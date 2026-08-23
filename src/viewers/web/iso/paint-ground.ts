@@ -58,7 +58,7 @@ export function paintIslands(layer: SVGGElement, scene: ProjectedScene): Map<str
     const group = svg('g', {}, `island ${island.kind}`)
     group.append(svg('polygon', { points: pointsAttribute(polygon) }, 'ground'))
     if (island.kind !== 'system') group.append(svg('polygon', { points: pointsAttribute(polygon) }, 'pattern'))
-    group.append(surfaceText(text, ISLAND_FONT, 'label', island.kind !== 'system', ISLAND_SPACING))
+    group.append(surfaceText(text, ISLAND_FONT, 'label', true, ISLAND_SPACING))
     if (island.element) {
       group.dataset.id = island.element.representationId
       group.setAttribute('aria-label', island.name)

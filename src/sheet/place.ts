@@ -1,7 +1,7 @@
 import { compareElements } from '../element-order.ts'
 import type { ArchitectureWorld, WorldElement, WorldRelationship } from '../types.ts'
 import { ISLAND_GAP } from './forces.ts'
-import { MARGIN, PAD, shadeOf, translate, unionRects } from './grid.ts'
+import { MARGIN, NESTED_CONTENT_PAD, PAD, shadeOf, translate, unionRects } from './grid.ts'
 import {
   ISLAND_FONT,
   ISLAND_SPACING,
@@ -129,13 +129,16 @@ function packed(
     partners: partners.get(child.key)!,
   }))
   const placed = stack ? shelf(items, 1) : grow(items)
+  /** Systems, slabs and zones share the roomier nested-content inset; the centred people and external islands stay compact. */
+  const padding = paint.kind === 'island' && paint.islandKind !== 'system' ? PAD : NESTED_CONTENT_PAD
+  const extra = padding - PAD
   return {
     key,
-    w: Math.max(placed.w, nameWidth(paint)),
-    d: placed.d,
+    w: Math.max(placed.w, nameWidth(paint)) + 2 * extra,
+    d: placed.d + 2 * extra,
     children: children.map(child => {
       const at = placed.at.get(child.key)!
-      return { node: child, gx: at.gx + behind(child), gy: at.gy + behind(child) }
+      return { node: child, gx: at.gx + behind(child) + extra, gy: at.gy + behind(child) + extra }
     }),
     paint,
   }

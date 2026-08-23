@@ -3,8 +3,10 @@ import type { CellRect } from './types.ts'
 
 /** Lanes per cell: routes travel at 0, ¼, ½ and ¾ of a cell. */
 export const LANES = 4
-/** Cells between a child and its parent's edge; the front band holds the parent's name. */
+/** Base cells inside a packed parent; surface labels use the same compact edge inset. */
 export const PAD = 1
+/** Cells between nested contents and every system island, container slab or group zone edge. */
+export const NESTED_CONTENT_PAD = 2
 /**
  * Cells of ground one floor hides behind a building. A floor lifts the roof
  * 12 px and a cell drops 24 px on screen, so the roof covers half a cell

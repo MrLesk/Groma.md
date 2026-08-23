@@ -45,9 +45,9 @@ function tokens(level: Level): string {
 
 /**
  * The map's own stylesheet. Every level group sets its tokens from the
- * scale, one rule turns them into strokes (times the state's emphasis and
- * the camera's zoom weight) and fills, and nothing else sets a width or a
- * tint. Line style means origin; only a route leaving a touched element for an untouched one adds accent dots: observed solid, planned
+ * scale, with the system island half a tint step lighter on that scale. One
+ * rule turns them into strokes (times the state's emphasis and the camera's
+ * zoom weight) and fills; no literal width or tint lives here. Line style means origin; only a route leaving a touched element for an untouched one adds accent dots: observed solid, planned
  * dashed, missing dotted; patterns mean kind and nothing else. Selection
  * and context change strokes, never fills.
  */
@@ -64,6 +64,7 @@ export const mapCss = `
   /* zones lie inside slab groups and keep their own weight while the slab is hovered or selected */
   #map .zone { ${stroke('building')} --emphasis: 1; }
   #map .island { ${tokens('island')} }
+  #map .island.system { --top-fill: ${tint(depthOf('island') - 0.5)}; }
   #map .slab { ${tokens('slab')} }
   #map .building { ${tokens('building')} }
   #map .route { ${stroke('route')} }

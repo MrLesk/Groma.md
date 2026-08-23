@@ -228,7 +228,7 @@ test.concurrent('an off-centre route meets the near wall of the person it leaves
   assert.equal(new Set(drawn.map(({ route, points }) => JSON.stringify(ground(points[route.target === person.representationId ? points.length - 1 : 0]!)))).size, drawn.length)
 })
 
-test.concurrent('roof text fits the roof it lies on: a box from its north corner, a curved roof centred', async () => {
+test.concurrent('roof and surface text keep their owning shape inset', async () => {
   const scene = await fixtureScene(viewerFixtureRoot)
   const rounded = scene.buildings.filter(({ building }) => curved(building.shape))
   assert.ok(scene.buildings.length > rounded.length && rounded.length > 0)
@@ -253,6 +253,28 @@ test.concurrent('roof text fits the roof it lies on: a box from its north corner
   for (const { island, text } of scene.islands) {
     assert.deepEqual(text.origin, project(island.rect.gx, island.rect.gy + island.rect.d - PAD, 0))
   }
+})
+
+test.concurrent('every surface label stays in the compact edge band', () => {
+  const projected = projectScene({
+    sheet: { gx: 0, gy: 0, w: 30, d: 20 },
+    islands: [
+      { key: 'island:people', kind: 'people', name: 'People', element: null, rect: { gx: 4, gy: 4, w: 4, d: 4 } },
+      { key: 'island:system', kind: 'system', name: 'System', element: null, rect: { gx: 10, gy: 4, w: 12, d: 12 } },
+    ],
+    zones: [{ key: 'group:system:one', name: 'Group', parent: 'island:system', members: [], rect: { gx: 12, gy: 6, w: 5, d: 5 } }],
+    slabs: [{ representationId: 'container:one', id: 'one', name: 'Container', origin: 'observed', island: 'island:system', rect: { gx: 16, gy: 8, w: 5, d: 6 } }],
+    buildings: [],
+    routes: [],
+  })
+  const compact = projected.islands.find(({ island }) => island.kind === 'people')!
+  const system = projected.islands.find(({ island }) => island.kind === 'system')!
+  assert.deepEqual(compact.text.origin, project(compact.island.rect.gx, compact.island.rect.gy + compact.island.rect.d - PAD, 0))
+  assert.deepEqual(system.text.origin, project(system.island.rect.gx, system.island.rect.gy + system.island.rect.d - PAD, 0))
+  const { zone, text: zoneText } = projected.zones[0]!
+  assert.deepEqual(zoneText.origin, project(zone.rect.gx, zone.rect.gy + zone.rect.d - PAD, 0))
+  const { slab, text: slabText } = projected.slabs[0]!
+  assert.deepEqual(slabText.origin, project(slab.rect.gx, slab.rect.gy + slab.rect.d - PAD, 0))
 })
 
 test.concurrent('projecting a frozen world leaves it untouched', async () => {
