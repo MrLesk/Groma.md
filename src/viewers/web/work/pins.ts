@@ -1,6 +1,6 @@
 import type { Point } from '../../../types.ts'
 import type { WorkPin } from '../../../work/pins.ts'
-import { fillWorkBadge, WORK_BADGE } from './badge.ts'
+import { fillWorkBadge, finishingWorkKeys, WORK_BADGE, WORK_BADGE_FLIP_MS } from './badge.ts'
 import type { Camera } from '../iso/camera.ts'
 import type { Tip } from '../organisms/tip.ts'
 
@@ -46,7 +46,7 @@ export const pinsCss = `
 const PIN = `<div class="foot"></div><div class="stem"></div><div class="head">${WORK_BADGE}<div class="task"></div></div>`
 
 export interface PinLayer {
-  /** Reconciles the pins by key; call after the map painted the scene. */
+  /** Reconciles the pins by key, so a pin that just finished plays its flip; call after the map painted the scene. */
   paint(pins: readonly WorkPin[]): void
   /** Moves every pin to the surface point it stands on under the camera. */
   place(camera: Camera): void
@@ -65,6 +65,7 @@ export function createPins(host: HTMLElement, anchorOf: (id: string) => Point | 
   const pinned = new Map<string, { node: HTMLElement; anchor: Point }>()
   let pins: readonly WorkPin[] = []
   let enabledStatuses: readonly string[] = []
+  const finishing = new Set<string>()
   let camera: Camera | undefined
   /** The first paint is the page's baseline; only pins first seen after it announce their arrival. */
   let painted = false
@@ -77,7 +78,7 @@ export function createPins(host: HTMLElement, anchorOf: (id: string) => Point | 
   }
   /** The pins the toggles allow fan out leftwards from their element's foot point, stems leaning back to it; the rest hide. */
   const fanOut = (): void => {
-    const shown = pins.filter(pin => pinned.has(pin.key) && enabledStatuses.includes(pin.status))
+    const shown = pins.filter(pin => pinned.has(pin.key) && (enabledStatuses.includes(pin.status) || finishing.has(pin.key)))
     const visible = new Set(shown.map(pin => pin.key))
     for (const [key, { node }] of pinned) node.hidden = !visible.has(key)
     const placed = new Map<string, number>()
@@ -93,6 +94,14 @@ export function createPins(host: HTMLElement, anchorOf: (id: string) => Point | 
   }
   return {
     paint(next) {
+      const visible = new Set(pins
+        .filter(pin => pinned.has(pin.key) && enabledStatuses.includes(pin.status))
+        .map(pin => pin.key))
+      const started = finishingWorkKeys(pins, next)
+      for (const key of started) {
+        if (visible.has(key)) finishing.add(key)
+        else started.delete(key)
+      }
       pins = next
       const keep = new Set(pins.map(pin => pin.key))
       for (const [key, { node }] of pinned) {
@@ -115,12 +124,19 @@ export function createPins(host: HTMLElement, anchorOf: (id: string) => Point | 
         pinned.set(pin.key, { node, anchor })
         node.style.setProperty('--pin', pin.colour)
         node.querySelector<HTMLElement>('.head')!.dataset.tip = `${pin.assignee ?? 'Unassigned'} · ${pin.title}`
-        fillWorkBadge(node, pin)
+        fillWorkBadge(node, pin, finishing.has(pin.key))
         node.querySelector('.task')!.textContent = pin.taskId
       }
       painted = true
       fanOut()
       place()
+      if (started.size > 0) setTimeout(() => {
+        for (const key of started) {
+          finishing.delete(key)
+          pinned.get(key)?.node.classList.remove('work-finishing')
+        }
+        fanOut()
+      }, WORK_BADGE_FLIP_MS)
     },
     place(current) {
       camera = current
