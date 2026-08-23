@@ -124,7 +124,7 @@ const style = `
   #hierarchy { grid-column: 1; display: flex; flex-direction: column; overflow: hidden; }
   #hierarchy-title { display: flex; align-items: center; min-height: 44px; padding: 0 8px 0 14px; border-bottom: 1px solid var(--hairline); }
   #hierarchy-title .pane-label { flex: 1; white-space: nowrap; transition: opacity var(--chrome-motion) ease; }
-  #hierarchy-toggle { display: grid; flex: none; width: 30px; height: 30px; padding: 0; place-items: center; border: 1px solid var(--hairline); background: color-mix(in srgb, var(--paper) 35%, transparent); }
+  #hierarchy-toggle { display: grid; flex: none; place-items: center; border: 1px solid var(--hairline); background: color-mix(in srgb, var(--paper) 35%, transparent); }
   #hierarchy-toggle .expand-icon { display: none; }
   body.hierarchy-collapsed #hierarchy-toggle .collapse-icon { display: none; }
   body.hierarchy-collapsed #hierarchy-toggle .expand-icon { display: block; }
@@ -165,9 +165,6 @@ const style = `
     top: 12px;
     right: 12px;
     display: grid;
-    width: 32px;
-    height: 32px;
-    padding: 0;
     place-items: center;
     border: 1px solid var(--hairline);
     border-radius: 6px;
@@ -202,14 +199,16 @@ const style = `
   .controls button.active { background: var(--ink); color: var(--paper); }
   #map-controls {
     align-items: stretch;
-    border: 1px solid var(--hairline);
+    border: 0;
     border-radius: 6px;
+    box-shadow: inset 0 0 0 1px var(--hairline);
     overflow: hidden;
     transform: translateY(-1px);
   }
   #map-controls button { display: flex; align-items: center; gap: 6px; border: 0; border-right: 1px solid var(--hairline); }
   #zoom { display: grid; min-width: 54px; place-items: center; padding: 0 8px; border-right: 1px solid var(--hairline); }
-  #zoom-in, #zoom-out { justify-content: center; padding-inline: 0; width: 32px; font-size: 12px; line-height: 1.2; }
+  #hierarchy-toggle, #details-close, #zoom-in, #zoom-out { width: 32px; height: 32px; padding: 0; }
+  #zoom-in, #zoom-out { justify-content: center; font-size: 12px; line-height: 1.2; }
   body #work {
     left: calc(var(--hierarchy-column) + 24px);
     right: calc(var(--details-column) + 24px);

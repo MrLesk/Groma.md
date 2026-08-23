@@ -29,7 +29,7 @@ export const workCss = `
   #work button { display: flex; align-items: center; gap: 6px; border: 0; background: transparent; padding: 4px; border-radius: 14px; }
   #work .label { display: flex; align-items: center; gap: 8px; margin-right: 4px; padding-left: 8px; font-weight: 600; }
   #work .label .backlog-mark { width: 29px; height: 36px; }
-  #work .toggle, #work .chip { height: 38px; }
+  #work .toggle, #work .chip { height: 38px; border-radius: 20px; }
   #work .toggle { padding: 4px 10px; border: 1px solid var(--hairline); color: var(--muted); }
   #work .toggle[aria-pressed="true"] { color: var(--accent); border-color: var(--accent); }
   /* The strip keeps its height with the chips at its top, so the 4 px scrollbar that appears under them on overflow moves nothing. */
@@ -38,7 +38,7 @@ export const workCss = `
   #work .strip::-webkit-scrollbar-track { background: transparent; }
   #work .strip::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--ink) 25%, transparent); border-radius: 2px; }
   #work .chip {
-    flex: none; gap: 8px; padding: 4px 10px 4px 4px; border: 1px solid var(--hairline); border-radius: 20px;
+    flex: none; gap: 8px; padding: 4px 10px 4px 4px; border: 1px solid var(--hairline);
     font-size: 10px; letter-spacing: 0.08em; filter: grayscale(1);
   }
   #work .chip:hover { border-color: var(--ink); }
