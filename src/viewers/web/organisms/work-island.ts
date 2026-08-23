@@ -3,19 +3,18 @@ import { BADGE, fillBadge } from './pins.ts'
 
 const icon = (paths: string): string =>
   `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${paths}</svg>`
-/** The Backlog.md mark: a hammer. */
-const BACKLOG_MARK = icon('<path d="M9.5 5.5l4-4 8 8-4 4z"/><path d="M13.5 9.5 5 18"/>')
-/** A pulse, the mark of live work. */
+/** A pulse, the mark of live work: on the folded pill and in the open island's label. */
 const PULSE_MARK = icon('<path d="M2 12h4l3-8 4 16 3-8h6"/>')
 const EYE_MARK = icon('<path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/>')
 /** Points up while folded, the way the island opens; the open island turns it down. */
 const CHEVRON = icon('<path d="M6 15l6-6 6 6"/>')
 
 export const workCss = `
+  /* Centred by margins, not by a translate: a fractional transform would resample the blurred layer and soften the text. */
   #work {
-    position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%); max-width: 96px;
+    position: absolute; left: 0; right: 0; bottom: 12px; margin: 0 auto; width: fit-content; box-sizing: border-box; max-width: 100px;
     display: flex; align-items: center; gap: 10px; padding: 6px 10px; border-radius: 28px;
-    background: color-mix(in srgb, var(--paper) 70%, transparent); border: 1px solid var(--hairline);
+    background: color-mix(in srgb, var(--paper) 55%, transparent); border: 1px solid var(--hairline);
     backdrop-filter: blur(14px); box-shadow: 0 6px 24px rgba(0, 0, 0, 0.12);
     overflow: hidden; white-space: nowrap; transition: max-width 0.35s ease, padding 0.35s ease;
   }
@@ -29,7 +28,8 @@ export const workCss = `
   #work .label { display: flex; align-items: center; gap: 8px; font-weight: 600; }
   #work .toggle { padding: 4px 10px; border: 1px solid var(--hairline); color: var(--muted); }
   #work .toggle[aria-pressed="true"] { color: var(--accent); border-color: var(--accent); }
-  #work .strip { display: flex; align-items: center; gap: 8px; overflow-x: auto; padding: 2px 0 4px; min-width: 0; }
+  /* The strip keeps its height with the chips at its top, so the 4 px scrollbar that appears under them on overflow moves nothing. */
+  #work .strip { display: flex; align-items: flex-start; gap: 8px; overflow-x: auto; box-sizing: border-box; height: 48px; padding: 5px 0 0; min-width: 0; }
   #work .strip::-webkit-scrollbar { height: 4px; }
   #work .strip::-webkit-scrollbar-track { background: transparent; }
   #work .strip::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--ink) 25%, transparent); border-radius: 2px; }
@@ -103,7 +103,7 @@ export function createWorkIsland(
     if (pins.length === 0) return
     const mark = document.createElement('span')
     mark.className = 'mark'
-    mark.innerHTML = `${BACKLOG_MARK}${pins.some(pin => pin.status !== 'Done') ? '<span class="dot"></span>' : ''}`
+    mark.innerHTML = `${PULSE_MARK}${pins.some(pin => pin.status !== 'Done') ? '<span class="dot"></span>' : ''}`
     const fold = button('fold', CHEVRON, () => {
       open = !open
       rebuild()
