@@ -219,7 +219,8 @@ or a system island's surface) near its left corner, and a tooltip
 with the task's title; when the task is Done the badge flips to a
 checkmark and flips back while hovered. Every assignee and
 task pair has its own colour, the pairs in task order over a fixed
-palette. The
+palette. A pin that appears after the map is open bounces once in
+that colour, then returns to the inactive greyscale. The
 Live work island, frosted glass at the bottom centre of the map
 above the footer, exists while any pin does: folded it is a pill with
 the pulse mark, a dot while a task is in progress, and a chevron
