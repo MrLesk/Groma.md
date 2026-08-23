@@ -2,7 +2,8 @@ import assert from 'node:assert/strict'
 
 import { test } from 'bun:test'
 
-import { GAP, unionRects } from '../src/sheet/grid.ts'
+import { GAP } from '../src/sheet/forces.ts'
+import { unionRects } from '../src/sheet/grid.ts'
 import { sheetScene } from '../src/sheet/scene.ts'
 import type { CellRect, SheetScene } from '../src/sheet/types.ts'
 import type { ArchitectureWorld, WorldRelationship } from '../src/types.ts'

@@ -1,28 +1,24 @@
 import type { WorldRelationship } from '../types.ts'
+import {
+  BEND,
+  BORDER_PUSH,
+  BORDER_REACH,
+  OFF_CENTRE,
+  REUSE,
+  RING,
+  ROUTE_PUSH,
+  ROUTE_REACH,
+  SIDE_PENALTY,
+} from './forces.ts'
 import { LANES, ROOF_SHADOW } from './grid.ts'
 import type { CellRect, Route, RoutePoint } from './types.ts'
 
-/** Lanes of clearance a route keeps from a foreign footprint. */
-export const RING = 1
 /** Lanes between two ports on one side: ports sit on half-cell marks. */
 const PORT_PITCH = 2
-/** Route costs: one lattice step, one turn, one lane another route already uses, a start or an end through a side not facing the other endpoint, one port step away from the middle of a one-cell side. */
+/** One lattice step, the unit the other costs in forces.ts are measured against. */
 const STEP = 1
-const BEND = 6
-const REUSE = 24
-const SIDE_PENALTY = 24
-const OFF_CENTRE = 8
 /** Lanes a route runs straight out of its port and straight into its goal, so it leaves and meets a side square on. */
 const APPROACH = 2
-/**
- * Lanes from a surface border, or from a route already drawn, within which a
- * line pays to run, and what each of those lanes costs: a route holds the
- * middle of the free ground instead of tracing an edge or crowding a
- * neighbour. Foreign buildings need no such push, since RING already keeps a
- * lane clear of them.
- */
-const NEAR = 2
-const CROWD = 3
 
 type Side = 'x-' | 'x+' | 'y-' | 'y+'
 const SIDES: readonly Side[] = ['x-', 'x+', 'y-', 'y+']
@@ -132,9 +128,10 @@ class Heap {
  * emerges from, or its arrowhead touches, the middle of the roof's back
  * edge. Routes leave and meet a side square on, keep one lane clear of every
  * foreign footprint, pay for turns and for lanes other routes already use,
- * and pay to run within NEAR lanes of a surface border or of a route already
- * drawn, so a line holds the middle of the free ground; they are solved in
- * the order given, so parallel routes take neighbouring ports.
+ * and pay to run close to a surface border or to a route already drawn, so a
+ * line holds the middle of the free ground; they are solved in the order
+ * given, so parallel routes take neighbouring ports. The weights are in
+ * forces.ts.
  */
 export function routeAll(
   sheet: CellRect,
@@ -165,8 +162,8 @@ export function routeAll(
   const closed = new Uint8Array(stateCount)
 
   const sweep = new Int32Array(nodeCount)
-  /** Lanes from each node out to the nearest source, NEAR at the furthest; -1 past that, where nothing is close enough to matter. */
-  const measure = (room: Int32Array, sources: Iterable<number>): void => {
+  /** Lanes from each node out to the nearest source, `reach` at the furthest; -1 past that, where nothing is close enough to matter. */
+  const measure = (room: Int32Array, sources: Iterable<number>, limit: number): void => {
     room.fill(-1)
     let tail = 0
     for (const node of sources) {
@@ -177,7 +174,7 @@ export function routeAll(
     }
     for (let head = 0; head < tail; head += 1) {
       const node = sweep[head]!
-      if (room[node]! >= NEAR) continue
+      if (room[node]! >= limit) continue
       const x = node % width
       const y = (node - x) / width
       for (let direction = 0; direction < 4; direction += 1) {
@@ -193,7 +190,10 @@ export function routeAll(
     }
   }
   /** What a lane costs for lying that close to whatever the room was measured from. */
-  const crowd = (room: Int32Array, node: number): number => (room[node] === -1 ? 0 : CROWD * (NEAR - room[node]!))
+  const crowd = (room: Int32Array, node: number, reach: number, weight: number): number =>
+    (room[node] === -1 ? 0 : weight * (reach - room[node]!))
+  const offBorder = (node: number): number => crowd(border, node, BORDER_REACH, BORDER_PUSH)
+  const offRoutes = (node: number): number => crowd(nearRoute, node, ROUTE_REACH, ROUTE_PUSH)
 
   /** The lanes along every surface's border, which a route would otherwise trace and be hard to tell from. */
   const borderLanes = function* (): Generator<number> {
@@ -205,7 +205,7 @@ export function routeAll(
     }
   }
   const border = new Int32Array(nodeCount)
-  measure(border, borderLanes())
+  measure(border, borderLanes(), BORDER_REACH)
   /** The room left around the routes drawn so far, so they push each other apart instead of squeezing into neighbouring lanes. */
   const nearRoute = new Int32Array(nodeCount).fill(-1)
 
@@ -388,7 +388,8 @@ export function routeAll(
         const neighbour = nodeOf(nx, ny)
         if (blocked[neighbour]) continue
         const cost = g[state]! + STEP + (next === direction ? 0 : BEND) + REUSE * used[edgeOf(node, neighbour)]!
-          + crowd(border, neighbour) + crowd(nearRoute, neighbour) + (goal[neighbour] ? goalCost[neighbour]! : 0)
+          + offBorder(neighbour) + offRoutes(neighbour)
+          + (goal[neighbour] ? goalCost[neighbour]! : 0)
         push(neighbour * 4 + next, cost, state)
       }
     }
@@ -405,7 +406,7 @@ export function routeAll(
       used[edge] = Math.min(255, used[edge]! + 1)
     }
     drawn.push(...nodes)
-    measure(nearRoute, drawn)
+    measure(nearRoute, drawn, ROUTE_REACH)
     return {
       id: request.id,
       source: request.source,
