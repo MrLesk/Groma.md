@@ -16,9 +16,9 @@ export interface SheetItem {
   origin: Origin
 }
 
-export type IslandKind = 'people' | 'external' | 'system'
+export type IslandKind = 'actors' | 'external' | 'system'
 
-/** A flat island on the sheet. People and external systems share one island each; every internal system has its own. */
+/** A flat island on the sheet. Actors and external systems share one island each; every internal system has its own. */
 export interface Island {
   key: string
   kind: IslandKind
@@ -44,13 +44,13 @@ export interface Slab extends SheetItem {
   rect: CellRect
 }
 
-/** A component's box, stack of tiers or tower; a person's round building; an external system's pill. */
+/** A component's box, stack of tiers or tower; an actor's round building; an external system's pill. */
 export interface Shape {
   kind: 'block' | 'stack' | 'tower' | 'round' | 'pill'
   levels: number
 }
 
-/** A component, person or external system standing on a slab or island. */
+/** A component, actor or external system standing on a slab or island. */
 export interface Building extends SheetItem {
   kind: C4Kind
   external: boolean

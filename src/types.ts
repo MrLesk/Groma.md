@@ -1,4 +1,4 @@
-export type C4Kind = 'person' | 'system' | 'container' | 'component'
+export type C4Kind = 'actor' | 'system' | 'container' | 'component'
 export type Origin = 'observed' | 'planned' | 'missing'
 export type SemanticLevel = 'context' | 'containers' | 'components'
 /** How an item sits on the campus at one C4 level. Underlay is not a ghost. */

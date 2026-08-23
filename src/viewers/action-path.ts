@@ -52,9 +52,9 @@ function downstream(
 }
 
 /**
- * A person's commands. When one of the person's targets reaches another of
+ * An actor's commands. When one of the actor's targets reaches another of
  * them, it is a launcher, such as the command line that starts the viewer the
- * person reads, and its own relationships are the commands.
+ * actor reads, and its own relationships are the commands.
  */
 export function outgoingActions(
   elementId: string | undefined,
@@ -64,7 +64,7 @@ export function outgoingActions(
   const parentOf = parentOfElements(world.elements)
   const own = exclusiveOutgoing(elementId, world, parentOf)
   const selected = world.elements.find(item => item.representationId === elementId)
-  if (selected?.kind !== 'person') return own
+  if (selected?.kind !== 'actor') return own
 
   const used = new Set(own.map(relationship => relationship.target))
   const launchers: string[] = []
@@ -96,18 +96,18 @@ export function pickableActions(
   world: ArchitectureWorld,
 ): WorldRelationship[] {
   const selected = world.elements.find(item => item.representationId === elementId)
-  if (selected?.kind !== 'person') return []
+  if (selected?.kind !== 'actor') return []
   return outgoingActions(elementId, world)
 }
 
 /**
- * The walk's legs in travel order: people reaching the start, then onward.
- * With a personId, only that person's approach joins the walk.
+ * The walk's legs in travel order: actors reaching the start, then onward.
+ * With an actorId, only that actor's approach joins the walk.
  */
 export function actionLegs(
   actionId: string | undefined,
   world: ArchitectureWorld,
-  personId?: string,
+  actorId?: string,
 ): WorldRelationship[] {
   const start = world.relationships.find(relationship => relationship.id === actionId)
   if (start === undefined) return []
@@ -117,8 +117,8 @@ export function actionLegs(
   for (const relationship of world.relationships) {
     if (
       relationship.target === start.source
-      && byId.get(relationship.source)?.kind === 'person'
-      && (personId === undefined || relationship.source === personId)
+      && byId.get(relationship.source)?.kind === 'actor'
+      && (actorId === undefined || relationship.source === actorId)
     ) {
       legs.push(relationship)
       ids.add(relationship.id)
@@ -140,18 +140,18 @@ export function actionLegs(
 export function actionPath(
   actionId: string | undefined,
   world: ArchitectureWorld,
-  personId?: string,
+  actorId?: string,
 ): Set<string> {
-  return new Set(actionLegs(actionId, world, personId).map(leg => leg.id))
+  return new Set(actionLegs(actionId, world, actorId).map(leg => leg.id))
 }
 
-/** Every person command in the world, deduped across the people who share it. */
+/** Every actor command in the world, deduped across the actors who share it. */
 export function worldCommands(world: ArchitectureWorld): WorldRelationship[] {
   const seen = new Set<string>()
   const commands: WorldRelationship[] = []
-  for (const person of world.elements) {
-    if (person.kind !== 'person') continue
-    for (const action of pickableActions(person.representationId, world)) {
+  for (const actor of world.elements) {
+    if (actor.kind !== 'actor') continue
+    for (const action of pickableActions(actor.representationId, world)) {
       if (seen.has(action.id)) continue
       seen.add(action.id)
       commands.push(action)
@@ -160,7 +160,7 @@ export function worldCommands(world: ArchitectureWorld): WorldRelationship[] {
   return commands
 }
 
-/** The person commands whose walk touches the element. */
+/** The actor commands whose walk touches the element. */
 export function travelledBy(
   elementId: string,
   world: ArchitectureWorld,

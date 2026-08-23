@@ -1,6 +1,6 @@
 ---
 id: operator
-kind: person
+kind: actor
 ---
 
 # Operator

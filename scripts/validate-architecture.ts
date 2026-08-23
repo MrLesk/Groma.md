@@ -7,14 +7,14 @@ import { parse, parseFrontmatter } from 'comark'
 import type { C4Kind, MarkdownElement } from '../src/types.ts'
 
 const allowedFrontmatterFields = new Set(['id', 'kind', 'parent', 'external', 'group', 'code'])
-const allowedKinds = new Set(['person', 'system', 'container', 'component'])
+const allowedKinds = new Set(['actor', 'system', 'container', 'component'])
 const expectedParentKinds = new Map<C4Kind, C4Kind>([
   ['container', 'system'],
   ['component', 'container'],
 ])
 const relationshipColumns = ['Target', 'Description', 'Technology']
 const elementPathPatterns = [
-  /^people\/[^/]+\.md$/,
+  /^actors\/[^/]+\.md$/,
   /^systems\/[^/]+\/system\.md$/,
   /^systems\/[^/]+\/containers\/[^/]+\/container\.md$/,
   /^systems\/[^/]+\/containers\/[^/]+\/components\/[^/]+\.md$/,
@@ -254,7 +254,7 @@ export async function validateRevision(
     }
 
     if (typeof frontmatter.kind !== 'string' || !allowedKinds.has(frontmatter.kind)) {
-      errors.push(`${relativeFile}: kind must be person, system, container, or component`)
+      errors.push(`${relativeFile}: kind must be actor, system, container, or component`)
     }
 
     if (typeof frontmatter.kind === 'string' && expectedParentKinds.has(frontmatter.kind as C4Kind)) {

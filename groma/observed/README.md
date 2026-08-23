@@ -5,8 +5,8 @@ This is the architecture known to exist in this repository.
 ## Start here
 
 - [Groma](systems/groma/system.md) keeps the architecture as Markdown.
-- The [human architect](people/human-architect.md) and
-  [coding agent](people/coding-agent.md) use the CLI, the terminal
+- The [human architect](actors/human-architect.md) and
+  [coding agent](actors/coding-agent.md) use the CLI, the terminal
   viewer, and the web viewer.
 - [CLI](systems/groma/containers/cli/container.md) starts view, web, scan,
   create, edit, and accept.

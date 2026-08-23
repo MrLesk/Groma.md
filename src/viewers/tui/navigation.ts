@@ -65,10 +65,10 @@ export interface ViewerState {
   /** First hidden content row of an overflowing details pane. */
   detailsScroll: number
   detailsTab: DetailsTab
-  /** One person command. Survives leaving the person until x or another pick. */
+  /** One actor command. Survives leaving the actor until x or another pick. */
   activeActionId?: string
-  /** The person the command was picked from; scopes the walk's approach to them. */
-  activeActionPersonId?: string
+  /** The actor the command was picked from; scopes the walk's approach to them. */
+  activeActionActorId?: string
   /** The traced leg of the active command's walk; absent while the whole walk shows. */
   actionStep?: number
   /** The command row the details cursor rests on; Enter picks it. */
@@ -129,10 +129,10 @@ export function detailsCommands(
   return pickableActions(state.currentId, world)
 }
 
-/** A lit walk: its command and, for a person's own pick, the picker. */
+/** A lit walk: its command and, for an actor's own pick, the picker. */
 export interface LitAction {
   id?: string
-  personId?: string
+  actorId?: string
 }
 
 /**
@@ -149,11 +149,11 @@ export function litAction(
     if (browsing) {
       return {
         id: state.actionCursor,
-        personId: state.detailsTab === 'what' ? state.currentId : undefined,
+        actorId: state.detailsTab === 'what' ? state.currentId : undefined,
       }
     }
   }
-  return { id: state.activeActionId, personId: state.activeActionPersonId }
+  return { id: state.activeActionId, actorId: state.activeActionActorId }
 }
 
 function resolve(
@@ -204,7 +204,7 @@ function reduceTree(
       return {
         ...current,
         activeActionId: commands[index]!.id,
-        activeActionPersonId: undefined,
+        activeActionActorId: undefined,
         actionStep: undefined,
       }
     }
@@ -297,13 +297,13 @@ export function reduceViewer(
     return {
       ...current,
       activeActionId: undefined,
-      activeActionPersonId: undefined,
+      activeActionActorId: undefined,
       actionStep: undefined,
     }
   }
   if (action === 'step-action') {
     const lit = litAction(world, current)
-    const legs = actionLegs(lit.id, world, lit.personId)
+    const legs = actionLegs(lit.id, world, lit.actorId)
     if (legs.length === 0) return current
     return { ...current, actionStep: ((current.actionStep ?? -1) + 1) % legs.length }
   }
@@ -350,7 +350,7 @@ export function reduceViewer(
       return {
         ...current,
         activeActionId: lit.id,
-        activeActionPersonId: lit.personId,
+        activeActionActorId: lit.actorId,
         actionStep: undefined,
       }
     }

@@ -136,16 +136,16 @@ test('loads a plan named observed independently from the observed revision', asy
   t.after(() => rm(temporaryRoot, { recursive: true, force: true }))
 
   const fixtures = [
-    ['groma/observed', 'observed-person'],
-    ['groma/plans/observed', 'planned-person'],
+    ['groma/observed', 'observed-actor'],
+    ['groma/plans/observed', 'planned-actor'],
   ]
   for (const [relativeRoot, id] of fixtures) {
     const revisionRoot = path.join(temporaryRoot, relativeRoot)
-    await mkdir(path.join(revisionRoot, 'people'), { recursive: true })
+    await mkdir(path.join(revisionRoot, 'actors'), { recursive: true })
     await writeFile(path.join(revisionRoot, 'README.md'), `# ${id}\n`)
     await writeFile(
-      path.join(revisionRoot, 'people', `${id}.md`),
-      `---\nid: ${id}\nkind: person\n---\n\n# ${id}\n\nA person.\n`,
+      path.join(revisionRoot, 'actors', `${id}.md`),
+      `---\nid: ${id}\nkind: actor\n---\n\n# ${id}\n\nAn actor.\n`,
     )
   }
   await mkdir(path.join(temporaryRoot, 'groma', 'missing'), { recursive: true })
@@ -169,7 +169,7 @@ test('loads a plan named observed independently from the observed revision', asy
           sourceDirectory: 'groma/observed',
         },
         context: 'groma/observed/README.md',
-        documentId: 'observed-person',
+        documentId: 'observed-actor',
       },
       {
         revision: {
@@ -186,7 +186,7 @@ test('loads a plan named observed independently from the observed revision', asy
           sourceDirectory: 'groma/plans/observed',
         },
         context: 'groma/plans/observed/README.md',
-        documentId: 'planned-person',
+        documentId: 'planned-actor',
       },
     ],
   )
@@ -197,10 +197,10 @@ test('stops a revision load and identifies the repository-relative file Comark c
   t.after(() => rm(temporaryRoot, { recursive: true, force: true }))
 
   const revisionRoot = path.join(temporaryRoot, 'groma', 'observed')
-  await mkdir(path.join(revisionRoot, 'people'), { recursive: true })
+  await mkdir(path.join(revisionRoot, 'actors'), { recursive: true })
   await writeFile(path.join(revisionRoot, 'README.md'), '# Observed\n')
   await writeFile(
-    path.join(revisionRoot, 'people', 'broken.md'),
+    path.join(revisionRoot, 'actors', 'broken.md'),
     '---\nid: [broken\n---\n\n# Broken\n',
   )
 
@@ -208,10 +208,10 @@ test('stops a revision load and identifies the repository-relative file Comark c
     loadRevision(temporaryRoot, { kind: 'observed' }),
     error => {
       assert.ok(error instanceof ArchitectureReadError)
-      assert.equal(error.sourceFilename, 'groma/observed/people/broken.md')
+      assert.equal(error.sourceFilename, 'groma/observed/actors/broken.md')
       assert.equal(error.revision.kind, 'observed')
       assert.equal(error.stage, 'parse')
-      assert.match(error.message, /groma\/observed\/people\/broken\.md/)
+      assert.match(error.message, /groma\/observed\/actors\/broken\.md/)
       return true
     },
   )
@@ -222,10 +222,10 @@ test('reports filesystem failures without labeling them as Comark parse failures
   t.after(() => rm(temporaryRoot, { recursive: true, force: true }))
 
   const revisionRoot = path.join(temporaryRoot, 'groma', 'observed')
-  await mkdir(path.join(revisionRoot, 'people'), { recursive: true })
+  await mkdir(path.join(revisionRoot, 'actors'), { recursive: true })
   await writeFile(
-    path.join(revisionRoot, 'people', 'person.md'),
-    '---\nid: person\nkind: person\n---\n\n# Person\n\nA person.\n',
+    path.join(revisionRoot, 'actors', 'actor.md'),
+    '---\nid: actor\nkind: actor\n---\n\n# Actor\n\nAn actor.\n',
   )
 
   await assert.rejects(

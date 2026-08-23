@@ -1,15 +1,15 @@
 ---
-id: shop-architect
-kind: person
+id: shop-operator
+kind: actor
 ---
 
-# Shop architect
+# Shop operator
 
-Designs how the shop fits together.
+Runs the shop day to day.
 
 ## Relationships
 
 | Target | Description | Technology |
 | --- | --- | --- |
-| [Api](../systems/shop/containers/api/container.md) | Reviews the order rules | Browser |
+| [Api](../systems/shop/containers/api/container.md) | Places a correction | Browser |
 | [Order viewer](../systems/shop/containers/order-viewer/container.md) | Watches orders arrive | Browser |

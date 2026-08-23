@@ -119,7 +119,7 @@ export function mountTerminalViewer(
       currentId: state.currentId,
       camera: next ?? snapshot(),
       lockCamera,
-      litIds: actionPath(lit.id, viewModel.world, lit.personId),
+      litIds: actionPath(lit.id, viewModel.world, lit.actorId),
     })
   }
 

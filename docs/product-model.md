@@ -160,7 +160,7 @@ reach an element document is an error.
 
 A software-to-software relationship is authored on the lowest elements that
 exist: components, once they exist. Parents are connected because a child
-is. Do not also write that collaboration on a parent. A person-to-system
+is. Do not also write that collaboration on a parent. An actor-to-system
 relationship, and a parent row with no lower pin yet, stay as written.
 Viewers treat an authored A → B as also connecting exclusive ancestors of
 A and B. Layout keeps one route per authored relationship.

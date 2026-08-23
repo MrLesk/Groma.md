@@ -51,7 +51,7 @@ function zoneGroup(zone: ProjectedZone): SVGGElement {
   return group
 }
 
-/** Flat islands; system islands are selectable, people and external islands are not. */
+/** Flat islands; system islands are selectable, actors and external islands are not. */
 export function paintIslands(layer: SVGGElement, scene: ProjectedScene): Map<string, Element> {
   const nodes = new Map<string, Element>()
   for (const { island, polygon, text } of scene.islands) {

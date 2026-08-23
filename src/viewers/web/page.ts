@@ -16,7 +16,7 @@ const lockup = readFileSync(
 )
 
 const legendKinds: C4Kind[][] = [
-  ['person', 'system'],
+  ['actor', 'system'],
   ['container', 'component'],
 ]
 

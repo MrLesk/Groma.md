@@ -45,7 +45,7 @@ function allSpans(captured: CapturedFrame): CapturedSpan[] {
 }
 
 function levelKind(level: SemanticLevel): Set<C4Kind> {
-  if (level === 'context') return new Set<C4Kind>(['person', 'system'])
+  if (level === 'context') return new Set<C4Kind>(['actor', 'system'])
   return new Set<C4Kind>([level === 'containers' ? 'container' : 'component'])
 }
 
@@ -63,7 +63,7 @@ test.concurrent('frames are stable and projections hold world invariants at ever
 
       assert.doesNotMatch(
         mapRegion(first, size.width),
-        /observed|planned|missing|SYSTEM|CONTAINER|COMPONENT|PERSON/,
+        /observed|planned|missing|SYSTEM|CONTAINER|COMPONENT|ACTOR/,
       )
 
       const projection = projectWorld(response.world, {
@@ -99,11 +99,11 @@ test.concurrent('frames are stable and projections hold world invariants at ever
       )
       if (view.level === 'context') {
         const groma = requiredElement(byId, 'observed:shop')
-        const person = requiredElement(byId, 'observed:shop-architect')
+        const actor = requiredElement(byId, 'observed:shop-architect')
         assert.equal(groma.display, 'system-boundary')
         assert.ok(
           groma.cellBounds.width * groma.cellBounds.height
-            > person.cellBounds.width * person.cellBounds.height,
+            > actor.cellBounds.width * actor.cellBounds.height,
         )
         for (const id of [
           'observed:shop-architect',
@@ -130,7 +130,7 @@ test.concurrent('frames are stable and projections hold world invariants at ever
           return element.kind !== 'component' || element.display === 'hidden'
         }))
         assert.ok(letterName(groma, 'context'))
-        assert.ok(letterName(person, 'context'))
+        assert.ok(letterName(actor, 'context'))
       }
       for (const card of cards) {
         if (card.parent === null) continue
@@ -172,7 +172,7 @@ test.concurrent('planned and missing elements render with distinct dashes and ob
 
   assert.doesNotMatch(
     mapRegion(frame, 120),
-    /observed|planned|missing|SYSTEM|CONTAINER|COMPONENT|PERSON/,
+    /observed|planned|missing|SYSTEM|CONTAINER|COMPONENT|ACTOR/,
   )
   assert.match(frame, /[╌┆]/)
   assert.match(frame, /[┈┊░]/)
@@ -315,7 +315,7 @@ test.concurrent('selection changes never move the camera and pan only when off s
   })
   const contextCards = labeled.elements.filter(element => {
     return element.display === 'card'
-      && (element.kind === 'person' || element.external)
+      && (element.kind === 'actor' || element.external)
       && visible(element.cellBounds, labeled.viewport)
   })
   assert.ok(contextCards.some(element => element.id === 'shop-architect'))
@@ -338,7 +338,7 @@ test.concurrent('selection changes never move the camera and pan only when off s
   }
 })
 
-test.concurrent('person cards use full names when the map has room', async () => {
+test.concurrent('actor cards use full names when the map has room', async () => {
   const response = await loadArchitectureViewModel(viewerFixtureRoot)
   const operator = response.world.elements.find(element => {
     return element.id === 'shop-operator'
@@ -359,22 +359,22 @@ test.concurrent('person cards use full names when the map has room', async () =>
     camera,
   })
   const byId = projectedById(view.elements)
-  const people = [
+  const actors = [
     requiredElement(byId, 'observed:shop-operator'),
     requiredElement(byId, 'observed:shop-architect'),
   ]
-  for (const person of people) {
-    assert.equal(visible(person.cellBounds, view.viewport), true, person.name)
+  for (const actor of actors) {
+    assert.equal(visible(actor.cellBounds, view.viewport), true, actor.name)
     assert.ok(
-      person.cellBounds.width >= person.name.length + 7,
-      `${person.name} is ${person.cellBounds.width} cells`,
+      actor.cellBounds.width >= actor.name.length + 7,
+      `${actor.name} is ${actor.cellBounds.width} cells`,
     )
   }
   const groma = requiredElement(byId, 'observed:shop')
   const git = requiredElement(byId, 'observed:vault')
-  assert.equal(overlaps(people[0]!.cellBounds, people[1]!.cellBounds), false)
-  for (const person of people) {
-    assert.equal(overlaps(person.cellBounds, groma.cellBounds), false)
-    assert.equal(overlaps(person.cellBounds, git.cellBounds), false)
+  assert.equal(overlaps(actors[0]!.cellBounds, actors[1]!.cellBounds), false)
+  for (const actor of actors) {
+    assert.equal(overlaps(actor.cellBounds, groma.cellBounds), false)
+    assert.equal(overlaps(actor.cellBounds, git.cellBounds), false)
   }
 })

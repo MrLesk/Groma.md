@@ -39,4 +39,4 @@ Say what must be true, not how to build it. Do not specify frameworks, file layo
 - Current meaning of an existing id: groma edit <id> --description <prose>
 - Plan outcome prose: groma edit <plan-id> --description <prose>
 
-Kinds are person, system, container, and component. Containers need a system parent. Components need a container parent.`
+Kinds are actor, system, container, and component. Containers need a system parent. Components need a container parent.`

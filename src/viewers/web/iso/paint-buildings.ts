@@ -5,7 +5,7 @@ import { surfaceText } from './text.ts'
 
 function classOf(projected: ProjectedBuilding): string {
   const { building } = projected
-  const kind = building.kind === 'person' ? 'person' : building.external ? 'external' : 'component'
+  const kind = building.kind === 'actor' ? 'actor' : building.external ? 'external' : 'component'
   const ghost = building.origin === 'observed' ? '' : ` ghost ${building.origin}`
   return `building ${kind}${ghost}`
 }

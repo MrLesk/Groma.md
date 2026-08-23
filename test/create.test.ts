@@ -156,7 +156,7 @@ test('a created container or component is planned under the given parent', async
   assert.equal(warehouse.parent, 'observed:shop')
 })
 
-test('--parent is required for container and component and forbidden for person and system', async t => {
+test('--parent is required for container and component and forbidden for actor and system', async t => {
   const root = await createRepo(t)
   const before = await readTree(root)
   const missingComponentParent = await groma(root, [
@@ -179,13 +179,13 @@ test('--parent is required for container and component and forbidden for person 
     '--description',
     'Stores goods.',
   ])
-  const personParent = await groma(root, [
+  const actorParent = await groma(root, [
     'create',
     'Buyer',
     '--plan',
     'next',
     '--kind',
-    'person',
+    'actor',
     '--parent',
     'shop',
     '--description',
@@ -209,34 +209,34 @@ test('--parent is required for container and component and forbidden for person 
   assert.equal(missingComponentParent.stdout, '')
   assert.notEqual(missingContainerParent.code, 0)
   assert.match(missingContainerParent.stderr, /--parent is required for container/)
-  assert.notEqual(personParent.code, 0)
-  assert.match(personParent.stderr, /--parent is forbidden for person/)
+  assert.notEqual(actorParent.code, 0)
+  assert.match(actorParent.stderr, /--parent is forbidden for actor/)
   assert.notEqual(systemParent.code, 0)
   assert.match(systemParent.stderr, /--parent is forbidden for system/)
   assert.deepEqual(await readTree(root), before)
 
-  const person = await groma(root, [
+  const actor = await groma(root, [
     'create',
     'Buyer',
     '--plan',
     'next',
     '--kind',
-    'person',
+    'actor',
     '--description',
     'Pays for goods.',
   ])
-  assert.equal(person.code, 0, person.stderr)
-  assert.equal(person.stdout, 'ok\nbuyer\n')
+  assert.equal(actor.code, 0, actor.stderr)
+  assert.equal(actor.stdout, 'ok\nbuyer\n')
   const model = await loadAnnotatedArchitecture(root)
   const buyer = model.elements.find(element => element.id === 'buyer')
   assert.ok(buyer)
   assert.equal(buyer.origin, 'planned')
   assert.equal(buyer.parent, null)
   assert.equal(
-    await readFile(path.join(root, 'groma/plans/next/people/buyer.md'), 'utf8'),
+    await readFile(path.join(root, 'groma/plans/next/actors/buyer.md'), 'utf8'),
     `---
 id: buyer
-kind: person
+kind: actor
 ---
 
 # Buyer
@@ -350,13 +350,13 @@ test('duplicate id, unknown parent, missing flag, illegal kind or parent, and no
         '--plan',
         'next',
         '--kind',
-        'widget',
+        'person',
         '--parent',
         'api',
         '--description',
         'Tracks stock.',
       ],
-      pattern: /unknown kind "widget"/,
+      pattern: /unknown kind "person"/,
     },
     {
       name: 'illegal parent kind',

@@ -24,7 +24,7 @@ responsibility, the parent candidate's name for containers and
 components, and Code references. A Code reference is the scanner, an
 exact repository-relative file, and an optional symbol. That result does
 not contain architecture IDs and is not the user-facing output. The
-TypeScript plugin sends empty responsibilities and no people or
+TypeScript plugin sends empty responsibilities and no actors or
 relationships.
 
 Core matches a candidate to an existing `code` reference (by scanner and

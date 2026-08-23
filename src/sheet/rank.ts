@@ -1,6 +1,6 @@
 /**
  * Flow ranks among the children of one surface: the children the outside
- * feeds (a person, or anything beyond the surface) stand first, and every
+ * feeds (an actor, or anything beyond the surface) stand first, and every
  * other child stands east of whatever feeds it, by the longest chain. Back
  * edges found by a depth-first walk from the entries in hierarchy order, then
  * from the children nothing feeds, then from whatever is left, are dropped

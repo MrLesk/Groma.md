@@ -18,19 +18,19 @@ ArchitectureWorld → sheetScene (blueprint sheet) → Web plugin
 A C4 level is one campus. Software wrappers keep the world-layout
 union size, from code up. Camera scale is the only shrink. The level
 names that layer of internal software and keeps the next software layer
-as unnamed underlay. People and external systems are marks: they keep
+as unnamed underlay. Actors and external systems are marks: they keep
 their world origin, and their drawn size follows the named level. Ghost
 means planned. Underlay is not a ghost. Entering a system does not move
-that system, its people, or sibling systems. A relationship between
+that system, its actors, or sibling systems. A relationship between
 nested endpoints attaches to the named software, mark, or campus wrapper
 above them, never to underlay. The TUI map paints this view. Entering a
 system makes its containers the named level. When a boundary's top edge
 scrolls above the map pane, its title docks on the pane's top row.
 
 The web map paints the whole world at once as one isometric blueprint
-sheet: flat islands for people, external systems and each internal system,
+sheet: flat islands for actors, external systems and each internal system,
 low container slabs, buildings (components whose height and shape follow
-the observed code, round buildings for people, pills for external
+the observed code, round buildings for actors, pills for external
 systems), and one lattice route per authored relationship.
 
 A viewer never reads architecture Markdown, walks `groma/` directories, or

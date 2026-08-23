@@ -16,7 +16,7 @@ const expectedParentKinds = new Map<C4Kind, C4Kind>([
   ['container', 'system'],
   ['component', 'container'],
 ])
-const rootKinds = new Set<C4Kind>(['person', 'system'])
+const rootKinds = new Set<C4Kind>(['actor', 'system'])
 const supportedKinds = new Set<C4Kind>([...rootKinds, ...expectedParentKinds.keys()])
 
 export class ArchitectureModelError extends Error {
@@ -180,7 +180,7 @@ function documentToElement(document: ArchitectureDocument): ArchitectureElement 
     throw new ArchitectureModelError(
       'INVALID_ELEMENT',
       sourceFilename,
-      `only a system can be external, but "${id}" is a ${kind}`,
+      `only a system can be external, but "${id}" has kind "${kind}"`,
     )
   }
   if (
@@ -266,9 +266,22 @@ function validateContainment(
         'INVALID_PARENT',
         element.sourceFilename,
         `${element.kind} "${element.id}" requires a ${expectedParentKind} parent, `
-        + `but "${element.parentId}" is a ${parent.kind}`,
+        + `but "${element.parentId}" has kind "${parent.kind}"`,
       )
     }
+  }
+}
+
+function validateActorLocation(element: ArchitectureElement, revision: Revision): void {
+  if (element.kind !== 'actor') return
+  const actorsDirectory = `${revision.sourceDirectory}/actors/`
+  const relative = element.sourceFilename.slice(actorsDirectory.length)
+  if (!element.sourceFilename.startsWith(actorsDirectory) || relative.includes('/')) {
+    throw new ArchitectureModelError(
+      'INVALID_ELEMENT_LOCATION',
+      element.sourceFilename,
+      `actor "${element.id}" must be stored directly under ${actorsDirectory}`,
+    )
   }
 }
 
@@ -362,6 +375,7 @@ export function buildArchitectureModel(
 
   for (const document of documents) {
     const element = documentToElement(document)
+    validateActorLocation(element, revisionRecord.revision)
     const first = elementsById.get(element.id)
 
     if (first) {

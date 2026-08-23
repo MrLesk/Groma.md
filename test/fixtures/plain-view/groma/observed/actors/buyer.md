@@ -1,14 +1,14 @@
 ---
 id: buyer
-kind: person
+kind: actor
 ---
 
 # Buyer
 
-Places orders in the shop.
+Pays for goods.
 
 ## Relationships
 
 | Target | Description | Technology |
 | --- | --- | --- |
-| [Shop](../systems/shop/system.md) | Places orders | Browser |
+| [Shop](../systems/shop/system.md) | uses | Browser |

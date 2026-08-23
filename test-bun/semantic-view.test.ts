@@ -74,7 +74,7 @@ function shopWorld(): ArchitectureWorld {
   const yard = box('yard', 'system', { x: 500, y: 0, width: 48, height: 40 }, {
     name: 'Yard',
   })
-  const buyer = box('buyer', 'person', { x: 0, y: 200, width: 20, height: 20 }, {
+  const buyer = box('buyer', 'actor', { x: 0, y: 200, width: 20, height: 20 }, {
     name: 'Buyer',
   })
   const git = box('git', 'system', { x: 400, y: 0, width: 40, height: 40 }, {
@@ -157,7 +157,7 @@ test.concurrent('context keeps a system campus wrapper size from world-layout', 
   assert.ok(shop.bounds.height > displaySize('Shop', 'system').height)
 })
 
-test.concurrent('context names systems, keeps containers as underlay, and marks people', () => {
+test.concurrent('context names systems, keeps containers as underlay, and marks actors', () => {
   const world = shopWorld()
   const view = semanticView(world, { level: 'context' })
   assert.deepEqual(idsOf(view, 'named'), ['shop', 'yard'])
@@ -200,7 +200,7 @@ test.concurrent('marks keep their world origin and follow the named level size',
   )
 })
 
-test.concurrent('entering a system does not move that system, its people, or siblings', () => {
+test.concurrent('entering a system does not move that system, its actors, or siblings', () => {
   const world = shopWorld()
   const context = semanticView(world, { level: 'context' })
   const entered = semanticView(world, { level: 'containers', focusId: 'observed:shop' })

@@ -28,7 +28,7 @@ export function letterName(
   level: SemanticLevel,
 ): boolean {
   if (element.display === 'hidden') return false
-  if (element.kind === 'person' || element.external) return true
+  if (element.kind === 'actor' || element.external) return true
   if (element.kind === 'system') return true
   if (element.kind === 'container') return level !== 'context'
   return level === 'components'

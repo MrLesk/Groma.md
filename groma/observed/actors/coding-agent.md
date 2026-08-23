@@ -1,11 +1,11 @@
 ---
 id: coding-agent
-kind: person
+kind: actor
 ---
 
 # Coding agent
 
-Plans and implements software changes while sharing the same architecture as people. It runs Groma from the command line to scan the repository, reads the world before it touches code, and authors plan ghosts for the parts it is about to build.
+Plans and implements software changes while sharing the same architecture as human architects. It runs Groma from the command line to scan the repository, reads the world before it touches code, and authors plan ghosts for the parts it is about to build.
 
 ## Relationships
 

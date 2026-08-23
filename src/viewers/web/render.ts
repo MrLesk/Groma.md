@@ -64,7 +64,7 @@ function viewport(): Viewport {
 
 let fitted: Camera = fitCamera(scene.bounds, viewport())
 let camera: Camera = fitted
-/** Once the person moved the camera, refits stop until they press 0. */
+/** Once an interaction positions the camera, live refits stop until the viewer presses 0. */
 let touched = false
 
 function firstSystem(current: ArchitectureWorld): WorldElement | undefined {
@@ -138,7 +138,7 @@ function syncUrl(): void {
 
 function paintSelection(): void {
   syncUrl()
-  const litIds = actionPath(activeAction.id, world, activeAction.personId)
+  const litIds = actionPath(activeAction.id, world, activeAction.actorId)
   const task = workItem(selectedId)
   const activeTasks = active.map(id => workItem(id)).filter((item): item is ActiveWorkItem => item !== undefined)
   map.select(selectedId)
@@ -199,8 +199,8 @@ function deselect(): void {
   paintSelection()
 }
 
-function pickAction(id: string, personId?: string): void {
-  activeAction = nextActiveAction(activeAction, { type: 'pick', id, personId })
+function pickAction(id: string, actorId?: string): void {
+  activeAction = nextActiveAction(activeAction, { type: 'pick', id, actorId })
   paintSelection()
 }
 

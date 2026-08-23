@@ -63,26 +63,39 @@ for (const {
     message: /external must be a boolean/,
   },
   {
-    name: 'reports an external person',
+    name: 'reports an actor outside the actors directory',
     documents: [
       elementDocument({
-        id: 'external-person',
-        kind: 'person',
+        id: 'misplaced-actor',
+        kind: 'actor',
+        sourceFilename: 'groma/plans/test-revision/people/misplaced-actor.md',
+      }),
+    ],
+    code: 'INVALID_ELEMENT_LOCATION',
+    sourceFilename: 'groma/plans/test-revision/people/misplaced-actor.md',
+    message: /actor "misplaced-actor" must be stored directly under groma\/plans\/test-revision\/actors\//,
+  },
+  {
+    name: 'reports an external actor',
+    documents: [
+      elementDocument({
+        id: 'external-actor',
+        kind: 'actor',
         external: true,
-        sourceFilename: 'groma/plans/test-revision/people/external-person.md',
+        sourceFilename: 'groma/plans/test-revision/actors/external-actor.md',
       }),
     ],
     code: 'INVALID_ELEMENT',
-    sourceFilename: 'groma/plans/test-revision/people/external-person.md',
-    message: /only a system can be external.*"external-person" is a person/,
+    sourceFilename: 'groma/plans/test-revision/actors/external-actor.md',
+    message: /only a system can be external.*"external-actor" has kind "actor"/,
   },
   {
     name: 'reports a duplicate stable id at the second document',
     documents: [
       elementDocument({
         id: 'same-id',
-        kind: 'person',
-        sourceFilename: 'groma/plans/test-revision/people/first.md',
+        kind: 'actor',
+        sourceFilename: 'groma/plans/test-revision/actors/first.md',
       }),
       elementDocument({
         id: 'same-id',
@@ -92,7 +105,7 @@ for (const {
     ],
     code: 'DUPLICATE_ID',
     sourceFilename: 'groma/plans/test-revision/systems/second/system.md',
-    message: /duplicate id "same-id".*people\/first\.md/,
+    message: /duplicate id "same-id".*actors\/first\.md/,
   },
   {
     name: 'reports an unknown parent id at the contained document',
@@ -114,14 +127,14 @@ for (const {
     name: 'reports a parent with the wrong C4 kind',
     documents: [
       elementDocument({
-        id: 'person-parent',
-        kind: 'person',
-        sourceFilename: 'groma/plans/test-revision/people/person-parent.md',
+        id: 'actor-parent',
+        kind: 'actor',
+        sourceFilename: 'groma/plans/test-revision/actors/actor-parent.md',
       }),
       elementDocument({
         id: 'wrongly-contained',
         kind: 'container',
-        parent: 'person-parent',
+        parent: 'actor-parent',
         sourceFilename:
           'groma/plans/test-revision/systems/groma/containers/wrong/container.md',
       }),
@@ -129,21 +142,21 @@ for (const {
     code: 'INVALID_PARENT',
     sourceFilename:
       'groma/plans/test-revision/systems/groma/containers/wrong/container.md',
-    message: /container "wrongly-contained" requires a system parent.*is a person/,
+    message: /container "wrongly-contained" requires a system parent.*has kind "actor"/,
   },
   {
     name: 'reports a root C4 element with an explicitly null parent',
     documents: [
       elementDocument({
-        id: 'null-parent-person',
-        kind: 'person',
+        id: 'null-parent-actor',
+        kind: 'actor',
         parent: null,
-        sourceFilename: 'groma/plans/test-revision/people/null-parent-person.md',
+        sourceFilename: 'groma/plans/test-revision/actors/null-parent-actor.md',
       }),
     ],
     code: 'INVALID_PARENT',
-    sourceFilename: 'groma/plans/test-revision/people/null-parent-person.md',
-    message: /person "null-parent-person" cannot declare a parent/,
+    sourceFilename: 'groma/plans/test-revision/actors/null-parent-actor.md',
+    message: /actor "null-parent-actor" cannot declare a parent/,
   },
   {
     name: 'reports a root C4 element with an empty parent',
@@ -165,15 +178,15 @@ for (const {
     name: 'reports a root C4 element that declares a parent',
     documents: [
       elementDocument({
-        id: 'nested-person',
-        kind: 'person',
+        id: 'nested-actor',
+        kind: 'actor',
         parent: 'some-system',
-        sourceFilename: 'groma/plans/test-revision/people/nested-person.md',
+        sourceFilename: 'groma/plans/test-revision/actors/nested-actor.md',
       }),
     ],
     code: 'INVALID_PARENT',
-    sourceFilename: 'groma/plans/test-revision/people/nested-person.md',
-    message: /person "nested-person" cannot declare a parent/,
+    sourceFilename: 'groma/plans/test-revision/actors/nested-actor.md',
+    message: /actor "nested-actor" cannot declare a parent/,
   },
   {
     name: 'reports a contained C4 element with an omitted parent',
@@ -213,8 +226,8 @@ for (const {
     documents: [
       elementDocument({
         id: 'architect',
-        kind: 'person',
-        sourceFilename: 'groma/plans/test-revision/people/architect.md',
+        kind: 'actor',
+        sourceFilename: 'groma/plans/test-revision/actors/architect.md',
         relationships: [{
           href: '../systems/missing/system.md',
           description: 'Uses missing software',
@@ -223,7 +236,7 @@ for (const {
       }),
     ],
     code: 'UNKNOWN_RELATIONSHIP_TARGET',
-    sourceFilename: 'groma/plans/test-revision/people/architect.md',
+    sourceFilename: 'groma/plans/test-revision/actors/architect.md',
     message: /relationship target.*systems\/missing\/system\.md.*does not resolve/,
   },
   {

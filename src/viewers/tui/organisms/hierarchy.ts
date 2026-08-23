@@ -9,7 +9,7 @@ import type { TreeRow } from '../tree.ts'
 import type { Bounds, C4Kind } from '../../../types.ts'
 
 const legendKinds: C4Kind[][] = [
-  ['person', 'system'],
+  ['actor', 'system'],
   ['container', 'component'],
 ]
 

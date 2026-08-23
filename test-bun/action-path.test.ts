@@ -56,16 +56,16 @@ const world: ArchitectureWorld = {
   bounds: { x: 0, y: 0, width: 40, height: 20 },
   groups: [],
   elements: [
-    element('buyer', 'person'),
+    element('buyer', 'actor'),
     element('shop', 'system'),
     element('api', 'container', 'shop'),
     element('web', 'container', 'shop'),
     element('jobs', 'container', 'shop'),
     element('store', 'container', 'shop'),
     element('git', 'system'),
-    element('unused', 'person'),
-    element('reader', 'person'),
-    element('ops', 'person'),
+    element('unused', 'actor'),
+    element('reader', 'actor'),
+    element('ops', 'actor'),
   ],
   relationships: [
     edge('buyer-api', 'buyer', 'api'),
@@ -102,7 +102,7 @@ test.concurrent('outgoing actions are titled by description and the authored tar
   )).toEqual({ title: 'Buyer', detail: 'Sends orders' })
 })
 
-test.concurrent('a person who uses a launcher lists that launcher\'s outgoing', () => {
+test.concurrent('an actor who uses a launcher lists that launcher\'s outgoing', () => {
   expect(outgoingActions('buyer', world).map(item => item.id)).toEqual([
     'api-web',
     'api-jobs',
@@ -127,12 +127,12 @@ test.concurrent('a person who uses a launcher lists that launcher\'s outgoing', 
   expect(pickableActions('api', world)).toEqual([])
 })
 
-test.concurrent('a launcher may reach the person\'s other target through a chain', () => {
+test.concurrent('a launcher may reach the actor\'s other target through a chain', () => {
   const chain: ArchitectureWorld = {
     bounds: { x: 0, y: 0, width: 40, height: 20 },
     groups: [],
     elements: [
-      element('dev', 'person'),
+      element('dev', 'actor'),
       element('tool', 'system'),
       element('cli', 'container', 'tool'),
       element('host', 'container', 'tool'),
@@ -151,7 +151,7 @@ test.concurrent('a launcher may reach the person\'s other target through a chain
   expect(outgoingActions('dev', chain).map(item => item.id)).toEqual(['commands-start', 'dev-screen'])
 })
 
-test.concurrent('an action path is one walk and keeps people who use its start', () => {
+test.concurrent('an action path is one walk and keeps actors who use its start', () => {
   expect([...actionPath('buyer-api', world)].sort()).toEqual([
     'api-jobs',
     'api-web',
@@ -176,7 +176,7 @@ test.concurrent('an action path is one walk and keeps people who use its start',
   expect(actionPath(undefined, world).size).toBe(0)
 })
 
-test.concurrent('the world lists every person command once', () => {
+test.concurrent('the world lists every actor command once', () => {
   expect(worldCommands(world).map(item => item.id)).toEqual([
     'api-web',
     'api-jobs',
@@ -202,7 +202,7 @@ test.concurrent('action legs walk in travel order: approaches, then onward', () 
     'loop-a',
   ])
   expect(actionLegs('missing', world)).toEqual([])
-  // Scoped to one person, only their approach joins the walk.
+  // Scoped to one actor, only their approach joins the walk.
   expect(actionLegs('api-jobs', world, 'buyer').map(leg => leg.id)).toEqual([
     'buyer-api',
     'api-jobs',

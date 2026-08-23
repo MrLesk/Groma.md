@@ -3,7 +3,7 @@ import type { OptimizedBuffer, RGBA } from '@opentui/core'
 import { cell } from './cell.ts'
 import type { Bounds, Origin } from '../../../types.ts'
 
-export type BorderStyle = 'card' | 'person' | 'system' | 'container' | 'group'
+export type BorderStyle = 'card' | 'actor' | 'system' | 'container' | 'group'
 
 interface BorderCharacters {
   bottomLeft: string
@@ -20,7 +20,7 @@ export function borderCharacters(origin: Origin, style: BorderStyle): BorderChar
     // title keep it apart on the map.
     return borderCharacters('planned', 'card')
   }
-  if (style === 'person') {
+  if (style === 'actor') {
     return {
       ...borderCharacters(origin, 'card'),
       bottomLeft: '╰',

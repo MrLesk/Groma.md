@@ -20,7 +20,7 @@ const NAME_MARGIN = 6
 const minimumSize: Record<C4Kind, Pick<Bounds, 'width' | 'height'>> = {
   component: { width: 34, height: 16 },
   container: { width: 42, height: 32 },
-  person: { width: 28, height: 40 },
+  actor: { width: 28, height: 40 },
   system: { width: 44, height: 40 },
 }
 
@@ -59,7 +59,7 @@ function within(
 }
 
 function isMark(element: WorldElement): boolean {
-  return element.kind === 'person' || element.external
+  return element.kind === 'actor' || element.external
 }
 
 function roleOf(

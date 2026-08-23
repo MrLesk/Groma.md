@@ -11,4 +11,4 @@ code:
 
 # Tree
 
-Turns the world into the hierarchy pane's visible rows, expand state, and cursor: people, then systems, then external systems, in the same order as the map. Both viewers share it.
+Turns the world into the hierarchy pane's visible rows, expand state, and cursor: actors, then systems, then external systems, in the same order as the map. Both viewers share it.

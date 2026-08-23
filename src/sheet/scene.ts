@@ -5,7 +5,7 @@ import type { SheetScene } from './types.ts'
 
 /**
  * Composes the merged world into one grid-snapped sheet: flat islands for
- * people, external systems and each internal system, container slabs level
+ * actors, external systems and each internal system, container slabs level
  * with the system islands, buildings on the slabs and islands, group zones,
  * and one
  * lattice route per authored relationship. Pure: the same world gives the same

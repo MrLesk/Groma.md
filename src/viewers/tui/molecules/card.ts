@@ -37,7 +37,7 @@ export function drawCard(
     element.origin,
     color,
     background,
-    element.kind === 'person' ? 'person' : 'card',
+    element.kind === 'actor' ? 'actor' : 'card',
     lit ? TextAttributes.BOLD : dim ? TextAttributes.DIM : 0,
   )
 

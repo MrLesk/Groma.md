@@ -9,4 +9,4 @@ code:
 
 # Instructions
 
-The local instruction hub. Bare `groma` and `groma instructions` print what a person or agent should run next, as plain text, so the next step never depends on remembering the command set.
+The local instruction hub. Bare `groma` and `groma instructions` print what an actor should run next, as plain text, so the next step never depends on remembering the command set.

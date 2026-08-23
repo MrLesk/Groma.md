@@ -339,9 +339,9 @@ test.concurrent('a route crosses a surface border instead of running along it', 
   }
 })
 
-test.concurrent('a person reaches a component inside a container on the one ground plane', () => {
+test.concurrent('an actor reaches a component inside a container on the one ground plane', () => {
   const scene = sheetScene(worldOf([
-    box('buyer', 'person', unit),
+    box('buyer', 'actor', unit),
     box('shop', 'system', unit),
     box('api', 'container', unit, { parent: 'observed:shop' }),
     box('orders', 'component', unit, { parent: 'observed:api' }),

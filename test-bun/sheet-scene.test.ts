@@ -24,12 +24,12 @@ import { box, openclawFixtureRoot, uses, viewerFixtureRoot, worldOf } from './he
 
 const unit = { x: 0, y: 0, width: 1, height: 1 }
 
-/** One person, one system with three containers (0, 2 and 5 components), one external system. */
+/** One actor, one system with three containers (0, 2 and 5 components), one external system. */
 function shopWorld(): ArchitectureWorld {
   const components = (container: string, names: string[]): WorldElement[] => names.map(name =>
     box(name, 'component', unit, { parent: `observed:${container}` }))
   return worldOf([
-    box('buyer', 'person', unit),
+    box('buyer', 'actor', unit),
     box('shop', 'system', unit, { children: ['observed:api', 'observed:web', 'observed:jobs'] }),
     box('api', 'container', unit, { parent: 'observed:shop' }),
     box('web', 'container', unit, { parent: 'observed:shop' }),
@@ -142,17 +142,17 @@ test.concurrent('system islands and slabs give their children two cells on every
   assert.equal(scene.slabs.length, 3)
 })
 
-test.concurrent('islands form one row along gx: people at the west end, externals at the east end', () => {
+test.concurrent('islands form one row along gx: actors at the west end, externals at the east end', () => {
   const scene = sheetScene(worldOf([
-    box('ann', 'person', unit),
-    box('bob', 'person', unit),
+    box('ann', 'actor', unit),
+    box('bob', 'actor', unit),
     box('shop', 'system', unit),
     box('warehouse', 'system', unit),
     box('bank', 'system', unit, { external: true }),
     box('carrier', 'system', unit, { external: true }),
     box('tax', 'system', unit, { external: true }),
   ]))
-  assert.deepEqual(scene.islands.map(island => island.kind), ['people', 'system', 'system', 'external'])
+  assert.deepEqual(scene.islands.map(island => island.kind), ['actors', 'system', 'system', 'external'])
   const rects = scene.islands.map(island => island.rect)
   const centre = (rect: CellRect): number => rect.gy + rect.d / 2
   for (let index = 1; index < rects.length; index += 1) {
@@ -164,14 +164,14 @@ test.concurrent('islands form one row along gx: people at the west end, external
   }
 })
 
-test.concurrent('people and external islands are squares with their buildings centred', () => {
+test.concurrent('actors and external islands are squares with their buildings centred', () => {
   const scene = sheetScene(worldOf([
-    box('ann', 'person', unit),
-    box('bob', 'person', unit),
+    box('ann', 'actor', unit),
+    box('bob', 'actor', unit),
     box('shop', 'system', unit),
     box('bank', 'system', unit, { external: true }),
   ]))
-  for (const kind of ['people', 'external'] as const) {
+  for (const kind of ['actors', 'external'] as const) {
     const island = scene.islands.find(item => item.kind === kind)!
     assert.equal(island.rect.w, island.rect.d)
     const rects = scene.buildings.filter(building => building.surface === island.key).map(building => building.rect)
@@ -261,7 +261,7 @@ test.concurrent('roof text, code files and code lines size a building', () => {
   assert.equal(floorsOf('planned', 2000, range), 1)
 
   const scene = sheetScene(worldOf([
-    box('ann', 'person', unit, { name: 'Ann the architect' }),
+    box('ann', 'actor', unit, { name: 'Ann the architect' }),
     { ...box('bank', 'system', unit, { external: true }), codeLines: 900 },
   ]))
   for (const building of scene.buildings) assert.equal(building.floors, 1)

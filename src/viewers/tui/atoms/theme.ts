@@ -35,7 +35,7 @@ export function themeFromPalette(palette: NormalizedTerminalPalette): ViewerThem
     selected: observed,
     observedTint: mix(palette.defaultBackground, observed, 0.08),
     selectedTint: mix(palette.defaultBackground, observed, 0.18),
-    person: palette.palette[11],
+    actor: palette.palette[11],
     system: palette.palette[14],
     container: mix(palette.palette[12], palette.defaultForeground, 0.7),
     component: palette.palette[13],

@@ -11,4 +11,4 @@ code:
 
 # Action path
 
-Resolves a person command into the walk it lights: the legs from the launcher onward, scoped to one person when picked from their details, and the elements those legs touch. Both viewers share it.
+Resolves an actor command into the walk it lights: the legs from the launcher onward, scoped to one actor when picked from their details, and the elements those legs touch. Both viewers share it.

@@ -30,14 +30,14 @@ collapse and restore the hierarchy and details panes; the map pane
 takes the freed width immediately, and only the camera viewport
 changes, never the world layout.
 
-The hierarchy pane opens with the flows list: every person command
-in the world, deduped across the people who share it, above a rule.
+The hierarchy pane opens with the flows list: every actor command
+in the world, deduped across the actors who share it, above a rule.
 The list is dropped when it would leave no tree row under it.
 The pane cursor walks the flow rows and the tree as one column;
 Enter on a flow row lights its walk (the active row carries the
 accent mark) and Right on one returns to the map. Below the rule
 the pane lists the merged world as a containment tree:
-people, then systems, then external systems at the root, left to
+actors, then systems, then external systems at the root, left to
 right as on the map. Containers sit under their system and
 components under their container, in the same left-to-right order.
 Ghost, missing and external names are dim.
@@ -54,22 +54,22 @@ does holds the meaning: description, relationships, and children.
 How it's built holds the evidence: the technology the element's
 Markdown declares, the scanner, file, and optional symbol from
 `code` under a files-and-lines weight line, and Travelled by, the
-person commands whose walk touches the selection. While the pane is
+actor commands whose walk touches the selection. While the pane is
 focused, Up and Down move over the tab's pickable command rows and
 Enter lights that walk. With no command rows they scroll the pane.
-Enter on a person or other leaf focuses the details pane. Right on
+Enter on an actor or other leaf focuses the details pane. Right on
 the map with nothing further right does the same. When the
-selection is a person who uses a launcher (software they use that
-starts other software they also use), the person's outgoing rows
-are that launcher's commands, plus the person's own relationships
+selection is an actor who uses a launcher (software they use that
+starts other software they also use), the actor's outgoing rows
+are that launcher's commands, plus the actor's own relationships
 the launcher does not reach. Up and Down choose one command and
-light its path immediately. A command picked from a person's details
-walks in from that person alone, even when other people share the
+light its path immediately. A command picked from an actor's details
+walks in from that actor alone, even when other actors share the
 launcher; picking the same command from the flows list or a
 Travelled-by row lights every sharer's approach. Esc or Left
 returns to the map and leaves the path on, so arrows, Enter, and
 zoom still inspect the boxes it touches. `x` clears the path.
-Choosing another person command replaces it. A lit walk is drawn
+Choosing another actor command replaces it. A lit walk is drawn
 whole at every level; a leg that finds no pair of attach points at
 this level runs between where its real endpoints sit on the map.
 
@@ -87,7 +87,7 @@ not a ghost.
 
 Software wrappers keep the world-layout size from code up. The camera
 is the only shrink. Each level names that layer of internal software
-and draws the next software layer as unnamed underlay. People and
+and draws the next software layer as unnamed underlay. Actors and
 external systems are marks: they keep their world origin, and their
 drawn size follows the named level. Titles stay readable in screen
 cells. Context draws the containers of internal systems as unlettered
@@ -99,10 +99,10 @@ may appear after the map is already open, and saving a task file
 refreshes it. A missing or slow Backlog CLI does not block the view.
 
 Each kind has one mark used in the tree, on the map, and in
-details: a yellow ● person, a cyan ■ system, a light □ container,
+details: a yellow ● actor, a cyan ■ system, a light □ container,
 and a magenta ▪ component. External systems use a dim system mark.
 The map carries no kind or origin words. Details spells the kind
-next to the mark and origin as a word. Person cards have rounded
+next to the mark and origin as a word. Actor cards have rounded
 corners. Planned and missing items use dashed and dotted borders,
 and missing cards carry a hatched fill.
 
@@ -130,7 +130,7 @@ lies in that direction, selection exits the boundary to the nearest
 outer item in that direction and the camera zooms out. Enter on a
 system or container changes C4 level inward; the hierarchy pane jumps
 to any element at its level. At Containers the camera frames the
-parent system and the people who use it. At Components it frames
+parent system and the actors who use it. At Components it frames
 the parent container.
 
 ## What you can do
