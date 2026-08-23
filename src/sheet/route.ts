@@ -118,10 +118,10 @@ class Heap {
 
 /**
  * Routes every relationship on the quarter-cell lattice with A*. A route
- * leaves its source from the middle of the side facing the target and
- * arrives, pointing inward, at the middle of the side of the target facing
- * it; when the two middles do not line up the line stays straight and the
- * longer side gives way. Later routes spread out around the middle. A back
+ * normally leaves its source from the middle of the side most directly facing
+ * the target; when buildings crowd that departure, it takes a clear side and
+ * runs a full cell before bending. It arrives, pointing inward, at the middle
+ * of the side of the target facing it. Later routes spread out around the middle. A back
  * side of a
  * building is hidden under its roof, so there a route starts or ends just
  * behind the building where the roof's shadow ends: on screen the line
@@ -261,8 +261,8 @@ export function routeAll(
     })
   }
 
-  /** The nodes from `from` stepping `lanes` times in `direction`, or undefined when one is off the lattice, blocked or on a lane in use. */
-  const run = (from: number, direction: number, lanes: number): number[] | undefined => {
+  /** The nodes from `from` stepping `lanes` times in `direction`, or undefined when one is off the lattice, blocked, or on a used lane unless `ignoreUsed`. */
+  const run = (from: number, direction: number, lanes: number, ignoreUsed = false): number[] | undefined => {
     const nodes = [from]
     let x = from % width
     let y = (from - x) / width
@@ -271,7 +271,7 @@ export function routeAll(
       y += DY[direction]!
       if (x < 0 || y < 0 || x >= width || y >= height) return undefined
       const next = nodeOf(x, y)
-      if (blocked[next] || used[edgeOf(nodes[nodes.length - 1]!, next)]) return undefined
+      if (blocked[next] || (!ignoreUsed && used[edgeOf(nodes[nodes.length - 1]!, next)])) return undefined
       nodes.push(next)
     }
     return nodes
@@ -353,17 +353,54 @@ export function routeAll(
       heap.push({ f: cost + h(state >> 2), g: cost, state })
     }
     const sourceFacing = facing(sourceRect, targetRect)
+    const gap: Record<Side, number> = {
+      'x-': sourceRect.x0 - targetRect.x1,
+      'x+': targetRect.x0 - sourceRect.x1,
+      'y-': sourceRect.y0 - targetRect.y1,
+      'y+': targetRect.y0 - sourceRect.y1,
+    }
+    const primaryGap = Math.max(...[...sourceFacing].map(side => gap[side]))
+    const primaryFacing = new Set([...sourceFacing].filter(side => gap[side] === primaryGap))
+    const foreignBuildings = [...endpoints.values()]
+      .filter(endpoint => endpoint.kind === 'building' && !own.has(endpoint.key))
+      .map(endpoint => lanes(endpoint.rect))
+    const departures: {
+      side: Side
+      direction: number
+      from: number
+      port: number
+      offset: number
+      approach: number[]
+      corridor: number[] | undefined
+    }[] = []
     for (const side of SIDES) {
       const direction = OUTWARD[side]
       for (const { node, offset } of ports(sourceRect, side)) {
         const from = anchor(source, side, node)
-        const out = from === undefined ? undefined : run(from, direction, APPROACH)
-        if (out === undefined) continue
-        const start = out[out.length - 1]!
-        const cost = (sourceFacing.has(side) ? 0 : SIDE_PENALTY) + offset * OFF_CENTRE + APPROACH * STEP
-        push(start * 4 + direction, cost, -1)
-        starts.set(start * 4 + direction, { port: node, prefix: out.slice(0, -1) })
+        if (from === undefined) continue
+        const approach = run(from, direction, APPROACH)
+        if (approach === undefined) continue
+        const corridor = run(from, direction, LANES, true)
+        departures.push({ side, direction, from, port: node, offset, approach, corridor })
       }
+    }
+    const clear = ({ corridor }: typeof departures[number]): boolean => corridor !== undefined && corridor.every(node => {
+      const x = node % width
+      const y = (node - x) / width
+      return foreignBuildings.every(rect =>
+        Math.max(rect.x0 - x, 0, x - rect.x1) + Math.max(rect.y0 - y, 0, y - rect.y1) >= CLEARANCE_REACH)
+    })
+    const clearPrimary = departures.some(departure => primaryFacing.has(departure.side) && clear(departure))
+    for (const departure of departures) {
+      const out = clearPrimary
+        ? departure.approach
+        : (clear(departure) ? run(departure.from, departure.direction, LANES) : undefined)
+      if (out === undefined) continue
+      const start = out[out.length - 1]!
+      const sideCost = clearPrimary && !sourceFacing.has(departure.side) ? SIDE_PENALTY : 0
+      const cost = sideCost + departure.offset * OFF_CENTRE + (out.length - 1) * STEP
+      push(start * 4 + departure.direction, cost, -1)
+      starts.set(start * 4 + departure.direction, { port: departure.port, prefix: out.slice(0, -1) })
     }
     while (heap.size > 0) {
       const { state } = heap.pop()
