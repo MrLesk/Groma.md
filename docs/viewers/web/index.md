@@ -188,7 +188,8 @@ pointing up; unfolded it shows the Live work label, an Agents toggle
 that hides every pin and chip, a Completed toggle that hides the
 finished ones while Agents is on, and a scrollable strip of chips,
 one per pin with its badge and task id, in progress first and the
-finished ones in grey. The pins still shown on an element fan out
+finished ones in grey; hovering a chip, like hovering a pin head,
+shows the task's title. The pins still shown on an element fan out
 afresh, so a pin left alone stands over its roof. Pins and chips are
 greyscale until their task is active: clicking a pin's head or a
 chip activates the task, so its pins and chips show their colour and

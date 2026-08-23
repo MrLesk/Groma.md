@@ -22,6 +22,7 @@ import type { ActiveAction, DetailsTab } from './organisms/details.ts'
 import { paintFlows } from './organisms/flows.ts'
 import { paintHierarchy } from './organisms/hierarchy.ts'
 import { createPins } from './organisms/pins.ts'
+import { createTip } from './organisms/tip.ts'
 import { createWorkIsland } from './organisms/work-island.ts'
 import type { WebPayload } from './payload.ts'
 import { readView, writeView } from './url.ts'
@@ -45,8 +46,9 @@ const actionHost = document.getElementById('action')!
 const zoomHost = document.getElementById('zoom')!
 
 const map = createMap(host)
-const pins = createPins(host, id => map.anchorOf(id), id => toggleTask(id))
-const island = createWorkIsland(host, id => toggleTask(id), pins.show)
+const tip = createTip(host)
+const pins = createPins(host, id => map.anchorOf(id), id => toggleTask(id), tip)
+const island = createWorkIsland(host, id => toggleTask(id), pins.show, tip)
 let tree = initialTree()
 const opened = readView(location.search, world, work)
 let selectedId = opened.selectedId ?? firstSystem(world)?.representationId
