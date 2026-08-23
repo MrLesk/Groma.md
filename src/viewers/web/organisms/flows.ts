@@ -4,7 +4,7 @@ import { sectionHeading } from './sidebar-section.ts'
 /** The list starts folded and keeps its state across repaints. */
 let unfolded = false
 
-/** The sidebar's flow list, folded under its heading: every person command, the active one lit. */
+/** The sidebar's flow list, folded under its heading: every actor command, the active one lit. */
 export function paintFlows(
   host: HTMLElement,
   commands: WorldRelationship[],

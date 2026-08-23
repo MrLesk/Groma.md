@@ -47,7 +47,7 @@ export function paintWorld(
   },
 ): void {
   buffer.clear(theme.background)
-  const legs = actionLegs(options.lit.id, world, options.lit.personId)
+  const legs = actionLegs(options.lit.id, world, options.lit.actorId)
   const pathIds = new Set(legs.map(leg => leg.id))
   const traced = options.actionStep === undefined ? undefined : legs[options.actionStep]
   const selectionId = projection.currentId ?? undefined

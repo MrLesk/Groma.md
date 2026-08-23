@@ -119,12 +119,12 @@ test.concurrent('the tabs split meaning from build evidence', () => {
   expect(tabSections('how')).toEqual(['technology', 'code', 'travelledBy'])
 })
 
-test.concurrent('a person lists launcher commands as pickable actions', () => {
+test.concurrent('an actor lists launcher commands as pickable actions', () => {
   const fixture: ArchitectureWorld = {
     bounds: { x: 0, y: 0, width: 40, height: 20 },
     groups: [],
     elements: [
-      element('buyer', 'person', null, []),
+      element('buyer', 'actor', null, []),
       element('api', 'container', null, []),
       element('web', 'container', null, []),
       element('jobs', 'container', null, []),
@@ -192,18 +192,17 @@ test.concurrent('a person lists launcher commands as pickable actions', () => {
 })
 
 test.concurrent('a picked action stays across selection and clears on x', () => {
-  let action = nextActiveAction({}, { type: 'pick', id: 'api-jobs', personId: 'buyer' })
+  let action = nextActiveAction({}, { type: 'pick', id: 'api-jobs', actorId: 'buyer' })
   expect(action.id).toBe('api-jobs')
-  expect(action.personId).toBe('buyer')
+  expect(action.actorId).toBe('buyer')
   action = nextActiveAction(action, { type: 'select' })
   expect(action.id).toBe('api-jobs')
-  expect(action.personId).toBe('buyer')
-  // A person-less pick replaces the walk and drops the scope.
+  expect(action.actorId).toBe('buyer')
+  // An actor-less pick replaces the walk and drops the scope.
   action = nextActiveAction(action, { type: 'pick', id: 'api-web' })
   expect(action.id).toBe('api-web')
-  expect(action.personId).toBeUndefined()
+  expect(action.actorId).toBeUndefined()
   action = nextActiveAction(action, { type: 'clear' })
   expect(action.id).toBeUndefined()
-  expect(action.personId).toBeUndefined()
+  expect(action.actorId).toBeUndefined()
 })
-

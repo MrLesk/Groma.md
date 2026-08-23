@@ -107,8 +107,8 @@ test('keeps the group on the element and omits it otherwise', () => {
 test('resolves a relationship link to the target document stable id', () => {
   const source = elementDocument({
     id: 'architect',
-    kind: 'person',
-    sourceFilename: 'groma/plans/test-revision/people/architect.md',
+    kind: 'actor',
+    sourceFilename: 'groma/plans/test-revision/actors/architect.md',
     relationships: [{
       href: '../systems/platform/system.md#context',
       label: 'Readable platform name',
@@ -129,7 +129,7 @@ test('resolves a relationship link to the target document stable id', () => {
     targetId: 'stable-platform-id',
     description: 'Uses the platform',
     technology: 'Browser',
-    sourceFilename: 'groma/plans/test-revision/people/architect.md',
+    sourceFilename: 'groma/plans/test-revision/actors/architect.md',
     targetSourceFilename: 'groma/plans/test-revision/systems/platform/system.md',
   }])
 })
@@ -140,10 +140,10 @@ test('orders equivalent unchanged revisions deterministically', () => {
     kind: 'system',
     sourceFilename: 'groma/plans/test-revision/systems/z/system.md',
   })
-  const person = elementDocument({
-    id: 'a-person',
-    kind: 'person',
-    sourceFilename: 'groma/plans/test-revision/people/a.md',
+  const actor = elementDocument({
+    id: 'a-actor',
+    kind: 'actor',
+    sourceFilename: 'groma/plans/test-revision/actors/a.md',
     relationships: [
       {
         href: '../systems/z/system.md',
@@ -158,11 +158,11 @@ test('orders equivalent unchanged revisions deterministically', () => {
     ],
   })
 
-  const first = buildArchitectureModel(revisionRecord([system, person]))
-  const second = buildArchitectureModel(revisionRecord([person, system]))
+  const first = buildArchitectureModel(revisionRecord([system, actor]))
+  const second = buildArchitectureModel(revisionRecord([actor, system]))
 
   assert.deepEqual(first, second)
-  assert.deepEqual(first.elements.map(element => element.id), ['a-person', 'z-system'])
+  assert.deepEqual(first.elements.map(element => element.id), ['a-actor', 'z-system'])
   assert.deepEqual(
     first.relationships.map(relationship => relationship.description),
     ['First alphabetically', 'Second alphabetically'],

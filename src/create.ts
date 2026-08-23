@@ -10,7 +10,7 @@ const expectedParentKinds = new Map<C4Kind, C4Kind>([
   ['container', 'system'],
   ['component', 'container'],
 ])
-const rootKinds = new Set<C4Kind>(['person', 'system'])
+const rootKinds = new Set<C4Kind>(['actor', 'system'])
 const supportedKinds = new Set<C4Kind>([...rootKinds, ...expectedParentKinds.keys()])
 
 interface WorldRecord {
@@ -50,7 +50,7 @@ function plannedPathFor(
   parent: WorldRecord | undefined,
 ): string {
   const root = `groma/plans/${planId}`
-  if (kind === 'person') return `${root}/people/${id}.md`
+  if (kind === 'actor') return `${root}/actors/${id}.md`
   if (kind === 'system') return `${root}/systems/${id}/system.md`
   if (parent === undefined) {
     throw new Error(`missing parent for ${id}`)

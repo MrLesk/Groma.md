@@ -192,7 +192,7 @@ function roofOutline(rect: CellRect): { gx: number; gy: number }[] {
  * Where a route meets a curved building: it was routed against the square
  * footprint, so an off-centre end sits beside the wall rather than on it. A
  * route leaves and meets a side square on, so the end slides along its own
- * axis onto the near wall of the shape, and the line reaches what people see
+ * axis onto the near wall of the shape, and the line reaches what the viewer sees
  * instead of stopping beside it. An end west or north of the footprint is the
  * anchor of a back side, which the router already placed where the roof's
  * shadow ends, so the shape slides under the roof to meet it there.

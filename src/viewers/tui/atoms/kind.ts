@@ -1,14 +1,14 @@
 import type { C4Kind } from '../../../types.ts'
 
 const glyphs: Record<C4Kind, string> = {
-  person: '●',
+  actor: '●',
   system: '■',
   container: '□',
   component: '▪',
 }
 
 const labels: Record<C4Kind, string> = {
-  person: 'Person',
+  actor: 'Actor',
   system: 'System',
   container: 'Container',
   component: 'Component',

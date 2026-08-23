@@ -72,7 +72,7 @@ function keepTitledCardInView(bounds: Bounds, viewport: Bounds): Bounds {
 }
 
 function leafCard(element: WorldElement): boolean {
-  return element.kind === 'person' || element.external
+  return element.kind === 'actor' || element.external
 }
 
 type ProjectedElement = ReturnType<typeof projectElements>[number]

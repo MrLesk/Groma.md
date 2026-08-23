@@ -38,7 +38,7 @@ test('a fixture with each C4 kind and a relationship validates', async () => {
     ['observed', 'next'],
   )
   assert.deepEqual(results.map(result => result.elementCount), [5, 1])
-  assert.ok(kinds.has('person'))
+  assert.ok(kinds.has('actor'))
   assert.ok(kinds.has('system'))
   assert.ok(kinds.has('container'))
   assert.ok(kinds.has('component'))

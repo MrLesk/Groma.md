@@ -1,6 +1,6 @@
 ---
 id: human-architect
-kind: person
+kind: actor
 ---
 
 # Human architect

@@ -37,7 +37,7 @@ Each candidate has one of these types:
 | `system`    | A software system that delivers value independently         | none           |
 | `container` | An application or data store that makes a system work       | `system`       |
 | `component` | A cohesive responsibility inside a container                | `container`    |
-| `person`    | A human or external actor interacting with the architecture | none; optional |
+| `actor`     | A human or automated actor interacting with the architecture | none; optional |
 
 A candidate of any kind may carry Code references; the TypeScript plugin
 puts one on every container, and `scripts/validate-architecture.ts`

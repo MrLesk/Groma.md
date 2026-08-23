@@ -62,20 +62,20 @@ export function tabSections(tab: DetailsTab): Section[] {
     : ['technology', 'code', 'travelledBy']
 }
 
-/** The lit walk: its command and, for a person-details pick, the picker. */
+/** The lit walk: its command and, for a pick from actor details, the picker. */
 export interface ActiveAction {
   id?: string
-  personId?: string
+  actorId?: string
 }
 
 export function nextActiveAction(
   current: ActiveAction,
   event:
-    | { type: 'pick'; id: string; personId?: string }
+    | { type: 'pick'; id: string; actorId?: string }
     | { type: 'select' }
     | { type: 'clear' },
 ): ActiveAction {
-  if (event.type === 'pick') return { id: event.id, personId: event.personId }
+  if (event.type === 'pick') return { id: event.id, actorId: event.actorId }
   if (event.type === 'clear') return {}
   return current
 }
@@ -101,7 +101,7 @@ export function inspectDetails(
     relationships.push({
       id: relationship.id,
       outgoing,
-      pickable: element.kind === 'person' && outgoing,
+      pickable: element.kind === 'actor' && outgoing,
       peerId,
       peerName: peer?.name ?? peerId,
       peerKind: peer?.kind ?? null,
@@ -165,7 +165,7 @@ export function paintDetails(
   host: HTMLElement,
   inspected: Inspected,
   onSelect: (id: string) => void,
-  /** ownCommand is true for the person's own command rows, false for walk references. */
+  /** ownCommand is true for the actor's own command rows, false for walk references. */
   onPickAction: (id: string, ownCommand: boolean) => void,
   activeActionId: string | undefined,
   tab: DetailsTab,

@@ -38,7 +38,7 @@ documents is complete, and its README remains as the plan record.
 All architecture locations follow the C4 ownership hierarchy:
 
 ```text
-people/<person-id>.md
+actors/<actor-id>.md
 systems/<system-id>/system.md
 systems/<system-id>/containers/<container-id>/container.md
 systems/<system-id>/containers/<container-id>/components/<component-id>.md
@@ -55,7 +55,7 @@ Containment is limited to:
 
 | Kind | Parent |
 | --- | --- |
-| `person` | none |
+| `actor` | none |
 | `system` | none |
 | `container` | a `system` |
 | `component` | a `container` |
@@ -68,7 +68,7 @@ these fields:
 | Field | Required | Meaning |
 | --- | --- | --- |
 | `id` | yes | Stable, meaningful identifier in lowercase kebab-case, unique in the merged world. |
-| `kind` | yes | One of `person`, `system`, `container`, or `component`. |
+| `kind` | yes | One of `actor`, `system`, `container`, or `component`. |
 | `parent` | for containers and components | The stable `id` of the containing system or container. |
 | `external` | no | `true` only for a system outside the architecture's ownership boundary; absence means `false`. |
 | `group` | no | Readable name of a hand-chosen cluster. Siblings with the same parent and the same `group` render inside one boundary labeled with that name. |
@@ -146,7 +146,7 @@ link that reaches no element document is an error. Core resolves parents by
 A software-to-software relationship is authored on the lowest elements
 that exist. Once two components participate, write the row there and not
 again on their containers or systems. Parents show as connected because
-that child row exists. A person-to-system relationship, and a parent row
+that child row exists. An actor-to-system relationship, and a parent row
 with no lower pin yet, stay on those documents.
 
 `Description` states the intent of the interaction. On an observed document,
@@ -185,7 +185,7 @@ TypeScript, NestJS, and PostgreSQL.
 
 The [observed architecture](observed/README.md) combined with the
 [MVP plan](plans/mvp/README.md) is a complete example of the document
-format: observed people, systems, containers, and components, plus planned
+format: observed actors, systems, containers, and components, plus planned
 fragments that add new IDs only.
 
 All element documents are valid CommonMark/GFM with YAML frontmatter and can

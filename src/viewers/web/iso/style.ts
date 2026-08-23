@@ -14,7 +14,7 @@ function tile(id: string, plane: Plane, size: number, body: string): string {
 
 /**
  * One grey pattern per kind, each tile drawn in the pixels of the plane it
- * lies on and mapped by that plane's matrix: dots for people (their island
+ * lies on and mapped by that plane's matrix: dots for actors (their island
  * and the sides of their buildings), crosses for external systems, storey
  * lines for the sides of components, a faint grain for container slabs and a
  * diagonal hatch for group zones. Systems have no pattern, and neither does
@@ -81,17 +81,17 @@ export const mapCss = `
   #map .ground, #map .face.top { fill: var(--top-fill); }
   #map .face.right { fill: var(--right-fill); }
   #map .face.left { fill: var(--left-fill); }
-  #map .person .face { fill: var(--paper); }
+  #map .actor .face { fill: var(--paper); }
   #map .zone .ground { fill: url(#hatch-ground); stroke: var(--muted); }
   /* the sheet's name chips only: the Live work island has chips of its own that must stay clickable */
   #map .pattern, #map > svg .chip { stroke: none; pointer-events: none; }
-  #map .island.people .pattern { fill: url(#dots); }
+  #map .island.actors .pattern { fill: url(#dots); }
   #map .island.external .pattern { fill: url(#cross); }
   #map .slab .pattern { fill: url(#grain); }
   #map .building.component .pattern.left { fill: url(#lines-left); }
   #map .building.component .pattern.right { fill: url(#lines-right); }
-  #map .building.person .pattern.left { fill: url(#dots-left); }
-  #map .building.person .pattern.right { fill: url(#dots-right); }
+  #map .building.actor .pattern.left { fill: url(#dots-left); }
+  #map .building.actor .pattern.right { fill: url(#dots-right); }
   #map .building.external .pattern.left { fill: url(#cross-left); }
   #map .building.external .pattern.right { fill: url(#cross-right); }
   #map > svg .chip { fill: var(--paper); fill-opacity: 0.75; }

@@ -18,7 +18,7 @@ matched it.
 2. Core attaches those results to the current world: refresh `code` on a
    known observed ID, or create a new observed element. Core does not accept
    a ghost.
-3. A person or coding agent changes the architecture through Groma. New
+3. An actor changes the architecture through Groma. New
    parts and required changes become plan ghosts. Explanations stay on
    observed documents.
 4. This plan adds IDs that do not yet exist. Parents resolve against

@@ -19,7 +19,7 @@
 export const GAP = 2
 /** Cells between nested contents and a system, slab or group edge. More gives inner buildings room and makes every nested surface larger. */
 export const NESTED_CONTENT_PAD = 2
-/** Cells of screen width between islands. More separates the people, the systems and the externals; the sheet widens by as much. */
+/** Cells of screen width between islands. More separates the actors, the systems and the externals; the sheet widens by as much. */
 export const ISLAND_GAP = 3
 /**
  * Cells of visible ground a corridor keeps behind a roof. An arrow leaves its

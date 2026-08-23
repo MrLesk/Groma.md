@@ -21,7 +21,7 @@ function viewOf(state: ViewerState): Pick<ViewerState, 'level' | 'currentId'> {
 
 const box = (
   id: string,
-  kind: 'person' | 'container',
+  kind: 'actor' | 'container',
   parent: string | null = null,
 ) => ({
   representationId: id,
@@ -272,11 +272,11 @@ test.concurrent('leave from details returns to the map and the parent Enter open
   assert.deepEqual(viewOf(state), { level: 'containers', currentId: 'observed:cleft' })
 })
 
-test.concurrent('a person action stays on after leaving details and x clears it', () => {
+test.concurrent('an actor action stays on after leaving details and x clears it', () => {
   const world: ArchitectureWorld = {
     bounds: { x: 0, y: 0, width: 20, height: 10 },
     groups: [],
-    elements: [box('buyer', 'person'), box('api', 'container'), box('web', 'container')],
+    elements: [box('buyer', 'actor'), box('api', 'container'), box('web', 'container')],
     relationships: [
       edge('buyer-api', 'buyer', 'api'),
       edge('buyer-web', 'buyer', 'web'),
@@ -318,7 +318,7 @@ test.concurrent('s traces the active walk one leg at a time and wraps', () => {
   const world: ArchitectureWorld = {
     bounds: { x: 0, y: 0, width: 20, height: 10 },
     groups: [],
-    elements: [box('buyer', 'person'), box('api', 'container'), box('web', 'container')],
+    elements: [box('buyer', 'actor'), box('api', 'container'), box('web', 'container')],
     // buyer uses api and web, making api a launcher, so picking its api-web
     // command walks buyer-api then api-web.
     relationships: [
@@ -358,7 +358,7 @@ test.concurrent('t flips the details tab and How lists travelled-by picks', () =
   const world: ArchitectureWorld = {
     bounds: { x: 0, y: 0, width: 20, height: 10 },
     groups: [],
-    elements: [box('buyer', 'person'), box('api', 'container'), box('web', 'container')],
+    elements: [box('buyer', 'actor'), box('api', 'container'), box('web', 'container')],
     // buyer uses api and web, so api is a launcher and api-web its command.
     relationships: [
       edge('buyer-api', 'buyer', 'api'),
@@ -382,10 +382,10 @@ test.concurrent('t flips the details tab and How lists travelled-by picks', () =
   assert.equal(state.actionCursor, 'api-web')
   state = reduceViewer(world, state, 'enter')
   assert.equal(state.activeActionId, 'api-web')
-  // A travelled-by pick has no picking person.
-  assert.equal(state.activeActionPersonId, undefined)
+  // A travelled-by pick has no picking actor.
+  assert.equal(state.activeActionActorId, undefined)
 
-  // On What, a non-person selection scrolls instead.
+  // On What, a non-actor selection scrolls instead.
   state = reduceViewer(world, state, 'toggle-details-tab')
   assert.equal(state.detailsTab, 'what')
   state = reduceViewer(world, { ...state, actionCursor: undefined }, 'down')
@@ -393,13 +393,13 @@ test.concurrent('t flips the details tab and How lists travelled-by picks', () =
   assert.equal(state.actionCursor, undefined)
 })
 
-test.concurrent('a details pick scopes the walk to that person; a flows pick does not', () => {
+test.concurrent('a details pick scopes the walk to that actor; a flows pick does not', () => {
   const world: ArchitectureWorld = {
     bounds: { x: 0, y: 0, width: 20, height: 10 },
     groups: [],
     elements: [
-      box('buyer', 'person'),
-      box('ops', 'person'),
+      box('buyer', 'actor'),
+      box('ops', 'actor'),
       box('api', 'container'),
       box('web', 'container'),
     ],
@@ -420,26 +420,26 @@ test.concurrent('a details pick scopes the walk to that person; a flows pick doe
   }
   state = reduceViewer(world, state, 'enter')
   assert.equal(state.activeActionId, 'api-web')
-  assert.equal(state.activeActionPersonId, 'buyer')
+  assert.equal(state.activeActionActorId, 'buyer')
 
   // The scoped walk has two legs (buyer's approach, then the command),
-  // so a third step wraps; the other person's approach is not walked.
+  // so a third step wraps; the other actor's approach is not walked.
   state = reduceViewer(world, state, 'step-action')
   state = reduceViewer(world, state, 'step-action')
   state = reduceViewer(world, state, 'step-action')
   assert.equal(state.actionStep, 0)
 
   state = reduceViewer(world, state, 'clear-action')
-  assert.equal(state.activeActionPersonId, undefined)
+  assert.equal(state.activeActionActorId, undefined)
 
-  // The flows list has no person context: the pick keeps the whole walk.
+  // The flows list has no actor context: the pick keeps the whole walk.
   state = reduceViewer(world, {
     ...state,
     focus: 'hierarchy',
     tree: { ...state.tree, cursor: 'api-web' },
   }, 'enter')
   assert.equal(state.activeActionId, 'api-web')
-  assert.equal(state.activeActionPersonId, undefined)
+  assert.equal(state.activeActionActorId, undefined)
 })
 
 test.concurrent('browsing details previews a walk; only Enter keeps it', () => {
@@ -447,7 +447,7 @@ test.concurrent('browsing details previews a walk; only Enter keeps it', () => {
     bounds: { x: 0, y: 0, width: 20, height: 10 },
     groups: [],
     elements: [
-      box('buyer', 'person'),
+      box('buyer', 'actor'),
       box('api', 'container'),
       box('web', 'container'),
       box('jobs', 'container'),
@@ -460,35 +460,35 @@ test.concurrent('browsing details previews a walk; only Enter keeps it', () => {
     ],
   }
   let state: ViewerState = { ...initialState(world), currentId: 'buyer', focus: 'details' }
-  assert.deepEqual(litAction(world, state), { id: undefined, personId: undefined })
+  assert.deepEqual(litAction(world, state), { id: undefined, actorId: undefined })
 
-  // Browsing lights the row under the cursor, scoped to the person.
+  // Browsing lights the row under the cursor, scoped to the actor.
   state = reduceViewer(world, state, 'down')
   assert.equal(state.actionCursor, 'api-web')
-  assert.deepEqual(litAction(world, state), { id: 'api-web', personId: 'buyer' })
+  assert.deepEqual(litAction(world, state), { id: 'api-web', actorId: 'buyer' })
   assert.equal(state.activeActionId, undefined)
   state = reduceViewer(world, state, 'down')
-  assert.deepEqual(litAction(world, state), { id: 'api-jobs', personId: 'buyer' })
+  assert.deepEqual(litAction(world, state), { id: 'api-jobs', actorId: 'buyer' })
 
   // Leaving without Enter drops the preview: nothing was committed.
   const left = reduceViewer(world, state, 'dismiss')
   assert.equal(left.focus, 'architecture')
-  assert.deepEqual(litAction(world, left), { id: undefined, personId: undefined })
+  assert.deepEqual(litAction(world, left), { id: undefined, actorId: undefined })
 
   // Enter commits, so the walk survives leaving the pane.
   state = reduceViewer(world, state, 'enter')
   assert.equal(state.activeActionId, 'api-jobs')
   const kept = reduceViewer(world, state, 'dismiss')
-  assert.deepEqual(litAction(world, kept), { id: 'api-jobs', personId: 'buyer' })
+  assert.deepEqual(litAction(world, kept), { id: 'api-jobs', actorId: 'buyer' })
 
   // Browsing again previews over the commitment without replacing it.
   let browsing = reduceViewer(world, { ...kept, focus: 'details' }, 'up')
-  assert.deepEqual(litAction(world, browsing), { id: 'api-web', personId: 'buyer' })
+  assert.deepEqual(litAction(world, browsing), { id: 'api-web', actorId: 'buyer' })
   assert.equal(browsing.activeActionId, 'api-jobs')
   browsing = reduceViewer(world, browsing, 'dismiss')
-  assert.deepEqual(litAction(world, browsing), { id: 'api-jobs', personId: 'buyer' })
+  assert.deepEqual(litAction(world, browsing), { id: 'api-jobs', actorId: 'buyer' })
 
-  // A How-tab preview is a walk reference, so it carries no person scope.
+  // A How-tab preview is a walk reference, so it carries no actor scope.
   const how = reduceViewer(world, {
     ...state,
     currentId: 'web',
@@ -496,14 +496,14 @@ test.concurrent('browsing details previews a walk; only Enter keeps it', () => {
     detailsTab: 'how',
     actionCursor: undefined,
   }, 'down')
-  assert.deepEqual(litAction(world, how), { id: 'api-web', personId: undefined })
+  assert.deepEqual(litAction(world, how), { id: 'api-web', actorId: undefined })
 })
 
 test.concurrent('the hierarchy cursor reaches the flow rows and Enter lights one', () => {
   const world: ArchitectureWorld = {
     bounds: { x: 0, y: 0, width: 20, height: 10 },
     groups: [],
-    elements: [box('buyer', 'person'), box('api', 'container'), box('web', 'container')],
+    elements: [box('buyer', 'actor'), box('api', 'container'), box('web', 'container')],
     relationships: [
       edge('buyer-api', 'buyer', 'api'),
       edge('buyer-web', 'buyer', 'web'),

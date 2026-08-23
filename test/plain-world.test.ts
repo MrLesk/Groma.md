@@ -18,7 +18,7 @@ const fixtureRoot = path.resolve(
   'plain-view',
 )
 
-const approvedWorld = `buyer  person  Buyer
+const approvedWorld = `buyer  actor  Buyer
   Pays for goods.
   ->  uses  shop
 shop  system  Shop
@@ -40,7 +40,7 @@ next
   The next release adds stock checks.
   stock
 
-1 person, 2 systems, 2 containers, 2 components`
+1 actor, 2 systems, 2 containers, 2 components`
 
 function element(
   fields: Partial<AnnotatedElement> & Pick<AnnotatedElement, 'id' | 'kind' | 'origin'>,
@@ -106,7 +106,7 @@ test('formatPlainWorld omits the plans section when no plan exists', () => {
       'shop  system  Shop',
       '  The store.',
       '',
-      '0 people, 1 system, 0 containers, 0 components',
+      '0 actors, 1 system, 0 containers, 0 components',
     ].join('\n'),
   )
   assert.doesNotMatch(printed, /^plans$/m)
@@ -171,7 +171,7 @@ test('a restated id prints once as planned and keeps only the winning source edg
       '  Reserve stock first.',
       '  orders',
       '',
-      '0 people, 1 system, 0 containers, 1 component',
+      '0 actors, 1 system, 0 containers, 1 component',
     ].join('\n'),
   )
   assert.doesNotMatch(printed, /Places orders|charges/)

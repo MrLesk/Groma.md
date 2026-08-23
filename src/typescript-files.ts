@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process'
+import { existsSync } from 'node:fs'
 import path from 'node:path'
 
 export interface TypeScriptScannerConfig {
@@ -113,6 +114,7 @@ export async function listTypeScriptFiles(
   const listed = await gitListFiles(repositoryRoot)
   return listed
     .map(file => file.split(path.sep).join('/'))
+    .filter(file => existsSync(path.join(repositoryRoot, file)))
     .filter(file => isTypeScriptScanFile(file, config))
     .sort()
 }

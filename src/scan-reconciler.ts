@@ -69,8 +69,8 @@ function observedPathFor(
   id: string,
   parent: WorldRecord | undefined,
 ): string {
-  if (candidate.kind === 'person') {
-    return `groma/observed/people/${id}.md`
+  if (candidate.kind === 'actor') {
+    return `groma/observed/actors/${id}.md`
   }
   if (candidate.kind === 'system') {
     return `groma/observed/systems/${id}/system.md`

@@ -85,7 +85,7 @@ test('scanTypeScriptSource returns observation candidates', async t => {
   assert.equal('relationships' in result, false)
 })
 
-test('gitignore and ignore patterns drop files; globs select the rest', async t => {
+test('gitignore, deleted files, and ignore patterns drop files; globs select the rest', async t => {
   const root = await createRepo(t, {
     'src/cli.ts': 'export function start() {}\n',
     'lib/extra.ts': 'export function extra() {}\n',
@@ -104,6 +104,9 @@ test('gitignore and ignore patterns drop files; globs select the rest', async t 
     ignore: ['**/*.test.ts'],
   })
   assert.deepEqual(onlySrc, ['src/cli.ts'])
+
+  await rm(path.join(root, 'src', 'cli.ts'))
+  assert.deepEqual(await listTypeScriptFiles(root), ['lib/extra.ts'])
 })
 
 test('C4 candidates match what core consumes', async t => {

@@ -35,10 +35,10 @@ function keepGap(rects: readonly CellRect[]): void {
   })
 }
 
-/** A person using components of container `api` inside system `shop`, plus the given components in `api`. */
+/** An actor using components of container `api` inside system `shop`, plus the given components in `api`. */
 function shopWorld(components: string[], relationships: WorldRelationship[]): ArchitectureWorld {
   return worldOf([
-    box('ann', 'person', unit),
+    box('ann', 'actor', unit),
     box('shop', 'system', unit),
     box('api', 'container', unit, { parent: 'observed:shop' }),
     ...components.map(name => box(name, 'component', unit, { parent: 'observed:api' })),
@@ -61,7 +61,7 @@ test.concurrent('a chain grows east from its entry, a cycle closes beside it, an
 
 test.concurrent('containers grow from where the flow enters them, through their components, along straight arrows', () => {
   const scene = sheetScene(worldOf([
-    box('ann', 'person', unit),
+    box('ann', 'actor', unit),
     box('shop', 'system', unit),
     ...['x', 'y', 'z', 'w'].map(name => box(name, 'container', unit, { parent: 'observed:shop' })),
     ...['x', 'y', 'z', 'w'].map(name => box(`${name}1`, 'component', unit, { parent: `observed:${name}` })),
@@ -125,9 +125,9 @@ test.concurrent('entries that would stack into a strip fold into a square-ish bl
   keepGap(names.map(name => rectOf(scene, name)))
 })
 
-test.concurrent('people and external islands face the centre of their partners', () => {
+test.concurrent('actors and external islands face the centre of their partners', () => {
   const scene = sheetScene(worldOf([
-    box('ann', 'person', unit),
+    box('ann', 'actor', unit),
     box('shop', 'system', unit),
     box('api', 'container', unit, { parent: 'observed:shop' }),
     ...['x', 'y', 'u', 'v', 'w'].map(name => box(name, 'component', unit, { parent: 'observed:api' })),

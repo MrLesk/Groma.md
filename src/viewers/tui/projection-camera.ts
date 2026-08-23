@@ -93,13 +93,13 @@ export function within(
   return false
 }
 
-function peopleUsing(
+function actorsUsing(
   focus: WorldElement,
   world: ArchitectureWorld,
   elementsById: Map<string, WorldElement>,
 ): WorldElement[] {
   return world.elements.filter(element => {
-    if (element.kind !== 'person') return false
+    if (element.kind !== 'actor') return false
     return world.relationships.some(relationship => {
       const otherId = relationship.source === element.representationId
         ? relationship.target
@@ -132,7 +132,7 @@ export function fitLayer(
     return overviewCamera(padded(world.bounds), viewport)
   }
   const frame = level === 'containers'
-    ? unionBounds([subject.bounds, ...peopleUsing(subject, world, elementsById).map(element => {
+    ? unionBounds([subject.bounds, ...actorsUsing(subject, world, elementsById).map(element => {
       return element.bounds
     })])
     : subject.bounds

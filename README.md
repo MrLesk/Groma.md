@@ -47,7 +47,7 @@ chip, and outlines the elements the task touches.
 
 ## The C4 layers
 
-- **System Context** shows the people and software systems involved and how
+- **System Context** shows the actors and software systems involved and how
   they interact.
 - **Container** opens one system to show the applications and data stores
   that make it work.

@@ -10,12 +10,12 @@ export interface ViewState {
   dark: boolean
 }
 
-/** A selected element is named by its kind: `person=<id>`, `system=<id>`, `container=<id>` or `component=<id>`. */
-const KINDS: C4Kind[] = ['person', 'system', 'container', 'component']
+/** A selected element is named by its kind: `actor=<id>`, `system=<id>`, `container=<id>` or `component=<id>`. */
+const KINDS: C4Kind[] = ['actor', 'system', 'container', 'component']
 
 /**
  * Reads the selection (`<kind>=<id>`, `relationship=<source id>/<target id>` or `task=<id>`),
- * the lit command (`flow=<source id>/<target id>` with `by=<person id>`),
+ * the lit command (`flow=<source id>/<target id>` with `by=<actor id>`),
  * `tab=how` and `theme=dark`. Ids are the authored ids; anything the world
  * or the work does not know is ignored, a kind naming an element of another kind included.
  */
@@ -31,9 +31,10 @@ export function readView(search: string, world: ArchitectureWorld, work: readonl
   }
   const element = KINDS.map(named).find((item, index) => item?.kind === KINDS[index])
   const flow = pair('flow')
+  const actor = named('by')
   return {
     selectedId: element?.representationId ?? pair('relationship')?.id ?? work.find(item => item.id === params.get('task'))?.id,
-    action: flow === undefined ? {} : { id: flow.id, personId: named('by')?.representationId },
+    action: flow === undefined ? {} : { id: flow.id, actorId: actor?.kind === 'actor' ? actor.representationId : undefined },
     tab: params.get('tab') === 'how' ? 'how' : 'what',
     dark: params.get('theme') === 'dark',
   }
@@ -58,8 +59,8 @@ export function writeView(state: ViewState, world: ArchitectureWorld, work: read
   const flow = ends(state.action.id)
   if (flow !== undefined) {
     pairs.push(['flow', flow])
-    const by = elements.get(state.action.personId ?? '')
-    if (by !== undefined) pairs.push(['by', by.id])
+    const by = elements.get(state.action.actorId ?? '')
+    if (by?.kind === 'actor') pairs.push(['by', by.id])
   }
   if (state.tab === 'how') pairs.push(['tab', 'how'])
   if (state.dark) pairs.push(['theme', 'dark'])

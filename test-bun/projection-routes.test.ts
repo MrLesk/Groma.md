@@ -6,10 +6,10 @@ import type { ArchitectureWorld, WorldElement } from '../src/types.ts'
 import { box } from './helpers.ts'
 
 function routeWorld(target: 'container' | 'system'): ArchitectureWorld {
-  const person: WorldElement = {
+  const actor: WorldElement = {
     representationId: 'observed:ann',
     id: 'ann',
-    kind: 'person',
+    kind: 'actor',
     name: 'Ann',
     description: '',
     parent: null,
@@ -48,7 +48,7 @@ function routeWorld(target: 'container' | 'system'): ArchitectureWorld {
   return {
     bounds: { x: 0, y: 0, width: 140, height: 200 },
     groups: [],
-    elements: [person, system, container],
+    elements: [actor, system, container],
     relationships: [{
       id: 'reads',
       source: 'observed:ann',

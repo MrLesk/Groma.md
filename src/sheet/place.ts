@@ -26,7 +26,7 @@ import type {
   Zone,
 } from './types.ts'
 
-const PEOPLE_ISLAND = 'island:people'
+const ACTORS_ISLAND = 'island:actors'
 const EXTERNAL_ISLAND = 'island:external'
 
 /** A packed subtree: its size in cells and where each child sits relative to its north corner. */
@@ -69,7 +69,7 @@ function nameWidth(paint: Node['paint']): number {
 
 /** The relationships among siblings, lifted from whatever stands inside them. */
 interface Lifted {
-  /** Siblings something outside them feeds: a person, or anything beyond their surface. */
+  /** Siblings something outside them feeds: an actor, or anything beyond their surface. */
   entries: Set<string>
   /** Directed edges between siblings, in relationship order. */
   edges: Map<string, string[]>
@@ -103,7 +103,7 @@ function lifted(siblings: readonly Node[], relationships: readonly WorldRelation
 }
 
 /**
- * A surface holding its children by growth placement (the people and
+ * A surface holding its children by growth placement (the actors and
  * external islands stack theirs in one column), at least as wide as its own
  * name.
  */
@@ -129,7 +129,7 @@ function packed(
     partners: partners.get(child.key)!,
   }))
   const placed = stack ? shelf(items, 1) : grow(items)
-  /** Systems, slabs and zones share the roomier nested-content inset; the centred people and external islands stay compact. */
+  /** Systems, slabs and zones share the roomier nested-content inset; the centred actors and external islands stay compact. */
   const padding = paint.kind === 'island' && paint.islandKind !== 'system' ? PAD : NESTED_CONTENT_PAD
   const extra = padding - PAD
   return {
@@ -145,7 +145,7 @@ function packed(
 }
 
 /**
- * People and external islands are squares with their buildings centred, so a
+ * Actors and external islands are squares with their buildings centred, so a
  * lone building does not sit in the corner of a strip cut for the island's
  * name. The side grows by one cell when the west and east margins would differ.
  */
@@ -201,7 +201,7 @@ export function placeWorld(world: Pick<ArchitectureWorld, 'elements' | 'relation
     .sort(compareElements)
 
   const building = (element: WorldElement): Node => {
-    const shape: Shape = element.kind === 'person'
+    const shape: Shape = element.kind === 'actor'
       ? { kind: 'round', levels: 1 }
       : element.external ? { kind: 'pill', levels: 1 } : shapeOf(element.code.length)
     const lines = shape.kind === 'pill' ? [element.name] : roofLines(element.name)
@@ -228,14 +228,14 @@ export function placeWorld(world: Pick<ArchitectureWorld, 'elements' | 'relation
     )
   }
   const roots = childrenOf(null)
-  const people = roots.filter(element => element.kind === 'person')
+  const actors = roots.filter(element => element.kind === 'actor')
   const systems = roots.filter(element => element.kind === 'system' && !element.external)
   const externals = roots.filter(element => element.kind === 'system' && element.external)
 
   const islands: Node[] = []
-  if (people.length > 0) {
-    islands.push(squared(packed(PEOPLE_ISLAND, people.map(building),
-      { kind: 'island', islandKind: 'people', name: 'People', element: null }, world.relationships, true)))
+  if (actors.length > 0) {
+    islands.push(squared(packed(ACTORS_ISLAND, actors.map(building),
+      { kind: 'island', islandKind: 'actors', name: 'Actors', element: null }, world.relationships, true)))
   }
   const systemIslands = systems.map(systemIsland)
   const externalIslands = externals.length === 0 ? [] : [squared(packed(EXTERNAL_ISLAND, externals.map(building),
@@ -249,9 +249,9 @@ export function placeWorld(world: Pick<ArchitectureWorld, 'elements' | 'relation
 }
 
 /**
- * Islands in one row along +gx in the order given (people, systems by the
+ * Islands in one row along +gx in the order given (actors, systems by the
  * flow among them, externals), their centres on one gy line, ISLAND_GAP
- * cells apart; then the people and external islands slide along gy so the
+ * cells apart; then the actors and external islands slide along gy so the
  * centre of their buildings faces the centre of what those buildings talk to.
  */
 function placeRow(islands: readonly Node[], relationships: readonly WorldRelationship[]): CellRect[] {

@@ -13,7 +13,7 @@ const world: ArchitectureWorld = {
   bounds: unit,
   groups: [],
   elements: [
-    box('dev', 'person', unit),
+    box('dev', 'actor', unit),
     box('tool', 'system', unit),
     box('cli', 'container', unit, { parent: 'observed:tool' }),
     box('commands', 'component', unit, { parent: 'observed:cli' }),
@@ -24,7 +24,7 @@ const world: ArchitectureWorld = {
 
 const full: ViewState = {
   selectedId: 'observed:scan',
-  action: { id: 'relationship:1', personId: 'observed:dev' },
+  action: { id: 'relationship:1', actorId: 'observed:dev' },
   tab: 'how',
   dark: true,
 }
@@ -40,7 +40,7 @@ test.concurrent('defaults write nothing and read back as the default view', () =
   assert.equal(writeView(rest, world, []), '')
   assert.deepEqual(readView('', world, []), rest)
   assert.equal(writeView({ ...rest, action: { id: 'relationship:1' } }, world, []), '?flow=commands/scan')
-  assert.equal(writeView({ ...rest, selectedId: 'observed:dev' }, world, []), '?person=dev')
+  assert.equal(writeView({ ...rest, selectedId: 'observed:dev' }, world, []), '?actor=dev')
 })
 
 test.concurrent('a selected relationship is carried as its source and target ids', () => {
@@ -61,12 +61,14 @@ test.concurrent('a selected task is carried by its id while the work knows it', 
 })
 
 test.concurrent('unknown ids, kinds and values are ignored', () => {
-  assert.equal(readView('?person=scan', world, []).selectedId, undefined)
+  assert.equal(readView('?person=dev', world, []).selectedId, undefined)
+  assert.equal(readView('?actor=scan', world, []).selectedId, undefined)
   assert.deepEqual(readView('?component=nope&flow=dev/scan&by=zed&tab=weird&theme=light', world, []), {
     selectedId: undefined,
     action: {},
     tab: 'what',
     dark: false,
   })
-  assert.deepEqual(readView('?flow=commands/scan&by=nobody', world, []).action, { id: 'relationship:1', personId: undefined })
+  assert.deepEqual(readView('?flow=commands/scan&by=nobody', world, []).action, { id: 'relationship:1', actorId: undefined })
+  assert.deepEqual(readView('?flow=commands/scan&by=tool', world, []).action, { id: 'relationship:1', actorId: undefined })
 })

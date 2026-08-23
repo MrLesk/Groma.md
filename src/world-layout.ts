@@ -53,7 +53,7 @@ const groupLayoutOptions = {
 const minimumSizes: Record<C4Kind, Pick<Bounds, 'width' | 'height'>> = {
   component: { width: 34, height: 16 },
   container: { width: 42, height: 32 },
-  person: { width: 28, height: 40 },
+  actor: { width: 28, height: 40 },
   system: { width: 44, height: 40 },
 }
 

@@ -27,7 +27,7 @@ export const containersFixtureRoot = path.join(
   'fixtures',
   'containers-view',
 )
-/** A minimum world with people, three levels, and an external system. */
+/** A minimum world with actors, three levels, and an external system. */
 export const viewerFixtureRoot = path.join(
   repositoryRoot,
   'test',
@@ -186,7 +186,7 @@ export function navigationWorld(): ArchitectureWorld {
       box('alpha', 'system', { x: 20, y: 0, width: 56, height: 40 }, {
         children: ['observed:cleft', 'observed:cright'],
       }),
-      box('ann', 'person', { x: 0, y: 8, width: 12, height: 12 }),
+      box('ann', 'actor', { x: 0, y: 8, width: 12, height: 12 }),
       cleft,
       cright,
       cfar,

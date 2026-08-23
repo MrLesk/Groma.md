@@ -46,7 +46,7 @@ function compareIds(left: string, right: string): number {
 }
 
 function rootRank(element: AnnotatedElement): number {
-  if (element.kind === 'person') return 0
+  if (element.kind === 'actor') return 0
   return element.external ? 2 : 1
 }
 
@@ -75,14 +75,14 @@ function plural(count: number, singular: string, many: string): string {
 
 function countLine(elements: readonly AnnotatedElement[]): string {
   const counts: Record<C4Kind, number> = {
-    person: 0,
+    actor: 0,
     system: 0,
     container: 0,
     component: 0,
   }
   for (const element of elements) counts[element.kind] += 1
   return [
-    plural(counts.person, 'person', 'people'),
+    plural(counts.actor, 'actor', 'actors'),
     plural(counts.system, 'system', 'systems'),
     plural(counts.container, 'container', 'containers'),
     plural(counts.component, 'component', 'components'),

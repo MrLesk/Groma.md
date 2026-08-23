@@ -3,7 +3,7 @@
 OpenClaw is the personal assistant. The operator talks on WhatsApp or Telegram
 and operates from the CLI, Control UI, or a paired node.
 
-- [Operator](people/operator.md) messages the assistant and runs the Gateway.
+- [Operator](actors/operator.md) messages the assistant and runs the Gateway.
 - [OpenClaw](systems/openclaw/system.md) is the self-hosted assistant.
 - [Gateway](systems/openclaw/containers/gateway/container.md) is the control plane.
 - [Channels](systems/openclaw/containers/channels/container.md) hold chat sessions.

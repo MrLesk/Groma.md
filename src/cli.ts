@@ -90,7 +90,7 @@ program
   .description('Author a planned element')
   .argument('<name>', 'element name')
   .requiredOption('--plan <plan-id>', 'plan id')
-  .requiredOption('--kind <kind>', 'person, system, container, or component')
+  .requiredOption('--kind <kind>', 'actor, system, container, or component')
   .requiredOption('--description <prose>', 'element description')
   .option('--parent <id>', 'parent element id')
   .action(async (name: string, options) => {

@@ -73,7 +73,7 @@ test.concurrent('pane toggles resize the map viewport without touching the world
   for (const element of narrow.elements) {
     const moved = requiredElement(wideById, element.representationId)
     assert.equal(moved.cellBounds.y, element.cellBounds.y, element.representationId)
-    if (element.kind === 'person' || element.external) continue
+    if (element.kind === 'actor' || element.external) continue
     assert.equal(
       moved.cellBounds.x - element.cellBounds.x,
       Math.round(deltaX),
@@ -143,7 +143,7 @@ test.concurrent('the hierarchy pane ends with the kind legend', async () => {
     .map(column)
   const tail = interior.slice(-3).join('\n')
   const tree = interior.slice(0, -3).join('\n')
-  for (const kind of ['person', 'system', 'container', 'component'] as const) {
+  for (const kind of ['actor', 'system', 'container', 'component'] as const) {
     assert.match(tail, new RegExp(`${kindGlyph(kind)} ${kindLabel(kind)}`))
     assert.doesNotMatch(tree, new RegExp(kindLabel(kind)))
   }

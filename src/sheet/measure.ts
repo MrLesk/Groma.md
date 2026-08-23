@@ -53,7 +53,7 @@ export function shapeOf(files: number): Shape {
 /**
  * Observed code lines raise a component by its share of the range between
  * the fewest and the most lines among the observed components, in half
- * floors. Ghosts, people and external systems stay one floor, as does every
+ * floors. Ghosts, actors and external systems stay one floor, as does every
  * component when there are no observed components or all have the same count.
  */
 export function floorsOf(origin: Origin, lines: number, range: { min: number; max: number }): number {
@@ -62,7 +62,7 @@ export function floorsOf(origin: Origin, lines: number, range: { min: number; ma
   return 1 + Math.round(2 * (MAX_FLOORS - 1) * share) / 2
 }
 
-/** A person's round building or an external system's pill: one curved tier. */
+/** An actor's round building or an external system's pill: one curved tier. */
 export const curved = (shape: Shape): boolean => shape.kind === 'round' || shape.kind === 'pill'
 
 /** The name's block on a roof in plane pixels: the longest line with ROOF_PAD around it, one ROOF_LINE_HEIGHT per line. */

@@ -11,7 +11,7 @@ import type {
 
 const elements: AnnotatedArchitectureModel['elements'] = [
   {
-    representationId: 'observed:architect', id: 'architect', kind: 'person',
+    representationId: 'observed:architect', id: 'architect', kind: 'actor',
     name: 'Architect', description: 'Reviews the design.', parent: null,
     children: [], external: false, code: [], origin: 'observed',
   },
