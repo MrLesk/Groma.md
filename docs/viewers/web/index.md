@@ -27,8 +27,8 @@ Flows heading; clicking the heading opens it. The list holds every
 actor command in the world, deduped across the actors who share
 it. Clicking one lights its walk on the map from every actor who
 shares it, and the active row is highlighted. Below it the Structure
-section starts open and lists the merged world as a containment tree:
-actors, then systems, then external systems at the root. Containers
+section starts open and groups the merged containment tree under Actors,
+Systems, and External systems labels, omitting an empty group. Containers
 sit under their system and components under their container, in
 hierarchy order; the map places them by flow instead.
 Ghost names and external systems are dim. Every selected element is marked,
@@ -36,7 +36,7 @@ and rows are collapsed except the paths to selected items; a collapsed row shows
 count. A row's arrow
 expands or collapses it by hand without changing the selection, while selected paths stay open. The
 tree and the map share one selection. The bottom of the pane is the kind legend.
-Groups are invisible to the tree.
+Authored sibling groups are invisible to the tree.
 
 The details pane always shows the last selected item; an element
 shows under two tabs whose choice persists across selections. What

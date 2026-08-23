@@ -5,6 +5,11 @@ import { sectionHeading } from './sidebar-section.ts'
 /** The structure starts open and keeps its state across repaints. */
 let unfolded = true
 
+function rootGroupName(row: TreeRow): string {
+  if (row.kind === 'actor') return 'Actors'
+  return row.external ? 'External systems' : 'Systems'
+}
+
 export function paintHierarchy(
   host: HTMLElement,
   rows: TreeRow[],
@@ -13,7 +18,18 @@ export function paintHierarchy(
   onToggle: (row: TreeRow) => void,
 ): void {
   const list = document.createElement('div')
+  let group: string | undefined
   for (const row of rows) {
+    if (row.depth === 0) {
+      const nextGroup = rootGroupName(row)
+      if (nextGroup !== group) {
+        const label = document.createElement('div')
+        label.className = 'group'
+        label.textContent = nextGroup
+        list.append(label)
+        group = nextGroup
+      }
+    }
     const button = document.createElement('button')
     button.type = 'button'
     button.className = 'row'
