@@ -1,8 +1,8 @@
 import type { WorldRelationship } from '../types.ts'
 import {
   BEND,
-  BORDER_PUSH,
-  BORDER_REACH,
+  CLEARANCE_PUSH,
+  CLEARANCE_REACH,
   OFF_CENTRE,
   REUSE,
   RING,
@@ -128,10 +128,10 @@ class Heap {
  * emerges from, or its arrowhead touches, the middle of the roof's back
  * edge. Routes leave and meet a side square on, keep one lane clear of every
  * foreign footprint, pay for turns and for lanes other routes already use,
- * and pay to run close to a surface border or to a route already drawn, so a
- * line holds the middle of the free ground; they are solved in the order
- * given, so parallel routes take neighbouring ports. The weights are in
- * forces.ts.
+ * and pay to run close to a building they pass, to a surface border or to a
+ * route already drawn, so a line holds the middle of the free ground; they
+ * are solved in the order given, so parallel routes take neighbouring ports.
+ * The weights are in forces.ts.
  */
 export function routeAll(
   sheet: CellRect,
@@ -192,20 +192,24 @@ export function routeAll(
   /** What a lane costs for lying that close to whatever the room was measured from. */
   const crowd = (room: Int32Array, node: number, reach: number, weight: number): number =>
     (room[node] === -1 ? 0 : weight * (reach - room[node]!))
-  const offBorder = (node: number): number => crowd(border, node, BORDER_REACH, BORDER_PUSH)
+  const offClearance = (node: number): number => crowd(clearance, node, CLEARANCE_REACH, CLEARANCE_PUSH)
   const offRoutes = (node: number): number => crowd(nearRoute, node, ROUTE_REACH, ROUTE_PUSH)
 
-  /** The lanes along every surface's border, which a route would otherwise trace and be hard to tell from. */
-  const borderLanes = function* (): Generator<number> {
+  /**
+   * What a route keeps its distance from: the outline of every building, which
+   * it would otherwise graze, and of every surface, whose border it would
+   * otherwise trace and be hard to tell from. The outline is enough for a
+   * building because no route may cross its inside.
+   */
+  const clearanceLanes = function* (own: ReadonlySet<string>): Generator<number> {
     for (const endpoint of endpoints.values()) {
-      if (endpoint.kind === 'building') continue
+      if (own.has(endpoint.key)) continue
       const rect = lanes(endpoint.rect)
       for (let x = rect.x0; x <= rect.x1; x += 1) { yield nodeOf(x, rect.y0); yield nodeOf(x, rect.y1) }
       for (let y = rect.y0; y <= rect.y1; y += 1) { yield nodeOf(rect.x0, y); yield nodeOf(rect.x1, y) }
     }
   }
-  const border = new Int32Array(nodeCount)
-  measure(border, borderLanes(), BORDER_REACH)
+  const clearance = new Int32Array(nodeCount)
   /** The room left around the routes drawn so far, so they push each other apart instead of squeezing into neighbouring lanes. */
   const nearRoute = new Int32Array(nodeCount).fill(-1)
 
@@ -291,6 +295,7 @@ export function routeAll(
     }
     const own = new Set([source.key, target.key])
     const free = new Set([...source.within, ...target.within])
+    measure(clearance, clearanceLanes(own), CLEARANCE_REACH)
     blocked.fill(0)
     goal.fill(0)
     goalCost.fill(0)
@@ -325,6 +330,8 @@ export function routeAll(
         goals.set(last, { port: node, suffix: approach.slice(0, -1).reverse() })
       }
     }
+    /** A* reaches a goal once; only its fixed suffix may enter the target approach. */
+    for (const { suffix } of goals.values()) for (const node of suffix) blocked[node] = 1
     /** Goals lie up to this far outside the target, so the distance to its footprint overestimates by as much. */
     const reach = APPROACH + (target.kind === 'building' ? shadow(target.roof ?? 0) : 0)
     const h = (node: number): number => {
@@ -388,7 +395,7 @@ export function routeAll(
         const neighbour = nodeOf(nx, ny)
         if (blocked[neighbour]) continue
         const cost = g[state]! + STEP + (next === direction ? 0 : BEND) + REUSE * used[edgeOf(node, neighbour)]!
-          + offBorder(neighbour) + offRoutes(neighbour)
+          + offClearance(neighbour) + offRoutes(neighbour)
           + (goal[neighbour] ? goalCost[neighbour]! : 0)
         push(neighbour * 4 + next, cost, state)
       }
