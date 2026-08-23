@@ -72,13 +72,14 @@ these fields:
 | `parent` | for containers and components | The stable `id` of the containing system or container. |
 | `external` | no | `true` only for a system outside the architecture's ownership boundary; absence means `false`. |
 | `group` | no | Readable name of a hand-chosen cluster. Siblings with the same parent and the same `group` render inside one boundary labeled with that name. |
+| `technology` | no | Free text naming the implementation technology, comma-separated. Core reads it and the details pane shows each part under How it's built. |
 | `code` | no | High-level scanner-produced source references for a component. |
 
 No other frontmatter field is part of the contract. Observed versus planned
 meaning comes only from the containing directory.
 
 A group is a narrative overlay on one level of the hierarchy: it never
-becomes a parent, owns no relationships, and only an author writes it —
+becomes a parent, owns no relationships, and only an author writes it:
 scanners never derive groups.
 
 The architecture model owns IDs. Groma is the only writer of these files. A
@@ -138,9 +139,9 @@ prose and do not add model fields.
 ```
 
 Each row declares one direction: the element in the current file is the
-source. The target document's `id` identifies the target. The Markdown link
-is for readers. Core resolves parents and relationship targets by `id`
-across the merged world.
+source. The target is the element whose document the row's link reaches; a
+link that reaches no element document is an error. Core resolves parents by
+`id` across the merged world.
 
 A software-to-software relationship is authored on the lowest elements
 that exist. Once two components participate, write the row there and not

@@ -13,16 +13,16 @@ code work; small documentation corrections can be made directly.
 
 ## Set up the repository
 
-Groma requires Bun and Node.js 20.19 or newer.
+Groma requires Bun 1.3.14 or newer and Node.js 20.19 or newer.
 
 ```sh
 bun install
 bun run check
 ```
 
-Groma is written in TypeScript. Bun runs the CLI and TUI viewer, while Node-specific scripts and tests run through
-`tsx`. `bun run check` typechecks and runs the test suites. Architecture validation uses fixtures under
-`test/fixtures/`, not the live `groma/` tree.
+Groma is written in TypeScript. Bun runs the CLI and both viewers. Tests under `test/` run on Node through `tsx`
+(`bun run test:node`); tests under `test-bun/` run with `bun test` (`bun run test:viewer`). `bun run check` typechecks
+and runs both. Every test loads architecture from fixtures under `test/fixtures/`, never from the live `groma/` tree.
 
 ## Before starting a feature
 
@@ -38,6 +38,8 @@ Confirm that the actor, entry point, observable result, and approved example are
 - Update canonical Markdown when the represented architecture or product contract changes.
 - Add focused lower-level tests for implementation rules that do not belong in a product-flow scenario.
 - Do not add compatibility behavior, fallbacks, or speculative abstractions without an explicit product requirement.
+- For Backlog-tracked work, record each changed file and each affected element `id` on the task as you go, before
+  changing the next file. [AGENTS.md](AGENTS.md) describes that loop under Backlog change tracking.
 
 ## Verify the result
 
@@ -46,6 +48,9 @@ Run the checks relevant to the change:
 ```sh
 bun run check
 ```
+
+`bun src/typescript-scanner.ts` prints the C4 candidates the scanner reads from this repository's import graph
+without writing Markdown; `--glob` replaces the files it reads and `--ignore` adds to the files it skips.
 
 For a terminal feature, finish by running its approved scenario through the real TUI in a PTY when the task requires a
 terminal walkthrough.

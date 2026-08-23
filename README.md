@@ -13,7 +13,7 @@ A scan succeeds when a person can recognize the resulting architecture well
 enough to navigate and improve it. Later scans refresh Code references and
 must not rewrite curated prose.
 
-A plan succeeds when the next parts — and required changes to existing parts —
+A plan succeeds when the next parts, and required changes to existing parts,
 are visible as ghosts on the same world, and can be accepted without inventing
 a second identity.
 
@@ -21,17 +21,29 @@ a second identity.
 
 Groma is the only writer of files under `groma/`.
 
-1. Open a viewer — see the world. `groma view` starts the TUI plugin. It
-   does not scan on open. The live process starts the same watch as
+1. Open a viewer: see the world. `groma view` opens the terminal map;
+   without a TTY, with `--plain`, or with a target, it prints text
+   instead. `groma web` opens the same world in the browser. Neither
+   scans on open. The live process starts the same watch as
    `groma scan --watch`. Architecture Markdown changes update the map
    without scanning.
-2. `groma scan` — scan this repo. Core updates Markdown. The command
+2. `groma scan`: scan this repo. Core updates Markdown. The command
    prints `ok` and a short summary, not the architecture.
 3. Change the architecture through Groma. New parts and required changes
-   become plan ghosts. Explanations of an existing part stay on that
-   observed document.
-4. `groma accept <id>` — accept that ghost if a scan has matched it.
-   Otherwise the command fails. A scan never accepts a ghost on its own.
+   become plan ghosts: `groma create <name> --plan <plan-id> --kind <kind>
+   --description <prose>` (plus `--parent <id>` for a container or
+   component) authors a new part, and `groma edit <id> --plan <plan-id>`
+   restates an existing one. Explanations of an existing part stay on
+   that observed document: `groma edit <id> --description <prose>`.
+4. `groma accept <id>`: apply the ghost once a scan has matched it. If
+   none has, accept scans first and fails when the scan still does not
+   match. A scan never accepts a ghost on its own.
+
+Both maps show live Backlog work. The terminal map marks the assignees of
+each task in progress on the elements the task references. The web map
+stands one pin per assignee and task on the element the task touched last,
+lists them in the Live work island, opens a task's details from its pin or
+chip, and outlines the elements the task touches.
 
 ## The C4 layers
 
@@ -44,6 +56,9 @@ Groma is the only writer of files under `groma/`.
 - Component details show the scanner, exact file, and optional symbol behind
   that component. Code is not a separate viewer level.
 
+The terminal map walks these levels one at a time; the web map shows all
+of them on one sheet.
+
 See the [documentation index](docs/index.md) and the
 [product model](docs/product-model.md) for the exact rules.
 
@@ -52,5 +67,8 @@ See the [documentation index](docs/index.md) and the
 From this repository:
 
 ```sh
-groma view
+bun install
+bun src/cli.ts view
 ```
+
+`bun src/cli.ts web` opens the browser map at http://localhost:4747.

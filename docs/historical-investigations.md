@@ -20,8 +20,8 @@ Its durable conclusions are:
 - C4 levels are views of one fixed world, not separately laid-out diagrams.
 - Renderer selection must consider interaction fidelity and visual quality
   before isolated benchmark numbers.
-- React Flow reproduced the approved interaction cleanly and gave the smallest
-  supported path from the existing viewer.
+- One candidate reproduced the approved interaction and was the smallest
+  step from the web viewer of that time; that direction was abandoned.
 
 The branch retains the candidate inventory, comparison implementations,
 benchmarks, withdrawn decisions, and disposable proof applications. It records
@@ -41,7 +41,7 @@ Its durable conclusions are:
 
 - The complete application state can be expressed as `(level, selection)`.
 - Arrows traverse peers and can escape a boundary by ascending, Enter descends,
-  and Backspace or Esc ascends to the parent.
+  and Backspace ascends to the parent.
 - Same-level arrows pan just enough to keep the selection visible and do not
   change zoom. Leaving a boundary *is* zooming out.
 - Each element needs a representation ladder selected by its available cell
@@ -50,6 +50,15 @@ Its durable conclusions are:
   the browser palette.
 
 The branch retains the disposable OpenTUI implementation, verified API notes,
-and design learnings. The current [MVP plan](../groma/plans/mvp/README.md)
-keeps only the interaction that survived review; the spike must be consulted
-as evidence and rebuilt rather than merged.
+and design learnings. The [TUI viewer page](viewers/tui/index.md) describes
+the interaction that survived review; the spike is evidence and was rebuilt,
+not merged.
+
+## Semantic-zoom viewer rebuild
+
+- Branch: `wip/semantic-zoom-viewer`
+- Commit: `8a7daca48e19ca59357cda9771e62734c68c6f3c`
+
+A snapshot, committed on 2026-08-02, of an in-flight semantic-zoom web
+viewer rebuild and its evidence: 111 files of candidate proofs, benchmarks,
+tests, and viewer changes. It is evidence only and is not merge material.

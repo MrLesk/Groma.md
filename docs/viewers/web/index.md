@@ -25,21 +25,23 @@ map never renders under a side pane.
 The hierarchy pane starts with the flows list folded under its
 Flows heading; clicking the heading opens it. The list holds every
 person command in the world, deduped across the people who share
-it. Clicking one lights its walk on the map, exactly like picking it
-from a person's details, and the active row is highlighted. Below it
+it. Clicking one lights its walk on the map from every person who
+shares it, and the active row is highlighted. Below it
 the pane lists the merged world as a containment tree:
 people, then systems, then external systems at the root. Containers
 sit under their system and components under their container, in
 hierarchy order; the map places them by flow instead.
-Ghost names are dim. Rows are collapsed except the path to the current
-selection; a collapsed row shows its child count. A row's arrow
+Ghost names and external systems are dim. Rows are collapsed except
+the path to the current selection; a collapsed row shows its child
+count. A row's arrow
 expands or collapses it by hand without changing the selection. The
 tree and the map share one selection. The bottom of the pane is the kind legend.
 Groups are invisible to the tree.
 
-The details pane always shows the current selection under two tabs
-that persist across selections. What it does holds the meaning:
-description, relationships, and children. How it's built holds the
+The details pane always shows the current selection; an element
+shows under two tabs whose choice persists across selections. What
+it does holds the meaning: description, relationships, and children.
+How it's built holds the
 evidence: the technology the element's Markdown declares
 (`technology: SVG, Bun serve` renders as one chip per
 comma-separated part), the scanner, file, and optional symbol from
@@ -48,7 +50,8 @@ the selection; clicking one lights that walk. Children and
 relationship peers select that element. When the
 selection is a person who uses a launcher, software they use that
 starts other software they also use, the person's outgoing rows
-are that launcher's commands. Click a command to light its path on
+are that launcher's commands, plus whatever they use that no launcher
+reaches. Click a command to light its path on
 the map: the rest dims and each lit route runs in the accent green
 with a moving dash from source to target. A command picked
 from a person's details walks in from that person alone, even when
@@ -74,13 +77,15 @@ on the sheet, in one row along the grid from west to east so flows
 read that way: the people island, then the systems, then the external
 systems; on screen the row runs from the upper left down to the right.
 The people and external islands are squares with their buildings
-centred, each a little bigger than what stands on it.
-Inside every surface, relationships decide where the children stand.
+stacked in one column and centred, each a little bigger than what
+stands on it. Inside every system island, slab and zone,
+relationships decide where the children stand.
 The children something outside the surface feeds stand first, in a
-west column (in a system, whatever a person uses directly); when that
+west column (in a system, whatever a person or another island feeds
+directly); when that
 column would be more than three times as deep as wide it folds into a
 square-ish block. Every other child then takes its place in order of
-weight, the one with the most relationships first, at the cheapest
+weight, the heaviest child with a placed partner first, at the cheapest
 spot beside the siblings it talks to or beside everything placed so
 far: a spot is priced by the arrows it makes (their length, their
 bends, and a forced way around another sibling counting more than
@@ -90,8 +95,8 @@ next to what feeds it, light intermediates settle at the edges,
 partners line up into straight runs and chains wrap instead of
 stretching. Nothing stands west of the entries, and children no
 relationship touches are packed as one block after them. The
-people and external islands slide along the row so their buildings
-face what they talk to.
+people and external islands shift across the row, north or south, so
+their buildings face what they talk to.
 Containers are slabs whose top is level with the ground and whose
 thickness hangs below the grid line, drawn over the island in front of
 them, so they read as slabs while everything on them stays on the one
@@ -99,7 +104,9 @@ plane. Components are buildings on their slab: the observed component
 with the most code lines stands four floors, the one with the fewest
 one floor, and every other in between in half floors by its share of
 that range; one code file is a block, two or three files stack as
-tiers, four or more files make a tower.
+tiers, four or more files make a tower. Ghost components stand one
+floor, as does every component when all observed ones have the same
+line count.
 People are round buildings (a cylinder whose circular roof holds the
 name) and external systems are pills (a stadium roof with the name on
 one line), one floor each, on their own islands; a route still meets
@@ -112,7 +119,8 @@ islands have none; every pattern is laid in the plane it lies on.
 Sibling groups are flat hatched zones around their members, and a
 translucent chip lies under every name that lies on a pattern. Line
 style means origin and nothing else: observed items are solid,
-planned ghosts dashed, missing ghosts dotted.
+planned ghosts dashed, missing ghosts dotted; ghosts are hollow, with
+no fill, pattern or chip, and slightly faded.
 
 Weight follows depth, like heading levels: islands, slabs, buildings
 and routes each sit one level below the one before, every level 1.4
@@ -136,16 +144,19 @@ Routes follow the lattice: one route per authored relationship,
 between the authored endpoints, preferring to leave from the middle of
 the side of the source that faces the target and to arrive, pointing
 inward, at the middle of the side of the target that faces the source,
-keeping one lane clear of every foreign building, and running on the
-one ground plane from end to end, slabs included. A building's back
-sides are hidden under its roof, so there a route starts or ends on the
+keeping one lane clear of every foreign building and slab, and
+running on the one ground plane from end to end, slabs included. A
+building's back sides are hidden under its roof, so there a route
+starts or ends on the
 ground just behind the building where the roof's shadow ends: on screen
 the line emerges from, or its arrowhead touches, the middle of the
 roof's back edge, with no visible step. Parallel routes spread out
 around the middle; when two middles do not line up, the line stays
-straight and the longer side gives way. A route's description is its
-tooltip. The selected box draws every edge and its name in the
-accent green, the name in bold, the slab or island it stands on is
+straight and the longer side gives way. Each route ends in an
+arrowhead lying on the sheet that keeps its screen size at every
+zoom. A route's description is its tooltip. The selected box draws
+every edge and its name in the accent green, the name in bold, the
+slab or island it stands on is
 outlined in the accent as its context, and the routes that touch the
 selection turn green too; fills never change. A lit person command
 draws its routes in the accent with a moving dash and dims everything
@@ -153,10 +164,11 @@ off the path.
 
 The map never reads architecture Markdown or calculates layout. Core
 composes the sheet from the merged world: islands, slabs, buildings,
-zones and routes, all in cells. The web server ships the world and its
-sheet together; the browser only projects the sheet isometrically,
-paints it as SVG, and handles camera, selection and the lit flow. It
-may not move a footprint or reroute a relationship.
+zones and routes, all in cells. The web server ships the world, its
+sheet, the active tasks and their pins together; the browser only
+projects the sheet isometrically, paints it as SVG, and handles
+camera, selection and the lit flow. It may not move a footprint or
+reroute a relationship.
 
 ## What you can do
 
@@ -164,8 +176,12 @@ The first view fits the whole sheet inside the map pane. The first
 internal system is selected. Two fingers on a trackpad, or the
 wheel, pan the map; a pinch zooms as far as the fingers move, and
 cmd or ctrl with the wheel zooms about the cursor; the `-` and `+`
-buttons and keys zoom about the center, and `0` refits.
-Dragging pans too. Click a building, a slab, a system island, or a tree
+buttons and keys zoom about the center, and `0` refits, between half
+the fitted view and a cell 192 screen pixels wide. Dragging pans too;
+scrolling or pinching over a pin moves the map, and over the Live
+work island it scrolls the chip strip. Resizing the pane refits the
+map until you move the camera; after that it keeps the same point in
+the centre. Click a building, a slab, a system island, or a tree
 row to select it; click a route to select its relationship, which
 draws the route and both of its ends in the accent and shows the
 relationship in the details pane with its ends as links; click empty
@@ -175,10 +191,12 @@ Agents at work show as pins. Every Backlog task In Progress, and
 every task Done in the last day, puts one pin per assignee on the
 element the task touched last: the element whose code holds the
 task's newest modified file, else the first element the task
-references. A pin is a round badge with the assignee's two-letter
-monogram inside a ring that fills by checked acceptance criteria over
-total, the task id under it, a stem to the roof and a tooltip with
-the task's title; when the task is Done the badge flips to a
+references. A pin is a round badge with the assignee's mark (the
+vendor mark for the claude and codex handles, else a two-letter
+monogram) inside a ring that fills by checked acceptance criteria
+over total, the task id under it, a stem to the roof (or to the top
+of a slab or the centre of a system island) and a tooltip with the
+task's title; when the task is Done the badge flips to a
 checkmark and flips back while hovered. Every assignee and task pair
 has its own colour, the pairs in task order over a fixed palette. The
 Live work island, frosted glass at the bottom centre of the map
@@ -206,8 +224,10 @@ selects the element; its pins and chips carry the selection accent,
 and the strip scrolls them into view. Escape or a click on empty
 sheet deactivates every task. Pins move as Backlog changes, through
 the same live channel as the world. The island eases its width and
-height between sizes whenever it folds, unfolds, or its chips change.
-The URL follows the view so any view opens again from its link:
+height between sizes whenever it folds, unfolds, or its chips change,
+and keeps its fold and toggles across live updates.
+The URL follows the view without adding history entries, so any
+view opens again from its link:
 the selected element's kind names it (`?person=<id>`, `system=<id>`,
 `container=<id>` or `component=<id>`), `relationship=<source>/<target>`
 names a selected route, `task=<id>` a selected task,
@@ -217,5 +237,6 @@ tab and `theme=dark` the theme;
 defaults stay out of the URL and unknown values are ignored.
 A watched TypeScript change folds and rebuilds the map without a
 browser refresh. An architecture Markdown change does the same
-without scanning. Selection stays if that box still exists, and the
-camera stays where you left it.
+without scanning. Selection stays if that box still exists, else the
+first internal system is selected; a camera you have moved stays
+where you left it, an untouched one refits to the new sheet.
