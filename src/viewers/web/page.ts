@@ -80,6 +80,7 @@ const style = `
   }
   #details ul { margin: 0; padding: 0; list-style: none; }
   #details li { margin: 0 0 6px; }
+  #details .criterion-check { color: var(--accent); }
   #details .tabs { margin: 0 0 8px; }
   #details .tabs button { flex: 1; }
   .chips { display: flex; flex-wrap: wrap; gap: 6px; }
