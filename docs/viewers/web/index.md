@@ -235,13 +235,14 @@ that checkmark once. Every assignee and
 task pair has its own colour, the pairs in task order over a fixed
 palette. A pin that appears after the map is open bounces once in
 that colour, then returns to the inactive greyscale. The
-Backlog.md Tasks panel, 35%-paper frosted glass with the floating chrome's corner radius at the bottom centre of the map,
-exists while any pin does: folded it is a compact panel with
+Backlog.md Tasks panel, 35%-paper frosted glass with a 28px outer radius
+at the bottom centre of the map, exists while any pin does: folded it is a compact pill with
 the Backlog document mark in greyscale, a dot while a nonterminal task is available,
 and a chevron pointing up; unfolded it keeps the mark greyscale beside Backlog.md with
 Tasks on the next line, one
 filter for each configured status in configuration order when that status
-has at least one pin, and a scrollable strip of chips, one per shown pin
+has at least one pin. The filters match the task chips' height, and a vertical
+rule separates them from the scrollable strip of chips, one per shown pin
 with its badge and task id. A filter appears on the same live update that
 brings the first pin in its status. The configured default and terminal
 statuses start hidden; every other configured status starts shown. A filter
