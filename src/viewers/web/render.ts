@@ -138,6 +138,8 @@ function paintSelection(): void {
   const task = workItem(selectedId)
   map.select(selectedId)
   map.mark(new Set(task === undefined ? [] : touchedElements(task, world)))
+  pins.select(task?.id)
+  island.select(task?.id)
   map.setFlow(litIds, id => elementOnPath(id, litIds, world))
   paintHierarchy(treeHost, treeRows(world, selectedId, tree), selectedId, select, toggleRow)
   const commands = worldCommands(world)

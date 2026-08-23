@@ -196,8 +196,9 @@ acceptance criteria as a checklist, its modified files and its
 references, where a reference naming an element is a link that
 selects the element; the map outlines every element the task
 touches, those whose code holds one of its modified files and those
-it references. Pins move as Backlog changes, through the same live
-channel as the world. The island eases its width and height between
+it references; the task's pins and chips carry the selection accent,
+and the strip scrolls them into view. Pins move as Backlog changes,
+through the same live channel as the world. The island eases its width and height between
 sizes whenever it folds, unfolds, or its chips change.
 The URL follows the view so any view opens again from its link:
 the selected element's kind names it (`?person=<id>`, `system=<id>`,

@@ -43,6 +43,8 @@ export const pinsCss = `
     margin-top: 2px; padding: 1px 6px; border-radius: 3px; background: var(--pin); color: #fff;
     font-size: 9px; letter-spacing: 0.08em; white-space: nowrap;
   }
+  .pin.selected .badge { border-radius: 50%; box-shadow: 0 0 0 3px var(--accent); }
+  .pin.selected .task { background: var(--accent); }
 `
 
 /** A ringed badge: the ring filled by the share done, a flipping disc with the assignee's mark in front and a checkmark behind. */
@@ -66,6 +68,8 @@ export interface PinLayer {
   place(camera: Camera): void
   /** Shows or hides the pins: none while agents is off, the finished ones only while completed is on too; the pins still shown fan out anew. */
   show(agents: boolean, completed: boolean): void
+  /** Marks the pins of the selected task; none while no task is selected. */
+  select(taskId: string | undefined): void
 }
 
 /** The agents' pins over the map; clicking a pin's head selects its task. */
@@ -142,6 +146,9 @@ export function createPins(host: HTMLElement, anchorOf: (id: string) => Point | 
       agents = nextAgents
       completed = nextCompleted
       fanOut()
+    },
+    select(taskId) {
+      for (const pin of pins) pinned.get(pin.key)?.node.classList.toggle('selected', pin.taskId === taskId)
     },
   }
 }
