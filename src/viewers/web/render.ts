@@ -192,12 +192,14 @@ let pointer: {
   onSheet: boolean
 } | null = null
 
-map.svg.addEventListener('wheel', event => {
+/** The pane takes the wheel wherever the cursor is, pins included; the Live work island keeps it for its chip strip. */
+host.addEventListener('wheel', event => {
+  if (event.target instanceof Element && event.target.closest('#work')) return
   event.preventDefault()
   const action = wheelAction(event)
   if (action.kind === 'pan') camera = pan(camera, action.dx, action.dy)
   else {
-    const rect = map.svg.getBoundingClientRect()
+    const rect = host.getBoundingClientRect()
     camera = zoomAbout(camera, action.factor, { x: event.clientX - rect.left, y: event.clientY - rect.top }, fitted)
   }
   touched = true
