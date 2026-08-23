@@ -1,5 +1,6 @@
 import { compareElements } from '../../element-order.ts'
 import type { ActiveWorkItem, ArchitectureWorld, WorldElement, WorldRelationship } from '../../types.ts'
+import { touchedElements } from '../../work-pins.ts'
 import { actionPath, elementOnPath, worldCommands } from '../action-path.ts'
 import { initialTree, toggleExpansion, treeRows } from '../tui/tree.ts'
 import type { TreeRow } from '../tui/tree.ts'
@@ -134,7 +135,9 @@ function syncUrl(): void {
 function paintSelection(): void {
   syncUrl()
   const litIds = actionPath(activeAction.id, world, activeAction.personId)
+  const task = workItem(selectedId)
   map.select(selectedId)
+  map.mark(new Set(task === undefined ? [] : touchedElements(task, world)))
   map.setFlow(litIds, id => elementOnPath(id, litIds, world))
   paintHierarchy(treeHost, treeRows(world, selectedId, tree), selectedId, select, toggleRow)
   const commands = worldCommands(world)
@@ -142,7 +145,6 @@ function paintSelection(): void {
   paintStats(commands.length)
   const selected = worldElement(selectedId)
   const relationship = worldRelationship(selectedId)
-  const task = workItem(selectedId)
   if (relationship !== undefined) paintRelationship(detailsHost, relationship, world, select)
   else if (task !== undefined) paintTask(detailsHost, task, world, select)
   else if (selected === undefined) clearDetails(detailsHost)

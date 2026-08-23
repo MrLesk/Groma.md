@@ -25,20 +25,23 @@ export function monogram(assignee: string): string {
 
 const taskNumber = (id: string): number => Number.parseFloat(id.replace(/^\D+/, ''))
 
-/**
- * Pins for the active work: one per assignee and task, standing on the
- * element whose code holds the task's last modified file, else the first
- * element the task references; a task that touches no element has no pin.
- * Colours follow the pins in task order, so every visible pair differs.
- */
-export function pinsOf(items: readonly ActiveWorkItem[], world: Pick<ArchitectureWorld, 'elements'>): WorkPin[] {
+/** The elements a task touches, each once: those whose code holds one of its modified files, newest file first, then those it references. */
+export function touchedElements(item: ActiveWorkItem, world: Pick<ArchitectureWorld, 'elements'>): string[] {
   const byId = new Map(world.elements.map(element => [element.id, element.representationId]))
   const byFile = new Map(world.elements.flatMap(element => element.code.map(reference => [reference.file, element.representationId] as const)))
+  const ids = [...[...item.modifiedFiles].reverse().map(file => byFile.get(file)), ...item.references.map(reference => byId.get(reference))]
+  return [...new Set(ids.filter((id): id is string => id !== undefined))]
+}
+
+/**
+ * Pins for the active work: one per assignee and task, standing on the
+ * first element the task touches; a task that touches no element has no
+ * pin. Colours follow the pins in task order, so every visible pair differs.
+ */
+export function pinsOf(items: readonly ActiveWorkItem[], world: Pick<ArchitectureWorld, 'elements'>): WorkPin[] {
   const pins: WorkPin[] = []
   for (const item of [...items].sort((a, b) => taskNumber(a.id) - taskNumber(b.id))) {
-    const references = item.references.map(reference => byId.get(reference)).filter((id): id is string => id !== undefined)
-    const touched = [...item.modifiedFiles].reverse().map(file => byFile.get(file)).find(id => id !== undefined)
-    const elementId = touched ?? references[0]
+    const elementId = touchedElements(item, world)[0]
     if (elementId === undefined) continue
     for (const assignee of item.assignees) {
       pins.push({
