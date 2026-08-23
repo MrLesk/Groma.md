@@ -119,9 +119,9 @@ islands have none; every pattern is laid in the plane it lies on.
 Sibling groups are flat hatched zones around their members, and a
 translucent chip lies under every name that lies on a pattern. Line
 style means origin: observed items are solid, planned ghosts dashed,
-missing ghosts dotted, and only a route touched at one end by an
-active task adds accent dots; ghosts are hollow, with no fill,
-pattern or chip, and slightly faded.
+missing ghosts dotted, and only a route leaving an element an active
+task touches for one it does not adds accent dots; ghosts are hollow,
+with no fill, pattern or chip, and slightly faded.
 
 Weight follows depth, like heading levels: islands, slabs, buildings
 and routes each sit one level below the one before, every level 1.4
@@ -195,11 +195,10 @@ task's newest modified file, else the first element the task
 references. A pin is a round badge with the assignee's mark (the
 vendor mark for the claude and codex handles, else a two-letter
 monogram) inside a ring that fills by checked acceptance criteria
-over total, the task id under it, a stem from the element's
-bottom-left corner (a building's leftmost point at ground, the west
-corner of a box's footprint, of a slab's top or of a system island)
-and a tooltip with the task's title; when the task is Done the badge
-flips to a checkmark and flips back while hovered. Every assignee and
+over total, the task id under it, a stem from the roof (a slab's top
+or a system island's surface) near its left corner, and a tooltip
+with the task's title; when the task is Done the badge flips to a
+checkmark and flips back while hovered. Every assignee and
 task pair has its own colour, the pairs in task order over a fixed
 palette. The
 Live work island, frosted glass at the bottom centre of the map
@@ -211,14 +210,14 @@ finished ones while Agents is on, and a scrollable strip of chips,
 one per pin with its badge and task id, in progress first and the
 finished ones in grey; hovering a chip, like hovering a pin head,
 shows the task's title. The pins still shown on an element fan out
-leftwards from their element's corner afresh, so a pin left alone
-stands on it. Pins and chips are
+leftwards from that foot point afresh, so a pin left alone stands
+on it. Pins and chips are
 greyscale until their task is active: clicking a pin's head or a
 chip activates the task, so its pins and chips show their colour
 with an accent ring around their badge, and the map outlines every
 element the task touches, those whose code holds one of its modified
-files and those it references, and draws the routes touching them in
-the accent, dotted when only one end is touched; clicking it again
+files and those it references, and draws the routes leaving them in
+the accent, dotted when the target is untouched; clicking it again
 deactivates it, and several tasks can be active at once, their
 touched elements counted together. The
 task activated last is the selection (deactivating it hands the

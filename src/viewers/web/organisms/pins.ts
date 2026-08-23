@@ -64,13 +64,13 @@ export function fillBadge(host: HTMLElement, pin: WorkPin): void {
     `${(pin.total === 0 ? 0 : pin.done / pin.total) * RING_LENGTH} ${RING_LENGTH}`
 }
 
-/** A pin's markup: its foot on the element's bottom-left corner, a stem leaning to its head, the head a ringed badge over the task id. */
+/** A pin's markup: its foot on the element's surface near its left corner, a stem leaning to its head, the head a ringed badge over the task id. */
 const PIN = `<div class="foot"></div><div class="stem"></div><div class="head">${BADGE}<div class="task"></div></div>`
 
 export interface PinLayer {
   /** Reconciles the pins by key, so a pin that just finished plays its flip; call after the map painted the scene. */
   paint(pins: readonly WorkPin[]): void
-  /** Moves every pin to the corner it stands on under the camera. */
+  /** Moves every pin to the surface point it stands on under the camera. */
   place(camera: Camera): void
   /** Shows or hides the pins: none while agents is off, the finished ones only while completed is on too; the pins still shown fan out anew. */
   show(agents: boolean, completed: boolean): void
@@ -83,7 +83,7 @@ export function createPins(host: HTMLElement, anchorOf: (id: string) => Point | 
   const layer = document.createElement('div')
   layer.id = 'pins'
   host.append(layer)
-  /** Each pin's node and the corner it stands on, in world pixels. */
+  /** Each pin's node and the surface point it stands on, in world pixels. */
   const pinned = new Map<string, { node: HTMLElement; anchor: Point }>()
   let pins: readonly WorkPin[] = []
   let agents = true
@@ -96,7 +96,7 @@ export function createPins(host: HTMLElement, anchorOf: (id: string) => Point | 
       node.style.top = `${anchor.y * camera.k + camera.y}px`
     }
   }
-  /** The pins the toggles allow fan out leftwards from their element's bottom-left corner, stems leaning back to it; the rest hide. */
+  /** The pins the toggles allow fan out leftwards from their element's foot point, stems leaning back to it; the rest hide. */
   const fanOut = (): void => {
     const shown = pins.filter(pin => pinned.has(pin.key) && agents && (pin.status !== 'Done' || completed))
     const visible = new Set(shown.map(pin => pin.key))

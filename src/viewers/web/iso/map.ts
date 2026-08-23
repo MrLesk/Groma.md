@@ -46,15 +46,27 @@ export interface IsoMap {
   paint(scene: ProjectedScene): void
   /** Marks a selected element with its surface and the routes touching it, or a selected route with both of its ends. */
   select(id: string | undefined): void
-  /** Outlines the elements the active tasks touch and accents the routes touching them, dotted when only one end is touched; an empty set clears both. */
+  /** Outlines the elements the active tasks touch and accents the routes leaving them, dotted when the target is untouched; an empty set clears both. */
   mark(ids: ReadonlySet<string>): void
   /** Lights a picked flow's routes and dims everything off its path. */
   setFlow(litIds: ReadonlySet<string>, onPath: (id: string) => boolean): void
   hitId(target: EventTarget | null): string | undefined
   /** True when a click hit nothing but the sheet. */
   isSheet(target: EventTarget | null): boolean
-  /** The point a pin's foot stands on: the bottom-left (ground west) corner of a building, the west corner of a slab's top or of a system island. */
+  /** The point a pin's foot stands on: the roof of a building, the top of a slab or the surface of a system island, near its left corner. */
   anchorOf(id: string): Point | undefined
+}
+
+/** World pixels from a surface's westmost point to a pin's foot. */
+const FOOT_INSET = 18
+
+/**
+ * The westmost point moved straight right on screen: the two edges meeting at a west corner both run rightwards, so
+ * this heads into the surface and the pin stands near its left corner instead of on the edge.
+ */
+function onSurface(points: readonly Point[]): Point {
+  const west = points.reduce((best, point) => (point.x < best.x ? point : best))
+  return { x: west.x + FOOT_INSET, y: west.y }
 }
 
 /** The map SVG: patterns, one camera group, and the layers back to front. */
@@ -124,9 +136,9 @@ export function createMap(host: HTMLElement): IsoMap {
     mark(ids) {
       for (const [itemId, node] of items) node.classList.toggle('touched', ids.has(itemId))
       for (const route of routes.values()) {
-        const touchedEnds = [route.source, route.target].filter(id => ids.has(id)).length
-        route.group.classList.toggle('touched', touchedEnds > 0)
-        route.group.classList.toggle('half', touchedEnds === 1)
+        const leaving = ids.has(route.source)
+        route.group.classList.toggle('touched', leaving)
+        route.group.classList.toggle('half', leaving && !ids.has(route.target))
       }
     },
     setFlow(litIds, onPath) {
@@ -143,15 +155,12 @@ export function createMap(host: HTMLElement): IsoMap {
       return target === root || target === field
     },
     anchorOf(id) {
-      // a left face runs W0, S0, S1, W1 and a top face or island polygon N, E, S, W, so the west corner is the first
-      // point of the one and the fourth of the others; a curved building's left face is its front band, whose first
-      // point is the leftmost ground point of the curve
       const building = painted?.buildings.find(item => item.building.representationId === id)
-      if (building) return building.tiers[0]!.find(face => face.side === 'left')!.points[0]
+      if (building) return onSurface(building.tiers.at(-1)!.find(face => face.side === 'top')!.points)
       const slab = painted?.slabs.find(item => item.slab.representationId === id)
-      if (slab) return slab.faces.find(face => face.side === 'top')!.points[3]
+      if (slab) return onSurface(slab.faces.find(face => face.side === 'top')!.points)
       const island = painted?.islands.find(item => item.island.element?.representationId === id)
-      return island?.polygon[3]
+      return island === undefined ? undefined : onSurface(island.polygon)
     },
   }
 }

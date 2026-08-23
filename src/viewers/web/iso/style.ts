@@ -47,7 +47,7 @@ function tokens(level: Level): string {
  * The map's own stylesheet. Every level group sets its tokens from the
  * scale, one rule turns them into strokes (times the state's emphasis and
  * the camera's zoom weight) and fills, and nothing else sets a width or a
- * tint. Line style means origin; only a route touched at one end by an active task adds accent dots: observed solid, planned
+ * tint. Line style means origin; only a route leaving a touched element for an untouched one adds accent dots: observed solid, planned
  * dashed, missing dotted; patterns mean kind and nothing else. Selection
  * and context change strokes, never fills.
  */
