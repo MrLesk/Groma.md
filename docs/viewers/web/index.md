@@ -186,8 +186,10 @@ slab or island it stands on is
 outlined in the accent as its context, and the routes that touch the
 selection turn green too; selected routes add their two ends to the same treatment,
 and fills never change. A lit actor command
-draws its routes in the accent with a moving dash and dims everything
-off the path.
+draws its routes in the accent with a moving dash. The direct source
+and target elements carry the same accent on their outline and name;
+slabs and islands that only contain the path stay neutral at full
+opacity, and everything off the path dims.
 
 The map never reads architecture Markdown or calculates layout. Core
 composes the sheet from the merged world: islands, slabs, buildings,
