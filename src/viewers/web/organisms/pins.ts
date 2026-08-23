@@ -17,6 +17,13 @@ export const pinsCss = `
   #pins { position: absolute; inset: 0; pointer-events: none; }
   .pin { position: absolute; width: 0; height: 0; pointer-events: auto; --pin: var(--ink); filter: grayscale(1); }
   .pin.active { filter: none; }
+  .pin.arriving { animation: pin-arrive 700ms ease-out; }
+  @keyframes pin-arrive {
+    0% { transform: translateY(0); filter: grayscale(0); }
+    50% { transform: translateY(-16px); filter: grayscale(0); }
+    75% { transform: translateY(0); filter: grayscale(0); }
+    100% { transform: translateY(0); filter: grayscale(1); }
+  }
   .pin .foot { position: absolute; left: -2.5px; top: -2.5px; width: 5px; height: 5px; border-radius: 50%; background: var(--pin); }
   .pin .stem {
     position: absolute; left: -0.5px; bottom: 0; width: 1px; height: var(--stem); background: var(--pin);
@@ -89,6 +96,8 @@ export function createPins(host: HTMLElement, anchorOf: (id: string) => Point | 
   let agents = true
   let completed = true
   let camera: Camera | undefined
+  /** The first paint is the page's baseline; only pins first seen after it announce their arrival. */
+  let painted = false
   const place = (): void => {
     if (camera === undefined) return
     for (const { node, anchor } of pinned.values()) {
@@ -127,7 +136,7 @@ export function createPins(host: HTMLElement, anchorOf: (id: string) => Point | 
         let node = pinned.get(pin.key)?.node
         if (node === undefined) {
           node = document.createElement('div')
-          node.className = 'pin'
+          node.className = painted ? 'pin arriving' : 'pin'
           node.innerHTML = PIN
           node.querySelector('.head')!.addEventListener('click', () => onToggle(pin.taskId))
           tip.attach(node.querySelector('.head')!)
@@ -140,6 +149,7 @@ export function createPins(host: HTMLElement, anchorOf: (id: string) => Point | 
         fillBadge(node, pin)
         node.querySelector('.task')!.textContent = pin.taskId
       }
+      painted = true
       fanOut()
       place()
     },
