@@ -34,8 +34,9 @@ export const workCss = `
   #work .strip::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--ink) 25%, transparent); border-radius: 2px; }
   #work .chip {
     flex: none; gap: 8px; padding: 4px 10px 4px 4px; border: 1px solid var(--hairline); border-radius: 20px;
-    font-size: 10px; letter-spacing: 0.08em;
+    font-size: 10px; letter-spacing: 0.08em; filter: grayscale(1);
   }
+  #work .chip.active { filter: none; }
   #work .chip .badge { width: 28px; height: 28px; }
   #work .chip .badge .card { inset: 3px; }
   #work .chip .badge .face { font-size: 8px; }
@@ -51,8 +52,8 @@ export const workCss = `
 export interface WorkIsland {
   /** Rebuilds the island for these pins; nothing shows while there are none. */
   paint(pins: readonly WorkPin[]): void
-  /** Marks the chip of the selected task and scrolls it into view; none while no task is selected. */
-  select(taskId: string | undefined): void
+  /** Colours the chips of the active tasks, greyscale otherwise, marks those of the selected task (always one of the active ones) and scrolls the first into view. */
+  activate(active: readonly string[], selected: string | undefined): void
 }
 
 function button(className: string, html: string, onClick: () => void): HTMLButtonElement {
@@ -64,8 +65,8 @@ function button(className: string, html: string, onClick: () => void): HTMLButto
   return node
 }
 
-function chip(pin: WorkPin, onSelect: (id: string) => void): HTMLButtonElement {
-  const node = button(`chip${pin.status === 'Done' ? ' done' : ''}`, `${BADGE}<span>${pin.taskId}</span>`, () => onSelect(pin.taskId))
+function chip(pin: WorkPin, onToggle: (id: string) => void): HTMLButtonElement {
+  const node = button(`chip${pin.status === 'Done' ? ' done' : ''}`, `${BADGE}<span>${pin.taskId}</span>`, () => onToggle(pin.taskId))
   node.dataset.task = pin.taskId
   node.style.setProperty('--pin', pin.colour)
   node.title = `${pin.assignee} · ${pin.title}`
@@ -77,12 +78,12 @@ function chip(pin: WorkPin, onSelect: (id: string) => void): HTMLButtonElement {
  * The Live work island at the map's bottom centre: a pill that unfolds into
  * the label, the two toggles and the chip strip. It starts folded with both
  * kinds of work shown and keeps its fold and toggles across repaints;
- * clicking a chip selects its task. Every rebuild eases the island's
+ * clicking a chip toggles its task. Every rebuild eases the island's
  * width and height from the size it had to the size it needs.
  */
 export function createWorkIsland(
   host: HTMLElement,
-  onSelect: (taskId: string) => void,
+  onToggle: (taskId: string) => void,
   onShow: (agents: boolean, completed: boolean) => void,
 ): WorkIsland {
   const island = document.createElement('div')
@@ -92,6 +93,7 @@ export function createWorkIsland(
   let open = false
   let agents = true
   let completed = true
+  let active: readonly string[] = []
   let selected: string | undefined
 
   const toggle = (name: string, pressed: boolean, flip: () => void): HTMLButtonElement => {
@@ -127,7 +129,7 @@ export function createWorkIsland(
     /** The toggles hide chips as they hide pins: Agents all of them, Completed the finished ones, which come last, in grey. */
     const live = pins.filter(pin => pin.status !== 'Done')
     const finished = pins.filter(pin => pin.status === 'Done')
-    strip.append(...(agents ? [...live, ...(completed ? finished : [])] : []).map(pin => chip(pin, onSelect)))
+    strip.append(...(agents ? [...live, ...(completed ? finished : [])] : []).map(pin => chip(pin, onToggle)))
     return [
       label,
       toggle('Agents', agents, () => { agents = !agents }),
@@ -136,9 +138,12 @@ export function createWorkIsland(
       fold,
     ]
   }
-  /** Marks the selected task's chips and scrolls the strip to centre the first of them when it lies outside the visible part. */
+  /** Colours the active tasks' chips, marks the selected task's and scrolls the strip to centre the first of those when it lies outside the visible part. */
   const mark = (): void => {
-    for (const chip of island.querySelectorAll<HTMLElement>('.chip')) chip.classList.toggle('selected', chip.dataset.task === selected)
+    for (const chip of island.querySelectorAll<HTMLElement>('.chip')) {
+      chip.classList.toggle('active', active.includes(chip.dataset.task!))
+      chip.classList.toggle('selected', chip.dataset.task === selected)
+    }
     const chip = island.querySelector<HTMLElement>('.chip.selected')
     if (chip === null) return
     const strip = chip.parentElement!
@@ -169,8 +174,9 @@ export function createWorkIsland(
       pins = next
       rebuild()
     },
-    select(taskId) {
-      selected = taskId
+    activate(nextActive, nextSelected) {
+      active = nextActive
+      selected = nextSelected
       mark()
     },
   }

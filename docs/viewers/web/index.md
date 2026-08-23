@@ -178,7 +178,7 @@ task's newest modified file, else the first element the task
 references. A pin is a round badge with the assignee's two-letter
 monogram inside a ring that fills by checked acceptance criteria over
 total, the task id under it, a stem to the roof and a tooltip with
-the task's title; when the task is Done the badge flips to a green
+the task's title; when the task is Done the badge flips to a
 checkmark and flips back while hovered. Every assignee and task pair
 has its own colour, the pairs in task order over a fixed palette. The
 Live work island, frosted glass at the bottom centre of the map
@@ -189,17 +189,23 @@ that hides every pin and chip, a Completed toggle that hides the
 finished ones while Agents is on, and a scrollable strip of chips,
 one per pin with its badge and task id, in progress first and the
 finished ones in grey. The pins still shown on an element fan out
-afresh, so a pin left alone stands over its roof. Clicking a pin's
-head or a chip selects the task: the details pane shows its id,
+afresh, so a pin left alone stands over its roof. Pins and chips are
+greyscale until their task is active: clicking a pin's head or a
+chip activates the task, so its pins and chips show their colour and
+the map outlines every element the task touches, those whose code
+holds one of its modified files and those it references; clicking it
+again deactivates it, and several tasks can be active at once. The
+task activated last is the selection (deactivating it hands the
+selection to the one activated before it, or to nothing; selecting
+an element keeps the tasks active): the details pane shows its id,
 status and assignees over its title, then its description, its
 acceptance criteria as a checklist, its modified files and its
 references, where a reference naming an element is a link that
-selects the element; the map outlines every element the task
-touches, those whose code holds one of its modified files and those
-it references; the task's pins and chips carry the selection accent,
-and the strip scrolls them into view. Pins move as Backlog changes,
-through the same live channel as the world. The island eases its width and height between
-sizes whenever it folds, unfolds, or its chips change.
+selects the element; its pins and chips carry the selection accent,
+and the strip scrolls them into view. Escape or a click on empty
+sheet deactivates every task. Pins move as Backlog changes, through
+the same live channel as the world. The island eases its width and
+height between sizes whenever it folds, unfolds, or its chips change.
 The URL follows the view so any view opens again from its link:
 the selected element's kind names it (`?person=<id>`, `system=<id>`,
 `container=<id>` or `component=<id>`), `relationship=<source>/<target>`

@@ -45,11 +45,13 @@ const actionHost = document.getElementById('action')!
 const zoomHost = document.getElementById('zoom')!
 
 const map = createMap(host)
-const pins = createPins(host, id => map.anchorOf(id), id => select(id))
-const island = createWorkIsland(host, id => select(id), pins.show)
+const pins = createPins(host, id => map.anchorOf(id), id => toggleTask(id))
+const island = createWorkIsland(host, id => toggleTask(id), pins.show)
 let tree = initialTree()
 const opened = readView(location.search, world, work)
 let selectedId = opened.selectedId ?? firstSystem(world)?.representationId
+/** The tasks activated from their pins or chips, in activation order; the last one is the selection until an element or route is selected. */
+let active: string[] = opened.selectedId !== undefined && workItem(opened.selectedId) !== undefined ? [opened.selectedId] : []
 let activeAction: ActiveAction = opened.action
 let detailsTab: DetailsTab = opened.tab
 let darkTheme = opened.dark
@@ -136,10 +138,11 @@ function paintSelection(): void {
   syncUrl()
   const litIds = actionPath(activeAction.id, world, activeAction.personId)
   const task = workItem(selectedId)
+  const activeTasks = active.map(id => workItem(id)).filter((item): item is ActiveWorkItem => item !== undefined)
   map.select(selectedId)
-  map.mark(new Set(task === undefined ? [] : touchedElements(task, world)))
-  pins.select(task?.id)
-  island.select(task?.id)
+  map.mark(new Set(activeTasks.flatMap(item => touchedElements(item, world))))
+  pins.activate(active, task?.id)
+  island.activate(active, task?.id)
   map.setFlow(litIds, id => elementOnPath(id, litIds, world))
   paintHierarchy(treeHost, treeRows(world, selectedId, tree), selectedId, select, toggleRow)
   const commands = worldCommands(world)
@@ -179,8 +182,18 @@ function select(id: string): void {
   paintSelection()
 }
 
+/** A pin or chip click activates its task, or deactivates it when it is active; the task activated last is the selection. */
+function toggleTask(id: string): void {
+  const wasActive = active.includes(id)
+  active = wasActive ? active.filter(item => item !== id) : [...active, id]
+  if (!wasActive) selectedId = id
+  else if (selectedId === id) selectedId = active.at(-1)
+  paintSelection()
+}
+
 function deselect(): void {
   selectedId = undefined
+  active = []
   paintSelection()
 }
 
@@ -308,6 +321,7 @@ function applyWorld(payload: WebPayload): void {
   scene = projectScene(payload.sheet)
   fitted = fitCamera(scene.bounds, viewport())
   if (!touched) camera = fitted
+  active = active.filter(id => workItem(id) !== undefined)
   if (selectedId !== undefined && !known(selectedId)) selectedId = firstSystem(world)?.representationId
   map.paint(scene)
   pins.paint(payload.pins)
