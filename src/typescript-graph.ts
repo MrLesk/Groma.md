@@ -11,7 +11,6 @@ export interface ImportGraphNode {
   file: string
   imports: string[]
   importedBy: string[]
-  externals: string[]
   symbol?: string
 }
 
@@ -110,7 +109,6 @@ export async function buildImportGraph(
       file,
       imports: [],
       importedBy: [],
-      externals: [],
     })
   }
 
@@ -119,17 +117,11 @@ export async function buildImportGraph(
     const node = nodes.get(file)
     if (node === undefined) continue
     const imports = new Set<string>()
-    const externals = new Set<string>()
     for (const specifier of importSpecifiers(source)) {
       const resolved = resolveSpecifier(file, specifier, files)
-      if (resolved !== undefined) {
-        imports.add(resolved)
-        continue
-      }
-      if (!specifier.startsWith('.')) externals.add(specifier)
+      if (resolved !== undefined) imports.add(resolved)
     }
     node.imports = [...imports].sort()
-    node.externals = [...externals].sort()
     const symbol = firstExportSymbol(source)
     if (symbol !== undefined) node.symbol = symbol
   }

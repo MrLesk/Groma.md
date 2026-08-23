@@ -10,7 +10,7 @@ code:
 
 # Scanner plugin
 
-The generic TypeScript plugin. It turns the import graph into C4 candidates: one system, the CLI and its sibling containers, a component for every other file, with Code references and import relationships. It requires no Groma types, comments, or ids in application source.
+Owns the TypeScript-to-C4 mapping. It turns file-level import evidence into one system, container and component candidates with Code references, plus relationships for the standalone observation. scanTypeScriptSource returns only the candidates for core to fold. Application source needs no Groma types, comments, or IDs.
 
 ## Relationships
 
