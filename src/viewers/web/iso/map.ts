@@ -48,7 +48,7 @@ export interface IsoMap {
   select(ids: readonly string[]): void
   /** Outlines the elements the active tasks touch and accents the routes leaving them, dotted when the target is untouched; an empty set clears both. */
   mark(ids: ReadonlySet<string>): void
-  /** Lights route ids and dims everything off their path. */
+  /** Lights route ids and direct endpoints; contextual ancestors stay neutral while everything off the path dims. */
   setLitRoutes(litRouteIds: ReadonlySet<string>, onPath: (id: string) => boolean): void
   hitId(target: EventTarget | null): string | undefined
   /** True when a click hit nothing but the sheet. */
@@ -156,9 +156,17 @@ export function createMap(host: HTMLElement): IsoMap {
     },
     setLitRoutes(litRouteIds, onPath) {
       const tracing = litRouteIds.size > 0
+      const litEndpointIds = new Set<string>()
       camera.toggleAttribute('data-tracing', tracing)
-      for (const [routeId, route] of routes) route.group.classList.toggle('lit', litRouteIds.has(routeId))
-      for (const [itemId, node] of items) node.classList.toggle('onpath', tracing && onPath(itemId))
+      for (const [routeId, route] of routes) {
+        const lit = litRouteIds.has(routeId)
+        route.group.classList.toggle('lit', lit)
+        if (lit) litEndpointIds.add(route.source).add(route.target)
+      }
+      for (const [itemId, node] of items) {
+        node.classList.toggle('lit', litEndpointIds.has(itemId))
+        node.classList.toggle('onpath', tracing && onPath(itemId))
+      }
     },
     hitId(target) {
       if (!(target instanceof Element)) return undefined

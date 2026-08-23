@@ -129,8 +129,13 @@ export const mapCss = `
   #map .island.system:not(.selected):not(.context):hover, #map .context { --emphasis: ${emphasis(0.5)}; }
   #map .building:not(.selected):hover .face, #map .slab:not(.selected):not(.context):hover .face,
   #map .island.system:not(.selected):not(.context):hover > .ground { stroke: var(--ink); }
-  #map .selected, #map .touched { --emphasis: ${emphasis(1)}; }
+  #map .selected, #map .touched,
+  #map .building.lit, #map .slab.lit, #map .island.lit { --emphasis: ${emphasis(1)}; }
   #map .context .face, #map .island.context > .ground, #map .selected .face, #map .island.selected > .ground,
-  #map .touched .face, #map .island.touched > .ground { stroke: var(--accent); }
-  #map .selected > .label .text, #map .touched > .label .text { fill: var(--accent); font-weight: 600; }
+  #map .touched .face, #map .island.touched > .ground,
+  #map .building.lit > .face, #map .slab.lit > .face, #map .island.lit > .ground { stroke: var(--accent); }
+  #map .selected > .label .text, #map .touched > .label .text,
+  #map .building.lit > .label .text, #map .slab.lit > .label .text, #map .island.lit > .label .text {
+    fill: var(--accent); font-weight: 600;
+  }
 `
