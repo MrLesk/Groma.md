@@ -82,7 +82,8 @@ export const mapCss = `
   #map .face.left { fill: var(--left-fill); }
   #map .person .face { fill: var(--paper); }
   #map .zone .ground { fill: url(#hatch-ground); stroke: var(--muted); }
-  #map .pattern, #map .chip { stroke: none; pointer-events: none; }
+  /* the sheet's name chips only: the Live work island has chips of its own that must stay clickable */
+  #map .pattern, #map > svg .chip { stroke: none; pointer-events: none; }
   #map .island.people .pattern { fill: url(#dots); }
   #map .island.external .pattern { fill: url(#cross); }
   #map .slab .pattern { fill: url(#grain); }
@@ -92,7 +93,7 @@ export const mapCss = `
   #map .building.person .pattern.right { fill: url(#dots-right); }
   #map .building.external .pattern.left { fill: url(#cross-left); }
   #map .building.external .pattern.right { fill: url(#cross-right); }
-  #map .chip { fill: var(--paper); fill-opacity: 0.75; }
+  #map > svg .chip { fill: var(--paper); fill-opacity: 0.75; }
   #map .ghost { opacity: 0.8; }
   #map .ghost .face, #map .ghost .ground { fill: none; }
   #map .ghost .pattern, #map .ghost .chip { display: none; }

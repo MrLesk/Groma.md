@@ -14,7 +14,8 @@ const STEM = 22
 
 export const pinsCss = `
   #pins { position: absolute; inset: 0; pointer-events: none; }
-  .pin { position: absolute; width: 0; height: 0; pointer-events: auto; --pin: var(--ink); }
+  .pin { position: absolute; width: 0; height: 0; pointer-events: auto; --pin: var(--ink); filter: grayscale(1); }
+  .pin.active { filter: none; }
   .pin .foot { position: absolute; left: -2.5px; top: -2.5px; width: 5px; height: 5px; border-radius: 50%; background: var(--pin); }
   .pin .stem {
     position: absolute; left: -0.5px; bottom: 0; width: 1px; height: var(--stem); background: var(--pin);
@@ -68,12 +69,12 @@ export interface PinLayer {
   place(camera: Camera): void
   /** Shows or hides the pins: none while agents is off, the finished ones only while completed is on too; the pins still shown fan out anew. */
   show(agents: boolean, completed: boolean): void
-  /** Marks the pins of the selected task; none while no task is selected. */
-  select(taskId: string | undefined): void
+  /** Colours the pins of the active tasks, greyscale otherwise, and marks those of the selected task, which is always one of the active ones. */
+  activate(active: readonly string[], selected: string | undefined): void
 }
 
-/** The agents' pins over the map; clicking a pin's head selects its task. */
-export function createPins(host: HTMLElement, anchorOf: (id: string) => Point | undefined, onSelect: (taskId: string) => void): PinLayer {
+/** The agents' pins over the map; clicking a pin's head toggles its task. */
+export function createPins(host: HTMLElement, anchorOf: (id: string) => Point | undefined, onToggle: (taskId: string) => void): PinLayer {
   const layer = document.createElement('div')
   layer.id = 'pins'
   host.append(layer)
@@ -125,7 +126,7 @@ export function createPins(host: HTMLElement, anchorOf: (id: string) => Point | 
           node = document.createElement('div')
           node.className = 'pin'
           node.innerHTML = PIN
-          node.querySelector('.head')!.addEventListener('click', () => onSelect(pin.taskId))
+          node.querySelector('.head')!.addEventListener('click', () => onToggle(pin.taskId))
           layer.append(node)
         }
         pinned.set(pin.key, { node, anchor })
@@ -147,8 +148,12 @@ export function createPins(host: HTMLElement, anchorOf: (id: string) => Point | 
       completed = nextCompleted
       fanOut()
     },
-    select(taskId) {
-      for (const pin of pins) pinned.get(pin.key)?.node.classList.toggle('selected', pin.taskId === taskId)
+    activate(active, selected) {
+      for (const pin of pins) {
+        const node = pinned.get(pin.key)?.node
+        node?.classList.toggle('active', active.includes(pin.taskId))
+        node?.classList.toggle('selected', pin.taskId === selected)
+      }
     },
   }
 }
