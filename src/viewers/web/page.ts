@@ -5,15 +5,20 @@ import type { C4Kind } from '../../types.ts'
 import { kindGlyph, kindLabel } from './atoms/kind.ts'
 import { cssBlock, palettes } from './atoms/theme.ts'
 import { mapCss } from './iso/style.ts'
-import { pinsCss } from './organisms/pins.ts'
 import { tipCss } from './organisms/tip.ts'
-import { workCss } from './organisms/work-island.ts'
 import type { WebPayload } from './payload.ts'
+import { backlogMarkCss } from './work/backlog-mark.ts'
+import { workBadgeCss } from './work/badge.ts'
+import { workCss } from './work/island.ts'
+import { pinsCss } from './work/pins.ts'
 
 const lockup = readFileSync(
   fileURLToPath(new URL('./atoms/lockup.svg', import.meta.url)),
   'utf8',
 )
+const backlogMark = readFileSync(
+  fileURLToPath(new URL('./work/backlog-mark.png', import.meta.url)),
+).toString('base64')
 
 const legendKinds: C4Kind[][] = [
   ['actor', 'system'],
@@ -21,7 +26,7 @@ const legendKinds: C4Kind[][] = [
 ]
 
 const style = `
-  :root { ${cssBlock(palettes.light)} }
+  :root { ${cssBlock(palettes.light)} --backlog-mark-image: url("data:image/png;base64,${backlogMark}"); }
   [data-theme="dark"] { ${cssBlock(palettes.dark)} }
   html { margin: 0; height: 100%; overflow-x: auto; overflow-y: hidden; background: var(--paper); }
   body {
@@ -129,7 +134,7 @@ const style = `
   .link.active { box-shadow: inset 2px 0 var(--accent); padding-left: 6px; }
   .mark { flex: none; }
   .ghost { opacity: 0.5; }
-${mapCss}${pinsCss}${workCss}${tipCss}`
+${backlogMarkCss}${workBadgeCss}${mapCss}${pinsCss}${workCss}${tipCss}`
 
 function legend(): string {
   return legendKinds.map(line => {

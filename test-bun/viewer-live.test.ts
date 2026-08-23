@@ -8,13 +8,13 @@ import { test } from 'bun:test'
 import { normalizeTerminalPalette } from '@opentui/core'
 import { createTestRenderer } from '@opentui/core/testing'
 
-import type { WorkSource } from '../src/backlog-plugin.ts'
+import { EMPTY_WORK_SNAPSHOT, type WorkSource } from '../src/work/backlog.ts'
 import { scanRepository } from '../src/scanner.ts'
 import { startTerminalViewer } from '../src/view-host.ts'
 
 function emptyWorkSource(): WorkSource {
   return {
-    read: async () => [],
+    read: async () => EMPTY_WORK_SNAPSHOT,
     watch: () => ({ close() {} }),
   }
 }

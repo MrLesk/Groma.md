@@ -7,8 +7,8 @@ import { test } from 'bun:test'
 import { normalizeTerminalPalette } from '@opentui/core'
 import { createTestRenderer } from '@opentui/core/testing'
 
+import { EMPTY_WORK_SNAPSHOT, type WorkSource } from '../src/work/backlog.ts'
 import { loadArchitectureViewModel } from '../src/core.ts'
-import type { WorkSource } from '../src/backlog-plugin.ts'
 import { startTerminalViewer } from '../src/view-host.ts'
 import { mountTerminalViewer } from '../src/viewers/tui/terminal-viewer.ts'
 import {
@@ -21,7 +21,7 @@ import {
 
 function emptyWorkSource(): WorkSource {
   return {
-    read: async () => [],
+    read: async () => EMPTY_WORK_SNAPSHOT,
     watch: () => ({ close() {} }),
   }
 }
@@ -46,7 +46,7 @@ test.concurrent('viewer modules consume only the core response and fixed world',
 
   assert.doesNotMatch(
     viewerSource,
-    /node:fs|node:child_process|architecture-reader|architecture-watch|backlog-plugin|loadArchitectureViewModel|repositoryRoot|watchScan|world-layout|elkjs|groma\/(?:observed|missing|plans)/,
+    /node:fs|node:child_process|architecture-reader|architecture-watch|work\/backlog|loadArchitectureViewModel|repositoryRoot|watchScan|world-layout|elkjs|groma\/(?:observed|missing|plans)/,
   )
 })
 

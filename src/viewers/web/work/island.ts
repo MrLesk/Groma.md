@@ -1,11 +1,12 @@
-import type { WorkPin } from '../../../work-pins.ts'
-import { BADGE, fillBadge } from './pins.ts'
-import type { Tip } from './tip.ts'
+import type { WorkPin } from '../../../work/pins.ts'
+import type { Tip } from '../organisms/tip.ts'
+import { BACKLOG_MARK } from './backlog-mark.ts'
+import { fillWorkBadge, WORK_BADGE } from './badge.ts'
+import { toggleWorkStatus, workStatusFilters } from './status-filter.ts'
+import type { WorkStatusFilterState } from './status-filter.ts'
 
 const icon = (paths: string): string =>
   `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${paths}</svg>`
-/** A pulse, the mark of live work: on the folded pill and in the open island's label. */
-const PULSE_MARK = icon('<path d="M2 12h4l3-8 4 16 3-8h6"/>')
 const EYE_MARK = icon('<path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/>')
 /** Points up while folded, the way the island opens; the open island turns it down. */
 const CHEVRON = icon('<path d="M6 15l6-6 6 6"/>')
@@ -46,15 +47,15 @@ export const workCss = `
   #work .chip .badge .ring { width: 100%; height: 100%; }
   #work .chip .badge .face svg { width: 12px; height: 12px; }
   #work .chip .badge .ring circle { stroke-width: 4; }
-  #work .chip.done { --pin: var(--muted); }
+  #work .chip.work-done { --pin: var(--muted); }
   #work .chip.selected { border-color: var(--accent); color: var(--accent); }
   #work .fold svg { transition: transform 0.35s ease; }
   #work.open .fold svg { transform: rotate(180deg); }
 `
 
 export interface WorkIsland {
-  /** Rebuilds the island for these pins; nothing shows while there are none. */
-  paint(pins: readonly WorkPin[]): void
+  /** Rebuilds the island for these pins and configured statuses; nothing shows while there are no pins. */
+  paint(pins: readonly WorkPin[], statuses: readonly string[], defaultStatus: string): void
   /** Colours the chips of the active tasks, greyscale otherwise, marks those of the selected task (always one of the active ones) and scrolls the first into view. */
   activate(active: readonly string[], selected: string | undefined): void
 }
@@ -69,42 +70,44 @@ function button(className: string, html: string, onClick: () => void): HTMLButto
 }
 
 function chip(pin: WorkPin, onToggle: (id: string) => void, tip: Tip): HTMLButtonElement {
-  const node = button(`chip${pin.status === 'Done' ? ' done' : ''}`, `${BADGE}<span>${pin.taskId}</span>`, () => onToggle(pin.taskId))
+  const node = button('chip', `${WORK_BADGE}<span>${pin.taskId}</span>`, () => onToggle(pin.taskId))
   node.dataset.task = pin.taskId
   node.style.setProperty('--pin', pin.colour)
-  node.dataset.tip = `${pin.assignee} · ${pin.title}`
+  node.dataset.tip = `${pin.assignee ?? 'Unassigned'} · ${pin.title}`
   tip.attach(node)
-  fillBadge(node, pin)
+  fillWorkBadge(node, pin)
   return node
 }
 
 /**
- * The Live work island at the map's bottom centre: a pill that unfolds into
- * the label, the two toggles and the chip strip. It starts folded with both
- * kinds of work shown and keeps its fold and toggles across repaints;
+ * The Backlog task island at the map's bottom centre: a pill that unfolds into
+ * the label, the configured statuses that have pins and the chip strip. It starts
+ * folded with the workflow statuses other than the default and terminal ones
+ * shown, and keeps its fold and filters across repaints;
  * clicking a chip toggles its task. Every rebuild eases the island's
  * width and height from the size it had to the size it needs.
  */
 export function createWorkIsland(
   host: HTMLElement,
   onToggle: (taskId: string) => void,
-  onShow: (agents: boolean, completed: boolean) => void,
+  onShow: (statuses: readonly string[]) => void,
   tip: Tip,
 ): WorkIsland {
   const island = document.createElement('div')
   island.id = 'work'
   host.append(island)
   let pins: readonly WorkPin[] = []
+  let configuredStatuses: readonly string[] = []
+  let statusFilters: WorkStatusFilterState | undefined
   let open = false
-  let agents = true
-  let completed = true
   let active: readonly string[] = []
   let selected: string | undefined
 
-  const toggle = (name: string, pressed: boolean, flip: () => void): HTMLButtonElement => {
-    const node = button('toggle', `${EYE_MARK}${name}`, () => {
-      flip()
-      onShow(agents, completed)
+  const toggle = (status: string): HTMLButtonElement => {
+    const pressed = statusFilters?.enabled.includes(status) ?? false
+    const node = button('toggle', `${EYE_MARK}${status}`, () => {
+      statusFilters = toggleWorkStatus(statusFilters!, status)
+      onShow(statusFilters.enabled)
       rebuild()
     })
     node.setAttribute('aria-pressed', String(pressed))
@@ -115,7 +118,7 @@ export function createWorkIsland(
     if (pins.length === 0) return []
     const mark = document.createElement('span')
     mark.className = 'mark'
-    mark.innerHTML = `${PULSE_MARK}${pins.some(pin => pin.status !== 'Done') ? '<span class="dot"></span>' : ''}`
+    mark.innerHTML = `${BACKLOG_MARK}${pins.some(pin => !pin.terminal) ? '<span class="dot"></span>' : ''}`
     const fold = button('fold', CHEVRON, () => {
       open = !open
       rebuild()
@@ -128,17 +131,16 @@ export function createWorkIsland(
     }
     const label = document.createElement('span')
     label.className = 'label'
-    label.innerHTML = `${PULSE_MARK}Live work`
+    label.innerHTML = `${BACKLOG_MARK}Live work`
     const strip = document.createElement('div')
     strip.className = 'strip'
-    /** The toggles hide chips as they hide pins: Agents all of them, Completed the finished ones, which come last, in grey. */
-    const live = pins.filter(pin => pin.status !== 'Done')
-    const finished = pins.filter(pin => pin.status === 'Done')
-    strip.append(...(agents ? [...live, ...(completed ? finished : [])] : []).map(pin => chip(pin, onToggle, tip)))
+    const order = new Map(configuredStatuses.map((status, index) => [status, index]))
+    const shown = pins.filter(pin => statusFilters!.enabled.includes(pin.status))
+    shown.sort((left, right) => order.get(left.status)! - order.get(right.status)!)
+    strip.append(...shown.map(pin => chip(pin, onToggle, tip)))
     return [
       label,
-      toggle('Agents', agents, () => { agents = !agents }),
-      toggle('Completed', completed, () => { completed = !completed }),
+      ...statusFilters!.available.map(toggle),
       strip,
       fold,
     ]
@@ -175,8 +177,16 @@ export function createWorkIsland(
     )
   }
   return {
-    paint(next) {
-      pins = next
+    paint(nextPins, nextStatuses, defaultStatus) {
+      pins = nextPins
+      configuredStatuses = nextStatuses
+      statusFilters = workStatusFilters(
+        configuredStatuses,
+        defaultStatus,
+        pins.map(pin => pin.status),
+        statusFilters?.enabled,
+      )
+      onShow(statusFilters.enabled)
       rebuild()
     },
     activate(nextActive, nextSelected) {

@@ -88,8 +88,8 @@ export interface ScanSummary {
   matched: number
 }
 
-/** A Backlog task in progress, or done lately, as the viewers show it. */
-export interface ActiveWorkItem {
+/** A Backlog task available to the viewers. */
+export interface WorkItem {
   id: string
   title: string
   status: string
@@ -100,6 +100,13 @@ export interface ActiveWorkItem {
   modifiedFiles: string[]
   /** The acceptance criteria in order, each with its checked state. */
   criteria: { text: string; checked: boolean }[]
+}
+
+/** The Backlog workflow and tasks read together, so viewers interpret every status against the same configuration. */
+export interface WorkSnapshot {
+  statuses: string[]
+  defaultStatus: string
+  items: WorkItem[]
 }
 
 export interface WorkMarker {

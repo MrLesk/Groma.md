@@ -4,7 +4,7 @@ kind: component
 parent: view-host
 code:
   - scanner: typescript
-    file: src/work-projection.ts
+    file: src/work/projection.ts
     symbol: projectActiveWork
 ---
 

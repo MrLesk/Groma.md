@@ -41,9 +41,10 @@ Groma is the only writer of files under `groma/`.
 
 Both maps show live Backlog work. The terminal map marks the assignees of
 each task in progress on the elements the task references. The web map
-stands one pin per assignee and task on the element the task touched last,
-lists them in the Live work island, opens a task's details from its pin or
-chip, and outlines the elements the task touches.
+stands one pin per assignee and task, or one generic pin for an unassigned
+task, on the element the task touched last. Its Live work island filters the
+pins and chips by the configured Backlog statuses, opens a task's details
+from its pin or chip, and outlines the elements the task touches.
 
 ## The C4 layers
 

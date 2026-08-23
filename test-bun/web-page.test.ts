@@ -10,7 +10,13 @@ import { repositoryRoot, viewerFixtureRoot } from './helpers.ts'
 
 test.concurrent('the page embeds the world and its sheet and mounts one SVG map', async () => {
   const { world } = await loadArchitectureViewModel(viewerFixtureRoot)
-  const page = renderPage({ generation: 1, world, sheet: sheetScene(world), work: [], pins: [] })
+  const page = renderPage({
+    generation: 1,
+    world,
+    sheet: sheetScene(world),
+    work: { statuses: [], defaultStatus: '', items: [] },
+    pins: [],
+  })
   assert.match(page, /<div id="map"><\/div>/)
   assert.match(page, /"sheet":\{"sheet":/)
 })

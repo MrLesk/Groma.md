@@ -8,7 +8,7 @@ import { drawRoute, drawRouteArrow, drawRouteLabel } from '../molecules/route.ts
 import { drawSelection } from '../molecules/selection.ts'
 import { drawWorkMarker } from '../molecules/work-marker.ts'
 import type { WorkMarker, WorldProjection } from '../../../types.ts'
-import { assigneesOnElement } from '../../../work-projection.ts'
+import { assigneesOnElement } from '../../../work/projection.ts'
 
 export function drawWorld(
   buffer: OptimizedBuffer,

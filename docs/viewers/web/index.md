@@ -181,7 +181,8 @@ off the path.
 The map never reads architecture Markdown or calculates layout. Core
 composes the sheet from the merged world: islands, slabs, buildings,
 zones and routes, all in cells. The web server ships the world, its
-sheet, the active tasks and their pins together; the browser only
+sheet, the configured Backlog workflow, available tasks and their pins
+together; the browser only
 projects the sheet isometrically, paints it as SVG, and handles
 camera, selection and the lit flow. It may not move a footprint or
 reroute a relationship.
@@ -207,29 +208,32 @@ marks every selected element, and the last item selected owns the details pane.
 Removing that item returns details to the previous item. Click empty
 sheet or press Escape to clear the selection, and the details pane empties. A
 actor command stays on the map until `x`.
-Agents at work show as pins. Every Backlog task In Progress, and
-every task Done in the last day, puts one pin per assignee on the
-element the task touched last: the element whose code holds the
-task's newest modified file, else the first element the task
-references. A pin is a round badge with the assignee's mark (the
-vendor mark for the claude and codex handles, else a two-letter
-monogram) inside a ring that fills by checked acceptance criteria
+Backlog work shows as pins. Every task outside the configured terminal
+status, and every task in that status changed within the last day, puts
+one pin per assignee on the element the task touched last: the element
+whose code holds the task's newest modified file, else the first element
+the task references. An unassigned task puts one generic pin there. A pin
+is a round badge with the assignee's mark (the vendor mark for the claude
+and codex handles, else a two-letter monogram), or the Backlog document
+mark for an unassigned task, inside a ring that fills by checked acceptance criteria
 over total, the task id under it, a stem from the roof (a slab's top
 or a system island's surface) near its left corner, and a tooltip
-with the task's title; when the task is Done the badge flips to a
-checkmark and flips back while hovered. Every assignee and
+with the task's title; when the task is Done the badge shows a checkmark
+and flips back while hovered. Every assignee and
 task pair has its own colour, the pairs in task order over a fixed
 palette. A pin that appears after the map is open bounces once in
 that colour, then returns to the inactive greyscale. The
 Live work island, frosted glass at the bottom centre of the map
 above the footer, exists while any pin does: folded it is a pill with
-the pulse mark, a dot while a task is in progress, and a chevron
-pointing up; unfolded it shows the Live work label, an Agents toggle
-that hides every pin and chip, a Completed toggle that hides the
-finished ones while Agents is on, and a scrollable strip of chips,
-one per pin with its badge and task id, in progress first and the
-finished ones in grey; hovering a chip, like hovering a pin head,
-shows the task's title. The pins still shown on an element fan out
+the Backlog document mark, a dot while a nonterminal task is available,
+and a chevron pointing up; unfolded it shows the Live work label, one
+filter for each configured status in configuration order when that status
+has at least one pin, and a scrollable strip of chips, one per shown pin
+with its badge and task id. A filter appears on the same live update that
+brings the first pin in its status. The configured default and terminal
+statuses start hidden; every other configured status starts shown. A filter
+hides or shows both the matching pins and chips. Done chips are grey.
+Hovering a chip, like hovering a pin head, shows the task's title. The pins still shown on an element fan out
 leftwards from that foot point afresh, so a pin left alone stands
 on it. Pins and chips are
 greyscale until their task is active: clicking a pin's head or a
@@ -252,7 +256,7 @@ into view. Escape or a click on empty
 sheet deactivates every task. Pins move as Backlog changes, through
 the same live channel as the world. The island eases its width and
 height between sizes whenever it folds, unfolds, or its chips change,
-and keeps its fold and toggles across live updates.
+and keeps its fold and filters across live updates.
 The URL follows the view without adding history entries, so any
 view opens again from its link:
 each selected element's kind names it (`?actor=<id>`, `system=<id>`,

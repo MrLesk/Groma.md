@@ -2,7 +2,7 @@ import { spawn } from 'node:child_process'
 import { watch } from 'node:fs'
 import path from 'node:path'
 
-import type { ActiveWorkItem } from './types.ts'
+import type { WorkSnapshot } from '../types.ts'
 
 export type BacklogCommand = (
   arguments_: string[],
@@ -10,8 +10,14 @@ export type BacklogCommand = (
 ) => Promise<string>
 
 export interface WorkSource {
-  read(): Promise<ActiveWorkItem[]>
+  read(): Promise<WorkSnapshot>
   watch(onChange: () => void): { close(): void }
+}
+
+export const EMPTY_WORK_SNAPSHOT: WorkSnapshot = {
+  statuses: [],
+  defaultStatus: '',
+  items: [],
 }
 
 function runBacklog(arguments_: string[], repositoryRoot: string): Promise<string> {
@@ -39,7 +45,7 @@ function runBacklog(arguments_: string[], repositoryRoot: string): Promise<strin
 const DONE_WINDOW_MS = 24 * 60 * 60 * 1000
 
 interface TaskListJson {
-  tasks: { id: string; status: string; updatedAt: string }[]
+  tasks: { id: string; status: string; updatedAt: string | null }[]
 }
 
 interface TaskViewJson {
@@ -62,11 +68,18 @@ export function createBacklogPlugin(
 ): WorkSource {
   return {
     async read() {
-      const list = JSON.parse(await run(['task', 'list', '--json'], repositoryRoot)) as TaskListJson
+      const [listText, statusesText, defaultStatusText] = await Promise.all([
+        run(['task', 'list', '--json'], repositoryRoot),
+        run(['config', 'get', 'statuses'], repositoryRoot),
+        run(['config', 'get', 'defaultStatus'], repositoryRoot),
+      ])
+      const list = JSON.parse(listText) as TaskListJson
+      const statuses = statusesText.split(',').map(status => status.trim()).filter(Boolean)
+      const terminalStatus = statuses.at(-1)
       const since = now() - DONE_WINDOW_MS
-      const active = list.tasks.filter(task =>
-        task.status === 'In Progress' || (task.status === 'Done' && Date.parse(task.updatedAt) >= since))
-      return Promise.all(active.map(async summary => {
+      const available = list.tasks.filter(task => task.status !== terminalStatus
+        || (task.updatedAt !== null && Date.parse(task.updatedAt) >= since))
+      const items = await Promise.all(available.map(async summary => {
         const { task } = JSON.parse(await run(
           ['task', 'view', summary.id, '--json'],
           repositoryRoot,
@@ -82,6 +95,7 @@ export function createBacklogPlugin(
           criteria: task.acceptanceCriteria.map(({ text, checked }) => ({ text, checked })),
         }
       }))
+      return { statuses, defaultStatus: defaultStatusText.trim(), items }
     },
     watch(onChange) {
       const watcher = watch(

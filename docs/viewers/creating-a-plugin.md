@@ -67,9 +67,9 @@ The TUI plugin is `mountTerminalViewer(renderer, viewModel, options)` in
 - `setView({ level, currentId, camera })`: moves the view without a key
   press; every field is optional.
 
-Work comes through a `WorkSource` (`src/backlog-plugin.ts`): `read()`
-resolves the active Backlog tasks and `watch(onChange)` returns a handle
-whose `close()` stops watching the task files. The default is
+Work comes through a `WorkSource` (`src/work/backlog.ts`): `read()`
+resolves the configured workflow and available Backlog tasks, and
+`watch(onChange)` returns a handle whose `close()` stops watching the task files. The default is
 `createBacklogPlugin(repositoryRoot)`; both hosts take another source
 through their `workSource` option.
 

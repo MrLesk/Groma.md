@@ -35,7 +35,7 @@ Groma  system
 |   |-- Svg  component  src/viewers/web/iso/svg.ts  svg
 |   |-- Text  component  src/viewers/web/iso/text.ts  surfaceText
 |   |-- Url  component  src/viewers/web/url.ts  readView
-|   `-- Work pins  component  src/work-pins.ts  monogram
+|   `-- Work pins  component  src/work/pins.ts  monogram
 |-- Typescript graph  container  src/typescript-graph.ts  kebabCase
 `-- View host  container  src/view-host.ts  startTerminalViewer
     |-- Action path  component  src/viewers/action-path.ts  actionCaption
@@ -52,7 +52,7 @@ Groma  system
     |-- Semantic view  component  src/semantic-view.ts  displaySize
     |-- Terminal viewer  component  src/viewers/tui/terminal-viewer.ts  mountTerminalViewer
     |-- Tree  component  src/viewers/tui/tree.ts  initialTree
-    `-- Work projection  component  src/work-projection.ts  assigneesOnElement
+    `-- Work projection  component  src/work/projection.ts  assigneesOnElement
 
 relationships
 Cli  uses  Core
