@@ -152,6 +152,9 @@ the side of the source that faces the target and to arrive, pointing
 inward, at the middle of the side of the target that faces the source,
 keeping one lane clear of every foreign building and slab, and
 running on the one ground plane from end to end, slabs included. A
+route holds the middle of the free ground: it keeps out of the two
+lanes beside a slab or island border, and out of the two lanes beside
+a route already drawn, unless its ends leave it nowhere else to go. A
 building's back sides are hidden under its roof, so there a route
 starts or ends on the
 ground just behind the building where the roof's shadow ends: on screen

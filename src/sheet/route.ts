@@ -14,6 +14,15 @@ const SIDE_PENALTY = 24
 const OFF_CENTRE = 8
 /** Lanes a route runs straight out of its port and straight into its goal, so it leaves and meets a side square on. */
 const APPROACH = 2
+/**
+ * Lanes from a surface border, or from a route already drawn, within which a
+ * line pays to run, and what each of those lanes costs: a route holds the
+ * middle of the free ground instead of tracing an edge or crowding a
+ * neighbour. Foreign buildings need no such push, since RING already keeps a
+ * lane clear of them.
+ */
+const NEAR = 2
+const CROWD = 3
 
 type Side = 'x-' | 'x+' | 'y-' | 'y+'
 const SIDES: readonly Side[] = ['x-', 'x+', 'y-', 'y+']
@@ -122,9 +131,10 @@ class Heap {
  * behind the building where the roof's shadow ends: on screen the line
  * emerges from, or its arrowhead touches, the middle of the roof's back
  * edge. Routes leave and meet a side square on, keep one lane clear of every
- * foreign footprint and pay for turns and for lanes other routes already
- * use; they are solved in the order given, so parallel routes take
- * neighbouring ports.
+ * foreign footprint, pay for turns and for lanes other routes already use,
+ * and pay to run within NEAR lanes of a surface border or of a route already
+ * drawn, so a line holds the middle of the free ground; they are solved in
+ * the order given, so parallel routes take neighbouring ports.
  */
 export function routeAll(
   sheet: CellRect,
@@ -153,6 +163,51 @@ export function routeAll(
   const g = new Float64Array(stateCount)
   const parent = new Int32Array(stateCount)
   const closed = new Uint8Array(stateCount)
+
+  const sweep = new Int32Array(nodeCount)
+  /** Lanes from each node out to the nearest source, NEAR at the furthest; -1 past that, where nothing is close enough to matter. */
+  const measure = (room: Int32Array, sources: Iterable<number>): void => {
+    room.fill(-1)
+    let tail = 0
+    for (const node of sources) {
+      if (room[node] !== -1) continue
+      room[node] = 0
+      sweep[tail] = node
+      tail += 1
+    }
+    for (let head = 0; head < tail; head += 1) {
+      const node = sweep[head]!
+      if (room[node]! >= NEAR) continue
+      const x = node % width
+      const y = (node - x) / width
+      for (let direction = 0; direction < 4; direction += 1) {
+        const nx = x + DX[direction]!
+        const ny = y + DY[direction]!
+        if (nx < 0 || ny < 0 || nx >= width || ny >= height) continue
+        const next = nodeOf(nx, ny)
+        if (room[next] !== -1) continue
+        room[next] = room[node]! + 1
+        sweep[tail] = next
+        tail += 1
+      }
+    }
+  }
+  /** What a lane costs for lying that close to whatever the room was measured from. */
+  const crowd = (room: Int32Array, node: number): number => (room[node] === -1 ? 0 : CROWD * (NEAR - room[node]!))
+
+  /** The lanes along every surface's border, which a route would otherwise trace and be hard to tell from. */
+  const borderLanes = function* (): Generator<number> {
+    for (const endpoint of endpoints.values()) {
+      if (endpoint.kind === 'building') continue
+      const rect = lanes(endpoint.rect)
+      for (let x = rect.x0; x <= rect.x1; x += 1) { yield nodeOf(x, rect.y0); yield nodeOf(x, rect.y1) }
+      for (let y = rect.y0; y <= rect.y1; y += 1) { yield nodeOf(rect.x0, y); yield nodeOf(rect.x1, y) }
+    }
+  }
+  const border = new Int32Array(nodeCount)
+  measure(border, borderLanes())
+  /** The room left around the routes drawn so far, so they push each other apart instead of squeezing into neighbouring lanes. */
+  const nearRoute = new Int32Array(nodeCount).fill(-1)
 
   const paint = (rect: LaneRect, back: number, front: number): void => {
     const x0 = Math.max(0, rect.x0 - back)
@@ -333,13 +388,14 @@ export function routeAll(
         const neighbour = nodeOf(nx, ny)
         if (blocked[neighbour]) continue
         const cost = g[state]! + STEP + (next === direction ? 0 : BEND) + REUSE * used[edgeOf(node, neighbour)]!
-          + (goal[neighbour] ? goalCost[neighbour]! : 0)
+          + crowd(border, neighbour) + crowd(nearRoute, neighbour) + (goal[neighbour] ? goalCost[neighbour]! : 0)
         push(neighbour * 4 + next, cost, state)
       }
     }
     throw new Error(`No route for ${request.id} (${request.source} → ${request.target})`)
   }
 
+  const drawn: number[] = []
   return requests.map(request => {
     const { nodes, port, goalPort } = solve(request)
     usedPorts.add(port)
@@ -348,6 +404,8 @@ export function routeAll(
       const edge = edgeOf(nodes[index - 1]!, nodes[index]!)
       used[edge] = Math.min(255, used[edge]! + 1)
     }
+    drawn.push(...nodes)
+    measure(nearRoute, drawn)
     return {
       id: request.id,
       source: request.source,

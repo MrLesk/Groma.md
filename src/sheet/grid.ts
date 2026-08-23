@@ -25,7 +25,8 @@ const CLEAR = 1
  * neighbours are unaffected, because nothing hides that ground.
  */
 export function shadeOf(floors: number): number {
-  return Math.ceil(floors * ROOF_SHADOW + CLEAR - GAP)
+  /** Never negative: a wider GAP already clears the roof, and a building must not claim less than its footprint. */
+  return Math.max(0, Math.ceil(floors * ROOF_SHADOW + CLEAR - GAP))
 }
 /** Cells of screen width between islands. */
 export const ISLAND_GAP = 3
