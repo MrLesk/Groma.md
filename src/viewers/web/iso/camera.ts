@@ -18,7 +18,7 @@ const ZOOM_MAX = 4
 /** Screen pixels kept free around the fitted sheet. */
 const FIT_MARGIN = 24
 /** Screen pixels around focused elements, leaving their highlighted context readable. */
-const CONTEXT_MARGIN = 72
+const CONTEXT_MARGIN = 120
 /** One wheel notch of 100 units zooms by about 16 %. */
 const WHEEL_RATE = 0.0015
 /** A trackpad pinch arrives as ctrl+wheel whose delta is the percent change, so this rate follows the fingers. */
