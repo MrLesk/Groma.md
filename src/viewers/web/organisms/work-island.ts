@@ -1,5 +1,6 @@
 import type { WorkPin } from '../../../work-pins.ts'
 import { BADGE, fillBadge } from './pins.ts'
+import type { Tip } from './tip.ts'
 
 const icon = (paths: string): string =>
   `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${paths}</svg>`
@@ -14,7 +15,7 @@ export const workCss = `
   #work {
     position: absolute; left: 0; right: 0; bottom: 12px; margin: 0 auto; width: fit-content; box-sizing: border-box; max-width: calc(100% - 24px);
     display: flex; align-items: center; gap: 10px; padding: 6px 12px; border-radius: 28px;
-    background: color-mix(in srgb, var(--paper) 55%, transparent); border: 1px solid var(--hairline);
+    background: color-mix(in srgb, var(--paper) 40%, transparent); border: 1px solid var(--hairline);
     backdrop-filter: blur(14px); box-shadow: 0 6px 24px rgba(0, 0, 0, 0.12);
     overflow: hidden; white-space: nowrap;
   }
@@ -37,6 +38,7 @@ export const workCss = `
     font-size: 10px; letter-spacing: 0.08em; filter: grayscale(1);
   }
   #work .chip.active { filter: none; }
+  #work .chip:hover { border-color: var(--ink); }
   #work .chip .badge { width: 28px; height: 28px; }
   #work .chip .badge .card { inset: 3px; }
   #work .chip .badge .face { font-size: 8px; }
@@ -65,11 +67,12 @@ function button(className: string, html: string, onClick: () => void): HTMLButto
   return node
 }
 
-function chip(pin: WorkPin, onToggle: (id: string) => void): HTMLButtonElement {
+function chip(pin: WorkPin, onToggle: (id: string) => void, tip: Tip): HTMLButtonElement {
   const node = button(`chip${pin.status === 'Done' ? ' done' : ''}`, `${BADGE}<span>${pin.taskId}</span>`, () => onToggle(pin.taskId))
   node.dataset.task = pin.taskId
   node.style.setProperty('--pin', pin.colour)
-  node.title = `${pin.assignee} · ${pin.title}`
+  node.dataset.tip = `${pin.assignee} · ${pin.title}`
+  tip.attach(node)
   fillBadge(node, pin)
   return node
 }
@@ -85,6 +88,7 @@ export function createWorkIsland(
   host: HTMLElement,
   onToggle: (taskId: string) => void,
   onShow: (agents: boolean, completed: boolean) => void,
+  tip: Tip,
 ): WorkIsland {
   const island = document.createElement('div')
   island.id = 'work'
@@ -129,7 +133,7 @@ export function createWorkIsland(
     /** The toggles hide chips as they hide pins: Agents all of them, Completed the finished ones, which come last, in grey. */
     const live = pins.filter(pin => pin.status !== 'Done')
     const finished = pins.filter(pin => pin.status === 'Done')
-    strip.append(...(agents ? [...live, ...(completed ? finished : [])] : []).map(pin => chip(pin, onToggle)))
+    strip.append(...(agents ? [...live, ...(completed ? finished : [])] : []).map(pin => chip(pin, onToggle, tip)))
     return [
       label,
       toggle('Agents', agents, () => { agents = !agents }),

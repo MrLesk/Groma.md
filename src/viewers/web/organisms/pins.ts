@@ -3,6 +3,7 @@ import { monogram } from '../../../work-pins.ts'
 import type { WorkPin } from '../../../work-pins.ts'
 import { MARKS } from '../atoms/marks.ts'
 import type { Camera } from '../iso/camera.ts'
+import type { Tip } from './tip.ts'
 
 /** The ring's radius in the badge's 40 px box. */
 const RING_RADIUS = 18
@@ -74,7 +75,7 @@ export interface PinLayer {
 }
 
 /** The agents' pins over the map; clicking a pin's head toggles its task. */
-export function createPins(host: HTMLElement, anchorOf: (id: string) => Point | undefined, onToggle: (taskId: string) => void): PinLayer {
+export function createPins(host: HTMLElement, anchorOf: (id: string) => Point | undefined, onToggle: (taskId: string) => void, tip: Tip): PinLayer {
   const layer = document.createElement('div')
   layer.id = 'pins'
   host.append(layer)
@@ -127,12 +128,13 @@ export function createPins(host: HTMLElement, anchorOf: (id: string) => Point | 
           node.className = 'pin'
           node.innerHTML = PIN
           node.querySelector('.head')!.addEventListener('click', () => onToggle(pin.taskId))
+          tip.attach(node.querySelector('.head')!)
           layer.append(node)
         }
         pinned.set(pin.key, { node, anchor })
         node.style.setProperty('--pin', pin.colour)
         node.classList.toggle('done', pin.status === 'Done')
-        node.querySelector<HTMLElement>('.head')!.title = `${pin.taskId} · ${pin.title}`
+        node.querySelector<HTMLElement>('.head')!.dataset.tip = `${pin.assignee} · ${pin.title}`
         fillBadge(node, pin)
         node.querySelector('.task')!.textContent = pin.taskId
       }
