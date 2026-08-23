@@ -1,4 +1,4 @@
-import type { ArchitectureWorld, WorkItem } from '../types.ts'
+import type { ArchitectureGraph, WorkItem } from '../types.ts'
 
 /** Eight hues that read on paper and on dark paper; the brand green stays out of it for the checkmark and the selection. */
 export const PIN_COLOURS = ['#E0685E', '#2F9ED6', '#8B5CF6', '#E8A317', '#1BA39C', '#D6409F', '#6B8E23', '#FF7A1A']
@@ -27,7 +27,7 @@ export function monogram(assignee: string): string {
 const taskNumber = (id: string): number => Number.parseFloat(id.replace(/^\D+/, ''))
 
 /** The elements a task touches, each once: those whose code holds one of its modified files, newest file first, then those it references. */
-export function touchedElements(item: WorkItem, world: Pick<ArchitectureWorld, 'elements'>): string[] {
+export function touchedElements(item: WorkItem, world: Pick<ArchitectureGraph, 'elements'>): string[] {
   const byId = new Map(world.elements.map(element => [element.id, element.representationId]))
   const byFile = new Map(world.elements.flatMap(element => element.code.map(reference => [reference.file, element.representationId] as const)))
   const ids = [...[...item.modifiedFiles].reverse().map(file => byFile.get(file)), ...item.references.map(reference => byId.get(reference))]
@@ -42,7 +42,7 @@ export function touchedElements(item: WorkItem, world: Pick<ArchitectureWorld, '
  */
 export function pinsOf(
   items: readonly WorkItem[],
-  world: Pick<ArchitectureWorld, 'elements'>,
+  world: Pick<ArchitectureGraph, 'elements'>,
   terminalStatus: string | undefined,
 ): WorkPin[] {
   const pins: WorkPin[] = []

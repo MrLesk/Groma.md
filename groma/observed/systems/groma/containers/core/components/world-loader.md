@@ -10,7 +10,7 @@ code:
 
 # World loader
 
-Loads the merged world for every caller: reads the observed and planned documents, builds one annotated world with the lines behind each component's code, and lays it out for the viewers. The CLI, the terminal host and the web server all start here.
+Loads the merged semantic architecture for every caller: reads the observed and planned documents, builds one annotated graph with stable relationship ids and the lines behind each component's code. The web sheet consumes this graph directly; the terminal path adds its fixed world layout afterwards.
 
 ## Relationships
 

@@ -1,11 +1,11 @@
 import type {
   WorkItem,
-  ArchitectureWorld,
+  AnnotatedElement,
+  AnnotatedRelationship,
+  ArchitectureGraph,
   C4Kind,
   CodeReference,
   Origin,
-  WorldElement,
-  WorldRelationship,
 } from '../../../types.ts'
 import { actionCaption, outgoingActions, travelledBy } from '../../action-path.ts'
 import { kindGlyph, kindLabel } from '../atoms/kind.ts'
@@ -63,8 +63,8 @@ export function tabSections(tab: DetailsTab): Section[] {
 }
 
 export function inspectDetails(
-  element: WorldElement,
-  world: ArchitectureWorld,
+  element: AnnotatedElement,
+  world: ArchitectureGraph,
 ): Inspected {
   const byId = new Map(world.elements.map(item => [item.representationId, item]))
   const parentOf = parentOfElements(world.elements)
@@ -281,8 +281,8 @@ export function paintDetails(
 /** The pane for a selected relationship: its description as the title, then both ends as links. */
 export function paintRelationship(
   host: HTMLElement,
-  relationship: WorldRelationship,
-  world: ArchitectureWorld,
+  relationship: AnnotatedRelationship,
+  world: ArchitectureGraph,
   onSelect: (id: string, additive: boolean) => void,
 ): void {
   const byId = new Map(world.elements.map(item => [item.representationId, item]))
@@ -312,7 +312,7 @@ export function paintRelationship(
 export function paintTask(
   host: HTMLElement,
   item: WorkItem,
-  world: ArchitectureWorld,
+  world: ArchitectureGraph,
   onSelect: (id: string, additive: boolean) => void,
 ): void {
   const byId = new Map(world.elements.map(element => [element.id, element]))

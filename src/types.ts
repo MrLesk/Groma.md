@@ -163,6 +163,7 @@ export interface AnnotatedElement {
 }
 
 export interface AnnotatedRelationship {
+  id: string
   source: string
   target: string
   description: string
@@ -171,10 +172,14 @@ export interface AnnotatedRelationship {
   plan?: string
 }
 
-export interface AnnotatedArchitectureModel {
-  plans: string[]
+/** Semantic architecture needed by a view before any renderer adds geometry. */
+export interface ArchitectureGraph {
   elements: AnnotatedElement[]
   relationships: AnnotatedRelationship[]
+}
+
+export interface AnnotatedArchitectureModel extends ArchitectureGraph {
+  plans: string[]
 }
 
 export interface WorldElement extends AnnotatedElement {
@@ -182,7 +187,6 @@ export interface WorldElement extends AnnotatedElement {
 }
 
 export interface WorldRelationship extends AnnotatedRelationship {
-  id: string
   route: Point[]
   label: Bounds | null
 }

@@ -8,6 +8,7 @@ import type {
   AnnotatedArchitectureModel,
   AnnotatedElement,
   AnnotatedRelationship,
+  ArchitectureGraph,
   ArchitectureWorld,
   Bounds,
   C4Kind,
@@ -151,7 +152,7 @@ function labelWidth(text: string): number {
   return Math.max(10, Math.min(32, text.length + 2))
 }
 
-function graphFor(model: AnnotatedArchitectureModel): ElkNode {
+function graphFor(model: ArchitectureGraph): ElkNode {
   const elementsById = new Map(model.elements.map(element => [
     element.representationId,
     element,
@@ -167,12 +168,12 @@ function graphFor(model: AnnotatedArchitectureModel): ElkNode {
     id: 'architecture-world',
     layoutOptions: rootLayoutOptions,
     children: siblingNodes(null, roots, elementsById),
-    edges: model.relationships.map((relationship, index) => ({
-      id: `relationship:${index}`,
+    edges: model.relationships.map(relationship => ({
+      id: relationship.id,
       sources: [relationship.source],
       targets: [relationship.target],
       labels: [{
-        id: `relationship:${index}:label`,
+        id: `${relationship.id}:label`,
         text: relationship.description,
         width: labelWidth(relationship.description),
         height: 1,
@@ -261,7 +262,6 @@ function collectEdges(
     const offset = edgeOffset(relationship, elementsById, groupsById)
 
     result.push({
-      id: edge.id,
       ...relationship,
       route: [
         absolutePoint(section.startPoint, offset.x, offset.y),
@@ -297,8 +297,8 @@ export async function layoutArchitectureWorld(
   } finally {
     elk.terminateWorker()
   }
-  const modelRelationships = new Map(model.relationships.map((relationship, index) => [
-    `relationship:${index}`,
+  const modelRelationships = new Map(model.relationships.map(relationship => [
+    relationship.id,
     relationship,
   ]))
 

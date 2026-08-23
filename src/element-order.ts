@@ -1,12 +1,20 @@
-import type { WorldElement } from './types.ts'
+import type { AnnotatedElement, WorldElement } from './types.ts'
 
-function meaningRank(element: WorldElement): number {
+function meaningRank(element: AnnotatedElement): number {
   if (element.kind === 'actor') return 0
   if (element.external) return 2
   return 1
 }
 
-/** Sibling order shared by the hierarchy pane and the sheet: actors, then internal software, then externals; left to right. */
+/** Geometry-free sibling order for renderers that place the semantic architecture themselves. */
+export function compareSemanticElements(left: AnnotatedElement, right: AnnotatedElement): number {
+  return meaningRank(left) - meaningRank(right)
+    || (left.representationId < right.representationId
+      ? -1
+      : left.representationId > right.representationId ? 1 : 0)
+}
+
+/** TUI sibling order: actors, then internal software, then externals; left to right in the ELK world. */
 export function compareElements(left: WorldElement, right: WorldElement): number {
   return meaningRank(left) - meaningRank(right)
     || left.bounds.x - right.bounds.x

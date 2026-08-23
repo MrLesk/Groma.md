@@ -1,11 +1,11 @@
 import type { SheetScene } from '../../sheet/types.ts'
-import type { ArchitectureWorld, WorkSnapshot } from '../../types.ts'
+import type { ArchitectureGraph, WorkSnapshot } from '../../types.ts'
 import type { WorkPin } from '../../work/pins.ts'
 
 /** Architecture state, changed only by architecture publication. */
 export interface WebMapPayload {
   generation: number
-  world: ArchitectureWorld
+  world: ArchitectureGraph
   sheet: SheetScene
 }
 

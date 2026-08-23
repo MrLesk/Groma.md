@@ -1,4 +1,4 @@
-import type { WorldRelationship } from '../../../types.ts'
+import type { AnnotatedRelationship } from '../../../types.ts'
 import type { FlowRef } from '../../action-path.ts'
 import { sectionHeading } from '../organisms/sidebar-section.ts'
 
@@ -8,7 +8,7 @@ let unfolded = false
 /** Every command row shows whether its flow is active and whether it owns details. */
 export function paintFlows(
   host: HTMLElement,
-  commands: readonly WorldRelationship[],
+  commands: readonly AnnotatedRelationship[],
   active: readonly FlowRef[],
   selected: FlowRef | undefined,
   onPick: (commandId: string) => void,

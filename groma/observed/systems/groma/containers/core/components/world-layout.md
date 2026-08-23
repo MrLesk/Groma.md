@@ -11,7 +11,7 @@ code:
 
 # World layout
 
-Lays the whole world out once for the terminal map: containment boxes, group boundaries, and orthogonal routes, with one stable id per relationship that every viewer shares.
+Adds containment boxes, group boundaries, and orthogonal routes to the semantic graph for the terminal map only.
 
 ## Technology
 

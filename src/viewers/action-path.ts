@@ -3,7 +3,7 @@ import {
   parentOfElements,
   promotedPeer,
 } from './relationship-text.ts'
-import type { ArchitectureWorld, WorldRelationship } from '../types.ts'
+import type { AnnotatedRelationship, ArchitectureGraph } from '../types.ts'
 
 /** One command flow, optionally limited to the actor who starts it. */
 export interface FlowRef {
@@ -30,9 +30,9 @@ export function actionCaption(
 
 function exclusiveOutgoing(
   elementId: string,
-  world: ArchitectureWorld,
+  world: ArchitectureGraph,
   parentOf: ReturnType<typeof parentOfElements>,
-): WorldRelationship[] {
+): AnnotatedRelationship[] {
   return world.relationships.filter(relationship => {
     return promotedPeer(relationship, elementId, parentOf)?.outgoing === true
   })
@@ -41,7 +41,7 @@ function exclusiveOutgoing(
 /** Everything an element reaches along outgoing relationships, the element itself excluded. */
 function downstream(
   elementId: string,
-  world: ArchitectureWorld,
+  world: ArchitectureGraph,
   parentOf: ReturnType<typeof parentOfElements>,
 ): Set<string> {
   const reached = new Set<string>()
@@ -64,8 +64,8 @@ function downstream(
  */
 export function outgoingActions(
   elementId: string | undefined,
-  world: ArchitectureWorld,
-): WorldRelationship[] {
+  world: ArchitectureGraph,
+): AnnotatedRelationship[] {
   if (elementId === undefined) return []
   const parentOf = parentOfElements(world.elements)
   const own = exclusiveOutgoing(elementId, world, parentOf)
@@ -82,7 +82,7 @@ export function outgoingActions(
   }
   if (launchers.length === 0) return own
 
-  const exposed: WorldRelationship[] = []
+  const exposed: AnnotatedRelationship[] = []
   const covered = new Set<string>()
   for (const launcher of launchers) {
     covered.add(launcher)
@@ -99,8 +99,8 @@ export function outgoingActions(
 
 export function pickableActions(
   elementId: string | undefined,
-  world: ArchitectureWorld,
-): WorldRelationship[] {
+  world: ArchitectureGraph,
+): AnnotatedRelationship[] {
   const selected = world.elements.find(item => item.representationId === elementId)
   if (selected?.kind !== 'actor') return []
   return outgoingActions(elementId, world)
@@ -112,12 +112,12 @@ export function pickableActions(
  */
 export function actionLegs(
   actionId: string | undefined,
-  world: ArchitectureWorld,
+  world: ArchitectureGraph,
   actorId?: string,
-): WorldRelationship[] {
+): AnnotatedRelationship[] {
   const start = world.relationships.find(relationship => relationship.id === actionId)
   if (start === undefined) return []
-  const legs: WorldRelationship[] = []
+  const legs: AnnotatedRelationship[] = []
   const ids = new Set<string>()
   const byId = new Map(world.elements.map(item => [item.representationId, item]))
   for (const relationship of world.relationships) {
@@ -145,7 +145,7 @@ export function actionLegs(
 
 export function actionPath(
   actionId: string | undefined,
-  world: ArchitectureWorld,
+  world: ArchitectureGraph,
   actorId?: string,
 ): Set<string> {
   return new Set(actionLegs(actionId, world, actorId).map(leg => leg.id))
@@ -154,7 +154,7 @@ export function actionPath(
 /** The union of authored relationship routes travelled by the active flows. */
 export function flowRouteIds(
   flows: readonly FlowRef[],
-  world: ArchitectureWorld,
+  world: ArchitectureGraph,
 ): Set<string> {
   return new Set(flows.flatMap(flow => [
     ...actionPath(flow.commandId, world, flow.actorId),
@@ -162,9 +162,9 @@ export function flowRouteIds(
 }
 
 /** Every actor command in the world, deduped across the actors who share it. */
-export function worldCommands(world: ArchitectureWorld): WorldRelationship[] {
+export function worldCommands(world: ArchitectureGraph): AnnotatedRelationship[] {
   const seen = new Set<string>()
-  const commands: WorldRelationship[] = []
+  const commands: AnnotatedRelationship[] = []
   for (const actor of world.elements) {
     if (actor.kind !== 'actor') continue
     for (const action of pickableActions(actor.representationId, world)) {
@@ -179,8 +179,8 @@ export function worldCommands(world: ArchitectureWorld): WorldRelationship[] {
 /** The actor commands whose walk touches the element. */
 export function travelledBy(
   elementId: string,
-  world: ArchitectureWorld,
-): WorldRelationship[] {
+  world: ArchitectureGraph,
+): AnnotatedRelationship[] {
   return worldCommands(world).filter(action =>
     elementOnPath(elementId, actionPath(action.id, world), world))
 }
@@ -188,7 +188,7 @@ export function travelledBy(
 export function elementOnPath(
   elementId: string,
   pathIds: Set<string>,
-  world: ArchitectureWorld,
+  world: ArchitectureGraph,
 ): boolean {
   const parentOf = parentOfElements(world.elements)
   return world.relationships.some(relationship => {

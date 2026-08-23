@@ -16,11 +16,11 @@ import { compareElements } from '../../element-order.ts'
 import { ancestorsOf, initialTree, treeRows } from './tree.ts'
 import type { TreeState } from './tree.ts'
 import type {
+  AnnotatedRelationship,
   ArchitectureWorld,
   C4Kind,
   SemanticLevel,
   WorldElement,
-  WorldRelationship,
 } from '../../types.ts'
 
 export type ViewerFocus = 'architecture' | 'hierarchy' | 'details'
@@ -122,7 +122,7 @@ export function initialState(world: ArchitectureWorld): ViewerState {
 export function detailsCommands(
   world: ArchitectureWorld,
   state: Pick<ViewerState, 'currentId' | 'detailsTab'>,
-): WorldRelationship[] {
+): AnnotatedRelationship[] {
   if (state.detailsTab === 'how') {
     return state.currentId === undefined ? [] : travelledBy(state.currentId, world)
   }

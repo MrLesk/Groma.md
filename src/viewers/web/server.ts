@@ -1,7 +1,7 @@
 import { watchArchitecture } from '../../architecture-watch.ts'
 import { createBacklogPlugin, EMPTY_WORK_SNAPSHOT } from '../../work/backlog.ts'
 import type { WorkSource } from '../../work/backlog.ts'
-import { loadArchitectureViewModel } from '../../core.ts'
+import { loadAnnotatedArchitecture } from '../../core.ts'
 import { watchScan } from '../../scanner.ts'
 import { sheetScene } from '../../sheet/scene.ts'
 import { pinsOf } from '../../work/pins.ts'
@@ -20,7 +20,8 @@ async function bundleRenderer(): Promise<string> {
 
 /** Loads the architecture map without consulting optional work plugins. */
 async function loadMap(repositoryRoot: string): Promise<Omit<WebMapPayload, 'generation'>> {
-  const { world } = await loadArchitectureViewModel(repositoryRoot)
+  const { elements, relationships } = await loadAnnotatedArchitecture(repositoryRoot)
+  const world = { elements, relationships }
   return { world, sheet: sheetScene(world) }
 }
 
