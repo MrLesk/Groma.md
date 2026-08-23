@@ -14,15 +14,14 @@ const STEM = 22
 
 export const pinsCss = `
   #pins { position: absolute; inset: 0; pointer-events: none; }
-  #pins.hide-agents .pin:not(.done), #pins.hide-completed .pin.done { display: none; }
   .pin { position: absolute; width: 0; height: 0; pointer-events: auto; --pin: var(--ink); }
   .pin .foot { position: absolute; left: -2.5px; top: -2.5px; width: 5px; height: 5px; border-radius: 50%; background: var(--pin); }
   .pin .stem {
     position: absolute; left: -0.5px; bottom: 0; width: 1px; height: var(--stem); background: var(--pin);
-    transform-origin: bottom center; transform: rotate(var(--lean));
+    transform-origin: bottom center; transform: rotate(var(--lean)); transition: transform 0.3s, height 0.3s;
   }
   .pin .head {
-    position: absolute; left: calc(var(--fan) - 20px); bottom: ${STEM}px; width: 40px;
+    position: absolute; left: calc(var(--fan) - 20px); bottom: ${STEM}px; width: 40px; transition: left 0.3s;
     display: flex; flex-direction: column; align-items: center; cursor: pointer;
   }
   .badge { position: relative; width: 40px; height: 40px; perspective: 200px; }
@@ -65,7 +64,7 @@ export interface PinLayer {
   paint(pins: readonly WorkPin[]): void
   /** Moves every pin to its element's roof under the camera. */
   place(camera: Camera): void
-  /** Shows or hides the in-progress pins and the finished ones. */
+  /** Shows or hides the in-progress pins and the finished ones; the pins still shown fan out anew. */
   show(agents: boolean, completed: boolean): void
 }
 
@@ -76,6 +75,9 @@ export function createPins(host: HTMLElement, anchorOf: (id: string) => Point | 
   host.append(layer)
   /** Each pin's node and the roof point it stands on, in world pixels. */
   const pinned = new Map<string, { node: HTMLElement; anchor: Point }>()
+  let pins: readonly WorkPin[] = []
+  let agents = true
+  let completed = true
   let camera: Camera | undefined
   const place = (): void => {
     if (camera === undefined) return
@@ -84,17 +86,33 @@ export function createPins(host: HTMLElement, anchorOf: (id: string) => Point | 
       node.style.top = `${anchor.y * camera.k + camera.y}px`
     }
   }
+  /** The pins the toggles allow fan out side by side around their element's roof point, stems leaning back to it; the rest hide. */
+  const fanOut = (): void => {
+    const shown = pins.filter(pin => pinned.has(pin.key) && (pin.status === 'Done' ? completed : agents))
+    const visible = new Set(shown.map(pin => pin.key))
+    for (const [key, { node }] of pinned) node.hidden = !visible.has(key)
+    const sharing = new Map<string, number>()
+    for (const pin of shown) sharing.set(pin.elementId, (sharing.get(pin.elementId) ?? 0) + 1)
+    const placed = new Map<string, number>()
+    for (const pin of shown) {
+      const index = placed.get(pin.elementId) ?? 0
+      placed.set(pin.elementId, index + 1)
+      const fan = (index - (sharing.get(pin.elementId)! - 1) / 2) * FAN_PITCH
+      const { node } = pinned.get(pin.key)!
+      node.style.setProperty('--fan', `${fan}px`)
+      node.style.setProperty('--lean', `${Math.atan2(fan, STEM)}rad`)
+      node.style.setProperty('--stem', `${Math.hypot(fan, STEM)}px`)
+    }
+  }
   return {
-    paint(pins) {
+    paint(next) {
+      pins = next
       const keep = new Set(pins.map(pin => pin.key))
       for (const [key, { node }] of pinned) {
         if (keep.has(key)) continue
         node.remove()
         pinned.delete(key)
       }
-      const sharing = new Map<string, number>()
-      for (const pin of pins) sharing.set(pin.elementId, (sharing.get(pin.elementId) ?? 0) + 1)
-      const placed = new Map<string, number>()
       for (const pin of pins) {
         const anchor = anchorOf(pin.elementId)
         if (anchor === undefined) continue
@@ -113,23 +131,18 @@ export function createPins(host: HTMLElement, anchorOf: (id: string) => Point | 
         node.querySelector<HTMLElement>('.head')!.title = `${pin.taskId} · ${pin.title}`
         fillBadge(node, pin)
         node.querySelector('.task')!.textContent = pin.taskId
-        /** Pins sharing an element fan out side by side around its roof point, their stems leaning back to it. */
-        const index = placed.get(pin.elementId) ?? 0
-        placed.set(pin.elementId, index + 1)
-        const fan = (index - (sharing.get(pin.elementId)! - 1) / 2) * FAN_PITCH
-        node.style.setProperty('--fan', `${fan}px`)
-        node.style.setProperty('--lean', `${Math.atan2(fan, STEM)}rad`)
-        node.style.setProperty('--stem', `${Math.hypot(fan, STEM)}px`)
       }
+      fanOut()
       place()
     },
     place(current) {
       camera = current
       place()
     },
-    show(agents, completed) {
-      layer.classList.toggle('hide-agents', !agents)
-      layer.classList.toggle('hide-completed', !completed)
+    show(nextAgents, nextCompleted) {
+      agents = nextAgents
+      completed = nextCompleted
+      fanOut()
     },
   }
 }
