@@ -93,7 +93,12 @@ any length), by the arrows it would stand in the way of, and by the
 cells it adds to the surface's longer side, so a heavy target comes
 next to what feeds it, light intermediates settle at the edges,
 partners line up into straight runs and chains wrap instead of
-stretching. Nothing stands west of the entries, and children no
+stretching. A building's roof hides the ground behind it, so it
+claims those cells on its north and west; once that shadow outgrows
+the usual gap, its neighbours there stand far enough back that the
+corridor between them still shows ground. Nothing hides the ground
+to its south and east, so those neighbours keep the usual gap.
+Nothing stands west of the entries, and children no
 relationship touches are packed as one block after them. The
 people and external islands shift across the row, north or south, so
 their buildings face what they talk to.

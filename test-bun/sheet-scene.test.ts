@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { test } from 'bun:test'
 
 import { loadArchitectureViewModel } from '../src/core.ts'
-import { EMPTY, GAP, ISLAND_GAP, MARGIN, PAD, contains, overlaps } from '../src/sheet/grid.ts'
+import { EMPTY, GAP, ISLAND_GAP, MARGIN, PAD, ROOF_SHADOW, contains, overlaps, shadeOf } from '../src/sheet/grid.ts'
 import {
   ISLAND_FONT,
   ISLAND_SPACING,
@@ -19,7 +19,7 @@ import {
 import { sheetScene } from '../src/sheet/scene.ts'
 import type { CellRect, SheetScene } from '../src/sheet/types.ts'
 import type { ArchitectureWorld, WorldElement } from '../src/types.ts'
-import { box, openclawFixtureRoot, viewerFixtureRoot, worldOf } from './helpers.ts'
+import { box, openclawFixtureRoot, uses, viewerFixtureRoot, worldOf } from './helpers.ts'
 
 const unit = { x: 0, y: 0, width: 1, height: 1 }
 
@@ -81,6 +81,38 @@ test.concurrent('siblings never overlap and keep the gap on one axis', () => {
       }
     }
   }
+})
+
+test.concurrent('a building keeps the ground its roof hides clear of its north and west neighbours', () => {
+  const scene = sheetScene(worldOf([
+    box('shop', 'system', unit),
+    box('api', 'container', unit, { parent: 'observed:shop' }),
+    { ...box('tall', 'component', unit, { parent: 'observed:api' }), codeLines: 4000 },
+    { ...box('short', 'component', unit, { parent: 'observed:api' }), codeLines: 0 },
+    { ...box('middling', 'component', unit, { parent: 'observed:api' }), codeLines: 1200 },
+  ], [uses('relationship:0', 'tall', 'short'), uses('relationship:1', 'middling', 'tall')]))
+  assert.ok(shadeOf(scene.buildings.find(building => building.id === 'tall')!.floors) > 0)
+  let pairs = 0
+  for (const near of scene.buildings) {
+    /** The ground the roof hides, plus the one cell an arrow needs to run out of one building and into the next. */
+    const room = near.floors * ROOF_SHADOW + 1
+    for (const far of scene.buildings) {
+      if (far === near || far.surface !== near.surface) continue
+      const alongX = near.rect.gx < far.rect.gx + far.rect.w && far.rect.gx < near.rect.gx + near.rect.w
+      const alongY = near.rect.gy < far.rect.gy + far.rect.d && far.rect.gy < near.rect.gy + near.rect.d
+      /** Only a building whose roof outgrows the plain gap makes this rule bite. */
+      const shaded = shadeOf(near.floors) > 0 ? 1 : 0
+      if (alongX && far.rect.gy + far.rect.d <= near.rect.gy) {
+        pairs += shaded
+        assert.ok(near.rect.gy - (far.rect.gy + far.rect.d) >= room, `${far.id} stands in ${near.id}'s roof shadow`)
+      }
+      if (alongY && far.rect.gx + far.rect.w <= near.rect.gx) {
+        pairs += shaded
+        assert.ok(near.rect.gx - (far.rect.gx + far.rect.w) >= room, `${far.id} stands in ${near.id}'s roof shadow`)
+      }
+    }
+  }
+  assert.ok(pairs > 0)
 })
 
 test.concurrent('children sit inside their parent with padding and leave the front band free', () => {
