@@ -4,7 +4,7 @@ import { BADGE, fillBadge } from './pins.ts'
 const icon = (paths: string): string =>
   `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${paths}</svg>`
 /** The Backlog.md mark: a hammer. */
-const BACKLOG_MARK = icon('<path d="M14 4l6 6-2 2-6-6z"/><path d="M12 6 4 14l3 3 8-8"/><path d="M4 14l-1 1"/>')
+const BACKLOG_MARK = icon('<path d="M9.5 5.5l4-4 8 8-4 4z"/><path d="M13.5 9.5 5 18"/>')
 /** A pulse, the mark of live work. */
 const PULSE_MARK = icon('<path d="M2 12h4l3-8 4 16 3-8h6"/>')
 const EYE_MARK = icon('<path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/>')
@@ -35,6 +35,8 @@ export const workCss = `
   #work .chip .badge { width: 28px; height: 28px; }
   #work .chip .badge .card { inset: 3px; }
   #work .chip .badge .face { font-size: 8px; }
+  #work .chip .badge .ring { width: 100%; height: 100%; }
+  #work .chip .badge .face svg { width: 12px; height: 12px; }
   #work .chip .badge .ring circle { stroke-width: 4; }
   #work .chip.done { --pin: var(--muted); }
   #work .done-label { color: var(--muted); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; flex: none; }

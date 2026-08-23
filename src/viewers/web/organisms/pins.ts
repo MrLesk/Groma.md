@@ -1,10 +1,8 @@
 import type { Point } from '../../../types.ts'
 import { monogram } from '../../../work-pins.ts'
 import type { WorkPin } from '../../../work-pins.ts'
+import { MARKS } from '../atoms/marks.ts'
 import type { Camera } from '../iso/camera.ts'
-
-/** Inline SVG marks for assignees that have one, by handle without the @; everyone else gets a monogram. */
-export const MARKS: Record<string, string> = {}
 
 /** The ring's radius in the badge's 40 px box. */
 const RING_RADIUS = 18
@@ -37,7 +35,7 @@ export const pinsCss = `
     position: absolute; inset: 0; border-radius: 50%; display: grid; place-items: center;
     backface-visibility: hidden; font-size: 11px; font-weight: 600; letter-spacing: 0.04em;
   }
-  .badge .face svg { width: 18px; height: 18px; }
+  #map .badge .face svg { width: 18px; height: 18px; }
   .badge .face.front { background: var(--paper); color: var(--pin); border: 1px solid var(--pin); }
   .badge .face.back { background: var(--accent); color: #fff; transform: rotateY(180deg); font-size: 14px; }
   .pin.done .card { transform: rotateY(180deg); }
