@@ -52,11 +52,12 @@ function tokens(level: Level): string {
  * and context change strokes, never fills.
  */
 export const mapCss = `
-  #map svg {
+  #map > svg {
     display: block; width: 100%; height: 100%; cursor: grab;
     user-select: none; -webkit-user-select: none; touch-action: none; outline: none;
   }
-  #map svg:active { cursor: grabbing; }
+  #map > svg [data-id] { cursor: pointer; }
+  #map > svg:active, #map > svg:active [data-id] { cursor: grabbing; }
   #map .camera { transform-box: view-box; transform-origin: 0 0; }
   #map .sheet { pointer-events: none; ${stroke('island')} }
   #map .tick, #map .compass { ${stroke('building')} }

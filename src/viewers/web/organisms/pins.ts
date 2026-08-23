@@ -34,7 +34,7 @@ export const pinsCss = `
     position: absolute; inset: 0; border-radius: 50%; display: grid; place-items: center;
     backface-visibility: hidden; font-size: 11px; font-weight: 600; letter-spacing: 0.04em;
   }
-  #map .badge .face svg { width: 18px; height: 18px; }
+  .badge .face svg { width: 18px; height: 18px; }
   .badge .face.front { background: var(--paper); color: var(--pin); border: 1px solid var(--pin); }
   .badge .face.back { background: var(--accent); color: #fff; transform: rotateY(180deg); font-size: 14px; }
   .pin.done .card { transform: rotateY(180deg); }

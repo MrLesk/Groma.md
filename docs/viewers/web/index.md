@@ -183,7 +183,7 @@ checkmark and flips back while hovered. Every assignee and task pair
 has its own colour, the pairs in task order over a fixed palette. The
 Live work island, frosted glass at the bottom centre of the map
 above the footer, exists while any pin does: folded it is a pill with
-the Backlog mark, a dot while a task is in progress, and a chevron
+the pulse mark, a dot while a task is in progress, and a chevron
 pointing up; unfolded it shows the Live work label, an Agents toggle
 and a Completed toggle that hide the in-progress or the finished pins
 and their chips, and a scrollable strip of chips, one per pin with
