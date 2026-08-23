@@ -53,15 +53,8 @@ export interface IsoMap {
   hitId(target: EventTarget | null): string | undefined
   /** True when a click hit nothing but the sheet. */
   isSheet(target: EventTarget | null): boolean
-  /** The centre of an element's roof or top in world pixels, where a pin stands. */
+  /** The point a pin's foot stands on: the bottom-left (ground west) corner of a building, the west corner of a slab's top or of a system island. */
   anchorOf(id: string): Point | undefined
-}
-
-function centroid(points: readonly Point[]): Point {
-  return {
-    x: points.reduce((sum, point) => sum + point.x, 0) / points.length,
-    y: points.reduce((sum, point) => sum + point.y, 0) / points.length,
-  }
 }
 
 /** The map SVG: patterns, one camera group, and the layers back to front. */
@@ -145,12 +138,15 @@ export function createMap(host: HTMLElement): IsoMap {
       return target === root || target === field
     },
     anchorOf(id) {
+      // a left face runs W0, S0, S1, W1 and a top face or island polygon N, E, S, W, so the west corner is the first
+      // point of the one and the fourth of the others; a curved building's left face is its front band, whose first
+      // point is the leftmost ground point of the curve
       const building = painted?.buildings.find(item => item.building.representationId === id)
-      if (building) return centroid(building.tiers.at(-1)!.find(face => face.side === 'top')!.points)
+      if (building) return building.tiers[0]!.find(face => face.side === 'left')!.points[0]
       const slab = painted?.slabs.find(item => item.slab.representationId === id)
-      if (slab) return centroid(slab.faces.find(face => face.side === 'top')!.points)
+      if (slab) return slab.faces.find(face => face.side === 'top')!.points[3]
       const island = painted?.islands.find(item => item.island.element?.representationId === id)
-      return island === undefined ? undefined : centroid(island.polygon)
+      return island?.polygon[3]
     },
   }
 }
