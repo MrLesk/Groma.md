@@ -12,14 +12,13 @@ const CHEVRON = icon('<path d="M6 15l6-6 6 6"/>')
 export const workCss = `
   /* Centred by margins, not by a translate: a fractional transform would resample the blurred layer and soften the text. */
   #work {
-    position: absolute; left: 0; right: 0; bottom: 12px; margin: 0 auto; width: fit-content; box-sizing: border-box; max-width: 100px;
-    display: flex; align-items: center; gap: 10px; padding: 6px 10px; border-radius: 28px;
+    position: absolute; left: 0; right: 0; bottom: 12px; margin: 0 auto; width: fit-content; box-sizing: border-box; max-width: calc(100% - 24px);
+    display: flex; align-items: center; gap: 10px; padding: 6px 12px; border-radius: 28px;
     background: color-mix(in srgb, var(--paper) 55%, transparent); border: 1px solid var(--hairline);
     backdrop-filter: blur(14px); box-shadow: 0 6px 24px rgba(0, 0, 0, 0.12);
-    overflow: hidden; white-space: nowrap; transition: max-width 0.35s ease, padding 0.35s ease;
+    overflow: hidden; white-space: nowrap;
   }
   #work:empty { display: none; }
-  #work.open { max-width: calc(100% - 24px); padding: 8px 14px; }
   #work svg { width: 18px; height: 18px; flex: none; }
   #work .mark { position: relative; display: grid; place-items: center; width: 28px; height: 28px; }
   #work .mark .dot { position: absolute; top: 3px; right: 3px; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
@@ -74,7 +73,8 @@ function chip(pin: WorkPin, onSelect: (id: string) => void): HTMLButtonElement {
  * The Live work island at the map's bottom centre: a pill that unfolds into
  * the label, the two toggles and the chip strip. It starts folded with both
  * kinds of work shown and keeps its fold and toggles across repaints;
- * clicking a chip selects its task.
+ * clicking a chip selects its task. Every rebuild eases the island's
+ * width and height from the size it had to the size it needs.
  */
 export function createWorkIsland(
   host: HTMLElement,
@@ -98,10 +98,9 @@ export function createWorkIsland(
     node.setAttribute('aria-pressed', String(pressed))
     return node
   }
-  const rebuild = (): void => {
-    island.replaceChildren()
-    island.classList.toggle('open', open)
-    if (pins.length === 0) return
+  /** The island's parts for the current state: nothing, the folded pill, or the open row. */
+  const parts = (): Node[] => {
+    if (pins.length === 0) return []
     const mark = document.createElement('span')
     mark.className = 'mark'
     mark.innerHTML = `${PULSE_MARK}${pins.some(pin => pin.status !== 'Done') ? '<span class="dot"></span>' : ''}`
@@ -113,24 +112,36 @@ export function createWorkIsland(
     if (!open) {
       const divider = document.createElement('span')
       divider.className = 'divider'
-      island.append(mark, divider, fold)
-      return
+      return [mark, divider, fold]
     }
     const label = document.createElement('span')
     label.className = 'label'
     label.innerHTML = `${PULSE_MARK}Live work`
     const strip = document.createElement('div')
     strip.className = 'strip'
-    /** The toggles hide chips as they hide pins; the finished ones come last, in grey. */
+    /** The toggles hide chips as they hide pins: Agents all of them, Completed the finished ones, which come last, in grey. */
     const live = pins.filter(pin => pin.status !== 'Done')
     const finished = pins.filter(pin => pin.status === 'Done')
-    strip.append(...[...(agents ? live : []), ...(completed ? finished : [])].map(pin => chip(pin, onSelect)))
-    island.append(
+    strip.append(...(agents ? [...live, ...(completed ? finished : [])] : []).map(pin => chip(pin, onSelect)))
+    return [
       label,
       toggle('Agents', agents, () => { agents = !agents }),
       toggle('Completed', completed, () => { completed = !completed }),
       strip,
       fold,
+    ]
+  }
+  /** Rebuilds the island and eases its size from what it was to what it is now; an unchanged size does not animate. */
+  const rebuild = (): void => {
+    const was = island.getBoundingClientRect()
+    for (const running of island.getAnimations()) running.cancel()
+    island.replaceChildren(...parts())
+    island.classList.toggle('open', open)
+    const now = island.getBoundingClientRect()
+    if (now.width === was.width && now.height === was.height) return
+    island.animate(
+      [{ width: `${was.width}px`, height: `${was.height}px` }, { width: `${now.width}px`, height: `${now.height}px` }],
+      { duration: 350, easing: 'ease' },
     )
   }
   return {
