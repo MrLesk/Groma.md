@@ -48,15 +48,9 @@ export const REUSE = 24
 export const SIDE_PENALTY = 24
 /** What one port step off the middle of a side costs, so arrows meet sides in the middle rather than at their corners. */
 export const OFF_CENTRE = 8
-/**
- * How far an arrow stays off a surface border, and what each lane inside that
- * costs. An arrow settles exactly at the reach and stops caring, so the reach
- * is the spacing you get: at 2 lanes a fifth of arrow lanes ran within half a
- * cell of an island or slab edge, where a hairline is hard to tell from the
- * heavier edge beside it. Widening it alone is close to free.
- */
-export const BORDER_REACH = 4
-export const BORDER_PUSH = 3
+/** Preferred distance from a building an arrow passes or a surface border, and the cost of each lane inside it. RING remains the hard building clearance. */
+export const CLEARANCE_REACH = 4
+export const CLEARANCE_PUSH = 3
 /**
  * The same, measured from the arrows already drawn, so they push each other
  * apart instead of squeezing into neighbouring lanes. Again the reach is the

@@ -259,6 +259,33 @@ test.concurrent('a route arrives through the side of the target that faces the s
   assert.ok(before.gy > last.gy && before.gx === last.gx, 'points north into the side')
 })
 
+test.concurrent('a route holds a cell off a building it only passes, when it has the room', () => {
+  // the wall stands between a and b with the whole south of the sheet free, so the route rounds it with room to spare
+  const wall = { gx: 8, gy: 4, w: 2, d: 6 }
+  const endpoints = new Map<string, Endpoint>([
+    ['a', { key: 'a', kind: 'building', rect: { gx: 2, gy: 9, w: 2, d: 2 }, within: [], roof: 1 }],
+    ['b', { key: 'b', kind: 'building', rect: { gx: 16, gy: 9, w: 2, d: 2 }, within: [], roof: 1 }],
+    ['wall', { key: 'wall', kind: 'building', rect: wall, within: [], roof: 1 }],
+  ])
+  const [route] = routeAll({ gx: 0, gy: 0, w: 20, d: 20 }, endpoints, [
+    { id: 'relationship:0', source: 'a', target: 'b', description: 'uses', origin: 'observed' },
+  ])
+  for (const point of laneNodes(route!)) {
+    assert.equal(strictlyInside(point, wall, 1), false, 'the route grazes the wall it passes')
+  }
+})
+
+test.concurrent('passing clearance does not push parallel routes off their own facing side', () => {
+  const endpoints = new Map<string, Endpoint>([
+    ['a', { key: 'a', kind: 'building', rect: { gx: 8, gy: 8, w: 2, d: 2 }, within: [], roof: 1 }],
+    ['b', { key: 'b', kind: 'building', rect: { gx: 12, gy: 8, w: 2, d: 2 }, within: [], roof: 1 }],
+  ])
+  const routes = routeAll({ gx: 0, gy: 0, w: 22, d: 22 }, endpoints, [0, 1, 2].map(index => ({
+    id: `relationship:${index}`, source: 'a', target: 'b', description: '', origin: 'observed',
+  })))
+  for (const route of routes) assert.equal(route.points[0]!.gx, 10)
+})
+
 test.concurrent('a route crosses a surface border instead of running along it', async () => {
   const { scene } = await fixtureScene(viewerFixtureRoot)
   const borders = [...scene.slabs, ...scene.islands].map(surface => surface.rect)
