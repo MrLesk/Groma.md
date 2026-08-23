@@ -131,8 +131,9 @@ floor, as does every component when all observed ones have the same
 line count.
 Actors are round buildings (a cylinder whose circular roof holds the
 name) and external systems are pills (a stadium roof with the name on
-one line), one floor each, on their own islands; a route still meets
-the middle of a footprint side, where the curve touches it. One grey
+one line), one floor each, on their own islands; a route meets the wall
+itself, sliding along its own axis onto the curve, so it starts and
+ends on the shape the viewer sees rather than beside it. One grey
 pattern tells each kind apart, on side faces and
 surfaces and never on a roof: component sides carry storey lines,
 actor sides and the actors island dots, external sides and the
@@ -169,14 +170,14 @@ the side of the source that faces the target and to arrive, pointing
 inward, at the middle of the side of the target that faces the source,
 keeping one lane clear of every foreign building and slab, and
 running on the one ground plane from end to end, slabs included. A
-route holds the middle of the free ground: it keeps out of the two
-lanes beside a slab or island border, and out of the two lanes beside
-a route already drawn, unless its ends leave it nowhere else to go. A
+route holds the middle of the free ground: it keeps a full cell clear
+of every building it passes, of a slab or island border, and of a
+route already drawn, unless its ends leave it nowhere else to go. A
 building's back sides are hidden under its roof, so there a route
 starts or ends on the
 ground just behind the building where the roof's shadow ends: on screen
-the line emerges from, or its arrowhead touches, the middle of the
-roof's back edge, with no visible step. Parallel routes spread out
+the line emerges from, or its arrowhead touches, the back of the
+roof, with no visible step. Parallel routes spread out
 around the middle; when two middles do not line up, the line stays
 straight and the longer side gives way. Each route ends in an
 arrowhead lying on the sheet that keeps its screen size at every
@@ -259,8 +260,7 @@ greyscale until their task is active: clicking a pin's head or a
 chip activates and selects an inactive task, so its pins and chips show their colour
 and its chips add an accent pill outline, while only its pins add an accent
 ring around their badge. The selected task whose details are shown also bolds
-its chip text; the map outlines every
-element the task touches, those whose code holds one of its modified
+its chip text; the map outlines every element the task touches, those whose code holds one of its modified
 files and those it references, and draws the routes leaving them in
 the accent, dotted when the target is untouched. Several tasks can be
 active at once, their touched elements counted together. Clicking another
