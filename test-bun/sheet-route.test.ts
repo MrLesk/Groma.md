@@ -286,6 +286,22 @@ test.concurrent('passing clearance does not push parallel routes off their own f
   for (const route of routes) assert.equal(route.points[0]!.gx, 10)
 })
 
+test.concurrent('a crowded facing corridor lets a clear departure run one cell before turning', () => {
+  const endpoints = new Map<string, Endpoint>([
+    ['source', { key: 'source', kind: 'building', rect: { gx: 4, gy: 14, w: 4, d: 4 }, within: [], roof: 1 }],
+    ['north', { key: 'north', kind: 'building', rect: { gx: 4, gy: 9, w: 4, d: 4 }, within: [], roof: 1 }],
+    ['east', { key: 'east', kind: 'building', rect: { gx: 9, gy: 14, w: 2, d: 4 }, within: [], roof: 1 }],
+    ['target', { key: 'target', kind: 'building', rect: { gx: 14, gy: 1, w: 2, d: 2 }, within: [], roof: 1 }],
+  ])
+  const [route] = routeAll({ gx: 0, gy: 0, w: 20, d: 18 }, endpoints, [
+    { id: 'relationship:0', source: 'source', target: 'target', description: '', origin: 'observed' },
+  ])
+  const [start, turn, north] = route!.points
+  assert.ok(start!.gx < 4)
+  assert.deepEqual(turn, { gx: start!.gx - 1, gy: start!.gy })
+  assert.ok(north!.gx === turn!.gx && north!.gy < turn!.gy)
+})
+
 test.concurrent('a route crosses a surface border instead of running along it', async () => {
   const { scene } = await fixtureScene(viewerFixtureRoot)
   const borders = [...scene.slabs, ...scene.islands].map(surface => surface.rect)
