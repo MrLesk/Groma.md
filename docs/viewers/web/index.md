@@ -79,7 +79,13 @@ systems; on screen the row runs from the upper left down to the right.
 The people and external islands are squares with their buildings
 stacked in one column and centred, each a little bigger than what
 stands on it. Inside every system island, slab and zone,
-relationships decide where the children stand.
+relationships decide where the children stand. These three nested
+surfaces keep a two-cell band between their children and every edge;
+the centred people and external islands keep their compact band. The
+surface names stay in the one-cell edge band; the larger inset belongs
+only to nested contents. The
+plain system surface sits half a tint step lighter on the same grey
+scale, so the broadest internal boundary stays in the background.
 The children something outside the surface feeds stand first, in a
 west column (in a system, whatever a person or another island feeds
 directly); when that
@@ -121,8 +127,8 @@ surfaces and never on a roof: component sides carry storey lines,
 person sides and the people island dots, external sides and the
 external island crosses, container slabs a faint grain, and system
 islands have none; every pattern is laid in the plane it lies on.
-Sibling groups are flat hatched zones around their members, and a
-translucent chip lies under every name that lies on a pattern. Line
+Sibling groups are flat hatched zones around their members. A
+translucent chip lies under every island, slab and zone name. Line
 style means origin: observed items are solid, planned ghosts dashed,
 missing ghosts dotted, and only a route leaving an element an active
 task touches for one it does not adds accent dots; ghosts are hollow,

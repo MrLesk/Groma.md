@@ -9,9 +9,9 @@ const CHIP_PAD = 3
 /**
  * Text lying on a ground-plane surface: the lines are laid out in plane
  * pixels from the surface's north corner and the ground matrix lays them
- * along the surface's north-east edge, skewed with it. On a patterned
- * surface a translucent paper chip lies under the lines so they stay
- * readable; `spacing` is the letter spacing in em, used for the metric and
+ * along the surface's north-east edge, skewed with it. When requested, a
+ * translucent paper chip lies under the lines so they stay readable;
+ * `spacing` is the letter spacing in em, used for the metric and
  * set on the text. Lines sit with their baseline 0.9 em below the line top
  * and the chip allows 0.2 em more for descenders.
  */

@@ -4,7 +4,7 @@ import { test } from 'bun:test'
 
 import { loadArchitectureViewModel } from '../src/core.ts'
 import { GAP, ISLAND_GAP } from '../src/sheet/forces.ts'
-import { EMPTY, MARGIN, PAD, ROOF_SHADOW, contains, overlaps, shadeOf } from '../src/sheet/grid.ts'
+import { EMPTY, MARGIN, NESTED_CONTENT_PAD, PAD, ROOF_SHADOW, contains, overlaps, shadeOf } from '../src/sheet/grid.ts'
 import {
   ISLAND_FONT,
   ISLAND_SPACING,
@@ -116,19 +116,25 @@ test.concurrent('a building keeps the ground its roof hides clear of its north a
   assert.ok(pairs > 0)
 })
 
-test.concurrent('children sit inside their parent with padding and leave the front band free', () => {
+test.concurrent('system islands and slabs give their children two cells on every edge', () => {
+  assert.ok(NESTED_CONTENT_PAD > PAD)
   const scene = sheetScene(shopWorld())
   const rectOf = new Map<string, CellRect>([
     ...scene.islands.map(island => [island.key, island.rect] as const),
     ...scene.slabs.map(slab => [slab.representationId, slab.rect] as const),
   ])
+  const nested = new Set([
+    ...scene.islands.filter(island => island.kind === 'system').map(island => island.key),
+    ...scene.slabs.map(slab => slab.representationId),
+  ])
   const inside = (child: CellRect, parentKey: string): void => {
     const parent = rectOf.get(parentKey)
     assert.ok(parent)
+    const padding = nested.has(parentKey) ? NESTED_CONTENT_PAD : PAD
     assert.equal(contains(parent, child), true)
-    assert.ok(child.gx >= parent.gx + PAD && child.gy >= parent.gy + PAD)
-    assert.ok(child.gx + child.w <= parent.gx + parent.w - PAD)
-    assert.ok(child.gy + child.d <= parent.gy + parent.d - PAD)
+    assert.ok(child.gx >= parent.gx + padding && child.gy >= parent.gy + padding)
+    assert.ok(child.gx + child.w <= parent.gx + parent.w - padding)
+    assert.ok(child.gy + child.d <= parent.gy + parent.d - padding)
   }
   for (const building of scene.buildings) inside(building.rect, building.surface)
   for (const slab of scene.slabs) inside(slab.rect, slab.island)
@@ -196,7 +202,10 @@ test.concurrent('a group becomes a zone around its members on the parent surface
     const member = zone.members.includes(building.representationId)
     assert.equal(contains(zone.rect, building.rect), member)
     if (member) {
-      assert.ok(building.rect.gx >= zone.rect.gx + PAD && building.rect.gy >= zone.rect.gy + PAD)
+      assert.ok(building.rect.gx >= zone.rect.gx + NESTED_CONTENT_PAD)
+      assert.ok(building.rect.gy >= zone.rect.gy + NESTED_CONTENT_PAD)
+      assert.ok(building.rect.gx + building.rect.w <= zone.rect.gx + zone.rect.w - NESTED_CONTENT_PAD)
+      assert.ok(building.rect.gy + building.rect.d <= zone.rect.gy + zone.rect.d - NESTED_CONTENT_PAD)
     } else {
       assert.equal(apart(zone.rect, building.rect, GAP), true)
     }
@@ -289,13 +298,14 @@ test.concurrent('the sheet is the islands plus the margin, starting at the margi
   assert.deepEqual(scene.sheet, { gx: 0, gy: 0, w: maxX + MARGIN, d: maxY + MARGIN })
 })
 
-test.concurrent('empty containers are four-cell slabs', async () => {
+test.concurrent('empty containers keep the nested-surface padding around their empty core', async () => {
   const { world: fixture } = await loadArchitectureViewModel(openclawFixtureRoot)
   const scene = sheetScene(fixture)
   assert.equal(scene.slabs.length, 6)
   for (const slab of scene.slabs) {
-    assert.equal(slab.rect.d, EMPTY)
-    assert.ok(slab.rect.w >= EMPTY)
+    const side = EMPTY + 2 * (NESTED_CONTENT_PAD - PAD)
+    assert.equal(slab.rect.d, side)
+    assert.ok(slab.rect.w >= side)
   }
 })
 
