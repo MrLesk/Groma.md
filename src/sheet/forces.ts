@@ -17,6 +17,8 @@
  * arrow.
  */
 export const GAP = 2
+/** Cells between nested contents and a system, slab or group edge. More gives inner buildings room and makes every nested surface larger. */
+export const NESTED_CONTENT_PAD = 2
 /** Cells of screen width between islands. More separates the people, the systems and the externals; the sheet widens by as much. */
 export const ISLAND_GAP = 3
 /**
@@ -42,6 +44,8 @@ export const FOLD_ASPECT = 3
 export const RING = 1
 /** What one turn costs against one lane of length: more gives straighter arrows and longer ways round. */
 export const BEND = 6
+/** What a turn in the final cell before a target costs. More moves the last bend earlier and can lengthen the approach. */
+export const FINAL_BEND = 30
 /** What a lane another arrow already uses costs: high enough that two arrows share a lane only when there is no other way. */
 export const REUSE = 24
 /** What it costs to leave or arrive through a side that does not face the other end. Less lets arrows hook around a building to reach a nearer port. */

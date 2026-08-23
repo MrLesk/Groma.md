@@ -3,8 +3,8 @@ import assert from 'node:assert/strict'
 import { test } from 'bun:test'
 
 import { loadArchitectureViewModel } from '../src/core.ts'
-import { GAP, ISLAND_GAP } from '../src/sheet/forces.ts'
-import { EMPTY, MARGIN, NESTED_CONTENT_PAD, PAD, ROOF_SHADOW, contains, overlaps, shadeOf } from '../src/sheet/grid.ts'
+import { GAP, ISLAND_GAP, NESTED_CONTENT_PAD } from '../src/sheet/forces.ts'
+import { EMPTY, MARGIN, PAD, ROOF_SHADOW, contains, overlaps, shadeOf } from '../src/sheet/grid.ts'
 import {
   ISLAND_FONT,
   ISLAND_SPACING,
