@@ -26,8 +26,8 @@ The hierarchy pane starts with the flows list folded under its
 Flows heading; clicking the heading opens it. The list holds every
 person command in the world, deduped across the people who share
 it. Clicking one lights its walk on the map from every person who
-shares it, and the active row is highlighted. Below it
-the pane lists the merged world as a containment tree:
+shares it, and the active row is highlighted. Below it the Structure
+section starts open and lists the merged world as a containment tree:
 people, then systems, then external systems at the root. Containers
 sit under their system and components under their container, in
 hierarchy order; the map places them by flow instead.
