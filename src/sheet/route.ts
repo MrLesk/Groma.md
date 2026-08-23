@@ -6,7 +6,7 @@ import type { CellRect, Route, RoutePoint } from './types.ts'
 export const RING = 1
 /** Lanes between two ports on one side: ports sit on half-cell marks. */
 const PORT_PITCH = 2
-/** Route costs: one lattice step, one turn, one lane another route already uses, a start on a side not facing the target, one port step away from the middle of a one-cell side. */
+/** Route costs: one lattice step, one turn, one lane another route already uses, a start or an end through a side not facing the other endpoint, one port step away from the middle of a one-cell side. */
 const STEP = 1
 const BEND = 6
 const REUSE = 24
@@ -24,6 +24,16 @@ const OUTWARD: Record<Side, number> = { 'x+': 0, 'y+': 1, 'x-': 2, 'y-': 3 }
 const INWARD: Record<Side, number> = { 'x+': 2, 'y+': 3, 'x-': 0, 'y-': 1 }
 /** A building's back sides, hidden under its roof: routes start and end behind them, where the roof's shadow ends. */
 const BACK: readonly Side[] = ['x-', 'y-']
+
+/** The sides of `rect` that face `other`: a side faces it when the other rect lies wholly beyond that side. */
+function facing(rect: LaneRect, other: LaneRect): Set<Side> {
+  const sides = new Set<Side>()
+  if (other.x1 <= rect.x0) sides.add('x-')
+  if (other.x0 >= rect.x1) sides.add('x+')
+  if (other.y1 <= rect.y0) sides.add('y-')
+  if (other.y0 >= rect.y1) sides.add('y+')
+  return sides
+}
 
 /** Anything a route may start or end on, with the slab and island it stands in. */
 export interface Endpoint {
@@ -138,8 +148,8 @@ export function routeAll(
   const blocked = new Uint8Array(nodeCount)
   /** Goal nodes hold the arriving direction plus one; zero is no goal. */
   const goal = new Uint8Array(nodeCount)
-  /** Each goal port's distance from the middle of its side, in port steps per cell of side. */
-  const goalOffset = new Float32Array(nodeCount)
+  /** Each goal's extra cost: its port's distance from the middle of its side in port steps per cell, and the penalty of a side not facing the source. */
+  const goalCost = new Float32Array(nodeCount)
   const used = new Uint8Array(nodeCount * 2)
   const usedPorts = new Set<number>()
   const g = new Float64Array(stateCount)
@@ -230,7 +240,7 @@ export function routeAll(
     const free = new Set([...source.within, ...target.within])
     blocked.fill(0)
     goal.fill(0)
-    goalOffset.fill(0)
+    goalCost.fill(0)
     for (const endpoint of endpoints.values()) {
       const rect = lanes(endpoint.rect)
       if (endpoint.kind === 'building') {
@@ -248,6 +258,7 @@ export function routeAll(
     }
     const sourceRect = lanes(source.rect)
     const targetRect = lanes(target.rect)
+    const targetFacing = facing(targetRect, sourceRect)
     /** The port each goal stands for and the straight run from the goal into its anchor. */
     const goals = new Map<number, { port: number; suffix: number[] }>()
     for (const side of SIDES) {
@@ -257,7 +268,7 @@ export function routeAll(
         if (approach === undefined) continue
         const last = approach[approach.length - 1]!
         goal[last] = INWARD[side] + 1
-        goalOffset[last] = offset
+        goalCost[last] = offset * OFF_CENTRE + (targetFacing.has(side) ? 0 : SIDE_PENALTY)
         goals.set(last, { port: node, suffix: approach.slice(0, -1).reverse() })
       }
     }
@@ -281,11 +292,7 @@ export function routeAll(
       parent[state] = from
       heap.push({ f: cost + h(state >> 2), g: cost, state })
     }
-    const facing = new Set<Side>()
-    if (targetRect.x1 <= sourceRect.x0) facing.add('x-')
-    if (targetRect.x0 >= sourceRect.x1) facing.add('x+')
-    if (targetRect.y1 <= sourceRect.y0) facing.add('y-')
-    if (targetRect.y0 >= sourceRect.y1) facing.add('y+')
+    const sourceFacing = facing(sourceRect, targetRect)
     for (const side of SIDES) {
       const direction = OUTWARD[side]
       for (const { node, offset } of ports(sourceRect, side)) {
@@ -293,7 +300,7 @@ export function routeAll(
         const out = from === undefined ? undefined : run(from, direction, APPROACH)
         if (out === undefined) continue
         const start = out[out.length - 1]!
-        const cost = (facing.has(side) ? 0 : SIDE_PENALTY) + offset * OFF_CENTRE + APPROACH * STEP
+        const cost = (sourceFacing.has(side) ? 0 : SIDE_PENALTY) + offset * OFF_CENTRE + APPROACH * STEP
         push(start * 4 + direction, cost, -1)
         starts.set(start * 4 + direction, { port: node, prefix: out.slice(0, -1) })
       }
@@ -328,7 +335,7 @@ export function routeAll(
         const neighbour = nodeOf(nx, ny)
         if (blocked[neighbour]) continue
         const cost = g[state]! + STEP + (next === direction ? 0 : BEND) + REUSE * used[edgeOf(node, neighbour)]!
-          + (goal[neighbour] ? goalOffset[neighbour]! * OFF_CENTRE : 0)
+          + (goal[neighbour] ? goalCost[neighbour]! : 0)
         push(neighbour * 4 + next, cost, state)
       }
     }
