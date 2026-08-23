@@ -46,7 +46,7 @@ export interface IsoMap {
   paint(scene: ProjectedScene): void
   /** Marks a selected element with its surface and the routes touching it, or a selected route with both of its ends. */
   select(id: string | undefined): void
-  /** Outlines the elements a selected task touches; an empty set clears them. */
+  /** Outlines the elements the active tasks touch and accents the routes touching them, dotted when only one end is touched; an empty set clears both. */
   mark(ids: ReadonlySet<string>): void
   /** Lights a picked flow's routes and dims everything off its path. */
   setFlow(litIds: ReadonlySet<string>, onPath: (id: string) => boolean): void
@@ -123,6 +123,11 @@ export function createMap(host: HTMLElement): IsoMap {
     },
     mark(ids) {
       for (const [itemId, node] of items) node.classList.toggle('touched', ids.has(itemId))
+      for (const route of routes.values()) {
+        const touchedEnds = [route.source, route.target].filter(id => ids.has(id)).length
+        route.group.classList.toggle('touched', touchedEnds > 0)
+        route.group.classList.toggle('half', touchedEnds === 1)
+      }
     },
     setFlow(litIds, onPath) {
       const tracing = litIds.size > 0

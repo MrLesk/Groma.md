@@ -45,8 +45,12 @@ export const pinsCss = `
     margin-top: 2px; padding: 1px 6px; border-radius: 3px; background: var(--pin); color: #fff;
     font-size: 9px; letter-spacing: 0.08em; white-space: nowrap;
   }
-  .pin.selected .badge { border-radius: 50%; box-shadow: 0 0 0 3px var(--accent); }
-  .pin.selected .task { background: var(--accent); }
+  .pin.active .badge { border-radius: 50%; box-shadow: 0 0 0 3px var(--accent); }
+  /* a 10 by 6 px triangle whose tip ends 3 px above the 3 px ring */
+  .pin.selected .head::before {
+    content: ''; position: absolute; top: -12px; left: calc(50% - 5px);
+    border: 5px solid transparent; border-top: 6px solid var(--accent);
+  }
 `
 
 /** A ringed badge: the ring filled by the share done, a flipping disc with the assignee's mark in front and a checkmark behind. */
