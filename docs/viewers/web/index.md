@@ -194,10 +194,11 @@ task's newest modified file, else the first element the task
 references. A pin is a round badge with the assignee's mark (the
 vendor mark for the claude and codex handles, else a two-letter
 monogram) inside a ring that fills by checked acceptance criteria
-over total, the task id under it, a stem to the roof (or to the top
-of a slab or the centre of a system island) and a tooltip with the
-task's title; when the task is Done the badge flips to a
-checkmark and flips back while hovered. Every assignee and task pair
+over total, the task id under it, a stem from the element's
+bottom-left corner (a building's leftmost point at ground, the west
+corner of a box's footprint, of a slab's top or of a system island)
+and a tooltip with the task's title; when the task is Done the badge
+flips to a checkmark and flips back while hovered. Every assignee and task pair
 has its own colour, the pairs in task order over a fixed palette. The
 Live work island, frosted glass at the bottom centre of the map
 above the footer, exists while any pin does: folded it is a pill with
@@ -208,7 +209,8 @@ finished ones while Agents is on, and a scrollable strip of chips,
 one per pin with its badge and task id, in progress first and the
 finished ones in grey; hovering a chip, like hovering a pin head,
 shows the task's title. The pins still shown on an element fan out
-afresh, so a pin left alone stands over its roof. Pins and chips are
+leftwards from their element's corner afresh, so a pin left alone
+stands on it. Pins and chips are
 greyscale until their task is active: clicking a pin's head or a
 chip activates the task, so its pins and chips show their colour and
 the map outlines every element the task touches, those whose code
