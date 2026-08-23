@@ -6,7 +6,7 @@ import { watchScan } from '../../scanner.ts'
 import { sheetScene } from '../../sheet/scene.ts'
 import { pinsOf } from '../../work/pins.ts'
 import { renderPage } from './page.ts'
-import type { WebPayload } from './payload.ts'
+import type { WebMapPayload, WebPayload, WebWorkPayload } from './payload.ts'
 
 const defaultPort = 4747
 
@@ -18,13 +18,10 @@ async function bundleRenderer(): Promise<string> {
   return build.outputs[0]!.text()
 }
 
-/** The world with its sheet, Backlog workflow and pins; a work source that cannot be read counts as no work, as the terminal viewer treats it. */
-async function loadSheet(repositoryRoot: string, workSource: WorkSource): Promise<Omit<WebPayload, 'generation'>> {
-  const [{ world }, work] = await Promise.all([
-    loadArchitectureViewModel(repositoryRoot),
-    workSource.read().catch(() => EMPTY_WORK_SNAPSHOT),
-  ])
-  return { world, sheet: sheetScene(world), work, pins: pinsOf(work.items, world, work.statuses.at(-1)) }
+/** Loads the architecture map without consulting optional work plugins. */
+async function loadMap(repositoryRoot: string): Promise<Omit<WebMapPayload, 'generation'>> {
+  const { world } = await loadArchitectureViewModel(repositoryRoot)
+  return { world, sheet: sheetScene(world) }
 }
 
 /** Starts the map server and returns its URL. */
@@ -34,21 +31,38 @@ export async function startWebViewer(
 ): Promise<{ url: string; close: () => void }> {
   const renderer = await bundleRenderer()
   const workSource = options.workSource ?? createBacklogPlugin(repositoryRoot)
-  /** Counts published worlds; a browser ignores anything older than what it applied. */
-  let generation = 1
-  let payload: WebPayload = { generation, ...(await loadSheet(repositoryRoot, workSource)) }
+  let map: WebMapPayload = {
+    generation: 1,
+    ...(await loadMap(repositoryRoot)),
+  }
+  let workState: Omit<WebWorkPayload, 'pins'> = {
+    workGeneration: 0,
+    work: EMPTY_WORK_SNAPSHOT,
+  }
+  let closed = false
   const clients = new Set<ReadableStreamDefaultController<Uint8Array>>()
   const encoder = new TextEncoder()
 
-  function worldEvent(): Uint8Array {
-    return encoder.encode(`event: world\ndata: ${JSON.stringify(payload)}\n\n`)
+  function workPayload(): WebWorkPayload {
+    return {
+      ...workState,
+      pins: pinsOf(workState.work.items, map.world, workState.work.statuses.at(-1)),
+    }
   }
 
-  async function publishWorld(): Promise<void> {
-    const next = await loadSheet(repositoryRoot, workSource)
-    generation += 1
-    payload = { generation, ...next }
-    const chunk = worldEvent()
+  function payload(): WebPayload {
+    return { ...map, ...workPayload() }
+  }
+
+  function worldEvent(): Uint8Array {
+    return encoder.encode(`event: world\ndata: ${JSON.stringify(payload())}\n\n`)
+  }
+
+  function workEvent(): Uint8Array {
+    return encoder.encode(`event: work\ndata: ${JSON.stringify(workPayload())}\n\n`)
+  }
+
+  function broadcast(chunk: Uint8Array): void {
     for (const client of clients) {
       try {
         client.enqueue(chunk)
@@ -58,6 +72,29 @@ export async function startWebViewer(
     }
   }
 
+  async function publishWorld(): Promise<void> {
+    const next = await loadMap(repositoryRoot)
+    if (closed) return
+    map = {
+      generation: map.generation + 1,
+      ...next,
+    }
+    broadcast(worldEvent())
+  }
+
+  let workChain = Promise.resolve()
+  function publishWork(): void {
+    workChain = workChain.then(async () => {
+      const work = await workSource.read().catch(() => EMPTY_WORK_SNAPSHOT)
+      if (closed) return
+      workState = {
+        workGeneration: workState.workGeneration + 1,
+        work,
+      }
+      broadcast(workEvent())
+    })
+  }
+
   const sourceWatch = watchScan(repositoryRoot, {
     onFold: publishWorld,
   })
@@ -65,7 +102,7 @@ export async function startWebViewer(
     onChange: publishWorld,
   })
   const workWatch = workSource.watch(() => {
-    void publishWorld()
+    void publishWork()
   })
 
   const server = Bun.serve({
@@ -83,7 +120,7 @@ export async function startWebViewer(
         })
       }
       if (pathname === '/world.json') {
-        return Response.json(payload)
+        return Response.json(payload())
       }
       if (pathname === '/events') {
         let controller: ReadableStreamDefaultController<Uint8Array>
@@ -105,9 +142,7 @@ export async function startWebViewer(
           },
         })
       }
-      // Reload on every request so a browser refresh picks up architecture edits.
-      payload = { generation, ...(await loadSheet(repositoryRoot, workSource)) }
-      return new Response(renderPage(payload), {
+      return new Response(renderPage(payload()), {
         headers: {
           'Content-Type': 'text/html; charset=utf-8',
           'Cache-Control': 'no-store',
@@ -115,10 +150,12 @@ export async function startWebViewer(
       })
     },
   })
+  publishWork()
 
   return {
     url: `http://localhost:${server.port}`,
     close() {
+      closed = true
       sourceWatch.close()
       architectureWatch.close()
       workWatch.close()

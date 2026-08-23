@@ -30,7 +30,7 @@ import { createPins } from './work/pins.ts'
 import { createTip } from './organisms/tip.ts'
 import { createWorkIsland } from './work/island.ts'
 import { toggleWorkSelection } from './work/selection.ts'
-import type { WebPayload } from './payload.ts'
+import type { WebPayload, WebWorkPayload } from './payload.ts'
 import {
   noSelection,
   primarySelection,
@@ -49,7 +49,8 @@ const DRAG_THRESHOLD = 4
 const boot = JSON.parse(document.getElementById('world')!.textContent!) as WebPayload
 let world = boot.world
 let work = boot.work
-let applied = boot.generation
+let appliedWorld = boot.generation
+let appliedWork = boot.workGeneration
 let scene: ProjectedScene = projectScene(boot.sheet)
 
 const host = document.getElementById('map')!
@@ -393,6 +394,25 @@ function applyWorld(payload: WebPayload): void {
   paintSelection()
 }
 
+/** Repaints only the optional Backlog layer; map projection, painting and camera state stay unchanged. */
+function applyWork(payload: WebWorkPayload): void {
+  const ownedDetails = selection.kind === 'task'
+  work = payload.work
+  activeTaskIds = activeTaskIds.filter(id => workItem(id) !== undefined)
+  selection = retainSelection(selection, id => known(id))
+  pins.paint(payload.pins)
+  island.paint(payload.pins, work.statuses, work.defaultStatus)
+  syncUrl()
+  const task = selection.kind === 'task' ? workItem(selection.id) : undefined
+  const active = activeTaskIds.map(id => workItem(id)).filter((item): item is WorkItem => item !== undefined)
+  map.mark(new Set(active.flatMap(item => touchedElements(item, world))))
+  pins.activate(activeTaskIds, task?.id)
+  island.activate(activeTaskIds, task?.id)
+  if (!ownedDetails) return
+  if (task === undefined) clearDetails(detailsHost)
+  else paintTask(detailsHost, task, world, select)
+}
+
 map.paint(scene)
 pins.paint(boot.pins)
 island.paint(boot.pins, work.statuses, work.defaultStatus)
@@ -403,7 +423,14 @@ if (selection.kind === 'task') focusActiveTasks()
 const events = new EventSource('/events')
 events.addEventListener('world', event => {
   const payload = JSON.parse(event.data) as WebPayload
-  if (payload.generation <= applied) return
-  applied = payload.generation
+  if (payload.generation <= appliedWorld) return
+  appliedWorld = payload.generation
+  appliedWork = Math.max(appliedWork, payload.workGeneration)
   applyWorld(payload)
+})
+events.addEventListener('work', event => {
+  const payload = JSON.parse(event.data) as WebWorkPayload
+  if (payload.workGeneration <= appliedWork) return
+  appliedWork = payload.workGeneration
+  applyWork(payload)
 })

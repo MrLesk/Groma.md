@@ -87,8 +87,9 @@ test.concurrent('groma web does not scan on open and applies a watched fold', as
     assert.ok(!(await worldNames(server.url)).includes('Orders'))
 
     await scanRepository(root)
-    await fetch(server.url)
+    await waitUntil(async () => (await worldNames(server.url)).includes('Cli'))
     assert.ok((await worldNames(server.url)).includes('Cli'))
+    assert.match(await (await fetch(server.url)).text(), /"name":"Cli"/)
     assert.ok(!(await worldNames(server.url)).includes('Orders'))
 
     const events = await fetch(`${server.url}/events`)
@@ -135,7 +136,7 @@ test.concurrent('groma web applies an architecture Markdown change without a ref
   }
 })
 
-test.concurrent('groma web ships agent pins and republishes them when the work source changes', async () => {
+test.concurrent('groma web loads work asynchronously and updates only the work overlay', async () => {
   const root = await createLiveRepo()
   await scanRepository(root)
   let items: WorkItem[] = [{
@@ -153,9 +154,17 @@ test.concurrent('groma web ships agent pins and republishes them when the work s
     defaultStatus: 'To Do',
     items,
   })
+  let reads = 0
+  let resolveFirst!: (work: WorkSnapshot) => void
+  const firstRead = new Promise<WorkSnapshot>(resolve => {
+    resolveFirst = resolve
+  })
   let changed: () => void = () => {}
   const workSource: WorkSource = {
-    read: async () => snapshot(),
+    read: async () => {
+      reads += 1
+      return reads === 1 ? firstRead : snapshot()
+    },
     watch(onChange) {
       changed = onChange
       return { close() {} }
@@ -163,26 +172,61 @@ test.concurrent('groma web ships agent pins and republishes them when the work s
   }
   const server = await startWebViewer(root, { port: 0, workSource })
   try {
-    const payload = await (await fetch(`${server.url}/world.json`)).json() as {
+    type LivePayload = {
+      generation: number
+      workGeneration: number
+      world: unknown
+      sheet: unknown
       work: { statuses: string[]; defaultStatus: string; items: { id: string }[] }
       pins: { key: string; elementId: string; done: number; total: number }[]
     }
-    assert.deepEqual(payload.work.statuses, ['To Do', 'In Progress', 'Done'])
-    assert.equal(payload.work.defaultStatus, 'To Do')
-    assert.deepEqual(payload.work.items.map(item => item.id), ['TASK-PIN'])
-    assert.deepEqual(payload.pins.map(pin => [pin.key, pin.elementId, pin.done, pin.total]), [['@codex TASK-PIN', 'observed:shop', 1, 2]])
+    await waitUntil(() => reads === 1)
+    const initial = await (await fetch(`${server.url}/world.json`)).json() as LivePayload
+    assert.equal(initial.workGeneration, 0)
+    assert.deepEqual(initial.work.items, [])
+    assert.deepEqual(initial.pins, [])
 
     const events = await fetch(`${server.url}/events`)
     const reader = events.body!.getReader()
     const decoder = new TextDecoder()
+    const firstEvent = await reader.read()
+    assert.match(decoder.decode(firstEvent.value), /^event: world/m)
+
+    resolveFirst(snapshot())
     let pushed = ''
+    await waitUntil(async () => {
+      const { value } = await reader.read()
+      if (value) pushed += decoder.decode(value, { stream: true })
+      return pushed.includes('event: work') && pushed.includes('"workGeneration":1')
+    })
+    const loaded = await (await fetch(`${server.url}/world.json`)).json() as LivePayload
+    assert.equal(loaded.generation, initial.generation)
+    assert.deepEqual(loaded.world, initial.world)
+    assert.deepEqual(loaded.sheet, initial.sheet)
+    assert.deepEqual(loaded.work.statuses, ['To Do', 'In Progress', 'Done'])
+    assert.equal(loaded.work.defaultStatus, 'To Do')
+    assert.deepEqual(loaded.work.items.map(item => item.id), ['TASK-PIN'])
+    assert.deepEqual(loaded.pins.map(pin => [pin.key, pin.elementId, pin.done, pin.total]), [['@codex TASK-PIN', 'observed:shop', 1, 2]])
+
+    await fetch(server.url)
+    assert.equal(reads, 1)
+
+    pushed = ''
     items = [{ ...items[0]!, status: 'Done', criteria: items[0]!.criteria.map(criterion => ({ ...criterion, checked: true })) }]
     changed()
     await waitUntil(async () => {
       const { value } = await reader.read()
       if (value) pushed += decoder.decode(value, { stream: true })
-      return pushed.includes('"generation":2') && pushed.includes('"status":"Done"')
+      return pushed.includes('"workGeneration":2') && pushed.includes('"status":"Done"')
     })
+    assert.doesNotMatch(pushed, /event: world/)
+    assert.equal(reads, 2)
+    const changedPayload = await (await fetch(`${server.url}/world.json`)).json() as LivePayload
+    assert.equal(changedPayload.generation, initial.generation)
+    assert.deepEqual(changedPayload.world, initial.world)
+    assert.deepEqual(changedPayload.sheet, initial.sheet)
+    assert.match(await (await fetch(server.url)).text(), /"workGeneration":2.*"status":"Done"/)
+    assert.equal(reads, 2)
     await reader.cancel()
   } finally {
     server.close()
