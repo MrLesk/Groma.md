@@ -1,5 +1,5 @@
 import { compareElements } from '../../element-order.ts'
-import type { ArchitectureWorld, WorldElement, WorldRelationship } from '../../types.ts'
+import type { ActiveWorkItem, ArchitectureWorld, WorldElement, WorldRelationship } from '../../types.ts'
 import { actionPath, elementOnPath, worldCommands } from '../action-path.ts'
 import { initialTree, toggleExpansion, treeRows } from '../tui/tree.ts'
 import type { TreeRow } from '../tui/tree.ts'
@@ -16,7 +16,7 @@ import type { Camera, KeyTarget, Viewport } from './iso/camera.ts'
 import { createMap } from './iso/map.ts'
 import { projectScene } from './iso/project.ts'
 import type { ProjectedScene } from './iso/project.ts'
-import { clearDetails, paintDetails, paintRelationship, inspectDetails, nextActiveAction } from './organisms/details.ts'
+import { clearDetails, paintDetails, paintRelationship, paintTask, inspectDetails, nextActiveAction } from './organisms/details.ts'
 import type { ActiveAction, DetailsTab } from './organisms/details.ts'
 import { paintFlows } from './organisms/flows.ts'
 import { paintHierarchy } from './organisms/hierarchy.ts'
@@ -30,6 +30,7 @@ const DRAG_THRESHOLD = 4
 
 const boot = JSON.parse(document.getElementById('world')!.textContent!) as WebPayload
 let world = boot.world
+let work = boot.work
 let applied = boot.generation
 let scene: ProjectedScene = projectScene(boot.sheet)
 
@@ -44,9 +45,9 @@ const zoomHost = document.getElementById('zoom')!
 
 const map = createMap(host)
 const pins = createPins(host, id => map.anchorOf(id), id => select(id))
-const work = createWorkIsland(host, id => select(id), pins.show)
+const island = createWorkIsland(host, id => select(id), pins.show)
 let tree = initialTree()
-const opened = readView(location.search, world)
+const opened = readView(location.search, world, work)
 let selectedId = opened.selectedId ?? firstSystem(world)?.representationId
 let activeAction: ActiveAction = opened.action
 let detailsTab: DetailsTab = opened.tab
@@ -77,9 +78,13 @@ function worldRelationship(id: string | undefined): WorldRelationship | undefine
   return id === undefined ? undefined : world.relationships.find(item => item.id === id)
 }
 
-/** True for an element or relationship id the current world has. */
+function workItem(id: string | undefined): ActiveWorkItem | undefined {
+  return id === undefined ? undefined : work.find(item => item.id === id)
+}
+
+/** True for an element, relationship or task id the current payload has. */
 function known(id: string | undefined): boolean {
-  return worldElement(id) !== undefined || worldRelationship(id) !== undefined
+  return worldElement(id) !== undefined || worldRelationship(id) !== undefined || workItem(id) !== undefined
 }
 
 function applyCamera(): void {
@@ -122,7 +127,7 @@ function paintStats(flowCount: number): void {
 
 /** The URL follows the view, without adding history entries. */
 function syncUrl(): void {
-  const query = writeView({ selectedId, action: activeAction, tab: detailsTab, dark: darkTheme }, world)
+  const query = writeView({ selectedId, action: activeAction, tab: detailsTab, dark: darkTheme }, world, work)
   history.replaceState(null, '', `${location.pathname}${query}`)
 }
 
@@ -137,7 +142,9 @@ function paintSelection(): void {
   paintStats(commands.length)
   const selected = worldElement(selectedId)
   const relationship = worldRelationship(selectedId)
+  const task = workItem(selectedId)
   if (relationship !== undefined) paintRelationship(detailsHost, relationship, world, select)
+  else if (task !== undefined) paintTask(detailsHost, task, world, select)
   else if (selected === undefined) clearDetails(detailsHost)
   else {
     paintDetails(
@@ -293,20 +300,21 @@ new ResizeObserver(() => {
 
 function applyWorld(payload: WebPayload): void {
   world = payload.world
+  work = payload.work
   scene = projectScene(payload.sheet)
   fitted = fitCamera(scene.bounds, viewport())
   if (!touched) camera = fitted
   if (selectedId !== undefined && !known(selectedId)) selectedId = firstSystem(world)?.representationId
   map.paint(scene)
   pins.paint(payload.pins)
-  work.paint(payload.pins)
+  island.paint(payload.pins)
   applyCamera()
   paintSelection()
 }
 
 map.paint(scene)
 pins.paint(boot.pins)
-work.paint(boot.pins)
+island.paint(boot.pins)
 applyCamera()
 paintSelection()
 

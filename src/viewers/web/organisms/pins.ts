@@ -68,8 +68,8 @@ export interface PinLayer {
   show(agents: boolean, completed: boolean): void
 }
 
-/** The agents' pins over the map. */
-export function createPins(host: HTMLElement, anchorOf: (id: string) => Point | undefined, onSelect: (id: string) => void): PinLayer {
+/** The agents' pins over the map; clicking a pin's head selects its task. */
+export function createPins(host: HTMLElement, anchorOf: (id: string) => Point | undefined, onSelect: (taskId: string) => void): PinLayer {
   const layer = document.createElement('div')
   layer.id = 'pins'
   host.append(layer)
@@ -121,11 +121,10 @@ export function createPins(host: HTMLElement, anchorOf: (id: string) => Point | 
           node = document.createElement('div')
           node.className = 'pin'
           node.innerHTML = PIN
-          node.querySelector('.head')!.addEventListener('click', () => onSelect(node!.dataset.element!))
+          node.querySelector('.head')!.addEventListener('click', () => onSelect(pin.taskId))
           layer.append(node)
         }
         pinned.set(pin.key, { node, anchor })
-        node.dataset.element = pin.elementId
         node.style.setProperty('--pin', pin.colour)
         node.classList.toggle('done', pin.status === 'Done')
         node.querySelector<HTMLElement>('.head')!.title = `${pin.taskId} · ${pin.title}`

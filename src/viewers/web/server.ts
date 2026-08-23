@@ -18,13 +18,13 @@ async function bundleRenderer(): Promise<string> {
   return build.outputs[0]!.text()
 }
 
-/** The world with its sheet and pins; a work source that cannot be read counts as no work, as the terminal viewer treats it. */
+/** The world with its sheet, the active tasks and their pins; a work source that cannot be read counts as no work, as the terminal viewer treats it. */
 async function loadSheet(repositoryRoot: string, workSource: WorkSource): Promise<Omit<WebPayload, 'generation'>> {
   const [{ world }, work] = await Promise.all([
     loadArchitectureViewModel(repositoryRoot),
     workSource.read().catch(() => []),
   ])
-  return { world, sheet: sheetScene(world), pins: pinsOf(work, world) }
+  return { world, sheet: sheetScene(world), work, pins: pinsOf(work, world) }
 }
 
 /** Starts the map server and returns its URL. */

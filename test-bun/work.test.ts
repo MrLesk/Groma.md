@@ -20,23 +20,24 @@ import { viewerFixtureRoot } from './helpers.ts'
 
 test.concurrent('active work projects only exact architecture ID references', async () => {
   const model = await loadArchitectureViewModel(viewerFixtureRoot)
-  const done = { done: 0, total: 2 }
   const projected = projectActiveWork(model, [{
     id: 'TASK-1',
     title: 'Change Shop',
     status: 'In Progress',
     assignees: ['@codex'],
+    description: '',
     references: ['shop', 'src/shop.ts', 'not-a-groma-id'],
     modifiedFiles: [],
-    acceptance: done,
+    criteria: [],
   }, {
     id: 'TASK-2',
     title: 'Finished',
     status: 'Done',
     assignees: ['@luna'],
+    description: '',
     references: ['vault'],
     modifiedFiles: [],
-    acceptance: done,
+    criteria: [],
   }])
 
   assert.deepEqual(projected.work, [{
@@ -94,9 +95,10 @@ test.concurrent('Backlog plugin reads the tasks in progress and those done in th
         title: `Change ${id}`,
         status: id === 'TASK-2' ? 'Done' : 'In Progress',
         assignees: ['@codex'],
+        description: id === 'TASK-2' ? null : 'Why it matters',
         references: ['shop', 'https://example.com'],
         modifiedFiles: ['src/shop.ts'],
-        acceptanceCriteria: [{ checked: true }, { checked: false }, { checked: true }],
+        acceptanceCriteria: [{ index: 1, text: 'one', checked: true }, { index: 2, text: 'two', checked: false }],
       },
     })
   }
@@ -108,9 +110,10 @@ test.concurrent('Backlog plugin reads the tasks in progress and those done in th
     ['task', 'view', 'TASK-1', '--json'],
     ['task', 'view', 'TASK-2', '--json'],
   ])
-  assert.deepEqual(work.map(item => [item.id, item.status, item.acceptance, item.modifiedFiles]), [
-    ['TASK-1', 'In Progress', { done: 2, total: 3 }, ['src/shop.ts']],
-    ['TASK-2', 'Done', { done: 2, total: 3 }, ['src/shop.ts']],
+  const criteria = [{ text: 'one', checked: true }, { text: 'two', checked: false }]
+  assert.deepEqual(work.map(item => [item.id, item.status, item.description, item.criteria, item.modifiedFiles]), [
+    ['TASK-1', 'In Progress', 'Why it matters', criteria, ['src/shop.ts']],
+    ['TASK-2', 'Done', '', criteria, ['src/shop.ts']],
   ])
   assert.deepEqual(work[0]!.references, ['shop', 'https://example.com'])
 })
@@ -225,9 +228,10 @@ test.concurrent('host refreshes the viewer from a changed work snapshot', async 
       title: 'Change Shop',
       status: 'In Progress',
         assignees: ['@codex'],
+      description: '',
       references: ['shop'],
       modifiedFiles: [],
-      acceptance: { done: 0, total: 1 },
+      criteria: [{ text: 'Shown', checked: false }],
     }]
     changed()
     const deadline = Date.now() + 3000

@@ -20,9 +20,10 @@ function item(id: string, extra: Partial<ActiveWorkItem> = {}): ActiveWorkItem {
     title: `Work ${id}`,
     status: 'In Progress',
     assignees: ['@codex'],
+    description: '',
     references: ['api'],
     modifiedFiles: [],
-    acceptance: { done: 1, total: 3 },
+    criteria: [{ text: 'a', checked: true }, { text: 'b', checked: false }, { text: 'c', checked: false }],
     ...extra,
   }
 }
@@ -39,9 +40,9 @@ test.concurrent('a pin stands on the element holding the last modified file, els
   ])
 })
 
-test.concurrent('every assignee and task pair gets its own colour in task order, with its progress and monogram', () => {
+test.concurrent('every assignee and task pair gets its own colour in task order, with its progress from the criteria and its monogram', () => {
   const pins = pinsOf([
-    item('TASK-10', { assignees: ['@luna'], status: 'Done', acceptance: { done: 4, total: 4 } }),
+    item('TASK-10', { assignees: ['@luna'], status: 'Done', criteria: Array.from({ length: 4 }, () => ({ text: 'x', checked: true })) }),
     item('TASK-9', { assignees: ['@codex', '@claude'] }),
   ], world)
   assert.deepEqual(pins.map(pin => pin.key), ['@codex TASK-9', '@claude TASK-9', '@luna TASK-10'])

@@ -47,8 +47,8 @@ export function pinsOf(items: readonly ActiveWorkItem[], world: Pick<Architectur
         taskId: item.id,
         title: item.title,
         status: item.status,
-        done: item.acceptance.done,
-        total: item.acceptance.total,
+        done: item.criteria.filter(criterion => criterion.checked).length,
+        total: item.criteria.length,
         elementId,
         colour: PIN_COLOURS[pins.length % PIN_COLOURS.length]!,
       })

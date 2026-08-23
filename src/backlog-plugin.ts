@@ -49,8 +49,9 @@ interface TaskViewJson {
     status: string
     assignees: string[]
     references: string[]
+    description: string | null
     modifiedFiles: string[]
-    acceptanceCriteria: { checked: boolean }[]
+    acceptanceCriteria: { text: string; checked: boolean }[]
   }
 }
 
@@ -75,12 +76,10 @@ export function createBacklogPlugin(
           title: task.title,
           status: task.status,
           assignees: task.assignees,
+          description: task.description ?? '',
           references: task.references,
           modifiedFiles: task.modifiedFiles,
-          acceptance: {
-            done: task.acceptanceCriteria.filter(criterion => criterion.checked).length,
-            total: task.acceptanceCriteria.length,
-          },
+          criteria: task.acceptanceCriteria.map(({ text, checked }) => ({ text, checked })),
         }
       }))
     },
