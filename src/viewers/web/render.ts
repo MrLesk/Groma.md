@@ -1,9 +1,9 @@
-import { compareElements } from '../../element-order.ts'
-import type { ArchitectureWorld, WorkItem, WorldElement, WorldRelationship } from '../../types.ts'
+import { compareSemanticElements } from '../../element-order.ts'
+import type { AnnotatedElement, AnnotatedRelationship, ArchitectureGraph, WorkItem } from '../../types.ts'
 import { touchedElements } from '../../work/pins.ts'
 import { elementOnPath, flowRouteIds, worldCommands } from '../action-path.ts'
 import type { FlowRef } from '../action-path.ts'
-import { initialTree, toggleExpansion, treeRows } from '../tui/tree.ts'
+import { initialTree, semanticTreeRows, toggleExpansion } from '../tui/tree.ts'
 import type { TreeRow } from '../tui/tree.ts'
 import { createWebShell } from './chrome/shell.ts'
 import { paintFlowDetails } from './flow/details.ts'
@@ -116,19 +116,19 @@ let camera: Camera = fitted
 /** Once an interaction positions the camera, live refits stop until the viewer presses 0. */
 let touched = false
 
-function firstSystem(current: ArchitectureWorld): WorldElement | undefined {
+function firstSystem(current: ArchitectureGraph): AnnotatedElement | undefined {
   return current.elements
     .filter(element => element.kind === 'system' && !element.external)
-    .sort(compareElements)[0]
+    .sort(compareSemanticElements)[0]
 }
 
-function worldElement(id: string | undefined): WorldElement | undefined {
+function worldElement(id: string | undefined): AnnotatedElement | undefined {
   return id === undefined
     ? undefined
     : world.elements.find(element => element.representationId === id)
 }
 
-function worldRelationship(id: string | undefined): WorldRelationship | undefined {
+function worldRelationship(id: string | undefined): AnnotatedRelationship | undefined {
   return id === undefined ? undefined : world.relationships.find(item => item.id === id)
 }
 
@@ -221,7 +221,7 @@ function paintSelection(): void {
 function paintTree(): void {
   paintHierarchy(
     treeHost,
-    treeRows(world, selectedArchitecture(selection), tree),
+    semanticTreeRows(world, selectedArchitecture(selection), tree),
     new Set(selectedArchitecture(selection)),
     select,
     toggleRow,

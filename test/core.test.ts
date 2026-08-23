@@ -163,6 +163,7 @@ test('returns every independently annotated architecture representation', async 
 
   assert.deepEqual(model.relationships, [
     {
+      id: 'relationship:0',
       source: 'observed:orders',
       target: 'observed:payments',
       description: 'Requests payment authorization',
@@ -170,6 +171,7 @@ test('returns every independently annotated architecture representation', async 
       origin: 'observed',
     },
     {
+      id: 'relationship:1',
       source: 'missing:legacy',
       target: 'observed:orders',
       description: 'Delegates current orders',
@@ -177,6 +179,7 @@ test('returns every independently annotated architecture representation', async 
       origin: 'missing',
     },
     {
+      id: 'relationship:2',
       source: 'planned:checkout:orders',
       target: 'observed:payments',
       description: 'Authorizes checkout payment',
@@ -185,6 +188,7 @@ test('returns every independently annotated architecture representation', async 
       plan: 'checkout',
     },
     {
+      id: 'relationship:3',
       source: 'planned:inventory:inventory',
       target: 'planned:inventory:orders',
       description: 'Reports reserved stock',
@@ -193,6 +197,7 @@ test('returns every independently annotated architecture representation', async 
       plan: 'inventory',
     },
     {
+      id: 'relationship:4',
       source: 'planned:inventory:orders',
       target: 'observed:payments',
       description: 'Authorizes reserved orders',

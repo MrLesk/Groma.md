@@ -1,4 +1,4 @@
-import type { ArchitectureWorld } from '../../../types.ts'
+import type { ArchitectureGraph } from '../../../types.ts'
 import { actionLegs } from '../../action-path.ts'
 import type { FlowRef } from '../../action-path.ts'
 
@@ -6,7 +6,7 @@ import type { FlowRef } from '../../action-path.ts'
 export function paintFlowDetails(
   host: HTMLElement,
   flow: FlowRef,
-  world: ArchitectureWorld,
+  world: ArchitectureGraph,
   onSelect: (id: string, additive: boolean) => void,
 ): void {
   const command = world.relationships.find(relationship => relationship.id === flow.commandId)!

@@ -1,5 +1,5 @@
-import { compareElements } from '../../element-order.ts'
-import type { ArchitectureWorld, C4Kind, Origin, WorldElement } from '../../types.ts'
+import { compareElements, compareSemanticElements } from '../../element-order.ts'
+import type { AnnotatedElement, ArchitectureGraph, ArchitectureWorld, C4Kind, Origin } from '../../types.ts'
 
 /** Manual overrides on top of the always-visible paths to the selections. */
 export interface TreeState {
@@ -42,13 +42,9 @@ export function toggleExpansion(tree: TreeState, row: TreeRow): TreeState {
   return { ...tree, expanded, collapsed }
 }
 
-function sorted(elements: WorldElement[]): WorldElement[] {
-  return [...elements].sort(compareElements)
-}
-
 export function ancestorsOf(
   id: string | undefined,
-  byId: Map<string, WorldElement>,
+  byId: ReadonlyMap<string, AnnotatedElement>,
 ): Set<string> {
   const ancestors = new Set<string>()
   let current = id === undefined ? undefined : byId.get(id)
@@ -62,26 +58,29 @@ export function ancestorsOf(
 }
 
 /** The visible rows of the containment tree, in drawing order. */
-export function treeRows(
-  world: ArchitectureWorld,
+function rows<Element extends AnnotatedElement>(
+  elements: Element[],
   selectionIds: readonly string[],
   tree: TreeState,
+  order: (left: Element, right: Element) => number,
 ): TreeRow[] {
-  const byId = new Map(world.elements.map(element => [element.representationId, element]))
+  const sorted = (items: Element[]): Element[] => [...items].sort(order)
+  const byId = new Map(elements.map(element => [element.representationId, element]))
   const selectionPath = new Set(selectionIds.flatMap(id => [...ancestorsOf(id, byId)]))
   const rows: TreeRow[] = []
 
-  function expandedFor(element: WorldElement): boolean {
+  function expandedFor(element: Element): boolean {
     if (element.children.length === 0) return false
     if (selectionPath.has(element.representationId)) return true
     if (tree.collapsed.has(element.representationId)) return false
     return tree.expanded.has(element.representationId)
   }
 
-  function push(element: WorldElement, depth: number): void {
-    const children = sorted(element.children
-      .map(id => byId.get(id))
-      .filter((child): child is WorldElement => child !== undefined))
+  function push(element: Element, depth: number): void {
+    const children = sorted(element.children.flatMap(id => {
+      const child = byId.get(id)
+      return child === undefined ? [] : [child]
+    }))
     const expanded = expandedFor(element)
     rows.push({
       id: element.representationId,
@@ -98,8 +97,26 @@ export function treeRows(
     for (const child of children) push(child, depth + 1)
   }
 
-  for (const root of sorted(world.elements.filter(element => element.parent === null))) {
+  for (const root of sorted(elements.filter(element => element.parent === null))) {
     push(root, 0)
   }
   return rows
+}
+
+/** TUI hierarchy order follows the fixed ELK world. */
+export function treeRows(
+  world: ArchitectureWorld,
+  selectionIds: readonly string[],
+  tree: TreeState,
+): TreeRow[] {
+  return rows(world.elements, selectionIds, tree, compareElements)
+}
+
+/** Web hierarchy order follows semantic identity because the web places its own map. */
+export function semanticTreeRows(
+  world: ArchitectureGraph,
+  selectionIds: readonly string[],
+  tree: TreeState,
+): TreeRow[] {
+  return rows(world.elements, selectionIds, tree, compareSemanticElements)
 }

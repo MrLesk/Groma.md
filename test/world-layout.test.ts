@@ -53,15 +53,18 @@ const elements: AnnotatedArchitectureModel['elements'] = [
 
 const relationships: AnnotatedArchitectureModel['relationships'] = [
   {
+    id: 'relationship:0',
     source: 'observed:architect', target: 'planned:checkout',
     description: 'Reviews checkout', technology: 'Terminal', origin: 'observed',
   },
   {
+    id: 'relationship:1',
     source: 'planned:checkout', target: 'missing:fulfilment',
     description: 'Starts fulfilment', technology: 'Queue', origin: 'planned',
     plan: 'checkout',
   },
   {
+    id: 'relationship:2',
     source: 'missing:fulfilment', target: 'observed:payments',
     description: 'Confirms payment', technology: 'HTTPS', origin: 'missing',
   },

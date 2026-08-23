@@ -1,4 +1,4 @@
-import type { C4Kind, Origin, WorldRelationship } from '../types.ts'
+import type { AnnotatedRelationship, C4Kind, Origin } from '../types.ts'
 
 /** A rectangle of whole grid cells: `gx`, `gy` is the north corner, `w` runs along gx, `d` along gy. */
 export interface CellRect {
@@ -70,7 +70,7 @@ export interface RoutePoint {
 }
 
 /** One authored relationship routed on the quarter-cell lattice. */
-export type Route = Pick<WorldRelationship, 'id' | 'source' | 'target' | 'description' | 'origin'> & {
+export type Route = Pick<AnnotatedRelationship, 'id' | 'source' | 'target' | 'description' | 'origin'> & {
   points: RoutePoint[]
 }
 

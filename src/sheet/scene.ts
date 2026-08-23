@@ -1,4 +1,4 @@
-import type { ArchitectureWorld } from '../types.ts'
+import type { ArchitectureGraph } from '../types.ts'
 import { placeWorld } from './place.ts'
 import { routeAll, type Endpoint } from './route.ts'
 import type { SheetScene } from './types.ts'
@@ -11,7 +11,7 @@ import type { SheetScene } from './types.ts'
  * lattice route per authored relationship. Pure: the same world gives the same
  * sheet and the world is never touched.
  */
-export function sheetScene(world: Pick<ArchitectureWorld, 'elements' | 'relationships'>): SheetScene {
+export function sheetScene(world: ArchitectureGraph): SheetScene {
   const placement = placeWorld(world)
   const endpoints = new Map<string, Endpoint>()
   for (const island of placement.islands) {

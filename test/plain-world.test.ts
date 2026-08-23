@@ -137,6 +137,7 @@ test('a restated id prints once as planned and keeps only the winning source edg
     description: 'Takes payment.',
   })
   const observedEdge: AnnotatedRelationship = {
+    id: 'relationship:0',
     source: observed.representationId,
     target: payments.representationId,
     description: 'charges',
@@ -144,6 +145,7 @@ test('a restated id prints once as planned and keeps only the winning source edg
     origin: 'observed',
   }
   const plannedEdge: AnnotatedRelationship = {
+    id: 'relationship:1',
     source: planned.representationId,
     target: payments.representationId,
     description: 'reserves',

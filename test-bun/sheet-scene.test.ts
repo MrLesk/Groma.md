@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 
 import { test } from 'bun:test'
 
-import { loadArchitectureViewModel } from '../src/core.ts'
+import { loadAnnotatedArchitecture, loadArchitectureViewModel } from '../src/core.ts'
 import { GAP, ISLAND_GAP, NESTED_CONTENT_PAD } from '../src/sheet/forces.ts'
 import { EMPTY, MARGIN, PAD, ROOF_SHADOW, contains, overlaps, shadeOf } from '../src/sheet/grid.ts'
 import {
@@ -213,10 +213,16 @@ test.concurrent('a group becomes a zone around its members on the parent surface
 })
 
 test.concurrent('the same world gives the same sheet and the world is untouched', async () => {
-  const { world: fixture } = await loadArchitectureViewModel(viewerFixtureRoot)
+  const fixture = await loadAnnotatedArchitecture(viewerFixtureRoot)
   const before = structuredClone(fixture)
   const first = sheetScene(fixture)
-  const second = sheetScene({ ...fixture, elements: [...fixture.elements].reverse() })
+  const second = sheetScene({
+    elements: [...fixture.elements].reverse().map((element, index) => ({
+      ...element,
+      bounds: { x: 10_000 - index, y: -10_000 + index, width: 1, height: 1 },
+    })),
+    relationships: fixture.relationships,
+  })
   assert.deepEqual(second, first)
   assert.deepEqual(fixture, before)
   assert.ok(first.buildings.length > 0 && first.routes.length === fixture.relationships.length)

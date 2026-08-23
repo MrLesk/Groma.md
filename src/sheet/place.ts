@@ -1,5 +1,5 @@
-import { compareElements } from '../element-order.ts'
-import type { ArchitectureWorld, WorldElement, WorldRelationship } from '../types.ts'
+import { compareSemanticElements } from '../element-order.ts'
+import type { AnnotatedElement, AnnotatedRelationship, ArchitectureGraph } from '../types.ts'
 import { ISLAND_GAP, NESTED_CONTENT_PAD } from './forces.ts'
 import { MARGIN, PAD, shadeOf, translate, unionRects } from './grid.ts'
 import {
@@ -36,10 +36,10 @@ interface Node {
   d: number
   children: { node: Node; gx: number; gy: number }[]
   paint:
-    | { kind: 'building'; element: WorldElement; floors: number; shape: Shape; lines: string[] }
-    | { kind: 'slab'; element: WorldElement }
+    | { kind: 'building'; element: AnnotatedElement; floors: number; shape: Shape; lines: string[] }
+    | { kind: 'slab'; element: AnnotatedElement }
     | { kind: 'zone'; name: string; members: string[] }
-    | { kind: 'island'; islandKind: IslandKind; name: string; element: WorldElement | null }
+    | { kind: 'island'; islandKind: IslandKind; name: string; element: AnnotatedElement | null }
 }
 
 export interface Placement {
@@ -50,7 +50,7 @@ export interface Placement {
   buildings: Building[]
 }
 
-function item(element: WorldElement): SheetItem {
+function item(element: AnnotatedElement): SheetItem {
   return {
     representationId: element.representationId,
     id: element.id,
@@ -77,7 +77,7 @@ interface Lifted {
   partners: Map<string, Map<string, number>>
 }
 
-function lifted(siblings: readonly Node[], relationships: readonly WorldRelationship[]): Lifted {
+function lifted(siblings: readonly Node[], relationships: readonly AnnotatedRelationship[]): Lifted {
   /** The sibling each node inside the surface stands in. */
   const holder = new Map<string, string>()
   const claim = (node: Node, sibling: string): void => {
@@ -111,7 +111,7 @@ function packed(
   key: string,
   children: readonly Node[],
   paint: Node['paint'],
-  relationships: readonly WorldRelationship[],
+  relationships: readonly AnnotatedRelationship[],
   stack = false,
 ): Node {
   const { entries, partners } = lifted(children, relationships)
@@ -129,7 +129,7 @@ function packed(
     partners: partners.get(child.key)!,
   }))
   const placed = stack ? shelf(items, 1) : grow(items)
-  /** Systems, slabs and zones share the roomier nested-content inset; the centred actors and external islands stay compact. */
+  /** Systems, slabs and zones share the roomier nested-surface inset; the centred actors and external islands stay compact. */
   const padding = paint.kind === 'island' && paint.islandKind !== 'system' ? PAD : NESTED_CONTENT_PAD
   const extra = padding - PAD
   return {
@@ -169,8 +169,8 @@ function squared(node: Node): Node {
 function withZones(
   parentKey: string,
   siblings: readonly Node[],
-  elements: readonly WorldElement[],
-  relationships: readonly WorldRelationship[],
+  elements: readonly AnnotatedElement[],
+  relationships: readonly AnnotatedRelationship[],
 ): Node[] {
   const groupOf = new Map(elements.map(element => [element.representationId, element.group]))
   const buckets = new Map<string, { group: string | undefined; nodes: Node[] }>()
@@ -186,7 +186,7 @@ function withZones(
     : packed(key, nodes, { kind: 'zone', name: group, members: nodes.map(member => member.key) }, relationships))
 }
 
-export function placeWorld(world: Pick<ArchitectureWorld, 'elements' | 'relationships'>): Placement {
+export function placeWorld(world: ArchitectureGraph): Placement {
   const degree = new Map<string, number>()
   for (const relationship of world.relationships) {
     degree.set(relationship.source, (degree.get(relationship.source) ?? 0) + 1)
@@ -196,11 +196,11 @@ export function placeWorld(world: Pick<ArchitectureWorld, 'elements' | 'relation
     .filter(element => element.kind === 'component' && element.origin === 'observed')
     .map(element => element.codeLines ?? 0)
   const range = { min: Math.min(...observedLines), max: Math.max(...observedLines) }
-  const childrenOf = (parent: string | null): WorldElement[] => world.elements
+  const childrenOf = (parent: string | null): AnnotatedElement[] => world.elements
     .filter(element => element.parent === parent)
-    .sort(compareElements)
+    .sort(compareSemanticElements)
 
-  const building = (element: WorldElement): Node => {
+  const building = (element: AnnotatedElement): Node => {
     const shape: Shape = element.kind === 'actor'
       ? { kind: 'round', levels: 1 }
       : element.external ? { kind: 'pill', levels: 1 } : shapeOf(element.code.length)
@@ -209,7 +209,7 @@ export function placeWorld(world: Pick<ArchitectureWorld, 'elements' | 'relation
     const { w, d } = footprintOf(lines, shape, degree.get(element.representationId) ?? 0)
     return { key: element.representationId, w, d, children: [], paint: { kind: 'building', element, floors, shape, lines } }
   }
-  const slab = (container: WorldElement): Node => {
+  const slab = (container: AnnotatedElement): Node => {
     const components = childrenOf(container.representationId).filter(child => child.kind === 'component')
     return packed(
       container.representationId,
@@ -218,7 +218,7 @@ export function placeWorld(world: Pick<ArchitectureWorld, 'elements' | 'relation
       world.relationships,
     )
   }
-  const systemIsland = (system: WorldElement): Node => {
+  const systemIsland = (system: AnnotatedElement): Node => {
     const containers = childrenOf(system.representationId).filter(child => child.kind === 'container')
     return packed(
       system.representationId,
@@ -254,7 +254,7 @@ export function placeWorld(world: Pick<ArchitectureWorld, 'elements' | 'relation
  * cells apart; then the actors and external islands slide along gy so the
  * centre of their buildings faces the centre of what those buildings talk to.
  */
-function placeRow(islands: readonly Node[], relationships: readonly WorldRelationship[]): CellRect[] {
+function placeRow(islands: readonly Node[], relationships: readonly AnnotatedRelationship[]): CellRect[] {
   const deepest = Math.max(0, ...islands.map(island => island.d))
   const origins: CellRect[] = []
   let gx = 0

@@ -1,4 +1,4 @@
-import type { ArchitectureWorld, C4Kind, WorkItem, WorldRelationship } from '../../types.ts'
+import type { AnnotatedRelationship, ArchitectureGraph, C4Kind, WorkItem } from '../../types.ts'
 import type { FlowRef } from '../action-path.ts'
 import type { DetailsTab } from './organisms/details.ts'
 import { noSelection, selectFlow, selectTask } from './selection.ts'
@@ -22,10 +22,10 @@ const KINDS: C4Kind[] = ['actor', 'system', 'container', 'component']
  * `tab=how` and `theme=dark`. Ids are the authored ids; anything the world
  * or the work does not know is ignored, a kind naming an element of another kind included.
  */
-export function readView(search: string, world: ArchitectureWorld, work: readonly WorkItem[]): ViewState {
+export function readView(search: string, world: ArchitectureGraph, work: readonly WorkItem[]): ViewState {
   const params = new URLSearchParams(search)
   const byId = new Map(world.elements.map(element => [element.id, element]))
-  const relationship = (value: string): WorldRelationship | undefined => {
+  const relationship = (value: string): AnnotatedRelationship | undefined => {
     const [from, to] = value.split('/')
     const source = byId.get(from ?? '')?.representationId
     const target = byId.get(to ?? '')?.representationId
@@ -73,7 +73,7 @@ export function readView(search: string, world: ArchitectureWorld, work: readonl
 }
 
 /** The query string for a view, empty when everything is at its default. */
-export function writeView(state: ViewState, world: ArchitectureWorld, work: readonly WorkItem[]): string {
+export function writeView(state: ViewState, world: ArchitectureGraph, work: readonly WorkItem[]): string {
   const elements = new Map(world.elements.map(element => [element.representationId, element]))
   const ends = (relationshipId: string | undefined): string | undefined => {
     const relationship = world.relationships.find(item => item.id === relationshipId)

@@ -3,7 +3,6 @@ import path from 'node:path'
 
 import { buildArchitectureModel } from './architecture-model.ts'
 import { loadArchitecture } from './architecture-reader.ts'
-import { layoutArchitectureWorld } from './world-layout.ts'
 import type {
   AnnotatedArchitectureModel,
   AnnotatedElement,
@@ -86,7 +85,10 @@ function withDirectChildren(elements: AnnotatedElement[]): AnnotatedElement[] {
 function annotateRevision(
   observed: RevisionRecord,
   revisionRecord: RevisionRecord,
-): Pick<AnnotatedArchitectureModel, 'elements' | 'relationships'> {
+): {
+  elements: AnnotatedElement[]
+  relationships: Omit<AnnotatedRelationship, 'id'>[]
+} {
   const origin = originFor(revisionRecord.revision)
   const plan = revisionRecord.revision.kind === 'plan'
     ? revisionRecord.revision.name
@@ -127,7 +129,7 @@ function annotateRevision(
       })),
     relationships: model.relationships
       .filter(relationship => suppliedIds.has(relationship.sourceId))
-      .map<AnnotatedRelationship>(relationship => ({
+      .map<Omit<AnnotatedRelationship, 'id'>>(relationship => ({
         source: ownRepresentation(relationship.sourceId),
         target: resolvedRepresentation(relationship.targetId),
         description: relationship.description,
@@ -151,7 +153,9 @@ export function annotateArchitecture(
       return record.revision.kind === 'plan' ? [record.revision.name] : []
     }),
     elements: withDirectChildren(elements),
-    relationships: annotated.flatMap(model => model.relationships),
+    relationships: annotated
+      .flatMap(model => model.relationships)
+      .map((relationship, index) => ({ id: `relationship:${index}`, ...relationship })),
   }
 }
 
@@ -190,6 +194,7 @@ export async function loadArchitectureViewModel(
   options: { onFilesystemAccess?: FilesystemAccessHandler } = {},
 ): Promise<ArchitectureViewModel> {
   const model = await loadAnnotatedArchitecture(repositoryRoot, options)
+  const { layoutArchitectureWorld } = await import('./world-layout.ts')
   return {
     ...model,
     world: await layoutArchitectureWorld(model),

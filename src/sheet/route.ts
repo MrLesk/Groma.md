@@ -1,4 +1,4 @@
-import type { WorldRelationship } from '../types.ts'
+import type { AnnotatedRelationship } from '../types.ts'
 import {
   BEND,
   CLEARANCE_PUSH,
@@ -32,7 +32,7 @@ export interface Endpoint {
   centrePorts?: boolean
 }
 
-export type RouteRequest = Pick<WorldRelationship, 'id' | 'source' | 'target' | 'description' | 'origin'>
+export type RouteRequest = Pick<AnnotatedRelationship, 'id' | 'source' | 'target' | 'description' | 'origin'>
 
 interface Solved {
   nodes: number[]
