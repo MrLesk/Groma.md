@@ -53,17 +53,32 @@ administration, such as relabeling, status corrections, or metadata maintenance.
 in-scope code change may remain part of that code task. Continue to run `backlog instructions overview` for every user
 request.
 
-## Backlog references
+## Backlog change tracking
 
-When a task changes a Groma architecture element, add that element's exact
-`id` as a Backlog reference (`backlog task edit TASK-N --add-ref <id>`).
-Do not use file paths as the join key. Only an exact element `id` produces
-a live marker.
+Update task traceability immediately after each change. Do not wait for tests,
+progress notes, or task finalization, and do not batch several changes before
+updating the task.
 
-While working on a task, record each source file you change with
-`backlog task edit TASK-N --modified-file <path>` (repository-relative, one
-flag per file, in the order you touch them). The web map stands the task's
-pin on the element whose code holds the newest recorded file.
+- As soon as you change a repository file for a task, and before changing
+  another file, record its repository-relative path in the task's modified-file
+  list. `--modified-file` replaces the complete list, so first preserve every
+  existing entry, then append the newly changed path with another flag. Use
+  `backlog task view TASK-N --plain` first if you do not have the current list.
+  Keep one flag per file in the order the files were first changed:
+
+  ```bash
+  backlog task edit TASK-N \
+    --modified-file <existing-path> \
+    --modified-file <new-path>
+  ```
+
+  The web map stands the task's pin on the element whose code holds the newest
+  recorded file.
+- As soon as a change affects a Groma architecture element, add that element's
+  exact `id` as a Backlog reference with
+  `backlog task edit TASK-N --add-ref <id>`. Do this in the same immediate
+  change-tracking loop, not at the end of the task. Do not use file paths as the
+  join key. Only an exact element `id` produces a live marker.
 
 ## Commit messages
 
