@@ -34,6 +34,7 @@ export function sheetScene(world: Pick<ArchitectureWorld, 'elements' | 'relation
       rect: building.rect,
       within: island === building.surface ? [island] : [building.surface, island],
       roof: building.floors,
+      centrePorts: building.shape.kind === 'round',
     })
   }
   return { ...placement, routes: routeAll(placement.sheet, endpoints, world.relationships) }

@@ -12,33 +12,14 @@ import {
   SIDE_PENALTY,
 } from './forces.ts'
 import { LANES, ROOF_SHADOW } from './grid.ts'
+import { BACK, INWARD, OUTWARD, SIDES, facing, layoutPorts, portPairs, ports } from './port-layout.ts'
+import type { LaneRect, PortPair, PortSeed, Side } from './port-layout.ts'
 import type { CellRect, Route, RoutePoint } from './types.ts'
 
-/** Lanes between two ports on one side: ports sit on half-cell marks. */
-const PORT_PITCH = 2
 /** One lattice step, the unit the other costs in forces.ts are measured against. */
 const STEP = 1
 /** Lanes a route runs straight out of its port and straight into its goal, so it leaves and meets a side square on. */
 const APPROACH = 2
-
-type Side = 'x-' | 'x+' | 'y-' | 'y+'
-const SIDES: readonly Side[] = ['x-', 'x+', 'y-', 'y+']
-/** Direction index a route takes when it leaves through each side, and the one it arrives with. */
-const OUTWARD: Record<Side, number> = { 'x+': 0, 'y+': 1, 'x-': 2, 'y-': 3 }
-const INWARD: Record<Side, number> = { 'x+': 2, 'y+': 3, 'x-': 0, 'y-': 1 }
-/** A building's back sides, hidden under its roof: routes start and end behind them, where the roof's shadow ends. */
-const BACK: readonly Side[] = ['x-', 'y-']
-
-/** The sides of `rect` that face `other`: a side faces it when the other rect lies wholly beyond that side. */
-function facing(rect: LaneRect, other: LaneRect): Set<Side> {
-  const sides = new Set<Side>()
-  if (other.x1 <= rect.x0) sides.add('x-')
-  if (other.x0 >= rect.x1) sides.add('x+')
-  if (other.y1 <= rect.y0) sides.add('y-')
-  if (other.y0 >= rect.y1) sides.add('y+')
-  return sides
-}
-
 /** Anything a route may start or end on, with the slab and island it stands in. */
 export interface Endpoint {
   key: string
@@ -47,18 +28,19 @@ export interface Endpoint {
   within: string[]
   /** Buildings: the roof's height above the ground plane, for departures and arrivals through a back side. */
   roof?: number
+  /** Round actors: ports on each side use an exact centred visual layout before their route bodies repel. */
+  centrePorts?: boolean
 }
 
 export type RouteRequest = Pick<WorldRelationship, 'id' | 'source' | 'target' | 'description' | 'origin'>
 
-/** A footprint in lane units: x0..x1 and y0..y1 are its boundary lanes, inclusive. */
-interface LaneRect {
-  x0: number
-  y0: number
-  x1: number
-  y1: number
+interface Solved {
+  nodes: number[]
+  port: number
+  goalPort: number
 }
 
+class NoRouteError extends Error {}
 /** Directions a route may step: +x, +y, −x, −y. */
 const DX = [1, 0, -1, 0]
 const DY = [0, 1, 0, -1]
@@ -68,7 +50,6 @@ interface Open {
   g: number
   state: number
 }
-
 /** Cheapest estimate first, then the deeper path, then the lower state: a total order, so routing is deterministic. */
 function before(a: Open, b: Open): boolean {
   if (a.f !== b.f) return a.f < b.f
@@ -117,23 +98,7 @@ class Heap {
   }
 }
 
-/**
- * Routes every relationship on the quarter-cell lattice with A*. A route
- * normally leaves its source from the middle of the side most directly facing
- * the target; when buildings crowd that departure, it takes a clear side and
- * runs a full cell before bending. It arrives, pointing inward, at the middle
- * of the side of the target facing it. Later routes spread out around the middle. A back
- * side of a
- * building is hidden under its roof, so there a route starts or ends just
- * behind the building where the roof's shadow ends: on screen the line
- * emerges from, or its arrowhead touches, the middle of the roof's back
- * edge. Routes leave and meet a side square on, keep one lane clear of every
- * foreign footprint, pay for turns and for lanes other routes already use,
- * and pay to run close to a building they pass, to a surface border or to a
- * route already drawn, so a line holds the middle of the free ground; they
- * are solved in the order given, so parallel routes take neighbouring ports.
- * The weights are in forces.ts.
- */
+/** Routes every relationship on the quarter-cell lattice. Port layout fixes each end; A* shapes the route body. */
 export function routeAll(
   sheet: CellRect,
   endpoints: ReadonlyMap<string, Endpoint>,
@@ -160,6 +125,8 @@ export function routeAll(
   const usedPorts = new Set<number>()
   const g = new Float64Array(stateCount)
   const parent = new Int32Array(stateCount)
+  /** Start state whose departure approach led to each current best state. */
+  const root = new Int32Array(stateCount)
   const closed = new Uint8Array(stateCount)
 
   const sweep = new Int32Array(nodeCount)
@@ -223,20 +190,6 @@ export function routeAll(
     for (let y = y0; y <= y1; y += 1) blocked.fill(1, nodeOf(x0, y), nodeOf(x1, y) + 1)
   }
 
-  /** The free ports of one side, each with its distance from the side's middle in port steps per cell of side, so a long side yields its middle before a short one. */
-  const ports = (rect: LaneRect, side: Side): { node: number; offset: number }[] => {
-    const alongY = side === 'x-' || side === 'x+'
-    const [from, to] = alongY ? [rect.y0, rect.y1] : [rect.x0, rect.x1]
-    const cells = (to - from) / LANES
-    const fixed = side === 'x-' ? rect.x0 : side === 'x+' ? rect.x1 : side === 'y-' ? rect.y0 : rect.y1
-    const result: { node: number; offset: number }[] = []
-    for (let lane = from + PORT_PITCH; lane < to; lane += PORT_PITCH) {
-      const node = alongY ? nodeOf(fixed, lane) : nodeOf(lane, fixed)
-      if (!usedPorts.has(node)) result.push({ node, offset: Math.abs(lane - (from + to) / 2) / PORT_PITCH / cells })
-    }
-    return result
-  }
-
   const edgeOf = (a: number, b: number): number => 2 * Math.min(a, b) + (Math.abs(a - b) === 1 ? 0 : 1)
 
   /**
@@ -289,7 +242,7 @@ export function routeAll(
     return behind > 0 && blocked[node] ? undefined : node
   }
 
-  const solve = (request: RouteRequest): { nodes: number[]; port: number; goalPort: number } => {
+  const solve = (request: RouteRequest, fixed?: PortPair): Solved => {
     const source = endpoints.get(request.source)
     const target = endpoints.get(request.target)
     if (!source || !target) {
@@ -322,7 +275,8 @@ export function routeAll(
     /** The port each goal stands for and the straight run from the goal into its anchor. */
     const goals = new Map<number, { port: number; suffix: number[] }>()
     for (const side of SIDES) {
-      for (const { node, offset } of ports(targetRect, side)) {
+      for (const { node, offset } of ports(targetRect, side, width, usedPorts)) {
+        if (fixed?.target !== undefined && fixed.target !== node) continue
         const end = anchor(target, side, node)
         const approach = end === undefined ? undefined : run(end, OUTWARD[side], APPROACH)
         if (approach === undefined) continue
@@ -337,22 +291,30 @@ export function routeAll(
     measure(nearGoal, goals.keys(), LANES)
     /** Goals lie up to this far outside the target, so the distance to its footprint overestimates by as much. */
     const reach = APPROACH + (target.kind === 'building' ? shadow(target.roof ?? 0) : 0)
+    const exactGoal = goals.size === 1 ? goals.keys().next().value as number : undefined
     const h = (node: number): number => {
       const x = node % width
       const y = (node - x) / width
+      if (exactGoal !== undefined) {
+        const goalX = exactGoal % width
+        const goalY = (exactGoal - goalX) / width
+        return Math.abs(goalX - x) + Math.abs(goalY - y)
+      }
       const away = Math.max(targetRect.x0 - x, 0, x - targetRect.x1) + Math.max(targetRect.y0 - y, 0, y - targetRect.y1)
       return Math.max(0, away - reach)
     }
     g.fill(Infinity)
     parent.fill(-1)
+    root.fill(-1)
     closed.fill(0)
     const heap = new Heap()
     /** The port each start state leaves through and the straight run from its anchor to the start. */
-    const starts = new Map<number, { port: number; prefix: number[] }>()
-    const push = (state: number, cost: number, from: number): void => {
+    const starts = new Map<number, { port: number; prefix: number[]; guard: number }>()
+    const push = (state: number, cost: number, from: number, departure: number): void => {
       if (cost >= g[state]!) return
       g[state] = cost
       parent[state] = from
+      root[state] = departure
       heap.push({ f: cost + h(state >> 2), g: cost, state })
     }
     const sourceFacing = facing(sourceRect, targetRect)
@@ -378,7 +340,8 @@ export function routeAll(
     }[] = []
     for (const side of SIDES) {
       const direction = OUTWARD[side]
-      for (const { node, offset } of ports(sourceRect, side)) {
+      for (const { node, offset } of ports(sourceRect, side, width, usedPorts)) {
+        if (fixed?.source !== undefined && fixed.source !== node) continue
         const from = anchor(source, side, node)
         if (from === undefined) continue
         const approach = run(from, direction, APPROACH)
@@ -402,9 +365,12 @@ export function routeAll(
       const start = out[out.length - 1]!
       const sideCost = clearPrimary && !sourceFacing.has(departure.side) ? SIDE_PENALTY : 0
       const cost = sideCost + departure.offset * OFF_CENTRE + (out.length - 1) * STEP
-      push(start * 4 + departure.direction, cost, -1)
-      starts.set(start * 4 + departure.direction, { port: departure.port, prefix: out.slice(0, -1) })
+      const state = start * 4 + departure.direction
+      push(state, cost, -1, state)
+      starts.set(state, { port: departure.port, prefix: out.slice(0, -1), guard: departure.approach.at(-1)! })
     }
+    /** A route body may never enter any fixed departure from the side or retrace it. */
+    for (const { prefix } of starts.values()) for (const node of prefix) blocked[node] = 1
     while (heap.size > 0) {
       const { state } = heap.pop()
       if (closed[state]) continue
@@ -429,32 +395,99 @@ export function routeAll(
       const x = node % width
       const y = (node - x) / width
       for (let next = 0; next < 4; next += 1) {
+        if (next === (direction + 2) % 4) continue
         const nx = x + DX[next]!
         const ny = y + DY[next]!
         if (nx < 0 || ny < 0 || nx >= width || ny >= height) continue
+        const departure = root[state]!
+        const departureNode = starts.get(departure)!.guard
+        const departureX = departureNode % width
+        const departureY = (departureNode - departureX) / width
+        const firstDirection = departure & 3
+        const behind = firstDirection === 0 ? nx <= departureX : firstDirection === 1 ? ny <= departureY
+          : firstDirection === 2 ? nx >= departureX : ny >= departureY
+        const across = firstDirection % 2 === 0 ? Math.abs(ny - departureY) : Math.abs(nx - departureX)
+        const reversesDeparture = next === (firstDirection + 2) % 4
+        if (reversesDeparture && behind && across <= LANES) continue
+        const departureDistance = Math.max(Math.abs(x - departureX), Math.abs(y - departureY))
+        const nextDepartureDistance = Math.max(Math.abs(nx - departureX), Math.abs(ny - departureY))
+        if (departureDistance > LANES && nextDepartureDistance <= LANES) continue
         const neighbour = nodeOf(nx, ny)
         if (blocked[neighbour]) continue
+        const edge = edgeOf(node, neighbour)
         const turn = next === direction ? 0 : nearGoal[node] !== -1 && nearGoal[node]! < LANES ? FINAL_BEND : BEND
-        const cost = g[state]! + STEP + turn + REUSE * used[edgeOf(node, neighbour)]!
+        const cost = g[state]! + STEP + turn + REUSE * used[edge]!
           + offClearance(neighbour) + offRoutes(neighbour)
           + (goal[neighbour] ? goalCost[neighbour]! : 0)
-        push(neighbour * 4 + next, cost, state)
+        push(neighbour * 4 + next, cost, state, departure)
       }
     }
-    throw new Error(`No route for ${request.id} (${request.source} → ${request.target})`)
+    throw new NoRouteError(`No route for ${request.id} (${request.source} → ${request.target})`)
   }
 
-  const drawn: number[] = []
-  return requests.map(request => {
-    const { nodes, port, goalPort } = solve(request)
-    usedPorts.add(port)
-    usedPorts.add(goalPort)
+  const remember = (nodes: readonly number[], drawn: number[]): void => {
     for (let index = 1; index < nodes.length; index += 1) {
       const edge = edgeOf(nodes[index - 1]!, nodes[index]!)
       used[edge] = Math.min(255, used[edge]! + 1)
     }
     drawn.push(...nodes)
     measure(nearRoute, drawn, ROUTE_REACH)
+  }
+
+  /** First preserve obstacle- and route-aware side choices, then lay out round ports on those sides. */
+  const plannedNodes: number[] = []
+  const seeds = requests.map(request => {
+    const { nodes, port, goalPort } = solve(request)
+    const source = endpoints.get(request.source)!
+    const target = endpoints.get(request.target)!
+    const aligned = Math.abs(source.rect.gx + source.rect.w / 2 - target.rect.gx - target.rect.w / 2) <= 0.5
+      || Math.abs(source.rect.gy + source.rect.d / 2 - target.rect.gy - target.rect.d / 2) <= 0.5
+    const direct = lift(nodes).length === 2 && aligned
+    usedPorts.add(port)
+    usedPorts.add(goalPort)
+    remember(nodes, plannedNodes)
+    return {
+      source: {
+        key: source.key,
+        rect: lanes(source.rect),
+        node: port,
+        policy: source.centrePorts === true ? 'centre-balanced' as const : 'baseline' as const,
+      },
+      target: {
+        key: target.key,
+        rect: lanes(target.rect),
+        node: goalPort,
+        policy: target.centrePorts === true ? 'centre-balanced' as const
+          : direct ? 'baseline' as const : 'prefer-centre' as const,
+      },
+    }
+  })
+  const laidOut = layoutPorts(seeds, width)
+  usedPorts.clear()
+  used.fill(0)
+  nearRoute.fill(-1)
+
+  /** Tries concrete port pairs in layout order; route cost never chooses between ports. */
+  const solvePlanned = (request: RouteRequest, pair: PortPair, seed: PortSeed): Solved => {
+    let failure: NoRouteError | undefined
+    for (const fixed of portPairs(seed, pair, width)) {
+      try {
+        return solve(request, fixed)
+      } catch (error) {
+        if (!(error instanceof NoRouteError)) throw error
+        failure = error
+      }
+    }
+    throw failure ?? new NoRouteError(`No planned port pair for ${request.id}`)
+  }
+
+  const drawn: number[] = []
+  return requests.map((request, index) => {
+    const solved = solvePlanned(request, laidOut[index]!, seeds[index]!)
+    const { nodes, port, goalPort } = solved
+    usedPorts.add(port)
+    usedPorts.add(goalPort)
+    remember(nodes, drawn)
     return {
       id: request.id,
       source: request.source,
