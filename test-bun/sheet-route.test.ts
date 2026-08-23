@@ -302,6 +302,25 @@ test.concurrent('a crowded facing corridor lets a clear departure run one cell b
   assert.ok(north!.gx === turn!.gx && north!.gy < turn!.gy)
 })
 
+test.concurrent('a busy target keeps one full cell straight after its final bend', () => {
+  const endpoints = new Map<string, Endpoint>([
+    ['blocker', { key: 'blocker', kind: 'building', rect: { gx: 4, gy: 9, w: 3, d: 3 }, within: [], roof: 1 }],
+    ['source', { key: 'source', kind: 'building', rect: { gx: 9, gy: 10, w: 2, d: 2 }, within: [], roof: 1 }],
+    ['target', { key: 'target', kind: 'building', rect: { gx: 4, gy: 14, w: 3, d: 2 }, within: [], roof: 1 }],
+    ['east', { key: 'east', kind: 'building', rect: { gx: 20, gy: 13, w: 3, d: 2 }, within: [], roof: 1 }],
+  ])
+  const routes = routeAll({ gx: 0, gy: 0, w: 26, d: 25 }, endpoints, [
+    { id: 'relationship:0', source: 'target', target: 'east', description: '', origin: 'observed' },
+    { id: 'relationship:1', source: 'source', target: 'target', description: '', origin: 'observed' },
+  ])
+  const points = routes.at(-1)!.points
+  const last = points.at(-1)!
+  const bend = points.at(-2)!
+  assert.ok(Math.abs(last.gx - bend.gx) + Math.abs(last.gy - bend.gy) >= 1)
+  const edges = routes.flatMap(laneEdges)
+  assert.equal(new Set(edges).size, edges.length)
+})
+
 test.concurrent('a route crosses a surface border instead of running along it', async () => {
   const { scene } = await fixtureScene(viewerFixtureRoot)
   const borders = [...scene.slabs, ...scene.islands].map(surface => surface.rect)

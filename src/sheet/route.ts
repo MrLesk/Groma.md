@@ -210,6 +210,7 @@ export function routeAll(
     }
   }
   const clearance = new Int32Array(nodeCount)
+  const nearGoal = new Int32Array(nodeCount)
   /** The room left around the routes drawn so far, so they push each other apart instead of squeezing into neighbouring lanes. */
   const nearRoute = new Int32Array(nodeCount).fill(-1)
 
@@ -332,6 +333,7 @@ export function routeAll(
     }
     /** A* reaches a goal once; only its fixed suffix may enter the target approach. */
     for (const { suffix } of goals.values()) for (const node of suffix) blocked[node] = 1
+    measure(nearGoal, goals.keys(), LANES)
     /** Goals lie up to this far outside the target, so the distance to its footprint overestimates by as much. */
     const reach = APPROACH + (target.kind === 'building' ? shadow(target.roof ?? 0) : 0)
     const h = (node: number): number => {
@@ -431,7 +433,8 @@ export function routeAll(
         if (nx < 0 || ny < 0 || nx >= width || ny >= height) continue
         const neighbour = nodeOf(nx, ny)
         if (blocked[neighbour]) continue
-        const cost = g[state]! + STEP + (next === direction ? 0 : BEND) + REUSE * used[edgeOf(node, neighbour)]!
+        const turn = next === direction ? 0 : BEND * (nearGoal[node] !== -1 && nearGoal[node]! < LANES ? 1 + LANES : 1)
+        const cost = g[state]! + STEP + turn + REUSE * used[edgeOf(node, neighbour)]!
           + offClearance(neighbour) + offRoutes(neighbour)
           + (goal[neighbour] ? goalCost[neighbour]! : 0)
         push(neighbour * 4 + next, cost, state)
