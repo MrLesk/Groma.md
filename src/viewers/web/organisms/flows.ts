@@ -1,4 +1,5 @@
 import type { WorldRelationship } from '../../../types.ts'
+import { sectionHeading } from './sidebar-section.ts'
 
 /** The list starts folded and keeps its state across repaints. */
 let unfolded = false
@@ -12,12 +13,7 @@ export function paintFlows(
 ): void {
   host.replaceChildren()
   if (commands.length === 0) return
-  const heading = document.createElement('button')
-  heading.type = 'button'
-  heading.className = 'section'
-  heading.textContent = `${unfolded ? '▾' : '▸'} Flows`
-  heading.setAttribute('aria-expanded', String(unfolded))
-  heading.addEventListener('click', () => {
+  const heading = sectionHeading('Flows', unfolded, () => {
     unfolded = !unfolded
     paintFlows(host, commands, activeActionId, onPick)
   })

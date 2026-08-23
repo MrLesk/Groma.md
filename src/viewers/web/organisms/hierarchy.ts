@@ -1,5 +1,9 @@
 import { kindGlyph } from '../atoms/kind.ts'
 import type { TreeRow } from '../../tui/tree.ts'
+import { sectionHeading } from './sidebar-section.ts'
+
+/** The structure starts open and keeps its state across repaints. */
+let unfolded = true
 
 export function paintHierarchy(
   host: HTMLElement,
@@ -8,7 +12,7 @@ export function paintHierarchy(
   onSelect: (id: string) => void,
   onToggle: (row: TreeRow) => void,
 ): void {
-  host.replaceChildren()
+  const list = document.createElement('div')
   for (const row of rows) {
     const button = document.createElement('button')
     button.type = 'button'
@@ -41,6 +45,12 @@ export function paintHierarchy(
 
     button.append(twist, mark, name)
     button.addEventListener('click', () => onSelect(row.id))
-    host.append(button)
+    list.append(button)
   }
+  const heading = sectionHeading('Structure', unfolded, () => {
+    unfolded = !unfolded
+    paintHierarchy(host, rows, selectedId, onSelect, onToggle)
+  })
+  list.hidden = !unfolded
+  host.replaceChildren(heading, list)
 }

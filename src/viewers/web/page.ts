@@ -41,7 +41,7 @@ const style = `
   }
   button { font: inherit; color: inherit; cursor: pointer; }
   button:focus-visible { outline: 2px solid var(--accent); outline-offset: -1px; }
-  #legend span, #details .meta, #details .section, #flows .section, #action.hint, #zoom, #details .chip, #stats {
+  #legend span, #details .meta, #details .section, #hierarchy .section, #action.hint, #zoom, #details .chip, #stats {
     font-size: 10px;
     letter-spacing: 0.14em;
     text-transform: uppercase;
@@ -62,7 +62,7 @@ const style = `
   #hierarchy { display: flex; flex-direction: column; border-right: 1px solid var(--ink); }
   #flows { padding: 14px 0 10px; border-bottom: 1px solid var(--hairline); }
   #flows:empty { display: none; }
-  #flows .section { margin: 0 0 6px; padding: 0 14px; width: 100%; border: 0; background: transparent; text-align: left; }
+  #hierarchy .section { margin: 0 0 6px; padding: 0 14px; width: 100%; border: 0; background: transparent; text-align: left; }
   #tree { flex: 1; overflow: auto; padding: 14px 0; }
   #legend { border-top: 1px solid var(--ink); padding: 12px 16px; display: grid; gap: 4px; }
   #legend div { display: flex; gap: 16px; }
