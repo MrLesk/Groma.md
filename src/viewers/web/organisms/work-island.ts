@@ -43,6 +43,7 @@ export const workCss = `
   #work .chip .badge .face svg { width: 12px; height: 12px; }
   #work .chip .badge .ring circle { stroke-width: 4; }
   #work .chip.done { --pin: var(--muted); }
+  #work .chip.selected { border-color: var(--accent); color: var(--accent); }
   #work .fold svg { transition: transform 0.35s ease; }
   #work.open .fold svg { transform: rotate(180deg); }
 `
@@ -50,6 +51,8 @@ export const workCss = `
 export interface WorkIsland {
   /** Rebuilds the island for these pins; nothing shows while there are none. */
   paint(pins: readonly WorkPin[]): void
+  /** Marks the chip of the selected task and scrolls it into view; none while no task is selected. */
+  select(taskId: string | undefined): void
 }
 
 function button(className: string, html: string, onClick: () => void): HTMLButtonElement {
@@ -63,6 +66,7 @@ function button(className: string, html: string, onClick: () => void): HTMLButto
 
 function chip(pin: WorkPin, onSelect: (id: string) => void): HTMLButtonElement {
   const node = button(`chip${pin.status === 'Done' ? ' done' : ''}`, `${BADGE}<span>${pin.taskId}</span>`, () => onSelect(pin.taskId))
+  node.dataset.task = pin.taskId
   node.style.setProperty('--pin', pin.colour)
   node.title = `${pin.assignee} · ${pin.title}`
   fillBadge(node, pin)
@@ -88,6 +92,7 @@ export function createWorkIsland(
   let open = false
   let agents = true
   let completed = true
+  let selected: string | undefined
 
   const toggle = (name: string, pressed: boolean, flip: () => void): HTMLButtonElement => {
     const node = button('toggle', `${EYE_MARK}${name}`, () => {
@@ -131,12 +136,27 @@ export function createWorkIsland(
       fold,
     ]
   }
+  /** Marks the selected task's chips and scrolls the strip to centre the first of them when it lies outside the visible part. */
+  const mark = (): void => {
+    for (const chip of island.querySelectorAll<HTMLElement>('.chip')) chip.classList.toggle('selected', chip.dataset.task === selected)
+    const chip = island.querySelector<HTMLElement>('.chip.selected')
+    if (chip === null) return
+    const strip = chip.parentElement!
+    const box = strip.getBoundingClientRect()
+    const { left, right } = chip.getBoundingClientRect()
+    if (left >= box.left && right <= box.right) return
+    strip.scrollBy({ left: (left + right - box.left - box.right) / 2, behavior: 'smooth' })
+  }
   /** Rebuilds the island and eases its size from what it was to what it is now; an unchanged size does not animate. */
   const rebuild = (): void => {
     const was = island.getBoundingClientRect()
+    const scrolled = island.querySelector('.strip')?.scrollLeft ?? 0
     for (const running of island.getAnimations()) running.cancel()
     island.replaceChildren(...parts())
     island.classList.toggle('open', open)
+    // the strip stays where it was, so a repaint moves it only to reveal a selected chip
+    island.querySelector('.strip')?.scrollTo(scrolled, 0)
+    mark()
     const now = island.getBoundingClientRect()
     if (now.width === was.width && now.height === was.height) return
     island.animate(
@@ -148,6 +168,10 @@ export function createWorkIsland(
     paint(next) {
       pins = next
       rebuild()
+    },
+    select(taskId) {
+      selected = taskId
+      mark()
     },
   }
 }
