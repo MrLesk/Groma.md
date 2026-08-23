@@ -4,7 +4,8 @@ import { test } from 'bun:test'
 
 import { loadArchitectureViewModel } from '../src/core.ts'
 import { LANES } from '../src/sheet/grid.ts'
-import { RING, ROOF_SHADOW } from '../src/sheet/route.ts'
+import { RING, ROOF_SHADOW, routeAll } from '../src/sheet/route.ts'
+import type { Endpoint } from '../src/sheet/route.ts'
 import { sheetScene } from '../src/sheet/scene.ts'
 import type { CellRect, Route, RoutePoint, SheetScene } from '../src/sheet/types.ts'
 import type { ArchitectureWorld, WorldElement } from '../src/types.ts'
@@ -237,6 +238,24 @@ test.concurrent('a route leaves its source on the side facing the target', () =>
   const eastward = scene.routes[1]!.points[0]!
   assert.equal(eastward.gx, a.gx + a.w)
   assert.ok(Math.abs(eastward.gy - (a.gy + a.d / 2)) <= 0.5)
+})
+
+test.concurrent('a route arrives through the side of the target that faces the source, even off its middle', () => {
+  // b lies straight north of a but is much wider, so the south-side port ahead of a sits far from that side's middle
+  // while the east side's middle port is near; the facing side must still win
+  const endpoints = new Map<string, Endpoint>([
+    ['a', { key: 'a', kind: 'building', rect: { gx: 8, gy: 9, w: 2, d: 2 }, within: [], roof: 1 }],
+    ['b', { key: 'b', kind: 'building', rect: { gx: 2, gy: 3, w: 8, d: 2 }, within: [], roof: 1 }],
+  ])
+  const [route] = routeAll({ gx: 0, gy: 0, w: 16, d: 16 }, endpoints, [
+    { id: 'relationship:0', source: 'a', target: 'b', description: 'uses', origin: 'observed' },
+  ])
+  const points = route!.points
+  const last = points[points.length - 1]!
+  const before = points[points.length - 2]!
+  assert.equal(last.gy, 5, 'arrives on the south side of b')
+  assert.ok(last.gx > 2 && last.gx < 10)
+  assert.ok(before.gy > last.gy && before.gx === last.gx, 'points north into the side')
 })
 
 test.concurrent('a person reaches a component inside a container on the one ground plane', () => {
