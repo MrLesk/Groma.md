@@ -10,4 +10,4 @@ code:
 
 # Typescript graph
 
-Builds the project import graph and reads containers out of it: the `bin` file or the most-imported root is the CLI, roots nothing else imports are sibling containers, files two containers share are hubs, and every other file is a component of the nearest container, named in kebab-case.
+Builds file-level import evidence for the TypeScript scanner: relative imports, reverse importers, first exported symbols, and source labels. It does not decide C4 containers or components.

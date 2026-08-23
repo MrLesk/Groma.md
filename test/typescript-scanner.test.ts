@@ -7,10 +7,12 @@ import test from 'node:test'
 import type { TestContext } from 'node:test'
 import { fileURLToPath } from 'node:url'
 
-import { isTypeScriptScanFile } from '../src/typescript-files.ts'
+import {
+  isTypeScriptScanFile,
+  listTypeScriptFiles,
+} from '../src/typescript-files.ts'
 import {
   formatTypeScriptObservation,
-  listTypeScriptFiles,
   observeTypeScriptSource,
   scanTypeScriptSource,
 } from '../src/typescript-scanner.ts'

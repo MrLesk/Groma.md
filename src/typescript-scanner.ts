@@ -17,15 +17,10 @@ import {
   type ImportGraphNode,
 } from './typescript-graph.ts'
 
-export type { TypeScriptScannerConfig } from './typescript-files.ts'
-export { defaultTypeScriptScannerConfig, listTypeScriptFiles } from './typescript-files.ts'
-export type { ImportGraph, ImportGraphNode } from './typescript-graph.ts'
-export { buildImportGraph } from './typescript-graph.ts'
-
 export interface TypeScriptRelationship {
   source: string
   target: string
-  description: string
+  description: 'starts' | 'uses'
 }
 
 export interface TypeScriptObservation {
@@ -187,12 +182,10 @@ function observationFromGraph(
     })
   }
 
-  const claimed = new Set<string>()
   for (const node of graph.files) {
-    if (skip.has(node.file) || containers.has(node.file) || claimed.has(node.file)) continue
+    if (skip.has(node.file) || containers.has(node.file)) continue
     const parentFile = nearestContainer(node.file)
     if (parentFile === undefined) continue
-    claimed.add(node.file)
     owner.set(node.file, parentFile)
     candidates.push({
       kind: 'component',

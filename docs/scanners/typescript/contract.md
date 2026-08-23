@@ -31,7 +31,7 @@ the command that produced it, run from this repository's root.
    specifiers become edges, resolved by exact path or by adding `.ts`,
    `.tsx`, `.js`, `/index.ts`, or `/index.tsx`; a relative import written
    with a `.js` suffix does not resolve to the `.ts` file. Bare specifiers
-   are externals. A file's symbol is its first `export function`,
+   are ignored. A file's symbol is its first `export function`,
    `export async function`, or `export class`, and is absent otherwise.
 
 ## How it becomes C4
