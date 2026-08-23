@@ -354,8 +354,16 @@ export function paintTask(
   const done = item.criteria.filter(criterion => criterion.checked).length
   section(`Acceptance criteria · ${done} of ${item.criteria.length}`, item.criteria.map(criterion => {
     const row = document.createElement('li')
-    if (criterion.checked) row.className = 'ghost'
-    row.textContent = `${criterion.checked ? '✓' : '○'} ${criterion.text}`
+    if (!criterion.checked) row.textContent = `○ ${criterion.text}`
+    else {
+      const check = document.createElement('span')
+      check.className = 'criterion-check'
+      check.textContent = '✓'
+      const text = document.createElement('span')
+      text.className = 'ghost'
+      text.textContent = ` ${criterion.text}`
+      row.append(check, text)
+    }
     return row
   }))
   section('Modified files', item.modifiedFiles.map(file => {
