@@ -60,6 +60,11 @@ When a task changes a Groma architecture element, add that element's exact
 Do not use file paths as the join key. Only an exact element `id` produces
 a live marker.
 
+While working on a task, record each source file you change with
+`backlog task edit TASK-N --modified-file <path>` (repository-relative, one
+flag per file, in the order you touch them). The web map stands the task's
+pin on the element whose code holds the newest recorded file.
+
 ## Commit messages
 
 When the user confirms that a task is done, commit that task's files

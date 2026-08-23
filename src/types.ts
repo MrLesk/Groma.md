@@ -88,11 +88,16 @@ export interface ScanSummary {
   matched: number
 }
 
+/** A Backlog task in progress, or done lately, as the viewers show it. */
 export interface ActiveWorkItem {
   id: string
   title: string
+  status: string
   assignees: string[]
   references: string[]
+  /** Repository-relative paths the task recorded as touched, oldest first. */
+  modifiedFiles: string[]
+  acceptance: { done: number; total: number }
 }
 
 export interface WorkMarker {
