@@ -45,37 +45,28 @@ class NoRouteError extends Error {}
 const DX = [1, 0, -1, 0]
 const DY = [0, 1, 0, -1]
 
-interface Open {
-  f: number
-  g: number
-  state: number
-}
+type Open = { f: number; g: number; state: number }
 /** Cheapest estimate first, then the deeper path, then the lower state: a total order, so routing is deterministic. */
-function before(a: Open, b: Open): boolean {
-  if (a.f !== b.f) return a.f < b.f
-  if (a.g !== b.g) return a.g > b.g
-  return a.state < b.state
-}
-
+const before = (a: Open, b: Open): boolean =>
+  a.f !== b.f ? a.f < b.f : a.g !== b.g ? a.g > b.g : a.state < b.state
 class Heap {
   private readonly items: Open[] = []
-
   get size(): number {
     return this.items.length
   }
-
   push(item: Open): void {
     const items = this.items
     items.push(item)
     let index = items.length - 1
     while (index > 0) {
-      const parent = (index - 1) >> 1
+      const parent = (index - 1) >> 2
       if (!before(items[index]!, items[parent]!)) break
-      ;[items[parent], items[index]] = [items[index]!, items[parent]!]
+      const swap = items[parent]!
+      items[parent] = items[index]!
+      items[index] = swap
       index = parent
     }
   }
-
   pop(): Open {
     const items = this.items
     const top = items[0]!
@@ -84,20 +75,21 @@ class Heap {
       items[0] = last
       let index = 0
       for (;;) {
-        const left = 2 * index + 1
-        const right = left + 1
+        const first = 4 * index + 1
         let smallest = index
-        if (left < items.length && before(items[left]!, items[smallest]!)) smallest = left
-        if (right < items.length && before(items[right]!, items[smallest]!)) smallest = right
+        for (let child = first; child < Math.min(first + 4, items.length); child += 1) {
+          if (before(items[child]!, items[smallest]!)) smallest = child
+        }
         if (smallest === index) break
-        ;[items[smallest], items[index]] = [items[index]!, items[smallest]!]
+        const swap = items[smallest]!
+        items[smallest] = items[index]!
+        items[index] = swap
         index = smallest
       }
     }
     return top
   }
 }
-
 /** Routes every relationship on the quarter-cell lattice. Port layout fixes each end; A* shapes the route body. */
 export function routeAll(
   sheet: CellRect,
@@ -108,7 +100,6 @@ export function routeAll(
   const height = sheet.d * LANES + 1
   const nodeCount = width * height
   const stateCount = nodeCount * 4
-
   const lanes = (rect: CellRect): LaneRect => ({
     x0: (rect.gx - sheet.gx) * LANES,
     y0: (rect.gy - sheet.gy) * LANES,
@@ -116,6 +107,19 @@ export function routeAll(
     y1: (rect.gy + rect.d - sheet.gy) * LANES,
   })
   const nodeOf = (x: number, y: number): number => y * width + x
+  const nodeX = new Uint32Array(nodeCount)
+  const nodeY = new Uint32Array(nodeCount)
+  const neighbours = new Uint32Array(nodeCount * 4).fill(nodeCount)
+  for (let node = 0; node < nodeCount; node += 1) {
+    const x = node % width
+    const y = Math.floor(node / width)
+    nodeX[node] = x
+    nodeY[node] = y
+    if (x + 1 < width) neighbours[node * 4] = node + 1
+    if (y + 1 < height) neighbours[node * 4 + 1] = node + width
+    if (x > 0) neighbours[node * 4 + 2] = node - 1
+    if (y > 0) neighbours[node * 4 + 3] = node - width
+  }
   const blocked = new Uint8Array(nodeCount)
   /** Goal nodes hold the arriving direction plus one; zero is no goal. */
   const goal = new Uint8Array(nodeCount)
@@ -128,7 +132,6 @@ export function routeAll(
   /** Start state whose departure approach led to each current best state. */
   const root = new Int32Array(stateCount)
   const closed = new Uint8Array(stateCount)
-
   const sweep = new Int32Array(nodeCount)
   /** Lanes from each node out to the nearest source, `reach` at the furthest; -1 past that, where nothing is close enough to matter. */
   const measure = (room: Int32Array, sources: Iterable<number>, limit: number): void => {
@@ -143,13 +146,9 @@ export function routeAll(
     for (let head = 0; head < tail; head += 1) {
       const node = sweep[head]!
       if (room[node]! >= limit) continue
-      const x = node % width
-      const y = (node - x) / width
       for (let direction = 0; direction < 4; direction += 1) {
-        const nx = x + DX[direction]!
-        const ny = y + DY[direction]!
-        if (nx < 0 || ny < 0 || nx >= width || ny >= height) continue
-        const next = nodeOf(nx, ny)
+        const next = neighbours[node * 4 + direction]!
+        if (next === nodeCount) continue
         if (room[next] !== -1) continue
         room[next] = room[node]! + 1
         sweep[tail] = next
@@ -204,8 +203,7 @@ export function routeAll(
   /** The route's points: the lattice nodes with the collinear ones dropped. */
   const lift = (nodes: readonly number[]): RoutePoint[] => {
     const points = nodes.map(node => {
-      const x = node % width
-      return { gx: sheet.gx + x / LANES, gy: sheet.gy + (node - x) / width / LANES }
+      return { gx: sheet.gx + nodeX[node]! / LANES, gy: sheet.gy + nodeY[node]! / LANES }
     })
     return points.filter((point, index) => {
       if (index === 0 || index === points.length - 1) return true
@@ -219,8 +217,8 @@ export function routeAll(
   /** The nodes from `from` stepping `lanes` times in `direction`, or undefined when one is off the lattice, blocked, or on a used lane unless `ignoreUsed`. */
   const run = (from: number, direction: number, lanes: number, ignoreUsed = false): number[] | undefined => {
     const nodes = [from]
-    let x = from % width
-    let y = (from - x) / width
+    let x = nodeX[from]!
+    let y = nodeY[from]!
     for (let step = 0; step < lanes; step += 1) {
       x += DX[direction]!
       y += DY[direction]!
@@ -235,8 +233,8 @@ export function routeAll(
   /** The lattice node where a route through `side` of `rect` starts or ends: the port, or the node behind it where the roof's shadow ends. */
   const anchor = (endpoint: Endpoint, side: Side, port: number): number | undefined => {
     const behind = endpoint.kind === 'building' && BACK.includes(side) ? shadow(endpoint.roof ?? 0) : 0
-    const x = port % width - behind
-    const y = (port - port % width) / width - behind
+    const x = nodeX[port]! - behind
+    const y = nodeY[port]! - behind
     if (x < 0 || y < 0) return undefined
     const node = nodeOf(x, y)
     return behind > 0 && blocked[node] ? undefined : node
@@ -293,11 +291,11 @@ export function routeAll(
     const reach = APPROACH + (target.kind === 'building' ? shadow(target.roof ?? 0) : 0)
     const exactGoal = goals.size === 1 ? goals.keys().next().value as number : undefined
     const h = (node: number): number => {
-      const x = node % width
-      const y = (node - x) / width
+      const x = nodeX[node]!
+      const y = nodeY[node]!
       if (exactGoal !== undefined) {
-        const goalX = exactGoal % width
-        const goalY = (exactGoal - goalX) / width
+        const goalX = nodeX[exactGoal]!
+        const goalY = nodeY[exactGoal]!
         return Math.abs(goalX - x) + Math.abs(goalY - y)
       }
       const away = Math.max(targetRect.x0 - x, 0, x - targetRect.x1) + Math.max(targetRect.y0 - y, 0, y - targetRect.y1)
@@ -351,8 +349,8 @@ export function routeAll(
       }
     }
     const clear = ({ corridor }: typeof departures[number]): boolean => corridor !== undefined && corridor.every(node => {
-      const x = node % width
-      const y = (node - x) / width
+      const x = nodeX[node]!
+      const y = nodeY[node]!
       return foreignBuildings.every(rect =>
         Math.max(rect.x0 - x, 0, x - rect.x1) + Math.max(rect.y0 - y, 0, y - rect.y1) >= CLEARANCE_REACH)
     })
@@ -392,27 +390,27 @@ export function routeAll(
           goalPort: arrival.port,
         }
       }
-      const x = node % width
-      const y = (node - x) / width
+      const x = nodeX[node]!
+      const y = nodeY[node]!
+      const departure = root[state]!
+      const departureNode = starts.get(departure)!.guard
+      const departureX = nodeX[departureNode]!
+      const departureY = nodeY[departureNode]!
+      const firstDirection = departure & 3
+      const departureDistance = Math.max(Math.abs(x - departureX), Math.abs(y - departureY))
       for (let next = 0; next < 4; next += 1) {
         if (next === (direction + 2) % 4) continue
-        const nx = x + DX[next]!
-        const ny = y + DY[next]!
-        if (nx < 0 || ny < 0 || nx >= width || ny >= height) continue
-        const departure = root[state]!
-        const departureNode = starts.get(departure)!.guard
-        const departureX = departureNode % width
-        const departureY = (departureNode - departureX) / width
-        const firstDirection = departure & 3
+        const neighbour = neighbours[node * 4 + next]!
+        if (neighbour === nodeCount) continue
+        const nx = nodeX[neighbour]!
+        const ny = nodeY[neighbour]!
         const behind = firstDirection === 0 ? nx <= departureX : firstDirection === 1 ? ny <= departureY
           : firstDirection === 2 ? nx >= departureX : ny >= departureY
         const across = firstDirection % 2 === 0 ? Math.abs(ny - departureY) : Math.abs(nx - departureX)
         const reversesDeparture = next === (firstDirection + 2) % 4
         if (reversesDeparture && behind && across <= LANES) continue
-        const departureDistance = Math.max(Math.abs(x - departureX), Math.abs(y - departureY))
         const nextDepartureDistance = Math.max(Math.abs(nx - departureX), Math.abs(ny - departureY))
         if (departureDistance > LANES && nextDepartureDistance <= LANES) continue
-        const neighbour = nodeOf(nx, ny)
         if (blocked[neighbour]) continue
         const edge = edgeOf(node, neighbour)
         const turn = next === direction ? 0 : nearGoal[node] !== -1 && nearGoal[node]! < LANES ? FINAL_BEND : BEND
