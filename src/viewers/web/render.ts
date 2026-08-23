@@ -442,6 +442,7 @@ function applyWork(payload: WebWorkPayload): void {
   pins.paint(payload.pins)
   island.paint(payload.pins, work.statuses, work.defaultStatus)
   syncUrl()
+  shell.paint(selection)
   const task = selection.kind === 'task' ? workItem(selection.id) : undefined
   const active = activeTaskIds.map(id => workItem(id)).filter((item): item is WorkItem => item !== undefined)
   map.mark(new Set(active.flatMap(item => touchedElements(item, world))))
