@@ -50,15 +50,18 @@ export const SIDE_PENALTY = 24
 export const OFF_CENTRE = 8
 /**
  * How far an arrow stays off a surface border, and what each lane inside that
- * costs: it keeps arrows off island and slab edges, where a hairline is hard
- * to tell from the heavier edge beside it.
+ * costs. An arrow settles exactly at the reach and stops caring, so the reach
+ * is the spacing you get: at 2 lanes a fifth of arrow lanes ran within half a
+ * cell of an island or slab edge, where a hairline is hard to tell from the
+ * heavier edge beside it. Widening it alone is close to free.
  */
-export const BORDER_REACH = 2
+export const BORDER_REACH = 4
 export const BORDER_PUSH = 3
 /**
  * The same, measured from the arrows already drawn, so they push each other
- * apart instead of squeezing into neighbouring lanes: without it 29% of arrow
- * lanes have another arrow alongside, with it 6%.
+ * apart instead of squeezing into neighbouring lanes. Again the reach is the
+ * spacing: at 2 lanes 38% of arrow lanes had another arrow within half a
+ * cell, at a full cell 9%, for 7% more arrow and a quarter more bends.
  */
-export const ROUTE_REACH = 2
+export const ROUTE_REACH = 4
 export const ROUTE_PUSH = 3
