@@ -59,6 +59,27 @@ function laneEdges(route: Route): string[] {
   })
 }
 
+/** Whether a route turns back through the one-cell band around its fixed half-cell departure. */
+function reentersDepartureBand(route: Route): boolean {
+  const nodes = laneNodes(route)
+  const dx = Math.sign(nodes[1]!.gx - nodes[0]!.gx)
+  const dy = Math.sign(nodes[1]!.gy - nodes[0]!.gy)
+  const departure = nodes[LANES / 2]!
+  const fixed = new Set(nodes.slice(0, LANES / 2).map(node => `${node.gx},${node.gy}`))
+  let leftBand = false
+  return nodes.slice(LANES / 2 + 1).some((node, index) => {
+    if (fixed.has(`${node.gx},${node.gy}`)) return true
+    const previous = nodes[index + LANES / 2]!
+    const opposite = Math.sign(node.gx - previous.gx) === -dx && Math.sign(node.gy - previous.gy) === -dy
+    const behind = dx > 0 ? node.gx <= departure.gx : dx < 0 ? node.gx >= departure.gx
+      : dy > 0 ? node.gy <= departure.gy : node.gy >= departure.gy
+    const across = dx === 0 ? Math.abs(node.gx - departure.gx) : Math.abs(node.gy - departure.gy)
+    const distance = Math.max(Math.abs(node.gx - departure.gx), Math.abs(node.gy - departure.gy))
+    if (distance > 1) leftBand = true
+    return (opposite && behind && across <= 1) || (leftBand && distance <= 1)
+  })
+}
+
 function rectOf(scene: SheetScene, key: string): { rect: CellRect; kind: 'island' | 'slab' | 'building' } {
   const island = scene.islands.find(item => item.key === key)
   if (island) return { rect: island.rect, kind: 'island' }
@@ -74,7 +95,7 @@ async function fixtureScene(root: string): Promise<{ scene: SheetScene; world: A
   return { scene: sheetScene(fixture), world: fixture }
 }
 
-test.concurrent('one lattice route per authored relationship, Manhattan and on quarter lanes', async () => {
+test.concurrent('one lattice route per authored relationship, Manhattan, on quarter lanes and without retracing', async () => {
   const { scene, world: fixture } = await fixtureScene(viewerFixtureRoot)
   assert.deepEqual(scene.routes.map(route => route.id), fixture.relationships.map(item => item.id))
   for (const route of scene.routes) {
@@ -89,6 +110,8 @@ test.concurrent('one lattice route per authored relationship, Manhattan and on q
       const changed = [from.gx !== to.gx, from.gy !== to.gy].filter(Boolean).length
       assert.equal(changed, 1)
     }
+    const edges = laneEdges(route)
+    assert.equal(new Set(edges).size, edges.length, `${route.id} retraces a lane`)
   }
 })
 
@@ -241,22 +264,47 @@ test.concurrent('a route leaves its source on the side facing the target', () =>
   assert.ok(Math.abs(eastward.gy - (a.gy + a.d / 2)) <= 0.5)
 })
 
-test.concurrent('a route arrives through the side of the target that faces the source, even off its middle', () => {
-  // b lies straight north of a but is much wider, so the south-side port ahead of a sits far from that side's middle
-  // while the east side's middle port is near; the facing side must still win
+test.concurrent('route repulsion cannot bend a route back through its departure band', () => {
   const endpoints = new Map<string, Endpoint>([
-    ['a', { key: 'a', kind: 'building', rect: { gx: 8, gy: 9, w: 2, d: 2 }, within: [], roof: 1 }],
-    ['b', { key: 'b', kind: 'building', rect: { gx: 2, gy: 3, w: 8, d: 2 }, within: [], roof: 1 }],
+    ['source', { key: 'source', kind: 'building', rect: { gx: 11, gy: 6, w: 2, d: 2 }, within: [], roof: 1 }],
+    ['target', { key: 'target', kind: 'building', rect: { gx: 11, gy: 3, w: 2, d: 2 }, within: [], roof: 1 }],
+    ['repeller', { key: 'repeller', kind: 'building', rect: { gx: 8, gy: 6, w: 2, d: 2 }, within: [], roof: 1 }],
+    ['far', { key: 'far', kind: 'building', rect: { gx: 2, gy: 9, w: 2, d: 2 }, within: [], roof: 1 }],
   ])
-  const [route] = routeAll({ gx: 0, gy: 0, w: 16, d: 16 }, endpoints, [
-    { id: 'relationship:0', source: 'a', target: 'b', description: 'uses', origin: 'observed' },
+  const requests = [['repeller', 'far'], ['source', 'target'], ['source', 'target']].map(([source, target], index) => ({
+    id: `relationship:${index}`, source: source!, target: target!, description: 'uses', origin: 'observed' as const,
+  }))
+  for (const route of routeAll({ gx: 0, gy: 0, w: 16, d: 16 }, endpoints, requests)) {
+    assert.equal(reentersDepartureBand(route), false, `${route.id} re-enters its departure band`)
+  }
+})
+
+test.concurrent('a full-cell departure guards the band around its fixed half-cell approach', () => {
+  const endpoints = new Map<string, Endpoint>([
+    ['source', { key: 'source', kind: 'building', rect: { gx: 5, gy: 7, w: 3, d: 2 }, within: [], roof: 2 }],
+    ['target', { key: 'target', kind: 'building', rect: { gx: 10, gy: 7, w: 3, d: 2 }, within: [], roof: 2 }],
+    ['north', { key: 'north', kind: 'building', rect: { gx: 6, gy: 3, w: 4, d: 2 }, within: [], roof: 3 }],
+    ['south', { key: 'south', kind: 'building', rect: { gx: 5, gy: 11, w: 2, d: 2 }, within: [], roof: 1 }],
   ])
-  const points = route!.points
-  const last = points[points.length - 1]!
-  const before = points[points.length - 2]!
-  assert.equal(last.gy, 5, 'arrives on the south side of b')
-  assert.ok(last.gx > 2 && last.gx < 10)
-  assert.ok(before.gy > last.gy && before.gx === last.gx, 'points north into the side')
+  const [route] = routeAll({ gx: 0, gy: 0, w: 20, d: 16 }, endpoints, [
+    { id: 'relationship:0', source: 'source', target: 'target', description: '', origin: 'observed' },
+  ])
+  assert.equal(reentersDepartureBand(route!), false)
+})
+
+test.concurrent('a fixed departure cannot be entered from its side and retraced', () => {
+  const endpoints = new Map<string, Endpoint>([
+    ['source', { key: 'source', kind: 'building', rect: { gx: 9, gy: 5, w: 3, d: 4 }, within: [], roof: 1, centrePorts: true }],
+    ['south', { key: 'south', kind: 'building', rect: { gx: 4, gy: 15, w: 3, d: 3 }, within: [], roof: 1 }],
+    ['east', { key: 'east', kind: 'building', rect: { gx: 13, gy: 9, w: 3, d: 2 }, within: [], roof: 1 }],
+  ])
+  const routes = routeAll({ gx: 0, gy: 0, w: 20, d: 20 }, endpoints, ['south', 'east'].map((target, index) => ({
+    id: `relationship:${index}`, source: 'source', target, description: 'uses', origin: 'observed' as const,
+  })))
+  for (const route of routes) {
+    assert.equal(reentersDepartureBand(route), false)
+    assert.equal(new Set(laneEdges(route)).size, laneEdges(route).length)
+  }
 })
 
 test.concurrent('a route holds a cell off a building it only passes, when it has the room', () => {
