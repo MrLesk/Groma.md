@@ -1,6 +1,6 @@
 import { compareElements } from '../element-order.ts'
 import type { ArchitectureWorld, WorldElement, WorldRelationship } from '../types.ts'
-import { ISLAND_GAP, MARGIN, PAD, translate, unionRects } from './grid.ts'
+import { ISLAND_GAP, MARGIN, PAD, shadeOf, translate, unionRects } from './grid.ts'
 import {
   ISLAND_FONT,
   ISLAND_SPACING,
@@ -114,15 +114,28 @@ function packed(
   stack = false,
 ): Node {
   const { entries, partners } = lifted(children, relationships)
+  /**
+   * A roof hides the ground to its north and west, so a building claims those
+   * cells in the packing and stands that far inside the claim; only its
+   * neighbours there move.
+   */
+  const behind = (child: Node): number => (child.paint.kind === 'building' ? shadeOf(child.paint.floors) : 0)
   const items: Partnered[] = children.map(child => ({
-    key: child.key, w: child.w, d: child.d, entry: entries.has(child.key), partners: partners.get(child.key)!,
+    key: child.key,
+    w: child.w + behind(child),
+    d: child.d + behind(child),
+    entry: entries.has(child.key),
+    partners: partners.get(child.key)!,
   }))
   const placed = stack ? shelf(items, 1) : grow(items)
   return {
     key,
     w: Math.max(placed.w, nameWidth(paint)),
     d: placed.d,
-    children: children.map(child => ({ node: child, ...placed.at.get(child.key)! })),
+    children: children.map(child => {
+      const at = placed.at.get(child.key)!
+      return { node: child, gx: at.gx + behind(child), gy: at.gy + behind(child) }
+    }),
     paint,
   }
 }

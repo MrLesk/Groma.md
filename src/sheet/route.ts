@@ -1,5 +1,5 @@
 import type { WorldRelationship } from '../types.ts'
-import { LANES } from './grid.ts'
+import { LANES, ROOF_SHADOW } from './grid.ts'
 import type { CellRect, Route, RoutePoint } from './types.ts'
 
 /** Lanes of clearance a route keeps from a foreign footprint. */
@@ -14,8 +14,6 @@ const SIDE_PENALTY = 24
 const OFF_CENTRE = 8
 /** Lanes a route runs straight out of its port and straight into its goal, so it leaves and meets a side square on. */
 const APPROACH = 2
-/** Cells the roof's back edge covers behind a building per floor of height in the 2:1 view: 12 px per floor over 24 px per cell. */
-export const ROOF_SHADOW = 12 / 24
 
 type Side = 'x-' | 'x+' | 'y-' | 'y+'
 const SIDES: readonly Side[] = ['x-', 'x+', 'y-', 'y+']
