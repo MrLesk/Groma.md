@@ -58,7 +58,7 @@ export interface IsoMap {
 }
 
 /** World pixels from a surface's westmost point to a pin's foot. */
-const FOOT_INSET = 18
+const FOOT_INSET = 10
 
 /**
  * The westmost point moved straight right on screen: the two edges meeting at a west corner both run rightwards, so
