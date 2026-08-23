@@ -11,12 +11,18 @@ import {
   createBacklogPlugin,
   type BacklogCommand,
   type WorkSource,
-} from '../src/backlog-plugin.ts'
+} from '../src/work/backlog.ts'
 import { loadArchitectureViewModel } from '../src/core.ts'
-import type { ActiveWorkItem } from '../src/types.ts'
+import type { WorkItem, WorkSnapshot } from '../src/types.ts'
 import { startTerminalViewer } from '../src/view-host.ts'
-import { assigneesOnElement, projectActiveWork } from '../src/work-projection.ts'
+import { assigneesOnElement, projectActiveWork } from '../src/work/projection.ts'
 import { viewerFixtureRoot } from './helpers.ts'
+
+const snapshot = (items: WorkItem[] = []): WorkSnapshot => ({
+  statuses: ['To Do', 'In Progress', 'Done'],
+  defaultStatus: 'To Do',
+  items,
+})
 
 test.concurrent('active work projects only exact architecture ID references', async () => {
   const model = await loadArchitectureViewModel(viewerFixtureRoot)
@@ -75,25 +81,30 @@ test.concurrent('two tasks on one element keep every unique assignee', () => {
   assert.deepEqual(names, ['@grok', '@codex', '@luna'])
 })
 
-test.concurrent('Backlog plugin reads the tasks in progress and those done in the last day, with their progress and files', async () => {
+test.concurrent('Backlog plugin reads configured nonterminal work and only recent terminal work', async () => {
   const calls: string[][] = []
   const now = Date.parse('2026-08-23T12:00:00Z')
   const run: BacklogCommand = async arguments_ => {
     calls.push(arguments_)
+    if (arguments_[0] === 'config') {
+      return arguments_[2] === 'statuses' ? 'To Do, In Progress, Review, Done\n' : 'To Do\n'
+    }
     if (arguments_[1] === 'list') {
       return JSON.stringify({ tasks: [
         { id: 'TASK-1', status: 'In Progress', updatedAt: '2026-08-20T12:00:00Z' },
         { id: 'TASK-2', status: 'Done', updatedAt: '2026-08-23T01:00:00Z' },
         { id: 'TASK-3', status: 'Done', updatedAt: '2026-08-21T12:00:00Z' },
         { id: 'TASK-4', status: 'To Do', updatedAt: '2026-08-23T11:00:00Z' },
+        { id: 'TASK-5', status: 'Review', updatedAt: null },
       ] })
     }
     const id = arguments_[2]!
+    const status = { 'TASK-2': 'Done', 'TASK-4': 'To Do', 'TASK-5': 'Review' }[id] ?? 'In Progress'
     return JSON.stringify({
       task: {
         id,
         title: `Change ${id}`,
-        status: id === 'TASK-2' ? 'Done' : 'In Progress',
+        status,
         assignees: ['@codex'],
         description: id === 'TASK-2' ? null : 'Why it matters',
         references: ['shop', 'https://example.com'],
@@ -107,15 +118,23 @@ test.concurrent('Backlog plugin reads the tasks in progress and those done in th
 
   assert.deepEqual(calls, [
     ['task', 'list', '--json'],
+    ['config', 'get', 'statuses'],
+    ['config', 'get', 'defaultStatus'],
     ['task', 'view', 'TASK-1', '--json'],
     ['task', 'view', 'TASK-2', '--json'],
+    ['task', 'view', 'TASK-4', '--json'],
+    ['task', 'view', 'TASK-5', '--json'],
   ])
   const criteria = [{ text: 'one', checked: true }, { text: 'two', checked: false }]
-  assert.deepEqual(work.map(item => [item.id, item.status, item.description, item.criteria, item.modifiedFiles]), [
+  assert.deepEqual(work.statuses, ['To Do', 'In Progress', 'Review', 'Done'])
+  assert.equal(work.defaultStatus, 'To Do')
+  assert.deepEqual(work.items.map(item => [item.id, item.status, item.description, item.criteria, item.modifiedFiles]), [
     ['TASK-1', 'In Progress', 'Why it matters', criteria, ['src/shop.ts']],
     ['TASK-2', 'Done', '', criteria, ['src/shop.ts']],
+    ['TASK-4', 'To Do', 'Why it matters', criteria, ['src/shop.ts']],
+    ['TASK-5', 'Review', 'Why it matters', criteria, ['src/shop.ts']],
   ])
-  assert.deepEqual(work[0]!.references, ['shop', 'https://example.com'])
+  assert.deepEqual(work.items[0]!.references, ['shop', 'https://example.com'])
 })
 
 test.concurrent('Backlog plugin signals a task-directory change', async () => {
@@ -203,10 +222,10 @@ test.concurrent('a failed Backlog read leaves architecture refresh working', asy
 })
 
 test.concurrent('host refreshes the viewer from a changed work snapshot', async () => {
-  let items: ActiveWorkItem[] = []
+  let items: WorkItem[] = []
   let changed = () => {}
   const workSource: WorkSource = {
-    read: async () => items,
+    read: async () => snapshot(items),
     watch(onChange) {
       changed = onChange
       return { close() {} }

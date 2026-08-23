@@ -1,4 +1,4 @@
-import type { ActiveWorkItem, ArchitectureWorld, C4Kind, WorldElement, WorldRelationship } from '../../types.ts'
+import type { ArchitectureWorld, C4Kind, WorkItem, WorldElement, WorldRelationship } from '../../types.ts'
 import type { ActiveAction, DetailsTab } from './organisms/details.ts'
 import { noSelection, selectTask } from './selection.ts'
 import type { Selection } from './selection.ts'
@@ -21,7 +21,7 @@ const KINDS: C4Kind[] = ['actor', 'system', 'container', 'component']
  * `tab=how` and `theme=dark`. Ids are the authored ids; anything the world
  * or the work does not know is ignored, a kind naming an element of another kind included.
  */
-export function readView(search: string, world: ArchitectureWorld, work: readonly ActiveWorkItem[]): ViewState {
+export function readView(search: string, world: ArchitectureWorld, work: readonly WorkItem[]): ViewState {
   const params = new URLSearchParams(search)
   const byId = new Map(world.elements.map(element => [element.id, element]))
   const named = (name: string): WorldElement | undefined => byId.get(params.get(name) ?? '')
@@ -53,7 +53,7 @@ export function readView(search: string, world: ArchitectureWorld, work: readonl
 }
 
 /** The query string for a view, empty when everything is at its default. */
-export function writeView(state: ViewState, world: ArchitectureWorld, work: readonly ActiveWorkItem[]): string {
+export function writeView(state: ViewState, world: ArchitectureWorld, work: readonly WorkItem[]): string {
   const elements = new Map(world.elements.map(element => [element.representationId, element]))
   const ends = (relationshipId: string | undefined): string | undefined => {
     const relationship = world.relationships.find(item => item.id === relationshipId)

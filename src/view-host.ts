@@ -5,14 +5,14 @@ import {
 import type { CliRenderer, NormalizedTerminalPalette } from '@opentui/core'
 
 import { watchArchitecture } from './architecture-watch.ts'
-import { createBacklogPlugin } from './backlog-plugin.ts'
-import type { WorkSource } from './backlog-plugin.ts'
+import { createBacklogPlugin } from './work/backlog.ts'
+import type { WorkSource } from './work/backlog.ts'
 import { loadArchitectureViewModel } from './core.ts'
 import { watchScan } from './scanner.ts'
-import type { ActiveWorkItem } from './types.ts'
+import type { WorkItem } from './types.ts'
 import { mountTerminalViewer } from './viewers/tui/terminal-viewer.ts'
 import type { TerminalViewer } from './viewers/tui/terminal-viewer.ts'
-import { projectActiveWork } from './work-projection.ts'
+import { projectActiveWork } from './work/projection.ts'
 
 interface StartViewerOptions {
   renderer?: CliRenderer
@@ -25,7 +25,7 @@ export async function startTerminalViewer(
   options: StartViewerOptions = {},
 ): Promise<TerminalViewer> {
   const workSource = options.workSource ?? createBacklogPlugin(repositoryRoot)
-  let work: ActiveWorkItem[] = []
+  let work: WorkItem[] = []
   let viewer: TerminalViewer
   let closed = false
   let publishChain = Promise.resolve()
@@ -42,9 +42,9 @@ export async function startTerminalViewer(
     return run
   }
   const pullWork = () => {
-    const run = workSource.read().then(items => {
+    const run = workSource.read().then(snapshot => {
       if (closed) return
-      work = items
+      work = snapshot.items
       return publish()
     }).catch(() => {})
     return run

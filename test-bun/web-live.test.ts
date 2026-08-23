@@ -5,9 +5,9 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { test } from 'bun:test'
 
-import type { WorkSource } from '../src/backlog-plugin.ts'
+import type { WorkSource } from '../src/work/backlog.ts'
 import { scanRepository } from '../src/scanner.ts'
-import type { ActiveWorkItem } from '../src/types.ts'
+import type { WorkItem, WorkSnapshot } from '../src/types.ts'
 import { startWebViewer } from '../src/viewers/web/server.ts'
 
 function run(command: string, args: string[], cwd: string) {
@@ -138,7 +138,7 @@ test.concurrent('groma web applies an architecture Markdown change without a ref
 test.concurrent('groma web ships agent pins and republishes them when the work source changes', async () => {
   const root = await createLiveRepo()
   await scanRepository(root)
-  let items: ActiveWorkItem[] = [{
+  let items: WorkItem[] = [{
     id: 'TASK-PIN',
     title: 'Change Shop',
     status: 'In Progress',
@@ -148,9 +148,14 @@ test.concurrent('groma web ships agent pins and republishes them when the work s
     modifiedFiles: [],
     criteria: [{ text: 'a', checked: true }, { text: 'b', checked: false }],
   }]
+  const snapshot = (): WorkSnapshot => ({
+    statuses: ['To Do', 'In Progress', 'Done'],
+    defaultStatus: 'To Do',
+    items,
+  })
   let changed: () => void = () => {}
   const workSource: WorkSource = {
-    read: async () => items,
+    read: async () => snapshot(),
     watch(onChange) {
       changed = onChange
       return { close() {} }
@@ -159,10 +164,12 @@ test.concurrent('groma web ships agent pins and republishes them when the work s
   const server = await startWebViewer(root, { port: 0, workSource })
   try {
     const payload = await (await fetch(`${server.url}/world.json`)).json() as {
-      work: { id: string }[]
+      work: { statuses: string[]; defaultStatus: string; items: { id: string }[] }
       pins: { key: string; elementId: string; done: number; total: number }[]
     }
-    assert.deepEqual(payload.work.map(item => item.id), ['TASK-PIN'])
+    assert.deepEqual(payload.work.statuses, ['To Do', 'In Progress', 'Done'])
+    assert.equal(payload.work.defaultStatus, 'To Do')
+    assert.deepEqual(payload.work.items.map(item => item.id), ['TASK-PIN'])
     assert.deepEqual(payload.pins.map(pin => [pin.key, pin.elementId, pin.done, pin.total]), [['@codex TASK-PIN', 'observed:shop', 1, 2]])
 
     const events = await fetch(`${server.url}/events`)

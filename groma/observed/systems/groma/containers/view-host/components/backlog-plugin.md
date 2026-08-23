@@ -4,10 +4,10 @@ kind: component
 parent: view-host
 code:
   - scanner: typescript
-    file: src/backlog-plugin.ts
+    file: src/work/backlog.ts
     symbol: createBacklogPlugin
 ---
 
 # Backlog plugin
 
-Reads in-progress Backlog tasks through the `backlog` CLI and watches the task directory for changes. The view host owns when that happens; a failed read leaves the map alone.
+Reads the configured Backlog workflow and available tasks through the `backlog` CLI, and watches the task directory for changes. The view host owns when that happens; a failed read leaves the map alone.

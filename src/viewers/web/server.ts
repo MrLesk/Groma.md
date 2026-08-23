@@ -1,10 +1,10 @@
 import { watchArchitecture } from '../../architecture-watch.ts'
-import { createBacklogPlugin } from '../../backlog-plugin.ts'
-import type { WorkSource } from '../../backlog-plugin.ts'
+import { createBacklogPlugin, EMPTY_WORK_SNAPSHOT } from '../../work/backlog.ts'
+import type { WorkSource } from '../../work/backlog.ts'
 import { loadArchitectureViewModel } from '../../core.ts'
 import { watchScan } from '../../scanner.ts'
 import { sheetScene } from '../../sheet/scene.ts'
-import { pinsOf } from '../../work-pins.ts'
+import { pinsOf } from '../../work/pins.ts'
 import { renderPage } from './page.ts'
 import type { WebPayload } from './payload.ts'
 
@@ -18,13 +18,13 @@ async function bundleRenderer(): Promise<string> {
   return build.outputs[0]!.text()
 }
 
-/** The world with its sheet, the active tasks and their pins; a work source that cannot be read counts as no work, as the terminal viewer treats it. */
+/** The world with its sheet, Backlog workflow and pins; a work source that cannot be read counts as no work, as the terminal viewer treats it. */
 async function loadSheet(repositoryRoot: string, workSource: WorkSource): Promise<Omit<WebPayload, 'generation'>> {
   const [{ world }, work] = await Promise.all([
     loadArchitectureViewModel(repositoryRoot),
-    workSource.read().catch(() => []),
+    workSource.read().catch(() => EMPTY_WORK_SNAPSHOT),
   ])
-  return { world, sheet: sheetScene(world), work, pins: pinsOf(work, world) }
+  return { world, sheet: sheetScene(world), work, pins: pinsOf(work.items, world, work.statuses.at(-1)) }
 }
 
 /** Starts the map server and returns its URL. */

@@ -1,6 +1,6 @@
 import { compareElements } from '../../element-order.ts'
-import type { ActiveWorkItem, ArchitectureWorld, WorldElement, WorldRelationship } from '../../types.ts'
-import { touchedElements } from '../../work-pins.ts'
+import type { ArchitectureWorld, WorkItem, WorldElement, WorldRelationship } from '../../types.ts'
+import { touchedElements } from '../../work/pins.ts'
 import { actionPath, elementOnPath, worldCommands } from '../action-path.ts'
 import { initialTree, toggleExpansion, treeRows } from '../tui/tree.ts'
 import type { TreeRow } from '../tui/tree.ts'
@@ -21,9 +21,9 @@ import { clearDetails, paintDetails, paintRelationship, paintTask, inspectDetail
 import type { ActiveAction, DetailsTab } from './organisms/details.ts'
 import { paintFlows } from './organisms/flows.ts'
 import { paintHierarchy } from './organisms/hierarchy.ts'
-import { createPins } from './organisms/pins.ts'
+import { createPins } from './work/pins.ts'
 import { createTip } from './organisms/tip.ts'
-import { createWorkIsland } from './organisms/work-island.ts'
+import { createWorkIsland } from './work/island.ts'
 import type { WebPayload } from './payload.ts'
 import {
   noSelection,
@@ -58,7 +58,7 @@ const tip = createTip(host)
 const pins = createPins(host, id => map.anchorOf(id), id => toggleTask(id), tip)
 const island = createWorkIsland(host, id => toggleTask(id), pins.show, tip)
 let tree = initialTree()
-const opened = readView(location.search, world, work)
+const opened = readView(location.search, world, work.items)
 let selection = opened.selection
 const initial = firstSystem(world)
 if (selection.kind === 'none' && initial !== undefined) {
@@ -95,8 +95,8 @@ function worldRelationship(id: string | undefined): WorldRelationship | undefine
   return id === undefined ? undefined : world.relationships.find(item => item.id === id)
 }
 
-function workItem(id: string | undefined): ActiveWorkItem | undefined {
-  return id === undefined ? undefined : work.find(item => item.id === id)
+function workItem(id: string | undefined): WorkItem | undefined {
+  return id === undefined ? undefined : work.items.find(item => item.id === id)
 }
 
 /** True for an element, relationship or task id the current payload has. */
@@ -144,7 +144,7 @@ function paintStats(flowCount: number): void {
 
 /** The URL follows the view, without adding history entries. */
 function syncUrl(): void {
-  const query = writeView({ selection, action: activeAction, tab: detailsTab, dark: darkTheme }, world, work)
+  const query = writeView({ selection, action: activeAction, tab: detailsTab, dark: darkTheme }, world, work.items)
   history.replaceState(null, '', `${location.pathname}${query}`)
 }
 
@@ -154,7 +154,7 @@ function paintSelection(): void {
   const selectedIds = selectedArchitecture(selection)
   const litIds = actionPath(activeAction.id, world, activeAction.actorId)
   const task = selection.kind === 'task' ? workItem(selection.id) : undefined
-  const activeTasks = active.map(id => workItem(id)).filter((item): item is ActiveWorkItem => item !== undefined)
+  const activeTasks = active.map(id => workItem(id)).filter((item): item is WorkItem => item !== undefined)
   map.select(selectedIds)
   map.mark(new Set(activeTasks.flatMap(item => touchedElements(item, world))))
   pins.activate(active, task?.id)
@@ -363,14 +363,14 @@ function applyWorld(payload: WebPayload): void {
   }
   map.paint(scene)
   pins.paint(payload.pins)
-  island.paint(payload.pins)
+  island.paint(payload.pins, work.statuses, work.defaultStatus)
   applyCamera()
   paintSelection()
 }
 
 map.paint(scene)
 pins.paint(boot.pins)
-island.paint(boot.pins)
+island.paint(boot.pins, work.statuses, work.defaultStatus)
 applyCamera()
 paintSelection()
 

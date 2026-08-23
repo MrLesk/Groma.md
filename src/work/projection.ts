@@ -1,8 +1,8 @@
 import type {
-  ActiveWorkItem,
+  WorkItem,
   ArchitectureViewModel,
   WorkMarker,
-} from './types.ts'
+} from '../types.ts'
 
 export function assigneesOnElement(
   work: readonly WorkMarker[],
@@ -23,7 +23,7 @@ export function assigneesOnElement(
 
 export function projectActiveWork(
   model: ArchitectureViewModel,
-  items: readonly ActiveWorkItem[],
+  items: readonly WorkItem[],
 ): ArchitectureViewModel {
   const elementIds = new Set(model.elements.map(element => element.id))
   const work: WorkMarker[] = []

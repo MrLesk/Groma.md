@@ -1,13 +1,9 @@
 import type { Point } from '../../../types.ts'
-import { monogram } from '../../../work-pins.ts'
-import type { WorkPin } from '../../../work-pins.ts'
-import { MARKS } from '../atoms/marks.ts'
+import type { WorkPin } from '../../../work/pins.ts'
+import { fillWorkBadge, WORK_BADGE } from './badge.ts'
 import type { Camera } from '../iso/camera.ts'
-import type { Tip } from './tip.ts'
+import type { Tip } from '../organisms/tip.ts'
 
-/** The ring's radius in the badge's 40 px box. */
-const RING_RADIUS = 18
-const RING_LENGTH = 2 * Math.PI * RING_RADIUS
 /** Screen pixels between the badges of pins that share an element. */
 const FAN_PITCH = 46
 /** Screen pixels from the foot up to the label of a pin standing straight. */
@@ -33,21 +29,7 @@ export const pinsCss = `
     position: absolute; left: calc(var(--fan) - 20px); bottom: ${STEM}px; width: 40px; transition: left 0.3s;
     display: flex; flex-direction: column; align-items: center; cursor: pointer;
   }
-  .badge { position: relative; width: 40px; height: 40px; perspective: 200px; }
-  .badge .ring { position: absolute; inset: 0; transform: rotate(-90deg); }
-  .badge .ring circle { fill: none; stroke-width: 3; }
-  .badge .ring .track { stroke: var(--hairline); }
-  .badge .ring .done { stroke: var(--pin); transition: stroke-dasharray 0.4s; }
-  .badge .card { position: absolute; inset: 5px; transform-style: preserve-3d; transition: transform 0.5s; }
-  .badge .face {
-    position: absolute; inset: 0; border-radius: 50%; display: grid; place-items: center;
-    backface-visibility: hidden; font-size: 11px; font-weight: 600; letter-spacing: 0.04em;
-  }
-  .badge .face svg { width: 18px; height: 18px; }
-  .badge .face.front { background: var(--paper); color: var(--pin); border: 1px solid var(--pin); }
-  .badge .face.back { background: var(--accent); color: #fff; transform: rotateY(180deg); font-size: 14px; }
-  .pin.done .card { transform: rotateY(180deg); }
-  .pin.done .head:hover .card { transform: rotateY(0); }
+  .pin.work-done .head:hover .card { transform: rotateY(0); }
   .pin .task {
     margin-top: 2px; padding: 1px 6px; border-radius: 3px; background: var(--pin); color: #fff;
     font-size: 9px; letter-spacing: 0.08em; white-space: nowrap;
@@ -60,32 +42,21 @@ export const pinsCss = `
   }
 `
 
-/** A ringed badge: the ring filled by the share done, a flipping disc with the assignee's mark in front and a checkmark behind. */
-export const BADGE = `<div class="badge"><svg class="ring" viewBox="0 0 40 40"><circle class="track" cx="20" cy="20" r="${RING_RADIUS}"/><circle class="done" cx="20" cy="20" r="${RING_RADIUS}"/></svg>`
-  + '<div class="card"><div class="face front"></div><div class="face back">✓</div></div></div>'
-
-/** Fills a badge for a pin: the mark and the ring's share. */
-export function fillBadge(host: HTMLElement, pin: WorkPin): void {
-  host.querySelector<HTMLElement>('.face.front')!.innerHTML = MARKS[pin.assignee.replace(/^@/, '')] ?? monogram(pin.assignee)
-  host.querySelector<SVGCircleElement>('.ring .done')!.style.strokeDasharray =
-    `${(pin.total === 0 ? 0 : pin.done / pin.total) * RING_LENGTH} ${RING_LENGTH}`
-}
-
 /** A pin's markup: its foot on the element's surface near its left corner, a stem leaning to its head, the head a ringed badge over the task id. */
-const PIN = `<div class="foot"></div><div class="stem"></div><div class="head">${BADGE}<div class="task"></div></div>`
+const PIN = `<div class="foot"></div><div class="stem"></div><div class="head">${WORK_BADGE}<div class="task"></div></div>`
 
 export interface PinLayer {
-  /** Reconciles the pins by key, so a pin that just finished plays its flip; call after the map painted the scene. */
+  /** Reconciles the pins by key; call after the map painted the scene. */
   paint(pins: readonly WorkPin[]): void
   /** Moves every pin to the surface point it stands on under the camera. */
   place(camera: Camera): void
-  /** Shows or hides the pins: none while agents is off, the finished ones only while completed is on too; the pins still shown fan out anew. */
-  show(agents: boolean, completed: boolean): void
+  /** Shows pins whose Backlog status is enabled; the pins still shown fan out anew. */
+  show(statuses: readonly string[]): void
   /** Colours the pins of the active tasks, greyscale otherwise, and marks those of the selected task, which is always one of the active ones. */
   activate(active: readonly string[], selected: string | undefined): void
 }
 
-/** The agents' pins over the map; clicking a pin's head toggles its task. */
+/** The work pins over the map; clicking a pin's head toggles its task. */
 export function createPins(host: HTMLElement, anchorOf: (id: string) => Point | undefined, onToggle: (taskId: string) => void, tip: Tip): PinLayer {
   const layer = document.createElement('div')
   layer.id = 'pins'
@@ -93,8 +64,7 @@ export function createPins(host: HTMLElement, anchorOf: (id: string) => Point | 
   /** Each pin's node and the surface point it stands on, in world pixels. */
   const pinned = new Map<string, { node: HTMLElement; anchor: Point }>()
   let pins: readonly WorkPin[] = []
-  let agents = true
-  let completed = true
+  let enabledStatuses: readonly string[] = []
   let camera: Camera | undefined
   /** The first paint is the page's baseline; only pins first seen after it announce their arrival. */
   let painted = false
@@ -107,7 +77,7 @@ export function createPins(host: HTMLElement, anchorOf: (id: string) => Point | 
   }
   /** The pins the toggles allow fan out leftwards from their element's foot point, stems leaning back to it; the rest hide. */
   const fanOut = (): void => {
-    const shown = pins.filter(pin => pinned.has(pin.key) && agents && (pin.status !== 'Done' || completed))
+    const shown = pins.filter(pin => pinned.has(pin.key) && enabledStatuses.includes(pin.status))
     const visible = new Set(shown.map(pin => pin.key))
     for (const [key, { node }] of pinned) node.hidden = !visible.has(key)
     const placed = new Map<string, number>()
@@ -144,9 +114,8 @@ export function createPins(host: HTMLElement, anchorOf: (id: string) => Point | 
         }
         pinned.set(pin.key, { node, anchor })
         node.style.setProperty('--pin', pin.colour)
-        node.classList.toggle('done', pin.status === 'Done')
-        node.querySelector<HTMLElement>('.head')!.dataset.tip = `${pin.assignee} · ${pin.title}`
-        fillBadge(node, pin)
+        node.querySelector<HTMLElement>('.head')!.dataset.tip = `${pin.assignee ?? 'Unassigned'} · ${pin.title}`
+        fillWorkBadge(node, pin)
         node.querySelector('.task')!.textContent = pin.taskId
       }
       painted = true
@@ -157,9 +126,8 @@ export function createPins(host: HTMLElement, anchorOf: (id: string) => Point | 
       camera = current
       place()
     },
-    show(nextAgents, nextCompleted) {
-      agents = nextAgents
-      completed = nextCompleted
+    show(statuses) {
+      enabledStatuses = statuses
       fanOut()
     },
     activate(active, selected) {

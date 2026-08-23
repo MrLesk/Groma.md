@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 
 import { test } from 'bun:test'
 
-import type { ActiveWorkItem, ArchitectureWorld } from '../src/types.ts'
+import type { ArchitectureWorld, WorkItem } from '../src/types.ts'
 import { noSelection, selectTask } from '../src/viewers/web/selection.ts'
 import { readView, writeView } from '../src/viewers/web/url.ts'
 import type { ViewState } from '../src/viewers/web/url.ts'
@@ -41,6 +41,7 @@ test.concurrent('defaults write nothing and read back as the default view', () =
   assert.equal(writeView(rest, world, []), '')
   assert.deepEqual(readView('', world, []), rest)
   assert.equal(writeView({ ...rest, action: { id: 'relationship:1' } }, world, []), '?flow=commands/scan')
+  assert.equal(writeView({ ...rest, action: { id: 'relationship:1', actorId: 'observed:tool' } }, world, []), '?flow=commands/scan')
   assert.equal(writeView({ ...rest, selection: { kind: 'architecture', ids: ['observed:dev'] } }, world, []), '?actor=dev')
 })
 
@@ -52,7 +53,7 @@ test.concurrent('a selected relationship is carried as its source and target ids
 })
 
 test.concurrent('a selected task is carried by its id while the work knows it', () => {
-  const work: ActiveWorkItem[] = [{
+  const work: WorkItem[] = [{
     id: 'TASK-7', title: 'Change', status: 'In Progress', assignees: [], description: '', references: [], modifiedFiles: [], criteria: [],
   }]
   const state: ViewState = { selection: selectTask('TASK-7'), action: {}, tab: 'what', dark: false }

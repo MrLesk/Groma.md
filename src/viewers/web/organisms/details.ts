@@ -1,5 +1,5 @@
 import type {
-  ActiveWorkItem,
+  WorkItem,
   ArchitectureWorld,
   C4Kind,
   CodeReference,
@@ -329,7 +329,7 @@ export function paintRelationship(
  */
 export function paintTask(
   host: HTMLElement,
-  item: ActiveWorkItem,
+  item: WorkItem,
   world: ArchitectureWorld,
   onSelect: (id: string, additive: boolean) => void,
 ): void {
