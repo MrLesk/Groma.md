@@ -1,7 +1,7 @@
 import { compareElements } from '../../element-order.ts'
 import type { ArchitectureWorld, C4Kind, Origin, WorldElement } from '../../types.ts'
 
-/** Manual overrides on top of the always-visible path to the selection. */
+/** Manual overrides on top of the always-visible paths to the selections. */
 export interface TreeState {
   cursor?: string
   expanded: ReadonlySet<string>
@@ -29,7 +29,10 @@ export function initialTree(): TreeState {
 export function toggleExpansion(tree: TreeState, row: TreeRow): TreeState {
   const expanded = new Set(tree.expanded)
   const collapsed = new Set(tree.collapsed)
-  if (row.expanded) {
+  if (tree.collapsed.has(row.id)) {
+    collapsed.delete(row.id)
+    expanded.add(row.id)
+  } else if (row.expanded) {
     expanded.delete(row.id)
     collapsed.add(row.id)
   } else {
@@ -61,18 +64,18 @@ export function ancestorsOf(
 /** The visible rows of the containment tree, in drawing order. */
 export function treeRows(
   world: ArchitectureWorld,
-  selectionId: string | undefined,
+  selectionIds: readonly string[],
   tree: TreeState,
 ): TreeRow[] {
   const byId = new Map(world.elements.map(element => [element.representationId, element]))
-  const selectionPath = ancestorsOf(selectionId, byId)
+  const selectionPath = new Set(selectionIds.flatMap(id => [...ancestorsOf(id, byId)]))
   const rows: TreeRow[] = []
 
   function expandedFor(element: WorldElement): boolean {
     if (element.children.length === 0) return false
+    if (selectionPath.has(element.representationId)) return true
     if (tree.collapsed.has(element.representationId)) return false
     return tree.expanded.has(element.representationId)
-      || selectionPath.has(element.representationId)
   }
 
   function push(element: WorldElement, depth: number): void {

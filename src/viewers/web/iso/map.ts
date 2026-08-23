@@ -44,8 +44,8 @@ export interface IsoMap {
   move(camera: Camera, zoomRatio: number): void
   /** Rebuilds every layer; only a world change needs this. */
   paint(scene: ProjectedScene): void
-  /** Marks a selected element with its surface and the routes touching it, or a selected route with both of its ends. */
-  select(id: string | undefined): void
+  /** Unions the existing selected-element and selected-route treatments across an ordered selection. */
+  select(ids: readonly string[]): void
   /** Outlines the elements the active tasks touch and accents the routes leaving them, dotted when the target is untouched; an empty set clears both. */
   mark(ids: ReadonlySet<string>): void
   /** Lights a picked flow's routes and dims everything off its path. */
@@ -120,17 +120,30 @@ export function createMap(host: HTMLElement): IsoMap {
         ...scene.slabs.map(({ slab }) => [slab.representationId, slab.island] as const),
       ])
     },
-    select(id) {
-      const route = routes.get(id ?? '')
-      const ends = new Set(route === undefined ? [id] : [route.source, route.target])
-      const context = route === undefined ? surfaces.get(id ?? '') : undefined
+    select(ids) {
+      const directItems = new Set<string>()
+      const selectedItems = new Set<string>()
+      const selectedRoutes = new Set<string>()
+      const contexts = new Set<string>()
+      for (const id of ids) {
+        const route = routes.get(id)
+        if (route !== undefined) {
+          selectedRoutes.add(id)
+          selectedItems.add(route.source).add(route.target)
+        } else {
+          directItems.add(id)
+          selectedItems.add(id)
+          const context = surfaces.get(id)
+          if (context !== undefined) contexts.add(context)
+        }
+      }
       for (const [itemId, node] of items) {
-        node.classList.toggle('selected', ends.has(itemId))
-        node.classList.toggle('context', itemId === context)
+        node.classList.toggle('selected', selectedItems.has(itemId))
+        node.classList.toggle('context', contexts.has(itemId))
       }
       for (const [routeId, node] of routes) {
-        node.group.classList.toggle('selected', routeId === id)
-        node.group.classList.toggle('endpoint', route === undefined && (ends.has(node.source) || ends.has(node.target)))
+        node.group.classList.toggle('selected', selectedRoutes.has(routeId))
+        node.group.classList.toggle('endpoint', directItems.has(node.source) || directItems.has(node.target))
       }
     },
     mark(ids) {

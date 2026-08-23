@@ -31,14 +31,14 @@ section starts open and lists the merged world as a containment tree:
 people, then systems, then external systems at the root. Containers
 sit under their system and components under their container, in
 hierarchy order; the map places them by flow instead.
-Ghost names and external systems are dim. Rows are collapsed except
-the path to the current selection; a collapsed row shows its child
+Ghost names and external systems are dim. Every selected element is marked,
+and rows are collapsed except the paths to selected items; a collapsed row shows its child
 count. A row's arrow
-expands or collapses it by hand without changing the selection. The
+expands or collapses it by hand without changing the selection, while selected paths stay open. The
 tree and the map share one selection. The bottom of the pane is the kind legend.
 Groups are invisible to the tree.
 
-The details pane always shows the current selection; an element
+The details pane always shows the last selected item; an element
 shows under two tabs whose choice persists across selections. What
 it does holds the meaning: description, relationships, and children.
 How it's built holds the
@@ -169,11 +169,12 @@ roof's back edge, with no visible step. Parallel routes spread out
 around the middle; when two middles do not line up, the line stays
 straight and the longer side gives way. Each route ends in an
 arrowhead lying on the sheet that keeps its screen size at every
-zoom. A route's description is its tooltip. The selected box draws
+zoom. A route's description is its tooltip. Every selected box draws
 every edge and its name in the accent green, the name in bold, the
 slab or island it stands on is
 outlined in the accent as its context, and the routes that touch the
-selection turn green too; fills never change. A lit person command
+selection turn green too; selected routes add their two ends to the same treatment,
+and fills never change. A lit person command
 draws its routes in the accent with a moving dash and dims everything
 off the path.
 
@@ -199,8 +200,12 @@ map until you move the camera; after that it keeps the same point in
 the centre. Click a building, a slab, a system island, or a tree
 row to select it; click a route to select its relationship, which
 draws the route and both of its ends in the accent and shows the
-relationship in the details pane with its ends as links; click empty
-sheet or press Escape to deselect, and the details pane empties. A
+relationship in the details pane with its ends as links. Hold Shift while
+clicking an architecture item or relationship to add or remove it from the
+selection. The map combines their normal selection treatments, the hierarchy
+marks every selected element, and the last item selected owns the details pane.
+Removing that item returns details to the previous item. Click empty
+sheet or press Escape to clear the selection, and the details pane empties. A
 person command stays on the map until `x`.
 Agents at work show as pins. Every Backlog task In Progress, and
 every task Done in the last day, puts one pin per assignee on the
@@ -249,9 +254,10 @@ height between sizes whenever it folds, unfolds, or its chips change,
 and keeps its fold and toggles across live updates.
 The URL follows the view without adding history entries, so any
 view opens again from its link:
-the selected element's kind names it (`?person=<id>`, `system=<id>`,
+each selected element's kind names it (`?person=<id>`, `system=<id>`,
 `container=<id>` or `component=<id>`), `relationship=<source>/<target>`
-names a selected route, `task=<id>` a selected task,
+names a selected route, and repeated element and relationship parameters keep
+their selection order; `task=<id>` names a selected task,
 `flow=<source>/<target>` the lit command (with `by=<person>` when it
 was picked from that person's details), `tab=how` the How it's built
 tab and `theme=dark` the theme;

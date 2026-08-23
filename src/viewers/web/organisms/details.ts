@@ -164,7 +164,7 @@ function marked(
 export function paintDetails(
   host: HTMLElement,
   inspected: Inspected,
-  onSelect: (id: string) => void,
+  onSelect: (id: string, additive: boolean) => void,
   /** ownCommand is true for the person's own command rows, false for walk references. */
   onPickAction: (id: string, ownCommand: boolean) => void,
   activeActionId: string | undefined,
@@ -217,9 +217,9 @@ export function paintDetails(
             marked(relationship.peerKind, relationship.peerExternal, relationship.title),
           )
         }
-        link.addEventListener('click', () => {
+        link.addEventListener('click', event => {
           if (relationship.pickable) onPickAction(relationship.id, true)
-          else onSelect(relationship.peerId)
+          else onSelect(relationship.peerId, event.shiftKey)
         })
         item.append(link, rest)
         list.append(item)
@@ -237,7 +237,7 @@ export function paintDetails(
         link.type = 'button'
         link.className = 'link'
         link.append(marked(child.kind, child.external, child.name))
-        link.addEventListener('click', () => onSelect(child.id))
+        link.addEventListener('click', event => onSelect(child.id, event.shiftKey))
         item.append(link)
         list.append(item)
       }
@@ -301,7 +301,7 @@ export function paintRelationship(
   host: HTMLElement,
   relationship: WorldRelationship,
   world: ArchitectureWorld,
-  onSelect: (id: string) => void,
+  onSelect: (id: string, additive: boolean) => void,
 ): void {
   const byId = new Map(world.elements.map(item => [item.representationId, item]))
   host.querySelector('h1')!.textContent = relationship.description
@@ -315,7 +315,7 @@ export function paintRelationship(
     link.type = 'button'
     link.className = 'link'
     link.append(prefix, marked(end.kind, end.external, end.name))
-    link.addEventListener('click', () => onSelect(id))
+    link.addEventListener('click', event => onSelect(id, event.shiftKey))
     item.append(link)
     list.append(item)
   }
@@ -331,7 +331,7 @@ export function paintTask(
   host: HTMLElement,
   item: ActiveWorkItem,
   world: ArchitectureWorld,
-  onSelect: (id: string) => void,
+  onSelect: (id: string, additive: boolean) => void,
 ): void {
   const byId = new Map(world.elements.map(element => [element.id, element]))
   host.querySelector('h1')!.textContent = item.title
@@ -380,7 +380,7 @@ export function paintTask(
       link.type = 'button'
       link.className = 'link'
       link.append(marked(element.kind, element.external, element.name))
-      link.addEventListener('click', () => onSelect(element.representationId))
+      link.addEventListener('click', event => onSelect(element.representationId, event.shiftKey))
       row.append(link)
     }
     return row

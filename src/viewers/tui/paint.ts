@@ -65,7 +65,7 @@ export function paintWorld(
     buffer,
     layout.hierarchy,
     commands.map(command => ({ id: command.id, title: command.description })),
-    treeRows(world, selectionId, tree),
+    treeRows(world, selectionId === undefined ? [] : [selectionId], tree),
     selectionId,
     tree.cursor ?? selectionId,
     options.activeActionId,

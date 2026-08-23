@@ -25,6 +25,14 @@ import { createPins } from './organisms/pins.ts'
 import { createTip } from './organisms/tip.ts'
 import { createWorkIsland } from './organisms/work-island.ts'
 import type { WebPayload } from './payload.ts'
+import {
+  noSelection,
+  primarySelection,
+  retainSelection,
+  selectArchitecture,
+  selectedArchitecture,
+  selectTask,
+} from './selection.ts'
 import { readView, writeView } from './url.ts'
 
 const ZOOM_STEP = 1.25
@@ -51,9 +59,13 @@ const pins = createPins(host, id => map.anchorOf(id), id => toggleTask(id), tip)
 const island = createWorkIsland(host, id => toggleTask(id), pins.show, tip)
 let tree = initialTree()
 const opened = readView(location.search, world, work)
-let selectedId = opened.selectedId ?? firstSystem(world)?.representationId
+let selection = opened.selection
+const initial = firstSystem(world)
+if (selection.kind === 'none' && initial !== undefined) {
+  selection = selectArchitecture(noSelection, initial.representationId, false)
+}
 /** The tasks activated from their pins or chips, in activation order; the last one is the selection until an element or route is selected. */
-let active: string[] = opened.selectedId !== undefined && workItem(opened.selectedId) !== undefined ? [opened.selectedId] : []
+let active: string[] = selection.kind === 'task' ? [selection.id] : []
 let activeAction: ActiveAction = opened.action
 let detailsTab: DetailsTab = opened.tab
 let darkTheme = opened.dark
@@ -132,21 +144,23 @@ function paintStats(flowCount: number): void {
 
 /** The URL follows the view, without adding history entries. */
 function syncUrl(): void {
-  const query = writeView({ selectedId, action: activeAction, tab: detailsTab, dark: darkTheme }, world, work)
+  const query = writeView({ selection, action: activeAction, tab: detailsTab, dark: darkTheme }, world, work)
   history.replaceState(null, '', `${location.pathname}${query}`)
 }
 
 function paintSelection(): void {
   syncUrl()
+  const selectedId = primarySelection(selection)
+  const selectedIds = selectedArchitecture(selection)
   const litIds = actionPath(activeAction.id, world, activeAction.personId)
-  const task = workItem(selectedId)
+  const task = selection.kind === 'task' ? workItem(selection.id) : undefined
   const activeTasks = active.map(id => workItem(id)).filter((item): item is ActiveWorkItem => item !== undefined)
-  map.select(selectedId)
+  map.select(selectedIds)
   map.mark(new Set(activeTasks.flatMap(item => touchedElements(item, world))))
   pins.activate(active, task?.id)
   island.activate(active, task?.id)
   map.setFlow(litIds, id => elementOnPath(id, litIds, world))
-  paintHierarchy(treeHost, treeRows(world, selectedId, tree), selectedId, select, toggleRow)
+  paintTree()
   const commands = worldCommands(world)
   paintFlows(flowsHost, commands, activeAction.id, pickAction)
   paintStats(commands.length)
@@ -172,14 +186,24 @@ function paintSelection(): void {
   paintAction()
 }
 
-function toggleRow(row: TreeRow): void {
-  tree = toggleExpansion(tree, row)
-  paintHierarchy(treeHost, treeRows(world, selectedId, tree), selectedId, select, toggleRow)
+function paintTree(): void {
+  paintHierarchy(
+    treeHost,
+    treeRows(world, selectedArchitecture(selection), tree),
+    new Set(selectedArchitecture(selection)),
+    select,
+    toggleRow,
+  )
 }
 
-function select(id: string): void {
-  if (!known(id)) return
-  selectedId = id
+function toggleRow(row: TreeRow): void {
+  tree = toggleExpansion(tree, row)
+  paintTree()
+}
+
+function select(id: string, additive = false): void {
+  if (worldElement(id) === undefined && worldRelationship(id) === undefined) return
+  selection = selectArchitecture(selection, id, additive)
   activeAction = nextActiveAction(activeAction, { type: 'select' })
   paintSelection()
 }
@@ -188,13 +212,16 @@ function select(id: string): void {
 function toggleTask(id: string): void {
   const wasActive = active.includes(id)
   active = wasActive ? active.filter(item => item !== id) : [...active, id]
-  if (!wasActive) selectedId = id
-  else if (selectedId === id) selectedId = active.at(-1)
+  if (!wasActive) selection = selectTask(id)
+  else if (selection.kind === 'task' && selection.id === id) {
+    const fallback = active.at(-1)
+    selection = fallback === undefined ? noSelection : selectTask(fallback)
+  }
   paintSelection()
 }
 
 function deselect(): void {
-  selectedId = undefined
+  selection = noSelection
   active = []
   paintSelection()
 }
@@ -216,6 +243,7 @@ let pointer: {
   dragging: boolean
   targetId: string | undefined
   onSheet: boolean
+  additive: boolean
 } | null = null
 
 /** The pane takes the wheel wherever the cursor is, pins included; the Live work island keeps it for its chip strip. */
@@ -241,6 +269,7 @@ map.svg.addEventListener('pointerdown', event => {
     dragging: false,
     targetId: map.hitId(event.target),
     onSheet: map.isSheet(event.target),
+    additive: event.shiftKey,
   }
   map.svg.setPointerCapture(event.pointerId)
 })
@@ -259,7 +288,7 @@ map.svg.addEventListener('pointermove', event => {
 map.svg.addEventListener('pointerup', event => {
   if (pointer === null || pointer.id !== event.pointerId) return
   if (!pointer.dragging) {
-    if (pointer.targetId !== undefined) select(pointer.targetId)
+    if (pointer.targetId !== undefined) select(pointer.targetId, pointer.additive)
     else if (pointer.onSheet) deselect()
   }
   pointer = null
@@ -324,7 +353,14 @@ function applyWorld(payload: WebPayload): void {
   fitted = fitCamera(scene.bounds, viewport())
   if (!touched) camera = fitted
   active = active.filter(id => workItem(id) !== undefined)
-  if (selectedId !== undefined && !known(selectedId)) selectedId = firstSystem(world)?.representationId
+  const hadSelection = primarySelection(selection) !== undefined
+  selection = retainSelection(selection, id => known(id))
+  if (hadSelection && primarySelection(selection) === undefined) {
+    const first = firstSystem(world)
+    selection = first === undefined
+      ? noSelection
+      : selectArchitecture(noSelection, first.representationId, false)
+  }
   map.paint(scene)
   pins.paint(payload.pins)
   island.paint(payload.pins)

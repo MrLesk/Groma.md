@@ -8,7 +8,7 @@ import { navigationWorld } from './helpers.ts'
 
 test.concurrent('the containment tree lists every element once and tracks collapse state', () => {
   const world = navigationWorld()
-  const all = treeRows(world, undefined, {
+  const all = treeRows(world, [], {
     expanded: new Set(world.elements.map(element => element.representationId)),
     collapsed: new Set(),
   })
@@ -42,7 +42,7 @@ test.concurrent('the containment tree lists every element once and tracks collap
     ['observed:cleft', 'observed:cright'],
   )
 
-  const rows = treeRows(world, 'observed:pleft', initialTree())
+  const rows = treeRows(world, ['observed:pleft'], initialTree())
   const ids = rows.map(row => row.id)
   assert.ok(ids.includes('observed:pleft'))
   assert.ok(ids.includes('observed:pmid'))
@@ -51,27 +51,34 @@ test.concurrent('the containment tree lists every element once and tracks collap
   const cright = rows.find(row => row.id === 'observed:cright')
   assert.equal(cright?.expanded, false)
   assert.equal(cright?.count, 1)
+
+  const several = treeRows(world, ['observed:pleft', 'observed:pright'], initialTree())
+  assert.ok(several.some(row => row.id === 'observed:pleft'))
+  assert.ok(several.some(row => row.id === 'observed:pright'))
 })
 
-test.concurrent('manual toggles expand and collapse rows over the selection path', () => {
+test.concurrent('manual toggles cannot hide a selection path', () => {
   const world = navigationWorld()
   let tree = initialTree()
-  let rows = treeRows(world, 'observed:pleft', tree)
+  let rows = treeRows(world, ['observed:pleft'], tree)
 
   const closedSibling = rows.find(row => row.id === 'observed:cright')!
   tree = toggleExpansion(tree, closedSibling)
-  rows = treeRows(world, 'observed:pleft', tree)
+  rows = treeRows(world, ['observed:pleft'], tree)
   assert.ok(rows.some(row => row.id === 'observed:pright'))
   assert.ok(rows.some(row => row.id === 'observed:pleft'))
 
   const selectionParent = rows.find(row => row.id === 'observed:cleft')!
   tree = toggleExpansion(tree, selectionParent)
-  rows = treeRows(world, 'observed:pleft', tree)
-  assert.ok(!rows.some(row => row.id === 'observed:pleft'))
+  rows = treeRows(world, ['observed:pleft'], tree)
+  assert.ok(rows.some(row => row.id === 'observed:pleft'))
+  assert.equal(rows.find(row => row.id === 'observed:cleft')?.expanded, true)
+  assert.ok(tree.collapsed.has('observed:cleft'))
 
   tree = toggleExpansion(tree, rows.find(row => row.id === 'observed:cleft')!)
-  rows = treeRows(world, 'observed:pleft', tree)
+  rows = treeRows(world, ['observed:pleft'], tree)
   assert.ok(rows.some(row => row.id === 'observed:pleft'))
+  assert.ok(!tree.collapsed.has('observed:cleft'))
 })
 
 test.concurrent('tree focus moves the cursor and enter drives selection and level', () => {
