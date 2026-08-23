@@ -5,12 +5,14 @@ import { actionPath, elementOnPath, worldCommands } from '../action-path.ts'
 import { initialTree, toggleExpansion, treeRows } from '../tui/tree.ts'
 import type { TreeRow } from '../tui/tree.ts'
 import {
+  fitHighlights,
   fitCamera,
   keyAction,
   pan,
   resized,
   wheelAction,
   zoomAbout,
+  zoomLimits,
   zoomReadout,
 } from './iso/camera.ts'
 import type { Camera, KeyTarget, Viewport } from './iso/camera.ts'
@@ -24,6 +26,7 @@ import { paintHierarchy } from './organisms/hierarchy.ts'
 import { createPins } from './work/pins.ts'
 import { createTip } from './organisms/tip.ts'
 import { createWorkIsland } from './work/island.ts'
+import { toggleWorkSelection } from './work/selection.ts'
 import type { WebPayload } from './payload.ts'
 import {
   noSelection,
@@ -64,7 +67,7 @@ const initial = firstSystem(world)
 if (selection.kind === 'none' && initial !== undefined) {
   selection = selectArchitecture(noSelection, initial.representationId, false)
 }
-/** The tasks activated from their pins or chips, in activation order; the last one is the selection until an element or route is selected. */
+/** Tasks activated from pins or chips, in activation order; selection is independent and this order supplies its deactivation fallback. */
 let active: string[] = selection.kind === 'task' ? [selection.id] : []
 let activeAction: ActiveAction = opened.action
 let detailsTab: DetailsTab = opened.tab
@@ -208,16 +211,25 @@ function select(id: string, additive = false): void {
   paintSelection()
 }
 
-/** A pin or chip click activates its task, or deactivates it when it is active; the task activated last is the selection. */
+function focusActiveTasks(): void {
+  const elementIds = active.flatMap(id => {
+    const task = workItem(id)
+    return task === undefined ? [] : touchedElements(task, world)
+  })
+  const focused = fitHighlights(scene, elementIds, viewport(), zoomLimits(fitted).max)
+  if (focused === undefined) return
+  camera = focused
+  touched = true
+  applyCamera()
+}
+
+/** A pin or chip click selects its task; only clicking the selected task again deactivates it. */
 function toggleTask(id: string): void {
-  const wasActive = active.includes(id)
-  active = wasActive ? active.filter(item => item !== id) : [...active, id]
-  if (!wasActive) selection = selectTask(id)
-  else if (selection.kind === 'task' && selection.id === id) {
-    const fallback = active.at(-1)
-    selection = fallback === undefined ? noSelection : selectTask(fallback)
-  }
+  const next = toggleWorkSelection(active, selection.kind === 'task' ? selection.id : undefined, id)
+  active = next.active
+  selection = next.selected === undefined ? noSelection : selectTask(next.selected)
   paintSelection()
+  focusActiveTasks()
 }
 
 function deselect(): void {
@@ -373,6 +385,7 @@ pins.paint(boot.pins)
 island.paint(boot.pins, work.statuses, work.defaultStatus)
 applyCamera()
 paintSelection()
+if (selection.kind === 'task') focusActiveTasks()
 
 const events = new EventSource('/events')
 events.addEventListener('world', event => {

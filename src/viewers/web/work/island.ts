@@ -16,17 +16,19 @@ export const workCss = `
   #work {
     position: absolute; left: 0; right: 0; bottom: 12px; margin: 0 auto; width: fit-content; box-sizing: border-box; max-width: calc(100% - 24px);
     display: flex; align-items: center; gap: 10px; padding: 6px 12px; border-radius: 28px;
-    background: color-mix(in srgb, var(--paper) 40%, transparent); border: 1px solid var(--hairline);
-    backdrop-filter: blur(14px); box-shadow: 0 6px 24px rgba(0, 0, 0, 0.12);
+    background: color-mix(in srgb, var(--paper) 35%, transparent); border: 1px solid color-mix(in srgb, var(--ink) 8%, transparent);
+    backdrop-filter: blur(14px); box-shadow: 0 4px 8px rgba(0, 0, 0, 0.05);
     overflow: hidden; white-space: nowrap;
   }
   #work:empty { display: none; }
   #work svg { width: 18px; height: 18px; flex: none; }
   #work .mark { position: relative; display: grid; place-items: center; width: 28px; height: 28px; }
+  #work > .mark .backlog-mark, #work > .label .backlog-mark { filter: grayscale(1); }
   #work .mark .dot { position: absolute; top: 3px; right: 3px; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
   #work .divider { width: 1px; height: 24px; background: var(--hairline); flex: none; }
   #work button { display: flex; align-items: center; gap: 6px; border: 0; background: transparent; padding: 4px; border-radius: 14px; }
-  #work .label { display: flex; align-items: center; gap: 8px; font-weight: 600; }
+  #work .label { display: flex; align-items: center; gap: 8px; margin-right: 4px; padding-left: 8px; font-weight: 600; }
+  #work .label .backlog-mark { width: 29px; height: 36px; }
   #work .toggle { padding: 4px 10px; border: 1px solid var(--hairline); color: var(--muted); }
   #work .toggle[aria-pressed="true"] { color: var(--accent); border-color: var(--accent); }
   /* The strip keeps its height with the chips at its top, so the 4 px scrollbar that appears under them on overflow moves nothing. */
@@ -38,9 +40,8 @@ export const workCss = `
     flex: none; gap: 8px; padding: 4px 10px 4px 4px; border: 1px solid var(--hairline); border-radius: 20px;
     font-size: 10px; letter-spacing: 0.08em; filter: grayscale(1);
   }
-  #work .chip.active { filter: none; }
-  #work .chip.active .badge { border-radius: 50%; box-shadow: 0 0 0 2px var(--accent); }
   #work .chip:hover { border-color: var(--ink); }
+  #work .chip.active { filter: none; border-color: var(--accent); color: var(--accent); }
   #work .chip .badge { width: 28px; height: 28px; }
   #work .chip .badge .card { inset: 3px; }
   #work .chip .badge .face { font-size: 8px; }
@@ -48,8 +49,8 @@ export const workCss = `
   #work .chip .badge .face svg { width: 12px; height: 12px; }
   #work .chip .badge .ring circle { stroke-width: 4; }
   #work .chip.work-done { --pin: var(--muted); }
-  #work .chip.selected { border-color: var(--accent); color: var(--accent); }
-  #work .fold svg { transition: transform 0.35s ease; }
+  #work .chip.selected { font-weight: 700; }
+  #work .fold svg { transition: transform 0.3s ease; }
   #work.open .fold svg { transform: rotate(180deg); }
 `
 
@@ -135,7 +136,7 @@ export function createWorkIsland(
     }
     const label = document.createElement('span')
     label.className = 'label'
-    label.innerHTML = `${BACKLOG_MARK}Live work`
+    label.innerHTML = `${BACKLOG_MARK}<span>Backlog.md<br>Tasks</span>`
     const strip = document.createElement('div')
     strip.className = 'strip'
     const order = new Map(configuredStatuses.map((status, index) => [status, index]))
@@ -178,7 +179,7 @@ export function createWorkIsland(
     if (now.width === was.width && now.height === was.height) return
     island.animate(
       [{ width: `${was.width}px`, height: `${was.height}px` }, { width: `${now.width}px`, height: `${now.height}px` }],
-      { duration: 350, easing: 'ease' },
+      { duration: 300, easing: 'ease' },
     )
   }
   return {

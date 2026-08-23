@@ -224,10 +224,11 @@ that checkmark once. Every assignee and
 task pair has its own colour, the pairs in task order over a fixed
 palette. A pin that appears after the map is open bounces once in
 that colour, then returns to the inactive greyscale. The
-Live work island, frosted glass at the bottom centre of the map
+Backlog.md Tasks panel, 35%-paper frosted glass at the bottom centre of the map
 above the footer, exists while any pin does: folded it is a pill with
-the Backlog document mark, a dot while a nonterminal task is available,
-and a chevron pointing up; unfolded it shows the Live work label, one
+the Backlog document mark in greyscale, a dot while a nonterminal task is available,
+and a chevron pointing up; unfolded it keeps the mark greyscale beside Backlog.md with
+Tasks on the next line, one
 filter for each configured status in configuration order when that status
 has at least one pin, and a scrollable strip of chips, one per shown pin
 with its badge and task id. A filter appears on the same live update that
@@ -241,16 +242,23 @@ pin head, shows the task's title. The pins still shown on an element fan out
 leftwards from that foot point afresh, so a pin left alone stands
 on it. Pins and chips are
 greyscale until their task is active: clicking a pin's head or a
-chip activates the task, so its pins and chips show their colour
-with an accent ring around their badge, and the map outlines every
+chip activates and selects an inactive task, so its pins and chips show their colour
+and its chips add an accent pill outline, while only its pins add an accent
+ring around their badge. The selected task whose details are shown also bolds
+its chip text; the map outlines every
 element the task touches, those whose code holds one of its modified
 files and those it references, and draws the routes leaving them in
-the accent, dotted when the target is untouched; clicking it again
-deactivates it, and several tasks can be active at once, their
-touched elements counted together. The
-task activated last is the selection (deactivating it hands the
-selection to the one activated before it, or to nothing; selecting
-an element keeps the tasks active): the details pane shows its id,
+the accent, dotted when the target is untouched. Several tasks can be
+active at once, their touched elements counted together. Clicking another
+active task selects it without removing any highlight. Only clicking the
+selected task again deactivates it, handing selection to the most recently
+activated remaining task or to nothing. Whenever the active set changes, the
+camera centres the combined projected bodies touched by every active task and the
+highlighted routes leaving them at the closest allowed zoom, with a wider context
+margin around that complete highlight. Switching sidebar selection without changing the active set
+keeps that shared fit; removing a task refits to the remaining active work, while
+clearing the final task leaves the camera in place. Selecting
+an element keeps the tasks active. The details pane shows the task's id,
 status and assignees over its title, then its description, its
 acceptance criteria as a checklist, its modified files and its
 references, where a reference naming an element is a link that
