@@ -1,8 +1,9 @@
-import { MARGIN, PAD } from '../../../sheet/grid.ts'
+import { MARGIN, PAD, ROOF_SHADOW } from '../../../sheet/grid.ts'
 import { PLANE, curved, roofBlock } from '../../../sheet/measure.ts'
 import type {
   Building,
   CellRect,
+  RoutePoint,
   Island,
   Route,
   SheetScene,
@@ -163,18 +164,52 @@ function inset(rect: CellRect, by: number): CellRect {
   return { gx: rect.gx + by, gy: rect.gy + by, w: rect.w - 2 * by, d: rect.d - 2 * by }
 }
 
-/** Points around a curved roof in ground cells: a stadium with a semicircle at each end along +gx; in a square the two share a centre and make a circle. The ring starts at the east cap's north, runs over its east to the south, and returns along the west cap. */
+/** A curved footprint in ground cells: every point `radius` from the segment between the two cap centres, which runs from `west` to `east` along `middle`; in a square the caps share a centre and the shape is a circle. `back` slides the shape north-west, under a roof that hides that much ground. */
+function stadium(rect: CellRect, back = 0): { radius: number; west: number; east: number; middle: number } {
+  const radius = Math.min(rect.w, rect.d) / 2
+  return {
+    radius,
+    west: rect.gx + radius - back,
+    east: rect.gx + rect.w - radius - back,
+    middle: rect.gy + rect.d / 2 - back,
+  }
+}
+
+/** Points around a curved roof: the ring starts at the east cap's north, runs over its east to the south, and returns along the west cap. */
 function roofOutline(rect: CellRect): { gx: number; gy: number }[] {
-  const r = Math.min(rect.w, rect.d) / 2
-  const cy = rect.gy + rect.d / 2
+  const { radius, west, east, middle } = stadium(rect)
   const arc = (cx: number, from: number, to: number): { gx: number; gy: number }[] => Array.from(
     { length: ARC_STEPS + 1 },
     (_, step) => {
       const t = from + ((to - from) * step) / ARC_STEPS
-      return { gx: cx + r * Math.cos(t), gy: cy + r * Math.sin(t) }
+      return { gx: cx + radius * Math.cos(t), gy: middle + radius * Math.sin(t) }
     },
   )
-  return [...arc(rect.gx + rect.w - r, -Math.PI / 2, Math.PI / 2), ...arc(rect.gx + r, Math.PI / 2, (3 * Math.PI) / 2)]
+  return [...arc(east, -Math.PI / 2, Math.PI / 2), ...arc(west, Math.PI / 2, (3 * Math.PI) / 2)]
+}
+
+/**
+ * Where a route meets a curved building: it was routed against the square
+ * footprint, so an off-centre end sits beside the wall rather than on it. A
+ * route leaves and meets a side square on, so the end slides along its own
+ * axis onto the near wall of the shape, and the line reaches what people see
+ * instead of stopping beside it. An end west or north of the footprint is the
+ * anchor of a back side, which the router already placed where the roof's
+ * shadow ends, so the shape slides under the roof to meet it there.
+ */
+function onWall(point: RoutePoint, towards: RoutePoint, building: Building | undefined): RoutePoint {
+  if (building === undefined || !curved(building.shape)) return point
+  const { rect } = building
+  const shadowed = point.gx < rect.gx || point.gy < rect.gy
+  const { radius, west, east, middle } = stadium(rect, shadowed ? building.floors * ROOF_SHADOW : 0)
+  /** Half the chord the outline cuts on a line `off` from the middle. A port sits inside a side at least two radii long, so the root is always real. */
+  const half = (off: number): number => Math.sqrt(Math.max(0, radius * radius - off * off))
+  if (point.gy === towards.gy) {
+    const chord = half(point.gy - middle)
+    return { gx: point.gx < towards.gx ? east + chord : west - chord, gy: point.gy }
+  }
+  const chord = half(point.gx - Math.min(Math.max(point.gx, west), east))
+  return { gx: point.gx, gy: point.gy < towards.gy ? middle + chord : middle - chord }
 }
 
 /**
@@ -300,12 +335,17 @@ export function projectScene(scene: SheetScene): ProjectedScene {
     tiers: buildingTiers(building),
     text: roofText(building),
   }))
+  const standing = new Map(scene.buildings.map(building => [building.representationId, building]))
   const routes = scene.routes.map(route => {
-    const points = route.points.map(point => project(point.gx, point.gy, 0))
-    const last = route.points[route.points.length - 1]!
-    const before = route.points[route.points.length - 2] ?? last
+    const cells = [...route.points]
+    const end = cells.length - 1
+    cells[0] = onWall(cells[0]!, cells[1]!, standing.get(route.source))
+    cells[end] = onWall(cells[end]!, cells[end - 1]!, standing.get(route.target))
+    const points = cells.map(point => project(point.gx, point.gy, 0))
+    const last = cells[end]!
+    const before = cells[end - 1]!
     const turn = last.gx > before.gx ? 0 : last.gy > before.gy ? 90 : last.gx < before.gx ? 180 : 270
-    return { route, points, arrow: { at: points[points.length - 1]!, turn } }
+    return { route, points, arrow: { at: points[end]!, turn } }
   })
   const frame = corners(scene.sheet, 0)
   return {
