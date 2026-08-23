@@ -118,9 +118,10 @@ external island crosses, container slabs a faint grain, and system
 islands have none; every pattern is laid in the plane it lies on.
 Sibling groups are flat hatched zones around their members, and a
 translucent chip lies under every name that lies on a pattern. Line
-style means origin and nothing else: observed items are solid,
-planned ghosts dashed, missing ghosts dotted; ghosts are hollow, with
-no fill, pattern or chip, and slightly faded.
+style means origin: observed items are solid, planned ghosts dashed,
+missing ghosts dotted, and only a route touched at one end by an
+active task adds accent dots; ghosts are hollow, with no fill,
+pattern or chip, and slightly faded.
 
 Weight follows depth, like heading levels: islands, slabs, buildings
 and routes each sit one level below the one before, every level 1.4
@@ -198,8 +199,9 @@ over total, the task id under it, a stem from the element's
 bottom-left corner (a building's leftmost point at ground, the west
 corner of a box's footprint, of a slab's top or of a system island)
 and a tooltip with the task's title; when the task is Done the badge
-flips to a checkmark and flips back while hovered. Every assignee and task pair
-has its own colour, the pairs in task order over a fixed palette. The
+flips to a checkmark and flips back while hovered. Every assignee and
+task pair has its own colour, the pairs in task order over a fixed
+palette. The
 Live work island, frosted glass at the bottom centre of the map
 above the footer, exists while any pin does: folded it is a pill with
 the pulse mark, a dot while a task is in progress, and a chevron
@@ -212,18 +214,22 @@ shows the task's title. The pins still shown on an element fan out
 leftwards from their element's corner afresh, so a pin left alone
 stands on it. Pins and chips are
 greyscale until their task is active: clicking a pin's head or a
-chip activates the task, so its pins and chips show their colour and
-the map outlines every element the task touches, those whose code
-holds one of its modified files and those it references; clicking it
-again deactivates it, and several tasks can be active at once. The
+chip activates the task, so its pins and chips show their colour
+with an accent ring around their badge, and the map outlines every
+element the task touches, those whose code holds one of its modified
+files and those it references, and draws the routes touching them in
+the accent, dotted when only one end is touched; clicking it again
+deactivates it, and several tasks can be active at once, their
+touched elements counted together. The
 task activated last is the selection (deactivating it hands the
 selection to the one activated before it, or to nothing; selecting
 an element keeps the tasks active): the details pane shows its id,
 status and assignees over its title, then its description, its
 acceptance criteria as a checklist, its modified files and its
 references, where a reference naming an element is a link that
-selects the element; its pins and chips carry the selection accent,
-and the strip scrolls them into view. Escape or a click on empty
+selects the element; its pins carry a small arrowhead above their
+badge, its chips an accent border, and the strip scrolls the first
+into view. Escape or a click on empty
 sheet deactivates every task. Pins move as Backlog changes, through
 the same live channel as the world. The island eases its width and
 height between sizes whenever it folds, unfolds, or its chips change,

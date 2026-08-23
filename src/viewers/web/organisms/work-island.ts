@@ -38,6 +38,7 @@ export const workCss = `
     font-size: 10px; letter-spacing: 0.08em; filter: grayscale(1);
   }
   #work .chip.active { filter: none; }
+  #work .chip.active .badge { border-radius: 50%; box-shadow: 0 0 0 2px var(--accent); }
   #work .chip:hover { border-color: var(--ink); }
   #work .chip .badge { width: 28px; height: 28px; }
   #work .chip .badge .card { inset: 3px; }

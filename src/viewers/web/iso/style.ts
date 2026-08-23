@@ -47,7 +47,7 @@ function tokens(level: Level): string {
  * The map's own stylesheet. Every level group sets its tokens from the
  * scale, one rule turns them into strokes (times the state's emphasis and
  * the camera's zoom weight) and fills, and nothing else sets a width or a
- * tint. Line style means origin and nothing else: observed solid, planned
+ * tint. Line style means origin; only a route touched at one end by an active task adds accent dots: observed solid, planned
  * dashed, missing dotted; patterns mean kind and nothing else. Selection
  * and context change strokes, never fills.
  */
@@ -105,11 +105,12 @@ export const mapCss = `
   #map .route .line { fill: none; stroke-linecap: round; opacity: 0.9; }
   #map .route .arrow { fill: var(--map-line); opacity: 0.9; }
   #map .route .hit { fill: none; stroke: transparent; stroke-width: 12; }
-  #map .route:hover, #map .route.endpoint { --emphasis: ${emphasis(1)}; }
+  #map .route:hover, #map .route.endpoint, #map .route.touched { --emphasis: ${emphasis(1)}; }
   #map .route:hover .line { stroke: var(--ink); opacity: 1; }
   #map .route:hover .arrow { fill: var(--ink); opacity: 1; }
-  #map .route.endpoint .line, #map .route.selected .line { stroke: var(--accent); opacity: 1; }
-  #map .route.endpoint .arrow, #map .route.selected .arrow { fill: var(--accent); opacity: 1; }
+  #map .route.endpoint .line, #map .route.selected .line, #map .route.touched .line { stroke: var(--accent); opacity: 1; }
+  #map .route.endpoint .arrow, #map .route.selected .arrow, #map .route.touched .arrow { fill: var(--accent); opacity: 1; }
+  #map .route.touched.half .line { stroke-dasharray: 1 4; }
   #map .route.lit { --emphasis: ${emphasis(2)}; }
   #map .route.lit .line {
     stroke: var(--accent); opacity: 1;
