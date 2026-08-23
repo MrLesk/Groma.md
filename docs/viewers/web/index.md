@@ -219,7 +219,8 @@ mark for an unassigned task, inside a ring that fills by checked acceptance crit
 over total, the task id under it, a stem from the roof (a slab's top
 or a system island's surface) near its left corner, and a tooltip
 with the task's title; when the task is Done the badge shows a checkmark
-and flips back while hovered. Every assignee and
+and flips back while hovered. A visible pin that becomes Done flips into
+that checkmark once. Every assignee and
 task pair has its own colour, the pairs in task order over a fixed
 palette. A pin that appears after the map is open bounces once in
 that colour, then returns to the inactive greyscale. The
@@ -232,8 +233,11 @@ has at least one pin, and a scrollable strip of chips, one per shown pin
 with its badge and task id. A filter appears on the same live update that
 brings the first pin in its status. The configured default and terminal
 statuses start hidden; every other configured status starts shown. A filter
-hides or shows both the matching pins and chips. Done chips are grey.
-Hovering a chip, like hovering a pin head, shows the task's title. The pins still shown on an element fan out
+hides or shows both the matching pins and chips. A visible chip also flips
+once when its task becomes Done. Each completing badge stays visible through
+the flip, then follows the Done filter; work that was already hidden does not
+appear just to animate. Done chips are grey. Hovering a chip, like hovering a
+pin head, shows the task's title. The pins still shown on an element fan out
 leftwards from that foot point afresh, so a pin left alone stands
 on it. Pins and chips are
 greyscale until their task is active: clicking a pin's head or a
