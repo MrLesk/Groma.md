@@ -48,9 +48,10 @@ program
 program
   .command('web')
   .description('Open the browser map')
-  .action(async () => {
+  .option('--port <number>', 'port to listen on', Number)
+  .action(async options => {
     const { startWebViewer } = await import('./viewers/web/server.ts')
-    const { url } = await startWebViewer(process.cwd())
+    const { url } = await startWebViewer(process.cwd(), { port: options.port })
     console.log(`groma web at ${url}`)
   })
 
