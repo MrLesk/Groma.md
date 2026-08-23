@@ -2,22 +2,42 @@ bun src/typescript-scanner.ts --ignore test/** --ignore test-bun/** --ignore e2e
 
 Groma  system
 |-- Cli  container  src/cli.ts
-|-- Core  container  src/core.ts  loadArchitectureViewModel
+|   `-- Instructions  component  src/instructions.ts
+|-- Core  container  src/core.ts  annotateArchitecture
 |   |-- Accept  component  src/accept.ts  acceptGhost
 |   |-- Architecture model  component  src/architecture-model.ts  buildArchitectureModel
 |   |-- Architecture reader  component  src/architecture-reader.ts  loadRevision
-|   |-- Markdown emitter  component  src/markdown-emitter.ts  renderObservedDocument
 |   |-- Scan reconciler  component  src/scan-reconciler.ts  foldScanResult
 |   `-- World layout  component  src/world-layout.ts  layoutArchitectureWorld
+|-- Create  container  src/create.ts  ensurePlanReadme
+|   `-- Markdown emitter  component  src/markdown-emitter.ts  omitCode
+|-- Edit  container  src/edit.ts  editArchitecture
+|-- Plain world  container  src/plain-world.ts  formatPlainWorld
 |-- Scanner  container  src/scanner.ts  formatScanSummary
-|   |-- Typescript files  component  src/typescript-files.ts  listTypeScriptFiles
-|   |-- Typescript graph  component  src/typescript-graph.ts  kebabCase
+|   |-- Typescript files  component  src/typescript-files.ts  isTypeScriptScanFile
 |   `-- Typescript scanner  component  src/typescript-scanner.ts  formatTypeScriptObservation
 |-- Server  container  src/viewers/web/server.ts  startWebViewer
+|   |-- Map  component  src/viewers/web/iso/map.ts  createMap
+|   |-- Pack  component  src/sheet/pack.ts  shelf
 |   |-- Page  component  src/viewers/web/page.ts  renderPage
+|   |-- Paint buildings  component  src/viewers/web/iso/paint-buildings.ts  paintBuildings
+|   |-- Paint ground  component  src/viewers/web/iso/paint-ground.ts  paintSheet
+|   |-- Paint routes  component  src/viewers/web/iso/paint-routes.ts  paintRoutes
+|   |-- Payload  component  src/viewers/web/payload.ts
+|   |-- Place  component  src/sheet/place.ts  placeWorld
+|   |-- Project  component  src/viewers/web/iso/project.ts  project
+|   |-- Rank  component  src/sheet/rank.ts  flowRanks
 |   |-- Render  component  src/viewers/web/render.ts
-|   `-- Scene  component  src/viewers/web/scene.ts  project
-`-- Terminal viewer  container  src/viewers/tui/terminal-viewer.ts  mountTerminalViewer
+|   |-- Route  component  src/sheet/route.ts  routeAll
+|   |-- Scale  component  src/viewers/web/iso/scale.ts  depthOf
+|   |-- Scene  component  src/sheet/scene.ts  sheetScene
+|   |-- Style  component  src/viewers/web/iso/style.ts
+|   |-- Svg  component  src/viewers/web/iso/svg.ts  svg
+|   |-- Text  component  src/viewers/web/iso/text.ts  surfaceText
+|   |-- Url  component  src/viewers/web/url.ts  readView
+|   `-- Work pins  component  src/work-pins.ts  monogram
+|-- Typescript graph  container  src/typescript-graph.ts  kebabCase
+`-- View host  container  src/view-host.ts  startTerminalViewer
     |-- Action path  component  src/viewers/action-path.ts  actionCaption
     |-- Camera  component  src/viewers/tui/camera.ts  createCamera
     |-- Layout  component  src/viewers/tui/layout.ts  paneLayout
@@ -25,16 +45,37 @@ Groma  system
     |-- Navigation spatial  component  src/viewers/tui/navigation-spatial.ts  canEnter
     |-- Projection  component  src/viewers/tui/projection.ts  projectWorld
     |-- Projection camera  component  src/viewers/tui/projection-camera.ts  focusElement
-    `-- Projection routes  component  src/viewers/tui/projection-routes.ts  orthogonalRoute
+    |-- Projection display  component  src/viewers/tui/projection-display.ts  displayFor
+    |-- Projection routes  component  src/viewers/tui/projection-routes.ts  orthogonalRoute
+    |-- Relationship text  component  src/viewers/relationship-text.ts  parentOfElements
+    |-- Semantic city  component  src/semantic-city.ts  promotedEndpoint
+    |-- Semantic view  component  src/semantic-view.ts  displaySize
+    |-- Terminal viewer  component  src/viewers/tui/terminal-viewer.ts  mountTerminalViewer
+    |-- Tree  component  src/viewers/tui/tree.ts  initialTree
+    `-- Work projection  component  src/work-projection.ts  assigneesOnElement
 
 relationships
 Cli  uses  Core
-Cli  starts  Scanner
+Cli  uses  Create
+Cli  starts  Edit
+Cli  starts  Plain world
+Cli  uses  Scanner
 Cli  starts  Server
-Cli  starts  Terminal viewer
+Cli  starts  View host
+Core  uses  Create
+Create  uses  Core
+Create  uses  Typescript graph
+Edit  uses  Core
+Edit  uses  Create
+Edit  uses  Typescript graph
+Plain world  uses  Core
 Scanner  uses  Core
+Scanner  uses  Typescript graph
 Server  uses  Core
-Server  uses  Terminal viewer
-Terminal viewer  uses  Core
+Server  uses  Scanner
+Server  uses  View host
+Typescript graph  uses  Scanner
+View host  uses  Core
+View host  uses  Scanner
 
-1 system, 5 containers, 20 components
+1 system, 9 containers, 43 components
