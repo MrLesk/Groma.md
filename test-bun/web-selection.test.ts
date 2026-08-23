@@ -4,6 +4,7 @@ import { test } from 'bun:test'
 
 import {
   noSelection,
+  ownsDetails,
   primarySelection,
   retainSelection,
   selectArchitecture,
@@ -12,6 +13,13 @@ import {
   selectFlow,
   selectTask,
 } from '../src/viewers/web/selection.ts'
+
+test.concurrent('every concrete selection owns details and the empty selection does not', () => {
+  assert.equal(ownsDetails(noSelection), false)
+  assert.equal(ownsDetails(selectArchitecture(noSelection, 'observed:a', false)), true)
+  assert.equal(ownsDetails(selectTask('TASK-7')), true)
+  assert.equal(ownsDetails(selectFlow({ commandId: 'relationship:0' })), true)
+})
 
 test.concurrent('a plain architecture pick replaces the current selection', () => {
   const several = selectArchitecture(

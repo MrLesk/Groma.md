@@ -9,19 +9,20 @@ This page is the browser surface. The shared viewer rules live in
 
 ## Layout
 
-Fixed chrome frames the world as one white technical sheet with
-grey hairline rules. A header strip shows the groma.md lockup,
-the observed system's name with live flow and element counts, and a
-Dark/Light toggle. The toggle swaps the whole viewer, chrome and map
-alike, between the light sheet and a dark one; the accent green stays
-the same. A footer holds the `-` and `+` zoom buttons, a zoom readout
-(a percentage relative to the fitted view, nothing while fitted), and
-a quiet control hint on the left. Between them sit three panes that each reserve their
-width: the hierarchy pane on the left, the map pane in the center, and
-the details pane on the right. The map pane is the camera viewport; the
-map never renders under a side pane.
+The isometric grid fills the screen. Inset 35%-paper frosted chrome floats
+above it as one technical instrument. The header shows the groma.md lockup,
+the observed system's name with live flow and element counts, one compact
+Fit, `-`, zoom-readout and `+` group, Help, and an icon-labelled Dark/Light
+toggle. Help opens the short map-control guide. The toggle swaps the whole
+viewer, chrome and map alike, between the light sheet and a dark one; the
+accent green stays the same. The full footer is absent, and Live work keeps
+the bottom centre. The camera fits architecture into the clear area between
+the floating hierarchy and any open details pane, so the grid continues
+beneath the chrome without hiding the fitted world.
 
-The hierarchy pane starts with the flows list folded under its
+The hierarchy pane's boxed double-chevron retracts it to a narrow rail and
+returns it without changing tree, selection, or camera state. Its quiet branch lines keep nested
+rows legible. It starts with the flows list folded under its
 Flows heading; clicking the heading opens it. The list holds every
 actor command in the world, deduped across the actors who share it.
 Clicking an inactive command activates and selects its flow. Clicking
@@ -41,7 +42,10 @@ expands or collapses it by hand without changing the selection, while selected p
 tree and the map share one selection. The bottom of the pane is the kind legend.
 Authored sibling groups are invisible to the tree.
 
-The details pane always shows the last selected item; an element
+The wider details pane appears only while an element, relationship,
+flow, or task owns the selection. It keeps its width while that owner
+changes and disappears when selection is cleared. Its X clears the selection,
+closes the pane, and returns focus to the map without moving the camera. An element
 shows under two tabs whose choice persists across selections. What
 it does holds the meaning: description, relationships, and children.
 How it's built holds the
@@ -214,7 +218,7 @@ selection. The map combines their normal selection treatments, the hierarchy
 marks every selected element, and the last item selected owns the details pane.
 Removing that item returns details to the previous item. Click empty
 sheet or press Escape to clear the selection, active flows, and active tasks;
-the details pane empties.
+the details pane closes.
 Backlog work shows as pins. Every task outside the configured terminal
 status, and every task in that status changed within the last day, puts
 one pin per assignee on the element the task touched last: the element
@@ -231,8 +235,8 @@ that checkmark once. Every assignee and
 task pair has its own colour, the pairs in task order over a fixed
 palette. A pin that appears after the map is open bounces once in
 that colour, then returns to the inactive greyscale. The
-Backlog.md Tasks panel, 35%-paper frosted glass at the bottom centre of the map
-above the footer, exists while any pin does: folded it is a pill with
+Backlog.md Tasks panel, 35%-paper frosted glass at the bottom centre of the map,
+exists while any pin does: folded it is a pill with
 the Backlog document mark in greyscale, a dot while a nonterminal task is available,
 and a chevron pointing up; unfolded it keeps the mark greyscale beside Backlog.md with
 Tasks on the next line, one

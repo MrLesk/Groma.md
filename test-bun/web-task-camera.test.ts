@@ -58,12 +58,13 @@ test.concurrent('active task focus centres touched bodies and outgoing routes wi
   const top = Math.min(...ys) * camera.k + camera.y
   const bottom = Math.max(...ys) * camera.k + camera.y
 
-  assert.ok(left >= 72 && right <= viewport.width - 72)
-  assert.ok(top >= 72 && bottom <= viewport.height - 72)
+  assert.ok(left >= 120 && right <= viewport.width - 120)
+  assert.ok(top >= 120 && bottom <= viewport.height - 120)
   assert.equal((left + right) / 2, viewport.width / 2)
   assert.equal((top + bottom) / 2, viewport.height / 2)
   assert.ok(camera.k <= 4)
 
   assert.equal(fitHighlights(scene, ['missing'], viewport, 4), undefined)
-  assert.equal(fitHighlights(scene, ['observed:component'], viewport, 4)?.k, 4)
+  const focusedComponent = fitHighlights(scene, ['observed:component'], viewport, 4)
+  assert.ok(focusedComponent && focusedComponent.k < 4)
 })

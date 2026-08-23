@@ -21,6 +21,11 @@ export function selectedFlow(selection: Selection): FlowRef | undefined {
   return selection.kind === 'flow' ? selection.flow : undefined
 }
 
+/** Every concrete selection owns the inspector; the empty selection removes it from the shell. */
+export function ownsDetails(selection: Selection): boolean {
+  return selection.kind !== 'none'
+}
+
 /** A plain pick replaces the architecture selection; an additive pick toggles one target in its ordered set. */
 export function selectArchitecture(selection: Selection, id: string, additive: boolean): Selection {
   if (!additive || selection.kind !== 'architecture') return { kind: 'architecture', ids: [id] }

@@ -5,11 +5,13 @@ parent: web-viewer
 code:
   - scanner: typescript
     file: src/viewers/web/render.ts
+  - scanner: typescript
+    file: src/viewers/web/chrome/shell.ts
 ---
 
 # Render
 
-Drives the browser: projects the sheet, paints the map, keeps the selection in step with the hierarchy and details panes, lights a picked flow, zooms and pans the camera, and applies every world the server pushes.
+Drives the browser: projects the sheet, paints its grid across the screen, fits the camera between the floating hierarchy and selection-owned details panes, keeps selection in step with both panes without reframing when either closes, lights a picked flow, zooms and pans, and applies every world the server pushes.
 
 ## Relationships
 

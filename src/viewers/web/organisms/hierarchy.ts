@@ -10,6 +10,15 @@ function rootGroupName(row: TreeRow): string {
   return row.external ? 'External systems' : 'Systems'
 }
 
+function hasLaterSibling(rows: readonly TreeRow[], index: number): boolean {
+  const depth = rows[index]!.depth
+  for (const row of rows.slice(index + 1)) {
+    if (row.depth < depth) return false
+    if (row.depth === depth) return true
+  }
+  return false
+}
+
 export function paintHierarchy(
   host: HTMLElement,
   rows: TreeRow[],
@@ -19,7 +28,7 @@ export function paintHierarchy(
 ): void {
   const list = document.createElement('div')
   let group: string | undefined
-  for (const row of rows) {
+  for (const [index, row] of rows.entries()) {
     if (row.depth === 0) {
       const nextGroup = rootGroupName(row)
       if (nextGroup !== group) {
@@ -36,7 +45,16 @@ export function paintHierarchy(
     button.dataset.id = row.id
     if (selectedIds.has(row.id)) button.classList.add('selected')
     if (row.origin !== 'observed' || row.external) button.classList.add('ghost')
-    button.style.paddingLeft = `${14 + row.depth * 16}px`
+
+    const branches = Array.from({ length: row.depth }, () => {
+      const branch = document.createElement('span')
+      branch.className = 'branch'
+      branch.setAttribute('aria-hidden', 'true')
+      return branch
+    })
+    const currentBranch = branches.at(-1)
+    currentBranch?.classList.add('current')
+    if (currentBranch !== undefined && !hasLaterSibling(rows, index)) currentBranch.classList.add('end')
 
     const twist = document.createElement('span')
     twist.className = 'twist'
@@ -59,7 +77,7 @@ export function paintHierarchy(
       ? `${row.name} (${row.count})`
       : row.name
 
-    button.append(twist, mark, name)
+    button.append(...branches, twist, mark, name)
     button.addEventListener('click', event => onSelect(row.id, event.shiftKey))
     list.append(button)
   }

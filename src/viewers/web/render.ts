@@ -5,6 +5,7 @@ import { elementOnPath, flowRouteIds, worldCommands } from '../action-path.ts'
 import type { FlowRef } from '../action-path.ts'
 import { initialTree, toggleExpansion, treeRows } from '../tui/tree.ts'
 import type { TreeRow } from '../tui/tree.ts'
+import { createWebShell } from './chrome/shell.ts'
 import { paintFlowDetails } from './flow/details.ts'
 import { paintFlows } from './flow/list.ts'
 import { sameFlow, toggleFlowSelection } from './flow/state.ts'
@@ -13,7 +14,6 @@ import {
   fitCamera,
   keyAction,
   pan,
-  resized,
   wheelAction,
   zoomAbout,
   zoomLimits,
@@ -54,14 +54,21 @@ let appliedWork = boot.workGeneration
 let scene: ProjectedScene = projectScene(boot.sheet)
 
 const host = document.getElementById('map')!
+const headerHost = document.getElementById('header')!
+const hierarchyHost = document.getElementById('hierarchy')!
 const treeHost = document.getElementById('tree')!
 const flowsHost = document.getElementById('flows')!
 const statsHost = document.getElementById('stats')!
 const themeButton = document.getElementById('theme')!
+const themeLabel = themeButton.querySelector<HTMLElement>('.label')!
 const detailsHost = document.getElementById('details')!
+const detailsClose = document.getElementById('details-close') as HTMLButtonElement
 const zoomHost = document.getElementById('zoom')!
+const hierarchyContent = document.getElementById('hierarchy-content')!
+const hierarchyToggle = document.getElementById('hierarchy-toggle') as HTMLButtonElement
 
 const map = createMap(host)
+const shell = createWebShell(document.body, hierarchyContent, hierarchyToggle, detailsHost, map.svg)
 const tip = createTip(host)
 const pins = createPins(host, id => map.anchorOf(id), id => toggleTask(id), tip)
 const island = createWorkIsland(host, id => toggleTask(id), pins.show, tip)
@@ -78,11 +85,33 @@ let activeTaskIds: string[] = selection.kind === 'task' ? [selection.id] : []
 let detailsTab: DetailsTab = opened.tab
 let darkTheme = opened.dark
 
-function viewport(): Viewport {
-  return { width: host.clientWidth, height: host.clientHeight }
+interface MapFrame extends Viewport {
+  x: number
+  y: number
 }
 
-let fitted: Camera = fitCamera(scene.bounds, viewport())
+/** The full-screen grid surrounds a safe camera frame between the floating chrome. */
+function viewport(): MapFrame {
+  const mapRect = host.getBoundingClientRect()
+  const headerRect = headerHost.getBoundingClientRect()
+  const hierarchyRect = hierarchyHost.getBoundingClientRect()
+  const detailsRect = detailsHost.getBoundingClientRect()
+  const x = hierarchyRect.right - mapRect.left + 12
+  const y = headerRect.bottom - mapRect.top + 12
+  const right = detailsRect.left - mapRect.left - 12
+  return {
+    x,
+    y,
+    width: Math.max(right - x, 1),
+    height: Math.max(mapRect.bottom - mapRect.top - y - 12, 1),
+  }
+}
+
+function fitScene(frame: MapFrame): Camera {
+  return pan(fitCamera(scene.bounds, frame), frame.x, frame.y)
+}
+
+let fitted: Camera = fitScene(viewport())
 let camera: Camera = fitted
 /** Once an interaction positions the camera, live refits stop until the viewer presses 0. */
 let touched = false
@@ -115,19 +144,19 @@ function known(id: string | undefined): boolean {
 function applyCamera(): void {
   map.move(camera, camera.k / fitted.k)
   pins.place(camera)
-  zoomHost.textContent = zoomReadout(camera, fitted)
+  zoomHost.textContent = zoomReadout(camera, fitted) || '100%'
 }
 
 function refit(): void {
-  fitted = fitCamera(scene.bounds, viewport())
+  fitted = fitScene(viewport())
   camera = fitted
   touched = false
   applyCamera()
 }
 
 function zoomStep(factor: number): void {
-  const { width, height } = viewport()
-  camera = zoomAbout(camera, factor, { x: width / 2, y: height / 2 }, fitted)
+  const frame = viewport()
+  camera = zoomAbout(camera, factor, { x: frame.x + frame.width / 2, y: frame.y + frame.height / 2 }, fitted)
   touched = true
   applyCamera()
 }
@@ -147,6 +176,7 @@ function syncUrl(): void {
 
 function paintSelection(): void {
   syncUrl()
+  shell.paint(selection)
   const selectedId = primarySelection(selection)
   const selectedIds = selectedArchitecture(selection)
   const litIds = flowRouteIds(activeFlows, world)
@@ -214,7 +244,9 @@ function focusActiveTasks(): void {
     const task = workItem(id)
     return task === undefined ? [] : touchedElements(task, world)
   })
-  const focused = fitHighlights(scene, elementIds, viewport(), zoomLimits(fitted).max)
+  const frame = viewport()
+  const focus = fitHighlights(scene, elementIds, frame, zoomLimits(fitted).max)
+  const focused = focus === undefined ? undefined : pan(focus, frame.x, frame.y)
   if (focused === undefined) return
   camera = focused
   touched = true
@@ -315,9 +347,11 @@ map.svg.addEventListener('pointercancel', () => {
 
 document.getElementById('zoom-in')!.addEventListener('click', () => zoomStep(ZOOM_STEP))
 document.getElementById('zoom-out')!.addEventListener('click', () => zoomStep(1 / ZOOM_STEP))
+document.getElementById('fit')!.addEventListener('click', refit)
+detailsClose.addEventListener('click', deselect)
 
 function applyTheme(): void {
-  themeButton.textContent = darkTheme ? 'Light' : 'Dark'
+  themeLabel.textContent = darkTheme ? 'Light' : 'Dark'
   if (darkTheme) document.documentElement.dataset.theme = 'dark'
   else delete document.documentElement.dataset.theme
   syncUrl()
@@ -349,23 +383,28 @@ document.addEventListener('keydown', event => {
 })
 
 let lastViewport = viewport()
-new ResizeObserver(() => {
+const resizeObserver = new ResizeObserver(() => {
   const next = viewport()
   if (touched) {
-    camera = resized(camera, lastViewport, next)
-    fitted = fitCamera(scene.bounds, next)
+    camera = pan(
+      camera,
+      next.x + next.width / 2 - lastViewport.x - lastViewport.width / 2,
+      next.y + next.height / 2 - lastViewport.y - lastViewport.height / 2,
+    )
+    fitted = fitScene(next)
     applyCamera()
   } else {
     refit()
   }
   lastViewport = next
-}).observe(host)
+})
+resizeObserver.observe(host)
 
 function applyWorld(payload: WebPayload): void {
   world = payload.world
   work = payload.work
   scene = projectScene(payload.sheet)
-  fitted = fitCamera(scene.bounds, viewport())
+  fitted = fitScene(viewport())
   if (!touched) camera = fitted
   activeTaskIds = activeTaskIds.filter(id => workItem(id) !== undefined)
   activeFlows = activeFlows.filter(flow => {
