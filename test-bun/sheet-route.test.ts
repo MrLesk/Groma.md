@@ -258,6 +258,24 @@ test.concurrent('a route arrives through the side of the target that faces the s
   assert.ok(before.gy > last.gy && before.gx === last.gx, 'points north into the side')
 })
 
+test.concurrent('a route crosses a surface border instead of running along it', async () => {
+  const { scene } = await fixtureScene(viewerFixtureRoot)
+  const borders = [...scene.slabs, ...scene.islands].map(surface => surface.rect)
+  const onBorder = (point: RoutePoint, rect: CellRect): boolean => {
+    const withinX = point.gx >= rect.gx && point.gx <= rect.gx + rect.w
+    const withinY = point.gy >= rect.gy && point.gy <= rect.gy + rect.d
+    return (withinY && (point.gx === rect.gx || point.gx === rect.gx + rect.w))
+      || (withinX && (point.gy === rect.gy || point.gy === rect.gy + rect.d))
+  }
+  for (const route of scene.routes) {
+    let along = 0
+    for (const node of laneNodes(route)) {
+      along = borders.some(rect => onBorder(node, rect)) ? along + 1 : 0
+      assert.ok(along <= 1, `${route.id} runs along a surface border`)
+    }
+  }
+})
+
 test.concurrent('a person reaches a component inside a container on the one ground plane', () => {
   const scene = sheetScene(worldOf([
     box('buyer', 'person', unit),
