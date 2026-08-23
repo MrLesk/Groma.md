@@ -41,7 +41,7 @@ const style = `
   }
   button { font: inherit; color: inherit; cursor: pointer; }
   button:focus-visible { outline: 2px solid var(--accent); outline-offset: -1px; }
-  #legend span, #details .meta, #details .section, #hierarchy .section, #action.hint, #zoom, #details .chip, #stats {
+  #legend span, #details .meta, #details .section, #hierarchy .section, #tree .group, #action.hint, #zoom, #details .chip, #stats {
     font-size: 10px;
     letter-spacing: 0.14em;
     text-transform: uppercase;
@@ -64,6 +64,8 @@ const style = `
   #flows:empty { display: none; }
   #hierarchy .section { margin: 0 0 6px; padding: 0 14px; width: 100%; border: 0; background: transparent; text-align: left; }
   #tree { flex: 1; overflow: auto; padding: 14px 0; }
+  #tree .group { padding: 10px 14px 4px; }
+  #tree .group:first-child { padding-top: 4px; }
   #legend { border-top: 1px solid var(--ink); padding: 12px 16px; display: grid; gap: 4px; }
   #legend div { display: flex; gap: 16px; }
   #legend span { display: inline-flex; align-items: center; gap: 6px; }
