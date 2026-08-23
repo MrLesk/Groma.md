@@ -5,6 +5,12 @@ import {
 } from './relationship-text.ts'
 import type { ArchitectureWorld, WorldRelationship } from '../types.ts'
 
+/** One command flow, optionally limited to the actor who starts it. */
+export interface FlowRef {
+  commandId: string
+  actorId?: string
+}
+
 export function actionCaption(
   relationship: { source: string; target: string; description: string },
   outgoing: boolean,
@@ -143,6 +149,16 @@ export function actionPath(
   actorId?: string,
 ): Set<string> {
   return new Set(actionLegs(actionId, world, actorId).map(leg => leg.id))
+}
+
+/** The union of authored relationship routes travelled by the active flows. */
+export function flowRouteIds(
+  flows: readonly FlowRef[],
+  world: ArchitectureWorld,
+): Set<string> {
+  return new Set(flows.flatMap(flow => [
+    ...actionPath(flow.commandId, world, flow.actorId),
+  ]))
 }
 
 /** Every actor command in the world, deduped across the actors who share it. */

@@ -62,24 +62,6 @@ export function tabSections(tab: DetailsTab): Section[] {
     : ['technology', 'code', 'travelledBy']
 }
 
-/** The lit walk: its command and, for a pick from actor details, the picker. */
-export interface ActiveAction {
-  id?: string
-  actorId?: string
-}
-
-export function nextActiveAction(
-  current: ActiveAction,
-  event:
-    | { type: 'pick'; id: string; actorId?: string }
-    | { type: 'select' }
-    | { type: 'clear' },
-): ActiveAction {
-  if (event.type === 'pick') return { id: event.id, actorId: event.actorId }
-  if (event.type === 'clear') return {}
-  return current
-}
-
 export function inspectDetails(
   element: WorldElement,
   world: ArchitectureWorld,
@@ -166,8 +148,8 @@ export function paintDetails(
   inspected: Inspected,
   onSelect: (id: string, additive: boolean) => void,
   /** ownCommand is true for the actor's own command rows, false for walk references. */
-  onPickAction: (id: string, ownCommand: boolean) => void,
-  activeActionId: string | undefined,
+  onPickFlow: (id: string, ownCommand: boolean) => void,
+  activeCommandIds: ReadonlySet<string>,
   tab: DetailsTab,
   onTab: (tab: DetailsTab) => void,
 ): void {
@@ -207,7 +189,7 @@ export function paintDetails(
         const link = document.createElement('button')
         link.type = 'button'
         link.className = 'link'
-        if (relationship.id === activeActionId) link.classList.add('active')
+        if (activeCommandIds.has(relationship.id)) link.classList.add('active')
         const rest = relationship.detail === '' ? '' : ` · ${relationship.detail}`
         if (relationship.outgoing) {
           link.append(`→ ${relationship.title}`)
@@ -218,7 +200,7 @@ export function paintDetails(
           )
         }
         link.addEventListener('click', event => {
-          if (relationship.pickable) onPickAction(relationship.id, true)
+          if (relationship.pickable) onPickFlow(relationship.id, true)
           else onSelect(relationship.peerId, event.shiftKey)
         })
         item.append(link, rest)
@@ -284,9 +266,9 @@ export function paintDetails(
         const link = document.createElement('button')
         link.type = 'button'
         link.className = 'link'
-        if (walk.id === activeActionId) link.classList.add('active')
+        if (activeCommandIds.has(walk.id)) link.classList.add('active')
         link.append(walk.title)
-        link.addEventListener('click', () => onPickAction(walk.id, false))
+        link.addEventListener('click', () => onPickFlow(walk.id, false))
         item.append(link)
         list.append(item)
       }

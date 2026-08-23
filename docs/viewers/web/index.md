@@ -15,18 +15,21 @@ the observed system's name with live flow and element counts, and a
 Dark/Light toggle. The toggle swaps the whole viewer, chrome and map
 alike, between the light sheet and a dark one; the accent green stays
 the same. A footer holds the `-` and `+` zoom buttons, a zoom readout
-(a percentage relative to the fitted view, nothing while fitted), and,
-on the left, either a quiet control hint or the active actor command
-with `x clear`. Between them sit three panes that each reserve their
+(a percentage relative to the fitted view, nothing while fitted), and
+a quiet control hint on the left. Between them sit three panes that each reserve their
 width: the hierarchy pane on the left, the map pane in the center, and
 the details pane on the right. The map pane is the camera viewport; the
 map never renders under a side pane.
 
 The hierarchy pane starts with the flows list folded under its
 Flows heading; clicking the heading opens it. The list holds every
-actor command in the world, deduped across the actors who share
-it. Clicking one lights its walk on the map from every actor who
-shares it, and the active row is highlighted. Below it the Structure
+actor command in the world, deduped across the actors who share it.
+Clicking an inactive command activates and selects its flow. Clicking
+another keeps both active and selects the new one; clicking the selected
+flow deactivates it and selects the latest remaining flow. Active rows use
+the accent and the selected row adds the normal selected treatment. One command
+has at most one active flow; picking it from an actor changes that flow's scope
+in place. Below it the Structure
 section starts open and groups the merged containment tree under Actors,
 Systems, and External systems labels, omitting an empty group. Containers
 sit under their system and components under their container, in
@@ -47,7 +50,10 @@ evidence: the technology the element's Markdown declares
 comma-separated part), the scanner, file, and optional symbol from
 `code`, and Travelled by, the actor commands whose walk touches
 the selection; clicking one lights that walk. Children and
-relationship peers select that element. When the
+relationship peers select that element. A selected flow shows its command as
+the title, its optional starting actor and leg count, then every authored
+relationship leg in travel order. Each leg's relationship and both endpoints
+can be selected without clearing active flows. When the
 selection is an actor who uses a launcher, software they use that
 starts other software they also use, the actor's outgoing rows
 are that launcher's commands, plus whatever they use that no launcher
@@ -56,9 +62,10 @@ the map: the rest dims and each lit route runs in the accent green
 with a moving dash from source to target. A command picked
 from an actor's details walks in from that actor alone, even when
 other actors share the launcher; picking the same command from the
-sidebar flows list or a Travelled-by row lights every sharer's
-approach. The path stays while other boxes are selected. `x` clears
-it. Choosing another actor command replaces it.
+sidebar flows list or a Travelled-by row includes every sharer's
+approach. Several active flows share the map as the union of their routes.
+Selecting architecture or a Backlog task keeps those routes lit. Escape or a
+click on empty sheet clears them with the other active selections.
 
 ## What it shows
 
@@ -206,8 +213,8 @@ clicking an architecture item or relationship to add or remove it from the
 selection. The map combines their normal selection treatments, the hierarchy
 marks every selected element, and the last item selected owns the details pane.
 Removing that item returns details to the previous item. Click empty
-sheet or press Escape to clear the selection, and the details pane empties. A
-actor command stays on the map until `x`.
+sheet or press Escape to clear the selection, active flows, and active tasks;
+the details pane empties.
 Backlog work shows as pins. Every task outside the configured terminal
 status, and every task in that status changed within the last day, puts
 one pin per assignee on the element the task touched last: the element
@@ -274,9 +281,11 @@ view opens again from its link:
 each selected element's kind names it (`?actor=<id>`, `system=<id>`,
 `container=<id>` or `component=<id>`), `relationship=<source>/<target>`
 names a selected route, and repeated element and relationship parameters keep
-their selection order; `task=<id>` names a selected task,
-`flow=<source>/<target>` the lit command (with `by=<actor>` when it
-was picked from that actor's details), `tab=how` the How it's built
+their selection order; `task=<id>` names a selected task. Repeated
+`flow=<source>/<target>` entries preserve active flow order; an actor-scoped
+flow uses `flow=<actor>/<source>/<target>`. `selected-flow` keeps the details
+owner when it is not the latest active flow. When architecture and task
+selection are absent, an active flow owns details. `tab=how` names the How it's built
 tab and `theme=dark` the theme;
 defaults stay out of the URL and unknown values are ignored.
 A watched TypeScript change folds and rebuilds the map without a

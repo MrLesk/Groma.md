@@ -125,6 +125,7 @@ const style = `
     padding: 5px 14px;
   }
   .row:hover { background: var(--hover); }
+  .row.active { color: var(--accent); }
   .row.selected { background: rgba(29, 158, 117, 0.1); box-shadow: inset 2px 0 var(--accent); }
   .row .twist { width: 1em; flex: none; color: var(--muted); }
   .row .twist.toggle:hover { color: var(--accent); }
@@ -155,7 +156,7 @@ export function renderPage(payload: WebPayload): string {
     + `<nav id="hierarchy"><div id="flows"></div><div id="tree"></div><div id="legend">${legend()}</div></nav>`
     + '<div id="map"></div>'
     + '<aside id="details"><p class="meta"></p><h1></h1><nav class="controls tabs"></nav><div class="body"></div></aside>'
-    + '<footer id="footer"><span id="action"></span><span id="zoom"></span>'
+    + '<footer id="footer"><span id="action" class="hint">drag or scroll pan · pinch zoom · + − 0</span><span id="zoom"></span>'
     + '<div class="controls"><button id="zoom-out">−</button><button id="zoom-in">+</button></div>'
     + '</footer>'
     + `<script type="application/json" id="world">${json}</script>`

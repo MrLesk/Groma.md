@@ -1,7 +1,10 @@
+import type { FlowRef } from '../action-path.ts'
+
 export type Selection =
   | { kind: 'none' }
   | { kind: 'architecture'; ids: readonly string[] }
   | { kind: 'task'; id: string }
+  | { kind: 'flow'; flow: FlowRef }
 
 export const noSelection: Selection = { kind: 'none' }
 
@@ -12,6 +15,10 @@ export function primarySelection(selection: Selection): string | undefined {
 
 export function selectedArchitecture(selection: Selection): readonly string[] {
   return selection.kind === 'architecture' ? selection.ids : []
+}
+
+export function selectedFlow(selection: Selection): FlowRef | undefined {
+  return selection.kind === 'flow' ? selection.flow : undefined
 }
 
 /** A plain pick replaces the architecture selection; an additive pick toggles one target in its ordered set. */
@@ -26,10 +33,20 @@ export function selectTask(id: string): Selection {
   return { kind: 'task', id }
 }
 
+export function selectFlow(flow: FlowRef): Selection {
+  return { kind: 'flow', flow }
+}
+
 /** Drops targets that disappeared from a live payload without changing the order of those that remain. */
 export function retainSelection(selection: Selection, known: (id: string) => boolean): Selection {
   if (selection.kind === 'none') return selection
   if (selection.kind === 'task') return known(selection.id) ? selection : noSelection
+  if (selection.kind === 'flow') {
+    return known(selection.flow.commandId)
+      && (selection.flow.actorId === undefined || known(selection.flow.actorId))
+      ? selection
+      : noSelection
+  }
   const ids = selection.ids.filter(known)
   return ids.length === 0 ? noSelection : { kind: 'architecture', ids }
 }

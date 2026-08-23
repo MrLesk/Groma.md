@@ -125,16 +125,15 @@ export function zoomReadout(camera: Camera, fit: Camera): string {
 
 export type KeyTarget = 'hierarchy' | 'control' | 'text' | 'other'
 
-/** Map keys, leaving text fields alone and `x` to the panes when they have focus. */
+/** Map keys, leaving text fields alone. */
 export function keyAction(
   key: string,
   target: KeyTarget,
-): 'in' | 'out' | 'fit' | 'clear' | 'deselect' | undefined {
+): 'in' | 'out' | 'fit' | 'deselect' | undefined {
   if (target === 'text') return undefined
   if (key === '+' || key === '=') return 'in'
   if (key === '-' || key === '_') return 'out'
   if (key === '0') return 'fit'
   if (key === 'Escape') return 'deselect'
-  if ((key === 'x' || key === 'X') && target === 'other') return 'clear'
   return undefined
 }

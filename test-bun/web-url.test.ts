@@ -25,28 +25,31 @@ const world: ArchitectureWorld = {
 
 const full: ViewState = {
   selection: { kind: 'architecture', ids: ['observed:tool', 'relationship:1', 'observed:scan'] },
-  action: { id: 'relationship:1', actorId: 'observed:dev' },
+  flows: [
+    { commandId: 'relationship:0', actorId: 'observed:dev' },
+    { commandId: 'relationship:1' },
+  ],
   tab: 'how',
   dark: true,
 }
 
 test.concurrent('a view round-trips through the query string with authored ids', () => {
   const query = writeView(full, world, [])
-  assert.equal(query, '?system=tool&relationship=commands/scan&component=scan&flow=commands/scan&by=dev&tab=how&theme=dark')
+  assert.equal(query, '?system=tool&relationship=commands/scan&component=scan&flow=dev/dev/commands&flow=commands/scan&tab=how&theme=dark')
   assert.deepEqual(readView(query, world, []), full)
 })
 
 test.concurrent('defaults write nothing and read back as the default view', () => {
-  const rest: ViewState = { selection: noSelection, action: {}, tab: 'what', dark: false }
+  const rest: ViewState = { selection: noSelection, flows: [], tab: 'what', dark: false }
   assert.equal(writeView(rest, world, []), '')
   assert.deepEqual(readView('', world, []), rest)
-  assert.equal(writeView({ ...rest, action: { id: 'relationship:1' } }, world, []), '?flow=commands/scan')
-  assert.equal(writeView({ ...rest, action: { id: 'relationship:1', actorId: 'observed:tool' } }, world, []), '?flow=commands/scan')
+  assert.equal(writeView({ ...rest, flows: [{ commandId: 'relationship:1' }] }, world, []), '?flow=commands/scan')
+  assert.equal(writeView({ ...rest, flows: [{ commandId: 'relationship:1', actorId: 'observed:tool' }] }, world, []), '?flow=commands/scan')
   assert.equal(writeView({ ...rest, selection: { kind: 'architecture', ids: ['observed:dev'] } }, world, []), '?actor=dev')
 })
 
 test.concurrent('a selected relationship is carried as its source and target ids', () => {
-  const state: ViewState = { selection: { kind: 'architecture', ids: ['relationship:1'] }, action: {}, tab: 'what', dark: false }
+  const state: ViewState = { selection: { kind: 'architecture', ids: ['relationship:1'] }, flows: [], tab: 'what', dark: false }
   assert.equal(writeView(state, world, []), '?relationship=commands/scan')
   assert.deepEqual(readView('?relationship=commands/scan', world, []), state)
   assert.deepEqual(readView('?relationship=dev/scan', world, []).selection, noSelection)
@@ -56,7 +59,7 @@ test.concurrent('a selected task is carried by its id while the work knows it', 
   const work: WorkItem[] = [{
     id: 'TASK-7', title: 'Change', status: 'In Progress', assignees: [], description: '', references: [], modifiedFiles: [], criteria: [],
   }]
-  const state: ViewState = { selection: selectTask('TASK-7'), action: {}, tab: 'what', dark: false }
+  const state: ViewState = { selection: selectTask('TASK-7'), flows: [], tab: 'what', dark: false }
   assert.equal(writeView(state, world, work), '?task=TASK-7')
   assert.deepEqual(readView('?task=TASK-7', world, work), state)
   assert.deepEqual(readView('?task=TASK-7', world, []).selection, noSelection)
@@ -67,12 +70,40 @@ test.concurrent('unknown ids, kinds and values are ignored', () => {
   assert.deepEqual(readView('?actor=scan', world, []).selection, noSelection)
   assert.deepEqual(readView('?component=nope&flow=dev/scan&by=zed&tab=weird&theme=light', world, []), {
     selection: noSelection,
-    action: {},
+    flows: [],
     tab: 'what',
     dark: false,
   })
-  assert.deepEqual(readView('?flow=commands/scan&by=nobody', world, []).action, { id: 'relationship:1', actorId: undefined })
-  assert.deepEqual(readView('?flow=commands/scan&by=tool', world, []).action, { id: 'relationship:1', actorId: undefined })
+})
+
+test.concurrent('repeated flows keep activation order and scope, then own details without another selection', () => {
+  const state = readView('?flow=commands/scan&flow=dev/dev/commands', world, [])
+
+  assert.deepEqual(state.flows, [
+    { commandId: 'relationship:1' },
+    { commandId: 'relationship:0', actorId: 'observed:dev' },
+  ])
+  assert.deepEqual(state.selection, {
+    kind: 'flow',
+    flow: { commandId: 'relationship:0', actorId: 'observed:dev' },
+  })
+  assert.equal(writeView(state, world, []), '?flow=commands/scan&flow=dev/dev/commands')
+})
+
+test.concurrent('a selected active flow round-trips independently of activation order', () => {
+  const state: ViewState = {
+    selection: { kind: 'flow', flow: { commandId: 'relationship:1' } },
+    flows: [
+      { commandId: 'relationship:1' },
+      { commandId: 'relationship:0', actorId: 'observed:dev' },
+    ],
+    tab: 'what',
+    dark: false,
+  }
+
+  const query = '?flow=commands/scan&flow=dev/dev/commands&selected-flow=commands/scan'
+  assert.equal(writeView(state, world, []), query)
+  assert.deepEqual(readView(query, world, []), state)
 })
 
 test.concurrent('repeated architecture parameters restore one ordered selection and ignore unknown entries', () => {
