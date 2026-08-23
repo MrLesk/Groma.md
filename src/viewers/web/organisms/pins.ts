@@ -64,7 +64,7 @@ export interface PinLayer {
   paint(pins: readonly WorkPin[]): void
   /** Moves every pin to its element's roof under the camera. */
   place(camera: Camera): void
-  /** Shows or hides the in-progress pins and the finished ones; the pins still shown fan out anew. */
+  /** Shows or hides the pins: none while agents is off, the finished ones only while completed is on too; the pins still shown fan out anew. */
   show(agents: boolean, completed: boolean): void
 }
 
@@ -88,7 +88,7 @@ export function createPins(host: HTMLElement, anchorOf: (id: string) => Point | 
   }
   /** The pins the toggles allow fan out side by side around their element's roof point, stems leaning back to it; the rest hide. */
   const fanOut = (): void => {
-    const shown = pins.filter(pin => pinned.has(pin.key) && (pin.status === 'Done' ? completed : agents))
+    const shown = pins.filter(pin => pinned.has(pin.key) && agents && (pin.status !== 'Done' || completed))
     const visible = new Set(shown.map(pin => pin.key))
     for (const [key, { node }] of pinned) node.hidden = !visible.has(key)
     const sharing = new Map<string, number>()

@@ -185,17 +185,18 @@ Live work island, frosted glass at the bottom centre of the map
 above the footer, exists while any pin does: folded it is a pill with
 the pulse mark, a dot while a task is in progress, and a chevron
 pointing up; unfolded it shows the Live work label, an Agents toggle
-and a Completed toggle that hide the in-progress or the finished pins
-and their chips, and a scrollable strip of chips, one per pin with
-its badge and task id, in progress first and the finished ones in
-grey. The pins still shown on an element fan out afresh, so a pin
-left alone stands over its roof. Clicking a pin's head or a chip
-selects the task: the details pane shows its id, status and
-assignees over its title, then its description, its acceptance
-criteria as a checklist, its modified files and its references,
-where a reference naming an element is a link that selects the
-element. Pins move as Backlog changes, through the same live
-channel as the world.
+that hides every pin and chip, a Completed toggle that hides the
+finished ones while Agents is on, and a scrollable strip of chips,
+one per pin with its badge and task id, in progress first and the
+finished ones in grey. The pins still shown on an element fan out
+afresh, so a pin left alone stands over its roof. Clicking a pin's
+head or a chip selects the task: the details pane shows its id,
+status and assignees over its title, then its description, its
+acceptance criteria as a checklist, its modified files and its
+references, where a reference naming an element is a link that
+selects the element. Pins move as Backlog changes, through the same
+live channel as the world. The island eases its width and height
+between sizes whenever it folds, unfolds, or its chips change.
 The URL follows the view so any view opens again from its link:
 the selected element's kind names it (`?person=<id>`, `system=<id>`,
 `container=<id>` or `component=<id>`), `relationship=<source>/<target>`
