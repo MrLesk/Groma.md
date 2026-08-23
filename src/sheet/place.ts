@@ -1,6 +1,7 @@
 import { compareElements } from '../element-order.ts'
 import type { ArchitectureWorld, WorldElement, WorldRelationship } from '../types.ts'
-import { ISLAND_GAP, MARGIN, PAD, shadeOf, translate, unionRects } from './grid.ts'
+import { ISLAND_GAP } from './forces.ts'
+import { MARGIN, PAD, shadeOf, translate, unionRects } from './grid.ts'
 import {
   ISLAND_FONT,
   ISLAND_SPACING,

@@ -1,9 +1,8 @@
+import { CORRIDOR, GAP } from './forces.ts'
 import type { CellRect } from './types.ts'
 
 /** Lanes per cell: routes travel at 0, ¼, ½ and ¾ of a cell. */
 export const LANES = 4
-/** Cells between siblings in one shelf; leaves five free lanes in every corridor. */
-export const GAP = 2
 /** Cells between a child and its parent's edge; the front band holds the parent's name. */
 export const PAD = 1
 /**
@@ -13,23 +12,15 @@ export const PAD = 1
  */
 export const ROOF_SHADOW = 0.5
 /**
- * Cells of visible ground a corridor keeps: an arrow leaves its port and
- * enters its goal along two lanes each, so one cell is the least it can carry.
- */
-const CLEAR = 1
-
-/**
  * Extra cells a building claims on its north and west, where its roof hides
  * the ground. Its neighbours there stand that much further away, so the
- * corridor between them still shows CLEAR cells; its south and east
+ * corridor between them still shows CORRIDOR cells; its south and east
  * neighbours are unaffected, because nothing hides that ground.
  */
 export function shadeOf(floors: number): number {
   /** Never negative: a wider GAP already clears the roof, and a building must not claim less than its footprint. */
-  return Math.max(0, Math.ceil(floors * ROOF_SHADOW + CLEAR - GAP))
+  return Math.max(0, Math.ceil(floors * ROOF_SHADOW + CORRIDOR - GAP))
 }
-/** Cells of screen width between islands. */
-export const ISLAND_GAP = 3
 /** Cells of sheet around the islands; the compass rose lives in a corner of this band. */
 export const MARGIN = 4
 /** Side of an empty slab or empty island. */

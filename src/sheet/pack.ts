@@ -1,4 +1,5 @@
-import { EMPTY, GAP, PAD, overlaps, unionRects } from './grid.ts'
+import { FOLD_ASPECT, GAP, SPOT_BEND, SPOT_DETOUR } from './forces.ts'
+import { EMPTY, PAD, overlaps, unionRects } from './grid.ts'
 import type { CellRect } from './types.ts'
 
 export interface ShelfItem {
@@ -47,13 +48,6 @@ export interface Partnered extends ShelfItem {
   /** Sibling keys the item has relationships with, each with the number of relationships. */
   partners: ReadonlyMap<string, number>
 }
-
-/** Cells a bend costs, so a straight run beats a shorter dog-leg. */
-const BEND = 2
-/** An arrow forced around a sibling is the worst case, whatever its length. */
-const DETOUR = 100
-/** An entry column deeper than this many times its width folds into a square-ish block. */
-const FOLD_ASPECT = 3
 
 interface Partner {
   rect: CellRect
@@ -116,7 +110,7 @@ function arrowCost(a: CellRect, b: CellRect, others: readonly CellRect[]): numbe
   const dx = Math.abs(centre(a).x - centre(b).x)
   const dy = Math.abs(centre(a).y - centre(b).y)
   const bends = dx <= 0.5 || dy <= 0.5 ? 0 : overlapX(a, b) || overlapY(a, b) ? 2 : 1
-  return dx + dy + BEND * bends + (blocked(a, b, others) ? DETOUR : 0)
+  return dx + dy + SPOT_BEND * bends + (blocked(a, b, others) ? SPOT_DETOUR : 0)
 }
 
 /** The spots a child may take: beside each placed partner, centred on it, then beside everything placed so far, centred on the partners' weighted centre. */
@@ -197,7 +191,7 @@ export function grow(items: readonly Partnered[]): Shelf {
           longer(unionRects([...placed, rect])!) - longer(all),
         ) + arrows.reduce((sum, arrow) => {
           const others = placed.filter(other => other !== arrow.a && other !== arrow.b)
-          return sum + (!blocked(arrow.a, arrow.b, others) && blocked(arrow.a, arrow.b, [...others, rect]) ? DETOUR * arrow.count : 0)
+          return sum + (!blocked(arrow.a, arrow.b, others) && blocked(arrow.a, arrow.b, [...others, rect]) ? SPOT_DETOUR * arrow.count : 0)
         }, 0)
         if (cost < bestCost) {
           best = { gx: rect.gx, gy: rect.gy }
