@@ -1,9 +1,13 @@
 import { compareElements } from '../../element-order.ts'
 import type { ArchitectureWorld, WorkItem, WorldElement, WorldRelationship } from '../../types.ts'
 import { touchedElements } from '../../work/pins.ts'
-import { actionPath, elementOnPath, worldCommands } from '../action-path.ts'
+import { elementOnPath, flowRouteIds, worldCommands } from '../action-path.ts'
+import type { FlowRef } from '../action-path.ts'
 import { initialTree, toggleExpansion, treeRows } from '../tui/tree.ts'
 import type { TreeRow } from '../tui/tree.ts'
+import { paintFlowDetails } from './flow/details.ts'
+import { paintFlows } from './flow/list.ts'
+import { sameFlow, toggleFlowSelection } from './flow/state.ts'
 import {
   fitHighlights,
   fitCamera,
@@ -19,9 +23,8 @@ import type { Camera, KeyTarget, Viewport } from './iso/camera.ts'
 import { createMap } from './iso/map.ts'
 import { projectScene } from './iso/project.ts'
 import type { ProjectedScene } from './iso/project.ts'
-import { clearDetails, paintDetails, paintRelationship, paintTask, inspectDetails, nextActiveAction } from './organisms/details.ts'
-import type { ActiveAction, DetailsTab } from './organisms/details.ts'
-import { paintFlows } from './organisms/flows.ts'
+import { clearDetails, paintDetails, paintRelationship, paintTask, inspectDetails } from './organisms/details.ts'
+import type { DetailsTab } from './organisms/details.ts'
 import { paintHierarchy } from './organisms/hierarchy.ts'
 import { createPins } from './work/pins.ts'
 import { createTip } from './organisms/tip.ts'
@@ -34,6 +37,8 @@ import {
   retainSelection,
   selectArchitecture,
   selectedArchitecture,
+  selectedFlow,
+  selectFlow,
   selectTask,
 } from './selection.ts'
 import { readView, writeView } from './url.ts'
@@ -53,7 +58,6 @@ const flowsHost = document.getElementById('flows')!
 const statsHost = document.getElementById('stats')!
 const themeButton = document.getElementById('theme')!
 const detailsHost = document.getElementById('details')!
-const actionHost = document.getElementById('action')!
 const zoomHost = document.getElementById('zoom')!
 
 const map = createMap(host)
@@ -63,13 +67,13 @@ const island = createWorkIsland(host, id => toggleTask(id), pins.show, tip)
 let tree = initialTree()
 const opened = readView(location.search, world, work.items)
 let selection = opened.selection
+let activeFlows: FlowRef[] = [...opened.flows]
 const initial = firstSystem(world)
 if (selection.kind === 'none' && initial !== undefined) {
   selection = selectArchitecture(noSelection, initial.representationId, false)
 }
 /** Tasks activated from pins or chips, in activation order; selection is independent and this order supplies its deactivation fallback. */
-let active: string[] = selection.kind === 'task' ? [selection.id] : []
-let activeAction: ActiveAction = opened.action
+let activeTaskIds: string[] = selection.kind === 'task' ? [selection.id] : []
 let detailsTab: DetailsTab = opened.tab
 let darkTheme = opened.dark
 
@@ -127,17 +131,6 @@ function zoomStep(factor: number): void {
   applyCamera()
 }
 
-function paintAction(): void {
-  const active = world.relationships.find(item => item.id === activeAction.id)
-  if (active === undefined) {
-    actionHost.textContent = 'drag or scroll pan · pinch zoom · + − 0'
-    actionHost.classList.add('hint')
-    return
-  }
-  actionHost.textContent = `${active.description}   x clear`
-  actionHost.classList.remove('hint')
-}
-
 function paintStats(flowCount: number): void {
   const system = firstSystem(world)
   statsHost.textContent = system === undefined
@@ -147,7 +140,7 @@ function paintStats(flowCount: number): void {
 
 /** The URL follows the view, without adding history entries. */
 function syncUrl(): void {
-  const query = writeView({ selection, action: activeAction, tab: detailsTab, dark: darkTheme }, world, work.items)
+  const query = writeView({ selection, flows: activeFlows, tab: detailsTab, dark: darkTheme }, world, work.items)
   history.replaceState(null, '', `${location.pathname}${query}`)
 }
 
@@ -155,21 +148,24 @@ function paintSelection(): void {
   syncUrl()
   const selectedId = primarySelection(selection)
   const selectedIds = selectedArchitecture(selection)
-  const litIds = actionPath(activeAction.id, world, activeAction.actorId)
+  const litIds = flowRouteIds(activeFlows, world)
+  const flow = selectedFlow(selection)
+  const activeCommandIds = new Set(activeFlows.map(item => item.commandId))
   const task = selection.kind === 'task' ? workItem(selection.id) : undefined
-  const activeTasks = active.map(id => workItem(id)).filter((item): item is WorkItem => item !== undefined)
+  const activeTaskItems = activeTaskIds.map(id => workItem(id)).filter((item): item is WorkItem => item !== undefined)
   map.select(selectedIds)
-  map.mark(new Set(activeTasks.flatMap(item => touchedElements(item, world))))
-  pins.activate(active, task?.id)
-  island.activate(active, task?.id)
-  map.setFlow(litIds, id => elementOnPath(id, litIds, world))
+  map.mark(new Set(activeTaskItems.flatMap(item => touchedElements(item, world))))
+  pins.activate(activeTaskIds, task?.id)
+  island.activate(activeTaskIds, task?.id)
+  map.setLitRoutes(litIds, id => elementOnPath(id, litIds, world))
   paintTree()
   const commands = worldCommands(world)
-  paintFlows(flowsHost, commands, activeAction.id, pickAction)
+  paintFlows(flowsHost, commands, activeFlows, flow, pickCommand)
   paintStats(commands.length)
   const selected = worldElement(selectedId)
   const relationship = worldRelationship(selectedId)
-  if (relationship !== undefined) paintRelationship(detailsHost, relationship, world, select)
+  if (flow !== undefined) paintFlowDetails(detailsHost, flow, world, select)
+  else if (relationship !== undefined) paintRelationship(detailsHost, relationship, world, select)
   else if (task !== undefined) paintTask(detailsHost, task, world, select)
   else if (selected === undefined) clearDetails(detailsHost)
   else {
@@ -177,8 +173,11 @@ function paintSelection(): void {
       detailsHost,
       inspectDetails(selected, world),
       select,
-      (id, ownCommand) => pickAction(id, ownCommand ? selected.representationId : undefined),
-      activeAction.id,
+      (id, ownCommand) => toggleFlow({
+        commandId: id,
+        ...(ownCommand ? { actorId: selected.representationId } : {}),
+      }),
+      activeCommandIds,
       detailsTab,
       tab => {
         detailsTab = tab
@@ -186,7 +185,6 @@ function paintSelection(): void {
       },
     )
   }
-  paintAction()
 }
 
 function paintTree(): void {
@@ -207,12 +205,11 @@ function toggleRow(row: TreeRow): void {
 function select(id: string, additive = false): void {
   if (worldElement(id) === undefined && worldRelationship(id) === undefined) return
   selection = selectArchitecture(selection, id, additive)
-  activeAction = nextActiveAction(activeAction, { type: 'select' })
   paintSelection()
 }
 
 function focusActiveTasks(): void {
-  const elementIds = active.flatMap(id => {
+  const elementIds = activeTaskIds.flatMap(id => {
     const task = workItem(id)
     return task === undefined ? [] : touchedElements(task, world)
   })
@@ -225,8 +222,8 @@ function focusActiveTasks(): void {
 
 /** A pin or chip click selects its task; only clicking the selected task again deactivates it. */
 function toggleTask(id: string): void {
-  const next = toggleWorkSelection(active, selection.kind === 'task' ? selection.id : undefined, id)
-  active = next.active
+  const next = toggleWorkSelection(activeTaskIds, selection.kind === 'task' ? selection.id : undefined, id)
+  activeTaskIds = next.active
   selection = next.selected === undefined ? noSelection : selectTask(next.selected)
   paintSelection()
   focusActiveTasks()
@@ -234,17 +231,23 @@ function toggleTask(id: string): void {
 
 function deselect(): void {
   selection = noSelection
-  active = []
+  activeTaskIds = []
+  activeFlows = []
   paintSelection()
 }
 
-function pickAction(id: string, actorId?: string): void {
-  activeAction = nextActiveAction(activeAction, { type: 'pick', id, actorId })
-  paintSelection()
+function pickCommand(commandId: string): void {
+  const selected = selectedFlow(selection)
+  const flow = selected?.commandId === commandId
+    ? selected
+    : activeFlows.findLast(item => item.commandId === commandId) ?? { commandId }
+  toggleFlow(flow)
 }
 
-function clearAction(): void {
-  activeAction = nextActiveAction(activeAction, { type: 'clear' })
+function toggleFlow(flow: FlowRef): void {
+  const next = toggleFlowSelection(activeFlows, selectedFlow(selection), flow)
+  activeFlows = next.active
+  selection = next.selected === undefined ? noSelection : selectFlow(next.selected)
   paintSelection()
 }
 
@@ -342,7 +345,6 @@ document.addEventListener('keydown', event => {
   else if (action === 'out') zoomStep(1 / ZOOM_STEP)
   else if (action === 'fit') refit()
   else if (action === 'deselect') deselect()
-  else clearAction()
 })
 
 let lastViewport = viewport()
@@ -364,9 +366,20 @@ function applyWorld(payload: WebPayload): void {
   scene = projectScene(payload.sheet)
   fitted = fitCamera(scene.bounds, viewport())
   if (!touched) camera = fitted
-  active = active.filter(id => workItem(id) !== undefined)
+  activeTaskIds = activeTaskIds.filter(id => workItem(id) !== undefined)
+  activeFlows = activeFlows.filter(flow => {
+    return worldRelationship(flow.commandId) !== undefined
+      && (flow.actorId === undefined || worldElement(flow.actorId)?.kind === 'actor')
+  })
   const hadSelection = primarySelection(selection) !== undefined
   selection = retainSelection(selection, id => known(id))
+  if (selection.kind === 'flow') {
+    const selected = selection.flow
+    if (!activeFlows.some(flow => sameFlow(flow, selected))) {
+      const fallback = activeFlows.at(-1)
+      selection = fallback === undefined ? noSelection : selectFlow(fallback)
+    }
+  }
   if (hadSelection && primarySelection(selection) === undefined) {
     const first = firstSystem(world)
     selection = first === undefined

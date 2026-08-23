@@ -2,7 +2,6 @@ import { expect, test } from 'bun:test'
 
 import {
   inspectDetails,
-  nextActiveAction,
   tabSections,
 } from '../src/viewers/web/organisms/details.ts'
 import type {
@@ -189,20 +188,4 @@ test.concurrent('an actor lists launcher commands as pickable actions', () => {
   const web = inspectDetails(fixture.elements[2]!, fixture)
   expect(web.travelledBy).toEqual([{ id: 'api-web', title: 'starts' }])
   expect(api.travelledBy.map(walk => walk.id)).toEqual(['api-web', 'api-jobs'])
-})
-
-test.concurrent('a picked action stays across selection and clears on x', () => {
-  let action = nextActiveAction({}, { type: 'pick', id: 'api-jobs', actorId: 'buyer' })
-  expect(action.id).toBe('api-jobs')
-  expect(action.actorId).toBe('buyer')
-  action = nextActiveAction(action, { type: 'select' })
-  expect(action.id).toBe('api-jobs')
-  expect(action.actorId).toBe('buyer')
-  // An actor-less pick replaces the walk and drops the scope.
-  action = nextActiveAction(action, { type: 'pick', id: 'api-web' })
-  expect(action.id).toBe('api-web')
-  expect(action.actorId).toBeUndefined()
-  action = nextActiveAction(action, { type: 'clear' })
-  expect(action.id).toBeUndefined()
-  expect(action.actorId).toBeUndefined()
 })

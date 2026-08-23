@@ -48,8 +48,8 @@ export interface IsoMap {
   select(ids: readonly string[]): void
   /** Outlines the elements the active tasks touch and accents the routes leaving them, dotted when the target is untouched; an empty set clears both. */
   mark(ids: ReadonlySet<string>): void
-  /** Lights a picked flow's routes and dims everything off its path. */
-  setFlow(litIds: ReadonlySet<string>, onPath: (id: string) => boolean): void
+  /** Lights route ids and dims everything off their path. */
+  setLitRoutes(litRouteIds: ReadonlySet<string>, onPath: (id: string) => boolean): void
   hitId(target: EventTarget | null): string | undefined
   /** True when a click hit nothing but the sheet. */
   isSheet(target: EventTarget | null): boolean
@@ -154,10 +154,10 @@ export function createMap(host: HTMLElement): IsoMap {
         route.group.classList.toggle('half', leaving && !ids.has(route.target))
       }
     },
-    setFlow(litIds, onPath) {
-      const tracing = litIds.size > 0
+    setLitRoutes(litRouteIds, onPath) {
+      const tracing = litRouteIds.size > 0
       camera.toggleAttribute('data-tracing', tracing)
-      for (const [routeId, route] of routes) route.group.classList.toggle('lit', litIds.has(routeId))
+      for (const [routeId, route] of routes) route.group.classList.toggle('lit', litRouteIds.has(routeId))
       for (const [itemId, node] of items) node.classList.toggle('onpath', tracing && onPath(itemId))
     },
     hitId(target) {

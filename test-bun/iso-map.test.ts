@@ -10,6 +10,7 @@ import type { Building, RoutePoint, SheetScene } from '../src/sheet/types.ts'
 import type { Bounds, Point } from '../src/types.ts'
 import {
   fitCamera,
+  keyAction,
   pan,
   wheelAction,
   zoomAbout,
@@ -143,6 +144,12 @@ test.concurrent('a plain wheel pans by the scroll delta; a pinch or cmd+wheel zo
   assert.ok(pinch.kind === 'zoom' && Math.abs(pinch.factor - Math.exp(0.1)) < 1e-12)
   const wheel = wheelAction({ deltaX: 0, deltaY: -100, ctrlKey: false, metaKey: true })
   assert.ok(wheel.kind === 'zoom' && Math.abs(wheel.factor - Math.exp(0.15)) < 1e-12)
+})
+
+test.concurrent('Escape clears selection while x has no map action', () => {
+  assert.equal(keyAction('Escape', 'other'), 'deselect')
+  assert.equal(keyAction('x', 'other'), undefined)
+  assert.equal(keyAction('X', 'other'), undefined)
 })
 
 test.concurrent('the frame and its ticks enclose every island and the compass sits in the west corner', async () => {

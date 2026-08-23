@@ -5,6 +5,7 @@ import {
   actionLegs,
   actionPath,
   elementOnPath,
+  flowRouteIds,
   outgoingActions,
   pickableActions,
   worldCommands,
@@ -208,5 +209,19 @@ test.concurrent('action legs walk in travel order: approaches, then onward', () 
     'api-jobs',
     'jobs-store',
     'loop-a',
+  ])
+})
+
+test.concurrent('active flows share one union of authored route ids', () => {
+  expect([...flowRouteIds([
+    { commandId: 'api-jobs', actorId: 'buyer' },
+    { commandId: 'reader-web', actorId: 'reader' },
+  ], world)].sort()).toEqual([
+    'api-jobs',
+    'buyer-api',
+    'jobs-store',
+    'loop-a',
+    'reader-web',
+    'web-store',
   ])
 })

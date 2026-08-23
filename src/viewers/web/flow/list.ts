@@ -1,29 +1,33 @@
 import type { WorldRelationship } from '../../../types.ts'
-import { sectionHeading } from './sidebar-section.ts'
+import type { FlowRef } from '../../action-path.ts'
+import { sectionHeading } from '../organisms/sidebar-section.ts'
 
 /** The list starts folded and keeps its state across repaints. */
 let unfolded = false
 
-/** The sidebar's flow list, folded under its heading: every actor command, the active one lit. */
+/** Every command row shows whether its flow is active and whether it owns details. */
 export function paintFlows(
   host: HTMLElement,
-  commands: WorldRelationship[],
-  activeActionId: string | undefined,
-  onPick: (id: string) => void,
+  commands: readonly WorldRelationship[],
+  active: readonly FlowRef[],
+  selected: FlowRef | undefined,
+  onPick: (commandId: string) => void,
 ): void {
   host.replaceChildren()
   if (commands.length === 0) return
   const heading = sectionHeading('Flows', unfolded, () => {
     unfolded = !unfolded
-    paintFlows(host, commands, activeActionId, onPick)
+    paintFlows(host, commands, active, selected, onPick)
   })
   const list = document.createElement('div')
   list.hidden = !unfolded
+  const activeCommands = new Set(active.map(flow => flow.commandId))
   for (const command of commands) {
     const button = document.createElement('button')
     button.type = 'button'
     button.className = 'row'
-    if (command.id === activeActionId) button.classList.add('selected')
+    if (activeCommands.has(command.id)) button.classList.add('active')
+    if (selected?.commandId === command.id) button.classList.add('selected')
     const name = document.createElement('span')
     name.className = 'name'
     name.textContent = `→ ${command.description}`

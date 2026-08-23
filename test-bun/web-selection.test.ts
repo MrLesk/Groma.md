@@ -8,6 +8,8 @@ import {
   retainSelection,
   selectArchitecture,
   selectedArchitecture,
+  selectedFlow,
+  selectFlow,
   selectTask,
 } from '../src/viewers/web/selection.ts'
 
@@ -53,6 +55,15 @@ test.concurrent('task selection is separate from architecture selection', () => 
   assert.equal(primarySelection(noSelection), undefined)
 })
 
+test.concurrent('flow selection owns details without becoming architecture selection', () => {
+  const flow = { commandId: 'relationship:0', actorId: 'observed:actor' }
+  const selected = selectFlow(flow)
+
+  assert.deepEqual(selectedFlow(selected), flow)
+  assert.equal(primarySelection(selected), undefined)
+  assert.deepEqual(selectedArchitecture(selected), [])
+})
+
 test.concurrent('live selection keeps known targets in their original order', () => {
   const selected = {
     kind: 'architecture' as const,
@@ -65,4 +76,8 @@ test.concurrent('live selection keeps known targets in their original order', ()
   })
   assert.deepEqual(retainSelection(selected, () => false), noSelection)
   assert.deepEqual(retainSelection(selectTask('TASK-7'), () => false), noSelection)
+  assert.deepEqual(retainSelection(selectFlow({ commandId: 'relationship:0' }), id => id === 'relationship:0'), {
+    kind: 'flow',
+    flow: { commandId: 'relationship:0' },
+  })
 })

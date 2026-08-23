@@ -65,8 +65,13 @@ to Core's sheet; the web server ships the world, its sheet, the active
 Backlog tasks and their pins together as one payload. The
 Web renderer may not move a footprint or reroute a relationship.
 
-Both plugins share the command walks, the route-text rule, sibling order
-and the containment tree from `src/viewers/` and `src/element-order.ts`.
+Both plugins share command flows, the route-text rule, sibling order and the
+containment tree from `src/viewers/` and `src/element-order.ts`. A command is
+an authored relationship exposed as something an actor can start. A flow is
+the viewer-derived walk from one command through every reachable outgoing
+relationship, optionally limited to one starting actor. A leg is one authored
+relationship in that walk. Commands and legs belong to the architecture world;
+flows are viewer state and are not new architecture elements.
 
 See [Creating a viewer plugin](creating-a-plugin.md) for the shared
 boundary.
