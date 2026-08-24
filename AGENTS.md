@@ -241,17 +241,23 @@ map pane.
 - Cards, routes, and relationship labels stay on the same cells while
   the selection stays on screen.
 
-Drive `groma view` with `agent-tty`. Snapshot, send keys, screenshot.
+Drive `groma view` with `tui-test`. Read the terminal, send keys, and
+capture a screenshot.
 Compare frames after arrows between visible items. If a card or label
 jumped, the map moved. Do not wait for a human screenshot.
 
 ```bash
-SID=$(agent-tty create --json --cols 120 --rows 36 -- bun src/cli.ts view | jq -r '.result.sessionId')
-agent-tty wait "$SID" --text 'System Context' --json
-agent-tty snapshot "$SID" --format text --json
-agent-tty send-keys "$SID" Enter --json
-agent-tty screenshot "$SID" --json
-agent-tty destroy "$SID"
+GROMA_TUI_SESSION="groma-view-$$"
+GROMA_TUI_ARTIFACTS=$(mktemp -d /tmp/groma-tui-test.XXXXXX)
+trap 'tui-test close --session "$GROMA_TUI_SESSION" >/dev/null 2>&1 || true' EXIT
+tui-test run --session "$GROMA_TUI_SESSION" --cols 120 --rows 36 --cwd "$PWD" bun src/cli.ts view
+tui-test wait idle --session "$GROMA_TUI_SESSION" --timeout 10000
+tui-test text --session "$GROMA_TUI_SESSION"
+tui-test press --session "$GROMA_TUI_SESSION" Enter
+tui-test wait idle --session "$GROMA_TUI_SESSION" --timeout 10000
+tui-test screenshot --session "$GROMA_TUI_SESSION" "$GROMA_TUI_ARTIFACTS/frame.svg"
+tui-test close --session "$GROMA_TUI_SESSION"
+trap - EXIT
 ```
 
 Look at the start view, details, each level, and a large size such as 200x60.
