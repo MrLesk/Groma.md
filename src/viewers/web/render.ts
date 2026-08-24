@@ -181,7 +181,6 @@ function paintSelection(): void {
   const selectedIds = selectedArchitecture(selection)
   const litIds = flowRouteIds(activeFlows, world)
   const flow = selectedFlow(selection)
-  const activeCommandIds = new Set(activeFlows.map(item => item.commandId))
   const task = selection.kind === 'task' ? workItem(selection.id) : undefined
   const activeTaskItems = activeTaskIds.map(id => workItem(id)).filter((item): item is WorkItem => item !== undefined)
   map.select(selectedIds)
@@ -191,7 +190,8 @@ function paintSelection(): void {
   map.setLitRoutes(litIds, id => elementOnPath(id, litIds, world))
   paintTree()
   const commands = worldCommands(world)
-  paintFlows(flowsHost, commands, activeFlows, flow, pickCommand)
+  const actorName = (actorId: string): string | undefined => worldElement(actorId)?.name
+  paintFlows(flowsHost, commands, activeFlows, flow, actorName, toggleFlow)
   paintStats(commands.length)
   const selected = worldElement(selectedId)
   const relationship = worldRelationship(selectedId)
@@ -204,11 +204,10 @@ function paintSelection(): void {
       detailsHost,
       inspectDetails(selected, world),
       select,
-      (id, ownCommand) => toggleFlow({
-        commandId: id,
-        ...(ownCommand ? { actorId: selected.representationId } : {}),
-      }),
-      activeCommandIds,
+      toggleFlow,
+      activeFlows,
+      flow,
+      actorName,
       detailsTab,
       tab => {
         detailsTab = tab
@@ -267,14 +266,6 @@ function deselect(): void {
   activeTaskIds = []
   activeFlows = []
   paintSelection()
-}
-
-function pickCommand(commandId: string): void {
-  const selected = selectedFlow(selection)
-  const flow = selected?.commandId === commandId
-    ? selected
-    : activeFlows.findLast(item => item.commandId === commandId) ?? { commandId }
-  toggleFlow(flow)
 }
 
 function toggleFlow(flow: FlowRef): void {

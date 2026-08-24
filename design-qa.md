@@ -1,47 +1,38 @@
-# Design QA: TASK-154
+# TASK-168 design QA
 
-final result: passed
+- Source visual truth: `/Users/alex/.codex/generated_images/01a03500-32f2-7151-bd22-e823cad730be/exec-d3aeaa63-8131-4c8a-96f8-3c680ef80c57.png`
+- Implementation: `http://localhost:4873/?component=render`
+- Implementation screenshot: `/Users/alex/.codex/visualizations/2026/08/24/01a03500-32f2-7151-bd22-e823cad730be/task-168-component.png`
+- Viewport: 1280 × 720 CSS pixels at device pixel ratio 1
+- Pixels: source 1562 × 1007; implementation 1280 × 720
+- Normalization: the full source was resized proportionally to 720 pixels high beside the implementation. The left and right pane crops were each normalized to 700 pixels high for focused comparison. The source is taller, so vertical visibility was judged separately from pane structure.
+- State: light theme, Render component selected, Flows and Structure open, no active flow in the full-view implementation capture. Active and actor-scoped states were checked separately.
 
 ## Evidence
 
-- Visual source: `/Users/alex/.codex/generated_images/01a02fc9-4d85-7fd3-aca8-437064a0cf0b/exec-17e57a7b-6f86-4027-82f8-3023bfe4cb1d.png` (approved option 1), with `/Users/alex/.codex/generated_images/01a02fc9-4d85-7fd3-aca8-437064a0cf0b/exec-4ec42335-782e-4f82-b776-cdcb8e128a88.png` and `/var/folders/fd/cgvn5zh52tb_sbt7hp_vtbmm0000gn/T/codex-clipboard-cba7f1a6-1b83-4f7a-b074-0a79840cc3c5.png` for the wider inspector and hierarchy lines.
-- Primary implementation: `/var/folders/fd/cgvn5zh52tb_sbt7hp_vtbmm0000gn/T/groma-web-chrome-audit/16-floating-live-work-aligned.png`.
-- Additional states: `13-floating-task.png`, `17-floating-dark.png`, `19-floating-help.png`, `20-camera-invariant-empty.png`, `21-details-close.png`, and `22-boxed-toggle.png` in the same audit directory.
-- Direct comparison: `/var/folders/fd/cgvn5zh52tb_sbt7hp_vtbmm0000gn/T/groma-web-chrome-audit/16-floating-option1-comparison.png`.
-- Viewport: 1280 x 720 CSS pixels at density 1. The source was proportionally resized and centre-cropped to the same size for comparison.
+- Full comparison: `/Users/alex/.codex/visualizations/2026/08/24/01a03500-32f2-7151-bd22-e823cad730be/task-168-comparison.png`
+- Hierarchy comparison: `/Users/alex/.codex/visualizations/2026/08/24/01a03500-32f2-7151-bd22-e823cad730be/task-168-left-comparison.png`
+- Details comparison: `/Users/alex/.codex/visualizations/2026/08/24/01a03500-32f2-7151-bd22-e823cad730be/task-168-right-comparison.png`
+- Actor Commands: `/Users/alex/.codex/visualizations/2026/08/24/01a03500-32f2-7151-bd22-e823cad730be/task-168-actor.png`
+- Active global flow: `/Users/alex/.codex/visualizations/2026/08/24/01a03500-32f2-7151-bd22-e823cad730be/task-168-flow.png`
 
-## Findings
+The full view preserves the current Groma map and chrome while matching the source hierarchy: Flows above Structure, generic kind marks, neutral architecture selection, and green reserved for active flows. The details crop confirms that peer names are the primary relationship target, direction and description are secondary, and a chevron signals navigation. The source omits Render's real description and uses invented project peers; the implementation intentionally keeps authored Groma content and the existing description contract.
 
-No actionable P0, P1, or P2 differences remain.
+Typography remains the product's existing SF Mono stack and compact scale. Spacing follows the source grouping without importing its larger viewport. Colors use the existing paper, ink, muted, hairline, hover, and accent tokens. There are no raster assets to compare; the UI uses only Groma's generic architecture glyphs and one identical abstract flow mark. Copy comes from the architecture world rather than mock data.
 
-- Layout: the isometric grid measures 1280 x 720 and continues below the inset header and sidebars. The fitted architecture remains inside the clear centre between the 280px hierarchy and 409.6px inspector.
-- Frost: the header and unchanged Live work surface both compute to `color(srgb 1 1 1 / 0.35)` in the light theme. The sidebars use the same 35%-paper rule and remain readable in both themes.
-- Controls: Fit, its four-corner icon, zoom out, readout, zoom in, Help, and the icon-labelled theme action share one stable header group. No camera controls remain on the map.
-- Selection: the inspector has a visible X, closes with empty selection, keeps its width between concrete selections, and returns focus to the map. The task-focused camera shows more context at 304% compared with 372% before the margin change.
-- Integration: the open Live work surface is constrained to the same clear centre as the camera and does not sit under either sidebar. Its component and visual styling are unchanged.
-- Hierarchy: the approved boxed double-chevron, collapsed rail, and quiet terminating branch lines remain legible over the full-screen grid.
-- Accessibility: hidden panel content is inert and `aria-hidden`, focus styles remain visible, and shell transitions stop under `prefers-reduced-motion`.
+## Interaction and accessibility checks
 
-## Comparison History
-
-1. The first implementation kept the grid inside the centre pane, used 82%-paper chrome, placed zoom over the map, and omitted Fit and theme icons.
-2. User review reopened acceptance and required a full-screen grid, 35%-paper floating chrome, header-owned camera controls with icons, and a wider task-focus view.
-3. The revised browser pass exposed Help over dense inspector copy and Live work centred under the floating sidebars. Help now opens in the clear map area with a stronger reading surface, and shell CSS constrains the unchanged task bar to the clear centre.
-4. The final side-by-side comparison shows the approved full-screen grid and floating relationships. Differences in map size follow the explicitly wider inspector and are intentional.
-5. Final user review added the missing inspector X and required floating panels to stop controlling the camera. The measured SVG transform remains `translate(588.21px, 267.4px) scale(0.0986)` through hierarchy collapse and inspector close.
-
-## Browser Verification
-
-- Page identity and meaningful DOM passed at `http://localhost:4747`.
-- Tested full fit, zoom, task selection, empty selection through Escape, hierarchy collapse/restore, Help, open Live work, and light/dark theme switching.
-- Fit returned the readout to 100%; task focus changed from the previous 372% to 304% with all highlighted task context inside the clear area.
-- Hierarchy collapse and inspector close leave the exact camera transform unchanged. The close action makes details inert and moves focus to the architecture map.
+- Global Runs a scan activates `flow=commands/scan` and exposes `aria-pressed=true`.
+- Component Starts the browser map activates `flow=commands/web-server`.
+- Actor Runs a scan activates `flow=coding-agent/commands/scan` and reports `Actor: Coding agent`.
+- Render → Iso camera navigates to `component=iso-camera` without activating a flow.
+- Flow buttons expose their full name, scope, pressed state, and hover title. Relationship buttons expose the destination kind, name, and relationship description.
 - Browser console warnings and errors: none.
-- Full project check: 93 Node tests and 176 viewer tests passed.
 
-## Implementation Checklist
+## Comparison history
 
-- [x] Full-screen grid and 35%-paper floating shell match the approved direction.
-- [x] Fit/zoom and icon-labelled theme control live in the header; Help remains beside Theme.
-- [x] Wider selection-owned inspector, visible X, camera-invariant pane actions, hierarchy lines, task context, and unchanged Live work behavior are verified.
-- [x] Light, dark, long-task, collapsed, empty, Help, Fit, and Live work states are verified.
+The first browser capture found two P2 clarity mismatches: relationship peer names were truncated by side-by-side descriptions, and the 280-pixel hierarchy made browser and terminal flow names hard to distinguish. Relationship descriptions were moved beneath their peer names, flow names were tightened, the hierarchy became a responsive 280–360 pixels, and full accessible names and titles were added. The post-fix captures above show complete relationship peer names and visibly distinct flow suffixes at 1280 × 720.
+
+One P3 remains: the longest hierarchy flow names still ellipsize at the 1280-pixel viewport. Their visible endings distinguish browser from terminal, and the full name remains available to accessibility tools and on hover.
+
+final result: passed

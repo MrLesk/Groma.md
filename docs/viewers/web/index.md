@@ -22,13 +22,15 @@ beneath the chrome without hiding the fitted world.
 
 The hierarchy pane's boxed double-chevron retracts it to a narrow rail and
 returns it without changing tree, selection, or camera state. Its quiet branch lines keep nested
-rows legible. It starts with the flows list folded under its
-Flows heading; clicking the heading opens it. The list holds every
+rows legible. It starts with the flows list open under its
+Flows heading. The list holds every
 actor command in the world, deduped across the actors who share it.
 Clicking an inactive command activates and selects its flow. Clicking
 another keeps both active and selects the new one; clicking the selected
-flow deactivates it and selects the latest remaining flow. Active rows use
-the accent and the selected row adds the normal selected treatment. One command
+flow deactivates it and selects the latest remaining flow. Every flow row uses
+the same checkbox, abstract path mark, active state, and Global or actor scope
+in the hierarchy and details pane. Structure rows use kind marks and neutral
+selection instead; their arrows only expand containment. One command
 has at most one active flow; picking it from an actor changes that flow's scope
 in place. Below it the Structure
 section starts open and groups the merged containment tree under Actors,
@@ -47,13 +49,18 @@ flow, or task owns the selection. It keeps its width while that owner
 changes and disappears when selection is cleared. Its X clears the selection,
 closes the pane, and returns focus to the map without moving the camera. An element
 shows under two tabs whose choice persists across selections. What
-it does holds the meaning: description, relationships, and children.
+it does holds the meaning: description, peer relationships, actor Commands,
+Flows through, and children. A relationship row always names and selects its
+peer; its arrow shows authored direction and never activates a flow. Commands
+are the actor-scoped flows the selected actor can start. Flows through are the
+general flows whose path crosses the selected software element. Both use the
+same flow control as the hierarchy list. Actors do not repeat Commands as
+relationships or build information.
 How it's built holds the
 evidence: the technology the element's Markdown declares
 (`technology: SVG, Bun serve` renders as one chip per
 comma-separated part), the scanner, file, and optional symbol from
-`code`, and Travelled by, the actor commands whose walk touches
-the selection; clicking one lights that walk. Children and
+`code`. Elements without either do not show the build tab. Children and
 relationship peers select that element. A selected flow shows its command as
 the title, its optional starting actor and leg count, then every authored
 relationship leg in travel order. Each leg's relationship and both endpoints

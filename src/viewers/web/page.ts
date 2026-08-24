@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url'
 import type { C4Kind } from '../../types.ts'
 import { kindGlyph, kindLabel } from './atoms/kind.ts'
 import { cssBlock, palettes } from './atoms/theme.ts'
+import { flowRowCss } from './flow/row.ts'
 import { mapCss } from './iso/style.ts'
 import { tipCss } from './organisms/tip.ts'
 import type { WebPayload } from './payload.ts'
@@ -39,7 +40,7 @@ const style = `
     --backlog-mark-image: url("data:image/png;base64,${backlogMark}");
     --chrome-radius: 10px;
     --chrome-motion: 260ms;
-    --hierarchy-column: 280px;
+    --hierarchy-column: clamp(280px, 27vw, 360px);
     --details-column: clamp(360px, 32vw, 420px);
   }
   [data-theme="dark"] { ${cssBlock(palettes.dark)} }
@@ -178,9 +179,14 @@ const style = `
     margin: 26px 0 10px;
     padding-bottom: 6px;
     border-bottom: 1px solid var(--hairline);
+    font-size: 10px;
+    font-weight: 400;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
   }
   #details ul { margin: 0; padding: 0; list-style: none; }
   #details li { margin: 0 0 6px; }
+  #details .relationships li { margin: 0; }
   #details .criterion-check { color: var(--accent); }
   #details .tabs { margin: 0 0 8px; }
   #details .tabs button { flex: 1; }
@@ -226,8 +232,7 @@ const style = `
     padding: 5px 14px;
   }
   .row:hover { background: var(--hover); }
-  .row.active { color: var(--accent); }
-  .row.selected { background: rgba(29, 158, 117, 0.1); box-shadow: inset 2px 0 var(--accent); }
+  .row.selected { background: var(--hover); box-shadow: inset 2px 0 color-mix(in srgb, var(--ink) 35%, transparent); }
   .row .branch { align-self: stretch; width: 16px; flex: none; border-left: 1px solid color-mix(in srgb, var(--ink) 18%, transparent); position: relative; }
   .row .branch.current::after { content: ''; position: absolute; top: 50%; left: 0; width: 11px; border-top: 1px solid color-mix(in srgb, var(--ink) 18%, transparent); }
   .row .branch.current.end { height: 50%; align-self: flex-start; }
@@ -235,15 +240,33 @@ const style = `
   .row .twist { width: 1em; flex: none; color: var(--muted); }
   .row .twist.toggle:hover { color: var(--accent); }
   .row .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .relationship-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 10px;
+    grid-template-rows: auto auto;
+    align-items: center;
+    gap: 2px 8px;
+    width: 100%;
+    padding: 8px 0;
+    border: 0;
+    border-bottom: 1px solid var(--hairline);
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+  }
+  .relationship-row:hover { background: var(--hover); }
+  .relationship-peer { grid-column: 1; grid-row: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .relationship-detail { grid-column: 1 / -1; grid-row: 2; padding-left: 17px; color: var(--muted); font-size: 9px; }
+  .relationship-destination { grid-column: 2; grid-row: 1; font-size: 16px; text-align: right; }
   .link { border: 0; background: transparent; padding: 0; text-align: left; }
   .link:hover { text-decoration: underline; text-underline-offset: 2px; }
-  .link.active { box-shadow: inset 2px 0 var(--accent); padding-left: 6px; }
   .mark { flex: none; }
   .ghost { opacity: 0.5; }
   @media (prefers-reduced-motion: reduce) {
     body, #hierarchy-content, #hierarchy-title .pane-label, #details, body #work { transition: none; }
   }
-${backlogMarkCss}${workBadgeCss}${mapCss}${pinsCss}${workCss}${tipCss}`
+${backlogMarkCss}${workBadgeCss}${flowRowCss}${mapCss}${pinsCss}${workCss}${tipCss}`
 
 function legend(): string {
   return legendKinds.map(line => {

@@ -7,23 +7,22 @@ import type {
   CodeReference,
   Origin,
 } from '../../../types.ts'
-import { actionCaption, outgoingActions, travelledBy } from '../../action-path.ts'
+import { pickableActions, travelledBy } from '../../action-path.ts'
+import type { FlowRef } from '../../action-path.ts'
 import { kindGlyph, kindLabel } from '../atoms/kind.ts'
+import { flowRow, type FlowRowData } from '../flow/row.ts'
 import {
   parentOfElements,
   promotedPeer,
 } from '../../relationship-text.ts'
 
 export interface InspectedRelationship {
-  id: string
   outgoing: boolean
-  pickable: boolean
   peerId: string
   peerName: string
   peerKind: C4Kind | null
   peerExternal: boolean
-  title: string
-  detail: string
+  description: string
 }
 
 export interface InspectedChild {
@@ -39,10 +38,11 @@ export interface Inspected {
   origin: Origin
   description: string
   relationships: InspectedRelationship[]
+  commands: FlowRowData[]
+  flowsThrough: FlowRowData[]
   children: InspectedChild[]
   technology: string[]
   code: CodeReference[]
-  travelledBy: { id: string; title: string }[]
 }
 
 export type DetailsTab = 'what' | 'how'
@@ -50,16 +50,17 @@ export type DetailsTab = 'what' | 'how'
 type Section =
   | 'description'
   | 'relationships'
+  | 'commands'
+  | 'flowsThrough'
   | 'children'
   | 'technology'
   | 'code'
-  | 'travelledBy'
 
 /** The pane's split: meaning on one tab, build evidence on the other. */
 export function tabSections(tab: DetailsTab): Section[] {
   return tab === 'what'
-    ? ['description', 'relationships', 'children']
-    : ['technology', 'code', 'travelledBy']
+    ? ['description', 'relationships', 'commands', 'flowsThrough', 'children']
+    : ['technology', 'code']
 }
 
 export function inspectDetails(
@@ -68,28 +69,21 @@ export function inspectDetails(
 ): Inspected {
   const byId = new Map(world.elements.map(item => [item.representationId, item]))
   const parentOf = parentOfElements(world.elements)
-  const actions = outgoingActions(element.representationId, world)
-  const actionIds = new Set(actions.map(item => item.id))
-  const incoming = world.relationships.filter(relationship => {
-    return promotedPeer(relationship, element.representationId, parentOf)?.outgoing === false
-  })
+  const commandRelationships = pickableActions(element.representationId, world)
+  const commandIds = new Set(commandRelationships.map(relationship => relationship.id))
   const relationships: InspectedRelationship[] = []
-  for (const relationship of [...actions, ...incoming]) {
-    const outgoing = actionIds.has(relationship.id)
+  for (const relationship of world.relationships) {
     const ends = promotedPeer(relationship, element.representationId, parentOf)
-    const peerId = outgoing ? relationship.target : ends?.peerId ?? relationship.source
+    if (ends == null || commandIds.has(relationship.id)) continue
+    const peerId = ends.peerId
     const peer = byId.get(peerId)
-    const caption = actionCaption(relationship, outgoing, id => byId.get(id)?.name)
     relationships.push({
-      id: relationship.id,
-      outgoing,
-      pickable: element.kind === 'actor' && outgoing,
+      outgoing: ends.outgoing,
       peerId,
       peerName: peer?.name ?? peerId,
       peerKind: peer?.kind ?? null,
       peerExternal: peer?.external ?? false,
-      title: caption.title,
-      detail: caption.detail,
+      description: relationship.description,
     })
   }
   const children: InspectedChild[] = []
@@ -108,19 +102,27 @@ export function inspectDetails(
     origin: element.origin,
     description: element.description,
     relationships,
+    commands: commandRelationships.map(command => ({
+      flow: { commandId: command.id, actorId: element.representationId },
+      title: command.description,
+    })),
+    flowsThrough: element.kind === 'actor'
+      ? []
+      : travelledBy(element.representationId, world).map(action => ({
+        flow: { commandId: action.id },
+        title: action.description,
+      })),
     children,
     technology: (element.technology ?? '')
       .split(',')
       .map(part => part.trim())
       .filter(part => part.length > 0),
     code: element.code,
-    travelledBy: travelledBy(element.representationId, world)
-      .map(action => ({ id: action.id, title: action.description })),
   }
 }
 
 function heading(label: string): HTMLElement {
-  const row = document.createElement('p')
+  const row = document.createElement('h2')
   row.className = 'section'
   row.textContent = label
   return row
@@ -147,25 +149,35 @@ export function paintDetails(
   host: HTMLElement,
   inspected: Inspected,
   onSelect: (id: string, additive: boolean) => void,
-  /** ownCommand is true for the actor's own command rows, false for walk references. */
-  onPickFlow: (id: string, ownCommand: boolean) => void,
-  activeCommandIds: ReadonlySet<string>,
+  onToggleFlow: (flow: FlowRef) => void,
+  activeFlows: readonly FlowRef[],
+  selectedFlow: FlowRef | undefined,
+  actorName: (actorId: string) => string | undefined,
   tab: DetailsTab,
   onTab: (tab: DetailsTab) => void,
 ): void {
   const title = host.querySelector('h1')!
   const meta = host.querySelector('.meta')!
-  const tabsHost = host.querySelector('.tabs')!
+  const tabsHost = host.querySelector<HTMLElement>('.tabs')!
   const body = host.querySelector('.body')!
   title.textContent = inspected.name
   meta.textContent = `${inspected.kindLabel} · ${inspected.origin}`
 
+  const hasBuild = inspected.technology.length > 0 || inspected.code.length > 0
+  const shownTab = tab === 'how' && !hasBuild ? 'what' : tab
   tabsHost.replaceChildren()
-  for (const [key, label] of [['what', 'What it does'], ['how', 'How it\'s built']] as const) {
+  tabsHost.hidden = !hasBuild
+  tabsHost.setAttribute('aria-label', 'Details view')
+  for (const [key, label] of [
+    ['what', 'What it does'],
+    ...(hasBuild ? [['how', 'How it\'s built'] as const] : []),
+  ] as const) {
     const button = document.createElement('button')
     button.type = 'button'
+    button.setAttribute('role', 'tab')
     button.textContent = label
-    if (key === tab) button.classList.add('active')
+    button.setAttribute('aria-selected', String(key === shownTab))
+    if (key === shownTab) button.classList.add('active')
     button.addEventListener('click', () => onTab(key))
     tabsHost.append(button)
   }
@@ -184,27 +196,59 @@ export function paintDetails(
       if (inspected.relationships.length === 0) return
       body.append(heading('Relationships'))
       const list = document.createElement('ul')
+      list.className = 'relationships'
       for (const relationship of inspected.relationships) {
         const item = document.createElement('li')
         const link = document.createElement('button')
         link.type = 'button'
-        link.className = 'link'
-        if (activeCommandIds.has(relationship.id)) link.classList.add('active')
-        const rest = relationship.detail === '' ? '' : ` · ${relationship.detail}`
-        if (relationship.outgoing) {
-          link.append(`→ ${relationship.title}`)
-        } else {
-          link.append(
-            '← ',
-            marked(relationship.peerKind, relationship.peerExternal, relationship.title),
-          )
-        }
-        link.addEventListener('click', event => {
-          if (relationship.pickable) onPickFlow(relationship.id, true)
-          else onSelect(relationship.peerId, event.shiftKey)
-        })
-        item.append(link, rest)
+        link.className = 'relationship-row'
+        const peerKind = relationship.peerKind === null
+          ? 'element'
+          : kindLabel(relationship.peerKind, relationship.peerExternal).toLowerCase()
+        link.setAttribute(
+          'aria-label',
+          `Select ${peerKind} ${relationship.peerName}: ${relationship.description}`,
+        )
+        link.title = `Select ${relationship.peerName}: ${relationship.description}`
+        const peer = marked(
+          relationship.peerKind,
+          relationship.peerExternal,
+          relationship.peerName,
+        )
+        peer.classList.add('relationship-peer')
+        const detail = document.createElement('span')
+        detail.className = 'relationship-detail'
+        detail.textContent = `${relationship.outgoing ? '→' : '←'} ${relationship.description}`
+        const destination = document.createElement('span')
+        destination.className = 'relationship-destination'
+        destination.setAttribute('aria-hidden', 'true')
+        destination.textContent = '›'
+        link.append(peer, detail, destination)
+        link.addEventListener('click', event => onSelect(relationship.peerId, event.shiftKey))
+        item.append(link)
         list.append(item)
+      }
+      body.append(list)
+    },
+
+    commands: () => {
+      if (inspected.commands.length === 0) return
+      body.append(heading('Commands'))
+      const list = document.createElement('div')
+      list.className = 'flow-list'
+      for (const command of inspected.commands) {
+        list.append(flowRow(command, activeFlows, selectedFlow, actorName, onToggleFlow))
+      }
+      body.append(list)
+    },
+
+    flowsThrough: () => {
+      if (inspected.flowsThrough.length === 0) return
+      body.append(heading('Flows through'))
+      const list = document.createElement('div')
+      list.className = 'flow-list'
+      for (const flow of inspected.flowsThrough) {
+        list.append(flowRow(flow, activeFlows, selectedFlow, actorName, onToggleFlow))
       }
       body.append(list)
     },
@@ -257,25 +301,8 @@ export function paintDetails(
       body.append(list)
     },
 
-    travelledBy: () => {
-      if (inspected.travelledBy.length === 0) return
-      body.append(heading('Travelled by'))
-      const list = document.createElement('ul')
-      for (const walk of inspected.travelledBy) {
-        const item = document.createElement('li')
-        const link = document.createElement('button')
-        link.type = 'button'
-        link.className = 'link'
-        if (activeCommandIds.has(walk.id)) link.classList.add('active')
-        link.append(walk.title)
-        link.addEventListener('click', () => onPickFlow(walk.id, false))
-        item.append(link)
-        list.append(item)
-      }
-      body.append(list)
-    },
   }
-  for (const key of tabSections(tab)) sections[key]()
+  for (const key of tabSections(shownTab)) sections[key]()
 }
 
 /** The pane for a selected relationship: its description as the title, then both ends as links. */
