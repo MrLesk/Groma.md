@@ -95,18 +95,13 @@ test.concurrent('authored endpoint routes keep their laid-out bend', () => {
   assert.ok(ys.size > 1)
 })
 
-/**
- * One system holding three containers with a component each, and a
- * relationship between two of them: at Components only the focused
- * container's relationships normally draw.
- */
-function threeContainerWorld(): ArchitectureWorld {
+function containerFlowWorld(): ArchitectureWorld {
   return {
     bounds: { x: 0, y: 0, width: 200, height: 60 },
     groups: [],
     elements: [
       box('shop', 'system', { x: 10, y: 0, width: 180, height: 56 }, {
-        children: ['observed:api', 'observed:store', 'observed:jobs'],
+        children: ['observed:api', 'observed:store'],
       }),
       box('api', 'container', { x: 16, y: 6, width: 40, height: 40 }, {
         parent: 'observed:shop',
@@ -116,55 +111,43 @@ function threeContainerWorld(): ArchitectureWorld {
         parent: 'observed:shop',
         children: ['observed:table'],
       }),
-      box('jobs', 'container', { x: 140, y: 6, width: 40, height: 40 }, {
-        parent: 'observed:shop',
-        children: ['observed:worker'],
-      }),
       box('handler', 'component', { x: 20, y: 12, width: 14, height: 8 }, {
         parent: 'observed:api',
       }),
       box('table', 'component', { x: 84, y: 12, width: 14, height: 8 }, {
         parent: 'observed:store',
       }),
-      box('worker', 'component', { x: 144, y: 12, width: 14, height: 8 }, {
-        parent: 'observed:jobs',
-      }),
     ],
     relationships: [{
-      id: 'table-worker',
-      source: 'observed:table',
-      target: 'observed:worker',
-      description: 'queues',
+      id: 'handler-table',
+      source: 'observed:handler',
+      target: 'observed:table',
+      description: 'stores',
       technology: '',
       origin: 'observed',
-      route: [{ x: 98, y: 26 }, { x: 144, y: 26 }],
+      route: [{ x: 34, y: 26 }, { x: 84, y: 26 }],
       label: null,
     }],
   }
 }
 
-test.concurrent('a lit route draws at a level that would otherwise hide it', () => {
-  const world = threeContainerWorld()
+test.concurrent('lighting a promoted container route leaves its geometry stable', () => {
+  const world = containerFlowWorld()
   const view = {
     viewport: { x: 0, y: 0, width: 100, height: 36 },
     level: 'components' as const,
-    // Focus sits in Api, so neither end of the queueing route is in frame.
     currentId: 'observed:handler',
   }
-  const hidden = projectWorld(world, view)
-  assert.equal(hidden.relationships.length, 0)
-
-  const lit = projectWorld(world, { ...view, litIds: new Set(['table-worker']) })
-  const route = lit.relationships.find(item => item.id === 'table-worker')
+  const normal = projectWorld(world, view)
+  const lit = projectWorld(world, { ...view, litIds: new Set(['handler-table']) })
+  const route = lit.relationships.find(item => item.id === 'handler-table')
   assert.ok(route)
-  // Sibling containers are not on this campus, so the lit walk keeps
-  // the hidden component ends instead of collapsing onto one wrapper.
-  assert.equal(route.displaySource, 'observed:table')
-  assert.equal(route.displayTarget, 'observed:worker')
+  assert.equal(route.displaySource, 'observed:handler')
+  assert.equal(route.displayTarget, 'observed:api')
 
-  // Element geometry is untouched by lighting the walk.
   assert.deepEqual(
     lit.elements.map(item => item.cellBounds),
-    hidden.elements.map(item => item.cellBounds),
+    normal.elements.map(item => item.cellBounds),
   )
+  assert.deepEqual(route.cellRoute, normal.relationships[0]?.cellRoute)
 })

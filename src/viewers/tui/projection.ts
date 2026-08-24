@@ -1,13 +1,11 @@
 import { defaultSelection } from './navigation.ts'
 import {
-  clamp,
-  fitZoomFor,
   focusElement,
-  overviewCamera,
-  padded,
+  MAP_SCALE,
   panCells,
   projectBounds,
   projectPoint,
+  scopeCamera,
   transformFor,
   visibleIn,
 } from './projection-camera.ts'
@@ -31,12 +29,10 @@ import type {
   ProjectionOptions,
   SemanticEdge,
   SemanticItem,
-  SemanticLevel,
+  TerminalLevel,
   WorldElement,
   WorldProjection,
 } from '../../types.ts'
-
-export { fitLayer, fitView, followSelection } from './projection-camera.ts'
 
 const titledCard = {
   height: 5,
@@ -112,7 +108,7 @@ function projectElements(
   itemsById: Map<string, SemanticItem>,
   transform: ReturnType<typeof transformFor>,
   viewport: Bounds,
-  level: SemanticLevel,
+  level: TerminalLevel,
 ) {
   const elements = world.elements.map(element => {
     const item = itemsById.get(element.representationId)
@@ -150,9 +146,14 @@ function projectGroups(
 ): ProjectedGroup[] {
   return world.groups
     .filter(group => projectedElements.some(element => {
-      return element.display !== 'hidden'
-        && element.group === group.name
+      if (element.display === 'hidden') return false
+      return (
+        element.group === group.name
         && element.parent === group.parent
+      ) || (
+        element.representationId === group.parent
+        && element.display === 'container-boundary'
+      )
     }))
     .map(group => ({
       ...group,
@@ -162,7 +163,7 @@ function projectGroups(
 
 function projectRelationships(
   world: ArchitectureWorld,
-  level: SemanticLevel,
+  level: TerminalLevel,
   elementsById: Map<string, WorldElement>,
   projectedElements: ReturnType<typeof projectElements>,
   projectedGroups: ProjectedGroup[],
@@ -210,8 +211,7 @@ function projectRelationships(
     )
   }
   return world.relationships
-    // A lit walk is drawn whole: its legs cross whatever the level hides.
-    .filter(relationship => litIds?.has(relationship.id) || edges.has(relationship.id))
+    .filter(relationship => edges.has(relationship.id))
     .map(relationship => {
       const edge = edges.get(relationship.id)
       const lit = litIds?.has(relationship.id) === true
@@ -278,21 +278,11 @@ function projectRelationships(
     })
 }
 
-const levelDepth: Record<SemanticLevel, number> = {
-  context: 0,
-  containers: 1,
-  components: 2,
-}
-
 export function projectWorld(
   world: ArchitectureWorld,
   options: ProjectionOptions,
 ): WorldProjection {
   const { viewport, level = 'context', currentId } = options
-  if (!Object.hasOwn(levelDepth, level)) {
-    throw new Error(`Unsupported semantic level: ${level}`)
-  }
-
   const elementsById = new Map(world.elements.map(element => [
     element.representationId,
     element,
@@ -301,15 +291,8 @@ export function projectWorld(
     ? defaultSelection(world, level)
     : elementsById.get(currentId) ?? defaultSelection(world, level)
   const focus = focusElement(level, selected, elementsById)
-  const overview = padded(world.bounds)
-  const fitZoom = fitZoomFor(overview, viewport)
-  let camera = options.camera ?? overviewCamera(overview, viewport)
-  if (!options.lockCamera) {
-    camera = {
-      ...camera,
-      zoom: clamp(camera.zoom, fitZoom, 1),
-    }
-  }
+  let camera = options.camera ?? scopeCamera(world, level, currentId)
+  camera = { ...camera, zoom: MAP_SCALE }
   const view = semanticView(world, {
     level,
     ...(focus ? { focusId: focus.representationId } : {}),
@@ -347,7 +330,6 @@ export function projectWorld(
   return {
     level,
     currentId: selected?.representationId ?? null,
-    fitZoom,
     camera,
     viewport,
     elements,

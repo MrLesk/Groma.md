@@ -227,17 +227,17 @@ The TUI world is a map inside fixed chrome: a one-row header, a
 hierarchy pane, the map pane, a details pane, and a one-row footer,
 with one blank row above the header and below the footer.
 Panes reserve width; they never overlay the map. The world layout
-never changes; only the camera viewport does. The first view fits the
-whole map inside the map pane. `+` and `-` zoom the camera. At the
-closest zoom, names stay readable and the map may be larger than the
-map pane.
+never changes; only the camera viewport does. The map uses one fixed,
+readable scale. A larger terminal reveals more canvas; there is no
+geometric zoom or fit-all view.
 
 - The details pane always shows the current selection.
-- Arrowing selects the nearest sibling inside the same boundary. The
-  camera pans just enough if that sibling would leave the map pane; it
-  does not zoom. When no sibling lies in that direction, selection
-  exits to the nearest outer item in that direction and the camera
-  zooms out. Arrows never descend.
+- The root map shows actors, systems, containers, collapsed groups and
+  external systems. It does not show component cards.
+- Enter opens only a container, showing that container, its groups and
+  components. Backspace returns to root. Arrows never change scope.
+- Arrowing selects the nearest visible peer in its direction. The camera
+  pans only enough to keep that selection visible.
 - Cards, routes, and relationship labels stay on the same cells while
   the selection stays on screen.
 
@@ -260,4 +260,4 @@ tui-test close --session "$GROMA_TUI_SESSION"
 trap - EXIT
 ```
 
-Look at the start view, details, each level, and a large size such as 200x60.
+Look at the root view, details, a container, and a large size such as 200x60.

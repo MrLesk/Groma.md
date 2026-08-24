@@ -1,9 +1,12 @@
 import type { Bounds, Point } from '../../types.ts'
 import {
-  clamp,
   projectPoint,
   type Transform,
 } from './projection-camera.ts'
+
+function clamp(value: number, minimum: number, maximum: number): number {
+  return Math.max(minimum, Math.min(maximum, value))
+}
 
 function insideSpan(value: number, start: number, size: number): number {
   if (size <= 2) return Math.round(start + (size - 1) / 2)

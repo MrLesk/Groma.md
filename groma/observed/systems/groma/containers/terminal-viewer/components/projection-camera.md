@@ -11,4 +11,4 @@ code:
 
 # Projection camera
 
-Frames the selection: the camera that fits the whole map, the pan that keeps a sibling in view without zooming, and the zoom out when the selection leaves a boundary.
+Centers the initial root or container scope at one readable scale. Selection pans the viewport only far enough to keep the selected peer visible; it never changes the scale or world geometry.

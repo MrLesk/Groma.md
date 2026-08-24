@@ -21,23 +21,22 @@ function mix(left: RGBA, right: RGBA, rightWeight: number): RGBA {
 }
 
 export function themeFromPalette(palette: NormalizedTerminalPalette): ViewerTheme {
-  const observed = palette.palette[2]
-  // Bright blue: the normal ANSI blue is barely readable on dark themes.
-  const planned = palette.palette[12]
-  const missing = palette.palette[1]
+  const background = palette.defaultBackground
+  const foreground = palette.defaultForeground
+  const accent = palette.palette[2]
 
   return {
-    background: palette.defaultBackground,
-    foreground: palette.defaultForeground,
-    observed,
-    planned,
-    missing,
-    selected: observed,
-    observedTint: mix(palette.defaultBackground, observed, 0.08),
-    selectedTint: mix(palette.defaultBackground, observed, 0.18),
-    actor: palette.palette[11],
-    system: palette.palette[14],
-    container: mix(palette.palette[12], palette.defaultForeground, 0.7),
-    component: palette.palette[13],
+    background,
+    foreground,
+    observed: foreground,
+    planned: mix(background, foreground, 0.68),
+    missing: mix(background, foreground, 0.48),
+    selected: accent,
+    observedTint: mix(background, foreground, 0.06),
+    selectedTint: mix(background, accent, 0.18),
+    actor: mix(background, foreground, 0.82),
+    system: mix(background, foreground, 0.92),
+    container: mix(background, foreground, 0.72),
+    component: mix(background, foreground, 0.82),
   }
 }

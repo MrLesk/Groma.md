@@ -6,7 +6,7 @@ import { kindGlyph } from '../atoms/kind.ts'
 import { text } from '../atoms/text.ts'
 import type { ViewerTheme } from '../atoms/theme.ts'
 import { letterName } from '../projection-display.ts'
-import { drawHatch } from './hatch.ts'
+import { drawHatch, drawSurfacePattern } from './hatch.ts'
 import { drawSpine } from './spine.ts'
 import type { ProjectedElement, WorldProjection } from '../../../types.ts'
 
@@ -29,6 +29,14 @@ export function drawCard(
       ? theme.selectedTint
       : theme.observedTint
     buffer.fillRect(bounds.x + 1, bounds.y + 1, bounds.width - 2, bounds.height - 2, fill)
+    drawSurfacePattern(
+      buffer,
+      bounds,
+      element.kind,
+      element.external,
+      theme.missing,
+      fill,
+    )
   }
 
   drawBorder(

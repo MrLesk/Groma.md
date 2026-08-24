@@ -5,7 +5,6 @@ import { visible } from '../atoms/visible.ts'
 import { drawBoundary, drawGroupBoundary } from '../molecules/boundary.ts'
 import { drawCard } from '../molecules/card.ts'
 import { drawRoute, drawRouteArrow, drawRouteLabel } from '../molecules/route.ts'
-import { drawSelection } from '../molecules/selection.ts'
 import { drawWorkMarker } from '../molecules/work-marker.ts'
 import type { WorkMarker, WorldProjection } from '../../../types.ts'
 import { assigneesOnElement } from '../../../work/projection.ts'
@@ -49,6 +48,21 @@ export function drawWorld(
       touched.add(relationship.displayTarget)
     }
   }
+  for (const element of shown(element => element.display === 'system-boundary')) {
+    drawBoundary(buffer, element, projection, theme,
+      touched.has(element.representationId)
+        || element.representationId === projection.currentId)
+  }
+  for (const element of shown(element => element.display === 'container-boundary')) {
+    drawBoundary(buffer, element, projection, theme,
+      touched.has(element.representationId)
+        || element.representationId === projection.currentId)
+  }
+  for (const group of projection.groups) {
+    if (visible(group.cellBounds, projection.viewport)) {
+      drawGroupBoundary(buffer, group, projection, theme)
+    }
+  }
   for (const relationship of projection.relationships) {
     const lit = tracing && trace.pathIds.has(relationship.id)
     drawRoute(buffer, relationship, theme, tracing && !lit, lit, relationship.id === trace.tracedId)
@@ -65,23 +79,6 @@ export function drawWorld(
       touched.has(element.representationId),
     )
   }
-  for (const group of projection.groups) {
-    if (visible(group.cellBounds, projection.viewport)) {
-      drawGroupBoundary(buffer, group, projection, theme)
-    }
-  }
-  for (const element of shown(element => element.display === 'container-boundary')) {
-    drawBoundary(buffer, element, projection, theme, touched.has(element.representationId))
-  }
-  for (const element of shown(element => element.display === 'system-boundary')) {
-    drawBoundary(buffer, element, projection, theme, touched.has(element.representationId))
-  }
-  const selected = projection.elements.find(element => {
-    return element.representationId === projection.currentId
-  })
-  if (selected?.display.endsWith('-boundary')) {
-    drawSelection(buffer, selected, theme)
-  }
   for (const element of shown(element => {
     return element.display === 'card' && element.kind !== 'component'
   })) {
@@ -93,9 +90,6 @@ export function drawWorld(
       tracing && !trace.onPath(element.representationId),
       touched.has(element.representationId),
     )
-  }
-  if (selected?.display === 'card') {
-    drawSelection(buffer, selected, theme)
   }
   for (const element of shown(item => item.display !== 'hidden')) {
     const assignees = assigneesOnElement(trace.work, element.id)

@@ -4,7 +4,6 @@ export const HIERARCHY_PANE_WIDTH = 26
 export const DETAILS_PANE_WIDTH = 32
 
 export interface PaneVisibility {
-  hierarchy: boolean
   details: boolean
 }
 
@@ -21,14 +20,14 @@ export interface PaneLayout {
 export function paneLayout(
   width: number,
   height: number,
-  panes: PaneVisibility = { hierarchy: true, details: true },
+  panes: PaneVisibility = { details: true },
 ): PaneLayout {
   const body = { y: 2, height: Math.max(1, height - 4) }
   const detailsWidth = panes.details ? DETAILS_PANE_WIDTH : 0
   const hierarchy = {
     x: 0,
     ...body,
-    width: panes.hierarchy ? HIERARCHY_PANE_WIDTH : 0,
+    width: HIERARCHY_PANE_WIDTH,
   }
   const details = {
     x: Math.max(hierarchy.width, width - detailsWidth),

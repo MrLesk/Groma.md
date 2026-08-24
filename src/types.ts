@@ -1,6 +1,7 @@
 export type C4Kind = 'actor' | 'system' | 'container' | 'component'
 export type Origin = 'observed' | 'planned' | 'missing'
 export type SemanticLevel = 'context' | 'containers' | 'components'
+export type TerminalLevel = 'context' | 'components'
 /** How an item sits on the campus at one C4 level. Underlay is not a ghost. */
 export type SemanticRole = 'named' | 'underlay' | 'mark' | 'campus'
 export type DisplayRole =
@@ -289,9 +290,8 @@ export interface MapCamera {
 }
 
 export interface WorldProjection {
-  level: SemanticLevel
+  level: TerminalLevel
   currentId: string | null
-  fitZoom: number
   camera: MapCamera
   viewport: Bounds
   elements: ProjectedElement[]
@@ -302,7 +302,7 @@ export interface WorldProjection {
 export interface ProjectionOptions {
   /** The map pane interior; the camera projects the world into these cells. */
   viewport: Bounds
-  level?: SemanticLevel
+  level?: TerminalLevel
   currentId?: string
   camera?: MapCamera
   lockCamera?: boolean
