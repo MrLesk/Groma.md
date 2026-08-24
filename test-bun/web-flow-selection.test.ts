@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { test } from 'bun:test'
 
 import { flowRowState } from '../src/viewers/web/flow/row.ts'
-import { toggleFlowSelection } from '../src/viewers/web/flow/state.ts'
+import { toggleFlowActivation, toggleFlowSelection } from '../src/viewers/web/flow/state.ts'
 
 const scan = { commandId: 'scan' }
 const render = { commandId: 'render', actorId: 'architect' }
@@ -34,6 +34,16 @@ test.concurrent('actor scope replaces the same command instead of hiding a secon
   const scoped = toggleFlowSelection([unscoped], unscoped, render)
 
   assert.deepEqual(scoped, { active: [render], selected: render })
+})
+
+test.concurrent('contextual toggles change activation without needing a details selection', () => {
+  const activated = toggleFlowActivation([scan], render)
+  const deactivated = toggleFlowActivation(activated, render)
+  const rescope = toggleFlowActivation([{ commandId: 'render' }], render)
+
+  assert.deepEqual(activated, [scan, render])
+  assert.deepEqual(deactivated, [scan])
+  assert.deepEqual(rescope, [render])
 })
 
 test.concurrent('general rows preserve current scope while actor command rows require their exact scope', () => {

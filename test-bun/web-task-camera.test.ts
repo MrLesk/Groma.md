@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { test } from 'bun:test'
 
 import type { SheetScene } from '../src/sheet/types.ts'
-import { fitHighlights } from '../src/viewers/web/iso/camera.ts'
+import { fitElements, fitHighlights } from '../src/viewers/web/iso/camera.ts'
 import { projectScene } from '../src/viewers/web/iso/project.ts'
 
 const sheet: SheetScene = {
@@ -40,7 +40,7 @@ const sheet: SheetScene = {
   }],
 }
 
-test.concurrent('active task focus centres touched bodies and outgoing routes with context room', () => {
+test.concurrent('camera focus fits task routes or relationship endpoint bodies with context room', () => {
   const scene = projectScene(sheet)
   const viewport = { width: 800, height: 500 }
   const camera = fitHighlights(scene, ['observed:system', 'missing', 'observed:component'], viewport, 4)
@@ -67,4 +67,13 @@ test.concurrent('active task focus centres touched bodies and outgoing routes wi
   assert.equal(fitHighlights(scene, ['missing'], viewport, 4), undefined)
   const focusedComponent = fitHighlights(scene, ['observed:component'], viewport, 4)
   assert.ok(focusedComponent && focusedComponent.k < 4)
+
+  const endpoints = fitElements(
+    scene,
+    ['observed:system', 'observed:component'],
+    viewport,
+    4,
+  )
+  assert.ok(endpoints && endpoints.k > camera.k)
+  assert.equal(fitElements(scene, ['missing'], viewport, 4), undefined)
 })

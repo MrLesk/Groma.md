@@ -9,7 +9,7 @@ export interface FlowRowData {
 export const flowRowCss = `
   .flow-row {
     display: grid;
-    grid-template-columns: 14px 28px minmax(0, 1fr) auto;
+    grid-template-columns: 14px minmax(0, 1fr) auto;
     align-items: center;
     gap: 7px;
     width: 100%;
@@ -32,9 +32,7 @@ export const flowRowCss = `
     font-size: 9px;
     line-height: 1;
   }
-  .flow-mark { color: var(--muted); font-size: 9px; letter-spacing: -0.15em; }
   .flow-row.active .flow-check { border-color: var(--accent); background: var(--accent); color: var(--paper); }
-  .flow-row.active .flow-mark { color: var(--accent); }
   .flow-row .name { overflow: hidden; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
   .flow-scope { color: var(--muted); font-size: 8px; letter-spacing: 0.06em; text-transform: uppercase; white-space: nowrap; }
   #details .flow-list .flow-row { padding: 7px 0; }
@@ -88,10 +86,6 @@ export function flowRow(
   check.className = 'flow-check'
   check.setAttribute('aria-hidden', 'true')
   check.textContent = state.active ? '✓' : ''
-  const mark = document.createElement('span')
-  mark.className = 'flow-mark'
-  mark.setAttribute('aria-hidden', 'true')
-  mark.textContent = '•─•'
   const name = document.createElement('span')
   name.className = 'name'
   name.textContent = row.title
@@ -99,7 +93,7 @@ export function flowRow(
   scopeLabel.className = 'flow-scope'
   scopeLabel.textContent = scope
 
-  button.append(check, mark, name, scopeLabel)
+  button.append(check, name, scopeLabel)
   button.addEventListener('click', () => onToggle(state.toggleTarget))
   return button
 }

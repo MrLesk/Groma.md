@@ -44,15 +44,8 @@ export function fitCamera(bounds: Bounds, viewport: Viewport): Camera {
   return fittedCamera(bounds, viewport, Infinity, FIT_MARGIN)
 }
 
-/** Fits identified bodies and the highlighted routes leaving them; missing ids do not affect the camera. */
-export function fitHighlights(
-  scene: ProjectedScene,
-  ids: readonly string[],
-  viewport: Viewport,
-  maxZoom: number,
-): Camera | undefined {
-  const wanted = new Set(ids)
-  const points = [
+function bodyPoints(scene: ProjectedScene, wanted: ReadonlySet<string>): Point[] {
+  return [
     ...scene.islands
       .filter(item => item.island.element !== null && wanted.has(item.island.element.representationId))
       .flatMap(item => item.polygon),
@@ -62,10 +55,14 @@ export function fitHighlights(
     ...scene.buildings
       .filter(item => wanted.has(item.building.representationId))
       .flatMap(item => item.tiers.flatMap(tier => tier.flatMap(face => face.points))),
-    ...scene.routes
-      .filter(item => wanted.has(item.route.source))
-      .flatMap(item => item.points),
   ]
+}
+
+function fitPoints(
+  points: readonly Point[],
+  viewport: Viewport,
+  maxZoom: number,
+): Camera | undefined {
   if (points.length === 0) return undefined
   const xs = points.map(point => point.x)
   const ys = points.map(point => point.y)
@@ -75,6 +72,33 @@ export function fitHighlights(
     width: Math.max(...xs) - Math.min(...xs),
     height: Math.max(...ys) - Math.min(...ys),
   }, viewport, maxZoom, CONTEXT_MARGIN)
+}
+
+/** Fits identified architecture bodies; missing ids do not affect the camera. */
+export function fitElements(
+  scene: ProjectedScene,
+  ids: readonly string[],
+  viewport: Viewport,
+  maxZoom: number,
+): Camera | undefined {
+  const wanted = new Set(ids)
+  return fitPoints(bodyPoints(scene, wanted), viewport, maxZoom)
+}
+
+/** Fits identified bodies and the highlighted routes leaving them; missing ids do not affect the camera. */
+export function fitHighlights(
+  scene: ProjectedScene,
+  ids: readonly string[],
+  viewport: Viewport,
+  maxZoom: number,
+): Camera | undefined {
+  const wanted = new Set(ids)
+  return fitPoints([
+    ...bodyPoints(scene, wanted),
+    ...scene.routes
+      .filter(item => wanted.has(item.route.source))
+      .flatMap(item => item.points),
+  ], viewport, maxZoom)
 }
 
 /** Zoom stays between half the fitted view and the closest zoom. */
