@@ -28,8 +28,8 @@ actor command in the world, deduped across the actors who share it.
 Clicking an inactive command activates and selects its flow. Clicking
 another keeps both active and selects the new one; clicking the selected
 flow deactivates it and selects the latest remaining flow. Every flow row uses
-the same checkbox, abstract path mark, active state, and Global or actor scope
-in the hierarchy and details pane. Structure rows use kind marks and neutral
+the same checkbox, active state, and Global or actor scope in the hierarchy and
+details pane; it has no separate flow glyph. Structure rows use kind marks and neutral
 selection instead; their arrows only expand containment. One command
 has at most one active flow; picking it from an actor changes that flow's scope
 in place. Below it the Structure
@@ -54,17 +54,20 @@ Flows through, and children. A relationship row always names and selects its
 peer; its arrow shows authored direction and never activates a flow. Commands
 are the actor-scoped flows the selected actor can start. Flows through are the
 general flows whose path crosses the selected software element. Both use the
-same flow control as the hierarchy list. Actors do not repeat Commands as
-relationships or build information.
+same flow control as the hierarchy list, but they toggle the map path in place
+and keep the actor or component in the details pane. The hierarchy list opens
+the selected flow's own details. Actors do not repeat Commands as relationships
+or build information.
 How it's built holds the
 evidence: the technology the element's Markdown declares
 (`technology: SVG, Bun serve` renders as one chip per
 comma-separated part), the scanner, file, and optional symbol from
 `code`. Elements without either do not show the build tab. Children and
 relationship peers select that element. A selected flow shows its command as
-the title, its optional starting actor and leg count, then every authored
-relationship leg in travel order. Each leg's relationship and both endpoints
-can be selected without clearing active flows. When the
+the title, its optional starting actor and relationship count, then a labeled
+Relationships list in travel order. Clicking a relationship keeps the flow
+details open, fits its two endpoint elements in the map, and starts a continuous
+slow pulse on both that keeps them visible throughout. When the
 selection is an actor who uses a launcher, software they use that
 starts other software they also use, the actor's outgoing rows
 are that launcher's commands, plus whatever they use that no launcher

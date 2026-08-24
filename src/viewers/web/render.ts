@@ -8,8 +8,9 @@ import type { TreeRow } from '../tui/tree.ts'
 import { createWebShell } from './chrome/shell.ts'
 import { paintFlowDetails } from './flow/details.ts'
 import { paintFlows } from './flow/list.ts'
-import { sameFlow, toggleFlowSelection } from './flow/state.ts'
+import { sameFlow, toggleFlowActivation, toggleFlowSelection } from './flow/state.ts'
 import {
+  fitElements,
   fitHighlights,
   fitCamera,
   keyAction,
@@ -191,11 +192,11 @@ function paintSelection(): void {
   paintTree()
   const commands = worldCommands(world)
   const actorName = (actorId: string): string | undefined => worldElement(actorId)?.name
-  paintFlows(flowsHost, commands, activeFlows, flow, actorName, toggleFlow)
+  paintFlows(flowsHost, commands, activeFlows, flow, actorName, toggleHierarchyFlow)
   paintStats(commands.length)
   const selected = worldElement(selectedId)
   const relationship = worldRelationship(selectedId)
-  if (flow !== undefined) paintFlowDetails(detailsHost, flow, world, select)
+  if (flow !== undefined) paintFlowDetails(detailsHost, flow, world, focusFlowLeg)
   else if (relationship !== undefined) paintRelationship(detailsHost, relationship, world, select)
   else if (task !== undefined) paintTask(detailsHost, task, world, select)
   else if (selected === undefined) clearDetails(detailsHost)
@@ -204,7 +205,7 @@ function paintSelection(): void {
       detailsHost,
       inspectDetails(selected, world),
       select,
-      toggleFlow,
+      toggleContextFlow,
       activeFlows,
       flow,
       actorName,
@@ -238,18 +239,26 @@ function select(id: string, additive = false): void {
   paintSelection()
 }
 
+function applyFocus(next: Camera | undefined, frame: MapFrame): boolean {
+  if (next === undefined) return false
+  camera = pan(next, frame.x, frame.y)
+  touched = true
+  applyCamera()
+  return true
+}
 function focusActiveTasks(): void {
   const elementIds = activeTaskIds.flatMap(id => {
     const task = workItem(id)
     return task === undefined ? [] : touchedElements(task, world)
   })
   const frame = viewport()
-  const focus = fitHighlights(scene, elementIds, frame, zoomLimits(fitted).max)
-  const focused = focus === undefined ? undefined : pan(focus, frame.x, frame.y)
-  if (focused === undefined) return
-  camera = focused
-  touched = true
-  applyCamera()
+  applyFocus(fitHighlights(scene, elementIds, frame, zoomLimits(fitted).max), frame)
+}
+
+function focusFlowLeg(sourceId: string, targetId: string): void {
+  const frame = viewport()
+  const focus = fitElements(scene, [sourceId, targetId], frame, zoomLimits(fitted).max)
+  if (applyFocus(focus, frame)) map.pulse([sourceId, targetId])
 }
 
 /** A pin or chip click selects its task; only clicking the selected task again deactivates it. */
@@ -268,10 +277,15 @@ function deselect(): void {
   paintSelection()
 }
 
-function toggleFlow(flow: FlowRef): void {
+function toggleHierarchyFlow(flow: FlowRef): void {
   const next = toggleFlowSelection(activeFlows, selectedFlow(selection), flow)
   activeFlows = next.active
   selection = next.selected === undefined ? noSelection : selectFlow(next.selected)
+  paintSelection()
+}
+
+function toggleContextFlow(flow: FlowRef): void {
+  activeFlows = toggleFlowActivation(activeFlows, flow)
   paintSelection()
 }
 
