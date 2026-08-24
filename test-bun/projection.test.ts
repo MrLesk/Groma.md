@@ -1,22 +1,22 @@
 import assert from 'node:assert/strict'
 import { test } from 'bun:test'
 
-import { normalizeTerminalPalette, rgbToHex } from '@opentui/core'
-import type { CapturedFrame, CapturedSpan } from '@opentui/core'
 import { createTestRenderer } from '@opentui/core/testing'
 
 import { loadArchitectureViewModel } from '../src/core.ts'
 import { mountTerminalViewer } from '../src/viewers/tui/terminal-viewer.ts'
 import { letterName } from '../src/viewers/tui/projection-display.ts'
+import { MAP_SCALE } from '../src/viewers/tui/projection-camera.ts'
 import { projectWorld } from '../src/viewers/tui/projection.ts'
 import type {
   ArchitectureWorld,
   C4Kind,
-  SemanticLevel,
+  TerminalLevel,
   WorldElement,
 } from '../src/types.ts'
 import {
   cameraOn,
+  box,
   containersFixtureRoot,
   contains,
   fixtureRoot,
@@ -34,19 +34,14 @@ const sizes = [
   { width: 180, height: 50 },
 ]
 
-const views: Array<{ level: SemanticLevel; currentId: string }> = [
+const views: Array<{ level: TerminalLevel; currentId: string }> = [
   { level: 'context', currentId: 'observed:shop' },
-  { level: 'containers', currentId: 'observed:api' },
   { level: 'components', currentId: 'observed:orders' },
 ]
 
-function allSpans(captured: CapturedFrame): CapturedSpan[] {
-  return captured.lines.flatMap(line => line.spans)
-}
-
-function levelKind(level: SemanticLevel): Set<C4Kind> {
+function levelKind(level: TerminalLevel): Set<C4Kind> {
   if (level === 'context') return new Set<C4Kind>(['actor', 'system'])
-  return new Set<C4Kind>([level === 'containers' ? 'container' : 'component'])
+  return new Set<C4Kind>(['component'])
 }
 
 test.concurrent('frames are stable and projections hold world invariants at every level and size', async () => {
@@ -70,8 +65,7 @@ test.concurrent('frames are stable and projections hold world invariants at ever
         viewport: mapViewportOf(size),
         ...view,
       })
-      assert.equal(projection.camera.zoom, projection.fitZoom)
-      assert.ok(projection.camera.zoom <= 1)
+      assert.equal(projection.camera.zoom, MAP_SCALE)
 
       const kinds = levelKind(view.level)
       const cards = projection.elements.filter(element => {
@@ -105,20 +99,10 @@ test.concurrent('frames are stable and projections hold world invariants at ever
           groma.cellBounds.width * groma.cellBounds.height
             > actor.cellBounds.width * actor.cellBounds.height,
         )
-        for (const id of [
-          'observed:shop-architect',
-          'observed:shop-operator',
-          'observed:vault',
-        ]) {
-          assert.ok(
-            visible(requiredElement(byId, id).cellBounds, projection.viewport),
-            id,
-          )
-        }
         assert.ok(projection.elements.some(element => {
           return element.kind === 'container'
             && element.display === 'container-boundary'
-            && !letterName(element, 'context')
+            && letterName(element, 'context')
             && element.cellBounds.x >= groma.cellBounds.x
             && element.cellBounds.y >= groma.cellBounds.y
             && element.cellBounds.x + element.cellBounds.width
@@ -158,6 +142,41 @@ test.concurrent('frames are stable and projections hold world invariants at ever
   }
 })
 
+test.concurrent('root keeps named groups collapsed while component cards stay hidden', () => {
+  const system = box('system', 'system', { x: 0, y: 0, width: 120, height: 80 }, {
+    children: ['observed:container'],
+  })
+  const container = box('container', 'container', { x: 10, y: 10, width: 90, height: 60 }, {
+    parent: system.representationId,
+    children: ['observed:component'],
+  })
+  const component = box('component', 'component', { x: 20, y: 20, width: 34, height: 16 }, {
+    parent: container.representationId,
+    group: 'Domain',
+  })
+  const world: ArchitectureWorld = {
+    bounds: system.bounds,
+    elements: [system, container, component],
+    groups: [{
+      id: 'group:observed:container:Domain',
+      name: 'Domain',
+      parent: container.representationId,
+      bounds: { x: 16, y: 16, width: 44, height: 28 },
+    }],
+    relationships: [],
+  }
+  const projection = projectWorld(world, {
+    viewport: mapViewportOf({ width: 120, height: 36 }),
+    level: 'context',
+    currentId: system.representationId,
+  })
+  assert.equal(projection.groups[0]?.name, 'Domain')
+  assert.equal(requiredElement(
+    projectedById(projection.elements),
+    component.representationId,
+  ).display, 'hidden')
+})
+
 test.concurrent('planned and missing elements render with distinct dashes and observed tint', async () => {
   const response = await loadArchitectureViewModel(fixtureRoot)
   const setup = await createTestRenderer({ width: 120, height: 36 })
@@ -167,8 +186,6 @@ test.concurrent('planned and missing elements render with distinct dashes and ob
   })
   await setup.renderOnce()
   const frame = setup.captureCharFrame()
-  const spans = allSpans(setup.captureSpans())
-  const palette = normalizeTerminalPalette()
 
   assert.doesNotMatch(
     mapRegion(frame, 120),
@@ -176,10 +193,6 @@ test.concurrent('planned and missing elements render with distinct dashes and ob
   )
   assert.match(frame, /[╌┆]/)
   assert.match(frame, /[┈┊░]/)
-  assert.ok(spans.some(span => rgbToHex(span.fg) === rgbToHex(palette.palette[1])))
-  assert.ok(spans.some(span => {
-    return rgbToHex(span.bg) !== rgbToHex(palette.defaultBackground)
-  }))
   app.destroy()
 })
 
@@ -199,22 +212,6 @@ test.concurrent('resize and semantic projection preserve the core world', async 
   app.destroy()
 })
 
-test.concurrent('containers view attaches a component relationship to named containers', async () => {
-  const fixture = await loadArchitectureViewModel(containersFixtureRoot)
-  const projection = projectWorld(fixture.world, {
-    viewport: mapViewportOf({ width: 120, height: 36 }),
-    level: 'containers',
-    currentId: 'observed:shop',
-  })
-  const direct = projection.relationships.find(relationship => {
-    return relationship.source === 'observed:page'
-      && relationship.target === 'observed:orders'
-  })
-  assert.ok(direct)
-  assert.equal(direct.displaySource, 'observed:web')
-  assert.equal(direct.displayTarget, 'observed:api')
-})
-
 test.concurrent('a hidden endpoint promotes its route to the nearest displayed ancestor', async () => {
   const fixture = await loadArchitectureViewModel(containersFixtureRoot)
   const projection = projectWorld(fixture.world, {
@@ -228,7 +225,7 @@ test.concurrent('a hidden endpoint promotes its route to the nearest displayed a
   })
   assert.ok(promoted)
   assert.equal(promoted.displaySource, 'observed:page')
-  assert.equal(promoted.displayTarget, 'observed:shop')
+  assert.equal(promoted.displayTarget, 'observed:web')
 })
 
 test.concurrent('components level shows only the focused container children', async () => {
@@ -253,22 +250,6 @@ test.concurrent('selection changes never move the camera and pan only when off s
   const response = await loadArchitectureViewModel(viewerFixtureRoot)
   const viewport = mapViewportOf({ width: 120, height: 36 })
 
-  const systemView = projectWorld(response.world, {
-    viewport,
-    level: 'context',
-    currentId: 'observed:shop',
-  })
-  const operatorView = projectWorld(response.world, {
-    viewport,
-    level: 'context',
-    currentId: 'observed:shop-operator',
-  })
-  assert.deepEqual(operatorView.camera, systemView.camera)
-  assert.deepEqual(
-    operatorView.elements.map(element => [element.representationId, element.cellBounds]),
-    systemView.elements.map(element => [element.representationId, element.cellBounds]),
-  )
-
   const modelView = projectWorld(response.world, {
     viewport,
     level: 'components',
@@ -292,7 +273,7 @@ test.concurrent('selection changes never move the camera and pan only when off s
     currentId: 'observed:shop',
     camera: cameraOn(response.world, 'observed:shop', 1),
   })
-  assert.equal(start.camera.zoom, 1)
+  assert.equal(start.camera.zoom, MAP_SCALE)
   for (const id of ['observed:shop-architect', 'observed:shop-operator', 'observed:vault']) {
     const panned = projectWorld(response.world, {
       viewport,

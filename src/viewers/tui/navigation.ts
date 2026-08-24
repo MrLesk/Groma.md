@@ -19,7 +19,7 @@ import type {
   AnnotatedRelationship,
   ArchitectureWorld,
   C4Kind,
-  SemanticLevel,
+  TerminalLevel,
   WorldElement,
 } from '../../types.ts'
 
@@ -33,7 +33,6 @@ export type ViewerAction =
   | 'left'
   | 'right'
   | 'tab'
-  | 'toggle-hierarchy'
   | 'toggle-details'
   | 'dismiss'
   | 'clear-action'
@@ -53,11 +52,11 @@ export interface FilterState {
   query: string
   index: number
   /** The view to restore when the filter is cancelled. */
-  before: { level: SemanticLevel; currentId?: string }
+  before: { level: TerminalLevel; currentId?: string }
 }
 
 export interface ViewerState {
-  level: SemanticLevel
+  level: TerminalLevel
   currentId?: string
   focus: ViewerFocus
   tree: TreeState
@@ -82,14 +81,11 @@ function elementsById(world: ArchitectureWorld): Map<string, WorldElement> {
 
 export function defaultSelection(
   world: ArchitectureWorld,
-  level: SemanticLevel,
+  level: TerminalLevel,
 ): WorldElement | undefined {
   const ranked = [...world.elements].sort(compareElements)
   if (level === 'context') {
     return ranked.find(element => element.kind === 'system' && !element.external)
-  }
-  if (level === 'containers') {
-    return ranked.find(element => element.kind === 'container')
   }
   return ranked.find(element => element.kind === 'component')
 }
@@ -112,7 +108,7 @@ export function initialState(world: ArchitectureWorld): ViewerState {
     currentId: defaultSelection(world, 'context')?.representationId,
     focus: 'architecture',
     tree: initialTree(),
-    panes: { hierarchy: true, details: true },
+    panes: { details: true },
     detailsScroll: 0,
     detailsTab: 'what',
   }
@@ -272,18 +268,7 @@ export function reduceViewer(
     return syncTree(world, {
       ...current,
       focus: 'hierarchy',
-      panes: { ...current.panes, hierarchy: true },
     })
-  }
-  if (action === 'toggle-hierarchy') {
-    const hierarchy = !current.panes.hierarchy
-    return {
-      ...current,
-      panes: { ...current.panes, hierarchy },
-      focus: !hierarchy && current.focus === 'hierarchy'
-        ? 'architecture'
-        : current.focus,
-    }
   }
   if (action === 'toggle-details') {
     const details = !current.panes.details

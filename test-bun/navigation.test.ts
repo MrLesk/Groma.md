@@ -11,12 +11,20 @@ import {
   reduceViewer,
 } from '../src/viewers/tui/navigation.ts'
 import type { ViewerState } from '../src/viewers/tui/navigation.ts'
-import type { ArchitectureWorld } from '../src/types.ts'
+import type { ArchitectureWorld, TerminalLevel } from '../src/types.ts'
 import { initialTree } from '../src/viewers/tui/tree.ts'
 import { navigationWorld, viewerFixtureRoot } from './helpers.ts'
 
 function viewOf(state: ViewerState): Pick<ViewerState, 'level' | 'currentId'> {
   return { level: state.level, currentId: state.currentId }
+}
+
+function stateAt(
+  world: ArchitectureWorld,
+  level: TerminalLevel,
+  currentId: string,
+): ViewerState {
+  return { ...initialState(world), level, currentId }
 }
 
 const box = (
@@ -59,15 +67,12 @@ test.concurrent('unit navigation covers selection, level changes, and spatial mo
     currentId: 'observed:alpha',
     focus: 'architecture',
     tree: initialTree(),
-    panes: { hierarchy: true, details: true },
+    panes: { details: true },
     detailsScroll: 0,
     detailsTab: 'what' as const,
   })
 
-  assert.deepEqual(viewOf(reduceViewer(world, state, 'enter')), {
-    level: 'containers',
-    currentId: 'observed:cleft',
-  })
+  assert.equal(reduceViewer(world, state, 'enter').focus, 'details')
   assert.equal(
     reduceViewer(world, { ...state, currentId: 'observed:ann' }, 'enter').focus,
     'details',
@@ -81,30 +86,17 @@ test.concurrent('unit navigation covers selection, level changes, and spatial mo
     'details',
   )
   assert.deepEqual(
-    viewOf(reduceViewer(world, {
-      level: 'components',
-      currentId: 'observed:pleft',
-      focus: 'architecture',
-      tree: initialTree(),
-      panes: { hierarchy: true, details: true },
-      detailsScroll: 0,
-      detailsTab: 'what' as const,
-    }, 'enter')),
+    viewOf(reduceViewer(world, stateAt(world, 'components', 'observed:pleft'), 'enter')),
     { level: 'components', currentId: 'observed:pleft' },
   )
 
-  state = reduceViewer(world, state, 'enter')
-  assert.deepEqual(viewOf(reduceViewer(world, state, 'leave')), {
-    level: 'context',
-    currentId: 'observed:alpha',
-  })
   state = reduceViewer(world, {
-    ...state,
+    ...initialState(world),
     currentId: 'observed:cleft',
   }, 'enter')
   assert.deepEqual(viewOf(state), { level: 'components', currentId: 'observed:pleft' })
   assert.deepEqual(viewOf(reduceViewer(world, state, 'leave')), {
-    level: 'containers',
+    level: 'context',
     currentId: 'observed:cleft',
   })
   assert.deepEqual(viewOf(reduceViewer(world, initialState(world), 'leave')), {
@@ -112,78 +104,35 @@ test.concurrent('unit navigation covers selection, level changes, and spatial mo
     currentId: 'observed:alpha',
   })
 
-  state = {
-    level: 'containers',
-    currentId: 'observed:cleft',
-    focus: 'architecture',
-    tree: initialTree(),
-    panes: { hierarchy: true, details: true },
-    detailsScroll: 0,
-    detailsTab: 'what' as const,
-  }
+  state = stateAt(world, 'context', 'observed:cleft')
   assert.equal(reduceViewer(world, state, 'right').currentId, 'observed:cright')
 
-  state = {
+  state = stateAt(world, 'components', 'observed:pright')
+  assert.deepEqual(viewOf(reduceViewer(world, state, 'right')), {
     level: 'components',
     currentId: 'observed:pright',
-    focus: 'architecture',
-    tree: initialTree(),
-    panes: { hierarchy: true, details: true },
-    detailsScroll: 0,
-    detailsTab: 'what' as const,
-  }
-  assert.deepEqual(viewOf(reduceViewer(world, state, 'right')), {
-    level: 'containers',
-    currentId: 'observed:cfar',
   })
 
-  state = {
+  state = stateAt(world, 'components', 'observed:pfar')
+  assert.deepEqual(viewOf(reduceViewer(world, state, 'right')), {
     level: 'components',
     currentId: 'observed:pfar',
-    focus: 'architecture',
-    tree: initialTree(),
-    panes: { hierarchy: true, details: true },
-    detailsScroll: 0,
-    detailsTab: 'what' as const,
-  }
-  assert.deepEqual(viewOf(reduceViewer(world, state, 'right')), {
-    level: 'context',
-    currentId: 'observed:ext',
   })
 
-  state = {
-    level: 'components',
-    currentId: 'observed:pleft',
-    focus: 'architecture',
-    tree: initialTree(),
-    panes: { hierarchy: true, details: true },
-    detailsScroll: 0,
-    detailsTab: 'what' as const,
-  }
+  state = stateAt(world, 'components', 'observed:pleft')
   const escaped = reduceViewer(world, state, 'left')
-  assert.deepEqual(viewOf(escaped), { level: 'context', currentId: 'observed:ann' })
-  assert.notEqual(escaped.currentId, 'observed:alpha')
-  assert.notEqual(escaped.currentId, 'observed:cleft')
+  assert.deepEqual(viewOf(escaped), { level: 'components', currentId: 'observed:pleft' })
 
-  state = {
-    level: 'context',
-    currentId: 'observed:ann',
-    focus: 'architecture',
-    tree: initialTree(),
-    panes: { hierarchy: false, details: true },
-    detailsScroll: 0,
-    detailsTab: 'what' as const,
-  }
+  state = stateAt(world, 'context', 'observed:ann')
   const toTree = reduceViewer(world, state, 'left')
   assert.deepEqual(viewOf(toTree), { level: 'context', currentId: 'observed:ann' })
   assert.equal(toTree.focus, 'hierarchy')
   assert.equal(toTree.tree.cursor, 'observed:ann')
-  assert.equal(toTree.panes.hierarchy, true)
 
   const toDetails = reduceViewer(world, {
     ...state,
     currentId: 'observed:ext',
-    panes: { hierarchy: true, details: false },
+    panes: { details: false },
   }, 'right')
   assert.deepEqual(viewOf(toDetails), { level: 'context', currentId: 'observed:ext' })
   assert.equal(toDetails.focus, 'details')
@@ -218,10 +167,7 @@ test.concurrent('the filter narrows by name, drives selection live, and restores
   assert.deepEqual(filterMatches(world, ''), [])
   assert.deepEqual(filterMatches(world, 'no such thing'), [])
 
-  let state = {
-    ...initialState(world),
-    panes: { hierarchy: false, details: false },
-  }
+  let state: ViewerState = { ...initialState(world), panes: { details: false } }
   const before = { level: state.level, currentId: state.currentId }
 
   state = reduceFilter(world, state, { type: 'open' })
@@ -230,13 +176,13 @@ test.concurrent('the filter narrows by name, drives selection live, and restores
     state = reduceFilter(world, state, { type: 'char', char })
   }
   assert.equal(state.currentId, viewerMatches[0]?.representationId)
-  assert.equal(state.level, 'containers')
+  assert.equal(state.level, 'context')
 
   const firstMatch = viewerMatches[0]?.representationId
   const secondMatch = viewerMatches[1]?.representationId
   state = reduceFilter(world, state, { type: 'next' })
   assert.equal(state.currentId, secondMatch)
-  assert.equal(state.level, 'containers')
+  assert.equal(state.level, 'context')
   state = reduceFilter(world, state, { type: 'previous' })
   assert.equal(state.currentId, firstMatch)
 
@@ -253,13 +199,12 @@ test.concurrent('the filter narrows by name, drives selection live, and restores
   const accepted = reduceFilter(world, state, { type: 'accept' })
   assert.equal(accepted.filter, undefined)
   assert.equal(accepted.currentId, firstMatch)
-  assert.equal(accepted.level, 'containers')
+  assert.equal(accepted.level, 'context')
 })
 
 test.concurrent('leave from details returns to the map and the parent Enter opened', () => {
   const world = navigationWorld()
-  let state = initialState(world)
-  state = reduceViewer(world, state, 'enter')
+  let state: ViewerState = { ...initialState(world), currentId: 'observed:cleft' }
   state = reduceViewer(world, state, 'enter')
   state = reduceViewer(world, state, 'enter')
   assert.equal(state.focus, 'details')
@@ -269,7 +214,7 @@ test.concurrent('leave from details returns to the map and the parent Enter open
   assert.deepEqual(viewOf(dismissed), { level: 'components', currentId: 'observed:pleft' })
   state = reduceViewer(world, state, 'leave')
   assert.equal(state.focus, 'architecture')
-  assert.deepEqual(viewOf(state), { level: 'containers', currentId: 'observed:cleft' })
+  assert.deepEqual(viewOf(state), { level: 'context', currentId: 'observed:cleft' })
 })
 
 test.concurrent('an actor action stays on after leaving details and x clears it', () => {

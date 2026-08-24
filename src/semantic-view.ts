@@ -68,7 +68,7 @@ function roleOf(
   focus: WorldElement | undefined,
   elements: Map<string, WorldElement>,
 ): SemanticRole | null {
-  if (isMark(element)) return 'mark'
+  if (isMark(element)) return level === 'components' ? null : 'mark'
 
   if (level === 'context') {
     if (element.kind === 'system') return 'named'
@@ -93,7 +93,6 @@ function roleOf(
     return null
   }
 
-  if (element.kind === 'system') return 'campus'
   if (element.kind === 'container' && element.representationId === focus.representationId) {
     return 'campus'
   }
@@ -101,6 +100,23 @@ function roleOf(
     return 'named'
   }
   return null
+}
+
+function componentEndpoints(
+  relationship: WorldRelationship,
+  focus: WorldElement,
+  items: readonly SemanticItem[],
+  elements: Map<string, WorldElement>,
+): { source: SemanticItem; target: SemanticItem } | undefined {
+  const localize = (id: string): string => {
+    return within(elements.get(id), focus.representationId, elements)
+      ? id
+      : focus.representationId
+  }
+  return promotedEndpoints({
+    source: localize(relationship.source),
+    target: localize(relationship.target),
+  }, items, [...elements.values()])
 }
 
 function touchesFocus(
@@ -156,7 +172,9 @@ export function semanticView(
     if (level !== 'context' && (!focusId || !touchesFocus(relationship, focusId, elements))) {
       continue
     }
-    const endpoints = promotedEndpoints(relationship, items, world.elements)
+    const endpoints = level === 'components' && focus
+      ? componentEndpoints(relationship, focus, items, elements)
+      : promotedEndpoints(relationship, items, world.elements)
     if (!endpoints) continue
     const { source, target } = endpoints
     if (source.representationId === target.representationId) continue

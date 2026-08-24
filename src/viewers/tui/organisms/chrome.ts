@@ -7,18 +7,11 @@ import { text } from '../atoms/text.ts'
 import type { ViewerTheme } from '../atoms/theme.ts'
 import type { ViewerFocus } from '../navigation.ts'
 import type { PaneLayout } from '../layout.ts'
-import type { Bounds, WorldProjection } from '../../../types.ts'
-
-/** The camera state shown beside the zoom controls. */
-export function zoomReadout(zoom: number, fitZoom: number): string {
-  if (Math.abs(zoom - 1) < 1e-6) return '1:1'
-  if (Math.abs(zoom - fitZoom) < 1e-6) return 'fit'
-  return `${Math.round(zoom * 100)}%`
-}
+import type { Bounds } from '../../../types.ts'
 
 const paneHints: Record<ViewerFocus, string> = {
   architecture: '←↑↓→ select   enter open   backspace back   tab tree',
-  hierarchy: '↑↓ move   ←→ fold   enter select   tab map   [ ] panes',
+  hierarchy: '↑↓ move   ←→ fold   enter select   tab map   ] details',
   details: '↑↓ scroll   t tab   backspace back   esc map',
 }
 
@@ -47,7 +40,6 @@ function footerHint(
 export function drawChrome(
   buffer: OptimizedBuffer,
   layout: PaneLayout,
-  projection: WorldProjection,
   theme: ViewerTheme,
   focus: ViewerFocus = 'architecture',
   footerOverride?: string,
@@ -109,23 +101,12 @@ export function drawChrome(
     TextAttributes.DIM,
   )
 
-  const readout = zoomReadout(projection.camera.zoom, projection.fitZoom)
-  const zoomControls = `- out   + in · ${readout}`
   text(
     buffer,
     footerOverride ?? footerHint(focus, actionTitle, picking),
     layout.footer.x + 1,
     layout.footer.y,
-    Math.max(0, layout.footer.width - zoomControls.length - 3),
-    theme.foreground,
-    theme.background,
-  )
-  text(
-    buffer,
-    zoomControls,
-    Math.max(0, layout.footer.x + layout.footer.width - zoomControls.length - 1),
-    layout.footer.y,
-    zoomControls.length,
+    Math.max(0, layout.footer.width - 2),
     theme.foreground,
     theme.background,
   )

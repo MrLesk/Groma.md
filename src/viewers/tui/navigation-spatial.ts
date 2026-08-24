@@ -5,7 +5,7 @@ import type {
   Bounds,
   C4Kind,
   Point,
-  SemanticLevel,
+  TerminalLevel,
   WorldElement,
 } from '../../types.ts'
 
@@ -48,7 +48,7 @@ function firstComponentUnder(
 
 export function canEnter(element: WorldElement): boolean {
   return !element.external
-    && (element.kind === 'system' || element.kind === 'container')
+    && element.kind === 'container'
     && element.children.length > 0
 }
 
@@ -56,13 +56,6 @@ export function enterView(
   world: ArchitectureWorld,
   element: WorldElement,
 ): Pick<ViewerState, 'level' | 'currentId'> {
-  if (element.kind === 'system') {
-    const container = firstChildOfKind(element, 'container', elementsById(world))
-    return {
-      level: 'containers',
-      currentId: container?.representationId ?? element.representationId,
-    }
-  }
   const component = firstComponentUnder(element, elementsById(world))
   return {
     level: 'components',
@@ -79,52 +72,32 @@ export function leaveView(
     return { level: state.level, currentId: selected?.representationId }
   }
   const byId = elementsById(world)
-  if (state.level === 'containers') {
-    const system = ancestorOfKind(selected, 'system', byId)
-    return { level: 'context', currentId: system?.representationId ?? selected?.representationId }
-  }
   const container = ancestorOfKind(selected, 'container', byId)
   return {
-    level: 'containers',
+    level: 'context',
     currentId: container?.representationId ?? selected?.representationId,
   }
 }
 
-function sameLevelItems(world: ArchitectureWorld, level: SemanticLevel): WorldElement[] {
-  if (level === 'context') return world.elements.filter(element => element.parent === null)
-  if (level === 'containers') {
-    return world.elements.filter(element => element.kind === 'container')
+function scopeItems(
+  world: ArchitectureWorld,
+  level: TerminalLevel,
+  selected: WorldElement,
+): WorldElement[] {
+  if (level === 'context') {
+    return world.elements.filter(element => element.kind !== 'component')
   }
-  return world.elements.filter(element => element.kind === 'component')
+  const byId = elementsById(world)
+  const container = ancestorOfKind(selected, 'container', byId)
+  if (!container) return []
+  return [container, ...world.elements.filter(element => {
+    return element.kind === 'component' && element.parent === container.representationId
+  })]
 }
 
-function higherLevelItems(world: ArchitectureWorld, level: SemanticLevel): WorldElement[] {
-  if (level === 'context') return []
-  if (level === 'containers') {
-    return world.elements.filter(element => element.parent === null)
-  }
-  return world.elements.filter(element => {
-    return element.kind === 'container' || element.parent === null
-  })
-}
-
-export function levelFor(element: WorldElement): SemanticLevel {
+export function levelFor(element: WorldElement): TerminalLevel {
   if (element.kind === 'component') return 'components'
-  if (element.kind === 'container') return 'containers'
   return 'context'
-}
-
-function ancestorIds(
-  element: WorldElement,
-  byId: Map<string, WorldElement>,
-): Set<string> {
-  const ids = new Set<string>()
-  let current: WorldElement | undefined = element
-  while (current) {
-    ids.add(current.representationId)
-    current = current.parent === null ? undefined : byId.get(current.parent)
-  }
-  return ids
 }
 
 function center(bounds: Bounds): Point {
@@ -132,6 +105,19 @@ function center(bounds: Bounds): Point {
     x: bounds.x + bounds.width / 2,
     y: bounds.y + bounds.height / 2,
   }
+}
+
+function descendsFrom(
+  element: WorldElement,
+  ancestorId: string,
+  byId: Map<string, WorldElement>,
+): boolean {
+  let current: WorldElement | undefined = element
+  while (current?.parent !== null) {
+    if (current?.parent === ancestorId) return true
+    current = current?.parent === undefined ? undefined : byId.get(current.parent)
+  }
+  return false
 }
 
 function inDirection(
@@ -181,18 +167,14 @@ export function moveView(
   direction: 'up' | 'down' | 'left' | 'right',
 ): Pick<ViewerState, 'level' | 'currentId'> {
   const current = { level: state.level, currentId: selected.representationId }
-  const same = sameLevelItems(world, state.level).filter(element => {
+  const byId = elementsById(world)
+  const candidates = scopeItems(world, state.level, selected).filter(element => {
     return element.representationId !== selected.representationId
-      && element.parent === selected.parent
+      && !descendsFrom(element, selected.representationId, byId)
+      && !descendsFrom(selected, element.representationId, byId)
   })
-  const sameHit = nearestInDirection(selected, same, direction)
-  if (sameHit) return { level: state.level, currentId: sameHit.representationId }
-
-  const excluded = ancestorIds(selected, elementsById(world))
-  const higher = higherLevelItems(world, state.level).filter(element => {
-    return !excluded.has(element.representationId)
-  })
-  const higherHit = nearestInDirection(selected, higher, direction)
-  if (!higherHit) return current
-  return { level: levelFor(higherHit), currentId: higherHit.representationId }
+  const hit = nearestInDirection(selected, candidates, direction)
+  return hit === undefined
+    ? current
+    : { level: state.level, currentId: hit.representationId }
 }

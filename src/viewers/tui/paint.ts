@@ -99,7 +99,6 @@ export function paintWorld(
   drawChrome(
     buffer,
     layout,
-    projection,
     theme,
     options.focus,
     options.filter && filterLine(world, options.filter),

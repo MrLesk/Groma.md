@@ -2,8 +2,8 @@ import type {
   DisplayRole,
   ProjectedElement,
   SemanticItem,
-  SemanticLevel,
   SemanticRole,
+  TerminalLevel,
   WorldElement,
 } from '../../types.ts'
 
@@ -25,11 +25,11 @@ export function attachableRole(role: SemanticRole | undefined): boolean {
 /** Named software, marks, and campus wrappers letter a name. Underlay does not. */
 export function letterName(
   element: Pick<ProjectedElement, 'display' | 'kind' | 'external'>,
-  level: SemanticLevel,
+  level: TerminalLevel,
 ): boolean {
   if (element.display === 'hidden') return false
   if (element.kind === 'actor' || element.external) return true
   if (element.kind === 'system') return true
-  if (element.kind === 'container') return level !== 'context'
+  if (element.kind === 'container') return true
   return level === 'components'
 }

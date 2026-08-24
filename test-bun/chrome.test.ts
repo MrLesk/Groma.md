@@ -7,7 +7,6 @@ import { loadArchitectureViewModel } from '../src/core.ts'
 import { mountTerminalViewer } from '../src/viewers/tui/terminal-viewer.ts'
 import { initialState, reduceViewer } from '../src/viewers/tui/navigation.ts'
 import { paneLayout } from '../src/viewers/tui/layout.ts'
-import { zoomReadout } from '../src/viewers/tui/organisms/chrome.ts'
 import { kindGlyph, kindLabel } from '../src/viewers/tui/atoms/kind.ts'
 import { projectWorld } from '../src/viewers/tui/projection.ts'
 import {
@@ -31,28 +30,20 @@ test.concurrent('header and footer sit one row in from the terminal edges', () =
   assert.equal(layout.footer.y + layout.footer.height, height - 1)
 })
 
-test.concurrent('pane toggles resize the map viewport without touching the world', async () => {
+test.concurrent('details reserves width while the hierarchy remains persistent', async () => {
   const world = navigationWorld()
   let state = initialState(world)
-  assert.deepEqual(state.panes, { hierarchy: true, details: true })
+  assert.deepEqual(state.panes, { details: true })
 
   state = reduceViewer(world, state, 'toggle-details')
-  assert.deepEqual(state.panes, { hierarchy: true, details: false })
-  state = reduceViewer(world, state, 'toggle-hierarchy')
-  assert.deepEqual(state.panes, { hierarchy: false, details: false })
+  assert.deepEqual(state.panes, { details: false })
 
   state = reduceViewer(world, state, 'tab')
   assert.equal(state.focus, 'hierarchy')
-  assert.equal(state.panes.hierarchy, true)
-  state = reduceViewer(world, state, 'toggle-hierarchy')
-  assert.equal(state.focus, 'architecture')
-  assert.equal(state.panes.hierarchy, false)
 
-  const full = paneLayout(120, 36, { hierarchy: false, details: false })
-  assert.equal(full.map.x, 0)
-  assert.equal(full.map.width, 120)
-  const partial = paneLayout(120, 36, { hierarchy: true, details: false })
-  assert.equal(partial.map.x + partial.map.width, 120)
+  const wide = paneLayout(120, 36, { details: false })
+  assert.equal(wide.map.x, wide.hierarchy.width)
+  assert.equal(wide.map.x + wide.map.width, 120)
 
   const response = await loadArchitectureViewModel(viewerFixtureRoot)
   const threePane = paneLayout(120, 36)
@@ -61,14 +52,14 @@ test.concurrent('pane toggles resize the map viewport without touching the world
     camera: cameraOn(response.world, 'observed:shop', 1),
     lockCamera: true,
   })
-  const wide = projectWorld(response.world, {
-    viewport: full.mapViewport,
+  const wideProjection = projectWorld(response.world, {
+    viewport: wide.mapViewport,
     camera: cameraOn(response.world, 'observed:shop', 1),
     lockCamera: true,
   })
-  assert.equal(wide.camera.zoom, narrow.camera.zoom)
-  const wideById = projectedById(wide.elements)
-  const deltaX = full.mapViewport.x + full.mapViewport.width / 2
+  assert.equal(wideProjection.camera.zoom, narrow.camera.zoom)
+  const wideById = projectedById(wideProjection.elements)
+  const deltaX = wide.mapViewport.x + wide.mapViewport.width / 2
     - (threePane.mapViewport.x + threePane.mapViewport.width / 2)
   for (const element of narrow.elements) {
     const moved = requiredElement(wideById, element.representationId)
@@ -80,13 +71,6 @@ test.concurrent('pane toggles resize the map viewport without touching the world
       element.representationId,
     )
   }
-})
-
-test.concurrent('the zoom readout names fit, in-between, and one-to-one states', () => {
-  assert.equal(zoomReadout(0.31, 0.31), 'fit')
-  assert.equal(zoomReadout(0.62, 0.31), '62%')
-  assert.equal(zoomReadout(1, 0.31), '1:1')
-  assert.equal(zoomReadout(1, 1), '1:1')
 })
 
 test.concurrent('the details pane always shows the selection and reserves its column', async () => {

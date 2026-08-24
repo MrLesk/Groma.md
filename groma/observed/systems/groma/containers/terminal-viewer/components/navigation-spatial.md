@@ -11,4 +11,4 @@ code:
 
 # Navigation spatial
 
-Moves the selection across the map: the nearest sibling in an arrow's direction, the exit to the outer item when no sibling is left that way, and what Enter descends into.
+Moves selection to the nearest visible peer in an arrow's direction without changing scope. It also defines the only scope transition: Enter opens a container and Backspace returns to root.

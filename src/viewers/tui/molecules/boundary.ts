@@ -8,6 +8,7 @@ import { kindGlyph } from '../atoms/kind.ts'
 import { text } from '../atoms/text.ts'
 import type { ViewerTheme } from '../atoms/theme.ts'
 import { letterName } from '../projection-display.ts'
+import { drawSurfacePattern } from './hatch.ts'
 import type {
   Bounds,
   Origin,
@@ -33,7 +34,7 @@ function drawTitledFrame(
     bounds,
     origin,
     color,
-    theme.background,
+    titleBackground,
     style,
     TextAttributes.DIM,
   )
@@ -90,13 +91,31 @@ export function drawBoundary(
     ? 'system'
     : 'container'
 
+  if (element.origin === 'observed' && element.cellBounds.width > 2 && element.cellBounds.height > 2) {
+    buffer.fillRect(
+      element.cellBounds.x + 1,
+      element.cellBounds.y + 1,
+      element.cellBounds.width - 2,
+      element.cellBounds.height - 2,
+      background,
+    )
+    drawSurfacePattern(
+      buffer,
+      element.cellBounds,
+      element.kind,
+      element.external,
+      theme.missing,
+      background,
+    )
+  }
+
   if (!letterName(element, projection.level)) {
     drawBorder(
       buffer,
       element.cellBounds,
       element.origin,
       color,
-      theme.background,
+      background,
       style,
       TextAttributes.DIM,
     )
@@ -123,16 +142,37 @@ export function drawGroupBoundary(
   projection: WorldProjection,
   theme: ViewerTheme,
 ): void {
+  const background = theme.observedTint
+  if (group.cellBounds.width > 2 && group.cellBounds.height > 2) {
+    buffer.fillRect(
+      group.cellBounds.x + 1,
+      group.cellBounds.y + 1,
+      group.cellBounds.width - 2,
+      group.cellBounds.height - 2,
+      background,
+    )
+    drawSurfacePattern(
+      buffer,
+      group.cellBounds,
+      'group',
+      false,
+      theme.missing,
+      background,
+    )
+  }
+  const count = projection.elements.filter(element => {
+    return element.group === group.name && element.parent === group.parent
+  }).length
   drawTitledFrame(
     buffer,
     projection,
     theme,
     group.cellBounds,
-    group.name,
+    `${group.name} (${count})`,
     'observed',
     'group',
     theme.foreground,
-    theme.background,
+    background,
     TextAttributes.DIM,
   )
 }

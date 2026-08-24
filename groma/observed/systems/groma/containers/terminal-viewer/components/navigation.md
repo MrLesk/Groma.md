@@ -11,4 +11,4 @@ code:
 
 # Navigation
 
-Owns viewer state: C4 level, selection, focus, the filter, the lit command, and which panes are open. Every key becomes one action reduced over that state.
+Owns viewer state: root or container scope, selection, the filter, the active flow, and whether details are open. Every key becomes one action reduced over that state.

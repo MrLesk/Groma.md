@@ -170,7 +170,7 @@ test.concurrent('context names systems, keeps containers as underlay, and marks 
   assert.deepEqual(item(view, 'api').bounds, worldOf(world, 'api').bounds)
 })
 
-test.concurrent('marks keep their world origin and follow the named level size', () => {
+test.concurrent('marks stay on outer scopes and container scope stays local', () => {
   const world = shopWorld()
   const buyerEl = worldOf(world, 'buyer')
   const context = semanticView(world, { level: 'context' })
@@ -178,10 +178,9 @@ test.concurrent('marks keep their world origin and follow the named level size',
   const deeper = semanticView(world, { level: 'components', focusId: 'observed:web' })
   const contextBuyer = item(context, 'buyer')
   const enteredBuyer = item(entered, 'buyer')
-  const deeperBuyer = item(deeper, 'buyer')
   assert.equal(contextBuyer.role, 'mark')
   assert.equal(enteredBuyer.role, 'mark')
-  assert.equal(deeperBuyer.role, 'mark')
+  assert.deepEqual(idsOf(deeper, 'mark'), [])
   assert.equal(contextBuyer.bounds.x, buyerEl.bounds.x)
   assert.equal(contextBuyer.bounds.y, buyerEl.bounds.y)
   assert.equal(enteredBuyer.bounds.x, buyerEl.bounds.x)
@@ -194,10 +193,7 @@ test.concurrent('marks keep their world origin and follow the named level size',
     { width: enteredBuyer.bounds.width, height: enteredBuyer.bounds.height },
     displaySize('Buyer', 'container'),
   )
-  assert.deepEqual(
-    { width: deeperBuyer.bounds.width, height: deeperBuyer.bounds.height },
-    displaySize('Buyer', 'component'),
-  )
+  assert.deepEqual(deeper.items.map(entry => entry.id).sort(), ['page', 'scene', 'web'])
 })
 
 test.concurrent('entering a system does not move that system, its actors, or siblings', () => {
@@ -327,7 +323,7 @@ test.concurrent('components keep the entered boundary anchor and promote to the 
   const uses = route(view, 'uses')
   assert.deepEqual(
     [uses.source, uses.target],
-    ['observed:shop', 'observed:page'],
+    ['observed:web', 'observed:page'],
   )
   assert.ok(uses.route.length >= 2)
   for (let index = 1; index < uses.route.length; index += 1) {
