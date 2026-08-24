@@ -86,15 +86,12 @@ test.concurrent('details list children, promoted peers, and code', () => {
 
   const core = inspectDetails(fixture.elements[2]!, fixture)
   expect(core.relationships).toEqual([{
-    id: 'r1',
     outgoing: true,
-    pickable: false,
     peerId: 'web',
     peerName: 'web',
     peerKind: 'container',
     peerExternal: false,
-    title: 'supplies positions',
-    detail: 'web',
+    description: 'supplies positions',
   }])
 
   const layout = inspectDetails(fixture.elements[4]!, fixture)
@@ -114,11 +111,17 @@ test.concurrent('a declared technology becomes chips; none stays empty', () => {
 })
 
 test.concurrent('the tabs split meaning from build evidence', () => {
-  expect(tabSections('what')).toEqual(['description', 'relationships', 'children'])
-  expect(tabSections('how')).toEqual(['technology', 'code', 'travelledBy'])
+  expect(tabSections('what')).toEqual([
+    'description',
+    'relationships',
+    'commands',
+    'flowsThrough',
+    'children',
+  ])
+  expect(tabSections('how')).toEqual(['technology', 'code'])
 })
 
-test.concurrent('an actor lists launcher commands as pickable actions', () => {
+test.concurrent('actor commands are scoped flows and stay separate from peer relationships', () => {
   const fixture: ArchitectureWorld = {
     bounds: { x: 0, y: 0, width: 40, height: 20 },
     groups: [],
@@ -172,20 +175,38 @@ test.concurrent('an actor lists launcher commands as pickable actions', () => {
     ],
   }
   const buyer = inspectDetails(fixture.elements[0]!, fixture)
-  expect(buyer.relationships.map(item => ({
-    id: item.id,
-    pickable: item.pickable,
-  }))).toEqual([
-    { id: 'api-web', pickable: true },
-    { id: 'api-jobs', pickable: true },
+  expect(buyer.commands).toEqual([
+    { flow: { commandId: 'api-web', actorId: 'buyer' }, title: 'starts' },
+    { flow: { commandId: 'api-jobs', actorId: 'buyer' }, title: 'runs jobs' },
   ])
+  expect(buyer.relationships.map(({ peerId, description }) => ({ peerId, description }))).toEqual([
+    { peerId: 'api', description: 'sends' },
+    { peerId: 'web', description: 'reads' },
+  ])
+  expect(buyer.flowsThrough).toEqual([])
+
   const api = inspectDetails(fixture.elements[1]!, fixture)
-  expect(api.relationships.every(item => item.pickable)).toBe(false)
+  expect(api.commands).toEqual([])
+  expect(api.relationships.map(({ peerId, outgoing, description }) => ({
+    peerId,
+    outgoing,
+    description,
+  }))).toEqual([
+    { peerId: 'buyer', outgoing: false, description: 'sends' },
+    { peerId: 'web', outgoing: true, description: 'starts' },
+    { peerId: 'jobs', outgoing: true, description: 'runs jobs' },
+  ])
 
   // An element is travelled by exactly the commands whose walk touches it.
   const jobs = inspectDetails(fixture.elements[3]!, fixture)
-  expect(jobs.travelledBy).toEqual([{ id: 'api-jobs', title: 'runs jobs' }])
+  expect(jobs.flowsThrough).toEqual([{
+    flow: { commandId: 'api-jobs' },
+    title: 'runs jobs',
+  }])
   const web = inspectDetails(fixture.elements[2]!, fixture)
-  expect(web.travelledBy).toEqual([{ id: 'api-web', title: 'starts' }])
-  expect(api.travelledBy.map(walk => walk.id)).toEqual(['api-web', 'api-jobs'])
+  expect(web.flowsThrough).toEqual([{
+    flow: { commandId: 'api-web' },
+    title: 'starts',
+  }])
+  expect(api.flowsThrough.map(flow => flow.flow.commandId)).toEqual(['api-web', 'api-jobs'])
 })
