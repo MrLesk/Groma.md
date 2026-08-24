@@ -82,7 +82,7 @@ export const mapCss = `
   #map .face.right { fill: var(--right-fill); }
   #map .face.left { fill: var(--left-fill); }
   #map .actor .face { fill: var(--paper); }
-  #map .zone .ground { fill: url(#hatch-ground); stroke: var(--muted); }
+  #map .zone .ground { fill: url(#hatch-ground); }
   /* the sheet's name chips only: the Live work island has chips of its own that must stay clickable */
   #map .pattern, #map > svg .chip { stroke: none; pointer-events: none; }
   #map .island.actors .pattern { fill: url(#dots); }
