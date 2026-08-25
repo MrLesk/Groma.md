@@ -60,7 +60,7 @@ export const mapCss = `
   #map > svg:active, #map > svg:active [data-id] { cursor: grabbing; }
   #map .camera { transform-box: view-box; transform-origin: 0 0; }
   #map .sheet { pointer-events: none; ${stroke('island')} }
-  #map .tick, #map .compass { ${stroke('building')} }
+  #map .calibration-tick, #map .compass, #map .project-plate { ${stroke('building')} }
   /* zones lie inside slab groups and keep their own weight while the slab is hovered or selected */
   #map .zone { ${stroke('building')} --emphasis: 1; }
   #map .island { ${tokens('island')} }
@@ -68,14 +68,44 @@ export const mapCss = `
   #map .slab { ${tokens('slab')} }
   #map .building { ${tokens('building')} }
   #map .route { ${stroke('route')} }
-  #map .frame, #map .tick, #map .compass .ring, #map .compass .star, #map .compass .north,
+  #map .frame, #map .calibration-tick,
+  #map .compass .ring, #map .compass .star, #map .compass .north,
+  #map .project-plate .plate, #map .project-plate .divider,
+  #map .project-plate .pencil path, #map .project-plate .pencil polygon,
   #map .ground, #map .face, #map .route .line {
     stroke: var(--map-line); stroke-linejoin: round;
     stroke-width: calc(var(--stroke) * var(--emphasis, 1) * var(--weight, 1));
   }
-  #map .frame, #map .tick, #map .compass .ring, #map .compass .star { fill: none; }
+  #map .frame, #map .calibration-tick,
+  #map .compass .ring, #map .compass .star,
+  #map .project-plate .divider, #map .project-plate .pencil path { fill: none; }
+  #map .frame { --emphasis: 1.6; }
+  #map .calibration-tick { stroke-linecap: square; }
+  #map .compass { --emphasis: 1.25; }
   #map .compass .north { fill: var(--map-line); }
-  #map .compass .text { fill: var(--muted); }
+  #map .compass .text { fill: var(--ink); font-weight: 600; }
+  #map .project-plate .plate { fill: var(--paper); fill-opacity: 0.72; }
+  #map .project-plate .project-name .text { font-weight: 650; letter-spacing: 0.06em; }
+  #map .project-plate .project-description .text { fill: var(--muted); }
+  #map .project-plate .project-description .md-strong { font-weight: 700; fill: var(--ink); }
+  #map .project-plate .project-description .md-emphasis { font-style: italic; }
+  #map .project-plate .project-description .md-code { font-family: 'SF Mono', ui-monospace, Menlo, monospace; fill: var(--ink); }
+  #map .project-plate .project-description .md-link { text-decoration: underline; text-underline-offset: 2px; }
+  #map .project-plate .project-meta .text { fill: var(--muted); letter-spacing: 0.14em; }
+  #map .project-edit { pointer-events: all; cursor: pointer; outline: none; }
+  #map .project-edit .edit-hit { fill: transparent; stroke: none; }
+  #map .project-edit .pencil path { stroke-linecap: square; }
+  #map .project-edit .pencil .body { fill: color-mix(in srgb, var(--ink) 10%, var(--paper)); }
+  #map .project-edit .pencil .facet { fill: color-mix(in srgb, var(--ink) 18%, var(--paper)); }
+  #map .project-edit .pencil .eraser { fill: color-mix(in srgb, var(--ink) 28%, var(--paper)); }
+  #map .project-edit .pencil .ferrule { fill: color-mix(in srgb, var(--ink) 18%, var(--paper)); }
+  #map .project-edit .pencil .tip { fill: color-mix(in srgb, var(--ink) 12%, var(--paper)); }
+  #map .project-edit .pencil .lead { fill: var(--ink); }
+  #map .project-edit .pencil .facet, #map .project-edit .pencil .eraser, #map .project-edit .pencil .ferrule,
+  #map .project-edit .pencil .tip, #map .project-edit .pencil .lead { stroke: none; }
+  #map .project-edit:hover .edit-hit, #map .project-edit:focus .edit-hit { fill: var(--ink); fill-opacity: 0.05; }
+  #map .project-edit:hover .pencil path, #map .project-edit:focus .pencil path,
+  #map .project-edit:hover .pencil .body, #map .project-edit:focus .pencil .body { stroke: var(--ink); }
   #map .grid { fill: none; stroke: var(--map-grid); }
   #map .grid.major { stroke: var(--map-grid-major); }
   #map .ground, #map .face.top { fill: var(--top-fill); }

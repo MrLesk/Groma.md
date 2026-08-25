@@ -12,6 +12,7 @@ test.concurrent('the page embeds the world and its sheet and mounts one SVG map'
   const { world } = await loadArchitectureViewModel(viewerFixtureRoot)
   const page = renderPage({
     generation: 1,
+    project: null,
     workGeneration: 0,
     world,
     sheet: sheetScene(world),
@@ -19,6 +20,7 @@ test.concurrent('the page embeds the world and its sheet and mounts one SVG map'
     pins: [],
   })
   assert.match(page, /<div id="map"><\/div>/)
+  assert.match(page, /"project":null/)
   assert.match(page, /"sheet":\{"sheet":/)
 })
 

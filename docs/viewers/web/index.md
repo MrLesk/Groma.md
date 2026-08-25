@@ -86,12 +86,17 @@ click on empty sheet clears them with the other active selections.
 The whole architecture is one isometric blueprint resting on a grid
 sheet. The grid is the field the architecture is built on: every
 footprint is a whole number of cells and every route travels a
-quarter-cell lattice. The sheet is the content plus breathing room;
-the grid itself runs to the edge of the map pane in every direction at
-any zoom, a slightly heavier border runs around the sheet with crop
-ticks at its corners, and a compass rose lies in the sheet's west
-corner with north along the grid's up-right axis, so the actors island
-is due west.
+quarter-cell lattice. A proportional drafting band surrounds that fixed
+semantic sheet without moving its cells. The grid itself runs to the edge of
+the map pane at any zoom. One strong outer frame defines the band;
+its small compass scales with the sheet and keeps north on the grid's up-right
+axis, so the actors island is due west. A title plate in the band shows the
+project name and Markdown description from `groma/README.md`, wraps the full
+rendered text, fits its width to lines up to 80 characters, and pushes only the
+south frame edge outward when longer content wraps. Small
+unlabeled calibration ticks line its two front edges.
+The compass, title metadata, and pencil lie on the same isometric ground plane,
+and every blueprint decoration uses the map's neutral grayscale palette.
 
 Actors, external systems, and each internal system are flat islands
 on the sheet, in one row along the grid from west to east so flows
@@ -204,11 +209,11 @@ opacity, and everything off the path dims.
 
 The map never reads architecture Markdown or calculates layout. Core
 composes the sheet from the merged world: islands, slabs, buildings,
-zones and routes, all in cells. The web server ships the world, its
-sheet, the configured Backlog workflow, available tasks and their pins
+zones and routes, all in cells. The web server ships the project profile,
+world, sheet, configured Backlog workflow, available tasks and their pins
 together; the browser only
 projects the sheet isometrically, paints it as SVG, and handles
-camera, selection and the lit flow. It may not move a footprint or
+camera, selection, the project-profile form, and the lit flow. It may not move a footprint or
 reroute a relationship.
 
 ## What you can do
@@ -231,7 +236,13 @@ selection. The map combines their normal selection treatments, the hierarchy
 marks every selected element, and the last item selected owns the details pane.
 Removing that item returns details to the previous item. Click empty
 sheet or press Escape to clear the selection, active flows, and active tasks;
-the details pane closes.
+the details pane closes. Click the isometric pencil in the title plate to open
+the floating project-profile form. Its Write view edits the description as
+Markdown and Preview renders it through Comark's sanitized HTML renderer. The
+title plate projects the same parsed Markdown semantics onto the isometric sheet.
+Saving asks the web host to update only
+`groma/README.md`; the published world event repaints every open map without a
+browser reload.
 Backlog work shows as pins. Every task outside the configured terminal
 status, and every task in that status changed within the last day, puts
 one pin per assignee on the element the task touched last: the element

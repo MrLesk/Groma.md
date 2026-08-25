@@ -1,10 +1,9 @@
-import { ISLAND_FONT, ISLAND_SPACING, SURFACE_FONT } from '../../../sheet/measure.ts'
-import type { Compass, ProjectedScene, ProjectedZone, Segment } from './project.ts'
+import { ISLAND_FONT, ISLAND_SPACING, SURFACE_FONT, textWidth } from '../../../sheet/measure.ts'
+import type { Compass, PlateText, ProjectPlate, RichPlateText, Segment } from './blueprint.ts'
+import type { ProjectedScene, ProjectedZone } from './project.ts'
 import { planeMatrix } from './project.ts'
 import { pointsAttribute, round, svg } from './svg.ts'
 import { surfaceText } from './text.ts'
-
-const COMPASS_FONT = 10
 
 function pathOf(segments: readonly Segment[]): string {
   return segments
@@ -24,7 +23,7 @@ function compassGroup(compass: Compass): SVGGElement {
   for (const letter of compass.letters) {
     const plane = svg('g', { transform: planeMatrix('ground', letter.at) })
     const text = svg('text', {
-      'font-size': COMPASS_FONT, 'text-anchor': 'middle', 'dominant-baseline': 'middle',
+      'font-size': compass.fontSize, 'text-anchor': 'middle', 'dominant-baseline': 'middle',
     }, 'text')
     text.textContent = letter.text
     plane.append(text)
@@ -33,13 +32,92 @@ function compassGroup(compass: Compass): SVGGElement {
   return group
 }
 
-/** The sheet's border with its corner ticks and the compass; the grid itself is the map's endless pattern. */
+function plateText(text: PlateText, className: string): SVGGElement {
+  const group = svg('g', { transform: planeMatrix('ground', text.origin) }, className)
+  text.lines.forEach((line, index) => {
+    const node = svg('text', {
+      y: text.fontSize * 0.9 + index * text.lineHeight,
+      'font-size': text.fontSize,
+    }, 'text')
+    if (textWidth(line, text.fontSize) > text.maxWidth) {
+      node.setAttribute('textLength', String(text.maxWidth))
+      node.setAttribute('lengthAdjust', 'spacingAndGlyphs')
+    }
+    node.textContent = line
+    group.append(node)
+  })
+  return group
+}
+
+function richPlateText(text: RichPlateText, className: string): SVGGElement {
+  const group = svg('g', { transform: planeMatrix('ground', text.origin) }, className)
+  text.lines.forEach((line, index) => {
+    const node = svg('text', {
+      y: text.fontSize * 0.9 + index * text.lineHeight,
+      'font-size': text.fontSize,
+    }, 'text')
+    const plain = line.map(run => run.text).join('')
+    if (textWidth(plain, text.fontSize) > text.maxWidth) {
+      node.setAttribute('textLength', String(text.maxWidth))
+      node.setAttribute('lengthAdjust', 'spacingAndGlyphs')
+    }
+    for (const run of line) {
+      const span = svg('tspan', {}, run.styles.map(style => `md-${style}`).join(' '))
+      span.textContent = run.text
+      node.append(span)
+    }
+    group.append(node)
+  })
+  return group
+}
+
+function pencilGroup(plate: ProjectPlate): SVGGElement {
+  const { origin, length, thickness } = plate.edit.pencil
+  const eraser = thickness * 0.45
+  const ferrule = eraser + thickness * 0.25
+  const tip = length - thickness * 0.8
+  const lead = length - thickness * 0.2
+  const group = svg('g', { transform: planeMatrix('ground', origin) }, 'pencil')
+  group.append(
+    svg('polygon', { points: `0,0 ${thickness},0 ${thickness},${tip} ${thickness / 2},${length} 0,${tip}` }, 'body'),
+    svg('polygon', {
+      points: `${thickness * 0.28},${ferrule} ${thickness * 0.72},${ferrule} ${thickness * 0.72},${tip} ${thickness * 0.28},${tip}`,
+    }, 'facet'),
+    svg('polygon', { points: `0,0 ${thickness},0 ${thickness},${eraser} 0,${eraser}` }, 'eraser'),
+    svg('polygon', { points: `0,${eraser} ${thickness},${eraser} ${thickness},${ferrule} 0,${ferrule}` }, 'ferrule'),
+    svg('polygon', { points: `0,${tip} ${thickness},${tip} ${thickness / 2},${length}` }, 'tip'),
+    svg('polygon', { points: `${thickness * 0.4},${lead} ${thickness * 0.6},${lead} ${thickness / 2},${length}` }, 'lead'),
+    svg('path', { d: `M0 ${eraser}H${thickness}M0 ${ferrule}H${thickness}M0 ${tip}H${thickness}` }, 'seams'),
+  )
+  return group
+}
+
+function projectPlateGroup(plate: ProjectPlate): SVGGElement {
+  const group = svg('g', {}, 'project-plate')
+  group.append(
+    svg('polygon', { points: pointsAttribute(plate.polygon) }, 'plate'),
+    svg('path', { d: pathOf([plate.divider]) }, 'divider'),
+    plateText(plate.name, 'project-name'),
+    richPlateText(plate.description, 'project-description'),
+    plateText(plate.meta, 'project-meta'),
+  )
+  const edit = svg('g', {
+    'data-project-edit': '', role: 'button', tabindex: 0, 'aria-label': 'Edit project profile',
+  }, 'project-edit')
+  edit.append(svg('polygon', { points: pointsAttribute(plate.edit.polygon) }, 'edit-hit'))
+  edit.append(pencilGroup(plate))
+  group.append(edit)
+  return group
+}
+
+/** The sheet's frame, front-edge calibration and compass; the grid itself is the map's endless pattern. */
 export function paintSheet(layer: SVGGElement, scene: ProjectedScene): void {
   layer.append(
     svg('polygon', { points: pointsAttribute(scene.frame) }, 'frame'),
-    svg('path', { d: pathOf(scene.ticks) }, 'tick'),
+    svg('path', { d: pathOf(scene.calibrationTicks) }, 'calibration-tick'),
     compassGroup(scene.compass),
   )
+  if (scene.projectPlate !== undefined) layer.append(projectPlateGroup(scene.projectPlate))
 }
 
 function zoneGroup(zone: ProjectedZone): SVGGElement {

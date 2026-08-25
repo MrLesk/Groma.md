@@ -42,7 +42,7 @@ export interface IsoMap {
   svg: SVGSVGElement
   /** Applies the camera to the map; the grid stays aligned under it, strokes and arrowheads take the zoom's weight, building names show when readable. */
   move(camera: Camera, zoomRatio: number): void
-  /** Rebuilds every layer; only a world change needs this. */
+  /** Rebuilds every layer after an architecture or project-profile change. */
   paint(scene: ProjectedScene): void
   /** Unions the existing selected-element and selected-route treatments across an ordered selection. */
   select(ids: readonly string[]): void
@@ -55,6 +55,8 @@ export interface IsoMap {
   hitId(target: EventTarget | null): string | undefined
   /** True when a click hit nothing but the sheet. */
   isSheet(target: EventTarget | null): boolean
+  /** True when a click or key target is the project plate's pencil action. */
+  isProjectEdit(target: EventTarget | null): boolean
   /** The point a pin's foot stands on: the roof of a building, the top of a slab or the surface of a system island, near its left corner. */
   anchorOf(id: string): Point | undefined
 }
@@ -186,6 +188,9 @@ export function createMap(host: HTMLElement): IsoMap {
     },
     isSheet(target) {
       return target === root || target === field
+    },
+    isProjectEdit(target) {
+      return target instanceof Element && target.closest('[data-project-edit]') !== null
     },
     anchorOf(id) {
       const building = painted?.buildings.find(item => item.building.representationId === id)

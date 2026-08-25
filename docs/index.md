@@ -1,8 +1,8 @@
 # Groma documentation
 
-Groma is this repo's architecture in Git: Markdown you can read, one C4 world
-you can walk. Solid boxes exist. Ghosts are next. Groma is the only writer of
-the files under `groma/`.
+Groma keeps architecture in Git as Markdown you can read and one C4 world you
+can walk. Solid boxes exist. Ghosts are next. Groma writes architecture
+records; the project profile in `groma/README.md` belongs to the project owner.
 
 ## See
 
@@ -15,7 +15,6 @@ instructions` prints the shipped workflow guide.
 - [Scanners](scanners/index.md)
 - [Viewers](viewers/index.md)
 - [Web viewer and live work](viewers/web/index.md)
-- [Observed architecture](../groma/observed/README.md)
 
 ## Change and accept
 
@@ -25,8 +24,7 @@ plan ghosts. Explanations stay on the observed element. `groma create` and
 ghost only after a scan has matched it.
 
 - [Product model](product-model.md)
-- [Plans](../groma/plans/README.md)
-- [Component Markdown contract](../groma/README.md)
+- [Component Markdown contract](component-markdown.md)
 
 ## Product principles
 

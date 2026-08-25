@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
-import { mkdir, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { test } from 'bun:test'
@@ -38,6 +38,7 @@ async function createLiveRepo(): Promise<string> {
   await writeTree(root, {
     'package.json': JSON.stringify({ name: 'shop', bin: { shop: 'src/cli.ts' } }),
     '.gitignore': 'node_modules/\n',
+    'groma/README.md': '# Shop\n\nShop architecture.\n',
     'groma/observed/README.md': '# Observed\n',
     'groma/missing/README.md': '# Missing\n',
     'backlog/tasks/.keep': '',
@@ -77,6 +78,20 @@ async function worldNames(url: string): Promise<string[]> {
   }
   return payload.world.elements.map(element => element.name)
 }
+
+test.concurrent('groma web omits the project profile when its README is incomplete', async () => {
+  const root = await createLiveRepo()
+  await writeFile(path.join(root, 'groma', 'README.md'), '# Shop\n')
+  const server = await startWebViewer(root, { port: 0 })
+  try {
+    assert.equal((await fetch(server.url)).status, 200)
+    const payload = await (await fetch(`${server.url}/world.json`)).json() as { project: unknown }
+    assert.equal(payload.project, null)
+  } finally {
+    server.close()
+    await rm(root, { recursive: true, force: true })
+  }
+})
 
 test.concurrent('groma web does not scan on open and applies a watched fold', async () => {
   const root = await createLiveRepo()
@@ -129,6 +144,45 @@ test.concurrent('groma web applies an architecture Markdown change without a ref
     })
     assert.ok((await worldNames(server.url)).includes('Shopfront'))
     assert.ok(!(await worldNames(server.url)).includes('Orders'))
+    await reader.cancel()
+  } finally {
+    server.close()
+    await rm(root, { recursive: true, force: true })
+  }
+})
+
+test.concurrent('groma web saves the project profile and publishes it without a refresh', async () => {
+  const root = await createLiveRepo()
+  const server = await startWebViewer(root, { port: 0 })
+  try {
+    const events = await fetch(`${server.url}/events`)
+    const reader = events.body!.getReader()
+    const decoder = new TextDecoder()
+    await reader.read()
+
+    const response = await fetch(`${server.url}/project`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'Supply map', description: 'Shows supply responsibilities.' }),
+    })
+    assert.equal(response.status, 200)
+
+    let pushed = ''
+    await waitUntil(async () => {
+      const { value } = await reader.read()
+      if (value) pushed += decoder.decode(value, { stream: true })
+      return pushed.includes('"generation":2') && pushed.includes('"name":"Supply map"')
+    })
+    const payload = await (await fetch(`${server.url}/world.json`)).json() as {
+      project: { name: string; description: string; descriptionBlocks: unknown[] }
+    }
+    assert.equal(payload.project.name, 'Supply map')
+    assert.equal(payload.project.description, 'Shows supply responsibilities.')
+    assert.equal(payload.project.descriptionBlocks.length, 1)
+    assert.equal(
+      await readFile(path.join(root, 'groma', 'README.md'), 'utf8'),
+      '# Supply map\n\nShows supply responsibilities.\n',
+    )
     await reader.cancel()
   } finally {
     server.close()

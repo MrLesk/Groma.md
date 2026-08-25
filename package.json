@@ -19,6 +19,7 @@
     "check": "bun run typecheck && bun run test"
   },
   "dependencies": {
+    "@comark/html": "0.5.1",
     "@opentui/core": "0.5.1",
     "comark": "0.5.1",
     "commander": "15.0.0",

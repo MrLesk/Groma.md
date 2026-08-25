@@ -1,4 +1,4 @@
-import { MARGIN, PAD, ROOF_SHADOW } from '../../../sheet/grid.ts'
+import { PAD, ROOF_SHADOW } from '../../../sheet/grid.ts'
 import { PLANE, curved, roofBlock } from '../../../sheet/measure.ts'
 import type {
   Building,
@@ -10,7 +10,10 @@ import type {
   Slab,
   Zone,
 } from '../../../sheet/types.ts'
+import type { ProjectProfile } from '../../../project-profile.ts'
 import type { Bounds, Point } from '../../../types.ts'
+import { projectBlueprint } from './blueprint.ts'
+import type { Blueprint } from './blueprint.ts'
 
 /** A cell is a 48 × 24 diamond; a floor is 12 px tall, so a roof's shadow is exactly half a cell per floor and lands on the lattice. 2:1 dimetric keeps every lattice point on integers. */
 const CELL_X = 24
@@ -23,12 +26,6 @@ const TIER_INSET = 0.25
 const ARC_STEPS = 16
 /** Screen pixels a slab's thickness hangs below the grid line: its top is the ground, its sides are drawn over the island in front of it. */
 const SLAB_HANG = 3
-/** The compass rose: a circle of this many cells lying in the sheet's west corner. */
-const COMPASS_RADIUS = 1
-/** Cells between a needle tip and its letter. */
-const COMPASS_LETTER = 0.4
-/** Cells each arm of a corner tick runs along its grid axis. */
-const TICK = 0.25
 
 export function project(gx: number, gy: number, z: number): Point {
   return { x: (gx - gy) * CELL_X, y: (gx + gy) * CELL_Y - z * FLOOR }
@@ -95,31 +92,7 @@ export interface ProjectedRoute {
   arrow: { at: Point; turn: number }
 }
 
-export interface Segment {
-  from: Point
-  to: Point
-}
-
-/** A compass rose lying on the sheet, its needles on the grid's axes: N is −gy, up and to the right on screen. */
-export interface Compass {
-  /** The rose's centre on the sheet. */
-  at: { gx: number; gy: number }
-  centre: Point
-  rx: number
-  ry: number
-  /** Four-point star: the N, E, S and W tips with a notch between each pair. */
-  star: Point[]
-  /** The north half of the star, filled. */
-  north: Point[]
-  letters: { text: string; at: Point }[]
-}
-
-export interface ProjectedScene {
-  /** The sheet's border. */
-  frame: Point[]
-  /** Crop marks at the sheet's four corners, two arms each along the grid's axes; the grid itself is endless. */
-  ticks: Segment[]
-  compass: Compass
+export interface ProjectedScene extends Blueprint {
   islands: ProjectedIsland[]
   zones: ProjectedZone[]
   slabs: ProjectedSlab[]
@@ -278,43 +251,8 @@ function boundsOf(points: readonly Point[]): Bounds {
   return { x: minX, y: minY, width: Math.max(maxX - minX, 1), height: Math.max(maxY - minY, 1) }
 }
 
-/** Two arms per corner, each along one grid axis. */
-function ticksOf(sheet: CellRect): Segment[] {
-  const cornersOf = [
-    [sheet.gx, sheet.gy], [sheet.gx + sheet.w, sheet.gy],
-    [sheet.gx + sheet.w, sheet.gy + sheet.d], [sheet.gx, sheet.gy + sheet.d],
-  ]
-  return cornersOf.flatMap(([gx, gy]) => [
-    { from: project(gx! - TICK, gy!, 0), to: project(gx! + TICK, gy!, 0) },
-    { from: project(gx!, gy! - TICK, 0), to: project(gx!, gy! + TICK, 0) },
-  ])
-}
-
-/** The rose lies in the middle of the sheet's west corner, clear of the border; a circle on the sheet projects to a 2:1 ellipse. */
-function compassOf(sheet: CellRect): Compass {
-  const at = { gx: sheet.gx + MARGIN / 2, gy: sheet.gy + sheet.d - MARGIN / 2 }
-  const on = (dx: number, dy: number): Point => project(at.gx + dx, at.gy + dy, 0)
-  const r = COMPASS_RADIUS
-  const n = 0.18 * r
-  const tip = r + COMPASS_LETTER
-  return {
-    at,
-    centre: on(0, 0),
-    rx: r * CELL_X * Math.SQRT2,
-    ry: r * CELL_Y * Math.SQRT2,
-    star: [on(0, -r), on(n, -n), on(r, 0), on(n, n), on(0, r), on(-n, n), on(-r, 0), on(-n, -n)],
-    north: [on(0, -r), on(n, -n), on(0, 0), on(-n, -n)],
-    letters: [
-      { text: 'N', at: on(0, -tip) },
-      { text: 'E', at: on(tip, 0) },
-      { text: 'S', at: on(0, tip) },
-      { text: 'W', at: on(-tip, 0) },
-    ],
-  }
-}
-
 /** Projects the sheet into screen polygons, route polylines and surface text, ready to paint. */
-export function projectScene(scene: SheetScene): ProjectedScene {
+export function projectScene(scene: SheetScene, profile?: ProjectProfile): ProjectedScene {
   const islands = scene.islands.map(island => ({
     island,
     polygon: corners(island.rect, 0),
@@ -347,18 +285,16 @@ export function projectScene(scene: SheetScene): ProjectedScene {
     const turn = last.gx > before.gx ? 0 : last.gy > before.gy ? 90 : last.gx < before.gx ? 180 : 270
     return { route, points, arrow: { at: points[end]!, turn } }
   })
-  const frame = corners(scene.sheet, 0)
+  const blueprint = projectBlueprint(scene.sheet, profile, project)
   return {
-    frame,
-    ticks: ticksOf(scene.sheet),
-    compass: compassOf(scene.sheet),
+    ...blueprint,
     islands,
     zones,
     slabs,
     routes,
     buildings,
     bounds: boundsOf([
-      ...frame,
+      ...blueprint.frame,
       ...buildings.flatMap(item => item.tiers.flatMap(tier => tier.flatMap(face => face.points))),
     ]),
   }

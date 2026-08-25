@@ -10,4 +10,4 @@ code:
 
 # Architecture watch
 
-Watches `groma/observed` and `groma/plans` for Markdown changes and settles them, so a live viewer reloads the world without scanning.
+Watches the observed, planned, and missing architecture Markdown, then settles changes so a live viewer republishes without scanning.

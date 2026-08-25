@@ -41,7 +41,11 @@ const sheet: SheetScene = {
 }
 
 test.concurrent('camera focus fits task routes or relationship endpoint bodies with context room', () => {
-  const scene = projectScene(sheet)
+  const scene = projectScene(sheet, {
+    name: 'System',
+    description: 'System architecture.',
+    descriptionBlocks: [{ spans: [{ text: 'System architecture.', styles: [] }] }],
+  })
   const viewport = { width: 800, height: 500 }
   const camera = fitHighlights(scene, ['observed:system', 'missing', 'observed:component'], viewport, 4)
   assert.ok(camera)
