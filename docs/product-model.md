@@ -68,8 +68,8 @@ prints the planned one.
   the ID it will keep when accepted.
 - A required change to something that exists restates that same ID and
   shows as a ghost until accepted.
-- Core assigns an ID only when a scan finds something that is not already in
-  the world, derived from the candidate's recognizable name.
+- Core assigns an ID only when a scan finds an unknown file, derived from its
+  recognizable file name and qualified when the world already uses that ID.
 - A scanner never invents an ID for a ghost and never decides that a ghost is
   built.
 
@@ -93,24 +93,24 @@ with `ok` and a short summary of what changed. It does not print elements,
 IDs, or a machine-readable architecture. If someone later needs that, it is
 a different command, not scan.
 
-`groma scan --watch` is the same scan, left running. It watches the TypeScript
-plugin file set and folds each settled source change. It does not open a
-viewer. `groma view` and `groma web` start that watch in-process.
+`groma scan --watch` is the same scan, left running. It watches supported
+TypeScript and C# source and project files. It does not open a viewer.
+`groma view` and `groma web` start that watch in-process.
 
-The scanner plugin sends candidates to Groma core: kind, name, parent
-evidence, and Code references, and no architecture IDs. The TypeScript
-plugin sends no relationships and no responsibility prose. Core folds that
-result into Markdown.
+Each language scanner returns one validated, complete observation of atomic
+files and symbols, inferred scopes and relationships, and diagnostics. Groma
+collects every supported observation before core writes Markdown. A scanner
+failure therefore cannot publish a partial batch.
 
-Core applies a candidate like this:
+Core applies the batch like this:
 
-1. An existing `code` reference that still matches keeps that element's ID.
-   The file matches even when the symbol changed. Core refreshes `code` and
-   leaves the body alone.
-2. Else the kebab-case of the candidate name equals an existing ID. Observed
-   match: refresh `code`, keep the body. Ghost match: attach `code` to the
-   planned document. The ID stays planned.
-3. Else Groma creates a new observed file with that ID.
+1. An existing `code` file match keeps its element and authored body. Symbols
+   refresh from current evidence, but every curated file remains on that
+   element, including files grouped together by a person.
+2. Placement inferred from imports, directories, or projects chooses a scope
+   for unknown files. It never changes existing ownership.
+3. An unknown file becomes a singleton component. A matching ghost receives
+   Code and remains planned.
 
 A scan never turns a ghost into observed architecture.
 

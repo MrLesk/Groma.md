@@ -3,9 +3,13 @@ import type { FSWatcher } from 'node:fs'
 import { stat } from 'node:fs/promises'
 import path from 'node:path'
 
-import { foldScanResult } from './core.ts'
-import { isTypeScriptScanFile } from './typescript-files.ts'
-import { scanTypeScriptSource } from './typescript-scanner.ts'
+import { reconcileScanObservations } from './core.ts'
+import {
+  isCSharpScanFile,
+  scanCSharpSource,
+} from './scanner/csharp/adapter.ts'
+import { isTypeScriptScanFile } from './scanner/typescript/files.ts'
+import { scanTypeScriptSource } from './scanner/typescript/scan.ts'
 import type { ScanSummary } from './types.ts'
 
 const SETTLE_MS = 150
@@ -18,7 +22,11 @@ export function formatScanSummary(summary: ScanSummary): string {
 export async function scanRepository(
   repositoryRoot: string,
 ): Promise<ScanSummary> {
-  return foldScanResult(repositoryRoot, await scanTypeScriptSource(repositoryRoot))
+  const observations = (await Promise.all([
+    scanTypeScriptSource(repositoryRoot),
+    scanCSharpSource(repositoryRoot),
+  ])).filter(observation => observation !== undefined)
+  return reconcileScanObservations(repositoryRoot, observations)
 }
 
 function sourceRelative(directory: string, filename: string | null): string | undefined {
@@ -86,7 +94,10 @@ export function watchScan(
   function onSourceEvent(prefix: string, filename: string | null): void {
     if (closed) return
     const relative = sourceRelative(prefix, filename)
-    if (relative === undefined || !isTypeScriptScanFile(relative)) return
+    if (
+      relative === undefined
+      || (!isTypeScriptScanFile(relative) && !isCSharpScanFile(relative))
+    ) return
     void stat(path.join(root, relative)).then(info => {
       if (!closed && info.mtimeMs >= startedAt) schedule()
     }, () => {

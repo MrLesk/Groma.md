@@ -1,4 +1,4 @@
-namespace Groma.DotNetScanner;
+namespace Groma.CSharpScanner;
 
 public static class ScannerCommand
 {
@@ -10,14 +10,13 @@ public static class ScannerCommand
     {
         if (args.Length != 1)
         {
-            await standardError.WriteLineAsync("Usage: dotnet-scanner <solution.sln|project.csproj>");
+            await standardError.WriteLineAsync("Usage: csharp-scanner <solution.sln|project.csproj>");
             return 2;
         }
 
         try
         {
-            CompleteScanSnapshot snapshot = await new RoslynScanner().ScanAsync(args[0], cancellationToken);
-            string json = snapshot.ToCanonicalJson();
+            string json = (await new RoslynScanner().ScanAsync(args[0], cancellationToken)).ToCanonicalJson();
             await standardOutput.WriteAsync(json);
             return 0;
         }

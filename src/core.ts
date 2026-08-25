@@ -16,7 +16,7 @@ import type {
 } from './types.ts'
 
 export { acceptGhost, type AcceptResult } from './accept.ts'
-export { foldScanResult } from './scan-reconciler.ts'
+export { reconcileScanObservations } from './scan-reconciler.ts'
 
 function originFor(revision: Revision): Origin {
   return revision.kind === 'plan' ? 'planned' : revision.kind

@@ -1,56 +1,44 @@
 using System.Text.Json;
-using System.Text.Json.Serialization;
 
-namespace Groma.DotNetScanner;
+namespace Groma.CSharpScanner;
 
 public sealed record ScannerIdentity(string Language, string Engine, string EngineVersion);
+public sealed record ScanRoot(string Kind, string Name, string File);
+public sealed record ScanScope(string Id, string Name);
+public sealed record ScanSymbol(string Id, string Name, string Kind);
+public sealed record ScanFile(string File, IReadOnlyList<ScanSymbol> Symbols);
+public sealed record ScanPlacement(string File, string Scope);
+public sealed record ScanRelationship(string Source, string Target, string Kind);
+public sealed record ScanDiagnostic(string Severity, string Code, string Message);
 
-public sealed record ScanRoot(string Kind, string File);
-
-public sealed record ScopeEvidence(string Id, string Name);
-
-public sealed record SymbolEvidence(string Id, string Name, string Kind);
-
-public sealed record FileEvidence(string File, IReadOnlyList<SymbolEvidence> Symbols);
-
-public sealed record PlacementEvidence(string File, string Scope);
-
-public sealed record RelationshipEvidence(string SourceScope, string TargetScope, string Kind);
-
-public sealed record DiagnosticEvidence(string Severity, string Code, string Message);
-
-public sealed record CompleteScanSnapshot(
+public sealed record ScanObservation(
     int SchemaVersion,
     ScannerIdentity Scanner,
     bool Complete,
     ScanRoot Root,
-    IReadOnlyList<ScopeEvidence> Scopes,
-    IReadOnlyList<FileEvidence> Files,
-    IReadOnlyList<PlacementEvidence> Placements,
-    IReadOnlyList<RelationshipEvidence> Relationships,
-    IReadOnlyList<DiagnosticEvidence> Diagnostics)
+    IReadOnlyList<ScanScope> Scopes,
+    IReadOnlyList<ScanFile> Files,
+    IReadOnlyList<ScanPlacement> Placements,
+    IReadOnlyList<ScanRelationship> Relationships,
+    IReadOnlyList<ScanDiagnostic> Diagnostics)
 {
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
         WriteIndented = true,
     };
 
-    public static CompleteScanSnapshot Create(
+    public static ScanObservation Create(
         ScannerIdentity scanner,
         ScanRoot root,
-        IEnumerable<ScopeEvidence> scopes,
-        IEnumerable<FileEvidence> files,
-        IEnumerable<PlacementEvidence> placements,
-        IEnumerable<RelationshipEvidence> relationships,
-        IEnumerable<DiagnosticEvidence> diagnostics)
+        IEnumerable<ScanScope> scopes,
+        IEnumerable<ScanFile> files,
+        IEnumerable<ScanPlacement> placements,
+        IEnumerable<ScanRelationship> relationships,
+        IEnumerable<ScanDiagnostic> diagnostics)
     {
-        ScopeEvidence[] orderedScopes = UniqueBy(
-            scopes,
-            scope => scope.Id,
-            "scope id");
-        FileEvidence[] orderedFiles = UniqueBy(
+        ScanScope[] orderedScopes = UniqueBy(scopes, scope => scope.Id, "scope id");
+        ScanFile[] orderedFiles = UniqueBy(
             files.Select(file => file with
             {
                 Symbols = file.Symbols
@@ -61,34 +49,37 @@ public sealed record CompleteScanSnapshot(
             }),
             file => file.File,
             "file path");
-
         HashSet<string> scopeIds = orderedScopes.Select(scope => scope.Id).ToHashSet(StringComparer.Ordinal);
         HashSet<string> filePaths = orderedFiles.Select(file => file.File).ToHashSet(StringComparer.Ordinal);
-        PlacementEvidence[] orderedPlacements = placements
+        ScanPlacement[] orderedPlacements = placements
             .Distinct()
             .OrderBy(placement => placement.File, StringComparer.Ordinal)
             .ThenBy(placement => placement.Scope, StringComparer.Ordinal)
             .ToArray();
-        RelationshipEvidence[] orderedRelationships = relationships
+        ScanRelationship[] orderedRelationships = relationships
             .Distinct()
-            .OrderBy(relationship => relationship.SourceScope, StringComparer.Ordinal)
-            .ThenBy(relationship => relationship.TargetScope, StringComparer.Ordinal)
+            .OrderBy(relationship => relationship.Source, StringComparer.Ordinal)
+            .ThenBy(relationship => relationship.Target, StringComparer.Ordinal)
             .ThenBy(relationship => relationship.Kind, StringComparer.Ordinal)
             .ToArray();
 
-        foreach (PlacementEvidence placement in orderedPlacements)
+        HashSet<string> placedFiles = new(StringComparer.Ordinal);
+        foreach (ScanPlacement placement in orderedPlacements)
         {
             Require(filePaths.Contains(placement.File), $"Placement references unknown file '{placement.File}'.");
             Require(scopeIds.Contains(placement.Scope), $"Placement references unknown scope '{placement.Scope}'.");
+            Require(placedFiles.Add(placement.File), $"File has multiple placements '{placement.File}'.");
         }
-
-        foreach (RelationshipEvidence relationship in orderedRelationships)
+        foreach (string file in filePaths)
+            Require(placedFiles.Contains(file), $"File has no placement '{file}'.");
+        HashSet<string> evidenceIds = [..scopeIds, ..filePaths];
+        foreach (ScanRelationship relationship in orderedRelationships)
         {
-            Require(scopeIds.Contains(relationship.SourceScope), $"Relationship references unknown source scope '{relationship.SourceScope}'.");
-            Require(scopeIds.Contains(relationship.TargetScope), $"Relationship references unknown target scope '{relationship.TargetScope}'.");
+            Require(evidenceIds.Contains(relationship.Source), $"Relationship references unknown source '{relationship.Source}'.");
+            Require(evidenceIds.Contains(relationship.Target), $"Relationship references unknown target '{relationship.Target}'.");
         }
 
-        return new CompleteScanSnapshot(
+        return new ScanObservation(
             SchemaVersion: 1,
             Scanner: scanner,
             Complete: true,
@@ -107,10 +98,7 @@ public sealed record CompleteScanSnapshot(
 
     public string ToCanonicalJson() => JsonSerializer.Serialize(this, JsonOptions) + "\n";
 
-    private static T[] UniqueBy<T>(
-        IEnumerable<T> values,
-        Func<T, string> key,
-        string keyName)
+    private static T[] UniqueBy<T>(IEnumerable<T> values, Func<T, string> key, string label)
         where T : notnull
     {
         T[] materialized = values.ToArray();
@@ -118,7 +106,7 @@ public sealed record CompleteScanSnapshot(
             .GroupBy(key, StringComparer.Ordinal)
             .FirstOrDefault(group => group.Count() > 1)
             ?.Key;
-        Require(duplicate is null, $"Snapshot contains duplicate {keyName} '{duplicate}'.");
+        Require(duplicate is null, $"Snapshot contains duplicate {label} '{duplicate}'.");
         return materialized.OrderBy(key, StringComparer.Ordinal).ToArray();
     }
 

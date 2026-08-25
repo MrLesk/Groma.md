@@ -1,16 +1,9 @@
 # TypeScript scanner
 
-The TypeScript scanner plugin implements Groma's scanner-plugin interface.
-It is the generic TypeScript mapping. It must not require Groma-specific
-types, comments, or IDs in application source.
+The TypeScript scanner reports supported `.ts` and `.tsx` files without requiring Groma comments, IDs, or types in application code.
 
-`bun src/typescript-scanner.ts [root]` prints the C4 candidates it reads
-from the import graph: an indented tree of system, containers, and
-components with their file and first exported symbol, the relationships
-between containers, and a count line. `root` is the repository to scan
-and defaults to the current directory. `--glob` replaces the default
-globs and `--ignore` adds to the default ignore list; both may repeat.
-`.gitignore` is honored through `git ls-files`. `groma scan` folds the
-candidates.
+It uses `git ls-files`, the configured globs, and `.gitignore` to select files. Declaration, test, and spec files are excluded by default. Relative imports form a source graph; bare package imports do not.
 
-The [TypeScript scanner contract](contract.md) names the mapping.
+Each file remains one atomic evidence entry with every recognized exported function, class, interface, type, enum, or variable declared in that file. Package bins and import structure identify scopes. Import distance assigns files to the nearest scope, with common directories as the deterministic fallback. Cross-scope imports become source relationships.
+
+These scopes and placements are evidence, not C4 ownership. Core preserves curated multi-file components and creates a singleton only for a previously unknown file.

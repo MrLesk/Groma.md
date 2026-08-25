@@ -73,7 +73,7 @@ these fields:
 | `external` | no | `true` only for a system outside the architecture's ownership boundary; absence means `false`. |
 | `group` | no | Readable name of a hand-chosen cluster. Siblings with the same parent and the same `group` render inside one boundary labeled with that name. |
 | `technology` | no | Free text naming the implementation technology, comma-separated. Core reads it and the details pane shows each part under How it's built. |
-| `code` | no | High-level scanner-produced source references for a component. |
+| `code` | no | Scanner-produced source references for this element. |
 
 No other frontmatter field is part of the contract. Observed versus planned
 meaning comes only from the containing directory.
@@ -90,7 +90,7 @@ Architecture IDs live in Markdown, not application source.
 
 ### Code references
 
-`code` is a list on a component document. Each entry contains only:
+`code` is a list on an element document. Each entry contains only:
 
 | Field | Required | Meaning |
 | --- | --- | --- |
@@ -98,13 +98,13 @@ Architecture IDs live in Markdown, not application source.
 | `file` | yes | The exact repository-relative source file. |
 | `symbol` | no | The relevant symbol or entry point; omit it when the complete file is the useful reference. |
 
-Multiple scanners may contribute references to the same component. Code
-references appear in component details; they are not separate architecture
+Multiple scanners may contribute references to the same element. Code
+references appear in details; they are not separate architecture
 elements, a fourth viewer level, or part of C4 containment. Core uses them
 to reconcile later scans with stable observed elements.
 
-After the first write of a document, core may refresh `code` from later scan
-results but must not rewrite the Markdown body.
+After the first write of a document, core may refresh supported symbols from
+later scans but must preserve curated file membership and the Markdown body.
 
 Runtime viewer annotations such as `observed` and `planned` are not
 frontmatter fields. Groma core derives them from architecture location.
