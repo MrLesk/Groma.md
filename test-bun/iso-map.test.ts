@@ -8,6 +8,7 @@ import { PLANE, ROOF_PAD, curved, roofBlock, textWidth } from '../src/sheet/meas
 import { sheetScene } from '../src/sheet/scene.ts'
 import type { Building, RoutePoint, SheetScene } from '../src/sheet/types.ts'
 import type { Bounds, Point } from '../src/types.ts'
+import type { ProjectProfile } from '../src/project-profile.ts'
 import {
   fitCamera,
   keyAction,
@@ -26,9 +27,20 @@ import {
 import type { ProjectedScene } from '../src/viewers/web/iso/project.ts'
 import { openclawFixtureRoot, viewerFixtureRoot } from './helpers.ts'
 
+const profile = (name: string, description: string): ProjectProfile => ({
+  name,
+  description,
+  descriptionBlocks: [{ spans: [{ text: description, styles: [] }] }],
+})
+const projectProfile = profile('Shop', 'Shop architecture.')
+const groundPoint = ({ x, y }: Point): RoutePoint => ({
+  gx: (y / 12 + x / 24) / 2,
+  gy: (y / 12 - x / 24) / 2,
+})
+
 async function fixtureScene(root: string): Promise<ProjectedScene> {
   const { world } = await loadArchitectureViewModel(root)
-  return projectScene(sheetScene(world))
+  return projectScene(sheetScene(world), projectProfile)
 }
 
 function everyPoint(scene: ProjectedScene): Point[] {
@@ -152,17 +164,33 @@ test.concurrent('Escape clears selection while x has no map action', () => {
   assert.equal(keyAction('X', 'other'), undefined)
 })
 
-test.concurrent('the frame and its ticks enclose every island and the compass sits in the west corner', async () => {
+test.concurrent('the frame encloses its drafting marks, every island and the west-corner compass', async () => {
   const scene = await fixtureScene(viewerFixtureRoot)
-  const { frame, ticks, compass } = scene
+  const { frame, calibrationTicks, compass } = scene
   assert.equal(frame.length, 4)
-  assert.equal(ticks.length, 8)
+  assert.ok(calibrationTicks.length >= 10)
   const sheet = screenBox(frame)
   for (const point of [...scene.islands.flatMap(item => item.polygon), ...compassPoints(scene)]) {
     assert.ok(point.x >= sheet.x && point.x <= sheet.x + sheet.width)
     assert.ok(point.y >= sheet.y && point.y <= sheet.y + sheet.height)
   }
-  for (const tick of ticks) assert.ok(frame.some(corner => corner.x === tick.from.x + (tick.to.x - tick.from.x) / 2))
+  const groundFrame = frame.map(groundPoint)
+  const west = Math.min(...groundFrame.map(point => point.gx))
+  const north = Math.min(...groundFrame.map(point => point.gy))
+  const east = Math.max(...groundFrame.map(point => point.gx))
+  const south = Math.max(...groundFrame.map(point => point.gy))
+  const inside = (point: Point): boolean => {
+    const ground = groundPoint(point)
+    return ground.gx >= west - 1e-8 && ground.gx <= east + 1e-8
+      && ground.gy >= north - 1e-8 && ground.gy <= south + 1e-8
+  }
+  for (const tick of calibrationTicks) {
+    assert.ok(inside(tick.from) && inside(tick.to))
+    const from = groundPoint(tick.from)
+    const to = groundPoint(tick.to)
+    assert.ok((Math.abs(from.gx - east) < 1e-8 && to.gx < from.gx)
+      || (Math.abs(from.gy - south) < 1e-8 && to.gy < from.gy))
+  }
   assert.ok(compass.at.gx < Math.min(...scene.islands.map(item => item.island.rect.gx)))
   const letter = (text: string): Point => compass.letters.find(item => item.text === text)!.at
   assert.ok(letter('N').y < compass.centre.y && letter('N').x > compass.centre.x)
@@ -173,9 +201,63 @@ test.concurrent('the frame and its ticks enclose every island and the compass si
   }
 })
 
+test.concurrent('blueprint decorations scale with the sheet and the project plate stays outside architecture', () => {
+  const empty = (side: number): SheetScene => ({
+    sheet: { gx: 0, gy: 0, w: side, d: side },
+    islands: [], zones: [], slabs: [], buildings: [], routes: [],
+  })
+  const project = profile('Supply map', 'Shows supply responsibilities across the repository.')
+  const plain = projectScene(empty(48))
+  const small = projectScene(empty(12), project)
+  const large = projectScene(empty(96), project)
+  const compact = projectScene(empty(96), profile('Map', 'Short.'))
+  const growing = projectScene(empty(96), profile('Map', 'x'.repeat(60)))
+  const threshold = projectScene(empty(96), profile('Map', 'x'.repeat(80)))
+  const overflow = projectScene(empty(96), profile('Map', 'x'.repeat(81)))
+  const extended = projectScene(empty(96), profile(
+    project.name,
+    Array(8).fill(project.description).join(' '),
+  ))
+  const length = (segment: ProjectedScene['calibrationTicks'][number]): number =>
+    Math.hypot(segment.to.x - segment.from.x, segment.to.y - segment.from.y)
+  const east = (scene: ProjectedScene): number => Math.max(...scene.frame.map(point => groundPoint(point).gx))
+  const south = (scene: ProjectedScene): number => Math.max(...scene.frame.map(point => groundPoint(point).gy))
+  const plateWidth = (scene: ProjectedScene): number => {
+    const ground = scene.projectPlate!.polygon.map(groundPoint)
+    return Math.max(...ground.map(point => point.gx)) - Math.min(...ground.map(point => point.gx))
+  }
+  const largePlate = large.projectPlate!
+  const extendedPlate = extended.projectPlate!
+
+  assert.equal(plain.projectPlate, undefined)
+  assert.equal(east(plain), south(plain))
+  assert.ok(large.compass.rx >= small.compass.rx * 2.9)
+  assert.ok(large.compass.rx * 2 < screenBox(large.frame).width / 10)
+  assert.ok(length(large.calibrationTicks[0]!) >= length(small.calibrationTicks[0]!) * 2.9)
+  assert.ok(plateWidth(compact) < plateWidth(growing))
+  assert.ok(plateWidth(growing) < plateWidth(threshold))
+  assert.equal(plateWidth(overflow), plateWidth(threshold))
+  assert.ok(groundPoint(largePlate.divider.from).gx
+    - groundPoint(largePlate.description.origin).gx
+    - largePlate.description.maxWidth / PLANE >= 0.5)
+  assert.equal(overflow.projectPlate!.description.lines.length, 2)
+  assert.equal(east(compact), east(overflow))
+  assert.ok(Math.min(...largePlate.polygon.map(point => groundPoint(point).gy)) > 96)
+  assert.ok(Math.max(...largePlate.polygon.map(point => groundPoint(point).gx)) < east(large))
+  assert.ok(extendedPlate.description.lines.length > largePlate.description.lines.length)
+  assert.equal(east(extended), east(large))
+  assert.ok(south(extended) > south(large))
+  for (const point of extendedPlate.polygon.map(groundPoint)) {
+    assert.ok(point.gy < south(extended))
+  }
+  for (const line of extendedPlate.description.lines) {
+    assert.ok(textWidth(line.map(run => run.text).join(''), extendedPlate.description.fontSize) <= extendedPlate.description.maxWidth)
+  }
+})
+
 test.concurrent('every relationship has a polyline whose arrowhead lies on the sheet along its last step', async () => {
   const { world } = await loadArchitectureViewModel(viewerFixtureRoot)
-  const scene = projectScene(sheetScene(world))
+  const scene = projectScene(sheetScene(world), projectProfile)
   assert.deepEqual(scene.routes.map(item => item.route.id), world.relationships.map(item => item.id))
   for (const { route, points, arrow } of scene.routes) {
     assert.ok(points.length >= 2)
@@ -213,7 +295,7 @@ test.concurrent('an off-centre route meets the near wall of the actor it leaves,
   /** Back from screen pixels to ground cells, one cell east being `unit`. */
   const unit = project(1, 0, 0)
   const ground = ({ x, y }: Point): RoutePoint => ({ gx: (y / unit.y + x / unit.x) / 2, gy: (y / unit.y - x / unit.x) / 2 })
-  const drawn = projectScene(scene).routes
+  const drawn = projectScene(scene, projectProfile).routes
   const radius = actor.rect.w / 2
 
   for (const { route, points } of drawn) {
@@ -273,7 +355,7 @@ test.concurrent('every surface label stays in the compact edge band', () => {
     slabs: [{ representationId: 'container:one', id: 'one', name: 'Container', origin: 'observed', island: 'island:system', rect: { gx: 16, gy: 8, w: 5, d: 6 } }],
     buildings: [],
     routes: [],
-  })
+  }, projectProfile)
   const compact = projected.islands.find(({ island }) => island.kind === 'actors')!
   const system = projected.islands.find(({ island }) => island.kind === 'system')!
   assert.deepEqual(compact.text.origin, project(compact.island.rect.gx, compact.island.rect.gy + compact.island.rect.d - PAD, 0))
@@ -288,6 +370,6 @@ test.concurrent('projecting a frozen world leaves it untouched', async () => {
   const { world } = await loadArchitectureViewModel(viewerFixtureRoot)
   const frozen = Object.freeze(structuredClone(world))
   const before = structuredClone(frozen)
-  projectScene(sheetScene(frozen))
+  projectScene(sheetScene(frozen), projectProfile)
   assert.deepEqual(frozen, before)
 })

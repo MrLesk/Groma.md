@@ -23,7 +23,9 @@ ArchitectureWorld → sheetScene (blueprint sheet) → Web plugin
   viewer edits architecture.
 - Leave when asked, without leaving presentation state in the model.
 
-A viewer does not place boxes and does not write `groma/` files.
+A viewer does not place boxes or touch the filesystem. An interactive host may
+ask core to save non-architecture project data, as the web host does for the
+project profile; the viewer still cannot write architecture records.
 
 ## The world
 

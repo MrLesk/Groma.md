@@ -4,8 +4,9 @@ Groma is this repo's architecture in Git: Markdown you can read, one C4 world
 you can walk. Solid boxes exist. Ghosts are next. A generated picture of the
 same repo is already out of date.
 
-The Markdown remains useful even if you stop using Groma. People and agents
-still change it through Groma, not by editing those files by hand.
+The architecture Markdown remains useful even if you stop using Groma. People
+and agents change architecture records through Groma. The project profile in
+`groma/README.md` is user-owned and editable from the web map.
 
 ## Product promise
 
@@ -19,7 +20,8 @@ a second identity.
 
 ## What you do
 
-Groma is the only writer of files under `groma/`.
+Groma is the only writer of architecture element and revision files under
+`groma/`.
 
 1. Open a viewer: see the world. `groma view` opens the terminal map;
    without a TTY, with `--plain`, or with a target, it prints text

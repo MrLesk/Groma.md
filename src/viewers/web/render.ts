@@ -1,4 +1,5 @@
 import { compareSemanticElements } from '../../element-order.ts'
+import type { ProjectProfile } from '../../project-profile.ts'
 import type { AnnotatedElement, AnnotatedRelationship, ArchitectureGraph, WorkItem } from '../../types.ts'
 import { touchedElements } from '../../work/pins.ts'
 import { elementOnPath, flowRouteIds, worldCommands } from '../action-path.ts'
@@ -29,6 +30,7 @@ import type { DetailsTab } from './organisms/details.ts'
 import { paintHierarchy } from './organisms/hierarchy.ts'
 import { createPins } from './work/pins.ts'
 import { createTip } from './organisms/tip.ts'
+import { createProjectEditor } from './project/editor.ts'
 import { createWorkIsland } from './work/island.ts'
 import { toggleWorkSelection } from './work/selection.ts'
 import type { WebPayload, WebWorkPayload } from './payload.ts'
@@ -50,9 +52,10 @@ const DRAG_THRESHOLD = 4
 const boot = JSON.parse(document.getElementById('world')!.textContent!) as WebPayload
 let world = boot.world
 let work = boot.work
+let project: ProjectProfile | undefined = boot.project ?? undefined
 let appliedWorld = boot.generation
 let appliedWork = boot.workGeneration
-let scene: ProjectedScene = projectScene(boot.sheet)
+let scene: ProjectedScene = projectScene(boot.sheet, project)
 
 const host = document.getElementById('map')!
 const headerHost = document.getElementById('header')!
@@ -69,6 +72,14 @@ const hierarchyContent = document.getElementById('hierarchy-content')!
 const hierarchyToggle = document.getElementById('hierarchy-toggle') as HTMLButtonElement
 
 const map = createMap(host)
+const projectEditor = createProjectEditor(async profile => {
+  const response = await fetch('/project', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(profile),
+  })
+  if (!response.ok) throw new Error(await response.text())
+})
 const shell = createWebShell(document.body, hierarchyContent, hierarchyToggle, detailsHost, map.svg)
 const tip = createTip(host)
 const pins = createPins(host, id => map.anchorOf(id), id => toggleTask(id), tip)
@@ -296,6 +307,7 @@ let pointer: {
   dragging: boolean
   targetId: string | undefined
   onSheet: boolean
+  projectEdit: boolean
   additive: boolean
 } | null = null
 
@@ -322,6 +334,7 @@ map.svg.addEventListener('pointerdown', event => {
     dragging: false,
     targetId: map.hitId(event.target),
     onSheet: map.isSheet(event.target),
+    projectEdit: map.isProjectEdit(event.target),
     additive: event.shiftKey,
   }
   map.svg.setPointerCapture(event.pointerId)
@@ -341,13 +354,19 @@ map.svg.addEventListener('pointermove', event => {
 map.svg.addEventListener('pointerup', event => {
   if (pointer === null || pointer.id !== event.pointerId) return
   if (!pointer.dragging) {
-    if (pointer.targetId !== undefined) select(pointer.targetId, pointer.additive)
+    if (pointer.projectEdit && project !== undefined) projectEditor.open(project)
+    else if (pointer.targetId !== undefined) select(pointer.targetId, pointer.additive)
     else if (pointer.onSheet) deselect()
   }
   pointer = null
 })
 map.svg.addEventListener('pointercancel', () => {
   pointer = null
+})
+map.svg.addEventListener('keydown', event => {
+  if (!map.isProjectEdit(event.target) || (event.key !== 'Enter' && event.key !== ' ')) return
+  event.preventDefault()
+  if (project !== undefined) projectEditor.open(project)
 })
 
 document.getElementById('zoom-in')!.addEventListener('click', () => zoomStep(ZOOM_STEP))
@@ -408,7 +427,8 @@ resizeObserver.observe(host)
 function applyWorld(payload: WebPayload): void {
   world = payload.world
   work = payload.work
-  scene = projectScene(payload.sheet)
+  project = payload.project ?? undefined
+  scene = projectScene(payload.sheet, project)
   fitted = fitScene(viewport())
   if (!touched) camera = fitted
   activeTaskIds = activeTaskIds.filter(id => workItem(id) !== undefined)

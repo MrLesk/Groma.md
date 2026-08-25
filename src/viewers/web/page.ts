@@ -9,6 +9,7 @@ import { flowRowCss } from './flow/row.ts'
 import { mapCss } from './iso/style.ts'
 import { tipCss } from './organisms/tip.ts'
 import type { WebPayload } from './payload.ts'
+import { projectEditorCss } from './project/editor.ts'
 import { backlogMarkCss } from './work/backlog-mark.ts'
 import { workBadgeCss } from './work/badge.ts'
 import { workCss } from './work/island.ts'
@@ -267,7 +268,7 @@ const style = `
   @media (prefers-reduced-motion: reduce) {
     body, #hierarchy-content, #hierarchy-title .pane-label, #details, body #work { transition: none; }
   }
-${backlogMarkCss}${workBadgeCss}${flowDetailsCss}${flowRowCss}${mapCss}${pinsCss}${workCss}${tipCss}`
+${backlogMarkCss}${workBadgeCss}${flowDetailsCss}${flowRowCss}${mapCss}${pinsCss}${workCss}${tipCss}${projectEditorCss}`
 
 function legend(): string {
   return legendKinds.map(line => {

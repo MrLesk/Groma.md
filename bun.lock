@@ -5,6 +5,7 @@
     "": {
       "name": "groma",
       "dependencies": {
+        "@comark/html": "0.5.1",
         "@opentui/core": "0.5.1",
         "comark": "0.5.1",
         "commander": "15.0.0",
@@ -20,6 +21,8 @@
     },
   },
   "packages": {
+    "@comark/html": ["@comark/html@0.5.1", "", { "dependencies": { "comark": "^0.5.1" }, "peerDependencies": { "beautiful-mermaid": ">=1.0", "katex": ">=0.16", "shiki": "^4.3.1" }, "optionalPeers": ["beautiful-mermaid", "katex", "shiki"] }, "sha512-GzS3yNP/lZKaVf+LpAsvH5eRevEJQsVnTE9dPEDsLclydJycj3AH0p/KYg9buF1nc//ewROXBCSYYZYyUBmkjg=="],
+
     "@esbuild/aix-ppc64": ["@esbuild/aix-ppc64@0.28.2", "", { "os": "aix", "cpu": "ppc64" }, "sha512-XExcO+dvLKvVtNTibSTBej1NCAbaGhWn9Ww1ZPx80qsahhPFe/8jgWP0IchNe0F3HwkU7n8ejhH8bjonqht8mQ=="],
 
     "@esbuild/android-arm": ["@esbuild/android-arm@0.28.2", "", { "os": "android", "cpu": "arm" }, "sha512-kXXoiPVVGQcnIYGOeaovwOURpniDBpSq4A03qkQ+BMQqtGG6HYap3xne9C1O1yo4TR3qxlCX5IqqmX6fFo2Lqg=="],

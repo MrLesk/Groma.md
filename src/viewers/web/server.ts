@@ -2,6 +2,7 @@ import { watchArchitecture } from '../../architecture-watch.ts'
 import { createBacklogPlugin, EMPTY_WORK_SNAPSHOT } from '../../work/backlog.ts'
 import type { WorkSource } from '../../work/backlog.ts'
 import { loadAnnotatedArchitecture } from '../../core.ts'
+import { loadProjectProfile, saveProjectProfile } from '../../project-profile.ts'
 import { watchScan } from '../../scanner.ts'
 import { sheetScene } from '../../sheet/scene.ts'
 import { pinsOf } from '../../work/pins.ts'
@@ -20,9 +21,12 @@ async function bundleRenderer(): Promise<string> {
 
 /** Loads the architecture map without consulting optional work plugins. */
 async function loadMap(repositoryRoot: string): Promise<Omit<WebMapPayload, 'generation'>> {
-  const { elements, relationships } = await loadAnnotatedArchitecture(repositoryRoot)
+  const [{ elements, relationships }, project] = await Promise.all([
+    loadAnnotatedArchitecture(repositoryRoot),
+    loadProjectProfile(repositoryRoot),
+  ])
   const world = { elements, relationships }
-  return { world, sheet: sheetScene(world) }
+  return { project: project ?? null, world, sheet: sheetScene(world) }
 }
 
 /** Starts the map server and returns its URL. */
@@ -122,6 +126,16 @@ export async function startWebViewer(
       }
       if (pathname === '/world.json') {
         return Response.json(payload())
+      }
+      if (pathname === '/project' && request.method === 'PUT') {
+        try {
+          const profile = await saveProjectProfile(repositoryRoot, await request.json())
+          map = { ...map, generation: map.generation + 1, project: profile }
+          broadcast(worldEvent())
+          return Response.json(profile)
+        } catch (error) {
+          return new Response(error instanceof Error ? error.message : String(error), { status: 400 })
+        }
       }
       if (pathname === '/events') {
         let controller: ReadableStreamDefaultController<Uint8Array>

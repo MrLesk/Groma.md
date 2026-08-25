@@ -75,7 +75,8 @@ Groma must distinguish the architecture known to exist from a desired
 outcome. Git is the history of how those states change. A plan is not proof
 that source exists. `groma accept` applies a ghost only when a scan has
 matched it. Scanners cannot infer that a ghost is built. People and agents
-do not edit `groma/` files by hand.
+do not edit architecture element or revision files by hand. The root
+`groma/README.md` is their project profile, not an architecture record.
 
 ## Plans describe outcomes, not work
 

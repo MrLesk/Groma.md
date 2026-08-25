@@ -5,14 +5,18 @@ as one C4 world. Solid boxes exist. Ghosts are next. A generated picture of
 the same repo is already out of date.
 
 The architecture model owns identity. Source code is evidence. Groma is the
-only writer of files under `groma/`. The [component Markdown
-contract](../groma/README.md) defines the document format.
+only writer of architecture element and revision files. The project owner
+controls the project name and description in `groma/README.md`, directly or
+through the web map. The [component Markdown contract](component-markdown.md)
+defines the architecture document format.
 
 ## What you do
 
-People and agents use Groma. They do not edit `groma/` Markdown by hand.
-Groma writes those files so paths, identity, and metadata stay consistent.
-Bare `groma` and `groma instructions` are the local instruction hub.
+People and agents use Groma. They do not edit architecture element or revision
+Markdown by hand. Groma writes those files so paths, identity, and metadata
+stay consistent. The root `groma/README.md` is different: its H1 is the project
+name and the remaining Markdown body is the project description. Bare `groma` and `groma
+instructions` are the local instruction hub.
 
 1. Open a viewer: see the world. On a TTY, `groma view` starts the TUI
    plugin. It does not scan on open. The live process starts the same
@@ -27,7 +31,8 @@ Bare `groma` and `groma instructions` are the local instruction hub.
 2. `groma scan`: scan this repo. Core folds the findings into Markdown.
    The command prints `ok` and a short summary. It does not print the
    architecture.
-3. Change the architecture through Groma's commands; no viewer edits it.
+3. Change the architecture through Groma's commands; no viewer edits element
+   or revision documents.
    - A **new part** becomes a ghost in a plan. `groma create` authors that
      ghost.
    - A **required change** to an existing part becomes a plan that restates
@@ -37,6 +42,8 @@ Bare `groma` and `groma instructions` are the local instruction hub.
      changing it) stays on the observed document. `groma edit
      <element-id> --description <prose>` updates that lead prose.
      `groma edit <plan-id> --description <prose>` sets the plan Outcome.
+   - The web map's project pencil edits only the project name and description
+     in `groma/README.md`; it does not edit architecture.
 4. `groma accept <id>`: accept that ghost, only if a scan has matched it.
    Groma may scan first if needed. No match: the command fails and the
    ghost stays planned. A scan never accepts a ghost on its own.
@@ -142,7 +149,7 @@ every plan directory under `groma/plans/`, merges them into one world, and
 lays that world out before any viewer sees it: `world-layout` gives the TUI
 map its bounds and routes, the `sheet` gives the web map its cells, floors
 and lanes. A viewer plugin projects what core computed. It never reads the
-files itself. The minimum tree is `groma/observed/README.md`,
+files itself. The minimum tree is `groma/README.md`, `groma/observed/README.md`,
 `groma/missing/README.md`, and the `groma/plans/` directory.
 
 Core also counts the lines of each element's `code` files; an unreadable
