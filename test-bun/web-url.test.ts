@@ -76,34 +76,15 @@ test.concurrent('unknown ids, kinds and values are ignored', () => {
   })
 })
 
-test.concurrent('repeated flows keep activation order and scope, then own details without another selection', () => {
+test.concurrent('repeated flows keep activation order and scope without creating a details selection', () => {
   const state = readView('?flow=commands/scan&flow=dev/dev/commands', world, [])
 
   assert.deepEqual(state.flows, [
     { commandId: 'relationship:1' },
     { commandId: 'relationship:0', actorId: 'observed:dev' },
   ])
-  assert.deepEqual(state.selection, {
-    kind: 'flow',
-    flow: { commandId: 'relationship:0', actorId: 'observed:dev' },
-  })
+  assert.deepEqual(state.selection, noSelection)
   assert.equal(writeView(state, world, []), '?flow=commands/scan&flow=dev/dev/commands')
-})
-
-test.concurrent('a selected active flow round-trips independently of activation order', () => {
-  const state: ViewState = {
-    selection: { kind: 'flow', flow: { commandId: 'relationship:1' } },
-    flows: [
-      { commandId: 'relationship:1' },
-      { commandId: 'relationship:0', actorId: 'observed:dev' },
-    ],
-    tab: 'what',
-    dark: false,
-  }
-
-  const query = '?flow=commands/scan&flow=dev/dev/commands&selected-flow=commands/scan'
-  assert.equal(writeView(state, world, []), query)
-  assert.deepEqual(readView(query, world, []), state)
 })
 
 test.concurrent('repeated architecture parameters restore one ordered selection and ignore unknown entries', () => {

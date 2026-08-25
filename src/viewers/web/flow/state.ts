@@ -20,19 +20,3 @@ export function toggleFlowActivation(
     ? active.filter(flow => flow.commandId !== clicked.commandId)
     : activateFlow(active, clicked)
 }
-
-/** Selects without dropping another highlight; clicking the selected flow deactivates it. */
-export function toggleFlowSelection(
-  active: readonly FlowRef[],
-  selected: FlowRef | undefined,
-  clicked: FlowRef,
-): { active: FlowRef[]; selected: FlowRef | undefined } {
-  if (!sameFlow(selected, clicked)) {
-    return {
-      active: activateFlow(active, clicked),
-      selected: clicked,
-    }
-  }
-  const remaining = active.filter(flow => flow.commandId !== clicked.commandId)
-  return { active: remaining, selected: remaining.at(-1) }
-}

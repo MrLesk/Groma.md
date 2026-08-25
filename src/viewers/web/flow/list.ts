@@ -6,12 +6,11 @@ import { flowRow } from './row.ts'
 /** The list starts open and keeps its state across repaints. */
 let unfolded = true
 
-/** Every command row shows whether its flow is active and whether it owns details. */
+/** Every command row toggles whether its path is active on the map. */
 export function paintFlows(
   host: HTMLElement,
   commands: readonly AnnotatedRelationship[],
   active: readonly FlowRef[],
-  selected: FlowRef | undefined,
   actorName: (actorId: string) => string | undefined,
   onToggle: (flow: FlowRef) => void,
 ): void {
@@ -19,7 +18,7 @@ export function paintFlows(
   if (commands.length === 0) return
   const heading = sectionHeading('Flows', unfolded, () => {
     unfolded = !unfolded
-    paintFlows(host, commands, active, selected, actorName, onToggle)
+    paintFlows(host, commands, active, actorName, onToggle)
   })
   const list = document.createElement('div')
   list.hidden = !unfolded
@@ -27,7 +26,6 @@ export function paintFlows(
     list.append(flowRow(
       { flow: { commandId: command.id }, title: command.description },
       active,
-      selected,
       actorName,
       onToggle,
     ))

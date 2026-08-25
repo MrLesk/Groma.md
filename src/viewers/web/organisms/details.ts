@@ -151,7 +151,6 @@ export function paintDetails(
   onSelect: (id: string, additive: boolean) => void,
   onToggleFlow: (flow: FlowRef) => void,
   activeFlows: readonly FlowRef[],
-  selectedFlow: FlowRef | undefined,
   actorName: (actorId: string) => string | undefined,
   tab: DetailsTab,
   onTab: (tab: DetailsTab) => void,
@@ -237,7 +236,7 @@ export function paintDetails(
       const list = document.createElement('div')
       list.className = 'flow-list'
       for (const command of inspected.commands) {
-        list.append(flowRow(command, activeFlows, selectedFlow, actorName, onToggleFlow))
+        list.append(flowRow(command, activeFlows, actorName, onToggleFlow))
       }
       body.append(list)
     },
@@ -248,7 +247,7 @@ export function paintDetails(
       const list = document.createElement('div')
       list.className = 'flow-list'
       for (const flow of inspected.flowsThrough) {
-        list.append(flowRow(flow, activeFlows, selectedFlow, actorName, onToggleFlow))
+        list.append(flowRow(flow, activeFlows, actorName, onToggleFlow))
       }
       body.append(list)
     },

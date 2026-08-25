@@ -25,11 +25,11 @@ returns it without changing tree, selection, or camera state. Its quiet branch l
 rows legible. It starts with the flows list open under its
 Flows heading. The list holds every
 actor command in the world, deduped across the actors who share it.
-Clicking an inactive command activates and selects its flow. Clicking
-another keeps both active and selects the new one; clicking the selected
-flow deactivates it and selects the latest remaining flow. Every flow row uses
-the same checkbox, active state, and Global or actor scope in the hierarchy and
-details pane; it has no separate flow glyph. Structure rows use kind marks and neutral
+Clicking a command toggles its highlighted map path without changing the
+selection or details pane. Several paths can stay active together. Every flow
+row uses the same checkbox, active state, Global or actor scope, and toggle
+behavior in the hierarchy and details pane; it has no separate flow glyph.
+Structure rows use kind marks and neutral
 selection instead; their arrows only expand containment. One command
 has at most one active flow; picking it from an actor changes that flow's scope
 in place. Below it the Structure
@@ -45,7 +45,7 @@ tree and the map share one selection. The bottom of the pane is the kind legend.
 Authored sibling groups are invisible to the tree.
 
 The wider details pane appears only while an element, relationship,
-flow, or task owns the selection. It keeps its width while that owner
+or task owns the selection. It keeps its width while that owner
 changes and disappears when selection is cleared. Its X clears the selection,
 closes the pane, and returns focus to the map without moving the camera. An element
 shows under two tabs whose choice persists across selections. What
@@ -54,20 +54,17 @@ Flows through, and children. A relationship row always names and selects its
 peer; its arrow shows authored direction and never activates a flow. Commands
 are the actor-scoped flows the selected actor can start. Flows through are the
 general flows whose path crosses the selected software element. Both use the
-same flow control as the hierarchy list, but they toggle the map path in place
-and keep the actor or component in the details pane. The hierarchy list opens
-the selected flow's own details. Actors do not repeat Commands as relationships
+same flow control as the hierarchy list. They toggle the map path in place and
+keep the actor or component in the details pane. If details are closed, a flow
+toggle keeps them closed. Actors do not repeat Commands as relationships
 or build information.
 How it's built holds the
 evidence: the technology the element's Markdown declares
 (`technology: SVG, Bun serve` renders as one chip per
 comma-separated part), the scanner, file, and optional symbol from
 `code`. Elements without either do not show the build tab. Children and
-relationship peers select that element. A selected flow shows its command as
-the title, its optional starting actor and relationship count, then a labeled
-Relationships list in travel order. Clicking a relationship keeps the flow
-details open, fits its two endpoint elements in the map, and starts a continuous
-slow pulse on both that keeps them visible throughout. When the
+relationship peers select that element. To inspect a highlighted path, select
+one of its items or connections on the map. When the
 selection is an actor who uses a launcher, software they use that
 starts other software they also use, the actor's outgoing rows
 are that launcher's commands, plus whatever they use that no launcher
@@ -311,9 +308,8 @@ each selected element's kind names it (`?actor=<id>`, `system=<id>`,
 names a selected route, and repeated element and relationship parameters keep
 their selection order; `task=<id>` names a selected task. Repeated
 `flow=<source>/<target>` entries preserve active flow order; an actor-scoped
-flow uses `flow=<actor>/<source>/<target>`. `selected-flow` keeps the details
-owner when it is not the latest active flow. When architecture and task
-selection are absent, an active flow owns details. `tab=how` names the How it's built
+flow uses `flow=<actor>/<source>/<target>`. Active flows do not create a
+selection or own details. `tab=how` names the How it's built
 tab and `theme=dark` the theme;
 defaults stay out of the URL and unknown values are ignored.
 A watched TypeScript change folds and rebuilds the map without a

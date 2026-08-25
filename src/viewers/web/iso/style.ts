@@ -149,11 +149,8 @@ export const mapCss = `
   }
   #map .route.lit .arrow { fill: var(--accent); opacity: 1; }
   @keyframes map-flow { to { stroke-dashoffset: -10; } }
-  #map .pulse { --emphasis: ${emphasis(2)}; animation: map-pulse 1.6s ease-in-out infinite; }
-  @keyframes map-pulse { 50% { opacity: 0.55; } }
   @media (prefers-reduced-motion: reduce) {
     #map .route.lit .line { animation: none; stroke-dasharray: none; }
-    #map .pulse { animation: none; }
   }
   #map .camera[data-tracing] .route:not(.lit):not(.selected) { opacity: 0.18; }
   #map .camera[data-tracing] .building:not(.onpath):not(.selected),

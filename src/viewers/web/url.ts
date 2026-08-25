@@ -1,7 +1,7 @@
 import type { AnnotatedRelationship, ArchitectureGraph, C4Kind, WorkItem } from '../../types.ts'
 import type { FlowRef } from '../action-path.ts'
 import type { DetailsTab } from './organisms/details.ts'
-import { noSelection, selectFlow, selectTask } from './selection.ts'
+import { noSelection, selectTask } from './selection.ts'
 import type { Selection } from './selection.ts'
 
 /** What the page's query string carries, so a view opens again from its link. */
@@ -57,15 +57,11 @@ export function readView(search: string, world: ArchitectureGraph, work: readonl
     if (flow === undefined) continue
     if (!flows.some(item => item.commandId === flow.commandId)) flows.push(flow)
   }
-  const requested = flowFrom(params.get('selected-flow') ?? '')
-  const selected = requested === undefined
-    ? flows.at(-1)
-    : flows.find(flow => flow.commandId === requested.commandId && flow.actorId === requested.actorId)
   return {
     selection: architecture.length > 0
       ? { kind: 'architecture', ids: architecture }
       : task !== undefined ? selectTask(task.id)
-      : selected === undefined ? noSelection : selectFlow(selected),
+      : noSelection,
     flows,
     tab: params.get('tab') === 'how' ? 'how' : 'what',
     dark: params.get('theme') === 'dark',
@@ -103,14 +99,6 @@ export function writeView(state: ViewState, world: ArchitectureGraph, work: read
   for (const active of state.flows) {
     const value = flowValue(active)
     if (value !== undefined) pairs.push(['flow', value])
-  }
-  const latest = state.flows.at(-1)
-  if (state.selection.kind === 'flow' && (
-    latest?.commandId !== state.selection.flow.commandId
-    || latest.actorId !== state.selection.flow.actorId
-  )) {
-    const value = flowValue(state.selection.flow)
-    if (value !== undefined) pairs.push(['selected-flow', value])
   }
   if (state.tab === 'how') pairs.push(['tab', 'how'])
   if (state.dark) pairs.push(['theme', 'dark'])
