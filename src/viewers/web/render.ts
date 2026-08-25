@@ -7,11 +7,9 @@ import type { FlowRef } from '../action-path.ts'
 import { initialTree, semanticTreeRows, toggleExpansion } from '../tui/tree.ts'
 import type { TreeRow } from '../tui/tree.ts'
 import { createWebShell } from './chrome/shell.ts'
-import { paintFlowDetails } from './flow/details.ts'
 import { paintFlows } from './flow/list.ts'
-import { sameFlow, toggleFlowActivation, toggleFlowSelection } from './flow/state.ts'
+import { toggleFlowActivation } from './flow/state.ts'
 import {
-  fitElements,
   fitHighlights,
   fitCamera,
   keyAction,
@@ -40,8 +38,6 @@ import {
   retainSelection,
   selectArchitecture,
   selectedArchitecture,
-  selectedFlow,
-  selectFlow,
   selectTask,
 } from './selection.ts'
 import { readView, writeView } from './url.ts'
@@ -186,13 +182,12 @@ function syncUrl(): void {
   history.replaceState(null, '', `${location.pathname}${query}`)
 }
 
-function paintSelection(): void {
+function paintViewState(): void {
   syncUrl()
   shell.paint(selection)
   const selectedId = primarySelection(selection)
   const selectedIds = selectedArchitecture(selection)
   const litIds = flowRouteIds(activeFlows, world)
-  const flow = selectedFlow(selection)
   const task = selection.kind === 'task' ? workItem(selection.id) : undefined
   const activeTaskItems = activeTaskIds.map(id => workItem(id)).filter((item): item is WorkItem => item !== undefined)
   map.select(selectedIds)
@@ -203,12 +198,11 @@ function paintSelection(): void {
   paintTree()
   const commands = worldCommands(world)
   const actorName = (actorId: string): string | undefined => worldElement(actorId)?.name
-  paintFlows(flowsHost, commands, activeFlows, flow, actorName, toggleHierarchyFlow)
+  paintFlows(flowsHost, commands, activeFlows, actorName, toggleFlow)
   paintStats(commands.length)
   const selected = worldElement(selectedId)
   const relationship = worldRelationship(selectedId)
-  if (flow !== undefined) paintFlowDetails(detailsHost, flow, world, focusFlowLeg)
-  else if (relationship !== undefined) paintRelationship(detailsHost, relationship, world, select)
+  if (relationship !== undefined) paintRelationship(detailsHost, relationship, world, select)
   else if (task !== undefined) paintTask(detailsHost, task, world, select)
   else if (selected === undefined) clearDetails(detailsHost)
   else {
@@ -216,14 +210,13 @@ function paintSelection(): void {
       detailsHost,
       inspectDetails(selected, world),
       select,
-      toggleContextFlow,
+      toggleFlow,
       activeFlows,
-      flow,
       actorName,
       detailsTab,
       tab => {
         detailsTab = tab
-        paintSelection()
+        paintViewState()
       },
     )
   }
@@ -247,7 +240,7 @@ function toggleRow(row: TreeRow): void {
 function select(id: string, additive = false): void {
   if (worldElement(id) === undefined && worldRelationship(id) === undefined) return
   selection = selectArchitecture(selection, id, additive)
-  paintSelection()
+  paintViewState()
 }
 
 function applyFocus(next: Camera | undefined, frame: MapFrame): boolean {
@@ -266,18 +259,12 @@ function focusActiveTasks(): void {
   applyFocus(fitHighlights(scene, elementIds, frame, zoomLimits(fitted).max), frame)
 }
 
-function focusFlowLeg(sourceId: string, targetId: string): void {
-  const frame = viewport()
-  const focus = fitElements(scene, [sourceId, targetId], frame, zoomLimits(fitted).max)
-  if (applyFocus(focus, frame)) map.pulse([sourceId, targetId])
-}
-
 /** A pin or chip click selects its task; only clicking the selected task again deactivates it. */
 function toggleTask(id: string): void {
   const next = toggleWorkSelection(activeTaskIds, selection.kind === 'task' ? selection.id : undefined, id)
   activeTaskIds = next.active
   selection = next.selected === undefined ? noSelection : selectTask(next.selected)
-  paintSelection()
+  paintViewState()
   focusActiveTasks()
 }
 
@@ -285,19 +272,12 @@ function deselect(): void {
   selection = noSelection
   activeTaskIds = []
   activeFlows = []
-  paintSelection()
+  paintViewState()
 }
 
-function toggleHierarchyFlow(flow: FlowRef): void {
-  const next = toggleFlowSelection(activeFlows, selectedFlow(selection), flow)
-  activeFlows = next.active
-  selection = next.selected === undefined ? noSelection : selectFlow(next.selected)
-  paintSelection()
-}
-
-function toggleContextFlow(flow: FlowRef): void {
+function toggleFlow(flow: FlowRef): void {
   activeFlows = toggleFlowActivation(activeFlows, flow)
-  paintSelection()
+  paintViewState()
 }
 
 let pointer: {
@@ -438,13 +418,6 @@ function applyWorld(payload: WebPayload): void {
   })
   const hadSelection = primarySelection(selection) !== undefined
   selection = retainSelection(selection, id => known(id))
-  if (selection.kind === 'flow') {
-    const selected = selection.flow
-    if (!activeFlows.some(flow => sameFlow(flow, selected))) {
-      const fallback = activeFlows.at(-1)
-      selection = fallback === undefined ? noSelection : selectFlow(fallback)
-    }
-  }
   if (hadSelection && primarySelection(selection) === undefined) {
     const first = firstSystem(world)
     selection = first === undefined
@@ -455,7 +428,7 @@ function applyWorld(payload: WebPayload): void {
   pins.paint(payload.pins)
   island.paint(payload.pins, work.statuses, work.defaultStatus)
   applyCamera()
-  paintSelection()
+  paintViewState()
 }
 
 /** Repaints only the optional Backlog layer; map projection, painting and camera state stay unchanged. */
@@ -482,7 +455,7 @@ map.paint(scene)
 pins.paint(boot.pins)
 island.paint(boot.pins, work.statuses, work.defaultStatus)
 applyCamera()
-paintSelection()
+paintViewState()
 if (selection.kind === 'task') focusActiveTasks()
 
 const events = new EventSource('/events')

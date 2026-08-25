@@ -4,7 +4,6 @@ import { fileURLToPath } from 'node:url'
 import type { C4Kind } from '../../types.ts'
 import { kindGlyph, kindLabel } from './atoms/kind.ts'
 import { cssBlock, palettes } from './atoms/theme.ts'
-import { flowDetailsCss } from './flow/details.ts'
 import { flowRowCss } from './flow/row.ts'
 import { mapCss } from './iso/style.ts'
 import { tipCss } from './organisms/tip.ts'
@@ -268,7 +267,7 @@ const style = `
   @media (prefers-reduced-motion: reduce) {
     body, #hierarchy-content, #hierarchy-title .pane-label, #details, body #work { transition: none; }
   }
-${backlogMarkCss}${workBadgeCss}${flowDetailsCss}${flowRowCss}${mapCss}${pinsCss}${workCss}${tipCss}${projectEditorCss}`
+${backlogMarkCss}${workBadgeCss}${flowRowCss}${mapCss}${pinsCss}${workCss}${tipCss}${projectEditorCss}`
 
 function legend(): string {
   return legendKinds.map(line => {

@@ -50,8 +50,6 @@ export interface IsoMap {
   mark(ids: ReadonlySet<string>): void
   /** Lights route ids and direct endpoints; contextual ancestors stay neutral while everything off the path dims. */
   setLitRoutes(litRouteIds: ReadonlySet<string>, onPath: (id: string) => boolean): void
-  /** Starts or replaces the continuous pulse on the identified architecture bodies. */
-  pulse(ids: readonly string[]): void
   hitId(target: EventTarget | null): string | undefined
   /** True when a click hit nothing but the sheet. */
   isSheet(target: EventTarget | null): boolean
@@ -170,16 +168,6 @@ export function createMap(host: HTMLElement): IsoMap {
       for (const [itemId, node] of items) {
         node.classList.toggle('lit', litEndpointIds.has(itemId))
         node.classList.toggle('onpath', tracing && onPath(itemId))
-      }
-    },
-    pulse(ids) {
-      for (const node of items.values()) node.classList.remove('pulse')
-      // Commit removal before re-adding the class so the pulse restarts on repeated focus.
-      void root.getBoundingClientRect()
-      for (const id of ids) {
-        const node = items.get(id)
-        if (node === undefined) continue
-        node.classList.add('pulse')
       }
     },
     hitId(target) {

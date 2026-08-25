@@ -74,17 +74,6 @@ function fitPoints(
   }, viewport, maxZoom, CONTEXT_MARGIN)
 }
 
-/** Fits identified architecture bodies; missing ids do not affect the camera. */
-export function fitElements(
-  scene: ProjectedScene,
-  ids: readonly string[],
-  viewport: Viewport,
-  maxZoom: number,
-): Camera | undefined {
-  const wanted = new Set(ids)
-  return fitPoints(bodyPoints(scene, wanted), viewport, maxZoom)
-}
-
 /** Fits identified bodies and the highlighted routes leaving them; missing ids do not affect the camera. */
 export function fitHighlights(
   scene: ProjectedScene,

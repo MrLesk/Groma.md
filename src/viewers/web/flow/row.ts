@@ -22,7 +22,6 @@ export const flowRowCss = `
     text-align: left;
   }
   .flow-row:hover { background: var(--hover); }
-  .flow-row.selected { background: color-mix(in srgb, var(--accent) 10%, transparent); }
   .flow-check {
     display: grid;
     width: 12px;
@@ -43,15 +42,13 @@ export const flowRowCss = `
 export function flowRowState(
   flow: FlowRef,
   active: readonly FlowRef[],
-  selected: FlowRef | undefined,
-): { active: boolean; selected: boolean; toggleTarget: FlowRef } {
+): { active: boolean; toggleTarget: FlowRef } {
   const scoped = flow.actorId !== undefined
   const activeFlow = scoped
     ? active.find(item => sameFlow(item, flow))
     : active.find(item => item.commandId === flow.commandId)
   return {
     active: activeFlow !== undefined,
-    selected: scoped ? sameFlow(selected, flow) : selected?.commandId === flow.commandId,
     toggleTarget: scoped ? flow : activeFlow ?? flow,
   }
 }
@@ -60,11 +57,10 @@ export function flowRowState(
 export function flowRow(
   row: FlowRowData,
   active: readonly FlowRef[],
-  selected: FlowRef | undefined,
   actorName: (actorId: string) => string | undefined,
   onToggle: (flow: FlowRef) => void,
 ): HTMLButtonElement {
-  const state = flowRowState(row.flow, active, selected)
+  const state = flowRowState(row.flow, active)
   const shownFlow = state.toggleTarget
   const scope = shownFlow.actorId === undefined
     ? 'Global'
@@ -77,10 +73,6 @@ export function flowRow(
   button.setAttribute('aria-label', `${row.title} · ${scope}`)
   button.title = `${row.title} · ${scope}`
   if (state.active) button.classList.add('active')
-  if (state.selected) {
-    button.classList.add('selected')
-    button.setAttribute('aria-current', 'true')
-  }
 
   const check = document.createElement('span')
   check.className = 'flow-check'
