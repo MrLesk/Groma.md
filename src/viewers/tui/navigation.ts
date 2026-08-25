@@ -12,26 +12,24 @@ import {
   levelFor,
   moveView,
 } from './navigation-spatial.ts'
-import { compareElements } from '../../element-order.ts'
-import { ancestorsOf, initialTree, treeRows } from './tree.ts'
+import { compareSemanticElements } from '../../element-order.ts'
+import { ancestorsOf, initialTree, semanticTreeRows } from './tree.ts'
 import type { TreeState } from './tree.ts'
+import type { TerminalViewModel } from './model.ts'
 import type {
+  AnnotatedElement,
   AnnotatedRelationship,
-  ArchitectureWorld,
   C4Kind,
   TerminalLevel,
-  WorldElement,
 } from '../../types.ts'
 
 export type ViewerFocus = 'architecture' | 'hierarchy' | 'details'
 export type DetailsTab = 'what' | 'how'
+export type MapDirection = 'up' | 'down' | 'left' | 'right'
 export type ViewerAction =
   | 'enter'
   | 'leave'
-  | 'up'
-  | 'down'
-  | 'left'
-  | 'right'
+  | MapDirection
   | 'tab'
   | 'toggle-details'
   | 'dismiss'
@@ -73,17 +71,19 @@ export interface ViewerState {
   /** The command row the details cursor rests on; Enter picks it. */
   actionCursor?: string
   filter?: FilterState
+  /** The map edge just crossed, used to step through a containing boundary. */
+  mapStep?: { fromId: string; direction: MapDirection }
 }
 
-function elementsById(world: ArchitectureWorld): Map<string, WorldElement> {
+function elementsById(world: TerminalViewModel): Map<string, AnnotatedElement> {
   return new Map(world.elements.map(element => [element.representationId, element]))
 }
 
 export function defaultSelection(
-  world: ArchitectureWorld,
+  world: TerminalViewModel,
   level: TerminalLevel,
-): WorldElement | undefined {
-  const ranked = [...world.elements].sort(compareElements)
+): AnnotatedElement | undefined {
+  const ranked = [...world.elements].sort(compareSemanticElements)
   if (level === 'context') {
     return ranked.find(element => element.kind === 'system' && !element.external)
   }
@@ -91,10 +91,10 @@ export function defaultSelection(
 }
 
 export function ancestorOfKind(
-  element: WorldElement | undefined,
+  element: AnnotatedElement | undefined,
   kind: C4Kind,
-  byId: Map<string, WorldElement>,
-): WorldElement | undefined {
+  byId: Map<string, AnnotatedElement>,
+): AnnotatedElement | undefined {
   let current = element
   while (current && current.kind !== kind) {
     current = current.parent === null ? undefined : byId.get(current.parent)
@@ -102,7 +102,7 @@ export function ancestorOfKind(
   return current
 }
 
-export function initialState(world: ArchitectureWorld): ViewerState {
+export function initialState(world: TerminalViewModel): ViewerState {
   return {
     level: 'context',
     currentId: defaultSelection(world, 'context')?.representationId,
@@ -116,7 +116,7 @@ export function initialState(world: ArchitectureWorld): ViewerState {
 
 /** The pickable command rows the details pane shows for its tab. */
 export function detailsCommands(
-  world: ArchitectureWorld,
+  world: TerminalViewModel,
   state: Pick<ViewerState, 'currentId' | 'detailsTab'>,
 ): AnnotatedRelationship[] {
   if (state.detailsTab === 'how') {
@@ -136,7 +136,7 @@ export interface LitAction {
  * that row is previewed, otherwise the committed pick shows.
  */
 export function litAction(
-  world: ArchitectureWorld,
+  world: TerminalViewModel,
   state: ViewerState,
 ): LitAction {
   if (state.focus === 'details' && state.actionCursor !== undefined) {
@@ -153,9 +153,9 @@ export function litAction(
 }
 
 function resolve(
-  world: ArchitectureWorld,
+  world: TerminalViewModel,
   state: ViewerState,
-): { selected?: WorldElement; currentId?: string } {
+): { selected?: AnnotatedElement; currentId?: string } {
   const byId = elementsById(world)
   const selected = state.currentId === undefined
     ? defaultSelection(world, state.level)
@@ -167,7 +167,7 @@ function resolve(
  * Selection changes keep the panes in step: the tree cursor follows,
  * its path unhides, and the details scroll returns to the top.
  */
-function syncTree(world: ArchitectureWorld, state: ViewerState): ViewerState {
+function syncTree(world: TerminalViewModel, state: ViewerState): ViewerState {
   const path = ancestorsOf(state.currentId, elementsById(world))
   const collapsed = new Set(
     [...state.tree.collapsed].filter(id => !path.has(id)),
@@ -180,13 +180,13 @@ function syncTree(world: ArchitectureWorld, state: ViewerState): ViewerState {
 }
 
 function reduceTree(
-  world: ArchitectureWorld,
+  world: TerminalViewModel,
   current: ViewerState,
   action: ViewerAction,
 ): ViewerState {
   // One cursor space: the flow rows sit above the tree rows.
   const commands = worldCommands(world)
-  const rows = treeRows(world, current.currentId === undefined ? [] : [current.currentId], current.tree)
+  const rows = semanticTreeRows(world, current.currentId === undefined ? [] : [current.currentId], current.tree)
   const ids = [...commands.map(command => command.id), ...rows.map(row => row.id)]
   if (ids.length === 0) return current
   const index = Math.max(0, ids.indexOf(current.tree.cursor ?? ''))
@@ -239,6 +239,7 @@ function reduceTree(
       tree,
       level: levelFor(element),
       currentId: element.representationId,
+      mapStep: undefined,
     })
   }
   return current
@@ -253,7 +254,7 @@ function expandRow(tree: TreeState, id: string): TreeState {
 }
 
 export function reduceViewer(
-  world: ArchitectureWorld,
+  world: TerminalViewModel,
   state: ViewerState,
   action: ViewerAction,
 ): ViewerState {
@@ -300,14 +301,23 @@ export function reduceViewer(
     }
   }
   if (action === 'dismiss') {
-    if (current.focus !== 'architecture') return { ...current, focus: 'architecture' }
-    return current
+    const view = current.level === 'components'
+      ? leaveView(world, current, resolved.selected)
+      : { level: current.level, currentId: current.currentId }
+    return syncTree(world, {
+      ...current,
+      ...view,
+      focus: 'architecture',
+      panes: { ...current.panes, details: false },
+      mapStep: undefined,
+    })
   }
   if (action === 'leave') {
     return syncTree(world, {
       ...current,
       ...leaveView(world, current, resolved.selected),
       focus: 'architecture',
+      mapStep: undefined,
     })
   }
   if (current.focus === 'hierarchy') {
@@ -344,7 +354,11 @@ export function reduceViewer(
   }
   if (action === 'enter') {
     if (resolved.selected && canEnter(resolved.selected)) {
-      return syncTree(world, { ...current, ...enterView(world, resolved.selected) })
+      return syncTree(world, {
+        ...current,
+        ...enterView(world, resolved.selected),
+        mapStep: undefined,
+      })
     }
     return enterDetails(current)
   }
@@ -357,7 +371,11 @@ export function reduceViewer(
     if (action === 'left') return reduceViewer(world, current, 'tab')
     if (action === 'right') return enterDetails(current)
   }
-  return syncTree(world, { ...current, ...moved })
+  return syncTree(world, {
+    ...current,
+    ...moved,
+    mapStep: { fromId: resolved.selected.representationId, direction: action },
+  })
 }
 
 /** Details focus starts with the cursor on the already-picked command. */
@@ -371,18 +389,18 @@ function enterDetails(current: ViewerState): ViewerState {
 }
 
 export function filterMatches(
-  world: ArchitectureWorld,
+  world: TerminalViewModel,
   query: string,
-): WorldElement[] {
+): AnnotatedElement[] {
   const needle = query.trim().toLowerCase()
   if (needle.length === 0) return []
   return world.elements
     .filter(element => element.name.toLowerCase().includes(needle))
-    .sort(compareElements)
+    .sort(compareSemanticElements)
 }
 
 /** The current match drives selection live; no match leaves the view alone. */
-function followMatch(world: ArchitectureWorld, state: ViewerState): ViewerState {
+function followMatch(world: TerminalViewModel, state: ViewerState): ViewerState {
   const filter = state.filter
   if (!filter) return state
   const match = filterMatches(world, filter.query)[filter.index]
@@ -391,11 +409,12 @@ function followMatch(world: ArchitectureWorld, state: ViewerState): ViewerState 
     ...state,
     level: levelFor(match),
     currentId: match.representationId,
+    mapStep: undefined,
   })
 }
 
 export function reduceFilter(
-  world: ArchitectureWorld,
+  world: TerminalViewModel,
   state: ViewerState,
   input: FilterInput,
 ): ViewerState {
@@ -438,5 +457,6 @@ export function reduceFilter(
     filter: undefined,
     level: filter.before.level,
     currentId: filter.before.currentId,
+    mapStep: undefined,
   })
 }

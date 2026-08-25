@@ -8,7 +8,7 @@ import type {
   NormalizedTerminalPalette,
 } from '@opentui/core'
 
-import { actionPath } from '../action-path.ts'
+import { actionLegs } from '../action-path.ts'
 import { paneLayout } from './layout.ts'
 import {
   initialState,
@@ -19,17 +19,17 @@ import {
 import type { FilterInput, ViewerAction, ViewerState } from './navigation.ts'
 import { paintWorld, themeFromPalette } from './paint.ts'
 import { projectWorld } from './projection.ts'
-import { scopeCamera } from './projection-camera.ts'
-import type {
-  ArchitectureViewModel,
-  MapCamera,
-  TerminalLevel,
-} from '../../types.ts'
+import type { TerminalCamera } from './projection-camera.ts'
+import type { TerminalViewModel } from './model.ts'
+import type { TerminalLevel } from '../../types.ts'
+
+const FLOW_ANIMATION_MS = 120
+const FLOW_ANIMATION_PHASES = 3
 
 interface ViewerOptions {
   level?: TerminalLevel
   currentId?: string
-  camera?: MapCamera
+  camera?: TerminalCamera
   palette?: NormalizedTerminalPalette
   onRefresh?: () => void | Promise<void>
 }
@@ -38,22 +38,22 @@ export interface TerminalViewer {
   closed: Promise<void>
   destroy(): void
   refresh(): Promise<void>
-  update(next: ArchitectureViewModel): void
+  update(next: TerminalViewModel): void
   setView(next: {
     level?: TerminalLevel
     currentId?: string
-    camera?: MapCamera
+    camera?: TerminalCamera
   }): void
 }
 
 export function mountTerminalViewer(
   renderer: CliRenderer,
-  response: ArchitectureViewModel,
+  response: TerminalViewModel,
   options: ViewerOptions = {},
 ): TerminalViewer {
   let viewModel = response
   let state: ViewerState = {
-    ...initialState(response.world),
+    ...initialState(response),
     ...(options.level === undefined ? {} : { level: options.level }),
     ...(options.currentId === undefined ? {} : { currentId: options.currentId }),
   }
@@ -65,11 +65,9 @@ export function mountTerminalViewer(
   const theme = themeFromPalette(
     options.palette ?? normalizeTerminalPalette(),
   )
-  let camera = options.camera ?? scopeCamera(
-    viewModel.world,
-    state.level,
-    state.currentId,
-  )
+  let camera = options.camera
+  let animationPhase = 0
+  let animationTimer: ReturnType<typeof setInterval> | undefined
   const frame = new FrameBufferRenderable(renderer, {
     id: 'architecture-world',
     width: Math.max(1, renderer.width),
@@ -82,12 +80,8 @@ export function mountTerminalViewer(
   frame.height = '100%'
   renderer.root.add(frame)
 
-  function snapshot(): MapCamera {
-    return {
-      zoom: camera.zoom,
-      centerX: camera.centerX,
-      centerY: camera.centerY,
-    }
+  function snapshot(): TerminalCamera | undefined {
+    return camera === undefined ? undefined : { ...camera }
   }
 
   function currentLayout() {
@@ -95,42 +89,62 @@ export function mountTerminalViewer(
     return paneLayout(width, height, state.panes)
   }
 
-  function project(next?: MapCamera) {
-    const lit = litAction(viewModel.world, state)
-    return projectWorld(viewModel.world, {
+  function project(next?: TerminalCamera) {
+    const lit = litAction(viewModel, state)
+    const attentionId = state.actionStep === undefined
+      ? undefined
+      : actionLegs(lit.id, viewModel, lit.actorId)[state.actionStep]?.target
+    return projectWorld(viewModel, {
       viewport: currentLayout().mapViewport,
       level: state.level,
       currentId: state.currentId,
+      attentionId,
       camera: next ?? snapshot(),
-      lockCamera: false,
-      litIds: actionPath(lit.id, viewModel.world, lit.actorId),
     })
+  }
+
+  function syncAnimation(active: boolean): void {
+    if (!active) {
+      if (animationTimer !== undefined) clearInterval(animationTimer)
+      animationTimer = undefined
+      animationPhase = 0
+      return
+    }
+    if (animationTimer !== undefined) return
+    animationTimer = setInterval(() => {
+      animationPhase = (animationPhase + 1) % FLOW_ANIMATION_PHASES
+      repaint()
+    }, FLOW_ANIMATION_MS)
   }
 
   function repaint(): void {
     if (closed || frame.isDestroyed) return
     const projection = project()
+    const lit = litAction(viewModel, state)
+    syncAnimation(lit.id !== undefined)
     camera = projection.camera
     state = {
       ...state,
       currentId: projection.currentId ?? undefined,
     }
-    paintWorld(frame.frameBuffer, currentLayout(), projection, viewModel.world, theme, {
+    paintWorld(frame.frameBuffer, currentLayout(), projection, viewModel, theme, {
       focus: state.focus,
       tree: state.tree,
       detailsScroll: state.detailsScroll,
       filter: state.filter,
       activeActionId: state.activeActionId,
-      lit: litAction(viewModel.world, state),
+      lit,
       actionStep: state.actionStep,
       actionCursor: state.actionCursor,
       detailsTab: state.detailsTab,
       work: viewModel.work ?? [],
+      animationPhase,
     })
     frame.requestRender()
   }
 
   function release(): void {
+    syncAnimation(false)
     renderer.keyInput.off('keypress', onKeypress)
     renderer.off('destroy', onRendererDestroy)
     resolveClosed()
@@ -154,7 +168,7 @@ export function mountTerminalViewer(
     return Promise.resolve(options.onRefresh?.())
   }
 
-  function update(next: ArchitectureViewModel): void {
+  function update(next: TerminalViewModel): void {
     if (closed) return
     viewModel = next
     repaint()
@@ -178,7 +192,7 @@ export function mountTerminalViewer(
     return undefined
   }
 
-  let filterReturnCamera: MapCamera | undefined
+  let filterReturnCamera: TerminalCamera | undefined
 
   function filterInputFor(key: KeyEvent): FilterInput | undefined {
     if (key.name === 'return') return { type: 'accept' }
@@ -195,14 +209,14 @@ export function mountTerminalViewer(
     const changedScope = next.level !== state.level
     state = next
     if (changedScope) {
-      camera = scopeCamera(viewModel.world, state.level, state.currentId)
+      camera = undefined
     }
     repaint()
   }
 
   function onFilterKey(key: KeyEvent): void {
     if (key.name === 'escape') {
-      state = reduceFilter(viewModel.world, state, { type: 'cancel' })
+      state = reduceFilter(viewModel, state, { type: 'cancel' })
       if (filterReturnCamera) {
         camera = filterReturnCamera
         filterReturnCamera = undefined
@@ -213,7 +227,7 @@ export function mountTerminalViewer(
     const input = filterInputFor(key)
     if (!input) return
     if (input.type === 'accept') filterReturnCamera = undefined
-    transition(reduceFilter(viewModel.world, state, input))
+    transition(reduceFilter(viewModel, state, input))
   }
 
   function onKeypress(key: KeyEvent): void {
@@ -227,15 +241,13 @@ export function mountTerminalViewer(
       return
     }
     if (key.name === '/') {
-      state = reduceFilter(viewModel.world, state, { type: 'open' })
+      state = reduceFilter(viewModel, state, { type: 'open' })
       filterReturnCamera = snapshot()
       repaint()
       return
     }
     if (key.name === 'escape') {
-      if (state.focus === 'architecture') return
-      state = reduceViewer(viewModel.world, state, 'dismiss')
-      repaint()
+      transition(reduceViewer(viewModel, state, 'dismiss'))
       return
     }
     if (key.name === 'r' && !key.ctrl) {
@@ -244,7 +256,7 @@ export function mountTerminalViewer(
     }
     const action = actionFor(key)
     if (!action) return
-    transition(reduceViewer(viewModel.world, state, action))
+    transition(reduceViewer(viewModel, state, action))
   }
 
   renderer.keyInput.on('keypress', onKeypress)
@@ -259,7 +271,7 @@ export function mountTerminalViewer(
     setView(next: {
       level?: TerminalLevel
       currentId?: string
-      camera?: MapCamera
+      camera?: TerminalCamera
     }) {
       if (next.camera) {
         camera = next.camera
@@ -268,6 +280,7 @@ export function mountTerminalViewer(
         ...state,
         level: next.level ?? state.level,
         currentId: next.currentId ?? state.currentId,
+        mapStep: undefined,
       }
       repaint()
     },

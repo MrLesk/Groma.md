@@ -6,16 +6,18 @@ import { kindGlyph, kindLabel } from '../atoms/kind.ts'
 import { text } from '../atoms/text.ts'
 import type { ViewerTheme } from '../atoms/theme.ts'
 import { actionCaption, outgoingActions, travelledBy } from '../../action-path.ts'
+import { flowEndpointLabel, type ProjectedFlowStep } from '../flow.ts'
 import type { DetailsTab } from '../navigation.ts'
 import {
   parentOfElements,
   promotedPeer,
 } from '../../relationship-text.ts'
 import type {
-  ArchitectureWorld,
+  AnnotatedElement,
+  AnnotatedRelationship,
+  ArchitectureGraph,
   Bounds,
   WorkMarker,
-  WorldElement,
 } from '../../../types.ts'
 
 interface Span {
@@ -47,8 +49,8 @@ function wrap(value: string, width: number): string[] {
 }
 
 function detailsRows(
-  element: WorldElement,
-  world: ArchitectureWorld,
+  element: AnnotatedElement,
+  world: ArchitectureGraph,
   theme: ViewerTheme,
   width: number,
   tab: DetailsTab,
@@ -74,7 +76,7 @@ function detailsRows(
       })
     : (span: Span): Span => span
 
-  const mark = (kind: WorldElement['kind'], external = false): Span => {
+  const mark = (kind: AnnotatedElement['kind'], external = false): Span => {
     return {
       value: kindGlyph(kind),
       foreground: theme[kind],
@@ -213,8 +215,8 @@ function detailsRows(
 export function drawDetails(
   buffer: OptimizedBuffer,
   bounds: Bounds,
-  element: WorldElement,
-  world: ArchitectureWorld,
+  element: AnnotatedElement,
+  world: ArchitectureGraph,
   theme: ViewerTheme,
   view: {
     focused: boolean
@@ -287,5 +289,49 @@ export function drawDetails(
       x += [...span.value].length
     }
     y += 1
+  }
+}
+
+export function drawFlowDetails(
+  buffer: OptimizedBuffer,
+  bounds: Bounds,
+  command: AnnotatedRelationship,
+  step: ProjectedFlowStep | undefined,
+  total: number,
+  theme: ViewerTheme,
+): void {
+  if (bounds.width <= 0 || bounds.height <= 0) return
+  buffer.fillRect(bounds.x, bounds.y, bounds.width, bounds.height, theme.background)
+  drawBorder(buffer, bounds, 'observed', theme.foreground, theme.background)
+  text(
+    buffer,
+    ` ${command.description} `,
+    bounds.x + 2,
+    bounds.y,
+    Math.max(0, bounds.width - 4),
+    theme.selected,
+    theme.background,
+    TextAttributes.BOLD,
+  )
+  const width = Math.max(0, bounds.width - 4)
+  const rows = step === undefined
+    ? [`${total} ${total === 1 ? 'leg' : 'legs'}`]
+    : [
+        `Leg ${step.index + 1}/${step.total}`,
+        ...wrap(`${flowEndpointLabel(step.source)} → ${flowEndpointLabel(step.target)}`, width),
+        '',
+        ...wrap(step.description, width),
+      ]
+  for (const [index, row] of rows.slice(0, Math.max(0, bounds.height - 2)).entries()) {
+    text(
+      buffer,
+      row,
+      bounds.x + 2,
+      bounds.y + 1 + index,
+      width,
+      index === 0 ? theme.selected : theme.foreground,
+      theme.background,
+      index === 0 ? TextAttributes.BOLD : 0,
+    )
   }
 }

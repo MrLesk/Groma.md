@@ -11,21 +11,16 @@ an MCP app would be the same kind of plugin. Core never knows which surface
 is showing the world.
 
 ```text
-ArchitectureWorld → semanticView (semantic city) → TUI plugin
-ArchitectureWorld → sheetScene (blueprint sheet) → Web plugin
+ArchitectureWorld → sheetScene (blueprint sheet) → TUI plugin
+                                             └──→ Web plugin
 ```
 
-A C4 level is one campus. Software wrappers keep the world-layout
-union size, from code up. Camera scale is the only shrink. The level
-names that layer of internal software and keeps the next software layer
-as unnamed underlay. Actors and external systems are marks: they keep
-their world origin, and their drawn size follows the named level. Ghost
-means planned. Underlay is not a ghost. Entering a system does not move
-that system, its actors, or sibling systems. A relationship between
-nested endpoints attaches to the named software, mark, or campus wrapper
-above them, never to underlay. The TUI map paints this view. Entering a
-system makes its containers the named level. When a boundary's top edge
-scrolls above the map pane, its title docks on the pane's top row.
+The sheet lays out the whole architecture once. The TUI projects it from above
+at one fixed readable scale. Its root scope shows actors, internal-system
+boundaries, container slabs, collapsed groups, and external systems. Entering a
+container shows that boundary, its groups, and its component buildings. Hidden
+relationship endpoints promote to the nearest visible boundary without moving
+the sheet.
 
 The web map paints the whole world at once as one isometric blueprint
 sheet: flat islands for actors, external systems and each internal system,
@@ -34,21 +29,16 @@ the observed code, round buildings for actors, pills for external
 systems), and one lattice route per authored relationship.
 
 A viewer never reads architecture Markdown, walks `groma/` directories, or
-lays the world out. For the web, core composes the blueprint sheet before
-the page receives it; the sheet owns every footprint, floor, shape, zone
-and route on whole cells. For the TUI, the plugin asks core's
-`semanticView` for the city of its current level and focus on every
-repaint; the city owns the visible items, their roles and drawn sizes,
-and the promoted relationship endpoints. A live
-viewer starts the same watch as `groma scan --watch` in-process and applies
-each new world after a fold. It also reloads the world when architecture
-Markdown changes. It does not scan on open. A live viewer also reads the
-active Backlog tasks and refreshes them when a task file changes: the TUI
-marks In Progress work on the elements a task references, the web stands
-each task's pins on the element it touched last. A Backlog read that
-fails counts as no work. The world
-and its maps are maps: selecting an item or opening details does not lay
-anything out again.
+lays the world out. Core composes the blueprint sheet before either viewer
+receives it; the sheet owns every footprint, floor, shape, zone, and route on
+whole cells. A live host starts the same watch as `groma scan --watch`
+in-process and reloads the architecture and sheet after each fold. It also
+reloads them when architecture Markdown changes, but it does not scan on open.
+A live host reads active Backlog tasks and refreshes them when a task file
+changes: the TUI marks In Progress work on referenced elements, while the web
+stands each task's pins on the element it touched last. A work refresh projects
+onto the cached map instead of composing another sheet. A failed Backlog read
+leaves the map available. Selection and details never lay anything out again.
 The first view fits the whole map. Routes stay on the map. One authored
 relationship is one route; on the TUI, relationships that promote to the
 same pair of items at a level share one route. Parents

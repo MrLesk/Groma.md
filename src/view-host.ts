@@ -7,11 +7,13 @@ import type { CliRenderer, NormalizedTerminalPalette } from '@opentui/core'
 import { watchArchitecture } from './architecture-watch.ts'
 import { createBacklogPlugin } from './work/backlog.ts'
 import type { WorkSource } from './work/backlog.ts'
-import { loadArchitectureViewModel } from './core.ts'
+import { loadAnnotatedArchitecture } from './core.ts'
 import { watchScan } from './scanner.ts'
+import { sheetScene } from './sheet/scene.ts'
 import type { WorkItem } from './types.ts'
 import { mountTerminalViewer } from './viewers/tui/terminal-viewer.ts'
 import type { TerminalViewer } from './viewers/tui/terminal-viewer.ts'
+import type { TerminalViewModel } from './viewers/tui/model.ts'
 import { projectActiveWork } from './work/projection.ts'
 
 interface StartViewerOptions {
@@ -27,16 +29,20 @@ export async function startTerminalViewer(
   const workSource = options.workSource ?? createBacklogPlugin(repositoryRoot)
   let work: WorkItem[] = []
   let viewer: TerminalViewer
+  let map: TerminalViewModel
   let closed = false
   let publishChain = Promise.resolve()
-  const project = async () => projectActiveWork(
-    await loadArchitectureViewModel(repositoryRoot),
-    work,
-  )
+  const loadMap = async (): Promise<TerminalViewModel> => {
+    const model = await loadAnnotatedArchitecture(repositoryRoot)
+    return { ...model, sheet: sheetScene(model) }
+  }
   const publish = () => {
     const run = publishChain.then(async () => {
       if (closed) return
-      viewer.update(await project())
+      const next = await loadMap()
+      if (closed) return
+      map = next
+      viewer.update(projectActiveWork(map, work))
     }).catch(() => {})
     publishChain = run
     return run
@@ -45,7 +51,7 @@ export async function startTerminalViewer(
     const run = workSource.read().then(snapshot => {
       if (closed) return
       work = snapshot.items
-      return publish()
+      viewer.update(projectActiveWork(map, work))
     }).catch(() => {})
     return run
   }
@@ -61,7 +67,8 @@ export async function startTerminalViewer(
     const palette = options.palette ?? normalizeTerminalPalette(
       await renderer.getPalette({ timeout: 100 }),
     )
-    viewer = mountTerminalViewer(renderer, await project(), {
+    map = await loadMap()
+    viewer = mountTerminalViewer(renderer, projectActiveWork(map, work), {
       palette,
       onRefresh: publish,
     })

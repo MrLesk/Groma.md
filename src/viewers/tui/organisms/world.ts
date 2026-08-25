@@ -1,28 +1,32 @@
 import type { OptimizedBuffer } from '@opentui/core'
 
 import type { ViewerTheme } from '../atoms/theme.ts'
-import { visible } from '../atoms/visible.ts'
-import { drawBoundary, drawGroupBoundary } from '../molecules/boundary.ts'
+import { visibleIn } from '../projection-camera.ts'
+import {
+  drawBoundaryFrame,
+  drawPinnedBoundaryTitle,
+  fillBoundary,
+} from '../molecules/boundary.ts'
 import { drawCard } from '../molecules/card.ts'
-import { drawRoute, drawRouteArrow, drawRouteLabel } from '../molecules/route.ts'
+import { drawFlowMarker } from '../molecules/flow-marker.ts'
+import { drawRoute, drawRouteLabel } from '../molecules/route.ts'
 import { drawWorkMarker } from '../molecules/work-marker.ts'
-import type { WorkMarker, WorldProjection } from '../../../types.ts'
+import type { ProjectedFlowStep } from '../flow.ts'
+import type { TerminalProjection } from '../projection.ts'
+import type { WorkMarker } from '../../../types.ts'
 import { assigneesOnElement } from '../../../work/projection.ts'
 
 export function drawWorld(
   buffer: OptimizedBuffer,
-  projection: WorldProjection,
+  projection: TerminalProjection,
   theme: ViewerTheme,
   trace: {
     pathIds: Set<string>
     onPath: (elementId: string) => boolean
     work: WorkMarker[]
-    /** The relationship whose leg is being traced; drawn heavy. */
     tracedId?: string
-  } = {
-    pathIds: new Set(),
-    onPath: () => true,
-    work: [],
+    step?: ProjectedFlowStep
+    animationPhase: number
   },
 ): void {
   buffer.pushScissorRect(
@@ -31,85 +35,74 @@ export function drawWorld(
     projection.viewport.width,
     projection.viewport.height,
   )
-  function shown(
-    match: (element: (typeof projection.elements)[number]) => boolean,
-  ): typeof projection.elements {
-    return projection.elements.filter(element => {
-      return match(element) && visible(element.cellBounds, projection.viewport)
-    })
-  }
   const tracing = trace.pathIds.size > 0
-  // The displayed endpoints the lit routes attach to carry the accent too.
-  const touched = new Set<string>()
-  if (tracing) {
-    for (const relationship of projection.relationships) {
-      if (!trace.pathIds.has(relationship.id)) continue
-      touched.add(relationship.displaySource)
-      touched.add(relationship.displayTarget)
-    }
+  const activeRoutes = projection.relationships.filter(route => {
+    return route.ids.some(id => trace.pathIds.has(id))
+  })
+  const visibleItems = projection.items.filter(item => {
+    return visibleIn(item.cellBounds, projection.viewport)
+  })
+
+  for (const item of visibleItems.filter(item => item.shape !== 'card')) {
+    fillBoundary(buffer, item, theme)
   }
-  for (const element of shown(element => element.display === 'system-boundary')) {
-    drawBoundary(buffer, element, projection, theme,
-      touched.has(element.representationId)
-        || element.representationId === projection.currentId)
+  for (const route of projection.relationships) {
+    const active = route.ids.some(id => trace.pathIds.has(id))
+    drawRoute(
+      buffer,
+      route,
+      projection,
+      theme,
+      active,
+      trace.tracedId !== undefined && route.ids.includes(trace.tracedId),
+      active ? trace.animationPhase : undefined,
+    )
   }
-  for (const element of shown(element => element.display === 'container-boundary')) {
-    drawBoundary(buffer, element, projection, theme,
-      touched.has(element.representationId)
-        || element.representationId === projection.currentId)
+  for (const item of visibleItems.filter(item => item.shape !== 'card')) {
+    drawBoundaryFrame(
+      buffer,
+      item,
+      projection,
+      theme,
+      item.representationId === projection.currentId,
+    )
   }
-  for (const group of projection.groups) {
-    if (visible(group.cellBounds, projection.viewport)) {
-      drawGroupBoundary(buffer, group, projection, theme)
-    }
-  }
-  for (const relationship of projection.relationships) {
-    const lit = tracing && trace.pathIds.has(relationship.id)
-    drawRoute(buffer, relationship, theme, tracing && !lit, lit, relationship.id === trace.tracedId)
-  }
-  for (const element of shown(element => {
-    return element.display === 'card' && element.kind === 'component'
-  })) {
+  for (const item of visibleItems.filter(item => item.shape === 'card')) {
     drawCard(
       buffer,
-      element,
+      item,
       projection,
       theme,
-      tracing && !trace.onPath(element.representationId),
-      touched.has(element.representationId),
+      tracing && item.representationId !== undefined && !trace.onPath(item.representationId),
     )
   }
-  for (const element of shown(element => {
-    return element.display === 'card' && element.kind !== 'component'
-  })) {
-    drawCard(
-      buffer,
-      element,
-      projection,
-      theme,
-      tracing && !trace.onPath(element.representationId),
-      touched.has(element.representationId),
-    )
+  for (const item of visibleItems) {
+    if (item.id === undefined) continue
+    const assignees = assigneesOnElement(trace.work, item.id)
+    if (assignees.length > 0) drawWorkMarker(buffer, item, assignees, theme)
   }
-  for (const element of shown(item => item.display !== 'hidden')) {
-    const assignees = assigneesOnElement(trace.work, element.id)
-    if (assignees.length > 0) {
-      drawWorkMarker(buffer, element, assignees, theme)
+  for (const route of activeRoutes) {
+    drawRouteLabel(buffer, route, projection, theme, true)
+  }
+  const scope = projection.items.find(item => {
+    return item.representationId === projection.currentId
+      && (item.kind === 'system' || item.kind === 'container')
+  }) ?? projection.items.find(item => {
+    return projection.level === 'context' ? item.kind === 'system' : item.kind === 'container'
+  })
+  if (scope) drawPinnedBoundaryTitle(buffer, scope, projection, theme)
+  if (trace.step) {
+    const source = visibleItems.find(item => item.key === trace.step?.source.visibleKey)
+    const target = visibleItems.find(item => item.key === trace.step?.target.visibleKey)
+    if (source && source.key !== target?.key) {
+      drawFlowMarker(buffer, source, projection, theme, '●')
     }
-  }
-  for (const relationship of projection.relationships) {
-    drawRouteLabel(
-      buffer,
-      relationship,
-      projection,
-      theme,
-      tracing && trace.pathIds.has(relationship.id),
-    )
-  }
-  for (const relationship of projection.relationships) {
-    const lit = tracing && trace.pathIds.has(relationship.id)
-    if (tracing && !lit) continue
-    drawRouteArrow(buffer, relationship, projection, theme, lit)
+    if (target) {
+      const label = trace.step.target.visibleName === trace.step.target.name
+        ? `▶ ${trace.step.index + 1}/${trace.step.total}`
+        : `▶ ${trace.step.target.name}`
+      drawFlowMarker(buffer, target, projection, theme, label)
+    }
   }
   buffer.popScissorRect()
 }

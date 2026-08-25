@@ -6,4 +6,4 @@ parent: groma
 
 # View host
 
-Composes what the terminal viewer shows: the architecture world from core, in-progress Backlog work when the CLI answers, and a fresh world after every watched source fold or Markdown change. A missing or slow Backlog never blocks the map.
+Caches the annotated architecture graph and shared sheet shown by the terminal viewer. Source folds, Markdown changes, and manual refreshes replace that map. Backlog changes only project current work onto it, so a missing or slow Backlog never blocks or recomposes the map.

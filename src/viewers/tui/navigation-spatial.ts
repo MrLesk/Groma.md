@@ -1,62 +1,45 @@
-import { compareElements } from '../../element-order.ts'
-import { ancestorOfKind, type ViewerState } from './navigation.ts'
-import type {
-  ArchitectureWorld,
-  Bounds,
-  C4Kind,
-  Point,
-  TerminalLevel,
-  WorldElement,
-} from '../../types.ts'
+import { compareSemanticElements } from '../../element-order.ts'
+import type { AnnotatedElement, Bounds, C4Kind, TerminalLevel } from '../../types.ts'
+import type { TerminalViewModel } from './model.ts'
+import { ancestorOfKind, type MapDirection, type ViewerState } from './navigation.ts'
+import { mapAnchors } from './projection.ts'
 
-function elementsById(world: ArchitectureWorld): Map<string, WorldElement> {
-  return new Map(world.elements.map(element => [element.representationId, element]))
+function elementsById(model: TerminalViewModel): Map<string, AnnotatedElement> {
+  return new Map(model.elements.map(element => [element.representationId, element]))
 }
 
-function childElements(
-  element: WorldElement | undefined,
-  byId: Map<string, WorldElement>,
-): WorldElement[] {
+function children(
+  element: AnnotatedElement | undefined,
+  byId: ReadonlyMap<string, AnnotatedElement>,
+): AnnotatedElement[] {
   if (!element) return []
   return element.children
-    .map(id => byId.get(id))
-    .filter((child): child is WorldElement => child !== undefined)
-    .sort(compareElements)
+    .flatMap(id => {
+      const child = byId.get(id)
+      return child === undefined ? [] : [child]
+    })
+    .sort(compareSemanticElements)
 }
 
 function firstChildOfKind(
-  element: WorldElement | undefined,
+  element: AnnotatedElement | undefined,
   kind: C4Kind,
-  byId: Map<string, WorldElement>,
-): WorldElement | undefined {
-  return childElements(element, byId).find(child => child.kind === kind)
+  byId: ReadonlyMap<string, AnnotatedElement>,
+): AnnotatedElement | undefined {
+  return children(element, byId).find(child => child.kind === kind)
 }
 
-function firstComponentUnder(
-  element: WorldElement | undefined,
-  byId: Map<string, WorldElement>,
-): WorldElement | undefined {
-  if (!element) return undefined
-  if (element.kind === 'component') return element
-  const direct = firstChildOfKind(element, 'component', byId)
-  if (direct) return direct
-  for (const child of childElements(element, byId)) {
-    const found = firstComponentUnder(child, byId)
-    if (found) return found
-  }
-}
-
-export function canEnter(element: WorldElement): boolean {
+export function canEnter(element: AnnotatedElement): boolean {
   return !element.external
     && element.kind === 'container'
     && element.children.length > 0
 }
 
 export function enterView(
-  world: ArchitectureWorld,
-  element: WorldElement,
+  model: TerminalViewModel,
+  element: AnnotatedElement,
 ): Pick<ViewerState, 'level' | 'currentId'> {
-  const component = firstComponentUnder(element, elementsById(world))
+  const component = firstChildOfKind(element, 'component', elementsById(model))
   return {
     level: 'components',
     currentId: component?.representationId ?? element.representationId,
@@ -64,117 +47,193 @@ export function enterView(
 }
 
 export function leaveView(
-  world: ArchitectureWorld,
+  model: TerminalViewModel,
   state: ViewerState,
-  selected: WorldElement | undefined,
+  selected: AnnotatedElement | undefined,
 ): Pick<ViewerState, 'level' | 'currentId'> {
   if (state.level === 'context') {
     return { level: state.level, currentId: selected?.representationId }
   }
-  const byId = elementsById(world)
-  const container = ancestorOfKind(selected, 'container', byId)
+  const container = ancestorOfKind(selected, 'container', elementsById(model))
   return {
     level: 'context',
     currentId: container?.representationId ?? selected?.representationId,
   }
 }
 
-function scopeItems(
-  world: ArchitectureWorld,
-  level: TerminalLevel,
-  selected: WorldElement,
-): WorldElement[] {
-  if (level === 'context') {
-    return world.elements.filter(element => element.kind !== 'component')
-  }
-  const byId = elementsById(world)
-  const container = ancestorOfKind(selected, 'container', byId)
-  if (!container) return []
-  return [container, ...world.elements.filter(element => {
-    return element.kind === 'component' && element.parent === container.representationId
-  })]
+export function levelFor(element: AnnotatedElement): TerminalLevel {
+  return element.kind === 'component' ? 'components' : 'context'
 }
 
-export function levelFor(element: WorldElement): TerminalLevel {
-  if (element.kind === 'component') return 'components'
-  return 'context'
+interface DirectionalBounds {
+  start: number
+  end: number
+  crossStart: number
+  crossEnd: number
 }
 
-function center(bounds: Bounds): Point {
+/** Makes every direction increase from start to end along one primary axis. */
+function directionalBounds(bounds: Bounds, direction: MapDirection): DirectionalBounds {
+  const horizontal = direction === 'left' || direction === 'right'
+  const reversed = direction === 'left' || direction === 'up'
+  const rawStart = horizontal ? bounds.x : bounds.y
+  const rawEnd = rawStart + (horizontal ? bounds.width : bounds.height)
   return {
-    x: bounds.x + bounds.width / 2,
-    y: bounds.y + bounds.height / 2,
+    start: reversed ? -rawEnd : rawStart,
+    end: reversed ? -rawStart : rawEnd,
+    crossStart: horizontal ? bounds.y : bounds.x,
+    crossEnd: (horizontal ? bounds.y + bounds.height : bounds.x + bounds.width),
   }
 }
 
-function descendsFrom(
-  element: WorldElement,
-  ancestorId: string,
-  byId: Map<string, WorldElement>,
-): boolean {
-  let current: WorldElement | undefined = element
-  while (current?.parent !== null) {
-    if (current?.parent === ancestorId) return true
-    current = current?.parent === undefined ? undefined : byId.get(current.parent)
-  }
-  return false
+function middle(start: number, end: number): number {
+  return (start + end) / 2
 }
 
-function inDirection(
-  from: Point,
-  to: Point,
-  direction: 'up' | 'down' | 'left' | 'right',
+function inDirection(from: DirectionalBounds, to: DirectionalBounds): boolean {
+  return middle(to.start, to.end) > middle(from.start, from.end)
+}
+
+function perpendicularGap(from: DirectionalBounds, to: DirectionalBounds): number {
+  return Math.max(
+    0,
+    Math.max(from.crossStart, to.crossStart) - Math.min(from.crossEnd, to.crossEnd),
+  )
+}
+
+function crossesPerpendicularCentre(
+  from: DirectionalBounds,
+  to: DirectionalBounds,
 ): boolean {
-  if (direction === 'right') return to.x > from.x
-  if (direction === 'left') return to.x < from.x
-  if (direction === 'down') return to.y > from.y
-  return to.y < from.y
+  const coordinate = middle(from.crossStart, from.crossEnd)
+  return coordinate >= to.crossStart && coordinate <= to.crossEnd
+}
+
+function forwardEdgeGap(from: DirectionalBounds, to: DirectionalBounds): number {
+  return Math.max(0, to.start - from.end)
+}
+
+function nearestChildAcrossBoundary(
+  anchors: ReadonlyMap<string, Bounds>,
+  elements: ReadonlyMap<string, AnnotatedElement>,
+  parentId: string,
+  originBounds: Bounds,
+  direction: MapDirection,
+): string | undefined {
+  const origin = directionalBounds(originBounds, direction)
+  return [...anchors]
+    .filter(([id, bounds]) => {
+      return elements.get(id)?.parent === parentId
+        && inDirection(origin, directionalBounds(bounds, direction))
+    })
+    .map(([id, bounds]) => {
+      const candidate = directionalBounds(bounds, direction)
+      return {
+        id,
+        edge: forwardEdgeGap(origin, candidate),
+        missesCentre: Number(!crossesPerpendicularCentre(origin, candidate)),
+        cross: perpendicularGap(origin, candidate),
+        perpendicular: Math.abs(
+          middle(candidate.crossStart, candidate.crossEnd)
+          - middle(origin.crossStart, origin.crossEnd),
+        ),
+      }
+    })
+    .sort((left, right) => left.edge - right.edge
+      || left.missesCentre - right.missesCentre
+      || left.cross - right.cross
+      || left.perpendicular - right.perpendicular
+      || left.id.localeCompare(right.id))[0]?.id
 }
 
 function nearestInDirection(
-  from: WorldElement,
-  candidates: WorldElement[],
-  direction: 'up' | 'down' | 'left' | 'right',
-): WorldElement | undefined {
-  const origin = center(from.bounds)
-  let best: WorldElement | undefined
-  let bestDistance = Infinity
-  for (const candidate of candidates) {
-    const point = center(candidate.bounds)
-    if (!inDirection(origin, point, direction)) continue
-    const dx = point.x - origin.x
-    const dy = point.y - origin.y
-    const distance = dx * dx + dy * dy
+  anchors: ReadonlyMap<string, Bounds>,
+  selectedId: string,
+  originBounds: Bounds,
+  direction: MapDirection,
+  include: (id: string) => boolean,
+  sameLane = false,
+): string | undefined {
+  const origin = directionalBounds(originBounds, direction)
+  let best: { id: string; cross: number; forward: number; distance: number } | undefined
+  for (const [id, bounds] of anchors) {
+    if (id === selectedId || !include(id)) continue
+    const candidate = directionalBounds(bounds, direction)
+    if (!inDirection(origin, candidate)) continue
+    const cross = perpendicularGap(origin, candidate)
+    if (sameLane && cross > 0) continue
+    const forward = middle(candidate.start, candidate.end) - middle(origin.start, origin.end)
+    const perpendicular = middle(candidate.crossStart, candidate.crossEnd)
+      - middle(origin.crossStart, origin.crossEnd)
+    const distance = forward * forward + perpendicular * perpendicular
     if (
-      distance < bestDistance
+      best === undefined
+      || cross < best.cross
+      || (cross === best.cross && forward < best.forward)
+      || (cross === best.cross && forward === best.forward && distance < best.distance)
       || (
-        distance === bestDistance
-        && best !== undefined
-        && candidate.representationId < best.representationId
+        cross === best.cross
+        && forward === best.forward
+        && distance === best.distance
+        && id < best.id
       )
     ) {
-      best = candidate
-      bestDistance = distance
+      best = { id, cross, forward, distance }
     }
   }
-  return best
+  return best?.id
 }
 
 export function moveView(
-  world: ArchitectureWorld,
+  model: TerminalViewModel,
   state: ViewerState,
-  selected: WorldElement,
-  direction: 'up' | 'down' | 'left' | 'right',
+  selected: AnnotatedElement,
+  direction: MapDirection,
 ): Pick<ViewerState, 'level' | 'currentId'> {
-  const current = { level: state.level, currentId: selected.representationId }
-  const byId = elementsById(world)
-  const candidates = scopeItems(world, state.level, selected).filter(element => {
-    return element.representationId !== selected.representationId
-      && !descendsFrom(element, selected.representationId, byId)
-      && !descendsFrom(selected, element.representationId, byId)
-  })
-  const hit = nearestInDirection(selected, candidates, direction)
-  return hit === undefined
-    ? current
-    : { level: state.level, currentId: hit.representationId }
+  const anchors = mapAnchors(model, state.level, selected.representationId)
+  const originBounds = anchors.get(selected.representationId)
+  if (!originBounds) return { level: state.level, currentId: selected.representationId }
+  const byId = elementsById(model)
+  const previous = state.mapStep?.direction === direction
+    ? byId.get(state.mapStep.fromId)
+    : undefined
+  const previousBounds = previous === undefined
+    ? undefined
+    : anchors.get(previous.representationId)
+  if (
+    previous !== undefined
+    && previousBounds !== undefined
+    && previous.parent !== selected.representationId
+  ) {
+    const child = nearestChildAcrossBoundary(
+      anchors,
+      byId,
+      selected.representationId,
+      previousBounds,
+      direction,
+    )
+    if (child !== undefined) return { level: state.level, currentId: child }
+  }
+  const sibling = nearestInDirection(
+    anchors,
+    selected.representationId,
+    originBounds,
+    direction,
+    id => byId.get(id)?.parent === selected.parent,
+    true,
+  )
+  const parent = selected.parent !== null && anchors.has(selected.parent)
+    ? selected.parent
+    : undefined
+  const next = sibling ?? parent ?? nearestInDirection(
+    anchors,
+    selected.representationId,
+    originBounds,
+    direction,
+    () => true,
+  )
+  return {
+    level: state.level,
+    currentId: next ?? selected.representationId,
+  }
 }

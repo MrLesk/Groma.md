@@ -16,9 +16,14 @@ interface BorderCharacters {
 
 export function borderCharacters(origin: Origin, style: BorderStyle): BorderCharacters {
   if (style === 'group') {
-    // A group boundary shares the planned dash; its dim color and quiet
-    // title keep it apart on the map.
-    return borderCharacters('planned', 'card')
+    return {
+      bottomLeft: '╰',
+      bottomRight: '╯',
+      horizontal: '╌',
+      topLeft: '╭',
+      topRight: '╮',
+      vertical: '┆',
+    }
   }
   if (style === 'actor') {
     return {
@@ -31,12 +36,12 @@ export function borderCharacters(origin: Origin, style: BorderStyle): BorderChar
   }
   if (origin === 'observed' && style === 'system') {
     return {
-      bottomLeft: '╚',
-      bottomRight: '╝',
-      horizontal: '═',
-      topLeft: '╔',
-      topRight: '╗',
-      vertical: '║',
+      bottomLeft: '╰',
+      bottomRight: '╯',
+      horizontal: '─',
+      topLeft: '╭',
+      topRight: '╮',
+      vertical: '│',
     }
   }
   if (origin === 'observed') {

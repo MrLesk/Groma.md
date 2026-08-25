@@ -48,8 +48,6 @@ Groma  system
     |-- Projection display  component  src/viewers/tui/projection-display.ts  displayFor
     |-- Projection routes  component  src/viewers/tui/projection-routes.ts  orthogonalRoute
     |-- Relationship text  component  src/viewers/relationship-text.ts  parentOfElements
-    |-- Semantic city  component  src/semantic-city.ts  promotedEndpoint
-    |-- Semantic view  component  src/semantic-view.ts  displaySize
     |-- Terminal viewer  component  src/viewers/tui/terminal-viewer.ts  mountTerminalViewer
     |-- Tree  component  src/viewers/tui/tree.ts  initialTree
     `-- Work projection  component  src/work/projection.ts  assigneesOnElement

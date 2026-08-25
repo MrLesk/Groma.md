@@ -1,17 +1,16 @@
-import assert from 'node:assert/strict'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { createTestRenderer } from '@opentui/core/testing'
 
+import { loadAnnotatedArchitecture } from '../src/core.ts'
 import { paneLayout } from '../src/viewers/tui/layout.ts'
+import { sheetScene } from '../src/sheet/scene.ts'
+import type { TerminalViewModel } from '../src/viewers/tui/model.ts'
 import type {
   ArchitectureWorld,
   Bounds,
   C4Kind,
-  MapCamera,
-  Point,
-  ProjectedElement,
   WorldElement,
   WorldRelationship,
 } from '../src/types.ts'
@@ -42,6 +41,11 @@ export const openclawFixtureRoot = path.join(
   'openclaw-view',
 )
 
+export async function terminalModel(root: string): Promise<TerminalViewModel> {
+  const model = await loadAnnotatedArchitecture(root)
+  return { ...model, sheet: sheetScene(model) }
+}
+
 export function mapViewportOf(size: { width: number; height: number }): Bounds {
   return paneLayout(size.width, size.height).mapViewport
 }
@@ -52,53 +56,6 @@ export function mapRegion(frame: string, width: number): string {
     .split('\n')
     .map(line => [...line].slice(layout.map.x, layout.details.x).join(''))
     .join('\n')
-}
-
-export function overlaps(left: Bounds, right: Bounds): boolean {
-  return left.x < right.x + right.width
-    && left.x + left.width > right.x
-    && left.y < right.y + right.height
-    && left.y + left.height > right.y
-}
-
-export function visible(bounds: Bounds, viewport: Bounds): boolean {
-  return bounds.x < viewport.x + viewport.width
-    && bounds.x + bounds.width > viewport.x
-    && bounds.y < viewport.y + viewport.height
-    && bounds.y + bounds.height > viewport.y
-}
-
-export function contains(bounds: Bounds, point: Point | undefined): boolean {
-  assert.ok(point)
-  return point.x >= bounds.x
-    && point.x < bounds.x + bounds.width
-    && point.y >= bounds.y
-    && point.y < bounds.y + bounds.height
-}
-
-export function requiredElement(
-  elementsById: Map<string, ProjectedElement>,
-  id: string,
-): ProjectedElement {
-  const element = elementsById.get(id)
-  assert.ok(element)
-  return element
-}
-
-export function projectedById(
-  elements: ProjectedElement[],
-): Map<string, ProjectedElement> {
-  return new Map(elements.map(element => [element.representationId, element]))
-}
-
-export function geometry(world: ArchitectureWorld) {
-  return {
-    bounds: world.bounds,
-    elements: world.elements.map(element => [element.representationId, element.bounds]),
-    routes: world.relationships.map(relationship => {
-      return [relationship.id, relationship.route, relationship.label]
-    }),
-  }
 }
 
 export async function press(
@@ -125,20 +82,6 @@ export async function press(
   return setup.captureCharFrame()
 }
 
-export function cameraOn(
-  world: ArchitectureWorld,
-  id: string,
-  zoom: number,
-): MapCamera {
-  const element = world.elements.find(item => item.representationId === id)
-  assert.ok(element)
-  return {
-    zoom,
-    centerX: element.bounds.x + element.bounds.width / 2,
-    centerY: element.bounds.y + element.bounds.height / 2,
-  }
-}
-
 export function box(
   id: string,
   kind: C4Kind,
@@ -154,13 +97,15 @@ export function box(
     parent: extra.parent ?? null,
     children: extra.children ?? [],
     external: extra.external ?? false,
+    ...(extra.group === undefined ? {} : { group: extra.group }),
+    ...(extra.technology === undefined ? {} : { technology: extra.technology }),
     code: extra.code ?? [],
     origin: extra.origin ?? 'observed',
     bounds,
   }
 }
 
-export function navigationWorld(): ArchitectureWorld {
+export function navigationWorld(): ArchitectureWorld & TerminalViewModel {
   const cleft = box('cleft', 'container', { x: 24, y: 6, width: 18, height: 18 }, {
     parent: 'observed:alpha',
     children: ['observed:pleft', 'observed:pmid'],
@@ -173,7 +118,7 @@ export function navigationWorld(): ArchitectureWorld {
     parent: 'observed:zeta',
     children: ['observed:pfar'],
   })
-  return {
+  const world: ArchitectureWorld = {
     bounds: { x: 0, y: 0, width: 180, height: 70 },
     relationships: [],
     groups: [],
@@ -204,11 +149,21 @@ export function navigationWorld(): ArchitectureWorld {
       }),
     ],
   }
+  return { ...world, plans: [], sheet: sheetScene(world) }
 }
 
 /** A world of hand-built boxes with no layout bounds of its own. */
-export function worldOf(elements: WorldElement[], relationships: WorldRelationship[] = []): ArchitectureWorld {
-  return { bounds: { x: 0, y: 0, width: 1, height: 1 }, elements, groups: [], relationships }
+export function worldOf(
+  elements: WorldElement[],
+  relationships: WorldRelationship[] = [],
+): ArchitectureWorld & TerminalViewModel {
+  const world: ArchitectureWorld = {
+    bounds: { x: 0, y: 0, width: 1, height: 1 },
+    elements,
+    groups: [],
+    relationships,
+  }
+  return { ...world, plans: [], sheet: sheetScene(world) }
 }
 
 /** An observed relationship between two boxes, by id. */

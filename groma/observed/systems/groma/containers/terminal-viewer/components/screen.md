@@ -10,7 +10,7 @@ code:
 
 # Screen
 
-Mounts the terminal screen with fixed chrome: header, persistent hierarchy, map, reserved details pane, and footer. It opens selected containers, returns to the root, reduces navigation keys, and repaints new worlds without resetting valid viewer state.
+Mounts the terminal screen with fixed chrome: header, persistent hierarchy, map, reserved details pane, and footer. It opens selected containers, returns to the root, reduces navigation keys, animates active flows on a presentation-only clock, and repaints new worlds without resetting valid viewer state.
 
 ## Relationships
 

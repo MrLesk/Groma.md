@@ -7,6 +7,7 @@ import {
   worldCommands,
 } from '../action-path.ts'
 import type { ViewerTheme } from './atoms/theme.ts'
+import { flowEndpointLabel, projectFlowStep } from './flow.ts'
 import { detailsCommands, filterMatches } from './navigation.ts'
 import type {
   DetailsTab,
@@ -15,21 +16,23 @@ import type {
   ViewerFocus,
 } from './navigation.ts'
 import type { PaneLayout } from './layout.ts'
+import type { TerminalViewModel } from './model.ts'
 import { drawChrome } from './organisms/chrome.ts'
-import { drawDetails } from './organisms/details.ts'
+import { drawDetails, drawFlowDetails } from './organisms/details.ts'
 import { drawHierarchy } from './organisms/hierarchy.ts'
 import { drawWorld } from './organisms/world.ts'
-import { treeRows } from './tree.ts'
+import { semanticTreeRows } from './tree.ts'
 import type { TreeState } from './tree.ts'
-import type { ArchitectureWorld, WorkMarker, WorldProjection } from '../../types.ts'
+import type { WorkMarker } from '../../types.ts'
+import type { TerminalProjection } from './projection.ts'
 
 export { themeFromPalette } from './atoms/theme.ts'
 
 export function paintWorld(
   buffer: OptimizedBuffer,
   layout: PaneLayout,
-  projection: WorldProjection,
-  world: ArchitectureWorld,
+  projection: TerminalProjection,
+  world: TerminalViewModel,
   theme: ViewerTheme,
   options: {
     tree: TreeState
@@ -44,20 +47,29 @@ export function paintWorld(
     actionCursor?: string
     detailsTab: DetailsTab
     work: WorkMarker[]
+    animationPhase: number
   },
 ): void {
   buffer.clear(theme.background)
   const legs = actionLegs(options.lit.id, world, options.lit.actorId)
   const pathIds = new Set(legs.map(leg => leg.id))
-  const traced = options.actionStep === undefined ? undefined : legs[options.actionStep]
+  const step = projectFlowStep(
+    world,
+    projection,
+    options.lit.id,
+    options.lit.actorId,
+    options.actionStep,
+  )
   const selectionId = projection.currentId ?? undefined
   drawWorld(buffer, projection, theme, {
     pathIds,
     onPath: elementId => {
       return elementId === selectionId || elementOnPath(elementId, pathIds, world)
     },
-    tracedId: traced?.id,
+    tracedId: step?.id,
+    step,
     work: options.work,
+    animationPhase: options.animationPhase,
   })
   const commands = worldCommands(world)
   const tree = options.tree
@@ -65,7 +77,7 @@ export function paintWorld(
     buffer,
     layout.hierarchy,
     commands.map(command => ({ id: command.id, title: command.description })),
-    treeRows(world, selectionId === undefined ? [] : [selectionId], tree),
+    semanticTreeRows(world, selectionId === undefined ? [] : [selectionId], tree),
     selectionId,
     tree.cursor ?? selectionId,
     options.activeActionId,
@@ -75,7 +87,19 @@ export function paintWorld(
   const selected = world.elements.find(element => {
     return element.representationId === projection.currentId
   })
-  if (selected) {
+  const focusedFlow = options.focus === 'hierarchy'
+    ? commands.find(command => command.id === tree.cursor)
+    : undefined
+  if (focusedFlow) {
+    drawFlowDetails(
+      buffer,
+      layout.details,
+      focusedFlow,
+      focusedFlow.id === options.lit.id ? step : undefined,
+      actionLegs(focusedFlow.id, world).length,
+      theme,
+    )
+  } else if (selected) {
     drawDetails(buffer, layout.details, selected, world, theme, {
       focused: options.focus === 'details',
       scroll: options.detailsScroll,
@@ -90,10 +114,10 @@ export function paintWorld(
   const nameOf = (id: string): string => names.get(id) ?? id
   const actionTitle = litCommand === undefined
     ? undefined
-    : traced === undefined
+    : step === undefined
       ? actionCaption(litCommand, true, nameOf).title
-      : `step ${options.actionStep! + 1}/${legs.length} · ${nameOf(traced.source)}`
-        + ` → ${nameOf(traced.target)} · ${traced.description}`
+      : `leg ${step.index + 1}/${step.total} · ${flowEndpointLabel(step.source)}`
+        + ` → ${flowEndpointLabel(step.target)} · ${step.description}`
   const system = world.elements.find(element =>
     element.kind === 'system' && element.origin === 'observed' && !element.external)
   drawChrome(
@@ -113,7 +137,7 @@ export function paintWorld(
   )
 }
 
-function filterLine(world: ArchitectureWorld, filter: FilterState): string {
+function filterLine(world: TerminalViewModel, filter: FilterState): string {
   const matches = filterMatches(world, filter.query)
   const match = matches[filter.index]
   const position = match === undefined
