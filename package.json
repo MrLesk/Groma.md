@@ -14,6 +14,7 @@
     "cli": "bun src/cli.ts",
     "typecheck": "tsc --version && tsc --noEmit",
     "test": "bun run test:node && bun run test:viewer",
+    "test:csharp": "dotnet test src/scanner/csharp/test/Groma.CSharpScanner.Tests.csproj",
     "test:node": "node --import=tsx --test test/*.test.ts",
     "test:viewer": "bun test --timeout 20000 test-bun/",
     "check": "bun run typecheck && bun run test"

@@ -63,18 +63,6 @@ export interface FilesystemAccess {
 
 export type FilesystemAccessHandler = (access: FilesystemAccess) => void
 
-export interface ScanCandidate {
-  kind: C4Kind
-  name: string
-  responsibility: string
-  parent?: string
-  code?: CodeReference[]
-}
-
-export interface ScanResult {
-  candidates: ScanCandidate[]
-}
-
 export interface ScanSummary {
   created: number
   refreshed: number

@@ -7,7 +7,8 @@ import test from 'node:test'
 import type { TestContext } from 'node:test'
 import { fileURLToPath } from 'node:url'
 
-import { acceptGhost, foldScanResult } from '../src/core.ts'
+import { acceptGhost, reconcileScanObservations } from '../src/core.ts'
+import { createScanObservation } from '../src/scanner/observation.ts'
 
 const projectRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -284,17 +285,18 @@ test('a scan match leaves the ghost planned until accept', async t => {
       inventoryDocument,
   })
 
-  const summary = await foldScanResult(root, {
-    candidates: [{
-      kind: 'component',
-      name: 'Inventory',
-      responsibility: 'This must not accept the ghost.',
-      parent: 'Api',
-      code: [
-        { scanner: 'typescript', file: 'src/inventory.ts', symbol: 'Inventory' },
-      ],
+  const summary = await reconcileScanObservations(root, [createScanObservation({
+    scanner: { language: 'typescript', engine: 'test', engineVersion: '1' },
+    root: { kind: 'package', name: 'Shop', file: 'package.json' },
+    scopes: [{ id: 'scope:src/api.ts', name: 'Api' }],
+    files: [{
+      file: 'src/inventory.ts',
+      symbols: [{ id: 'src/inventory.ts#Inventory', name: 'Inventory', kind: 'class' }],
     }],
-  })
+    placements: [{ file: 'src/inventory.ts', scope: 'scope:src/api.ts' }],
+    relationships: [],
+    diagnostics: [],
+  })])
 
   assert.deepEqual(summary, { created: 0, refreshed: 0, matched: 1 })
   await missing(path.join(

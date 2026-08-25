@@ -7,7 +7,7 @@ import {
   setOutcomeSection,
   writeObservedDocument,
 } from './markdown-emitter.ts'
-import { kebabCase } from './typescript-graph.ts'
+import { kebabCase } from './naming.ts'
 import type { ArchitectureDocument, RevisionRecord } from './types.ts'
 
 interface EditArchitectureInput {

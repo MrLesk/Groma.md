@@ -58,7 +58,7 @@ program
 program
   .command('scan')
   .description('Scan this repo and fold findings into Markdown')
-  .option('--watch', 'scan again when TypeScript source changes')
+  .option('--watch', 'scan again when supported source changes')
   .action(async options => {
     const root = process.cwd()
     if (options.watch) {

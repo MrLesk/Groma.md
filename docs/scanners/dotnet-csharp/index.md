@@ -1,20 +1,13 @@
-# .NET/C# scanner
+# C#/.NET scanner
 
-Status: **not built yet**
+The C# scanner uses Roslyn and MSBuild project semantics. `groma scan` discovers a root `.sln` or `.csproj`; scanning C# requires a .NET 10 SDK.
 
-No .NET/C# plugin exists. One would implement Groma's shared
-scanner-plugin interface and produce the same scan-result model as the
-[TypeScript plugin](../typescript/index.md): a list of candidates, each
-with a kind, a name, a responsibility, the parent candidate's name for
-containers and components, and Code references. Its source contract will
-live in this directory when a concrete .NET example defines the mapping.
+Every project is a scope. Every source file is a separate evidence entry containing the types declared in that file. Partial declarations in different files therefore stay separate. Project membership supplies placement, and project references become source relationships. Generated files under `bin` and `obj` are excluded.
 
-Groma's scan-result model and architecture Markdown are language-neutral.
-`package.json`, `tsconfig`, npm workspaces, and other TypeScript project
-facts belong only in the TypeScript plugin. They must not appear in Groma
-core, the scan-result model, or architecture Markdown. A C# plugin will
-use `.csproj`, solutions, and C# declarations the same way: inside this
-plugin, never in core.
+The scanner completes all Roslyn work and validates the observation before writing JSON. A missing project, workspace failure, or invalid input returns an error with no partial standard output. Groma parses that JSON through the same contract used by TypeScript before core sees it.
 
-Shared scanner concepts stay language-neutral. A scanner contract is added
-here only when a real .NET/C# example exists.
+Run the focused C# suite with:
+
+```sh
+dotnet test src/scanner/csharp/test/Groma.CSharpScanner.Tests.csproj
+```

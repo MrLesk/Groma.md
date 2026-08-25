@@ -2,9 +2,9 @@
 id: scanner
 kind: container
 parent: groma
-technology: TypeScript import graph
+technology: TypeScript and Roslyn
 ---
 
 # Scanner
 
-Runs a scan once or as a watch: the language plugin reads the repository, core folds the candidates into Markdown, and the command prints `ok` with a short summary. It never writes architecture Markdown itself and never invents an architecture id.
+Collects complete TypeScript and C# source observations, then gives the validated batch to core for architecture reconciliation. A watch repeats the same scan after a supported source or project file changes.

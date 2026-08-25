@@ -5,13 +5,13 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.MSBuild;
 using System.Text.RegularExpressions;
 
-namespace Groma.DotNetScanner;
+namespace Groma.CSharpScanner;
 
 public sealed class RoslynScanner
 {
     private static readonly object MSBuildRegistrationLock = new();
 
-    public async Task<CompleteScanSnapshot> ScanAsync(string inputPath, CancellationToken cancellationToken = default)
+    public async Task<ScanObservation> ScanAsync(string inputPath, CancellationToken cancellationToken = default)
     {
         string input = Path.GetFullPath(inputPath);
         if (!File.Exists(input))
@@ -36,9 +36,9 @@ public sealed class RoslynScanner
             ? await workspace.OpenSolutionAsync(input, cancellationToken: cancellationToken)
             : (await workspace.OpenProjectAsync(input, cancellationToken: cancellationToken)).Solution;
 
-        Dictionary<string, ScopeEvidence> scopes = new(StringComparer.Ordinal);
-        Dictionary<string, HashSet<SymbolEvidence>> symbolsByFile = new(StringComparer.Ordinal);
-        HashSet<PlacementEvidence> placements = [];
+        Dictionary<string, ScanScope> scopes = new(StringComparer.Ordinal);
+        Dictionary<string, HashSet<ScanSymbol>> symbolsByFile = new(StringComparer.Ordinal);
+        HashSet<ScanPlacement> placements = [];
         Dictionary<ProjectId, string> scopeByProject = new();
 
         foreach (Project project in solution.Projects.OrderBy(project => project.FilePath, StringComparer.Ordinal))
@@ -47,8 +47,9 @@ public sealed class RoslynScanner
             if (project.FilePath is null || Path.GetExtension(project.FilePath) != ".csproj")
                 continue;
 
-            string scopeId = RelativePath(rootDirectory, project.FilePath);
-            scopes.TryAdd(scopeId, new ScopeEvidence(scopeId, project.Name));
+            string projectPath = RelativePath(rootDirectory, project.FilePath);
+            string scopeId = $"scope:{projectPath}";
+            scopes.TryAdd(scopeId, new ScanScope(scopeId, project.Name));
             scopeByProject[project.Id] = scopeId;
             Compilation compilation = await project.GetCompilationAsync(cancellationToken)
                 ?? throw new InvalidDataException($"Roslyn could not compile scope '{scopeId}'.");
@@ -59,8 +60,8 @@ public sealed class RoslynScanner
                     continue;
 
                 string file = RelativePath(rootDirectory, document.FilePath!);
-                placements.Add(new PlacementEvidence(file, scopeId));
-                if (!symbolsByFile.TryGetValue(file, out HashSet<SymbolEvidence>? symbols))
+                placements.Add(new ScanPlacement(file, scopeId));
+                if (!symbolsByFile.TryGetValue(file, out HashSet<ScanSymbol>? symbols))
                     symbolsByFile[file] = symbols = [];
 
                 SyntaxTree? tree = await document.GetSyntaxTreeAsync(cancellationToken);
@@ -78,7 +79,7 @@ public sealed class RoslynScanner
                     if (symbol is not INamedTypeSymbol namedType)
                         throw new InvalidDataException($"Roslyn could not resolve a type declaration in '{file}'.");
 
-                    symbols.Add(new SymbolEvidence(
+                    symbols.Add(new ScanSymbol(
                         Id: namedType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
                         Name: namedType.Name,
                         Kind: DeclarationKind(declaration)));
@@ -86,42 +87,36 @@ public sealed class RoslynScanner
             }
         }
 
-        HashSet<RelationshipEvidence> relationships = [];
+        HashSet<ScanRelationship> relationships = [];
         foreach (Project project in solution.Projects)
         {
             if (!scopeByProject.TryGetValue(project.Id, out string? sourceScope))
                 continue;
-
             foreach (ProjectReference reference in project.ProjectReferences)
             {
                 if (scopeByProject.TryGetValue(reference.ProjectId, out string? targetScope))
-                    relationships.Add(new RelationshipEvidence(sourceScope, targetScope, "project-reference"));
+                    relationships.Add(new ScanRelationship(sourceScope, targetScope, "project-reference"));
             }
         }
 
         ThrowIfIncomplete(workspaceDiagnostics, expectedProjects, solution, rootDirectory);
-
-        FileEvidence[] files = symbolsByFile
-            .Select(pair => new FileEvidence(pair.Key, pair.Value.ToArray()))
-            .ToArray();
-        DiagnosticEvidence[] diagnostics = workspaceDiagnostics
-            .Select(diagnostic => new DiagnosticEvidence(
-                diagnostic.Kind == WorkspaceDiagnosticKind.Failure ? "error" : "warning",
-                "MSBUILD_WORKSPACE",
-                NormalizeMessage(diagnostic.Message, rootDirectory)))
-            .ToArray();
-
-        return CompleteScanSnapshot.Create(
+        return ScanObservation.Create(
             new ScannerIdentity(
                 Language: "csharp",
                 Engine: "roslyn",
                 EngineVersion: typeof(CSharpCompilation).Assembly.GetName().Version!.ToString()),
-            new ScanRoot(extension == ".sln" ? "solution" : "project", RelativePath(rootDirectory, input)),
+            new ScanRoot(
+                extension == ".sln" ? "solution" : "project",
+                Path.GetFileNameWithoutExtension(input),
+                RelativePath(rootDirectory, input)),
             scopes.Values,
-            files,
+            symbolsByFile.Select(pair => new ScanFile(pair.Key, pair.Value.ToArray())),
             placements,
             relationships,
-            diagnostics);
+            workspaceDiagnostics.Select(diagnostic => new ScanDiagnostic(
+                diagnostic.Kind == WorkspaceDiagnosticKind.Failure ? "error" : "warning",
+                "MSBUILD_WORKSPACE",
+                NormalizeMessage(diagnostic.Message, rootDirectory))));
     }
 
     private static void RegisterMSBuild()
@@ -167,12 +162,12 @@ public sealed class RoslynScanner
     {
         if (path is null || Path.GetExtension(path) != ".cs" || !File.Exists(path))
             return false;
-
         string relative = RelativePath(rootDirectory, path);
+        string[] segments = relative.Split('/');
         return relative != ".."
             && !relative.StartsWith("../", StringComparison.Ordinal)
-            && !relative.Split('/').Contains("obj", StringComparer.OrdinalIgnoreCase)
-            && !relative.Split('/').Contains("bin", StringComparer.OrdinalIgnoreCase);
+            && !segments.Contains("obj", StringComparer.OrdinalIgnoreCase)
+            && !segments.Contains("bin", StringComparer.OrdinalIgnoreCase);
     }
 
     private static string RelativePath(string rootDirectory, string path) =>

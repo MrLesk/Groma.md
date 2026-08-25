@@ -6,12 +6,12 @@ group: Scan folding
 code:
   - scanner: typescript
     file: src/scan-reconciler.ts
-    symbol: foldScanResult
+    symbol: readCode
 ---
 
 # Scan reconciler
 
-Matches scanner results to elements that already exist, refreshes only Code frontmatter after curation, attaches Code to a matching ghost without accepting it, and assigns a readable id only to a new observation that is not already in the world.
+Reconciles a complete batch of language observations with the curated architecture. Existing Code file membership stays together, supported symbols refresh in place, and each unknown file becomes separate evidence under its inferred scope. Matching planned elements receive Code without being accepted.
 
 ## Relationships
 

@@ -3,7 +3,7 @@ import {
   renderObservedDocument,
   writeObservedDocument,
 } from './markdown-emitter.ts'
-import { displayName, kebabCase } from './typescript-graph.ts'
+import { displayName, kebabCase } from './naming.ts'
 import type { C4Kind, RevisionRecord } from './types.ts'
 
 const expectedParentKinds = new Map<C4Kind, C4Kind>([

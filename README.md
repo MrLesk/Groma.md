@@ -30,7 +30,8 @@ Groma is the only writer of architecture element and revision files under
    `groma scan --watch`. Architecture Markdown changes update the map
    without scanning.
 2. `groma scan`: scan this repo. Core updates Markdown. The command
-   prints `ok` and a short summary, not the architecture.
+   prints `ok` and a short summary, not the architecture. TypeScript is
+   built in; C# solution and project scans require a .NET 10 SDK.
 3. Change the architecture through Groma. New parts and required changes
    become plan ghosts: `groma create <name> --plan <plan-id> --kind <kind>
    --description <prose>` (plus `--parent <id>` for a container or

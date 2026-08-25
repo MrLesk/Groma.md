@@ -59,14 +59,9 @@ function matchesGlob(relative: string, glob: string): boolean {
     return relative === normalized.slice(0, -1) || relative.startsWith(normalized)
   }
   if (!normalized.includes('*') && !normalized.includes('?')) {
-    return relative === normalized
-      || relative.startsWith(`${normalized}/`)
+    return relative === normalized || relative.startsWith(`${normalized}/`)
   }
   return globToRegExp(normalized).test(relative)
-}
-
-function matchesAny(relative: string, patterns: string[]): boolean {
-  return patterns.some(pattern => matchesGlob(relative, pattern))
 }
 
 function gitListFiles(repositoryRoot: string): Promise<string[]> {
@@ -78,9 +73,7 @@ function gitListFiles(repositoryRoot: string): Promise<string[]> {
     )
     const chunks: Buffer[] = []
     let stderr = ''
-    child.stdout.on('data', chunk => {
-      chunks.push(chunk as Buffer)
-    })
+    child.stdout.on('data', chunk => chunks.push(chunk as Buffer))
     child.stderr.setEncoding('utf8')
     child.stderr.on('data', chunk => {
       stderr += chunk
@@ -91,10 +84,7 @@ function gitListFiles(repositoryRoot: string): Promise<string[]> {
         reject(new Error(stderr.trim() || `git ls-files exited ${code}`))
         return
       }
-      const files = Buffer.concat(chunks).toString('utf8')
-        .split('\0')
-        .filter(file => file !== '')
-      resolve(files)
+      resolve(Buffer.concat(chunks).toString('utf8').split('\0').filter(Boolean))
     })
   })
 }
@@ -104,15 +94,15 @@ export function isTypeScriptScanFile(
   config: TypeScriptScannerConfig = defaultTypeScriptScannerConfig,
 ): boolean {
   const file = relative.split(path.sep).join('/')
-  return matchesAny(file, config.globs) && !matchesAny(file, config.ignore)
+  return config.globs.some(glob => matchesGlob(file, glob))
+    && !config.ignore.some(glob => matchesGlob(file, glob))
 }
 
 export async function listTypeScriptFiles(
   repositoryRoot: string,
   config: TypeScriptScannerConfig = defaultTypeScriptScannerConfig,
 ): Promise<string[]> {
-  const listed = await gitListFiles(repositoryRoot)
-  return listed
+  return (await gitListFiles(repositoryRoot))
     .map(file => file.split(path.sep).join('/'))
     .filter(file => existsSync(path.join(repositoryRoot, file)))
     .filter(file => isTypeScriptScanFile(file, config))
