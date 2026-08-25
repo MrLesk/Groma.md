@@ -13,20 +13,28 @@ the nearest visible architecture element when their authored endpoint is hidden.
 Enter opens a selected container. That scope shows the container boundary, its
 named groups, and its direct components. An endpoint outside the container attaches
 to the container boundary. Backspace returns to root with the container selected.
-No other element opens a map scope.
+Escape also returns to root and closes details. No other element opens a map
+scope.
 
-ELK currently supplies box bounds and routes. The terminal projection does not
-interpret or improve that placement.
+The terminal viewer consumes the same sheet scene as the web viewer. It keeps
+that scene immutable while translating sheet cells and routes into terminal
+columns and rows.
 
 ## Camera and selection
 
 The map has one readable scale. It has no fit-all state, zoom keys, zoom readout,
 or camera animation. A larger terminal reveals more of the same canvas.
 
-Arrow keys select the nearest visible peer in their direction without changing
-scope. When the selected element would leave the map pane, the camera pans only
-enough to reveal it. Selection, pane changes, and details never change world
-geometry.
+Arrow keys follow visual rows and columns without changing scope. Each system
+boundary is one navigation step: moving inward stops on the system before a
+second press reaches the first child edge along that path; the entry ray breaks
+equal-edge ties. Moving outward stops on the system before a second press leaves
+it. Same-lane siblings still win within a boundary. When the
+selected element would leave the map pane, the camera pans only enough to reveal
+it. The same rule applies left, right, up, and down. Selection, pane changes,
+and details never change world geometry. Stepping a flow uses the same minimal
+pan to reveal its visible destination without changing architecture selection
+or map scope.
 
 The hierarchy and `/` search can select architecture outside the current scope.
 Selecting a component opens its parent container; selecting any outer element
@@ -35,31 +43,36 @@ component glyphs, with `▾` and `▸` disclosure and `▌` for the current item
 
 ## Details and flows
 
-The details pane opens by default and always describes the current selection. `]`
-closes or reopens it, reserving or releasing its columns. `t` switches between
-what the element does and how it is built.
+The details pane opens by default and describes the current architecture selection.
+While a flow row has hierarchy focus, it instead shows that flow and its current
+leg. `]` closes or reopens the pane, reserving or releasing its columns. `t`
+switches between what an architecture element does and how it is built.
 
 The hierarchy lists actor flows above the architecture tree. Picking a flow lights
-its visible promoted routes without hiding or moving unrelated architecture. `s`
-steps through the flow and `x` clears it.
+its visible promoted routes without hiding or moving unrelated architecture. The
+architecture selection keeps its own marker. `s` advances to a leg, whose route
+and visible destination carry the stronger treatment. When an exact endpoint is
+hidden at root, the destination marker names it on its visible container and the
+footer shows both names. `x` clears the flow.
 
 ## Appearance
 
-Neutral shades are mixed from the terminal foreground and background, so light
-and dark terminal themes keep their own contrast. Kind remains visible without
-color: actors use dots, systems a clean surface, containers grain, groups diagonal
-hatch, and external systems crosses. Observed, planned, and missing architecture
-uses solid, dashed, and dotted treatment.
+Neutral surface shades are mixed from the terminal foreground and background, so
+light and dark terminal themes keep their own contrast. Actors, systems,
+containers, groups, components, and external systems use distinct grayscale
+fills and frames. Observed, planned, and missing architecture uses solid,
+dashed, and dotted treatment.
 
 The terminal green is the map's only chromatic accent. It marks selection, active
-flows, their endpoints, and active work.
+flows, their endpoints, and active work. Active routes march from source to
+target while their geometry, labels, and arrowheads remain fixed.
 
 ## Keys
 
 - Arrow keys move selection or the focused side-pane cursor.
 - Enter opens a container or focuses details for another element.
 - Backspace returns from a container map to root.
-- Tab moves between the hierarchy and map; Escape returns side-pane focus to map.
+- Tab moves between the hierarchy and map; Escape closes details, returns focus to map, and leaves container scope.
 - `/` searches architecture; Enter keeps a match and Escape restores the prior view.
 - `]` toggles details, `t` changes its tab, `s` steps a flow, and `x` clears it.
 - `r` refreshes and Ctrl+C exits.

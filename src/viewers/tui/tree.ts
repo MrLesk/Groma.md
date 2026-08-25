@@ -1,5 +1,5 @@
-import { compareElements, compareSemanticElements } from '../../element-order.ts'
-import type { AnnotatedElement, ArchitectureGraph, ArchitectureWorld, C4Kind, Origin } from '../../types.ts'
+import { compareSemanticElements } from '../../element-order.ts'
+import type { AnnotatedElement, ArchitectureGraph, C4Kind, Origin } from '../../types.ts'
 
 /** Manual overrides on top of the always-visible paths to the selections. */
 export interface TreeState {
@@ -103,16 +103,7 @@ function rows<Element extends AnnotatedElement>(
   return rows
 }
 
-/** TUI hierarchy order follows the fixed ELK world. */
-export function treeRows(
-  world: ArchitectureWorld,
-  selectionIds: readonly string[],
-  tree: TreeState,
-): TreeRow[] {
-  return rows(world.elements, selectionIds, tree, compareElements)
-}
-
-/** Web hierarchy order follows semantic identity because the web places its own map. */
+/** Hierarchy order follows semantic identity rather than renderer geometry. */
 export function semanticTreeRows(
   world: ArchitectureGraph,
   selectionIds: readonly string[],

@@ -3,12 +3,12 @@ import { test } from 'bun:test'
 
 import { initialState, reduceViewer } from '../src/viewers/tui/navigation.ts'
 import { scrollOffset } from '../src/viewers/tui/organisms/hierarchy.ts'
-import { initialTree, toggleExpansion, treeRows } from '../src/viewers/tui/tree.ts'
+import { initialTree, semanticTreeRows, toggleExpansion } from '../src/viewers/tui/tree.ts'
 import { navigationWorld } from './helpers.ts'
 
 test.concurrent('the containment tree lists every element once and tracks collapse state', () => {
   const world = navigationWorld()
-  const all = treeRows(world, [], {
+  const all = semanticTreeRows(world, [], {
     expanded: new Set(world.elements.map(element => element.representationId)),
     collapsed: new Set(),
   })
@@ -31,8 +31,8 @@ test.concurrent('the containment tree lists every element once and tracks collap
     [
       'observed:ann',
       'observed:alpha',
-      'observed:zeta',
       'observed:empty',
+      'observed:zeta',
       'observed:ext',
     ],
   )
@@ -42,7 +42,7 @@ test.concurrent('the containment tree lists every element once and tracks collap
     ['observed:cleft', 'observed:cright'],
   )
 
-  const rows = treeRows(world, ['observed:pleft'], initialTree())
+  const rows = semanticTreeRows(world, ['observed:pleft'], initialTree())
   const ids = rows.map(row => row.id)
   assert.ok(ids.includes('observed:pleft'))
   assert.ok(ids.includes('observed:pmid'))
@@ -52,7 +52,7 @@ test.concurrent('the containment tree lists every element once and tracks collap
   assert.equal(cright?.expanded, false)
   assert.equal(cright?.count, 1)
 
-  const several = treeRows(world, ['observed:pleft', 'observed:pright'], initialTree())
+  const several = semanticTreeRows(world, ['observed:pleft', 'observed:pright'], initialTree())
   assert.ok(several.some(row => row.id === 'observed:pleft'))
   assert.ok(several.some(row => row.id === 'observed:pright'))
 })
@@ -60,23 +60,23 @@ test.concurrent('the containment tree lists every element once and tracks collap
 test.concurrent('manual toggles cannot hide a selection path', () => {
   const world = navigationWorld()
   let tree = initialTree()
-  let rows = treeRows(world, ['observed:pleft'], tree)
+  let rows = semanticTreeRows(world, ['observed:pleft'], tree)
 
   const closedSibling = rows.find(row => row.id === 'observed:cright')!
   tree = toggleExpansion(tree, closedSibling)
-  rows = treeRows(world, ['observed:pleft'], tree)
+  rows = semanticTreeRows(world, ['observed:pleft'], tree)
   assert.ok(rows.some(row => row.id === 'observed:pright'))
   assert.ok(rows.some(row => row.id === 'observed:pleft'))
 
   const selectionParent = rows.find(row => row.id === 'observed:cleft')!
   tree = toggleExpansion(tree, selectionParent)
-  rows = treeRows(world, ['observed:pleft'], tree)
+  rows = semanticTreeRows(world, ['observed:pleft'], tree)
   assert.ok(rows.some(row => row.id === 'observed:pleft'))
   assert.equal(rows.find(row => row.id === 'observed:cleft')?.expanded, true)
   assert.ok(tree.collapsed.has('observed:cleft'))
 
   tree = toggleExpansion(tree, rows.find(row => row.id === 'observed:cleft')!)
-  rows = treeRows(world, ['observed:pleft'], tree)
+  rows = semanticTreeRows(world, ['observed:pleft'], tree)
   assert.ok(rows.some(row => row.id === 'observed:pleft'))
   assert.ok(!tree.collapsed.has('observed:cleft'))
 })
@@ -121,7 +121,8 @@ test.concurrent('tree focus moves the cursor and enter drives selection and leve
   assert.equal(state.focus, 'architecture')
   state = reduceViewer(world, state, 'right')
   assert.equal(state.tree.cursor, state.currentId)
-  assert.equal(state.tree.collapsed.has('observed:cleft'), false)
+  assert.equal(state.currentId, 'observed:cright')
+  assert.equal(state.tree.collapsed.has('observed:cleft'), true)
 })
 
 test.concurrent('tree scrolling keeps the cursor inside the visible window', () => {

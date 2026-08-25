@@ -19,6 +19,12 @@ test.concurrent('the terminal map uses neutral palette mixes and one green accen
     theme.container,
     theme.component,
     theme.observedTint,
+    theme.actorTint,
+    theme.systemTint,
+    theme.containerTint,
+    theme.componentTint,
+    theme.groupTint,
+    theme.externalTint,
   ]) {
     const [red, green, blue] = color.toInts()
     assert.equal(red, green)

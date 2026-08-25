@@ -6,7 +6,7 @@ group: Projection
 code:
   - scanner: typescript
     file: src/viewers/tui/projection-camera.ts
-    symbol: focusElement
+    symbol: reveal
 ---
 
 # Projection camera

@@ -9,6 +9,12 @@ export interface ViewerTheme extends Record<Origin | C4Kind, RGBA> {
   selected: RGBA
   observedTint: RGBA
   selectedTint: RGBA
+  actorTint: RGBA
+  systemTint: RGBA
+  containerTint: RGBA
+  componentTint: RGBA
+  groupTint: RGBA
+  externalTint: RGBA
 }
 
 function mix(left: RGBA, right: RGBA, rightWeight: number): RGBA {
@@ -34,9 +40,25 @@ export function themeFromPalette(palette: NormalizedTerminalPalette): ViewerThem
     selected: accent,
     observedTint: mix(background, foreground, 0.06),
     selectedTint: mix(background, accent, 0.18),
+    actorTint: mix(background, foreground, 0.08),
+    systemTint: mix(background, foreground, 0.03),
+    containerTint: mix(background, foreground, 0.06),
+    componentTint: mix(background, foreground, 0.09),
+    groupTint: mix(background, foreground, 0.1),
+    externalTint: mix(background, foreground, 0.12),
     actor: mix(background, foreground, 0.82),
     system: mix(background, foreground, 0.92),
     container: mix(background, foreground, 0.72),
     component: mix(background, foreground, 0.82),
   }
+}
+
+export function surfaceTint(
+  theme: ViewerTheme,
+  kind: C4Kind | 'group',
+  external: boolean,
+): RGBA {
+  if (external) return theme.externalTint
+  if (kind === 'group') return theme.groupTint
+  return theme[`${kind}Tint`]
 }

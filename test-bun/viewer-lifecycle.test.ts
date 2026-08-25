@@ -8,14 +8,13 @@ import { normalizeTerminalPalette } from '@opentui/core'
 import { createTestRenderer } from '@opentui/core/testing'
 
 import { EMPTY_WORK_SNAPSHOT, type WorkSource } from '../src/work/backlog.ts'
-import { loadArchitectureViewModel } from '../src/core.ts'
 import { startTerminalViewer } from '../src/view-host.ts'
 import { mountTerminalViewer } from '../src/viewers/tui/terminal-viewer.ts'
 import {
   fixtureRoot,
-  geometry,
   press,
   repositoryRoot,
+  terminalModel,
   viewerFixtureRoot,
 } from './helpers.ts'
 
@@ -117,22 +116,19 @@ test.concurrent('R reloads the world from core and keeps the current view', asyn
   }
 })
 
-// Eighteen keypresses, each waiting out its camera tween: under parallel
-// suite load this can pass bun's 5s default, so it gets a wide timeout.
 test.concurrent('headless keys drive the viewer and leave world coordinates unchanged', async () => {
-  const response = await loadArchitectureViewModel(viewerFixtureRoot)
-  const before = structuredClone(geometry(response.world))
+  const response = await terminalModel(viewerFixtureRoot)
+  const before = structuredClone(response.sheet)
   const setup = await createTestRenderer({ width: 120, height: 36 })
   const app = mountTerminalViewer(setup.renderer, response)
   await setup.renderOnce()
 
-  await press(setup, '+', '-', '=', '_')
   await press(setup, 'enter', 'right', 'left', 'up', 'down')
   await press(setup, 'tab', 'right', 'down', 'enter', 'escape')
   await press(setup, '[', ']', '[', ']')
   await press(setup, 'enter', 'escape')
   assert.equal(setup.renderer.isDestroyed, false)
 
-  assert.deepEqual(geometry(response.world), before)
+  assert.deepEqual(response.sheet, before)
   app.destroy()
 }, 20000)

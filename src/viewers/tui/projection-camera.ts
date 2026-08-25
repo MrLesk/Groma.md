@@ -1,63 +1,90 @@
-import { ancestorOfKind, defaultSelection } from './navigation.ts'
-import type {
-  ArchitectureWorld,
-  Bounds,
-  MapCamera,
-  Point,
-  TerminalLevel,
-  WorldElement,
-} from '../../types.ts'
+import type { Bounds, Point } from '../../types.ts'
 
-export const CELL_ASPECT = 0.5
-/** World layout reserves three units per terminal glyph. */
-export const MAP_SCALE = 1 / 3
-
-export interface Transform {
-  xScale: number
-  yScale: number
+export interface TerminalCamera {
+  /** Top-left world cell shown in the map viewport. */
   x: number
   y: number
 }
 
-export function focusElement(
-  level: TerminalLevel,
-  selected: WorldElement | undefined,
-  elementsById: Map<string, WorldElement>,
-): WorldElement | null {
-  if (level === 'context') return null
-  return ancestorOfKind(selected, 'container', elementsById) ?? null
+function clamp(value: number, minimum: number, maximum: number): number {
+  return Math.max(minimum, Math.min(maximum, value))
 }
 
-export function scopeCamera(
-  world: ArchitectureWorld,
-  level: TerminalLevel,
-  currentId?: string,
-): MapCamera {
-  const elementsById = new Map(world.elements.map(element => [
-    element.representationId,
-    element,
-  ]))
-  const selected = currentId === undefined
-    ? defaultSelection(world, level)
-    : elementsById.get(currentId) ?? defaultSelection(world, level)
-  const focus = focusElement(level, selected, elementsById) ?? selected
-  const subject = focus?.bounds ?? world.bounds
+export function centeredCamera(
+  world: Bounds,
+  subject: Bounds,
+  viewport: Bounds,
+): TerminalCamera {
+  return clampCamera({
+    x: Math.round(subject.x + subject.width / 2 - viewport.width / 2),
+    y: Math.round(subject.y + subject.height / 2 - viewport.height / 2),
+  }, world, viewport)
+}
+
+export function clampCamera(
+  camera: TerminalCamera,
+  world: Bounds,
+  viewport: Bounds,
+): TerminalCamera {
+  const centeredX = world.x - Math.floor((viewport.width - world.width) / 2)
+  const centeredY = world.y - Math.floor((viewport.height - world.height) / 2)
+  const maximumX = Math.max(world.x, world.x + world.width - viewport.width)
+  const maximumY = Math.max(world.y, world.y + world.height - viewport.height)
   return {
-    zoom: MAP_SCALE,
-    centerX: subject.x + subject.width / 2,
-    centerY: subject.y + subject.height / 2,
+    x: world.width <= viewport.width ? centeredX : clamp(camera.x, world.x, maximumX),
+    y: world.height <= viewport.height ? centeredY : clamp(camera.y, world.y, maximumY),
   }
 }
 
-export function transformFor(camera: MapCamera, viewport: Bounds): Transform {
-  const xScale = camera.zoom
-  const yScale = camera.zoom * CELL_ASPECT
-  return {
-    xScale,
-    yScale,
-    x: viewport.x + viewport.width / 2 - camera.centerX * xScale,
-    y: viewport.y + viewport.height / 2 - camera.centerY * yScale,
+/** Moves only enough to keep a selected shape inside the viewport. */
+export function reveal(
+  camera: TerminalCamera,
+  selection: Bounds,
+  world: Bounds,
+  viewport: Bounds,
+): TerminalCamera {
+  let x = camera.x
+  let y = camera.y
+  const margin = 1
+  if (selection.width <= viewport.width - 2 * margin) {
+    if (selection.x < x + margin) x = selection.x - margin
+    if (selection.x + selection.width > x + viewport.width - margin) {
+      x = selection.x + selection.width - viewport.width + margin
+    }
+  } else if (selection.x + selection.width <= x || selection.x >= x + viewport.width) {
+    x = selection.x
   }
+  if (selection.height <= viewport.height - 2 * margin) {
+    if (selection.y < y + margin) y = selection.y - margin
+    if (selection.y + selection.height > y + viewport.height - margin) {
+      y = selection.y + selection.height - viewport.height + margin
+    }
+  } else if (selection.y + selection.height <= y || selection.y >= y + viewport.height) {
+    y = selection.y
+  }
+  return x === camera.x && y === camera.y
+    ? camera
+    : clampCamera({ x, y }, world, viewport)
+}
+
+export function projectPoint(
+  point: Point,
+  camera: TerminalCamera,
+  viewport: Bounds,
+): Point {
+  return {
+    x: viewport.x + point.x - camera.x,
+    y: viewport.y + point.y - camera.y,
+  }
+}
+
+export function projectBounds(
+  bounds: Bounds,
+  camera: TerminalCamera,
+  viewport: Bounds,
+): Bounds {
+  const point = projectPoint(bounds, camera, viewport)
+  return { ...bounds, ...point }
 }
 
 export function visibleIn(bounds: Bounds, viewport: Bounds): boolean {
@@ -65,48 +92,4 @@ export function visibleIn(bounds: Bounds, viewport: Bounds): boolean {
     && bounds.x + bounds.width > viewport.x
     && bounds.y < viewport.y + viewport.height
     && bounds.y + bounds.height > viewport.y
-}
-
-export function panCells(bounds: Bounds, viewport: Bounds): Point {
-  let x = 0
-  let y = 0
-  if (bounds.width <= viewport.width) {
-    if (bounds.x < viewport.x) x = viewport.x - bounds.x
-    else if (bounds.x + bounds.width > viewport.x + viewport.width) {
-      x = viewport.x + viewport.width - bounds.x - bounds.width
-    }
-  } else if (!visibleIn(bounds, viewport)) {
-    x = viewport.x - bounds.x
-  }
-  if (bounds.height <= viewport.height) {
-    if (bounds.y < viewport.y) y = viewport.y - bounds.y
-    else if (bounds.y + bounds.height > viewport.y + viewport.height) {
-      y = viewport.y + viewport.height - bounds.y - bounds.height
-    }
-  } else if (!visibleIn(bounds, viewport)) {
-    y = viewport.y - bounds.y
-  }
-  return { x, y }
-}
-
-export function projectPoint(point: Point, transform: Transform): Point {
-  return {
-    x: Math.round(transform.x + point.x * transform.xScale),
-    y: Math.round(transform.y + point.y * transform.yScale),
-  }
-}
-
-export function projectBounds(bounds: Bounds, transform: Transform): Bounds {
-  const topLeft = projectPoint(bounds, transform)
-  const bottomRight = projectPoint({
-    x: bounds.x + bounds.width,
-    y: bounds.y + bounds.height,
-  }, transform)
-
-  return {
-    x: topLeft.x,
-    y: topLeft.y,
-    width: Math.max(1, bottomRight.x - topLeft.x),
-    height: Math.max(1, bottomRight.y - topLeft.y),
-  }
 }

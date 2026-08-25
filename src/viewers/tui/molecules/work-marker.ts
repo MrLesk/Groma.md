@@ -3,11 +3,11 @@ import type { OptimizedBuffer } from '@opentui/core'
 
 import { text } from '../atoms/text.ts'
 import type { ViewerTheme } from '../atoms/theme.ts'
-import type { ProjectedElement } from '../../../types.ts'
+import type { ProjectedMapItem } from '../projection.ts'
 
 export function drawWorkMarker(
   buffer: OptimizedBuffer,
-  element: ProjectedElement,
+  element: ProjectedMapItem,
   assignees: string[],
   theme: ViewerTheme,
 ): void {

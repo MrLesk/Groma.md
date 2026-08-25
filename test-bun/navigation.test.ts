@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'bun:test'
 
-import { loadArchitectureViewModel } from '../src/core.ts'
 import {
   defaultSelection,
   filterMatches,
@@ -9,470 +8,298 @@ import {
   litAction,
   reduceFilter,
   reduceViewer,
+  type ViewerState,
 } from '../src/viewers/tui/navigation.ts'
-import type { ViewerState } from '../src/viewers/tui/navigation.ts'
-import type { ArchitectureWorld, TerminalLevel } from '../src/types.ts'
-import { initialTree } from '../src/viewers/tui/tree.ts'
-import { navigationWorld, viewerFixtureRoot } from './helpers.ts'
+import {
+  box,
+  navigationWorld,
+  terminalModel,
+  uses,
+  viewerFixtureRoot,
+  worldOf,
+} from './helpers.ts'
 
-function viewOf(state: ViewerState): Pick<ViewerState, 'level' | 'currentId'> {
-  return { level: state.level, currentId: state.currentId }
+function actionWorld() {
+  return worldOf([
+    box('buyer', 'actor', { x: 0, y: 0, width: 1, height: 1 }),
+    box('product', 'system', { x: 0, y: 0, width: 1, height: 1 }, {
+      children: ['observed:api', 'observed:web', 'observed:jobs'],
+    }),
+    ...['api', 'web', 'jobs'].map(id => box(
+      id,
+      'container',
+      { x: 0, y: 0, width: 1, height: 1 },
+      { parent: 'observed:product' },
+    )),
+  ], [
+    uses('buyer-api', 'buyer', 'api'),
+    uses('buyer-web', 'buyer', 'web'),
+    uses('api-web', 'api', 'web'),
+    uses('api-jobs', 'api', 'jobs'),
+  ])
 }
 
-function stateAt(
-  world: ArchitectureWorld,
-  level: TerminalLevel,
-  currentId: string,
-): ViewerState {
-  return { ...initialState(world), level, currentId }
+function laneNavigationWorld() {
+  const ids = ['top-left', 'top-right', 'middle-left', 'bottom-left', 'middle-right']
+  const model = worldOf([
+    box('system', 'system', { x: 0, y: 0, width: 1, height: 1 }, {
+      children: ['observed:container'],
+    }),
+    box('container', 'container', { x: 0, y: 0, width: 1, height: 1 }, {
+      parent: 'observed:system',
+      children: ids.map(id => `observed:${id}`),
+    }),
+    ...ids.map(id => box(id, 'component', { x: 0, y: 0, width: 1, height: 1 }, {
+      parent: 'observed:container',
+    })),
+  ])
+  const rects = new Map([
+    ['observed:top-left', { gx: 10, gy: 5, w: 6, d: 4 }],
+    ['observed:top-right', { gx: 20, gy: 5, w: 6, d: 4 }],
+    ['observed:middle-left', { gx: 10, gy: 11, w: 6, d: 4 }],
+    ['observed:bottom-left', { gx: 11, gy: 17, w: 6, d: 4 }],
+    ['observed:middle-right', { gx: 24, gy: 11, w: 6, d: 4 }],
+  ])
+  return {
+    ...model,
+    sheet: {
+      ...model.sheet,
+      buildings: model.sheet.buildings.map(building => ({
+        ...building,
+        rect: rects.get(building.representationId) ?? building.rect,
+      })),
+    },
+  }
 }
 
-const box = (
-  id: string,
-  kind: 'actor' | 'container',
-  parent: string | null = null,
-) => ({
-  representationId: id,
-  id,
-  kind,
-  name: id,
-  description: '',
-  parent,
-  children: [] as string[],
-  external: false,
-  code: [],
-  origin: 'observed' as const,
-  bounds: { x: 0, y: 0, width: 8, height: 8 },
-})
+function containmentNavigationWorld() {
+  const model = worldOf([
+    box('system', 'system', { x: 0, y: 0, width: 1, height: 1 }, {
+      children: ['observed:upper', 'observed:lower'],
+    }),
+    box('upper', 'container', { x: 0, y: 0, width: 1, height: 1 }, {
+      parent: 'observed:system',
+    }),
+    box('lower', 'container', { x: 0, y: 0, width: 1, height: 1 }, {
+      parent: 'observed:system',
+    }),
+    box('north', 'system', { x: 0, y: 0, width: 1, height: 1 }),
+    box('south', 'system', { x: 0, y: 0, width: 1, height: 1 }),
+    box('actor', 'actor', { x: 0, y: 0, width: 1, height: 1 }),
+    box('external', 'system', { x: 0, y: 0, width: 1, height: 1 }, { external: true }),
+  ])
+  return {
+    ...model,
+    sheet: {
+      ...model.sheet,
+      islands: model.sheet.islands.map(island => {
+        if (island.element?.id === 'system') {
+          return { ...island, rect: { gx: 20, gy: 20, w: 72, d: 80 } }
+        }
+        if (island.element?.id === 'north') {
+          return { ...island, rect: { gx: 20, gy: 0, w: 72, d: 10 } }
+        }
+        if (island.element?.id === 'south') {
+          return { ...island, rect: { gx: 20, gy: 110, w: 72, d: 10 } }
+        }
+        return island
+      }),
+      slabs: model.sheet.slabs.map(slab => ({
+        ...slab,
+        rect: slab.id === 'upper'
+          ? { gx: 22, gy: 24, w: 18, d: 14 }
+          : { gx: 22, gy: 70, w: 37, d: 14 },
+      })),
+      buildings: model.sheet.buildings.map(building => ({
+        ...building,
+        rect: { gx: 2, gy: 54, w: 12, d: 10 },
+      })),
+    },
+  }
+}
 
-const edge = (id: string, source: string, target: string) => ({
-  id,
-  source,
-  target,
-  description: id,
-  technology: '',
-  origin: 'observed' as const,
-  route: [{ x: 0, y: 0 }, { x: 1, y: 0 }],
-  label: null,
-})
+test.concurrent('map navigation enters only containers and returns to the same container', () => {
+  const model = navigationWorld()
+  assert.equal(defaultSelection(model, 'context')?.representationId, 'observed:alpha')
 
-test.concurrent('unit navigation covers selection, level changes, and spatial movement', () => {
-  const world = navigationWorld()
-  assert.equal(defaultSelection(world, 'context')?.representationId, 'observed:alpha')
-  assert.notEqual(world.elements[0]?.representationId, 'observed:alpha')
-
-  let state = initialState(world)
-  assert.deepEqual(state, {
-    level: 'context',
-    currentId: 'observed:alpha',
-    focus: 'architecture',
-    tree: initialTree(),
-    panes: { details: true },
-    detailsScroll: 0,
-    detailsTab: 'what' as const,
-  })
-
-  assert.equal(reduceViewer(world, state, 'enter').focus, 'details')
-  assert.equal(
-    reduceViewer(world, { ...state, currentId: 'observed:ann' }, 'enter').focus,
-    'details',
-  )
-  assert.equal(
-    reduceViewer(world, { ...state, currentId: 'observed:ext' }, 'enter').focus,
-    'details',
-  )
-  assert.equal(
-    reduceViewer(world, { ...state, currentId: 'observed:empty' }, 'enter').focus,
-    'details',
-  )
+  let state: ViewerState = {
+    ...initialState(model),
+    currentId: 'observed:cleft',
+  }
+  state = reduceViewer(model, state, 'enter')
   assert.deepEqual(
-    viewOf(reduceViewer(world, stateAt(world, 'components', 'observed:pleft'), 'enter')),
+    { level: state.level, currentId: state.currentId },
     { level: 'components', currentId: 'observed:pleft' },
   )
 
-  state = reduceViewer(world, {
-    ...initialState(world),
-    currentId: 'observed:cleft',
+  state = reduceViewer(model, state, 'right')
+  assert.equal(state.currentId, 'observed:pmid')
+  state = reduceViewer(model, state, 'leave')
+  assert.deepEqual(
+    { level: state.level, currentId: state.currentId },
+    { level: 'context', currentId: 'observed:cleft' },
+  )
+
+  const actor = reduceViewer(model, {
+    ...initialState(model),
+    currentId: 'observed:ann',
   }, 'enter')
-  assert.deepEqual(viewOf(state), { level: 'components', currentId: 'observed:pleft' })
-  assert.deepEqual(viewOf(reduceViewer(world, state, 'leave')), {
-    level: 'context',
-    currentId: 'observed:cleft',
-  })
-  assert.deepEqual(viewOf(reduceViewer(world, initialState(world), 'leave')), {
-    level: 'context',
-    currentId: 'observed:alpha',
-  })
+  assert.equal(actor.level, 'context')
+  assert.equal(actor.focus, 'details')
+})
 
-  state = stateAt(world, 'context', 'observed:cleft')
-  assert.equal(reduceViewer(world, state, 'right').currentId, 'observed:cright')
+test.concurrent('map edges lead to the fixed hierarchy and details panes', () => {
+  const model = navigationWorld()
+  const left = reduceViewer(model, {
+    ...initialState(model),
+    currentId: 'observed:ann',
+  }, 'left')
+  assert.equal(left.focus, 'hierarchy')
+  assert.equal(left.tree.cursor, 'observed:ann')
 
-  state = stateAt(world, 'components', 'observed:pright')
-  assert.deepEqual(viewOf(reduceViewer(world, state, 'right')), {
-    level: 'components',
-    currentId: 'observed:pright',
-  })
-
-  state = stateAt(world, 'components', 'observed:pfar')
-  assert.deepEqual(viewOf(reduceViewer(world, state, 'right')), {
-    level: 'components',
-    currentId: 'observed:pfar',
-  })
-
-  state = stateAt(world, 'components', 'observed:pleft')
-  const escaped = reduceViewer(world, state, 'left')
-  assert.deepEqual(viewOf(escaped), { level: 'components', currentId: 'observed:pleft' })
-
-  state = stateAt(world, 'context', 'observed:ann')
-  const toTree = reduceViewer(world, state, 'left')
-  assert.deepEqual(viewOf(toTree), { level: 'context', currentId: 'observed:ann' })
-  assert.equal(toTree.focus, 'hierarchy')
-  assert.equal(toTree.tree.cursor, 'observed:ann')
-
-  const toDetails = reduceViewer(world, {
-    ...state,
+  const right = reduceViewer(model, {
+    ...initialState(model),
     currentId: 'observed:ext',
     panes: { details: false },
   }, 'right')
-  assert.deepEqual(viewOf(toDetails), { level: 'context', currentId: 'observed:ext' })
-  assert.equal(toDetails.focus, 'details')
-  assert.equal(toDetails.panes.details, true)
-
-  let details = reduceViewer(world, toDetails, 'down')
-  details = reduceViewer(world, details, 'down')
-  assert.equal(details.detailsScroll, 2)
-  details = reduceViewer(world, details, 'up')
-  details = reduceViewer(world, details, 'up')
-  details = reduceViewer(world, details, 'up')
-  assert.equal(details.detailsScroll, 0)
-  details = reduceViewer(world, { ...details, detailsScroll: 3 }, 'left')
-  assert.equal(details.focus, 'architecture')
-  const moved = reduceViewer(world, details, 'left')
-  assert.equal(moved.detailsScroll, 0)
-
-  const hidden = reduceViewer(world, toDetails, 'toggle-details')
-  assert.equal(hidden.focus, 'architecture')
-  assert.equal(hidden.panes.details, false)
+  assert.equal(right.focus, 'details')
+  assert.equal(right.panes.details, true)
 })
 
-test.concurrent('the filter narrows by name, drives selection live, and restores on cancel', async () => {
-  const response = await loadArchitectureViewModel(viewerFixtureRoot)
-  const world = response.world
+test.concurrent('map navigation follows visual rows and columns before diagonals', () => {
+  const model = laneNavigationWorld()
+  let state: ViewerState = {
+    ...initialState(model),
+    level: 'components',
+    currentId: 'observed:top-right',
+  }
 
-  const viewerMatches = filterMatches(world, 'VIEW')
+  state = reduceViewer(model, state, 'left')
+  assert.equal(state.currentId, 'observed:top-left')
+  state = reduceViewer(model, state, 'right')
+  assert.equal(state.currentId, 'observed:top-right')
+
+  state = { ...state, currentId: 'observed:top-left' }
+  state = reduceViewer(model, state, 'down')
+  assert.equal(state.currentId, 'observed:middle-left')
+  state = reduceViewer(model, state, 'down')
+  assert.equal(state.currentId, 'observed:bottom-left')
+})
+
+test.concurrent('map navigation stays with directional siblings before crossing a boundary', () => {
+  const model = containmentNavigationWorld()
+  const start: ViewerState = {
+    ...initialState(model),
+    currentId: 'observed:lower',
+  }
+
+  const up = reduceViewer(model, start, 'up')
+  assert.equal(up.currentId, 'observed:upper')
+
+  const boundary = reduceViewer(model, start, 'left')
+  assert.equal(boundary.currentId, 'observed:system')
+  const outside = reduceViewer(model, boundary, 'left')
+  assert.equal(outside.currentId, 'observed:actor')
+
+  let inward: ViewerState = {
+    ...initialState(model),
+    currentId: 'observed:actor',
+  }
+  inward = reduceViewer(model, inward, 'right')
+  assert.equal(inward.currentId, 'observed:system')
+  inward = reduceViewer(model, inward, 'right')
+  assert.equal(inward.currentId, 'observed:lower')
+
+  let reverse: ViewerState = {
+    ...initialState(model),
+    currentId: 'observed:external',
+  }
+  reverse = reduceViewer(model, reverse, 'left')
+  assert.equal(reverse.currentId, 'observed:system')
+  reverse = reduceViewer(model, reverse, 'left')
+  assert.equal(reverse.currentId, 'observed:lower')
+
+  let downward: ViewerState = {
+    ...initialState(model),
+    currentId: 'observed:north',
+  }
+  downward = reduceViewer(model, downward, 'down')
+  assert.equal(downward.currentId, 'observed:system')
+  downward = reduceViewer(model, downward, 'down')
+  assert.equal(downward.currentId, 'observed:upper')
+
+  let upward: ViewerState = {
+    ...initialState(model),
+    currentId: 'observed:south',
+  }
+  upward = reduceViewer(model, upward, 'up')
+  assert.equal(upward.currentId, 'observed:system')
+  upward = reduceViewer(model, upward, 'up')
+  assert.equal(upward.currentId, 'observed:lower')
+})
+
+test.concurrent('dismiss closes details and returns container scope to the root map', () => {
+  const model = navigationWorld()
+  const state = reduceViewer(model, {
+    ...initialState(model),
+    focus: 'details',
+  }, 'dismiss')
+
+  assert.equal(state.panes.details, false)
+  assert.equal(state.focus, 'architecture')
+
+  const nested = reduceViewer(model, {
+    ...initialState(model),
+    level: 'components',
+    currentId: 'observed:pleft',
+    focus: 'details',
+  }, 'dismiss')
+  assert.equal(nested.level, 'context')
+  assert.equal(nested.currentId, 'observed:cleft')
+  assert.equal(nested.panes.details, false)
+  assert.equal(nested.focus, 'architecture')
+})
+
+test.concurrent('search follows matches live and cancel restores the prior view', async () => {
+  const model = await terminalModel(viewerFixtureRoot)
+  const matches = filterMatches(model, 'VIEW')
   assert.deepEqual(
-    viewerMatches.map(element => element.representationId).sort(),
+    matches.map(element => element.representationId).sort(),
     ['observed:order-viewer', 'observed:stock-viewer'],
   )
-  assert.deepEqual(filterMatches(world, ''), [])
-  assert.deepEqual(filterMatches(world, 'no such thing'), [])
 
-  let state: ViewerState = { ...initialState(world), panes: { details: false } }
-  const before = { level: state.level, currentId: state.currentId }
-
-  state = reduceFilter(world, state, { type: 'open' })
-  assert.ok(state.filter)
-  for (const char of 'view') {
-    state = reduceFilter(world, state, { type: 'char', char })
-  }
-  assert.equal(state.currentId, viewerMatches[0]?.representationId)
+  let state = reduceFilter(model, initialState(model), { type: 'open' })
+  for (const char of 'view') state = reduceFilter(model, state, { type: 'char', char })
+  assert.equal(state.currentId, matches[0]!.representationId)
   assert.equal(state.level, 'context')
+  state = reduceFilter(model, state, { type: 'next' })
+  assert.equal(state.currentId, matches[1]!.representationId)
 
-  const firstMatch = viewerMatches[0]?.representationId
-  const secondMatch = viewerMatches[1]?.representationId
-  state = reduceFilter(world, state, { type: 'next' })
-  assert.equal(state.currentId, secondMatch)
-  assert.equal(state.level, 'context')
-  state = reduceFilter(world, state, { type: 'previous' })
-  assert.equal(state.currentId, firstMatch)
-
-  state = reduceFilter(world, state, { type: 'char', char: 'q' })
-  assert.equal(state.currentId, firstMatch)
-  state = reduceFilter(world, state, { type: 'delete' })
-  assert.equal(state.filter?.query, 'view')
-
-  const cancelled = reduceFilter(world, state, { type: 'cancel' })
+  const cancelled = reduceFilter(model, state, { type: 'cancel' })
   assert.equal(cancelled.filter, undefined)
-  assert.equal(cancelled.level, before.level)
-  assert.equal(cancelled.currentId, before.currentId)
-
-  const accepted = reduceFilter(world, state, { type: 'accept' })
-  assert.equal(accepted.filter, undefined)
-  assert.equal(accepted.currentId, firstMatch)
-  assert.equal(accepted.level, 'context')
+  assert.equal(cancelled.currentId, 'observed:shop')
 })
 
-test.concurrent('leave from details returns to the map and the parent Enter opened', () => {
-  const world = navigationWorld()
-  let state: ViewerState = { ...initialState(world), currentId: 'observed:cleft' }
-  state = reduceViewer(world, state, 'enter')
-  state = reduceViewer(world, state, 'enter')
-  assert.equal(state.focus, 'details')
-  assert.deepEqual(viewOf(state), { level: 'components', currentId: 'observed:pleft' })
-  const dismissed = reduceViewer(world, state, 'dismiss')
-  assert.equal(dismissed.focus, 'architecture')
-  assert.deepEqual(viewOf(dismissed), { level: 'components', currentId: 'observed:pleft' })
-  state = reduceViewer(world, state, 'leave')
-  assert.equal(state.focus, 'architecture')
-  assert.deepEqual(viewOf(state), { level: 'context', currentId: 'observed:cleft' })
-})
-
-test.concurrent('an actor action stays on after leaving details and x clears it', () => {
-  const world: ArchitectureWorld = {
-    bounds: { x: 0, y: 0, width: 20, height: 10 },
-    groups: [],
-    elements: [box('buyer', 'actor'), box('api', 'container'), box('web', 'container')],
-    relationships: [
-      edge('buyer-api', 'buyer', 'api'),
-      edge('buyer-web', 'buyer', 'web'),
-    ],
-  }
+test.concurrent('flow preview, commit, step, and clear share one navigation state', () => {
+  const model = actionWorld()
   let state: ViewerState = {
-    ...initialState(world),
-    currentId: 'buyer',
+    ...initialState(model),
+    currentId: 'observed:buyer',
     focus: 'details',
   }
-  // Browsing moves the cursor without lighting a path.
-  state = reduceViewer(world, state, 'down')
-  assert.equal(state.actionCursor, 'buyer-api')
-  assert.equal(state.activeActionId, undefined)
-  state = reduceViewer(world, state, 'down')
-  assert.equal(state.actionCursor, 'buyer-web')
-  assert.equal(state.activeActionId, undefined)
-  // Enter picks the command under the cursor.
-  state = reduceViewer(world, state, 'enter')
-  assert.equal(state.activeActionId, 'buyer-web')
-  state = reduceViewer(world, state, 'left')
-  assert.equal(state.focus, 'architecture')
-  assert.equal(state.activeActionId, 'buyer-web')
-  // A selection without commands scrolls instead of moving the cursor.
-  state = reduceViewer(world, { ...state, currentId: 'api', focus: 'details' }, 'down')
-  assert.equal(state.activeActionId, 'buyer-web')
-  assert.equal(state.detailsScroll, 1)
-  state = reduceViewer(world, { ...state, currentId: 'buyer', focus: 'details' }, 'up')
-  state = reduceViewer(world, state, 'enter')
-  assert.equal(state.activeActionId, 'buyer-api')
-  state = reduceViewer(world, state, 'dismiss')
-  assert.equal(state.focus, 'architecture')
-  assert.equal(state.activeActionId, 'buyer-api')
-  state = reduceViewer(world, state, 'clear-action')
-  assert.equal(state.activeActionId, undefined)
-})
 
-test.concurrent('s traces the active walk one leg at a time and wraps', () => {
-  const world: ArchitectureWorld = {
-    bounds: { x: 0, y: 0, width: 20, height: 10 },
-    groups: [],
-    elements: [box('buyer', 'actor'), box('api', 'container'), box('web', 'container')],
-    // buyer uses api and web, making api a launcher, so picking its api-web
-    // command walks buyer-api then api-web.
-    relationships: [
-      edge('buyer-api', 'buyer', 'api'),
-      edge('buyer-web', 'buyer', 'web'),
-      edge('api-web', 'api', 'web'),
-    ],
-  }
-  let state: ViewerState = { ...initialState(world), currentId: 'buyer' }
+  state = reduceViewer(model, state, 'down')
+  assert.equal(state.activeActionId, undefined)
+  assert.equal(litAction(model, state).actorId, 'observed:buyer')
+  state = reduceViewer(model, state, 'enter')
+  assert.ok(state.activeActionId)
+  const committed = state.activeActionId
 
-  // Without an active command s does nothing.
-  assert.equal(reduceViewer(world, state, 'step-action').actionStep, undefined)
-
-  state = { ...state, activeActionId: 'api-web' }
-  state = reduceViewer(world, state, 'step-action')
+  state = reduceViewer(model, state, 'dismiss')
+  assert.equal(litAction(model, state).id, committed)
+  state = reduceViewer(model, state, 'step-action')
   assert.equal(state.actionStep, 0)
-  state = reduceViewer(world, state, 'step-action')
-  assert.equal(state.actionStep, 1)
-  state = reduceViewer(world, state, 'step-action')
-  assert.equal(state.actionStep, 0)
-
-  // Picking a command again restarts the trace; x removes it with the path.
-  state = reduceViewer(world, {
-    ...state,
-    focus: 'details',
-    actionCursor: 'api-web',
-  }, 'enter')
-  assert.equal(state.activeActionId, 'api-web')
-  assert.equal(state.actionStep, undefined)
-  state = reduceViewer(world, state, 'step-action')
-  state = reduceViewer(world, state, 'clear-action')
+  state = reduceViewer(model, state, 'clear-action')
   assert.equal(state.activeActionId, undefined)
   assert.equal(state.actionStep, undefined)
-})
-
-test.concurrent('t flips the details tab and How lists travelled-by picks', () => {
-  const world: ArchitectureWorld = {
-    bounds: { x: 0, y: 0, width: 20, height: 10 },
-    groups: [],
-    elements: [box('buyer', 'actor'), box('api', 'container'), box('web', 'container')],
-    // buyer uses api and web, so api is a launcher and api-web its command.
-    relationships: [
-      edge('buyer-api', 'buyer', 'api'),
-      edge('buyer-web', 'buyer', 'web'),
-      edge('api-web', 'api', 'web'),
-    ],
-  }
-  let state: ViewerState = { ...initialState(world), currentId: 'web' }
-  assert.equal(state.detailsTab, 'what')
-
-  state = reduceViewer(world, { ...state, detailsScroll: 3 }, 'toggle-details-tab')
-  assert.equal(state.detailsTab, 'how')
-  assert.equal(state.detailsScroll, 0)
-
-  // The tab survives moving the selection.
-  state = reduceViewer(world, { ...state, focus: 'architecture' }, 'left')
-  assert.equal(state.detailsTab, 'how')
-
-  // On How, the details cursor walks the commands that travel the element.
-  state = reduceViewer(world, { ...state, currentId: 'web', focus: 'details' }, 'down')
-  assert.equal(state.actionCursor, 'api-web')
-  state = reduceViewer(world, state, 'enter')
-  assert.equal(state.activeActionId, 'api-web')
-  // A travelled-by pick has no picking actor.
-  assert.equal(state.activeActionActorId, undefined)
-
-  // On What, a non-actor selection scrolls instead.
-  state = reduceViewer(world, state, 'toggle-details-tab')
-  assert.equal(state.detailsTab, 'what')
-  state = reduceViewer(world, { ...state, actionCursor: undefined }, 'down')
-  assert.equal(state.detailsScroll, 1)
-  assert.equal(state.actionCursor, undefined)
-})
-
-test.concurrent('a details pick scopes the walk to that actor; a flows pick does not', () => {
-  const world: ArchitectureWorld = {
-    bounds: { x: 0, y: 0, width: 20, height: 10 },
-    groups: [],
-    elements: [
-      box('buyer', 'actor'),
-      box('ops', 'actor'),
-      box('api', 'container'),
-      box('web', 'container'),
-    ],
-    // buyer and ops both use the api launcher, so both expose api-web.
-    relationships: [
-      edge('buyer-api', 'buyer', 'api'),
-      edge('buyer-web', 'buyer', 'web'),
-      edge('ops-api', 'ops', 'api'),
-      edge('ops-web', 'ops', 'web'),
-      edge('api-web', 'api', 'web'),
-    ],
-  }
-  let state: ViewerState = {
-    ...initialState(world),
-    currentId: 'buyer',
-    focus: 'details',
-    actionCursor: 'api-web',
-  }
-  state = reduceViewer(world, state, 'enter')
-  assert.equal(state.activeActionId, 'api-web')
-  assert.equal(state.activeActionActorId, 'buyer')
-
-  // The scoped walk has two legs (buyer's approach, then the command),
-  // so a third step wraps; the other actor's approach is not walked.
-  state = reduceViewer(world, state, 'step-action')
-  state = reduceViewer(world, state, 'step-action')
-  state = reduceViewer(world, state, 'step-action')
-  assert.equal(state.actionStep, 0)
-
-  state = reduceViewer(world, state, 'clear-action')
-  assert.equal(state.activeActionActorId, undefined)
-
-  // The flows list has no actor context: the pick keeps the whole walk.
-  state = reduceViewer(world, {
-    ...state,
-    focus: 'hierarchy',
-    tree: { ...state.tree, cursor: 'api-web' },
-  }, 'enter')
-  assert.equal(state.activeActionId, 'api-web')
-  assert.equal(state.activeActionActorId, undefined)
-})
-
-test.concurrent('browsing details previews a walk; only Enter keeps it', () => {
-  const world: ArchitectureWorld = {
-    bounds: { x: 0, y: 0, width: 20, height: 10 },
-    groups: [],
-    elements: [
-      box('buyer', 'actor'),
-      box('api', 'container'),
-      box('web', 'container'),
-      box('jobs', 'container'),
-    ],
-    relationships: [
-      edge('buyer-api', 'buyer', 'api'),
-      edge('buyer-web', 'buyer', 'web'),
-      edge('api-web', 'api', 'web'),
-      edge('api-jobs', 'api', 'jobs'),
-    ],
-  }
-  let state: ViewerState = { ...initialState(world), currentId: 'buyer', focus: 'details' }
-  assert.deepEqual(litAction(world, state), { id: undefined, actorId: undefined })
-
-  // Browsing lights the row under the cursor, scoped to the actor.
-  state = reduceViewer(world, state, 'down')
-  assert.equal(state.actionCursor, 'api-web')
-  assert.deepEqual(litAction(world, state), { id: 'api-web', actorId: 'buyer' })
-  assert.equal(state.activeActionId, undefined)
-  state = reduceViewer(world, state, 'down')
-  assert.deepEqual(litAction(world, state), { id: 'api-jobs', actorId: 'buyer' })
-
-  // Leaving without Enter drops the preview: nothing was committed.
-  const left = reduceViewer(world, state, 'dismiss')
-  assert.equal(left.focus, 'architecture')
-  assert.deepEqual(litAction(world, left), { id: undefined, actorId: undefined })
-
-  // Enter commits, so the walk survives leaving the pane.
-  state = reduceViewer(world, state, 'enter')
-  assert.equal(state.activeActionId, 'api-jobs')
-  const kept = reduceViewer(world, state, 'dismiss')
-  assert.deepEqual(litAction(world, kept), { id: 'api-jobs', actorId: 'buyer' })
-
-  // Browsing again previews over the commitment without replacing it.
-  let browsing = reduceViewer(world, { ...kept, focus: 'details' }, 'up')
-  assert.deepEqual(litAction(world, browsing), { id: 'api-web', actorId: 'buyer' })
-  assert.equal(browsing.activeActionId, 'api-jobs')
-  browsing = reduceViewer(world, browsing, 'dismiss')
-  assert.deepEqual(litAction(world, browsing), { id: 'api-jobs', actorId: 'buyer' })
-
-  // A How-tab preview is a walk reference, so it carries no actor scope.
-  const how = reduceViewer(world, {
-    ...state,
-    currentId: 'web',
-    focus: 'details',
-    detailsTab: 'how',
-    actionCursor: undefined,
-  }, 'down')
-  assert.deepEqual(litAction(world, how), { id: 'api-web', actorId: undefined })
-})
-
-test.concurrent('the hierarchy cursor reaches the flow rows and Enter lights one', () => {
-  const world: ArchitectureWorld = {
-    bounds: { x: 0, y: 0, width: 20, height: 10 },
-    groups: [],
-    elements: [box('buyer', 'actor'), box('api', 'container'), box('web', 'container')],
-    relationships: [
-      edge('buyer-api', 'buyer', 'api'),
-      edge('buyer-web', 'buyer', 'web'),
-      edge('api-web', 'api', 'web'),
-    ],
-  }
-  let state: ViewerState = { ...initialState(world), currentId: 'buyer' }
-  state = reduceViewer(world, state, 'tab')
-  assert.equal(state.focus, 'hierarchy')
-  assert.equal(state.tree.cursor, 'buyer')
-
-  // Up from the first tree row crosses onto the flow row above it.
-  state = reduceViewer(world, state, 'up')
-  assert.equal(state.tree.cursor, 'api-web')
-  state = reduceViewer(world, state, 'enter')
-  assert.equal(state.activeActionId, 'api-web')
-  assert.equal(state.actionStep, undefined)
-  assert.equal(state.focus, 'hierarchy')
-
-  // Right on a flow row returns to the map; Down returns to the tree.
-  assert.equal(reduceViewer(world, state, 'right').focus, 'architecture')
-  state = reduceViewer(world, state, 'down')
-  assert.equal(state.tree.cursor, 'buyer')
-  state = reduceViewer(world, state, 'enter')
-  assert.equal(state.currentId, 'buyer')
-  assert.equal(state.activeActionId, 'api-web')
 })

@@ -23,16 +23,16 @@ function footerHint(
   if (picking) {
     return actionTitle === undefined
       ? '↑↓ action   enter pick   t tab   esc map'
-      : '↑↓ action   enter pick   x clear   esc map'
+      : `${actionTitle}   ↑↓ action   enter pick   x clear   esc map`
   }
   if (actionTitle !== undefined) {
     if (focus === 'architecture') {
-      return `${actionTitle}   s step   x clear   enter open`
+      return `${actionTitle}   s next   x clear   enter open`
     }
     if (focus === 'hierarchy') {
-      return `${actionTitle}   s step   x clear   enter select`
+      return `${actionTitle}   s next   x clear   enter select`
     }
-    return `${actionTitle}   s step   x clear   esc map`
+    return `${actionTitle}   s next   x clear   esc map`
   }
   return paneHints[focus]
 }

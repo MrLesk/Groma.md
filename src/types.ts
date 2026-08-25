@@ -1,14 +1,6 @@
 export type C4Kind = 'actor' | 'system' | 'container' | 'component'
 export type Origin = 'observed' | 'planned' | 'missing'
-export type SemanticLevel = 'context' | 'containers' | 'components'
 export type TerminalLevel = 'context' | 'components'
-/** How an item sits on the campus at one C4 level. Underlay is not a ghost. */
-export type SemanticRole = 'named' | 'underlay' | 'mark' | 'campus'
-export type DisplayRole =
-  | 'card'
-  | 'hidden'
-  | 'system-boundary'
-  | 'container-boundary'
 
 export interface Point {
   x: number
@@ -207,105 +199,7 @@ export interface ArchitectureWorld {
   relationships: WorldRelationship[]
 }
 
-/** An item on the campus at one C4 level. */
-export interface SemanticItem {
-  representationId: string
-  id: string
-  kind: C4Kind
-  name: string
-  role: SemanticRole
-  /** World-layout wrapper, or a mark's world origin plus named-level drawn size. */
-  bounds: Bounds
-}
-
-/** One authored relationship, attached to the visible items at this level. */
-export interface SemanticEdge {
-  id: string
-  source: string
-  target: string
-  description: string
-}
-
-/** A route between the visible semantic endpoints of one authored edge. */
-export interface SemanticRoute extends SemanticEdge {
-  /** Projection-independent world points, attached to source and target bounds. */
-  route: Point[]
-  /** World-space label bounds, or null when the relationship has no label. */
-  label: Bounds | null
-}
-
-/** A semantic item that a renderer may offer as a selection target. */
-export type SemanticSelectionTarget = Pick<
-  SemanticItem,
-  'representationId' | 'id' | 'role' | 'bounds'
->
-
-/** The C4 level and entered boundary represented by one semantic city. */
-export interface SemanticFocusScope {
-  level: SemanticLevel
-  focusId: string | null
-}
-
-export interface SemanticView {
-  level: SemanticLevel
-  focusId: string | null
-  focusScope: SemanticFocusScope
-  items: SemanticItem[]
-  edges: SemanticEdge[]
-  routes: SemanticRoute[]
-  selectionTargets: SemanticSelectionTarget[]
-}
-
-export interface SemanticViewOptions {
-  level: SemanticLevel
-  /** The entered system at Containers, or the entered container at Components. */
-  focusId?: string
-}
-
 export interface ArchitectureViewModel extends AnnotatedArchitectureModel {
   world: ArchitectureWorld
   work?: WorkMarker[]
-}
-
-export interface ProjectedElement extends WorldElement {
-  display: DisplayRole
-  cellBounds: Bounds
-}
-
-export interface ProjectedGroup extends WorldGroup {
-  cellBounds: Bounds
-}
-
-export interface ProjectedRelationship extends WorldRelationship {
-  cellRoute: Point[]
-  cellLabel: Pick<Bounds, 'x' | 'y' | 'width'> | null
-  displaySource: string
-  displayTarget: string
-}
-
-export interface MapCamera {
-  zoom: number
-  centerX: number
-  centerY: number
-}
-
-export interface WorldProjection {
-  level: TerminalLevel
-  currentId: string | null
-  camera: MapCamera
-  viewport: Bounds
-  elements: ProjectedElement[]
-  groups: ProjectedGroup[]
-  relationships: ProjectedRelationship[]
-}
-
-export interface ProjectionOptions {
-  /** The map pane interior; the camera projects the world into these cells. */
-  viewport: Bounds
-  level?: TerminalLevel
-  currentId?: string
-  camera?: MapCamera
-  lockCamera?: boolean
-  /** Relationships on the lit walk; they draw at every level. */
-  litIds?: Set<string>
 }

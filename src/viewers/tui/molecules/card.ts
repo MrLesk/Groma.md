@@ -4,75 +4,59 @@ import type { OptimizedBuffer } from '@opentui/core'
 import { drawBorder } from '../atoms/border.ts'
 import { kindGlyph } from '../atoms/kind.ts'
 import { text } from '../atoms/text.ts'
-import type { ViewerTheme } from '../atoms/theme.ts'
-import { letterName } from '../projection-display.ts'
-import { drawHatch, drawSurfacePattern } from './hatch.ts'
+import { surfaceTint, type ViewerTheme } from '../atoms/theme.ts'
+import { drawHatch } from './hatch.ts'
 import { drawSpine } from './spine.ts'
-import type { ProjectedElement, WorldProjection } from '../../../types.ts'
+import type { ProjectedMapItem, TerminalProjection } from '../projection.ts'
 
 export function drawCard(
   buffer: OptimizedBuffer,
-  element: ProjectedElement,
-  projection: WorldProjection,
+  item: ProjectedMapItem,
+  projection: TerminalProjection,
   theme: ViewerTheme,
   dimmed = false,
-  lit = false,
+  accented = false,
 ): void {
-  const bounds = element.cellBounds
-  const color = lit ? theme.selected : theme[element.kind]
-  const dim = !lit && (dimmed || element.external)
-  const background = element.origin === 'observed'
-    ? theme.observedTint
-    : theme.background
-  if (element.origin === 'observed' && bounds.width > 2 && bounds.height > 2) {
-    const fill = element.representationId === projection.currentId
-      ? theme.selectedTint
-      : theme.observedTint
-    buffer.fillRect(bounds.x + 1, bounds.y + 1, bounds.width - 2, bounds.height - 2, fill)
-    drawSurfacePattern(
-      buffer,
-      bounds,
-      element.kind,
-      element.external,
-      theme.missing,
-      fill,
-    )
+  const bounds = item.cellBounds
+  const selected = item.representationId === projection.currentId
+  const color = accented || selected ? theme.selected : theme[item.kind === 'group' ? 'component' : item.kind]
+  const background = selected
+    ? theme.selectedTint
+    : surfaceTint(theme, item.kind, item.external)
+  if (item.origin === 'observed' && bounds.width > 2 && bounds.height > 2) {
+    buffer.fillRect(bounds.x + 1, bounds.y + 1, bounds.width - 2, bounds.height - 2, background)
   }
-
   drawBorder(
     buffer,
     bounds,
-    element.origin,
+    item.origin,
     color,
     background,
-    element.kind === 'actor' ? 'actor' : 'card',
-    lit ? TextAttributes.BOLD : dim ? TextAttributes.DIM : 0,
+    item.kind === 'actor' || item.external ? 'actor' : 'card',
+    accented || selected ? TextAttributes.BOLD : dimmed || item.external ? TextAttributes.DIM : 0,
   )
+  if (item.origin === 'missing') drawHatch(buffer, bounds, theme.missing, background)
+  if (bounds.width < 7 || bounds.height < 3) return
 
-  if (element.origin === 'missing' && bounds.width > 4 && bounds.height > 2) {
-    drawHatch(buffer, bounds, theme.missing, background)
-  }
-  if (
-    !letterName(element, projection.level)
-    || bounds.height < 3
-    || bounds.width < 8
-  ) return
-
-  const spineColor = element.representationId === projection.currentId
-    ? theme.selected
-    : theme[element.origin]
-  drawSpine(buffer, bounds, spineColor, background)
-
-  const textX = bounds.x + 3
-  const textWidth = Math.max(0, bounds.width - 5)
-  text(
+  drawSpine(
     buffer,
-    `${kindGlyph(element.kind)} ${element.name}`,
-    textX,
-    bounds.y + 1,
-    textWidth,
-    color,
+    bounds,
+    selected ? theme.selected : theme[item.origin],
     background,
-    dim ? TextAttributes.DIM : TextAttributes.BOLD,
   )
+  const lines = item.lines.length === 0 ? [item.name] : item.lines
+  const available = Math.max(0, bounds.width - 5)
+  const firstY = bounds.y + Math.max(1, Math.floor((bounds.height - lines.length) / 2))
+  for (const [index, line] of lines.slice(0, Math.max(1, bounds.height - 2)).entries()) {
+    text(
+      buffer,
+      index === 0 ? `${kindGlyph(item.kind as 'actor' | 'system' | 'container' | 'component')} ${line}` : `  ${line}`,
+      bounds.x + 3,
+      firstY + index,
+      available,
+      color,
+      background,
+      dimmed || item.external ? TextAttributes.DIM : TextAttributes.BOLD,
+    )
+  }
 }

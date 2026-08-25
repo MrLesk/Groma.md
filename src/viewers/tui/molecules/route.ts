@@ -4,8 +4,9 @@ import type { OptimizedBuffer, RGBA } from '@opentui/core'
 import { cell } from '../atoms/cell.ts'
 import { text } from '../atoms/text.ts'
 import type { ViewerTheme } from '../atoms/theme.ts'
-import { visible } from '../atoms/visible.ts'
-import type { Point, ProjectedRelationship, WorldProjection } from '../../../types.ts'
+import { visibleIn } from '../projection-camera.ts'
+import type { ProjectedMapRoute, TerminalProjection } from '../projection.ts'
+import type { Point } from '../../../types.ts'
 
 function drawLine(
   buffer: OptimizedBuffer,
@@ -14,152 +15,129 @@ function drawLine(
   color: RGBA,
   background: RGBA,
   attributes: number,
-  characters: { horizontal: string; vertical: string },
+  horizontal: string,
+  vertical: string,
+  routeDistance: number,
+  animationPhase?: number,
 ): void {
-  if (from.x === to.x) {
-    const start = Math.min(from.y, to.y)
-    const end = Math.max(from.y, to.y)
-    for (let y = start; y <= end; y += 1) {
-      cell(buffer, from.x, y, characters.vertical, color, background, attributes)
-    }
-    return
-  }
-
-  const start = Math.min(from.x, to.x)
-  const end = Math.max(from.x, to.x)
-  for (let x = start; x <= end; x += 1) {
-    cell(buffer, x, from.y, characters.horizontal, color, background, attributes)
+  const length = Math.abs(to.x - from.x) + Math.abs(to.y - from.y)
+  const stepX = Math.sign(to.x - from.x)
+  const stepY = Math.sign(to.y - from.y)
+  for (let distance = 0; distance <= length; distance += 1) {
+    const pattern = (routeDistance + distance - (animationPhase ?? 0) + 3) % 3
+    if (animationPhase !== undefined && pattern >= 2) continue
+    cell(
+      buffer,
+      from.x + stepX * distance,
+      from.y + stepY * distance,
+      from.x === to.x ? vertical : horizontal,
+      color,
+      background,
+      attributes,
+    )
   }
 }
 
-function cornerFor(previous: Point, point: Point, next: Point): string {
+function corner(previous: Point, point: Point, next: Point): string {
   const horizontal = previous.x === point.x ? next : previous
   const vertical = previous.x === point.x ? previous : next
   const left = horizontal.x < point.x
   const up = vertical.y < point.y
-  if (left && up) return '┘'
-  if (left) return '┐'
-  if (up) return '└'
-  return '┌'
+  if (left && up) return '╯'
+  if (left) return '╮'
+  if (up) return '╰'
+  return '╭'
 }
 
-function arrowFor(from: Point, to: Point): string {
+function arrow(from: Point, to: Point): string {
   if (to.x > from.x) return '▶'
   if (to.x < from.x) return '◀'
   if (to.y > from.y) return '▼'
   return '▲'
 }
 
-const heavyCorners: Record<string, string> = { '┘': '┛', '┐': '┓', '└': '┗', '┌': '┏' }
+function routeColor(route: ProjectedMapRoute, theme: ViewerTheme, active: boolean): RGBA {
+  if (active) return theme.selected
+  return route.origin === 'planned' ? theme.planned : theme.missing
+}
 
 export function drawRoute(
   buffer: OptimizedBuffer,
-  relationship: ProjectedRelationship,
+  route: ProjectedMapRoute,
+  projection: TerminalProjection,
   theme: ViewerTheme,
-  dimmed = false,
-  lit = false,
+  active = false,
   traced = false,
+  animationPhase?: number,
 ): void {
-  const color = lit
-    ? theme.selected
-    : relationship.origin === 'observed'
-      ? theme.foreground
-      : theme[relationship.origin]
-  const attributes = lit ? TextAttributes.BOLD : dimmed ? TextAttributes.DIM : 0
-  // The traced leg draws heavy so it stands out from the rest of the walk.
-  const characters = traced
-    ? { horizontal: '━', vertical: '┃' }
-    : relationship.origin === 'observed'
-      ? { horizontal: '─', vertical: '│' }
-      : { horizontal: '╌', vertical: '┆' }
-
-  for (let index = 1; index < relationship.cellRoute.length; index += 1) {
+  if (route.cellRoute.length < 2) return
+  const color = routeColor(route, theme, active)
+  const attributes = active ? TextAttributes.BOLD : TextAttributes.DIM
+  const horizontal = traced ? '━' : route.origin === 'observed' ? '─' : '╌'
+  const vertical = traced ? '┃' : route.origin === 'observed' ? '│' : '┆'
+  let routeDistance = 0
+  for (let index = 1; index < route.cellRoute.length; index += 1) {
+    const from = route.cellRoute[index - 1]!
+    const to = route.cellRoute[index]!
     drawLine(
       buffer,
-      relationship.cellRoute[index - 1],
-      relationship.cellRoute[index],
+      from,
+      to,
       color,
       theme.background,
       attributes,
-      characters,
+      horizontal,
+      vertical,
+      routeDistance,
+      active ? animationPhase : undefined,
     )
+    routeDistance += Math.abs(to.x - from.x) + Math.abs(to.y - from.y)
   }
-  for (let index = 1; index < relationship.cellRoute.length - 1; index += 1) {
-    const previous = relationship.cellRoute[index - 1]
-    const point = relationship.cellRoute[index]
-    const next = relationship.cellRoute[index + 1]
+  for (let index = 1; index < route.cellRoute.length - 1; index += 1) {
+    const previous = route.cellRoute[index - 1]!
+    const point = route.cellRoute[index]!
+    const next = route.cellRoute[index + 1]!
     if ((previous.x === point.x) !== (next.x === point.x)) {
-      const corner = cornerFor(previous, point, next)
-      cell(
-        buffer,
-        point.x,
-        point.y,
-        traced ? heavyCorners[corner] ?? corner : corner,
-        color,
-        theme.background,
-        attributes,
-      )
+      cell(buffer, point.x, point.y, corner(previous, point, next), color, theme.background, attributes)
     }
   }
-}
-
-export function drawRouteArrow(
-  buffer: OptimizedBuffer,
-  relationship: ProjectedRelationship,
-  projection: WorldProjection,
-  theme: ViewerTheme,
-  lit = false,
-): void {
-  const route = relationship.cellRoute
-  const target = route.at(-1)
-  if (!target) return
-  let previousIndex = route.length - 2
-  while (previousIndex >= 0
-    && route[previousIndex]!.x === target.x
-    && route[previousIndex]!.y === target.y) {
-    previousIndex -= 1
+  const first = route.cellRoute[0]!
+  const last = route.cellRoute.at(-1)!
+  const before = route.cellRoute.at(-2)!
+  if (visibleIn({ ...first, width: 1, height: 1 }, projection.viewport)) {
+    cell(buffer, first.x, first.y, '●', color, theme.background, TextAttributes.BOLD)
   }
-  if (previousIndex >= 0 && visible({ ...target, width: 1, height: 1 }, projection.viewport)) {
-    cell(
-      buffer,
-      target.x,
-      target.y,
-      arrowFor(route[previousIndex]!, target),
-      lit
-        ? theme.selected
-        : relationship.origin === 'observed'
-          ? theme.foreground
-          : theme[relationship.origin],
-      theme.background,
-      TextAttributes.BOLD,
-    )
+  if (visibleIn({ ...last, width: 1, height: 1 }, projection.viewport)) {
+    cell(buffer, last.x, last.y, arrow(before, last), color, theme.background, TextAttributes.BOLD)
   }
 }
 
 export function drawRouteLabel(
   buffer: OptimizedBuffer,
-  relationship: ProjectedRelationship,
-  projection: WorldProjection,
+  route: ProjectedMapRoute,
+  projection: TerminalProjection,
   theme: ViewerTheme,
-  lit = false,
+  active: boolean,
 ): void {
-  if (!lit || !relationship.cellLabel) return
-  const fullLabel = projection.level === 'components'
-    ? relationship.description.split(' ').slice(0, 2).join(' ')
-    : relationship.description.split(' ', 1)[0]
-  const maxWidth = Math.min(34, relationship.cellLabel.width + 2)
-  const labelWidth = Math.max(1, maxWidth - 2)
-  const label = fullLabel.length > labelWidth
-    ? `${fullLabel.slice(0, Math.max(0, labelWidth - 1))}…`
-    : fullLabel
+  if (!active || route.cellRoute.length < 2) return
+  const longest = route.cellRoute.slice(1).map((to, index) => ({
+    from: route.cellRoute[index]!,
+    to,
+    width: route.cellRoute[index]!.y === to.y ? Math.abs(to.x - route.cellRoute[index]!.x) : 0,
+  })).sort((left, right) => right.width - left.width)[0]
+  if (!longest || longest.width < 5) return
+  const label = route.description.split(' ', projection.level === 'components' ? 2 : 1).join(' ')
+  const width = Math.min(label.length + 2, longest.width - 1)
+  if (width < 3) return
+  const x = Math.round((longest.from.x + longest.to.x - width) / 2)
   text(
     buffer,
-    ` ${label} `,
-    relationship.cellLabel.x - 1,
-    relationship.cellLabel.y,
-    maxWidth,
-    lit ? theme.selected : theme.foreground,
+    ` ${label.slice(0, width - 2)} `,
+    x,
+    longest.from.y,
+    width,
+    theme.selected,
     theme.background,
-    lit ? TextAttributes.BOLD : TextAttributes.DIM,
+    TextAttributes.BOLD,
   )
 }
