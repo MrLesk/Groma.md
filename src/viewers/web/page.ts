@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url'
 import type { C4Kind } from '../../types.ts'
 import { kindGlyph, kindLabel } from './atoms/kind.ts'
 import { cssBlock, palettes } from './atoms/theme.ts'
+import { fpsCss } from './chrome/fps.ts'
 import { flowRowCss } from './flow/row.ts'
 import { mapCss } from './iso/style.ts'
 import { tipCss } from './organisms/tip.ts'
@@ -273,7 +274,7 @@ const style = `
   @media (prefers-reduced-motion: reduce) {
     body, #hierarchy-content, #hierarchy-title .pane-label, #details, body #work { transition: none; }
   }
-${backlogMarkCss}${workBadgeCss}${flowRowCss}${mapCss}${pinsCss}${workCss}${tipCss}${projectEditorCss}`
+${backlogMarkCss}${workBadgeCss}${flowRowCss}${mapCss}${pinsCss}${workCss}${tipCss}${projectEditorCss}${fpsCss}`
 
 function legend(): string {
   return legendKinds.map(line => {
@@ -289,7 +290,7 @@ export function renderPage(payload: WebPayload): string {
   return '<!doctype html><html><head><meta charset="utf-8"><title>groma.md</title>'
     + `<style>${style}</style></head><body>`
     + `<header id="header">${lockup}<span id="stats"></span>`
-    + `<div class="header-actions"><div id="map-controls" class="controls" aria-label="Map controls"><button id="fit" aria-label="Fit map">${fitIcon}<span>Fit</span></button><button id="zoom-out" aria-label="Zoom out">−</button><span id="zoom" aria-live="polite"></span><button id="zoom-in" aria-label="Zoom in">+</button></div><details id="help"><summary>Help</summary><div class="help-panel"><p>Drag or scroll to pan<br>Pinch, + or − to zoom<br>0 or Fit shows the whole map<br>F1 toggles map only<br>Escape clears selection</p></div></details><button id="theme"><span class="moon">${moonIcon}</span><span class="sun">${sunIcon}</span><span class="label">Dark</span></button></div>`
+    + `<div class="header-actions"><div id="map-controls" class="controls" aria-label="Map controls"><button id="fit" aria-label="Fit map">${fitIcon}<span>Fit</span></button><button id="zoom-out" aria-label="Zoom out">−</button><span id="zoom" aria-live="polite"></span><button id="zoom-in" aria-label="Zoom in">+</button></div><details id="help"><summary>Help</summary><div class="help-panel"><p>Drag or scroll to pan<br>Pinch, + or − to zoom<br>0 or Fit shows the whole map<br>F1 toggles map only<br>F3 toggles FPS<br>Escape clears selection</p></div></details><button id="theme"><span class="moon">${moonIcon}</span><span class="sun">${sunIcon}</span><span class="label">Dark</span></button></div>`
     + '</header>'
     + `<nav id="hierarchy" aria-label="Hierarchy"><div id="hierarchy-title"><span class="pane-label">Hierarchy</span><button id="hierarchy-toggle" type="button" aria-controls="hierarchy-content">${collapseIcon}${expandIcon}</button></div><div id="hierarchy-content"><div id="flows"></div><div id="tree"></div><div id="legend">${legend()}</div></div></nav>`
     + '<div id="map"></div>'

@@ -6,6 +6,7 @@ import { elementOnPath, flowRouteIds, worldCommands } from '../action-path.ts'
 import type { FlowRef } from '../action-path.ts'
 import { initialTree, semanticTreeRows, toggleExpansion } from '../tui/tree.ts'
 import type { TreeRow } from '../tui/tree.ts'
+import { createFpsCounter } from './chrome/fps.ts'
 import { createWebShell, mapFrame } from './chrome/shell.ts'
 import type { MapFrame } from './chrome/shell.ts'
 import { paintFlows } from './flow/list.ts'
@@ -78,6 +79,7 @@ const projectEditor = createProjectEditor(async profile => {
   if (!response.ok) throw new Error(await response.text())
 })
 const shell = createWebShell(document.body, hierarchyContent, hierarchyToggle, detailsHost, map.svg)
+const fps = createFpsCounter(document.body)
 const tip = createTip(host)
 const pins = createPins(host, id => map.anchorOf(id), id => toggleTask(id), tip)
 const island = createWorkIsland(host, id => toggleTask(id), pins.show, tip)
@@ -376,6 +378,11 @@ function keyTarget(target: EventTarget | null): KeyTarget {
 
 document.addEventListener('keydown', event => {
   if (event.metaKey || event.ctrlKey || event.altKey) return
+  if (event.key === 'F3') {
+    event.preventDefault()
+    fps.toggle()
+    return
+  }
   if (event.key === 'F1') {
     event.preventDefault()
     toggleHud()
