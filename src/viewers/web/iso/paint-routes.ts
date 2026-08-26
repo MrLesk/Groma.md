@@ -4,16 +4,19 @@ import { pointsAttribute, svg } from './svg.ts'
 
 export interface RouteNode {
   group: SVGGElement
-  /** The arrowhead's triangle; the map scales it by the zoom weight over the camera scale, so it follows the stroke ladder in screen pixels. */
-  head: SVGPathElement
   source: string
   target: string
 }
 
-/** One group per route, carrying its relationship id: the line, its arrowhead lying on the sheet, a wide transparent hit line and the description as a tooltip. */
+/** Batches neutral strokes by origin, then keeps one interactive overlay, arrow, hit line and tooltip per route. */
 export function paintRoutes(layer: SVGGElement, scene: ProjectedScene): Map<string, RouteNode> {
   const nodes = new Map<string, RouteNode>()
+  const basePathsByOrigin = new Map<string, string[]>()
+  const interactiveRoutes: SVGGElement[] = []
   for (const { route, points, arrow } of scene.routes) {
+    const originPaths = basePathsByOrigin.get(route.origin) ?? []
+    originPaths.push(`M${pointsAttribute(points)}`)
+    basePathsByOrigin.set(route.origin, originPaths)
     const ghost = route.origin === 'observed' ? '' : ` ghost ${route.origin}`
     const group = svg('g', { 'data-id': route.id }, `route${ghost}`)
     const title = svg('title')
@@ -27,8 +30,13 @@ export function paintRoutes(layer: SVGGElement, scene: ProjectedScene): Map<stri
       svg('polyline', { points: pointsAttribute(points) }, 'hit'),
       title,
     )
-    nodes.set(route.id, { group, head, source: route.source, target: route.target })
-    layer.append(group)
+    nodes.set(route.id, { group, source: route.source, target: route.target })
+    interactiveRoutes.push(group)
   }
+  for (const [origin, lines] of basePathsByOrigin) {
+    const ghost = origin === 'observed' ? '' : ` ghost ${origin}`
+    layer.append(svg('path', { d: lines.join('') }, `route route-base${ghost}`))
+  }
+  layer.append(...interactiveRoutes)
   return nodes
 }

@@ -5,14 +5,14 @@ import { paintIslands, paintSheet, paintSlabs } from './paint-ground.ts'
 import { paintRoutes, type RouteNode } from './paint-routes.ts'
 import type { ProjectedScene } from './project.ts'
 import type { Point } from '../../../types.ts'
-import { namesVisible, weightAt } from './scale.ts'
+import { GRID_ROW_PITCH, facadeDetailsVisible, minorGridVisible, namesVisible, weightAt } from './scale.ts'
 import { mapDefs } from './style.ts'
 import { svg } from './svg.ts'
 
 /** A grid tile is four cells square: minor lines every cell, one major line each way. */
 const TILE_CELLS = 4
 const TILE_WIDTH = TILE_CELLS * 48
-const TILE_HEIGHT = TILE_CELLS * 24
+const TILE_HEIGHT = TILE_CELLS * GRID_ROW_PITCH
 
 /**
  * The endless grid: one tile repeated over the whole pane, moved and scaled
@@ -27,7 +27,7 @@ function gridPattern(): { pattern: SVGPatternElement; lines: SVGPathElement[] } 
   const minor: string[] = []
   const major: string[] = []
   for (let index = -TILE_CELLS; index <= 2 * TILE_CELLS; index += 1) {
-    const y = index * 24
+    const y = index * GRID_ROW_PITCH
     const lines = index % TILE_CELLS === 0 ? major : minor
     lines.push(`M0 ${y}L${TILE_WIDTH} ${y + TILE_HEIGHT}`, `M0 ${y}L${TILE_WIDTH} ${y - TILE_HEIGHT}`)
   }
@@ -40,8 +40,8 @@ function gridPattern(): { pattern: SVGPatternElement; lines: SVGPathElement[] } 
 
 export interface IsoMap {
   svg: SVGSVGElement
-  /** Applies the camera to the map; the grid stays aligned under it, strokes and arrowheads take the zoom's weight, building names show when readable. */
-  move(camera: Camera, zoomRatio: number): void
+  /** Applies the camera and reports whether its scale-dependent presentation changed. */
+  move(camera: Camera, zoomRatio: number): boolean
   /** Rebuilds every layer after an architecture or project-profile change. */
   paint(scene: ProjectedScene): void
   /** Unions the existing selected-element and selected-route treatments across an ordered selection. */
@@ -93,6 +93,8 @@ export function createMap(host: HTMLElement): IsoMap {
   let items = new Map<string, Element>()
   let painted: ProjectedScene | undefined
   let routes = new Map<string, RouteNode>()
+  let appliedK: number | undefined
+  let appliedZoomRatio: number | undefined
   /** The slab or system island each building and slab stands on, by id. */
   let surfaces = new Map<string, string>()
 
@@ -100,12 +102,19 @@ export function createMap(host: HTMLElement): IsoMap {
     svg: root,
     move(current, zoomRatio) {
       camera.style.transform = cameraTransform(current)
+      grid.pattern.setAttribute('patternTransform', `translate(${current.x} ${current.y}) scale(${current.k})`)
+      const scaleChanged = current.k !== appliedK || zoomRatio !== appliedZoomRatio
+      if (!scaleChanged) return false
       const weight = weightAt(zoomRatio)
       camera.style.setProperty('--weight', String(weight))
-      camera.style.setProperty('--name-opacity', namesVisible(current.k) ? '1' : '0')
-      grid.pattern.setAttribute('patternTransform', `translate(${current.x} ${current.y}) scale(${current.k})`)
+      camera.style.setProperty('--arrow-scale', String(weight / current.k))
+      camera.toggleAttribute('data-names-hidden', !namesVisible(current.k))
+      camera.toggleAttribute('data-facades-hidden', !facadeDetailsVisible(current.k))
+      root.toggleAttribute('data-minor-grid-hidden', !minorGridVisible(current.k))
       for (const line of grid.lines) line.style.strokeWidth = String(1 / current.k)
-      for (const route of routes.values()) route.head.setAttribute('transform', `scale(${weight / current.k})`)
+      appliedK = current.k
+      appliedZoomRatio = zoomRatio
+      return true
     },
     paint(scene) {
       painted = scene

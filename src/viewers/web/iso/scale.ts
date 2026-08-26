@@ -21,6 +21,12 @@ const ISLAND_TINT = 0.04
 export const SIDE = { right: 1, left: 1.5 } as const
 /** Building names show once the roof font is this many screen pixels. */
 const MIN_NAME_PX = 6
+/** The smallest facade mark must reach one screen pixel before its pattern is useful. */
+export const FACADE_MARK = 1.1
+/** Minor grid rows stay at least this far apart; major rows remain visible below it. */
+const MIN_GRID_PITCH_PX = 3
+/** World-pixel distance between minor rows in the isometric grid. */
+export const GRID_ROW_PITCH = 24
 
 export function depthOf(level: Level): number {
   return LEVELS.indexOf(level)
@@ -48,4 +54,12 @@ export function weightAt(zoomRatio: number): number {
 
 export function namesVisible(k: number): boolean {
   return k * ROOF_FONT >= MIN_NAME_PX
+}
+
+export function facadeDetailsVisible(k: number): boolean {
+  return k * FACADE_MARK >= 1
+}
+
+export function minorGridVisible(k: number): boolean {
+  return k * GRID_ROW_PITCH >= MIN_GRID_PITCH_PX
 }
