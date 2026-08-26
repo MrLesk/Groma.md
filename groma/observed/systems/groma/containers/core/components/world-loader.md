@@ -10,7 +10,7 @@ code:
 
 # World loader
 
-Loads the merged semantic architecture for every caller: reads the observed and planned documents, builds one annotated graph with stable relationship ids and the lines behind each component's code. The web sheet consumes this graph directly; the terminal path adds its fixed world layout afterwards.
+Loads the merged semantic architecture for every caller: reads the observed and planned documents, builds one annotated graph with stable relationship ids, and measures both every code file and each component total. The web sheet consumes this graph directly; the terminal path adds its fixed world layout afterwards.
 
 ## Relationships
 

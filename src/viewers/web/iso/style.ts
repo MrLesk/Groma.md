@@ -12,11 +12,37 @@ function tile(id: string, plane: Plane, size: number, body: string): string {
   return `<pattern id="${id}" width="${size}" height="${size}" patternUnits="userSpaceOnUse" patternTransform="${planeMatrix(plane)}">${body}</pattern>`
 }
 
+function hash(value: string): number {
+  let result = 2166136261
+  for (let index = 0; index < value.length; index += 1) {
+    result ^= value.charCodeAt(index)
+    result = Math.imul(result, 16777619)
+  }
+  return result >>> 0
+}
+
+export function facadePatternId(fileType: string, plane: Extract<Plane, 'left' | 'right'>): string {
+  return `facade-${hash(fileType).toString(36)}-${plane}`
+}
+
+/** A stable window tile derived from the file type itself, so unknown extensions need no registry. */
+export function facadePattern(fileType: string, plane: Extract<Plane, 'left' | 'right'>): string {
+  const value = hash(fileType)
+  const bits = (value ^ (value >>> 9) ^ (value >>> 18)) & 0x1ff || 1
+  const windows = Array.from({ length: 9 }, (_, index) => {
+    if ((bits & (1 << index)) === 0) return ''
+    const x = 1 + (index % 3) * 2.5
+    const y = 1 + Math.floor(index / 3) * 2.5
+    return `<rect x="${x}" y="${y}" width="1.1" height="1.1" fill="var(--map-hatch)"/>`
+  }).join('')
+  return tile(facadePatternId(fileType, plane), plane, 8, windows)
+}
+
 /**
  * One grey pattern per kind, each tile drawn in the pixels of the plane it
  * lies on and mapped by that plane's matrix: dots for actors (their island
  * and the sides of their buildings), crosses for external systems, storey
- * lines for the sides of components, a faint grain for container slabs and a
+ * fallback lines for components without source files, a faint grain for container slabs and a
  * diagonal hatch for group zones. Systems have no pattern, and neither does
  * any roof.
  */
@@ -48,7 +74,7 @@ function tokens(level: Level): string {
  * scale, with the system island half a tint step lighter on that scale. One
  * rule turns them into strokes (times the state's emphasis and the camera's
  * zoom weight) and fills; no literal width or tint lives here. Line style means origin; only a route leaving a touched element for an untouched one adds accent dots: observed solid, planned
- * dashed, missing dotted; patterns mean kind and nothing else. Selection
+ * dashed, missing dotted; patterns mean kind, and component facade windows mean file type. Selection
  * and context change strokes, never fills.
  */
 export const mapCss = `

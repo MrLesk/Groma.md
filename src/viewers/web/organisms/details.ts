@@ -7,6 +7,7 @@ import type {
   CodeReference,
   Origin,
 } from '../../../types.ts'
+import { fileTypeOf } from '../../../sheet/measure.ts'
 import { pickableActions, travelledBy } from '../../action-path.ts'
 import type { FlowRef } from '../../action-path.ts'
 import { kindGlyph, kindLabel } from '../atoms/kind.ts'
@@ -292,9 +293,11 @@ export function paintDetails(
         file.textContent = reference.file
         const extra = document.createElement('li')
         extra.className = 'ghost'
-        extra.textContent = reference.symbol === undefined
-          ? reference.scanner
-          : `${reference.symbol} · ${reference.scanner}`
+        const facts = [fileTypeOf(reference.file)]
+        if (reference.lines !== undefined) facts.push(`${reference.lines} lines`)
+        if (reference.symbol !== undefined) facts.push(reference.symbol)
+        facts.push(reference.scanner)
+        extra.textContent = facts.join(' · ')
         list.append(file, extra)
       }
       body.append(list)

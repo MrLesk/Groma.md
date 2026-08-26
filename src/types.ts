@@ -16,6 +16,8 @@ export interface CodeReference {
   scanner: string
   file: string
   symbol?: string
+  /** Runtime source measurement; authored architecture never supplies it. */
+  lines?: number
 }
 
 export type MarkdownNode = string | MarkdownElement

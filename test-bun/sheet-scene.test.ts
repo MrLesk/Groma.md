@@ -11,6 +11,7 @@ import {
   PLANE,
   ROOF_PAD,
   SURFACE_FONT,
+  fileTypeOf,
   floorsOf,
   footprintOf,
   roofLines,
@@ -88,9 +89,15 @@ test.concurrent('a building keeps the ground its roof hides clear of its north a
   const scene = sheetScene(worldOf([
     box('shop', 'system', unit),
     box('api', 'container', unit, { parent: 'observed:shop' }),
-    { ...box('tall', 'component', unit, { parent: 'observed:api' }), codeLines: 4000 },
-    { ...box('short', 'component', unit, { parent: 'observed:api' }), codeLines: 0 },
-    { ...box('middling', 'component', unit, { parent: 'observed:api' }), codeLines: 1200 },
+    box('tall', 'component', unit, {
+      parent: 'observed:api', code: [{ scanner: 'fixture', file: 'tall.ts', lines: 4000 }],
+    }),
+    box('short', 'component', unit, {
+      parent: 'observed:api', code: [{ scanner: 'fixture', file: 'short.ts', lines: 0 }],
+    }),
+    box('middling', 'component', unit, {
+      parent: 'observed:api', code: [{ scanner: 'fixture', file: 'middling.ts', lines: 1200 }],
+    }),
   ], [uses('relationship:0', 'tall', 'short'), uses('relationship:1', 'middling', 'tall')]))
   assert.ok(shadeOf(scene.buildings.find(building => building.id === 'tall')!.floors) > 0)
   let pairs = 0
@@ -248,17 +255,17 @@ test.concurrent('roof text, code files and code lines size a building', () => {
   assert.deepEqual(roofLines('Ab'), ['Ab'])
   assert.deepEqual(roofLines('Architecture model'), ['Architecture', 'model'])
   assert.deepEqual(roofLines('A very long component name indeed'), ['A very long component', 'name indeed'])
-  assert.deepEqual(shapeOf(0), { kind: 'block', levels: 1 })
+  assert.deepEqual(shapeOf(0), { kind: 'block' })
   assert.deepEqual(shapeOf(2), { kind: 'stack', levels: 2 })
-  assert.deepEqual(shapeOf(4), { kind: 'tower', levels: 1 })
+  assert.deepEqual(shapeOf(4), { kind: 'tower' })
   assert.deepEqual(footprintOf(['Ab'], shapeOf(0), 0), { w: 2, d: 2 })
   assert.deepEqual(footprintOf(['Architecture', 'model'], shapeOf(2), 0), { w: 5, d: 3 })
   assert.deepEqual(footprintOf(['A very long component', 'name indeed'], shapeOf(4), 0), { w: 7, d: 2 })
   assert.deepEqual(footprintOf(['Ab'], shapeOf(3), 0), { w: 3, d: 3 })
   assert.deepEqual(footprintOf(['Ab'], shapeOf(0), 8), { w: 2, d: 3 })
-  assert.deepEqual(footprintOf(['Ab'], { kind: 'round', levels: 1 }, 0), { w: 2, d: 2 })
-  assert.deepEqual(footprintOf(['Ann the architect'], { kind: 'round', levels: 1 }, 0), { w: 6, d: 6 })
-  assert.deepEqual(footprintOf(['Git'], { kind: 'pill', levels: 1 }, 0), { w: 4, d: 2 })
+  assert.deepEqual(footprintOf(['Ab'], { kind: 'round' }, 0), { w: 2, d: 2 })
+  assert.deepEqual(footprintOf(['Ann the architect'], { kind: 'round' }, 0), { w: 6, d: 6 })
+  assert.deepEqual(footprintOf(['Git'], { kind: 'pill' }, 0), { w: 4, d: 2 })
   const range = { min: 0, max: 2000 }
   assert.equal(floorsOf('observed', 0, range), 1)
   assert.equal(floorsOf('observed', 450, range), 1.5)
@@ -277,6 +284,32 @@ test.concurrent('roof text, code files and code lines size a building', () => {
   const bank = scene.buildings.find(building => building.id === 'bank')!
   assert.equal(bank.shape.kind, 'pill')
   assert.ok(bank.rect.d === 2 && bank.lines.length === 1)
+})
+
+test.concurrent('every unique source file becomes one LOC-sized tower section', () => {
+  const code = Array.from({ length: 8 }, (_, index) => ({
+    scanner: 'fixture',
+    file: `src/file-${index}.${index % 2 === 0 ? 'ts' : 'CS'}`,
+    lines: index * 100,
+  }))
+  const scene = sheetScene(worldOf([
+    box('shop', 'system', unit),
+    box('api', 'container', unit, { parent: 'observed:shop' }),
+    box('tower', 'component', unit, {
+      parent: 'observed:api',
+      code: [...code, { ...code[0]!, symbol: 'duplicate reference' }],
+    }),
+  ]))
+  const tower = scene.buildings.find(building => building.id === 'tower')!
+  assert.equal(tower.shape.kind, 'tower')
+  assert.equal(tower.sections.length, 8)
+  assert.deepEqual(tower.sections.map(section => section.file), code.map(reference => reference.file))
+  assert.equal(tower.sections[0]!.floors, 1)
+  assert.equal(tower.sections[7]!.floors, 4)
+  assert.equal(tower.floors, tower.sections.reduce((total, section) => total + section.floors, 0))
+  assert.deepEqual(new Set(tower.sections.map(section => section.fileType)), new Set(['.ts', '.cs']))
+  assert.equal(fileTypeOf('Dockerfile'), 'no extension')
+  assert.equal(fileTypeOf('.env'), '.env')
 })
 
 test.concurrent('a surface is at least as wide as its own name', () => {

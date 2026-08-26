@@ -6,10 +6,10 @@ import {
   ISLAND_FONT,
   ISLAND_SPACING,
   SURFACE_FONT,
-  floorsOf,
   footprintOf,
   nameCells,
   roofLines,
+  sectionsOf,
   shapeOf,
 } from './measure.ts'
 import { grow, shelf } from './pack.ts'
@@ -17,6 +17,7 @@ import type { Partnered } from './pack.ts'
 import { flowRanks } from './rank.ts'
 import type {
   Building,
+  BuildingSection,
   CellRect,
   Island,
   IslandKind,
@@ -36,7 +37,7 @@ interface Node {
   d: number
   children: { node: Node; gx: number; gy: number }[]
   paint:
-    | { kind: 'building'; element: AnnotatedElement; floors: number; shape: Shape; lines: string[] }
+    | { kind: 'building'; element: AnnotatedElement; floors: number; shape: Shape; sections: BuildingSection[]; lines: string[] }
     | { kind: 'slab'; element: AnnotatedElement }
     | { kind: 'zone'; name: string; members: string[] }
     | { kind: 'island'; islandKind: IslandKind; name: string; element: AnnotatedElement | null }
@@ -57,6 +58,19 @@ function item(element: AnnotatedElement): SheetItem {
     name: element.name,
     origin: element.origin,
   }
+}
+
+function buildingNode(element: AnnotatedElement, range: { min: number; max: number }, degree: number): Node {
+  const sections = element.kind === 'component' ? sectionsOf(element.origin, element.code, range) : []
+  const shape: Shape = element.kind === 'actor'
+    ? { kind: 'round' }
+    : element.external ? { kind: 'pill' } : shapeOf(sections.length)
+  const lines = shape.kind === 'pill' ? [element.name] : roofLines(element.name)
+  const floors = element.kind !== 'component'
+    ? 1
+    : sections.reduce((total, section) => total + section.floors, 0) || 1
+  const { w, d } = footprintOf(lines, shape, degree)
+  return { key: element.representationId, w, d, children: [], paint: { kind: 'building', element, floors, shape, sections, lines } }
 }
 
 /** The cells a surface's own name needs in its front band. */
@@ -192,23 +206,18 @@ export function placeWorld(world: ArchitectureGraph): Placement {
     degree.set(relationship.source, (degree.get(relationship.source) ?? 0) + 1)
     degree.set(relationship.target, (degree.get(relationship.target) ?? 0) + 1)
   }
-  const observedLines = world.elements
+  const observedFileLines = world.elements
     .filter(element => element.kind === 'component' && element.origin === 'observed')
-    .map(element => element.codeLines ?? 0)
-  const range = { min: Math.min(...observedLines), max: Math.max(...observedLines) }
+    .flatMap(element => element.code.flatMap(reference => reference.lines === undefined ? [] : [reference.lines]))
+  const range = observedFileLines.length === 0
+    ? { min: 0, max: 0 }
+    : { min: Math.min(...observedFileLines), max: Math.max(...observedFileLines) }
   const childrenOf = (parent: string | null): AnnotatedElement[] => world.elements
     .filter(element => element.parent === parent)
     .sort(compareSemanticElements)
 
-  const building = (element: AnnotatedElement): Node => {
-    const shape: Shape = element.kind === 'actor'
-      ? { kind: 'round', levels: 1 }
-      : element.external ? { kind: 'pill', levels: 1 } : shapeOf(element.code.length)
-    const lines = shape.kind === 'pill' ? [element.name] : roofLines(element.name)
-    const floors = element.kind === 'component' ? floorsOf(element.origin, element.codeLines ?? 0, range) : 1
-    const { w, d } = footprintOf(lines, shape, degree.get(element.representationId) ?? 0)
-    return { key: element.representationId, w, d, children: [], paint: { kind: 'building', element, floors, shape, lines } }
-  }
+  const building = (element: AnnotatedElement): Node =>
+    buildingNode(element, range, degree.get(element.representationId) ?? 0)
   const slab = (container: AnnotatedElement): Node => {
     const components = childrenOf(container.representationId).filter(child => child.kind === 'component')
     return packed(
@@ -323,6 +332,7 @@ function collect(islands: readonly Node[], origins: readonly CellRect[]): Placem
         rect,
         floors: paint.floors,
         shape: paint.shape,
+        sections: paint.sections,
         lines: paint.lines,
       })
     }

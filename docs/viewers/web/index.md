@@ -134,20 +134,25 @@ their buildings face what they talk to.
 Containers are slabs whose top is level with the ground and whose
 thickness hangs below the grid line, drawn over the island in front of
 them, so they read as slabs while everything on them stays on the one
-plane. Components are buildings on their slab: the observed component
-with the most code lines stands four floors, the one with the fewest
-one floor, and every other in between in half floors by its share of
-that range; one code file is a block, two or three files stack as
-tiers, four or more files make a tower. Ghost components stand one
-floor, as does every component when all observed ones have the same
-line count.
+plane. Components are buildings on their slab. Every unique code file
+is one section: the observed file with the most code lines contributes
+four floors, the one with the fewest one floor, and every other file in
+between contributes half floors by its share of that range. One file is
+a block, two or three files make a stepped stack, and four or more
+files align as one vertical tower with only its final roof visible.
+Every tower section keeps the component's one footprint; area does not
+encode a file metric. Ghost and unmeasured components keep the minimum
+height.
 Actors are round buildings (a cylinder whose circular roof holds the
 name) and external systems are pills (a stadium roof with the name on
 one line), one floor each, on their own islands; a route meets the wall
 itself, sliding along its own axis onto the curve, so it starts and
 ends on the shape the viewer sees rather than beside it. One grey
 pattern tells each kind apart, on side faces and
-surfaces and never on a roof: component sides carry storey lines,
+surfaces and never on a roof: each measured component section carries
+a stable window pattern derived from its lower-case file extension,
+including extensions Groma has not seen before; components without
+source evidence keep plain storey lines,
 actor sides and the actors island dots, external sides and the
 external island crosses, container slabs a faint grain, and system
 islands have none; every pattern is laid in the plane it lies on.
