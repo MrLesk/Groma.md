@@ -36,3 +36,21 @@ The source shows a fixed-width plate with unused horizontal space. The implement
 No actionable P0, P1, or P2 difference remains for this correction. A small sheet can wrap before 80 characters when the sheet itself is narrower; this keeps the title plate inside its frame.
 
 final result: passed
+
+# TASK-169.1 visual QA
+
+## Source and implementation
+
+- Source: `/var/folders/fd/cgvn5zh52tb_sbt7hp_vtbmm0000gn/T/codex-clipboard-39c4fafa-e34b-49e0-ad13-d6d3add419a1.png` (702×86), confirmed against the live web task island.
+- Terminal: `/tmp/groma-task-169-1-capture.ta11DN/normal-120.svg` and `/tmp/groma-task-169-1-capture.ta11DN/work-120.svg` at 120×36.
+- Wide terminal: `/tmp/groma-task-169-1-wide.CmqqZQ/task-156-200.svg` at 200×60.
+- Component focus: `/tmp/groma-task-169-1-component2.kIXIdi/task-172-120.svg` at 120×36.
+- Comparison: `/tmp/groma-task-169-1-capture.ta11DN/recap-comparison.png`.
+
+## Comparison
+
+The source and terminal recap share the same hierarchy: Backlog identity, workflow counts, and a direct expansion action. The terminal uses one centered reserved row instead of web chips because terminal geometry is fixed and the map cannot be overlaid. It uses the existing TUI palette, typography, and separators.
+
+The recap does not cover map cells. Task markers remain visible in normal mode. Work focus preserves both side panes, highlights touched architecture, and changes only temporary scope and camera. Cross-container tasks use the root map; a task contained by Web viewer opens its component map. Both terminal sizes remain readable with no cropped chrome or overlapping panes.
+
+Result: passed.

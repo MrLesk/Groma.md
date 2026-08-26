@@ -10,6 +10,7 @@ import {
   reduceViewer,
   type ViewerState,
 } from '../src/viewers/tui/navigation.ts'
+import { selectedWorkId } from '../src/viewers/tui/work/model.ts'
 import {
   box,
   navigationWorld,
@@ -302,4 +303,48 @@ test.concurrent('flow preview, commit, step, and clear share one navigation stat
   state = reduceViewer(model, state, 'clear-action')
   assert.equal(state.activeActionId, undefined)
   assert.equal(state.actionStep, undefined)
+})
+
+test.concurrent('Work focus keeps architecture and flow state while tasks own the side panes', () => {
+  const base = actionWorld()
+  const model = {
+    ...base,
+    work: {
+      statuses: ['To Do', 'In Progress', 'Done'],
+      defaultStatus: 'To Do',
+      items: [
+        { id: 'TASK-1', title: 'First', status: 'In Progress', assignees: [], description: '', references: ['api'], modifiedFiles: [], criteria: [] },
+        { id: 'TASK-2', title: 'Second', status: 'In Progress', assignees: [], description: '', references: ['web'], modifiedFiles: [], criteria: [] },
+      ],
+    },
+  }
+  const before: ViewerState = {
+    ...initialState(model),
+    currentId: 'observed:product',
+    focus: 'hierarchy',
+    panes: { details: false },
+    detailsScroll: 4,
+    activeActionId: 'buyer-api',
+    actionCursor: 'buyer-api',
+  }
+
+  let state = reduceViewer(model, before, 'toggle-work')
+  assert.equal(state.currentId, before.currentId)
+  assert.equal(state.focus, 'hierarchy')
+  assert.equal(selectedWorkId(state.work), 'TASK-1')
+  assert.equal(litAction(model, state).id, undefined)
+
+  state = reduceViewer(model, state, 'down')
+  assert.equal(selectedWorkId(state.work), 'TASK-2')
+  state = reduceViewer(model, state, 'enter')
+  assert.equal(state.focus, 'details')
+
+  state = reduceViewer(model, state, 'toggle-work')
+  assert.equal(state.work, undefined)
+  assert.equal(state.currentId, before.currentId)
+  assert.equal(state.focus, before.focus)
+  assert.deepEqual(state.panes, before.panes)
+  assert.equal(state.detailsScroll, before.detailsScroll)
+  assert.equal(state.actionCursor, before.actionCursor)
+  assert.equal(litAction(model, state).id, 'buyer-api')
 })

@@ -16,6 +16,9 @@ import { compareSemanticElements } from '../../element-order.ts'
 import { ancestorsOf, initialTree, semanticTreeRows } from './tree.ts'
 import type { TreeState } from './tree.ts'
 import type { TerminalViewModel } from './model.ts'
+import { initialWorkFocus } from './work/model.ts'
+import type { WorkFocus } from './work/model.ts'
+import { reduceWorkFocus } from './work/navigation.ts'
 import type {
   AnnotatedElement,
   AnnotatedRelationship,
@@ -36,6 +39,7 @@ export type ViewerAction =
   | 'clear-action'
   | 'step-action'
   | 'toggle-details-tab'
+  | 'toggle-work'
 
 export type FilterInput =
   | { type: 'open' }
@@ -73,6 +77,8 @@ export interface ViewerState {
   filter?: FilterState
   /** The map edge just crossed, used to step through a containing boundary. */
   mapStep?: { fromId: string; direction: MapDirection }
+  /** Present only while the terminal is using its task-focused side panes. */
+  work?: WorkFocus
 }
 
 function elementsById(world: TerminalViewModel): Map<string, AnnotatedElement> {
@@ -139,6 +145,7 @@ export function litAction(
   world: TerminalViewModel,
   state: ViewerState,
 ): LitAction {
+  if (state.work !== undefined) return {}
   if (state.focus === 'details' && state.actionCursor !== undefined) {
     const browsing = detailsCommands(world, state)
       .some(command => command.id === state.actionCursor)
@@ -264,6 +271,23 @@ export function reduceViewer(
     currentId: resolved.currentId,
   }
 
+  if (action === 'toggle-work' && current.work === undefined) {
+    return {
+      ...current,
+      work: initialWorkFocus(world.work, {
+        focus: current.focus,
+        details: current.panes.details,
+        detailsScroll: current.detailsScroll,
+        actionCursor: current.actionCursor,
+      }),
+      focus: 'hierarchy',
+      panes: { ...current.panes, details: true },
+      detailsScroll: 0,
+      actionCursor: undefined,
+    }
+  }
+  if (current.work !== undefined) return reduceWorkFocus(world, current, action)
+  if (action === 'toggle-work') return current
   if (action === 'tab') {
     if (current.focus === 'hierarchy') return { ...current, focus: 'architecture' }
     return syncTree(world, {

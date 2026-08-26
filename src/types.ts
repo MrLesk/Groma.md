@@ -92,13 +92,6 @@ export interface WorkSnapshot {
   items: WorkItem[]
 }
 
-export interface WorkMarker {
-  elementId: string
-  taskId: string
-  taskTitle: string
-  assignees: string[]
-}
-
 export interface ArchitectureElement {
   id: string
   kind: C4Kind
@@ -191,5 +184,4 @@ export interface ArchitectureWorld {
 
 export interface ArchitectureViewModel extends AnnotatedArchitectureModel {
   world: ArchitectureWorld
-  work?: WorkMarker[]
 }

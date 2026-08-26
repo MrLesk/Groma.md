@@ -10,9 +10,9 @@ import type { PaneLayout } from '../layout.ts'
 import type { Bounds } from '../../../types.ts'
 
 const paneHints: Record<ViewerFocus, string> = {
-  architecture: '←↑↓→ select   enter open   backspace back   tab tree',
-  hierarchy: '↑↓ move   ←→ fold   enter select   tab map   ] details',
-  details: '↑↓ scroll   t tab   backspace back   esc map',
+  architecture: '←↑↓→ select   enter open   backspace back   tab tree   w work',
+  hierarchy: '↑↓ move   ←→ fold   enter select   tab map   w work',
+  details: '↑↓ scroll   t tab   backspace back   esc map   w work',
 }
 
 function footerHint(

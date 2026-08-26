@@ -58,8 +58,8 @@ export interface TerminalProjectionOptions {
   viewport: Bounds
   level?: TerminalLevel
   currentId?: string
-  /** Exact flow endpoint the camera should reveal without changing selection. */
-  attentionId?: string
+  /** Exact task or flow endpoints the camera should reveal without changing selection. */
+  attentionIds?: readonly string[]
   camera?: TerminalCamera
 }
 
@@ -268,12 +268,12 @@ function componentItems(
   return [boundary, ...groups, ...components]
 }
 
-function unionBounds(items: readonly { worldBounds: Bounds }[]): Bounds {
+function unionBounds(items: readonly { worldBounds: Bounds }[], margin = 2): Bounds {
   if (items.length === 0) return { x: 0, y: 0, width: 1, height: 1 }
-  const left = Math.min(...items.map(item => item.worldBounds.x)) - 2
-  const top = Math.min(...items.map(item => item.worldBounds.y)) - 2
-  const right = Math.max(...items.map(item => item.worldBounds.x + item.worldBounds.width)) + 2
-  const bottom = Math.max(...items.map(item => item.worldBounds.y + item.worldBounds.height)) + 2
+  const left = Math.min(...items.map(item => item.worldBounds.x)) - margin
+  const top = Math.min(...items.map(item => item.worldBounds.y)) - margin
+  const right = Math.max(...items.map(item => item.worldBounds.x + item.worldBounds.width)) + margin
+  const bottom = Math.max(...items.map(item => item.worldBounds.y + item.worldBounds.height)) + margin
   return { x: left, y: top, width: right - left, height: bottom - top }
 }
 
@@ -391,19 +391,21 @@ export function projectWorld(
   }))
   const elements = new Map(model.elements.map(element => [element.representationId, element]))
   const boundary = focus === undefined ? undefined : visible.get(focus.representationId)
-  const attention = options.attentionId === undefined
-    ? undefined
-    : visibleEndpointFor(options.attentionId, visible, elements, boundary)
+  const attention = [...new Map((options.attentionIds ?? []).flatMap(id => {
+    const item = visibleEndpointFor(id, visible, elements, boundary)
+    return item === undefined ? [] : [[item.key, item] as const]
+  })).values()]
+  const attentionBounds = attention.length === 0 ? undefined : unionBounds(attention, 0)
   const subject = level === 'components'
-    ? attention?.worldBounds
+    ? attentionBounds
       ?? worldItems.find(item => item.representationId === focus?.representationId)?.worldBounds
       ?? selected?.worldBounds
-    : attention?.worldBounds ?? selected?.worldBounds
+    : attentionBounds ?? selected?.worldBounds
   let camera = options.camera
     ?? centeredCamera(worldBounds, subject ?? worldBounds, options.viewport)
-  const revealItem = attention ?? selected
-  if (revealItem) {
-    camera = reveal(camera, revealItem.worldBounds, worldBounds, options.viewport)
+  const revealBounds = attentionBounds ?? selected?.worldBounds
+  if (revealBounds) {
+    camera = reveal(camera, revealBounds, worldBounds, options.viewport)
   }
   const items = worldItems.map(item => ({
     ...item,

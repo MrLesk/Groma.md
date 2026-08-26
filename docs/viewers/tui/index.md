@@ -55,6 +55,25 @@ and visible destination carry the stronger treatment. When an exact endpoint is
 hidden at root, the destination marker names it on its visible container and the
 footer shows both names. `x` clears the flow.
 
+## Work focus
+
+The map always shows compact task markers on visible architecture anchors. A reserved
+recap row at its bottom summarizes current work and points to `w`. Neither treatment
+covers or changes the architecture canvas.
+
+`w` gives the hierarchy and details panes to Backlog tasks without changing the
+stored architecture selection, map scope, camera, flow, or sheet geometry. Tasks
+follow the configured workflow statuses. Up and Down select one task; Enter focuses
+its details, including status, assignees, description, acceptance criteria, modified
+files, and references.
+
+The selected task accents every element touched by its modified files and exact
+architecture references, plus routes leaving those elements. If all touched elements
+belong to one container, Work temporarily opens that component map. Otherwise it uses
+the root map and promotes hidden components to their visible containers. The camera
+frames the complete visible touched set at the same fixed scale. Closing Work focus
+with `w` or Escape restores the exact pre-Work view.
+
 ## Appearance
 
 Neutral surface shades are mixed from the terminal foreground and background, so
@@ -70,12 +89,12 @@ target while their geometry, labels, and arrowheads remain fixed.
 ## Keys
 
 - Arrow keys move selection or the focused side-pane cursor.
-- Enter opens a container or focuses details for another element.
+- Enter opens a container or focuses architecture, flow, or task details.
 - Backspace returns from a container map to root.
-- Tab moves between the hierarchy and map; Escape closes details, returns focus to map, and leaves container scope.
+- Tab moves between the hierarchy and map, or between tasks and task details in Work focus. Escape leaves the current focused mode.
 - `/` searches architecture; Enter keeps a match and Escape restores the prior view.
-- `]` toggles details, `t` changes its tab, `s` steps a flow, and `x` clears it.
+- `w` toggles Work focus. `]` toggles details, `t` changes its architecture tab, `s` steps a flow, and `x` clears it.
 - `r` refreshes and Ctrl+C exits.
 
-Refresh preserves a valid selection, map scope, pane state, and camera. The same
-world coordinates are projected after every repaint.
+Refresh preserves valid architecture and task selections, map scope, pane state,
+and camera. The same world coordinates are projected after every repaint.

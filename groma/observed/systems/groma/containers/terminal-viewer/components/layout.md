@@ -11,4 +11,4 @@ code:
 
 # Layout
 
-Reserves the header, the footer, and the three pane widths for a terminal size. The map never renders under a side pane.
+Reserves the header, footer, three pane widths, and one map-bottom Backlog recap row for a terminal size. The camera viewport never renders under a pane or the recap.

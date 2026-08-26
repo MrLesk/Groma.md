@@ -13,6 +13,8 @@ export interface PaneLayout {
   map: Bounds
   /** Interior of the map pane; the camera viewport. */
   mapViewport: Bounds
+  /** One reserved row for the persistent Backlog recap. */
+  workRecap: Bounds
   details: Bounds
   footer: Bounds
 }
@@ -47,7 +49,13 @@ export function paneLayout(
       x: map.x + 1,
       y: map.y + 1,
       width: Math.max(1, map.width - 2),
-      height: Math.max(1, map.height - 2),
+      height: Math.max(1, map.height - 3),
+    },
+    workRecap: {
+      x: map.x + 1,
+      y: map.y + map.height - 2,
+      width: Math.max(1, map.width - 2),
+      height: 1,
     },
     details,
     footer: { x: 0, y: height - 2, width, height: 1 },

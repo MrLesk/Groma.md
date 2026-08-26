@@ -11,4 +11,4 @@ code:
 
 # Navigation
 
-Owns viewer state: root or container scope, selection, the last crossed map edge, the filter, the active flow, and whether details are open. Every key becomes one action reduced over that state. Escape closes details and, from container scope, returns to the root map.
+Owns viewer state: root or container scope, architecture selection, the last crossed map edge, the filter, the active flow, Work focus, its selected task, and whether details are open. Every key becomes one action reduced over that state. Work focus temporarily gives the side panes to tasks while preserving architecture and flow state.

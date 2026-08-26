@@ -11,7 +11,7 @@ code:
 
 # Projection
 
-Projects the shared sheet scene into terminal cells at a fixed scale. The root scope shows actors, systems, containers, collapsed groups, and external systems. A container scope replaces that map with the container's groups and direct components. Both scopes keep sheet positions and routes immutable.
+Projects the shared sheet scene into terminal cells at a fixed scale. The root scope shows actors, systems, containers, collapsed groups, and external systems. A container scope replaces that map with the container's groups and direct components. Selection and task attention may move the camera, while multiple task targets are framed as one bounds set. Every scope keeps sheet positions and routes immutable.
 
 ## Relationships
 
