@@ -5,7 +5,18 @@ parent: scanner
 code:
   - scanner: typescript
     file: src/scanner/csharp/adapter.ts
-    symbol: isCSharpScanFile
+    symbol: scanCSharpSource
+  - scanner: csharp
+    file: src/scanner/csharp/Contract.cs
+    symbol: ScanObservation
+  - scanner: csharp
+    file: src/scanner/csharp/Scanner.cs
+    symbol: RoslynScanner
+  - scanner: csharp
+    file: src/scanner/csharp/Command.cs
+    symbol: ScannerCommand
+  - scanner: csharp
+    file: src/scanner/csharp/Program.cs
 ---
 
 # C# scanner
