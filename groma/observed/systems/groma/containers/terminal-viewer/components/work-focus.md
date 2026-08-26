@@ -6,10 +6,16 @@ code:
   - scanner: typescript
     file: src/viewers/tui/work/navigation.ts
     symbol: reduceWorkFocus
+    dependencies: 3
+    dependents: 1
   - scanner: typescript
     file: src/viewers/tui/work/model.ts
+    dependencies: 4
+    dependents: 6
   - scanner: typescript
     file: src/viewers/tui/work/paint.ts
+    dependencies: 7
+    dependents: 2
 ---
 
 # Work focus

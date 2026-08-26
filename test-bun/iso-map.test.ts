@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { test } from 'bun:test'
 
 import { loadArchitectureViewModel } from '../src/core.ts'
-import { PAD, ROOF_SHADOW } from '../src/sheet/grid.ts'
+import { PAD, ROOF_SHADOW, centredRect } from '../src/sheet/grid.ts'
 import { PLANE, ROOF_PAD, curved, roofBlock, textWidth } from '../src/sheet/measure.ts'
 import { sheetScene } from '../src/sheet/scene.ts'
 import type { Building, RoutePoint, SheetScene } from '../src/sheet/types.ts'
@@ -19,7 +19,7 @@ import {
   zoomReadout,
 } from '../src/viewers/web/iso/camera.ts'
 import {
-  FLOOR,
+  HEIGHT_UNIT,
   boxFaces,
   project,
   projectScene,
@@ -48,7 +48,7 @@ function everyPoint(scene: ProjectedScene): Point[] {
   return [
     ...scene.islands.flatMap(item => item.polygon),
     ...scene.slabs.flatMap(item => item.faces.flatMap(face => face.points)),
-    ...scene.buildings.flatMap(item => item.tiers.flatMap(tier => tier.flatMap(face => face.points))),
+    ...scene.buildings.flatMap(item => item.floors.flatMap(floor => floor.flatMap(face => face.points))),
     ...scene.routes.flatMap(item => item.points),
   ]
 }
@@ -84,7 +84,7 @@ test.concurrent('the lattice projects to integer screen units and depth grows do
     assert.equal(Number.isInteger(point.x) && Number.isInteger(point.y), true)
   }
   assert.ok(project(3, 2, 0).y > project(2, 2, 0).y && project(2, 3, 0).y > project(2, 2, 0).y)
-  assert.equal(project(1, 0, 1).y, project(1, 0, 0).y - FLOOR)
+  assert.equal(project(1, 0, 1).y, project(1, 0, 0).y - HEIGHT_UNIT)
 })
 
 test.concurrent('a box shows its top and the two faces turned to the viewer', () => {
@@ -99,32 +99,33 @@ test.concurrent('a box shows its top and the two faces turned to the viewer', ()
   }
 })
 
-test.concurrent('a many-file component projects as one aligned sectioned tower', () => {
+test.concurrent('a many-file component projects as one centred compressed tower', () => {
   const unit = { x: 0, y: 0, width: 1, height: 1 }
   const code = Array.from({ length: 8 }, (_, index) => ({
     scanner: 'fixture',
     file: `src/file-${index}.${index % 2 === 0 ? 'ts' : 'cs'}`,
     lines: index * 100,
+    dependencies: index,
+    dependents: 7 - index,
   }))
   const scene = projectScene(sheetScene(worldOf([
     box('shop', 'system', unit),
     box('api', 'container', unit, { parent: 'observed:shop' }),
+    box('single', 'component', unit, {
+      parent: 'observed:api',
+      code: [{ scanner: 'fixture', file: 'src/single.ts', lines: 0, dependencies: 0, dependents: 0 }],
+    }),
     box('tower', 'component', unit, { parent: 'observed:api', code }),
   ])))
   const tower = scene.buildings.find(item => item.building.id === 'tower')!
-  assert.equal(tower.tiers.length, 8)
-  assert.deepEqual(tower.tiers.map(tier => tier.map(face => face.side)), [
-    ['left', 'right'],
-    ['left', 'right'],
-    ['left', 'right'],
-    ['left', 'right'],
-    ['left', 'right'],
-    ['left', 'right'],
-    ['left', 'right'],
-    ['left', 'right', 'top'],
-  ])
-  const leftXs = tower.tiers.map(tier => tier.find(face => face.side === 'left')!.points.map(point => point.x))
-  for (const xs of leftXs.slice(1)) assert.deepEqual(xs, leftXs[0])
+  assert.equal(tower.floors.length, 5)
+  assert.ok(tower.floors.every(floor => floor.some(face => face.side === 'left')))
+  assert.ok(tower.floors.at(-1)!.some(face => face.side === 'top'))
+  const rects = tower.building.floors.map(floor => centredRect(tower.building.rect, floor.footprint))
+  for (const rect of rects) {
+    assert.equal(rect.gx + rect.w / 2, tower.building.rect.gx + tower.building.rect.w / 2)
+    assert.equal(rect.gy + rect.d / 2, tower.building.rect.gy + tower.building.rect.d / 2)
+  }
   assert.equal(facadePatternId('.ts', 'left'), facadePatternId('.ts', 'left'))
   assert.notEqual(facadePatternId('.ts', 'left'), facadePatternId('.cs', 'left'))
   assert.notEqual(facadePatternId('.unknown', 'left'), facadePatternId('.ts', 'left'))
@@ -135,7 +136,7 @@ test.concurrent('buildings paint back to front', async () => {
     const scene = await fixtureScene(root)
     const boxes = scene.buildings.map(item => ({
       rect: item.building.rect,
-      screen: screenBox(item.tiers.flatMap(tier => tier.flatMap(face => face.points))),
+      screen: screenBox(item.floors.flatMap(floor => floor.flatMap(face => face.points))),
     }))
     for (const [index, earlier] of boxes.entries()) {
       for (const later of boxes.slice(index + 1)) {
@@ -305,7 +306,7 @@ test.concurrent('an off-centre route meets the near wall of the actor it leaves,
   const actor: Building = {
     representationId: 'observed:actor', id: 'actor', name: 'Actor', origin: 'observed',
     kind: 'actor', external: false, surface: 'actors', rect: { gx: 4, gy: 4, w: 4, d: 4 },
-    floors: 1, shape: { kind: 'round' }, sections: [], lines: ['Actor'],
+    heightUnits: 1, shape: { kind: 'round' }, floors: [], lines: ['Actor'],
   }
   const leg = (id: string, from: RoutePoint, to: RoutePoint, arriving = false): SheetScene['routes'][number] => ({
     id,
@@ -314,7 +315,7 @@ test.concurrent('an off-centre route meets the near wall of the actor it leaves,
     description: '', origin: 'observed', points: arriving ? [to, from] : [from, to],
   })
   /** A back side is hidden under the roof, so the router anchors a route half a cell behind the footprint, where a one-floor roof stops shading the ground. */
-  const shadow = actor.floors * ROOF_SHADOW
+  const shadow = actor.heightUnits * ROOF_SHADOW
   const scene: SheetScene = {
     sheet: { gx: 0, gy: 0, w: 12, d: 12 }, islands: [], zones: [], slabs: [], buildings: [actor],
     routes: [
@@ -353,22 +354,23 @@ test.concurrent('roof and surface text keep their owning shape inset', async () 
   const scene = await fixtureScene(viewerFixtureRoot)
   const rounded = scene.buildings.filter(({ building }) => curved(building.shape))
   assert.ok(scene.buildings.length > rounded.length && rounded.length > 0)
-  for (const { building, text, tiers } of scene.buildings) {
-    const inset = building.shape.kind === 'stack' ? 0.25 * (building.shape.levels - 1) : 0
-    const roofWidth = (building.rect.w - 2 * inset) * PLANE
+  for (const { building, text, floors } of scene.buildings) {
+    const top = building.floors.at(-1)
+    const roof = top === undefined ? building.rect : centredRect(building.rect, top.footprint)
+    const roofWidth = roof.w * PLANE
     for (const line of text.lines) assert.ok(textWidth(line) + 2 * ROOF_PAD <= roofWidth)
     if (curved(building.shape)) continue
-    const roofNorth = tiers[tiers.length - 1]![2]!.points[0]!
+    const roofNorth = floors.at(-1)!.find(face => face.side === 'top')!.points[0]!
     assert.deepEqual(text.origin, roofNorth)
   }
-  for (const { building, text, tiers } of rounded) {
+  for (const { building, text, floors } of rounded) {
     const { rect, lines } = building
     const block = roofBlock(lines)
-    assert.deepEqual(text.origin, project(rect.gx + (rect.w - block.w / PLANE) / 2, rect.gy + (rect.d - block.d / PLANE) / 2, building.floors))
-    assert.equal(tiers.length, 1)
-    const [band, top] = tiers[0]!
+    assert.deepEqual(text.origin, project(rect.gx + (rect.w - block.w / PLANE) / 2, rect.gy + (rect.d - block.d / PLANE) / 2, building.heightUnits))
+    assert.equal(floors.length, 1)
+    const [band, top] = floors[0]!
     assert.ok(top!.side === 'top' && top!.points.length > 4 && band!.side === 'left')
-    const box = screenBox(boxFaces(rect, 0, building.floors).find(face => face.side === 'top')!.points)
+    const box = screenBox(boxFaces(rect, 0, building.heightUnits).find(face => face.side === 'top')!.points)
     for (const point of top!.points) assert.ok(point.x >= box.x - 0.01 && point.x <= box.x + box.width + 0.01 && point.y >= box.y - 0.01 && point.y <= box.y + box.height + 0.01)
   }
   for (const { island, text } of scene.islands) {

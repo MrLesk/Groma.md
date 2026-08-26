@@ -34,7 +34,10 @@ async function gitAdd(root: string): Promise<void> {
   }
 }
 
-function observation(files: { file: string; symbols?: string[] }[]) {
+function observation(
+  files: { file: string; symbols?: string[] }[],
+  relationships: { source: string; target: string; kind: string }[] = [],
+) {
   return createScanObservation({
     scanner: { language: 'typescript', engine: 'test', engineVersion: '1' },
     root: { kind: 'package', name: 'Shop', file: 'package.json' },
@@ -48,7 +51,7 @@ function observation(files: { file: string; symbols?: string[] }[]) {
       })),
     })),
     placements: files.map(item => ({ file: item.file, scope: 'scope:src/api.ts' })),
-    relationships: [],
+    relationships,
     diagnostics: [],
   })
 }
@@ -110,6 +113,11 @@ test.concurrent('TypeScript emits one file fact and separate inferred placement'
     }))).toBeTrue()
     expect(result?.placements).toHaveLength(4)
     expect(result?.scopes.some(scope => scope.id === 'scope:src/cli.ts')).toBeTrue()
+    expect(result?.relationships.filter(relationship => relationship.kind === 'source-dependency'))
+      .toEqual([
+        { source: 'src/cli.ts', target: 'src/scanner.ts', kind: 'source-dependency' },
+        { source: 'src/scanner.ts', target: 'src/parse.ts', kind: 'source-dependency' },
+      ])
   } finally {
     await rm(root, { recursive: true, force: true })
   }
@@ -142,13 +150,19 @@ Curated responsibility.
     'groma/observed/systems/shop/containers/api/components/profile.md': profile,
   })
   try {
-    const summary = await reconcileScanObservations(root, [observation([
+    const scan = observation([
       { file: 'src/api.ts', symbols: ['startApi'] },
       { file: 'src/profile.ts', symbols: ['readProfile'] },
       { file: 'src/profile-markdown.ts', symbols: ['parseProfileMarkdown'] },
       { file: 'src/new-helper.ts', symbols: ['help'] },
       { file: 'src/other/new-helper.ts', symbols: ['helpOther'] },
-    ])])
+    ], [
+      { source: 'src/api.ts', target: 'src/profile.ts', kind: 'source-dependency' },
+      { source: 'src/new-helper.ts', target: 'src/profile.ts', kind: 'source-dependency' },
+      { source: 'src/profile.ts', target: 'src/profile-markdown.ts', kind: 'source-dependency' },
+    ])
+    const summary = await reconcileScanObservations(root, [scan])
+    await reconcileScanObservations(root, [scan])
     const curated = await readFile(
       path.join(root, 'groma/observed/systems/shop/containers/api/components/profile.md'),
       'utf8',
@@ -169,7 +183,11 @@ Curated responsibility.
     expect(summary).toEqual({ created: 3, refreshed: 1, matched: 0 })
     expect(curated.match(/file: src\/profile/g)).toHaveLength(2)
     expect(curated).toContain('symbol: readProfile')
+    expect(curated).toContain('dependencies: 1')
+    expect(curated).toContain('dependents: 2')
     expect(curated).toContain('symbol: parseProfileMarkdown')
+    expect(curated).toContain('dependencies: 0')
+    expect(curated).toContain('dependents: 1')
     expect(curated).toContain('Curated responsibility.')
     expect(added).toContain('file: src/new-helper.ts')
     expect(qualified).toContain('file: src/other/new-helper.ts')

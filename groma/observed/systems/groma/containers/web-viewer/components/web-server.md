@@ -2,10 +2,17 @@
 id: web-server
 kind: component
 parent: web-viewer
+group: Web runtime
 code:
   - scanner: typescript
     file: src/viewers/web/server.ts
     symbol: startWebViewer
+    dependencies: 9
+    dependents: 1
+  - scanner: typescript
+    file: src/viewers/web/payload.ts
+    dependencies: 4
+    dependents: 3
 ---
 
 # Web server

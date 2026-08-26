@@ -162,6 +162,15 @@ export async function scanTypeScriptSource(
     const sourcePlacement = placements.get(node.file)
     if (sourcePlacement === undefined) continue
     for (const imported of node.imports) {
+      const dependency = {
+        source: node.file,
+        target: imported,
+        kind: 'source-dependency',
+      }
+      relationships.set(
+        `${dependency.source}\0${dependency.target}\0${dependency.kind}`,
+        dependency,
+      )
       const targetPlacement = placements.get(imported)
       if (targetPlacement === undefined || targetPlacement === sourcePlacement) continue
       const relationship = {
@@ -169,7 +178,10 @@ export async function scanTypeScriptSource(
         target: scopeId(targetPlacement),
         kind: 'imports',
       }
-      relationships.set(`${relationship.source}\0${relationship.target}`, relationship)
+      relationships.set(
+        `${relationship.source}\0${relationship.target}\0${relationship.kind}`,
+        relationship,
+      )
     }
   }
 

@@ -6,7 +6,9 @@ group: Projection
 code:
   - scanner: typescript
     file: src/viewers/tui/projection-routes.ts
-    symbol: orthogonalRoute
+    symbol: inside
+    dependencies: 1
+    dependents: 1
 ---
 
 # Projection routes

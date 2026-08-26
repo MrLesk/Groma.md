@@ -54,7 +54,7 @@ function bodyPoints(scene: ProjectedScene, wanted: ReadonlySet<string>): Point[]
       .flatMap(item => item.faces.flatMap(face => face.points)),
     ...scene.buildings
       .filter(item => wanted.has(item.building.representationId))
-      .flatMap(item => item.tiers.flatMap(tier => tier.flatMap(face => face.points))),
+      .flatMap(item => item.floors.flatMap(floor => floor.flatMap(face => face.points))),
   ]
 }
 

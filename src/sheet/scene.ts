@@ -33,7 +33,7 @@ export function sheetScene(world: ArchitectureGraph): SheetScene {
       kind: 'building',
       rect: building.rect,
       within: island === building.surface ? [island] : [building.surface, island],
-      roof: building.floors,
+      roof: building.heightUnits,
       centrePorts: building.shape.kind === 'round',
     })
   }

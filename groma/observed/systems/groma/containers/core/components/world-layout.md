@@ -7,6 +7,8 @@ code:
   - scanner: typescript
     file: src/world-layout.ts
     symbol: layoutArchitectureWorld
+    dependencies: 1
+    dependents: 1
 ---
 
 # World layout

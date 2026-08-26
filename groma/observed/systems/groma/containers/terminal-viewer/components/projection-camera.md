@@ -6,7 +6,9 @@ group: Projection
 code:
   - scanner: typescript
     file: src/viewers/tui/projection-camera.ts
-    symbol: reveal
+    symbol: centeredCamera
+    dependencies: 1
+    dependents: 4
 ---
 
 # Projection camera

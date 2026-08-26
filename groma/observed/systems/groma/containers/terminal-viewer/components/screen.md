@@ -6,6 +6,17 @@ code:
   - scanner: typescript
     file: src/viewers/tui/terminal-viewer.ts
     symbol: mountTerminalViewer
+    dependencies: 9
+    dependents: 1
+  - scanner: typescript
+    file: src/viewers/tui/model.ts
+    symbol: TerminalViewModel
+    dependencies: 2
+    dependents: 10
+  - scanner: typescript
+    file: test-bun/helpers.ts
+    dependencies: 5
+    dependents: 0
 ---
 
 # Screen

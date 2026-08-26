@@ -25,6 +25,10 @@ public sealed class ScannerTests
             "Core/Shared.Second.cs", "scope:Core/Core.csproj"));
         Assert.Contains(first.Relationships, relationship => relationship == new ScanRelationship(
             "scope:App/App.csproj", "scope:Core/Core.csproj", "project-reference"));
+        Assert.Contains(first.Relationships, relationship => relationship == new ScanRelationship(
+            "App/UsesCore.cs", "Core/Shared.First.cs", "source-dependency"));
+        Assert.Contains(first.Relationships, relationship => relationship == new ScanRelationship(
+            "App/UsesCore.cs", "Core/Shared.Second.cs", "source-dependency"));
     }
 
     [Fact]

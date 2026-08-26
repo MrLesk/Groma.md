@@ -2,10 +2,13 @@
 id: scan
 kind: component
 parent: scanner
+group: Scan lifecycle
 code:
   - scanner: typescript
     file: src/scanner.ts
     symbol: formatScanSummary
+    dependencies: 5
+    dependents: 3
 ---
 
 # Scan

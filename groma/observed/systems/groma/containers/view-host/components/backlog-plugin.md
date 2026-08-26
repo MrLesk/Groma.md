@@ -6,6 +6,8 @@ code:
   - scanner: typescript
     file: src/work/backlog.ts
     symbol: createBacklogPlugin
+    dependencies: 1
+    dependents: 2
 ---
 
 # Backlog plugin

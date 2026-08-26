@@ -2,10 +2,13 @@
 id: plain-world
 kind: component
 parent: cli
+group: Commands
 code:
   - scanner: typescript
     file: src/plain-world.ts
     symbol: formatPlainWorld
+    dependencies: 3
+    dependents: 1
 ---
 
 # Plain text view

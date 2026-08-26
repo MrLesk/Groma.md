@@ -12,6 +12,12 @@ function renderCodeLines(code: CodeReference[]): string[] {
     if (reference.symbol !== undefined) {
       lines.push(`    symbol: ${reference.symbol}`)
     }
+    if (reference.dependencies !== undefined) {
+      lines.push(`    dependencies: ${reference.dependencies}`)
+    }
+    if (reference.dependents !== undefined) {
+      lines.push(`    dependents: ${reference.dependents}`)
+    }
   }
   return lines
 }

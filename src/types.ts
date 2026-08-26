@@ -16,6 +16,10 @@ export interface CodeReference {
   scanner: string
   file: string
   symbol?: string
+  /** Distinct scanned source files this file depends on. */
+  dependencies?: number
+  /** Distinct scanned source files that depend on this file. */
+  dependents?: number
   /** Runtime source measurement; authored architecture never supplies it. */
   lines?: number
 }

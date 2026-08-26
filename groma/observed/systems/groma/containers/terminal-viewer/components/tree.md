@@ -7,6 +7,8 @@ code:
   - scanner: typescript
     file: src/viewers/tui/tree.ts
     symbol: initialTree
+    dependencies: 2
+    dependents: 5
 ---
 
 # Tree

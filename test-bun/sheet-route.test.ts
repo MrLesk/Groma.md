@@ -4,7 +4,7 @@ import { test } from 'bun:test'
 
 import { loadArchitectureViewModel } from '../src/core.ts'
 import { RING } from '../src/sheet/forces.ts'
-import { LANES, ROOF_SHADOW } from '../src/sheet/grid.ts'
+import { LANES, ROOF_SHADOW, centredRect } from '../src/sheet/grid.ts'
 import { routeAll } from '../src/sheet/route.ts'
 import type { Endpoint } from '../src/sheet/route.ts'
 import { sheetScene } from '../src/sheet/scene.ts'
@@ -116,18 +116,44 @@ test.concurrent('one lattice route per authored relationship, Manhattan, on quar
 })
 
 /** The ground point whose screen position is the middle of a roof edge lies this far behind the edge along both axes. */
-function roofShadow(building: { floors: number }): number {
-  return Math.floor(building.floors * ROOF_SHADOW * LANES) / LANES
+function roofShadow(building: { heightUnits: number }): number {
+  return Math.floor(building.heightUnits * ROOF_SHADOW * LANES) / LANES
 }
 
 /** The port a route end stands for: the point itself on the boundary, or the back-side port whose roof shadow it lies in. */
 function portOf(scene: SheetScene, point: RoutePoint, key: string): RoutePoint {
-  const { rect } = rectOf(scene, key)
-  if (onBoundary(point, rect)) return point
   const building = scene.buildings.find(item => item.representationId === key)
+  const ground = building?.floors[0]
+  const rect = building !== undefined && ground !== undefined
+    ? centredRect(building.rect, ground.footprint)
+    : rectOf(scene, key).rect
+  if (onBoundary(point, rect)) return point
   const shadow = building === undefined ? 0 : roofShadow(building)
   return { gx: point.gx + shadow, gy: point.gy + shadow }
 }
+
+test.concurrent('a component route attaches to its largest ground floor', () => {
+  const scene = sheetScene(worldOf([
+    box('shop', 'system', unit),
+    box('api', 'container', unit, { parent: 'observed:shop' }),
+    box('a', 'component', unit, {
+      parent: 'observed:api',
+      code: [
+        { scanner: 'fixture', file: 'a-ground.ts', lines: 0, dependencies: 0, dependents: 0 },
+        { scanner: 'fixture', file: 'a-top.ts', lines: 100, dependencies: 10, dependents: 10 },
+      ],
+    }),
+    box('b', 'component', unit, {
+      parent: 'observed:api',
+      code: [{ scanner: 'fixture', file: 'b.ts', lines: 50, dependencies: 0, dependents: 0 }],
+    }),
+  ], [uses('relationship:ground', 'a', 'b')]))
+  const building = scene.buildings.find(item => item.id === 'a')!
+  const ground = centredRect(building.rect, building.floors[0]!.footprint)
+  const start = portOf(scene, scene.routes[0]!.points[0]!, building.representationId)
+  assert.deepEqual(ground, building.rect)
+  assert.equal(onBoundary(start, ground), true)
+})
 
 test.concurrent('routes start and end on a side of their ends, back sides just behind the roof edge', async () => {
   const { scene } = await fixtureScene(viewerFixtureRoot)

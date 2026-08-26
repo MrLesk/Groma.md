@@ -1,5 +1,5 @@
 import { ROOF_FONT } from '../../../sheet/measure.ts'
-import type { BuildingSection } from '../../../sheet/types.ts'
+import type { BuildingFloor } from '../../../sheet/types.ts'
 import type { ProjectedBuilding, ProjectedScene } from './project.ts'
 import { facadePattern, facadePatternId } from './style.ts'
 import { pointsAttribute, svg } from './svg.ts'
@@ -21,38 +21,38 @@ function ensureFacadePattern(layer: SVGGElement, fileType: string, side: 'left' 
   return id
 }
 
-function paintTier(
+function paintFloor(
   layer: SVGGElement,
   buildingGroup: SVGGElement,
-  tier: ProjectedBuilding['tiers'][number],
-  section: BuildingSection | undefined,
+  faces: ProjectedBuilding['floors'][number],
+  floor: BuildingFloor | undefined,
 ): void {
-  const group = section === undefined
+  const group = floor === undefined
     ? buildingGroup
-    : svg('g', { 'data-file': section.file, 'data-file-type': section.fileType }, 'section')
-  for (const face of tier) {
+    : svg('g', { 'data-files': floor.files.join('\n'), 'data-file-type': floor.facadeFileType }, 'floor')
+  for (const face of faces) {
     group.append(svg('polygon', { points: pointsAttribute(face.points) }, `face ${face.side}`))
     if (face.side !== 'top') {
       const attributes: Record<string, string> = { points: pointsAttribute(face.points) }
-      if (section !== undefined) {
-        attributes.style = `fill:url(#${ensureFacadePattern(layer, section.fileType, face.side)})`
+      if (floor !== undefined) {
+        attributes.style = `fill:url(#${ensureFacadePattern(layer, floor.facadeFileType, face.side)})`
       }
       group.append(svg('polygon', attributes, `pattern ${face.side}`))
     }
   }
-  if (section !== undefined) buildingGroup.append(group)
+  if (floor !== undefined) buildingGroup.append(group)
 }
 
 function paintBuilding(layer: SVGGElement, projected: ProjectedBuilding): SVGGElement {
-  const { building, tiers, text } = projected
+  const { building, floors, text } = projected
   const group = svg('g', { 'aria-label': building.name }, classOf(projected))
   group.dataset.id = building.representationId
-  for (const [index, tier] of tiers.entries()) paintTier(layer, group, tier, building.sections[index])
+  for (const [index, faces] of floors.entries()) paintFloor(layer, group, faces, building.floors[index])
   group.append(surfaceText(text, ROOF_FONT, 'label'))
   return group
 }
 
-/** Buildings back to front: one group per file section, patterned side faces, and the name on the final plain roof. */
+/** Buildings back to front: one group per visible floor, patterned side faces, and the name on the final roof. */
 export function paintBuildings(layer: SVGGElement, scene: ProjectedScene): Map<string, Element> {
   const nodes = new Map<string, Element>()
   for (const projected of scene.buildings) {

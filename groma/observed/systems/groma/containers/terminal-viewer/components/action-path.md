@@ -7,6 +7,8 @@ code:
   - scanner: typescript
     file: src/viewers/action-path.ts
     symbol: actionCaption
+    dependencies: 2
+    dependents: 11
 ---
 
 # Action path

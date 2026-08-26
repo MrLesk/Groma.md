@@ -49,6 +49,8 @@ test('builds a serializable revision-local C4 graph with Code references', async
           scanner: 'typescript',
           file: 'src/orders.ts',
           symbol: 'placeOrder',
+          dependencies: 3,
+          dependents: 5,
         },
         {
           scanner: 'routes',

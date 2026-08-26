@@ -2,10 +2,11 @@
 id: project-editor
 kind: component
 parent: web-viewer
-group: Project profile
 code:
-  - scanner: architecture
+  - scanner: typescript
     file: src/viewers/web/project/editor.ts
+    dependencies: 1
+    dependents: 2
 ---
 
 # Project editor

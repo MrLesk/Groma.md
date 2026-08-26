@@ -6,6 +6,8 @@ code:
   - scanner: typescript
     file: src/viewers/relationship-text.ts
     symbol: parentOfElements
+    dependencies: 0
+    dependents: 4
 ---
 
 # Relationship text

@@ -6,6 +6,8 @@ code:
   - scanner: typescript
     file: src/architecture-watch.ts
     symbol: watchArchitecture
+    dependencies: 0
+    dependents: 2
 ---
 
 # Architecture watch

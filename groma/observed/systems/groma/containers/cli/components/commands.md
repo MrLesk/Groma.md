@@ -2,9 +2,12 @@
 id: commands
 kind: component
 parent: cli
+group: Commands
 code:
   - scanner: typescript
     file: src/cli.ts
+    dependencies: 8
+    dependents: 0
 ---
 
 # Commands

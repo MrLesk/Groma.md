@@ -6,6 +6,8 @@ code:
   - scanner: typescript
     file: src/view-host.ts
     symbol: startTerminalViewer
+    dependencies: 7
+    dependents: 1
 ---
 
 # Terminal host

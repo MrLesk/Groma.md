@@ -7,6 +7,8 @@ code:
   - scanner: typescript
     file: src/viewers/tui/navigation.ts
     symbol: defaultSelection
+    dependencies: 9
+    dependents: 6
 ---
 
 # Navigation
