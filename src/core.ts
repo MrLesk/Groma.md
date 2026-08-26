@@ -159,7 +159,7 @@ export function annotateArchitecture(
   }
 }
 
-/** Weighs each element by the lines of its code files; an unreadable file counts 0. */
+/** Measures each code file and its element total; an unreadable file counts 0. */
 async function attachCodeLines(
   repositoryRoot: string,
   elements: AnnotatedElement[],
@@ -175,6 +175,10 @@ async function attachCodeLines(
     }
   }))
   for (const element of elements) {
+    element.code = element.code.map(reference => ({
+      ...reference,
+      lines: lineCounts.get(reference.file) ?? 0,
+    }))
     const own = new Set(element.code.map(ref => ref.file))
     element.codeLines = [...own].reduce((total, file) => total + (lineCounts.get(file) ?? 0), 0)
   }

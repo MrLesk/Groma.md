@@ -1,5 +1,5 @@
-import type { Origin } from '../types.ts'
-import type { Shape } from './types.ts'
+import type { CodeReference, Origin } from '../types.ts'
+import type { BuildingSection, Shape } from './types.ts'
 
 /** Plane pixels per cell: the roof text is laid out in these units and projected with the roof. */
 export const PLANE = 24
@@ -18,7 +18,7 @@ const MAX_LINE_CELLS = 4
 const MIN_SIDE = 2
 /** A building touched by this many routes deepens so its front sides keep free ports. */
 const HUB_DEGREE = 8
-/** Floors of the observed component with the most code lines. */
+/** Floors of the observed file with the most code lines. */
 const MAX_FLOORS = 4
 
 export function textWidth(text: string, size = ROOF_FONT, spacing = 0): number {
@@ -45,16 +45,40 @@ export function roofLines(name: string): string[] {
 
 /** Code files decide the shape: one box, a stack of one tier per file, or a tower. */
 export function shapeOf(files: number): Shape {
-  if (files >= 4) return { kind: 'tower', levels: 1 }
+  if (files >= 4) return { kind: 'tower' }
   if (files >= 2) return { kind: 'stack', levels: files }
-  return { kind: 'block', levels: 1 }
+  return { kind: 'block' }
+}
+
+/** Lower-case extension used as the file's visual type; extensionless files share one neutral type. */
+export function fileTypeOf(file: string): string {
+  const name = file.split('/').at(-1) ?? file
+  const dot = name.lastIndexOf('.')
+  if (dot < 0 || dot === name.length - 1) return 'no extension'
+  return name.slice(dot).toLowerCase()
+}
+
+/** One measured section per unique file, preserving the authored code-reference order. */
+export function sectionsOf(
+  origin: Origin,
+  code: readonly CodeReference[],
+  range: { min: number; max: number },
+): BuildingSection[] {
+  const files = new Map<string, CodeReference>()
+  for (const reference of code) {
+    if (!files.has(reference.file)) files.set(reference.file, reference)
+  }
+  return [...files.values()].map(reference => ({
+    file: reference.file,
+    fileType: fileTypeOf(reference.file),
+    floors: floorsOf(origin, reference.lines ?? 0, range),
+  }))
 }
 
 /**
- * Observed code lines raise a component by its share of the range between
- * the fewest and the most lines among the observed components, in half
- * floors. Ghosts, actors and external systems stay one floor, as does every
- * component when there are no observed components or all have the same count.
+ * Observed code lines raise a file section by its share of the range between
+ * the fewest and the most lines among the observed files, in half floors.
+ * Planned files stay one floor, as do all files when the range has one value.
  */
 export function floorsOf(origin: Origin, lines: number, range: { min: number; max: number }): number {
   if (origin !== 'observed' || range.max <= range.min) return 1
@@ -89,8 +113,8 @@ export function footprintOf(
     const d = MIN_SIDE
     return { w: Math.ceil(block.w / PLANE) + d, d }
   }
-  /** Each tier above the first insets the roof a quarter cell per side. */
-  const inset = 0.5 * (shape.levels - 1)
+  /** Only a short stack steps inward; a tower keeps one footprint. */
+  const inset = shape.kind === 'stack' ? 0.5 * (shape.levels - 1) : 0
   const w = Math.ceil(block.w / PLANE + inset)
   const d = Math.ceil(block.d / PLANE + inset)
   return {

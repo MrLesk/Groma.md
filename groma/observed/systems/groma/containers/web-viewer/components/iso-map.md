@@ -11,4 +11,4 @@ code:
 
 # Iso map
 
-Owns the SVG: drafting decorations, patterns, the camera group and its layers, one group per island, slab, building, and route, and the class toggles for selection, context, and lit flows. It also exposes the title plate's pencil hit without making the rest of the sheet interactive, and repaints only when the world changes.
+Owns the SVG map: drafting decorations, the camera and layers, architecture surfaces, file-section buildings, routes, and interaction state. Every measured component section receives a deterministic facade-window pattern from its normalized file extension, so an unknown type needs no registry; roofs remain plain and readable.

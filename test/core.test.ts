@@ -64,10 +64,12 @@ test('returns every independently annotated architecture representation', async 
       scanner: 'typescript',
       file: 'src/orders.ts',
       symbol: 'placeOrder',
+      lines: 0,
     },
     {
       scanner: 'routes',
       file: 'src/routes/orders.ts',
+      lines: 0,
     },
   ])
   assert.deepEqual(
@@ -87,7 +89,7 @@ test('returns every independently annotated architecture representation', async 
     parent: 'observed:api',
     children: [],
     external: false,
-    code: [{ scanner: 'typescript', file: 'src/legacy.ts' }],
+    code: [{ scanner: 'typescript', file: 'src/legacy.ts', lines: 0 }],
     codeLines: 0,
     origin: 'missing',
   })
@@ -104,6 +106,7 @@ test('returns every independently annotated architecture representation', async 
       scanner: 'typescript',
       file: 'src/checkout-orders.ts',
       symbol: 'checkout',
+      lines: 0,
     }],
     codeLines: 0,
     origin: 'planned',

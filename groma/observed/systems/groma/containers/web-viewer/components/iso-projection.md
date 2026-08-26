@@ -14,4 +14,4 @@ code:
 
 # Iso projection
 
-Projects the sheet into the 2:1 isometric picture: three faces per box tier, one polyline and arrowhead per route, the plane each name lies on, and the painter order back to front. Its blueprint domain adds one proportional frame, unlabeled calibration ticks on its two front edges, a scaled compass, and—when a project profile exists—rendered project Markdown, title metadata, and a ground-plane pencil in an east-aligned plate. The plate fits lines up to an 80-character measure; content beyond it wraps and pushes only the south frame edge outward. Every added decoration uses the neutral map palette.
+Projects the sheet into the 2:1 isometric picture: side faces for every file section, visible intermediate roofs for short stepped stacks, only the final roof for aligned towers, one polyline and arrowhead per route, surface text, and painter order back to front. Its blueprint domain adds the proportional frame, calibration ticks, compass, and project plate in the neutral map palette.

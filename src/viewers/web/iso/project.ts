@@ -210,14 +210,23 @@ function curvedFaces(outline: readonly { gx: number; gy: number }[], z0: number,
   ]
 }
 
-/** A box stacks tiers from the ground up, each inset a quarter cell per side and sharing the floors equally; a round building or pill is one curved tier. */
+/** A box stacks file sections from the ground up; short stacks step inward while towers keep one footprint and only their final roof. */
 function buildingTiers(building: Building): Face[][] {
   if (curved(building.shape)) return [curvedFaces(roofOutline(building.rect), 0, building.floors)]
-  const levels = building.shape.levels
-  const tierHeight = building.floors / levels
+  const heights = building.sections.length > 0
+    ? building.sections.map(section => section.floors)
+    : [building.floors]
   const tiers: Face[][] = []
-  for (let level = 0; level < levels; level += 1) {
-    tiers.push(boxFaces(inset(building.rect, TIER_INSET * level), level * tierHeight, (level + 1) * tierHeight))
+  let floor = 0
+  for (const [level, height] of heights.entries()) {
+    const rect = building.shape.kind === 'stack'
+      ? inset(building.rect, TIER_INSET * level)
+      : building.rect
+    const faces = boxFaces(rect, floor, floor + height)
+    tiers.push(building.shape.kind === 'tower' && level < heights.length - 1
+      ? faces.filter(face => face.side !== 'top')
+      : faces)
+    floor += height
   }
   return tiers
 }
@@ -225,7 +234,7 @@ function buildingTiers(building: Building): Face[][] {
 /** A box's name starts at the north corner of its top tier's roof; a curved roof centres the name's block. */
 function roofText(building: Building): SurfaceText {
   const { shape, floors, lines } = building
-  const roof = inset(building.rect, TIER_INSET * (shape.levels - 1))
+  const roof = inset(building.rect, shape.kind === 'stack' ? TIER_INSET * (shape.levels - 1) : 0)
   if (!curved(shape)) return { origin: project(roof.gx, roof.gy, floors), lines }
   const block = roofBlock(lines)
   return { origin: project(roof.gx + (roof.w - block.w / PLANE) / 2, roof.gy + (roof.d - block.d / PLANE) / 2, floors), lines }

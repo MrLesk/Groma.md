@@ -11,7 +11,7 @@ code:
 
 # Sheet
 
-Composes the viewers' shared blueprint sheet directly from the semantic architecture graph: flat islands for actors, external systems, and each internal system, container slabs level with their island, buildings sized for their names and raised by their code, group zones, all snapped to whole grid cells, and one lattice route per authored relationship. Semantic identity orders siblings before placement; coordinates from another layout are never consulted. Inside every surface what the outside feeds stands in a west column and every other child, the heaviest first, takes the cheapest spot beside the siblings it talks to, arrows priced by length, bends and whatever stands in their way, so routes stay short and straight. The same graph always gives the same sheet.
+Composes the viewers' shared blueprint sheet from the semantic architecture graph: flat architecture surfaces, group zones, one lattice route per authored relationship, and one component building section per unique code file. Each observed file contributes one to four floors from its project-relative LOC; two or three files step inward, while four or more keep one footprint as a vertical tower. Semantic identity orders siblings, and coordinates from another layout are never consulted.
 
 ## Relationships
 

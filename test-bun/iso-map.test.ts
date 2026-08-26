@@ -25,7 +25,8 @@ import {
   projectScene,
 } from '../src/viewers/web/iso/project.ts'
 import type { ProjectedScene } from '../src/viewers/web/iso/project.ts'
-import { openclawFixtureRoot, viewerFixtureRoot } from './helpers.ts'
+import { facadePatternId } from '../src/viewers/web/iso/style.ts'
+import { box, openclawFixtureRoot, viewerFixtureRoot, worldOf } from './helpers.ts'
 
 const profile = (name: string, description: string): ProjectProfile => ({
   name,
@@ -96,6 +97,37 @@ test.concurrent('a box shows its top and the two faces turned to the viewer', ()
   for (const side of faces.slice(0, 2)) {
     assert.ok(side.points.some(point => point.x === south.x && point.y === south.y))
   }
+})
+
+test.concurrent('a many-file component projects as one aligned sectioned tower', () => {
+  const unit = { x: 0, y: 0, width: 1, height: 1 }
+  const code = Array.from({ length: 8 }, (_, index) => ({
+    scanner: 'fixture',
+    file: `src/file-${index}.${index % 2 === 0 ? 'ts' : 'cs'}`,
+    lines: index * 100,
+  }))
+  const scene = projectScene(sheetScene(worldOf([
+    box('shop', 'system', unit),
+    box('api', 'container', unit, { parent: 'observed:shop' }),
+    box('tower', 'component', unit, { parent: 'observed:api', code }),
+  ])))
+  const tower = scene.buildings.find(item => item.building.id === 'tower')!
+  assert.equal(tower.tiers.length, 8)
+  assert.deepEqual(tower.tiers.map(tier => tier.map(face => face.side)), [
+    ['left', 'right'],
+    ['left', 'right'],
+    ['left', 'right'],
+    ['left', 'right'],
+    ['left', 'right'],
+    ['left', 'right'],
+    ['left', 'right'],
+    ['left', 'right', 'top'],
+  ])
+  const leftXs = tower.tiers.map(tier => tier.find(face => face.side === 'left')!.points.map(point => point.x))
+  for (const xs of leftXs.slice(1)) assert.deepEqual(xs, leftXs[0])
+  assert.equal(facadePatternId('.ts', 'left'), facadePatternId('.ts', 'left'))
+  assert.notEqual(facadePatternId('.ts', 'left'), facadePatternId('.cs', 'left'))
+  assert.notEqual(facadePatternId('.unknown', 'left'), facadePatternId('.ts', 'left'))
 })
 
 test.concurrent('buildings paint back to front', async () => {
@@ -273,7 +305,7 @@ test.concurrent('an off-centre route meets the near wall of the actor it leaves,
   const actor: Building = {
     representationId: 'observed:actor', id: 'actor', name: 'Actor', origin: 'observed',
     kind: 'actor', external: false, surface: 'actors', rect: { gx: 4, gy: 4, w: 4, d: 4 },
-    floors: 1, shape: { kind: 'round', levels: 1 }, lines: ['Actor'],
+    floors: 1, shape: { kind: 'round' }, sections: [], lines: ['Actor'],
   }
   const leg = (id: string, from: RoutePoint, to: RoutePoint, arriving = false): SheetScene['routes'][number] => ({
     id,
@@ -322,7 +354,7 @@ test.concurrent('roof and surface text keep their owning shape inset', async () 
   const rounded = scene.buildings.filter(({ building }) => curved(building.shape))
   assert.ok(scene.buildings.length > rounded.length && rounded.length > 0)
   for (const { building, text, tiers } of scene.buildings) {
-    const inset = 0.25 * (building.shape.levels - 1)
+    const inset = building.shape.kind === 'stack' ? 0.25 * (building.shape.levels - 1) : 0
     const roofWidth = (building.rect.w - 2 * inset) * PLANE
     for (const line of text.lines) assert.ok(textWidth(line) + 2 * ROOF_PAD <= roofWidth)
     if (curved(building.shape)) continue

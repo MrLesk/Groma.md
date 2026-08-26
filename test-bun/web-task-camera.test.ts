@@ -27,7 +27,8 @@ const sheet: SheetScene = {
     surface: 'system',
     rect: { gx: 20, gy: 20, w: 2, d: 2 },
     floors: 2,
-    shape: { kind: 'block', levels: 1 },
+    shape: { kind: 'block' },
+    sections: [],
     lines: ['Component'],
   }],
   routes: [{
