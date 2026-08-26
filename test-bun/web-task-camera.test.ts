@@ -26,9 +26,9 @@ const sheet: SheetScene = {
     external: false,
     surface: 'system',
     rect: { gx: 20, gy: 20, w: 2, d: 2 },
-    floors: 2,
+    heightUnits: 2,
     shape: { kind: 'block' },
-    sections: [],
+    floors: [],
     lines: ['Component'],
   }],
   routes: [{
@@ -53,7 +53,7 @@ test.concurrent('camera focus fits task routes with context room', () => {
 
   const points = [
     ...scene.islands[0]!.polygon,
-    ...scene.buildings[0]!.tiers.flatMap(tier => tier.flatMap(face => face.points)),
+    ...scene.buildings[0]!.floors.flatMap(floor => floor.flatMap(face => face.points)),
     ...scene.routes[0]!.points,
   ]
   const xs = points.map(point => point.x)

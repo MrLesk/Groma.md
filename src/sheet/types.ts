@@ -44,16 +44,17 @@ export interface Slab extends SheetItem {
   rect: CellRect
 }
 
-/** A component's box, stack or tower; an actor's round building; an external system's pill. */
+/** A component's block; an actor's round building; an external system's pill. */
 export type Shape =
-  | { kind: 'stack'; levels: number }
-  | { kind: 'block' | 'tower' | 'round' | 'pill' }
+  { kind: 'block' | 'round' | 'pill' }
 
-/** One source file expressed as a vertical section of a component building. */
-export interface BuildingSection {
-  file: string
-  fileType: string
-  floors: number
+/** Source files combined into one visible floor of a component building. */
+export interface BuildingFloor {
+  files: string[]
+  /** Facade pattern chosen from the largest member; grouped files may have other types. */
+  facadeFileType: string
+  heightUnits: number
+  footprint: { w: number; d: number }
 }
 
 /** A component, actor or external system standing on a slab or island. */
@@ -62,10 +63,11 @@ export interface Building extends SheetItem {
   external: boolean
   /** Slab representation id or island key the building stands on. */
   surface: string
+  /** Complete tower envelope reserved by packing. */
   rect: CellRect
-  floors: number
+  heightUnits: number
   shape: Shape
-  sections: BuildingSection[]
+  floors: BuildingFloor[]
   /** The name as laid on the roof, one or two lines. */
   lines: string[]
 }

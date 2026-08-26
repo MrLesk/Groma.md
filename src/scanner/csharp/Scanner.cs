@@ -39,6 +39,7 @@ public sealed class RoslynScanner
         Dictionary<string, ScanScope> scopes = new(StringComparer.Ordinal);
         Dictionary<string, HashSet<ScanSymbol>> symbolsByFile = new(StringComparer.Ordinal);
         HashSet<ScanPlacement> placements = [];
+        HashSet<ScanRelationship> relationships = [];
         Dictionary<ProjectId, string> scopeByProject = new();
 
         foreach (Project project in solution.Projects.OrderBy(project => project.FilePath, StringComparer.Ordinal))
@@ -70,6 +71,19 @@ public sealed class RoslynScanner
 
                 SemanticModel semanticModel = compilation.GetSemanticModel(tree);
                 SyntaxNode root = await tree.GetRootAsync(cancellationToken);
+                foreach (NameSyntax name in root.DescendantNodes().OfType<NameSyntax>())
+                {
+                    ISymbol? referenced = semanticModel.GetSymbolInfo(name, cancellationToken).Symbol;
+                    foreach (Location location in referenced?.Locations ?? [])
+                    {
+                        string? targetPath = location.SourceTree?.FilePath;
+                        if (!IsSourceFile(rootDirectory, targetPath))
+                            continue;
+                        string target = RelativePath(rootDirectory, targetPath!);
+                        if (target != file)
+                            relationships.Add(new ScanRelationship(file, target, "source-dependency"));
+                    }
+                }
                 foreach (MemberDeclarationSyntax declaration in root.DescendantNodes().OfType<MemberDeclarationSyntax>())
                 {
                     if (declaration is not BaseTypeDeclarationSyntax and not DelegateDeclarationSyntax)
@@ -87,7 +101,6 @@ public sealed class RoslynScanner
             }
         }
 
-        HashSet<ScanRelationship> relationships = [];
         foreach (Project project in solution.Projects)
         {
             if (!scopeByProject.TryGetValue(project.Id, out string? sourceScope))

@@ -2,9 +2,12 @@
 id: instructions
 kind: component
 parent: cli
+group: Commands
 code:
   - scanner: typescript
     file: src/instructions.ts
+    dependencies: 0
+    dependents: 1
 ---
 
 # Instructions

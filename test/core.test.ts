@@ -64,6 +64,8 @@ test('returns every independently annotated architecture representation', async 
       scanner: 'typescript',
       file: 'src/orders.ts',
       symbol: 'placeOrder',
+      dependencies: 3,
+      dependents: 5,
       lines: 0,
     },
     {

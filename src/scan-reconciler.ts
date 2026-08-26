@@ -27,8 +27,31 @@ export function readCode(value: unknown): CodeReference[] {
       scanner: reference.scanner,
       file: reference.file,
       ...(Object.hasOwn(reference, 'symbol') ? { symbol: reference.symbol } : {}),
+      ...(Object.hasOwn(reference, 'dependencies') ? { dependencies: reference.dependencies } : {}),
+      ...(Object.hasOwn(reference, 'dependents') ? { dependents: reference.dependents } : {}),
     }
   })
+}
+
+interface SourceCounts {
+  dependencies: number
+  dependents: number
+}
+
+function sourceCounts(observation: ScanObservation): Map<string, SourceCounts> {
+  const counts = new Map(observation.files.map(file => [
+    file.file,
+    { dependencies: 0, dependents: 0 },
+  ]))
+  for (const relationship of observation.relationships) {
+    if (relationship.kind !== 'source-dependency') continue
+    const source = counts.get(relationship.source)
+    const target = counts.get(relationship.target)
+    if (source === undefined || target === undefined) continue
+    source.dependencies += 1
+    target.dependents += 1
+  }
+  return counts
 }
 
 function codeFileKey(scanner: string, file: string): string {
@@ -158,7 +181,11 @@ async function createRecord(
   return record
 }
 
-function refreshedReference(reference: CodeReference, evidence: ScanFile): CodeReference {
+function refreshedReference(
+  reference: CodeReference,
+  evidence: ScanFile,
+  counts: SourceCounts,
+): CodeReference {
   const exact = evidence.symbols.find(symbol => {
     return symbol.id === reference.symbol || symbol.name === reference.symbol
   })
@@ -167,6 +194,7 @@ function refreshedReference(reference: CodeReference, evidence: ScanFile): CodeR
     scanner: reference.scanner,
     file: reference.file,
     ...(symbol === undefined ? {} : { symbol: symbol.name }),
+    ...counts,
   }
 }
 
@@ -176,10 +204,14 @@ async function refreshCuratedCode(
   observations: ScanObservation[],
   summary: ScanSummary,
 ): Promise<void> {
-  const evidence = new Map<string, ScanFile>()
+  const evidence = new Map<string, { file: ScanFile; counts: SourceCounts }>()
   for (const observation of observations) {
+    const counts = sourceCounts(observation)
     for (const file of observation.files) {
-      evidence.set(codeFileKey(observation.scanner.language, file.file), file)
+      evidence.set(codeFileKey(observation.scanner.language, file.file), {
+        file,
+        counts: counts.get(file.file)!,
+      })
     }
   }
 
@@ -189,8 +221,8 @@ async function refreshCuratedCode(
       continue
     }
     record.code = record.code.map(reference => {
-      const file = evidence.get(codeFileKey(reference.scanner, reference.file))
-      return file === undefined ? reference : refreshedReference(reference, file)
+      const found = evidence.get(codeFileKey(reference.scanner, reference.file))
+      return found === undefined ? reference : refreshedReference(reference, found.file, found.counts)
     })
     await upsertCode(repositoryRoot, record.sourceFilename, record.code)
     if (record.origin === 'planned') summary.matched += 1
@@ -257,6 +289,7 @@ async function reconcileObservation(
   observation: ScanObservation,
   summary: ScanSummary,
 ): Promise<void> {
+  const counts = sourceCounts(observation)
   const inferred = new Map(observation.scopes.map(scope => [
     scope.id,
     inferredContainer(world, observation, scope),
@@ -304,6 +337,7 @@ async function reconcileObservation(
       scanner: observation.scanner.language,
       file: file.file,
       ...(symbol === undefined ? {} : { symbol }),
+      ...counts.get(file.file)!,
     }
     const name = fileDisplayName(file.file)
     const named = existingChild(world, 'component', name, parent)

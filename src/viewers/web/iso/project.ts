@@ -1,4 +1,4 @@
-import { PAD, ROOF_SHADOW } from '../../../sheet/grid.ts'
+import { PAD, ROOF_SHADOW, centredRect } from '../../../sheet/grid.ts'
 import { PLANE, curved, roofBlock } from '../../../sheet/measure.ts'
 import type {
   Building,
@@ -15,30 +15,27 @@ import type { Bounds, Point } from '../../../types.ts'
 import { projectBlueprint } from './blueprint.ts'
 import type { Blueprint } from './blueprint.ts'
 
-/** A cell is a 48 × 24 diamond; a floor is 12 px tall, so a roof's shadow is exactly half a cell per floor and lands on the lattice. 2:1 dimetric keeps every lattice point on integers. */
+/** A cell is a 48 × 24 diamond; one height unit is 12 px. */
 const CELL_X = 24
 const CELL_Y = 12
-export const FLOOR = 12
-
-/** Insets of each stack tier above the one below, in cells per side. */
-const TIER_INSET = 0.25
+export const HEIGHT_UNIT = 12
 /** Straight segments drawn along a semicircle of a curved roof. */
 const ARC_STEPS = 16
 /** Screen pixels a slab's thickness hangs below the grid line: its top is the ground, its sides are drawn over the island in front of it. */
 const SLAB_HANG = 3
 
 export function project(gx: number, gy: number, z: number): Point {
-  return { x: (gx - gy) * CELL_X, y: (gx + gy) * CELL_Y - z * FLOOR }
+  return { x: (gx - gy) * CELL_X, y: (gx + gy) * CELL_Y - z * HEIGHT_UNIT }
 }
 
 /** The planes the viewer sees. Every flat decoration (names, patterns, compass letters) is drawn in plane pixels and laid onto the screen by one matrix per plane. */
 export type Plane = 'ground' | 'left' | 'right'
 
-/** Screen vector of one plane pixel along each plane axis: 24 plane pixels make a cell, 14 make a floor. */
+/** Screen vector of one plane pixel along each plane axis. */
 const PLANE_AXES: Record<Plane, [Point, Point]> = {
   ground: [project(1 / CELL_X, 0, 0), project(0, 1 / CELL_X, 0)],
-  left: [project(0, 1 / CELL_X, 0), project(0, 0, 1 / FLOOR)],
-  right: [project(1 / CELL_X, 0, 0), project(0, 0, 1 / FLOOR)],
+  left: [project(0, 1 / CELL_X, 0), project(0, 0, 1 / HEIGHT_UNIT)],
+  right: [project(1 / CELL_X, 0, 0), project(0, 0, 1 / HEIGHT_UNIT)],
 }
 
 /** The SVG matrix that lays a plane's pixels onto the screen with the plane's origin at `origin`. */
@@ -80,8 +77,8 @@ export interface ProjectedSlab {
 
 export interface ProjectedBuilding {
   building: Building
-  /** Bottom tier first; each tier is left, right, top. */
-  tiers: Face[][]
+  /** Bottom floor first; each floor has visible side and roof faces. */
+  floors: Face[][]
   text: SurfaceText
 }
 
@@ -133,10 +130,6 @@ export function paintOrder<T extends { rect: CellRect }>(items: readonly T[]): T
     depthKey(left.rect) - depthKey(right.rect) || left.rect.gx - right.rect.gx)
 }
 
-function inset(rect: CellRect, by: number): CellRect {
-  return { gx: rect.gx + by, gy: rect.gy + by, w: rect.w - 2 * by, d: rect.d - 2 * by }
-}
-
 /** A curved footprint in ground cells: every point `radius` from the segment between the two cap centres, which runs from `west` to `east` along `middle`; in a square the caps share a centre and the shape is a circle. `back` slides the shape north-west, under a roof that hides that much ground. */
 function stadium(rect: CellRect, back = 0): { radius: number; west: number; east: number; middle: number } {
   const radius = Math.min(rect.w, rect.d) / 2
@@ -174,7 +167,7 @@ function onWall(point: RoutePoint, towards: RoutePoint, building: Building | und
   if (building === undefined || !curved(building.shape)) return point
   const { rect } = building
   const shadowed = point.gx < rect.gx || point.gy < rect.gy
-  const { radius, west, east, middle } = stadium(rect, shadowed ? building.floors * ROOF_SHADOW : 0)
+  const { radius, west, east, middle } = stadium(rect, shadowed ? building.heightUnits * ROOF_SHADOW : 0)
   /** Half the chord the outline cuts on a line `off` from the middle. A port sits inside a side at least two radii long, so the root is always real. */
   const half = (off: number): number => Math.sqrt(Math.max(0, radius * radius - off * off))
   if (point.gy === towards.gy) {
@@ -210,34 +203,39 @@ function curvedFaces(outline: readonly { gx: number; gy: number }[], z0: number,
   ]
 }
 
-/** A box stacks file sections from the ground up; short stacks step inward while towers keep one footprint and only their final roof. */
-function buildingTiers(building: Building): Face[][] {
-  if (curved(building.shape)) return [curvedFaces(roofOutline(building.rect), 0, building.floors)]
-  const heights = building.sections.length > 0
-    ? building.sections.map(section => section.floors)
-    : [building.floors]
-  const tiers: Face[][] = []
-  let floor = 0
-  for (const [level, height] of heights.entries()) {
-    const rect = building.shape.kind === 'stack'
-      ? inset(building.rect, TIER_INSET * level)
-      : building.rect
-    const faces = boxFaces(rect, floor, floor + height)
-    tiers.push(building.shape.kind === 'tower' && level < heights.length - 1
-      ? faces.filter(face => face.side !== 'top')
-      : faces)
-    floor += height
+function sameFootprint(left: CellRect, right: CellRect): boolean {
+  return left.gx === right.gx && left.gy === right.gy && left.w === right.w && left.d === right.d
+}
+
+/** File floors rise from the ground on one centred tower axis. */
+function buildingFloors(building: Building): Face[][] {
+  if (curved(building.shape)) {
+    return [curvedFaces(roofOutline(building.rect), 0, building.heightUnits)]
   }
-  return tiers
+  if (building.floors.length === 0) return [boxFaces(building.rect, 0, building.heightUnits)]
+  const rects = building.floors.map(floor => centredRect(building.rect, floor.footprint))
+  const faces: Face[][] = []
+  let height = 0
+  for (const [index, floor] of building.floors.entries()) {
+    const rect = rects[index]!
+    const nextHeight = height + floor.heightUnits
+    const floorFaces = boxFaces(rect, height, nextHeight)
+    const next = rects[index + 1]
+    if (next !== undefined && sameFootprint(rect, next)) floorFaces.pop()
+    faces.push(floorFaces)
+    height = nextHeight
+  }
+  return faces
 }
 
 /** A box's name starts at the north corner of its top tier's roof; a curved roof centres the name's block. */
 function roofText(building: Building): SurfaceText {
-  const { shape, floors, lines } = building
-  const roof = inset(building.rect, shape.kind === 'stack' ? TIER_INSET * (shape.levels - 1) : 0)
-  if (!curved(shape)) return { origin: project(roof.gx, roof.gy, floors), lines }
+  const { shape, heightUnits, lines } = building
+  const top = building.floors.at(-1)
+  const roof = top === undefined ? building.rect : centredRect(building.rect, top.footprint)
+  if (!curved(shape)) return { origin: project(roof.gx, roof.gy, heightUnits), lines }
   const block = roofBlock(lines)
-  return { origin: project(roof.gx + (roof.w - block.w / PLANE) / 2, roof.gy + (roof.d - block.d / PLANE) / 2, floors), lines }
+  return { origin: project(roof.gx + (roof.w - block.w / PLANE) / 2, roof.gy + (roof.d - block.d / PLANE) / 2, heightUnits), lines }
 }
 
 /** A surface's own name lies in its front band along the west corner, in front of every child. */
@@ -274,12 +272,12 @@ export function projectScene(scene: SheetScene, profile?: ProjectProfile): Proje
   }))
   const slabs = paintOrder(scene.slabs).map(slab => ({
     slab,
-    faces: boxFaces(slab.rect, -SLAB_HANG / FLOOR, 0),
+    faces: boxFaces(slab.rect, -SLAB_HANG / HEIGHT_UNIT, 0),
     text: bandText(slab.rect, 0, [slab.name]),
   }))
   const buildings = paintOrder(scene.buildings).map(building => ({
     building,
-    tiers: buildingTiers(building),
+    floors: buildingFloors(building),
     text: roofText(building),
   }))
   const standing = new Map(scene.buildings.map(building => [building.representationId, building]))
@@ -304,7 +302,7 @@ export function projectScene(scene: SheetScene, profile?: ProjectProfile): Proje
     buildings,
     bounds: boundsOf([
       ...blueprint.frame,
-      ...buildings.flatMap(item => item.tiers.flatMap(tier => tier.flatMap(face => face.points))),
+      ...buildings.flatMap(item => item.floors.flatMap(floor => floor.flatMap(face => face.points))),
     ]),
   }
 }

@@ -182,7 +182,7 @@ export function createMap(host: HTMLElement): IsoMap {
     },
     anchorOf(id) {
       const building = painted?.buildings.find(item => item.building.representationId === id)
-      if (building) return onSurface(building.tiers.at(-1)!.find(face => face.side === 'top')!.points)
+      if (building) return onSurface(building.floors.at(-1)!.find(face => face.side === 'top')!.points)
       const slab = painted?.slabs.find(item => item.slab.representationId === id)
       if (slab) return onSurface(slab.faces.find(face => face.side === 'top')!.points)
       const island = painted?.islands.find(item => item.island.element?.representationId === id)

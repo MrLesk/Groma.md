@@ -2,10 +2,13 @@
 id: scanner-observation
 kind: component
 parent: scanner
+group: Scan lifecycle
 code:
   - scanner: typescript
     file: src/scanner/observation.ts
     symbol: createScanObservation
+    dependencies: 0
+    dependents: 4
 ---
 
 # Scanner observation

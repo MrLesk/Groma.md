@@ -6,7 +6,7 @@ export const LANES = 4
 /** Base cells inside a packed parent; surface labels use the same compact edge inset. */
 export const PAD = 1
 /**
- * Cells of ground one floor hides behind a building. A floor lifts the roof
+ * Cells of ground one height unit hides behind a building. One unit lifts the roof
  * 12 px and a cell drops 24 px on screen, so the roof covers half a cell
  * north and half a cell west per floor, together.
  */
@@ -17,9 +17,9 @@ export const ROOF_SHADOW = 0.5
  * corridor between them still shows CORRIDOR cells; its south and east
  * neighbours are unaffected, because nothing hides that ground.
  */
-export function shadeOf(floors: number): number {
+export function shadeOf(heightUnits: number): number {
   /** Never negative: a wider GAP already clears the roof, and a building must not claim less than its footprint. */
-  return Math.max(0, Math.ceil(floors * ROOF_SHADOW + CORRIDOR - GAP))
+  return Math.max(0, Math.ceil(heightUnits * ROOF_SHADOW + CORRIDOR - GAP))
 }
 /** Cells of sheet around the islands; the compass rose lives in a corner of this band. */
 export const MARGIN = 4
@@ -28,6 +28,18 @@ export const EMPTY = 4
 
 export function translate(rect: CellRect, dx: number, dy: number): CellRect {
   return { gx: rect.gx + dx, gy: rect.gy + dy, w: rect.w, d: rect.d }
+}
+
+/** Centres a footprint on the same vertical axis as its complete building envelope. */
+export function centredRect(
+  envelope: CellRect,
+  footprint: Pick<CellRect, 'w' | 'd'>,
+): CellRect {
+  return {
+    gx: envelope.gx + (envelope.w - footprint.w) / 2,
+    gy: envelope.gy + (envelope.d - footprint.d) / 2,
+    ...footprint,
+  }
 }
 
 export function contains(outer: CellRect, inner: CellRect): boolean {

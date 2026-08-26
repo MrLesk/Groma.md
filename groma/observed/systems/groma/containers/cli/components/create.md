@@ -2,10 +2,13 @@
 id: create
 kind: component
 parent: cli
+group: Commands
 code:
   - scanner: typescript
     file: src/create.ts
     symbol: ensurePlanReadme
+    dependencies: 4
+    dependents: 2
 ---
 
 # Create

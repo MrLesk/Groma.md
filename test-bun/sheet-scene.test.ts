@@ -11,11 +11,11 @@ import {
   PLANE,
   ROOF_PAD,
   SURFACE_FONT,
+  areaUnitsOf,
   fileTypeOf,
-  floorsOf,
+  heightUnitsOf,
   footprintOf,
   roofLines,
-  shapeOf,
   textWidth,
 } from '../src/sheet/measure.ts'
 import { sheetScene } from '../src/sheet/scene.ts'
@@ -99,17 +99,17 @@ test.concurrent('a building keeps the ground its roof hides clear of its north a
       parent: 'observed:api', code: [{ scanner: 'fixture', file: 'middling.ts', lines: 1200 }],
     }),
   ], [uses('relationship:0', 'tall', 'short'), uses('relationship:1', 'middling', 'tall')]))
-  assert.ok(shadeOf(scene.buildings.find(building => building.id === 'tall')!.floors) > 0)
+  assert.ok(shadeOf(scene.buildings.find(building => building.id === 'tall')!.heightUnits) > 0)
   let pairs = 0
   for (const near of scene.buildings) {
     /** The ground the roof hides, plus the one cell an arrow needs to run out of one building and into the next. */
-    const room = near.floors * ROOF_SHADOW + 1
+    const room = near.heightUnits * ROOF_SHADOW + 1
     for (const far of scene.buildings) {
       if (far === near || far.surface !== near.surface) continue
       const alongX = near.rect.gx < far.rect.gx + far.rect.w && far.rect.gx < near.rect.gx + near.rect.w
       const alongY = near.rect.gy < far.rect.gy + far.rect.d && far.rect.gy < near.rect.gy + near.rect.d
       /** Only a building whose roof outgrows the plain gap makes this rule bite. */
-      const shaded = shadeOf(near.floors) > 0 ? 1 : 0
+      const shaded = shadeOf(near.heightUnits) > 0 ? 1 : 0
       if (alongX && far.rect.gy + far.rect.d <= near.rect.gy) {
         pairs += shaded
         assert.ok(near.rect.gy - (far.rect.gy + far.rect.d) >= room, `${far.id} stands in ${near.id}'s roof shadow`)
@@ -251,33 +251,32 @@ test.concurrent('adding a sibling that sorts last keeps the earlier buildings in
   for (const [id, offset] of before) assert.deepEqual(after.get(id), offset)
 })
 
-test.concurrent('roof text, code files and code lines size a building', () => {
+test.concurrent('roof text and file measurements size a building', () => {
   assert.deepEqual(roofLines('Ab'), ['Ab'])
   assert.deepEqual(roofLines('Architecture model'), ['Architecture', 'model'])
   assert.deepEqual(roofLines('A very long component name indeed'), ['A very long component', 'name indeed'])
-  assert.deepEqual(shapeOf(0), { kind: 'block' })
-  assert.deepEqual(shapeOf(2), { kind: 'stack', levels: 2 })
-  assert.deepEqual(shapeOf(4), { kind: 'tower' })
-  assert.deepEqual(footprintOf(['Ab'], shapeOf(0), 0), { w: 2, d: 2 })
-  assert.deepEqual(footprintOf(['Architecture', 'model'], shapeOf(2), 0), { w: 5, d: 3 })
-  assert.deepEqual(footprintOf(['A very long component', 'name indeed'], shapeOf(4), 0), { w: 7, d: 2 })
-  assert.deepEqual(footprintOf(['Ab'], shapeOf(3), 0), { w: 3, d: 3 })
-  assert.deepEqual(footprintOf(['Ab'], shapeOf(0), 8), { w: 2, d: 3 })
+  assert.deepEqual(footprintOf(['Ab'], { kind: 'block' }, 0), { w: 2, d: 2 })
+  assert.deepEqual(footprintOf(['Architecture', 'model'], { kind: 'block' }, 0), { w: 4, d: 2 })
+  assert.deepEqual(footprintOf(['A very long component', 'name indeed'], { kind: 'block' }, 0), { w: 7, d: 2 })
+  assert.deepEqual(footprintOf(['Ab'], { kind: 'block' }, 8), { w: 2, d: 3 })
   assert.deepEqual(footprintOf(['Ab'], { kind: 'round' }, 0), { w: 2, d: 2 })
   assert.deepEqual(footprintOf(['Ann the architect'], { kind: 'round' }, 0), { w: 6, d: 6 })
   assert.deepEqual(footprintOf(['Git'], { kind: 'pill' }, 0), { w: 4, d: 2 })
   const range = { min: 0, max: 2000 }
-  assert.equal(floorsOf('observed', 0, range), 1)
-  assert.equal(floorsOf('observed', 450, range), 1.5)
-  assert.equal(floorsOf('observed', 2000, range), 4)
-  assert.equal(floorsOf('observed', 700, { min: 700, max: 700 }), 1)
-  assert.equal(floorsOf('planned', 2000, range), 1)
+  assert.equal(heightUnitsOf('observed', 0, range), 1)
+  assert.equal(heightUnitsOf('observed', 450, range), 1.5)
+  assert.equal(heightUnitsOf('observed', 2000, range), 4)
+  assert.equal(heightUnitsOf('observed', 700, { min: 700, max: 700 }), 1)
+  assert.equal(heightUnitsOf('planned', 2000, range), 1)
+  assert.equal(areaUnitsOf('observed', 0, { min: 0, max: 9 }), 0)
+  assert.equal(areaUnitsOf('observed', 9, { min: 0, max: 9 }), 3)
+  assert.equal(areaUnitsOf('planned', 9, { min: 0, max: 9 }), 0)
 
   const scene = sheetScene(worldOf([
     box('ann', 'actor', unit, { name: 'Ann the architect' }),
     { ...box('bank', 'system', unit, { external: true }), codeLines: 900 },
   ]))
-  for (const building of scene.buildings) assert.equal(building.floors, 1)
+  for (const building of scene.buildings) assert.equal(building.heightUnits, 1)
   const ann = scene.buildings.find(building => building.id === 'ann')!
   assert.equal(ann.shape.kind, 'round')
   assert.ok(ann.rect.w === ann.rect.d && ann.rect.w > 2 && ann.lines.length === 2)
@@ -286,28 +285,49 @@ test.concurrent('roof text, code files and code lines size a building', () => {
   assert.ok(bank.rect.d === 2 && bank.lines.length === 1)
 })
 
-test.concurrent('every unique source file becomes one LOC-sized tower section', () => {
+test.concurrent('source files compress into nested project-relative floors without losing a file', () => {
   const code = Array.from({ length: 8 }, (_, index) => ({
     scanner: 'fixture',
     file: `src/file-${index}.${index % 2 === 0 ? 'ts' : 'CS'}`,
     lines: index * 100,
+    dependencies: index,
+    dependents: 7 - index,
   }))
   const scene = sheetScene(worldOf([
     box('shop', 'system', unit),
     box('api', 'container', unit, { parent: 'observed:shop' }),
+    box('single', 'component', unit, {
+      parent: 'observed:api',
+      code: [{ scanner: 'fixture', file: 'src/single.ts', lines: 0, dependencies: 0, dependents: 0 }],
+    }),
+    box('middle', 'component', unit, {
+      parent: 'observed:api',
+      code: code.slice(0, 4).map((reference, index) => ({ ...reference, file: `src/middle-${index}.ts` })),
+    }),
     box('tower', 'component', unit, {
       parent: 'observed:api',
       code: [...code, { ...code[0]!, symbol: 'duplicate reference' }],
     }),
   ]))
+  const single = scene.buildings.find(building => building.id === 'single')!
+  const middle = scene.buildings.find(building => building.id === 'middle')!
   const tower = scene.buildings.find(building => building.id === 'tower')!
-  assert.equal(tower.shape.kind, 'tower')
-  assert.equal(tower.sections.length, 8)
-  assert.deepEqual(tower.sections.map(section => section.file), code.map(reference => reference.file))
-  assert.equal(tower.sections[0]!.floors, 1)
-  assert.equal(tower.sections[7]!.floors, 4)
-  assert.equal(tower.floors, tower.sections.reduce((total, section) => total + section.floors, 0))
-  assert.deepEqual(new Set(tower.sections.map(section => section.fileType)), new Set(['.ts', '.cs']))
+  assert.equal(single.floors.length, 1)
+  assert.equal(middle.floors.length, 3)
+  assert.equal(middle.floors.flatMap(floor => floor.files).length, 4)
+  assert.equal(tower.shape.kind, 'block')
+  assert.deepEqual(
+    tower.floors.map(({ files, heightUnits, footprint }) => ({ files, heightUnits, footprint })),
+    [
+      { files: ['src/file-2.ts', 'src/file-3.CS'], heightUnits: 2.5, footprint: { w: 5, d: 5 } },
+      { files: ['src/file-4.ts', 'src/file-5.CS'], heightUnits: 3, footprint: { w: 5, d: 5 } },
+      { files: ['src/file-0.ts', 'src/file-1.CS'], heightUnits: 1.5, footprint: { w: 5, d: 5 } },
+      { files: ['src/file-6.ts'], heightUnits: 3.5, footprint: { w: 2, d: 5 } },
+      { files: ['src/file-7.CS'], heightUnits: 4, footprint: { w: 2, d: 5 } },
+    ],
+  )
+  assert.equal(tower.heightUnits, tower.floors.reduce((total, floor) => total + floor.heightUnits, 0))
+  assert.deepEqual({ w: tower.rect.w, d: tower.rect.d }, { w: 5, d: 5 })
   assert.equal(fileTypeOf('Dockerfile'), 'no extension')
   assert.equal(fileTypeOf('.env'), '.env')
 })

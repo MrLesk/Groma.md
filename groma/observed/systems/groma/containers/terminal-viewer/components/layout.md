@@ -7,6 +7,8 @@ code:
   - scanner: typescript
     file: src/viewers/tui/layout.ts
     symbol: paneLayout
+    dependencies: 1
+    dependents: 5
 ---
 
 # Layout

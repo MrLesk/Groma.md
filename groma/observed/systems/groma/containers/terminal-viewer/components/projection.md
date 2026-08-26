@@ -6,7 +6,9 @@ group: Projection
 code:
   - scanner: typescript
     file: src/viewers/tui/projection.ts
-    symbol: projectWorld
+    symbol: visibleEndpointFor
+    dependencies: 5
+    dependents: 11
 ---
 
 # Projection

@@ -6,6 +6,7 @@ import type {
   ArchitectureModel,
   ArchitectureRelationship,
   C4Kind,
+  CodeReference,
   MarkdownElement,
   MarkdownNode,
   Revision,
@@ -18,6 +19,17 @@ const expectedParentKinds = new Map<C4Kind, C4Kind>([
 ])
 const rootKinds = new Set<C4Kind>(['actor', 'system'])
 const supportedKinds = new Set<C4Kind>([...rootKinds, ...expectedParentKinds.keys()])
+
+function codeReferencesOf(code: unknown): CodeReference[] {
+  if (!Array.isArray(code)) return []
+  return code.map(reference => ({
+    scanner: reference.scanner,
+    file: reference.file,
+    ...(Object.hasOwn(reference, 'symbol') ? { symbol: reference.symbol } : {}),
+    ...(Object.hasOwn(reference, 'dependencies') ? { dependencies: reference.dependencies } : {}),
+    ...(Object.hasOwn(reference, 'dependents') ? { dependents: reference.dependents } : {}),
+  }))
+}
 
 export class ArchitectureModelError extends Error {
   readonly code: string
@@ -205,14 +217,6 @@ function documentToElement(document: ArchitectureDocument): ArchitectureElement 
   }
 
   const { name, description } = elementNameAndDescription(document.nodes)
-  const codeReferences = Array.isArray(code)
-    ? code.map(reference => ({
-        scanner: reference.scanner,
-        file: reference.file,
-        ...(Object.hasOwn(reference, 'symbol') ? { symbol: reference.symbol } : {}),
-      }))
-    : []
-
   return {
     id,
     kind: kind as C4Kind,
@@ -222,7 +226,7 @@ function documentToElement(document: ArchitectureDocument): ArchitectureElement 
     external: external === true,
     ...(typeof group === 'string' ? { group } : {}),
     ...(typeof technology === 'string' ? { technology } : {}),
-    code: codeReferences,
+    code: codeReferencesOf(code),
     sourceFilename,
   }
 }

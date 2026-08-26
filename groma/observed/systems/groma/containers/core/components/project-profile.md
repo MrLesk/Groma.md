@@ -6,6 +6,12 @@ code:
   - scanner: typescript
     file: src/project-profile.ts
     symbol: parseProjectProfile
+    dependencies: 1
+    dependents: 6
+  - scanner: typescript
+    file: src/project-markdown.ts
+    dependencies: 0
+    dependents: 2
 ---
 
 # Project profile

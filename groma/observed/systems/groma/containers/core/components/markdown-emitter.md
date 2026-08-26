@@ -7,6 +7,8 @@ code:
   - scanner: typescript
     file: src/markdown-emitter.ts
     symbol: omitCode
+    dependencies: 1
+    dependents: 4
 ---
 
 # Markdown emitter

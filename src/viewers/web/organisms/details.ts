@@ -129,6 +129,10 @@ function heading(label: string): HTMLElement {
   return row
 }
 
+function countFact(count: number, singular: string, plural: string): string {
+  return `${count} ${count === 1 ? singular : plural}`
+}
+
 function marked(
   kind: C4Kind | null,
   external: boolean,
@@ -295,6 +299,8 @@ export function paintDetails(
         extra.className = 'ghost'
         const facts = [fileTypeOf(reference.file)]
         if (reference.lines !== undefined) facts.push(`${reference.lines} lines`)
+        if (reference.dependencies !== undefined) facts.push(countFact(reference.dependencies, 'dependency', 'dependencies'))
+        if (reference.dependents !== undefined) facts.push(countFact(reference.dependents, 'dependent', 'dependents'))
         if (reference.symbol !== undefined) facts.push(reference.symbol)
         facts.push(reference.scanner)
         extra.textContent = facts.join(' · ')

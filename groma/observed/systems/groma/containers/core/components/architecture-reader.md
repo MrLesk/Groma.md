@@ -6,6 +6,8 @@ code:
   - scanner: typescript
     file: src/architecture-reader.ts
     symbol: loadRevision
+    dependencies: 1
+    dependents: 6
 ---
 
 # Architecture reader

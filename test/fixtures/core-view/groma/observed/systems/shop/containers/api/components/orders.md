@@ -6,6 +6,8 @@ code:
   - scanner: typescript
     file: src/orders.ts
     symbol: placeOrder
+    dependencies: 3
+    dependents: 5
   - scanner: routes
     file: src/routes/orders.ts
 ---

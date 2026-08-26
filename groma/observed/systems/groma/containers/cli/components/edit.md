@@ -2,10 +2,13 @@
 id: edit
 kind: component
 parent: cli
+group: Commands
 code:
   - scanner: typescript
     file: src/edit.ts
     symbol: editArchitecture
+    dependencies: 5
+    dependents: 1
 ---
 
 # Edit

@@ -7,6 +7,8 @@ code:
   - scanner: typescript
     file: src/viewers/web/iso/camera.ts
     symbol: fitCamera
+    dependencies: 2
+    dependents: 3
 ---
 
 # Iso camera

@@ -20,6 +20,10 @@ const elementPathPatterns = [
   /^systems\/[^/]+\/containers\/[^/]+\/components\/[^/]+\.md$/,
 ]
 
+function codeCountErrors(record: Record<string, unknown>, prefix: string): string[] {
+  return ['dependencies', 'dependents'].flatMap(field => record[field] === undefined || (Number.isInteger(record[field]) && Number(record[field]) >= 0)
+    ? [] : [`${prefix} ${field} must be a non-negative integer`])
+}
 export class ArchitectureValidationError extends Error {
   readonly errors: string[]
 
@@ -293,7 +297,7 @@ export async function validateRevision(
           }
           const record = entry as Record<string, unknown>
           const extra = Object.keys(record).filter(
-            field => field !== 'scanner' && field !== 'file' && field !== 'symbol',
+            field => !['scanner', 'file', 'symbol', 'dependencies', 'dependents'].includes(field),
           )
           if (extra.length > 0) {
             errors.push(
@@ -309,6 +313,7 @@ export async function validateRevision(
           if (record.symbol !== undefined && typeof record.symbol !== 'string') {
             errors.push(`${relativeFile}: code[${index}] symbol must be a string`)
           }
+          errors.push(...codeCountErrors(record, `${relativeFile}: code[${index}]`))
         }
       }
     }

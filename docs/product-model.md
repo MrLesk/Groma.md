@@ -153,12 +153,16 @@ files itself. The minimum tree is `groma/README.md`, `groma/observed/README.md`,
 `groma/missing/README.md`, and the `groma/plans/` directory.
 
 Core also counts the lines of each element's `code` files; an unreadable
-file counts 0. In the web map, every unique file becomes one building
-section from one to four floors according to its share of the observed
-project's file-line range. Four or more sections align as one tower, while
-two or three retain visible setbacks. A section's facade pattern comes from
-its normalized file extension. The terminal details pane keeps the aggregate
-count as `N files · ~M lines`.
+file counts 0. In the web map, every source file belongs to one visible floor
+group. Component file counts map project-relative from one to five floors, so
+the component with the fewest files has one floor and the component with the
+most has five. Each group takes the maximum member LOC, dependent, and
+dependency measurement. Groups are ordered largest-first and lower footprints
+expand where needed so no upper floor overhangs them. `heightUnits` range from
+one to four, width shows dependents, and depth shows dependencies. Floors stay
+centred on one tower axis, and facade patterns come from normalized file
+extensions. The
+terminal details pane keeps the aggregate count as `N files · ~M lines`.
 
 A plan README is not an element. Other prose without C4 frontmatter is not an
 element.

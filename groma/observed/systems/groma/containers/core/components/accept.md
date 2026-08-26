@@ -6,6 +6,8 @@ code:
   - scanner: typescript
     file: src/accept.ts
     symbol: acceptGhost
+    dependencies: 4
+    dependents: 1
 ---
 
 # Accept

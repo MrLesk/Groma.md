@@ -31,7 +31,6 @@ export interface Endpoint {
   /** Round actors: ports on each side use an exact centred visual layout before their route bodies repel. */
   centrePorts?: boolean
 }
-
 export type RouteRequest = Pick<AnnotatedRelationship, 'id' | 'source' | 'target' | 'description' | 'origin'>
 
 interface Solved {

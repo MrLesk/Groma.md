@@ -6,6 +6,8 @@ code:
   - scanner: typescript
     file: src/core.ts
     symbol: annotateArchitecture
+    dependencies: 6
+    dependents: 7
 ---
 
 # World loader

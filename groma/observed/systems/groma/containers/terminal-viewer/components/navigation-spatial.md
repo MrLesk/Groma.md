@@ -7,6 +7,8 @@ code:
   - scanner: typescript
     file: src/viewers/tui/navigation-spatial.ts
     symbol: canEnter
+    dependencies: 5
+    dependents: 1
 ---
 
 # Navigation spatial

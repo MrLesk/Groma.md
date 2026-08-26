@@ -6,18 +6,19 @@ import {
   ISLAND_FONT,
   ISLAND_SPACING,
   SURFACE_FONT,
+  type FileMeasureRanges,
+  fileMeasureRanges,
   footprintOf,
+  floorsOf,
   nameCells,
   roofLines,
-  sectionsOf,
-  shapeOf,
 } from './measure.ts'
 import { grow, shelf } from './pack.ts'
 import type { Partnered } from './pack.ts'
 import { flowRanks } from './rank.ts'
 import type {
   Building,
-  BuildingSection,
+  BuildingFloor,
   CellRect,
   Island,
   IslandKind,
@@ -37,7 +38,7 @@ interface Node {
   d: number
   children: { node: Node; gx: number; gy: number }[]
   paint:
-    | { kind: 'building'; element: AnnotatedElement; floors: number; shape: Shape; sections: BuildingSection[]; lines: string[] }
+    | { kind: 'building'; element: AnnotatedElement; heightUnits: number; shape: Shape; floors: BuildingFloor[]; lines: string[] }
     | { kind: 'slab'; element: AnnotatedElement }
     | { kind: 'zone'; name: string; members: string[] }
     | { kind: 'island'; islandKind: IslandKind; name: string; element: AnnotatedElement | null }
@@ -60,17 +61,21 @@ function item(element: AnnotatedElement): SheetItem {
   }
 }
 
-function buildingNode(element: AnnotatedElement, range: { min: number; max: number }, degree: number): Node {
-  const sections = element.kind === 'component' ? sectionsOf(element.origin, element.code, range) : []
+function buildingNode(element: AnnotatedElement, ranges: FileMeasureRanges, degree: number): Node {
   const shape: Shape = element.kind === 'actor'
     ? { kind: 'round' }
-    : element.external ? { kind: 'pill' } : shapeOf(sections.length)
+    : element.external ? { kind: 'pill' } : { kind: 'block' }
   const lines = shape.kind === 'pill' ? [element.name] : roofLines(element.name)
-  const floors = element.kind !== 'component'
+  const base = footprintOf(lines, shape, degree)
+  const floors = element.kind === 'component'
+    ? floorsOf(element.origin, element.code, ranges, base)
+    : []
+  const heightUnits = element.kind !== 'component'
     ? 1
-    : sections.reduce((total, section) => total + section.floors, 0) || 1
-  const { w, d } = footprintOf(lines, shape, degree)
-  return { key: element.representationId, w, d, children: [], paint: { kind: 'building', element, floors, shape, sections, lines } }
+    : floors.reduce((total, floor) => total + floor.heightUnits, 0) || 1
+  const w = Math.max(base.w, ...floors.map(floor => floor.footprint.w))
+  const d = Math.max(base.d, ...floors.map(floor => floor.footprint.d))
+  return { key: element.representationId, w, d, children: [], paint: { kind: 'building', element, heightUnits, shape, floors, lines } }
 }
 
 /** The cells a surface's own name needs in its front band. */
@@ -134,7 +139,7 @@ function packed(
    * cells in the packing and stands that far inside the claim; only its
    * neighbours there move.
    */
-  const behind = (child: Node): number => (child.paint.kind === 'building' ? shadeOf(child.paint.floors) : 0)
+  const behind = (child: Node): number => (child.paint.kind === 'building' ? shadeOf(child.paint.heightUnits) : 0)
   const items: Partnered[] = children.map(child => ({
     key: child.key,
     w: child.w + behind(child),
@@ -206,18 +211,13 @@ export function placeWorld(world: ArchitectureGraph): Placement {
     degree.set(relationship.source, (degree.get(relationship.source) ?? 0) + 1)
     degree.set(relationship.target, (degree.get(relationship.target) ?? 0) + 1)
   }
-  const observedFileLines = world.elements
-    .filter(element => element.kind === 'component' && element.origin === 'observed')
-    .flatMap(element => element.code.flatMap(reference => reference.lines === undefined ? [] : [reference.lines]))
-  const range = observedFileLines.length === 0
-    ? { min: 0, max: 0 }
-    : { min: Math.min(...observedFileLines), max: Math.max(...observedFileLines) }
+  const ranges = fileMeasureRanges(world.elements)
   const childrenOf = (parent: string | null): AnnotatedElement[] => world.elements
     .filter(element => element.parent === parent)
     .sort(compareSemanticElements)
 
   const building = (element: AnnotatedElement): Node =>
-    buildingNode(element, range, degree.get(element.representationId) ?? 0)
+    buildingNode(element, ranges, degree.get(element.representationId) ?? 0)
   const slab = (container: AnnotatedElement): Node => {
     const components = childrenOf(container.representationId).filter(child => child.kind === 'component')
     return packed(
@@ -330,9 +330,9 @@ function collect(islands: readonly Node[], origins: readonly CellRect[]): Placem
         external: paint.element.external,
         surface,
         rect,
-        floors: paint.floors,
+        heightUnits: paint.heightUnits,
         shape: paint.shape,
-        sections: paint.sections,
+        floors: paint.floors,
         lines: paint.lines,
       })
     }
