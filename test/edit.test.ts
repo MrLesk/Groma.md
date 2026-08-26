@@ -214,7 +214,7 @@ test('groma edit element --plan restates the id without code and creates the pla
     await readRelative(root, 'groma/plans/next/README.md'),
     approvedPlanReadme,
   )
-  assert.match(world.stdout, /orders  component  Orders  planned:next/)
+  assert.match(world.stdout, /orders {2}component {2}Orders {2}planned:next/)
 
   const existingRoot = await createRepo(t)
   const customReadme = `---

@@ -86,7 +86,9 @@ export function createProjectEditor(
 
   let previewVersion = 0
   const showMode = async (mode: 'write' | 'preview') => {
-    modes.forEach(button => button.setAttribute('aria-selected', String(button.dataset.mode === mode)))
+    modes.forEach(button => {
+      button.setAttribute('aria-selected', String(button.dataset.mode === mode))
+    })
     description.hidden = mode === 'preview'
     preview.hidden = mode === 'write'
     if (mode === 'write') return
@@ -96,7 +98,9 @@ export function createProjectEditor(
     preview.innerHTML = html
   }
 
-  modes.forEach(button => button.addEventListener('click', () => void showMode(button.dataset.mode as 'write' | 'preview')))
+  modes.forEach(button => {
+    button.addEventListener('click', () => void showMode(button.dataset.mode as 'write' | 'preview'))
+  })
   description.addEventListener('input', () => {
     if (!preview.hidden) void showMode('preview')
   })

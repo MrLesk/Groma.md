@@ -5,14 +5,8 @@ import os from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
 import type { TestContext } from 'node:test'
-import { fileURLToPath } from 'node:url'
 
 import { watchScan } from '../src/scanner.ts'
-
-const projectRoot = path.resolve(
-  path.dirname(fileURLToPath(import.meta.url)),
-  '..',
-)
 
 function run(command: string, args: string[], cwd: string) {
   return new Promise<{

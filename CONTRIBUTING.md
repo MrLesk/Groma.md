@@ -21,8 +21,13 @@ bun run check
 ```
 
 Groma is written in TypeScript. Bun runs the CLI and both viewers. Tests under `test/` run on Node through `tsx`
-(`bun run test:node`); tests under `test-bun/` run with `bun test` (`bun run test:viewer`). `bun run check` typechecks
-and runs both. Every test loads architecture from fixtures under `test/fixtures/`, never from the live `groma/` tree.
+(`bun run test:node`); tests under `test-bun/` run with `bun test` (`bun run test:viewer`). `bun run check` is the single
+repository check: it runs Biome, typechecks the code, and runs both test suites. Every test loads architecture from
+fixtures under `test/fixtures/`, never from the live `groma/` tree.
+
+Biome applies its recommended lint rules and reports cognitive complexity above 15. Existing complexity warnings identify
+cleanup work; do not add new ones. Biome formatting and import assist are disabled, so keep the surrounding file style
+when making changes.
 
 ## Before starting a feature
 

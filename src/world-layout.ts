@@ -291,7 +291,7 @@ export async function layoutArchitectureWorld(
 ): Promise<ArchitectureWorld> {
   const graph = graphFor(model)
   const elk = new ELK({ workerUrl })
-  let laidOut
+  let laidOut: ElkNode
   try {
     laidOut = await elk.layout(graph)
   } finally {

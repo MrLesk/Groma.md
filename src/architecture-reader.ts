@@ -133,7 +133,7 @@ async function parseDocument(
   onFilesystemAccess?: FilesystemAccessHandler,
 ): Promise<ArchitectureDocument> {
   const sourceFilename = repositoryRelative(repositoryRoot, filename)
-  let source
+  let source: string
 
   try {
     recordFilesystemAccess(onFilesystemAccess, 'read-file', filename)
@@ -142,7 +142,7 @@ async function parseDocument(
     throw new ArchitectureReadError(sourceFilename, revision, 'read', error)
   }
 
-  let tree
+  let tree: Awaited<ReturnType<typeof parse>>
   try {
     tree = await parse(source)
   } catch (error) {

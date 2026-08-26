@@ -348,12 +348,12 @@ export function routeAll(
         departures.push({ side, direction, from, port: node, offset, approach, corridor })
       }
     }
-    const clear = ({ corridor }: typeof departures[number]): boolean => corridor !== undefined && corridor.every(node => {
+    const clear = ({ corridor }: typeof departures[number]): boolean => corridor?.every(node => {
       const x = nodeX[node]!
       const y = nodeY[node]!
       return foreignBuildings.every(rect =>
         Math.max(rect.x0 - x, 0, x - rect.x1) + Math.max(rect.y0 - y, 0, y - rect.y1) >= CLEARANCE_REACH)
-    })
+    }) === true
     const clearPrimary = departures.some(departure => primaryFacing.has(departure.side) && clear(departure))
     for (const departure of departures) {
       const out = clearPrimary

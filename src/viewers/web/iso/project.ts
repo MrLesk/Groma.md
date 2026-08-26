@@ -114,7 +114,7 @@ function corners(rect: CellRect, z: number): Point[] {
 
 /** The three faces the viewer sees of a box standing on `rect` between two heights. */
 export function boxFaces(rect: CellRect, z0: number, z1: number): Face[] {
-  const [n0, e0, s0, w0] = corners(rect, z0)
+  const [, e0, s0, w0] = corners(rect, z0)
   const [n1, e1, s1, w1] = corners(rect, z1)
   return [
     { side: 'left', points: [w0!, s0!, s1!, w1!] },
