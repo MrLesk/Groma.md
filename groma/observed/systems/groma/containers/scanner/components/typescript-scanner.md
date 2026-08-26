@@ -4,6 +4,12 @@ kind: component
 parent: scanner
 code:
   - scanner: typescript
+    file: src/scanner/typescript/files.ts
+    symbol: listTypeScriptFiles
+  - scanner: typescript
+    file: src/scanner/typescript/graph.ts
+    symbol: buildImportGraph
+  - scanner: typescript
     file: src/scanner/typescript/scan.ts
     symbol: scanTypeScriptSource
 ---
