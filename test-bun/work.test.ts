@@ -12,11 +12,19 @@ import {
   type BacklogCommand,
   type WorkSource,
 } from '../src/work/backlog.ts'
-import { loadArchitectureViewModel } from '../src/core.ts'
 import type { WorkItem, WorkSnapshot } from '../src/types.ts'
 import { startTerminalViewer } from '../src/view-host.ts'
-import { assigneesOnElement, projectActiveWork } from '../src/work/projection.ts'
-import { viewerFixtureRoot } from './helpers.ts'
+import { projectWorld } from '../src/viewers/tui/projection.ts'
+import {
+  initialWorkFocus,
+  moveWorkFocus,
+  projectWork,
+  reconcileWorkFocus,
+  selectedWorkId,
+  workView,
+  workGroups,
+} from '../src/viewers/tui/work/model.ts'
+import { mapViewportOf, navigationWorld, press, viewerFixtureRoot } from './helpers.ts'
 
 const snapshot = (items: WorkItem[] = []): WorkSnapshot => ({
   statuses: ['To Do', 'In Progress', 'Done'],
@@ -24,61 +32,107 @@ const snapshot = (items: WorkItem[] = []): WorkSnapshot => ({
   items,
 })
 
-test.concurrent('active work projects only exact architecture ID references', async () => {
-  const model = await loadArchitectureViewModel(viewerFixtureRoot)
-  const projected = projectActiveWork(model, [{
-    id: 'TASK-1',
-    title: 'Change Shop',
-    status: 'In Progress',
-    assignees: ['@codex'],
-    description: '',
-    references: ['shop', 'src/shop.ts', 'not-a-groma-id'],
-    modifiedFiles: [],
-    criteria: [],
-  }, {
-    id: 'TASK-2',
-    title: 'Finished',
-    status: 'Done',
-    assignees: ['@luna'],
-    description: '',
-    references: ['vault'],
-    modifiedFiles: [],
-    criteria: [],
-  }])
+const beforeWork = {
+  focus: 'architecture' as const,
+  details: true,
+  detailsScroll: 0,
+}
 
-  assert.deepEqual(projected.work, [{
-    elementId: 'shop',
-    taskId: 'TASK-1',
-    taskTitle: 'Change Shop',
-    assignees: ['@codex'],
-  }])
+test.concurrent('Work focus follows active, default, then terminal workflow groups', () => {
+  const work = snapshot([
+    { id: 'TASK-TODO', title: 'Todo', status: 'To Do', assignees: [], description: '', references: [], modifiedFiles: [], criteria: [] },
+    { id: 'TASK-DONE', title: 'Done', status: 'Done', assignees: [], description: '', references: [], modifiedFiles: [], criteria: [] },
+    { id: 'TASK-ACTIVE', title: 'Active', status: 'In Progress', assignees: [], description: '', references: [], modifiedFiles: [], criteria: [] },
+  ])
+
+  assert.deepEqual(workGroups(work).map(group => group.status), ['In Progress', 'To Do', 'Done'])
+  const first = initialWorkFocus(work, beforeWork)
+  assert.equal(selectedWorkId(first), 'TASK-ACTIVE')
+  assert.equal(selectedWorkId(moveWorkFocus(work, first, 1)), 'TASK-TODO')
 })
 
-test.concurrent('two tasks on one element keep every unique assignee', () => {
-  const names = assigneesOnElement(
-    [
-      {
-        elementId: 'shop',
-        taskId: 'TASK-1',
-        taskTitle: 'Names',
-        assignees: ['@grok', '@codex'],
-      },
-      {
-        elementId: 'shop',
-        taskId: 'TASK-2',
-        taskTitle: 'Host',
-        assignees: ['@codex', '@luna'],
-      },
-      {
-        elementId: 'vault',
-        taskId: 'TASK-3',
-        taskTitle: 'Other',
-        assignees: ['@scan'],
-      },
-    ],
-    'shop',
-  )
-  assert.deepEqual(names, ['@grok', '@codex', '@luna'])
+test.concurrent('Work projection shares modified-file and reference touch meaning with the web', () => {
+  const base = navigationWorld()
+  const model = {
+    ...base,
+    elements: base.elements.map(element => element.id === 'cleft'
+      ? { ...element, code: [{ file: 'src/cleft.ts', scanner: 'fixture' }] }
+      : element),
+    work: snapshot([{
+      id: 'TASK-1',
+      title: 'Change two containers',
+      status: 'In Progress',
+        assignees: ['@codex'],
+      description: '',
+      references: ['cright'],
+      modifiedFiles: ['src/cleft.ts'],
+      criteria: [],
+    }]),
+  }
+  const projection = projectWorld(model, {
+    viewport: mapViewportOf({ width: 120, height: 36 }),
+    currentId: 'observed:alpha',
+  })
+  const geometry = {
+    items: projection.items.map(item => [item.key, item.cellBounds]),
+    routes: projection.relationships.map(route => route.cellRoute),
+  }
+  const work = projectWork(model, projection, {
+    selection: { state: 'selected', taskId: 'TASK-1' },
+    before: beforeWork,
+  })
+
+  assert.deepEqual(projectWork(model, projection, undefined), {
+    anchors: [{ elementId: 'observed:cleft', count: 1, active: false }],
+    touched: new Set(),
+  })
+  assert.deepEqual([...work.touched].sort(), ['observed:cleft', 'observed:cright'])
+  assert.deepEqual(work.anchors, [{ elementId: 'observed:cleft', count: 1, active: true }])
+  assert.deepEqual({
+    items: projection.items.map(item => [item.key, item.cellBounds]),
+    routes: projection.relationships.map(route => route.cellRoute),
+  }, geometry)
+})
+
+test.concurrent('Work chooses component scope for one container and root for several', () => {
+  const base = navigationWorld()
+  const model = {
+    ...base,
+    work: snapshot([
+      { id: 'TASK-LOCAL', title: 'Local', status: 'In Progress', assignees: [], description: '', references: ['pleft', 'pmid'], modifiedFiles: [], criteria: [] },
+      { id: 'TASK-CROSS', title: 'Cross', status: 'In Progress', assignees: [], description: '', references: ['pleft', 'pright'], modifiedFiles: [], criteria: [] },
+    ]),
+  }
+  const focus = (taskId: string) => ({
+    selection: { state: 'selected' as const, taskId },
+    before: beforeWork,
+  })
+
+  assert.deepEqual(workView(model, focus('TASK-LOCAL')), {
+    level: 'components',
+    currentId: 'observed:pleft',
+    attentionIds: ['observed:pleft', 'observed:pmid'],
+  })
+  assert.deepEqual(workView(model, focus('TASK-CROSS')), {
+    level: 'context',
+    currentId: 'observed:pleft',
+    attentionIds: ['observed:pleft', 'observed:pright'],
+  })
+})
+
+test.concurrent('Work refresh preserves a valid task, initializes delayed work, and clears a removed task', () => {
+  const work = snapshot([{
+    id: 'TASK-1', title: 'Live', status: 'In Progress', assignees: [], description: '', references: [], modifiedFiles: [], criteria: [],
+  }])
+
+  const waiting = initialWorkFocus(undefined, beforeWork)
+  const selected = reconcileWorkFocus(work, waiting)!
+  assert.equal(selectedWorkId(selected), 'TASK-1')
+  assert.equal(reconcileWorkFocus(work, selected), selected)
+
+  const cleared = reconcileWorkFocus(snapshot(), selected)!
+  assert.equal(cleared.selection.state, 'cleared')
+  assert.equal(reconcileWorkFocus(snapshot(), cleared), cleared)
 })
 
 test.concurrent('Backlog plugin reads configured nonterminal work and only recent terminal work', async () => {
@@ -246,19 +300,22 @@ test.concurrent('host refreshes the viewer from a changed work snapshot', async 
       id: 'TASK-LIVE',
       title: 'Change Shop',
       status: 'In Progress',
-        assignees: ['@codex'],
+      assignees: ['@codex'],
       description: '',
       references: ['shop'],
       modifiedFiles: [],
       criteria: [{ text: 'Shown', checked: false }],
     }]
     changed()
+    await press(setup, 'w')
     const deadline = Date.now() + 3000
     while (!setup.captureCharFrame().includes('TASK-LIVE') && Date.now() < deadline) {
       await new Promise(resolve => setTimeout(resolve, 25))
       await setup.renderOnce()
     }
-    assert.match(setup.captureCharFrame(), /TASK-LIVE/)
+    const frame = setup.captureCharFrame()
+    assert.match(frame, /TASK-LIVE/)
+    assert.match(frame, /Acceptance criteria/)
   } finally {
     viewer.destroy()
     if (!setup.renderer.isDestroyed) setup.renderer.destroy()

@@ -21,6 +21,7 @@ import { paintWorld, themeFromPalette } from './paint.ts'
 import { projectWorld } from './projection.ts'
 import type { TerminalCamera } from './projection-camera.ts'
 import type { TerminalViewModel } from './model.ts'
+import { reconcileWorkFocus, selectedWorkId, workView } from './work/model.ts'
 import type { TerminalLevel } from '../../types.ts'
 
 const FLOW_ANIMATION_MS = 120
@@ -91,14 +92,15 @@ export function mountTerminalViewer(
 
   function project(next?: TerminalCamera) {
     const lit = litAction(viewModel, state)
-    const attentionId = state.actionStep === undefined
+    const taskView = workView(viewModel, state.work)
+    const flowAttention = state.actionStep === undefined
       ? undefined
       : actionLegs(lit.id, viewModel, lit.actorId)[state.actionStep]?.target
     return projectWorld(viewModel, {
       viewport: currentLayout().mapViewport,
-      level: state.level,
-      currentId: state.currentId,
-      attentionId,
+      level: taskView?.level ?? state.level,
+      currentId: taskView?.currentId ?? state.currentId,
+      attentionIds: taskView?.attentionIds ?? (flowAttention === undefined ? [] : [flowAttention]),
       camera: next ?? snapshot(),
     })
   }
@@ -123,9 +125,8 @@ export function mountTerminalViewer(
     const lit = litAction(viewModel, state)
     syncAnimation(lit.id !== undefined)
     camera = projection.camera
-    state = {
-      ...state,
-      currentId: projection.currentId ?? undefined,
+    if (state.work === undefined) {
+      state = { ...state, currentId: projection.currentId ?? undefined }
     }
     paintWorld(frame.frameBuffer, currentLayout(), projection, viewModel, theme, {
       focus: state.focus,
@@ -137,7 +138,7 @@ export function mountTerminalViewer(
       actionStep: state.actionStep,
       actionCursor: state.actionCursor,
       detailsTab: state.detailsTab,
-      work: viewModel.work ?? [],
+      workFocus: state.work,
       animationPhase,
     })
     frame.requestRender()
@@ -170,7 +171,11 @@ export function mountTerminalViewer(
 
   function update(next: TerminalViewModel): void {
     if (closed) return
+    const previousView = workView(viewModel, state.work)
     viewModel = next
+    const work = reconcileWorkFocus(next.work, state.work)
+    state = { ...state, work }
+    if (JSON.stringify(workView(next, work)) !== JSON.stringify(previousView)) camera = undefined
     repaint()
   }
 
@@ -183,6 +188,7 @@ export function mountTerminalViewer(
     if (key.name === 'x') return 'clear-action'
     if (key.name === 's') return 'step-action'
     if (key.name === 't') return 'toggle-details-tab'
+    if (key.name === 'w') return 'toggle-work'
     if (
       key.name === 'up'
       || key.name === 'down'
@@ -193,6 +199,7 @@ export function mountTerminalViewer(
   }
 
   let filterReturnCamera: TerminalCamera | undefined
+  let workReturnCamera: TerminalCamera | undefined
 
   function filterInputFor(key: KeyEvent): FilterInput | undefined {
     if (key.name === 'return') return { type: 'accept' }
@@ -207,8 +214,17 @@ export function mountTerminalViewer(
   // The camera follows any selection change through one framing rule.
   function transition(next: ViewerState): void {
     const changedScope = next.level !== state.level
+    const enteringWork = state.work === undefined && next.work !== undefined
+    const leavingWork = state.work !== undefined && next.work === undefined
+    const changedTask = selectedWorkId(next.work) !== selectedWorkId(state.work)
+    if (enteringWork) workReturnCamera = snapshot()
     state = next
-    if (changedScope) {
+    if (leavingWork) {
+      camera = workReturnCamera
+      workReturnCamera = undefined
+    } else if (enteringWork || changedTask) {
+      camera = undefined
+    } else if (changedScope) {
       camera = undefined
     }
     repaint()
@@ -240,7 +256,7 @@ export function mountTerminalViewer(
       onFilterKey(key)
       return
     }
-    if (key.name === '/') {
+    if (key.name === '/' && state.work === undefined) {
       state = reduceFilter(viewModel, state, { type: 'open' })
       filterReturnCamera = snapshot()
       repaint()

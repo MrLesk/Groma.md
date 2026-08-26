@@ -9,6 +9,7 @@ import { projectWorld } from '../src/viewers/tui/projection.ts'
 import { mountTerminalViewer } from '../src/viewers/tui/terminal-viewer.ts'
 import {
   navigationWorld,
+  mapRegion,
   press,
   terminalModel,
   viewerFixtureRoot,
@@ -23,6 +24,8 @@ test.concurrent('fixed chrome reserves one header, body, and footer band', () =>
   assert.equal(layout.details.y, 2)
   assert.equal(layout.map.x, layout.hierarchy.width)
   assert.equal(layout.map.x + layout.map.width, layout.details.x)
+  assert.equal(layout.mapViewport.y + layout.mapViewport.height, layout.workRecap.y)
+  assert.equal(layout.workRecap.y + layout.workRecap.height, layout.map.y + layout.map.height - 1)
 })
 
 test.concurrent('details changes pane width without changing camera or world cells', () => {
@@ -63,5 +66,36 @@ test.concurrent('details always follows the current selection', async () => {
     .join('\n')
   assert.match(details, /Orders/)
   assert.match(await press(setup, 't'), /src\/orders\.ts/)
+  app.destroy()
+})
+
+test.concurrent('leaving Work focus restores the saved map camera', async () => {
+  const base = navigationWorld()
+  const model = {
+    ...base,
+    work: {
+      statuses: ['To Do', 'In Progress', 'Done'],
+      defaultStatus: 'To Do',
+      items: [{
+        id: 'TASK-1',
+        title: 'Change external system',
+        status: 'In Progress',
+        assignees: [],
+        description: '',
+        references: ['ext'],
+        modifiedFiles: [],
+        criteria: [],
+      }],
+    },
+  }
+  const setup = await createTestRenderer({ width: 120, height: 36 })
+  const app = mountTerminalViewer(setup.renderer, model, { currentId: 'observed:alpha' })
+  await setup.renderOnce()
+  const before = mapRegion(setup.captureCharFrame(), 120)
+
+  const focused = mapRegion(await press(setup, 'w'), 120)
+  assert.notEqual(focused, before)
+  const restored = mapRegion(await press(setup, 'w'), 120)
+  assert.equal(restored, before)
   app.destroy()
 })

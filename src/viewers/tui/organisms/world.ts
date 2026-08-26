@@ -10,11 +10,10 @@ import {
 import { drawCard } from '../molecules/card.ts'
 import { drawFlowMarker } from '../molecules/flow-marker.ts'
 import { drawRoute, drawRouteLabel } from '../molecules/route.ts'
-import { drawWorkMarker } from '../molecules/work-marker.ts'
 import type { ProjectedFlowStep } from '../flow.ts'
 import type { TerminalProjection } from '../projection.ts'
-import type { WorkMarker } from '../../../types.ts'
-import { assigneesOnElement } from '../../../work/projection.ts'
+import type { WorkMap } from '../work/model.ts'
+import { drawWorkMarker } from '../work/paint.ts'
 
 export function drawWorld(
   buffer: OptimizedBuffer,
@@ -23,7 +22,7 @@ export function drawWorld(
   trace: {
     pathIds: Set<string>
     onPath: (elementId: string) => boolean
-    work: WorkMarker[]
+    work: WorkMap
     tracedId?: string
     step?: ProjectedFlowStep
     animationPhase: number
@@ -47,7 +46,8 @@ export function drawWorld(
     fillBoundary(buffer, item, theme)
   }
   for (const route of projection.relationships) {
-    const active = route.ids.some(id => trace.pathIds.has(id))
+    const flowActive = route.ids.some(id => trace.pathIds.has(id))
+    const active = flowActive || trace.work.touched.has(route.source)
     drawRoute(
       buffer,
       route,
@@ -55,7 +55,7 @@ export function drawWorld(
       theme,
       active,
       trace.tracedId !== undefined && route.ids.includes(trace.tracedId),
-      active ? trace.animationPhase : undefined,
+      flowActive ? trace.animationPhase : undefined,
     )
   }
   for (const item of visibleItems.filter(item => item.shape !== 'card')) {
@@ -64,7 +64,7 @@ export function drawWorld(
       item,
       projection,
       theme,
-      item.representationId === projection.currentId,
+      item.representationId === projection.currentId || trace.work.touched.has(item.key),
     )
   }
   for (const item of visibleItems.filter(item => item.shape === 'card')) {
@@ -74,12 +74,8 @@ export function drawWorld(
       projection,
       theme,
       tracing && item.representationId !== undefined && !trace.onPath(item.representationId),
+      trace.work.touched.has(item.key),
     )
-  }
-  for (const item of visibleItems) {
-    if (item.id === undefined) continue
-    const assignees = assigneesOnElement(trace.work, item.id)
-    if (assignees.length > 0) drawWorkMarker(buffer, item, assignees, theme)
   }
   for (const route of activeRoutes) {
     drawRouteLabel(buffer, route, projection, theme, true)
@@ -91,6 +87,10 @@ export function drawWorld(
     return projection.level === 'context' ? item.kind === 'system' : item.kind === 'container'
   })
   if (scope) drawPinnedBoundaryTitle(buffer, scope, projection, theme)
+  for (const anchor of trace.work.anchors) {
+    const item = visibleItems.find(candidate => candidate.representationId === anchor.elementId)
+    if (item !== undefined) drawWorkMarker(buffer, item, projection, anchor, theme)
+  }
   if (trace.step) {
     const source = visibleItems.find(item => item.key === trace.step?.source.visibleKey)
     const target = visibleItems.find(item => item.key === trace.step?.target.visibleKey)

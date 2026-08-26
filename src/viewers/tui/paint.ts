@@ -23,8 +23,10 @@ import { drawHierarchy } from './organisms/hierarchy.ts'
 import { drawWorld } from './organisms/world.ts'
 import { semanticTreeRows } from './tree.ts'
 import type { TreeState } from './tree.ts'
-import type { WorkMarker } from '../../types.ts'
 import type { TerminalProjection } from './projection.ts'
+import { projectWork, selectedWorkId, selectedWorkItem, workGroups } from './work/model.ts'
+import type { WorkFocus } from './work/model.ts'
+import { drawWorkDetails, drawWorkList, drawWorkRecap } from './work/paint.ts'
 
 export { themeFromPalette } from './atoms/theme.ts'
 
@@ -46,7 +48,7 @@ export function paintWorld(
     actionStep?: number
     actionCursor?: string
     detailsTab: DetailsTab
-    work: WorkMarker[]
+    workFocus?: WorkFocus
     animationPhase: number
   },
 ): void {
@@ -61,6 +63,7 @@ export function paintWorld(
     options.actionStep,
   )
   const selectionId = projection.currentId ?? undefined
+  const workMap = projectWork(world, projection, options.workFocus)
   drawWorld(buffer, projection, theme, {
     pathIds,
     onPath: elementId => {
@@ -68,29 +71,56 @@ export function paintWorld(
     },
     tracedId: step?.id,
     step,
-    work: options.work,
+    work: workMap,
     animationPhase: options.animationPhase,
   })
-  const commands = worldCommands(world)
-  const tree = options.tree
-  drawHierarchy(
+  drawWorkRecap(
     buffer,
-    layout.hierarchy,
-    commands.map(command => ({ id: command.id, title: command.description })),
-    semanticTreeRows(world, selectionId === undefined ? [] : [selectionId], tree),
-    selectionId,
-    tree.cursor ?? selectionId,
-    options.activeActionId,
-    options.focus === 'hierarchy',
+    layout.workRecap,
+    world.work,
+    options.workFocus !== undefined,
     theme,
   )
+  const commands = worldCommands(world)
+  const tree = options.tree
+  if (options.workFocus !== undefined) {
+    drawWorkList(
+      buffer,
+      layout.hierarchy,
+      workGroups(world.work),
+      selectedWorkId(options.workFocus),
+      options.focus === 'hierarchy',
+      theme,
+    )
+  } else {
+    drawHierarchy(
+      buffer,
+      layout.hierarchy,
+      commands.map(command => ({ id: command.id, title: command.description })),
+      semanticTreeRows(world, selectionId === undefined ? [] : [selectionId], tree),
+      selectionId,
+      tree.cursor ?? selectionId,
+      options.activeActionId,
+      options.focus === 'hierarchy',
+      theme,
+    )
+  }
   const selected = world.elements.find(element => {
     return element.representationId === projection.currentId
   })
-  const focusedFlow = options.focus === 'hierarchy'
+  const focusedFlow = options.workFocus === undefined && options.focus === 'hierarchy'
     ? commands.find(command => command.id === tree.cursor)
     : undefined
-  if (focusedFlow) {
+  if (options.workFocus !== undefined) {
+    drawWorkDetails(
+      buffer,
+      layout.details,
+      selectedWorkItem(world.work, options.workFocus),
+      options.detailsScroll,
+      options.focus === 'details',
+      theme,
+    )
+  } else if (focusedFlow) {
     drawFlowDetails(
       buffer,
       layout.details,
@@ -106,7 +136,6 @@ export function paintWorld(
       tab: options.detailsTab,
       activeActionId: options.activeActionId,
       actionCursor: options.actionCursor,
-      work: options.work.filter(marker => marker.elementId === selected.id),
     })
   }
   const litCommand = world.relationships.find(item => item.id === options.lit.id)
@@ -125,15 +154,20 @@ export function paintWorld(
     layout,
     theme,
     options.focus,
-    options.filter && filterLine(world, options.filter),
+    options.workFocus === undefined
+      ? options.filter && filterLine(world, options.filter)
+      : options.focus === 'details'
+        ? '↑↓ scroll   ← tasks   w close work   ] details'
+        : '↑↓ task   enter details   w close work   ] details',
     actionTitle,
-    options.focus === 'details' && detailsCommands(world, {
+    options.workFocus === undefined && options.focus === 'details' && detailsCommands(world, {
       currentId: selectionId,
       detailsTab: options.detailsTab,
     }).length > 0,
     system === undefined
       ? undefined
-      : `${system.name} · ${commands.length} flows · ${world.elements.length} elements`,
+      : `${system.name} · ${commands.length} flows · ${world.elements.length} elements`
+        + (options.workFocus === undefined ? '' : ' · Work'),
   )
 }
 

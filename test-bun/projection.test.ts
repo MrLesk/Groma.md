@@ -139,7 +139,7 @@ test.concurrent('flow attention reveals its destination without changing selecti
   const followed = projectWorld(model, {
     viewport,
     currentId: 'observed:product',
-    attentionId: 'observed:vendor',
+    attentionIds: ['observed:vendor'],
     camera: start.camera,
   })
   const target = followed.items.find(item => item.representationId === 'observed:vendor')
@@ -147,4 +147,42 @@ test.concurrent('flow attention reveals its destination without changing selecti
   assert.equal(followed.currentId, 'observed:product')
   assert.ok(target)
   assert.equal(visibleIn(target.cellBounds, viewport), true)
+})
+
+test.concurrent('task attention frames every visible touched element together', () => {
+  const model = navigationWorld()
+  const viewport = mapViewportOf({ width: 120, height: 36 })
+  const start = projectWorld(model, { viewport, currentId: 'observed:cfar' })
+  const followed = projectWorld(model, {
+    viewport,
+    currentId: 'observed:alpha',
+    attentionIds: ['observed:cleft', 'observed:cright'],
+    camera: start.camera,
+  })
+  const touched = followed.items.filter(item => {
+    return item.representationId === 'observed:cleft'
+      || item.representationId === 'observed:cright'
+  })
+
+  assert.equal(followed.currentId, 'observed:alpha')
+  assert.equal(touched.length, 2)
+  assert.equal(touched.every(item => visibleIn(item.cellBounds, viewport)), true)
+})
+
+test.concurrent('oversized task attention keeps the complete set centered', () => {
+  const viewport = { x: 0, y: 0, width: 20, height: 8 }
+  const projection = projectWorld(navigationWorld(), {
+    viewport,
+    currentId: 'observed:alpha',
+    attentionIds: ['observed:cleft', 'observed:cright'],
+  })
+  const touched = projection.items.filter(item => {
+    return item.representationId === 'observed:cleft'
+      || item.representationId === 'observed:cright'
+  })
+  const left = Math.min(...touched.map(item => item.worldBounds.x))
+  const right = Math.max(...touched.map(item => item.worldBounds.x + item.worldBounds.width))
+
+  assert.equal(right - left > viewport.width, true)
+  assert.ok(Math.abs(projection.camera.x + viewport.width / 2 - (left + right) / 2) <= 0.5)
 })
