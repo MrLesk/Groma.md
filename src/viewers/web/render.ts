@@ -143,10 +143,22 @@ function known(id: string | undefined): boolean {
   return worldElement(id) !== undefined || worldRelationship(id) !== undefined || workItem(id) !== undefined
 }
 
+let cameraFrame: number | undefined
+
 function applyCamera(): void {
-  map.move(camera, camera.k / fitted.k)
+  if (cameraFrame !== undefined) cancelAnimationFrame(cameraFrame)
+  cameraFrame = undefined
+  const scaleChanged = map.move(camera, camera.k / fitted.k)
   pins.place(camera)
-  zoomHost.textContent = zoomReadout(camera, fitted) || '100%'
+  if (scaleChanged) zoomHost.textContent = zoomReadout(camera, fitted) || '100%'
+}
+
+function scheduleCamera(): void {
+  if (cameraFrame !== undefined) return
+  cameraFrame = requestAnimationFrame(() => {
+    cameraFrame = undefined
+    applyCamera()
+  })
 }
 
 function refit(): void {
@@ -296,7 +308,7 @@ host.addEventListener('wheel', event => {
     camera = zoomAbout(camera, action.factor, { x: event.clientX - rect.left, y: event.clientY - rect.top }, fitted)
   }
   touched = true
-  applyCamera()
+  scheduleCamera()
 }, { passive: false })
 
 map.svg.addEventListener('pointerdown', event => {
@@ -321,7 +333,7 @@ map.svg.addEventListener('pointermove', event => {
   if (!pointer.dragging) return
   camera = pan(camera, dx, dy)
   touched = true
-  applyCamera()
+  scheduleCamera()
   pointer.x = event.clientX
   pointer.y = event.clientY
 })

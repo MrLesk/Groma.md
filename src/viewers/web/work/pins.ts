@@ -10,7 +10,7 @@ const FAN_PITCH = 46
 const STEM = 22
 
 export const pinsCss = `
-  #pins { position: absolute; inset: 0; pointer-events: none; }
+  #pins { position: absolute; inset: 0; transform-origin: 0 0; pointer-events: none; }
   .pin { position: absolute; width: 0; height: 0; pointer-events: auto; --pin: var(--ink); filter: grayscale(1); }
   .pin.active { filter: none; }
   .pin.arriving { animation: pin-arrive 700ms ease-out; }
@@ -69,11 +69,13 @@ export function createPins(host: HTMLElement, anchorOf: (id: string) => Point | 
   let camera: Camera | undefined
   /** The first paint is the page's baseline; only pins first seen after it announce their arrival. */
   let painted = false
-  const place = (): void => {
+  const place = (scaleChanged = true): void => {
     if (camera === undefined) return
+    layer.style.transform = `translate(${camera.x}px, ${camera.y}px)`
+    if (!scaleChanged) return
     for (const { node, anchor } of pinned.values()) {
-      node.style.left = `${anchor.x * camera.k + camera.x}px`
-      node.style.top = `${anchor.y * camera.k + camera.y}px`
+      node.style.left = `${anchor.x * camera.k}px`
+      node.style.top = `${anchor.y * camera.k}px`
     }
   }
   /** The pins the toggles allow fan out leftwards from their element's foot point, stems leaning back to it; the rest hide. */
@@ -139,8 +141,9 @@ export function createPins(host: HTMLElement, anchorOf: (id: string) => Point | 
       }, WORK_BADGE_FLIP_MS)
     },
     place(current) {
+      const scaleChanged = camera?.k !== current.k
       camera = current
-      place()
+      place(scaleChanged)
     },
     show(statuses) {
       enabledStatuses = statuses

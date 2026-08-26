@@ -1,6 +1,6 @@
 import { planeMatrix } from './project.ts'
 import type { Plane } from './project.ts'
-import { SIDE, depthOf, emphasis, strokeAt, tintAt } from './scale.ts'
+import { FACADE_MARK, SIDE, depthOf, emphasis, strokeAt, tintAt } from './scale.ts'
 import type { Level } from './scale.ts'
 
 const ink = 'stroke="var(--map-hatch)" stroke-width="0.75"'
@@ -33,7 +33,7 @@ export function facadePattern(fileType: string, plane: Extract<Plane, 'left' | '
     if ((bits & (1 << index)) === 0) return ''
     const x = 1 + (index % 3) * 2.5
     const y = 1 + Math.floor(index / 3) * 2.5
-    return `<rect x="${x}" y="${y}" width="1.1" height="1.1" fill="var(--map-hatch)"/>`
+    return `<rect x="${x}" y="${y}" width="${FACADE_MARK}" height="${FACADE_MARK}" fill="var(--map-hatch)"/>`
   }).join('')
   return tile(facadePatternId(fileType, plane), plane, 8, windows)
 }
@@ -98,7 +98,7 @@ export const mapCss = `
   #map .compass .ring, #map .compass .star, #map .compass .north,
   #map .project-plate .plate, #map .project-plate .divider,
   #map .project-plate .pencil path, #map .project-plate .pencil polygon,
-  #map .ground, #map .face, #map .route .line {
+  #map .ground, #map .face, #map .route-base, #map .route .line {
     stroke: var(--map-line); stroke-linejoin: round;
     stroke-width: calc(var(--stroke) * var(--emphasis, 1) * var(--weight, 1));
   }
@@ -134,6 +134,7 @@ export const mapCss = `
   #map .project-edit:hover .pencil .body, #map .project-edit:focus .pencil .body { stroke: var(--ink); }
   #map .grid { fill: none; stroke: var(--map-grid); }
   #map .grid.major { stroke: var(--map-grid-major); }
+  #map > svg[data-minor-grid-hidden] .grid:not(.major) { display: none; }
   #map .ground, #map .face.top { fill: var(--top-fill); }
   #map .face.right { fill: var(--right-fill); }
   #map .face.left { fill: var(--left-fill); }
@@ -150,17 +151,25 @@ export const mapCss = `
   #map .building.actor .pattern.right { fill: url(#dots-right); }
   #map .building.external .pattern.left { fill: url(#cross-left); }
   #map .building.external .pattern.right { fill: url(#cross-right); }
+  #map .camera[data-facades-hidden] .building .pattern { display: none; }
   #map > svg .chip { fill: var(--paper); fill-opacity: 0.75; }
   #map .ghost { opacity: 0.8; }
   #map .ghost .face, #map .ghost .ground { fill: none; }
   #map .ghost .pattern, #map .ghost .chip { display: none; }
-  #map .ghost.planned .face, #map .ghost.planned .ground, #map .route.ghost.planned .line { stroke-dasharray: 4 3; }
-  #map .ghost.missing .face, #map .ghost.missing .ground, #map .route.ghost.missing .line { stroke-dasharray: 1 3; }
+  #map .ghost.planned .face, #map .ghost.planned .ground,
+  #map .route-base.ghost.planned, #map .route.ghost.planned .line { stroke-dasharray: 4 3; }
+  #map .ghost.missing .face, #map .ghost.missing .ground,
+  #map .route-base.ghost.missing, #map .route.ghost.missing .line { stroke-dasharray: 1 3; }
   #map .text { fill: var(--ink); pointer-events: none; }
   #map .zone > .label .text { fill: var(--muted); }
-  #map .building > .label { opacity: var(--name-opacity, 1); }
-  #map .route .line { fill: none; stroke-linecap: round; opacity: 0.9; }
+  #map .camera[data-names-hidden] .building > .label { display: none; }
+  #map .route-base, #map .route .line { fill: none; stroke-linecap: round; opacity: 0.9; }
+  #map .route-base { pointer-events: none; }
+  #map .route .line { opacity: 0; }
   #map .route .arrow { fill: var(--map-line); opacity: 0.9; }
+  #map .route .arrow > path {
+    transform-box: fill-box; transform-origin: right center; transform: scale(var(--arrow-scale, 1));
+  }
   #map .route .hit { fill: none; stroke: transparent; stroke-width: 12; }
   #map .route:hover, #map .route.endpoint, #map .route.touched { --emphasis: ${emphasis(1)}; }
   #map .route:hover .line { stroke: var(--ink); opacity: 1; }

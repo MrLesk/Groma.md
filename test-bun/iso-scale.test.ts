@@ -6,6 +6,8 @@ import {
   LEVELS,
   depthOf,
   emphasis,
+  facadeDetailsVisible,
+  minorGridVisible,
   namesVisible,
   strokeAt,
   tintAt,
@@ -22,11 +24,15 @@ test.concurrent('each level down is thinner and darker, with buildings at one pi
   assert.ok(emphasis(1) > emphasis(0.5) && emphasis(0.5) > 1)
 })
 
-test.concurrent('strokes follow the zoom from fit within limits and building names wait for a readable size', () => {
+test.concurrent('zoom keeps strokes bounded and removes details below readable size', () => {
   assert.equal(weightAt(1), 1)
   assert.ok(weightAt(4) > 1 && weightAt(4) <= 2)
   assert.equal(weightAt(100), 2)
   assert.equal(weightAt(0.01), 0.75)
   assert.equal(namesVisible(0.15), false)
   assert.equal(namesVisible(1), true)
+  assert.equal(facadeDetailsVisible(0.9), false)
+  assert.equal(facadeDetailsVisible(1), true)
+  assert.equal(minorGridVisible(0.12), false)
+  assert.equal(minorGridVisible(0.13), true)
 })

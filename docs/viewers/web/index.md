@@ -155,7 +155,9 @@ including extensions Groma has not seen before; components without
 source evidence keep plain storey lines,
 actor sides and the actors island dots, external sides and the
 external island crosses, container slabs a faint grain, and system
-islands have none; every pattern is laid in the plane it lies on.
+islands have none; every pattern is laid in the plane it lies on. Facade
+patterns stop below readable size while every floor face remains, and the
+minor grid yields to its major lines only at the most distant scale.
 Sibling groups are flat hatched zones around their members. A
 translucent chip lies under every island, slab and zone name. Line
 style means origin: observed items are solid, planned ghosts dashed,
