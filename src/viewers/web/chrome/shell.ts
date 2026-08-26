@@ -3,9 +3,46 @@ import type { Selection } from '../selection.ts'
 
 export interface WebShell {
   paint(selection: Selection): void
+  setHud(visible: boolean): void
 }
 
-/** Owns the two shell transitions; selection remains the only authority for inspector visibility. */
+interface Rect {
+  left: number
+  top: number
+  right: number
+  bottom: number
+  width: number
+  height: number
+}
+
+export interface MapFrame {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
+/** The camera frame is either the whole map or the safe area between visible chrome. */
+export function mapFrame(
+  map: Rect,
+  header: Rect,
+  hierarchy: Rect,
+  details: Rect,
+  hudVisible: boolean,
+): MapFrame {
+  if (!hudVisible) return { x: 0, y: 0, width: map.width, height: map.height }
+  const x = hierarchy.right - map.left + 12
+  const y = header.bottom - map.top + 12
+  const right = details.left - map.left - 12
+  return {
+    x,
+    y,
+    width: Math.max(right - x, 1),
+    height: Math.max(map.height - y - 12, 1),
+  }
+}
+
+/** Owns shell visibility; selection remains the only authority for inspector visibility. */
 export function createWebShell(
   root: HTMLElement,
   hierarchyContent: HTMLElement,
@@ -30,6 +67,9 @@ export function createWebShell(
   paintHierarchy()
 
   return {
+    setHud(visible) {
+      root.classList.toggle('hud-hidden', !visible)
+    },
     paint(selection) {
       const open = ownsDetails(selection)
       const ownedFocus = details.contains(document.activeElement)
