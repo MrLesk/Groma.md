@@ -451,7 +451,6 @@ test.concurrent('a hub hands each route its own port', async () => {
   const { scene } = await fixtureScene(openclawFixtureRoot)
   const portsOn = (key: string): string[] => {
     const { rect } = rectOf(scene, key)
-    const building = scene.buildings.find(item => item.representationId === key)
     return scene.routes.flatMap(route => {
       const ends = [
         route.source === key ? portOf(scene, route.points[0]!, key) : undefined,

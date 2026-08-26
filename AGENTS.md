@@ -111,6 +111,17 @@ complexity from an earlier Groma implementation, a generic architecture, or a hy
 
 A source or test file over 500 lines is a code smell. Split it so each file stays at or under 500 lines.
 
+## Repository checks
+
+Run `bun run check` after changing code. It is the single repository check: Biome lints the supported TypeScript files,
+TypeScript checks their types, and the Node and Bun test suites run.
+
+Biome uses its recommended lint rules and reports functions whose cognitive complexity is above 15. Existing complexity
+warnings are cleanup targets, not permission to add more. Keep new and changed functions at or below the limit, and prefer
+small domain operations over branches nested inside one large function.
+
+Biome formatting and import assist are disabled. Do not use Biome to format files or organize imports.
+
 ## UI descriptions
 
 Do not add subtitles, helper text, or descriptive copy beneath headings, labels, cards, or settings by default. Prefer

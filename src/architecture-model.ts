@@ -123,7 +123,7 @@ function relationshipTargetFilename(
     return null
   }
 
-  let decodedHref
+  let decodedHref: string
   try {
     decodedHref = decodeURIComponent(href.split('#', 1)[0])
   } catch {

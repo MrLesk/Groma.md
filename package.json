@@ -17,7 +17,7 @@
     "test:csharp": "dotnet test src/scanner/csharp/test/Groma.CSharpScanner.Tests.csproj",
     "test:node": "node --import=tsx --test test/*.test.ts",
     "test:viewer": "bun test --timeout 20000 test-bun/",
-    "check": "bun run typecheck && bun run test"
+    "check": "biome lint && bun run typecheck && bun run test"
   },
   "dependencies": {
     "@comark/html": "0.5.1",
@@ -28,6 +28,7 @@
     "web-worker": "1.5.0"
   },
   "devDependencies": {
+    "@biomejs/biome": "2.4.13",
     "@types/bun": "^1.3.14",
     "@types/node": "20",
     "tsx": "^4.23.12",

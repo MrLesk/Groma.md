@@ -271,7 +271,9 @@ function placeRow(islands: readonly Node[], relationships: readonly AnnotatedRel
       walk(child.node, { gx: rect.gx + child.gx, gy: rect.gy + child.gy, w: child.node.w, d: child.node.d }, island)
     }
   }
-  islands.forEach((island, index) => walk(island, origins[index]!, island.key))
+  islands.forEach((island, index) => {
+    walk(island, origins[index]!, island.key)
+  })
   const centre = (id: string): number => rects.get(id)!.gy + rects.get(id)!.d / 2
   islands.forEach((island, index) => {
     if (island.paint.kind !== 'island' || island.paint.islandKind === 'system') return
@@ -334,7 +336,9 @@ function collect(islands: readonly Node[], origins: readonly CellRect[]): Placem
       )
     }
   }
-  islands.forEach((island, index) => visit(island, origins[index]!, island.key, island.key))
+  islands.forEach((island, index) => {
+    visit(island, origins[index]!, island.key, island.key)
+  })
   const union = unionRects(origins)
   placement.sheet = union
     ? { gx: 0, gy: 0, w: union.gx + union.w + MARGIN, d: union.gy + union.d + MARGIN }

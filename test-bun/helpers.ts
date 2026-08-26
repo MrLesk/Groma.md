@@ -1,7 +1,7 @@
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-import { createTestRenderer } from '@opentui/core/testing'
+import type { createTestRenderer } from '@opentui/core/testing'
 
 import { loadAnnotatedArchitecture } from '../src/core.ts'
 import { paneLayout } from '../src/viewers/tui/layout.ts'
