@@ -227,7 +227,9 @@ cmd or ctrl with the wheel zooms about the cursor; the `-` and `+`
 buttons and keys zoom about the center, and `0` refits, between half
 the fitted view and a cell 192 screen pixels wide. Dragging pans too;
 scrolling or pinching over a pin moves the map, and over the Live
-work island it scrolls the chip strip. Resizing the pane refits the
+work island it scrolls the chip strip. `F1` toggles the HUD for a map-only
+view. `F3` independently toggles a live FPS counter, which remains visible
+in map-only view. Resizing the pane refits the
 map until you move the camera; after that it keeps the same point in
 the centre. Click a building, a slab, a system island, or a tree
 row to select it; click a route to select its relationship, which
