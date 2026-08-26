@@ -6,7 +6,8 @@ import { elementOnPath, flowRouteIds, worldCommands } from '../action-path.ts'
 import type { FlowRef } from '../action-path.ts'
 import { initialTree, semanticTreeRows, toggleExpansion } from '../tui/tree.ts'
 import type { TreeRow } from '../tui/tree.ts'
-import { createWebShell } from './chrome/shell.ts'
+import { createWebShell, mapFrame } from './chrome/shell.ts'
+import type { MapFrame } from './chrome/shell.ts'
 import { paintFlows } from './flow/list.ts'
 import { toggleFlowActivation } from './flow/state.ts'
 import {
@@ -19,7 +20,7 @@ import {
   zoomLimits,
   zoomReadout,
 } from './iso/camera.ts'
-import type { Camera, KeyTarget, Viewport } from './iso/camera.ts'
+import type { Camera, KeyTarget } from './iso/camera.ts'
 import { createMap } from './iso/map.ts'
 import { projectScene } from './iso/project.ts'
 import type { ProjectedScene } from './iso/project.ts'
@@ -82,6 +83,8 @@ const pins = createPins(host, id => map.anchorOf(id), id => toggleTask(id), tip)
 const island = createWorkIsland(host, id => toggleTask(id), pins.show, tip)
 let tree = initialTree()
 const opened = readView(location.search, world, work.items)
+let hudVisible = opened.hudVisible
+shell.setHud(hudVisible)
 let selection = opened.selection
 let activeFlows: FlowRef[] = [...opened.flows]
 const initial = firstSystem(world)
@@ -93,26 +96,15 @@ let activeTaskIds: string[] = selection.kind === 'task' ? [selection.id] : []
 let detailsTab: DetailsTab = opened.tab
 let darkTheme = opened.dark
 
-interface MapFrame extends Viewport {
-  x: number
-  y: number
-}
-
 /** The full-screen grid surrounds a safe camera frame between the floating chrome. */
 function viewport(): MapFrame {
-  const mapRect = host.getBoundingClientRect()
-  const headerRect = headerHost.getBoundingClientRect()
-  const hierarchyRect = hierarchyHost.getBoundingClientRect()
-  const detailsRect = detailsHost.getBoundingClientRect()
-  const x = hierarchyRect.right - mapRect.left + 12
-  const y = headerRect.bottom - mapRect.top + 12
-  const right = detailsRect.left - mapRect.left - 12
-  return {
-    x,
-    y,
-    width: Math.max(right - x, 1),
-    height: Math.max(mapRect.bottom - mapRect.top - y - 12, 1),
-  }
+  return mapFrame(
+    host.getBoundingClientRect(),
+    headerHost.getBoundingClientRect(),
+    hierarchyHost.getBoundingClientRect(),
+    detailsHost.getBoundingClientRect(),
+    hudVisible,
+  )
 }
 
 function fitScene(frame: MapFrame): Camera {
@@ -178,7 +170,7 @@ function paintStats(flowCount: number): void {
 
 /** The URL follows the view, without adding history entries. */
 function syncUrl(): void {
-  const query = writeView({ selection, flows: activeFlows, tab: detailsTab, dark: darkTheme }, world, work.items)
+  const query = writeView({ selection, flows: activeFlows, tab: detailsTab, dark: darkTheme, hudVisible }, world, work.items)
   history.replaceState(null, '', `${location.pathname}${query}`)
 }
 
@@ -354,6 +346,13 @@ document.getElementById('zoom-out')!.addEventListener('click', () => zoomStep(1 
 document.getElementById('fit')!.addEventListener('click', refit)
 detailsClose.addEventListener('click', deselect)
 
+function toggleHud(): void {
+  hudVisible = !hudVisible
+  shell.setHud(hudVisible)
+  refit()
+  syncUrl()
+}
+
 function applyTheme(): void {
   themeLabel.textContent = darkTheme ? 'Light' : 'Dark'
   if (darkTheme) document.documentElement.dataset.theme = 'dark'
@@ -377,7 +376,13 @@ function keyTarget(target: EventTarget | null): KeyTarget {
 
 document.addEventListener('keydown', event => {
   if (event.metaKey || event.ctrlKey || event.altKey) return
-  const action = keyAction(event.key, keyTarget(event.target))
+  if (event.key === 'F1') {
+    event.preventDefault()
+    toggleHud()
+    return
+  }
+  const target = keyTarget(event.target)
+  const action = keyAction(event.key, target)
   if (action === undefined) return
   event.preventDefault()
   if (action === 'in') zoomStep(ZOOM_STEP)

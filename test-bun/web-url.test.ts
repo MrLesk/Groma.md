@@ -31,6 +31,7 @@ const full: ViewState = {
   ],
   tab: 'how',
   dark: true,
+  hudVisible: true,
 }
 
 test.concurrent('a view round-trips through the query string with authored ids', () => {
@@ -40,7 +41,7 @@ test.concurrent('a view round-trips through the query string with authored ids',
 })
 
 test.concurrent('defaults write nothing and read back as the default view', () => {
-  const rest: ViewState = { selection: noSelection, flows: [], tab: 'what', dark: false }
+  const rest: ViewState = { selection: noSelection, flows: [], tab: 'what', dark: false, hudVisible: true }
   assert.equal(writeView(rest, world, []), '')
   assert.deepEqual(readView('', world, []), rest)
   assert.equal(writeView({ ...rest, flows: [{ commandId: 'relationship:1' }] }, world, []), '?flow=commands/scan')
@@ -49,7 +50,7 @@ test.concurrent('defaults write nothing and read back as the default view', () =
 })
 
 test.concurrent('a selected relationship is carried as its source and target ids', () => {
-  const state: ViewState = { selection: { kind: 'architecture', ids: ['relationship:1'] }, flows: [], tab: 'what', dark: false }
+  const state: ViewState = { selection: { kind: 'architecture', ids: ['relationship:1'] }, flows: [], tab: 'what', dark: false, hudVisible: true }
   assert.equal(writeView(state, world, []), '?relationship=commands/scan')
   assert.deepEqual(readView('?relationship=commands/scan', world, []), state)
   assert.deepEqual(readView('?relationship=dev/scan', world, []).selection, noSelection)
@@ -59,7 +60,7 @@ test.concurrent('a selected task is carried by its id while the work knows it', 
   const work: WorkItem[] = [{
     id: 'TASK-7', title: 'Change', status: 'In Progress', assignees: [], description: '', references: [], modifiedFiles: [], criteria: [],
   }]
-  const state: ViewState = { selection: selectTask('TASK-7'), flows: [], tab: 'what', dark: false }
+  const state: ViewState = { selection: selectTask('TASK-7'), flows: [], tab: 'what', dark: false, hudVisible: true }
   assert.equal(writeView(state, world, work), '?task=TASK-7')
   assert.deepEqual(readView('?task=TASK-7', world, work), state)
   assert.deepEqual(readView('?task=TASK-7', world, []).selection, noSelection)
@@ -73,7 +74,15 @@ test.concurrent('unknown ids, kinds and values are ignored', () => {
     flows: [],
     tab: 'what',
     dark: false,
+    hudVisible: true,
   })
+})
+
+test.concurrent('map-only mode is shareable while the HUD remains the default', () => {
+  const state: ViewState = { selection: noSelection, flows: [], tab: 'what', dark: false, hudVisible: false }
+  assert.equal(writeView(state, world, []), '?hud=off')
+  assert.deepEqual(readView('?hud=off', world, []), state)
+  assert.equal(readView('?hud=anything-else', world, []).hudVisible, true)
 })
 
 test.concurrent('repeated flows keep activation order and scope without creating a details selection', () => {

@@ -10,6 +10,7 @@ export interface ViewState {
   flows: readonly FlowRef[]
   tab: DetailsTab
   dark: boolean
+  hudVisible: boolean
 }
 
 /** A selected element is named by its kind: `actor=<id>`, `system=<id>`, `container=<id>` or `component=<id>`. */
@@ -19,7 +20,7 @@ const KINDS: C4Kind[] = ['actor', 'system', 'container', 'component']
  * Reads the ordered architecture selection (repeated `<kind>=<id>` and
  * `relationship=<source id>/<target id>` entries) or `task=<id>`,
  * repeated active flows (`flow=<source>/<target>` or `flow=<actor>/<source>/<target>`),
- * `tab=how` and `theme=dark`. Ids are the authored ids; anything the world
+ * `tab=how`, `theme=dark` and `hud=off`. Ids are the authored ids; anything the world
  * or the work does not know is ignored, a kind naming an element of another kind included.
  */
 export function readView(search: string, world: ArchitectureGraph, work: readonly WorkItem[]): ViewState {
@@ -65,6 +66,7 @@ export function readView(search: string, world: ArchitectureGraph, work: readonl
     flows,
     tab: params.get('tab') === 'how' ? 'how' : 'what',
     dark: params.get('theme') === 'dark',
+    hudVisible: params.get('hud') !== 'off',
   }
 }
 
@@ -102,5 +104,6 @@ export function writeView(state: ViewState, world: ArchitectureGraph, work: read
   }
   if (state.tab === 'how') pairs.push(['tab', 'how'])
   if (state.dark) pairs.push(['theme', 'dark'])
+  if (!state.hudVisible) pairs.push(['hud', 'off'])
   return pairs.length === 0 ? '' : `?${pairs.map(([key, value]) => `${key}=${value}`).join('&')}`
 }

@@ -66,6 +66,12 @@ const style = `
   }
   body.hierarchy-collapsed { --hierarchy-column: 44px; }
   body.details-hidden { --details-column: 0px; }
+  body.hud-hidden { min-width: 0; display: block; padding: 0; }
+  body.hud-hidden #header,
+  body.hud-hidden #hierarchy,
+  body.hud-hidden #details,
+  body.hud-hidden #work,
+  body.hud-hidden #pins { display: none; }
   button { font: inherit; color: inherit; cursor: pointer; }
   button:focus-visible { outline: 2px solid var(--accent); outline-offset: -1px; }
   #legend span, #details .meta, #details .section, #hierarchy .section, #tree .group, #zoom, #details .chip, #stats, .pane-label {
@@ -283,7 +289,7 @@ export function renderPage(payload: WebPayload): string {
   return '<!doctype html><html><head><meta charset="utf-8"><title>groma.md</title>'
     + `<style>${style}</style></head><body>`
     + `<header id="header">${lockup}<span id="stats"></span>`
-    + `<div class="header-actions"><div id="map-controls" class="controls" aria-label="Map controls"><button id="fit" aria-label="Fit map">${fitIcon}<span>Fit</span></button><button id="zoom-out" aria-label="Zoom out">−</button><span id="zoom" aria-live="polite"></span><button id="zoom-in" aria-label="Zoom in">+</button></div><details id="help"><summary>Help</summary><div class="help-panel"><p>Drag or scroll to pan<br>Pinch, + or − to zoom<br>0 or Fit shows the whole map<br>Escape clears selection</p></div></details><button id="theme"><span class="moon">${moonIcon}</span><span class="sun">${sunIcon}</span><span class="label">Dark</span></button></div>`
+    + `<div class="header-actions"><div id="map-controls" class="controls" aria-label="Map controls"><button id="fit" aria-label="Fit map">${fitIcon}<span>Fit</span></button><button id="zoom-out" aria-label="Zoom out">−</button><span id="zoom" aria-live="polite"></span><button id="zoom-in" aria-label="Zoom in">+</button></div><details id="help"><summary>Help</summary><div class="help-panel"><p>Drag or scroll to pan<br>Pinch, + or − to zoom<br>0 or Fit shows the whole map<br>F1 toggles map only<br>Escape clears selection</p></div></details><button id="theme"><span class="moon">${moonIcon}</span><span class="sun">${sunIcon}</span><span class="label">Dark</span></button></div>`
     + '</header>'
     + `<nav id="hierarchy" aria-label="Hierarchy"><div id="hierarchy-title"><span class="pane-label">Hierarchy</span><button id="hierarchy-toggle" type="button" aria-controls="hierarchy-content">${collapseIcon}${expandIcon}</button></div><div id="hierarchy-content"><div id="flows"></div><div id="tree"></div><div id="legend">${legend()}</div></div></nav>`
     + '<div id="map"></div>'
