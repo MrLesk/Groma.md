@@ -177,8 +177,8 @@ hairlines, and actors keep paper faces. Hover, selection and lit
 routes climb the same ladder instead of setting widths of their own,
 and every stroke scales with the square root of the zoom relative to
 fit, between three quarters and twice its fit width. Building names
-appear once their roof font reaches six screen pixels; island and
-slab names always show.
+appear once their roof font reaches six screen pixels; island, slab,
+and zone names always show.
 
 Names lie on the surfaces they belong to, skewed with the sheet: a
 building's name on its roof, wrapped onto two lines when it is long,

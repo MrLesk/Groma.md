@@ -19,8 +19,8 @@ const BUILDING_STROKE = 1
 const ISLAND_TINT = 0.04
 /** A thing's sides lie one level deeper than its top, the left face half a level more, for the 3D read. */
 export const SIDE = { right: 1, left: 1.5 } as const
-/** Surface names show once their font reaches this readable screen size. */
-const MIN_NAME_PX = 6
+/** Building names show once their roof font reaches this readable screen size. */
+const MIN_BUILDING_NAME_PX = 6
 /** The smallest facade mark must reach one screen pixel before its pattern is useful. */
 export const FACADE_MARK = 1.1
 /** Minor grid rows stay at least this far apart; major rows remain visible below it. */
@@ -56,8 +56,8 @@ export function weightAt(zoomRatio: number): number {
   return Math.min(2, Math.max(0.75, Math.sqrt(zoomRatio)))
 }
 
-export function namesVisible(k: number): boolean {
-  return k * ROOF_FONT >= MIN_NAME_PX
+export function buildingNamesVisible(k: number): boolean {
+  return k * ROOF_FONT >= MIN_BUILDING_NAME_PX
 }
 
 export function facadeDetailsVisible(k: number): boolean {
