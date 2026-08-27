@@ -32,11 +32,7 @@ export const workCss = `
   #work .toggle, #work .chip { height: 38px; border-radius: 20px; }
   #work .toggle { padding: 4px 10px; border: 1px solid var(--hairline); color: var(--muted); }
   #work .toggle[aria-pressed="true"] { color: var(--highlight-text); border-color: var(--highlight); }
-  /* The strip keeps its height with the chips at its top, so the 4 px scrollbar that appears under them on overflow moves nothing. */
   #work .strip { display: flex; align-items: flex-start; gap: 8px; overflow-x: auto; box-sizing: border-box; height: 48px; padding: 5px 0 0; min-width: 0; }
-  #work .strip::-webkit-scrollbar { height: 4px; }
-  #work .strip::-webkit-scrollbar-track { background: transparent; }
-  #work .strip::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--ink) 25%, transparent); border-radius: 2px; }
   #work .chip {
     flex: none; gap: 8px; padding: 4px 10px 4px 4px; border: 1px solid var(--hairline);
     font-size: 10px; letter-spacing: 0.08em; filter: grayscale(1);

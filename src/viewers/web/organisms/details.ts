@@ -133,6 +133,35 @@ function countFact(count: number, singular: string, plural: string): string {
   return `${count} ${count === 1 ? singular : plural}`
 }
 
+function codeFacts(reference: CodeReference): string {
+  const facts = [fileTypeOf(reference.file)]
+  if (reference.lines !== undefined) facts.push(`${reference.lines} lines`)
+  if (reference.dependencies !== undefined) facts.push(countFact(reference.dependencies, 'dependency', 'dependencies'))
+  if (reference.dependents !== undefined) facts.push(countFact(reference.dependents, 'dependent', 'dependents'))
+  if (reference.symbol !== undefined) facts.push(reference.symbol)
+  facts.push(reference.scanner)
+  return facts.join(' · ')
+}
+
+function codeList(references: CodeReference[], onSource: (file: string) => void): HTMLElement {
+  const list = document.createElement('ul')
+  for (const reference of references) {
+    const item = document.createElement('li')
+    const file = document.createElement('button')
+    file.type = 'button'
+    file.className = 'link source-file'
+    file.textContent = reference.file
+    file.setAttribute('aria-label', `Open source ${reference.file}`)
+    file.addEventListener('click', () => onSource(reference.file))
+    const extra = document.createElement('span')
+    extra.className = 'ghost'
+    extra.textContent = codeFacts(reference)
+    item.append(file, extra)
+    list.append(item)
+  }
+  return list
+}
+
 function marked(
   kind: C4Kind | null,
   external: boolean,
@@ -159,6 +188,7 @@ export function paintDetails(
   actorName: (actorId: string) => string | undefined,
   tab: DetailsTab,
   onTab: (tab: DetailsTab) => void,
+  onSource: (file: string) => void,
 ): void {
   const title = host.querySelector('h1')!
   const meta = host.querySelector('.meta')!
@@ -290,23 +320,7 @@ export function paintDetails(
 
     code: () => {
       if (inspected.code.length === 0) return
-      body.append(heading('Code'))
-      const list = document.createElement('ul')
-      for (const reference of inspected.code) {
-        const file = document.createElement('li')
-        file.textContent = reference.file
-        const extra = document.createElement('li')
-        extra.className = 'ghost'
-        const facts = [fileTypeOf(reference.file)]
-        if (reference.lines !== undefined) facts.push(`${reference.lines} lines`)
-        if (reference.dependencies !== undefined) facts.push(countFact(reference.dependencies, 'dependency', 'dependencies'))
-        if (reference.dependents !== undefined) facts.push(countFact(reference.dependents, 'dependent', 'dependents'))
-        if (reference.symbol !== undefined) facts.push(reference.symbol)
-        facts.push(reference.scanner)
-        extra.textContent = facts.join(' · ')
-        list.append(file, extra)
-      }
-      body.append(list)
+      body.append(heading('Code'), codeList(inspected.code, onSource))
     },
 
   }

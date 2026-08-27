@@ -10,6 +10,7 @@ import { sheetScene } from '../../sheet/scene.ts'
 import { pinsOf } from '../../work/pins.ts'
 import { renderPage } from './page.ts'
 import type { WebMapPayload, WebPayload, WebRevision, WebWorkPayload } from './payload.ts'
+import { readSource } from './source/read.ts'
 
 const defaultPort = 4747
 
@@ -170,6 +171,21 @@ export async function startWebViewer(
       if (pathname === '/world.json') {
         const selected = await payloadAt(url.searchParams.get('revision'))
         return selected instanceof Response ? selected : Response.json(selected)
+      }
+      if (pathname === '/source.json') {
+        const selected = await payloadAt(url.searchParams.get('revision'))
+        if (selected instanceof Response) return selected
+        const element = url.searchParams.get('element')
+        const file = url.searchParams.get('file')
+        if (element === null || file === null) return new Response('Source selection required', { status: 400 })
+        try {
+          const source = await readSource(repositoryRoot, selected.world, selected.revision, element, file)
+          return source === undefined
+            ? new Response('Source file not found', { status: 404 })
+            : Response.json(source)
+        } catch {
+          return new Response('Source file not found', { status: 404 })
+        }
       }
       if (pathname === '/project' && request.method === 'PUT') {
         try {

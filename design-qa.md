@@ -54,3 +54,42 @@ The source and terminal recap share the same hierarchy: Backlog identity, workfl
 The recap does not cover map cells. Task markers remain visible in normal mode. Work focus preserves both side panes, highlights touched architecture, and changes only temporary scope and camera. Cross-container tasks use the root map; a task contained by Web viewer opens its component map. Both terminal sizes remain readable with no cropped chrome or overlapping panes.
 
 Result: passed.
+
+# TASK-199 design QA
+
+- Source visual truth: `/Users/alex/.codex/generated_images/01a044d2-ddf7-77a3-98d5-a8fc59588b03/exec-d98b3f65-67bf-4b65-bfd1-4a5ad42df299.png`
+- Implementation screenshots: `/tmp/task-199-light-v4.png`, `/tmp/task-199-dark-v4.png`, and `/tmp/task-199-blueprint-v4.png`
+- Full-view comparison: `/tmp/task-199-comparison-v4.png`
+- Viewport: 1280 × 720 CSS pixels
+- Pixels and density: source 1672 × 941, normalized to 1280 × 720; implementation screenshots are 1280 × 720.
+- State: current revision, Details component selected, exact Code file open in the details pane, light theme for the reference comparison.
+
+## Findings
+
+No actionable P0, P1, or P2 difference remains. The implementation keeps the approved inspector drill-down composition while using Groma's existing details pane, typography, spacing, borders, and controls.
+
+## Full-view comparison
+
+The selected component stays visible on the architecture map while the details pane becomes a read-only source viewer. Back, component context, and line count share one compact header row; the exact file path sits above line-numbered source. Source mode expands the pane to 640 pixels, leaving the map visible while giving 627 content pixels to the code surface.
+
+## Focused comparison
+
+A separate crop was not needed because the full 1280 × 720 comparison keeps the complete source header and 25 readable code lines at native size. The three final theme screenshots provide focused color evidence without changing layout or content.
+
+## Required fidelity surfaces
+
+- Fonts and typography: The implementation reuses Groma's monospaced interface type. File identity is bold, metadata stays small and tracked, and code remains readable at the existing inspector density without wrapping.
+- Spacing and layout: At 1280 × 720 the 640-pixel source pane has room for the measured 594 pixels needed by 80 monospaced characters, line numbers, and padding. The body remains exactly 1280 pixels wide; only lines beyond the supported 80-character width scroll inside the pane.
+- Colors and tokens: Light uses restrained violet, blue, green, and orange syntax colors. Dark uses bright pink, yellow, green, orange, and blue. Blueprint uses yellow underlined keywords with cyan, lilac, pink, and white accents. Each palette uses theme-owned tokens.
+- Image quality and asset fidelity: The target contains no raster imagery or non-standard icon asset. The implementation preserves the live vector architecture scene and does not add replacement art.
+- Copy and content: Back, Component, exact file path, and line count match the approved information hierarchy. Source content is the real selected file from the active revision.
+- Interaction and accessibility: Exact Code files are buttons with descriptive accessible names. Back uses the shared standalone button atom, includes the reference's decorative left arrow, and matches the platform controls at 32 pixels high. Direct URL reload restored 424 source lines; Back cleared only the file state and returned to How it's built. Hierarchy, details, source, revision, and work surfaces inherit the same compact scrollbar rule.
+
+## Comparison history
+
+1. The first capture placed Back and line count above a second component-context row. This was a P2 density mismatch against the approved compact header.
+2. The source header was collapsed to one row. The next review found a P2 platform-consistency problem: Back still looked unlike other buttons, the pane was too narrow for useful source, and scroll surfaces could still fall back to browser-default or local scrollbar styles.
+3. Back now consumes the shared chrome button, source mode expands only the details column to 640 pixels, and one global compact scrollbar atom replaces local variants.
+4. The final review found the Back arrow missing and its 34-pixel box taller than the 32-pixel platform controls. The corrected button adds the decorative arrow and uses an exact 32-pixel border-box height. `/tmp/task-199-comparison-v4.png` confirms the final control and width across the full view.
+
+final result: passed
