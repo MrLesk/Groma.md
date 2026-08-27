@@ -31,7 +31,7 @@ export const flowRowCss = `
     font-size: 9px;
     line-height: 1;
   }
-  .flow-row.active .flow-check { border-color: var(--accent); background: var(--accent); color: var(--on-colour); }
+  .flow-row.active .flow-check { border-color: var(--highlight); background: var(--highlight); color: var(--on-colour); }
   .flow-row .name { overflow: hidden; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
   .flow-scope { color: var(--muted); font-size: 8px; letter-spacing: 0.06em; text-transform: uppercase; white-space: nowrap; }
   #details .flow-list .flow-row { padding: 7px 0; }

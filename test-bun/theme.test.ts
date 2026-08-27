@@ -30,6 +30,10 @@ test.concurrent('all themes declare the same variables and share brand signals',
   for (const theme of [light, dark, blueprint]) {
     assert.equal(theme.get('--accent'), accent)
   }
+  assert.equal(palettes.light.highlight, accent)
+  assert.equal(palettes.dark.highlight, accent)
+  assert.equal(palettes.blueprint.highlight, palettes.blueprint.ink)
+  assert.notEqual(palettes.blueprint.highlight, accent)
   assert.notEqual(light.get('--paper'), dark.get('--paper'))
   assert.notEqual(dark.get('--paper'), blueprint.get('--paper'))
 })
@@ -39,6 +43,8 @@ test.concurrent('every text token and coloured work surface meets normal-text co
     assert.ok(contrast(palette.ink, palette.paper) >= 4.5)
     assert.ok(contrast(palette.muted, palette.paper) >= 4.5)
     assert.ok(contrast(palette.accentText, palette.paper) >= 4.5)
+    assert.ok(contrast(palette.highlightText, palette.paper) >= 4.5)
+    assert.ok(contrast(onColour, palette.highlight) >= 4.5)
   }
   assert.ok(contrast(onColour, accent) >= 4.5)
   for (const colour of PIN_COLOURS) assert.ok(contrast(onColour, colour) >= 4.5)
