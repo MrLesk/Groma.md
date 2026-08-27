@@ -1,3 +1,4 @@
+import type { GitRevision } from '../../history/git.ts'
 import type { AnnotatedRelationship, ArchitectureGraph, C4Kind, WorkItem } from '../../types.ts'
 import type { FlowRef } from '../action-path.ts'
 import type { WebTheme } from './atoms/theme.ts'
@@ -7,6 +8,7 @@ import type { Selection } from './selection.ts'
 
 /** What the page's query string carries, so a view opens again from its link. */
 export interface ViewState {
+  revision?: string
   selection: Selection
   flows: readonly FlowRef[]
   tab: DetailsTab
@@ -24,8 +26,14 @@ const KINDS: C4Kind[] = ['actor', 'system', 'container', 'component']
  * `tab=how`, `theme=dark|blueprint` and `hud=off`. Ids are the authored ids; anything the world
  * or the work does not know is ignored, a kind naming an element of another kind included.
  */
-export function readView(search: string, world: ArchitectureGraph, work: readonly WorkItem[]): ViewState {
+export function readView(
+  search: string,
+  world: ArchitectureGraph,
+  work: readonly WorkItem[],
+  revisions: readonly GitRevision[] = [],
+): ViewState {
   const params = new URLSearchParams(search)
+  const revision = revisions.find(candidate => candidate.id === params.get('revision'))?.id
   const selectedTheme = params.get('theme')
   const byId = new Map(world.elements.map(element => [element.id, element]))
   const relationship = (value: string): AnnotatedRelationship | undefined => {
@@ -61,6 +69,7 @@ export function readView(search: string, world: ArchitectureGraph, work: readonl
     if (!flows.some(item => item.commandId === flow.commandId)) flows.push(flow)
   }
   return {
+    ...(revision === undefined ? {} : { revision }),
     selection: architecture.length > 0
       ? { kind: 'architecture', ids: architecture }
       : task !== undefined ? selectTask(task.id)
@@ -88,6 +97,7 @@ export function writeView(state: ViewState, world: ArchitectureGraph, work: read
     const actor = elements.get(flow.actorId ?? '')
     return actor?.kind === 'actor' ? `${actor.id}/${route}` : route
   }
+  if (state.revision !== undefined) pairs.push(['revision', state.revision])
   if (state.selection.kind === 'architecture') {
     for (const id of state.selection.ids) {
       const element = elements.get(id)

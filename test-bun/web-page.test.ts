@@ -13,6 +13,11 @@ test.concurrent('the page embeds the world and its sheet and mounts one SVG map'
   const page = renderPage({
     generation: 1,
     project: null,
+    revision: null,
+    revisions: [
+      { id: 'a'.repeat(40), shortId: 'aaaaaaa', date: '2026-08-27T16:42:00+02:00', subject: 'Map history', body: 'Full map notes.', tag: 'v2.0.0', compatible: true },
+      { id: 'b'.repeat(40), shortId: 'bbbbbbb', date: '2026-07-27T11:20:00+02:00', subject: 'Old contract', body: '', compatible: false },
+    ],
     workGeneration: 0,
     world,
     sheet: sheetScene(world),
@@ -22,6 +27,7 @@ test.concurrent('the page embeds the world and its sheet and mounts one SVG map'
   assert.match(page, /<div id="map"><\/div>/)
   assert.match(page, /"project":null/)
   assert.match(page, /"sheet":\{"sheet":/)
+  assert.match(page, /<details id="revision">/)
 })
 
 test.concurrent('the browser bundle only projects and paints', async () => {

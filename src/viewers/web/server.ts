@@ -1,13 +1,15 @@
 import { watchArchitecture } from '../../architecture-watch.ts'
+import { loadArchitecture } from '../../architecture-reader.ts'
+import { listGitRevisions, withGitGromaRevision, withGitRevision } from '../../history/git.ts'
 import { createBacklogPlugin, EMPTY_WORK_SNAPSHOT } from '../../work/backlog.ts'
 import type { WorkSource } from '../../work/backlog.ts'
-import { loadAnnotatedArchitecture } from '../../core.ts'
+import { annotateArchitecture, loadAnnotatedArchitecture } from '../../core.ts'
 import { loadProjectProfile, saveProjectProfile } from '../../project-profile.ts'
 import { watchScan } from '../../scanner.ts'
 import { sheetScene } from '../../sheet/scene.ts'
 import { pinsOf } from '../../work/pins.ts'
 import { renderPage } from './page.ts'
-import type { WebMapPayload, WebPayload, WebWorkPayload } from './payload.ts'
+import type { WebMapPayload, WebPayload, WebRevision, WebWorkPayload } from './payload.ts'
 
 const defaultPort = 4747
 
@@ -20,13 +22,38 @@ async function bundleRenderer(): Promise<string> {
 }
 
 /** Loads the architecture map without consulting optional work plugins. */
-async function loadMap(repositoryRoot: string): Promise<Omit<WebMapPayload, 'generation'>> {
+async function loadMapRoot(repositoryRoot: string): Promise<Pick<WebMapPayload, 'project' | 'world' | 'sheet'>> {
   const [{ elements, relationships }, project] = await Promise.all([
     loadAnnotatedArchitecture(repositoryRoot),
     loadProjectProfile(repositoryRoot),
   ])
   const world = { elements, relationships }
   return { project: project ?? null, world, sheet: sheetScene(world) }
+}
+
+async function loadMap(
+  repositoryRoot: string,
+  revisions: WebRevision[],
+  revision: WebRevision | null,
+): Promise<Omit<WebMapPayload, 'generation'>> {
+  const snapshot = revision === null
+    ? await loadMapRoot(repositoryRoot)
+    : await withGitRevision(repositoryRoot, revision.id, loadMapRoot)
+  return { ...snapshot, revision, revisions }
+}
+
+async function revisionHistory(repositoryRoot: string): Promise<WebRevision[]> {
+  return Promise.all((await listGitRevisions(repositoryRoot)).map(async revision => ({
+    ...revision,
+    compatible: await withGitGromaRevision(repositoryRoot, revision.id, async snapshotRoot => {
+      try {
+        annotateArchitecture(await loadArchitecture(snapshotRoot))
+        return true
+      } catch {
+        return false
+      }
+    }),
+  })))
 }
 
 /** Starts the map server and returns its URL. */
@@ -36,9 +63,10 @@ export async function startWebViewer(
 ): Promise<{ url: string; close: () => void }> {
   const renderer = await bundleRenderer()
   const workSource = options.workSource ?? createBacklogPlugin(repositoryRoot)
+  const revisions = await revisionHistory(repositoryRoot)
   let map: WebMapPayload = {
     generation: 1,
-    ...(await loadMap(repositoryRoot)),
+    ...(await loadMap(repositoryRoot, revisions, null)),
   }
   let workState: Omit<WebWorkPayload, 'pins'> = {
     workGeneration: 0,
@@ -57,6 +85,20 @@ export async function startWebViewer(
 
   function payload(): WebPayload {
     return { ...map, ...workPayload() }
+  }
+
+  async function payloadAt(revisionId: string | null): Promise<WebPayload | Response> {
+    if (revisionId === null) return payload()
+    const revision = revisions.find(candidate => candidate.id === revisionId)
+    if (revision === undefined) return new Response('Unknown Groma revision', { status: 404 })
+    if (!revision.compatible) return new Response('Unsupported Groma revision', { status: 422 })
+    return {
+      generation: map.generation,
+      ...(await loadMap(repositoryRoot, revisions, revision)),
+      workGeneration: workState.workGeneration,
+      work: EMPTY_WORK_SNAPSHOT,
+      pins: [],
+    }
   }
 
   function worldEvent(): Uint8Array {
@@ -78,7 +120,7 @@ export async function startWebViewer(
   }
 
   async function publishWorld(): Promise<void> {
-    const next = await loadMap(repositoryRoot)
+    const next = await loadMap(repositoryRoot, revisions, null)
     if (closed) return
     map = {
       generation: map.generation + 1,
@@ -115,7 +157,8 @@ export async function startWebViewer(
     // The event stream stays open while nothing changes; Bun's default closes it after ten idle seconds.
     idleTimeout: 0,
     fetch: async request => {
-      const { pathname } = new URL(request.url)
+      const url = new URL(request.url)
+      const { pathname } = url
       if (pathname === '/render.js') {
         return new Response(renderer, {
           headers: {
@@ -125,7 +168,8 @@ export async function startWebViewer(
         })
       }
       if (pathname === '/world.json') {
-        return Response.json(payload())
+        const selected = await payloadAt(url.searchParams.get('revision'))
+        return selected instanceof Response ? selected : Response.json(selected)
       }
       if (pathname === '/project' && request.method === 'PUT') {
         try {
@@ -157,7 +201,9 @@ export async function startWebViewer(
           },
         })
       }
-      return new Response(renderPage(payload()), {
+      const selected = await payloadAt(url.searchParams.get('revision'))
+      if (selected instanceof Response) return selected
+      return new Response(renderPage(selected), {
         headers: {
           'Content-Type': 'text/html; charset=utf-8',
           'Cache-Control': 'no-store',

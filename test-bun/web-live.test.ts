@@ -11,16 +11,21 @@ import type { WorkItem, WorkSnapshot } from '../src/types.ts'
 import { startWebViewer } from '../src/viewers/web/server.ts'
 
 function run(command: string, args: string[], cwd: string) {
-  return new Promise<{ code: number | null; stderr: string }>((resolve, reject) => {
+  return new Promise<{ code: number | null; stdout: string; stderr: string }>((resolve, reject) => {
     const child = spawn(command, args, { cwd, stdio: ['ignore', 'pipe', 'pipe'] })
+    let stdout = ''
     let stderr = ''
+    child.stdout.setEncoding('utf8')
     child.stderr.setEncoding('utf8')
+    child.stdout.on('data', chunk => {
+      stdout += chunk
+    })
     child.stderr.on('data', chunk => {
       stderr += chunk
     })
     child.on('error', reject)
     child.on('close', code => {
-      resolve({ code, stderr })
+      resolve({ code, stdout, stderr })
     })
   })
 }
@@ -31,6 +36,16 @@ async function writeTree(root: string, files: Record<string, string>): Promise<v
     await mkdir(path.dirname(filename), { recursive: true })
     await writeFile(filename, source)
   }
+}
+
+async function commitAll(root: string, subject: string): Promise<void> {
+  assert.equal((await run('git', ['add', '.'], root)).code, 0)
+  const result = await run('git', [
+    '-c', 'user.name=Groma Test',
+    '-c', 'user.email=groma@example.test',
+    'commit', '-m', subject,
+  ], root)
+  assert.equal(result.code, 0, result.stderr)
 }
 
 async function createLiveRepo(): Promise<string> {
@@ -48,6 +63,7 @@ async function createLiveRepo(): Promise<string> {
   })
   const init = await run('git', ['init'], root)
   assert.equal(init.code, 0, init.stderr)
+  await commitAll(root, 'Initial architecture')
   return root
 }
 
@@ -87,6 +103,68 @@ test.concurrent('groma web omits the project profile when its README is incomple
     assert.equal((await fetch(server.url)).status, 200)
     const payload = await (await fetch(`${server.url}/world.json`)).json() as { project: unknown }
     assert.equal(payload.project, null)
+  } finally {
+    server.close()
+    await rm(root, { recursive: true, force: true })
+  }
+})
+
+test.concurrent('groma web serves a selected Git snapshot without changing repository state', async () => {
+  const root = await createLiveRepo()
+  await writeFile(path.join(root, 'groma', 'README.md'), '# Current shop\n\nCurrent architecture.\n')
+  const before = await run('git', ['status', '--porcelain=v1'], root)
+  const server = await startWebViewer(root, { port: 0 })
+  try {
+    const current = await (await fetch(`${server.url}/world.json`)).json() as {
+      project: { name: string }
+      revisions: { id: string; subject: string }[]
+    }
+    assert.equal(current.project.name, 'Current shop')
+    assert.equal(current.revisions[0]!.subject, 'Initial architecture')
+
+    const revision = current.revisions[0]!.id
+    const historical = await (await fetch(`${server.url}/world.json?revision=${revision}`)).json() as {
+      project: { name: string }
+      revision: { id: string }
+      work: { items: unknown[] }
+      pins: unknown[]
+    }
+    assert.equal(historical.project.name, 'Shop')
+    assert.equal(historical.revision.id, revision)
+    assert.deepEqual(historical.work.items, [])
+    assert.deepEqual(historical.pins, [])
+    assert.equal((await fetch(`${server.url}/world.json?revision=unknown`)).status, 404)
+
+    const after = await run('git', ['status', '--porcelain=v1'], root)
+    assert.equal(after.code, 0, after.stderr)
+    assert.equal(after.stdout, before.stdout)
+  } finally {
+    server.close()
+    await rm(root, { recursive: true, force: true })
+  }
+})
+
+test.concurrent('groma web marks obsolete Markdown revisions unsupported', async () => {
+  const root = await createLiveRepo()
+  const actor = path.join(root, 'groma', 'observed', 'actors', 'legacy.md')
+  await mkdir(path.dirname(actor), { recursive: true })
+  await writeFile(actor, '---\nid: legacy\nkind: person\n---\n\n# Legacy\n')
+  await commitAll(root, 'Old person contract')
+  await writeFile(actor, '---\nid: legacy\nkind: actor\n---\n\n# Legacy\n')
+  await commitAll(root, 'Current actor contract')
+
+  const server = await startWebViewer(root, { port: 0 })
+  try {
+    const payload = await (await fetch(`${server.url}/world.json`)).json() as {
+      revisions: { id: string; subject: string; compatible: boolean }[]
+    }
+    const current = payload.revisions.find(revision => revision.subject === 'Current actor contract')
+    const obsolete = payload.revisions.find(revision => revision.subject === 'Old person contract')
+    assert.equal(current?.compatible, true)
+    assert.equal(obsolete?.compatible, false)
+    const response = await fetch(`${server.url}/world.json?revision=${obsolete!.id}`)
+    assert.equal(response.status, 422)
+    assert.equal(await response.text(), 'Unsupported Groma revision')
   } finally {
     server.close()
     await rm(root, { recursive: true, force: true })

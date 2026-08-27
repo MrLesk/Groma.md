@@ -9,6 +9,13 @@ import type { ViewState } from '../src/viewers/web/url.ts'
 import { box, uses } from './helpers.ts'
 
 const unit = { x: 0, y: 0, width: 1, height: 1 }
+const revision = {
+  id: 'a'.repeat(40),
+  shortId: 'aaaaaaa',
+  date: '2026-08-27T16:42:00+02:00',
+  subject: 'Architecture',
+  body: '',
+}
 
 const world: ArchitectureWorld = {
   bounds: unit,
@@ -47,6 +54,20 @@ test.concurrent('defaults write nothing and read back as the default view', () =
   assert.equal(writeView({ ...rest, flows: [{ commandId: 'relationship:1' }] }, world, []), '?flow=commands/scan')
   assert.equal(writeView({ ...rest, flows: [{ commandId: 'relationship:1', actorId: 'observed:tool' }] }, world, []), '?flow=commands/scan')
   assert.equal(writeView({ ...rest, selection: { kind: 'architecture', ids: ['observed:dev'] } }, world, []), '?actor=dev')
+})
+
+test.concurrent('a known Git revision is shareable while unknown revisions are ignored', () => {
+  const state: ViewState = {
+    revision: revision.id,
+    selection: noSelection,
+    flows: [],
+    tab: 'what',
+    theme: 'light',
+    hudVisible: true,
+  }
+  assert.equal(writeView(state, world, []), `?revision=${revision.id}`)
+  assert.deepEqual(readView(`?revision=${revision.id}`, world, [], [revision]), state)
+  assert.equal(readView('?revision=unknown', world, [], [revision]).revision, undefined)
 })
 
 test.concurrent('a selected relationship is carried as its source and target ids', () => {
