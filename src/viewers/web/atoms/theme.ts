@@ -70,7 +70,6 @@ export function themeLabel(theme: WebTheme): string {
 
 /** Brand signals shared by every theme. */
 export const accent = '#1D9E75'
-export const registration = '#F04B47'
 
 export function cssBlock(palette: Palette): string {
   return `
@@ -80,7 +79,6 @@ export function cssBlock(palette: Palette): string {
   --hairline: ${palette.hairline};
   --hover: ${palette.hover};
   --accent: ${accent};
-  --registration: ${registration};
   --map-line: ${palette.line};
   --map-hatch: ${palette.hatch};
   --map-grid: ${palette.grid};
