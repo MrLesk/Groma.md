@@ -159,7 +159,7 @@ export const mapCss = `
   #map .building.external .pattern.left { fill: url(#cross-left); }
   #map .building.external .pattern.right { fill: url(#cross-right); }
   #map .camera[data-facades-hidden] .building .pattern { display: none; }
-  #map > svg .chip { fill: var(--paper); fill-opacity: 0.75; }
+  #map > svg .chip { fill: var(--paper); }
   #map .ghost { opacity: 0.8; }
   #map .ghost .face, #map .ghost .ground { fill: none; }
   #map .ghost .pattern, #map .ghost .chip { display: none; }
@@ -168,7 +168,7 @@ export const mapCss = `
   #map .ghost.missing .face, #map .ghost.missing .ground,
   #map .route-base.ghost.missing, #map .route.ghost.missing .line { stroke-dasharray: 1 3; }
   #map .text { fill: var(--ink); pointer-events: none; }
-  #map .zone > .label .text { fill: var(--muted); }
+  #map :is(.island, .slab, .zone) > .label .text { font-weight: 600; }
   #map .camera[data-names-hidden] :is(.island, .slab, .zone, .building) > .label { display: none; }
   #map .route-base, #map .route .line { fill: none; stroke-linecap: round; opacity: 0.9; }
   #map .route-base { pointer-events: none; }
