@@ -6,6 +6,7 @@ import { elementOnPath, flowRouteIds, worldCommands } from '../action-path.ts'
 import type { FlowRef } from '../action-path.ts'
 import { initialTree, semanticTreeRows, toggleExpansion } from '../tui/tree.ts'
 import type { TreeRow } from '../tui/tree.ts'
+import { nextTheme, themeLabel } from './atoms/theme.ts'
 import { createFpsCounter } from './chrome/fps.ts'
 import { createWebShell, mapFrame } from './chrome/shell.ts'
 import type { MapFrame } from './chrome/shell.ts'
@@ -62,7 +63,7 @@ const treeHost = document.getElementById('tree')!
 const flowsHost = document.getElementById('flows')!
 const statsHost = document.getElementById('stats')!
 const themeButton = document.getElementById('theme')!
-const themeLabel = themeButton.querySelector<HTMLElement>('.label')!
+const themeText = themeButton.querySelector<HTMLElement>('.label')!
 const detailsHost = document.getElementById('details')!
 const detailsClose = document.getElementById('details-close') as HTMLButtonElement
 const zoomHost = document.getElementById('zoom')!
@@ -96,7 +97,7 @@ if (selection.kind === 'none' && initial !== undefined) {
 /** Tasks activated from pins or chips, in activation order; selection is independent and this order supplies its deactivation fallback. */
 let activeTaskIds: string[] = selection.kind === 'task' ? [selection.id] : []
 let detailsTab: DetailsTab = opened.tab
-let darkTheme = opened.dark
+let theme = opened.theme
 
 /** The full-screen grid surrounds a safe camera frame between the floating chrome. */
 function viewport(): MapFrame {
@@ -184,7 +185,7 @@ function paintStats(flowCount: number): void {
 
 /** The URL follows the view, without adding history entries. */
 function syncUrl(): void {
-  const query = writeView({ selection, flows: activeFlows, tab: detailsTab, dark: darkTheme, hudVisible }, world, work.items)
+  const query = writeView({ selection, flows: activeFlows, tab: detailsTab, theme, hudVisible }, world, work.items)
   history.replaceState(null, '', `${location.pathname}${query}`)
 }
 
@@ -368,18 +369,19 @@ function toggleHud(): void {
 }
 
 function applyTheme(): void {
-  themeLabel.textContent = darkTheme ? 'Light' : 'Dark'
-  if (darkTheme) document.documentElement.dataset.theme = 'dark'
-  else delete document.documentElement.dataset.theme
+  const next = nextTheme(theme)
+  themeButton.dataset.nextTheme = next
+  themeText.textContent = themeLabel(next)
+  if (theme === 'light') delete document.documentElement.dataset.theme
+  else document.documentElement.dataset.theme = theme
   syncUrl()
 }
 
 themeButton.addEventListener('click', () => {
-  darkTheme = !darkTheme
+  theme = nextTheme(theme)
   applyTheme()
 })
 applyTheme()
-
 function keyTarget(target: EventTarget | null): KeyTarget {
   if (!(target instanceof Element)) return 'other'
   if (target.closest('input, textarea, [contenteditable]')) return 'text'

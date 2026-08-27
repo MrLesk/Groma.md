@@ -12,11 +12,13 @@ This page is the browser surface. The shared viewer rules live in
 The isometric grid fills the screen. Inset 35%-paper frosted chrome floats
 above it as one technical instrument. The header shows the groma.md lockup,
 the observed system's name with live flow and element counts, one compact
-Fit, `-`, zoom-readout and `+` group, Help, and an icon-labelled Dark/Light
-toggle. Help opens the short map-control guide. The toggle swaps the whole
-viewer, chrome and map alike, between the light sheet and a dark one; the
-accent green stays the same. The full footer is absent, and Live work keeps
-the bottom centre. The camera fits architecture into the clear area between
+Fit, `-`, zoom-readout and `+` group, Help, and an icon-labelled theme
+control whose label names the next choice. Help opens the short map-control
+guide. The control cycles the whole viewer through Light, Dark, Blueprint,
+then Light. Blueprint uses a deep navy field, pale cyan drafting lines, and
+restrained calibration marks while keeping the same architecture, compass,
+and accent green. The full footer is absent, and Live work keeps the bottom
+centre. The camera fits architecture into the clear area between
 the floating hierarchy and any open details pane, so the grid continues
 beneath the chrome without hiding the fitted world.
 
@@ -319,7 +321,7 @@ their selection order; `task=<id>` names a selected task. Repeated
 `flow=<source>/<target>` entries preserve active flow order; an actor-scoped
 flow uses `flow=<actor>/<source>/<target>`. Active flows do not create a
 selection or own details. `tab=how` names the How it's built
-tab and `theme=dark` the theme;
+tab; `theme=dark` and `theme=blueprint` name the non-default themes;
 defaults stay out of the URL and unknown values are ignored.
 A watched TypeScript change folds and rebuilds the map without a
 browser refresh. An architecture Markdown change does the same

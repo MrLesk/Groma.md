@@ -27,6 +27,7 @@ const icon = (body: string, className = ''): string => `<svg class="control-icon
 const fitIcon = icon('<path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3"/>')
 const moonIcon = icon('<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79Z"/>')
 const sunIcon = icon('<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.42 1.42M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.42-1.42M17.66 6.34l1.41-1.41"/>')
+const blueprintIcon = icon('<circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/>')
 const closeIcon = icon('<path d="M18 6 6 18M6 6l12 12"/>')
 const collapseIcon = icon('<path d="m11 17-5-5 5-5M18 17l-5-5 5-5"/>', 'collapse-icon')
 const expandIcon = icon('<path d="m13 17 5-5-5-5M6 17l5-5-5-5"/>', 'expand-icon')
@@ -46,6 +47,7 @@ const style = `
     --details-column: clamp(360px, 32vw, 420px);
   }
   [data-theme="dark"] { ${cssBlock(palettes.dark)} }
+  [data-theme="blueprint"] { ${cssBlock(palettes.blueprint)} }
   html { margin: 0; height: 100%; overflow-x: auto; overflow-y: hidden; background: var(--paper); }
   *, *::before, *::after { box-sizing: border-box; }
   body {
@@ -112,9 +114,10 @@ const style = `
   .header-actions > button:hover, #help summary:hover, #hierarchy-toggle:hover { color: var(--ink); background: var(--hover); }
   .control-icon { width: 14px; height: 14px; display: block; flex: none; }
   #theme { display: flex; align-items: center; gap: 7px; }
-  #theme .sun { display: none; }
-  [data-theme="dark"] #theme .moon { display: none; }
-  [data-theme="dark"] #theme .sun { display: block; }
+  #theme .theme-icon { display: none; }
+  #theme[data-next-theme="dark"] .dark,
+  #theme[data-next-theme="blueprint"] .blueprint,
+  #theme[data-next-theme="light"] .light { display: block; }
   #help { position: relative; }
   #help summary { list-style: none; }
   #help summary::-webkit-details-marker { display: none; }
@@ -152,6 +155,40 @@ const style = `
   #legend span { display: inline-flex; align-items: center; gap: 6px; }
   #legend .mark { color: var(--ink); letter-spacing: 0; }
   #map { position: fixed; inset: 0; z-index: 0; overflow: hidden; }
+  [data-theme="blueprint"] #header,
+  [data-theme="blueprint"] #hierarchy,
+  [data-theme="blueprint"] #details,
+  [data-theme="blueprint"] #help .help-panel {
+    border-color: color-mix(in srgb, var(--map-line) 34%, transparent);
+    background: color-mix(in srgb, var(--paper) 78%, transparent);
+    box-shadow: 0 0 20px color-mix(in srgb, var(--map-line) 7%, transparent), inset 0 0 18px color-mix(in srgb, var(--map-line) 3%, transparent);
+  }
+  [data-theme="blueprint"] #map::before,
+  [data-theme="blueprint"] #map::after {
+    content: '';
+    position: absolute;
+    inset: 72px 20px 20px;
+    pointer-events: none;
+  }
+  [data-theme="blueprint"] #map .grid { opacity: 0.35; }
+  [data-theme="blueprint"] #map .grid.major { opacity: 0.6; }
+  [data-theme="blueprint"] #map::before {
+    background:
+      radial-gradient(circle at 16% 82%, transparent 0 44px, color-mix(in srgb, var(--map-line) 24%, transparent) 45px 46px, transparent 47px 58px, color-mix(in srgb, var(--map-line) 14%, transparent) 59px 60px, transparent 61px),
+      radial-gradient(circle at 74% 22%, transparent 0 36px, color-mix(in srgb, var(--map-line) 18%, transparent) 37px 38px, transparent 39px 49px, color-mix(in srgb, var(--map-line) 10%, transparent) 50px 51px, transparent 52px);
+  }
+  [data-theme="blueprint"] #map::after {
+    background:
+      linear-gradient(var(--registration), var(--registration)) left top / 18px 2px no-repeat,
+      linear-gradient(var(--registration), var(--registration)) left top / 2px 18px no-repeat,
+      linear-gradient(var(--registration), var(--registration)) right top / 18px 2px no-repeat,
+      linear-gradient(var(--registration), var(--registration)) right top / 2px 18px no-repeat,
+      linear-gradient(var(--registration), var(--registration)) left bottom / 18px 2px no-repeat,
+      linear-gradient(var(--registration), var(--registration)) left bottom / 2px 18px no-repeat,
+      linear-gradient(var(--registration), var(--registration)) right bottom / 18px 2px no-repeat,
+      linear-gradient(var(--registration), var(--registration)) right bottom / 2px 18px no-repeat;
+    opacity: 0.8;
+  }
   #details {
     grid-column: 3;
     position: relative;
@@ -290,7 +327,7 @@ export function renderPage(payload: WebPayload): string {
   return '<!doctype html><html><head><meta charset="utf-8"><title>groma.md</title>'
     + `<style>${style}</style></head><body>`
     + `<header id="header">${lockup}<span id="stats"></span>`
-    + `<div class="header-actions"><div id="map-controls" class="controls" aria-label="Map controls"><button id="fit" aria-label="Fit map">${fitIcon}<span>Fit</span></button><button id="zoom-out" aria-label="Zoom out">−</button><span id="zoom" aria-live="polite"></span><button id="zoom-in" aria-label="Zoom in">+</button></div><details id="help"><summary>Help</summary><div class="help-panel"><p>Drag or scroll to pan<br>Pinch, + or − to zoom<br>0 or Fit shows the whole map<br>F1 toggles map only<br>F3 toggles FPS<br>Escape clears selection</p></div></details><button id="theme"><span class="moon">${moonIcon}</span><span class="sun">${sunIcon}</span><span class="label">Dark</span></button></div>`
+    + `<div class="header-actions"><div id="map-controls" class="controls" aria-label="Map controls"><button id="fit" aria-label="Fit map">${fitIcon}<span>Fit</span></button><button id="zoom-out" aria-label="Zoom out">−</button><span id="zoom" aria-live="polite"></span><button id="zoom-in" aria-label="Zoom in">+</button></div><details id="help"><summary>Help</summary><div class="help-panel"><p>Drag or scroll to pan<br>Pinch, + or − to zoom<br>0 or Fit shows the whole map<br>F1 toggles map only<br>F3 toggles FPS<br>Escape clears selection</p></div></details><button id="theme" data-next-theme="dark"><span class="theme-icon dark">${moonIcon}</span><span class="theme-icon blueprint">${blueprintIcon}</span><span class="theme-icon light">${sunIcon}</span><span class="label">Dark</span></button></div>`
     + '</header>'
     + `<nav id="hierarchy" aria-label="Hierarchy"><div id="hierarchy-title"><span class="pane-label">Hierarchy</span><button id="hierarchy-toggle" type="button" aria-controls="hierarchy-content">${collapseIcon}${expandIcon}</button></div><div id="hierarchy-content"><div id="flows"></div><div id="tree"></div><div id="legend">${legend()}</div></div></nav>`
     + '<div id="map"></div>'
