@@ -9,13 +9,19 @@ import { paintIslands, paintSheet, paintSlabs } from './paint-ground.ts'
 import { paintRoutes, type RouteNode } from './paint-routes.ts'
 import { DEFAULT_PROJECTION, planeMatrix } from './project.ts'
 import type { ProjectionView } from './project.ts'
-import { facadeDetailsVisible, minorGridVisible, namesVisible, weightAt } from './scale.ts'
+import {
+  GRID_TILE_CELLS,
+  facadeDetailsVisible,
+  gridVisible,
+  minorGridVisible,
+  namesVisible,
+  weightAt,
+} from './scale.ts'
 import { mapDefs } from './style.ts'
 import { svg } from './svg.ts'
 
-/** A graph-paper tile is five cells square: minor lines every cell, one major line each way. */
-const TILE_CELLS = 5
-const TILE_SIZE = TILE_CELLS * PLANE
+/** A graph-paper tile: minor lines every cell, one major line each way. */
+const TILE_SIZE = GRID_TILE_CELLS * PLANE
 
 /**
  * The endless grid: one tile repeated over the whole pane, moved and scaled
@@ -29,9 +35,9 @@ function gridPattern(): { pattern: SVGPatternElement; lines: SVGPathElement[] } 
   })
   const minor: string[] = []
   const major: string[] = []
-  for (let index = 0; index <= TILE_CELLS; index += 1) {
+  for (let index = 0; index <= GRID_TILE_CELLS; index += 1) {
     const offset = index * PLANE
-    const lines = index % TILE_CELLS === 0 ? major : minor
+    const lines = index % GRID_TILE_CELLS === 0 ? major : minor
     lines.push(`M${offset} 0V${TILE_SIZE}`, `M0 ${offset}H${TILE_SIZE}`)
   }
   const paths = [svg('path', { d: minor.join('') }, 'grid'), svg('path', { d: major.join('') }, 'grid major')]
@@ -108,10 +114,13 @@ export function createMap(host: HTMLElement): IsoMap {
     svg: root,
     move(current, zoomRatio) {
       camera.style.transform = cameraTransform(current)
-      grid.pattern.setAttribute(
-        'patternTransform',
-        `translate(${current.x} ${current.y}) scale(${current.k}) ${planeMatrix('ground', undefined, gridView)}`,
-      )
+      const showGrid = gridVisible(current.k)
+      if (showGrid) {
+        grid.pattern.setAttribute(
+          'patternTransform',
+          `translate(${current.x} ${current.y}) scale(${current.k}) ${planeMatrix('ground', undefined, gridView)}`,
+        )
+      }
       const scaleChanged = current.k !== appliedK || zoomRatio !== appliedZoomRatio
       if (!scaleChanged) return false
       const weight = weightAt(zoomRatio)
@@ -120,6 +129,7 @@ export function createMap(host: HTMLElement): IsoMap {
       camera.style.setProperty('--camera-scale', String(current.k))
       camera.toggleAttribute('data-names-hidden', !namesVisible(current.k))
       camera.toggleAttribute('data-facades-hidden', !facadeDetailsVisible(current.k))
+      field.style.display = showGrid ? '' : 'none'
       root.toggleAttribute('data-minor-grid-hidden', !minorGridVisible(current.k))
       for (const line of grid.lines) line.style.strokeWidth = String(1 / current.k)
       appliedK = current.k
