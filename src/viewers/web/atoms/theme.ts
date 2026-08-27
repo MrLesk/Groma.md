@@ -14,7 +14,9 @@ export interface Palette {
   gridMajor: string
 }
 
-export const palettes: Record<'light' | 'dark', Palette> = {
+export type WebTheme = 'light' | 'dark' | 'blueprint'
+
+export const palettes: Record<WebTheme, Palette> = {
   light: {
     paper: '#FFFFFF',
     ink: '#22262E',
@@ -37,10 +39,38 @@ export const palettes: Record<'light' | 'dark', Palette> = {
     grid: '#1A1D21',
     gridMajor: '#22262B',
   },
+  blueprint: {
+    paper: '#04182B',
+    ink: '#D8F3FF',
+    muted: '#79A9BD',
+    hairline: '#164764',
+    hover: 'rgba(89, 203, 244, 0.09)',
+    line: '#64B7D6',
+    hatch: '#2B6C88',
+    grid: '#061F33',
+    gridMajor: '#0A3047',
+  },
 }
 
-/** The one brand green; identical in both themes. */
+const nextThemes: Record<WebTheme, WebTheme> = {
+  light: 'dark',
+  dark: 'blueprint',
+  blueprint: 'light',
+}
+
+/** The next theme activated by the header control. */
+export function nextTheme(theme: WebTheme): WebTheme {
+  return nextThemes[theme]
+}
+
+/** The short control label for a theme. */
+export function themeLabel(theme: WebTheme): string {
+  return theme[0]!.toUpperCase() + theme.slice(1)
+}
+
+/** Brand signals shared by every theme. */
 export const accent = '#1D9E75'
+export const registration = '#F04B47'
 
 export function cssBlock(palette: Palette): string {
   return `
@@ -50,6 +80,7 @@ export function cssBlock(palette: Palette): string {
   --hairline: ${palette.hairline};
   --hover: ${palette.hover};
   --accent: ${accent};
+  --registration: ${registration};
   --map-line: ${palette.line};
   --map-hatch: ${palette.hatch};
   --map-grid: ${palette.grid};

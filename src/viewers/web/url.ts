@@ -1,5 +1,6 @@
 import type { AnnotatedRelationship, ArchitectureGraph, C4Kind, WorkItem } from '../../types.ts'
 import type { FlowRef } from '../action-path.ts'
+import type { WebTheme } from './atoms/theme.ts'
 import type { DetailsTab } from './organisms/details.ts'
 import { noSelection, selectTask } from './selection.ts'
 import type { Selection } from './selection.ts'
@@ -9,7 +10,7 @@ export interface ViewState {
   selection: Selection
   flows: readonly FlowRef[]
   tab: DetailsTab
-  dark: boolean
+  theme: WebTheme
   hudVisible: boolean
 }
 
@@ -20,11 +21,12 @@ const KINDS: C4Kind[] = ['actor', 'system', 'container', 'component']
  * Reads the ordered architecture selection (repeated `<kind>=<id>` and
  * `relationship=<source id>/<target id>` entries) or `task=<id>`,
  * repeated active flows (`flow=<source>/<target>` or `flow=<actor>/<source>/<target>`),
- * `tab=how`, `theme=dark` and `hud=off`. Ids are the authored ids; anything the world
+ * `tab=how`, `theme=dark|blueprint` and `hud=off`. Ids are the authored ids; anything the world
  * or the work does not know is ignored, a kind naming an element of another kind included.
  */
 export function readView(search: string, world: ArchitectureGraph, work: readonly WorkItem[]): ViewState {
   const params = new URLSearchParams(search)
+  const selectedTheme = params.get('theme')
   const byId = new Map(world.elements.map(element => [element.id, element]))
   const relationship = (value: string): AnnotatedRelationship | undefined => {
     const [from, to] = value.split('/')
@@ -65,7 +67,7 @@ export function readView(search: string, world: ArchitectureGraph, work: readonl
       : noSelection,
     flows,
     tab: params.get('tab') === 'how' ? 'how' : 'what',
-    dark: params.get('theme') === 'dark',
+    theme: selectedTheme === 'dark' || selectedTheme === 'blueprint' ? selectedTheme : 'light',
     hudVisible: params.get('hud') !== 'off',
   }
 }
@@ -103,7 +105,7 @@ export function writeView(state: ViewState, world: ArchitectureGraph, work: read
     if (value !== undefined) pairs.push(['flow', value])
   }
   if (state.tab === 'how') pairs.push(['tab', 'how'])
-  if (state.dark) pairs.push(['theme', 'dark'])
+  if (state.theme !== 'light') pairs.push(['theme', state.theme])
   if (!state.hudVisible) pairs.push(['hud', 'off'])
   return pairs.length === 0 ? '' : `?${pairs.map(([key, value]) => `${key}=${value}`).join('&')}`
 }
