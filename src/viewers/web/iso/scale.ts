@@ -20,7 +20,7 @@ const ISLAND_TINT = 0.04
 /** A thing's sides lie one level deeper than its top, the left face half a level more, for the 3D read. */
 export const SIDE = { right: 1, left: 1.5 } as const
 /** Surface names show once their font reaches this readable screen size. */
-const MIN_NAME_PX = 10
+const MIN_NAME_PX = 6
 /** The smallest facade mark must reach one screen pixel before its pattern is useful. */
 export const FACADE_MARK = 1.1
 /** Minor grid rows stay at least this far apart; major rows remain visible below it. */
