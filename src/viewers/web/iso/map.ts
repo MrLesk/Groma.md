@@ -1,18 +1,21 @@
+import type { Point } from '../../../types.ts'
+import { PLANE } from '../../../sheet/measure.ts'
+import { paintLayerLabels, paintLayerPlanes } from '../layers/paint.ts'
+import type { LayeredScene } from '../layers/separation.ts'
 import { cameraTransform } from './camera.ts'
 import type { Camera } from './camera.ts'
 import { paintBuildings } from './paint-buildings.ts'
 import { paintIslands, paintSheet, paintSlabs } from './paint-ground.ts'
 import { paintRoutes, type RouteNode } from './paint-routes.ts'
-import type { ProjectedScene } from './project.ts'
-import type { Point } from '../../../types.ts'
-import { GRID_ROW_PITCH, facadeDetailsVisible, minorGridVisible, namesVisible, weightAt } from './scale.ts'
+import { DEFAULT_PROJECTION, planeMatrix } from './project.ts'
+import type { ProjectionView } from './project.ts'
+import { facadeDetailsVisible, minorGridVisible, namesVisible, weightAt } from './scale.ts'
 import { mapDefs } from './style.ts'
 import { svg } from './svg.ts'
 
 /** A grid tile is four cells square: minor lines every cell, one major line each way. */
 const TILE_CELLS = 4
-const TILE_WIDTH = TILE_CELLS * 48
-const TILE_HEIGHT = TILE_CELLS * GRID_ROW_PITCH
+const TILE_SIZE = TILE_CELLS * PLANE
 
 /**
  * The endless grid: one tile repeated over the whole pane, moved and scaled
@@ -22,14 +25,14 @@ const TILE_HEIGHT = TILE_CELLS * GRID_ROW_PITCH
  */
 function gridPattern(): { pattern: SVGPatternElement; lines: SVGPathElement[] } {
   const pattern = svg('pattern', {
-    id: 'grid', patternUnits: 'userSpaceOnUse', width: TILE_WIDTH, height: TILE_HEIGHT,
+    id: 'grid', patternUnits: 'userSpaceOnUse', width: TILE_SIZE, height: TILE_SIZE,
   })
   const minor: string[] = []
   const major: string[] = []
-  for (let index = -TILE_CELLS; index <= 2 * TILE_CELLS; index += 1) {
-    const y = index * GRID_ROW_PITCH
+  for (let index = 0; index <= TILE_CELLS; index += 1) {
+    const offset = index * PLANE
     const lines = index % TILE_CELLS === 0 ? major : minor
-    lines.push(`M0 ${y}L${TILE_WIDTH} ${y + TILE_HEIGHT}`, `M0 ${y}L${TILE_WIDTH} ${y - TILE_HEIGHT}`)
+    lines.push(`M${offset} 0V${TILE_SIZE}`, `M0 ${offset}H${TILE_SIZE}`)
   }
   const paths = [svg('path', { d: minor.join('') }, 'grid'), svg('path', { d: major.join('') }, 'grid major')]
   /** Inside a pattern the stroke must scale with the tile; the width is corrected in `move` instead. */
@@ -43,7 +46,7 @@ export interface IsoMap {
   /** Applies the camera and reports whether its scale-dependent presentation changed. */
   move(camera: Camera, zoomRatio: number): boolean
   /** Rebuilds every layer after an architecture or project-profile change. */
-  paint(scene: ProjectedScene): void
+  paint(scene: LayeredScene): void
   /** Unions the existing selected-element and selected-route treatments across an ordered selection. */
   select(ids: readonly string[]): void
   /** Outlines the elements the active tasks touch and accents the routes leaving them, dotted when the target is untouched; an empty set clears both. */
@@ -74,9 +77,10 @@ function onSurface(points: readonly Point[]): Point {
 /** The map SVG: patterns, one camera group, and the layers back to front. */
 export function createMap(host: HTMLElement): IsoMap {
   const root = svg('svg', { role: 'img', 'aria-label': 'Architecture map', tabindex: 0 })
-  root.innerHTML = mapDefs
+  root.innerHTML = `<defs>${mapDefs()}</defs>`
+  const definitions = root.querySelector('defs')!
   const grid = gridPattern()
-  root.querySelector('defs')!.append(grid.pattern)
+  definitions.append(grid.pattern)
   const field = svg('rect', { width: '100%', height: '100%', fill: 'url(#grid)' }, 'field')
   const camera = svg('g', {}, 'camera')
   const layers = {
@@ -85,16 +89,18 @@ export function createMap(host: HTMLElement): IsoMap {
     slabs: svg('g', {}, 'slabs'),
     routes: svg('g', {}, 'routes'),
     items: svg('g', {}, 'items'),
+    layerLabels: svg('g', {}, 'layer-labels'),
   }
   camera.append(...Object.values(layers))
   root.append(field, camera)
   host.replaceChildren(root)
 
   let items = new Map<string, Element>()
-  let painted: ProjectedScene | undefined
+  let painted: LayeredScene | undefined
   let routes = new Map<string, RouteNode>()
   let appliedK: number | undefined
   let appliedZoomRatio: number | undefined
+  let gridView: ProjectionView = DEFAULT_PROJECTION
   /** The slab or system island each building and slab stands on, by id. */
   let surfaces = new Map<string, string>()
 
@@ -102,12 +108,16 @@ export function createMap(host: HTMLElement): IsoMap {
     svg: root,
     move(current, zoomRatio) {
       camera.style.transform = cameraTransform(current)
-      grid.pattern.setAttribute('patternTransform', `translate(${current.x} ${current.y}) scale(${current.k})`)
+      grid.pattern.setAttribute(
+        'patternTransform',
+        `translate(${current.x} ${current.y}) scale(${current.k}) ${planeMatrix('ground', undefined, gridView)}`,
+      )
       const scaleChanged = current.k !== appliedK || zoomRatio !== appliedZoomRatio
       if (!scaleChanged) return false
       const weight = weightAt(zoomRatio)
       camera.style.setProperty('--weight', String(weight))
       camera.style.setProperty('--arrow-scale', String(weight / current.k))
+      camera.style.setProperty('--camera-scale', String(current.k))
       camera.toggleAttribute('data-names-hidden', !namesVisible(current.k))
       camera.toggleAttribute('data-facades-hidden', !facadeDetailsVisible(current.k))
       root.toggleAttribute('data-minor-grid-hidden', !minorGridVisible(current.k))
@@ -118,7 +128,11 @@ export function createMap(host: HTMLElement): IsoMap {
     },
     paint(scene) {
       painted = scene
+      gridView = scene.view
+      definitions.innerHTML = mapDefs(scene.view)
+      definitions.append(grid.pattern)
       for (const layer of Object.values(layers)) layer.replaceChildren()
+      paintLayerPlanes(layers.sheet, scene)
       paintSheet(layers.sheet, scene)
       items = new Map([
         ...paintIslands(layers.islands, scene),
@@ -126,6 +140,7 @@ export function createMap(host: HTMLElement): IsoMap {
         ...paintBuildings(layers.items, scene),
       ])
       routes = paintRoutes(layers.routes, scene)
+      paintLayerLabels(layers.layerLabels, scene)
       surfaces = new Map([
         ...scene.buildings.map(({ building }) => [building.representationId, building.surface] as const),
         ...scene.slabs.map(({ slab }) => [slab.representationId, slab.island] as const),

@@ -138,6 +138,14 @@ export function zoomReadout(camera: Camera, fit: Camera): string {
 
 export type KeyTarget = 'hierarchy' | 'control' | 'text' | 'other'
 
+export function keyTarget(target: EventTarget | null): KeyTarget {
+  if (!(target instanceof Element)) return 'other'
+  if (target.closest('input, textarea, [contenteditable]')) return 'text'
+  if (target.closest('#tree')) return 'hierarchy'
+  if (target.closest('button, select')) return 'control'
+  return 'other'
+}
+
 /** Map keys, leaving text fields alone. */
 export function keyAction(
   key: string,

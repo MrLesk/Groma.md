@@ -1,5 +1,5 @@
 import { ROOF_LINE_HEIGHT, ROOF_PAD, textWidth } from '../../../sheet/measure.ts'
-import type { SurfaceText } from './project.ts'
+import type { ProjectionView, SurfaceText } from './project.ts'
 import { planeMatrix } from './project.ts'
 import { svg } from './svg.ts'
 
@@ -15,8 +15,15 @@ const CHIP_PAD = 3
  * set on the text. Lines sit with their baseline 0.9 em below the line top
  * and the chip allows 0.2 em more for descenders.
  */
-export function surfaceText(text: SurfaceText, size: number, className: string, chip = false, spacing = 0): SVGGElement {
-  const group = svg('g', { transform: planeMatrix('ground', text.origin) }, className)
+export function surfaceText(
+  text: SurfaceText,
+  size: number,
+  className: string,
+  view: ProjectionView,
+  chip = false,
+  spacing = 0,
+): SVGGElement {
+  const group = svg('g', { transform: planeMatrix('ground', text.origin, view) }, className)
   if (chip) {
     const width = Math.max(...text.lines.map(line => textWidth(line, size, spacing)))
     group.append(svg('rect', {
