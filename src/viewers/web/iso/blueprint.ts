@@ -21,8 +21,7 @@ export interface Segment {
 export interface Compass {
   at: { gx: number; gy: number }
   centre: Point
-  rx: number
-  ry: number
+  ring: Point[]
   star: Point[]
   north: Point[]
   letters: { text: string; at: Point }[]
@@ -107,8 +106,10 @@ function compassOf(frame: CellRect, scale: number, project: Projector): Compass 
   return {
     at,
     centre: on(0, 0),
-    rx: radius * 24 * Math.SQRT2,
-    ry: radius * 12 * Math.SQRT2,
+    ring: Array.from({ length: 32 }, (_, index) => {
+      const angle = index * Math.PI / 16
+      return on(radius * Math.cos(angle), radius * Math.sin(angle))
+    }),
     star: [on(0, -radius), on(notch, -notch), on(radius, 0), on(notch, notch), on(0, radius), on(-notch, notch), on(-radius, 0), on(-notch, -notch)],
     north: [on(0, -radius), on(notch, -notch), on(0, 0), on(-notch, -notch)],
     letters: [

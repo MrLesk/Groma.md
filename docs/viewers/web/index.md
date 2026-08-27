@@ -232,7 +232,12 @@ buttons and keys zoom about the center, and `0` refits, between half
 the fitted view and a cell 192 screen pixels wide. Dragging pans too;
 scrolling or pinching over a pin moves the map, and over the Live
 work island it scrolls the chip strip. `F1` toggles the HUD for a map-only
-view. `F3` independently toggles a live FPS counter, which remains visible
+view. `F2` lifts the blueprint into aligned System, Container, and Component
+layers and briefly turns the view to show that it can orbit. In layer mode,
+drag to orbit horizontally with limited vertical tilt, or Shift-drag to pan;
+press `F2` again to return to the fixed nested view. Selection, flows, work
+pins, scrolling, zoom, and Fit continue to use the displayed geometry. `F3`
+independently toggles a live FPS counter, which remains visible
 in map-only view. Resizing the pane refits the
 map until you move the camera; after that it keeps the same point in
 the centre. Click a building, a slab, a system island, or a tree

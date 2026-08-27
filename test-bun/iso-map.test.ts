@@ -21,6 +21,7 @@ import {
 import {
   HEIGHT_UNIT,
   boxFaces,
+  paintOrder,
   project,
   projectScene,
 } from '../src/viewers/web/iso/project.ts'
@@ -97,6 +98,20 @@ test.concurrent('a box shows its top and the two faces turned to the viewer', ()
   for (const side of faces.slice(0, 2)) {
     assert.ok(side.points.some(point => point.x === south.x && point.y === south.y))
   }
+})
+
+test.concurrent('orbit projection turns visible walls and painter depth around the vertical axis', () => {
+  const rect = { gx: 2, gy: 3, w: 2, d: 2 }
+  const front = boxFaces(rect, 0, 1, { yaw: 45, pitch: 36 })
+  const back = boxFaces(rect, 0, 1, { yaw: 225, pitch: 36 })
+  assert.deepEqual(front.map(face => face.side), ['left', 'right', 'top'])
+  assert.deepEqual(back.map(face => face.side), ['left', 'right', 'top'])
+  assert.notDeepEqual(front.flatMap(face => face.points), back.flatMap(face => face.points))
+
+  const far = { id: 'far', rect: { gx: 0, gy: 0, w: 1, d: 1 } }
+  const near = { id: 'near', rect: { gx: 10, gy: 10, w: 1, d: 1 } }
+  assert.deepEqual(paintOrder([near, far], { yaw: 45, pitch: 36 }).map(item => item.id), ['far', 'near'])
+  assert.deepEqual(paintOrder([near, far], { yaw: 225, pitch: 36 }).map(item => item.id), ['near', 'far'])
 })
 
 test.concurrent('a many-file component projects as one centred compressed tower', () => {
@@ -264,8 +279,10 @@ test.concurrent('blueprint decorations scale with the sheet and the project plat
 
   assert.equal(plain.projectPlate, undefined)
   assert.equal(east(plain), south(plain))
-  assert.ok(large.compass.rx >= small.compass.rx * 2.9)
-  assert.ok(large.compass.rx * 2 < screenBox(large.frame).width / 10)
+  const largeCompass = screenBox(large.compass.ring).width
+  const smallCompass = screenBox(small.compass.ring).width
+  assert.ok(largeCompass >= smallCompass * 2.9)
+  assert.ok(largeCompass < screenBox(large.frame).width / 10)
   assert.ok(length(large.calibrationTicks[0]!) >= length(small.calibrationTicks[0]!) * 2.9)
   assert.ok(plateWidth(compact) < plateWidth(growing))
   assert.ok(plateWidth(growing) < plateWidth(threshold))

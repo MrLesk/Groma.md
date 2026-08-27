@@ -1,6 +1,6 @@
 import { ROOF_FONT } from '../../../sheet/measure.ts'
 import type { BuildingFloor } from '../../../sheet/types.ts'
-import type { ProjectedBuilding, ProjectedScene } from './project.ts'
+import type { Plane, ProjectedBuilding, ProjectedScene, ProjectionView } from './project.ts'
 import { facadePattern, facadePatternId } from './style.ts'
 import { pointsAttribute, svg } from './svg.ts'
 import { surfaceText } from './text.ts'
@@ -12,11 +12,16 @@ function classOf(projected: ProjectedBuilding): string {
   return `building ${kind}${ghost}`
 }
 
-function ensureFacadePattern(layer: SVGGElement, fileType: string, side: 'left' | 'right'): string {
-  const id = facadePatternId(fileType, side)
+function ensureFacadePattern(
+  layer: SVGGElement,
+  fileType: string,
+  plane: Extract<Plane, 'left' | 'right'>,
+  view: ProjectionView,
+): string {
+  const id = facadePatternId(fileType, plane)
   const root = layer.ownerSVGElement!
   if (root.querySelector(`[id="${id}"]`) === null) {
-    root.querySelector('defs')!.insertAdjacentHTML('beforeend', facadePattern(fileType, side))
+    root.querySelector('defs')!.insertAdjacentHTML('beforeend', facadePattern(fileType, plane, view))
   }
   return id
 }
@@ -24,8 +29,10 @@ function ensureFacadePattern(layer: SVGGElement, fileType: string, side: 'left' 
 function paintFloor(
   layer: SVGGElement,
   buildingGroup: SVGGElement,
+  projected: ProjectedBuilding,
   faces: ProjectedBuilding['floors'][number],
   floor: BuildingFloor | undefined,
+  view: ProjectionView,
 ): void {
   const group = floor === undefined
     ? buildingGroup
@@ -33,22 +40,31 @@ function paintFloor(
   for (const face of faces) {
     group.append(svg('polygon', { points: pointsAttribute(face.points) }, `face ${face.side}`))
     if (face.side !== 'top') {
-      const attributes: Record<string, string> = { points: pointsAttribute(face.points) }
-      if (floor !== undefined) {
-        attributes.style = `fill:url(#${ensureFacadePattern(layer, floor.facadeFileType, face.side)})`
-      }
+      const plane = face.plane!
+      const pattern = floor !== undefined
+        ? ensureFacadePattern(layer, floor.facadeFileType, plane, view)
+        : projected.building.kind === 'actor' ? `dots-${plane}`
+        : projected.building.external ? `cross-${plane}`
+        : `lines-${plane}`
+      const attributes = { points: pointsAttribute(face.points), style: `fill:url(#${pattern})` }
       group.append(svg('polygon', attributes, `pattern ${face.side}`))
     }
   }
   if (floor !== undefined) buildingGroup.append(group)
 }
 
-function paintBuilding(layer: SVGGElement, projected: ProjectedBuilding): SVGGElement {
+function paintBuilding(
+  layer: SVGGElement,
+  projected: ProjectedBuilding,
+  view: ProjectionView,
+): SVGGElement {
   const { building, floors, text } = projected
   const group = svg('g', { 'aria-label': building.name }, classOf(projected))
   group.dataset.id = building.representationId
-  for (const [index, faces] of floors.entries()) paintFloor(layer, group, faces, building.floors[index])
-  group.append(surfaceText(text, ROOF_FONT, 'label'))
+  for (const [index, faces] of floors.entries()) {
+    paintFloor(layer, group, projected, faces, building.floors[index], view)
+  }
+  group.append(surfaceText(text, ROOF_FONT, 'label', view))
   return group
 }
 
@@ -56,7 +72,7 @@ function paintBuilding(layer: SVGGElement, projected: ProjectedBuilding): SVGGEl
 export function paintBuildings(layer: SVGGElement, scene: ProjectedScene): Map<string, Element> {
   const nodes = new Map<string, Element>()
   for (const projected of scene.buildings) {
-    const group = paintBuilding(layer, projected)
+    const group = paintBuilding(layer, projected, scene.view)
     nodes.set(projected.building.representationId, group)
     layer.append(group)
   }

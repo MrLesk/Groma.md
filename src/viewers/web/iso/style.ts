@@ -1,5 +1,6 @@
-import { planeMatrix } from './project.ts'
-import type { Plane } from './project.ts'
+import { layerCss } from '../layers/paint.ts'
+import { DEFAULT_PROJECTION, planeMatrix } from './project.ts'
+import type { Plane, ProjectionView } from './project.ts'
 import { FACADE_MARK, SIDE, depthOf, emphasis, strokeAt, tintAt } from './scale.ts'
 import type { Level } from './scale.ts'
 
@@ -8,8 +9,8 @@ const dot = '<circle cx="4" cy="4" r="0.75" fill="var(--map-hatch)"/>'
 const cross = `<path d="M4 2V6M2 4H6" ${ink}/>`
 const line = `<path d="M0 3H6" ${ink}/>`
 
-function tile(id: string, plane: Plane, size: number, body: string): string {
-  return `<pattern id="${id}" width="${size}" height="${size}" patternUnits="userSpaceOnUse" patternTransform="${planeMatrix(plane)}">${body}</pattern>`
+function tile(id: string, plane: Plane, size: number, body: string, view: ProjectionView): string {
+  return `<pattern id="${id}" width="${size}" height="${size}" patternUnits="userSpaceOnUse" patternTransform="${planeMatrix(plane, undefined, view)}">${body}</pattern>`
 }
 
 function hash(value: string): number {
@@ -26,7 +27,11 @@ export function facadePatternId(fileType: string, plane: Extract<Plane, 'left' |
 }
 
 /** A stable window tile derived from the file type itself, so unknown extensions need no registry. */
-export function facadePattern(fileType: string, plane: Extract<Plane, 'left' | 'right'>): string {
+export function facadePattern(
+  fileType: string,
+  plane: Extract<Plane, 'left' | 'right'>,
+  view: ProjectionView = DEFAULT_PROJECTION,
+): string {
   const value = hash(fileType)
   const bits = (value ^ (value >>> 9) ^ (value >>> 18)) & 0x1ff || 1
   const windows = Array.from({ length: 9 }, (_, index) => {
@@ -35,7 +40,7 @@ export function facadePattern(fileType: string, plane: Extract<Plane, 'left' | '
     const y = 1 + Math.floor(index / 3) * 2.5
     return `<rect x="${x}" y="${y}" width="${FACADE_MARK}" height="${FACADE_MARK}" fill="var(--map-hatch)"/>`
   }).join('')
-  return tile(facadePatternId(fileType, plane), plane, 8, windows)
+  return tile(facadePatternId(fileType, plane), plane, 8, windows, view)
 }
 
 /**
@@ -46,13 +51,15 @@ export function facadePattern(fileType: string, plane: Extract<Plane, 'left' | '
  * diagonal hatch for group zones. Systems have no pattern, and neither does
  * any roof.
  */
-export const mapDefs = '<defs>'
-  + tile('dots', 'ground', 8, dot) + tile('dots-left', 'left', 8, dot) + tile('dots-right', 'right', 8, dot)
-  + tile('cross', 'ground', 8, cross) + tile('cross-left', 'left', 8, cross) + tile('cross-right', 'right', 8, cross)
-  + tile('lines-left', 'left', 6, line) + tile('lines-right', 'right', 6, line)
-  + tile('grain', 'ground', 12, '<circle cx="6" cy="6" r="0.6" fill="var(--map-hatch)"/>')
-  + tile('hatch-ground', 'ground', 8, `<path d="M0 8L8 0" ${ink}/>`)
-  + '</defs>'
+export function mapDefs(view: ProjectionView = DEFAULT_PROJECTION): string {
+  return tile('dots', 'ground', 8, dot, view)
+    + tile('dots-left', 'left', 8, dot, view) + tile('dots-right', 'right', 8, dot, view)
+    + tile('cross', 'ground', 8, cross, view)
+    + tile('cross-left', 'left', 8, cross, view) + tile('cross-right', 'right', 8, cross, view)
+    + tile('lines-left', 'left', 6, line, view) + tile('lines-right', 'right', 6, line, view)
+    + tile('grain', 'ground', 12, '<circle cx="6" cy="6" r="0.6" fill="var(--map-hatch)"/>', view)
+    + tile('hatch-ground', 'ground', 8, `<path d="M0 8L8 0" ${ink}/>`, view)
+}
 
 /** Paper with a depth's share of ink mixed in, in whichever theme. */
 function tint(depth: number): string {
@@ -203,4 +210,5 @@ export const mapCss = `
   #map .building.lit > .label .text, #map .slab.lit > .label .text, #map .island.lit > .label .text {
     fill: var(--ink); font-weight: 600;
   }
+  ${layerCss}
 `

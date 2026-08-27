@@ -16,16 +16,19 @@ import {
   fitHighlights,
   fitCamera,
   keyAction,
+  keyTarget,
   pan,
   wheelAction,
   zoomAbout,
   zoomLimits,
   zoomReadout,
 } from './iso/camera.ts'
-import type { Camera, KeyTarget } from './iso/camera.ts'
+import type { Camera } from './iso/camera.ts'
 import { createMap } from './iso/map.ts'
+import { bindMapPointer } from './iso/pointer.ts'
 import { projectScene } from './iso/project.ts'
-import type { ProjectedScene } from './iso/project.ts'
+import { sceneAtSeparation } from './layers/separation.ts'
+import { createLayerAnimator, createLayerMotion } from './layers/orbit.ts'
 import { clearDetails, paintDetails, paintRelationship, paintTask, inspectDetails } from './organisms/details.ts'
 import type { DetailsTab } from './organisms/details.ts'
 import { paintHierarchy } from './organisms/hierarchy.ts'
@@ -46,15 +49,22 @@ import {
 import { readView, writeView } from './url.ts'
 
 const ZOOM_STEP = 1.25
-const DRAG_THRESHOLD = 4
-
 const boot = JSON.parse(document.getElementById('world')!.textContent!) as WebPayload
 let world = boot.world
 let work = boot.work
+let sheet = boot.sheet
 let project: ProjectProfile | undefined = boot.project ?? undefined
 let appliedWorld = boot.generation
 let appliedWork = boot.workGeneration
-let scene: ProjectedScene = projectScene(boot.sheet, project)
+let currentPins = boot.pins
+const layerMotion = createLayerMotion()
+
+function projectedLayerScene() {
+  const pose = layerMotion.pose
+  return sceneAtSeparation(projectScene(sheet, project, pose), pose.separation)
+}
+
+let scene = projectedLayerScene()
 
 const host = document.getElementById('map')!
 const headerHost = document.getElementById('header')!
@@ -189,19 +199,23 @@ function syncUrl(): void {
   history.replaceState(null, '', `${location.pathname}${query}`)
 }
 
-function paintViewState(): void {
-  syncUrl()
-  shell.paint(selection)
-  const selectedId = primarySelection(selection)
+function paintMapState(task: WorkItem | undefined, activeTaskItems: WorkItem[]): void {
   const selectedIds = selectedArchitecture(selection)
   const litIds = flowRouteIds(activeFlows, world)
-  const task = selection.kind === 'task' ? workItem(selection.id) : undefined
-  const activeTaskItems = activeTaskIds.map(id => workItem(id)).filter((item): item is WorkItem => item !== undefined)
   map.select(selectedIds)
   map.mark(new Set(activeTaskItems.flatMap(item => touchedElements(item, world))))
   pins.activate(activeTaskIds, task?.id)
   island.activate(activeTaskIds, task?.id)
   map.setLitRoutes(litIds, id => elementOnPath(id, litIds, world))
+}
+
+function paintViewState(): void {
+  syncUrl()
+  shell.paint(selection)
+  const selectedId = primarySelection(selection)
+  const task = selection.kind === 'task' ? workItem(selection.id) : undefined
+  const activeTaskItems = activeTaskIds.map(id => workItem(id)).filter((item): item is WorkItem => item !== undefined)
+  paintMapState(task, activeTaskItems)
   paintTree()
   const commands = worldCommands(world)
   const actorName = (actorId: string): string | undefined => worldElement(actorId)?.name
@@ -287,17 +301,6 @@ function toggleFlow(flow: FlowRef): void {
   paintViewState()
 }
 
-let pointer: {
-  id: number
-  x: number
-  y: number
-  dragging: boolean
-  targetId: string | undefined
-  onSheet: boolean
-  projectEdit: boolean
-  additive: boolean
-} | null = null
-
 /** The pane takes the wheel wherever the cursor is, pins included; the Live work island keeps it for its chip strip. */
 host.addEventListener('wheel', event => {
   if (event.target instanceof Element && event.target.closest('#work')) return
@@ -312,43 +315,22 @@ host.addEventListener('wheel', event => {
   scheduleCamera()
 }, { passive: false })
 
-map.svg.addEventListener('pointerdown', event => {
-  if (event.button !== 0) return
-  pointer = {
-    id: event.pointerId,
-    x: event.clientX,
-    y: event.clientY,
-    dragging: false,
-    targetId: map.hitId(event.target),
-    onSheet: map.isSheet(event.target),
-    projectEdit: map.isProjectEdit(event.target),
-    additive: event.shiftKey,
-  }
-  map.svg.setPointerCapture(event.pointerId)
-})
-map.svg.addEventListener('pointermove', event => {
-  if (pointer === null || pointer.id !== event.pointerId) return
-  const dx = event.clientX - pointer.x
-  const dy = event.clientY - pointer.y
-  if (!pointer.dragging && Math.hypot(dx, dy) > DRAG_THRESHOLD) pointer.dragging = true
-  if (!pointer.dragging) return
-  camera = pan(camera, dx, dy)
-  touched = true
-  scheduleCamera()
-  pointer.x = event.clientX
-  pointer.y = event.clientY
-})
-map.svg.addEventListener('pointerup', event => {
-  if (pointer === null || pointer.id !== event.pointerId) return
-  if (!pointer.dragging) {
-    if (pointer.projectEdit && project !== undefined) projectEditor.open(project)
-    else if (pointer.targetId !== undefined) select(pointer.targetId, pointer.additive)
-    else if (pointer.onSheet) deselect()
-  }
-  pointer = null
-})
-map.svg.addEventListener('pointercancel', () => {
-  pointer = null
+bindMapPointer(map, {
+  orbiting: () => layerMotion.active,
+  pan(dx, dy) {
+    camera = pan(camera, dx, dy)
+    touched = true
+    scheduleCamera()
+  },
+  orbit(dx, dy) {
+    touched = true
+    layerAnimator.orbit(dx, dy)
+  },
+  select,
+  deselect,
+  editProject() {
+    if (project !== undefined) projectEditor.open(project)
+  },
 })
 map.svg.addEventListener('keydown', event => {
   if (!map.isProjectEdit(event.target) || (event.key !== 'Enter' && event.key !== ' ')) return
@@ -368,6 +350,32 @@ function toggleHud(): void {
   syncUrl()
 }
 
+function sceneCentre(bounds: typeof scene.bounds): { x: number; y: number } {
+  return { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 }
+}
+
+/** Reprojects from one pose, then either fits a mode transition or keeps an orbited map centred. */
+function repaintLayerScene(fit: boolean): void {
+  const before = sceneCentre(scene.bounds)
+  scene = projectedLayerScene()
+  const after = sceneCentre(scene.bounds)
+  map.paint(scene)
+  pins.paint(currentPins)
+  fitted = fitScene(viewport())
+  if (fit) {
+    camera = fitted
+    touched = false
+  } else camera = pan(camera, (before.x - after.x) * camera.k, (before.y - after.y) * camera.k)
+  applyCamera()
+  const task = selection.kind === 'task' ? workItem(selection.id) : undefined
+  paintMapState(task, activeTaskIds.map(id => workItem(id)).filter((item): item is WorkItem => item !== undefined))
+}
+
+const layerAnimator = createLayerAnimator(layerMotion, repaintLayerScene)
+
+function toggleLayers(): void {
+  layerAnimator.toggle()
+}
 function applyTheme(): void {
   const next = nextTheme(theme)
   themeButton.dataset.nextTheme = next
@@ -382,28 +390,19 @@ themeButton.addEventListener('click', () => {
   applyTheme()
 })
 applyTheme()
-function keyTarget(target: EventTarget | null): KeyTarget {
-  if (!(target instanceof Element)) return 'other'
-  if (target.closest('input, textarea, [contenteditable]')) return 'text'
-  if (target.closest('#tree')) return 'hierarchy'
-  if (target.closest('button, select')) return 'control'
-  return 'other'
-}
 
 document.addEventListener('keydown', event => {
   if (event.metaKey || event.ctrlKey || event.altKey) return
-  if (event.key === 'F3') {
+  const shortcut = event.key === 'F1' ? toggleHud
+    : event.key === 'F2' ? toggleLayers
+    : event.key === 'F3' ? fps.toggle
+    : undefined
+  if (shortcut !== undefined) {
     event.preventDefault()
-    fps.toggle()
+    shortcut()
     return
   }
-  if (event.key === 'F1') {
-    event.preventDefault()
-    toggleHud()
-    return
-  }
-  const target = keyTarget(event.target)
-  const action = keyAction(event.key, target)
+  const action = keyAction(event.key, keyTarget(event.target))
   if (action === undefined) return
   event.preventDefault()
   if (action === 'in') zoomStep(ZOOM_STEP)
@@ -423,9 +422,7 @@ const resizeObserver = new ResizeObserver(() => {
     )
     fitted = fitScene(next)
     applyCamera()
-  } else {
-    refit()
-  }
+  } else refit()
   lastViewport = next
 })
 resizeObserver.observe(host)
@@ -433,8 +430,10 @@ resizeObserver.observe(host)
 function applyWorld(payload: WebPayload): void {
   world = payload.world
   work = payload.work
+  sheet = payload.sheet
   project = payload.project ?? undefined
-  scene = projectScene(payload.sheet, project)
+  currentPins = payload.pins
+  scene = projectedLayerScene()
   fitted = fitScene(viewport())
   if (!touched) camera = fitted
   activeTaskIds = activeTaskIds.filter(id => workItem(id) !== undefined)
@@ -451,7 +450,7 @@ function applyWorld(payload: WebPayload): void {
       : selectArchitecture(noSelection, first.representationId, false)
   }
   map.paint(scene)
-  pins.paint(payload.pins)
+  pins.paint(currentPins)
   island.paint(payload.pins, work.statuses, work.defaultStatus)
   applyCamera()
   paintViewState()
@@ -461,6 +460,7 @@ function applyWorld(payload: WebPayload): void {
 function applyWork(payload: WebWorkPayload): void {
   const ownedDetails = selection.kind === 'task'
   work = payload.work
+  currentPins = payload.pins
   activeTaskIds = activeTaskIds.filter(id => workItem(id) !== undefined)
   selection = retainSelection(selection, id => known(id))
   pins.paint(payload.pins)
@@ -478,7 +478,7 @@ function applyWork(payload: WebWorkPayload): void {
 }
 
 map.paint(scene)
-pins.paint(boot.pins)
+pins.paint(currentPins)
 island.paint(boot.pins, work.statuses, work.defaultStatus)
 applyCamera()
 paintViewState()

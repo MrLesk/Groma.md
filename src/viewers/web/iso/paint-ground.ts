@@ -1,6 +1,6 @@
 import { ISLAND_FONT, ISLAND_SPACING, SURFACE_FONT, textWidth } from '../../../sheet/measure.ts'
 import type { Compass, PlateText, ProjectPlate, RichPlateText, Segment } from './blueprint.ts'
-import type { ProjectedScene, ProjectedZone } from './project.ts'
+import type { ProjectedScene, ProjectedZone, ProjectionView } from './project.ts'
 import { planeMatrix } from './project.ts'
 import { pointsAttribute, round, svg } from './svg.ts'
 import { surfaceText } from './text.ts'
@@ -11,17 +11,15 @@ function pathOf(segments: readonly Segment[]): string {
     .join('')
 }
 
-function compassGroup(compass: Compass): SVGGElement {
+function compassGroup(compass: Compass, view: ProjectionView): SVGGElement {
   const group = svg('g', {}, 'compass')
   group.append(
-    svg('ellipse', {
-      cx: round(compass.centre.x), cy: round(compass.centre.y), rx: round(compass.rx), ry: round(compass.ry),
-    }, 'ring'),
+    svg('polygon', { points: pointsAttribute(compass.ring) }, 'ring'),
     svg('polygon', { points: pointsAttribute(compass.star) }, 'star'),
     svg('polygon', { points: pointsAttribute(compass.north) }, 'north'),
   )
   for (const letter of compass.letters) {
-    const plane = svg('g', { transform: planeMatrix('ground', letter.at) })
+    const plane = svg('g', { transform: planeMatrix('ground', letter.at, view) })
     const text = svg('text', {
       'font-size': compass.fontSize, 'text-anchor': 'middle', 'dominant-baseline': 'middle',
     }, 'text')
@@ -32,8 +30,8 @@ function compassGroup(compass: Compass): SVGGElement {
   return group
 }
 
-function plateText(text: PlateText, className: string): SVGGElement {
-  const group = svg('g', { transform: planeMatrix('ground', text.origin) }, className)
+function plateText(text: PlateText, className: string, view: ProjectionView): SVGGElement {
+  const group = svg('g', { transform: planeMatrix('ground', text.origin, view) }, className)
   text.lines.forEach((line, index) => {
     const node = svg('text', {
       y: text.fontSize * 0.9 + index * text.lineHeight,
@@ -49,8 +47,8 @@ function plateText(text: PlateText, className: string): SVGGElement {
   return group
 }
 
-function richPlateText(text: RichPlateText, className: string): SVGGElement {
-  const group = svg('g', { transform: planeMatrix('ground', text.origin) }, className)
+function richPlateText(text: RichPlateText, className: string, view: ProjectionView): SVGGElement {
+  const group = svg('g', { transform: planeMatrix('ground', text.origin, view) }, className)
   text.lines.forEach((line, index) => {
     const node = svg('text', {
       y: text.fontSize * 0.9 + index * text.lineHeight,
@@ -71,13 +69,13 @@ function richPlateText(text: RichPlateText, className: string): SVGGElement {
   return group
 }
 
-function pencilGroup(plate: ProjectPlate): SVGGElement {
+function pencilGroup(plate: ProjectPlate, view: ProjectionView): SVGGElement {
   const { origin, length, thickness } = plate.edit.pencil
   const eraser = thickness * 0.45
   const ferrule = eraser + thickness * 0.25
   const tip = length - thickness * 0.8
   const lead = length - thickness * 0.2
-  const group = svg('g', { transform: planeMatrix('ground', origin) }, 'pencil')
+  const group = svg('g', { transform: planeMatrix('ground', origin, view) }, 'pencil')
   group.append(
     svg('polygon', { points: `0,0 ${thickness},0 ${thickness},${tip} ${thickness / 2},${length} 0,${tip}` }, 'body'),
     svg('polygon', {
@@ -92,20 +90,20 @@ function pencilGroup(plate: ProjectPlate): SVGGElement {
   return group
 }
 
-function projectPlateGroup(plate: ProjectPlate): SVGGElement {
+function projectPlateGroup(plate: ProjectPlate, view: ProjectionView): SVGGElement {
   const group = svg('g', {}, 'project-plate')
   group.append(
     svg('polygon', { points: pointsAttribute(plate.polygon) }, 'plate'),
     svg('path', { d: pathOf([plate.divider]) }, 'divider'),
-    plateText(plate.name, 'project-name'),
-    richPlateText(plate.description, 'project-description'),
-    plateText(plate.meta, 'project-meta'),
+    plateText(plate.name, 'project-name', view),
+    richPlateText(plate.description, 'project-description', view),
+    plateText(plate.meta, 'project-meta', view),
   )
   const edit = svg('g', {
     'data-project-edit': '', role: 'button', tabindex: 0, 'aria-label': 'Edit project profile',
   }, 'project-edit')
   edit.append(svg('polygon', { points: pointsAttribute(plate.edit.polygon) }, 'edit-hit'))
-  edit.append(pencilGroup(plate))
+  edit.append(pencilGroup(plate, view))
   group.append(edit)
   return group
 }
@@ -115,16 +113,16 @@ export function paintSheet(layer: SVGGElement, scene: ProjectedScene): void {
   layer.append(
     svg('polygon', { points: pointsAttribute(scene.frame) }, 'frame'),
     svg('path', { d: pathOf(scene.calibrationTicks) }, 'calibration-tick'),
-    compassGroup(scene.compass),
+    compassGroup(scene.compass, scene.view),
   )
-  if (scene.projectPlate !== undefined) layer.append(projectPlateGroup(scene.projectPlate))
+  if (scene.projectPlate !== undefined) layer.append(projectPlateGroup(scene.projectPlate, scene.view))
 }
 
-function zoneGroup(zone: ProjectedZone): SVGGElement {
+function zoneGroup(zone: ProjectedZone, view: ProjectionView): SVGGElement {
   const group = svg('g', {}, 'zone')
   group.append(
     svg('polygon', { points: pointsAttribute(zone.polygon) }, 'ground'),
-    surfaceText(zone.text, SURFACE_FONT, 'label', true),
+    surfaceText(zone.text, SURFACE_FONT, 'label', view, true),
   )
   return group
 }
@@ -136,7 +134,7 @@ export function paintIslands(layer: SVGGElement, scene: ProjectedScene): Map<str
     const group = svg('g', {}, `island ${island.kind}`)
     group.append(svg('polygon', { points: pointsAttribute(polygon) }, 'ground'))
     if (island.kind !== 'system') group.append(svg('polygon', { points: pointsAttribute(polygon) }, 'pattern'))
-    group.append(surfaceText(text, ISLAND_FONT, 'label', true, ISLAND_SPACING))
+    group.append(surfaceText(text, ISLAND_FONT, 'label', scene.view, true, ISLAND_SPACING))
     if (island.element) {
       group.dataset.id = island.element.representationId
       group.setAttribute('aria-label', island.name)
@@ -145,7 +143,7 @@ export function paintIslands(layer: SVGGElement, scene: ProjectedScene): Map<str
     layer.append(group)
   }
   for (const zone of scene.zones) {
-    if (scene.islands.some(item => item.island.key === zone.zone.parent)) layer.append(zoneGroup(zone))
+    if (scene.islands.some(item => item.island.key === zone.zone.parent)) layer.append(zoneGroup(zone, scene.view))
   }
   return nodes
 }
@@ -159,9 +157,9 @@ export function paintSlabs(layer: SVGGElement, scene: ProjectedScene): Map<strin
     for (const face of faces) group.append(svg('polygon', { points: pointsAttribute(face.points) }, `face ${face.side}`))
     const top = faces.find(face => face.side === 'top')!
     group.append(svg('polygon', { points: pointsAttribute(top.points) }, 'pattern'))
-    group.append(surfaceText(text, SURFACE_FONT, 'label', true))
+    group.append(surfaceText(text, SURFACE_FONT, 'label', scene.view, true))
     for (const zone of scene.zones) {
-      if (zone.zone.parent === slab.representationId) group.append(zoneGroup(zone))
+      if (zone.zone.parent === slab.representationId) group.append(zoneGroup(zone, scene.view))
     }
     nodes.set(slab.representationId, group)
     layer.append(group)
