@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@codex'
 created_date: '2026-08-27 18:58'
-updated_date: '2026-08-27 19:17'
+updated_date: '2026-08-27 19:41'
 labels: []
 dependencies: []
 references:
@@ -27,9 +27,7 @@ When a person zooms the web architecture map out, surface names should remain vi
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [x] #1 Island, slab, and zone names remain visible while zooming so the map keeps its structural context
-- [x] #2 Building names remain visible until their projected font is smaller than 6 screen pixels
-- [x] #3 The zoom visibility check covers the building-name threshold
+- [x] #1 Island, slab, zone, and building names remain rendered at every zoom level
 <!-- AC:END -->
 
 ## Definition of Done
@@ -43,7 +41,7 @@ When a person zooms the web architecture map out, surface names should remain vi
 ## Implementation Plan
 
 <!-- SECTION:PLAN:BEGIN -->
-1. Keep structural island, slab, and zone names outside semantic-zoom hiding. 2. Rename the generic name-visibility state to building-name visibility so future changes cannot easily hide every label again. 3. Verify the building cutoff test, rendered Fit and zoom states, repository checks, and required reviews.
+1. Delete the building-name zoom threshold and its camera state. 2. Delete the CSS hiding rule and the threshold test. 3. Update the Web viewer contract, verify the rendered map at Fit, and run the required checks and reviews.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
@@ -60,10 +58,16 @@ Corrected the architectural regression rather than lowering the cutoff again: is
 Rendered QA on the rebuilt server passed. At Fit, 3 island, 6 slab, and 11 zone labels remain present while 67 building labels are hidden. At 477% the structural labels are visible and building labels remain hidden; at 931% all 67 building labels appear. The page title is groma.md and no error overlay is present. bun run check passed lint/typecheck and all 81 Node tests on its retry, but the Bun phase is blocked by the unrelated in-progress web-live watcher test in files changed by another task; the same watcher test times out when run alone.
 
 Final focused verification after concurrent grid edits: bun test test-bun/iso-scale.test.ts passes 2/2, bun run typecheck passes, and git diff --check passes. Cold simplicity and full-context defensive-architecture reviews both pass with no further changes recommended.
+
+Reopened after Alex clarified that tiny container and building names are acceptable. The design no longer needs semantic name hiding: every surface name should remain rendered at every zoom, which deletes the cutoff instead of tuning it.
+
+Deleted name hiding completely: removed the font threshold, visibility function, camera attribute, CSS hiding selector, boundary assertions, and now-unused ROOF_FONT import. All surface names remain rendered as part of their owning surface. The focused scale test and TypeScript check pass, and git diff --check passes.
+
+Final rendered QA at Fit (100%) shows all 87 surface labels: 3 island, 6 slab, 11 zone, and 67 building names. No name-hiding attribute or error overlay is present. bun run check passes with 81 Node tests and 187 Bun tests. Cold simplicity and full-context defensive-architecture reviews pass and recommend no further deletion.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
-Restored semantic label hierarchy in the Web map: island, slab, and zone names remain available through zoom, while only building names wait for a readable six-pixel roof font. Renamed the visibility rule and camera state to be building-specific, reducing the chance of another broad-label regression. Verified in the rendered map at Fit, 477%, and 931%; the focused scale test, TypeScript check, diff check, and both architecture reviews pass. The full suite remains affected by an unrelated in-progress Web watcher test.
+Removed zoom-dependent name hiding instead of tuning it. Island, slab, zone, and building names now remain rendered at every zoom. Deleted the threshold, helper, camera attribute, CSS selector, unused font import, and threshold assertions. Verified all 87 labels at Fit in the rendered Web viewer; bun run check and both simplicity reviews pass.
 <!-- SECTION:FINAL_SUMMARY:END -->

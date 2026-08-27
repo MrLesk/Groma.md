@@ -14,7 +14,6 @@ import {
   facadeDetailsVisible,
   gridVisible,
   minorGridVisible,
-  buildingNamesVisible,
   weightAt,
 } from './scale.ts'
 import { mapDefs } from './style.ts'
@@ -127,7 +126,6 @@ export function createMap(host: HTMLElement): IsoMap {
       camera.style.setProperty('--weight', String(weight))
       camera.style.setProperty('--arrow-scale', String(weight / current.k))
       camera.style.setProperty('--camera-scale', String(current.k))
-      camera.toggleAttribute('data-building-names-hidden', !buildingNamesVisible(current.k))
       camera.toggleAttribute('data-facades-hidden', !facadeDetailsVisible(current.k))
       field.style.display = showGrid ? '' : 'none'
       root.toggleAttribute('data-minor-grid-hidden', !minorGridVisible(current.k))
