@@ -7,6 +7,7 @@ import {
   depthOf,
   emphasis,
   facadeDetailsVisible,
+  gridVisible,
   minorGridVisible,
   namesVisible,
   strokeAt,
@@ -35,4 +36,6 @@ test.concurrent('zoom keeps strokes bounded and removes details below readable s
   assert.equal(facadeDetailsVisible(1), true)
   assert.equal(minorGridVisible(0.12), false)
   assert.equal(minorGridVisible(0.13), true)
+  assert.equal(gridVisible(0.049), false)
+  assert.equal(gridVisible(0.05), true)
 })

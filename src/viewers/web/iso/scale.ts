@@ -25,8 +25,12 @@ const MIN_NAME_PX = 6
 export const FACADE_MARK = 1.1
 /** Minor grid rows stay at least this far apart; major rows remain visible below it. */
 const MIN_GRID_PITCH_PX = 3
+/** The complete grid leaves paint before its major rows become a dense moving texture. */
+const MIN_MAJOR_GRID_PITCH_PX = 6
 /** World-pixel distance between minor rows in the isometric grid. */
 export const GRID_ROW_PITCH = 24
+/** Minor cells inside one graph-paper major cell. */
+export const GRID_TILE_CELLS = 5
 
 export function depthOf(level: Level): number {
   return LEVELS.indexOf(level)
@@ -62,4 +66,8 @@ export function facadeDetailsVisible(k: number): boolean {
 
 export function minorGridVisible(k: number): boolean {
   return k * GRID_ROW_PITCH >= MIN_GRID_PITCH_PX
+}
+
+export function gridVisible(k: number): boolean {
+  return k * GRID_ROW_PITCH * GRID_TILE_CELLS >= MIN_MAJOR_GRID_PITCH_PX
 }
