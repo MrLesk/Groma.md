@@ -125,9 +125,9 @@ Biome formatting and import assist are disabled. Do not use Biome to format file
 ## Web SVG performance
 
 Keep viewport-sized SVG surfaces that use patterns or filters outside groups transformed by the camera. They must be
-siblings of the moving camera group so pan and zoom do not repaint them together with the architecture scene. After
-changing Web camera or grid composition, check frame rate while panning at close, fitted, and distant zoom, then run
-`bun run check`.
+siblings of the moving camera group so pan and zoom do not repaint them together with the architecture scene. Measure
+frame rate only when a rendering regression is suspected; do not make manual FPS checks routine. Run `bun run check`
+after code changes so the SVG composition guard still applies.
 
 ## UI descriptions
 
