@@ -17,7 +17,7 @@
     "test:csharp": "dotnet test src/scanner/csharp/test/Groma.CSharpScanner.Tests.csproj",
     "test:node": "node --import=tsx --test test/*.test.ts",
     "test:viewer": "bun test --timeout 20000 test-bun/",
-    "check": "biome lint && bun run typecheck && bun run test"
+    "check": "biome lint && bun scripts/lint-web-scrollbars.ts && bun run typecheck && bun run test"
   },
   "dependencies": {
     "@comark/html": "0.5.1",

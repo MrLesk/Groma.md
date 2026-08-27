@@ -10,7 +10,7 @@ code:
 
 # Page
 
-Serves the HTML shell: the chrome, the three panes, the embedded project, world and sheet, the palette variables, and the map and project-editor stylesheets.
+Serves the HTML shell: the three panes, embedded project, world and sheet, palette variables, and feature stylesheets.
 
 ## Relationships
 

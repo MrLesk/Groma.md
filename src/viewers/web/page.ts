@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 
 import type { C4Kind } from '../../types.ts'
+import { chromeCss } from './atoms/chrome.ts'
 import { kindGlyph, kindLabel } from './atoms/kind.ts'
 import { cssBlock, palettes } from './atoms/theme.ts'
 import { fpsCss } from './chrome/fps.ts'
@@ -11,6 +12,7 @@ import { tipCss } from './organisms/tip.ts'
 import type { WebPayload } from './payload.ts'
 import { projectEditorCss } from './project/editor.ts'
 import { revisionControl, revisionCss } from './revision/view.ts'
+import { sourceCss } from './source/view.ts'
 import { backlogMarkCss } from './work/backlog-mark.ts'
 import { workBadgeCss } from './work/badge.ts'
 import { workCss } from './work/island.ts'
@@ -288,7 +290,7 @@ const style = `
   @media (prefers-reduced-motion: reduce) {
     body, #hierarchy-content, #hierarchy-title .pane-label, #details, body #work { transition: none; }
   }
-${revisionCss}${backlogMarkCss}${workBadgeCss}${flowRowCss}${mapCss}${pinsCss}${workCss}${tipCss}${projectEditorCss}${fpsCss}`
+${chromeCss}${revisionCss}${sourceCss}${backlogMarkCss}${workBadgeCss}${flowRowCss}${mapCss}${pinsCss}${workCss}${tipCss}${projectEditorCss}${fpsCss}`
 
 function legend(): string {
   return legendKinds.map(line => {

@@ -50,13 +50,7 @@ export const revisionCss = `
     background: color-mix(in srgb, var(--paper) 94%, transparent);
     backdrop-filter: blur(18px);
     box-shadow: 0 12px 36px color-mix(in srgb, var(--ink) 14%, transparent);
-    scrollbar-width: thin;
-    scrollbar-color: color-mix(in srgb, var(--ink) 42%, var(--paper)) color-mix(in srgb, var(--ink) 8%, transparent);
   }
-  .revision-menu::-webkit-scrollbar { width: 4px; }
-  .revision-menu::-webkit-scrollbar-track { background: color-mix(in srgb, var(--ink) 8%, transparent); }
-  .revision-menu::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--ink) 42%, var(--paper)); border-radius: 2px; }
-  .revision-menu::-webkit-scrollbar-thumb:hover { background: color-mix(in srgb, var(--ink) 62%, var(--paper)); }
   .revision-option {
     width: 100%;
     display: grid;

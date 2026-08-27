@@ -25,7 +25,10 @@ const world: ArchitectureWorld = {
     box('tool', 'system', unit),
     box('cli', 'container', unit, { parent: 'observed:tool' }),
     box('commands', 'component', unit, { parent: 'observed:cli' }),
-    box('scan', 'component', unit, { parent: 'observed:cli' }),
+    box('scan', 'component', unit, {
+      parent: 'observed:cli',
+      code: [{ scanner: 'typescript', file: 'src/scan.ts' }],
+    }),
   ],
   relationships: [uses('relationship:0', 'dev', 'commands'), uses('relationship:1', 'commands', 'scan')],
 }
@@ -68,6 +71,22 @@ test.concurrent('a known Git revision is shareable while unknown revisions are i
   assert.equal(writeView(state, world, []), `?revision=${revision.id}`)
   assert.deepEqual(readView(`?revision=${revision.id}`, world, [], [revision]), state)
   assert.equal(readView('?revision=unknown', world, [], [revision]).revision, undefined)
+})
+
+test.concurrent('a component-owned source file restores and Back clears only the file drill-down', () => {
+  const source: ViewState = {
+    selection: { kind: 'architecture', ids: ['observed:scan'] },
+    file: 'src/scan.ts',
+    flows: [],
+    tab: 'how',
+    theme: 'light',
+    hudVisible: true,
+  }
+  assert.equal(writeView(source, world, []), '?component=scan&file=src/scan.ts&tab=how')
+  assert.deepEqual(readView('?component=scan&file=src/scan.ts', world, []), source)
+  assert.equal(writeView({ ...source, file: undefined }, world, []), '?component=scan&tab=how')
+  assert.equal(readView('?component=scan&file=src/other.ts', world, []).file, undefined)
+  assert.equal(readView('?container=cli&file=src/scan.ts', world, []).file, undefined)
 })
 
 test.concurrent('a selected relationship is carried as its source and target ids', () => {

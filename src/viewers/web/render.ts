@@ -47,6 +47,7 @@ import {
   selectedArchitecture,
   selectTask,
 } from './selection.ts'
+import { createSourceControl } from './source/control.ts'
 import { readView, writeView } from './url.ts'
 
 const ZOOM_STEP = 1.25
@@ -110,6 +111,11 @@ let theme = opened.theme
 const revisionControl = createRevisionControl({
   control: revisionSelect, body: document.body, boot,
   applyRevision: payload => applyWorld(payload, true), applyWorld, applyWork,
+})
+const source = createSourceControl({
+  host: detailsHost, initialFile: opened.file,
+  element: () => worldElement(primarySelection(selection)),
+  revision: () => revisionControl.selected, repaint: paintViewState,
 })
 
 /** The full-screen grid surrounds a safe camera frame between the floating chrome. */
@@ -200,6 +206,7 @@ function paintStats(flowCount: number): void {
 function syncUrl(): void {
   const query = writeView({
     ...(revisionControl.selected === undefined ? {} : { revision: revisionControl.selected }),
+    ...(source.file === undefined ? {} : { file: source.file }),
     selection,
     flows: activeFlows,
     tab: detailsTab,
@@ -233,6 +240,7 @@ function paintViewState(): void {
   paintStats(commands.length)
   const selected = worldElement(selectedId)
   const relationship = worldRelationship(selectedId)
+  if (source.paint(selected)) return
   if (relationship !== undefined) paintRelationship(detailsHost, relationship, world, select)
   else if (task !== undefined) paintTask(detailsHost, task, world, select)
   else if (selected === undefined) clearDetails(detailsHost)
@@ -249,6 +257,7 @@ function paintViewState(): void {
         detailsTab = tab
         paintViewState()
       },
+      source.open,
     )
   }
 }
@@ -270,6 +279,7 @@ function toggleRow(row: TreeRow): void {
 
 function select(id: string, additive = false): void {
   if (worldElement(id) === undefined && worldRelationship(id) === undefined) return
+  source.clear()
   selection = selectArchitecture(selection, id, additive)
   paintViewState()
 }
@@ -294,12 +304,14 @@ function focusActiveTasks(): void {
 function toggleTask(id: string): void {
   const next = toggleWorkSelection(activeTaskIds, selection.kind === 'task' ? selection.id : undefined, id)
   activeTaskIds = next.active
+  source.clear()
   selection = next.selected === undefined ? noSelection : selectTask(next.selected)
   paintViewState()
   focusActiveTasks()
 }
 
 function deselect(): void {
+  source.clear()
   selection = noSelection
   activeTaskIds = []
   activeFlows = []
@@ -446,6 +458,7 @@ function applyWorld(payload: WebPayload, reset = false): void {
   scene = projectedLayerScene()
   fitted = fitScene(viewport())
   if (reset) {
+    source.clear()
     tree = initialTree()
     activeTaskIds = []
     activeFlows = []
@@ -497,4 +510,5 @@ pins.paint(currentPins)
 island.paint(boot.pins, work.statuses, work.defaultStatus)
 applyCamera()
 paintViewState()
+source.restore()
 if (selection.kind === 'task') focusActiveTasks()

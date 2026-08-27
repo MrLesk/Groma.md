@@ -9,6 +9,7 @@ import type { Selection } from './selection.ts'
 /** What the page's query string carries, so a view opens again from its link. */
 export interface ViewState {
   revision?: string
+  file?: string
   selection: Selection
   flows: readonly FlowRef[]
   tab: DetailsTab
@@ -68,14 +69,23 @@ export function readView(
     if (flow === undefined) continue
     if (!flows.some(item => item.commandId === flow.commandId)) flows.push(flow)
   }
+  const selection: Selection = architecture.length > 0
+    ? { kind: 'architecture', ids: architecture }
+    : task !== undefined ? selectTask(task.id)
+    : noSelection
+  const selected = selection.kind === 'architecture'
+    ? world.elements.find(element => element.representationId === selection.ids.at(-1))
+    : undefined
+  const requestedFile = params.get('file')
+  const file = selected?.kind === 'component'
+    ? selected.code.find(reference => reference.file === requestedFile)?.file
+    : undefined
   return {
     ...(revision === undefined ? {} : { revision }),
-    selection: architecture.length > 0
-      ? { kind: 'architecture', ids: architecture }
-      : task !== undefined ? selectTask(task.id)
-      : noSelection,
+    ...(file === undefined ? {} : { file }),
+    selection,
     flows,
-    tab: params.get('tab') === 'how' ? 'how' : 'what',
+    tab: file !== undefined || params.get('tab') === 'how' ? 'how' : 'what',
     theme: selectedTheme === 'dark' || selectedTheme === 'blueprint' ? selectedTheme : 'light',
     hudVisible: params.get('hud') !== 'off',
   }
@@ -104,6 +114,11 @@ export function writeView(state: ViewState, world: ArchitectureGraph, work: read
       const relationship = ends(id)
       if (element !== undefined) pairs.push([element.kind, element.id])
       else if (relationship !== undefined) pairs.push(['relationship', relationship])
+    }
+    const selected = elements.get(state.selection.ids.at(-1) ?? '')
+    if (state.file !== undefined && selected?.kind === 'component') {
+      const file = selected.code.find(reference => reference.file === state.file)?.file
+      if (file !== undefined) pairs.push(['file', file])
     }
   } else if (state.selection.kind === 'task') {
     const taskId = state.selection.id

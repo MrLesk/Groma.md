@@ -19,5 +19,6 @@ Drives the browser: projects the project profile and sheet, paints the grid acro
 | --- | --- | --- |
 | [Iso projection](iso-projection.md) | Projects the sheet into screen polygons | In-process data |
 | [Iso map](iso-map.md) | Paints and restyles the SVG | DOM |
+| [Source viewer](source-viewer.md) | Opens a component's exact Code file without changing the architecture selection | Browser state |
 | [Iso camera](iso-camera.md) | Fits, zooms, and pans | In-process data |
 | [Project editor](project-editor.md) | Edits the project name and description | HTTP |

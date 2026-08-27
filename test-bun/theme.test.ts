@@ -36,6 +36,16 @@ test.concurrent('all themes declare the same variables and share brand signals',
   assert.notEqual(palettes.blueprint.highlight, accent)
   assert.notEqual(light.get('--paper'), dark.get('--paper'))
   assert.notEqual(dark.get('--paper'), blueprint.get('--paper'))
+  for (const token of [
+    '--syntax-comment',
+    '--syntax-function',
+    '--syntax-keyword',
+    '--syntax-number',
+    '--syntax-string',
+    '--syntax-type',
+  ]) {
+    assert.equal(new Set([light.get(token), dark.get(token), blueprint.get(token)]).size, 3)
+  }
 })
 
 test.concurrent('every text token and coloured work surface meets normal-text contrast', () => {
