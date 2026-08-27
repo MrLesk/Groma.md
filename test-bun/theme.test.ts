@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 
 import { test } from 'bun:test'
 
-import { accent, cssBlock, nextTheme, palettes, registration, themeLabel } from '../src/viewers/web/atoms/theme.ts'
+import { accent, cssBlock, nextTheme, palettes, themeLabel } from '../src/viewers/web/atoms/theme.ts'
 
 function variables(block: string): Map<string, string> {
   return new Map([...block.matchAll(/(--[a-z-]+):\s*([^;]+);/g)].map(match => [match[1]!, match[2]!.trim()]))
@@ -17,7 +17,6 @@ test.concurrent('all themes declare the same variables and share brand signals',
   assert.ok(light.size >= 10)
   for (const theme of [light, dark, blueprint]) {
     assert.equal(theme.get('--accent'), accent)
-    assert.equal(theme.get('--registration'), registration)
   }
   assert.notEqual(light.get('--paper'), dark.get('--paper'))
   assert.notEqual(dark.get('--paper'), blueprint.get('--paper'))

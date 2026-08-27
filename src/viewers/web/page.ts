@@ -163,32 +163,8 @@ const style = `
     background: color-mix(in srgb, var(--paper) 78%, transparent);
     box-shadow: 0 0 20px color-mix(in srgb, var(--map-line) 7%, transparent), inset 0 0 18px color-mix(in srgb, var(--map-line) 3%, transparent);
   }
-  [data-theme="blueprint"] #map::before,
-  [data-theme="blueprint"] #map::after {
-    content: '';
-    position: absolute;
-    inset: 72px 20px 20px;
-    pointer-events: none;
-  }
   [data-theme="blueprint"] #map .grid { opacity: 0.35; }
   [data-theme="blueprint"] #map .grid.major { opacity: 0.6; }
-  [data-theme="blueprint"] #map::before {
-    background:
-      radial-gradient(circle at 16% 82%, transparent 0 44px, color-mix(in srgb, var(--map-line) 24%, transparent) 45px 46px, transparent 47px 58px, color-mix(in srgb, var(--map-line) 14%, transparent) 59px 60px, transparent 61px),
-      radial-gradient(circle at 74% 22%, transparent 0 36px, color-mix(in srgb, var(--map-line) 18%, transparent) 37px 38px, transparent 39px 49px, color-mix(in srgb, var(--map-line) 10%, transparent) 50px 51px, transparent 52px);
-  }
-  [data-theme="blueprint"] #map::after {
-    background:
-      linear-gradient(var(--registration), var(--registration)) left top / 18px 2px no-repeat,
-      linear-gradient(var(--registration), var(--registration)) left top / 2px 18px no-repeat,
-      linear-gradient(var(--registration), var(--registration)) right top / 18px 2px no-repeat,
-      linear-gradient(var(--registration), var(--registration)) right top / 2px 18px no-repeat,
-      linear-gradient(var(--registration), var(--registration)) left bottom / 18px 2px no-repeat,
-      linear-gradient(var(--registration), var(--registration)) left bottom / 2px 18px no-repeat,
-      linear-gradient(var(--registration), var(--registration)) right bottom / 18px 2px no-repeat,
-      linear-gradient(var(--registration), var(--registration)) right bottom / 2px 18px no-repeat;
-    opacity: 0.8;
-  }
   #details {
     grid-column: 3;
     position: relative;
