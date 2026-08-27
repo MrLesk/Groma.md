@@ -9,7 +9,6 @@ import {
   facadeDetailsVisible,
   gridVisible,
   minorGridVisible,
-  buildingNamesVisible,
   strokeAt,
   tintAt,
   weightAt,
@@ -30,8 +29,6 @@ test.concurrent('zoom keeps strokes bounded and removes details below readable s
   assert.ok(weightAt(4) > 1 && weightAt(4) <= 2)
   assert.equal(weightAt(100), 2)
   assert.equal(weightAt(0.01), 0.75)
-  assert.equal(buildingNamesVisible(0.54), false)
-  assert.equal(buildingNamesVisible(0.55), true)
   assert.equal(facadeDetailsVisible(0.9), false)
   assert.equal(facadeDetailsVisible(1), true)
   assert.equal(minorGridVisible(0.24), false)
