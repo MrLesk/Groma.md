@@ -35,7 +35,7 @@ export const palettes: Record<WebTheme, Palette> = {
     line: '#A2A6AE',
     hatch: '#C4C8CF',
     grid: '#EEF1F6',
-    gridMajor: '#E3E6EB',
+    gridMajor: '#D4DAE3',
   },
   dark: {
     paper: '#111315',
@@ -49,7 +49,7 @@ export const palettes: Record<WebTheme, Palette> = {
     line: '#6B717A',
     hatch: '#4A5058',
     grid: '#1A1D21',
-    gridMajor: '#22262B',
+    gridMajor: '#343A42',
   },
   blueprint: {
     paper: '#04182B',
@@ -63,7 +63,7 @@ export const palettes: Record<WebTheme, Palette> = {
     line: '#64B7D6',
     hatch: '#2B6C88',
     grid: '#061F33',
-    gridMajor: '#0A3047',
+    gridMajor: '#174E6A',
   },
 }
 
