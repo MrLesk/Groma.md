@@ -24,7 +24,7 @@ const MIN_BUILDING_NAME_PX = 6
 /** The smallest facade mark must reach one screen pixel before its pattern is useful. */
 export const FACADE_MARK = 1.1
 /** Minor grid rows stay at least this far apart; major rows remain visible below it. */
-const MIN_GRID_PITCH_PX = 3
+const MIN_GRID_PITCH_PX = 6
 /** The complete grid leaves paint before its major rows become a dense moving texture. */
 const MIN_MAJOR_GRID_PITCH_PX = 6
 /** World-pixel distance between minor rows in the isometric grid. */

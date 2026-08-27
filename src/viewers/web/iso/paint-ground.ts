@@ -108,7 +108,7 @@ function projectPlateGroup(plate: ProjectPlate, view: ProjectionView): SVGGEleme
   return group
 }
 
-/** The sheet's frame, front-edge calibration and compass; the grid itself is the map's endless pattern. */
+/** The sheet's frame, front-edge calibration and compass; the map paints its grid behind them. */
 export function paintSheet(layer: SVGGElement, scene: ProjectedScene): void {
   layer.append(
     svg('polygon', { points: pointsAttribute(scene.frame) }, 'frame'),
