@@ -16,8 +16,6 @@ export interface Palette {
   line: string
   /** The kind patterns: dots, crosses, storey lines, grain and the zone hatch. */
   hatch: string
-  grid: string
-  gridMajor: string
 }
 
 export type WebTheme = 'light' | 'dark' | 'blueprint'
@@ -34,8 +32,6 @@ export const palettes: Record<WebTheme, Palette> = {
     hover: 'rgba(34, 38, 46, 0.05)',
     line: '#A2A6AE',
     hatch: '#C4C8CF',
-    grid: '#EEF1F6',
-    gridMajor: '#D4DAE3',
   },
   dark: {
     paper: '#111315',
@@ -48,8 +44,6 @@ export const palettes: Record<WebTheme, Palette> = {
     hover: 'rgba(230, 232, 235, 0.08)',
     line: '#6B717A',
     hatch: '#4A5058',
-    grid: '#1A1D21',
-    gridMajor: '#343A42',
   },
   blueprint: {
     paper: '#04182B',
@@ -62,8 +56,6 @@ export const palettes: Record<WebTheme, Palette> = {
     hover: 'rgba(89, 203, 244, 0.09)',
     line: '#64B7D6',
     hatch: '#2B6C88',
-    grid: '#061F33',
-    gridMajor: '#174E6A',
   },
 }
 
@@ -102,7 +94,7 @@ export function cssBlock(palette: Palette): string {
   --on-colour: ${onColour};
   --map-line: ${palette.line};
   --map-hatch: ${palette.hatch};
-  --map-grid: ${palette.grid};
-  --map-grid-major: ${palette.gridMajor};
+  --map-grid: color-mix(in srgb, var(--paper) 88%, var(--map-line));
+  --map-grid-major: color-mix(in srgb, var(--paper) 80%, var(--map-line));
 `
 }
