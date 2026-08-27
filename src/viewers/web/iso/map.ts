@@ -23,7 +23,7 @@ const TILE_SIZE = TILE_CELLS * PLANE
  * isometric directions are drawn past the tile and clipped, so they join up
  * across tiles; their width is set per camera move to stay screen-constant.
  */
-function gridPattern(): { pattern: SVGPatternElement; minor: SVGPathElement; major: SVGPathElement } {
+function gridPattern(): { pattern: SVGPatternElement; lines: SVGPathElement[] } {
   const pattern = svg('pattern', {
     id: 'grid', patternUnits: 'userSpaceOnUse', width: TILE_SIZE, height: TILE_SIZE,
   })
@@ -34,14 +34,11 @@ function gridPattern(): { pattern: SVGPatternElement; minor: SVGPathElement; maj
     const lines = index % TILE_CELLS === 0 ? major : minor
     lines.push(`M${offset} 0V${TILE_SIZE}`, `M0 ${offset}H${TILE_SIZE}`)
   }
-  const paths = {
-    minor: svg('path', { d: minor.join('') }, 'grid'),
-    major: svg('path', { d: major.join('') }, 'grid major'),
-  }
+  const paths = [svg('path', { d: minor.join('') }, 'grid'), svg('path', { d: major.join('') }, 'grid major')]
   /** Inside a pattern the stroke must scale with the tile; the width is corrected in `move` instead. */
-  for (const path of Object.values(paths)) path.removeAttribute('vector-effect')
-  pattern.append(paths.minor, paths.major)
-  return { pattern, ...paths }
+  for (const path of paths) path.removeAttribute('vector-effect')
+  pattern.append(...paths)
+  return { pattern, lines: paths }
 }
 
 export interface IsoMap {
@@ -124,8 +121,7 @@ export function createMap(host: HTMLElement): IsoMap {
       camera.toggleAttribute('data-names-hidden', !namesVisible(current.k))
       camera.toggleAttribute('data-facades-hidden', !facadeDetailsVisible(current.k))
       root.toggleAttribute('data-minor-grid-hidden', !minorGridVisible(current.k))
-      grid.minor.style.strokeWidth = String(1 / current.k)
-      grid.major.style.strokeWidth = String(1.5 / current.k)
+      for (const line of grid.lines) line.style.strokeWidth = String(1 / current.k)
       appliedK = current.k
       appliedZoomRatio = zoomRatio
       return true

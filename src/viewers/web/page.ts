@@ -163,8 +163,6 @@ const style = `
     background: color-mix(in srgb, var(--paper) 78%, transparent);
     box-shadow: 0 0 20px color-mix(in srgb, var(--map-line) 7%, transparent), inset 0 0 18px color-mix(in srgb, var(--map-line) 3%, transparent);
   }
-  [data-theme="blueprint"] #map .grid { opacity: 0.35; }
-  [data-theme="blueprint"] #map .grid.major { opacity: 0.6; }
   #details {
     grid-column: 3;
     position: relative;
