@@ -76,7 +76,7 @@ const style = `
   body.hud-hidden #work,
   body.hud-hidden #pins { display: none; }
   button { font: inherit; color: inherit; cursor: pointer; }
-  button:focus-visible { outline: 2px solid var(--accent); outline-offset: -1px; }
+  button:focus-visible { outline: 2px solid var(--highlight); outline-offset: -1px; }
   #legend span, #details .meta, #details .section, #hierarchy .section, #tree .group, #zoom, #details .chip, #stats, .pane-label {
     font-size: 10px;
     letter-spacing: 0.14em;
@@ -259,7 +259,7 @@ const style = `
   .row .branch.current.end { height: 50%; align-self: flex-start; }
   .row .branch.current.end::after { top: 100%; }
   .row .twist { width: 1em; flex: none; color: var(--muted); }
-  .row .twist.toggle:hover { color: var(--accent-text); }
+  .row .twist.toggle:hover { color: var(--highlight-text); }
   .row .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .relationship-row {
     display: grid;

@@ -172,17 +172,17 @@ export const mapCss = `
   }
   #map .route .hit { fill: none; stroke: transparent; stroke-width: 12; }
   #map .route:hover, #map .route.endpoint, #map .route.touched { --emphasis: ${emphasis(1)}; }
-  #map .route:hover .line { stroke: var(--ink); opacity: 1; }
-  #map .route:hover .arrow { fill: var(--ink); opacity: 1; }
-  #map .route.endpoint .line, #map .route.selected .line, #map .route.touched .line { stroke: var(--accent); opacity: 1; }
-  #map .route.endpoint .arrow, #map .route.selected .arrow, #map .route.touched .arrow { fill: var(--accent); opacity: 1; }
+  #map .route:hover .line { stroke: var(--map-line); opacity: 1; }
+  #map .route:hover .arrow { fill: var(--map-line); opacity: 1; }
+  #map .route.endpoint .line, #map .route.selected .line, #map .route.touched .line { stroke: var(--highlight); opacity: 1; }
+  #map .route.endpoint .arrow, #map .route.selected .arrow, #map .route.touched .arrow { fill: var(--highlight); opacity: 1; }
   #map .route.touched.half .line { stroke-dasharray: 1 4; }
   #map .route.lit { --emphasis: ${emphasis(2)}; }
   #map .route.lit .line {
-    stroke: var(--accent); opacity: 1;
+    stroke: var(--highlight); opacity: 1;
     stroke-dasharray: 6 4; animation: map-flow 0.8s linear infinite;
   }
-  #map .route.lit .arrow { fill: var(--accent); opacity: 1; }
+  #map .route.lit .arrow { fill: var(--highlight); opacity: 1; }
   @keyframes map-flow { to { stroke-dashoffset: -10; } }
   @media (prefers-reduced-motion: reduce) {
     #map .route.lit .line { animation: none; stroke-dasharray: none; }
@@ -193,12 +193,12 @@ export const mapCss = `
   #map .building:not(.selected):hover, #map .slab:not(.selected):not(.context):hover,
   #map .island.system:not(.selected):not(.context):hover, #map .context { --emphasis: ${emphasis(0.5)}; }
   #map .building:not(.selected):hover .face, #map .slab:not(.selected):not(.context):hover .face,
-  #map .island.system:not(.selected):not(.context):hover > .ground { stroke: var(--ink); }
+  #map .island.system:not(.selected):not(.context):hover > .ground { stroke: var(--map-line); }
   #map .selected, #map .touched,
   #map .building.lit, #map .slab.lit, #map .island.lit { --emphasis: ${emphasis(1)}; }
   #map .context .face, #map .island.context > .ground, #map .selected .face, #map .island.selected > .ground,
   #map .touched .face, #map .island.touched > .ground,
-  #map .building.lit > .face, #map .slab.lit > .face, #map .island.lit > .ground { stroke: var(--accent); }
+  #map .building.lit > .face, #map .slab.lit > .face, #map .island.lit > .ground { stroke: var(--highlight); }
   #map .selected > .label .text, #map .touched > .label .text,
   #map .building.lit > .label .text, #map .slab.lit > .label .text, #map .island.lit > .label .text {
     fill: var(--ink); font-weight: 600;

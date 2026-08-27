@@ -31,7 +31,7 @@ export const workCss = `
   #work .label .backlog-mark { width: 29px; height: 36px; }
   #work .toggle, #work .chip { height: 38px; border-radius: 20px; }
   #work .toggle { padding: 4px 10px; border: 1px solid var(--hairline); color: var(--muted); }
-  #work .toggle[aria-pressed="true"] { color: var(--accent-text); border-color: var(--accent); }
+  #work .toggle[aria-pressed="true"] { color: var(--highlight-text); border-color: var(--highlight); }
   /* The strip keeps its height with the chips at its top, so the 4 px scrollbar that appears under them on overflow moves nothing. */
   #work .strip { display: flex; align-items: flex-start; gap: 8px; overflow-x: auto; box-sizing: border-box; height: 48px; padding: 5px 0 0; min-width: 0; }
   #work .strip::-webkit-scrollbar { height: 4px; }
@@ -42,7 +42,7 @@ export const workCss = `
     font-size: 10px; letter-spacing: 0.08em; filter: grayscale(1);
   }
   #work .chip:hover { border-color: var(--ink); }
-  #work .chip.active { filter: none; border-color: var(--accent); color: var(--accent-text); }
+  #work .chip.active { filter: none; border-color: var(--highlight); color: var(--highlight-text); }
   #work .chip .badge { width: 28px; height: 28px; }
   #work .chip .badge .card { inset: 3px; }
   #work .chip .badge .face { font-size: 8px; }

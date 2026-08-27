@@ -3,8 +3,12 @@ export interface Palette {
   paper: string
   ink: string
   muted: string
-  /** Accent used as text on paper; light paper needs the darker green. */
+  /** Brand or positive-status green used as text on paper; light paper needs the darker green. */
   accentText: string
+  /** Durable interaction emphasis: selection, focus and active flows. */
+  highlight: string
+  /** Interaction emphasis used as text on paper. */
+  highlightText: string
   hairline: string
   /** Sidebar row hover wash. */
   hover: string
@@ -24,6 +28,8 @@ export const palettes: Record<WebTheme, Palette> = {
     ink: '#22262E',
     muted: '#585B62',
     accentText: '#147A59',
+    highlight: '#1D9E75',
+    highlightText: '#147A59',
     hairline: '#E4E6EA',
     hover: 'rgba(34, 38, 46, 0.05)',
     line: '#A2A6AE',
@@ -36,6 +42,8 @@ export const palettes: Record<WebTheme, Palette> = {
     ink: '#E6E8EB',
     muted: '#9AA0A8',
     accentText: '#1D9E75',
+    highlight: '#1D9E75',
+    highlightText: '#1D9E75',
     hairline: '#2A2E33',
     hover: 'rgba(230, 232, 235, 0.08)',
     line: '#6B717A',
@@ -48,6 +56,8 @@ export const palettes: Record<WebTheme, Palette> = {
     ink: '#D8F3FF',
     muted: '#79A9BD',
     accentText: '#1D9E75',
+    highlight: '#D8F3FF',
+    highlightText: '#D8F3FF',
     hairline: '#164764',
     hover: 'rgba(89, 203, 244, 0.09)',
     line: '#64B7D6',
@@ -87,6 +97,8 @@ export function cssBlock(palette: Palette): string {
   --hover: ${palette.hover};
   --accent: ${accent};
   --accent-text: ${palette.accentText};
+  --highlight: ${palette.highlight};
+  --highlight-text: ${palette.highlightText};
   --on-colour: ${onColour};
   --map-line: ${palette.line};
   --map-hatch: ${palette.hatch};

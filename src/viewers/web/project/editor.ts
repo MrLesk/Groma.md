@@ -58,9 +58,9 @@ export const projectEditorCss = `
   #project-editor .markdown-preview :where(ul, ol) { padding-left: 2em; }
   #project-editor .markdown-preview blockquote { padding-left: 0.75em; border-left: 2px solid var(--hairline); color: var(--muted); }
   #project-editor .markdown-preview code { padding: 1px 4px; border-radius: 3px; background: color-mix(in srgb, var(--ink) 8%, transparent); }
-  #project-editor .markdown-preview a { color: var(--accent-text); text-underline-offset: 2px; }
-  #project-editor input:focus, #project-editor textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
-  #project-editor .error { min-height: 1.5em; margin: -6px 0 0; color: var(--accent-text); font-size: 11px; }
+  #project-editor .markdown-preview a { color: var(--highlight-text); text-underline-offset: 2px; }
+  #project-editor input:focus, #project-editor textarea:focus { outline: 2px solid var(--highlight); outline-offset: -1px; }
+  #project-editor .error { min-height: 1.5em; margin: -6px 0 0; color: var(--highlight-text); font-size: 11px; }
   #project-editor .actions { display: flex; justify-content: flex-end; gap: 8px; }
   #project-editor button { border: 1px solid var(--hairline); border-radius: 6px; padding: 7px 12px; background: transparent; }
   #project-editor button[type="submit"] { border-color: var(--ink); background: var(--ink); color: var(--paper); }
