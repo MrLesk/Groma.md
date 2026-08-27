@@ -122,6 +122,13 @@ small domain operations over branches nested inside one large function.
 
 Biome formatting and import assist are disabled. Do not use Biome to format files or organize imports.
 
+## Web SVG performance
+
+Keep viewport-sized SVG surfaces that use patterns or filters outside groups transformed by the camera. They must be
+siblings of the moving camera group so pan and zoom do not repaint them together with the architecture scene. After
+changing Web camera or grid composition, check frame rate while panning at close, fitted, and distant zoom, then run
+`bun run check`.
+
 ## UI descriptions
 
 Do not add subtitles, helper text, or descriptive copy beneath headings, labels, cards, or settings by default. Prefer
