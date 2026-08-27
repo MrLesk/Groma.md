@@ -169,7 +169,7 @@ export const mapCss = `
   #map .route-base.ghost.missing, #map .route.ghost.missing .line { stroke-dasharray: 1 3; }
   #map .text { fill: var(--ink); pointer-events: none; }
   #map :is(.island, .slab, .zone) > .label .text { font-weight: 600; }
-  #map .camera[data-names-hidden] :is(.island, .slab, .zone, .building) > .label { display: none; }
+  #map .camera[data-building-names-hidden] .building > .label { display: none; }
   #map .route-base, #map .route .line { fill: none; stroke-linecap: round; opacity: 0.9; }
   #map .route-base { pointer-events: none; }
   #map .route .line { opacity: 0; }
