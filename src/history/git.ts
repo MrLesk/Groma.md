@@ -1,0 +1,138 @@
+import { spawn } from 'node:child_process'
+import { mkdtemp, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import path from 'node:path'
+
+export interface GitRevision {
+  id: string
+  shortId: string
+  date: string
+  subject: string
+  body: string
+  tag?: string
+}
+
+function runGit(arguments_: string[], repositoryRoot: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const child = spawn('git', arguments_, {
+      cwd: repositoryRoot,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    })
+    const stdout: Buffer[] = []
+    let stderr = ''
+    child.stdout.on('data', chunk => stdout.push(chunk as Buffer))
+    child.stderr.setEncoding('utf8')
+    child.stderr.on('data', chunk => {
+      stderr += chunk
+    })
+    child.on('error', reject)
+    child.on('close', code => {
+      if (code === 0) resolve(Buffer.concat(stdout).toString('utf8'))
+      else reject(new Error(stderr.trim() || `git exited ${code}`))
+    })
+  })
+}
+
+/** Current-branch commits whose resulting `groma/` tree changed, newest first. */
+export async function listGitRevisions(repositoryRoot: string): Promise<GitRevision[]> {
+  const output = await runGit([
+    'log',
+    '--decorate-refs=refs/tags/*',
+    '--format=%H%x00%h%x00%cI%x00%s%x00%b%x00%(decorate:prefix=,suffix=,separator=%x1f,tag=)%x00',
+    '--',
+    'groma',
+  ], repositoryRoot)
+  const fields = output.split('\0')
+  const revisions: GitRevision[] = []
+  for (let index = 0; index + 5 < fields.length; index += 6) {
+    const id = fields[index]!.trimStart()
+    if (id === '') continue
+    const tags = fields[index + 5]!.split('\x1f').map(tag => tag.trim()).filter(Boolean).sort()
+    revisions.push({
+      id,
+      shortId: fields[index + 1]!,
+      date: fields[index + 2]!,
+      subject: fields[index + 3]!,
+      body: fields[index + 4]!.trim(),
+      ...(tags[0] === undefined ? {} : { tag: tags[0] }),
+    })
+  }
+  return revisions
+}
+
+function extractArchive(
+  repositoryRoot: string,
+  revisionId: string,
+  destination: string,
+  paths: string[],
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const archive = spawn('git', ['archive', '--format=tar', revisionId, ...paths], {
+      cwd: repositoryRoot,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    })
+    const extract = spawn('tar', ['-x', '-C', destination], {
+      stdio: ['pipe', 'ignore', 'pipe'],
+    })
+    let stderr = ''
+    archive.stderr.setEncoding('utf8')
+    extract.stderr.setEncoding('utf8')
+    archive.stderr.on('data', chunk => {
+      stderr += chunk
+    })
+    extract.stderr.on('data', chunk => {
+      stderr += chunk
+    })
+    archive.stdout.pipe(extract.stdin)
+    let archiveCode: number | null | undefined
+    let extractCode: number | null | undefined
+    const settle = () => {
+      if (archiveCode === undefined || extractCode === undefined) return
+      if (archiveCode === 0 && extractCode === 0) resolve()
+      else reject(new Error(stderr.trim() || 'Could not read Git revision'))
+    }
+    archive.on('error', reject)
+    extract.on('error', reject)
+    archive.on('close', code => {
+      archiveCode = code
+      settle()
+    })
+    extract.on('close', code => {
+      extractCode = code
+      settle()
+    })
+  })
+}
+
+async function withGitTree<T>(
+  repositoryRoot: string,
+  revisionId: string,
+  paths: string[],
+  load: (snapshotRoot: string) => Promise<T>,
+): Promise<T> {
+  const snapshotRoot = await mkdtemp(path.join(tmpdir(), 'groma-revision-'))
+  try {
+    await extractArchive(repositoryRoot, revisionId, snapshotRoot, paths)
+    return await load(snapshotRoot)
+  } finally {
+    await rm(snapshotRoot, { recursive: true, force: true })
+  }
+}
+
+/** Loads through a complete, temporary repository snapshot and always removes it afterwards. */
+export function withGitRevision<T>(
+  repositoryRoot: string,
+  revisionId: string,
+  load: (snapshotRoot: string) => Promise<T>,
+): Promise<T> {
+  return withGitTree(repositoryRoot, revisionId, [], load)
+}
+
+/** Loads only a commit's Groma Markdown tree for current-contract validation. */
+export function withGitGromaRevision<T>(
+  repositoryRoot: string,
+  revisionId: string,
+  load: (snapshotRoot: string) => Promise<T>,
+): Promise<T> {
+  return withGitTree(repositoryRoot, revisionId, ['groma'], load)
+}

@@ -10,6 +10,7 @@ import { mapCss } from './iso/style.ts'
 import { tipCss } from './organisms/tip.ts'
 import type { WebPayload } from './payload.ts'
 import { projectEditorCss } from './project/editor.ts'
+import { revisionControl, revisionCss } from './revision/view.ts'
 import { backlogMarkCss } from './work/backlog-mark.ts'
 import { workBadgeCss } from './work/badge.ts'
 import { workCss } from './work/island.ts'
@@ -28,6 +29,8 @@ const fitIcon = icon('<path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 2
 const moonIcon = icon('<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79Z"/>')
 const sunIcon = icon('<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.42 1.42M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.42-1.42M17.66 6.34l1.41-1.41"/>')
 const blueprintIcon = icon('<circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/>')
+const historyIcon = icon('<path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5M12 7v5l3 2"/>', 'revision-history')
+const revisionLoader = icon('<path d="M21 12a9 9 0 1 1-9-9"/>', 'revision-loader')
 const closeIcon = icon('<path d="M18 6 6 18M6 6l12 12"/>')
 const collapseIcon = icon('<path d="m11 17-5-5 5-5M18 17l-5-5 5-5"/>', 'collapse-icon')
 const expandIcon = icon('<path d="m13 17 5-5-5-5M6 17l5-5-5-5"/>', 'expand-icon')
@@ -285,7 +288,7 @@ const style = `
   @media (prefers-reduced-motion: reduce) {
     body, #hierarchy-content, #hierarchy-title .pane-label, #details, body #work { transition: none; }
   }
-${backlogMarkCss}${workBadgeCss}${flowRowCss}${mapCss}${pinsCss}${workCss}${tipCss}${projectEditorCss}${fpsCss}`
+${revisionCss}${backlogMarkCss}${workBadgeCss}${flowRowCss}${mapCss}${pinsCss}${workCss}${tipCss}${projectEditorCss}${fpsCss}`
 
 function legend(): string {
   return legendKinds.map(line => {
@@ -300,7 +303,7 @@ export function renderPage(payload: WebPayload): string {
   const json = JSON.stringify(payload).replace(/</g, '\\u003c')
   return '<!doctype html><html><head><meta charset="utf-8"><title>groma.md</title>'
     + `<style>${style}</style></head><body>`
-    + `<header id="header">${lockup}<span id="stats"></span>`
+    + `<header id="header">${lockup}<span id="stats"></span>${revisionControl(payload, { history: historyIcon, loader: revisionLoader })}`
     + `<div class="header-actions"><div id="map-controls" class="controls" aria-label="Map controls"><button id="fit" aria-label="Fit map">${fitIcon}<span>Fit</span></button><button id="zoom-out" aria-label="Zoom out">−</button><span id="zoom" aria-live="polite"></span><button id="zoom-in" aria-label="Zoom in">+</button></div><details id="help"><summary>Help</summary><div class="help-panel"><p>Drag or scroll to pan<br>Pinch, + or − to zoom<br>0 or Fit shows the whole map<br>F1 toggles map only<br>F2 toggles layers<br>In layers: drag orbits; Shift-drag pans<br>F3 toggles FPS<br>Escape clears selection</p></div></details><button id="theme" data-next-theme="dark"><span class="theme-icon dark">${moonIcon}</span><span class="theme-icon blueprint">${blueprintIcon}</span><span class="theme-icon light">${sunIcon}</span><span class="label">Dark</span></button></div>`
     + '</header>'
     + `<nav id="hierarchy" aria-label="Hierarchy"><div id="hierarchy-title"><span class="pane-label">Hierarchy</span><button id="hierarchy-toggle" type="button" aria-controls="hierarchy-content">${collapseIcon}${expandIcon}</button></div><div id="hierarchy-content"><div id="flows"></div><div id="tree"></div><div id="legend">${legend()}</div></div></nav>`

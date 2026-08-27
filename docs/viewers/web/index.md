@@ -12,7 +12,7 @@ This page is the browser surface. The shared viewer rules live in
 The isometric grid fills the screen. Inset 35%-paper frosted chrome floats
 above it as one technical instrument. The header shows the groma.md lockup,
 the observed system's name with live flow and element counts, one compact
-Fit, `-`, zoom-readout and `+` group, Help, and an icon-labelled theme
+revision menu, one compact Fit, `-`, zoom-readout and `+` group, Help, and an icon-labelled theme
 control whose label names the next choice. Help opens the short map-control
 guide. The control cycles the whole viewer through Light, Dark, Blueprint,
 then Light. Blueprint uses a deep navy field, pale cyan drafting lines, and
@@ -21,6 +21,18 @@ and accent green. The full footer is absent, and Live work keeps the bottom
 centre. The camera fits architecture into the clear area between
 the floating hierarchy and any open details pane, so the grid continues
 beneath the chrome without hiding the fitted world.
+
+The revision menu starts at Current revision, the live `groma/` working tree.
+It lists the current branch's commits that changed `groma/`, newest first. Each
+two-line row shows the subject, then an exact tag when present, short hash, and
+the commit date and time in the browser's locale. A row with a commit body
+shows that body on hover without repeating its subject. A selected commit
+opens the complete architecture and source measurements from that same Git
+snapshot. Historical views are read-only,
+carry no current Backlog work, and keep their full commit id in the URL.
+Commits written with an obsolete Groma Markdown contract remain visible but
+are marked Unsupported and cannot be selected. Returning to Current revision
+resumes live architecture and work updates.
 
 The hierarchy pane's boxed double-chevron retracts it to a narrow rail and
 returns it without changing tree, selection, or camera state. Its quiet branch lines keep nested

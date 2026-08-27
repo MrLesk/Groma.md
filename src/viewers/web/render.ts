@@ -35,6 +35,7 @@ import { paintHierarchy } from './organisms/hierarchy.ts'
 import { createPins } from './work/pins.ts'
 import { createTip } from './organisms/tip.ts'
 import { createProjectEditor } from './project/editor.ts'
+import { createRevisionControl } from './revision/control.ts'
 import { createWorkIsland } from './work/island.ts'
 import { toggleWorkSelection } from './work/selection.ts'
 import type { WebPayload, WebWorkPayload } from './payload.ts'
@@ -54,8 +55,6 @@ let world = boot.world
 let work = boot.work
 let sheet = boot.sheet
 let project: ProjectProfile | undefined = boot.project ?? undefined
-let appliedWorld = boot.generation
-let appliedWork = boot.workGeneration
 let currentPins = boot.pins
 const layerMotion = createLayerMotion()
 
@@ -73,13 +72,13 @@ const treeHost = document.getElementById('tree')!
 const flowsHost = document.getElementById('flows')!
 const statsHost = document.getElementById('stats')!
 const themeButton = document.getElementById('theme')!
+const revisionSelect = document.getElementById('revision') as HTMLDetailsElement
 const themeText = themeButton.querySelector<HTMLElement>('.label')!
 const detailsHost = document.getElementById('details')!
 const detailsClose = document.getElementById('details-close') as HTMLButtonElement
 const zoomHost = document.getElementById('zoom')!
 const hierarchyContent = document.getElementById('hierarchy-content')!
 const hierarchyToggle = document.getElementById('hierarchy-toggle') as HTMLButtonElement
-
 const map = createMap(host)
 const projectEditor = createProjectEditor(async profile => {
   const response = await fetch('/project', {
@@ -95,19 +94,23 @@ const tip = createTip(host)
 const pins = createPins(host, id => map.anchorOf(id), id => toggleTask(id), tip)
 const island = createWorkIsland(host, id => toggleTask(id), pins.show, tip)
 let tree = initialTree()
-const opened = readView(location.search, world, work.items)
+const opened = readView(location.search, world, work.items, boot.revisions)
 let hudVisible = opened.hudVisible
 shell.setHud(hudVisible)
 let selection = opened.selection
 let activeFlows: FlowRef[] = [...opened.flows]
 const initial = firstSystem(world)
-if (selection.kind === 'none' && initial !== undefined) {
+if (boot.revision === null && selection.kind === 'none' && initial !== undefined) {
   selection = selectArchitecture(noSelection, initial.representationId, false)
 }
 /** Tasks activated from pins or chips, in activation order; selection is independent and this order supplies its deactivation fallback. */
 let activeTaskIds: string[] = selection.kind === 'task' ? [selection.id] : []
 let detailsTab: DetailsTab = opened.tab
 let theme = opened.theme
+const revisionControl = createRevisionControl({
+  control: revisionSelect, body: document.body, boot,
+  applyRevision: payload => applyWorld(payload, true), applyWorld, applyWork,
+})
 
 /** The full-screen grid surrounds a safe camera frame between the floating chrome. */
 function viewport(): MapFrame {
@@ -195,7 +198,14 @@ function paintStats(flowCount: number): void {
 
 /** The URL follows the view, without adding history entries. */
 function syncUrl(): void {
-  const query = writeView({ selection, flows: activeFlows, tab: detailsTab, theme, hudVisible }, world, work.items)
+  const query = writeView({
+    ...(revisionControl.selected === undefined ? {} : { revision: revisionControl.selected }),
+    selection,
+    flows: activeFlows,
+    tab: detailsTab,
+    theme,
+    hudVisible,
+  }, world, work.items)
   history.replaceState(null, '', `${location.pathname}${query}`)
 }
 
@@ -329,13 +339,13 @@ bindMapPointer(map, {
   select,
   deselect,
   editProject() {
-    if (project !== undefined) projectEditor.open(project)
+    if (revisionControl.selected === undefined && project !== undefined) projectEditor.open(project)
   },
 })
 map.svg.addEventListener('keydown', event => {
   if (!map.isProjectEdit(event.target) || (event.key !== 'Enter' && event.key !== ' ')) return
   event.preventDefault()
-  if (project !== undefined) projectEditor.open(project)
+  if (revisionControl.selected === undefined && project !== undefined) projectEditor.open(project)
 })
 
 document.getElementById('zoom-in')!.addEventListener('click', () => zoomStep(ZOOM_STEP))
@@ -427,7 +437,7 @@ const resizeObserver = new ResizeObserver(() => {
 })
 resizeObserver.observe(host)
 
-function applyWorld(payload: WebPayload): void {
+function applyWorld(payload: WebPayload, reset = false): void {
   world = payload.world
   work = payload.work
   sheet = payload.sheet
@@ -435,21 +445,25 @@ function applyWorld(payload: WebPayload): void {
   currentPins = payload.pins
   scene = projectedLayerScene()
   fitted = fitScene(viewport())
-  if (!touched) camera = fitted
-  activeTaskIds = activeTaskIds.filter(id => workItem(id) !== undefined)
-  activeFlows = activeFlows.filter(flow => {
-    return worldRelationship(flow.commandId) !== undefined
-      && (flow.actorId === undefined || worldElement(flow.actorId)?.kind === 'actor')
-  })
-  const hadSelection = primarySelection(selection) !== undefined
-  selection = retainSelection(selection, id => known(id))
-  if (hadSelection && primarySelection(selection) === undefined) {
-    const first = firstSystem(world)
-    selection = first === undefined
-      ? noSelection
-      : selectArchitecture(noSelection, first.representationId, false)
+  if (reset) {
+    tree = initialTree()
+    activeTaskIds = []
+    activeFlows = []
+    selection = noSelection
+    detailsTab = 'what'
+    camera = fitted
+    touched = false
+  } else {
+    if (!touched) camera = fitted
+    activeTaskIds = activeTaskIds.filter(id => workItem(id) !== undefined)
+    activeFlows = activeFlows.filter(flow => {
+      return worldRelationship(flow.commandId) !== undefined
+        && (flow.actorId === undefined || worldElement(flow.actorId)?.kind === 'actor')
+    })
+    selection = retainSelection(selection, id => known(id))
   }
   map.paint(scene)
+  revisionControl.paintProjectEdit(map.svg)
   pins.paint(currentPins)
   island.paint(payload.pins, work.statuses, work.defaultStatus)
   applyCamera()
@@ -478,23 +492,9 @@ function applyWork(payload: WebWorkPayload): void {
 }
 
 map.paint(scene)
+revisionControl.paintProjectEdit(map.svg)
 pins.paint(currentPins)
 island.paint(boot.pins, work.statuses, work.defaultStatus)
 applyCamera()
 paintViewState()
 if (selection.kind === 'task') focusActiveTasks()
-
-const events = new EventSource('/events')
-events.addEventListener('world', event => {
-  const payload = JSON.parse(event.data) as WebPayload
-  if (payload.generation <= appliedWorld) return
-  appliedWorld = payload.generation
-  appliedWork = Math.max(appliedWork, payload.workGeneration)
-  applyWorld(payload)
-})
-events.addEventListener('work', event => {
-  const payload = JSON.parse(event.data) as WebWorkPayload
-  if (payload.workGeneration <= appliedWork) return
-  appliedWork = payload.workGeneration
-  applyWork(payload)
-})

@@ -1,12 +1,19 @@
+import type { GitRevision } from '../../history/git.ts'
 import type { SheetScene } from '../../sheet/types.ts'
 import type { ProjectProfile } from '../../project-profile.ts'
 import type { ArchitectureGraph, WorkSnapshot } from '../../types.ts'
 import type { WorkPin } from '../../work/pins.ts'
 
+export interface WebRevision extends GitRevision {
+  compatible: boolean
+}
+
 /** Map state, changed by architecture folds or project-profile saves. */
 export interface WebMapPayload {
   generation: number
   project: ProjectProfile | null
+  revision: WebRevision | null
+  revisions: WebRevision[]
   world: ArchitectureGraph
   sheet: SheetScene
 }
