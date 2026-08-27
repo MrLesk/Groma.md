@@ -7,7 +7,8 @@ import type { Camera } from './camera.ts'
 import { paintBuildings } from './paint-buildings.ts'
 import { paintIslands, paintSheet, paintSlabs } from './paint-ground.ts'
 import { paintRoutes, type RouteNode } from './paint-routes.ts'
-import { planeMatrix } from './project.ts'
+import { DEFAULT_PROJECTION, planeMatrix } from './project.ts'
+import type { ProjectionView } from './project.ts'
 import {
   GRID_TILE_CELLS,
   facadeDetailsVisible,
@@ -17,7 +18,7 @@ import {
   weightAt,
 } from './scale.ts'
 import { mapDefs } from './style.ts'
-import { pointsAttribute, svg } from './svg.ts'
+import { svg } from './svg.ts'
 
 /** A graph-paper tile: minor lines every cell, one major line each way. */
 const TILE_SIZE = GRID_TILE_CELLS * PLANE
@@ -86,7 +87,7 @@ export function createMap(host: HTMLElement): IsoMap {
   const definitions = root.querySelector('defs')!
   const grid = gridPattern()
   definitions.append(grid.pattern)
-  const field = svg('polygon', { fill: 'url(#grid)' }, 'field')
+  const field = svg('rect', { width: '100%', height: '100%', fill: 'url(#grid)' }, 'field')
   const camera = svg('g', {}, 'camera')
   const layers = {
     sheet: svg('g', {}, 'sheet'),
@@ -96,8 +97,8 @@ export function createMap(host: HTMLElement): IsoMap {
     items: svg('g', {}, 'items'),
     layerLabels: svg('g', {}, 'layer-labels'),
   }
-  camera.append(field, ...Object.values(layers))
-  root.append(camera)
+  camera.append(...Object.values(layers))
+  root.append(field, camera)
   host.replaceChildren(root)
 
   let items = new Map<string, Element>()
@@ -105,6 +106,7 @@ export function createMap(host: HTMLElement): IsoMap {
   let routes = new Map<string, RouteNode>()
   let appliedK: number | undefined
   let appliedZoomRatio: number | undefined
+  let gridView: ProjectionView = DEFAULT_PROJECTION
   /** The slab or system island each building and slab stands on, by id. */
   let surfaces = new Map<string, string>()
 
@@ -113,6 +115,12 @@ export function createMap(host: HTMLElement): IsoMap {
     move(current, zoomRatio) {
       camera.style.transform = cameraTransform(current)
       const showGrid = gridVisible(current.k)
+      if (showGrid) {
+        grid.pattern.setAttribute(
+          'patternTransform',
+          `translate(${current.x} ${current.y}) scale(${current.k}) ${planeMatrix('ground', undefined, gridView)}`,
+        )
+      }
       const scaleChanged = current.k !== appliedK || zoomRatio !== appliedZoomRatio
       if (!scaleChanged) return false
       const weight = weightAt(zoomRatio)
@@ -130,10 +138,9 @@ export function createMap(host: HTMLElement): IsoMap {
     },
     paint(scene) {
       painted = scene
+      gridView = scene.view
       definitions.innerHTML = mapDefs(scene.view)
       definitions.append(grid.pattern)
-      grid.pattern.setAttribute('patternTransform', planeMatrix('ground', undefined, scene.view))
-      field.setAttribute('points', pointsAttribute(scene.frame))
       for (const layer of Object.values(layers)) layer.replaceChildren()
       paintLayerPlanes(layers.sheet, scene)
       paintSheet(layers.sheet, scene)
