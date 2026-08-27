@@ -31,7 +31,7 @@ export const pinsCss = `
   }
   .pin.work-done .head:hover .card { transform: rotateY(0); }
   .pin .task {
-    margin-top: 2px; padding: 1px 6px; border-radius: 3px; background: var(--pin); color: #fff;
+    margin-top: 2px; padding: 1px 6px; border-radius: 3px; background: var(--pin); color: var(--on-colour);
     font-size: 9px; letter-spacing: 0.08em; white-space: nowrap;
   }
   .pin.active .badge { border-radius: 50%; box-shadow: 0 0 0 3px var(--accent); }

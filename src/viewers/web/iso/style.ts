@@ -162,7 +162,7 @@ export const mapCss = `
   #map .route-base.ghost.missing, #map .route.ghost.missing .line { stroke-dasharray: 1 3; }
   #map .text { fill: var(--ink); pointer-events: none; }
   #map .zone > .label .text { fill: var(--muted); }
-  #map .camera[data-names-hidden] .building > .label { display: none; }
+  #map .camera[data-names-hidden] :is(.island, .slab, .zone, .building) > .label { display: none; }
   #map .route-base, #map .route .line { fill: none; stroke-linecap: round; opacity: 0.9; }
   #map .route-base { pointer-events: none; }
   #map .route .line { opacity: 0; }
@@ -201,6 +201,6 @@ export const mapCss = `
   #map .building.lit > .face, #map .slab.lit > .face, #map .island.lit > .ground { stroke: var(--accent); }
   #map .selected > .label .text, #map .touched > .label .text,
   #map .building.lit > .label .text, #map .slab.lit > .label .text, #map .island.lit > .label .text {
-    fill: var(--accent); font-weight: 600;
+    fill: var(--ink); font-weight: 600;
   }
 `
