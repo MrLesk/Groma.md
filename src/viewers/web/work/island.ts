@@ -20,10 +20,11 @@ export const workCss = `
     backdrop-filter: blur(14px); box-shadow: 0 4px 8px rgba(0, 0, 0, 0.05);
     overflow: hidden; white-space: nowrap;
   }
-  #work:empty { display: none; }
+  #work[hidden] { display: none; }
+  #work .content { display: contents; }
   #work svg { width: 18px; height: 18px; flex: none; }
   #work .mark { position: relative; display: grid; place-items: center; width: 28px; height: 28px; }
-  #work > .mark .backlog-mark, #work > .label .backlog-mark { filter: grayscale(1); }
+  #work .mark .backlog-mark, #work .label .backlog-mark { filter: grayscale(1); }
   #work .mark .dot { position: absolute; top: 3px; right: 3px; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
   #work .divider { width: 1px; height: 24px; background: var(--hairline); flex: none; }
   #work button { display: flex; align-items: center; gap: 6px; border: 0; background: transparent; padding: 4px; border-radius: 14px; }
@@ -32,7 +33,7 @@ export const workCss = `
   #work .toggle, #work .chip { height: 38px; border-radius: 20px; }
   #work .toggle { padding: 4px 10px; border: 1px solid var(--hairline); color: var(--muted); }
   #work .toggle[aria-pressed="true"] { color: var(--highlight-text); border-color: var(--highlight); }
-  #work .strip { display: flex; align-items: flex-start; gap: 8px; overflow-x: auto; box-sizing: border-box; height: 48px; padding: 5px 0 0; min-width: 0; }
+  #work .strip { display: flex; align-items: flex-start; gap: 8px; overflow-x: auto; overflow-y: hidden; box-sizing: border-box; height: 54px; padding: 5px 0 0; min-width: 0; }
   #work .chip {
     flex: none; gap: 8px; padding: 4px 10px 4px 4px; border: 1px solid var(--hairline);
     font-size: 10px; letter-spacing: 0.08em; filter: grayscale(1);
@@ -49,6 +50,9 @@ export const workCss = `
   #work .chip.selected { font-weight: 700; }
   #work .fold svg { transition: transform 0.3s ease; }
   #work.open .fold svg { transform: rotate(180deg); }
+  @media (prefers-reduced-motion: reduce) {
+    #work .fold svg { transition: none; }
+  }
 `
 
 export interface WorkIsland {
@@ -82,8 +86,8 @@ function chip(pin: WorkPin, finishing: boolean, onToggle: (id: string) => void, 
  * the label, the configured statuses that have pins and the chip strip. It starts
  * folded with the workflow statuses other than the default and terminal ones
  * shown, and keeps its fold and filters across repaints;
- * clicking a chip toggles its task. Every rebuild eases the island's
- * width and height from the size it had to the size it needs.
+ * clicking a chip toggles its task. The persistent fold control turns while
+ * final-size content is clipped out and back in, so text is never scaled.
  */
 export function createWorkIsland(
   host: HTMLElement,
@@ -93,7 +97,9 @@ export function createWorkIsland(
 ): WorkIsland {
   const island = document.createElement('div')
   island.id = 'work'
-  host.append(island)
+  island.hidden = true
+  const content = document.createElement('div')
+  content.className = 'content'
   let pins: readonly WorkPin[] = []
   let configuredStatuses: readonly string[] = []
   let statusFilters: WorkStatusFilterState | undefined
@@ -104,6 +110,8 @@ export function createWorkIsland(
   let open = false
   let active: readonly string[] = []
   let selected: string | undefined
+  let foldRevision = 0
+  let foldAnimation: Animation | undefined
 
   const toggle = (status: string): HTMLButtonElement => {
     const pressed = statusFilters?.enabled.includes(status) ?? false
@@ -115,22 +123,14 @@ export function createWorkIsland(
     node.setAttribute('aria-pressed', String(pressed))
     return node
   }
-  /** The island's parts for the current state: nothing, the folded pill, or the open row. */
+  /** The island's changing content for the folded pill or open row. */
   const parts = (): Node[] => {
-    if (pins.length === 0) return []
     const mark = document.createElement('span')
     mark.className = 'mark'
     mark.innerHTML = `${BACKLOG_MARK}${pins.some(pin => !pin.terminal) ? '<span class="dot"></span>' : ''}`
-    const fold = button('fold', CHEVRON, () => {
-      open = !open
-      rebuild()
-    })
-    fold.setAttribute('aria-expanded', String(open))
     const divider = document.createElement('span')
     divider.className = 'divider'
-    if (!open) {
-      return [mark, divider, fold]
-    }
+    if (!open) return [mark, divider]
     const label = document.createElement('span')
     label.className = 'label'
     label.innerHTML = `${BACKLOG_MARK}<span>Backlog.md<br>Tasks</span>`
@@ -145,7 +145,6 @@ export function createWorkIsland(
       ...statusFilters!.available.map(toggle),
       divider,
       strip,
-      fold,
     ]
   }
   /** Colours the active tasks' chips, marks the selected task's and scrolls the strip to centre the first of those when it lies outside the visible part. */
@@ -162,24 +161,55 @@ export function createWorkIsland(
     if (left >= box.left && right <= box.right) return
     strip.scrollBy({ left: (left + right - box.left - box.right) / 2, behavior: 'smooth' })
   }
-  /** Rebuilds the island and eases its size from what it was to what it is now; an unchanged size does not animate. */
+  /** Rebuilds only changing content; the disclosure control remains the same DOM node. */
   const rebuild = (): void => {
-    const was = island.getBoundingClientRect()
     const scrolled = island.querySelector('.strip')?.scrollLeft ?? 0
-    for (const running of island.getAnimations()) running.cancel()
-    island.replaceChildren(...parts())
+    foldAnimation?.cancel()
+    foldAnimation = undefined
+    foldRevision += 1
+    content.replaceChildren(...parts())
     animating.clear()
+    island.hidden = pins.length === 0
     island.classList.toggle('open', open)
     // the strip stays where it was, so a repaint moves it only to reveal a selected chip
     island.querySelector('.strip')?.scrollTo(scrolled, 0)
     mark()
-    const now = island.getBoundingClientRect()
-    if (now.width === was.width && now.height === was.height) return
-    island.animate(
-      [{ width: `${was.width}px`, height: `${was.height}px` }, { width: `${now.width}px`, height: `${now.height}px` }],
-      { duration: 300, easing: 'ease' },
-    )
   }
+  const fold = button('fold', CHEVRON, () => {
+    open = !open
+    island.classList.toggle('open', open)
+    fold.setAttribute('aria-expanded', String(open))
+    const revision = ++foldRevision
+    foldAnimation?.cancel()
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      rebuild()
+      return
+    }
+    const cover = island.animate(
+      [
+        { clipPath: 'inset(0 round 28px)', opacity: 1 },
+        { clipPath: 'inset(0 46% round 28px)', opacity: 0.25 },
+      ],
+      { duration: 120, easing: 'ease-in', fill: 'forwards' },
+    )
+    foldAnimation = cover
+    cover.finished.then(() => {
+      if (revision !== foldRevision) return
+      content.replaceChildren(...parts())
+      mark()
+      cover.cancel()
+      foldAnimation = island.animate(
+        [
+          { clipPath: 'inset(0 46% round 28px)', opacity: 0.25 },
+          { clipPath: 'inset(0 round 28px)', opacity: 1 },
+        ],
+        { duration: 160, easing: 'ease-out' },
+      )
+    }).catch(() => undefined)
+  })
+  fold.setAttribute('aria-expanded', 'false')
+  island.append(content, fold)
+  host.append(island)
   return {
     paint(nextPins, nextStatuses, defaultStatus) {
       const visible = new Set(open

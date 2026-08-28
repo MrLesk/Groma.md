@@ -8,21 +8,11 @@ import { initialTree, semanticTreeRows, toggleExpansion } from '../tui/tree.ts'
 import type { TreeRow } from '../tui/tree.ts'
 import { nextTheme, themeLabel } from './atoms/theme.ts'
 import { createFpsCounter } from './chrome/fps.ts'
-import { createWebShell, mapFrame } from './chrome/shell.ts'
-import type { MapFrame } from './chrome/shell.ts'
+import { animateControl, createThemeTransition } from './chrome/motion.ts'
+import { createWebShell, mapFrame, type MapFrame } from './chrome/shell.ts'
 import { paintFlows } from './flow/list.ts'
 import { toggleFlowActivation } from './flow/state.ts'
-import {
-  fitHighlights,
-  fitCamera,
-  keyAction,
-  keyTarget,
-  pan,
-  wheelAction,
-  zoomAbout,
-  zoomLimits,
-  zoomReadout,
-} from './iso/camera.ts'
+import { fitHighlights, fitCamera, keyAction, keyTarget, pan, wheelAction, zoomAbout, zoomLimits, zoomReadout } from './iso/camera.ts'
 import type { Camera } from './iso/camera.ts'
 import { createMap } from './iso/map.ts'
 import { bindMapPointer } from './iso/pointer.ts'
@@ -39,14 +29,7 @@ import { createRevisionControl } from './revision/control.ts'
 import { createWorkIsland } from './work/island.ts'
 import { toggleWorkSelection } from './work/selection.ts'
 import type { WebPayload, WebWorkPayload } from './payload.ts'
-import {
-  noSelection,
-  primarySelection,
-  retainSelection,
-  selectArchitecture,
-  selectedArchitecture,
-  selectTask,
-} from './selection.ts'
+import { noSelection, primarySelection, retainSelection, selectArchitecture, selectedArchitecture, selectTask } from './selection.ts'
 import { createSourceControl } from './source/control.ts'
 import { readView, writeView } from './url.ts'
 
@@ -188,7 +171,9 @@ function refit(): void {
   applyCamera()
 }
 
-function zoomStep(factor: number): void {
+function fitControl(): void { animateControl(document.getElementById('fit')!, 'fit'); refit() }
+function zoomStep(factor: number, control: HTMLElement): void {
+  animateControl(control, 'zoom')
   const frame = viewport()
   camera = zoomAbout(camera, factor, { x: frame.x + frame.width / 2, y: frame.y + frame.height / 2 }, fitted)
   touched = true
@@ -360,9 +345,9 @@ map.svg.addEventListener('keydown', event => {
   if (revisionControl.selected === undefined && project !== undefined) projectEditor.open(project)
 })
 
-document.getElementById('zoom-in')!.addEventListener('click', () => zoomStep(ZOOM_STEP))
-document.getElementById('zoom-out')!.addEventListener('click', () => zoomStep(1 / ZOOM_STEP))
-document.getElementById('fit')!.addEventListener('click', refit)
+document.getElementById('zoom-in')!.addEventListener('click', event => zoomStep(ZOOM_STEP, event.currentTarget as HTMLElement))
+document.getElementById('zoom-out')!.addEventListener('click', event => zoomStep(1 / ZOOM_STEP, event.currentTarget as HTMLElement))
+document.getElementById('fit')!.addEventListener('click', fitControl)
 detailsClose.addEventListener('click', deselect)
 
 function toggleHud(): void {
@@ -407,10 +392,11 @@ function applyTheme(): void {
   syncUrl()
 }
 
-themeButton.addEventListener('click', () => {
+const transitionTheme = createThemeTransition(document.body)
+themeButton.addEventListener('click', () => transitionTheme(() => {
   theme = nextTheme(theme)
   applyTheme()
-})
+}))
 applyTheme()
 
 document.addEventListener('keydown', event => {
@@ -427,9 +413,9 @@ document.addEventListener('keydown', event => {
   const action = keyAction(event.key, keyTarget(event.target))
   if (action === undefined) return
   event.preventDefault()
-  if (action === 'in') zoomStep(ZOOM_STEP)
-  else if (action === 'out') zoomStep(1 / ZOOM_STEP)
-  else if (action === 'fit') refit()
+  if (action === 'in') zoomStep(ZOOM_STEP, document.getElementById('zoom-in')!)
+  else if (action === 'out') zoomStep(1 / ZOOM_STEP, document.getElementById('zoom-out')!)
+  else if (action === 'fit') fitControl()
   else if (action === 'deselect') deselect()
 })
 
