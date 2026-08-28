@@ -397,3 +397,55 @@ test.concurrent('groma web loads work asynchronously and updates only the work o
     await rm(root, { recursive: true, force: true })
   }
 })
+
+test.concurrent('groma web loads a selected task diff outside the initial payload', async () => {
+  const root = await createLiveRepo()
+  await writeFile(path.join(root, 'src/cli.ts'), 'export const taskDiffSentinel = 42\n')
+  const task: WorkItem = {
+    id: 'TASK-DIFF',
+    title: 'Show task diff',
+    status: 'In Progress',
+    assignees: [],
+    description: '',
+    references: [],
+    modifiedFiles: ['src/cli.ts'],
+    criteria: [],
+  }
+  const workSource: WorkSource = {
+    async read() {
+      return {
+        statuses: ['To Do', 'In Progress', 'Done'],
+        defaultStatus: 'To Do',
+        items: [task],
+      }
+    },
+    watch() {
+      return { close() {} }
+    },
+  }
+  const server = await startWebViewer(root, { port: 0, workSource })
+  try {
+    await waitUntil(async () => {
+      const payload = await (await fetch(`${server.url}/world.json`)).json() as { work: WorkSnapshot }
+      return payload.work.items[0]?.id === task.id
+    })
+    assert.doesNotMatch(await (await fetch(server.url)).text(), /taskDiffSentinel/)
+    const response = await fetch(`${server.url}/task-diff.json?task=${task.id}`)
+    assert.equal(response.status, 200)
+    const diff = await response.json() as {
+      taskId: string
+      source: { kind: string; revision: string }
+      files: { status: string; additions: number; hunks: unknown[] }[]
+    }
+    assert.equal(diff.taskId, task.id)
+    assert.equal(diff.source.kind, 'working-tree')
+    assert.match(diff.source.revision, /^[0-9a-f]{40}$/)
+    assert.equal(diff.files[0]!.status, 'modified')
+    assert.ok(diff.files[0]!.additions > 0)
+    assert.ok(diff.files[0]!.hunks.length > 0)
+    assert.equal((await fetch(`${server.url}/task-diff.json?task=unknown`)).status, 404)
+  } finally {
+    server.close()
+    await rm(root, { recursive: true, force: true })
+  }
+})

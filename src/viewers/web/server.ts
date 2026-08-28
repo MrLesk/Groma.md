@@ -11,6 +11,7 @@ import { pinsOf } from '../../work/pins.ts'
 import { renderPage } from './page.ts'
 import type { WebMapPayload, WebPayload, WebRevision, WebWorkPayload } from './payload.ts'
 import { readSource } from './source/read.ts'
+import { readTaskDiff } from './task-diff/read.ts'
 
 const defaultPort = 4747
 
@@ -185,6 +186,16 @@ export async function startWebViewer(
             : Response.json(source)
         } catch {
           return new Response('Source file not found', { status: 404 })
+        }
+      }
+      if (pathname === '/task-diff.json') {
+        const taskId = url.searchParams.get('task')
+        const item = workState.work.items.find(candidate => candidate.id === taskId)
+        if (item === undefined) return new Response('Task not found', { status: 404 })
+        try {
+          return Response.json(await readTaskDiff(repositoryRoot, item, workState.work))
+        } catch (error) {
+          return new Response(error instanceof Error ? error.message : String(error), { status: 404 })
         }
       }
       if (pathname === '/project' && request.method === 'PUT') {

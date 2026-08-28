@@ -17,7 +17,7 @@ code:
   - scanner: typescript
     file: src/viewers/web/source/view.ts
     symbol: paintSource
-    dependencies: 2
+    dependencies: 4
     dependents: 2
 ---
 
