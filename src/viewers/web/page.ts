@@ -13,7 +13,9 @@ import { tipCss } from './organisms/tip.ts'
 import type { WebPayload } from './payload.ts'
 import { projectEditorCss } from './project/editor.ts'
 import { revisionControl, revisionCss } from './revision/view.ts'
+import { highlightCss } from './source/highlight.ts'
 import { sourceCss } from './source/view.ts'
+import { taskDiffCss } from './task-diff/view.ts'
 import { backlogMarkCss } from './work/backlog-mark.ts'
 import { workBadgeCss } from './work/badge.ts'
 import { workCss } from './work/island.ts'
@@ -300,7 +302,7 @@ const style = `
   @media (prefers-reduced-motion: reduce) {
     #hierarchy, #hierarchy-toggle .hierarchy-chevron, #hierarchy-content, #hierarchy-title .pane-label, #details, body #work { transition: none; }
   }
-${chromeCss}${motionCss}${revisionCss}${sourceCss}${backlogMarkCss}${workBadgeCss}${flowRowCss}${mapCss}${pinsCss}${workCss}${tipCss}${projectEditorCss}${fpsCss}`
+${chromeCss}${motionCss}${revisionCss}${highlightCss}${sourceCss}${taskDiffCss}${backlogMarkCss}${workBadgeCss}${flowRowCss}${mapCss}${pinsCss}${workCss}${tipCss}${projectEditorCss}${fpsCss}`
 
 function legend(): string {
   return legendKinds.map(line => {

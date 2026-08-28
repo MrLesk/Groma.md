@@ -1,5 +1,4 @@
 import type {
-  WorkItem,
   AnnotatedElement,
   AnnotatedRelationship,
   ArchitectureGraph,
@@ -351,71 +350,6 @@ export function paintRelationship(
     list.append(item)
   }
   host.querySelector('.body')!.replaceChildren(list)
-}
-
-/**
- * The pane for a selected task: its id, status and assignees over its title,
- * then the description, the acceptance criteria as a checklist, the modified
- * files and the references, an element reference as a link that selects it.
- */
-export function paintTask(
-  host: HTMLElement,
-  item: WorkItem,
-  world: ArchitectureGraph,
-  onSelect: (id: string, additive: boolean) => void,
-): void {
-  const byId = new Map(world.elements.map(element => [element.id, element]))
-  host.querySelector('h1')!.textContent = item.title
-  host.querySelector('.meta')!.textContent = [item.id, item.status, ...item.assignees].join(' · ')
-  host.querySelector('.tabs')!.replaceChildren()
-  const body = host.querySelector('.body')!
-  body.replaceChildren()
-  if (item.description !== '') {
-    const paragraph = document.createElement('p')
-    paragraph.className = 'description'
-    paragraph.textContent = item.description
-    body.append(paragraph)
-  }
-  const section = (label: string, rows: HTMLElement[]): void => {
-    if (rows.length === 0) return
-    const list = document.createElement('ul')
-    list.append(...rows)
-    body.append(heading(label), list)
-  }
-  const done = item.criteria.filter(criterion => criterion.checked).length
-  section(`Acceptance criteria · ${done} of ${item.criteria.length}`, item.criteria.map(criterion => {
-    const row = document.createElement('li')
-    if (!criterion.checked) row.textContent = `○ ${criterion.text}`
-    else {
-      const check = document.createElement('span')
-      check.className = 'criterion-check'
-      check.textContent = '✓'
-      const text = document.createElement('span')
-      text.className = 'ghost'
-      text.textContent = ` ${criterion.text}`
-      row.append(check, text)
-    }
-    return row
-  }))
-  section('Modified files', item.modifiedFiles.map(file => {
-    const row = document.createElement('li')
-    row.textContent = file
-    return row
-  }))
-  section('References', item.references.map(reference => {
-    const row = document.createElement('li')
-    const element = byId.get(reference)
-    if (element === undefined) row.textContent = reference
-    else {
-      const link = document.createElement('button')
-      link.type = 'button'
-      link.className = 'link'
-      link.append(marked(element.kind, element.external, element.name))
-      link.addEventListener('click', event => onSelect(element.representationId, event.shiftKey))
-      row.append(link)
-    }
-    return row
-  }))
 }
 
 /** Empties the pane while nothing is selected. */

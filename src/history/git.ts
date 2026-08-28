@@ -33,6 +33,45 @@ function runGit(arguments_: string[], repositoryRoot: string): Promise<string> {
   })
 }
 
+/** Resolves the repository's current commit to its full, stable identity. */
+export async function currentGitRevision(repositoryRoot: string): Promise<string> {
+  return (await runGit(['rev-parse', 'HEAD'], repositoryRoot)).trim()
+}
+
+/** Resolves a commit's parent to the full identity used as a comparison base. */
+export async function parentGitRevision(
+  repositoryRoot: string,
+  revisionId: string,
+): Promise<string> {
+  return (await runGit(['rev-parse', `${revisionId}^`], repositoryRoot)).trim()
+}
+
+/** Finds the newest current-branch commit whose subject exactly matches the task convention. */
+export async function findGitCommitBySubject(
+  repositoryRoot: string,
+  subject: string,
+): Promise<string | undefined> {
+  const output = await runGit(['log', '--format=%H%x00%s%x00'], repositoryRoot)
+  const fields = output.split('\0')
+  for (let index = 0; index + 1 < fields.length; index += 2) {
+    if (fields[index + 1] === subject) return fields[index]!.trimStart()
+  }
+  return undefined
+}
+
+/** Reads one text file at an exact Git revision, or reports that it did not exist. */
+export async function readGitText(
+  repositoryRoot: string,
+  revisionId: string,
+  filename: string,
+): Promise<string | undefined> {
+  try {
+    return await runGit(['show', `${revisionId}:${filename}`], repositoryRoot)
+  } catch {
+    return undefined
+  }
+}
+
 /** Current-branch commits whose resulting `groma/` tree changed, newest first. */
 export async function listGitRevisions(repositoryRoot: string): Promise<GitRevision[]> {
   const output = await runGit([

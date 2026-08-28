@@ -19,7 +19,7 @@ import { bindMapPointer } from './iso/pointer.ts'
 import { projectScene } from './iso/project.ts'
 import { sceneAtSeparation } from './layers/separation.ts'
 import { createLayerAnimator, createLayerMotion } from './layers/orbit.ts'
-import { clearDetails, paintDetails, paintRelationship, paintTask, inspectDetails } from './organisms/details.ts'
+import { clearDetails, paintDetails, paintRelationship, inspectDetails } from './organisms/details.ts'
 import type { DetailsTab } from './organisms/details.ts'
 import { paintHierarchy } from './organisms/hierarchy.ts'
 import { createPins } from './work/pins.ts'
@@ -31,6 +31,7 @@ import { toggleWorkSelection } from './work/selection.ts'
 import type { WebPayload, WebWorkPayload } from './payload.ts'
 import { noSelection, primarySelection, retainSelection, selectArchitecture, selectedArchitecture, selectTask } from './selection.ts'
 import { createSourceControl } from './source/control.ts'
+import { createTaskDiffControl } from './task-diff/control.ts'
 import { readView, writeView } from './url.ts'
 
 const ZOOM_STEP = 1.25
@@ -100,7 +101,7 @@ const source = createSourceControl({
   element: () => worldElement(primarySelection(selection)),
   revision: () => revisionControl.selected, repaint: paintViewState,
 })
-
+const taskDiff = createTaskDiffControl({ host: detailsHost, world: () => world, repaint: paintViewState, select })
 /** The full-screen grid surrounds a safe camera frame between the floating chrome. */
 function viewport(): MapFrame {
   return mapFrame(
@@ -226,8 +227,8 @@ function paintViewState(): void {
   const selected = worldElement(selectedId)
   const relationship = worldRelationship(selectedId)
   if (source.paint(selected)) return
+  if (taskDiff.paint(task)) return
   if (relationship !== undefined) paintRelationship(detailsHost, relationship, world, select)
-  else if (task !== undefined) paintTask(detailsHost, task, world, select)
   else if (selected === undefined) clearDetails(detailsHost)
   else {
     paintDetails(
@@ -486,8 +487,7 @@ function applyWork(payload: WebWorkPayload): void {
   pins.activate(activeTaskIds, task?.id)
   island.activate(activeTaskIds, task?.id)
   if (!ownedDetails) return
-  if (task === undefined) clearDetails(detailsHost)
-  else paintTask(detailsHost, task, world, select)
+  if (!taskDiff.paint(task)) clearDetails(detailsHost)
 }
 
 map.paint(scene)
