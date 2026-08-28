@@ -37,6 +37,48 @@ No actionable P0, P1, or P2 difference remains for this correction. A small shee
 
 final result: passed
 
+# TASK-201 design QA
+
+- Source visual truth: `/Users/alex/.codex/generated_images/01a044c0-eefb-76d0-92a6-b8cec7745b44/exec-0704e970-de85-4e17-aace-85e81336b3d7.png`
+- Desktop implementation: `/tmp/task-201-matched-open.png`
+- Narrow implementation: `/tmp/task-201-narrow-open.png`
+- Full-view comparison: `/tmp/task-201-final-comparison.png`
+- Viewports: 1280 × 720 and 520 × 720 CSS pixels at device scale 1
+- Pixels and density: source 1709 × 920, normalized to 1337 × 720 without changing its proportions; desktop implementation 1280 × 720; narrow browser capture 509 × 705 from the 520 × 720 viewport.
+- State: current revision, dark theme, boxed project pencil active; the desktop comparison uses a 931% close-up with hierarchy and details collapsed.
+
+## Findings
+
+No actionable P0, P1, or P2 difference remains. The implementation preserves the mock's upright editor, boxed isometric pencil, visible attachment to the title plate, bounded text surface, and green Save treatment while retaining Groma's existing name field and Write/Preview modes.
+
+## Full-view comparison
+
+The normalized side-by-side image shows the same composition: a compact south-east title plate, a bordered pencil control in its lower corner, and a dark upright editor beside it. The implementation uses a short straight connector instead of the mock's elbow because it joins the nearest points of the real dialog and live SVG cell at any camera position.
+
+## Focused comparison
+
+The final desktop capture keeps the pencil box and connector readable at the same approximate title-plate scale as the source. The narrow capture is the focused responsive evidence: the dialog remains between x=16 and x=506 inside a 520-pixel viewport, and its text surface remains fully visible.
+
+## Required fidelity surfaces
+
+- Fonts and typography: The editor and plate reuse Groma's monospaced interface and existing title hierarchy. The retained Name and Write/Preview controls use the established product typography.
+- Spacing and layout: The desktop dialog is 480 × 431 CSS pixels and sits beside the active edit cell. The narrow dialog stays inside the viewport. Long text does not change the plate after its three-line preview cap.
+- Colors and tokens: The dialog, border, connector, pencil, and map use existing theme tokens. Save uses Groma's existing green accent instead of a new color.
+- Image quality and asset fidelity: The live SVG title plate and existing pencil remain resolution-independent at every camera scale; no raster replacement or placeholder asset was added.
+- Copy and content: The editor shows the real project name and description. The Name field and Markdown modes intentionally remain because they are existing supported behavior not represented in the conceptual mock.
+- Interaction and accessibility: The SVG control remains a keyboard-focusable button. A 4,189-character description produced Write scrollHeight 2160/clientHeight 200 and Preview scrollHeight 1859/clientHeight 200. Cancel closed without persistence. The live save/publication path passes its focused test, and browser warnings/errors were empty.
+
+## Comparison history
+
+1. The first browser capture placed the connector outside the viewport because its coordinates were interpreted relative to the dialog. This was a P2 anchoring failure.
+2. The connector was changed to dialog-relative coordinates. The post-fix desktop comparison shows it joining the boxed pencil to the editor, and the compacted dialog leaves the attachment visible. Result: passed.
+
+## Follow-up polish
+
+The mock uses an elbow connector while the implementation uses the shortest straight segment between the live elements. This is an acceptable P3 difference because the straight segment stays correct as the camera and viewport change without another connector concept.
+
+final result: passed
+
 # TASK-169.1 visual QA
 
 ## Source and implementation

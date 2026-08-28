@@ -103,7 +103,7 @@ export const mapCss = `
   #map .route { ${stroke('route')} }
   #map .frame, #map .calibration-tick,
   #map .compass .ring, #map .compass .star, #map .compass .north,
-  #map .project-plate .plate, #map .project-plate .divider,
+  #map .project-plate .plate, #map .project-plate .edit-frame,
   #map .project-plate .pencil path, #map .project-plate .pencil polygon,
   #map .ground, #map .face, #map .route-base, #map .route .line {
     stroke: var(--map-line); stroke-linejoin: round;
@@ -111,7 +111,7 @@ export const mapCss = `
   }
   #map .frame, #map .calibration-tick,
   #map .compass .ring, #map .compass .star,
-  #map .project-plate .divider, #map .project-plate .pencil path { fill: none; }
+  #map .project-plate .edit-frame, #map .project-plate .pencil path { fill: none; }
   #map .frame { --emphasis: 1.6; }
   #map .calibration-tick { stroke-linecap: square; }
   #map .compass { --emphasis: 1.25; }
@@ -126,7 +126,7 @@ export const mapCss = `
   #map .project-plate .project-description .md-link { text-decoration: underline; text-underline-offset: 2px; }
   #map .project-plate .project-meta .text { fill: var(--muted); letter-spacing: 0.14em; }
   #map .project-edit { pointer-events: all; cursor: pointer; outline: none; }
-  #map .project-edit .edit-hit { fill: transparent; stroke: none; }
+  #map .project-edit .edit-frame { fill: transparent; pointer-events: all; }
   #map .project-edit .pencil path { stroke-linecap: square; }
   #map .project-edit .pencil .body { fill: color-mix(in srgb, var(--ink) 10%, var(--paper)); }
   #map .project-edit .pencil .facet { fill: color-mix(in srgb, var(--ink) 18%, var(--paper)); }
@@ -136,7 +136,7 @@ export const mapCss = `
   #map .project-edit .pencil .lead { fill: var(--ink); }
   #map .project-edit .pencil .facet, #map .project-edit .pencil .eraser, #map .project-edit .pencil .ferrule,
   #map .project-edit .pencil .tip, #map .project-edit .pencil .lead { stroke: none; }
-  #map .project-edit:hover .edit-hit, #map .project-edit:focus .edit-hit { fill: var(--ink); fill-opacity: 0.05; }
+  #map .project-edit:hover .edit-frame, #map .project-edit:focus .edit-frame { fill: var(--ink); fill-opacity: 0.05; }
   #map .project-edit:hover .pencil path, #map .project-edit:focus .pencil path,
   #map .project-edit:hover .pencil .body, #map .project-edit:focus .pencil .body { stroke: var(--ink); }
   #map .grid { fill: none; stroke: var(--map-grid); }

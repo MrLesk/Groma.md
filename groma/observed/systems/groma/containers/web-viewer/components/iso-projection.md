@@ -17,4 +17,4 @@ code:
 
 # Iso projection
 
-Projects the sheet into the 2:1 isometric picture: one centred piece for every visible source-file group, ordered as a nested largest-first tower, plus one polyline and arrowhead per route, surface text, and painter order back to front. Its blueprint domain adds the proportional frame, calibration ticks, compass, and project plate in the neutral map palette.
+Projects the sheet into the 2:1 isometric picture: one centred piece for every visible source-file group, ordered as a nested largest-first tower, plus one polyline and arrowhead per route, surface text, and painter order back to front. Its blueprint domain adds the proportional frame, calibration ticks, compass, and project plate in the neutral map palette. The plate owns a three-line description preview and one fixed inset edit cell, so longer Markdown cannot enlarge the blueprint control.

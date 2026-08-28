@@ -94,7 +94,6 @@ function projectPlateGroup(plate: ProjectPlate, view: ProjectionView): SVGGEleme
   const group = svg('g', {}, 'project-plate')
   group.append(
     svg('polygon', { points: pointsAttribute(plate.polygon) }, 'plate'),
-    svg('path', { d: pathOf([plate.divider]) }, 'divider'),
     plateText(plate.name, 'project-name', view),
     richPlateText(plate.description, 'project-description', view),
     plateText(plate.meta, 'project-meta', view),
@@ -102,7 +101,7 @@ function projectPlateGroup(plate: ProjectPlate, view: ProjectionView): SVGGEleme
   const edit = svg('g', {
     'data-project-edit': '', role: 'button', tabindex: 0, 'aria-label': 'Edit project profile',
   }, 'project-edit')
-  edit.append(svg('polygon', { points: pointsAttribute(plate.edit.polygon) }, 'edit-hit'))
+  edit.append(svg('polygon', { points: pointsAttribute(plate.edit.polygon) }, 'edit-frame'))
   edit.append(pencilGroup(plate, view))
   group.append(edit)
   return group

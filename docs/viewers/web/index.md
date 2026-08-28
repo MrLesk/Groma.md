@@ -102,9 +102,10 @@ semantic sheet without moving its cells. The grid itself runs to the edge of
 the map pane at any zoom. One strong outer frame defines the band;
 its small compass scales with the sheet and keeps north on the grid's up-right
 axis, so the actors island is due west. A title plate in the band shows the
-project name and Markdown description from `groma/README.md`, wraps the full
-rendered text, fits its width to lines up to 80 characters, and pushes only the
-south frame edge outward when longer content wraps. Small
+project name and up to three lines of the Markdown description from
+`groma/README.md`. It fits its width to lines up to 80 characters; longer
+content remains in the editor instead of growing the plate. A compact boxed
+pencil sits inside its lower corner. Small
 unlabeled calibration ticks line its two front edges.
 The compass, title metadata, and pencil lie on the same isometric ground plane,
 and every blueprint decoration uses the map's neutral grayscale palette.
@@ -260,9 +261,9 @@ selection. The map combines their normal selection treatments, the hierarchy
 marks every selected element, and the last item selected owns the details pane.
 Removing that item returns details to the previous item. Click empty
 sheet or press Escape to clear the selection, active flows, and active tasks;
-the details pane closes. Click the isometric pencil in the title plate to open
-the floating project-profile form. Its Write view edits the description as
-Markdown and Preview renders it through Comark's sanitized HTML renderer. The
+the details pane closes. Click the boxed isometric pencil in the title plate to
+open the upright project-profile editor beside it. Its bounded Write view keeps
+long Markdown scrollable, and Preview renders it through Comark's sanitized HTML renderer. The
 title plate projects the same parsed Markdown semantics onto the isometric sheet.
 Saving asks the web host to update only
 `groma/README.md`; the published world event repaints every open map without a

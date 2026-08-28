@@ -266,6 +266,10 @@ test.concurrent('blueprint decorations scale with the sheet and the project plat
     project.name,
     Array(8).fill(project.description).join(' '),
   ))
+  const moreExtended = projectScene(empty(96), profile(
+    project.name,
+    Array(16).fill(project.description).join(' '),
+  ))
   const length = (segment: ProjectedScene['calibrationTicks'][number]): number =>
     Math.hypot(segment.to.x - segment.from.x, segment.to.y - segment.from.y)
   const east = (scene: ProjectedScene): number => Math.max(...scene.frame.map(point => groundPoint(point).gx))
@@ -276,6 +280,11 @@ test.concurrent('blueprint decorations scale with the sheet and the project plat
   }
   const largePlate = large.projectPlate!
   const extendedPlate = extended.projectPlate!
+  const editBox = extendedPlate.edit.polygon.map(groundPoint)
+  const editWest = Math.min(...editBox.map(point => point.gx))
+  const editEast = Math.max(...editBox.map(point => point.gx))
+  const editNorth = Math.min(...editBox.map(point => point.gy))
+  const editSouth = Math.max(...editBox.map(point => point.gy))
 
   assert.equal(plain.projectPlate, undefined)
   assert.equal(east(plain), south(plain))
@@ -287,16 +296,21 @@ test.concurrent('blueprint decorations scale with the sheet and the project plat
   assert.ok(plateWidth(compact) < plateWidth(growing))
   assert.ok(plateWidth(growing) < plateWidth(threshold))
   assert.equal(plateWidth(overflow), plateWidth(threshold))
-  assert.ok(groundPoint(largePlate.divider.from).gx
-    - groundPoint(largePlate.description.origin).gx
-    - largePlate.description.maxWidth / PLANE >= 0.5)
   assert.equal(overflow.projectPlate!.description.lines.length, 2)
   assert.equal(east(compact), east(overflow))
   assert.ok(Math.min(...largePlate.polygon.map(point => groundPoint(point).gy)) > 96)
   assert.ok(Math.max(...largePlate.polygon.map(point => groundPoint(point).gx)) < east(large))
-  assert.ok(extendedPlate.description.lines.length > largePlate.description.lines.length)
+  assert.equal(extendedPlate.description.lines.length, 3)
   assert.equal(east(extended), east(large))
   assert.ok(south(extended) > south(large))
+  assert.deepEqual(moreExtended.projectPlate!.polygon, extendedPlate.polygon)
+  assert.equal(south(moreExtended), south(extended))
+  assert.ok(Math.abs(editEast - editWest - (editSouth - editNorth)) < 1e-8)
+  const plateGround = extendedPlate.polygon.map(groundPoint)
+  assert.ok(editWest > Math.min(...plateGround.map(point => point.gx)))
+  assert.ok(editEast < Math.max(...plateGround.map(point => point.gx)))
+  assert.ok(editNorth > Math.min(...plateGround.map(point => point.gy)))
+  assert.ok(editSouth < Math.max(...plateGround.map(point => point.gy)))
   for (const point of extendedPlate.polygon.map(groundPoint)) {
     assert.ok(point.gy < south(extended))
   }
