@@ -11,4 +11,4 @@ code:
 
 # Project editor
 
-Opens one floating form from the sheet title plate, switches the description between Markdown source and a Comark HTML preview sanitized for the browser, and sends the changed project profile to the web host.
+Opens one upright editor beside the title plate's boxed pencil, keeps long Markdown inside a bounded scrolling surface, switches between source and a Comark HTML preview sanitized for the browser, and sends the changed project profile to the web host.

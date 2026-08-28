@@ -10,6 +10,7 @@ const COMPASS_RADIUS = 0.55
 const COMPASS_LETTER = 0.22
 const PROJECT_META = 'GROMA  /  ARCHITECTURE MAP'
 const MAX_PLATE_LINE_CHARACTERS = 80
+const MAX_PLATE_DESCRIPTION_LINES = 3
 
 type Projector = (gx: number, gy: number, z: number) => Point
 
@@ -47,7 +48,6 @@ export interface RichPlateText extends Omit<PlateText, 'lines'> {
 
 export interface ProjectPlate {
   polygon: Point[]
-  divider: Segment
   name: PlateText
   description: RichPlateText
   meta: PlateText
@@ -186,7 +186,9 @@ function projectPlate(
   profile: ProjectProfile,
   project: Projector,
 ): { plate: ProjectPlate; rect: CellRect } {
-  const editWidth = 1.7 * scale
+  const editSize = 0.82 * scale
+  const editInset = 0.16 * scale
+  const editReservationWidth = editSize + editInset * 2
   const nameSize = 11 * scale
   const nameLineHeight = 12.5 * scale
   const descriptionSize = 6 * scale
@@ -206,23 +208,29 @@ function projectPlate(
     descriptionWidth,
     limitedWidth(PROJECT_META, metaSize),
   )
-  const width = Math.min(sheet.w, editWidth + horizontalPadding + desiredContentWidth / PLANE)
-  const contentWidth = (width - editWidth - horizontalPadding) * PLANE
+  const width = Math.min(sheet.w, editReservationWidth + horizontalPadding + desiredContentWidth / PLANE)
+  const contentWidth = (width - editReservationWidth - horizontalPadding) * PLANE
   const nameLines = wrapPlain(profile.name, contentWidth, nameSize)
   const descriptionLines = wrapMarkdown(profile.descriptionBlocks, contentWidth, descriptionSize)
+    .slice(0, MAX_PLATE_DESCRIPTION_LINES)
   const nameTop = 0.18 * scale
   const descriptionTop = nameTop + nameLines.length * nameLineHeight / PLANE + 0.18 * scale
   const metaTop = descriptionTop + descriptionLines.length * descriptionLineHeight / PLANE + 0.2 * scale
-  const depth = metaTop + 0.45 * scale
+  const depth = Math.max(metaTop + 0.45 * scale, editSize + editInset * 2)
   const rect = {
     gx: sheet.gx + sheet.w + (FRAME_MARGIN - 0.4) * scale - width,
     gy: sheet.gy + sheet.d + 0.15 * scale,
     w: width,
     d: depth,
   }
-  const editRect = { ...rect, gx: rect.gx + rect.w - editWidth, w: editWidth }
-  const pencilLength = Math.min(editRect.d * PLANE * 0.7, 36 * scale)
-  const pencilThickness = Math.min(editRect.w * PLANE * 0.35, 12 * scale)
+  const editRect = {
+    gx: rect.gx + rect.w - editInset - editSize,
+    gy: rect.gy + rect.d - editInset - editSize,
+    w: editSize,
+    d: editSize,
+  }
+  const pencilLength = editRect.d * PLANE * 0.5
+  const pencilThickness = editRect.w * PLANE * 0.18
   const pencilOrigin = project(
     editRect.gx + editRect.w / 2 - pencilThickness / PLANE / 2,
     editRect.gy + editRect.d / 2 - pencilLength / PLANE / 2,
@@ -232,7 +240,6 @@ function projectPlate(
     rect,
     plate: {
       polygon: corners(rect, project),
-      divider: { from: project(editRect.gx, editRect.gy, 0), to: project(editRect.gx, editRect.gy + editRect.d, 0) },
       name: {
         origin: project(rect.gx + contentInset, rect.gy + nameTop, 0),
         lines: nameLines, fontSize: nameSize, lineHeight: nameLineHeight, maxWidth: contentWidth,

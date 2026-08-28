@@ -13,9 +13,12 @@ const renderMarkdown = createRender({
 
 export const projectEditorCss = `
   #project-editor {
-    width: min(440px, calc(100vw - 40px));
-    margin: auto;
+    position: fixed;
+    width: min(480px, calc(100vw - 32px));
+    max-height: calc(100dvh - 32px);
+    margin: 0;
     padding: 0;
+    overflow: visible;
     color: var(--ink);
     background: color-mix(in srgb, var(--paper) 78%, transparent);
     border: 1px solid color-mix(in srgb, var(--ink) 16%, transparent);
@@ -23,8 +26,15 @@ export const projectEditorCss = `
     box-shadow: 0 16px 48px color-mix(in srgb, var(--ink) 18%, transparent);
     backdrop-filter: blur(18px);
   }
-  #project-editor::backdrop { background: color-mix(in srgb, var(--ink) 16%, transparent); }
-  #project-editor form { display: grid; gap: 16px; padding: 24px; }
+  #project-editor::backdrop { background: color-mix(in srgb, var(--ink) 8%, transparent); }
+  #project-editor form {
+    position: relative; z-index: 1; display: grid; gap: 12px; max-height: calc(100dvh - 32px); padding: 20px;
+    overflow: hidden; border-radius: inherit; background: inherit;
+  }
+  #project-editor .anchor-line {
+    position: absolute; z-index: 0; height: 1px; background: var(--map-line);
+    transform-origin: left center; pointer-events: none;
+  }
   #project-editor h1 { margin: 0; font-size: 18px; line-height: 1.3; }
   #project-editor label { display: grid; gap: 6px; color: var(--muted); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; }
   #project-editor .markdown-field { display: grid; gap: 6px; }
@@ -41,10 +51,11 @@ export const projectEditorCss = `
     color: var(--ink);
     background: color-mix(in srgb, var(--paper) 72%, transparent);
     font: 12px/1.5 'SF Mono', ui-monospace, Menlo, monospace;
-    resize: vertical;
+    resize: none;
   }
+  #project-editor textarea { height: clamp(180px, 28vh, 280px); overflow: auto; }
   #project-editor .markdown-preview {
-    min-height: 108px; max-height: 260px; overflow: auto;
+    height: clamp(180px, 28vh, 280px); overflow: auto;
     border: 1px solid var(--hairline); border-radius: 6px; padding: 10px;
     color: var(--ink); background: color-mix(in srgb, var(--paper) 72%, transparent);
     font: 12px/1.55 'SF Mono', ui-monospace, Menlo, monospace;
@@ -61,21 +72,65 @@ export const projectEditorCss = `
   #project-editor .markdown-preview a { color: var(--highlight-text); text-underline-offset: 2px; }
   #project-editor input:focus, #project-editor textarea:focus { outline: 2px solid var(--highlight); outline-offset: -1px; }
   #project-editor .error { min-height: 1.5em; margin: -6px 0 0; color: var(--highlight-text); font-size: 11px; }
+  #project-editor .error:empty { display: none; }
   #project-editor .actions { display: flex; justify-content: flex-end; gap: 8px; }
   #project-editor button { border: 1px solid var(--hairline); border-radius: 6px; padding: 7px 12px; background: transparent; }
-  #project-editor button[type="submit"] { border-color: var(--ink); background: var(--ink); color: var(--paper); }
+  #project-editor button[type="submit"] { border-color: var(--accent); background: transparent; color: var(--accent-text); }
   #project-editor button:disabled { opacity: 0.5; cursor: wait; }
+  @media (max-width: 640px) {
+    #project-editor { width: calc(100vw - 24px); max-height: calc(100dvh - 24px); }
+    #project-editor form { gap: 10px; max-height: calc(100dvh - 24px); padding: 16px; }
+    #project-editor textarea, #project-editor .markdown-preview { height: clamp(150px, 28vh, 220px); }
+  }
 `
+
+const VIEWPORT_INSET = 16
+const EDITOR_GAP = 24
+
+function clamp(value: number, minimum: number, maximum: number): number {
+  return Math.min(Math.max(value, minimum), Math.max(minimum, maximum))
+}
+
+function placeEditor(dialog: HTMLDialogElement, anchor: Element, line: HTMLElement): void {
+  const anchorRect = anchor.getBoundingClientRect()
+  const editorRect = dialog.getBoundingClientRect()
+  const left = clamp(
+    anchorRect.right + EDITOR_GAP,
+    VIEWPORT_INSET,
+    innerWidth - editorRect.width - VIEWPORT_INSET,
+  )
+  const top = clamp(
+    anchorRect.top - editorRect.height - EDITOR_GAP,
+    VIEWPORT_INSET,
+    innerHeight - editorRect.height - VIEWPORT_INSET,
+  )
+  dialog.style.left = `${left}px`
+  dialog.style.top = `${top}px`
+
+  const placed = dialog.getBoundingClientRect()
+  const anchorX = anchorRect.left + anchorRect.width / 2
+  const anchorY = anchorRect.top + anchorRect.height / 2
+  const lineX = clamp(anchorX, placed.left, placed.right)
+  const lineY = clamp(anchorY, placed.top, placed.bottom)
+  const dx = anchorX - lineX
+  const dy = anchorY - lineY
+  line.style.left = `${lineX - placed.left}px`
+  line.style.top = `${lineY - placed.top}px`
+  line.style.width = `${Math.hypot(dx, dy)}px`
+  line.style.transform = `rotate(${Math.atan2(dy, dx)}rad)`
+}
 
 export function createProjectEditor(
   save: (profile: ProjectProfileInput) => Promise<void>,
 ) {
   const dialog = document.createElement('dialog')
   dialog.id = 'project-editor'
-  dialog.innerHTML = '<form><h1>Project profile</h1><label>Name<input name="name" required></label><div class="markdown-field"><div class="markdown-head"><span class="markdown-label">Description</span><div class="markdown-modes" role="tablist"><button type="button" role="tab" data-mode="write" aria-selected="true">Write</button><button type="button" role="tab" data-mode="preview" aria-selected="false">Preview</button></div></div><textarea name="description" rows="7" required aria-label="Description Markdown"></textarea><div class="markdown-preview" role="tabpanel" hidden></div></div><p class="error" role="status"></p><div class="actions"><button type="button" data-cancel>Cancel</button><button type="submit">Save</button></div></form>'
+  dialog.innerHTML = '<span class="anchor-line" aria-hidden="true"></span><form><h1></h1><label>Name<input name="name" required></label><div class="markdown-field"><div class="markdown-head"><span class="markdown-label">Description</span><div class="markdown-modes" role="tablist"><button type="button" role="tab" data-mode="write" aria-selected="true">Write</button><button type="button" role="tab" data-mode="preview" aria-selected="false">Preview</button></div></div><textarea name="description" required aria-label="Description Markdown"></textarea><div class="markdown-preview" role="tabpanel" hidden></div></div><p class="error" role="status"></p><div class="actions"><button type="button" data-cancel>Cancel</button><button type="submit">Save</button></div></form>'
   document.body.append(dialog)
 
+  const line = dialog.querySelector<HTMLElement>('.anchor-line')!
   const form = dialog.querySelector('form')!
+  const title = form.querySelector('h1')!
   const name = form.elements.namedItem('name') as HTMLInputElement
   const description = form.elements.namedItem('description') as HTMLTextAreaElement
   const preview = form.querySelector<HTMLElement>('.markdown-preview')!
@@ -83,6 +138,11 @@ export function createProjectEditor(
   const cancel = form.querySelector<HTMLButtonElement>('[data-cancel]')!
   const submit = form.querySelector<HTMLButtonElement>('button[type="submit"]')!
   const error = form.querySelector<HTMLElement>('.error')!
+  let anchor: Element | undefined
+
+  window.addEventListener('resize', () => {
+    if (dialog.open && anchor !== undefined) placeEditor(dialog, anchor, line)
+  })
 
   let previewVersion = 0
   const showMode = async (mode: 'write' | 'preview') => {
@@ -121,11 +181,14 @@ export function createProjectEditor(
 
   return {
     open(profile: ProjectProfile) {
+      anchor = document.querySelector('[data-project-edit]')!
+      title.textContent = `Edit ${profile.name}`
       name.value = profile.name
       description.value = profile.description
       error.textContent = ''
       void showMode('write')
       dialog.showModal()
+      placeEditor(dialog, anchor, line)
       name.focus()
     },
   }
