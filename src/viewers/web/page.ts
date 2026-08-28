@@ -6,6 +6,7 @@ import { chromeCss } from './atoms/chrome.ts'
 import { kindGlyph, kindLabel } from './atoms/kind.ts'
 import { cssBlock, palettes } from './atoms/theme.ts'
 import { fpsCss } from './chrome/fps.ts'
+import { motionCss } from './chrome/motion.ts'
 import { flowRowCss } from './flow/row.ts'
 import { mapCss } from './iso/style.ts'
 import { tipCss } from './organisms/tip.ts'
@@ -34,8 +35,7 @@ const blueprintIcon = icon('<circle cx="12" cy="12" r="7"/><circle cx="12" cy="1
 const historyIcon = icon('<path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5M12 7v5l3 2"/>', 'revision-history')
 const revisionLoader = icon('<path d="M21 12a9 9 0 1 1-9-9"/>', 'revision-loader')
 const closeIcon = icon('<path d="M18 6 6 18M6 6l12 12"/>')
-const collapseIcon = icon('<path d="m11 17-5-5 5-5M18 17l-5-5 5-5"/>', 'collapse-icon')
-const expandIcon = icon('<path d="m13 17 5-5-5-5M6 17l5-5-5-5"/>', 'expand-icon')
+const hierarchyIcon = icon('<path d="m11 17-5-5 5-5M18 17l-5-5 5-5"/>', 'hierarchy-chevron')
 
 const legendKinds: C4Kind[][] = [
   ['actor', 'system'],
@@ -48,8 +48,11 @@ const style = `
     --backlog-mark-image: url("data:image/png;base64,${backlogMark}");
     --chrome-radius: 10px;
     --chrome-motion: 260ms;
+    --chrome-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
     --hierarchy-column: clamp(280px, 27vw, 360px);
     --details-column: clamp(360px, 32vw, 420px);
+    --hierarchy-inset: var(--hierarchy-column);
+    --details-inset: var(--details-column);
   }
   [data-theme="dark"] { ${cssBlock(palettes.dark)} }
   [data-theme="blueprint"] { ${cssBlock(palettes.blueprint)} }
@@ -61,19 +64,14 @@ const style = `
     min-width: 900px;
     overflow: hidden;
     background: transparent;
-    display: grid;
-    grid-template-rows: 52px minmax(0, 1fr);
-    grid-template-columns: var(--hierarchy-column) minmax(200px, 1fr) var(--details-column);
-    gap: 12px;
-    padding: 10px 12px 12px;
+    position: relative;
     font-family: 'SF Mono', ui-monospace, Menlo, monospace;
     font-size: 12px;
     line-height: 1.5;
     color: var(--ink);
-    transition: grid-template-columns var(--chrome-motion) ease;
   }
-  body.hierarchy-collapsed { --hierarchy-column: 44px; }
-  body.details-hidden { --details-column: 0px; }
+  body.hierarchy-collapsed { --hierarchy-inset: 44px; }
+  body.details-hidden { --details-inset: 0px; }
   body.hud-hidden { min-width: 0; display: block; padding: 0; }
   body.hud-hidden #header,
   body.hud-hidden #hierarchy,
@@ -96,8 +94,11 @@ const style = `
   }
   #header, #hierarchy, #details { background: color-mix(in srgb, var(--paper) 35%, transparent); }
   #header {
-    grid-column: 1 / -1;
-    grid-row: 1;
+    position: absolute;
+    top: 10px;
+    right: 12px;
+    left: 12px;
+    height: 52px;
     z-index: 20;
     display: flex;
     align-items: center;
@@ -130,24 +131,32 @@ const style = `
     position: fixed;
     z-index: 20;
     top: 74px;
-    right: calc(var(--details-column) + 24px);
+    right: calc(var(--details-inset) + 24px);
     width: 260px;
     padding: 14px 16px;
     background: color-mix(in srgb, var(--paper) 82%, transparent);
     line-height: 1.8;
   }
   #help .help-panel p { margin: 0; }
-  #hierarchy, #details { min-width: 0; min-height: 0; grid-row: 2; z-index: 5; }
-  #hierarchy { grid-column: 1; display: flex; flex-direction: column; overflow: hidden; }
+  #hierarchy, #details { position: absolute; top: 74px; bottom: 12px; min-width: 0; min-height: 0; z-index: 5; }
+  #hierarchy {
+    left: 12px;
+    width: var(--hierarchy-column);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    transform: translateX(0);
+    transition: transform var(--chrome-motion) var(--chrome-ease);
+  }
   #hierarchy-title { display: flex; align-items: center; min-height: 44px; padding: 0 8px 0 14px; border-bottom: 1px solid var(--hairline); }
-  #hierarchy-title .pane-label { flex: 1; white-space: nowrap; transition: opacity var(--chrome-motion) ease; }
+  #hierarchy-title .pane-label { flex: 1; white-space: nowrap; transition: opacity var(--chrome-motion) var(--chrome-ease); }
   #hierarchy-toggle { display: grid; flex: none; place-items: center; border: 1px solid var(--hairline); background: color-mix(in srgb, var(--paper) 35%, transparent); }
-  #hierarchy-toggle .expand-icon { display: none; }
-  body.hierarchy-collapsed #hierarchy-toggle .collapse-icon { display: none; }
-  body.hierarchy-collapsed #hierarchy-toggle .expand-icon { display: block; }
-  #hierarchy-content { flex: 1; min-height: 0; display: flex; flex-direction: column; opacity: 1; transition: opacity calc(var(--chrome-motion) * 0.6) ease; }
-  body.hierarchy-collapsed #hierarchy-title { padding-inline: 6px; border-bottom-color: transparent; }
-  body.hierarchy-collapsed #hierarchy-title .pane-label { width: 0; opacity: 0; overflow: hidden; }
+  #hierarchy-toggle .hierarchy-chevron { transition: transform var(--chrome-motion) var(--chrome-ease); }
+  #hierarchy-content { flex: 1; min-height: 0; display: flex; flex-direction: column; opacity: 1; transition: opacity calc(var(--chrome-motion) * 0.6) var(--chrome-ease); }
+  body.hierarchy-collapsed #hierarchy { transform: translateX(calc(-100% + 44px)); }
+  body.hierarchy-collapsed #hierarchy-toggle .hierarchy-chevron { transform: rotate(180deg); }
+  body.hierarchy-collapsed #hierarchy-title { border-bottom-color: transparent; }
+  body.hierarchy-collapsed #hierarchy-title .pane-label { opacity: 0; }
   body.hierarchy-collapsed #hierarchy-content { opacity: 0; pointer-events: none; }
   #flows { padding: 14px 0 10px; border-bottom: 1px solid var(--hairline); }
   #flows:empty { display: none; }
@@ -169,21 +178,21 @@ const style = `
     box-shadow: 0 0 20px color-mix(in srgb, var(--map-line) 7%, transparent), inset 0 0 18px color-mix(in srgb, var(--map-line) 3%, transparent);
   }
   #details {
-    grid-column: 3;
-    position: relative;
+    right: 12px;
+    width: var(--details-column);
     overflow: auto;
     padding: 22px 24px;
     opacity: 1;
     transform: translateX(0);
     visibility: visible;
-    transition: opacity var(--chrome-motion) ease, transform var(--chrome-motion) ease, visibility 0s linear 0s;
+    transition: opacity var(--chrome-motion) var(--chrome-ease), transform var(--chrome-motion) var(--chrome-ease), visibility 0s linear 0s;
   }
   body.details-hidden #details {
     opacity: 0;
-    transform: translateX(10px);
+    transform: translateX(calc(100% + 12px));
     visibility: hidden;
     pointer-events: none;
-    transition: opacity var(--chrome-motion) ease, transform var(--chrome-motion) ease, visibility 0s linear var(--chrome-motion);
+    transition: opacity var(--chrome-motion) var(--chrome-ease), transform var(--chrome-motion) var(--chrome-ease), visibility 0s linear var(--chrome-motion);
   }
   #details-close {
     position: absolute;
@@ -239,11 +248,12 @@ const style = `
   #zoom { display: grid; min-width: 54px; place-items: center; padding: 0 8px; border-right: 1px solid var(--hairline); }
   #hierarchy-toggle, #details-close, #zoom-in, #zoom-out { width: 32px; height: 32px; padding: 0; }
   #zoom-in, #zoom-out { justify-content: center; font-size: 12px; line-height: 1.2; }
+  .control-glyph { display: block; transform-origin: center; }
   body #work {
-    left: calc(var(--hierarchy-column) + 24px);
-    right: calc(var(--details-column) + 24px);
-    max-width: calc(100% - var(--hierarchy-column) - var(--details-column) - 48px);
-    transition: left var(--chrome-motion) ease, right var(--chrome-motion) ease;
+    left: calc(var(--hierarchy-inset) + 24px);
+    right: calc(var(--details-inset) + 24px);
+    max-width: calc(100% - var(--hierarchy-inset) - var(--details-inset) - 48px);
+    transition: left var(--chrome-motion) var(--chrome-ease), right var(--chrome-motion) var(--chrome-ease);
   }
   .row {
     display: flex;
@@ -288,9 +298,9 @@ const style = `
   .mark { flex: none; }
   .ghost { opacity: 0.5; }
   @media (prefers-reduced-motion: reduce) {
-    body, #hierarchy-content, #hierarchy-title .pane-label, #details, body #work { transition: none; }
+    #hierarchy, #hierarchy-toggle .hierarchy-chevron, #hierarchy-content, #hierarchy-title .pane-label, #details, body #work { transition: none; }
   }
-${chromeCss}${revisionCss}${sourceCss}${backlogMarkCss}${workBadgeCss}${flowRowCss}${mapCss}${pinsCss}${workCss}${tipCss}${projectEditorCss}${fpsCss}`
+${chromeCss}${motionCss}${revisionCss}${sourceCss}${backlogMarkCss}${workBadgeCss}${flowRowCss}${mapCss}${pinsCss}${workCss}${tipCss}${projectEditorCss}${fpsCss}`
 
 function legend(): string {
   return legendKinds.map(line => {
@@ -306,9 +316,9 @@ export function renderPage(payload: WebPayload): string {
   return '<!doctype html><html><head><meta charset="utf-8"><title>groma.md</title>'
     + `<style>${style}</style></head><body>`
     + `<header id="header">${lockup}<span id="stats"></span>${revisionControl(payload, { history: historyIcon, loader: revisionLoader })}`
-    + `<div class="header-actions"><div id="map-controls" class="controls" aria-label="Map controls"><button id="fit" aria-label="Fit map">${fitIcon}<span>Fit</span></button><button id="zoom-out" aria-label="Zoom out">−</button><span id="zoom" aria-live="polite"></span><button id="zoom-in" aria-label="Zoom in">+</button></div><details id="help"><summary>Help</summary><div class="help-panel"><p>Drag or scroll to pan<br>Pinch, + or − to zoom<br>0 or Fit shows the whole map<br>F1 toggles map only<br>F2 toggles layers<br>In layers: drag orbits; Shift-drag pans<br>F3 toggles FPS<br>Escape clears selection</p></div></details><button id="theme" data-next-theme="dark"><span class="theme-icon dark">${moonIcon}</span><span class="theme-icon blueprint">${blueprintIcon}</span><span class="theme-icon light">${sunIcon}</span><span class="label">Dark</span></button></div>`
+    + `<div class="header-actions"><div id="map-controls" class="controls" aria-label="Map controls"><button id="fit" aria-label="Fit map">${fitIcon}<span>Fit</span></button><button id="zoom-out" aria-label="Zoom out"><span class="control-glyph">−</span></button><span id="zoom" aria-live="polite"></span><button id="zoom-in" aria-label="Zoom in"><span class="control-glyph">+</span></button></div><details id="help"><summary>Help</summary><div class="help-panel"><p>Drag or scroll to pan<br>Pinch, + or − to zoom<br>0 or Fit shows the whole map<br>F1 toggles map only<br>F2 toggles layers<br>In layers: drag orbits; Shift-drag pans<br>F3 toggles FPS<br>Escape clears selection</p></div></details><button id="theme" data-next-theme="dark"><span class="theme-icon dark">${moonIcon}</span><span class="theme-icon blueprint">${blueprintIcon}</span><span class="theme-icon light">${sunIcon}</span><span class="label">Dark</span></button></div>`
     + '</header>'
-    + `<nav id="hierarchy" aria-label="Hierarchy"><div id="hierarchy-title"><span class="pane-label">Hierarchy</span><button id="hierarchy-toggle" type="button" aria-controls="hierarchy-content">${collapseIcon}${expandIcon}</button></div><div id="hierarchy-content"><div id="flows"></div><div id="tree"></div><div id="legend">${legend()}</div></div></nav>`
+    + `<nav id="hierarchy" aria-label="Hierarchy"><div id="hierarchy-title"><span class="pane-label">Hierarchy</span><button id="hierarchy-toggle" type="button" aria-controls="hierarchy-content">${hierarchyIcon}</button></div><div id="hierarchy-content"><div id="flows"></div><div id="tree"></div><div id="legend">${legend()}</div></div></nav>`
     + '<div id="map"></div>'
     + `<aside id="details" aria-label="Details"><button id="details-close" aria-label="Close details">${closeIcon}</button><p class="meta"></p><h1></h1><nav class="controls tabs"></nav><div class="body"></div></aside>`
     + `<script type="application/json" id="world">${json}</script>`
