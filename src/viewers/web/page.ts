@@ -187,7 +187,7 @@ const style = `
     opacity: 1;
     transform: translateX(0);
     visibility: visible;
-    transition: opacity var(--chrome-motion) var(--chrome-ease), transform var(--chrome-motion) var(--chrome-ease), visibility 0s linear 0s;
+    transition: opacity var(--chrome-motion) var(--chrome-ease), transform var(--chrome-motion) var(--chrome-ease), width var(--chrome-motion) var(--chrome-ease), visibility 0s linear 0s;
   }
   body.details-hidden #details {
     opacity: 0;
