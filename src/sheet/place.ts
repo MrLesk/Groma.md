@@ -1,5 +1,6 @@
 import { compareSemanticElements } from '../element-order.ts'
 import type { AnnotatedElement, AnnotatedRelationship, ArchitectureGraph } from '../types.ts'
+import { composePlacement } from './compose.ts'
 import { ISLAND_GAP, NESTED_CONTENT_PAD } from './forces.ts'
 import { MARGIN, PAD, shadeOf, translate, unionRects } from './grid.ts'
 import {
@@ -254,7 +255,7 @@ export function placeWorld(world: ArchitectureGraph): Placement {
   const ranks = flowRanks(all.map(island => island.key), entries, edges)
   const rankOf = (island: Node): number => ranks.get(island.key) ?? Number.MAX_SAFE_INTEGER
   islands.push(...systemIslands.sort((a, b) => rankOf(a) - rankOf(b)), ...externalIslands)
-  return collect(islands, placeRow(islands, world.relationships))
+  return composePlacement(collect(islands, placeRow(islands, world.relationships)), world.relationships)
 }
 
 /**

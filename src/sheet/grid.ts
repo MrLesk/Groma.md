@@ -1,8 +1,6 @@
 import { CORRIDOR, GAP } from './forces.ts'
 import type { CellRect } from './types.ts'
 
-/** Lanes per cell: routes travel at 0, ¼, ½ and ¾ of a cell. */
-export const LANES = 4
 /** Base cells inside a packed parent; surface labels use the same compact edge inset. */
 export const PAD = 1
 /**
