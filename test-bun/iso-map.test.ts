@@ -70,20 +70,7 @@ function overlaps(a: Bounds, b: Bounds): boolean {
   return a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height
 }
 
-test.concurrent('the lattice projects to integer screen units and depth grows down the screen', async () => {
-  const scene = await fixtureScene(viewerFixtureRoot)
-  // Curved outlines are sampled arcs, so neither they nor the route ends that meet one take part in the integer check.
-  const boxes = scene.buildings.filter(({ building }) => !curved(building.shape))
-  const round = new Set(scene.buildings
-    .filter(({ building }) => curved(building.shape))
-    .map(({ building }) => building.representationId))
-  const routes = scene.routes.map(drawn => ({
-    ...drawn,
-    points: drawn.points.slice(round.has(drawn.route.source) ? 1 : 0, round.has(drawn.route.target) ? -1 : undefined),
-  }))
-  for (const point of everyPoint({ ...scene, buildings: boxes, routes })) {
-    assert.equal(Number.isInteger(point.x) && Number.isInteger(point.y), true)
-  }
+test.concurrent('ground depth grows down the screen and height rises', () => {
   assert.ok(project(3, 2, 0).y > project(2, 2, 0).y && project(2, 3, 0).y > project(2, 2, 0).y)
   assert.equal(project(1, 0, 1).y, project(1, 0, 0).y - HEIGHT_UNIT)
 })

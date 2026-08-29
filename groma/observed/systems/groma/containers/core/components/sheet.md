@@ -10,6 +10,11 @@ code:
     dependencies: 4
     dependents: 3
   - scanner: typescript
+    file: src/sheet/compose.ts
+    symbol: composePlacement
+    dependencies: 3
+    dependents: 1
+  - scanner: typescript
     file: src/sheet/forces.ts
     dependencies: 0
     dependents: 4
@@ -42,10 +47,10 @@ code:
 
 # Sheet
 
-Composes the viewers' shared blueprint sheet from the semantic architecture graph: flat architecture surfaces, group zones, one lattice route per authored relationship, and component buildings compressed to one through five visible floors by their project-relative source-file count. Every unique file belongs to one group. Each group takes the maximum member LOC, dependent, and dependency measurements, then floors are ordered largest-first and nested so upper floors never overhang lower ones. Floors remain centred on one tower axis, while packing reserves the complete envelope. Semantic identity orders siblings, and coordinates from another layout are never consulted.
+Composes the viewers' shared blueprint sheet from the semantic architecture graph. Leaf relationships form a weighted container flow: actor-facing entries remain west, mediator containers bridge the flow, and its strongest internal sink becomes the east core. Complete slabs, zones, and buildings move together, with extra ground opened only where routes need it. The sheet also holds flat architecture surfaces, group zones, one route per authored relationship, and component buildings compressed to one through five visible floors by their project-relative source-file count. Every unique file belongs to one group. Each group takes the maximum member LOC, dependent, and dependency measurements, then floors are ordered largest-first and nested so upper floors never overhang lower ones. Semantic identity orders siblings, and coordinates from another layout are never consulted.
 
 ## Relationships
 
 | Target | Description | Technology |
 | --- | --- | --- |
-| [Sheet router](sheet-router.md) | Routes every relationship on the quarter-cell lattice | In-process data |
+| [Sheet router](sheet-router.md) | Routes every relationship in one obstacle-aware orthogonal pass | In-process data |

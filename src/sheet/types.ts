@@ -1,6 +1,6 @@
 import type { AnnotatedRelationship, C4Kind, Origin } from '../types.ts'
 
-/** A rectangle of whole grid cells: `gx`, `gy` is the north corner, `w` runs along gx, `d` along gy. */
+/** A rectangle in map cells: `gx`, `gy` is the north corner, `w` runs along gx, `d` along gy. */
 export interface CellRect {
   gx: number
   gy: number
@@ -72,19 +72,19 @@ export interface Building extends SheetItem {
   lines: string[]
 }
 
-/** A lattice point on the ground plane; every route runs there. */
+/** A point on the shared ground plane. */
 export interface RoutePoint {
   gx: number
   gy: number
 }
 
-/** One authored relationship routed on the quarter-cell lattice. */
+/** One authored relationship routed as an orthogonal ground path. */
 export type Route = Pick<AnnotatedRelationship, 'id' | 'source' | 'target' | 'description' | 'origin'> & {
   points: RoutePoint[]
 }
 
 export interface SheetScene {
-  /** The lattice domain in whole cells; islands sit at least MARGIN cells inside it. */
+  /** The map domain in cells; islands sit at least MARGIN cells inside it. */
   sheet: CellRect
   islands: Island[]
   zones: Zone[]

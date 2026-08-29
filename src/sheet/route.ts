@@ -1,497 +1,109 @@
-import type { AnnotatedRelationship } from '../types.ts'
+import { AvoidLib } from 'libavoid-js'
+
 import {
-  BEND,
-  CLEARANCE_PUSH,
-  CLEARANCE_REACH,
-  FINAL_BEND,
-  OFF_CENTRE,
-  REUSE,
-  RING,
-  ROUTE_PUSH,
-  ROUTE_REACH,
-  SIDE_PENALTY,
-} from './forces.ts'
-import { LANES, ROOF_SHADOW } from './grid.ts'
-import { BACK, INWARD, OUTWARD, SIDES, facing, layoutPorts, portPairs, ports } from './port-layout.ts'
-import type { LaneRect, PortPair, PortSeed, Side } from './port-layout.ts'
-import type { CellRect, Route, RoutePoint } from './types.ts'
+  ROUTE_CLEARANCE,
+  ROUTE_UNIT,
+  assignPorts,
+  attachWalls,
+  crossingRouteIdsFor,
+  routingAnchor,
+  visibleObstacle,
+  type Endpoint,
+  type FlatRoute,
+  type RouteRequest,
+} from './route-geometry.ts'
+import { refineRoutes } from './route-lanes.ts'
+import { routeSpacingIndex } from './route-spacing.ts'
+import type { Route } from './types.ts'
 
-/** One lattice step, the unit the other costs in forces.ts are measured against. */
-const STEP = 1
-/** Lanes a route runs straight out of its port and straight into its goal, so it leaves and meets a side square on. */
-const APPROACH = 2
-/** Anything a route may start or end on, with the slab and island it stands in. */
-export interface Endpoint {
-  key: string
-  kind: 'building' | 'slab' | 'island'
-  rect: CellRect
-  within: string[]
-  /** Buildings: the roof's height above the ground plane, for departures and arrivals through a back side. */
-  roof?: number
-  /** Round actors: ports on each side use an exact centred visual layout before their route bodies repel. */
-  centrePorts?: boolean
-}
-export type RouteRequest = Pick<AnnotatedRelationship, 'id' | 'source' | 'target' | 'description' | 'origin'>
+export type { Endpoint, RouteRequest } from './route-geometry.ts'
 
-interface Solved {
-  nodes: number[]
-  port: number
-  goalPort: number
+function enumNumber(value: unknown): number {
+  if (typeof value === 'number') return value
+  if (typeof value === 'object' && value !== null && 'value' in value) {
+    return Number((value as { value: unknown }).value)
+  }
+  throw new Error('Libavoid enum value is unavailable')
 }
 
-class NoRouteError extends Error {}
-/** Directions a route may step: +x, +y, −x, −y. */
-const DX = [1, 0, -1, 0]
-const DY = [0, 1, 0, -1]
+await AvoidLib.load()
+const Avoid = AvoidLib.getInstance()
 
-type Open = { f: number; g: number; state: number }
-/** Cheapest estimate first, then the deeper path, then the lower state: a total order, so routing is deterministic. */
-const before = (a: Open, b: Open): boolean =>
-  a.f !== b.f ? a.f < b.f : a.g !== b.g ? a.g > b.g : a.state < b.state
-class Heap {
-  private readonly items: Open[] = []
-  get size(): number {
-    return this.items.length
-  }
-  push(item: Open): void {
-    const items = this.items
-    items.push(item)
-    let index = items.length - 1
-    while (index > 0) {
-      const parent = (index - 1) >> 2
-      if (!before(items[index]!, items[parent]!)) break
-      const swap = items[parent]!
-      items[parent] = items[index]!
-      items[index] = swap
-      index = parent
-    }
-  }
-  pop(): Open {
-    const items = this.items
-    const top = items[0]!
-    const last = items.pop()!
-    if (items.length > 0) {
-      items[0] = last
-      let index = 0
-      for (;;) {
-        const first = 4 * index + 1
-        let smallest = index
-        for (let child = first; child < Math.min(first + 4, items.length); child += 1) {
-          if (before(items[child]!, items[smallest]!)) smallest = child
-        }
-        if (smallest === index) break
-        const swap = items[smallest]!
-        items[smallest] = items[index]!
-        items[index] = swap
-        index = smallest
-      }
-    }
-    return top
-  }
+interface RoutedPolyline {
+  size(): number
+  ps: { get(index: number): { x: number; y: number } }
 }
-/** Routes every relationship on the quarter-cell lattice. Port layout fixes each end; A* shapes the route body. */
+
+/** Routes every authored relationship once around the complete visible building silhouettes. */
 export function routeAll(
-  sheet: CellRect,
   endpoints: ReadonlyMap<string, Endpoint>,
   requests: readonly RouteRequest[],
 ): Route[] {
-  const width = sheet.w * LANES + 1
-  const height = sheet.d * LANES + 1
-  const nodeCount = width * height
-  const stateCount = nodeCount * 4
-  const lanes = (rect: CellRect): LaneRect => ({
-    x0: (rect.gx - sheet.gx) * LANES,
-    y0: (rect.gy - sheet.gy) * LANES,
-    x1: (rect.gx + rect.w - sheet.gx) * LANES,
-    y1: (rect.gy + rect.d - sheet.gy) * LANES,
+  const router = new Avoid.Router(enumNumber(Avoid.RouterFlag.OrthogonalRouting))
+  const parameter = (name: keyof typeof Avoid.RoutingParameter, value: number) => {
+    router.setRoutingParameter(enumNumber(Avoid.RoutingParameter[name]), value)
+  }
+  parameter('segmentPenalty', 10)
+  parameter('crossingPenalty', 700)
+  parameter('fixedSharedPathPenalty', 300)
+  parameter('portDirectionPenalty', 100)
+  parameter('shapeBufferDistance', 0)
+  parameter('idealNudgingDistance', ROUTE_UNIT * 0.75)
+  parameter('reverseDirectionPenalty', 2_000)
+  for (const name of [
+    'penaliseOrthogonalSharedPathsAtConnEnds',
+    'nudgeOrthogonalTouchingColinearSegments',
+    'performUnifyingNudgingPreprocessingStep',
+    'nudgeSharedPathsWithCommonEndPoint',
+  ] as const) router.setRoutingOption(enumNumber(Avoid.RoutingOption[name]), true)
+
+  const shapeReferences: unknown[] = []
+  for (const endpoint of endpoints.values()) {
+    if (endpoint.kind !== 'building') continue
+    const points = visibleObstacle(endpoint, ROUTE_CLEARANCE)
+    const polygon = new Avoid.Polygon(points.length)
+    for (const [index, point] of points.entries()) {
+      polygon.setPoint(index, new Avoid.Point(point.x, point.y))
+    }
+    shapeReferences.push(new Avoid.ShapeRef(router, polygon))
+  }
+
+  const ports = assignPorts(endpoints, requests)
+  const connectors = requests.map(request => {
+    const pair = ports.get(request.id)!
+    const sourcePoint = routingAnchor(pair.source, request.source, endpoints)
+    const targetPoint = routingAnchor(pair.target, request.target, endpoints)
+    const connector = new Avoid.ConnRef(
+      router,
+      new Avoid.ConnEnd(new Avoid.Point(sourcePoint.x, sourcePoint.y)),
+      new Avoid.ConnEnd(new Avoid.Point(targetPoint.x, targetPoint.y)),
+    )
+    connector.setRoutingType(enumNumber(Avoid.ConnType.ConnType_Orthogonal))
+    connector.setHateCrossings(true)
+    return { request, pair, connector }
   })
-  const nodeOf = (x: number, y: number): number => y * width + x
-  const nodeX = new Uint32Array(nodeCount)
-  const nodeY = new Uint32Array(nodeCount)
-  const neighbours = new Uint32Array(nodeCount * 4).fill(nodeCount)
-  for (let node = 0; node < nodeCount; node += 1) {
-    const x = node % width
-    const y = Math.floor(node / width)
-    nodeX[node] = x
-    nodeY[node] = y
-    if (x + 1 < width) neighbours[node * 4] = node + 1
-    if (y + 1 < height) neighbours[node * 4 + 1] = node + width
-    if (x > 0) neighbours[node * 4 + 2] = node - 1
-    if (y > 0) neighbours[node * 4 + 3] = node - width
-  }
-  const blocked = new Uint8Array(nodeCount)
-  /** Goal nodes hold the arriving direction plus one; zero is no goal. */
-  const goal = new Uint8Array(nodeCount)
-  /** Each goal's extra cost: its port's distance from the middle of its side in port steps per cell, and the penalty of a side not facing the source. */
-  const goalCost = new Float32Array(nodeCount)
-  const used = new Uint8Array(nodeCount * 2)
-  const usedPorts = new Set<number>()
-  const g = new Float64Array(stateCount)
-  const parent = new Int32Array(stateCount)
-  /** Start state whose departure approach led to each current best state. */
-  const root = new Int32Array(stateCount)
-  const closed = new Uint8Array(stateCount)
-  const sweep = new Int32Array(nodeCount)
-  /** Lanes from each node out to the nearest source, `reach` at the furthest; -1 past that, where nothing is close enough to matter. */
-  const measure = (room: Int32Array, sources: Iterable<number>, limit: number): void => {
-    room.fill(-1)
-    let tail = 0
-    for (const node of sources) {
-      if (room[node] !== -1) continue
-      room[node] = 0
-      sweep[tail] = node
-      tail += 1
-    }
-    for (let head = 0; head < tail; head += 1) {
-      const node = sweep[head]!
-      if (room[node]! >= limit) continue
-      for (let direction = 0; direction < 4; direction += 1) {
-        const next = neighbours[node * 4 + direction]!
-        if (next === nodeCount) continue
-        if (room[next] !== -1) continue
-        room[next] = room[node]! + 1
-        sweep[tail] = next
-        tail += 1
-      }
-    }
-  }
-  /** What a lane costs for lying that close to whatever the room was measured from. */
-  const crowd = (room: Int32Array, node: number, reach: number, weight: number): number =>
-    (room[node] === -1 ? 0 : weight * (reach - room[node]!))
-  const offClearance = (node: number): number => crowd(clearance, node, CLEARANCE_REACH, CLEARANCE_PUSH)
-  const offRoutes = (node: number): number => crowd(nearRoute, node, ROUTE_REACH, ROUTE_PUSH)
+  router.processTransaction()
 
-  /**
-   * What a route keeps its distance from: the outline of every building, which
-   * it would otherwise graze, and of every surface, whose border it would
-   * otherwise trace and be hard to tell from. The outline is enough for a
-   * building because no route may cross its inside.
-   */
-  const clearanceLanes = function* (own: ReadonlySet<string>): Generator<number> {
-    for (const endpoint of endpoints.values()) {
-      if (own.has(endpoint.key)) continue
-      const rect = lanes(endpoint.rect)
-      for (let x = rect.x0; x <= rect.x1; x += 1) { yield nodeOf(x, rect.y0); yield nodeOf(x, rect.y1) }
-      for (let y = rect.y0; y <= rect.y1; y += 1) { yield nodeOf(rect.x0, y); yield nodeOf(rect.x1, y) }
-    }
-  }
-  const clearance = new Int32Array(nodeCount)
-  const nearGoal = new Int32Array(nodeCount)
-  /** The room left around the routes drawn so far, so they push each other apart instead of squeezing into neighbouring lanes. */
-  const nearRoute = new Int32Array(nodeCount).fill(-1)
-
-  const paint = (rect: LaneRect, back: number, front: number): void => {
-    const x0 = Math.max(0, rect.x0 - back)
-    const y0 = Math.max(0, rect.y0 - back)
-    const x1 = Math.min(width - 1, rect.x1 + front)
-    const y1 = Math.min(height - 1, rect.y1 + front)
-    for (let y = y0; y <= y1; y += 1) blocked.fill(1, nodeOf(x0, y), nodeOf(x1, y) + 1)
-  }
-
-  const edgeOf = (a: number, b: number): number => 2 * Math.min(a, b) + (Math.abs(a - b) === 1 ? 0 : 1)
-
-  /**
-   * Lanes a ground route starts behind a back side so that its first point
-   * lands, on screen, on the middle of the roof's back edge: the roof's
-   * shadow for its height above the ground plane, rounded down so the start
-   * stays hidden under the roof. Moving one lane along both axes is one lane
-   * up the screen.
-   */
-  const shadow = (roof: number): number => Math.floor(roof * ROOF_SHADOW * LANES)
-
-  /** The route's points: the lattice nodes with the collinear ones dropped. */
-  const lift = (nodes: readonly number[]): RoutePoint[] => {
-    const points = nodes.map(node => {
-      return { gx: sheet.gx + nodeX[node]! / LANES, gy: sheet.gy + nodeY[node]! / LANES }
+  const raw: FlatRoute[] = connectors.map(({ request, pair, connector }) => {
+    const polyline = connector.displayRoute() as unknown as RoutedPolyline
+    const points = Array.from({ length: polyline.size() }, (_, index) => {
+      const point = polyline.ps.get(index)
+      return { x: point.x, y: point.y }
     })
-    return points.filter((point, index) => {
-      if (index === 0 || index === points.length - 1) return true
-      const previous = points[index - 1]!
-      const next = points[index + 1]!
-      return Math.sign(point.gx - previous.gx) !== Math.sign(next.gx - point.gx)
-        || Math.sign(point.gy - previous.gy) !== Math.sign(next.gy - point.gy)
-    })
-  }
-
-  /** The nodes from `from` stepping `lanes` times in `direction`, or undefined when one is off the lattice, blocked, or on a used lane unless `ignoreUsed`. */
-  const run = (from: number, direction: number, lanes: number, ignoreUsed = false): number[] | undefined => {
-    const nodes = [from]
-    let x = nodeX[from]!
-    let y = nodeY[from]!
-    for (let step = 0; step < lanes; step += 1) {
-      x += DX[direction]!
-      y += DY[direction]!
-      if (x < 0 || y < 0 || x >= width || y >= height) return undefined
-      const next = nodeOf(x, y)
-      if (blocked[next] || (!ignoreUsed && used[edgeOf(nodes[nodes.length - 1]!, next)])) return undefined
-      nodes.push(next)
-    }
-    return nodes
-  }
-
-  /** The lattice node where a route through `side` of `rect` starts or ends: the port, or the node behind it where the roof's shadow ends. */
-  const anchor = (endpoint: Endpoint, side: Side, port: number): number | undefined => {
-    const behind = endpoint.kind === 'building' && BACK.includes(side) ? shadow(endpoint.roof ?? 0) : 0
-    const x = nodeX[port]! - behind
-    const y = nodeY[port]! - behind
-    if (x < 0 || y < 0) return undefined
-    const node = nodeOf(x, y)
-    return behind > 0 && blocked[node] ? undefined : node
-  }
-
-  const solve = (request: RouteRequest, fixed?: PortPair): Solved => {
-    const source = endpoints.get(request.source)
-    const target = endpoints.get(request.target)
-    if (!source || !target) {
-      throw new Error(`Relationship ${request.id} names an element the sheet did not place`)
-    }
-    const own = new Set([source.key, target.key])
-    const free = new Set([...source.within, ...target.within])
-    measure(clearance, clearanceLanes(own), CLEARANCE_REACH)
-    blocked.fill(0)
-    goal.fill(0)
-    goalCost.fill(0)
-    for (const endpoint of endpoints.values()) {
-      const rect = lanes(endpoint.rect)
-      if (endpoint.kind === 'building') {
-        const ring = own.has(endpoint.key) ? 0 : RING
-        paint(rect, ring, ring)
-      } else if (endpoint.kind === 'slab') {
-        if (own.has(endpoint.key)) {
-          if (!free.has(endpoint.key)) paint(rect, 0, 0)
-        } else if (!free.has(endpoint.key)) {
-          paint(rect, RING, RING)
-        }
-      } else if (own.has(endpoint.key) && !free.has(endpoint.key)) {
-        paint(rect, 0, 0)
-      }
-    }
-    const sourceRect = lanes(source.rect)
-    const targetRect = lanes(target.rect)
-    const targetFacing = facing(targetRect, sourceRect)
-    /** The port each goal stands for and the straight run from the goal into its anchor. */
-    const goals = new Map<number, { port: number; suffix: number[] }>()
-    for (const side of SIDES) {
-      for (const { node, offset } of ports(targetRect, side, width, usedPorts)) {
-        if (fixed?.target !== undefined && fixed.target !== node) continue
-        const end = anchor(target, side, node)
-        const approach = end === undefined ? undefined : run(end, OUTWARD[side], APPROACH)
-        if (approach === undefined) continue
-        const last = approach[approach.length - 1]!
-        goal[last] = INWARD[side] + 1
-        goalCost[last] = offset * OFF_CENTRE + (targetFacing.has(side) ? 0 : SIDE_PENALTY)
-        goals.set(last, { port: node, suffix: approach.slice(0, -1).reverse() })
-      }
-    }
-    /** A* reaches a goal once; only its fixed suffix may enter the target approach. */
-    for (const { suffix } of goals.values()) for (const node of suffix) blocked[node] = 1
-    measure(nearGoal, goals.keys(), LANES)
-    /** Goals lie up to this far outside the target, so the distance to its footprint overestimates by as much. */
-    const reach = APPROACH + (target.kind === 'building' ? shadow(target.roof ?? 0) : 0)
-    const exactGoal = goals.size === 1 ? goals.keys().next().value as number : undefined
-    const h = (node: number): number => {
-      const x = nodeX[node]!
-      const y = nodeY[node]!
-      if (exactGoal !== undefined) {
-        const goalX = nodeX[exactGoal]!
-        const goalY = nodeY[exactGoal]!
-        return Math.abs(goalX - x) + Math.abs(goalY - y)
-      }
-      const away = Math.max(targetRect.x0 - x, 0, x - targetRect.x1) + Math.max(targetRect.y0 - y, 0, y - targetRect.y1)
-      return Math.max(0, away - reach)
-    }
-    g.fill(Infinity)
-    parent.fill(-1)
-    root.fill(-1)
-    closed.fill(0)
-    const heap = new Heap()
-    /** The port each start state leaves through and the straight run from its anchor to the start. */
-    const starts = new Map<number, { port: number; prefix: number[]; guard: number }>()
-    const push = (state: number, cost: number, from: number, departure: number): void => {
-      if (cost >= g[state]!) return
-      g[state] = cost
-      parent[state] = from
-      root[state] = departure
-      heap.push({ f: cost + h(state >> 2), g: cost, state })
-    }
-    const sourceFacing = facing(sourceRect, targetRect)
-    const gap: Record<Side, number> = {
-      'x-': sourceRect.x0 - targetRect.x1,
-      'x+': targetRect.x0 - sourceRect.x1,
-      'y-': sourceRect.y0 - targetRect.y1,
-      'y+': targetRect.y0 - sourceRect.y1,
-    }
-    const primaryGap = Math.max(...[...sourceFacing].map(side => gap[side]))
-    const primaryFacing = new Set([...sourceFacing].filter(side => gap[side] === primaryGap))
-    const foreignBuildings = [...endpoints.values()]
-      .filter(endpoint => endpoint.kind === 'building' && !own.has(endpoint.key))
-      .map(endpoint => lanes(endpoint.rect))
-    const departures: {
-      side: Side
-      direction: number
-      from: number
-      port: number
-      offset: number
-      approach: number[]
-      corridor: number[] | undefined
-    }[] = []
-    for (const side of SIDES) {
-      const direction = OUTWARD[side]
-      for (const { node, offset } of ports(sourceRect, side, width, usedPorts)) {
-        if (fixed?.source !== undefined && fixed.source !== node) continue
-        const from = anchor(source, side, node)
-        if (from === undefined) continue
-        const approach = run(from, direction, APPROACH)
-        if (approach === undefined) continue
-        const corridor = run(from, direction, LANES, true)
-        departures.push({ side, direction, from, port: node, offset, approach, corridor })
-      }
-    }
-    const clear = ({ corridor }: typeof departures[number]): boolean => corridor?.every(node => {
-      const x = nodeX[node]!
-      const y = nodeY[node]!
-      return foreignBuildings.every(rect =>
-        Math.max(rect.x0 - x, 0, x - rect.x1) + Math.max(rect.y0 - y, 0, y - rect.y1) >= CLEARANCE_REACH)
-    }) === true
-    const clearPrimary = departures.some(departure => primaryFacing.has(departure.side) && clear(departure))
-    for (const departure of departures) {
-      const out = clearPrimary
-        ? departure.approach
-        : (clear(departure) ? run(departure.from, departure.direction, LANES) : undefined)
-      if (out === undefined) continue
-      const start = out[out.length - 1]!
-      const sideCost = clearPrimary && !sourceFacing.has(departure.side) ? SIDE_PENALTY : 0
-      const cost = sideCost + departure.offset * OFF_CENTRE + (out.length - 1) * STEP
-      const state = start * 4 + departure.direction
-      push(state, cost, -1, state)
-      starts.set(state, { port: departure.port, prefix: out.slice(0, -1), guard: departure.approach.at(-1)! })
-    }
-    /** A route body may never enter any fixed departure from the side or retrace it. */
-    for (const { prefix } of starts.values()) for (const node of prefix) blocked[node] = 1
-    while (heap.size > 0) {
-      const { state } = heap.pop()
-      if (closed[state]) continue
-      closed[state] = 1
-      const node = state >> 2
-      const direction = state & 3
-      if (goal[node] === direction + 1) {
-        const path: number[] = []
-        let start = state
-        for (let current = state; current !== -1; current = parent[current]!) {
-          path.push(current >> 2)
-          start = current
-        }
-        const departure = starts.get(start)!
-        const arrival = goals.get(node)!
-        return {
-          nodes: [...departure.prefix, ...path.reverse(), ...arrival.suffix],
-          port: departure.port,
-          goalPort: arrival.port,
-        }
-      }
-      const x = nodeX[node]!
-      const y = nodeY[node]!
-      const departure = root[state]!
-      const departureNode = starts.get(departure)!.guard
-      const departureX = nodeX[departureNode]!
-      const departureY = nodeY[departureNode]!
-      const firstDirection = departure & 3
-      const departureDistance = Math.max(Math.abs(x - departureX), Math.abs(y - departureY))
-      for (let next = 0; next < 4; next += 1) {
-        if (next === (direction + 2) % 4) continue
-        const neighbour = neighbours[node * 4 + next]!
-        if (neighbour === nodeCount) continue
-        const nx = nodeX[neighbour]!
-        const ny = nodeY[neighbour]!
-        const behind = firstDirection === 0 ? nx <= departureX : firstDirection === 1 ? ny <= departureY
-          : firstDirection === 2 ? nx >= departureX : ny >= departureY
-        const across = firstDirection % 2 === 0 ? Math.abs(ny - departureY) : Math.abs(nx - departureX)
-        const reversesDeparture = next === (firstDirection + 2) % 4
-        if (reversesDeparture && behind && across <= LANES) continue
-        const nextDepartureDistance = Math.max(Math.abs(nx - departureX), Math.abs(ny - departureY))
-        if (departureDistance > LANES && nextDepartureDistance <= LANES) continue
-        if (blocked[neighbour]) continue
-        const edge = edgeOf(node, neighbour)
-        const turn = next === direction ? 0 : nearGoal[node] !== -1 && nearGoal[node]! < LANES ? FINAL_BEND : BEND
-        const cost = g[state]! + STEP + turn + REUSE * used[edge]!
-          + offClearance(neighbour) + offRoutes(neighbour)
-          + (goal[neighbour] ? goalCost[neighbour]! : 0)
-        push(neighbour * 4 + next, cost, state, departure)
-      }
-    }
-    throw new NoRouteError(`No route for ${request.id} (${request.source} → ${request.target})`)
-  }
-
-  const remember = (nodes: readonly number[], drawn: number[]): void => {
-    for (let index = 1; index < nodes.length; index += 1) {
-      const edge = edgeOf(nodes[index - 1]!, nodes[index]!)
-      used[edge] = Math.min(255, used[edge]! + 1)
-    }
-    drawn.push(...nodes)
-    measure(nearRoute, drawn, ROUTE_REACH)
-  }
-
-  /** First preserve obstacle- and route-aware side choices, then lay out round ports on those sides. */
-  const plannedNodes: number[] = []
-  const seeds = requests.map(request => {
-    const { nodes, port, goalPort } = solve(request)
-    const source = endpoints.get(request.source)!
-    const target = endpoints.get(request.target)!
-    const aligned = Math.abs(source.rect.gx + source.rect.w / 2 - target.rect.gx - target.rect.w / 2) <= 0.5
-      || Math.abs(source.rect.gy + source.rect.d / 2 - target.rect.gy - target.rect.d / 2) <= 0.5
-    const direct = lift(nodes).length === 2 && aligned
-    usedPorts.add(port)
-    usedPorts.add(goalPort)
-    remember(nodes, plannedNodes)
-    return {
-      source: {
-        key: source.key,
-        rect: lanes(source.rect),
-        node: port,
-        policy: source.centrePorts === true ? 'centre-balanced' as const : 'baseline' as const,
-      },
-      target: {
-        key: target.key,
-        rect: lanes(target.rect),
-        node: goalPort,
-        policy: target.centrePorts === true ? 'centre-balanced' as const
-          : direct ? 'baseline' as const : 'prefer-centre' as const,
-      },
-    }
+    if (points.length < 2) throw new Error(`Libavoid could not route ${request.id}`)
+    return { ...request, points: attachWalls(points, pair) }
   })
-  const laidOut = layoutPorts(seeds, width)
-  usedPorts.clear()
-  used.fill(0)
-  nearRoute.fill(-1)
-
-  /** Tries concrete port pairs in layout order; route cost never chooses between ports. */
-  const solvePlanned = (request: RouteRequest, pair: PortPair, seed: PortSeed): Solved => {
-    let failure: NoRouteError | undefined
-    for (const fixed of portPairs(seed, pair, width)) {
-      try {
-        return solve(request, fixed)
-      } catch (error) {
-        if (!(error instanceof NoRouteError)) throw error
-        failure = error
-      }
-    }
-    throw failure ?? new NoRouteError(`No planned port pair for ${request.id}`)
+  const routes = refineRoutes(endpoints, raw)
+  const crossing = crossingRouteIdsFor(endpoints)(routes)
+  const routeIds = new Set(routes.map(route => route.id))
+  const [spacing] = routeSpacingIndex(routes, routeIds).measure(routes, [ROUTE_UNIT * 0.75])
+  if (crossing.length > 0 || spacing.sharedPathLength > 0.001) {
+    throw new Error(`Shared sheet routing safety: crossings=${crossing.join(',')}; shared=${spacing.sharedPathLength}`)
   }
-
-  const drawn: number[] = []
-  return requests.map((request, index) => {
-    const solved = solvePlanned(request, laidOut[index]!, seeds[index]!)
-    const { nodes, port, goalPort } = solved
-    usedPorts.add(port)
-    usedPorts.add(goalPort)
-    remember(nodes, drawn)
-    return {
-      id: request.id,
-      source: request.source,
-      target: request.target,
-      description: request.description,
-      origin: request.origin,
-      points: lift(nodes),
-    }
-  })
+  // Keep Libavoid's WASM wrappers alive until every route has been extracted.
+  void shapeReferences
+  return routes.map(route => ({
+    ...route,
+    points: route.points.map(point => ({ gx: point.x / ROUTE_UNIT, gy: point.y / ROUTE_UNIT })),
+  }))
 }
