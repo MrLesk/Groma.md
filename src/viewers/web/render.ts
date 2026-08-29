@@ -229,8 +229,7 @@ function paintViewState(): void {
   if (source.paint(selected)) return
   if (taskDiff.paint(task)) return
   if (relationship !== undefined) paintRelationship(detailsHost, relationship, world, select)
-  else if (selected === undefined) clearDetails(detailsHost)
-  else {
+  else if (selected !== undefined) {
     paintDetails(
       detailsHost,
       inspectDetails(selected, world),
