@@ -80,6 +80,14 @@ updating the task.
   change-tracking loop, not at the end of the task. Do not use file paths as the
   join key. Only an exact element `id` produces a live marker.
 
+## Agent coordination
+
+Do not contact, interrupt, or otherwise disturb another agent merely because
+its task is active. Compare the tasks' recorded modified-file lists first. If
+the files do not overlap with the current task, proceed independently without
+sending a coordination message. Coordinate only when the recorded files
+overlap or when the current work is about to create a real file-level conflict.
+
 ## Commit messages
 
 When the user confirms that a task is done, commit that task's files
