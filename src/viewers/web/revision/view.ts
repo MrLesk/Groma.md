@@ -1,7 +1,7 @@
 import type { WebPayload } from '../payload.ts'
 
 export const revisionCss = `
-  #revision { position: relative; transform: translateY(-1px); }
+  #revision { position: relative; transform: translateY(-1px); --popover-width: 520px; }
   #revision summary {
     min-width: 132px;
     height: 32px;
@@ -36,38 +36,11 @@ export const revisionCss = `
   body[data-revision] #revision summary { border-color: var(--highlight); color: var(--ink); }
   @keyframes revision-spin { to { transform: rotate(360deg); } }
   @keyframes revision-dot { 0%, 60%, 100% { opacity: 0.25; } 30% { opacity: 1; } }
-  .revision-menu {
-    position: absolute;
-    z-index: 30;
-    top: 40px;
-    right: 0;
-    width: min(520px, 80vw);
-    max-height: min(460px, calc(100vh - 90px));
-    overflow: auto;
-    padding: 6px;
-    border: 1px solid color-mix(in srgb, var(--ink) 14%, transparent);
-    border-radius: 10px;
-    background: color-mix(in srgb, var(--paper) 94%, transparent);
-    backdrop-filter: blur(18px);
-    box-shadow: 0 12px 36px color-mix(in srgb, var(--ink) 14%, transparent);
-  }
   .revision-option {
-    width: 100%;
     display: grid;
     grid-template-columns: minmax(0, 1fr);
     gap: 2px;
-    border: 0;
-    border-radius: 0;
-    padding: 8px 5px 8px 9px;
-    background: transparent;
-    color: var(--muted);
-    text-align: left;
   }
-  .revision-option.current { border-top-left-radius: 6px; }
-  .revision-option:last-child { border-bottom-right-radius: 6px; }
-  .revision-option + .revision-option { border-top: 1px solid color-mix(in srgb, var(--ink) 10%, transparent); }
-  .revision-option:hover, .revision-option:focus-visible { background: var(--hover); color: var(--ink); }
-  .revision-option[aria-current="true"] { background: var(--hover); color: var(--highlight-text); }
   .revision-subject { overflow: hidden; color: var(--ink); text-overflow: ellipsis; white-space: nowrap; }
   .revision-meta { min-width: 0; display: flex; align-items: center; overflow: hidden; font-size: 10px; letter-spacing: 0.04em; white-space: nowrap; }
   .revision-meta > * { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
@@ -112,7 +85,7 @@ function revisionOption(revision: WebPayload['revisions'][number], selected: boo
   const status = revision.compatible ? '' : '<span class="unsupported">Unsupported</span>'
   const tag = revision.tag === undefined ? '' : `<span class="revision-tag">${escaped(revision.tag)}</span>`
   const body = revision.body === '' ? '' : ` data-body="${escaped(revision.body)}"`
-  return `<button class="revision-option" type="button" data-revision="${revision.id}"${body} aria-current="${selected}"${unsupported}><span class="revision-subject">${escaped(revision.subject)}</span><span class="revision-meta">${tag}<code>${revision.shortId}</code><time datetime="${revision.date}">${revision.date}</time>${status}</span></button>`
+  return `<button class="anchored-option revision-option" type="button" data-revision="${revision.id}"${body} aria-current="${selected}"${unsupported}><span class="revision-subject">${escaped(revision.subject)}</span><span class="revision-meta">${tag}<code>${revision.shortId}</code><time datetime="${revision.date}">${revision.date}</time>${status}</span></button>`
 }
 
 export function revisionControl(
@@ -124,5 +97,5 @@ export function revisionControl(
     .map(revision => revisionOption(revision, revision.id === payload.revision?.id))
     .join('')
   const current = payload.revision?.shortId ?? liveLabel
-  return `<details id="revision"><summary aria-label="Groma revision">${icons.history}${icons.loader}<span class="revision-current">${current}</span><span class="revision-loading">Loading<span class="revision-dots" aria-hidden="true"><span>.</span><span>.</span><span>.</span></span></span><span class="chevron"></span></summary><div class="revision-menu"><button class="revision-option current" type="button" data-revision="" aria-current="${String(payload.revision === null)}"><span class="revision-subject">${liveLabel}</span></button>${options}</div></details>`
+  return `<details id="revision"><summary aria-label="Groma revision">${icons.history}${icons.loader}<span class="revision-current">${current}</span><span class="revision-loading">Loading<span class="revision-dots" aria-hidden="true"><span>.</span><span>.</span><span>.</span></span></span><span class="chevron"></span></summary><div class="anchored-popover revision-menu"><button class="anchored-option revision-option current" type="button" data-revision="" aria-current="${String(payload.revision === null)}"><span class="revision-subject">${liveLabel}</span></button>${options}</div></details>`
 }

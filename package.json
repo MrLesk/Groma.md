@@ -27,10 +27,11 @@
     "commander": "15.0.0",
     "diff": "9.0.0",
     "elkjs": "0.12.0",
+    "fuse.js": "7.5.0",
     "libavoid-js": "0.5.0-beta.5",
+    "typescript": "7.1.0-dev.20260830.1",
     "web-worker": "1.5.0",
-    "webcola": "3.4.0",
-    "typescript": "7.1.0-dev.20260830.1"
+    "webcola": "3.4.0"
   },
   "devDependencies": {
     "@biomejs/biome": "2.4.13",

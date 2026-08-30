@@ -13,6 +13,7 @@ import {
   moveView,
 } from './navigation-spatial.ts'
 import { compareSemanticElements } from '../../element-order.ts'
+import type { ArchitectureSearch } from '../../search.ts'
 import { ancestorsOf, initialTree, semanticTreeRows } from './tree.ts'
 import type { TreeState } from './tree.ts'
 import type { TerminalViewModel } from './model.ts'
@@ -41,7 +42,7 @@ export type ViewerAction =
   | 'toggle-details-tab'
   | 'toggle-work'
 
-export type FilterInput =
+export type SearchInput =
   | { type: 'open' }
   | { type: 'char'; char: string }
   | { type: 'delete' }
@@ -50,10 +51,11 @@ export type FilterInput =
   | { type: 'accept' }
   | { type: 'cancel' }
 
-export interface FilterState {
+export interface SearchState {
   query: string
   index: number
-  /** The view to restore when the filter is cancelled. */
+  matches: AnnotatedElement[]
+  /** The view to restore when search is cancelled. */
   before: { level: TerminalLevel; currentId?: string }
 }
 
@@ -74,7 +76,7 @@ export interface ViewerState {
   actionStep?: number
   /** The command row the details cursor rests on; Enter picks it. */
   actionCursor?: string
-  filter?: FilterState
+  search?: SearchState
   /** The map edge just crossed, used to step through a containing boundary. */
   mapStep?: { fromId: string; direction: MapDirection }
   /** Present only while the terminal is using its task-focused side panes. */
@@ -412,22 +414,11 @@ function enterDetails(current: ViewerState): ViewerState {
   }
 }
 
-export function filterMatches(
-  world: TerminalViewModel,
-  query: string,
-): AnnotatedElement[] {
-  const needle = query.trim().toLowerCase()
-  if (needle.length === 0) return []
-  return world.elements
-    .filter(element => element.name.toLowerCase().includes(needle))
-    .sort(compareSemanticElements)
-}
-
 /** The current match drives selection live; no match leaves the view alone. */
 function followMatch(world: TerminalViewModel, state: ViewerState): ViewerState {
-  const filter = state.filter
-  if (!filter) return state
-  const match = filterMatches(world, filter.query)[filter.index]
+  const search = state.search
+  if (!search) return state
+  const match = search.matches[search.index]
   if (!match) return state
   return syncTree(world, {
     ...state,
@@ -437,50 +428,50 @@ function followMatch(world: TerminalViewModel, state: ViewerState): ViewerState 
   })
 }
 
-export function reduceFilter(
+export function reduceSearch(
   world: TerminalViewModel,
+  architectureSearch: ArchitectureSearch,
   state: ViewerState,
-  input: FilterInput,
+  input: SearchInput,
 ): ViewerState {
   if (input.type === 'open') {
     return {
       ...state,
-      filter: {
+      search: {
         query: '',
         index: 0,
+        matches: [],
         before: { level: state.level, currentId: state.currentId },
       },
     }
   }
-  const filter = state.filter
-  if (!filter) return state
-  if (input.type === 'char') {
+  const search = state.search
+  if (!search) return state
+  if (input.type === 'char' || input.type === 'delete') {
+    const query = input.type === 'char'
+      ? search.query + input.char
+      : search.query.slice(0, -1)
+    const matches = architectureSearch.find(query).map(result => result.element)
     return followMatch(world, {
       ...state,
-      filter: { ...filter, query: filter.query + input.char, index: 0 },
-    })
-  }
-  if (input.type === 'delete') {
-    return followMatch(world, {
-      ...state,
-      filter: { ...filter, query: filter.query.slice(0, -1), index: 0 },
+      search: { ...search, query, matches, index: 0 },
     })
   }
   if (input.type === 'next' || input.type === 'previous') {
-    const count = filterMatches(world, filter.query).length
+    const count = search.matches.length
     if (count === 0) return state
     const step = input.type === 'next' ? 1 : -1
-    const index = (filter.index + step + count) % count
-    return followMatch(world, { ...state, filter: { ...filter, index } })
+    const index = (search.index + step + count) % count
+    return followMatch(world, { ...state, search: { ...search, index } })
   }
   if (input.type === 'accept') {
-    return { ...state, filter: undefined }
+    return { ...state, search: undefined }
   }
   return syncTree(world, {
     ...state,
-    filter: undefined,
-    level: filter.before.level,
-    currentId: filter.before.currentId,
+    search: undefined,
+    level: search.before.level,
+    currentId: search.before.currentId,
     mapStep: undefined,
   })
 }

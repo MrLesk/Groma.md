@@ -3,6 +3,7 @@ import { fileURLToPath } from 'node:url'
 
 import type { C4Kind } from '../../types.ts'
 import { chromeCss } from './atoms/chrome.ts'
+import { anchoredPopoverCss } from './atoms/popover.ts'
 import { kindGlyph, kindLabel } from '../atoms/kind.ts'
 import { cssBlock, palettes } from './atoms/theme.ts'
 import { mapDebugCss } from './chrome/map-debug.ts'
@@ -13,6 +14,7 @@ import { tipCss } from './organisms/tip.ts'
 import type { WebPayload } from './payload.ts'
 import { projectEditorCss } from './project/editor.ts'
 import { revisionControl, revisionCss } from './revision/view.ts'
+import { searchControl, searchCss } from './search/view.ts'
 import { highlightCss } from './source/highlight.ts'
 import { sourceCss } from './source/view.ts'
 import { taskDiffCss } from './task-diff/view.ts'
@@ -35,6 +37,7 @@ const moonIcon = icon('<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79Z"
 const sunIcon = icon('<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.42 1.42M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.42-1.42M17.66 6.34l1.41-1.41"/>')
 const blueprintIcon = icon('<circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/>')
 const historyIcon = icon('<path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5M12 7v5l3 2"/>', 'revision-history')
+const searchIcon = icon('<circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/>')
 const revisionLoader = icon('<path d="M21 12a9 9 0 1 1-9-9"/>', 'revision-loader')
 const closeIcon = icon('<path d="M18 6 6 18M6 6l12 12"/>')
 const hierarchyIcon = icon('<path d="m11 17-5-5 5-5M18 17l-5-5 5-5"/>', 'hierarchy-chevron')
@@ -308,7 +311,7 @@ const style = `
   @media (prefers-reduced-motion: reduce) {
     #hierarchy, #hierarchy-toggle .hierarchy-chevron, #hierarchy-content, #hierarchy-title .pane-label, #details, body.details-hidden #details, body #work { transition: none; }
   }
-${chromeCss}${motionCss}${revisionCss}${highlightCss}${sourceCss}${taskDiffCss}${backlogMarkCss}${workBadgeCss}${flowRowCss}${mapCss}${pinsCss}${workCss}${tipCss}${projectEditorCss}${mapDebugCss}`
+${chromeCss}${anchoredPopoverCss}${motionCss}${revisionCss}${searchCss}${highlightCss}${sourceCss}${taskDiffCss}${backlogMarkCss}${workBadgeCss}${flowRowCss}${mapCss}${pinsCss}${workCss}${tipCss}${projectEditorCss}${mapDebugCss}`
 
 function legend(): string {
   return legendKinds.map(line => {
@@ -324,7 +327,7 @@ export function renderPage(payload: WebPayload): string {
   return '<!doctype html><html><head><meta charset="utf-8"><title>groma.md</title>'
     + `<style>${style}</style></head><body>`
     + `<header id="header">${lockup}<span id="stats"></span>${revisionControl(payload, { history: historyIcon, loader: revisionLoader })}`
-    + `<div class="header-actions"><div id="map-controls" class="controls" aria-label="Map controls"><button id="fit" aria-label="Fit map">${fitIcon}<span>Fit</span></button><button id="zoom-out" aria-label="Zoom out"><span class="control-glyph">−</span></button><span id="zoom" aria-live="polite"></span><button id="zoom-in" aria-label="Zoom in"><span class="control-glyph">+</span></button></div><details id="help"><summary>Help</summary><div class="help-panel"><p>Drag or scroll to pan<br>Pinch, + or − to zoom<br>0 or Fit shows the whole map<br>F1 toggles map only<br>F2 toggles layers<br>In layers: drag orbits; Shift-drag pans<br>F3 toggles map debug<br>Escape clears selection</p></div></details><button id="theme" data-next-theme="dark"><span class="theme-icon dark">${moonIcon}</span><span class="theme-icon blueprint">${blueprintIcon}</span><span class="theme-icon light">${sunIcon}</span><span class="label">Dark</span></button></div>`
+    + `<div class="header-actions"><div id="map-controls" class="controls" aria-label="Map controls"><button id="fit" aria-label="Fit map">${fitIcon}<span>Fit</span></button><button id="zoom-out" aria-label="Zoom out"><span class="control-glyph">−</span></button><span id="zoom" aria-live="polite"></span><button id="zoom-in" aria-label="Zoom in"><span class="control-glyph">+</span></button></div><details id="help"><summary>Help</summary><div class="help-panel"><p>Drag or scroll to pan<br>Pinch, + or − to zoom<br>0 or Fit shows the whole map<br>/ or Cmd/Ctrl+K searches<br>F1 toggles map only<br>F2 toggles layers<br>In layers: drag orbits; Shift-drag pans<br>F3 toggles map debug<br>Escape clears selection</p></div></details><button id="theme" data-next-theme="dark"><span class="theme-icon dark">${moonIcon}</span><span class="theme-icon blueprint">${blueprintIcon}</span><span class="theme-icon light">${sunIcon}</span><span class="label">Dark</span></button>${searchControl({ search: searchIcon, close: closeIcon })}</div>`
     + '</header>'
     + `<nav id="hierarchy" aria-label="Hierarchy"><div id="hierarchy-title"><span class="pane-label">Hierarchy</span><button id="hierarchy-toggle" type="button" aria-controls="hierarchy-content">${hierarchyIcon}</button></div><div id="hierarchy-content"><div id="flows"></div><div id="tree"></div><div id="legend">${legend()}</div></div></nav>`
     + '<div id="map"></div>'

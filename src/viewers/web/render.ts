@@ -1,6 +1,5 @@
-import { compareSemanticElements } from '../../element-order.ts'
 import type { ProjectProfile } from '../../project-profile.ts'
-import type { AnnotatedElement, AnnotatedRelationship, ArchitectureGraph, WorkItem } from '../../types.ts'
+import type { AnnotatedElement, AnnotatedRelationship, WorkItem } from '../../types.ts'
 import { touchedElements } from '../../work/pins.ts'
 import { elementOnPath, flowRouteIds, worldCommands } from '../action-path.ts'
 import type { FlowRef } from '../action-path.ts'
@@ -10,6 +9,7 @@ import { nextTheme, themeLabel } from './atoms/theme.ts'
 import { createMapDebugPanel } from './chrome/map-debug.ts'
 import { animateControl, createThemeTransition } from './chrome/motion.ts'
 import { createWebShell, mapFrame, type MapFrame } from './chrome/shell.ts'
+import { paintWorldStats, primarySystem } from './chrome/stats.ts'
 import { paintFlows } from './flow/list.ts'
 import { toggleFlowActivation } from './flow/state.ts'
 import { fitHighlights, fitCamera, keyAction, keyTarget, pan, wheelAction, zoomAbout, zoomLimits, zoomReadout } from './iso/camera.ts'
@@ -25,6 +25,7 @@ import { createPins } from './work/pins.ts'
 import { createTip } from './organisms/tip.ts'
 import { createProjectEditor } from './project/editor.ts'
 import { createRevisionControl } from './revision/control.ts'
+import { createSearchSession } from './search/session.ts'
 import { createWorkIsland } from './work/island.ts'
 import { toggleWorkSelection } from './work/selection.ts'
 import type { WebPayload, WebWorkPayload } from './payload.ts'
@@ -58,6 +59,7 @@ const flowsHost = document.getElementById('flows')!
 const statsHost = document.getElementById('stats')!
 const themeButton = document.getElementById('theme')!
 const revisionSelect = document.getElementById('revision') as HTMLDetailsElement
+const searchRoot = document.getElementById('architecture-search')!
 const themeText = themeButton.querySelector<HTMLElement>('.label')!
 const detailsHost = document.getElementById('details')!
 const detailsClose = document.getElementById('details-close') as HTMLButtonElement
@@ -83,7 +85,7 @@ let hudVisible = opened.hudVisible
 shell.setHud(hudVisible)
 let selection = opened.selection
 let activeFlows: FlowRef[] = [...opened.flows]
-const initial = firstSystem(world)
+const initial = primarySystem(world)
 if (boot.revision === null && selection.kind === 'none' && initial !== undefined) {
   selection = selectArchitecture(noSelection, initial.representationId, false)
 }
@@ -120,25 +122,11 @@ let fitted: Camera = fitScene(viewport())
 let camera: Camera = fitted
 /** Once an interaction positions the camera, live refits stop until the viewer presses 0. */
 let touched = false
-function firstSystem(current: ArchitectureGraph): AnnotatedElement | undefined {
-  return current.elements
-    .filter(element => element.kind === 'system' && !element.external)
-    .sort(compareSemanticElements)[0]
-}
+function worldElement(id: string | undefined): AnnotatedElement | undefined { return id === undefined ? undefined : world.elements.find(element => element.representationId === id) }
 
-function worldElement(id: string | undefined): AnnotatedElement | undefined {
-  return id === undefined
-    ? undefined
-    : world.elements.find(element => element.representationId === id)
-}
+function worldRelationship(id: string | undefined): AnnotatedRelationship | undefined { return id === undefined ? undefined : world.relationships.find(item => item.id === id) }
 
-function worldRelationship(id: string | undefined): AnnotatedRelationship | undefined {
-  return id === undefined ? undefined : world.relationships.find(item => item.id === id)
-}
-
-function workItem(id: string | undefined): WorkItem | undefined {
-  return id === undefined ? undefined : work.items.find(item => item.id === id)
-}
+function workItem(id: string | undefined): WorkItem | undefined { return id === undefined ? undefined : work.items.find(item => item.id === id) }
 
 /** True for an element, relationship or task id the current payload has. */
 function known(id: string | undefined): boolean {
@@ -179,13 +167,6 @@ function zoomStep(factor: number, control: HTMLElement): void {
   applyCamera()
 }
 
-function paintStats(flowCount: number): void {
-  const system = firstSystem(world)
-  statsHost.textContent = system === undefined
-    ? ''
-    : `${system.name} · ${flowCount} flows · ${world.elements.length} elements`
-}
-
 /** The URL follows the view, without adding history entries. */
 function syncUrl(): void {
   const query = writeView({
@@ -210,8 +191,8 @@ function paintMapState(task: WorkItem | undefined, activeTaskItems: WorkItem[]):
   map.setLitRoutes(litIds, id => elementOnPath(id, litIds, world))
 }
 
-function paintViewState(): void {
-  syncUrl()
+function paintViewState(commitUrl = true): void {
+  if (commitUrl) syncUrl()
   shell.paint(selection)
   const selectedId = primarySelection(selection)
   const task = selection.kind === 'task' ? workItem(selection.id) : undefined
@@ -221,7 +202,7 @@ function paintViewState(): void {
   const commands = worldCommands(world)
   const actorName = (actorId: string): string | undefined => worldElement(actorId)?.name
   paintFlows(flowsHost, commands, activeFlows, actorName, toggleFlow)
-  paintStats(commands.length)
+  paintWorldStats(statsHost, world, commands.length)
   const selected = worldElement(selectedId)
   const relationship = worldRelationship(selectedId)
   if (source.paint(selected)) return
@@ -302,6 +283,20 @@ function deselect(): void {
   activeFlows = []
   paintViewState()
 }
+
+const searchControl = createSearchSession({
+  root: searchRoot, elements: world.elements, viewport, clearSource: source.clear, anchorOf: id => map.anchorOf(id),
+  snapshot: () => ({ selection, camera: { ...camera }, touched, detailsTab }),
+  previewMap(id, nextCamera) {
+    if (nextCamera !== undefined) { camera = nextCamera; touched = true; applyCamera() }
+    map.select(id === undefined ? selectedArchitecture(selection) : [id])
+  },
+  apply(next, commitUrl) {
+    ({ selection, camera, touched, detailsTab } = next)
+    applyCamera()
+    paintViewState(commitUrl)
+  },
+})
 
 function toggleFlow(flow: FlowRef): void {
   activeFlows = toggleFlowActivation(activeFlows, flow)
@@ -463,6 +458,7 @@ function applyWorld(payload: WebPayload, reset = false): void {
     selection = retainSelection(selection, id => known(id))
   }
   debug.paint(() => map.paint(scene))
+  searchControl.update(world.elements)
   revisionControl.paintProjectEdit(map.svg)
   pins.paint(currentPins)
   island.paint(payload.pins, work.statuses, work.defaultStatus)
