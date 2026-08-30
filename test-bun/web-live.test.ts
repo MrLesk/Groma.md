@@ -7,7 +7,7 @@ import { test } from 'bun:test'
 
 import type { WorkSource } from '../src/work/backlog.ts'
 import { scanRepository } from '../src/scanner.ts'
-import type { WorkItem, WorkSnapshot } from '../src/types.ts'
+import type { WorkItem, WorkItemDetails, WorkSnapshot } from '../src/types.ts'
 import { startWebViewer } from '../src/viewers/web/server.ts'
 
 function run(command: string, args: string[], cwd: string) {
@@ -348,10 +348,11 @@ test.concurrent('groma web loads work asynchronously and updates only the work o
     title: 'Change Shop',
     status: 'In Progress',
     assignees: ['@codex'],
-    description: '',
     references: ['shop'],
     modifiedFiles: [],
-    criteria: [{ text: 'a', checked: true }, { text: 'b', checked: false }],
+    acceptanceCriteriaCompleted: 1,
+    acceptanceCriteriaCount: 2,
+    updatedAt: '2026-08-30T12:00:00Z',
   }]
   const snapshot = (): WorkSnapshot => ({
     statuses: ['To Do', 'In Progress', 'Done'],
@@ -369,6 +370,7 @@ test.concurrent('groma web loads work asynchronously and updates only the work o
       reads += 1
       return reads === 1 ? firstRead : snapshot()
     },
+    readItem: async () => assert.fail('unexpected task detail read'),
     watch(onChange) {
       changed = onChange
       return { close() {} }
@@ -425,7 +427,11 @@ test.concurrent('groma web loads work asynchronously and updates only the work o
     assert.equal(reads, 1)
 
     pushed = ''
-    items = [{ ...items[0]!, status: 'Done', criteria: items[0]!.criteria.map(criterion => ({ ...criterion, checked: true })) }]
+    items = [{
+      ...items[0]!,
+      status: 'Done',
+      acceptanceCriteriaCompleted: 2,
+    }]
     changed()
     await waitUntil(async () => {
       const { value } = await reader.read()
@@ -447,7 +453,7 @@ test.concurrent('groma web loads work asynchronously and updates only the work o
   }
 })
 
-test.concurrent('groma web loads a selected task diff outside the initial payload', async () => {
+test.concurrent('groma web loads selected task details and diff outside the initial payload', async () => {
   const root = await createLiveRepo()
   await writeFile(path.join(root, 'src/cli.ts'), 'export const taskDiffSentinel = 42\n')
   const task: WorkItem = {
@@ -455,11 +461,22 @@ test.concurrent('groma web loads a selected task diff outside the initial payloa
     title: 'Show task diff',
     status: 'In Progress',
     assignees: [],
-    description: '',
     references: [],
     modifiedFiles: ['src/cli.ts'],
-    criteria: [],
+    acceptanceCriteriaCompleted: 0,
+    acceptanceCriteriaCount: 1,
+    updatedAt: '2026-08-30T12:00:00Z',
   }
+  const details: WorkItemDetails = {
+    id: task.id,
+    description: 'Selected detail sentinel',
+    acceptanceCriteria: [{ text: 'Inspect the selected task', checked: false }],
+    definitionOfDone: [],
+    implementationPlan: '',
+    implementationNotes: '',
+    comments: [],
+  }
+  let detailReads = 0
   const workSource: WorkSource = {
     async read() {
       return {
@@ -467,6 +484,11 @@ test.concurrent('groma web loads a selected task diff outside the initial payloa
         defaultStatus: 'To Do',
         items: [task],
       }
+    },
+    async readItem(id) {
+      detailReads += 1
+      assert.equal(id, task.id)
+      return details
     },
     watch() {
       return { close() {} }
@@ -478,7 +500,13 @@ test.concurrent('groma web loads a selected task diff outside the initial payloa
       const payload = await (await fetch(`${server.url}/world.json`)).json() as { work: WorkSnapshot }
       return payload.work.items[0]?.id === task.id
     })
-    assert.doesNotMatch(await (await fetch(server.url)).text(), /taskDiffSentinel/)
+    const page = await (await fetch(server.url)).text()
+    assert.doesNotMatch(page, /taskDiffSentinel|Selected detail sentinel/)
+    assert.equal(detailReads, 0)
+    const detailResponse = await fetch(`${server.url}/task.json?task=${task.id}`)
+    assert.equal(detailResponse.status, 200)
+    assert.deepEqual(await detailResponse.json(), details)
+    assert.equal(detailReads, 1)
     const response = await fetch(`${server.url}/task-diff.json?task=${task.id}`)
     assert.equal(response.status, 200)
     const diff = await response.json() as {
@@ -492,6 +520,7 @@ test.concurrent('groma web loads a selected task diff outside the initial payloa
     assert.equal(diff.files[0]!.status, 'modified')
     assert.ok(diff.files[0]!.additions > 0)
     assert.ok(diff.files[0]!.hunks.length > 0)
+    assert.equal((await fetch(`${server.url}/task.json?task=unknown`)).status, 404)
     assert.equal((await fetch(`${server.url}/task-diff.json?task=unknown`)).status, 404)
   } finally {
     server.close()

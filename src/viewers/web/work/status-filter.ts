@@ -4,6 +4,14 @@ export interface WorkStatusFilterState {
   enabled: string[]
 }
 
+/** An unconfigured boot snapshot has no user choice to preserve. */
+export function preservedWorkStatuses(
+  previousConfigured: readonly string[],
+  enabled: readonly string[] | undefined,
+): readonly string[] | undefined {
+  return previousConfigured.length === 0 ? undefined : enabled
+}
+
 /**
  * Reconciles the island's filters with a work snapshot. Only statuses with a
  * mapped pin are rendered. The first snapshot enables every configured status

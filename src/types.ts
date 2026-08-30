@@ -75,18 +75,40 @@ export interface ScanSummary {
   matched: number
 }
 
-/** A Backlog task available to the viewers. */
+export interface WorkChecklistItem {
+  text: string
+  checked: boolean
+}
+
+export interface WorkComment {
+  body: string
+  createdAt: string
+  author: string
+}
+
+/** A Backlog task summary available to maps, navigation, and component work history. */
 export interface WorkItem {
   id: string
   title: string
   status: string
   assignees: string[]
-  description: string
   references: string[]
   /** Repository-relative paths the task recorded as touched, oldest first. */
   modifiedFiles: string[]
-  /** The acceptance criteria in order, each with its checked state. */
-  criteria: { text: string; checked: boolean }[]
+  acceptanceCriteriaCompleted: number
+  acceptanceCriteriaCount: number
+  updatedAt: string
+}
+
+/** Heavy task content loaded only for the task a developer opens. */
+export interface WorkItemDetails {
+  id: string
+  description: string
+  acceptanceCriteria: WorkChecklistItem[]
+  definitionOfDone: WorkChecklistItem[]
+  implementationPlan: string
+  implementationNotes: string
+  comments: WorkComment[]
 }
 
 /** The Backlog workflow and tasks read together, so viewers interpret every status against the same configuration. */

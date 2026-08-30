@@ -140,16 +140,10 @@ function taskLines(item: WorkItem, width: number, theme: ViewerTheme): DetailLin
   )
   const rows: DetailLine[] = [accent([item.status, ...item.assignees].join(' · ')), plain('')]
   rows.push(...wrap(item.title, width).map(line => plain(line, TextAttributes.BOLD)))
-  if (item.description !== '') {
-    rows.push(plain(''), ...wrap(item.description, width).map(plain))
-  }
-  if (item.criteria.length > 0) {
-    const done = item.criteria.filter(criterion => criterion.checked).length
-    rows.push(plain(''), heading(`Acceptance criteria · ${done} of ${item.criteria.length}`))
-    for (const criterion of item.criteria) {
-      const lines = wrap(criterion.text, width, criterion.checked ? '✓ ' : '○ ')
-      rows.push(...lines.map(line => criterion.checked ? dim(line) : plain(line)))
-    }
+  if (item.acceptanceCriteriaCount > 0) {
+    rows.push(plain(''), heading(
+      `Acceptance criteria · ${item.acceptanceCriteriaCompleted} of ${item.acceptanceCriteriaCount}`,
+    ))
   }
   if (item.modifiedFiles.length > 0) {
     rows.push(plain(''), heading('Modified files'))

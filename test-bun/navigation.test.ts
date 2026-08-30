@@ -314,8 +314,14 @@ test.concurrent('Work focus keeps architecture and flow state while tasks own th
       statuses: ['To Do', 'In Progress', 'Done'],
       defaultStatus: 'To Do',
       items: [
-        { id: 'TASK-1', title: 'First', status: 'In Progress', assignees: [], description: '', references: ['api'], modifiedFiles: [], criteria: [] },
-        { id: 'TASK-2', title: 'Second', status: 'In Progress', assignees: [], description: '', references: ['web'], modifiedFiles: [], criteria: [] },
+        {
+          id: 'TASK-1', title: 'First', status: 'In Progress', assignees: [], references: ['api'], modifiedFiles: [],
+          acceptanceCriteriaCompleted: 0, acceptanceCriteriaCount: 0, updatedAt: '2026-08-30T12:00:00Z',
+        },
+        {
+          id: 'TASK-2', title: 'Second', status: 'In Progress', assignees: [], references: ['web'], modifiedFiles: [],
+          acceptanceCriteriaCompleted: 0, acceptanceCriteriaCount: 0, updatedAt: '2026-08-30T12:00:00Z',
+        },
       ],
     },
   }

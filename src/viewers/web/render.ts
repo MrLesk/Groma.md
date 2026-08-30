@@ -1,6 +1,6 @@
 import type { ProjectProfile } from '../../project-profile.ts'
 import type { AnnotatedElement, AnnotatedRelationship, WorkItem } from '../../types.ts'
-import { touchedElements } from '../../work/pins.ts'
+import { elementWorkGroups, touchedElements } from '../../work/pins.ts'
 import { elementOnPath, flowRouteIds, worldCommands } from '../action-path.ts'
 import type { FlowRef } from '../action-path.ts'
 import { initialTree, semanticTreeRows, toggleExpansion } from '../tui/tree.ts'
@@ -19,7 +19,7 @@ import { bindMapPointer } from './iso/pointer.ts'
 import { projectScene } from './iso/project.ts'
 import { sceneAtSeparation } from './layers/separation.ts'
 import { createLayerAnimator, createLayerMotion } from './layers/orbit.ts'
-import { clearDetails, detailsTabAfterSelection, type DetailsTab, inspectDetails, paintDetails, paintRelationship } from './organisms/details.ts'
+import { clearDetails, detailsTabAfterSelection, detailsTabAfterWork, type DetailsTab, inspectDetails, paintDetails, paintRelationship } from './organisms/details.ts'
 import { paintHierarchy } from './organisms/hierarchy.ts'
 import { createPins } from './work/pins.ts'
 import { createTip } from './organisms/tip.ts'
@@ -209,20 +209,21 @@ function paintViewState(commitUrl = true): void {
   if (taskDiff.paint(task)) return
   if (relationship !== undefined) paintRelationship(detailsHost, relationship, world, select)
   else if (selected !== undefined) {
-    paintDetails(
-      detailsHost,
-      inspectDetails(selected, world),
-      select,
-      toggleFlow,
+    paintDetails(detailsHost, inspectDetails(selected, world), {
+      onSelect: select,
+      onToggleFlow: toggleFlow,
       activeFlows,
       actorName,
-      detailsTab,
-      tab => {
+      tab: detailsTab,
+      onTab: tab => {
         detailsTab = tab
         paintViewState()
       },
-      detailsTab === 'how' ? source.code() : [], source.open,
-    )
+      code: detailsTab === 'how' ? source.code() : [],
+      onSource: source.open,
+      workGroups: selected.kind === 'component' ? elementWorkGroups(work, selected.representationId, world) : [],
+      onTask: toggleTask,
+    })
   }
 }
 
@@ -465,12 +466,14 @@ function applyWorld(payload: WebPayload, reset = false): void {
   applyCamera()
   paintViewState()
 }
-
 /** Repaints only the optional Backlog layer; map projection, painting and camera state stay unchanged. */
 function applyWork(payload: WebWorkPayload): void {
-  const ownedDetails = selection.kind === 'task'
   work = payload.work
   currentPins = payload.pins
+  const selected = worldElement(primarySelection(selection))
+  const hasTasks = selected?.kind === 'component'
+    && elementWorkGroups(work, selected.representationId, world).length > 0
+  detailsTab = detailsTabAfterWork(detailsTab, hasTasks)
   activeTaskIds = activeTaskIds.filter(id => workItem(id) !== undefined)
   selection = retainSelection(selection, id => known(id))
   pins.paint(payload.pins)
@@ -482,8 +485,9 @@ function applyWork(payload: WebWorkPayload): void {
   map.mark(new Set(active.flatMap(item => touchedElements(item, world))))
   pins.activate(activeTaskIds, task?.id)
   island.activate(activeTaskIds, task?.id)
-  if (!ownedDetails) return
-  if (!taskDiff.paint(task)) clearDetails(detailsHost)
+  if (selection.kind === 'task') {
+    if (!taskDiff.paint(task)) clearDetails(detailsHost)
+  } else if (selection.kind === 'architecture') paintViewState()
 }
 
 debug.paint(() => map.paint(scene))
