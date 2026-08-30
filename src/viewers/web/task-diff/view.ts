@@ -1,6 +1,6 @@
 import type { ArchitectureGraph, C4Kind, WorkItem } from '../../../types.ts'
 import { chromeButton } from '../atoms/button.ts'
-import { kindGlyph } from '../atoms/kind.ts'
+import { kindGlyph } from '../../atoms/kind.ts'
 import { highlightedLine } from '../source/highlight.ts'
 import type { TaskFileDiff } from './project.ts'
 import type { TaskDiffPayload } from './read.ts'

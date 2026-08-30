@@ -9,7 +9,7 @@ import type {
 import { fileTypeOf } from '../../../sheet/measure.ts'
 import { pickableActions, travelledBy } from '../../action-path.ts'
 import type { FlowRef } from '../../action-path.ts'
-import { kindGlyph, kindLabel } from '../atoms/kind.ts'
+import { kindGlyph, kindLabel } from '../../atoms/kind.ts'
 import { flowRow, type FlowRowData } from '../flow/row.ts'
 import type { CodeMethod } from '../source/methods.ts'
 import {

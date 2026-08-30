@@ -2,7 +2,7 @@ import { TextAttributes } from '@opentui/core'
 import type { OptimizedBuffer } from '@opentui/core'
 
 import { cell } from '../atoms/cell.ts'
-import { kindGlyph, kindLabel } from '../atoms/kind.ts'
+import { kindGlyph, kindLabel } from '../../atoms/kind.ts'
 import { text } from '../atoms/text.ts'
 import type { ViewerTheme } from '../atoms/theme.ts'
 import type { TreeRow } from '../tree.ts'
