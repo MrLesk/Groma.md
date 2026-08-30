@@ -62,7 +62,8 @@ The wider details pane appears only while an element, relationship,
 or task owns the selection. It keeps its width while that owner
 changes and disappears when selection is cleared. Its X clears the selection,
 closes the pane, and returns focus to the map without moving the camera. An element
-shows under two tabs whose choice persists across selections. What
+shows under two tabs. Selecting another architecture item returns the pane to What
+it does; a direct `tab=how` link still opens How it's built. What
 it does holds the meaning: description, peer relationships, actor Commands,
 Flows through, and children. A relationship row always names and selects its
 peer; its arrow shows authored direction and never activates a flow. Commands

@@ -48,6 +48,15 @@ export interface Inspected {
 
 export type DetailsTab = 'what' | 'how'
 
+/** A new architecture item starts with its meaning instead of inheriting build evidence. */
+export function detailsTabAfterSelection(
+  tab: DetailsTab,
+  previousId: string | undefined,
+  nextId: string | undefined,
+): DetailsTab {
+  return previousId === nextId ? tab : 'what'
+}
+
 type Section =
   | 'description'
   | 'relationships'

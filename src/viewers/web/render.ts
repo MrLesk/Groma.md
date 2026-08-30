@@ -19,8 +19,7 @@ import { bindMapPointer } from './iso/pointer.ts'
 import { projectScene } from './iso/project.ts'
 import { sceneAtSeparation } from './layers/separation.ts'
 import { createLayerAnimator, createLayerMotion } from './layers/orbit.ts'
-import { clearDetails, paintDetails, paintRelationship, inspectDetails } from './organisms/details.ts'
-import type { DetailsTab } from './organisms/details.ts'
+import { clearDetails, detailsTabAfterSelection, type DetailsTab, inspectDetails, paintDetails, paintRelationship } from './organisms/details.ts'
 import { paintHierarchy } from './organisms/hierarchy.ts'
 import { createPins } from './work/pins.ts'
 import { createTip } from './organisms/tip.ts'
@@ -264,7 +263,9 @@ function toggleRow(row: TreeRow): void {
 function select(id: string, additive = false): void {
   if (worldElement(id) === undefined && worldRelationship(id) === undefined) return
   source.clear()
-  selection = selectArchitecture(selection, id, additive)
+  const next = selectArchitecture(selection, id, additive)
+  detailsTab = detailsTabAfterSelection(detailsTab, primarySelection(selection), primarySelection(next))
+  selection = next
   paintViewState()
 }
 

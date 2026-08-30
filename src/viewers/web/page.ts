@@ -49,6 +49,7 @@ const style = `
     ${cssBlock(palettes.light)}
     --backlog-mark-image: url("data:image/png;base64,${backlogMark}");
     --chrome-radius: 10px;
+    --control-radius: 6px;
     --chrome-surface: color-mix(in srgb, var(--paper) 35%, transparent);
     --chrome-motion: 260ms;
     --chrome-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
@@ -116,7 +117,7 @@ const style = `
   .header-actions { display: flex; align-items: center; gap: 8px; }
   .header-actions > button, #help summary, #hierarchy-toggle {
     border: 0;
-    border-radius: 6px;
+    border-radius: var(--control-radius);
     background: transparent;
     padding: 7px 10px;
     color: var(--muted);
@@ -207,7 +208,7 @@ const style = `
     display: grid;
     place-items: center;
     border: 1px solid var(--hairline);
-    border-radius: 6px;
+    border-radius: var(--control-radius);
     background: color-mix(in srgb, var(--paper) 35%, transparent);
   }
   #details-close:hover { background: var(--hover); }
@@ -227,8 +228,8 @@ const style = `
   #details li { margin: 0 0 6px; }
   #details .relationships li { margin: 0; }
   #details .criterion-check { color: var(--accent-text); }
-  #details .tabs { margin: 0 0 8px; }
-  #details .tabs button { flex: 1; }
+  #details .tabs { margin: 0 0 8px; border-radius: var(--control-radius); overflow: hidden; }
+  #details .tabs button { flex: 1; border-radius: 0; }
   .chips { display: flex; flex-wrap: wrap; gap: 6px; }
   #details .chip { border: 1px solid var(--hairline); padding: 2px 8px; margin: 0; }
   .controls { display: flex; }
@@ -245,7 +246,7 @@ const style = `
   #map-controls {
     align-items: stretch;
     border: 0;
-    border-radius: 6px;
+    border-radius: var(--control-radius);
     box-shadow: inset 0 0 0 1px var(--hairline);
     overflow: hidden;
     transform: translateY(-1px);
