@@ -93,7 +93,7 @@ program
       console.log(result.text)
       return
     }
-    if (options.plain || !process.stdout.isTTY) {
+    if (program.opts().plain || options.plain || !process.stdout.isTTY) {
       const { renderPlainWorld } = await import('./plain-world.ts')
       console.log(await renderPlainWorld(process.cwd()))
       return
