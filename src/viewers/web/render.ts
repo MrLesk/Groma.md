@@ -240,7 +240,7 @@ function paintViewState(): void {
         detailsTab = tab
         paintViewState()
       },
-      detailsTab === 'how' ? source.methods() : [], source.open,
+      detailsTab === 'how' ? source.code() : [], source.open,
     )
   }
 }

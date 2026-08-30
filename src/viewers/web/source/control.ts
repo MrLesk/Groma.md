@@ -1,6 +1,6 @@
 import type { AnnotatedElement } from '../../../types.ts'
-import type { CodeMethod } from './methods.ts'
 import type { SourcePayload } from './read.ts'
+import type { CodeFile } from './structure.ts'
 import { leaveSource, paintSource } from './view.ts'
 
 export interface SourceControl {
@@ -8,7 +8,7 @@ export interface SourceControl {
   readonly line: number | undefined
   back(): void
   clear(): void
-  methods(): readonly CodeMethod[]
+  code(): readonly CodeFile[]
   open(file: string, line?: number): void
   paint(element: AnnotatedElement | undefined): boolean
   restore(): void
@@ -50,10 +50,10 @@ export function createSourceControl(options: SourceControlOptions): SourceContro
   let payload: SourcePayload | undefined
   let error: string | undefined
   let request = 0
-  let methodsElement: AnnotatedElement | undefined
-  let methodsRevision: string | undefined
-  let codeMethods: readonly CodeMethod[] = []
-  let methodsRequest = 0
+  let structureElement: AnnotatedElement | undefined
+  let structureRevision: string | undefined
+  let codeFiles: readonly CodeFile[] = []
+  let structureRequest = 0
 
   function closeSource(): void {
     request += 1
@@ -65,10 +65,10 @@ export function createSourceControl(options: SourceControlOptions): SourceContro
 
   function clear(): void {
     closeSource()
-    methodsRequest += 1
-    methodsElement = undefined
-    methodsRevision = undefined
-    codeMethods = []
+    structureRequest += 1
+    structureElement = undefined
+    structureRevision = undefined
+    codeFiles = []
   }
 
   function back(): void {
@@ -102,19 +102,19 @@ export function createSourceControl(options: SourceControlOptions): SourceContro
     options.repaint()
   }
 
-  async function loadMethods(element: AnnotatedElement, revision: string | undefined): Promise<void> {
-    const activeRequest = ++methodsRequest
+  async function loadStructure(element: AnnotatedElement, revision: string | undefined): Promise<void> {
+    const activeRequest = ++structureRequest
     const query = new URLSearchParams({ element: element.representationId })
     if (revision !== undefined) query.set('revision', revision)
     try {
-      const response = await fetch(`/methods.json?${query}`)
+      const response = await fetch(`/code.json?${query}`)
       if (!response.ok) throw new Error(await response.text())
-      const loaded = await response.json() as CodeMethod[]
-      if (activeRequest !== methodsRequest || methodsElement !== element || methodsRevision !== revision) return
-      codeMethods = loaded
+      const loaded = await response.json() as CodeFile[]
+      if (activeRequest !== structureRequest || structureElement !== element || structureRevision !== revision) return
+      codeFiles = loaded
     } catch {
-      if (activeRequest !== methodsRequest || methodsElement !== element || methodsRevision !== revision) return
-      codeMethods = []
+      if (activeRequest !== structureRequest || structureElement !== element || structureRevision !== revision) return
+      codeFiles = []
     }
     options.repaint()
   }
@@ -128,18 +128,18 @@ export function createSourceControl(options: SourceControlOptions): SourceContro
     },
     back,
     clear,
-    methods() {
+    code() {
       const element = options.element()
       if (element?.kind !== 'component') return []
       const revision = options.revision()
-      if (methodsElement === element && methodsRevision === revision) return codeMethods
-      methodsElement = element
-      methodsRevision = revision
-      codeMethods = []
+      if (structureElement === element && structureRevision === revision) return codeFiles
+      structureElement = element
+      structureRevision = revision
+      codeFiles = []
       if (element.code.some(reference => reference.scanner === 'typescript')) {
-        void loadMethods(element, revision)
+        void loadStructure(element, revision)
       }
-      return codeMethods
+      return codeFiles
     },
     open(nextFile, nextLine) {
       void load(nextFile, nextLine)

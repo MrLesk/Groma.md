@@ -10,22 +10,22 @@ import { measuredSheetScene } from '../../sheet/scene.ts'
 import { pinsOf } from '../../work/pins.ts'
 import { renderPage } from './page.ts'
 import type { WebMapPayload, WebPayload, WebRevision, WebWorkPayload } from './payload.ts'
-import { readCodeMethods } from './source/methods.ts'
 import { readSource } from './source/read.ts'
+import { readCodeStructure } from './source/structure.ts'
 import { readTaskDiff } from './task-diff/read.ts'
 
 const defaultPort = 4747
 
-async function methodsResponse(
+async function structureResponse(
   repositoryRoot: string,
   selected: WebPayload,
   element: string,
 ): Promise<Response> {
   try {
-    const methods = await readCodeMethods(repositoryRoot, selected.world, selected.revision, element)
-    return methods === undefined
+    const structure = await readCodeStructure(repositoryRoot, selected.world, selected.revision, element)
+    return structure === undefined
       ? new Response('Component not found', { status: 404 })
-      : Response.json(methods)
+      : Response.json(structure)
   } catch (error) {
     return new Response(error instanceof Error ? error.message : String(error), { status: 500 })
   }
@@ -155,13 +155,13 @@ export async function startWebViewer(
     }
   }
 
-  async function codeResponse(url: URL): Promise<Response> {
+  async function sourceSelection(url: URL): Promise<Response> {
     const selected = await payloadAt(url.searchParams.get('revision'))
     if (selected instanceof Response) return selected
     const element = url.searchParams.get('element')
     if (element === null) return new Response('Component selection required', { status: 400 })
-    return url.pathname === '/methods.json'
-      ? methodsResponse(repositoryRoot, selected, element)
+    return url.pathname === '/code.json'
+      ? structureResponse(repositoryRoot, selected, element)
       : sourceResponse(repositoryRoot, selected, element, url.searchParams.get('file'))
   }
 
@@ -232,8 +232,8 @@ export async function startWebViewer(
     return selected instanceof Response ? selected : Response.json(selected)
   }
 
-  function selectedCodeResponse(_request: Request, url: URL): Promise<Response> {
-    return codeResponse(url)
+  function selectedSourceResponse(_request: Request, url: URL): Promise<Response> {
+    return sourceSelection(url)
   }
 
   async function taskDiffResponse(_request: Request, url: URL): Promise<Response> {
@@ -293,8 +293,8 @@ export async function startWebViewer(
   const routes = new Map<string, Route>([
     ['/render.js', rendererResponse],
     ['/world.json', worldResponse],
-    ['/methods.json', selectedCodeResponse],
-    ['/source.json', selectedCodeResponse],
+    ['/code.json', selectedSourceResponse],
+    ['/source.json', selectedSourceResponse],
     ['/task-diff.json', taskDiffResponse],
     ['/events', eventsResponse],
   ])

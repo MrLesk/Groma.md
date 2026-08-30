@@ -77,7 +77,10 @@ export function leaveSource(host: HTMLElement): void {
 
 export const sourceCss = `
   body.source-details { --details-column: 640px; }
-  #details :is(.source-file, .code-method) + .ghost { display: block; line-height: 1.55; margin-top: 2px; }
+  #details .source-file + .ghost, #details .code-entry > .ghost { display: block; line-height: 1.55; margin-top: 2px; }
+  #details .code-file + .code-file { margin-top: 16px; }
+  #details .code-file-name { color: var(--muted); font-size: 10px; margin-bottom: 7px; overflow-wrap: anywhere; }
+  #details .code-members { border-left: 1px solid var(--hairline); margin: 5px 0 10px 5px; padding-left: 12px; }
   #details .source-status { color: var(--muted); margin: 18px 22px; }
   #details .source-lines { list-style: none; margin: 0; min-width: max-content; padding: 14px 0 24px; }
   #details .source-line { display: grid; grid-template-columns: 4.5ch auto; line-height: 1.72; margin: 0; padding: 0 22px 0 10px; }

@@ -11,7 +11,7 @@ import { pickableActions, travelledBy } from '../../action-path.ts'
 import type { FlowRef } from '../../action-path.ts'
 import { kindGlyph, kindLabel } from '../../atoms/kind.ts'
 import { flowRow, type FlowRowData } from '../flow/row.ts'
-import type { CodeMethod } from '../source/methods.ts'
+import type { CodeDeclaration, CodeFile } from '../source/structure.ts'
 import {
   parentOfElements,
   promotedPeer,
@@ -172,21 +172,84 @@ function fileList(references: CodeReference[], onSource: (file: string) => void)
   return list
 }
 
-function methodList(methods: readonly CodeMethod[], onSource: (file: string, line?: number) => void): HTMLElement {
+function codeFacts(entry: boolean, scope: string, line: number, kind?: string): string {
+  return [entry ? 'entry' : undefined, scope, kind, `line ${line}`]
+    .filter(fact => fact !== undefined)
+    .join(' · ')
+}
+
+function codeEntry(
+  file: string,
+  name: string,
+  line: number,
+  facts: string,
+  callable: boolean,
+  onSource: (file: string, line?: number) => void,
+): HTMLElement {
+  const row = document.createElement('div')
+  row.className = 'code-entry'
+  const link = document.createElement('button')
+  link.type = 'button'
+  link.className = 'link code-declaration'
+  link.textContent = callable ? `${name}()` : name
+  link.setAttribute('aria-label', `Open ${name} in ${file} at line ${line}`)
+  link.addEventListener('click', () => onSource(file, line))
+  const meta = document.createElement('span')
+  meta.className = 'ghost'
+  meta.textContent = facts
+  row.append(link, meta)
+  return row
+}
+
+function declarationItem(
+  file: string,
+  declaration: CodeDeclaration,
+  onSource: (file: string, line?: number) => void,
+): HTMLElement {
+  const item = document.createElement('li')
+  item.append(codeEntry(
+    file,
+    declaration.name,
+    declaration.line,
+    codeFacts(declaration.entry, declaration.scope, declaration.line, declaration.kind === 'class' ? 'class' : undefined),
+    declaration.kind === 'function',
+    onSource,
+  ))
+  if (declaration.kind === 'class' && declaration.members.length > 0) {
+    const members = document.createElement('ul')
+    members.className = 'code-members'
+    for (const member of declaration.members) {
+      const child = document.createElement('li')
+      child.append(codeEntry(
+        file,
+        member.name,
+        member.line,
+        codeFacts(member.entry, member.scope, member.line),
+        true,
+        onSource,
+      ))
+      members.append(child)
+    }
+    item.append(members)
+  }
+  return item
+}
+
+function codeList(files: readonly CodeFile[], onSource: (file: string, line?: number) => void): HTMLElement {
   const list = document.createElement('ul')
-  for (const method of methods) {
-    const item = document.createElement('li')
-    const link = document.createElement('button')
-    link.type = 'button'
-    link.className = 'link code-method'
-    link.textContent = `${method.name}()`
-    link.setAttribute('aria-label', `Open ${method.name} in ${method.file} at line ${method.line}`)
-    link.addEventListener('click', () => onSource(method.file, method.line))
-    const location = document.createElement('span')
-    location.className = 'ghost'
-    location.textContent = `${method.file}:${method.line}`
-    item.append(link, location)
-    list.append(item)
+  list.className = 'code-files'
+  for (const file of files) {
+    const group = document.createElement('li')
+    group.className = 'code-file'
+    const name = document.createElement('div')
+    name.className = 'code-file-name'
+    name.textContent = file.file
+    const declarations = document.createElement('ul')
+    for (const declaration of file.declarations) {
+      declarations.append(declarationItem(file.file, declaration, onSource))
+    }
+    group.append(name, declarations)
+    list.append(group)
   }
   return list
 }
@@ -217,7 +280,7 @@ export function paintDetails(
   actorName: (actorId: string) => string | undefined,
   tab: DetailsTab,
   onTab: (tab: DetailsTab) => void,
-  methods: readonly CodeMethod[],
+  code: readonly CodeFile[],
   onSource: (file: string, line?: number) => void,
 ): void {
   const title = host.querySelector('h1')!
@@ -349,8 +412,8 @@ export function paintDetails(
     },
 
     code: () => {
-      if (methods.length === 0) return
-      body.append(heading('Code'), methodList(methods, onSource))
+      if (code.length === 0) return
+      body.append(heading('Code'), codeList(code, onSource))
     },
 
     files: () => {
