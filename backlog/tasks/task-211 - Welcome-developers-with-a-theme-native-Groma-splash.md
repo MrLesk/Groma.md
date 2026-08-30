@@ -1,11 +1,11 @@
 ---
 id: TASK-211
 title: Welcome developers with a theme-native Groma splash
-status: In Progress
+status: Done
 assignee:
   - '@codex'
 created_date: '2026-08-30 12:10'
-updated_date: '2026-08-30 18:41'
+updated_date: '2026-08-30 20:53'
 labels: []
 dependencies: []
 references:
@@ -26,6 +26,7 @@ modified_files:
   - src/welcome.ts
   - test-bun/welcome.test.ts
   - groma/observed/systems/groma/containers/cli/components/welcome.md
+  - test/cli-view.test.ts
 priority: high
 type: feature
 ordinal: 224000
@@ -52,7 +53,7 @@ When a developer runs bare groma in an interactive terminal from a repository fo
 ## Definition of Done
 <!-- DOD:BEGIN -->
 - [x] #1 Acceptance criteria have objective verification evidence.
-- [ ] #2 Relevant checks pass and changes remain task-scoped.
+- [x] #2 Relevant checks pass and changes remain task-scoped.
 - [x] #3 Public contracts or documentation are updated when behavior changes.
 - [x] #4 Implementation Plan reflects the final approach; correction history and verification are recorded in Implementation Notes.
 <!-- DOD:END -->
@@ -71,6 +72,8 @@ When a developer runs bare groma in an interactive terminal from a repository fo
 8. Keep the detected theme mode as Welcome state, subscribe once to OpenTUI theme_mode changes, repaint immediately, and remove the listener through the existing close path; verify live color changes and listener cleanup.
 
 9. Replace explicit theme detection and repainting with OpenTUI terminal-default foreground and background color intents, letting the terminal own startup and live theme changes; remove the synthetic event test and verify the default color intents plus the exact brand green.
+
+10. Restore the existing groma view --plain TTY contract by honoring the new global --plain value in the view action, add a TTY-sensitive CLI regression test, and run the focused CLI suite.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
@@ -169,4 +172,16 @@ The permitted targeted simplicity re-review passed. It confirmed all Welcome-onl
 Final full-context review passed the corrected architecture with no implementation finding. It confirmed the test now validates the real terminal-default color contract rather than a synthetic event; the domain-local constants and parameter-free helpers are simpler, easier to find, and safer for junior developers. AC #8 remains open only for Alex to confirm the corrected build in his terminal.
 
 Alex confirmed the corrected global groma launcher follows a real terminal theme switch while it remains open. This supplies the required supported-flow evidence for AC #8. The final full check still exits only on the unrelated host watcher exhaustion (EMFILE plus its CLI timeout), including when those two tests run alone; all TASK-211 focused checks pass. Commit and push approved by Alex.
+
+Fixed the TASK-211 regression where the new global --plain option shadowed view's local --plain in Commander, causing groma view --plain to open the TUI on a TTY. The view action now honors the global value. Added a TTY-stdout CLI regression test with a bounded timeout. Focused evidence passes: 12/12 CLI and instruction tests, Biome on both changed files, TypeScript, and a real PTY fixture run that printed the world and exited 0 without mounting OpenTUI.
+
+Full repository check evidence: bun run check reached the Node suite after Biome and TypeScript passed. The new TTY regression passed. The suite then stopped on the pre-existing shared-host watcher exhaustion: the scan --watch CLI case timed out and watchScan reported EMFILE (too many open files). This is unrelated to the two-file plain-view fix; the focused 12-test suite, focused Biome check, TypeScript check, and real PTY run all pass.
+
+Wrap-up verification: the repository-wide bun run check now passes completely (lint with existing warnings only, TypeScript, 91 Node tests, and 195 Bun tests). The final complexity review confirmed the direct CLI mode choice, one Welcome action list, exhaustive command dispatch, and one cleanup path. It found no authority-backed blocker. The final global --plain regression remains protected by the focused TTY test.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Added a theme-native interactive Groma welcome surface for bare TTY launches while keeping plain and non-interactive output stable. One ordered action model drives painting and selection, exhaustive command dispatch reuses existing operations, quit cannot dispatch, and cleanup follows one path. Corrected global --plain handling for groma view, covered the regression, updated public guidance and authored architecture, and passed the full repository check and final complexity review.
+<!-- SECTION:FINAL_SUMMARY:END -->
