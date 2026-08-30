@@ -2,6 +2,7 @@ import { AvoidLib } from 'libavoid-js'
 
 import {
   LANE_GAP,
+  ROUTE_CLEARANCE,
   ROUTE_UNIT,
   assignFixedPorts,
   attachWalls,
@@ -212,8 +213,8 @@ function facingRoutePoints(
   if (Math.sign(finish[runAxis] - start[runAxis]) !== endDirection(source)) return undefined
   const sourceSpan = wallSpan(sourceEndpoint, source)
   const targetSpan = wallSpan(targetEndpoint, target)
-  const lower = Math.max(sourceSpan[0], targetSpan[0])
-  const upper = Math.min(sourceSpan[1], targetSpan[1])
+  const lower = Math.max(sourceSpan[0] + ROUTE_CLEARANCE, targetSpan[0] + ROUTE_CLEARANCE)
+  const upper = Math.min(sourceSpan[1] - ROUTE_CLEARANCE, targetSpan[1] - ROUTE_CLEARANCE)
   if (lower > upper + PORT_EPSILON) return undefined
   const coordinate = Math.min(upper, Math.max(lower, source.slot))
   return [
@@ -246,11 +247,11 @@ function buildingFans(
 }
 
 function orderFan(group: RouteEndRun[]): void {
-  if (group.length < 2 || group.some(end => end.turn !== group[0]!.turn)) return
-  const turn = group[0]!.turn
+  if (group.length < 2) return
   const slots = group.map(end => end.slot).sort((a, b) => a - b)
   group.sort((a, b) => {
-    const distance = turn < 0 ? a.run - b.run : b.run - a.run
+    if (a.turn !== b.turn) return a.turn - b.turn
+    const distance = a.turn < 0 ? a.run - b.run : b.run - a.run
     return Math.abs(distance) > PORT_EPSILON ? distance : a.slot - b.slot
   })
   for (const [position, end] of group.entries()) {

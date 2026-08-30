@@ -71,6 +71,11 @@ function onVisibleBoundary(point: Point, endpoint: Endpoint): boolean {
   return polygon.some((from, index) => pointOnSegment(point, from, polygon[(index + 1) % polygon.length]!))
 }
 
+function onVisibleCorner(point: Point, endpoint: Endpoint): boolean {
+  return visibleObstacle(endpoint).some(corner =>
+    Math.abs(point.x - corner.x) < 0.01 && Math.abs(point.y - corner.y) < 0.01)
+}
+
 function endpointRunLength(points: readonly Point[], fromStart: boolean): number {
   const ordered = fromStart ? points : [...points].reverse()
   const first = { x: ordered[1]!.x - ordered[0]!.x, y: ordered[1]!.y - ordered[0]!.y }
@@ -223,6 +228,44 @@ test.concurrent('overlapping facing walls share one straight route coordinate', 
   assert.equal(route!.points[0]!.gy, route!.points[1]!.gy)
 })
 
+test.concurrent('a facing route stays inside both wall spans instead of attaching at a corner', () => {
+  const endpoints = new Map<string, Endpoint>([
+    ['source', { key: 'source', kind: 'building', rect: { gx: 2, gy: 8, w: 4, d: 3 }, roof: 4 }],
+    ['target', { key: 'target', kind: 'building', rect: { gx: 0, gy: 0, w: 3, d: 2 }, roof: 3.5 }],
+  ])
+  const [route] = routeAll(endpoints, [{
+    id: 'relationship:0',
+    source: 'source',
+    target: 'target',
+    description: 'uses',
+    origin: 'observed',
+  }])
+  const points = route!.points.map(point => ({ x: point.gx * ROUTE_UNIT, y: point.gy * ROUTE_UNIT }))
+
+  assert.equal(points.length, 2)
+  assert.equal(onVisibleCorner(points[0]!, endpoints.get('source')!), false)
+  assert.equal(onVisibleCorner(points.at(-1)!, endpoints.get('target')!), false)
+})
+
+test.concurrent('a corner-only facing overlap keeps the routed dogleg', () => {
+  const endpoints = new Map<string, Endpoint>([
+    ['source', { key: 'source', kind: 'building', rect: { gx: 0, gy: 0, w: 2, d: 2 }, roof: 3 }],
+    ['target', { key: 'target', kind: 'building', rect: { gx: 8, gy: 0, w: 2, d: 2 }, roof: 4 }],
+  ])
+  const [route] = routeAll(endpoints, [{
+    id: 'relationship:0',
+    source: 'source',
+    target: 'target',
+    description: 'uses',
+    origin: 'observed',
+  }])
+  const points = route!.points.map(point => ({ x: point.gx * ROUTE_UNIT, y: point.gy * ROUTE_UNIT }))
+
+  assert.equal(points.length, 4)
+  assert.equal(onVisibleCorner(points[0]!, endpoints.get('source')!), false)
+  assert.equal(onVisibleCorner(points.at(-1)!, endpoints.get('target')!), false)
+})
+
 test.concurrent('a safe endpoint lane transition loses its extra dogleg', () => {
   const [route] = refineRoutes(new Map(), [{
     id: 'relationship:0',
@@ -267,6 +310,38 @@ test.concurrent('nested routes sharing a building side use a non-crossing pin or
   }))
 
   assert.deepEqual(routes.map(route => [route.source, route.target]), targets.map(target => ['source', target]))
+  assert.equal(routes.some((route, index) => routes.slice(index + 1).some(other => routesCross(route, other))), false)
+})
+
+test.concurrent('mixed turns do not block a non-crossing shared-side pin order', () => {
+  const endpoints = new Map<string, Endpoint>([
+    ['blocker', { key: 'blocker', kind: 'building', rect: { gx: 0, gy: 5, w: 5, d: 5 }, roof: 1 }],
+    ['source', { key: 'source', kind: 'building', rect: { gx: 0, gy: 12, w: 4, d: 4 }, roof: 1 }],
+    ['early-north', { key: 'early-north', kind: 'building', rect: { gx: 15, gy: 0, w: 3, d: 3 }, roof: 1 }],
+    ['later-north', { key: 'later-north', kind: 'building', rect: { gx: 15, gy: 7, w: 3, d: 3 }, roof: 1 }],
+    ['south', { key: 'south', kind: 'building', rect: { gx: 15, gy: 30, w: 2, d: 4 }, roof: 1 }],
+  ])
+  const targets = ['early-north', 'south', 'later-north']
+  const routed = routeAll(endpoints, targets.map((target, index) => ({
+    id: `relationship:${index}`,
+    source: 'source',
+    target,
+    description: 'uses',
+    origin: 'observed',
+  })))
+  const routes: FlatRoute[] = routed.map(route => ({
+    ...route,
+    points: route.points.map(point => ({ x: point.gx, y: point.gy })),
+  }))
+  const byTarget = new Map(routes.map(route => [route.target, route]))
+  const early = byTarget.get('early-north')!
+  const later = byTarget.get('later-north')!
+  const south = byTarget.get('south')!
+
+  assert.ok(early.points[0]!.y < later.points[0]!.y)
+  assert.ok(early.points[2]!.y < early.points[1]!.y)
+  assert.ok(later.points[2]!.y < later.points[1]!.y)
+  assert.ok(south.points[2]!.y > south.points[1]!.y)
   assert.equal(routes.some((route, index) => routes.slice(index + 1).some(other => routesCross(route, other))), false)
 })
 
