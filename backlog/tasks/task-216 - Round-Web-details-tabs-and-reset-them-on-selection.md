@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@codex'
 created_date: '2026-08-30 15:12'
-updated_date: '2026-08-30 15:24'
+updated_date: '2026-08-30 16:45'
 labels: []
 dependencies: []
 references:
@@ -46,11 +46,10 @@ The Web details tabs should read as one rounded segmented control using the same
 ## Implementation Plan
 
 <!-- SECTION:PLAN:BEGIN -->
-1. `src/viewers/web/page.ts`: define one shared control-radius token, use it for existing chrome controls, and clip the joined details tab group while explicitly keeping both button radii at zero.
-2. `src/viewers/web/organisms/details.ts` and `src/viewers/web/render.ts`: keep the tab for the same primary selection and reset it to What it does when selection moves to another architecture item; leave initial URL state unchanged.
-3. `test-bun/inspect-details.test.ts`: cover the selection-to-tab rule as navigation state.
-4. `docs/viewers/web/index.md`: document the reset behavior and direct-link exception.
-5. Verify with focused Bun tests, the repository check, cold and full-context simplicity reviews, and the browser flow.
+1. Keep the shared 6px control radius and the existing selection-reset behavior.
+2. In `src/viewers/web/page.ts`, make the details tabs wrapper own the outer hairline and radius; remove child outer borders and draw only the center seam on the second tab.
+3. Verify the direct How link, component-switch reset, computed border geometry, and the rendered left edge in the browser.
+4. Run focused tests, the repository check, and the required simplicity and full-context reviews before finalizing again.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
@@ -69,10 +68,18 @@ Final repository check: lint and TypeScript passed; the Node suite passed 79/81 
 Full-context complexity review: no blocking findings and no structural refactor recommended. Accepted its one in-scope defensive improvement: `#details .tabs button` now explicitly keeps radius 0 so a later generic button style cannot round the joined seam.
 
 Post-review browser verification repeated the direct How link and component-switch flow. Computed styles were group radius 6px, overflow hidden, and both button radii 0px; selecting Render reset to What it does with no browser warnings or errors.
+
+Correction reopened after rendered feedback showed the left rounded outline appearing cut. Root cause: the rounded wrapper clipped the square border owned by its first child button, so the curve had no continuous wrapper-owned hairline.
+
+Corrected the Details tab border model in `src/viewers/web/page.ts`: the rounded wrapper now owns the one-pixel outer hairline; tab buttons have no outer borders; only the second button draws the center seam. This removes the clipped child-border curve without adding another visual concept.
+
+Correction verification: 16 focused Bun tests pass. Browser QA at `http://localhost:4757/?component=web-viewer-details&tab=how` showed a continuous 1px wrapper hairline, 6px wrapper radius, borderless buttons, and one 1px center seam; selecting Render reset to What it does and the console had no warnings or errors. `bun run check` passed lint and TypeScript and 88/90 Node tests; the same two filesystem-watch tests remained blocked by shared-session `EMFILE` watcher exhaustion.
+
+Correction reviews: the cold simplicity reviewer and full-context complexity reviewer found no blocking or optional changes. Both confirmed the three adjacent rules make border ownership explicit and safe: wrapper owns the outside, buttons own content/fill, second button owns the seam.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
-Rounded the Web details tabs as one shared-radius segmented control and made every new architecture selection return to What it does while preserving direct `tab=how` links. Verified with 16 focused tests, two browser interaction runs with computed-style checks and a clean console, and cold plus full-context simplicity reviews. The full repository check passed lint and TypeScript; its only two failures were unrelated filesystem-watch tests blocked by the shared session OS watcher limit.
+Rounded tabs now have one continuous wrapper-owned hairline instead of clipped child borders, so the outer curve no longer looks cut. The square center seam, direct `tab=how` link, and reset to What it does remain intact. Verified with 16 focused tests, browser geometry and interaction checks, a clean browser console, and two simplicity reviews; the full check passed lint, TypeScript, and 88/90 Node tests, with only the shared-session `EMFILE` watcher failures remaining.
 <!-- SECTION:FINAL_SUMMARY:END -->
