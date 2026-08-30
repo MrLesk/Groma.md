@@ -8,6 +8,7 @@ import {
   ROUTE_CLEARANCE,
   ROUTE_UNIT,
   crossingRouteIdsFor,
+  newRouteCrossingFor,
   visibleObstacle,
   type Endpoint,
   type FlatRoute,
@@ -287,6 +288,101 @@ test.concurrent('a safe endpoint lane transition loses its extra dogleg', () => 
     { x: 0, y: 3 * ROUTE_UNIT },
     { x: 10 * ROUTE_UNIT, y: 3 * ROUTE_UNIT },
   ])
+})
+
+test.concurrent('compacted terminal route bodies keep wall endpoints and use the preferred lane gap', () => {
+  const terminalRoutes: FlatRoute[] = [
+    {
+      id: 'relationship:a',
+      source: 'source-a',
+      target: 'target',
+      description: 'uses',
+      origin: 'observed',
+      points: [
+        { x: -4 * ROUTE_UNIT, y: -4 * ROUTE_UNIT },
+        { x: -4 * ROUTE_UNIT, y: 0 },
+        { x: 12 * ROUTE_UNIT, y: 0 },
+      ],
+    },
+    {
+      id: 'relationship:b',
+      source: 'source-b',
+      target: 'target',
+      description: 'uses',
+      origin: 'observed',
+      points: [
+        { x: -6 * ROUTE_UNIT, y: -6 * ROUTE_UNIT },
+        { x: -8 * ROUTE_UNIT, y: -6 * ROUTE_UNIT },
+        { x: -8 * ROUTE_UNIT, y: 0.75 * ROUTE_UNIT },
+        { x: 12 * ROUTE_UNIT, y: 0.75 * ROUTE_UNIT },
+      ],
+    },
+    {
+      id: 'relationship:c',
+      source: 'source-c',
+      target: 'target',
+      description: 'uses',
+      origin: 'observed',
+      points: [
+        { x: -4 * ROUTE_UNIT, y: 8 * ROUTE_UNIT },
+        { x: -4 * ROUTE_UNIT, y: 1.5 * ROUTE_UNIT },
+        { x: 12 * ROUTE_UNIT, y: 1.5 * ROUTE_UNIT },
+      ],
+    },
+  ]
+
+  const refined = refineRoutes(new Map(), terminalRoutes)
+  const longestHorizontal = (route: FlatRoute): Point => route.points.slice(1)
+    .map((to, index) => ({ from: route.points[index]!, to }))
+    .filter(segment => Math.abs(segment.from.y - segment.to.y) < 0.01)
+    .sort((a, b) => Math.abs(b.to.x - b.from.x) - Math.abs(a.to.x - a.from.x))[0]!.from
+  const turnCount = (route: FlatRoute): number => route.points.slice(2).filter((to, index) => {
+    const [a, b] = route.points.slice(index, index + 2) as [Point, Point]
+    return (b.x - a.x) * (to.y - b.y) !== (b.y - a.y) * (to.x - b.x)
+  }).length
+
+  assert.deepEqual(refined.map(route => [route.points[0], route.points.at(-1)]),
+    terminalRoutes.map(route => [route.points[0], route.points.at(-1)]))
+  assert.deepEqual(refineRoutes(new Map(), terminalRoutes), refined)
+  assert.equal(refined.every(route => orthogonal(route.points)), true)
+  assert.deepEqual(refined.map((route, index) => turnCount(route) - turnCount(terminalRoutes[index]!)), [2, 0, 2])
+  const routeIds = new Set(refined.map(route => route.id))
+  assert.equal(routeSpacingIndex(refined, routeIds).measure(refined, [LANE_GAP])[0]!.sharedPathLength, 0)
+  const lanes = refined.map(route => longestHorizontal(route).y).sort((a, b) => a - b)
+  assert.equal(lanes.slice(1).every((lane, index) => lane - lanes[index]! >= 2 * ROUTE_UNIT - 0.01), true)
+
+  const perpendicular: FlatRoute = {
+    id: 'relationship:perpendicular',
+    source: 'short-source',
+    target: 'short-target',
+    description: 'uses',
+    origin: 'observed',
+    points: [{ x: 0, y: -40 }, { x: 0, y: -20 }],
+  }
+  const withPerpendicular = [...terminalRoutes, perpendicular]
+  const crossingGuarded = refineRoutes(new Map(), withPerpendicular)
+  assert.equal(newRouteCrossingFor(withPerpendicular, routeIds)(crossingGuarded), false)
+  assert.deepEqual(crossingGuarded.at(-1), perpendicular)
+
+  const obstacle = new Map<string, Endpoint>([
+    ['foreign', { key: 'foreign', kind: 'building', rect: { gx: 0, gy: -2, w: 1, d: 1 }, roof: 0 }],
+  ])
+  assert.deepEqual(crossingRouteIdsFor(obstacle)(refineRoutes(obstacle, terminalRoutes)), [])
+
+  const shortStub: FlatRoute = {
+    id: 'relationship:short-stub',
+    source: 'stub-source',
+    target: 'stub-target',
+    description: 'uses',
+    origin: 'observed',
+    points: [
+      { x: 0, y: 8 * ROUTE_UNIT },
+      { x: 11.5 * ROUTE_UNIT, y: 8 * ROUTE_UNIT },
+      { x: 11.5 * ROUTE_UNIT, y: 0 },
+      { x: 12 * ROUTE_UNIT, y: 0 },
+    ],
+  }
+  assert.deepEqual(refineRoutes(new Map(), [shortStub]), [shortStub])
 })
 
 test.concurrent('nested routes sharing a building side use a non-crossing pin order', () => {

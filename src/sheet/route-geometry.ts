@@ -409,6 +409,48 @@ function routeCrosses(route: FlatRoute, obstacles: readonly RouteObstacle[]): bo
   return false
 }
 
+function segmentsCross(a0: Point, a1: Point, b0: Point, b1: Point): boolean {
+  const aHorizontal = Math.abs(a0.y - a1.y) < EPSILON
+  const bHorizontal = Math.abs(b0.y - b1.y) < EPSILON
+  if (aHorizontal === bHorizontal) return false
+  const [horizontal0, horizontal1] = aHorizontal ? [a0, a1] : [b0, b1]
+  const [vertical0, vertical1] = aHorizontal ? [b0, b1] : [a0, a1]
+  const between = (value: number, from: number, to: number) =>
+    value > Math.min(from, to) + EPSILON && value < Math.max(from, to) - EPSILON
+  return between(vertical0.x, horizontal0.x, horizontal1.x)
+    && between(horizontal0.y, vertical0.y, vertical1.y)
+}
+
+export function routesCross(a: FlatRoute, b: FlatRoute): boolean {
+  for (let left = 1; left < a.points.length; left += 1) {
+    for (let right = 1; right < b.points.length; right += 1) {
+      if (segmentsCross(a.points[left - 1]!, a.points[left]!, b.points[right - 1]!, b.points[right]!)) return true
+    }
+  }
+  return false
+}
+
+function crossingPairs(routes: readonly FlatRoute[], touching: ReadonlySet<string>): Set<string> {
+  const result = new Set<string>()
+  for (let left = 0; left < routes.length; left += 1) {
+    for (let right = left + 1; right < routes.length; right += 1) {
+      const a = routes[left]!
+      const b = routes[right]!
+      if ((touching.has(a.id) || touching.has(b.id)) && routesCross(a, b)) result.add(`${a.id}\0${b.id}`)
+    }
+  }
+  return result
+}
+
+/** Checks whether moving the selected routes introduces a new proper crossing. */
+export function newRouteCrossingFor(
+  routes: readonly FlatRoute[],
+  touching: ReadonlySet<string>,
+): (candidate: readonly FlatRoute[]) => boolean {
+  const before = crossingPairs(routes, touching)
+  return candidate => [...crossingPairs(candidate, touching)].some(pair => !before.has(pair))
+}
+
 /** Returns a checker for routes whose open body enters a foreign building silhouette. */
 export function crossingRouteIdsFor(
   endpoints: ReadonlyMap<string, Endpoint>,
