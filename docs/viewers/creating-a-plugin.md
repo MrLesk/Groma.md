@@ -8,8 +8,8 @@ Surface facts stay in the plugin: terminal cells, browser pixels, MCP app
 chrome. Nothing in core or architecture Markdown depends on them.
 
 ```text
-ArchitectureWorld → semanticView (semantic city) → TUI plugin
-ArchitectureWorld → sheetScene (blueprint sheet) → Web plugin
+ArchitectureWorld → sheetScene (blueprint sheet) → TUI plugin
+                                             └──→ Web plugin
 ```
 
 ## What every viewer does
@@ -29,33 +29,33 @@ project profile; the viewer still cannot write architecture records.
 
 ## The world
 
-Core returns the merged observed, planned and missing architecture,
-already laid out, with origin annotations. For the TUI, the plugin asks
-core's `semanticView` for the city of its current level and focus on
-every repaint (items with roles and drawn sizes, and promoted relationship
-endpoints); for the web, the server composes the sheet with `sheetScene`
-before shipping it (islands, slabs, buildings, zones and lattice routes on
-whole cells). A live host replaces the world after a `groma scan --watch`
-fold, an architecture Markdown change, or a Backlog task file change.
-Keys, pointers, projection, camera, paint, and widgets are plugin
+Core returns the merged observed, planned and missing architecture with origin
+annotations, then composes one `SheetScene`: islands, slabs, buildings, zones,
+and lattice routes on whole cells. Both hosts give that fixed scene to their
+viewer. Keys, pointers, projection, camera, paint, and widgets are plugin
 concerns.
+
+A live host reloads the architecture and composes a new sheet after a
+`groma scan --watch` fold, an architecture Markdown change, or a manual
+refresh. A Backlog task change updates only the work projected onto the cached
+architecture and sheet; it does not lay the map out again.
 
 ## Lifecycle and contract
 
-`groma view` calls `startTerminalViewer` in `src/view-host.ts`. The host
-loads the view model with `loadArchitectureViewModel` and projects the
-Backlog work it has read so far onto it with `projectActiveWork`, mounts
-the plugin with `mountTerminalViewer(renderer, viewModel, { palette,
-onRefresh })`, pulls the work with `workSource.read()`, and starts three
-watches: `watchScan` for source folds, `watchArchitecture` for
-architecture Markdown, and `workSource.watch` for Backlog task files.
-Each watch republishes: the host loads the view model again and hands it
-to the plugin's `update`; the work watch reads Backlog again first.
-Publishes run one at a time and stop once the viewer is closed. When the
-plugin's `closed` promise settles, the host stops the three watches. The
-host's `destroy` marks the viewer closed, stops the watches and destroys
-the plugin; its `refresh`, `update` and `setView` pass through to the
-plugin.
+`groma view` calls `startTerminalViewer` in `src/view-host.ts`. The host loads
+the annotated architecture, composes its sheet, projects the Backlog work read
+so far with `projectActiveWork`, and mounts
+`mountTerminalViewer(renderer, viewModel, { palette, onRefresh })`. It then
+pulls work with `workSource.read()` and starts three watches: `watchScan` for
+source folds, `watchArchitecture` for architecture Markdown, and
+`workSource.watch` for Backlog task files.
+
+Source, Markdown, and manual refreshes serialize architecture reloads and sheet
+composition before calling the plugin's `update`. Work refreshes read Backlog
+and call `update` with new markers over the cached map. When the plugin's
+`closed` promise settles, the host stops all three watches. The host's
+`destroy` marks the viewer closed, stops the watches and destroys the plugin;
+its `refresh`, `update` and `setView` pass through to the plugin.
 
 The TUI plugin is `mountTerminalViewer(renderer, viewModel, options)` in
 `src/viewers/tui/terminal-viewer.ts`; `options` may carry `level`,
