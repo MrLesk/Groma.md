@@ -75,10 +75,13 @@ toggle keeps them closed. Actors do not repeat Commands as relationships
 or build information.
 How it's built holds the evidence: the technology the element's Markdown
 declares (`technology: SVG, Bun serve` renders as one chip per
-comma-separated part), exported callable TypeScript declarations under Code,
-and exact authored source references with file measurements under Files. A
-callable opens read-only source at its visibly marked declaration line; a file
-opens at the top. Elements without build evidence do not show the tab. Children and
+comma-separated part), named TypeScript structure under Code, and exact
+authored source references with file measurements under Files. Code follows
+the authored file order. It includes exported and module-private top-level
+callables; named classes group their public, protected, and private methods.
+The Code reference symbol is marked as the entry point, while nested callbacks
+stay out. A declaration opens read-only source at its visibly marked line; a
+file opens at the top. Elements without build evidence do not show the tab. Children and
 relationship peers select that element. To inspect a highlighted path, select
 one of its items or connections on the map. When the
 selection is an actor who uses a launcher, software they use that

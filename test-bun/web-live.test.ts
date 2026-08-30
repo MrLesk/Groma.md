@@ -144,22 +144,44 @@ test.concurrent('groma web serves a selected Git snapshot without changing repos
   }
 })
 
+function expectedCode(version: 'current' | 'historical') {
+  return [
+    { file: 'src/details.ts', declarations: [
+      { kind: 'function', name: `${version}Hidden`, line: 1, scope: 'internal', entry: false },
+      { kind: 'class', name: 'Details', line: 4, scope: 'export', entry: true, members: [
+        { name: 'run', line: 5, scope: 'public', entry: false },
+        { name: 'prepare', line: 6, scope: 'protected', entry: false },
+        { name: 'finish', line: 7, scope: 'private', entry: false },
+      ] },
+      { kind: 'function', name: `${version}Arrow`, line: 9, scope: 'internal', entry: false },
+    ] },
+    { file: 'src/helpers.ts', declarations: [
+      { kind: 'function', name: 'helperEntry', line: 1, scope: 'export', entry: true },
+      { kind: 'function', name: `${version}Helper`, line: 2, scope: 'internal', entry: false },
+    ] },
+  ]
+}
+
 test.concurrent('groma web reads component code on demand from the selected revision', async () => {
   const root = await createLiveRepo()
-  const historicalSource = 'function hidden() {}\nexport function historicalMethod() {}\nexport const historicalArrow = () => true\n'
-  const currentSource = 'function hidden() {}\nexport function currentMethod() {}\nexport const currentArrow = () => true\n'
+  const historicalSource = 'function historicalHidden() {\n  function nestedHistorical() {}\n}\nexport class Details {\n  run() {}\n  protected prepare() {}\n  private finish() {}\n}\nconst historicalArrow = () => true\n'
+  const currentSource = 'function currentHidden() {\n  const nestedArrow = () => false\n}\nexport class Details {\n  public run() {}\n  protected prepare() {}\n  private finish() {}\n}\nconst currentArrow = () => true\n'
+  const historicalHelpers = 'export function helperEntry() {}\nconst historicalHelper = function () {}\n'
+  const currentHelpers = 'export function helperEntry() {}\nconst currentHelper = function () {}\n'
   await writeTree(root, {
     'groma/observed/systems/shop/system.md': '---\nid: shop\nkind: system\n---\n\n# Shop\n',
     'groma/observed/systems/shop/containers/web/container.md': '---\nid: web\nkind: container\nparent: shop\n---\n\n# Web\n',
-    'groma/observed/systems/shop/containers/web/components/details.md': '---\nid: details\nkind: component\nparent: web\ncode:\n  - scanner: typescript\n    file: src/details.ts\n---\n\n# Details\n',
+    'groma/observed/systems/shop/containers/web/components/details.md': '---\nid: details\nkind: component\nparent: web\ncode:\n  - scanner: typescript\n    file: src/details.ts\n    symbol: Details\n  - scanner: typescript\n    file: src/helpers.ts\n    symbol: helperEntry\n---\n\n# Details\n',
     'src/details.ts': historicalSource,
+    'src/helpers.ts': historicalHelpers,
   })
   await commitAll(root, 'Versioned source component')
   await writeFile(path.join(root, 'src', 'details.ts'), currentSource)
+  await writeFile(path.join(root, 'src', 'helpers.ts'), currentHelpers)
   const server = await startWebViewer(root, { port: 0 })
   try {
     const page = await (await fetch(server.url)).text()
-    assert.doesNotMatch(page, /currentMethod/)
+    assert.doesNotMatch(page, /currentHidden/)
     const world = await (await fetch(`${server.url}/world.json`)).json() as {
       revisions: { id: string; subject: string }[]
     }
@@ -167,19 +189,11 @@ test.concurrent('groma web reads component code on demand from the selected revi
     const selected = new URLSearchParams({ element: 'observed:details', file: 'src/details.ts' })
     const current = await (await fetch(`${server.url}/source.json?${selected}`)).json() as { source: string }
     assert.equal(current.source, currentSource)
-    const currentMethods = await (await fetch(`${server.url}/methods.json?element=observed:details`)).json()
-    assert.deepEqual(currentMethods, [
-      { name: 'currentMethod', file: 'src/details.ts', line: 2 },
-      { name: 'currentArrow', file: 'src/details.ts', line: 3 },
-    ])
+    assert.deepEqual(await (await fetch(`${server.url}/code.json?element=observed:details`)).json(), expectedCode('current'))
     selected.set('revision', revision.id)
     const historical = await (await fetch(`${server.url}/source.json?${selected}`)).json() as { source: string }
     assert.equal(historical.source, historicalSource)
-    const historicalMethods = await (await fetch(`${server.url}/methods.json?element=observed:details&revision=${revision.id}`)).json()
-    assert.deepEqual(historicalMethods, [
-      { name: 'historicalMethod', file: 'src/details.ts', line: 2 },
-      { name: 'historicalArrow', file: 'src/details.ts', line: 3 },
-    ])
+    assert.deepEqual(await (await fetch(`${server.url}/code.json?element=observed:details&revision=${revision.id}`)).json(), expectedCode('historical'))
     selected.set('file', 'src/other.ts')
     assert.equal((await fetch(`${server.url}/source.json?${selected}`)).status, 404)
   } finally {
