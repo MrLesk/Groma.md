@@ -2,7 +2,6 @@ import type { Point } from '../../../types.ts'
 import { PLANE } from '../../../sheet/measure.ts'
 import { paintLayerLabels, paintLayerPlanes } from '../layers/paint.ts'
 import type { LayeredScene } from '../layers/separation.ts'
-import { cameraTransform } from './camera.ts'
 import type { Camera } from './camera.ts'
 import { paintBuildings } from './paint-buildings.ts'
 import { paintIslands, paintSheet, paintSlabs } from './paint-ground.ts'
@@ -47,7 +46,7 @@ function gridPattern(): { pattern: SVGPatternElement; lines: SVGPathElement[] } 
 }
 
 export interface IsoMap {
-  svg: SVGSVGElement
+  svg: HTMLElement
   /** Applies the camera and reports whether its scale-dependent presentation changed. */
   move(camera: Camera, zoomRatio: number): boolean
   /** Rebuilds every layer after an architecture or project-profile change. */
@@ -79,15 +78,26 @@ function onSurface(points: readonly Point[]): Point {
   return { x: west.x + FOOT_INSET, y: west.y }
 }
 
-/** The map SVG: patterns, one camera group, and the layers back to front. */
+/** One fixed grid and one composited camera containing the complete SVG scene. */
 export function createMap(host: HTMLElement): IsoMap {
-  const root = svg('svg', { role: 'img', 'aria-label': 'Architecture map', tabindex: 0 })
-  root.innerHTML = `<defs>${mapDefs()}</defs>`
-  const definitions = root.querySelector('defs')!
+  const root = document.createElement('div')
+  root.className = 'map-surface'
+  root.setAttribute('role', 'img')
+  root.setAttribute('aria-label', 'Architecture map')
+  root.tabIndex = 0
+  const scene = svg('svg', { width: '100%', height: '100%', overflow: 'visible' }, 'scene')
+  scene.innerHTML = `<defs>${mapDefs()}</defs>`
+  const definitions = scene.querySelector('defs')!
   const grid = gridPattern()
-  definitions.append(grid.pattern)
+  const fieldSurface = svg('svg', { width: '100%', height: '100%', 'aria-hidden': 'true' }, 'field-surface')
+  const fieldDefinitions = svg('defs')
+  fieldDefinitions.append(grid.pattern)
   const field = svg('rect', { width: '100%', height: '100%', fill: 'url(#grid)' }, 'field')
-  const camera = svg('g', {}, 'camera')
+  fieldSurface.append(fieldDefinitions, field)
+  const camera = document.createElement('div')
+  camera.className = 'camera'
+  const zoom = document.createElement('div')
+  zoom.className = 'zoom'
   const layers = {
     sheet: svg('g', {}, 'sheet'),
     islands: svg('g', {}, 'islands'),
@@ -96,8 +106,10 @@ export function createMap(host: HTMLElement): IsoMap {
     items: svg('g', {}, 'items'),
     layerLabels: svg('g', {}, 'layer-labels'),
   }
-  camera.append(...Object.values(layers))
-  root.append(field, camera)
+  scene.append(...Object.values(layers))
+  zoom.append(scene)
+  camera.append(zoom)
+  root.append(fieldSurface, camera)
   host.replaceChildren(root)
 
   let items = new Map<string, Element>()
@@ -112,7 +124,7 @@ export function createMap(host: HTMLElement): IsoMap {
   return {
     svg: root,
     move(current, zoomRatio) {
-      camera.style.transform = cameraTransform(current)
+      camera.style.transform = `translate(${current.x.toFixed(2)}px, ${current.y.toFixed(2)}px)`
       const showGrid = gridVisible(current.k)
       if (showGrid) {
         grid.pattern.setAttribute(
@@ -122,6 +134,7 @@ export function createMap(host: HTMLElement): IsoMap {
       }
       const scaleChanged = current.k !== appliedK || zoomRatio !== appliedZoomRatio
       if (!scaleChanged) return false
+      zoom.style.transform = `scale(${current.k.toFixed(4)})`
       const weight = weightAt(zoomRatio)
       camera.style.setProperty('--weight', String(weight))
       camera.style.setProperty('--arrow-scale', String(weight / current.k))
@@ -138,7 +151,6 @@ export function createMap(host: HTMLElement): IsoMap {
       painted = scene
       gridView = scene.view
       definitions.innerHTML = mapDefs(scene.view)
-      definitions.append(grid.pattern)
       for (const layer of Object.values(layers)) layer.replaceChildren()
       paintLayerPlanes(layers.sheet, scene)
       paintSheet(layers.sheet, scene)
@@ -207,7 +219,7 @@ export function createMap(host: HTMLElement): IsoMap {
       return target.closest<HTMLElement>('[data-id]')?.dataset.id
     },
     isSheet(target) {
-      return target === root || target === field
+      return target === root || target === camera || target === zoom || target === scene || target === field
     },
     isProjectEdit(target) {
       return target instanceof Element && target.closest('[data-project-edit]') !== null

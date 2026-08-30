@@ -1,7 +1,7 @@
 import type { Bounds, Point } from '../../../types.ts'
 import type { ProjectedScene } from './project.ts'
 
-/** Screen = world · k + (x, y); applied as one CSS transform on the camera group. */
+/** Screen = world · k + (x, y); zoom and pan live on separate composition layers. */
 export interface Camera {
   k: number
   x: number
@@ -124,10 +124,6 @@ export function wheelAction(
     return { kind: 'zoom', factor: Math.exp(-event.deltaY * (event.ctrlKey ? PINCH_RATE : WHEEL_RATE)) }
   }
   return { kind: 'pan', dx: -event.deltaX, dy: -event.deltaY }
-}
-
-export function cameraTransform(camera: Camera): string {
-  return `translate(${camera.x.toFixed(2)}px, ${camera.y.toFixed(2)}px) scale(${camera.k.toFixed(4)})`
 }
 
 /** Percent relative to the fitted view; empty while fitted. */

@@ -4,6 +4,7 @@ import path from 'node:path'
 
 import { test } from 'bun:test'
 
+import { mapCss } from '../src/viewers/web/iso/style.ts'
 import { repositoryRoot } from './helpers.ts'
 
 interface AppendCall {
@@ -32,13 +33,15 @@ function assertFastComposition(source: string): void {
   const calls = appendCalls(source)
   assert.deepEqual(
     calls.filter(call => /\bfield\b/.test(call.arguments)).map(call => call.parent),
-    ['root'],
+    ['fieldSurface'],
     'Append the patterned field beside the moving camera; nesting it causes pan and zoom repaint regressions',
   )
   assert.ok(
-    calls.some(call => call.parent === 'root' && call.arguments.replaceAll(/\s/g, '') === 'field,camera'),
-    'Append the field and camera together as root SVG siblings',
+    calls.some(call => call.parent === 'root' && call.arguments.replaceAll(/\s/g, '') === 'fieldSurface,camera'),
+    'Append the field surface and camera together as map-surface siblings',
   )
+  assert.ok(calls.some(call => call.parent === 'camera' && call.arguments.trim() === 'zoom'))
+  assert.ok(calls.some(call => call.parent === 'zoom' && call.arguments.trim() === 'scene'))
 }
 
 test.concurrent('the patterned grid stays outside the moving SVG camera', async () => {
@@ -53,4 +56,15 @@ test.concurrent('the SVG performance guard rejects a field inside the camera', (
     () => assertFastComposition('camera.append(field, ...Object.values(layers))\nroot.append(camera)'),
     /Append the patterned field beside the moving camera/,
   )
+})
+
+test.concurrent('pan and zoom stay on separate retained composition layers', async () => {
+  const source = await readFile(path.join(repositoryRoot, 'src/viewers/web/iso/map.ts'), 'utf8')
+  assert.match(
+    mapCss,
+    /#map \.camera\s*\{[^}]*will-change:\s*transform/,
+    'Retain the complete scaled scene while panning instead of repainting its text and routes',
+  )
+  assert.match(source, /camera\.style\.transform = `translate\(/)
+  assert.match(source, /zoom\.style\.transform = `scale\(/)
 })
