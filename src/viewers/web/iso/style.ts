@@ -184,14 +184,19 @@ export const mapCss = `
   #map .route.endpoint .arrow, #map .route.selected .arrow, #map .route.touched .arrow { fill: var(--highlight); opacity: 1; }
   #map .route.touched.half .line { stroke-dasharray: 1 4; }
   #map .route.lit { --emphasis: ${emphasis(2)}; }
+  /* One inherited offset moves every lit dash; neutral routes reset it so their origin patterns stay still. */
+  #map .routes { animation: map-flow 0.8s steps(10, end) infinite; animation-play-state: paused; }
+  #map .camera[data-tracing] .routes { animation-play-state: running; }
+  #map .route:not(.lit), #map .route-base { stroke-dashoffset: 0; }
   #map .route.lit .line {
     stroke: var(--highlight); opacity: 1;
-    stroke-dasharray: 6 4; animation: map-flow 0.8s linear infinite;
+    stroke-dasharray: 6 4;
   }
   #map .route.lit .arrow { fill: var(--highlight); opacity: 1; }
   @keyframes map-flow { to { stroke-dashoffset: -10; } }
   @media (prefers-reduced-motion: reduce) {
-    #map .route.lit .line { animation: none; stroke-dasharray: none; }
+    #map .routes { animation: none; }
+    #map .route.lit .line { stroke-dasharray: none; }
   }
   #map .camera[data-tracing] .route:not(.lit):not(.selected) { opacity: 0.18; }
   #map .camera[data-tracing] .building:not(.onpath):not(.selected),
@@ -204,7 +209,7 @@ export const mapCss = `
   #map .building.lit, #map .slab.lit, #map .island.lit { --emphasis: ${emphasis(1)}; }
   #map .context .face, #map .island.context > .ground, #map .selected .face, #map .island.selected > .ground,
   #map .touched .face, #map .island.touched > .ground,
-  #map .building.lit > .face, #map .slab.lit > .face, #map .island.lit > .ground { stroke: var(--highlight); }
+  #map .building.lit .face, #map .slab.lit > .face, #map .island.lit > .ground { stroke: var(--highlight); }
   #map .selected > .label .text, #map .touched > .label .text,
   #map .building.lit > .label .text, #map .slab.lit > .label .text, #map .island.lit > .label .text {
     fill: var(--ink); font-weight: 600;
