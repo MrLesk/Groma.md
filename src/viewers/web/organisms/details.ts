@@ -155,6 +155,7 @@ function fileFacts(reference: CodeReference): string {
 
 function fileList(references: CodeReference[], onSource: (file: string) => void): HTMLElement {
   const list = document.createElement('ul')
+  list.className = 'file-groups'
   for (const reference of references) {
     const item = document.createElement('li')
     const file = document.createElement('button')
@@ -237,10 +238,9 @@ function declarationItem(
 
 function codeList(files: readonly CodeFile[], onSource: (file: string, line?: number) => void): HTMLElement {
   const list = document.createElement('ul')
-  list.className = 'code-files'
+  list.className = 'file-groups'
   for (const file of files) {
     const group = document.createElement('li')
-    group.className = 'code-file'
     const name = document.createElement('div')
     name.className = 'code-file-name'
     name.textContent = file.file
