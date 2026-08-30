@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict'
 import { test } from 'bun:test'
 
+import { createArchitectureSearch } from '../src/search.ts'
 import {
   defaultSelection,
-  filterMatches,
   initialState,
   litAction,
-  reduceFilter,
+  reduceSearch,
   reduceViewer,
   type ViewerState,
 } from '../src/viewers/tui/navigation.ts'
@@ -263,21 +263,22 @@ test.concurrent('dismiss closes details and returns container scope to the root 
 
 test.concurrent('search follows matches live and cancel restores the prior view', async () => {
   const model = await terminalModel(viewerFixtureRoot)
-  const matches = filterMatches(model, 'VIEW')
+  const search = createArchitectureSearch(model.elements)
+  let state = reduceSearch(model, search, initialState(model), { type: 'open' })
+  for (const char of 'view') state = reduceSearch(model, search, state, { type: 'char', char })
+  const matches = state.search?.matches ?? []
   assert.deepEqual(
     matches.map(element => element.representationId).sort(),
-    ['observed:order-viewer', 'observed:stock-viewer'],
+    ['observed:order-page', 'observed:order-viewer', 'observed:stock-page', 'observed:stock-viewer'],
   )
 
-  let state = reduceFilter(model, initialState(model), { type: 'open' })
-  for (const char of 'view') state = reduceFilter(model, state, { type: 'char', char })
   assert.equal(state.currentId, matches[0]!.representationId)
   assert.equal(state.level, 'context')
-  state = reduceFilter(model, state, { type: 'next' })
+  state = reduceSearch(model, search, state, { type: 'next' })
   assert.equal(state.currentId, matches[1]!.representationId)
 
-  const cancelled = reduceFilter(model, state, { type: 'cancel' })
-  assert.equal(cancelled.filter, undefined)
+  const cancelled = reduceSearch(model, search, state, { type: 'cancel' })
+  assert.equal(cancelled.search, undefined)
   assert.equal(cancelled.currentId, 'observed:shop')
 })
 

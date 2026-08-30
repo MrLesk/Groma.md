@@ -8,11 +8,11 @@ import {
 } from '../action-path.ts'
 import type { ViewerTheme } from './atoms/theme.ts'
 import { flowEndpointLabel, projectFlowStep } from './flow.ts'
-import { detailsCommands, filterMatches } from './navigation.ts'
+import { detailsCommands } from './navigation.ts'
 import type {
   DetailsTab,
-  FilterState,
   LitAction,
+  SearchState,
   ViewerFocus,
 } from './navigation.ts'
 import type { PaneLayout } from './layout.ts'
@@ -40,7 +40,7 @@ export function paintWorld(
     tree: TreeState
     detailsScroll: number
     focus?: ViewerFocus
-    filter?: FilterState
+    search?: SearchState
     /** The committed pick; details and the flows rows mark it. */
     activeActionId?: string
     /** The walk the map lights: the details preview, or the committed pick. */
@@ -155,7 +155,7 @@ export function paintWorld(
     theme,
     options.focus,
     options.workFocus === undefined
-      ? options.filter && filterLine(world, options.filter)
+      ? options.search && searchLine(options.search)
       : options.focus === 'details'
         ? '↑↓ scroll   ← tasks   w close work   ] details'
         : '↑↓ task   enter details   w close work   ] details',
@@ -171,11 +171,10 @@ export function paintWorld(
   )
 }
 
-function filterLine(world: TerminalViewModel, filter: FilterState): string {
-  const matches = filterMatches(world, filter.query)
-  const match = matches[filter.index]
+function searchLine(search: SearchState): string {
+  const match = search.matches[search.index]
   const position = match === undefined
-    ? filter.query.trim().length === 0 ? '' : 'no matches'
-    : `${filter.index + 1} of ${matches.length} · ${match.name}`
-  return `/ ${filter.query}▏  ${position}   ↑↓ next   enter keep   esc back`
+    ? search.query.trim().length === 0 ? '' : 'no matches'
+    : `${search.index + 1} of ${search.matches.length} · ${match.name}`
+  return `/ ${search.query}▏  ${position}   ↑↓ next   enter keep   esc back`
 }

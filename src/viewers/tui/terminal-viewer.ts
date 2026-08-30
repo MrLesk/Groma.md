@@ -9,14 +9,15 @@ import type {
 } from '@opentui/core'
 
 import { actionLegs } from '../action-path.ts'
+import { createArchitectureSearch } from '../../search.ts'
 import { paneLayout } from './layout.ts'
 import {
   initialState,
   litAction,
-  reduceFilter,
+  reduceSearch,
   reduceViewer,
 } from './navigation.ts'
-import type { FilterInput, ViewerAction, ViewerState } from './navigation.ts'
+import type { SearchInput, ViewerAction, ViewerState } from './navigation.ts'
 import { paintWorld, themeFromPalette } from './paint.ts'
 import { projectWorld } from './projection.ts'
 import type { TerminalCamera } from './projection-camera.ts'
@@ -26,6 +27,20 @@ import type { TerminalLevel } from '../../types.ts'
 
 const FLOW_ANIMATION_MS = 120
 const FLOW_ANIMATION_PHASES = 3
+const VIEWER_ACTION_BY_KEY: Readonly<Record<string, ViewerAction>> = {
+  return: 'enter',
+  backspace: 'leave',
+  tab: 'tab',
+  ']': 'toggle-details',
+  x: 'clear-action',
+  s: 'step-action',
+  t: 'toggle-details-tab',
+  w: 'toggle-work',
+  up: 'up',
+  down: 'down',
+  left: 'left',
+  right: 'right',
+}
 
 interface ViewerOptions {
   level?: TerminalLevel
@@ -53,6 +68,7 @@ export function mountTerminalViewer(
   options: ViewerOptions = {},
 ): TerminalViewer {
   let viewModel = response
+  let architectureSearch = createArchitectureSearch(response.elements)
   let state: ViewerState = {
     ...initialState(response),
     ...(options.level === undefined ? {} : { level: options.level }),
@@ -132,7 +148,7 @@ export function mountTerminalViewer(
       focus: state.focus,
       tree: state.tree,
       detailsScroll: state.detailsScroll,
-      filter: state.filter,
+      search: state.search,
       activeActionId: state.activeActionId,
       lit,
       actionStep: state.actionStep,
@@ -173,6 +189,7 @@ export function mountTerminalViewer(
     if (closed) return
     const previousView = workView(viewModel, state.work)
     viewModel = next
+    architectureSearch = createArchitectureSearch(next.elements)
     const work = reconcileWorkFocus(next.work, state.work)
     state = { ...state, work }
     if (JSON.stringify(workView(next, work)) !== JSON.stringify(previousView)) camera = undefined
@@ -180,28 +197,13 @@ export function mountTerminalViewer(
   }
 
   function actionFor(key: KeyEvent): ViewerAction | undefined {
-    if (key.ctrl) return undefined
-    if (key.name === 'return') return 'enter'
-    if (key.name === 'backspace') return 'leave'
-    if (key.name === 'tab') return 'tab'
-    if (key.name === ']') return 'toggle-details'
-    if (key.name === 'x') return 'clear-action'
-    if (key.name === 's') return 'step-action'
-    if (key.name === 't') return 'toggle-details-tab'
-    if (key.name === 'w') return 'toggle-work'
-    if (
-      key.name === 'up'
-      || key.name === 'down'
-      || key.name === 'left'
-      || key.name === 'right'
-    ) return key.name
-    return undefined
+    return key.ctrl || key.name === undefined ? undefined : VIEWER_ACTION_BY_KEY[key.name]
   }
 
-  let filterReturnCamera: TerminalCamera | undefined
+  let searchReturnCamera: TerminalCamera | undefined
   let workReturnCamera: TerminalCamera | undefined
 
-  function filterInputFor(key: KeyEvent): FilterInput | undefined {
+  function searchInputFor(key: KeyEvent): SearchInput | undefined {
     if (key.name === 'return') return { type: 'accept' }
     if (key.name === 'backspace') return { type: 'delete' }
     if (key.name === 'down') return { type: 'next' }
@@ -230,20 +232,33 @@ export function mountTerminalViewer(
     repaint()
   }
 
-  function onFilterKey(key: KeyEvent): void {
+  function onSearchKey(key: KeyEvent): void {
     if (key.name === 'escape') {
-      state = reduceFilter(viewModel, state, { type: 'cancel' })
-      if (filterReturnCamera) {
-        camera = filterReturnCamera
-        filterReturnCamera = undefined
+      state = reduceSearch(viewModel, architectureSearch, state, { type: 'cancel' })
+      if (searchReturnCamera) {
+        camera = searchReturnCamera
+        searchReturnCamera = undefined
       }
       repaint()
       return
     }
-    const input = filterInputFor(key)
+    const input = searchInputFor(key)
     if (!input) return
-    if (input.type === 'accept') filterReturnCamera = undefined
-    transition(reduceFilter(viewModel, state, input))
+    if (input.type === 'accept') searchReturnCamera = undefined
+    transition(reduceSearch(viewModel, architectureSearch, state, input))
+  }
+
+  function handleNonSearchKey(key: KeyEvent): boolean {
+    if (key.name === '/' && state.work === undefined) {
+      state = reduceSearch(viewModel, architectureSearch, state, { type: 'open' })
+      searchReturnCamera = snapshot()
+      repaint()
+    } else if (key.name === 'escape') {
+      transition(reduceViewer(viewModel, state, 'dismiss'))
+    } else if (key.name === 'r' && !key.ctrl) {
+      void refresh()
+    } else return false
+    return true
   }
 
   function onKeypress(key: KeyEvent): void {
@@ -252,24 +267,11 @@ export function mountTerminalViewer(
       destroy()
       return
     }
-    if (state.filter) {
-      onFilterKey(key)
+    if (state.search) {
+      onSearchKey(key)
       return
     }
-    if (key.name === '/' && state.work === undefined) {
-      state = reduceFilter(viewModel, state, { type: 'open' })
-      filterReturnCamera = snapshot()
-      repaint()
-      return
-    }
-    if (key.name === 'escape') {
-      transition(reduceViewer(viewModel, state, 'dismiss'))
-      return
-    }
-    if (key.name === 'r' && !key.ctrl) {
-      void refresh()
-      return
-    }
+    if (handleNonSearchKey(key)) return
     const action = actionFor(key)
     if (!action) return
     transition(reduceViewer(viewModel, state, action))
