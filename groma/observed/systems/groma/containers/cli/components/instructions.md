@@ -12,4 +12,4 @@ code:
 
 # Instructions
 
-The local instruction hub. Bare `groma` and `groma instructions` print what an actor should run next, as plain text, so the next step never depends on remembering the command set.
+Owns the shipped overview and authoring guides. groma instructions prints these stable local rules so a developer or agent can follow the supported workflow without external context.

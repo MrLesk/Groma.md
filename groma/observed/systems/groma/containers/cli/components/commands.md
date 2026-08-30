@@ -6,13 +6,13 @@ group: Commands
 code:
   - scanner: typescript
     file: src/cli.ts
-    dependencies: 8
+    dependencies: 9
     dependents: 0
 ---
 
 # Commands
 
-The `groma` command line: `view`, `web`, `scan`, `create`, `edit`, `accept`, and the bare `groma` that prints instructions. Each command hands straight over to the code that owns it; nothing here decides what the architecture means.
+Routes named groma commands and the action returned by the bare-terminal launcher through the same owning operations. Web and interactive view scan before opening; plain or targeted view reads the existing world. The command layer does not decide what the architecture means.
 
 ## Relationships
 
