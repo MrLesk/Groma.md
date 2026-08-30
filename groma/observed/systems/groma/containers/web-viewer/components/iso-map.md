@@ -2,13 +2,12 @@
 id: iso-map
 kind: component
 parent: web-viewer
-group: Map painting
+group: "Blueprint map"
 code:
   - scanner: typescript
     file: src/viewers/web/iso/map.ts
-    symbol: createMap
-    dependencies: 9
-    dependents: 1
+    dependencies: 12
+    dependents: 2
   - scanner: typescript
     file: src/viewers/web/iso/paint-buildings.ts
     symbol: paintBuildings
@@ -20,20 +19,20 @@ code:
     dependents: 1
   - scanner: typescript
     file: src/viewers/web/iso/paint-routes.ts
-    dependencies: 2
+    dependencies: 3
     dependents: 1
   - scanner: typescript
     file: src/viewers/web/iso/scale.ts
-    dependencies: 1
+    dependencies: 0
     dependents: 2
   - scanner: typescript
     file: src/viewers/web/iso/style.ts
-    dependencies: 2
+    dependencies: 3
     dependents: 3
   - scanner: typescript
     file: src/viewers/web/iso/svg.ts
     dependencies: 1
-    dependents: 5
+    dependents: 6
   - scanner: typescript
     file: src/viewers/web/iso/text.ts
     symbol: surfaceText
@@ -43,4 +42,4 @@ code:
 
 # Iso map
 
-Owns the SVG map: drafting decorations, the camera and layers, architecture surfaces, compressed file-floor buildings, routes, and interaction state. Every measured component floor receives a deterministic facade-window pattern from its largest member's normalized file extension, so an unknown type needs no registry; roofs remain plain and readable.
+Owns the SVG blueprint surface: architecture ground, file-floor buildings, routes, labels, deterministic facade patterns, and map styling.

@@ -22,7 +22,7 @@ function renderCodeLines(code: CodeReference[]): string[] {
   return lines
 }
 
-function withCodeFrontmatter(
+export function withCodeFrontmatter(
   source: string,
   code: CodeReference[],
 ): string {
@@ -50,6 +50,29 @@ function withCodeFrontmatter(
 
   const header = [...kept, ...renderCodeLines(code)].join('\n')
   return `---\n${header}\n---\n${source.slice(close + 5)}`
+}
+
+export function withFrontmatterField(
+  source: string,
+  field: 'group' | 'parent',
+  value: string | undefined,
+): string {
+  if (!source.startsWith('---\n')) {
+    throw new Error('document requires YAML frontmatter')
+  }
+  const close = source.indexOf('\n---\n', 4)
+  if (close === -1) {
+    throw new Error('document requires YAML frontmatter')
+  }
+
+  const lines = source.slice(4, close).split('\n')
+  const existing = lines.findIndex(line => line.startsWith(`${field}:`))
+  if (existing !== -1) lines.splice(existing, 1)
+  if (value !== undefined) {
+    const code = lines.indexOf('code:')
+    lines.splice(code === -1 ? lines.length : code, 0, `${field}: ${JSON.stringify(value)}`)
+  }
+  return `---\n${lines.join('\n')}\n---\n${source.slice(close + 5)}`
 }
 
 export function omitCode(source: string): string {
@@ -96,6 +119,8 @@ export function renderObservedDocument(input: {
   id: string
   kind: C4Kind
   parent?: string | null
+  external?: boolean
+  technology?: string
   name: string
   responsibility: string
   code?: CodeReference[]
@@ -107,9 +132,57 @@ export function renderObservedDocument(input: {
     }
     lines.push(`parent: ${input.parent}`)
   }
+  if (input.external === true) lines.push('external: true')
+  if (input.technology !== undefined) {
+    lines.push(`technology: ${JSON.stringify(input.technology)}`)
+  }
   lines.push(...renderCodeLines(input.code ?? []))
   lines.push('---', '', `# ${input.name}`, '', input.responsibility, '')
   return lines.join('\n')
+}
+
+export function withRelationship(
+  source: string,
+  relationship: {
+    targetName: string
+    targetHref: string
+    description: string
+    technology: string
+  },
+): string {
+  const row = `| [${relationship.targetName}](${relationship.targetHref}) | ${relationship.description} | ${relationship.technology} |`
+  if (source.includes(row)) throw new Error('relationship already exists')
+  const lines = source.trimEnd().split('\n')
+  const heading = lines.indexOf('## Relationships')
+  if (heading === -1) {
+    return `${source.trimEnd()}\n\n## Relationships\n\n| Target | Description | Technology |\n| --- | --- | --- |\n${row}\n`
+  }
+
+  const header = lines.indexOf('| Target | Description | Technology |', heading)
+  if (header === -1 || lines[header + 1] !== '| --- | --- | --- |') {
+    throw new Error('Relationships section requires the standard table')
+  }
+  let insert = header + 2
+  while (lines[insert]?.startsWith('|')) insert += 1
+  lines.splice(insert, 0, row)
+  return `${lines.join('\n')}\n`
+}
+
+export function withoutRelationship(source: string, row: string): string {
+  const lines = source.trimEnd().split('\n')
+  const rowIndex = lines.indexOf(row)
+  if (rowIndex === -1) throw new Error('relationship row is missing')
+  lines.splice(rowIndex, 1)
+
+  const heading = lines.lastIndexOf('## Relationships', rowIndex)
+  const header = lines.indexOf('| Target | Description | Technology |', heading)
+  const hasRows = lines[header + 2]?.startsWith('|') === true
+  if (heading !== -1 && header !== -1 && !hasRows) {
+    let end = header + 2
+    while (end < lines.length && !lines[end]?.startsWith('## ')) end += 1
+    lines.splice(heading, end - heading)
+  }
+  return `${lines.join('\n').trimEnd()}\n`
 }
 
 function absoluteFilename(

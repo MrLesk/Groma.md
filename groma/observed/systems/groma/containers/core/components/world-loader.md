@@ -2,21 +2,21 @@
 id: world-loader
 kind: component
 parent: core
+group: "Architecture world"
 code:
   - scanner: typescript
     file: src/core.ts
-    symbol: annotateArchitecture
     dependencies: 6
-    dependents: 7
+    dependents: 5
 ---
 
 # World loader
 
-Loads the merged semantic architecture for every caller: reads the observed and planned documents, builds one annotated graph with stable relationship ids, and measures both every code file and each component total. The web sheet consumes this graph directly; the terminal path adds its fixed world layout afterwards.
+Loads every revision into one annotated architecture graph, resolves winning representations, stable relationships, direct children, and source-file measurements for all viewers.
 
 ## Relationships
 
 | Target | Description | Technology |
 | --- | --- | --- |
-| [Architecture reader](architecture-reader.md) | Reads every revision document | In-process data |
-| [Architecture model](architecture-model.md) | Merges the revisions into one world | In-process data |
+| [Architecture model](architecture-model.md) | Builds one semantic graph | In-process data |
+| [Architecture reader](architecture-reader.md) | Reads every architecture revision | In-process data |

@@ -1,11 +1,10 @@
 ---
 id: project-profile
 kind: component
-parent: core
+parent: "core"
 code:
   - scanner: typescript
     file: src/project-profile.ts
-    symbol: parseProjectProfile
     dependencies: 1
     dependents: 6
   - scanner: typescript
@@ -16,4 +15,4 @@ code:
 
 # Project profile
 
-Strictly parses and saves the project-owned `groma/README.md` as one name and Markdown description, and derives the rich-text blocks projected by the title plate. Tolerant loading returns no profile when the document is missing or invalid so optional profile UI can be omitted.
+Strictly reads and saves the project-owned Groma README as one name and Markdown description, and derives the rich blocks used by the blueprint title plate.

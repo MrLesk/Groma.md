@@ -3,9 +3,10 @@
 import { Command } from 'commander'
 
 import { acceptGhost } from './core.ts'
-import { createPlannedElement } from './create.ts'
+import { createArchitectureElement } from './create.ts'
 import { editArchitecture } from './edit.ts'
 import { authoring, overview } from './instructions.ts'
+import { relateObserved, removeObservedRelationship } from './relate.ts'
 import { formatScanSummary, scanRepository, watchScan } from './scanner.ts'
 import {
   renderPlainWelcome,
@@ -131,20 +132,26 @@ program
 
 program
   .command('create')
-  .description('Author a planned element')
+  .description('Author an observed or planned element')
   .argument('<name>', 'element name')
-  .requiredOption('--plan <plan-id>', 'plan id')
+  .option('--plan <plan-id>', 'plan id')
+  .option('--observed', 'write directly to observed architecture')
   .requiredOption('--kind <kind>', 'actor, system, container, or component')
   .requiredOption('--description <prose>', 'element description')
   .option('--parent <id>', 'parent element id')
+  .option('--external', 'mark a system outside the architecture boundary')
+  .option('--technology <text>', 'implementation technology')
   .action(async (name: string, options) => {
     try {
-      const id = await createPlannedElement(process.cwd(), {
+      const id = await createArchitectureElement(process.cwd(), {
         name,
         plan: options.plan,
+        observed: options.observed,
         kind: options.kind,
         description: options.description,
         parent: options.parent,
+        external: options.external,
+        technology: options.technology,
       })
       console.log('ok')
       console.log(id)
@@ -160,12 +167,20 @@ program
   .argument('<id>', 'element id or plan id')
   .option('--description <prose>', 'lead prose or plan Outcome')
   .option('--plan <plan-id>', 'restate this element in the plan')
+  .option('--group <name>', 'assign this component to a sibling group')
+  .option('--ungroup', 'remove this component from its group')
+  .option('--parent <id>', 'move an empty observed component to this container')
+  .option('--combine <ids...>', 'combine empty scan elements into this observed element')
   .action(async (id: string, options) => {
     try {
       const edited = await editArchitecture(process.cwd(), {
         id,
         description: options.description,
         plan: options.plan,
+        group: options.group,
+        ungroup: options.ungroup,
+        parent: options.parent,
+        combine: options.combine,
       })
       console.log('ok')
       console.log(edited)
@@ -191,6 +206,38 @@ program
     }
     console.error(result === 'missing' ? 'not a planned ghost' : 'no scan match')
     process.exitCode = 1
+  })
+
+program
+  .command('relate')
+  .description('Author an observed relationship')
+  .argument('<source-id>', 'observed source element id')
+  .argument('<target-id>', 'observed target element id')
+  .option('--description <prose>', 'how the source uses the target')
+  .option('--technology <text>', 'interaction mechanism')
+  .option('--remove', 'remove the only relationship between these elements')
+  .action(async (source: string, target: string, options) => {
+    try {
+      if (options.remove && (options.description !== undefined || options.technology !== undefined)) {
+        throw new Error('--remove cannot include --description or --technology')
+      }
+      if (!options.remove && (options.description === undefined || options.technology === undefined)) {
+        throw new Error('--description and --technology are required')
+      }
+      const related = options.remove
+        ? await removeObservedRelationship(process.cwd(), source, target)
+        : await relateObserved(process.cwd(), {
+          source,
+          target,
+          description: options.description,
+          technology: options.technology,
+        })
+      console.log('ok')
+      console.log(related)
+    } catch (error) {
+      console.error(error instanceof Error ? error.message : String(error))
+      process.exitCode = 1
+    }
   })
 
 program

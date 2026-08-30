@@ -15,13 +15,15 @@ instructions` prints the shipped workflow guide.
 - [Scanners](scanners/index.md)
 - [Viewers](viewers/index.md)
 - [Web viewer and live work](viewers/web/index.md)
+- [Agent instructions for curating a scan](agent-instructions/index.md)
 
 ## Change and accept
 
 Change the architecture through Groma. Required changes and new parts become
-plan ghosts. Explanations stay on the observed element. `groma create` and
-`groma edit` author ghosts and explanations. `groma accept <id>` applies a
-ghost only after a scan has matched it.
+plan ghosts. Explanations stay on the observed element. `groma create`,
+`groma edit`, and `groma relate` author ghosts, observed meaning, scan
+curation, and collaborations. `groma accept <id>` applies a ghost only after
+a scan has matched it.
 
 - [Product model](product-model.md)
 - [Component Markdown contract](component-markdown.md)

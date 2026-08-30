@@ -80,7 +80,10 @@ meaning comes only from the containing directory.
 
 A group is a narrative overlay on one level of the hierarchy: it never
 becomes a parent, owns no relationships, and only an author writes it:
-scanners never derive groups.
+scanners never derive groups. `groma edit --group` and `--ungroup` are the
+supported writers. `groma edit --combine` folds unique Code references from
+empty scan records into one component, and `groma edit --parent` moves an
+empty scanned component without changing its identity.
 
 The architecture model owns IDs. Groma is the only writer of these files. A
 planned addition receives its ID when Groma authors it and keeps that ID
@@ -141,7 +144,8 @@ prose and do not add model fields.
 Each row declares one direction: the element in the current file is the
 source. The target is the element whose document the row's link reaches; a
 link that reaches no element document is an error. Core resolves parents by
-`id` across the merged world.
+`id` across the merged world. `groma relate` adds or removes an observed
+relationship row.
 
 A software-to-software relationship is authored on the lowest elements
 that exist. Once two components participate, write the row there and not

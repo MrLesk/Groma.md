@@ -1,4 +1,5 @@
 import { loadArchitecture } from './architecture-reader.ts'
+import { architectureElementPath } from './architecture-path.ts'
 import {
   renderObservedDocument,
   upsertCode,
@@ -58,22 +59,6 @@ function codeFileKey(scanner: string, file: string): string {
   return `${scanner}\0${file}`
 }
 
-export function architectureRelative(sourceFilename: string): string {
-  if (sourceFilename.startsWith('groma/plans/')) {
-    const slash = sourceFilename.indexOf('/', 'groma/plans/'.length)
-    return sourceFilename.slice(slash + 1)
-  }
-  if (sourceFilename.startsWith('groma/observed/')) {
-    return sourceFilename.slice('groma/observed/'.length)
-  }
-  return sourceFilename
-}
-
-function posixDirname(filename: string): string {
-  const separator = filename.lastIndexOf('/')
-  return separator === -1 ? '' : filename.slice(0, separator)
-}
-
 interface WorldRecord {
   id: string
   kind: C4Kind
@@ -117,21 +102,6 @@ function indexWorld(revisions: RevisionRecord[]): World {
   return { byId, byCodeFile }
 }
 
-function observedPathFor(
-  kind: C4Kind,
-  id: string,
-  parent?: WorldRecord,
-): string {
-  if (kind === 'actor') return `groma/observed/actors/${id}.md`
-  if (kind === 'system') return `groma/observed/systems/${id}/system.md`
-  if (parent === undefined) throw new Error(`missing parent for ${id}`)
-  const parentDir = posixDirname(architectureRelative(parent.sourceFilename))
-  if (kind === 'container') {
-    return `groma/observed/${parentDir}/containers/${id}/container.md`
-  }
-  return `groma/observed/${parentDir}/components/${id}.md`
-}
-
 function availableId(world: World, name: string, parent?: WorldRecord): string {
   const base = kebabCase(name) || 'source'
   const existing = world.byId.get(base)
@@ -159,7 +129,12 @@ async function createRecord(
     kind: input.kind,
     parent: input.parent?.id,
     origin: 'observed',
-    sourceFilename: observedPathFor(input.kind, id, input.parent),
+    sourceFilename: architectureElementPath({
+      root: 'groma/observed',
+      kind: input.kind,
+      id,
+      parentSourceFilename: input.parent?.sourceFilename,
+    }),
     code: input.code ?? [],
   }
   await writeObservedDocument(

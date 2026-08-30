@@ -59,6 +59,37 @@ test('a container parent must be a known system', async t => {
   )
 })
 
+test('technology is optional non-empty frontmatter', async t => {
+  const revisionRoot = await copyObserved(t)
+  const container = path.join(
+    revisionRoot,
+    'systems',
+    'shop',
+    'containers',
+    'api',
+    'container.md',
+  )
+  await replaceInFile(container, 'parent: shop', 'parent: shop\ntechnology: HTTP')
+  await validateRevision(revisionRoot)
+  await replaceInFile(container, 'technology: HTTP', 'technology: ""')
+  await assert.rejects(
+    validateRevision(revisionRoot),
+    /technology must be a non-empty string when present/,
+  )
+})
+
+test('a completed plan may contain only its README', async t => {
+  const revisionRoot = await mkdtemp(path.join(os.tmpdir(), 'groma-complete-plan-'))
+  t.after(() => rm(revisionRoot, { recursive: true, force: true }))
+  await writeFile(revisionRoot + '/README.md', '---\nid: done\n---\n\n# Done\n')
+
+  await assert.rejects(validateRevision(revisionRoot), /contains no element documents/)
+  assert.equal(
+    (await validateRevision(revisionRoot, { allowEmpty: true })).elementCount,
+    0,
+  )
+})
+
 test('a relationship target must resolve', async t => {
   const revisionRoot = await copyObserved(t)
   await replaceInFile(

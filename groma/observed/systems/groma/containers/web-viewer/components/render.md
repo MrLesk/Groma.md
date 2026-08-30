@@ -1,24 +1,33 @@
 ---
 id: render
 kind: component
-parent: web-viewer
+parent: "web-viewer"
+group: "Web runtime"
 code:
   - scanner: typescript
     file: src/viewers/web/render.ts
+    dependencies: 32
+    dependents: 0
   - scanner: typescript
-    file: src/viewers/web/chrome/shell.ts
+    file: src/viewers/web/selection.ts
+    dependencies: 0
+    dependents: 4
+  - scanner: typescript
+    file: src/viewers/web/url.ts
+    dependencies: 6
+    dependents: 1
 ---
 
 # Render
 
-Drives the browser: projects the project profile and sheet, paints the grid across the screen, opens the profile editor from the title plate, fits the camera between the floating hierarchy and selection-owned details panes, keeps selection in step with both panes without reframing when either closes, lights a picked flow, zooms and pans, and applies every world the server pushes.
+Owns browser selection and orchestration: paints the map, hierarchy and details, applies live payloads, and keeps URL state synchronized without changing sheet geometry.
 
 ## Relationships
 
 | Target | Description | Technology |
 | --- | --- | --- |
+| [Iso camera](iso-camera.md) | Fits, pans, and zooms the map | In-process data |
+| [Iso map](iso-map.md) | Paints and restyles the SVG blueprint | DOM |
 | [Iso projection](iso-projection.md) | Projects the sheet into screen polygons | In-process data |
-| [Iso map](iso-map.md) | Paints and restyles the SVG | DOM |
-| [Source viewer](source-viewer.md) | Opens a component's exact Code file without changing the architecture selection | Browser state |
-| [Iso camera](iso-camera.md) | Fits, zooms, and pans | In-process data |
 | [Project editor](project-editor.md) | Edits the project name and description | HTTP |
+| [Source viewer](source-viewer.md) | Opens owned Code without changing architecture selection | Browser state |

@@ -2,31 +2,32 @@
 id: web-server
 kind: component
 parent: web-viewer
-group: Web runtime
+group: "Web runtime"
 code:
   - scanner: typescript
     file: src/viewers/web/server.ts
     symbol: startWebViewer
-    dependencies: 10
+    dependencies: 14
     dependents: 1
   - scanner: typescript
     file: src/viewers/web/payload.ts
-    dependencies: 4
-    dependents: 4
+    dependencies: 5
+    dependents: 8
 ---
 
 # Web server
 
-Serves the page and browser bundle from the latest cached map. It loads the optional project profile and semantic architecture without ELK; a missing or invalid profile is published as `null` so the browser omits its title plate. Selected component structure and source are read on demand from the active working tree or Git revision. Valid profile edits go to core, then update only the cached profile before publishing. Architecture Markdown changes arrive through the architecture watcher. Backlog loads asynchronously and publishes separate work-overlay events that never place or route the map.
+Serves the page and browser bundle from the latest cached project, architecture, sheet, and work snapshots. It handles profile edits and on-demand task, source, and revision reads without recomposing unrelated state.
 
 ## Relationships
 
 | Target | Description | Technology |
 | --- | --- | --- |
-| [World loader](../../core/components/world-loader.md) | Loads the semantic architecture graph | loadAnnotatedArchitecture |
-| [Project profile](../../core/components/project-profile.md) | Loads and saves the project name and description | ProjectProfile |
-| [Sheet](../../core/components/sheet.md) | Composes the sheet once per generation | sheetScene |
-| [Page](page.md) | Serves the shell with the project, world and sheet embedded | renderPage |
-| [Backlog plugin](../../view-host/components/backlog-plugin.md) | Supplies optional work-overlay snapshots without delaying or recalculating the map | WorkSource |
-| [Architecture watch](../../core/components/architecture-watch.md) | Reloads the world when Markdown changes | watchArchitecture |
-| [Scan](../../scanner/components/scan.md) | Folds watched source changes | watchScan |
+| [Architecture watch](../../view-host/components/architecture-watch.md) | Reloads the world when Markdown changes | watchArchitecture |
+| [Backlog plugin](../../view-host/components/backlog-plugin.md) | Loads optional work snapshots independently | WorkSource |
+| [Page](page.md) | Serves the browser shell and embedded state | HTML |
+| [Project profile](../../core/components/project-profile.md) | Loads and saves the project profile | ProjectProfile |
+| [Scan lifecycle](../../scanner/components/scan-lifecycle.md) | Folds watched source changes | watchScan |
+| [Sheet composition](../../core/components/sheet-composition.md) | Composes the shared map sheet once per generation | In-process data |
+| [World loader](../../core/components/world-loader.md) | Loads the semantic architecture graph | In-process data |
+| [Work projection](../../view-host/components/work-projection.md) | Maps tasks to architecture anchors | In-process data |

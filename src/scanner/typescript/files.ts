@@ -10,6 +10,8 @@ export interface TypeScriptScannerConfig {
 export const defaultTypeScriptScannerConfig: TypeScriptScannerConfig = {
   globs: ['**/*.ts', '**/*.tsx'],
   ignore: [
+    'test/**',
+    'test-bun/**',
     '**/*.d.ts',
     '**/*.test.ts',
     '**/*.test.tsx',

@@ -1,7 +1,8 @@
 ---
 id: architecture-watch
 kind: component
-parent: core
+parent: view-host
+group: "Live sources"
 code:
   - scanner: typescript
     file: src/architecture-watch.ts
@@ -12,4 +13,4 @@ code:
 
 # Architecture watch
 
-Watches the observed, planned, and missing architecture Markdown, then settles changes so a live viewer republishes without scanning.
+Watches observed, planned, and missing architecture Markdown and settles changes so a live host republishes without scanning.

@@ -46,6 +46,14 @@ hub.
      changing it) stays on the observed document. `groma edit
      <element-id> --description <prose>` updates that lead prose.
      `groma edit <plan-id> --description <prose>` sets the plan Outcome.
+   - A **known existing part** that has no source evidence is authored with
+     `groma create <name> --observed`.
+   - Atomic scan evidence is curated with `groma edit`: combine empty scan
+     records, move an empty scanned component, and group or ungroup sibling
+     components. These operations validate the whole change before writing.
+   - An observed collaboration is authored with `groma relate <source-id>
+     <target-id> --description <prose> --technology <text>` and removed with
+     the same command plus `--remove`.
    - The web map's project pencil edits only the project name and description
      in `groma/README.md`; it does not edit architecture.
 4. `groma accept <id>`: accept that ghost, only if a scan has matched it.
@@ -80,15 +88,15 @@ prints the planned one.
 ## Observed architecture
 
 Observed architecture is what is known to exist. It lives under
-`groma/observed/`. It may be empty. Groma writes it from a first scan, from
-accepted plans, and from explanations people add through Groma.
+`groma/observed/`. It may be empty. Groma writes it from direct observed
+creation, a scan, accepted plans, and curation people apply through Groma.
 
 After the first write of a document, later scans may refresh only `code`
 frontmatter. They do not rewrite explanations or other authored prose.
 
 `technology`, a free-text frontmatter line with comma-separated parts, is
-authored the same way. Core reads it and both details panes show it under
-How it's built.
+authored through Groma. Core reads it and both details panes show it under
+How it's built. Only a system may be marked `external`.
 
 ## Scanning
 

@@ -2,9 +2,9 @@
 id: cli
 kind: container
 parent: groma
-technology: commander, Bun
+technology: "Commander, Bun"
 ---
 
 # CLI
 
-The `groma` command. It starts the viewers, runs a scan, authors and edits plan ghosts, accepts a matched ghost, and prints the merged world as plain text when there is no terminal to draw in.
+Owns the Groma command surface: viewers, scanning, observed curation, plans, acceptance, instructions, and plain-text inspection.

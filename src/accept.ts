@@ -1,10 +1,11 @@
 import { loadArchitecture } from './architecture-reader.ts'
+import { architectureRelative } from './architecture-path.ts'
 import {
   readDocument,
   removeDocument,
   writeObservedDocument,
 } from './markdown-emitter.ts'
-import { architectureRelative, readCode } from './scan-reconciler.ts'
+import { readCode } from './scan-reconciler.ts'
 import type { ArchitectureDocument, RevisionRecord } from './types.ts'
 
 export type AcceptResult = 'accepted' | 'unmatched' | 'missing'

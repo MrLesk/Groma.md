@@ -1,16 +1,19 @@
 ---
 id: navigation
 kind: component
-parent: terminal-viewer
-group: Navigation
+parent: "terminal-viewer"
+group: "Navigation"
 code:
   - scanner: typescript
     file: src/viewers/tui/navigation.ts
-    symbol: defaultSelection
-    dependencies: 9
+    dependencies: 10
     dependents: 6
+  - scanner: typescript
+    file: src/viewers/tui/navigation-spatial.ts
+    dependencies: 5
+    dependents: 1
 ---
 
 # Navigation
 
-Owns viewer state: root or container scope, architecture selection, the last crossed map edge, the filter, the active flow, Work focus, its selected task, and whether details are open. Every key becomes one action reduced over that state. Work focus temporarily gives the side panes to tasks while preserving architecture and flow state.
+Reduces every terminal key over one viewer state and moves selection by the nearest visible peer, including container scope and temporary Work focus.
