@@ -251,6 +251,16 @@ test.concurrent('groma web applies an architecture Markdown change without a ref
   try {
     await fetch(server.url)
     assert.ok((await worldNames(server.url)).includes('Shop'))
+    type MapPayload = {
+      generation: number
+      timings: {
+        architectureLoadMilliseconds: number
+        placementMilliseconds: number
+        routingMilliseconds: number
+        totalMilliseconds: number
+      }
+    }
+    const initial = await (await fetch(`${server.url}/world.json`)).json() as MapPayload
 
     const events = await fetch(`${server.url}/events`)
     const reader = events.body!.getReader()
@@ -262,8 +272,12 @@ test.concurrent('groma web applies an architecture Markdown change without a ref
     await waitUntil(async () => {
       const { value } = await reader.read()
       if (value) pushed += decoder.decode(value, { stream: true })
-      return pushed.includes('"generation":2') && pushed.includes('Shopfront')
+      return pushed.includes('"generation":2') && pushed.includes('"timings":') && pushed.includes('Shopfront')
     })
+    const changed = await (await fetch(`${server.url}/world.json`)).json() as MapPayload
+    assert.equal(changed.generation, initial.generation + 1)
+    assert.ok(changed.timings.totalMilliseconds >= changed.timings.architectureLoadMilliseconds)
+    assert.ok(changed.timings.totalMilliseconds >= changed.timings.placementMilliseconds + changed.timings.routingMilliseconds)
     assert.ok((await worldNames(server.url)).includes('Shopfront'))
     assert.ok(!(await worldNames(server.url)).includes('Orders'))
     await reader.cancel()
@@ -353,6 +367,12 @@ test.concurrent('groma web loads work asynchronously and updates only the work o
       workGeneration: number
       world: unknown
       sheet: unknown
+      timings: {
+        architectureLoadMilliseconds: number
+        placementMilliseconds: number
+        routingMilliseconds: number
+        totalMilliseconds: number
+      }
       work: { statuses: string[]; defaultStatus: string; items: { id: string }[] }
       pins: { key: string; elementId: string; done: number; total: number }[]
     }
@@ -361,6 +381,8 @@ test.concurrent('groma web loads work asynchronously and updates only the work o
     assert.equal(initial.workGeneration, 0)
     assert.deepEqual(initial.work.items, [])
     assert.deepEqual(initial.pins, [])
+    assert.ok(initial.timings.totalMilliseconds >= initial.timings.architectureLoadMilliseconds)
+    assert.ok(initial.timings.totalMilliseconds >= initial.timings.placementMilliseconds + initial.timings.routingMilliseconds)
 
     const events = await fetch(`${server.url}/events`)
     const reader = events.body!.getReader()
@@ -379,6 +401,7 @@ test.concurrent('groma web loads work asynchronously and updates only the work o
     assert.equal(loaded.generation, initial.generation)
     assert.deepEqual(loaded.world, initial.world)
     assert.deepEqual(loaded.sheet, initial.sheet)
+    assert.deepEqual(loaded.timings, initial.timings)
     assert.deepEqual(loaded.work.statuses, ['To Do', 'In Progress', 'Done'])
     assert.equal(loaded.work.defaultStatus, 'To Do')
     assert.deepEqual(loaded.work.items.map(item => item.id), ['TASK-PIN'])

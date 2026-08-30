@@ -250,8 +250,11 @@ layers and briefly turns the view to show that it can orbit. In layer mode,
 drag to orbit horizontally with limited vertical tilt, or Shift-drag to pan;
 press `F2` again to return to the fixed nested view. Selection, flows, work
 pins, scrolling, zoom, and Fit continue to use the displayed geometry. `F3`
-independently toggles a live FPS counter, which remains visible
-in map-only view. Resizing the pane refits the
+independently toggles a map debug panel, which remains visible in map-only
+view. It shows live FPS; architecture-load, building-placement, arrow-routing,
+projection, and SVG-paint timings for the current map generation; and the
+world, sheet, building, surface, route, and route-point counts. Opening the
+panel only reveals the collected snapshot and never rebuilds the map. Resizing the pane refits the
 map until you move the camera; after that it keeps the same point in
 the centre. Click a building, a slab, a system island, or a tree
 row to select it; click a route to select its relationship, which
