@@ -8,6 +8,7 @@ import {
   attachWalls,
   buildingPorts,
   crossingRouteIdsFor,
+  routesCross,
   routingAnchor,
   visibleObstacle,
   type Endpoint,
@@ -259,27 +260,6 @@ function orderFan(group: RouteEndRun[]): void {
       end.route.points[end.indices[offset]!]![end.slotAxis] = slots[position]!
     }
   }
-}
-
-function segmentCrosses(a0: Point, a1: Point, b0: Point, b1: Point): boolean {
-  const aHorizontal = Math.abs(a0.y - a1.y) < PORT_EPSILON
-  const bHorizontal = Math.abs(b0.y - b1.y) < PORT_EPSILON
-  if (aHorizontal === bHorizontal) return false
-  const [horizontal0, horizontal1] = aHorizontal ? [a0, a1] : [b0, b1]
-  const [vertical0, vertical1] = aHorizontal ? [b0, b1] : [a0, a1]
-  const between = (value: number, from: number, to: number) =>
-    value > Math.min(from, to) + PORT_EPSILON && value < Math.max(from, to) - PORT_EPSILON
-  return between(vertical0.x, horizontal0.x, horizontal1.x)
-    && between(horizontal0.y, vertical0.y, vertical1.y)
-}
-
-function routesCross(a: FlatRoute, b: FlatRoute): boolean {
-  for (let left = 1; left < a.points.length; left += 1) {
-    for (let right = 1; right < b.points.length; right += 1) {
-      if (segmentCrosses(a.points[left - 1]!, a.points[left]!, b.points[right - 1]!, b.points[right]!)) return true
-    }
-  }
-  return false
 }
 
 function fanCrossings(group: readonly RouteEndRun[]): number {

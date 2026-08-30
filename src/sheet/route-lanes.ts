@@ -5,6 +5,7 @@ import {
   ROUTE_CLEARANCE,
   ROUTE_UNIT,
   crossingRouteIdsFor,
+  newRouteCrossingFor,
   visibleObstacle,
   type Endpoint,
   type FlatRoute,
@@ -16,27 +17,26 @@ const EPSILON = 0.001
 const TRANSITION = ROUTE_UNIT
 const MIN_LANE_RUN = ROUTE_UNIT * 1.5
 const PREFERRED_LANE_GAP = ROUTE_UNIT * 2
+const ENDPOINT_FAN_TOLERANCE = ROUTE_UNIT / 4
 
 interface RouteSegment {
   routeId: string
   index: number
   axis: 'horizontal' | 'vertical'
+  transition: 'source' | 'target' | null
+  terminal: boolean
   coordinate: number
   start: number
   end: number
 }
-
 type CrossingChecker = ReturnType<typeof crossingRouteIdsFor>
-
 function same(a: Point, b: Point): boolean {
   return Math.abs(a.x - b.x) < EPSILON && Math.abs(a.y - b.y) < EPSILON
 }
-
 function collinear(a: Point, b: Point, c: Point): boolean {
   return Math.abs(a.x - b.x) < EPSILON && Math.abs(b.x - c.x) < EPSILON
     || Math.abs(a.y - b.y) < EPSILON && Math.abs(b.y - c.y) < EPSILON
 }
-
 function compactPoints(points: readonly Point[]): Point[] {
   const result: Point[] = []
   for (const point of points) {
@@ -46,13 +46,11 @@ function compactPoints(points: readonly Point[]): Point[] {
   }
   return result
 }
-
 /** Simplifies only the path between the fixed wall and guard points at both ports. */
 export function compactRoute(points: readonly Point[]): Point[] {
   if (points.length < 4) return compactPoints(points)
   return [{ ...points[0]! }, ...compactPoints(points.slice(1, -1)), { ...points.at(-1)! }]
 }
-
 function routeSegments(routes: readonly FlatRoute[]): RouteSegment[] {
   const result: RouteSegment[] = []
   for (const route of routes) {
@@ -64,6 +62,11 @@ function routeSegments(routes: readonly FlatRoute[]): RouteSegment[] {
   return result
 }
 
+function segmentTransition(index: number, finalSegmentIndex: number): RouteSegment['transition'] | 'both' {
+  const source = index === 1 && index < finalSegmentIndex
+  const target = index === finalSegmentIndex || (index === finalSegmentIndex - 1 && index > 0)
+  return source && target ? 'both' : source ? 'source' : target ? 'target' : null
+}
 function routeSegment(route: FlatRoute, index: number): RouteSegment | null {
   const from = route.points[index - 1]!
   const to = route.points[index]!
@@ -73,13 +76,16 @@ function routeSegment(route: FlatRoute, index: number): RouteSegment | null {
   if (!horizontal && !vertical) throw new Error(`Route ${route.id} is not orthogonal`)
   const along = horizontal ? [from.x, to.x] : [from.y, to.y]
   const length = Math.abs(along[1]! - along[0]!)
-  const touchesBothPorts = segmentIndex === 1 && segmentIndex === route.points.length - 3
-  const needsTransition = segmentIndex === 1 || segmentIndex === route.points.length - 3
-  if (length < EPSILON || touchesBothPorts || needsTransition && length < TRANSITION * 2) return null
+  const finalSegmentIndex = route.points.length - 2
+  const transition = segmentTransition(segmentIndex, finalSegmentIndex)
+  if (length < EPSILON || transition === 'both'
+    || transition !== null && length < TRANSITION * 2) return null
   return {
     routeId: route.id,
     index: segmentIndex,
     axis: horizontal ? 'horizontal' : 'vertical',
+    transition,
+    terminal: segmentIndex === finalSegmentIndex,
     coordinate: horizontal ? from.y : from.x,
     start: Math.min(...along),
     end: Math.max(...along),
@@ -301,10 +307,10 @@ function shiftSegment(points: Point[], segment: RouteSegment, coordinate: number
   const index = segment.index
   const from = points[index]!
   const to = points[index + 1]!
-  if (index === 1) {
+  if (segment.transition === 'source') {
     const stub = transitionPoint(from, to, segment.axis, true)
     points.splice(index + 1, 1, stub, shiftedPoint(stub, segment.axis, coordinate), shiftedPoint(to, segment.axis, coordinate))
-  } else if (index === points.length - 3) {
+  } else if (segment.transition === 'target') {
     const stub = transitionPoint(from, to, segment.axis, false)
     points.splice(index, 1, shiftedPoint(from, segment.axis, coordinate), shiftedPoint(stub, segment.axis, coordinate), stub)
   } else {
@@ -337,7 +343,6 @@ function endpointsUnchanged(before: readonly FlatRoute[], after: readonly FlatRo
     return same(route.points[0]!, original.points[0]!) && same(route.points.at(-1)!, original.points.at(-1)!)
   })
 }
-
 function segmentLength(a: Point, b: Point): number {
   return Math.abs(a.x - b.x) + Math.abs(a.y - b.y)
 }
@@ -402,13 +407,11 @@ function improves(before: RouteSpacing, after: RouteSpacing): boolean {
   if (after.sharedPathLength > before.sharedPathLength + EPSILON) return false
   return after.crowdedBodyLength < before.crowdedBodyLength - EPSILON
 }
-
-function preservesMinimum(before: RouteSpacing | undefined, after: RouteSpacing | undefined): boolean {
+function preservesMinimum(before: RouteSpacing | undefined, after: RouteSpacing | undefined, crowdedTolerance: number): boolean {
   if (!before || !after) return true
   return after.sharedPathLength <= before.sharedPathLength + EPSILON
-    && after.crowdedBodyLength <= before.crowdedBodyLength + EPSILON
+    && after.crowdedBodyLength <= before.crowdedBodyLength + crowdedTolerance
 }
-
 function bestCandidate(
   endpoints: ReadonlyMap<string, Endpoint>,
   routes: readonly FlatRoute[],
@@ -422,6 +425,9 @@ function bestCandidate(
   const spacing = routeSpacingIndex(routes, changedRouteIds)
   const gaps = protectMinimum ? [desiredGap, LANE_GAP] : [desiredGap]
   const currentChanged = routes.filter(route => changedRouteIds.has(route.id))
+  const targetFan = group.some(segment => segment.transition === 'target' && segment.terminal)
+    && currentChanged.every(route => route.target === currentChanged[0]?.target)
+  const createsRouteCrossing = newRouteCrossingFor(routes, changedRouteIds)
   const [before, minimumBefore] = spacing.measure(currentChanged, gaps)
   const blockedRouteIds = new Set<string>()
   const evaluate = (target: ReadonlyMap<string, number>) => {
@@ -435,9 +441,14 @@ function bestCandidate(
     for (const id of newClearance) blockedRouteIds.add(id)
     if (!endpointsUnchanged(routes, candidate)
       || buildingCrossings.length > 0
-      || newClearance.length > 0) return null
+      || newClearance.length > 0
+      || createsRouteCrossing(candidate)) return null
     const [diagnostics, minimumAfter] = spacing.measure(changed, gaps)
-    if (!preservesMinimum(minimumBefore, minimumAfter)) return null
+    if (!preservesMinimum(
+      minimumBefore,
+      minimumAfter,
+      targetFan ? ENDPOINT_FAN_TOLERANCE : EPSILON,
+    )) return null
     return improves(before, diagnostics) ? { routes: candidate, diagnostics } : null
   }
   const target = constrainedTargets(endpoints, routes, group, desiredGap)
@@ -456,7 +467,6 @@ function bestCandidate(
   }
   return best?.routes ?? null
 }
-
 /** Separates Libavoid highways while preserving topology, fixed ports and obstacle safety. */
 export function refineRoutes(
   endpoints: ReadonlyMap<string, Endpoint>,
@@ -476,14 +486,7 @@ export function refineRoutes(
       const group = groups.find(candidate => !rejected.has(componentKey(candidate)))
       if (!group) break
       const candidate = bestCandidate(
-        endpoints,
-        routes,
-        group,
-        crosses,
-        crossesClearance,
-        desiredGap,
-        protectMinimum,
-      )
+        endpoints, routes, group, crosses, crossesClearance, desiredGap, protectMinimum)
       if (candidate) {
         routes = candidate
         groups = conflictComponents(routeSegments(routes), desiredGap)
@@ -492,6 +495,6 @@ export function refineRoutes(
   }
   improve(LANE_GAP, 300, false)
   routes = routes.map(route => collapseDoglegs(route, crosses, crossesClearance))
-  improve(PREFERRED_LANE_GAP, 4, true)
-  return routes.map(route => collapseDoglegs(route, crosses, crossesClearance))
+  improve(PREFERRED_LANE_GAP, 8, true)
+  return routes
 }
