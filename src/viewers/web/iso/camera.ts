@@ -1,7 +1,7 @@
 import type { Bounds, Point } from '../../../types.ts'
 import type { ProjectedScene } from './project.ts'
 
-/** Screen = world · k + (x, y); zoom and pan live on separate composition layers. */
+/** Screen = world · k + (x, y); the same camera transform owns pan and zoom. */
 export interface Camera {
   k: number
   x: number

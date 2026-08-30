@@ -89,13 +89,12 @@ export const mapCss = `
     position: absolute; inset: 0; cursor: grab;
     user-select: none; -webkit-user-select: none; touch-action: none; outline: none;
   }
-  #map .field-surface, #map .camera, #map .zoom { position: absolute; inset: 0; width: 100%; height: 100%; }
+  #map .field-surface, #map .camera { position: absolute; inset: 0; width: 100%; height: 100%; }
   #map .field-surface { pointer-events: none; }
   #map .scene { display: block; width: 100%; height: 100%; overflow: visible; }
   #map > .map-surface [data-id] { cursor: pointer; }
   #map > .map-surface:active, #map > .map-surface:active [data-id] { cursor: grabbing; }
-  #map .camera { transform-origin: 0 0; will-change: transform; }
-  #map .zoom { transform-origin: 0 0; }
+  #map .camera { transform-origin: 0 0; }
   #map .sheet { pointer-events: none; ${stroke('island')} }
   #map .calibration-tick, #map .compass, #map .project-plate { ${stroke('building')} }
   /* zones lie inside slab groups and keep their own weight while the slab is hovered or selected */
@@ -177,9 +176,6 @@ export const mapCss = `
   #map .route-base { pointer-events: none; }
   #map .route .line { opacity: 0; }
   #map .route .arrow { fill: var(--map-line); opacity: 0.9; }
-  #map .route .arrow > path {
-    transform-box: fill-box; transform-origin: right center; transform: scale(var(--arrow-scale, 1));
-  }
   #map .route .hit { fill: none; stroke: transparent; stroke-width: 12; }
   #map .route:hover, #map .route.endpoint, #map .route.touched { --emphasis: ${emphasis(1)}; }
   #map .route:hover .line { stroke: var(--map-line); opacity: 1; }

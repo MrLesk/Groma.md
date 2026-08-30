@@ -230,6 +230,51 @@ function onWall(point: RoutePoint, towards: RoutePoint, building: Building | und
   return { gx: point.gx, gy: point.gy < towards.gy ? middle + chord : middle - chord }
 }
 
+function cross(left: Point, right: Point): number {
+  return left.x * right.y - left.y * right.x
+}
+
+function rayEdgeDistance(origin: Point, direction: Point, start: Point, end: Point): number | null {
+  const edge = { x: end.x - start.x, y: end.y - start.y }
+  const divisor = cross(direction, edge)
+  if (Math.abs(divisor) < 1e-9) return null
+  const offset = { x: start.x - origin.x, y: start.y - origin.y }
+  const distance = cross(offset, edge) / divisor
+  const position = cross(offset, direction) / divisor
+  return distance > 1e-9 && position >= -1e-9 && position <= 1 + 1e-9 ? distance : null
+}
+
+/**
+ * A stepped tower is routed against its largest footprint, but its highest
+ * visible face may be narrower. Extend the short endpoint leg until it first
+ * meets a face the viewer can see, so the line never stops on the invisible
+ * full-size roof used only for obstacle clearance.
+ */
+function onVisibleBuilding(
+  at: Point,
+  from: Point,
+  building: ProjectedBuilding | undefined,
+): Point {
+  if (building === undefined || curved(building.building.shape) || building.building.floors.length === 0) return at
+  const direction = { x: at.x - from.x, y: at.y - from.y }
+  const distances: number[] = []
+  for (const face of building.floors.flat()) {
+    for (let index = 0; index < face.points.length; index += 1) {
+      const distance = rayEdgeDistance(
+        from,
+        direction,
+        face.points[index]!,
+        face.points[(index + 1) % face.points.length]!,
+      )
+      if (distance !== null) distances.push(distance)
+    }
+  }
+  const distance = Math.min(...distances)
+  return Number.isFinite(distance)
+    ? { x: from.x + direction.x * distance, y: from.y + direction.y * distance }
+    : at
+}
+
 /**
  * The roof and the one front band of a curved building: the ring between its
  * screen-left and screen-right extremes along the base and back along the
@@ -366,12 +411,15 @@ export function projectScene(
     text: roofText(building, view),
   }))
   const standing = new Map(scene.buildings.map(building => [building.representationId, building]))
+  const visibleBuildings = new Map(buildings.map(building => [building.building.representationId, building]))
   const routes = scene.routes.map(route => {
     const cells = [...route.points]
     const end = cells.length - 1
     cells[0] = onWall(cells[0]!, cells[1]!, standing.get(route.source))
     cells[end] = onWall(cells[end]!, cells[end - 1]!, standing.get(route.target))
     const points = cells.map(point => project(point.gx, point.gy, 0, view))
+    points[0] = onVisibleBuilding(points[0]!, points[1]!, visibleBuildings.get(route.source))
+    points[end] = onVisibleBuilding(points[end]!, points[end - 1]!, visibleBuildings.get(route.target))
     const last = cells[end]!
     const before = cells[end - 1]!
     const turn = last.gx > before.gx ? 0 : last.gy > before.gy ? 90 : last.gx < before.gx ? 180 : 270

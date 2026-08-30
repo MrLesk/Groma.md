@@ -23,7 +23,7 @@ export function paintRoutes(layer: SVGGElement, scene: LayeredScene): Map<string
     const group = svg('g', { 'data-id': route.id }, `route${ghost}`)
     const title = svg('title')
     title.textContent = route.description
-    const head = svg('path', { d: 'M0 0L-8 3.5L-8 -3.5Z' })
+    const head = svg('path', { d: 'M0 0L-8 5.25L-8 -5.25Z' })
     const pose = svg('g', {
       transform: `${planeMatrix('ground', arrow.at, scene.view)} rotate(${arrow.turn})`,
     }, 'arrow')

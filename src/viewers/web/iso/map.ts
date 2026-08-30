@@ -20,6 +20,8 @@ import { svg } from './svg.ts'
 
 /** A graph-paper tile: minor lines every cell, one major line each way. */
 const TILE_SIZE = GRID_TILE_CELLS * PLANE
+/** Idle time before the temporary motion delta commits into the SVG camera. */
+const ZOOM_SETTLE_MS = 80
 
 /**
  * The endless grid: one tile repeated over the whole pane, moved and scaled
@@ -47,7 +49,7 @@ function gridPattern(): { pattern: SVGPatternElement; lines: SVGPathElement[] } 
 
 export interface IsoMap {
   svg: HTMLElement
-  /** Applies the camera and reports whether its scale-dependent presentation changed. */
+  /** Applies the camera and reports whether its compositor scale changed. */
   move(camera: Camera, zoomRatio: number): boolean
   /** Rebuilds every layer after an architecture or project-profile change. */
   paint(scene: LayeredScene): void
@@ -78,7 +80,7 @@ function onSurface(points: readonly Point[]): Point {
   return { x: west.x + FOOT_INSET, y: west.y }
 }
 
-/** One fixed grid and one composited camera containing the complete SVG scene. */
+/** One fixed grid and one SVG camera, with a temporary HTML motion layer only while the camera moves. */
 export function createMap(host: HTMLElement): IsoMap {
   const root = document.createElement('div')
   root.className = 'map-surface'
@@ -96,8 +98,6 @@ export function createMap(host: HTMLElement): IsoMap {
   fieldSurface.append(fieldDefinitions, field)
   const camera = document.createElement('div')
   camera.className = 'camera'
-  const zoom = document.createElement('div')
-  zoom.className = 'zoom'
   const layers = {
     sheet: svg('g', {}, 'sheet'),
     islands: svg('g', {}, 'islands'),
@@ -106,25 +106,71 @@ export function createMap(host: HTMLElement): IsoMap {
     items: svg('g', {}, 'items'),
     layerLabels: svg('g', {}, 'layer-labels'),
   }
-  scene.append(...Object.values(layers))
-  zoom.append(scene)
-  camera.append(zoom)
+  /** Owns the complete settled camera; the surrounding HTML layer holds only the active motion delta. */
+  const world = svg('g', {}, 'world')
+  world.append(...Object.values(layers))
+  scene.append(world)
+  camera.append(scene)
   root.append(fieldSurface, camera)
   host.replaceChildren(root)
 
   let items = new Map<string, Element>()
   let painted: LayeredScene | undefined
   let routes = new Map<string, RouteNode>()
-  let appliedK: number | undefined
-  let appliedZoomRatio: number | undefined
+  let composed: Camera | undefined
+  let composedZoomRatio: number | undefined
+  let committed: Camera | undefined
+  let cameraTimer: ReturnType<typeof setTimeout> | undefined
+  let latestCamera: { current: Camera; zoomRatio: number; showGrid: boolean } | undefined
   let gridView: ProjectionView = DEFAULT_PROJECTION
   /** The slab or system island each building and slab stands on, by id. */
   let surfaces = new Map<string, string>()
 
+  const clearCameraTimer = (): void => {
+    if (cameraTimer !== undefined) clearTimeout(cameraTimer)
+    cameraTimer = undefined
+  }
+
+  const commitCamera = (current: Camera, zoomRatio: number, showGrid: boolean): void => {
+    world.setAttribute('transform', `translate(${current.x} ${current.y}) scale(${current.k})`)
+    committed = current
+    const weight = weightAt(zoomRatio)
+    camera.style.setProperty('--weight', String(weight))
+    camera.style.setProperty('--camera-scale', String(current.k))
+    camera.toggleAttribute('data-facades-hidden', !facadeDetailsVisible(current.k))
+    field.style.display = showGrid ? '' : 'none'
+    root.toggleAttribute('data-minor-grid-hidden', !minorGridVisible(current.k))
+    for (const line of grid.lines) line.style.strokeWidth = String(1 / current.k)
+    camera.style.removeProperty('transform')
+    camera.style.removeProperty('will-change')
+  }
+
+  const scheduleCameraCommit = (): void => {
+    clearCameraTimer()
+    cameraTimer = setTimeout(() => {
+      cameraTimer = undefined
+      const latest = latestCamera
+      if (latest === undefined) camera.style.removeProperty('will-change')
+      else commitCamera(latest.current, latest.zoomRatio, latest.showGrid)
+    }, ZOOM_SETTLE_MS)
+  }
+
+  const startCameraMotion = (): void => {
+    camera.style.willChange = 'transform'
+    scheduleCameraCommit()
+  }
+
+  /** Capture wheel motion before the normal host handler schedules its camera frame, including over sibling overlays. */
+  host.addEventListener('wheel', () => {
+    startCameraMotion()
+  }, { capture: true, passive: true })
+  root.addEventListener('pointerdown', event => {
+    if (event.button === 0) startCameraMotion()
+  }, { capture: true, passive: true })
+
   return {
     svg: root,
     move(current, zoomRatio) {
-      camera.style.transform = `translate(${current.x.toFixed(2)}px, ${current.y.toFixed(2)}px)`
       const showGrid = gridVisible(current.k)
       if (showGrid) {
         grid.pattern.setAttribute(
@@ -132,20 +178,23 @@ export function createMap(host: HTMLElement): IsoMap {
           `translate(${current.x} ${current.y}) scale(${current.k}) ${planeMatrix('ground', undefined, gridView)}`,
         )
       }
-      const scaleChanged = current.k !== appliedK || zoomRatio !== appliedZoomRatio
-      if (!scaleChanged) return false
-      zoom.style.transform = `scale(${current.k.toFixed(4)})`
-      const weight = weightAt(zoomRatio)
-      camera.style.setProperty('--weight', String(weight))
-      camera.style.setProperty('--arrow-scale', String(weight / current.k))
-      camera.style.setProperty('--camera-scale', String(current.k))
-      camera.toggleAttribute('data-facades-hidden', !facadeDetailsVisible(current.k))
-      field.style.display = showGrid ? '' : 'none'
-      root.toggleAttribute('data-minor-grid-hidden', !minorGridVisible(current.k))
-      for (const line of grid.lines) line.style.strokeWidth = String(1 / current.k)
-      appliedK = current.k
-      appliedZoomRatio = zoomRatio
-      return true
+      const scaleChanged = current.k !== composed?.k || zoomRatio !== composedZoomRatio
+      const cameraChanged = current.x !== composed?.x || current.y !== composed?.y || current.k !== composed?.k
+      if (!cameraChanged && !scaleChanged) return false
+      composed = current
+      composedZoomRatio = zoomRatio
+      latestCamera = { current, zoomRatio, showGrid }
+      if (committed === undefined || camera.style.willChange !== 'transform') {
+        clearCameraTimer()
+        commitCamera(current, zoomRatio, showGrid)
+      } else {
+        const ratio = current.k / committed.k
+        const x = current.x - committed.x * ratio
+        const y = current.y - committed.y * ratio
+        camera.style.transform = `translate(${x}px, ${y}px) scale(${ratio})`
+        scheduleCameraCommit()
+      }
+      return scaleChanged
     },
     paint(scene) {
       painted = scene
@@ -219,7 +268,7 @@ export function createMap(host: HTMLElement): IsoMap {
       return target.closest<HTMLElement>('[data-id]')?.dataset.id
     },
     isSheet(target) {
-      return target === root || target === camera || target === zoom || target === scene || target === field
+      return target === root || target === camera || target === scene || target === field
     },
     isProjectEdit(target) {
       return target instanceof Element && target.closest('[data-project-edit]') !== null
