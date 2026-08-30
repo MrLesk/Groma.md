@@ -11,7 +11,10 @@ const STEM = 22
 
 export const pinsCss = `
   #pins { position: absolute; inset: 0; transform-origin: 0 0; will-change: transform; pointer-events: none; }
-  .pin { position: absolute; width: 0; height: 0; pointer-events: auto; --pin: var(--ink); filter: grayscale(1); }
+  .pin {
+    position: absolute; width: 0; height: 0; pointer-events: auto; --pin: var(--ink); filter: grayscale(1);
+    will-change: translate;
+  }
   .pin.active { filter: none; }
   .pin.arriving { animation: pin-arrive 700ms ease-out; }
   @keyframes pin-arrive {
@@ -74,8 +77,7 @@ export function createPins(host: HTMLElement, anchorOf: (id: string) => Point | 
     layer.style.transform = `translate(${camera.x}px, ${camera.y}px)`
     if (!scaleChanged) return
     for (const { node, anchor } of pinned.values()) {
-      node.style.left = `${anchor.x * camera.k}px`
-      node.style.top = `${anchor.y * camera.k}px`
+      node.style.translate = `${anchor.x * camera.k}px ${anchor.y * camera.k}px`
     }
   }
   /** The pins the toggles allow fan out leftwards from their element's foot point, stems leaning back to it; the rest hide. */

@@ -368,6 +368,31 @@ test.concurrent('an off-centre route meets the near wall of the actor it leaves,
   assert.equal(new Set(drawn.map(({ route, points }) => JSON.stringify(ground(points[route.target === actor.representationId ? points.length - 1 : 0]!)))).size, drawn.length)
 })
 
+test.concurrent('a route meets the visible upper face of a stepped tower', () => {
+  const tower: Building = {
+    representationId: 'observed:tower', id: 'tower', name: 'Tower', origin: 'observed',
+    kind: 'component', external: false, surface: 'surface', rect: { gx: 4, gy: 4, w: 4, d: 4 },
+    heightUnits: 4, shape: { kind: 'block' }, lines: ['Tower'],
+    floors: [
+      { files: ['base.ts'], facadeFileType: '.ts', heightUnits: 2, footprint: { w: 4, d: 4 } },
+      { files: ['top.ts'], facadeFileType: '.ts', heightUnits: 2, footprint: { w: 4, d: 2 } },
+    ],
+  }
+  const scene: SheetScene = {
+    sheet: { gx: 0, gy: 0, w: 12, d: 12 }, islands: [], zones: [], slabs: [], buildings: [tower],
+    routes: [{
+      id: 'arrives', source: 'other', target: tower.representationId,
+      description: '', origin: 'observed',
+      points: [{ gx: 6, gy: 0 }, { gx: 6, gy: 1.5 }, { gx: 6, gy: 2 }],
+    }],
+  }
+
+  const route = projectScene(scene, projectProfile).routes[0]!
+  assert.deepEqual(route.points.at(-1), project(6, 3, 0))
+  assert.deepEqual(route.arrow.at, route.points.at(-1))
+  assert.notDeepEqual(route.arrow.at, project(6, 2, 0))
+})
+
 test.concurrent('roof and surface text keep their owning shape inset', async () => {
   const scene = await fixtureScene(viewerFixtureRoot)
   const rounded = scene.buildings.filter(({ building }) => curved(building.shape))

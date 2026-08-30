@@ -40,8 +40,9 @@ function assertFastComposition(source: string): void {
     calls.some(call => call.parent === 'root' && call.arguments.replaceAll(/\s/g, '') === 'fieldSurface,camera'),
     'Append the field surface and camera together as map-surface siblings',
   )
-  assert.ok(calls.some(call => call.parent === 'camera' && call.arguments.trim() === 'zoom'))
-  assert.ok(calls.some(call => call.parent === 'zoom' && call.arguments.trim() === 'scene'))
+  assert.ok(calls.some(call => call.parent === 'camera' && call.arguments.trim() === 'scene'))
+  assert.ok(calls.some(call => call.parent === 'scene' && call.arguments.trim() === 'world'))
+  assert.ok(calls.some(call => call.parent === 'world' && /Object\.values\(layers\)/.test(call.arguments)))
 }
 
 test.concurrent('the patterned grid stays outside the moving SVG camera', async () => {
@@ -58,13 +59,27 @@ test.concurrent('the SVG performance guard rejects a field inside the camera', (
   )
 })
 
-test.concurrent('pan and zoom stay on separate retained composition layers', async () => {
+test.concurrent('one temporary motion layer always commits back to an untransformed SVG camera', async () => {
   const source = await readFile(path.join(repositoryRoot, 'src/viewers/web/iso/map.ts'), 'utf8')
-  assert.match(
-    mapCss,
-    /#map \.camera\s*\{[^}]*will-change:\s*transform/,
-    'Retain the complete scaled scene while panning instead of repainting its text and routes',
-  )
-  assert.match(source, /camera\.style\.transform = `translate\(/)
-  assert.match(source, /zoom\.style\.transform = `scale\(/)
+  assert.doesNotMatch(mapCss, /#map \.camera\s*\{[^}]*will-change:\s*transform/)
+  assert.doesNotMatch(mapCss, /#map \.zoom/)
+  assert.match(source, /world\.setAttribute\('transform', `translate\(/)
+  assert.match(source, /camera\.style\.transform = `translate\(\$\{x\}px, \$\{y\}px\) scale\(\$\{ratio\}\)`/)
+  assert.match(source, /host\.addEventListener\('wheel'/)
+  assert.match(source, /root\.addEventListener\('pointerdown'/)
+  assert.match(source, /\{ capture: true, passive: true \}/)
+  assert.match(source, /camera\.style\.willChange = 'transform'/)
+  assert.match(source, /camera\.style\.removeProperty\('transform'\)/)
+  assert.match(source, /camera\.style\.removeProperty\('will-change'\)/)
+})
+
+test.concurrent('arrowheads stay in map geometry while pins keep fixed screen geometry', async () => {
+  const [map, pins] = await Promise.all([
+    readFile(path.join(repositoryRoot, 'src/viewers/web/iso/map.ts'), 'utf8'),
+    readFile(path.join(repositoryRoot, 'src/viewers/web/work/pins.ts'), 'utf8'),
+  ])
+  assert.doesNotMatch(mapCss, /--arrow-scale/)
+  assert.doesNotMatch(map, /--arrow-scale/)
+  assert.match(pins, /node\.style\.translate = `\$\{anchor\.x \* camera\.k\}px \$\{anchor\.y \* camera\.k\}px`/)
+  assert.doesNotMatch(pins, /node\.style\.(?:left|top) = `\$\{anchor\.[xy] \* camera\.k\}/)
 })
