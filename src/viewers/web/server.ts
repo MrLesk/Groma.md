@@ -247,6 +247,17 @@ export async function startWebViewer(
     }
   }
 
+  async function taskResponse(_request: Request, url: URL): Promise<Response> {
+    const taskId = url.searchParams.get('task')
+    const item = workState.work.items.find(candidate => candidate.id === taskId)
+    if (item === undefined) return new Response('Task not found', { status: 404 })
+    try {
+      return Response.json(await workSource.readItem(item.id))
+    } catch (error) {
+      return new Response(error instanceof Error ? error.message : String(error), { status: 404 })
+    }
+  }
+
   async function projectResponse(request: Request): Promise<Response> {
     try {
       const profile = await saveProjectProfile(repositoryRoot, await request.json())
@@ -295,6 +306,7 @@ export async function startWebViewer(
     ['/world.json', worldResponse],
     ['/code.json', selectedSourceResponse],
     ['/source.json', selectedSourceResponse],
+    ['/task.json', taskResponse],
     ['/task-diff.json', taskDiffResponse],
     ['/events', eventsResponse],
   ])

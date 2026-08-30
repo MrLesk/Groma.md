@@ -6,12 +6,14 @@ import type {
   CodeReference,
   Origin,
 } from '../../../types.ts'
+import type { ElementWorkGroup } from '../../../work/pins.ts'
 import { fileTypeOf } from '../../../sheet/measure.ts'
 import { pickableActions, travelledBy } from '../../action-path.ts'
 import type { FlowRef } from '../../action-path.ts'
 import { kindGlyph, kindLabel } from '../../atoms/kind.ts'
 import { flowRow, type FlowRowData } from '../flow/row.ts'
 import type { CodeDeclaration, CodeFile } from '../source/structure.ts'
+import { paintElementWork } from '../work/component-tasks.ts'
 import {
   parentOfElements,
   promotedPeer,
@@ -46,7 +48,7 @@ export interface Inspected {
   files: CodeReference[]
 }
 
-export type DetailsTab = 'what' | 'how'
+export type DetailsTab = 'what' | 'how' | 'tasks'
 
 /** A new architecture item starts with its meaning instead of inheriting build evidence. */
 export function detailsTabAfterSelection(
@@ -55,6 +57,14 @@ export function detailsTabAfterSelection(
   nextId: string | undefined,
 ): DetailsTab {
   return previousId === nextId ? tab : 'what'
+}
+
+/** Definitive live work without a linked task leaves the component on its meaning tab. */
+export function detailsTabAfterWork(
+  tab: DetailsTab,
+  hasTasks: boolean,
+): DetailsTab {
+  return tab === 'tasks' && !hasTasks ? 'what' : tab
 }
 
 type Section =
@@ -68,10 +78,21 @@ type Section =
   | 'files'
 
 /** The pane's split: meaning on one tab, build evidence on the other. */
-export function tabSections(tab: DetailsTab): Section[] {
+export function tabSections(tab: Exclude<DetailsTab, 'tasks'>): Section[] {
   return tab === 'what'
     ? ['description', 'relationships', 'commands', 'flowsThrough', 'children']
     : ['technology', 'code', 'files']
+}
+
+export function detailsTabs(
+  inspected: Pick<Inspected, 'technology' | 'files'>,
+  workGroups: readonly { items: readonly unknown[] }[],
+): DetailsTab[] {
+  return [
+    'what',
+    ...(inspected.technology.length > 0 || inspected.files.length > 0 ? ['how' as const] : []),
+    ...(workGroups.some(group => group.items.length > 0) ? ['tasks' as const] : []),
+  ]
 }
 
 export function inspectDetails(
@@ -271,18 +292,21 @@ function marked(
   return row
 }
 
-export function paintDetails(
-  host: HTMLElement,
-  inspected: Inspected,
+interface DetailsOptions {
   onSelect: (id: string, additive: boolean) => void,
   onToggleFlow: (flow: FlowRef) => void,
-  activeFlows: readonly FlowRef[],
+  activeFlows: readonly FlowRef[]
   actorName: (actorId: string) => string | undefined,
-  tab: DetailsTab,
+  tab: DetailsTab
   onTab: (tab: DetailsTab) => void,
-  code: readonly CodeFile[],
+  code: readonly CodeFile[]
   onSource: (file: string, line?: number) => void,
-): void {
+  workGroups: readonly ElementWorkGroup[]
+  onTask: (id: string) => void
+}
+
+export function paintDetails(host: HTMLElement, inspected: Inspected, options: DetailsOptions): void {
+  const { onSelect, onToggleFlow, activeFlows, actorName, tab, onTab, code, onSource, workGroups, onTask } = options
   const title = host.querySelector('h1')!
   const meta = host.querySelector('.meta')!
   const tabsHost = host.querySelector<HTMLElement>('.tabs')!
@@ -290,19 +314,17 @@ export function paintDetails(
   title.textContent = inspected.name
   meta.textContent = `${inspected.kindLabel} · ${inspected.origin}`
 
-  const hasBuild = inspected.technology.length > 0 || inspected.files.length > 0
-  const shownTab = tab === 'how' && !hasBuild ? 'what' : tab
+  const availableTabs = detailsTabs(inspected, workGroups)
+  const shownTab = availableTabs.includes(tab) ? tab : 'what'
   tabsHost.replaceChildren()
-  tabsHost.hidden = !hasBuild
+  tabsHost.hidden = availableTabs.length === 1
   tabsHost.setAttribute('aria-label', 'Details view')
-  for (const [key, label] of [
-    ['what', 'What it does'],
-    ...(hasBuild ? [['how', 'How it\'s built'] as const] : []),
-  ] as const) {
+  const labels: Record<DetailsTab, string> = { what: 'What it does', how: 'How it\'s built', tasks: 'Tasks' }
+  for (const key of availableTabs) {
     const button = document.createElement('button')
     button.type = 'button'
     button.setAttribute('role', 'tab')
-    button.textContent = label
+    button.textContent = labels[key]
     button.setAttribute('aria-selected', String(key === shownTab))
     if (key === shownTab) button.classList.add('active')
     button.addEventListener('click', () => onTab(key))
@@ -422,7 +444,8 @@ export function paintDetails(
     },
 
   }
-  for (const key of tabSections(shownTab)) sections[key]()
+  if (shownTab === 'tasks') paintElementWork(body, workGroups, onTask)
+  else for (const key of tabSections(shownTab)) sections[key]()
 }
 
 /** The pane for a selected relationship: its description as the title, then both ends as links. */

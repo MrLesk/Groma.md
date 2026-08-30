@@ -115,7 +115,7 @@ function appendSourceState(
  * Reads the ordered architecture selection (repeated `<kind>=<id>` and
  * `relationship=<source id>/<target id>` entries) or `task=<id>`,
  * repeated active flows (`flow=<source>/<target>` or `flow=<actor>/<source>/<target>`),
- * `tab=how`, `theme=dark|blueprint` and `hud=off`. Ids are the authored ids; anything the world
+ * `tab=how|tasks`, `theme=dark|blueprint` and `hud=off`. Ids are the authored ids; anything the world
  * or the work does not know is ignored, a kind naming an element of another kind included.
  */
 export function readView(
@@ -143,7 +143,9 @@ export function readView(
     ...source,
     selection,
     flows: activeFlows(params, byId, world),
-    tab: source.file !== undefined || params.get('tab') === 'how' ? 'how' : 'what',
+    tab: source.file !== undefined || params.get('tab') === 'how'
+      ? 'how'
+      : params.get('tab') === 'tasks' ? 'tasks' : 'what',
     theme: selectedTheme === 'dark' || selectedTheme === 'blueprint' ? selectedTheme : 'light',
     hudVisible: params.get('hud') !== 'off',
   }
@@ -214,7 +216,7 @@ export function writeView(state: ViewState, world: ArchitectureGraph, work: read
   const pairs: [string, string][] = []
   if (state.revision !== undefined) pairs.push(['revision', state.revision])
   appendSelection(pairs, state, elements, world, work)
-  if (state.tab === 'how') pairs.push(['tab', 'how'])
+  if (state.selection.kind === 'architecture' && state.tab !== 'what') pairs.push(['tab', state.tab])
   appendSourceState(pairs, state, selected)
   appendFlows(pairs, state.flows, elements, world)
   if (state.theme !== 'light') pairs.push(['theme', state.theme])

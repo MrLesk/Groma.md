@@ -81,10 +81,11 @@ test.concurrent('leaving Work focus restores the saved map camera', async () => 
         title: 'Change external system',
         status: 'In Progress',
         assignees: [],
-        description: '',
         references: ['ext'],
         modifiedFiles: [],
-        criteria: [],
+        acceptanceCriteriaCompleted: 0,
+        acceptanceCriteriaCount: 0,
+        updatedAt: '2026-08-30T12:00:00Z',
       }],
     },
   }

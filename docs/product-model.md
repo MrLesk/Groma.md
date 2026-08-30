@@ -208,15 +208,15 @@ changing as ghosts are accepted.
 ## Work
 
 Groma reads Backlog through the `backlog` CLI: the configured statuses and
-default status, `task list --json`, then `task view <id> --json` for every
-nonterminal task and each terminal task changed within the last 24 hours.
-The last configured status is terminal. Groma watches `backlog/tasks` and
-never writes a task. The terminal map marks the assignees of each task In
-Progress on every element the task references by exact `id`. The web map
-stands one pin per assignee and task on the element the task touched last:
-the element whose `code` holds the task's newest modified file, else the
-first element it references. An unassigned mapped task gets one generic
+default status plus one `task list --json` summary containing every configured
+task, including terminal history. It reads `task view <id> --json` only for the
+task whose full details a developer opens. The last configured status is
+terminal. Groma watches `backlog/tasks` and never writes a task. A task touches
+every element whose `code` maps one of its modified files, then every element
+it references by exact `id`. The terminal map marks the assignees of each task
+In Progress on those elements. The web map stands one pin per assignee and task
+on the element the task touched last; an unassigned mapped task gets one generic
 Backlog pin. The Live work island filters pins and chips by the configured
 statuses, showing a filter only while that status has a mapped pin. A filter
-appears when the first matching pin arrives. The default and terminal
-statuses start hidden and every other configured status starts shown.
+appears when the first matching pin arrives. The default and terminal statuses
+start hidden and every other configured status starts shown.

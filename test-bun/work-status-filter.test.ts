@@ -2,7 +2,11 @@ import assert from 'node:assert/strict'
 
 import { test } from 'bun:test'
 
-import { toggleWorkStatus, workStatusFilters } from '../src/viewers/web/work/status-filter.ts'
+import {
+  preservedWorkStatuses,
+  toggleWorkStatus,
+  workStatusFilters,
+} from '../src/viewers/web/work/status-filter.ts'
 
 const statuses = ['To Do', 'In Progress', 'Done']
 
@@ -15,6 +19,18 @@ test.concurrent('only statuses with pins become filters while the default select
     available: ['To Do', 'In Progress', 'Done'],
     enabled: ['In Progress'],
   })
+})
+
+test.concurrent('an unconfigured cold start cannot become an empty user filter choice', () => {
+  const boot = workStatusFilters([], '', [])
+  const arrived = workStatusFilters(
+    statuses,
+    'To Do',
+    ['In Progress'],
+    preservedWorkStatuses([], boot.enabled),
+  )
+
+  assert.deepEqual(arrived, { available: ['In Progress'], enabled: ['In Progress'] })
 })
 
 test.concurrent('custom intermediate statuses start enabled when their first pin arrives', () => {

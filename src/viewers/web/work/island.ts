@@ -2,7 +2,7 @@ import type { WorkPin } from '../../../work/pins.ts'
 import type { Tip } from '../organisms/tip.ts'
 import { BACKLOG_MARK } from './backlog-mark.ts'
 import { fillWorkBadge, finishingWorkKeys, WORK_BADGE, WORK_BADGE_FLIP_MS } from './badge.ts'
-import { toggleWorkStatus, workStatusFilters } from './status-filter.ts'
+import { preservedWorkStatuses, toggleWorkStatus, workStatusFilters } from './status-filter.ts'
 import type { WorkStatusFilterState } from './status-filter.ts'
 
 const icon = (paths: string): string =>
@@ -224,13 +224,14 @@ export function createWorkIsland(
           animating.add(key)
         } else started.delete(key)
       }
+      const enabled = preservedWorkStatuses(configuredStatuses, statusFilters?.enabled)
       pins = nextPins
       configuredStatuses = nextStatuses
       statusFilters = workStatusFilters(
         configuredStatuses,
         defaultStatus,
         pins.map(pin => pin.status),
-        statusFilters?.enabled,
+        enabled,
       )
       onShow(statusFilters.enabled)
       rebuild()

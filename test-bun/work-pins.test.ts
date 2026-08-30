@@ -2,8 +2,8 @@ import assert from 'node:assert/strict'
 
 import { test } from 'bun:test'
 
-import type { WorkItem } from '../src/types.ts'
-import { PIN_COLOURS, monogram, pinsOf, touchedElements } from '../src/work/pins.ts'
+import type { WorkItem, WorkSnapshot } from '../src/types.ts'
+import { elementWorkGroups, PIN_COLOURS, monogram, pinsOf, touchedElements } from '../src/work/pins.ts'
 import { box, worldOf } from './helpers.ts'
 
 const unit = { x: 0, y: 0, width: 1, height: 1 }
@@ -20,10 +20,11 @@ function item(id: string, extra: Partial<WorkItem> = {}): WorkItem {
     title: `Work ${id}`,
     status: 'In Progress',
     assignees: ['@codex'],
-    description: '',
     references: ['api'],
     modifiedFiles: [],
-    criteria: [{ text: 'a', checked: true }, { text: 'b', checked: false }, { text: 'c', checked: false }],
+    acceptanceCriteriaCompleted: 1,
+    acceptanceCriteriaCount: 3,
+    updatedAt: '2026-08-30T12:00:00Z',
     ...extra,
   }
 }
@@ -45,9 +46,44 @@ test.concurrent('a task touches the elements of its modified files, newest first
   assert.deepEqual(touched, ['observed:vault', 'observed:api'])
 })
 
+test.concurrent('one modified file links every component that maps it', () => {
+  const shared = worldOf([
+    box('first', 'component', unit, { code: [{ scanner: 'ts', file: 'src/shared.ts' }] }),
+    box('second', 'component', unit, { code: [{ scanner: 'ts', file: 'src/shared.ts' }] }),
+  ])
+  const task = item('TASK-6', { references: [], modifiedFiles: ['src/shared.ts'] })
+
+  assert.deepEqual(touchedElements(task, shared), ['observed:first', 'observed:second'])
+  assert.equal(elementWorkGroups({ statuses: ['To Do', 'In Progress', 'Done'], defaultStatus: 'To Do', items: [task] }, 'observed:first', shared).length, 1)
+  assert.equal(elementWorkGroups({ statuses: ['To Do', 'In Progress', 'Done'], defaultStatus: 'To Do', items: [task] }, 'observed:second', shared).length, 1)
+})
+
+test.concurrent('an element receives default, intermediate, and terminal work groups only when tasks touch it', () => {
+  const work: WorkSnapshot = {
+    statuses: ['Ready', 'Building', 'Review', 'Shipped'],
+    defaultStatus: 'Ready',
+    items: [
+      item('TASK-1', { status: 'Ready', references: ['api'] }),
+      item('TASK-2', { status: 'Review', modifiedFiles: ['src/api.ts'], references: [] }),
+      item('TASK-3', { status: 'Shipped', references: ['api'] }),
+      item('TASK-4', { status: 'Building', references: ['vault'] }),
+    ],
+  }
+
+  assert.deepEqual(elementWorkGroups(work, 'observed:api', world).map(group => [
+    group.stage,
+    group.items.map(task => task.id),
+  ]), [
+    ['todo', ['TASK-1']],
+    ['progress', ['TASK-2']],
+    ['done', ['TASK-3']],
+  ])
+  assert.deepEqual(elementWorkGroups(work, 'observed:shop', world), [])
+})
+
 test.concurrent('every assignee and task pair gets its own colour in task order, with its progress from the criteria and its monogram', () => {
   const pins = pinsOf([
-    item('TASK-10', { assignees: ['@luna'], status: 'Done', criteria: Array.from({ length: 4 }, () => ({ text: 'x', checked: true })) }),
+    item('TASK-10', { assignees: ['@luna'], status: 'Done', acceptanceCriteriaCompleted: 4, acceptanceCriteriaCount: 4 }),
     item('TASK-9', { assignees: ['@codex', '@claude'] }),
   ], world, 'Done')
   assert.deepEqual(pins.map(pin => pin.key), ['@codex TASK-9', '@claude TASK-9', '@luna TASK-10'])

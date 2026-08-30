@@ -1,7 +1,9 @@
 import { expect, test } from 'bun:test'
 
 import {
+  detailsTabs,
   detailsTabAfterSelection,
+  detailsTabAfterWork,
   inspectDetails,
   tabSections,
 } from '../src/viewers/web/organisms/details.ts'
@@ -122,9 +124,22 @@ test.concurrent('the tabs split meaning from build evidence', () => {
   expect(tabSections('how')).toEqual(['technology', 'code', 'files'])
 })
 
+test.concurrent('the Tasks tab exists only while the selected component has linked work', () => {
+  const inspected = { technology: [], files: [] }
+  expect(detailsTabs(inspected, [])).toEqual(['what'])
+  expect(detailsTabs(inspected, [{ items: [] }])).toEqual(['what'])
+  expect(detailsTabs(inspected, [{ items: [{}] }])).toEqual(['what', 'tasks'])
+  expect(detailsTabs({ ...inspected, technology: ['Bun'] }, [])).toEqual(['what', 'how'])
+})
+
 test.concurrent('the build tab resets only when the primary selection changes', () => {
   expect(detailsTabAfterSelection('how', 'component-a', 'component-b')).toBe('what')
   expect(detailsTabAfterSelection('how', 'component-a', 'component-a')).toBe('how')
+})
+
+test.concurrent('live work closes Tasks when the selected component has no linked task', () => {
+  expect(detailsTabAfterWork('tasks', false)).toBe('what')
+  expect(detailsTabAfterWork('tasks', true)).toBe('tasks')
 })
 
 test.concurrent('actor commands are scoped flows and stay separate from peer relationships', () => {

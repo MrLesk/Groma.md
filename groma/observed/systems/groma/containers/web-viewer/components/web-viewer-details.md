@@ -13,3 +13,9 @@ code:
 # Web viewer details
 
 Inspects the current architecture or task selection and paints its meaning, relationships, command flows, and build evidence.
+
+## Relationships
+
+| Target | Description | Technology |
+| --- | --- | --- |
+| [Component tasks](component-tasks.md) | Delegates linked component task rows to the Work painter | DOM |

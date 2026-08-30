@@ -107,6 +107,18 @@ test.concurrent('a component-owned source file restores and Back clears only the
   assert.equal(readView('?container=cli&file=src/scan.ts', world, []).file, undefined)
 })
 
+test.concurrent('the component Tasks tab is shareable through the existing tab state', () => {
+  const state: ViewState = {
+    selection: { kind: 'architecture', ids: ['observed:scan'] },
+    flows: [],
+    tab: 'tasks',
+    theme: 'light',
+    hudVisible: true,
+  }
+  assert.equal(writeView(state, world, []), '?component=scan&tab=tasks')
+  assert.deepEqual(readView('?component=scan&tab=tasks', world, []), state)
+})
+
 test.concurrent('a selected relationship is carried as its source and target ids', () => {
   const state: ViewState = { selection: { kind: 'architecture', ids: ['relationship:1'] }, flows: [], tab: 'what', theme: 'light', hudVisible: true }
   assert.equal(writeView(state, world, []), '?relationship=commands/scan')
@@ -116,10 +128,12 @@ test.concurrent('a selected relationship is carried as its source and target ids
 
 test.concurrent('a selected task is carried by its id while the work knows it', () => {
   const work: WorkItem[] = [{
-    id: 'TASK-7', title: 'Change', status: 'In Progress', assignees: [], description: '', references: [], modifiedFiles: [], criteria: [],
+    id: 'TASK-7', title: 'Change', status: 'In Progress', assignees: [], references: [], modifiedFiles: [],
+    acceptanceCriteriaCompleted: 0, acceptanceCriteriaCount: 0, updatedAt: '2026-08-30T12:00:00Z',
   }]
   const state: ViewState = { selection: selectTask('TASK-7'), flows: [], tab: 'what', theme: 'light', hudVisible: true }
   assert.equal(writeView(state, world, work), '?task=TASK-7')
+  assert.equal(writeView({ ...state, tab: 'tasks' }, world, work), '?task=TASK-7')
   assert.deepEqual(readView('?task=TASK-7', world, work), state)
   assert.deepEqual(readView('?task=TASK-7', world, []).selection, noSelection)
 })

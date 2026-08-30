@@ -47,10 +47,11 @@ function item(overrides: Partial<WorkItem> = {}): WorkItem {
     title: 'Show changes',
     status: 'Done',
     assignees: [],
-    description: '',
     references: [],
     modifiedFiles: [],
-    criteria: [],
+    acceptanceCriteriaCompleted: 0,
+    acceptanceCriteriaCount: 0,
+    updatedAt: '2026-08-30T12:00:00Z',
     ...overrides,
   }
 }

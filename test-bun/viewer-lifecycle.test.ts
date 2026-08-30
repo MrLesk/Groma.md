@@ -21,6 +21,7 @@ import {
 function emptyWorkSource(): WorkSource {
   return {
     read: async () => EMPTY_WORK_SNAPSHOT,
+    readItem: async () => assert.fail('unexpected task detail read'),
     watch: () => ({ close() {} }),
   }
 }

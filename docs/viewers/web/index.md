@@ -276,11 +276,11 @@ title plate projects the same parsed Markdown semantics onto the isometric sheet
 Saving asks the web host to update only
 `groma/README.md`; the published world event repaints every open map without a
 browser reload.
-Backlog work shows as pins. Every task outside the configured terminal
-status, and every task in that status changed within the last day, puts
-one pin per assignee on the element the task touched last: the element
-whose code holds the task's newest modified file, else the first element
-the task references. An unassigned task puts one generic pin there. A pin
+Backlog work is loaded from one task-list summary and shows as pins. Every
+configured task, including terminal history, puts one pin per assignee on the
+element the task touched last: the element whose code holds the task's newest
+modified file, else the first element it references. An unassigned task puts
+one generic pin there. A pin
 is a round badge with the assignee's mark (the vendor mark for the claude
 and codex handles, else a two-letter monogram), or the Backlog document
 mark for an unassigned task, inside a ring that fills by checked acceptance criteria
@@ -326,13 +326,22 @@ highlighted routes leaving them at the closest allowed zoom, with a wider contex
 margin around that complete highlight. Switching sidebar selection without changing the active set
 keeps that shared fit; removing a task refits to the remaining active work, while
 clearing the final task leaves the camera in place. Selecting
-an element keeps the tasks active. The details pane shows the task's id,
-status and assignees over its title, then its description, its
-acceptance criteria as a checklist, its modified files and its
-references, where a reference naming an element is a link that
-selects the element; its pins carry a small arrowhead above their
-badge, its chips an accent border, and the strip scrolls the first
-into view. Escape or a click on empty
+an element keeps the tasks active. Opening a task loads that task's full
+Backlog record on demand. The details pane shows the task's id,
+status and assignees over its title, then its description, acceptance criteria,
+Definition of Done, references, modified files, implementation plan,
+implementation notes, and comments. Empty sections are omitted. A reference
+naming an element is a link that selects it. The selected task's pins carry a
+small arrowhead above their badge, its chips an accent border, and the strip
+scrolls the first into view.
+
+Selecting a component adds a Tasks tab only when at least one Backlog task
+touches it through a mapped modified file or an exact architecture reference.
+The tab groups the configured default status as To do, the last configured
+status as Done, and every intermediate status as In progress. Selecting a task
+row opens the same task details and map highlight as its pin or chip. A component
+without linked tasks, including in a project without Backlog, keeps its existing
+details tabs. Escape or a click on empty
 sheet deactivates every task. Pins move as Backlog changes, through
 the same live channel as the world. The island eases its width and
 height between sizes whenever it folds, unfolds, or its chips change,
@@ -344,7 +353,7 @@ names the world snapshot. Each selected element's kind names it (`actor=<id>`,
 `system=<id>`, `container=<id>` or `component=<id>`),
 `relationship=<source>/<target>` names a selected route, and repeated selection
 parameters keep their order; `task=<id>` names a selected task instead.
-`tab=how` names the details tab, then `file=<path>` opens a selected
+`tab=how|tasks` names the details tab, then `file=<path>` opens a selected
 component's source and `line=<number>` marks a declaration in that file.
 Repeated `flow=<source>/<target>` entries preserve active flow order; an
 actor-scoped flow uses `flow=<actor>/<source>/<target>`. Active flows do not

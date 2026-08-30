@@ -65,8 +65,8 @@ covers or changes the architecture canvas.
 `w` gives the hierarchy and details panes to Backlog tasks without changing the
 stored architecture selection, map scope, camera, flow, or sheet geometry. Tasks
 follow the configured workflow statuses. Up and Down select one task; Enter focuses
-its details, including status, assignees, description, acceptance criteria, modified
-files, and references.
+its task-list details: status, assignees, acceptance progress, modified files, and
+references.
 
 The selected task accents every element touched by its modified files and exact
 architecture references, plus routes leaving those elements. If all touched elements

@@ -1,8 +1,8 @@
 import { spawn } from 'node:child_process'
-import { watch } from 'node:fs'
+import { existsSync, watch } from 'node:fs'
 import path from 'node:path'
 
-import type { WorkSnapshot } from '../types.ts'
+import type { WorkItemDetails, WorkSnapshot } from '../types.ts'
 
 export type BacklogCommand = (
   arguments_: string[],
@@ -11,6 +11,7 @@ export type BacklogCommand = (
 
 export interface WorkSource {
   read(): Promise<WorkSnapshot>
+  readItem(id: string): Promise<WorkItemDetails>
   watch(onChange: () => void): { close(): void }
 }
 
@@ -41,11 +42,18 @@ function runBacklog(arguments_: string[], repositoryRoot: string): Promise<strin
   })
 }
 
-/** Done tasks stay in the active work this long after their last change, so their pins can show the finish. */
-const DONE_WINDOW_MS = 24 * 60 * 60 * 1000
-
 interface TaskListJson {
-  tasks: { id: string; status: string; updatedAt: string | null }[]
+  tasks: {
+    id: string
+    title: string
+    status: string
+    assignees: string[]
+    references: string[]
+    modifiedFiles: string[]
+    acceptanceCriteriaCompleted: number
+    acceptanceCriteriaCount: number
+    updatedAt: string
+  }[]
 }
 
 interface TaskViewJson {
@@ -58,13 +66,16 @@ interface TaskViewJson {
     description: string | null
     modifiedFiles: string[]
     acceptanceCriteria: { text: string; checked: boolean }[]
+    definitionOfDone: { text: string; checked: boolean }[]
+    implementationPlan: string | null
+    implementationNotes: string | null
+    comments: { body: string; createdAt: string; author: string }[]
   }
 }
 
 export function createBacklogPlugin(
   repositoryRoot: string,
   run: BacklogCommand = runBacklog,
-  now: () => number = () => Date.now(),
 ): WorkSource {
   return {
     async read() {
@@ -75,34 +86,27 @@ export function createBacklogPlugin(
       ])
       const list = JSON.parse(listText) as TaskListJson
       const statuses = statusesText.split(',').map(status => status.trim()).filter(Boolean)
-      const terminalStatus = statuses.at(-1)
-      const since = now() - DONE_WINDOW_MS
-      const available = list.tasks.filter(task => task.status !== terminalStatus
-        || (task.updatedAt !== null && Date.parse(task.updatedAt) >= since))
-      const items = await Promise.all(available.map(async summary => {
-        const { task } = JSON.parse(await run(
-          ['task', 'view', summary.id, '--json'],
-          repositoryRoot,
-        )) as TaskViewJson
-        return {
-          id: task.id,
-          title: task.title,
-          status: task.status,
-          assignees: task.assignees,
-          description: task.description ?? '',
-          references: task.references,
-          modifiedFiles: task.modifiedFiles,
-          criteria: task.acceptanceCriteria.map(({ text, checked }) => ({ text, checked })),
-        }
-      }))
-      return { statuses, defaultStatus: defaultStatusText.trim(), items }
+      return { statuses, defaultStatus: defaultStatusText.trim(), items: list.tasks }
+    },
+    async readItem(id) {
+      const { task } = JSON.parse(await run(
+        ['task', 'view', id, '--json'],
+        repositoryRoot,
+      )) as TaskViewJson
+      return {
+        id: task.id,
+        description: task.description ?? '',
+        acceptanceCriteria: task.acceptanceCriteria.map(({ text, checked }) => ({ text, checked })),
+        definitionOfDone: task.definitionOfDone.map(({ text, checked }) => ({ text, checked })),
+        implementationPlan: task.implementationPlan ?? '',
+        implementationNotes: task.implementationNotes ?? '',
+        comments: task.comments.map(({ body, createdAt, author }) => ({ body, createdAt, author })),
+      }
     },
     watch(onChange) {
-      const watcher = watch(
-        path.join(repositoryRoot, 'backlog', 'tasks'),
-        { recursive: false },
-        onChange,
-      )
+      const tasks = path.join(repositoryRoot, 'backlog', 'tasks')
+      if (!existsSync(tasks)) return { close() {} }
+      const watcher = watch(tasks, { recursive: false }, onChange)
       return { close: () => watcher.close() }
     },
   }

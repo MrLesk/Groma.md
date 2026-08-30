@@ -32,6 +32,19 @@ const snapshot = (items: WorkItem[] = []): WorkSnapshot => ({
   items,
 })
 
+const item = (id: string, extra: Partial<WorkItem> = {}): WorkItem => ({
+  id,
+  title: id,
+  status: 'In Progress',
+  assignees: [],
+  references: [],
+  modifiedFiles: [],
+  acceptanceCriteriaCompleted: 0,
+  acceptanceCriteriaCount: 0,
+  updatedAt: '2026-08-30T12:00:00Z',
+  ...extra,
+})
+
 const beforeWork = {
   focus: 'architecture' as const,
   details: true,
@@ -40,9 +53,9 @@ const beforeWork = {
 
 test.concurrent('Work focus follows active, default, then terminal workflow groups', () => {
   const work = snapshot([
-    { id: 'TASK-TODO', title: 'Todo', status: 'To Do', assignees: [], description: '', references: [], modifiedFiles: [], criteria: [] },
-    { id: 'TASK-DONE', title: 'Done', status: 'Done', assignees: [], description: '', references: [], modifiedFiles: [], criteria: [] },
-    { id: 'TASK-ACTIVE', title: 'Active', status: 'In Progress', assignees: [], description: '', references: [], modifiedFiles: [], criteria: [] },
+    item('TASK-TODO', { title: 'Todo', status: 'To Do' }),
+    item('TASK-DONE', { title: 'Done', status: 'Done' }),
+    item('TASK-ACTIVE', { title: 'Active' }),
   ])
 
   assert.deepEqual(workGroups(work).map(group => group.status), ['In Progress', 'To Do', 'Done'])
@@ -58,16 +71,12 @@ test.concurrent('Work projection shares modified-file and reference touch meanin
     elements: base.elements.map(element => element.id === 'cleft'
       ? { ...element, code: [{ file: 'src/cleft.ts', scanner: 'fixture' }] }
       : element),
-    work: snapshot([{
-      id: 'TASK-1',
+    work: snapshot([item('TASK-1', {
       title: 'Change two containers',
-      status: 'In Progress',
-        assignees: ['@codex'],
-      description: '',
+      assignees: ['@codex'],
       references: ['cright'],
       modifiedFiles: ['src/cleft.ts'],
-      criteria: [],
-    }]),
+    })]),
   }
   const projection = projectWorld(model, {
     viewport: mapViewportOf({ width: 120, height: 36 }),
@@ -99,8 +108,8 @@ test.concurrent('Work chooses component scope for one container and root for sev
   const model = {
     ...base,
     work: snapshot([
-      { id: 'TASK-LOCAL', title: 'Local', status: 'In Progress', assignees: [], description: '', references: ['pleft', 'pmid'], modifiedFiles: [], criteria: [] },
-      { id: 'TASK-CROSS', title: 'Cross', status: 'In Progress', assignees: [], description: '', references: ['pleft', 'pright'], modifiedFiles: [], criteria: [] },
+      item('TASK-LOCAL', { title: 'Local', references: ['pleft', 'pmid'] }),
+      item('TASK-CROSS', { title: 'Cross', references: ['pleft', 'pright'] }),
     ]),
   }
   const focus = (taskId: string) => ({
@@ -121,9 +130,7 @@ test.concurrent('Work chooses component scope for one container and root for sev
 })
 
 test.concurrent('Work refresh preserves a valid task, initializes delayed work, and clears a removed task', () => {
-  const work = snapshot([{
-    id: 'TASK-1', title: 'Live', status: 'In Progress', assignees: [], description: '', references: [], modifiedFiles: [], criteria: [],
-  }])
+  const work = snapshot([item('TASK-1', { title: 'Live' })])
 
   const waiting = initialWorkFocus(undefined, beforeWork)
   const selected = reconcileWorkFocus(work, waiting)!
@@ -135,25 +142,38 @@ test.concurrent('Work refresh preserves a valid task, initializes delayed work, 
   assert.equal(reconcileWorkFocus(snapshot(), cleared), cleared)
 })
 
-test.concurrent('Backlog plugin reads configured nonterminal work and only recent terminal work', async () => {
+test.concurrent('Backlog plugin reads every task summary once and selected detail on demand', async () => {
   const calls: string[][] = []
-  const now = Date.parse('2026-08-23T12:00:00Z')
+  const comments = new Map([['TASK-1', [
+    { index: 1, body: 'Review this', createdAt: '2026-08-23T11:00:00Z', author: '@alex' },
+  ]]])
   const run: BacklogCommand = async arguments_ => {
     calls.push(arguments_)
     if (arguments_[0] === 'config') {
       return arguments_[2] === 'statuses' ? 'To Do, In Progress, Review, Done\n' : 'To Do\n'
     }
     if (arguments_[1] === 'list') {
+      const task = (id: string, status: string) => ({
+        id,
+        title: `Change ${id}`,
+        status,
+        assignees: ['@codex'],
+        references: ['shop', 'https://example.com'],
+        modifiedFiles: ['src/shop.ts'],
+        acceptanceCriteriaCompleted: 1,
+        acceptanceCriteriaCount: 2,
+        updatedAt: '2026-08-23T11:00:00Z',
+      })
       return JSON.stringify({ tasks: [
-        { id: 'TASK-1', status: 'In Progress', updatedAt: '2026-08-20T12:00:00Z' },
-        { id: 'TASK-2', status: 'Done', updatedAt: '2026-08-23T01:00:00Z' },
-        { id: 'TASK-3', status: 'Done', updatedAt: '2026-08-21T12:00:00Z' },
-        { id: 'TASK-4', status: 'To Do', updatedAt: '2026-08-23T11:00:00Z' },
-        { id: 'TASK-5', status: 'Review', updatedAt: null },
+        task('TASK-1', 'In Progress'),
+        task('TASK-2', 'Done'),
+        task('TASK-3', 'Done'),
+        task('TASK-4', 'To Do'),
+        task('TASK-5', 'Review'),
       ] })
     }
     const id = arguments_[2]!
-    const status = { 'TASK-2': 'Done', 'TASK-4': 'To Do', 'TASK-5': 'Review' }[id] ?? 'In Progress'
+    const status = { 'TASK-2': 'Done', 'TASK-3': 'Done', 'TASK-4': 'To Do', 'TASK-5': 'Review' }[id] ?? 'In Progress'
     return JSON.stringify({
       task: {
         id,
@@ -164,31 +184,40 @@ test.concurrent('Backlog plugin reads configured nonterminal work and only recen
         references: ['shop', 'https://example.com'],
         modifiedFiles: ['src/shop.ts'],
         acceptanceCriteria: [{ index: 1, text: 'one', checked: true }, { index: 2, text: 'two', checked: false }],
+        definitionOfDone: [{ index: 1, text: 'verified', checked: id === 'TASK-2' }],
+        implementationPlan: id === 'TASK-1' ? 'First plan' : null,
+        implementationNotes: id === 'TASK-1' ? 'First note' : null,
+        comments: comments.get(id) ?? [],
       },
     })
   }
 
-  const work = await createBacklogPlugin('/repo', run, () => now).read()
+  const work = await createBacklogPlugin('/repo', run).read()
 
   assert.deepEqual(calls, [
     ['task', 'list', '--json'],
     ['config', 'get', 'statuses'],
     ['config', 'get', 'defaultStatus'],
-    ['task', 'view', 'TASK-1', '--json'],
-    ['task', 'view', 'TASK-2', '--json'],
-    ['task', 'view', 'TASK-4', '--json'],
-    ['task', 'view', 'TASK-5', '--json'],
   ])
-  const criteria = [{ text: 'one', checked: true }, { text: 'two', checked: false }]
   assert.deepEqual(work.statuses, ['To Do', 'In Progress', 'Review', 'Done'])
   assert.equal(work.defaultStatus, 'To Do')
-  assert.deepEqual(work.items.map(item => [item.id, item.status, item.description, item.criteria, item.modifiedFiles]), [
-    ['TASK-1', 'In Progress', 'Why it matters', criteria, ['src/shop.ts']],
-    ['TASK-2', 'Done', '', criteria, ['src/shop.ts']],
-    ['TASK-4', 'To Do', 'Why it matters', criteria, ['src/shop.ts']],
-    ['TASK-5', 'Review', 'Why it matters', criteria, ['src/shop.ts']],
+  assert.deepEqual(work.items.map(item => [item.id, item.status, item.acceptanceCriteriaCompleted, item.acceptanceCriteriaCount]), [
+    ['TASK-1', 'In Progress', 1, 2],
+    ['TASK-2', 'Done', 1, 2],
+    ['TASK-3', 'Done', 1, 2],
+    ['TASK-4', 'To Do', 1, 2],
+    ['TASK-5', 'Review', 1, 2],
   ])
   assert.deepEqual(work.items[0]!.references, ['shop', 'https://example.com'])
+  const details = await createBacklogPlugin('/repo', run).readItem('TASK-1')
+  assert.deepEqual(calls.at(-1), ['task', 'view', 'TASK-1', '--json'])
+  assert.deepEqual(details.acceptanceCriteria, [{ text: 'one', checked: true }, { text: 'two', checked: false }])
+  assert.deepEqual(details.definitionOfDone, [{ text: 'verified', checked: false }])
+  assert.equal(details.implementationPlan, 'First plan')
+  assert.equal(details.implementationNotes, 'First note')
+  assert.deepEqual(details.comments, [{
+    body: 'Review this', createdAt: '2026-08-23T11:00:00Z', author: '@alex',
+  }])
 })
 
 test.concurrent('Backlog plugin signals a task-directory change', async () => {
@@ -213,6 +242,15 @@ test.concurrent('Backlog plugin signals a task-directory change', async () => {
   }
 })
 
+test.concurrent('Backlog plugin needs no watcher when the project has no Backlog tasks', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'groma-no-backlog-'))
+  try {
+    createBacklogPlugin(root).watch(() => assert.fail('unexpected work change')).close()
+  } finally {
+    await rm(root, { recursive: true, force: true })
+  }
+})
+
 test.concurrent('host opens the viewer without waiting for a Backlog read', async () => {
   let readStarted = false
   const workSource: WorkSource = {
@@ -220,6 +258,7 @@ test.concurrent('host opens the viewer without waiting for a Backlog read', asyn
       readStarted = true
       return new Promise(() => {})
     },
+    readItem: async () => assert.fail('unexpected task detail read'),
     watch() {
       return { close() {} }
     },
@@ -250,6 +289,7 @@ test.concurrent('a failed Backlog read leaves architecture refresh working', asy
       reads += 1
       throw new Error('backlog unavailable')
     },
+    readItem: async () => assert.fail('unexpected task detail read'),
     watch() {
       return { close() {} }
     },
@@ -280,6 +320,7 @@ test.concurrent('host refreshes the viewer from a changed work snapshot', async 
   let changed = () => {}
   const workSource: WorkSource = {
     read: async () => snapshot(items),
+    readItem: async () => assert.fail('unexpected task detail read'),
     watch(onChange) {
       changed = onChange
       return { close() {} }
@@ -296,16 +337,12 @@ test.concurrent('host refreshes the viewer from a changed work snapshot', async 
     await setup.renderOnce()
     assert.doesNotMatch(setup.captureCharFrame(), /TASK-LIVE/)
 
-    items = [{
-      id: 'TASK-LIVE',
+    items = [item('TASK-LIVE', {
       title: 'Change Shop',
-      status: 'In Progress',
       assignees: ['@codex'],
-      description: '',
       references: ['shop'],
-      modifiedFiles: [],
-      criteria: [{ text: 'Shown', checked: false }],
-    }]
+      acceptanceCriteriaCount: 1,
+    })]
     changed()
     await press(setup, 'w')
     const deadline = Date.now() + 3000

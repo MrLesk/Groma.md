@@ -1,4 +1,4 @@
-import type { ArchitectureGraph, C4Kind, WorkItem } from '../../../types.ts'
+import type { ArchitectureGraph, C4Kind, WorkItem, WorkItemDetails } from '../../../types.ts'
 import { chromeButton } from '../atoms/button.ts'
 import { kindGlyph } from '../../atoms/kind.ts'
 import { highlightedLine } from '../source/highlight.ts'
@@ -95,10 +95,37 @@ function section(body: Element, label: string, rows: HTMLElement[]): void {
   body.append(heading(label), list)
 }
 
+function checklistRows(items: readonly { text: string; checked: boolean }[]): HTMLElement[] {
+  return items.map(item => {
+    const row = document.createElement('li')
+    if (!item.checked) row.textContent = `○ ${item.text}`
+    else {
+      const check = document.createElement('span')
+      check.className = 'criterion-check'
+      check.textContent = '✓'
+      const text = document.createElement('span')
+      text.className = 'ghost'
+      text.textContent = ` ${item.text}`
+      row.append(check, text)
+    }
+    return row
+  })
+}
+
+function textSection(body: Element, label: string, text: string): void {
+  if (text === '') return
+  const content = document.createElement('p')
+  content.className = 'task-text'
+  content.textContent = text
+  body.append(heading(label), content)
+}
+
 /** Paints a task summary and its on-demand file status rows. */
 export function paintTaskSummary(
   host: HTMLElement,
   item: WorkItem,
+  details: WorkItemDetails | undefined,
+  detailsError: string | undefined,
   world: ArchitectureGraph,
   payload: TaskDiffPayload | undefined,
   error: string | undefined,
@@ -112,24 +139,39 @@ export function paintTaskSummary(
   host.querySelector('.tabs')!.replaceChildren()
   const body = host.querySelector('.body')!
   body.replaceChildren()
-  if (item.description !== '') {
+  if (details === undefined && detailsError !== undefined) {
+    const status = document.createElement('p')
+    status.className = 'task-diff-status'
+    status.textContent = detailsError
+    body.append(status)
+    return
+  }
+  if (details !== undefined && details.description !== '') {
     const paragraph = document.createElement('p')
     paragraph.className = 'description'
-    paragraph.textContent = item.description
+    paragraph.textContent = details.description
     body.append(paragraph)
   }
-  const done = item.criteria.filter(criterion => criterion.checked).length
-  section(body, `Acceptance criteria · ${done} of ${item.criteria.length}`, item.criteria.map(criterion => {
+  if (details !== undefined) {
+    section(
+      body,
+      `Acceptance criteria · ${item.acceptanceCriteriaCompleted} of ${item.acceptanceCriteriaCount}`,
+      checklistRows(details.acceptanceCriteria),
+    )
+    const done = details.definitionOfDone.filter(criterion => criterion.checked).length
+    section(body, `Definition of Done · ${done} of ${details.definitionOfDone.length}`, checklistRows(details.definitionOfDone))
+  }
+  section(body, 'References', item.references.map(reference => {
     const row = document.createElement('li')
-    if (!criterion.checked) row.textContent = `○ ${criterion.text}`
+    const element = byId.get(reference)
+    if (element === undefined) row.textContent = reference
     else {
-      const check = document.createElement('span')
-      check.className = 'criterion-check'
-      check.textContent = '✓'
-      const text = document.createElement('span')
-      text.className = 'ghost'
-      text.textContent = ` ${criterion.text}`
-      row.append(check, text)
+      const link = document.createElement('button')
+      link.type = 'button'
+      link.className = 'link'
+      link.append(marked(element.kind, element.external, element.name))
+      link.addEventListener('click', event => onSelect(element.representationId, event.shiftKey))
+      row.append(link)
     }
     return row
   }))
@@ -144,18 +186,17 @@ export function paintTaskSummary(
     status.textContent = error
     body.append(status)
   }
-  section(body, 'References', item.references.map(reference => {
+  textSection(body, 'Implementation plan', details?.implementationPlan ?? '')
+  textSection(body, 'Implementation notes', details?.implementationNotes ?? '')
+  section(body, 'Comments', (details?.comments ?? []).map(comment => {
     const row = document.createElement('li')
-    const element = byId.get(reference)
-    if (element === undefined) row.textContent = reference
-    else {
-      const link = document.createElement('button')
-      link.type = 'button'
-      link.className = 'link'
-      link.append(marked(element.kind, element.external, element.name))
-      link.addEventListener('click', event => onSelect(element.representationId, event.shiftKey))
-      row.append(link)
-    }
+    row.className = 'task-comment'
+    const meta = document.createElement('div')
+    meta.className = 'ghost'
+    meta.textContent = `${comment.author} · ${comment.createdAt}`
+    const text = document.createElement('div')
+    text.textContent = comment.body
+    row.append(meta, text)
     return row
   }))
 }
@@ -245,6 +286,8 @@ export const taskDiffCss = `
   #details .task-diff-source { color: var(--muted); display: grid; font-size: 9px; gap: 4px; margin: 12px 0; }
   #details .task-diff-source code { color: inherit; font-family: inherit; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   #details .task-diff-status { color: var(--muted); margin: 14px 0; }
+  #details .task-text { line-height: 1.65; margin: 0; white-space: pre-wrap; }
+  #details .task-comment { line-height: 1.65; margin-bottom: 12px; white-space: pre-wrap; }
   #details.task-diff-open .task-diff-source { border-bottom: 1px solid var(--hairline); margin: 0; padding: 12px 22px; }
   #details .task-diff-code { min-width: max-content; padding-bottom: 24px; }
   #details .task-diff-hunk { background: color-mix(in srgb, var(--syntax-type) 9%, transparent); color: var(--syntax-type); font-size: 10px; padding: 7px 22px; }
