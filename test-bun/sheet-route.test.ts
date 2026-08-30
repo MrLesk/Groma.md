@@ -5,6 +5,7 @@ import { test } from 'bun:test'
 import { loadArchitectureViewModel } from '../src/core.ts'
 import {
   LANE_GAP,
+  ROUTE_CLEARANCE,
   ROUTE_UNIT,
   crossingRouteIdsFor,
   visibleObstacle,
@@ -12,6 +13,7 @@ import {
   type FlatRoute,
   type Point,
 } from '../src/sheet/route-geometry.ts'
+import { refineRoutes } from '../src/sheet/route-lanes.ts'
 import { artifactRouteIds, orthogonal, routeSpacingIndex } from '../src/sheet/route-spacing.ts'
 import { routeAll } from '../src/sheet/route.ts'
 import { sheetScene } from '../src/sheet/scene.ts'
@@ -69,6 +71,44 @@ function onVisibleBoundary(point: Point, endpoint: Endpoint): boolean {
   return polygon.some((from, index) => pointOnSegment(point, from, polygon[(index + 1) % polygon.length]!))
 }
 
+function endpointRunLength(points: readonly Point[], fromStart: boolean): number {
+  const ordered = fromStart ? points : [...points].reverse()
+  const first = { x: ordered[1]!.x - ordered[0]!.x, y: ordered[1]!.y - ordered[0]!.y }
+  let length = 0
+  for (let index = 1; index < ordered.length; index += 1) {
+    const step = { x: ordered[index]!.x - ordered[index - 1]!.x, y: ordered[index]!.y - ordered[index - 1]!.y }
+    if (Math.abs(first.x * step.y - first.y * step.x) >= 0.01
+      || first.x * step.x + first.y * step.y <= 0) break
+    length += Math.abs(step.x) + Math.abs(step.y)
+  }
+  return length
+}
+
+function segmentsCross(a0: Point, a1: Point, b0: Point, b1: Point): boolean {
+  const between = (value: number, from: number, to: number) =>
+    value > Math.min(from, to) + 0.01 && value < Math.max(from, to) - 0.01
+  const aHorizontal = Math.abs(a0.y - a1.y) < 0.01
+  const bHorizontal = Math.abs(b0.y - b1.y) < 0.01
+  if (aHorizontal === bHorizontal) return false
+  const [horizontal0, horizontal1] = aHorizontal ? [a0, a1] : [b0, b1]
+  const [vertical0, vertical1] = aHorizontal ? [b0, b1] : [a0, a1]
+  return between(vertical0.x, horizontal0.x, horizontal1.x)
+    && between(horizontal0.y, vertical0.y, vertical1.y)
+}
+
+function routesCross(a: FlatRoute, b: FlatRoute): boolean {
+  for (let left = 1; left < a.points.length; left += 1) {
+    for (let right = 1; right < b.points.length; right += 1) {
+      const a0 = a.points[left - 1]!
+      const a1 = a.points[left]!
+      const b0 = b.points[right - 1]!
+      const b1 = b.points[right]!
+      if (segmentsCross(a0, a1, b0, b1)) return true
+    }
+  }
+  return false
+}
+
 async function fixture(root: string): Promise<{ scene: SheetScene; world: ArchitectureWorld }> {
   const { world } = await loadArchitectureViewModel(root)
   return { scene: sheetScene(world), world }
@@ -87,6 +127,8 @@ test.concurrent('every authored relationship gets one deterministic orthogonal r
     assert.equal(orthogonal(route.points), true, route.id)
     assert.equal(onVisibleBoundary(route.points[0]!, endpoints.get(route.source)!), true, `${route.id} source`)
     assert.equal(onVisibleBoundary(route.points.at(-1)!, endpoints.get(route.target)!), true, `${route.id} target`)
+    assert.ok(endpointRunLength(route.points, true) >= ROUTE_CLEARANCE - 0.01, `${route.id} source run`)
+    assert.ok(endpointRunLength(route.points, false) >= ROUTE_CLEARANCE - 0.01, `${route.id} target run`)
     for (let index = 1; index < route.points.length; index += 1) {
       assert.notDeepEqual(route.points[index], route.points[index - 1], `${route.id} repeats a point`)
     }
@@ -132,12 +174,42 @@ test.concurrent('parallel relationships remain individual and use distinct ports
   assert.equal(spacing.sharedPathLength, 0)
 })
 
-test.concurrent('container geography chooses ports even when local component positions suggest the opposite', () => {
+test.concurrent('connected elements choose ports independently of their owner surfaces', () => {
+  const routeTo = (targetY: number) => routeAll(new Map<string, Endpoint>([
+    ['west-owner', { key: 'west-owner', kind: 'slab', rect: { gx: 0, gy: 4, w: 8, d: 8 } }],
+    ['east-owner', { key: 'east-owner', kind: 'slab', rect: { gx: 16, gy: 4, w: 8, d: 8 } }],
+    ['source', {
+      key: 'source',
+      kind: 'building',
+      rect: { gx: 12, gy: 7, w: 2, d: 2 },
+      owner: 'west-owner',
+      roof: 1,
+    }],
+    ['target', {
+      key: 'target',
+      kind: 'building',
+      rect: { gx: 4, gy: targetY, w: 2, d: 2 },
+      owner: 'east-owner',
+      roof: 1,
+    }],
+  ]), [{
+    id: 'relationship:0',
+    source: 'source',
+    target: 'target',
+    description: 'uses',
+    origin: 'observed',
+  }])[0]!
+
+  const north = routeTo(0)
+  const south = routeTo(16)
+  assert.ok(north.points[1]!.gy < north.points[0]!.gy)
+  assert.ok(south.points[1]!.gy > south.points[0]!.gy)
+})
+
+test.concurrent('overlapping facing walls share one straight route coordinate', () => {
   const endpoints = new Map<string, Endpoint>([
-    ['west', { key: 'west', kind: 'slab', rect: { gx: 0, gy: 4, w: 8, d: 8 } }],
-    ['east', { key: 'east', kind: 'slab', rect: { gx: 16, gy: 4, w: 8, d: 8 } }],
-    ['source', { key: 'source', kind: 'building', rect: { gx: 12, gy: 7, w: 2, d: 2 }, owner: 'west', roof: 1 }],
-    ['target', { key: 'target', kind: 'building', rect: { gx: 4, gy: 7, w: 2, d: 2 }, owner: 'east', roof: 1 }],
+    ['source', { key: 'source', kind: 'building', rect: { gx: 0, gy: 10, w: 3, d: 2 }, roof: 3.5 }],
+    ['target', { key: 'target', kind: 'building', rect: { gx: 7, gy: 10, w: 3, d: 3 }, roof: 3.5 }],
   ])
   const [route] = routeAll(endpoints, [{
     id: 'relationship:0',
@@ -147,8 +219,55 @@ test.concurrent('container geography chooses ports even when local component pos
     origin: 'observed',
   }])
 
-  assert.equal(route!.points[0]!.gx, 14)
-  assert.equal(route!.points.at(-1)!.gx, 3.5)
+  assert.equal(route!.points.length, 2)
+  assert.equal(route!.points[0]!.gy, route!.points[1]!.gy)
+})
+
+test.concurrent('a safe endpoint lane transition loses its extra dogleg', () => {
+  const [route] = refineRoutes(new Map(), [{
+    id: 'relationship:0',
+    source: 'source',
+    target: 'target',
+    description: 'uses',
+    origin: 'observed',
+    points: [
+      { x: 0, y: 0 },
+      { x: 0, y: 2 * ROUTE_UNIT },
+      { x: ROUTE_UNIT, y: 2 * ROUTE_UNIT },
+      { x: ROUTE_UNIT, y: 3 * ROUTE_UNIT },
+      { x: 10 * ROUTE_UNIT, y: 3 * ROUTE_UNIT },
+    ],
+  }])
+
+  assert.deepEqual(route!.points, [
+    { x: 0, y: 0 },
+    { x: 0, y: 3 * ROUTE_UNIT },
+    { x: 10 * ROUTE_UNIT, y: 3 * ROUTE_UNIT },
+  ])
+})
+
+test.concurrent('nested routes sharing a building side use a non-crossing pin order', () => {
+  const endpoints = new Map<string, Endpoint>([
+    ['source', { key: 'source', kind: 'building', rect: { gx: 10, gy: 0, w: 3, d: 5 }, roof: 1 }],
+    ['blocker', { key: 'blocker', kind: 'building', rect: { gx: 6, gy: 0, w: 2, d: 5 }, roof: 1 }],
+    ['near', { key: 'near', kind: 'building', rect: { gx: 3, gy: 15, w: 4, d: 2 }, roof: 1 }],
+    ['middle', { key: 'middle', kind: 'building', rect: { gx: 6.5, gy: 23, w: 3, d: 3 }, roof: 1 }],
+    ['far', { key: 'far', kind: 'building', rect: { gx: 5, gy: 31, w: 4, d: 3 }, roof: 1 }],
+  ])
+  const targets = ['near', 'middle', 'far']
+  const routes: FlatRoute[] = routeAll(endpoints, targets.map((target, index) => ({
+    id: `relationship:${index}`,
+    source: 'source',
+    target,
+    description: 'uses',
+    origin: 'observed',
+  }))).map(route => ({
+    ...route,
+    points: route.points.map(point => ({ x: point.gx, y: point.gy })),
+  }))
+
+  assert.deepEqual(routes.map(route => [route.source, route.target]), targets.map(target => ['source', target]))
+  assert.equal(routes.some((route, index) => routes.slice(index + 1).some(other => routesCross(route, other))), false)
 })
 
 test.concurrent('routing fails clearly when a relationship names an element that was not placed', () => {

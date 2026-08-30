@@ -78,10 +78,6 @@ function centre(endpoint: Endpoint): Point {
   return { x: x + width / 2 - shadow / 2, y: y + height / 2 - shadow / 2 }
 }
 
-function owner(endpoint: Endpoint, endpoints: ReadonlyMap<string, Endpoint>): Endpoint {
-  return endpoints.get(endpoint.owner ?? endpoint.key) ?? endpoint
-}
-
 function sidesTowards(from: Endpoint, to: Endpoint): PortSide[] {
   const a = centre(from)
   const b = centre(to)
@@ -92,16 +88,6 @@ function sidesTowards(from: Endpoint, to: Endpoint): PortSide[] {
   const preferred = Math.abs(dx) >= Math.abs(dy) ? [horizontal, vertical] : [vertical, horizontal]
   const opposite: Record<PortSide, PortSide> = { north: 'south', east: 'west', south: 'north', west: 'east' }
   return [...preferred, opposite[preferred[1]!], opposite[preferred[0]!]]
-}
-
-function preferredSides(
-  endpoint: Endpoint,
-  other: Endpoint,
-  endpoints: ReadonlyMap<string, Endpoint>,
-): PortSide[] {
-  const own = owner(endpoint, endpoints)
-  const partner = owner(other, endpoints)
-  return own.key === partner.key ? sidesTowards(endpoint, other) : sidesTowards(own, partner)
 }
 
 function portAt(endpoint: Endpoint, side: PortSide, share: number): RoutePort {
@@ -122,6 +108,13 @@ function portAt(endpoint: Endpoint, side: PortSide, share: number): RoutePort {
         ? { x: wall.x, y: wall.y + ROUTE_CLEARANCE }
         : { x: wall.x - ROUTE_CLEARANCE, y: wall.y }
   return { side, wall, guard }
+}
+
+/** Equivalent building ports from which Libavoid may choose the straightest route. */
+export function buildingPorts(endpoint: Endpoint): RoutePort[] {
+  return (['north', 'east', 'south', 'west'] as const).flatMap(side =>
+    Array.from({ length: PORT_CAPACITY }, (_, index) =>
+      portAt(endpoint, side, portShare(endpoint, side, index, PORT_CAPACITY))))
 }
 
 function inside(point: Point, polygon: readonly Point[]): boolean {
@@ -191,7 +184,8 @@ function routeCandidates(
     const target = endpoints.get(request.target)
     if (!source || !target) throw new Error(`Relationship ${request.id} names an element the sheet did not place`)
     for (const [endpoint, other, role] of [[source, target, 'source'], [target, source, 'target']] as const) {
-      const sides = preferredSides(endpoint, other, endpoints)
+      if (endpoint.kind === 'building') continue
+      const sides = sidesTowards(endpoint, other)
       const sideIndex = sides.findIndex(side => portClear(endpoint, other, buildings, side, 0.5))
       if (sideIndex < 0) throw new Error(`No clear port side for ${request.id} at ${endpoint.key}`)
       candidates.push({ request, endpoint, other, role, sides, sideIndex, side: sides[sideIndex]! })
@@ -289,7 +283,7 @@ function distributeClearPorts(
   return groups
 }
 
-function pairsFrom(groups: ReadonlyMap<string, EndpointCandidate[]>): Map<string, PortPair> {
+function pairsFrom(groups: ReadonlyMap<string, EndpointCandidate[]>): Map<string, Partial<PortPair>> {
   const pairs = new Map<string, Partial<PortPair>>()
   for (const group of groups.values()) {
     group.sort((a, b) => laneCoordinate(a) - laneCoordinate(b) || a.request.id.localeCompare(b.request.id))
@@ -303,14 +297,14 @@ function pairsFrom(groups: ReadonlyMap<string, EndpointCandidate[]>): Map<string
       pairs.set(candidate.request.id, pair)
     }
   }
-  return new Map([...pairs].map(([id, pair]) => [id, pair as PortPair]))
+  return pairs
 }
 
-/** Assigns clear, deterministic wall ports, preferring the direction between owning containers. */
-export function assignPorts(
+/** Assigns fixed ports only to endpoints that have no Libavoid building shape. */
+export function assignFixedPorts(
   endpoints: ReadonlyMap<string, Endpoint>,
   requests: readonly RouteRequest[],
-): Map<string, PortPair> {
+): Map<string, Partial<PortPair>> {
   const buildings = [...endpoints.values()].filter(endpoint => endpoint.kind === 'building')
   const candidates = routeCandidates(endpoints, requests, buildings)
   balanceSideLoads(candidates, buildings)

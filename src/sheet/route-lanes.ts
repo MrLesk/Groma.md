@@ -342,12 +342,29 @@ function segmentLength(a: Point, b: Point): number {
   return Math.abs(a.x - b.x) + Math.abs(a.y - b.y)
 }
 
+function runDirection(from: Point, to: Point): string {
+  return Math.abs(from.x - to.x) < EPSILON
+    ? `vertical:${Math.sign(to.y - from.y)}`
+    : `horizontal:${Math.sign(to.x - from.x)}`
+}
+
+function preservesEndpointDirections(before: readonly Point[], after: readonly Point[]): boolean {
+  return runDirection(before[0]!, before[1]!) === runDirection(after[0]!, after[1]!)
+    && runDirection(before.at(-2)!, before.at(-1)!) === runDirection(after.at(-2)!, after.at(-1)!)
+}
+
+function collapsibleDogleg(lengths: readonly number[], index: number, pointCount: number): boolean {
+  if (lengths.every(length => length < LANE_GAP - EPSILON)) return true
+  const touchesEndpoint = index === 0 || index + 3 === pointCount - 1
+  return touchesEndpoint && lengths[1]! <= ROUTE_UNIT + EPSILON
+}
+
 function collapseDoglegs(route: FlatRoute, crosses: CrossingChecker, crossesClearance: CrossingChecker): FlatRoute {
   let points = route.points.map(point => ({ ...point }))
-  for (let index = 1; index + 3 < points.length - 1;) {
+  for (let index = 0; index + 3 < points.length;) {
     const [a, b, c, d] = points.slice(index, index + 4) as [Point, Point, Point, Point]
-    if ([segmentLength(a, b), segmentLength(b, c), segmentLength(c, d)]
-      .some(length => length >= LANE_GAP - EPSILON)) {
+    const lengths = [segmentLength(a, b), segmentLength(b, c), segmentLength(c, d)]
+    if (!collapsibleDogleg(lengths, index, points.length)) {
       index += 1
       continue
     }
@@ -366,7 +383,8 @@ function collapseDoglegs(route: FlatRoute, crosses: CrossingChecker, crossesClea
     const before = crossesClearance([{ ...route, points }])
     const safe = candidates.find(candidate => {
       const changed = [{ ...route, points: candidate }]
-      return crosses(changed).length === 0
+      return preservesEndpointDirections(points, candidate)
+        && crosses(changed).length === 0
         && crossesClearance(changed).every(routeId => before.includes(routeId))
     })
     if (!safe) {
@@ -374,7 +392,7 @@ function collapseDoglegs(route: FlatRoute, crosses: CrossingChecker, crossesClea
       continue
     }
     points = safe
-    index = Math.max(1, index - 1)
+    index = Math.max(0, index - 1)
   }
   return { ...route, points }
 }
@@ -475,5 +493,5 @@ export function refineRoutes(
   improve(LANE_GAP, 300, false)
   routes = routes.map(route => collapseDoglegs(route, crosses, crossesClearance))
   improve(PREFERRED_LANE_GAP, 4, true)
-  return routes
+  return routes.map(route => collapseDoglegs(route, crosses, crossesClearance))
 }
