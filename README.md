@@ -23,12 +23,17 @@ a second identity.
 Groma is the only writer of architecture element and revision files under
 `groma/`.
 
-1. Open a viewer: see the world. `groma view` opens the terminal map;
-   without a TTY, with `--plain`, or with a target, it prints text
-   instead. `groma web` opens the same world in the browser. Neither
-   scans on open. The live process starts the same watch as
-   `groma scan --watch`. Architecture Markdown changes update the map
-   without scanning.
+Run bare `groma` in a terminal to open the repository launcher. Move through
+its actions with Up and Down, then press Enter to run one. Piped `groma` and
+`groma --plain` print the same repository context and actions without waiting
+for input.
+
+1. Open a viewer: see the world. `groma web` scans this repo and opens the
+   browser map. On a TTY, `groma view` scans and opens the terminal map;
+   without a TTY, with `--plain`, or with a target, it prints the existing
+   world instead. Both live viewers continue with the same watch as `groma
+   scan --watch`. Architecture Markdown changes update the map without
+   scanning.
 2. `groma scan`: scan this repo. Core updates Markdown. The command
    prints `ok` and a short summary, not the architecture. TypeScript is
    built in; C# solution and project scans require a .NET 10 SDK.

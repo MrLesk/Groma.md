@@ -15,15 +15,19 @@ defines the architecture document format.
 People and agents use Groma. They do not edit architecture element or revision
 Markdown by hand. Groma writes those files so paths, identity, and metadata
 stay consistent. The root `groma/README.md` is different: its H1 is the project
-name and the remaining Markdown body is the project description. Bare `groma` and `groma
-instructions` are the local instruction hub.
+name and the remaining Markdown body is the project description. Bare `groma`
+opens a terminal launcher for the current repository: Up and Down choose an
+action and Enter runs it. Without an interactive terminal, it prints the same
+context and actions as plain text. `groma instructions` is the local instruction
+hub.
 
-1. Open a viewer: see the world. On a TTY, `groma view` starts the TUI
-   plugin. It does not scan on open. The live process starts the same
-   watch as `groma scan --watch`, so a later source change folds and the
-   map updates. An architecture Markdown change reloads the world without
-   scanning. `groma view --plain`, or `groma view` when stdout is not a
-   TTY, prints the merged world as plain text and does not start the TUI.
+1. Open a viewer: see the world. `groma web` scans the repository and starts
+   the browser map. On a TTY, `groma view` scans and starts the terminal map.
+   Each live process then starts the same watch as `groma scan --watch`, so a
+   later source change folds and the map updates. An architecture Markdown
+   change reloads the world without scanning. `groma view --plain`, or `groma
+   view` when stdout is not a TTY, prints the merged world as plain text
+   without scanning and does not start the TUI.
    `groma view <id|plan|file>` prints one record as plain text: an
    element, a plan, or the element whose `code` names that
    repository-relative file. When several elements share the file, the
@@ -94,8 +98,9 @@ IDs, or a machine-readable architecture. If someone later needs that, it is
 a different command, not scan.
 
 `groma scan --watch` is the same scan, left running. It watches supported
-TypeScript and C# source and project files. It does not open a viewer.
-`groma view` and `groma web` start that watch in-process.
+TypeScript and C# source and project files. It does not open a viewer. `groma
+view` and `groma web` run one scan before opening, then start that watch
+in-process.
 
 Each language scanner returns one validated, complete observation of atomic
 files and symbols, inferred scopes and relationships, and diagnostics. Groma

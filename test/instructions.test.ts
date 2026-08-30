@@ -4,7 +4,8 @@ import path from 'node:path'
 import test from 'node:test'
 import { fileURLToPath } from 'node:url'
 
-import { authoring, overview, splash } from '../src/instructions.ts'
+import { authoring, overview } from '../src/instructions.ts'
+import { renderPlainWelcome } from '../src/welcome.ts'
 
 const projectRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -39,21 +40,29 @@ function run(args: string[]) {
   })
 }
 
-test('bare groma prints the splash and exits without a viewer', async () => {
+test('bare groma without a TTY prints the plain welcome and exits', async () => {
   const result = await run([])
+  const expected = renderPlainWelcome(projectRoot)
 
   assert.equal(result.code, 0, result.stderr)
   assert.equal(result.stderr, '')
-  assert.equal(result.stdout, `${splash}\n`)
+  assert.equal(result.stdout, `${expected}\n`)
+  assert.equal(result.stdout.includes('\u001B['), false)
+  assert.match(result.stdout, /groma\.md v0\.1\.0/)
+  assert.match(result.stdout, /https:\/\/groma\.md/)
+  assert.ok(result.stdout.includes(`project: ${path.basename(projectRoot)}`))
+  assert.ok(result.stdout.indexOf('groma web') < result.stdout.indexOf('groma view'))
   assert.doesNotMatch(result.stdout, /System Context/)
 })
 
-test('bare groma --plain prints the same splash', async () => {
+test('bare groma --plain prints the same plain welcome', async () => {
+  const bare = await run([])
   const result = await run(['--plain'])
 
   assert.equal(result.code, 0, result.stderr)
   assert.equal(result.stderr, '')
-  assert.equal(result.stdout, `${splash}\n`)
+  assert.equal(result.stdout, bare.stdout)
+  assert.equal(result.stdout.includes('\u001B['), false)
 })
 
 test('groma instructions and instructions overview print the overview', async () => {
@@ -87,8 +96,9 @@ test('groma --help still lists the commands', async () => {
   const result = await run(['--help'])
 
   assert.equal(result.code, 0, result.stderr)
-  assert.notEqual(result.stdout, `${splash}\n`)
-  for (const name of ['view', 'scan', 'create', 'edit', 'accept', 'instructions']) {
+  assert.notEqual(result.stdout, `${renderPlainWelcome(projectRoot)}\n`)
+  for (const name of ['web', 'view', 'scan', 'create', 'edit', 'accept', 'instructions']) {
     assert.match(result.stdout, new RegExp(`^\\s+${name}\\b`, 'm'))
   }
+  assert.ok(result.stdout.indexOf('web') < result.stdout.indexOf('view'))
 })

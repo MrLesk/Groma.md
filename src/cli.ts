@@ -5,22 +5,79 @@ import { Command } from 'commander'
 import { acceptGhost } from './core.ts'
 import { createPlannedElement } from './create.ts'
 import { editArchitecture } from './edit.ts'
-import { authoring, overview, splash } from './instructions.ts'
+import { authoring, overview } from './instructions.ts'
 import { formatScanSummary, scanRepository, watchScan } from './scanner.ts'
+import {
+  renderPlainWelcome,
+  startWelcomeLauncher,
+} from './welcome.ts'
+import type { WelcomeActionId } from './welcome.ts'
 
 const program = new Command()
+
+async function openWeb(port?: number): Promise<void> {
+  const root = process.cwd()
+  await scanRepository(root)
+  const { startWebViewer } = await import('./viewers/web/server.ts')
+  const { url } = await startWebViewer(root, { port })
+  console.log(`groma web at ${url}`)
+}
+
+async function openTerminalMap(): Promise<void> {
+  const root = process.cwd()
+  await scanRepository(root)
+  const { startTerminalViewer } = await import('./view-host.ts')
+  const viewer = await startTerminalViewer(root)
+  await viewer.closed
+}
+
+async function scanOnce(): Promise<void> {
+  const summary = await scanRepository(process.cwd())
+  console.log('ok')
+  console.log(formatScanSummary(summary))
+}
+
+function unhandledWelcomeAction(action: never): never {
+  throw new Error(`unhandled welcome action: ${action}`)
+}
+
+async function runWelcomeAction(action: WelcomeActionId): Promise<void> {
+  switch (action) {
+    case 'web': return openWeb()
+    case 'view': return openTerminalMap()
+    case 'scan': return scanOnce()
+    case 'help': return program.outputHelp()
+    default: return unhandledWelcomeAction(action)
+  }
+}
 
 program
   .name('groma')
   .description("This repo's architecture in Git")
   .option('--plain', 'print as plain text')
-  .action(() => {
-    console.log(splash)
+  .action(async () => {
+    const interactive = process.stdin.isTTY === true
+      && process.stdout.isTTY === true
+      && !program.opts().plain
+    if (!interactive) {
+      console.log(renderPlainWelcome(process.cwd()))
+      return
+    }
+    const selection = await startWelcomeLauncher(process.cwd())
+    if (selection !== undefined) await runWelcomeAction(selection)
+  })
+
+program
+  .command('web')
+  .description('Scan this repo and open the browser map')
+  .option('--port <number>', 'port to listen on', Number)
+  .action(async options => {
+    await openWeb(options.port)
   })
 
 program
   .command('view')
-  .description('Open the terminal map')
+  .description('Scan this repo and open the terminal map')
   .argument('[target]', 'element id, plan id, or repository-relative source file')
   .option('--plain', 'print the merged world as plain text')
   .action(async (target: string | undefined, options) => {
@@ -40,19 +97,7 @@ program
       console.log(await renderPlainWorld(process.cwd()))
       return
     }
-    const { startTerminalViewer } = await import('./view-host.ts')
-    const viewer = await startTerminalViewer(process.cwd())
-    await viewer.closed
-  })
-
-program
-  .command('web')
-  .description('Open the browser map')
-  .option('--port <number>', 'port to listen on', Number)
-  .action(async options => {
-    const { startWebViewer } = await import('./viewers/web/server.ts')
-    const { url } = await startWebViewer(process.cwd(), { port: options.port })
-    console.log(`groma web at ${url}`)
+    await openTerminalMap()
   })
 
 program
@@ -81,9 +126,7 @@ program
       })
       return
     }
-    const summary = await scanRepository(root)
-    console.log('ok')
-    console.log(formatScanSummary(summary))
+    await scanOnce()
   })
 
 program

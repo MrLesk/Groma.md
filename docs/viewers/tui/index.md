@@ -1,8 +1,9 @@
 # Terminal viewer
 
-Run `groma view` to inspect architecture in a terminal. The screen has a header,
-a persistent hierarchy pane, a map, an optional details pane, and a footer. Panes
-reserve their columns and never cover the map.
+Run `groma view` to scan the repository and inspect its architecture in a
+terminal. The screen has a header, a persistent hierarchy pane, a map, an
+optional details pane, and a footer. Panes reserve their columns and never cover
+the map.
 
 ## Map scopes
 

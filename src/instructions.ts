@@ -1,25 +1,16 @@
-export const splash = `groma
-
-1. groma view — see the world
-2. groma scan — fold this repo into Markdown
-3. groma create / groma edit — author new parts, required changes, and explanations
-4. groma accept <id> — accept a matched ghost
-
-groma instructions overview
-groma instructions authoring`
-
 export const overview = `# Overview
 
 Groma is this repository's architecture in Git. Solid boxes exist. Ghosts are next. Groma is the only writer of files under groma/.
 
 ## Workflow
 
-1. groma view — see the merged world. On a TTY with no target this is the map. groma view --plain prints the world as text. groma view <id|path> prints one record.
-2. groma scan — scan this repo. Prints ok and a short summary. It does not print the architecture.
-3. Change the architecture through Groma, not by editing groma/ files.
+1. groma web — scan this repo and open the browser map.
+2. groma view — scan this repo and open the terminal map. groma view --plain prints the existing world as text without scanning. groma view <id|path> prints one existing record.
+3. groma scan — scan this repo. Prints ok and a short summary. It does not print the architecture.
+4. Change the architecture through Groma, not by editing groma/ files.
    - groma create — a new part becomes a ghost in a plan.
    - groma edit — groma edit <id> --description updates current meaning; groma edit <id> --plan <plan-id> restates an existing part as planned.
-4. groma accept <id> — accept that ghost only if a scan has matched it.
+5. groma accept <id> — accept that ghost only if a scan has matched it.
 
 ## Rules of engagement
 
