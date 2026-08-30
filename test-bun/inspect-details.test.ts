@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test'
 
 import {
+  detailsTabAfterSelection,
   inspectDetails,
   tabSections,
 } from '../src/viewers/web/organisms/details.ts'
@@ -119,6 +120,11 @@ test.concurrent('the tabs split meaning from build evidence', () => {
     'children',
   ])
   expect(tabSections('how')).toEqual(['technology', 'code', 'files'])
+})
+
+test.concurrent('the build tab resets only when the primary selection changes', () => {
+  expect(detailsTabAfterSelection('how', 'component-a', 'component-b')).toBe('what')
+  expect(detailsTabAfterSelection('how', 'component-a', 'component-a')).toBe('how')
 })
 
 test.concurrent('actor commands are scoped flows and stay separate from peer relationships', () => {
