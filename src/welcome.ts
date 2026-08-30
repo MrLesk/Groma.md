@@ -5,14 +5,12 @@ import path from 'node:path'
 import {
   createCliRenderer,
   FrameBufferRenderable,
-  normalizeTerminalPalette,
   RGBA,
   TextAttributes,
 } from '@opentui/core'
 import type {
   CliRenderer,
   KeyEvent,
-  NormalizedTerminalPalette,
   OptimizedBuffer,
 } from '@opentui/core'
 
@@ -24,6 +22,8 @@ const { version } = createRequire(import.meta.url)('../package.json') as {
 
 const documentationUrl = 'https://groma.md'
 const brandGreen = RGBA.fromHex('#1D9E75')
+const terminalForeground = RGBA.defaultForeground()
+const terminalBackground = RGBA.defaultBackground()
 const mark = [
   '      ●',
   '      │',
@@ -68,7 +68,6 @@ interface WelcomeSheet {
   commandWidth: number
   descriptionWidth: number
   innerWidth: number
-  height: number
 }
 
 interface PaintedText {
@@ -110,7 +109,6 @@ function welcomeSheet(model: WelcomeModel): WelcomeSheet {
     commandWidth,
     descriptionWidth: innerWidth - commandWidth - 5,
     innerWidth,
-    height: mark.length + 1 + 3 + 1 + welcomeActions.length * 2 + 1,
   }
 }
 
@@ -134,8 +132,6 @@ function drawParts(
   parts: readonly PaintedText[],
   x: number,
   y: number,
-  foreground: RGBA,
-  background: RGBA,
 ): void {
   let cursor = x
   for (const part of parts) {
@@ -145,8 +141,8 @@ function drawParts(
       cursor,
       y,
       [...part.value].length,
-      part.color ?? foreground,
-      background,
+      part.color ?? terminalForeground,
+      terminalBackground,
       part.attributes,
     )
     cursor += [...part.value].length
@@ -172,12 +168,10 @@ function drawContext(
   model: WelcomeModel,
   x: number,
   y: number,
-  foreground: RGBA,
-  background: RGBA,
 ): void {
   const width = sheet.innerWidth + 2
-  text(buffer, `┌${'─'.repeat(sheet.innerWidth)}┐`, x, y, width, foreground, background)
-  text(buffer, `│${' '.repeat(sheet.innerWidth)}│`, x, y + 1, width, foreground, background)
+  text(buffer, `┌${'─'.repeat(sheet.innerWidth)}┐`, x, y, width, terminalForeground, terminalBackground)
+  text(buffer, `│${' '.repeat(sheet.innerWidth)}│`, x, y + 1, width, terminalForeground, terminalBackground)
   drawParts(buffer, [
     { value: 'project: ', attributes: TextAttributes.DIM },
     { value: model.project, color: brandGreen },
@@ -185,8 +179,8 @@ function drawContext(
     { value: model.folder, color: brandGreen },
     { value: ' │ status: ', attributes: TextAttributes.DIM },
     { value: model.status, color: brandGreen },
-  ], x + 2, y + 1, foreground, background)
-  text(buffer, `└${'─'.repeat(sheet.innerWidth)}┘`, x, y + 2, width, foreground, background)
+  ], x + 2, y + 1)
+  text(buffer, `└${'─'.repeat(sheet.innerWidth)}┘`, x, y + 2, width, terminalForeground, terminalBackground)
 }
 
 function drawCommands(
@@ -196,11 +190,9 @@ function drawCommands(
   arrowVisible: boolean,
   x: number,
   y: number,
-  foreground: RGBA,
-  background: RGBA,
 ): void {
   const width = sheet.innerWidth + 2
-  text(buffer, commandBorder(sheet, '┌', '┬', '┐'), x, y, width, foreground, background)
+  text(buffer, commandBorder(sheet, '┌', '┬', '┐'), x, y, width, terminalForeground, terminalBackground)
   for (const [index, action] of welcomeActions.entries()) {
     const row = y + index * 2 + 1
     const selected = index === selectedIndex
@@ -210,25 +202,25 @@ function drawCommands(
       x,
       row,
       width,
-      foreground,
-      background,
+      terminalForeground,
+      terminalBackground,
     )
     drawParts(buffer, [
-      { value: selected && arrowVisible ? '> ' : '  ', color: selected ? brandGreen : foreground },
+      { value: selected && arrowVisible ? '> ' : '  ', color: selected ? brandGreen : terminalForeground },
       {
         value: action.command,
-        color: selected ? brandGreen : foreground,
+        color: selected ? brandGreen : terminalForeground,
         attributes: selected ? TextAttributes.BOLD : 0,
       },
-    ], x + 2, row, foreground, background)
+    ], x + 2, row)
     text(
       buffer,
       action.description,
       x + sheet.commandWidth + 5,
       row,
       sheet.descriptionWidth,
-      foreground,
-      background,
+      terminalForeground,
+      terminalBackground,
       action.id === 'scan' || action.id === 'help' ? TextAttributes.DIM : 0,
     )
     if (index < welcomeActions.length - 1) {
@@ -238,61 +230,66 @@ function drawCommands(
         x,
         row + 1,
         width,
-        foreground,
-        background,
+        terminalForeground,
+        terminalBackground,
       )
     }
   }
   const bottom = y + welcomeActions.length * 2
-  text(buffer, commandBorder(sheet, '└', '┴', '┘'), x, bottom, width, foreground, background)
+  text(buffer, commandBorder(sheet, '└', '┴', '┘'), x, bottom, width, terminalForeground, terminalBackground)
 }
 
 function paintWelcome(
   buffer: OptimizedBuffer,
   model: WelcomeModel,
   sheet: WelcomeSheet,
-  palette: NormalizedTerminalPalette,
   selectedIndex: number,
   arrowVisible: boolean,
 ): void {
-  const background = palette.defaultBackground
-  const foreground = palette.defaultForeground
   const width = sheet.innerWidth + 2
-  const x = Math.max(0, Math.floor((buffer.width - width) / 2))
-  const y = Math.max(0, Math.floor((buffer.height - sheet.height) / 2))
-  buffer.clear(background)
+  const x = 2
+  const y = 2
+  buffer.clear(terminalBackground)
 
   for (const [row, line] of mark.entries()) {
-    text(buffer, line, x, y + row, width, foreground, background)
+    text(buffer, line, x, y + row, width, terminalForeground, terminalBackground)
   }
   drawParts(buffer, [
     { value: 'groma', attributes: TextAttributes.BOLD },
     { value: '.md', color: brandGreen, attributes: TextAttributes.BOLD },
     { value: `  v${version}`, attributes: TextAttributes.DIM },
-  ], x + 16, y + 2, foreground, background)
+  ], x + 16, y + 2)
   drawParts(buffer, [
     { value: 'architecture in Git  │  docs: ', attributes: TextAttributes.DIM },
     { value: documentationUrl, color: brandGreen },
-  ], x + 16, y + 3, foreground, background)
+  ], x + 16, y + 3)
 
   const contextY = y + mark.length + 1
-  drawContext(buffer, sheet, model, x, contextY, foreground, background)
+  drawContext(buffer, sheet, model, x, contextY)
+  const commandsY = contextY + 4
   drawCommands(
     buffer,
     sheet,
     selectedIndex,
     arrowVisible,
     x,
-    contextY + 4,
-    foreground,
-    background,
+    commandsY,
+  )
+  text(
+    buffer,
+    '↑/↓ navigate  │  Enter run  │  Esc/Q quit',
+    x + 2,
+    commandsY + welcomeActions.length * 2 + 2,
+    width - 4,
+    terminalForeground,
+    terminalBackground,
+    TextAttributes.DIM,
   )
 }
 
 export function mountWelcomeLauncher(
   renderer: CliRenderer,
   repositoryRoot: string,
-  palette: NormalizedTerminalPalette,
 ): Promise<WelcomeActionId | undefined> {
   const model = welcomeModel(repositoryRoot)
   const sheet = welcomeSheet(model)
@@ -321,7 +318,6 @@ export function mountWelcomeLauncher(
       frame.frameBuffer,
       model,
       sheet,
-      palette,
       selectedIndex,
       arrowVisible,
     )
@@ -359,7 +355,11 @@ export function mountWelcomeLauncher(
 
   function onKeypress(key: KeyEvent): void {
     if (key.eventType === 'release') return
-    if (key.ctrl && key.name === 'c') {
+    if (
+      (key.ctrl && key.name === 'c')
+      || key.name === 'escape'
+      || key.name === 'q'
+    ) {
       close(undefined)
       return
     }
@@ -390,10 +390,7 @@ export async function startWelcomeLauncher(
     useMouse: false,
   })
   try {
-    const palette = normalizeTerminalPalette(
-      await renderer.getPalette({ timeout: 100 }),
-    )
-    return await mountWelcomeLauncher(renderer, repositoryRoot, palette)
+    return await mountWelcomeLauncher(renderer, repositoryRoot)
   } catch (error) {
     renderer.destroy()
     throw error
