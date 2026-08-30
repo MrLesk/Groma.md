@@ -1,11 +1,11 @@
 ---
 id: TASK-209
 title: Keep Web panning at 120 FPS with complete map detail
-status: In Progress
+status: Done
 assignee:
   - '@codex'
 created_date: '2026-08-29 22:46'
-updated_date: '2026-08-30 09:54'
+updated_date: '2026-08-30 20:53'
 labels: []
 dependencies: []
 references:
@@ -36,15 +36,15 @@ When a human architect pans the production Web architecture map at fitted, close
 - [x] #3 Every DOM identity and geometry coordinate remains present and unchanged during pure panning
 - [x] #4 Panning does not rerun placement, routing, projection, full SVG construction, or scale-only presentation work
 - [x] #5 F1, F2, F3, selection, pins, themes, zoom, orbit, and camera reset remain behaviorally correct
-- [ ] #6 Focused tests, rendered browser QA, browser performance traces, and bun run check pass
+- [x] #6 Focused tests, rendered browser QA, browser performance traces, and bun run check pass
 <!-- AC:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 Acceptance criteria have objective verification evidence.
+- [x] #1 Acceptance criteria have objective verification evidence.
 - [x] #2 Relevant checks pass and changes remain task-scoped.
 - [x] #3 Public contracts or documentation are updated when behavior changes.
-- [ ] #4 Implementation Plan reflects the final approach; correction history and verification are recorded in Implementation Notes.
+- [x] #4 Implementation Plan reflects the final approach; correction history and verification are recorded in Implementation Notes.
 <!-- DOD:END -->
 
 ## Implementation Plan
@@ -101,4 +101,12 @@ Final post-review full-check attempt reproduced the same unrelated boundary: lin
 Human visual approval received on the final split-camera build: the minimum-zoom panning now looks good. This closes the human half of AC #1 alongside the 119.89 Hz zero-drop compositor trace.
 
 Human approval is complete. The latest clean full-check attempt passed lint, TypeScript, all 81 Node tests, and 167 of 169 Bun tests; only the two unrelated filesystem live-watch tests timed out under full-suite concurrency. The approved pan boundary is committed before zoom work so the two performance changes remain independently reviewable. TASK-209 remains open until the literal one-invocation gate is green.
+
+Wrap-up verification: the repository-wide bun run check now passes completely (lint with existing warnings only, TypeScript, 91 Node tests, and 195 Bun tests). The required final complexity review traced pan input through one retained camera layer, confirmed that pure pan avoids scale-only work and SVG reconstruction, and found no authority-backed blocker or simplification that should change the accepted implementation.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Kept the complete Web SVG scene mounted while pure pan updates only one retained camera transform, with the viewport-sized grid outside the moving layer and Work pins on their own retained overlay. Preserved every map detail and interaction, verified the 120 Hz target with browser traces and human approval, protected the composition boundary with focused tests, and passed the full repository check and final complexity review.
+<!-- SECTION:FINAL_SUMMARY:END -->
