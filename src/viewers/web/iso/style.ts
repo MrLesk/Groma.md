@@ -85,13 +85,17 @@ function tokens(level: Level): string {
  * and context change strokes, never fills.
  */
 export const mapCss = `
-  #map > svg {
-    display: block; width: 100%; height: 100%; cursor: grab;
+  #map > .map-surface {
+    position: absolute; inset: 0; cursor: grab;
     user-select: none; -webkit-user-select: none; touch-action: none; outline: none;
   }
-  #map > svg [data-id] { cursor: pointer; }
-  #map > svg:active, #map > svg:active [data-id] { cursor: grabbing; }
-  #map .camera { transform-box: view-box; transform-origin: 0 0; }
+  #map .field-surface, #map .camera, #map .zoom { position: absolute; inset: 0; width: 100%; height: 100%; }
+  #map .field-surface { pointer-events: none; }
+  #map .scene { display: block; width: 100%; height: 100%; overflow: visible; }
+  #map > .map-surface [data-id] { cursor: pointer; }
+  #map > .map-surface:active, #map > .map-surface:active [data-id] { cursor: grabbing; }
+  #map .camera { transform-origin: 0 0; will-change: transform; }
+  #map .zoom { transform-origin: 0 0; }
   #map .sheet { pointer-events: none; ${stroke('island')} }
   #map .calibration-tick, #map .compass, #map .project-plate { ${stroke('building')} }
   /* zones lie inside slab groups and keep their own weight while the slab is hovered or selected */
@@ -141,14 +145,14 @@ export const mapCss = `
   #map .project-edit:hover .pencil .body, #map .project-edit:focus .pencil .body { stroke: var(--ink); }
   #map .grid { fill: none; stroke: var(--map-grid); }
   #map .grid.major { stroke: var(--map-grid-major); }
-  #map > svg[data-minor-grid-hidden] .grid:not(.major) { display: none; }
+  #map > .map-surface[data-minor-grid-hidden] .grid:not(.major) { display: none; }
   #map .ground, #map .face.top { fill: var(--top-fill); }
   #map .face.right { fill: var(--right-fill); }
   #map .face.left { fill: var(--left-fill); }
   #map .actor .face { fill: var(--paper); }
   #map .zone .ground { fill: url(#hatch-ground); }
   /* the sheet's name chips only: the Live work island has chips of its own that must stay clickable */
-  #map .pattern, #map > svg .chip { stroke: none; pointer-events: none; }
+  #map .pattern, #map > .map-surface .chip { stroke: none; pointer-events: none; }
   #map .island.actors .pattern { fill: url(#dots); }
   #map .island.external .pattern { fill: url(#cross); }
   #map .slab .pattern { fill: url(#grain); }
@@ -159,7 +163,7 @@ export const mapCss = `
   #map .building.external .pattern.left { fill: url(#cross-left); }
   #map .building.external .pattern.right { fill: url(#cross-right); }
   #map .camera[data-facades-hidden] .building .pattern { display: none; }
-  #map > svg .chip { fill: var(--paper); }
+  #map > .map-surface .chip { fill: var(--paper); }
   #map .ghost { opacity: 0.8; }
   #map .ghost .face, #map .ghost .ground { fill: none; }
   #map .ghost .pattern, #map .ghost .chip { display: none; }

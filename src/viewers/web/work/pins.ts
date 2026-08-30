@@ -10,7 +10,7 @@ const FAN_PITCH = 46
 const STEM = 22
 
 export const pinsCss = `
-  #pins { position: absolute; inset: 0; transform-origin: 0 0; pointer-events: none; }
+  #pins { position: absolute; inset: 0; transform-origin: 0 0; will-change: transform; pointer-events: none; }
   .pin { position: absolute; width: 0; height: 0; pointer-events: auto; --pin: var(--ink); filter: grayscale(1); }
   .pin.active { filter: none; }
   .pin.arriving { animation: pin-arrive 700ms ease-out; }
