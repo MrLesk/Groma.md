@@ -339,16 +339,18 @@ height between sizes whenever it folds, unfolds, or its chips change,
 and keeps its fold and filters across live updates.
 The URL follows the view without adding history entries, so any
 view opens again from its link:
-each selected element's kind names it (`?actor=<id>`, `system=<id>`,
-`container=<id>` or `component=<id>`), `relationship=<source>/<target>`
-names a selected route, and repeated element and relationship parameters keep
-their selection order; `task=<id>` names a selected task. Repeated
-`flow=<source>/<target>` entries preserve active flow order; an actor-scoped
-flow uses `flow=<actor>/<source>/<target>`. Active flows do not create a
-selection or own details. `tab=how` names the How it's built tab;
-`file=<path>` opens a selected component's source and `line=<number>` marks a
-declaration in that file; `theme=dark` and `theme=blueprint` name the non-default themes;
-defaults stay out of the URL and unknown values are ignored.
+parameters are written from broad context to specific location. `revision=<commit>`
+names the world snapshot. Each selected element's kind names it (`actor=<id>`,
+`system=<id>`, `container=<id>` or `component=<id>`),
+`relationship=<source>/<target>` names a selected route, and repeated selection
+parameters keep their order; `task=<id>` names a selected task instead.
+`tab=how` names the details tab, then `file=<path>` opens a selected
+component's source and `line=<number>` marks a declaration in that file.
+Repeated `flow=<source>/<target>` entries preserve active flow order; an
+actor-scoped flow uses `flow=<actor>/<source>/<target>`. Active flows do not
+create a selection or own details. `theme=dark|blueprint` names a non-default
+theme, and `hud=off` hides the page chrome. Defaults stay out of the URL;
+reading accepts any parameter order and ignores unknown values.
 A watched TypeScript change folds and rebuilds the map without a
 browser refresh. An architecture Markdown change does the same
 without scanning. Selection stays if that box still exists, else the

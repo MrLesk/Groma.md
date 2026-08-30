@@ -29,11 +29,18 @@ const world: ArchitectureWorld = {
       parent: 'observed:cli',
       code: [{ scanner: 'typescript', file: 'src/scan.ts' }],
     }),
+    box('layer-modes', 'component', unit, {
+      parent: 'observed:cli',
+      code: [{ scanner: 'typescript', file: 'src/viewers/web/layers/orbit.ts' }],
+    }),
   ],
   relationships: [uses('relationship:0', 'dev', 'commands'), uses('relationship:1', 'commands', 'scan')],
 }
 
 const full: ViewState = {
+  revision: revision.id,
+  file: 'src/scan.ts',
+  line: 42,
   selection: { kind: 'architecture', ids: ['observed:tool', 'relationship:1', 'observed:scan'] },
   flows: [
     { commandId: 'relationship:0', actorId: 'observed:dev' },
@@ -41,13 +48,16 @@ const full: ViewState = {
   ],
   tab: 'how',
   theme: 'dark',
-  hudVisible: true,
+  hudVisible: false,
 }
 
-test.concurrent('a view round-trips through the query string with authored ids', () => {
+test.concurrent('a complete view round-trips through the canonical query hierarchy', () => {
   const query = writeView(full, world, [])
-  assert.equal(query, '?system=tool&relationship=commands/scan&component=scan&flow=dev/dev/commands&flow=commands/scan&tab=how&theme=dark')
-  assert.deepEqual(readView(query, world, []), full)
+  assert.equal(
+    query,
+    `?revision=${revision.id}&system=tool&relationship=commands/scan&component=scan&tab=how&file=src/scan.ts&line=42&flow=dev/dev/commands&flow=commands/scan&theme=dark&hud=off`,
+  )
+  assert.deepEqual(readView(query, world, [], [revision]), full)
 })
 
 test.concurrent('defaults write nothing and read back as the default view', () => {
@@ -75,19 +85,25 @@ test.concurrent('a known Git revision is shareable while unknown revisions are i
 
 test.concurrent('a component-owned source file restores and Back clears only the file drill-down', () => {
   const source: ViewState = {
-    selection: { kind: 'architecture', ids: ['observed:scan'] },
-    file: 'src/scan.ts',
-    line: 42,
+    selection: { kind: 'architecture', ids: ['observed:layer-modes'] },
+    file: 'src/viewers/web/layers/orbit.ts',
+    line: 34,
     flows: [],
     tab: 'how',
     theme: 'light',
     hudVisible: true,
   }
-  assert.equal(writeView(source, world, []), '?component=scan&file=src/scan.ts&line=42&tab=how')
-  assert.deepEqual(readView('?component=scan&file=src/scan.ts&line=42', world, []), source)
-  assert.equal(writeView({ ...source, file: undefined, line: undefined }, world, []), '?component=scan&tab=how')
-  assert.equal(readView('?component=scan&file=src/scan.ts&line=0', world, []).line, undefined)
-  assert.equal(readView('?component=scan&file=src/other.ts', world, []).file, undefined)
+  assert.equal(
+    writeView(source, world, []),
+    '?component=layer-modes&tab=how&file=src/viewers/web/layers/orbit.ts&line=34',
+  )
+  assert.deepEqual(
+    readView('?line=34&file=src/viewers/web/layers/orbit.ts&tab=how&component=layer-modes', world, []),
+    source,
+  )
+  assert.equal(writeView({ ...source, file: undefined, line: undefined }, world, []), '?component=layer-modes&tab=how')
+  assert.equal(readView('?component=layer-modes&file=src/viewers/web/layers/orbit.ts&line=0', world, []).line, undefined)
+  assert.equal(readView('?component=layer-modes&file=src/other.ts', world, []).file, undefined)
   assert.equal(readView('?container=cli&file=src/scan.ts', world, []).file, undefined)
 })
 

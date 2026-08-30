@@ -174,7 +174,6 @@ function appendSelection(
       if (element !== undefined) pairs.push([element.kind, element.id])
       else if (relationship !== undefined) pairs.push(['relationship', relationship])
     }
-    appendSourceState(pairs, state, elements.get(state.selection.ids.at(-1) ?? ''))
     return
   }
   if (state.selection.kind !== 'task') return
@@ -209,11 +208,15 @@ function appendFlows(
 /** The query string for a view, empty when everything is at its default. */
 export function writeView(state: ViewState, world: ArchitectureGraph, work: readonly WorkItem[]): string {
   const elements = new Map(world.elements.map(element => [element.representationId, element]))
+  const selected = state.selection.kind === 'architecture'
+    ? elements.get(state.selection.ids.at(-1) ?? '')
+    : undefined
   const pairs: [string, string][] = []
   if (state.revision !== undefined) pairs.push(['revision', state.revision])
   appendSelection(pairs, state, elements, world, work)
-  appendFlows(pairs, state.flows, elements, world)
   if (state.tab === 'how') pairs.push(['tab', 'how'])
+  appendSourceState(pairs, state, selected)
+  appendFlows(pairs, state.flows, elements, world)
   if (state.theme !== 'light') pairs.push(['theme', state.theme])
   if (!state.hudVisible) pairs.push(['hud', 'off'])
   return pairs.length === 0 ? '' : `?${pairs.map(([key, value]) => `${key}=${value}`).join('&')}`
