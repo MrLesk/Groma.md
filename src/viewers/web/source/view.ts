@@ -8,6 +8,7 @@ export function paintSource(
   host: HTMLElement,
   component: AnnotatedElement,
   file: string,
+  line: number | undefined,
   payload: SourcePayload | undefined,
   error: string | undefined,
   onBack: () => void,
@@ -44,9 +45,15 @@ export function paintSource(
   const lines = document.createElement('ol')
   lines.className = 'source-lines'
   lines.setAttribute('aria-label', file)
+  let selected: HTMLElement | undefined
   for (const [index, source] of sourceLines!.entries()) {
     const row = document.createElement('li')
     row.className = 'source-line'
+    if (index + 1 === line) {
+      row.classList.add('selected')
+      row.setAttribute('aria-current', 'location')
+      selected = row
+    }
     const number = document.createElement('span')
     number.className = 'source-line-number'
     number.setAttribute('aria-hidden', 'true')
@@ -57,6 +64,7 @@ export function paintSource(
     lines.append(row)
   }
   body.replaceChildren(lines)
+  selected?.scrollIntoView({ block: 'center' })
 }
 
 export function leaveSource(host: HTMLElement): void {
@@ -69,11 +77,12 @@ export function leaveSource(host: HTMLElement): void {
 
 export const sourceCss = `
   body.source-details { --details-column: 640px; }
-  #details .source-file + .ghost { display: block; line-height: 1.55; margin-top: 2px; }
+  #details :is(.source-file, .code-method) + .ghost { display: block; line-height: 1.55; margin-top: 2px; }
   #details .source-status { color: var(--muted); margin: 18px 22px; }
   #details .source-lines { list-style: none; margin: 0; min-width: max-content; padding: 14px 0 24px; }
   #details .source-line { display: grid; grid-template-columns: 4.5ch auto; line-height: 1.72; margin: 0; padding: 0 22px 0 10px; }
   #details .source-line:hover { background: var(--hover); }
+  #details .source-line.selected { background: color-mix(in srgb, var(--highlight) 12%, transparent); box-shadow: inset 2px 0 var(--highlight); }
   #details .source-line-number { color: var(--syntax-comment); padding-right: 1.5ch; text-align: right; user-select: none; }
   #details .source-line code { color: var(--ink); font-family: inherit; font-size: 11px; white-space: pre; }
 `

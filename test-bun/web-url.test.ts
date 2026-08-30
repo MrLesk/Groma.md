@@ -77,14 +77,16 @@ test.concurrent('a component-owned source file restores and Back clears only the
   const source: ViewState = {
     selection: { kind: 'architecture', ids: ['observed:scan'] },
     file: 'src/scan.ts',
+    line: 42,
     flows: [],
     tab: 'how',
     theme: 'light',
     hudVisible: true,
   }
-  assert.equal(writeView(source, world, []), '?component=scan&file=src/scan.ts&tab=how')
-  assert.deepEqual(readView('?component=scan&file=src/scan.ts', world, []), source)
-  assert.equal(writeView({ ...source, file: undefined }, world, []), '?component=scan&tab=how')
+  assert.equal(writeView(source, world, []), '?component=scan&file=src/scan.ts&line=42&tab=how')
+  assert.deepEqual(readView('?component=scan&file=src/scan.ts&line=42', world, []), source)
+  assert.equal(writeView({ ...source, file: undefined, line: undefined }, world, []), '?component=scan&tab=how')
+  assert.equal(readView('?component=scan&file=src/scan.ts&line=0', world, []).line, undefined)
   assert.equal(readView('?component=scan&file=src/other.ts', world, []).file, undefined)
   assert.equal(readView('?container=cli&file=src/scan.ts', world, []).file, undefined)
 })

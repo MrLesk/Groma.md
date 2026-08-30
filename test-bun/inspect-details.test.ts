@@ -75,7 +75,7 @@ function world(): ArchitectureWorld {
   }
 }
 
-test.concurrent('details list children, promoted peers, and code', () => {
+test.concurrent('details list children, promoted peers, and files', () => {
   const fixture = world()
   const groma = inspectDetails(fixture.elements[0]!, fixture)
   expect(groma.kindLabel).toBe('System')
@@ -95,7 +95,7 @@ test.concurrent('details list children, promoted peers, and code', () => {
   }])
 
   const layout = inspectDetails(fixture.elements[4]!, fixture)
-  expect(layout.code).toEqual([{
+  expect(layout.files).toEqual([{
     scanner: 'typescript',
     file: 'src/world-layout.ts',
     symbol: 'layoutWorld',
@@ -118,7 +118,7 @@ test.concurrent('the tabs split meaning from build evidence', () => {
     'flowsThrough',
     'children',
   ])
-  expect(tabSections('how')).toEqual(['technology', 'code'])
+  expect(tabSections('how')).toEqual(['technology', 'code', 'files'])
 })
 
 test.concurrent('actor commands are scoped flows and stay separate from peer relationships', () => {

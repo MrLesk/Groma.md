@@ -10,10 +10,43 @@ import { sheetScene } from '../../sheet/scene.ts'
 import { pinsOf } from '../../work/pins.ts'
 import { renderPage } from './page.ts'
 import type { WebMapPayload, WebPayload, WebRevision, WebWorkPayload } from './payload.ts'
+import { readCodeMethods } from './source/methods.ts'
 import { readSource } from './source/read.ts'
 import { readTaskDiff } from './task-diff/read.ts'
 
 const defaultPort = 4747
+
+async function methodsResponse(
+  repositoryRoot: string,
+  selected: WebPayload,
+  element: string,
+): Promise<Response> {
+  try {
+    const methods = await readCodeMethods(repositoryRoot, selected.world, selected.revision, element)
+    return methods === undefined
+      ? new Response('Component not found', { status: 404 })
+      : Response.json(methods)
+  } catch (error) {
+    return new Response(error instanceof Error ? error.message : String(error), { status: 500 })
+  }
+}
+
+async function sourceResponse(
+  repositoryRoot: string,
+  selected: WebPayload,
+  element: string,
+  file: string | null,
+): Promise<Response> {
+  if (file === null) return new Response('Source selection required', { status: 400 })
+  try {
+    const source = await readSource(repositoryRoot, selected.world, selected.revision, element, file)
+    return source === undefined
+      ? new Response('Source file not found', { status: 404 })
+      : Response.json(source)
+  } catch {
+    return new Response('Source file not found', { status: 404 })
+  }
+}
 
 async function bundleRenderer(): Promise<string> {
   const build = await Bun.build({
@@ -103,6 +136,16 @@ export async function startWebViewer(
     }
   }
 
+  async function codeResponse(url: URL): Promise<Response> {
+    const selected = await payloadAt(url.searchParams.get('revision'))
+    if (selected instanceof Response) return selected
+    const element = url.searchParams.get('element')
+    if (element === null) return new Response('Component selection required', { status: 400 })
+    return url.pathname === '/methods.json'
+      ? methodsResponse(repositoryRoot, selected, element)
+      : sourceResponse(repositoryRoot, selected, element, url.searchParams.get('file'))
+  }
+
   function worldEvent(): Uint8Array {
     return encoder.encode(`event: world\ndata: ${JSON.stringify(payload())}\n\n`)
   }
@@ -154,89 +197,101 @@ export async function startWebViewer(
     void publishWork()
   })
 
+  type Route = (request: Request, url: URL) => Response | Promise<Response>
+
+  function rendererResponse(): Response {
+    return new Response(renderer, {
+      headers: {
+        'Content-Type': 'text/javascript; charset=utf-8',
+        'Cache-Control': 'no-store',
+      },
+    })
+  }
+
+  async function worldResponse(_request: Request, url: URL): Promise<Response> {
+    const selected = await payloadAt(url.searchParams.get('revision'))
+    return selected instanceof Response ? selected : Response.json(selected)
+  }
+
+  function selectedCodeResponse(_request: Request, url: URL): Promise<Response> {
+    return codeResponse(url)
+  }
+
+  async function taskDiffResponse(_request: Request, url: URL): Promise<Response> {
+    const taskId = url.searchParams.get('task')
+    const item = workState.work.items.find(candidate => candidate.id === taskId)
+    if (item === undefined) return new Response('Task not found', { status: 404 })
+    try {
+      return Response.json(await readTaskDiff(repositoryRoot, item, workState.work))
+    } catch (error) {
+      return new Response(error instanceof Error ? error.message : String(error), { status: 404 })
+    }
+  }
+
+  async function projectResponse(request: Request): Promise<Response> {
+    try {
+      const profile = await saveProjectProfile(repositoryRoot, await request.json())
+      map = { ...map, generation: map.generation + 1, project: profile }
+      broadcast(worldEvent())
+      return Response.json(profile)
+    } catch (error) {
+      return new Response(error instanceof Error ? error.message : String(error), { status: 400 })
+    }
+  }
+
+  function eventsResponse(): Response {
+    let controller: ReadableStreamDefaultController<Uint8Array>
+    const stream = new ReadableStream<Uint8Array>({
+      start(next) {
+        controller = next
+        clients.add(next)
+        next.enqueue(worldEvent())
+      },
+      cancel() {
+        clients.delete(controller)
+      },
+    })
+    return new Response(stream, {
+      headers: {
+        'Content-Type': 'text/event-stream; charset=utf-8',
+        'Cache-Control': 'no-cache',
+        Connection: 'keep-alive',
+      },
+    })
+  }
+
+  async function pageResponse(url: URL): Promise<Response> {
+    const selected = await payloadAt(url.searchParams.get('revision'))
+    if (selected instanceof Response) return selected
+    return new Response(renderPage(selected), {
+      headers: {
+        'Content-Type': 'text/html; charset=utf-8',
+        'Cache-Control': 'no-store',
+      },
+    })
+  }
+
+  const routes = new Map<string, Route>([
+    ['/render.js', rendererResponse],
+    ['/world.json', worldResponse],
+    ['/methods.json', selectedCodeResponse],
+    ['/source.json', selectedCodeResponse],
+    ['/task-diff.json', taskDiffResponse],
+    ['/events', eventsResponse],
+  ])
+
+  async function responseFor(request: Request): Promise<Response> {
+    const url = new URL(request.url)
+    if (url.pathname === '/project' && request.method === 'PUT') return projectResponse(request)
+    const route = routes.get(url.pathname)
+    return route === undefined ? pageResponse(url) : route(request, url)
+  }
+
   const server = Bun.serve({
     port: options.port ?? defaultPort,
     // The event stream stays open while nothing changes; Bun's default closes it after ten idle seconds.
     idleTimeout: 0,
-    fetch: async request => {
-      const url = new URL(request.url)
-      const { pathname } = url
-      if (pathname === '/render.js') {
-        return new Response(renderer, {
-          headers: {
-            'Content-Type': 'text/javascript; charset=utf-8',
-            'Cache-Control': 'no-store',
-          },
-        })
-      }
-      if (pathname === '/world.json') {
-        const selected = await payloadAt(url.searchParams.get('revision'))
-        return selected instanceof Response ? selected : Response.json(selected)
-      }
-      if (pathname === '/source.json') {
-        const selected = await payloadAt(url.searchParams.get('revision'))
-        if (selected instanceof Response) return selected
-        const element = url.searchParams.get('element')
-        const file = url.searchParams.get('file')
-        if (element === null || file === null) return new Response('Source selection required', { status: 400 })
-        try {
-          const source = await readSource(repositoryRoot, selected.world, selected.revision, element, file)
-          return source === undefined
-            ? new Response('Source file not found', { status: 404 })
-            : Response.json(source)
-        } catch {
-          return new Response('Source file not found', { status: 404 })
-        }
-      }
-      if (pathname === '/task-diff.json') {
-        const taskId = url.searchParams.get('task')
-        const item = workState.work.items.find(candidate => candidate.id === taskId)
-        if (item === undefined) return new Response('Task not found', { status: 404 })
-        try {
-          return Response.json(await readTaskDiff(repositoryRoot, item, workState.work))
-        } catch (error) {
-          return new Response(error instanceof Error ? error.message : String(error), { status: 404 })
-        }
-      }
-      if (pathname === '/project' && request.method === 'PUT') {
-        try {
-          const profile = await saveProjectProfile(repositoryRoot, await request.json())
-          map = { ...map, generation: map.generation + 1, project: profile }
-          broadcast(worldEvent())
-          return Response.json(profile)
-        } catch (error) {
-          return new Response(error instanceof Error ? error.message : String(error), { status: 400 })
-        }
-      }
-      if (pathname === '/events') {
-        let controller: ReadableStreamDefaultController<Uint8Array>
-        const stream = new ReadableStream<Uint8Array>({
-          start(next) {
-            controller = next
-            clients.add(next)
-            next.enqueue(worldEvent())
-          },
-          cancel() {
-            clients.delete(controller)
-          },
-        })
-        return new Response(stream, {
-          headers: {
-            'Content-Type': 'text/event-stream; charset=utf-8',
-            'Cache-Control': 'no-cache',
-            Connection: 'keep-alive',
-          },
-        })
-      }
-      const selected = await payloadAt(url.searchParams.get('revision'))
-      if (selected instanceof Response) return selected
-      return new Response(renderPage(selected), {
-        headers: {
-          'Content-Type': 'text/html; charset=utf-8',
-          'Cache-Control': 'no-store',
-        },
-      })
-    },
+    fetch: responseFor,
   })
   publishWork()
 

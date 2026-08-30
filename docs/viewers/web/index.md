@@ -72,11 +72,12 @@ same flow control as the hierarchy list. They toggle the map path in place and
 keep the actor or component in the details pane. If details are closed, a flow
 toggle keeps them closed. Actors do not repeat Commands as relationships
 or build information.
-How it's built holds the
-evidence: the technology the element's Markdown declares
-(`technology: SVG, Bun serve` renders as one chip per
-comma-separated part), the scanner, file, and optional symbol from
-`code`. Elements without either do not show the build tab. Children and
+How it's built holds the evidence: the technology the element's Markdown
+declares (`technology: SVG, Bun serve` renders as one chip per
+comma-separated part), exported callable TypeScript declarations under Code,
+and exact authored source references with file measurements under Files. A
+callable opens read-only source at its visibly marked declaration line; a file
+opens at the top. Elements without build evidence do not show the tab. Children and
 relationship peers select that element. To inspect a highlighted path, select
 one of its items or connections on the map. When the
 selection is an actor who uses a launcher, software they use that
@@ -337,8 +338,9 @@ names a selected route, and repeated element and relationship parameters keep
 their selection order; `task=<id>` names a selected task. Repeated
 `flow=<source>/<target>` entries preserve active flow order; an actor-scoped
 flow uses `flow=<actor>/<source>/<target>`. Active flows do not create a
-selection or own details. `tab=how` names the How it's built
-tab; `theme=dark` and `theme=blueprint` name the non-default themes;
+selection or own details. `tab=how` names the How it's built tab;
+`file=<path>` opens a selected component's source and `line=<number>` marks a
+declaration in that file; `theme=dark` and `theme=blueprint` name the non-default themes;
 defaults stay out of the URL and unknown values are ignored.
 A watched TypeScript change folds and rebuilds the map without a
 browser refresh. An architecture Markdown change does the same

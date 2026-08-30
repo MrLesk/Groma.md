@@ -7,11 +7,16 @@ code:
   - scanner: typescript
     file: src/viewers/web/source/control.ts
     symbol: createSourceControl
-    dependencies: 3
+    dependencies: 4
     dependents: 1
   - scanner: typescript
     file: src/viewers/web/source/read.ts
     symbol: readSource
+    dependencies: 3
+    dependents: 3
+  - scanner: typescript
+    file: src/viewers/web/source/methods.ts
+    symbol: readCodeMethods
     dependencies: 3
     dependents: 3
   - scanner: typescript
@@ -23,7 +28,7 @@ code:
 
 # Source viewer
 
-Opens one exact Code file from the selected component inside the details pane, reads it on demand from the architecture's active working tree or full Git revision, and paints line-numbered source with the current theme's syntax palette. Back removes only this file drill-down and keeps the component selected.
+Reads a selected component's exported TypeScript callables on demand from the architecture's active working tree or full Git revision. It opens an exact component file, optionally at a declaration line, inside the details pane and paints line-numbered source with the current theme's syntax palette. Back removes only this source drill-down and keeps the component selected.
 
 ## Relationships
 

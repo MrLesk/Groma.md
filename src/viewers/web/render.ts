@@ -97,7 +97,7 @@ const revisionControl = createRevisionControl({
   applyRevision: payload => applyWorld(payload, true), applyWorld, applyWork,
 })
 const source = createSourceControl({
-  host: detailsHost, initialFile: opened.file,
+  host: detailsHost, initialFile: opened.file, initialLine: opened.line,
   element: () => worldElement(primarySelection(selection)),
   revision: () => revisionControl.selected, repaint: paintViewState,
 })
@@ -193,8 +193,8 @@ function syncUrl(): void {
   const query = writeView({
     ...(revisionControl.selected === undefined ? {} : { revision: revisionControl.selected }),
     ...(source.file === undefined ? {} : { file: source.file }),
-    selection,
-    flows: activeFlows,
+    ...(source.line === undefined ? {} : { line: source.line }),
+    selection, flows: activeFlows,
     tab: detailsTab,
     theme,
     hudVisible,
@@ -242,7 +242,7 @@ function paintViewState(): void {
         detailsTab = tab
         paintViewState()
       },
-      source.open,
+      detailsTab === 'how' ? source.methods() : [], source.open,
     )
   }
 }
