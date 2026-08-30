@@ -1,5 +1,5 @@
 import type { GitRevision } from '../../history/git.ts'
-import type { AnnotatedRelationship, ArchitectureGraph, C4Kind, WorkItem } from '../../types.ts'
+import type { AnnotatedElement, AnnotatedRelationship, ArchitectureGraph, C4Kind, WorkItem } from '../../types.ts'
 import type { FlowRef } from '../action-path.ts'
 import type { WebTheme } from './atoms/theme.ts'
 import type { DetailsTab } from './organisms/details.ts'
@@ -10,6 +10,7 @@ import type { Selection } from './selection.ts'
 export interface ViewState {
   revision?: string
   file?: string
+  line?: number
   selection: Selection
   flows: readonly FlowRef[]
   tab: DetailsTab
@@ -19,6 +20,96 @@ export interface ViewState {
 
 /** A selected element is named by its kind: `actor=<id>`, `system=<id>`, `container=<id>` or `component=<id>`. */
 const KINDS: C4Kind[] = ['actor', 'system', 'container', 'component']
+
+function relationshipFor(
+  value: string,
+  byId: ReadonlyMap<string, AnnotatedElement>,
+  world: ArchitectureGraph,
+): AnnotatedRelationship | undefined {
+  const [from, to] = value.split('/')
+  const source = byId.get(from ?? '')?.representationId
+  const target = byId.get(to ?? '')?.representationId
+  return world.relationships.find(item => item.source === source && item.target === target)
+}
+
+function architectureId(
+  name: string,
+  value: string,
+  byId: ReadonlyMap<string, AnnotatedElement>,
+  world: ArchitectureGraph,
+): string | undefined {
+  const element = byId.get(value)
+  if (KINDS.includes(name as C4Kind) && element?.kind === name) return element.representationId
+  return name === 'relationship' ? relationshipFor(value, byId, world)?.id : undefined
+}
+
+function architectureSelection(
+  params: URLSearchParams,
+  byId: ReadonlyMap<string, AnnotatedElement>,
+  world: ArchitectureGraph,
+): string[] {
+  const ids: string[] = []
+  for (const [name, value] of params) {
+    const id = architectureId(name, value, byId, world)
+    if (id !== undefined && !ids.includes(id)) ids.push(id)
+  }
+  return ids
+}
+
+function flowFrom(
+  value: string,
+  byId: ReadonlyMap<string, AnnotatedElement>,
+  world: ArchitectureGraph,
+): FlowRef | undefined {
+  const parts = value.split('/')
+  if (parts.length !== 2 && parts.length !== 3) return undefined
+  const command = relationshipFor(parts.slice(-2).join('/'), byId, world)
+  const actor = parts.length === 3 ? byId.get(parts[0]!) : undefined
+  if (command === undefined || (parts.length === 3 && actor?.kind !== 'actor')) return undefined
+  return {
+    commandId: command.id,
+    ...(actor === undefined ? {} : { actorId: actor.representationId }),
+  }
+}
+
+function activeFlows(
+  params: URLSearchParams,
+  byId: ReadonlyMap<string, AnnotatedElement>,
+  world: ArchitectureGraph,
+): FlowRef[] {
+  const flows: FlowRef[] = []
+  for (const value of params.getAll('flow')) {
+    const flow = flowFrom(value, byId, world)
+    if (flow !== undefined && !flows.some(item => item.commandId === flow.commandId)) flows.push(flow)
+  }
+  return flows
+}
+
+function sourceState(
+  params: URLSearchParams,
+  selected: AnnotatedElement | undefined,
+): Pick<ViewState, 'file' | 'line'> {
+  if (selected?.kind !== 'component') return {}
+  const requestedFile = params.get('file')
+  const file = selected.code.find(reference => reference.file === requestedFile)?.file
+  if (file === undefined) return {}
+  const requestedLine = Number(params.get('line'))
+  return Number.isInteger(requestedLine) && requestedLine > 0
+    ? { file, line: requestedLine }
+    : { file }
+}
+
+function appendSourceState(
+  pairs: [string, string][],
+  state: ViewState,
+  selected: AnnotatedElement | undefined,
+): void {
+  if (state.file === undefined || selected?.kind !== 'component') return
+  const file = selected.code.find(reference => reference.file === state.file)?.file
+  if (file === undefined) return
+  pairs.push(['file', file])
+  if (state.line !== undefined) pairs.push(['line', String(state.line)])
+}
 
 /**
  * Reads the ordered architecture selection (repeated `<kind>=<id>` and
@@ -37,38 +128,8 @@ export function readView(
   const revision = revisions.find(candidate => candidate.id === params.get('revision'))?.id
   const selectedTheme = params.get('theme')
   const byId = new Map(world.elements.map(element => [element.id, element]))
-  const relationship = (value: string): AnnotatedRelationship | undefined => {
-    const [from, to] = value.split('/')
-    const source = byId.get(from ?? '')?.representationId
-    const target = byId.get(to ?? '')?.representationId
-    return world.relationships.find(item => item.source === source && item.target === target)
-  }
-  const flowFrom = (value: string): FlowRef | undefined => {
-    const parts = value.split('/')
-    if (parts.length !== 2 && parts.length !== 3) return undefined
-    const command = relationship(parts.slice(-2).join('/'))
-    const actor = parts.length === 3 ? byId.get(parts[0]!) : undefined
-    if (command === undefined || (parts.length === 3 && actor?.kind !== 'actor')) return undefined
-    return {
-      commandId: command.id,
-      ...(actor === undefined ? {} : { actorId: actor.representationId }),
-    }
-  }
-  const architecture: string[] = []
-  for (const [name, value] of params) {
-    const element = byId.get(value)
-    const id = KINDS.includes(name as C4Kind) && element?.kind === name
-      ? element.representationId
-      : name === 'relationship' ? relationship(value)?.id : undefined
-    if (id !== undefined && !architecture.includes(id)) architecture.push(id)
-  }
+  const architecture = architectureSelection(params, byId, world)
   const task = work.find(item => item.id === params.get('task'))
-  const flows: FlowRef[] = []
-  for (const value of params.getAll('flow')) {
-    const flow = flowFrom(value)
-    if (flow === undefined) continue
-    if (!flows.some(item => item.commandId === flow.commandId)) flows.push(flow)
-  }
   const selection: Selection = architecture.length > 0
     ? { kind: 'architecture', ids: architecture }
     : task !== undefined ? selectTask(task.id)
@@ -76,59 +137,82 @@ export function readView(
   const selected = selection.kind === 'architecture'
     ? world.elements.find(element => element.representationId === selection.ids.at(-1))
     : undefined
-  const requestedFile = params.get('file')
-  const file = selected?.kind === 'component'
-    ? selected.code.find(reference => reference.file === requestedFile)?.file
-    : undefined
+  const source = sourceState(params, selected)
   return {
     ...(revision === undefined ? {} : { revision }),
-    ...(file === undefined ? {} : { file }),
+    ...source,
     selection,
-    flows,
-    tab: file !== undefined || params.get('tab') === 'how' ? 'how' : 'what',
+    flows: activeFlows(params, byId, world),
+    tab: source.file !== undefined || params.get('tab') === 'how' ? 'how' : 'what',
     theme: selectedTheme === 'dark' || selectedTheme === 'blueprint' ? selectedTheme : 'light',
     hudVisible: params.get('hud') !== 'off',
+  }
+}
+
+function relationshipEnds(
+  relationshipId: string | undefined,
+  elements: ReadonlyMap<string, AnnotatedElement>,
+  world: ArchitectureGraph,
+): string | undefined {
+  const relationship = world.relationships.find(item => item.id === relationshipId)
+  const source = elements.get(relationship?.source ?? '')
+  const target = elements.get(relationship?.target ?? '')
+  return source === undefined || target === undefined ? undefined : `${source.id}/${target.id}`
+}
+
+function appendSelection(
+  pairs: [string, string][],
+  state: ViewState,
+  elements: ReadonlyMap<string, AnnotatedElement>,
+  world: ArchitectureGraph,
+  work: readonly WorkItem[],
+): void {
+  if (state.selection.kind === 'architecture') {
+    for (const id of state.selection.ids) {
+      const element = elements.get(id)
+      const relationship = relationshipEnds(id, elements, world)
+      if (element !== undefined) pairs.push([element.kind, element.id])
+      else if (relationship !== undefined) pairs.push(['relationship', relationship])
+    }
+    appendSourceState(pairs, state, elements.get(state.selection.ids.at(-1) ?? ''))
+    return
+  }
+  if (state.selection.kind !== 'task') return
+  const taskId = state.selection.id
+  const task = work.find(item => item.id === taskId)
+  if (task !== undefined) pairs.push(['task', task.id])
+}
+
+function flowValue(
+  flow: FlowRef,
+  elements: ReadonlyMap<string, AnnotatedElement>,
+  world: ArchitectureGraph,
+): string | undefined {
+  const route = relationshipEnds(flow.commandId, elements, world)
+  if (route === undefined) return undefined
+  const actor = elements.get(flow.actorId ?? '')
+  return actor?.kind === 'actor' ? `${actor.id}/${route}` : route
+}
+
+function appendFlows(
+  pairs: [string, string][],
+  flows: readonly FlowRef[],
+  elements: ReadonlyMap<string, AnnotatedElement>,
+  world: ArchitectureGraph,
+): void {
+  for (const flow of flows) {
+    const value = flowValue(flow, elements, world)
+    if (value !== undefined) pairs.push(['flow', value])
   }
 }
 
 /** The query string for a view, empty when everything is at its default. */
 export function writeView(state: ViewState, world: ArchitectureGraph, work: readonly WorkItem[]): string {
   const elements = new Map(world.elements.map(element => [element.representationId, element]))
-  const ends = (relationshipId: string | undefined): string | undefined => {
-    const relationship = world.relationships.find(item => item.id === relationshipId)
-    const source = elements.get(relationship?.source ?? '')
-    const target = elements.get(relationship?.target ?? '')
-    return source === undefined || target === undefined ? undefined : `${source.id}/${target.id}`
-  }
   const pairs: [string, string][] = []
-  const flowValue = (flow: FlowRef): string | undefined => {
-    const route = ends(flow.commandId)
-    if (route === undefined) return undefined
-    const actor = elements.get(flow.actorId ?? '')
-    return actor?.kind === 'actor' ? `${actor.id}/${route}` : route
-  }
   if (state.revision !== undefined) pairs.push(['revision', state.revision])
-  if (state.selection.kind === 'architecture') {
-    for (const id of state.selection.ids) {
-      const element = elements.get(id)
-      const relationship = ends(id)
-      if (element !== undefined) pairs.push([element.kind, element.id])
-      else if (relationship !== undefined) pairs.push(['relationship', relationship])
-    }
-    const selected = elements.get(state.selection.ids.at(-1) ?? '')
-    if (state.file !== undefined && selected?.kind === 'component') {
-      const file = selected.code.find(reference => reference.file === state.file)?.file
-      if (file !== undefined) pairs.push(['file', file])
-    }
-  } else if (state.selection.kind === 'task') {
-    const taskId = state.selection.id
-    const task = work.find(item => item.id === taskId)
-    if (task !== undefined) pairs.push(['task', task.id])
-  }
-  for (const active of state.flows) {
-    const value = flowValue(active)
-    if (value !== undefined) pairs.push(['flow', value])
-  }
+  appendSelection(pairs, state, elements, world, work)
+  appendFlows(pairs, state.flows, elements, world)
   if (state.tab === 'how') pairs.push(['tab', 'how'])
   if (state.theme !== 'light') pairs.push(['theme', state.theme])
   if (!state.hudVisible) pairs.push(['hud', 'off'])

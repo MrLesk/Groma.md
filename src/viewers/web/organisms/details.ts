@@ -11,6 +11,7 @@ import { pickableActions, travelledBy } from '../../action-path.ts'
 import type { FlowRef } from '../../action-path.ts'
 import { kindGlyph, kindLabel } from '../atoms/kind.ts'
 import { flowRow, type FlowRowData } from '../flow/row.ts'
+import type { CodeMethod } from '../source/methods.ts'
 import {
   parentOfElements,
   promotedPeer,
@@ -42,7 +43,7 @@ export interface Inspected {
   flowsThrough: FlowRowData[]
   children: InspectedChild[]
   technology: string[]
-  code: CodeReference[]
+  files: CodeReference[]
 }
 
 export type DetailsTab = 'what' | 'how'
@@ -55,12 +56,13 @@ type Section =
   | 'children'
   | 'technology'
   | 'code'
+  | 'files'
 
 /** The pane's split: meaning on one tab, build evidence on the other. */
 export function tabSections(tab: DetailsTab): Section[] {
   return tab === 'what'
     ? ['description', 'relationships', 'commands', 'flowsThrough', 'children']
-    : ['technology', 'code']
+    : ['technology', 'code', 'files']
 }
 
 export function inspectDetails(
@@ -117,7 +119,7 @@ export function inspectDetails(
       .split(',')
       .map(part => part.trim())
       .filter(part => part.length > 0),
-    code: element.code,
+    files: element.code,
   }
 }
 
@@ -132,7 +134,7 @@ function countFact(count: number, singular: string, plural: string): string {
   return `${count} ${count === 1 ? singular : plural}`
 }
 
-function codeFacts(reference: CodeReference): string {
+function fileFacts(reference: CodeReference): string {
   const facts = [fileTypeOf(reference.file)]
   if (reference.lines !== undefined) facts.push(`${reference.lines} lines`)
   if (reference.dependencies !== undefined) facts.push(countFact(reference.dependencies, 'dependency', 'dependencies'))
@@ -142,7 +144,7 @@ function codeFacts(reference: CodeReference): string {
   return facts.join(' · ')
 }
 
-function codeList(references: CodeReference[], onSource: (file: string) => void): HTMLElement {
+function fileList(references: CodeReference[], onSource: (file: string) => void): HTMLElement {
   const list = document.createElement('ul')
   for (const reference of references) {
     const item = document.createElement('li')
@@ -154,8 +156,27 @@ function codeList(references: CodeReference[], onSource: (file: string) => void)
     file.addEventListener('click', () => onSource(reference.file))
     const extra = document.createElement('span')
     extra.className = 'ghost'
-    extra.textContent = codeFacts(reference)
+    extra.textContent = fileFacts(reference)
     item.append(file, extra)
+    list.append(item)
+  }
+  return list
+}
+
+function methodList(methods: readonly CodeMethod[], onSource: (file: string, line?: number) => void): HTMLElement {
+  const list = document.createElement('ul')
+  for (const method of methods) {
+    const item = document.createElement('li')
+    const link = document.createElement('button')
+    link.type = 'button'
+    link.className = 'link code-method'
+    link.textContent = `${method.name}()`
+    link.setAttribute('aria-label', `Open ${method.name} in ${method.file} at line ${method.line}`)
+    link.addEventListener('click', () => onSource(method.file, method.line))
+    const location = document.createElement('span')
+    location.className = 'ghost'
+    location.textContent = `${method.file}:${method.line}`
+    item.append(link, location)
     list.append(item)
   }
   return list
@@ -187,7 +208,8 @@ export function paintDetails(
   actorName: (actorId: string) => string | undefined,
   tab: DetailsTab,
   onTab: (tab: DetailsTab) => void,
-  onSource: (file: string) => void,
+  methods: readonly CodeMethod[],
+  onSource: (file: string, line?: number) => void,
 ): void {
   const title = host.querySelector('h1')!
   const meta = host.querySelector('.meta')!
@@ -196,7 +218,7 @@ export function paintDetails(
   title.textContent = inspected.name
   meta.textContent = `${inspected.kindLabel} · ${inspected.origin}`
 
-  const hasBuild = inspected.technology.length > 0 || inspected.code.length > 0
+  const hasBuild = inspected.technology.length > 0 || inspected.files.length > 0
   const shownTab = tab === 'how' && !hasBuild ? 'what' : tab
   tabsHost.replaceChildren()
   tabsHost.hidden = !hasBuild
@@ -318,8 +340,13 @@ export function paintDetails(
     },
 
     code: () => {
-      if (inspected.code.length === 0) return
-      body.append(heading('Code'), codeList(inspected.code, onSource))
+      if (methods.length === 0) return
+      body.append(heading('Code'), methodList(methods, onSource))
+    },
+
+    files: () => {
+      if (inspected.files.length === 0) return
+      body.append(heading('Files'), fileList(inspected.files, onSource))
     },
 
   }

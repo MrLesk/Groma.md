@@ -144,30 +144,42 @@ test.concurrent('groma web serves a selected Git snapshot without changing repos
   }
 })
 
-test.concurrent('groma web reads a component source file on demand from the selected revision', async () => {
+test.concurrent('groma web reads component code on demand from the selected revision', async () => {
   const root = await createLiveRepo()
+  const historicalSource = 'function hidden() {}\nexport function historicalMethod() {}\nexport const historicalArrow = () => true\n'
+  const currentSource = 'function hidden() {}\nexport function currentMethod() {}\nexport const currentArrow = () => true\n'
   await writeTree(root, {
     'groma/observed/systems/shop/system.md': '---\nid: shop\nkind: system\n---\n\n# Shop\n',
     'groma/observed/systems/shop/containers/web/container.md': '---\nid: web\nkind: container\nparent: shop\n---\n\n# Web\n',
     'groma/observed/systems/shop/containers/web/components/details.md': '---\nid: details\nkind: component\nparent: web\ncode:\n  - scanner: typescript\n    file: src/details.ts\n---\n\n# Details\n',
-    'src/details.ts': 'export const revision = "historical"\n',
+    'src/details.ts': historicalSource,
   })
   await commitAll(root, 'Versioned source component')
-  await writeFile(path.join(root, 'src', 'details.ts'), 'export const revision = "current"\n')
+  await writeFile(path.join(root, 'src', 'details.ts'), currentSource)
   const server = await startWebViewer(root, { port: 0 })
   try {
     const page = await (await fetch(server.url)).text()
-    assert.doesNotMatch(page, /export const revision = \\"current\\"/)
+    assert.doesNotMatch(page, /currentMethod/)
     const world = await (await fetch(`${server.url}/world.json`)).json() as {
       revisions: { id: string; subject: string }[]
     }
     const revision = world.revisions.find(candidate => candidate.subject === 'Versioned source component')!
     const selected = new URLSearchParams({ element: 'observed:details', file: 'src/details.ts' })
     const current = await (await fetch(`${server.url}/source.json?${selected}`)).json() as { source: string }
-    assert.equal(current.source, 'export const revision = "current"\n')
+    assert.equal(current.source, currentSource)
+    const currentMethods = await (await fetch(`${server.url}/methods.json?element=observed:details`)).json()
+    assert.deepEqual(currentMethods, [
+      { name: 'currentMethod', file: 'src/details.ts', line: 2 },
+      { name: 'currentArrow', file: 'src/details.ts', line: 3 },
+    ])
     selected.set('revision', revision.id)
     const historical = await (await fetch(`${server.url}/source.json?${selected}`)).json() as { source: string }
-    assert.equal(historical.source, 'export const revision = "historical"\n')
+    assert.equal(historical.source, historicalSource)
+    const historicalMethods = await (await fetch(`${server.url}/methods.json?element=observed:details&revision=${revision.id}`)).json()
+    assert.deepEqual(historicalMethods, [
+      { name: 'historicalMethod', file: 'src/details.ts', line: 2 },
+      { name: 'historicalArrow', file: 'src/details.ts', line: 3 },
+    ])
     selected.set('file', 'src/other.ts')
     assert.equal((await fetch(`${server.url}/source.json?${selected}`)).status, 404)
   } finally {
