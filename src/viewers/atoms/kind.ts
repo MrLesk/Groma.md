@@ -1,9 +1,9 @@
-import type { C4Kind } from '../../../types.ts'
+import type { C4Kind } from '../../types.ts'
 
 const glyphs: Record<C4Kind, string> = {
   actor: '●',
   system: '■',
-  container: '□',
+  container: '▱',
   component: '▪',
 }
 

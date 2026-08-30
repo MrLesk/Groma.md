@@ -39,7 +39,7 @@ or map scope.
 
 The hierarchy and `/` search can select architecture outside the current scope.
 Selecting a component opens its parent container; selecting any outer element
-returns to root. The hierarchy uses `●` actor, `■` system, `□` container, and `▪`
+returns to root. The hierarchy uses `●` actor, `■` system, `▱` container, and `▪`
 component glyphs, with `▾` and `▸` disclosure and `▌` for the current item.
 
 ## Details and flows

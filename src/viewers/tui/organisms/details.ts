@@ -2,7 +2,7 @@ import { TextAttributes } from '@opentui/core'
 import type { OptimizedBuffer, RGBA } from '@opentui/core'
 
 import { drawBorder } from '../atoms/border.ts'
-import { kindGlyph, kindLabel } from '../atoms/kind.ts'
+import { kindGlyph, kindLabel } from '../../atoms/kind.ts'
 import { text } from '../atoms/text.ts'
 import type { ViewerTheme } from '../atoms/theme.ts'
 import { actionCaption, outgoingActions, travelledBy } from '../../action-path.ts'

@@ -2,7 +2,7 @@ import { TextAttributes } from '@opentui/core'
 import type { OptimizedBuffer } from '@opentui/core'
 
 import { drawBorder } from '../atoms/border.ts'
-import { kindGlyph } from '../atoms/kind.ts'
+import { kindGlyph } from '../../atoms/kind.ts'
 import { text } from '../atoms/text.ts'
 import { surfaceTint, type ViewerTheme } from '../atoms/theme.ts'
 import { drawHatch } from './hatch.ts'

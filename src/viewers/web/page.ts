@@ -3,7 +3,7 @@ import { fileURLToPath } from 'node:url'
 
 import type { C4Kind } from '../../types.ts'
 import { chromeCss } from './atoms/chrome.ts'
-import { kindGlyph, kindLabel } from './atoms/kind.ts'
+import { kindGlyph, kindLabel } from '../atoms/kind.ts'
 import { cssBlock, palettes } from './atoms/theme.ts'
 import { fpsCss } from './chrome/fps.ts'
 import { motionCss } from './chrome/motion.ts'

@@ -1,4 +1,4 @@
-import { kindGlyph } from '../atoms/kind.ts'
+import { kindGlyph } from '../../atoms/kind.ts'
 import type { TreeRow } from '../../tui/tree.ts'
 import { sectionHeading } from './sidebar-section.ts'
 
