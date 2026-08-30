@@ -2,9 +2,9 @@
 id: scanner
 kind: container
 parent: groma
-technology: TypeScript and Roslyn
+technology: "TypeScript, Roslyn"
 ---
 
 # Scanner
 
-Collects complete TypeScript and C# source observations, then gives the validated batch to core for architecture reconciliation. A watch repeats the same scan after a supported source or project file changes.
+Collects complete TypeScript and C# source observations and reconciles their atomic evidence with human-curated architecture.

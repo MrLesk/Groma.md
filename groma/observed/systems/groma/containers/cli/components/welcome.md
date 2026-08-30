@@ -2,6 +2,7 @@
 id: welcome
 kind: component
 parent: cli
+group: "Command surface"
 code:
   - scanner: typescript
     file: src/welcome.ts
@@ -11,4 +12,4 @@ code:
 
 # Welcome
 
-Owns the bare groma repository welcome. It builds one repository context and ordered action list, prints stable plain text without a TTY, and mounts the keyboard-driven technical sheet in a terminal. The launcher returns the selected action to Commands after restoring the terminal.
+Owns the bare Groma repository welcome, ordered actions, stable non-interactive text, and keyboard launcher that returns one selected action to Commands.

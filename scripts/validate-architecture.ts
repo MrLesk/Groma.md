@@ -6,7 +6,15 @@ import { parse, parseFrontmatter } from 'comark'
 
 import type { C4Kind, MarkdownElement } from '../src/types.ts'
 
-const allowedFrontmatterFields = new Set(['id', 'kind', 'parent', 'external', 'group', 'code'])
+const allowedFrontmatterFields = new Set([
+  'id',
+  'kind',
+  'parent',
+  'external',
+  'group',
+  'technology',
+  'code',
+])
 const allowedKinds = new Set(['actor', 'system', 'container', 'component'])
 const expectedParentKinds = new Map<C4Kind, C4Kind>([
   ['container', 'system'],
@@ -23,6 +31,22 @@ const elementPathPatterns = [
 function codeCountErrors(record: Record<string, unknown>, prefix: string): string[] {
   return ['dependencies', 'dependents'].flatMap(field => record[field] === undefined || (Number.isInteger(record[field]) && Number(record[field]) >= 0)
     ? [] : [`${prefix} ${field} must be a non-negative integer`])
+}
+
+function emptyRevisionErrors(elementFiles: string[], allowEmpty: boolean): string[] {
+  return elementFiles.length === 0 && !allowEmpty
+    ? ['contains no element documents']
+    : []
+}
+
+function technologyErrors(frontmatter: Record<string, unknown>, relativeFile: string): string[] {
+  return frontmatter.technology !== undefined
+    && (
+      typeof frontmatter.technology !== 'string'
+      || frontmatter.technology.trim().length === 0
+    )
+    ? [`${relativeFile}: technology must be a non-empty string when present`]
+    : []
 }
 export class ArchitectureValidationError extends Error {
   readonly errors: string[]
@@ -194,7 +218,10 @@ function errorMessage(error: unknown): string {
 
 export async function validateRevision(
   revisionRoot: string,
-  options: { knownElements?: ReadonlyMap<string, ValidatedElement> } = {},
+  options: {
+    knownElements?: ReadonlyMap<string, ValidatedElement>
+    allowEmpty?: boolean
+  } = {},
 ): Promise<RevisionValidationResult> {
   const absoluteRoot = path.resolve(revisionRoot)
   const knownElements = options.knownElements ?? new Map<string, ValidatedElement>()
@@ -208,9 +235,7 @@ export async function validateRevision(
   const errors: string[] = []
   let relationshipCount = 0
 
-  if (elementFiles.length === 0) {
-    errors.push('contains no element documents')
-  }
+  errors.push(...emptyRevisionErrors(elementFiles, options.allowEmpty === true))
 
   const unsupportedFiles = markdownFiles.filter(file => {
     const relativeFile = path.relative(absoluteRoot, file).split(path.sep).join('/')
@@ -283,6 +308,7 @@ export async function validateRevision(
     ) {
       errors.push(`${relativeFile}: group must be a non-empty string when present`)
     }
+    errors.push(...technologyErrors(frontmatter, relativeFile))
 
     if (frontmatter.code !== undefined) {
       if (frontmatter.kind !== 'component') {
@@ -463,7 +489,10 @@ export async function validateRepository(
   for (const entry of planEntries.filter(item => item.isDirectory()).sort((left, right) => {
     return left.name < right.name ? -1 : left.name > right.name ? 1 : 0
   })) {
-    plans.push(await validateRevision(path.join(plansRoot, entry.name), { knownElements }))
+    plans.push(await validateRevision(path.join(plansRoot, entry.name), {
+      knownElements,
+      allowEmpty: true,
+    }))
   }
 
   return [observed, ...plans]

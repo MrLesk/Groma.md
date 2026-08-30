@@ -11,4 +11,10 @@ code:
 
 # Project editor
 
-Opens one upright editor beside the title plate's boxed pencil, keeps long Markdown inside a bounded scrolling surface, switches between source and a Comark HTML preview sanitized for the browser, and sends the changed project profile to the web host.
+Edits the project name and Markdown description in one bounded source or preview surface beside the blueprint title plate.
+
+## Relationships
+
+| Target | Description | Technology |
+| --- | --- | --- |
+| [Web server](web-server.md) | Saves a valid project profile | HTTP |

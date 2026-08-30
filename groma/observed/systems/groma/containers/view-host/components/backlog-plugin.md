@@ -2,14 +2,14 @@
 id: backlog-plugin
 kind: component
 parent: view-host
+group: "Live sources"
 code:
   - scanner: typescript
     file: src/work/backlog.ts
-    symbol: createBacklogPlugin
     dependencies: 1
     dependents: 2
 ---
 
 # Backlog plugin
 
-Reads the configured Backlog workflow and available tasks through the `backlog` CLI, and watches the task directory for changes. A host may load it after the architecture is visible; its snapshots update only the work projection, and a failed read leaves the map alone.
+Reads the configured Backlog workflow and tasks and watches task records without blocking architecture rendering.

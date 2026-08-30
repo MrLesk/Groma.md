@@ -2,7 +2,7 @@
 id: world-layout
 kind: component
 parent: core
-group: World building
+group: "Architecture world"
 code:
   - scanner: typescript
     file: src/world-layout.ts
@@ -13,8 +13,4 @@ code:
 
 # World layout
 
-Adds containment boxes, group boundaries, and orthogonal routes to the semantic graph for the terminal map only.
-
-## Technology
-
-ELK layered layout, run in a worker.
+Adds containment bounds, group boundaries, and orthogonal routes to the semantic graph for the fixed-scale terminal map.

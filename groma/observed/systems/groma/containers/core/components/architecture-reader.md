@@ -2,14 +2,14 @@
 id: architecture-reader
 kind: component
 parent: core
+group: "Architecture world"
 code:
   - scanner: typescript
     file: src/architecture-reader.ts
-    symbol: loadRevision
     dependencies: 1
-    dependents: 6
+    dependents: 8
 ---
 
 # Architecture reader
 
-Reads every element document under `groma/observed/` and every plan directory into revision records: frontmatter, Markdown body, and source filename. It is the only code that walks the `groma/` tree.
+Reads every architecture Markdown document into deterministic revision records. It is the only owner that walks the Groma architecture tree.

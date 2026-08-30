@@ -1,22 +1,28 @@
 ---
 id: projection
 kind: component
-parent: terminal-viewer
-group: Projection
+parent: "terminal-viewer"
 code:
   - scanner: typescript
     file: src/viewers/tui/projection.ts
-    symbol: visibleEndpointFor
     dependencies: 5
     dependents: 11
+  - scanner: typescript
+    file: src/viewers/tui/projection-camera.ts
+    dependencies: 1
+    dependents: 4
+  - scanner: typescript
+    file: src/viewers/tui/projection-routes.ts
+    dependencies: 1
+    dependents: 1
 ---
 
 # Projection
 
-Projects the shared sheet scene into terminal cells at a fixed scale. The root scope shows actors, systems, containers, collapsed groups, and external systems. A container scope replaces that map with the container's groups and direct components. Selection and task attention may move the camera, while multiple task targets are framed as one bounds set. Every scope keeps sheet positions and routes immutable.
+Projects the shared sheet into fixed-scale terminal cells and moves only the camera needed to keep the selected item visible.
 
 ## Relationships
 
 | Target | Description | Technology |
 | --- | --- | --- |
-| [Sheet](../../core/components/sheet.md) | Uses its fixed surfaces, buildings, zones, and routes | In-process data |
+| [Sheet composition](../../core/components/sheet-composition.md) | Uses the fixed shared surfaces and routes | In-process data |

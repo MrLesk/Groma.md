@@ -1,3 +1,7 @@
+import { existsSync } from 'node:fs'
+import path from 'node:path'
+
+import { architectureElementPath } from './architecture-path.ts'
 import { loadArchitecture } from './architecture-reader.ts'
 import {
   renderObservedDocument,
@@ -19,47 +23,26 @@ interface WorldRecord {
   sourceFilename: string
 }
 
-interface CreatePlannedElementInput {
+interface CreateArchitectureElementInput {
   name: string
-  plan: string
+  plan?: string
+  observed?: boolean
   kind: string
   description: string
   parent?: string
+  external?: boolean
+  technology?: string
 }
 
-function architectureRelative(sourceFilename: string): string {
-  if (sourceFilename.startsWith('groma/plans/')) {
-    const slash = sourceFilename.indexOf('/', 'groma/plans/'.length)
-    return sourceFilename.slice(slash + 1)
-  }
-  if (sourceFilename.startsWith('groma/observed/')) {
-    return sourceFilename.slice('groma/observed/'.length)
-  }
-  return sourceFilename
-}
-
-function posixDirname(filename: string): string {
-  const separator = filename.lastIndexOf('/')
-  return separator === -1 ? '' : filename.slice(0, separator)
-}
-
-function plannedPathFor(
-  planId: string,
-  kind: C4Kind,
-  id: string,
-  parent: WorldRecord | undefined,
-): string {
-  const root = `groma/plans/${planId}`
-  if (kind === 'actor') return `${root}/actors/${id}.md`
-  if (kind === 'system') return `${root}/systems/${id}/system.md`
-  if (parent === undefined) {
-    throw new Error(`missing parent for ${id}`)
-  }
-  const parentDir = posixDirname(architectureRelative(parent.sourceFilename))
-  if (kind === 'container') {
-    return `${root}/${parentDir}/containers/${id}/container.md`
-  }
-  return `${root}/${parentDir}/components/${id}.md`
+interface ValidatedCreateInput {
+  name: string
+  observed: boolean
+  planId?: string
+  kind: C4Kind
+  description: string
+  parentId?: string
+  external: boolean
+  technology?: string
 }
 
 function indexWorld(revisions: RevisionRecord[]) {
@@ -85,6 +68,16 @@ function indexWorld(revisions: RevisionRecord[]) {
   }
 
   return byId
+}
+
+async function ensureObservedReadme(repositoryRoot: string): Promise<void> {
+  const filename = path.join(repositoryRoot, 'groma', 'observed', 'README.md')
+  if (existsSync(filename)) return
+  await writeObservedDocument(
+    repositoryRoot,
+    'groma/observed/README.md',
+    '# Observed architecture\n',
+  )
 }
 
 export async function ensurePlanReadme(
@@ -117,20 +110,33 @@ function requireKind(kind: string): C4Kind {
   return kind as C4Kind
 }
 
-export async function createPlannedElement(
-  repositoryRoot: string,
-  input: CreatePlannedElementInput,
-): Promise<string> {
-  const name = requireText(input.name, 'name')
-  const planId = requireText(input.plan, 'plan')
-  const kind = requireKind(requireText(input.kind, 'kind'))
-  if (input.description === undefined) {
-    throw new Error('description is required')
+function validateElementMetadata(
+  kind: C4Kind,
+  input: CreateArchitectureElementInput,
+): Pick<ValidatedCreateInput, 'external' | 'technology'> {
+  const external = input.external === true
+  if (external && kind !== 'system') {
+    throw new Error('--external is allowed only for systems')
   }
-  if (planId !== kebabCase(planId)) {
+  const technology = input.technology
+  if (technology !== undefined && technology.trim().length === 0) {
+    throw new Error('--technology must not be empty')
+  }
+  return { external, technology }
+}
+
+function validateCreateInput(input: CreateArchitectureElementInput): ValidatedCreateInput {
+  const name = requireText(input.name, 'name')
+  const observed = input.observed === true
+  const planId = input.plan === undefined || input.plan === '' ? undefined : input.plan
+  if (observed === (planId !== undefined)) {
+    throw new Error('exactly one of --observed or --plan is required')
+  }
+  const kind = requireKind(requireText(input.kind, 'kind'))
+  if (input.description === undefined) throw new Error('description is required')
+  if (planId !== undefined && planId !== kebabCase(planId)) {
     throw new Error('plan id must be lowercase kebab-case')
   }
-
   const parentId = input.parent === undefined || input.parent === ''
     ? undefined
     : input.parent
@@ -140,7 +146,51 @@ export async function createPlannedElement(
   if (!rootKinds.has(kind) && parentId === undefined) {
     throw new Error(`--parent is required for ${kind}`)
   }
+  const metadata = validateElementMetadata(kind, input)
+  return {
+    name,
+    observed,
+    planId,
+    kind,
+    description: input.description,
+    parentId,
+    ...metadata,
+  }
+}
 
+function resolveParent(
+  byId: Map<string, WorldRecord>,
+  kind: C4Kind,
+  parentId: string | undefined,
+): WorldRecord | undefined {
+  if (parentId === undefined) return undefined
+  const parent = byId.get(parentId)
+  if (parent === undefined) throw new Error(`unknown parent "${parentId}"`)
+  const expectedParentKind = expectedParentKinds.get(kind)
+  if (parent.kind !== expectedParentKind) {
+    throw new Error(
+      `${kind} requires a ${expectedParentKind} parent, `
+      + `but "${parentId}" is a ${parent.kind}`,
+    )
+  }
+  return parent
+}
+
+export async function createArchitectureElement(
+  repositoryRoot: string,
+  input: CreateArchitectureElementInput,
+): Promise<string> {
+  const {
+    name,
+    observed,
+    planId,
+    kind,
+    description,
+    parentId,
+    external,
+    technology,
+  } = validateCreateInput(input)
+  if (observed) await ensureObservedReadme(repositoryRoot)
   const revisions = await loadArchitecture(repositoryRoot)
   const byId = indexWorld(revisions)
   const id = kebabCase(name)
@@ -148,30 +198,27 @@ export async function createPlannedElement(
     throw new Error(`id "${id}" already exists`)
   }
 
-  const parent = parentId === undefined ? undefined : byId.get(parentId)
-  if (parentId !== undefined) {
-    if (parent === undefined) {
-      throw new Error(`unknown parent "${parentId}"`)
-    }
-    const expectedParentKind = expectedParentKinds.get(kind)
-    if (parent.kind !== expectedParentKind) {
-      throw new Error(
-        `${kind} requires a ${expectedParentKind} parent, `
-        + `but "${parentId}" is a ${parent.kind}`,
-      )
-    }
-  }
+  const parent = resolveParent(byId, kind, parentId)
 
-  await ensurePlanReadme(repositoryRoot, planId, revisions)
+  if (planId !== undefined) {
+    await ensurePlanReadme(repositoryRoot, planId, revisions)
+  }
   await writeObservedDocument(
     repositoryRoot,
-    plannedPathFor(planId, kind, id, parent),
+    architectureElementPath({
+      root: planId === undefined ? 'groma/observed' : `groma/plans/${planId}`,
+      kind,
+      id,
+      parentSourceFilename: parent?.sourceFilename,
+    }),
     renderObservedDocument({
       id,
       kind,
       parent: parent?.id,
+      external,
+      technology,
       name,
-      responsibility: input.description,
+      responsibility: description,
     }),
   )
   return id

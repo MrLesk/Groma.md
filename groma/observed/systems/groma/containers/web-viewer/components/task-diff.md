@@ -2,7 +2,7 @@
 id: task-diff
 kind: component
 parent: web-viewer
-group: Web chrome
+group: "Work"
 code:
   - scanner: typescript
     file: src/viewers/web/task-diff/control.ts
@@ -24,12 +24,12 @@ code:
 
 # Task diff
 
-Loads a selected Backlog task's recorded files on demand and shows their Git states and unified diffs inside the details pane. Completed tasks use their exact task commit; active tasks compare HEAD with the working tree and mark files recorded by another active task as shared.
+Loads a selected Backlog task recorded files and Git states on demand and shows their unified diffs inside Details.
 
 ## Relationships
 
 | Target | Description | Technology |
 | --- | --- | --- |
-| [CLI Git](../../cli/components/cli-git.md) | Resolves exact commits and reads their file versions | Git |
-| [Source viewer](source-viewer.md) | Reuses the source syntax highlighter and file-viewer shell | DOM and CSS |
-| [Web server](web-server.md) | Loads task diffs only after a task is selected | JSON |
+| [Revision history](revision-history.md) | Reads exact task commits and file versions | Git |
+| [Source viewer](source-viewer.md) | Reuses source highlighting and drill-down | DOM and CSS |
+| [Web server](web-server.md) | Loads task diffs only after selection | JSON |

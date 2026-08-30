@@ -156,6 +156,57 @@ test('a created container or component is planned under the given parent', async
   assert.equal(warehouse.parent, 'observed:shop')
 })
 
+test('groma create --observed rebuilds the observed scaffold without a plan', async t => {
+  const root = await createRepo(t)
+  await rm(path.join(root, 'groma', 'observed'), { recursive: true, force: true })
+
+  const system = await groma(root, [
+    'create',
+    'Shop',
+    '--observed',
+    '--kind',
+    'system',
+    '--description',
+    'Sells goods.',
+  ])
+  const container = await groma(root, [
+    'create',
+    'API',
+    '--observed',
+    '--kind',
+    'container',
+    '--parent',
+    'shop',
+    '--technology',
+    'HTTP',
+    '--description',
+    'Handles orders.',
+  ])
+  const external = await groma(root, [
+    'create',
+    'Git',
+    '--observed',
+    '--kind',
+    'system',
+    '--external',
+    '--description',
+    'Keeps history.',
+  ])
+
+  assert.equal(system.code, 0, system.stderr)
+  assert.equal(container.code, 0, container.stderr)
+  assert.equal(external.code, 0, external.stderr)
+  const model = await loadAnnotatedArchitecture(root)
+  assert.equal(model.elements.find(element => element.id === 'shop')?.origin, 'observed')
+  assert.equal(model.elements.find(element => element.id === 'api')?.parent, 'observed:shop')
+  assert.equal(model.elements.find(element => element.id === 'api')?.technology, 'HTTP')
+  assert.equal(model.elements.find(element => element.id === 'git')?.external, true)
+  assert.equal(
+    await readFile(path.join(root, 'groma', 'observed', 'README.md'), 'utf8'),
+    '# Observed architecture\n',
+  )
+})
+
 test('--parent is required for container and component and forbidden for actor and system', async t => {
   const root = await createRepo(t)
   const before = await readTree(root)
@@ -389,6 +440,22 @@ test('duplicate id, unknown parent, missing flag, illegal kind or parent, and no
         'Tracks stock.',
       ],
       pattern: /plan id must be lowercase kebab-case/,
+    },
+    {
+      name: 'external component',
+      args: [
+        'create',
+        'Inventory',
+        '--observed',
+        '--kind',
+        'component',
+        '--parent',
+        'api',
+        '--external',
+        '--description',
+        'Tracks stock.',
+      ],
+      pattern: /--external is allowed only for systems/,
     },
   ]
 

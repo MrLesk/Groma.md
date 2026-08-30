@@ -2,7 +2,7 @@
 id: instructions
 kind: component
 parent: cli
-group: Commands
+group: "Command surface"
 code:
   - scanner: typescript
     file: src/instructions.ts
@@ -12,4 +12,4 @@ code:
 
 # Instructions
 
-Owns the shipped overview and authoring guides. groma instructions prints these stable local rules so a developer or agent can follow the supported workflow without external context.
+Owns the shipped overview and authoring guides so developers and agents can follow the supported Groma workflow without external context.
