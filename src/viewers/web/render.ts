@@ -7,7 +7,7 @@ import type { FlowRef } from '../action-path.ts'
 import { initialTree, semanticTreeRows, toggleExpansion } from '../tui/tree.ts'
 import type { TreeRow } from '../tui/tree.ts'
 import { nextTheme, themeLabel } from './atoms/theme.ts'
-import { createFpsCounter } from './chrome/fps.ts'
+import { createMapDebugPanel } from './chrome/map-debug.ts'
 import { animateControl, createThemeTransition } from './chrome/motion.ts'
 import { createWebShell, mapFrame, type MapFrame } from './chrome/shell.ts'
 import { paintFlows } from './flow/list.ts'
@@ -41,15 +41,16 @@ let work = boot.work
 let sheet = boot.sheet
 let project: ProjectProfile | undefined = boot.project ?? undefined
 let currentPins = boot.pins
+let mapMeta = { generation: boot.generation, timings: boot.timings }
 const layerMotion = createLayerMotion()
-
+const debug = createMapDebugPanel(document.body, () => ({ ...mapMeta, world, sheet }))
 function projectedLayerScene() {
-  const pose = layerMotion.pose
-  return sceneAtSeparation(projectScene(sheet, project, pose), pose.separation)
+  return debug.project(() => {
+    const pose = layerMotion.pose
+    return sceneAtSeparation(projectScene(sheet, project, pose), pose.separation)
+  })
 }
-
 let scene = projectedLayerScene()
-
 const host = document.getElementById('map')!
 const headerHost = document.getElementById('header')!
 const hierarchyHost = document.getElementById('hierarchy')!
@@ -74,7 +75,6 @@ const projectEditor = createProjectEditor(async profile => {
   if (!response.ok) throw new Error(await response.text())
 })
 const shell = createWebShell(document.body, hierarchyContent, hierarchyToggle, detailsHost, map.svg)
-const fps = createFpsCounter(document.body)
 const tip = createTip(host)
 const pins = createPins(host, id => map.anchorOf(id), id => toggleTask(id), tip)
 const island = createWorkIsland(host, id => toggleTask(id), pins.show, tip)
@@ -121,7 +121,6 @@ let fitted: Camera = fitScene(viewport())
 let camera: Camera = fitted
 /** Once an interaction positions the camera, live refits stop until the viewer presses 0. */
 let touched = false
-
 function firstSystem(current: ArchitectureGraph): AnnotatedElement | undefined {
   return current.elements
     .filter(element => element.kind === 'system' && !element.external)
@@ -366,7 +365,7 @@ function repaintLayerScene(fit: boolean): void {
   const before = sceneCentre(scene.bounds)
   scene = projectedLayerScene()
   const after = sceneCentre(scene.bounds)
-  map.paint(scene)
+  debug.paint(() => map.paint(scene))
   pins.paint(currentPins)
   fitted = fitScene(viewport())
   if (fit) {
@@ -403,7 +402,7 @@ document.addEventListener('keydown', event => {
   if (event.metaKey || event.ctrlKey || event.altKey) return
   const shortcut = event.key === 'F1' ? toggleHud
     : event.key === 'F2' ? toggleLayers
-    : event.key === 'F3' ? fps.toggle
+    : event.key === 'F3' ? debug.toggle
     : undefined
   if (shortcut !== undefined) {
     event.preventDefault()
@@ -436,6 +435,7 @@ const resizeObserver = new ResizeObserver(() => {
 resizeObserver.observe(host)
 
 function applyWorld(payload: WebPayload, reset = false): void {
+  mapMeta = { generation: payload.generation, timings: payload.timings }
   world = payload.world
   work = payload.work
   sheet = payload.sheet
@@ -461,7 +461,7 @@ function applyWorld(payload: WebPayload, reset = false): void {
     })
     selection = retainSelection(selection, id => known(id))
   }
-  map.paint(scene)
+  debug.paint(() => map.paint(scene))
   revisionControl.paintProjectEdit(map.svg)
   pins.paint(currentPins)
   island.paint(payload.pins, work.statuses, work.defaultStatus)
@@ -489,7 +489,7 @@ function applyWork(payload: WebWorkPayload): void {
   if (!taskDiff.paint(task)) clearDetails(detailsHost)
 }
 
-map.paint(scene)
+debug.paint(() => map.paint(scene))
 revisionControl.paintProjectEdit(map.svg)
 pins.paint(currentPins)
 island.paint(boot.pins, work.statuses, work.defaultStatus)

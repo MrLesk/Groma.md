@@ -21,6 +21,12 @@ test.concurrent('the page embeds the world and its sheet and mounts one SVG map'
     workGeneration: 0,
     world,
     sheet: sheetScene(world),
+    timings: {
+      architectureLoadMilliseconds: 1,
+      placementMilliseconds: 2,
+      routingMilliseconds: 3,
+      totalMilliseconds: 6,
+    },
     work: { statuses: [], defaultStatus: '', items: [] },
     pins: [],
   })

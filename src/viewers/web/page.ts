@@ -5,7 +5,7 @@ import type { C4Kind } from '../../types.ts'
 import { chromeCss } from './atoms/chrome.ts'
 import { kindGlyph, kindLabel } from '../atoms/kind.ts'
 import { cssBlock, palettes } from './atoms/theme.ts'
-import { fpsCss } from './chrome/fps.ts'
+import { mapDebugCss } from './chrome/map-debug.ts'
 import { motionCss } from './chrome/motion.ts'
 import { flowRowCss } from './flow/row.ts'
 import { mapCss } from './iso/style.ts'
@@ -49,6 +49,7 @@ const style = `
     ${cssBlock(palettes.light)}
     --backlog-mark-image: url("data:image/png;base64,${backlogMark}");
     --chrome-radius: 10px;
+    --chrome-surface: color-mix(in srgb, var(--paper) 35%, transparent);
     --chrome-motion: 260ms;
     --chrome-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
     --hierarchy-column: clamp(280px, 27vw, 360px);
@@ -57,7 +58,10 @@ const style = `
     --details-inset: var(--details-column);
   }
   [data-theme="dark"] { ${cssBlock(palettes.dark)} }
-  [data-theme="blueprint"] { ${cssBlock(palettes.blueprint)} }
+  [data-theme="blueprint"] {
+    ${cssBlock(palettes.blueprint)}
+    --chrome-surface: color-mix(in srgb, var(--paper) 78%, transparent);
+  }
   html { margin: 0; height: 100%; overflow-x: auto; overflow-y: hidden; background: var(--paper); }
   *, *::before, *::after { box-sizing: border-box; }
   body {
@@ -94,7 +98,7 @@ const style = `
     backdrop-filter: blur(14px);
     box-shadow: 0 4px 14px color-mix(in srgb, var(--ink) 6%, transparent);
   }
-  #header, #hierarchy, #details { background: color-mix(in srgb, var(--paper) 35%, transparent); }
+  #header, #hierarchy, #details { background: var(--chrome-surface); }
   #header {
     position: absolute;
     top: 10px;
@@ -176,7 +180,7 @@ const style = `
   [data-theme="blueprint"] #details,
   [data-theme="blueprint"] #help .help-panel {
     border-color: color-mix(in srgb, var(--map-line) 34%, transparent);
-    background: color-mix(in srgb, var(--paper) 78%, transparent);
+    background: var(--chrome-surface);
     box-shadow: 0 0 20px color-mix(in srgb, var(--map-line) 7%, transparent), inset 0 0 18px color-mix(in srgb, var(--map-line) 3%, transparent);
   }
   #details {
@@ -302,7 +306,7 @@ const style = `
   @media (prefers-reduced-motion: reduce) {
     #hierarchy, #hierarchy-toggle .hierarchy-chevron, #hierarchy-content, #hierarchy-title .pane-label, #details, body.details-hidden #details, body #work { transition: none; }
   }
-${chromeCss}${motionCss}${revisionCss}${highlightCss}${sourceCss}${taskDiffCss}${backlogMarkCss}${workBadgeCss}${flowRowCss}${mapCss}${pinsCss}${workCss}${tipCss}${projectEditorCss}${fpsCss}`
+${chromeCss}${motionCss}${revisionCss}${highlightCss}${sourceCss}${taskDiffCss}${backlogMarkCss}${workBadgeCss}${flowRowCss}${mapCss}${pinsCss}${workCss}${tipCss}${projectEditorCss}${mapDebugCss}`
 
 function legend(): string {
   return legendKinds.map(line => {
@@ -318,7 +322,7 @@ export function renderPage(payload: WebPayload): string {
   return '<!doctype html><html><head><meta charset="utf-8"><title>groma.md</title>'
     + `<style>${style}</style></head><body>`
     + `<header id="header">${lockup}<span id="stats"></span>${revisionControl(payload, { history: historyIcon, loader: revisionLoader })}`
-    + `<div class="header-actions"><div id="map-controls" class="controls" aria-label="Map controls"><button id="fit" aria-label="Fit map">${fitIcon}<span>Fit</span></button><button id="zoom-out" aria-label="Zoom out"><span class="control-glyph">−</span></button><span id="zoom" aria-live="polite"></span><button id="zoom-in" aria-label="Zoom in"><span class="control-glyph">+</span></button></div><details id="help"><summary>Help</summary><div class="help-panel"><p>Drag or scroll to pan<br>Pinch, + or − to zoom<br>0 or Fit shows the whole map<br>F1 toggles map only<br>F2 toggles layers<br>In layers: drag orbits; Shift-drag pans<br>F3 toggles FPS<br>Escape clears selection</p></div></details><button id="theme" data-next-theme="dark"><span class="theme-icon dark">${moonIcon}</span><span class="theme-icon blueprint">${blueprintIcon}</span><span class="theme-icon light">${sunIcon}</span><span class="label">Dark</span></button></div>`
+    + `<div class="header-actions"><div id="map-controls" class="controls" aria-label="Map controls"><button id="fit" aria-label="Fit map">${fitIcon}<span>Fit</span></button><button id="zoom-out" aria-label="Zoom out"><span class="control-glyph">−</span></button><span id="zoom" aria-live="polite"></span><button id="zoom-in" aria-label="Zoom in"><span class="control-glyph">+</span></button></div><details id="help"><summary>Help</summary><div class="help-panel"><p>Drag or scroll to pan<br>Pinch, + or − to zoom<br>0 or Fit shows the whole map<br>F1 toggles map only<br>F2 toggles layers<br>In layers: drag orbits; Shift-drag pans<br>F3 toggles map debug<br>Escape clears selection</p></div></details><button id="theme" data-next-theme="dark"><span class="theme-icon dark">${moonIcon}</span><span class="theme-icon blueprint">${blueprintIcon}</span><span class="theme-icon light">${sunIcon}</span><span class="label">Dark</span></button></div>`
     + '</header>'
     + `<nav id="hierarchy" aria-label="Hierarchy"><div id="hierarchy-title"><span class="pane-label">Hierarchy</span><button id="hierarchy-toggle" type="button" aria-controls="hierarchy-content">${hierarchyIcon}</button></div><div id="hierarchy-content"><div id="flows"></div><div id="tree"></div><div id="legend">${legend()}</div></div></nav>`
     + '<div id="map"></div>'

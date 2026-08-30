@@ -16,7 +16,7 @@ export const workCss = `
   #work {
     position: absolute; left: 0; right: 0; bottom: 12px; margin: 0 auto; width: fit-content; box-sizing: border-box; max-width: calc(100% - 24px);
     display: flex; align-items: center; gap: 10px; padding: 6px 12px; border-radius: 28px;
-    background: color-mix(in srgb, var(--paper) 35%, transparent); border: 1px solid color-mix(in srgb, var(--ink) 8%, transparent);
+    background: var(--chrome-surface); border: 1px solid color-mix(in srgb, var(--ink) 8%, transparent);
     backdrop-filter: blur(14px); box-shadow: 0 4px 8px rgba(0, 0, 0, 0.05);
     overflow: hidden; white-space: nowrap;
   }

@@ -8,6 +8,13 @@ export interface WebRevision extends GitRevision {
   compatible: boolean
 }
 
+export interface WebMapTimings {
+  architectureLoadMilliseconds: number
+  placementMilliseconds: number
+  routingMilliseconds: number
+  totalMilliseconds: number
+}
+
 /** Map state, changed by architecture folds or project-profile saves. */
 export interface WebMapPayload {
   generation: number
@@ -16,6 +23,7 @@ export interface WebMapPayload {
   revisions: WebRevision[]
   world: ArchitectureGraph
   sheet: SheetScene
+  timings: WebMapTimings
 }
 
 /** Optional work state, changed only by a work plugin publication. */

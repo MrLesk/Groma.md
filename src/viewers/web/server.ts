@@ -6,7 +6,7 @@ import type { WorkSource } from '../../work/backlog.ts'
 import { annotateArchitecture, loadAnnotatedArchitecture } from '../../core.ts'
 import { loadProjectProfile, saveProjectProfile } from '../../project-profile.ts'
 import { watchScan } from '../../scanner.ts'
-import { sheetScene } from '../../sheet/scene.ts'
+import { measuredSheetScene } from '../../sheet/scene.ts'
 import { pinsOf } from '../../work/pins.ts'
 import { renderPage } from './page.ts'
 import type { WebMapPayload, WebPayload, WebRevision, WebWorkPayload } from './payload.ts'
@@ -57,13 +57,32 @@ async function bundleRenderer(): Promise<string> {
 }
 
 /** Loads the architecture map without consulting optional work plugins. */
-async function loadMapRoot(repositoryRoot: string): Promise<Pick<WebMapPayload, 'project' | 'world' | 'sheet'>> {
-  const [{ elements, relationships }, project] = await Promise.all([
-    loadAnnotatedArchitecture(repositoryRoot),
+async function loadMapRoot(repositoryRoot: string): Promise<Pick<WebMapPayload, 'project' | 'world' | 'sheet' | 'timings'>> {
+  const started = performance.now()
+  const [architecture, project] = await Promise.all([
+    (async () => {
+      const loadStarted = performance.now()
+      const world = await loadAnnotatedArchitecture(repositoryRoot)
+      return { world, milliseconds: performance.now() - loadStarted }
+    })(),
     loadProjectProfile(repositoryRoot),
   ])
-  const world = { elements, relationships }
-  return { project: project ?? null, world, sheet: sheetScene(world) }
+  const world = {
+    elements: architecture.world.elements,
+    relationships: architecture.world.relationships,
+  }
+  const sheet = measuredSheetScene(world)
+  return {
+    project: project ?? null,
+    world,
+    sheet: sheet.scene,
+    timings: {
+      architectureLoadMilliseconds: architecture.milliseconds,
+      placementMilliseconds: sheet.timings.placementMilliseconds,
+      routingMilliseconds: sheet.timings.routingMilliseconds,
+      totalMilliseconds: performance.now() - started,
+    },
+  }
 }
 
 async function loadMap(
