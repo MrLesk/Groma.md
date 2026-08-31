@@ -59,7 +59,7 @@ function paintBuilding(
   view: ProjectionView,
 ): SVGGElement {
   const { building, floors, text } = projected
-  const group = svg('g', { 'aria-label': building.name }, classOf(projected))
+  const group = svg('g', { 'aria-label': building.title }, classOf(projected))
   group.dataset.id = building.representationId
   for (const [index, faces] of floors.entries()) {
     paintFloor(layer, group, projected, faces, building.floors[index], view)

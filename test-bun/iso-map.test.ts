@@ -29,10 +29,10 @@ import type { ProjectedScene } from '../src/viewers/web/iso/project.ts'
 import { facadePatternId } from '../src/viewers/web/iso/style.ts'
 import { box, openclawFixtureRoot, viewerFixtureRoot, worldOf } from './helpers.ts'
 
-const profile = (name: string, description: string): ProjectProfile => ({
-  name,
-  description,
-  descriptionBlocks: [{ spans: [{ text: description, styles: [] }] }],
+const profile = (title: string, overview: string): ProjectProfile => ({
+  title,
+  overview,
+  overviewBlocks: [{ spans: [{ text: overview, styles: [] }] }],
 })
 const projectProfile = profile('Shop', 'Shop architecture.')
 const groundPoint = ({ x, y }: Point): RoutePoint => ({
@@ -250,12 +250,12 @@ test.concurrent('blueprint decorations scale with the sheet and the project plat
   const threshold = projectScene(empty(96), profile('Map', 'x'.repeat(80)))
   const overflow = projectScene(empty(96), profile('Map', 'x'.repeat(81)))
   const extended = projectScene(empty(96), profile(
-    project.name,
-    Array(8).fill(project.description).join(' '),
+    project.title,
+    Array(8).fill(project.overview).join(' '),
   ))
   const moreExtended = projectScene(empty(96), profile(
-    project.name,
-    Array(16).fill(project.description).join(' '),
+    project.title,
+    Array(16).fill(project.overview).join(' '),
   ))
   const length = (segment: ProjectedScene['calibrationTicks'][number]): number =>
     Math.hypot(segment.to.x - segment.from.x, segment.to.y - segment.from.y)
@@ -283,11 +283,11 @@ test.concurrent('blueprint decorations scale with the sheet and the project plat
   assert.ok(plateWidth(compact) < plateWidth(growing))
   assert.ok(plateWidth(growing) < plateWidth(threshold))
   assert.equal(plateWidth(overflow), plateWidth(threshold))
-  assert.equal(overflow.projectPlate!.description.lines.length, 2)
+  assert.equal(overflow.projectPlate!.overview.lines.length, 2)
   assert.equal(east(compact), east(overflow))
   assert.ok(Math.min(...largePlate.polygon.map(point => groundPoint(point).gy)) > 96)
   assert.ok(Math.max(...largePlate.polygon.map(point => groundPoint(point).gx)) < east(large))
-  assert.equal(extendedPlate.description.lines.length, 3)
+  assert.equal(extendedPlate.overview.lines.length, 3)
   assert.equal(east(extended), east(large))
   assert.ok(south(extended) > south(large))
   assert.deepEqual(moreExtended.projectPlate!.polygon, extendedPlate.polygon)
@@ -301,8 +301,8 @@ test.concurrent('blueprint decorations scale with the sheet and the project plat
   for (const point of extendedPlate.polygon.map(groundPoint)) {
     assert.ok(point.gy < south(extended))
   }
-  for (const line of extendedPlate.description.lines) {
-    assert.ok(textWidth(line.map(run => run.text).join(''), extendedPlate.description.fontSize) <= extendedPlate.description.maxWidth)
+  for (const line of extendedPlate.overview.lines) {
+    assert.ok(textWidth(line.map(run => run.text).join(''), extendedPlate.overview.fontSize) <= extendedPlate.overview.maxWidth)
   }
 })
 
@@ -322,7 +322,7 @@ test.concurrent('every relationship has a polyline whose arrowhead lies on the s
 
 test.concurrent('an off-centre route meets the near wall of the actor it leaves, front side or under the roof', () => {
   const actor: Building = {
-    representationId: 'observed:actor', id: 'actor', name: 'Actor', origin: 'observed',
+    representationId: 'observed:actor', id: 'actor', title: 'Actor', origin: 'observed',
     kind: 'actor', external: false, surface: 'actors', rect: { gx: 4, gy: 4, w: 4, d: 4 },
     heightUnits: 1, shape: { kind: 'round' }, floors: [], lines: ['Actor'],
   }
@@ -370,7 +370,7 @@ test.concurrent('an off-centre route meets the near wall of the actor it leaves,
 
 test.concurrent('a route meets the visible upper face of a stepped tower', () => {
   const tower: Building = {
-    representationId: 'observed:tower', id: 'tower', name: 'Tower', origin: 'observed',
+    representationId: 'observed:tower', id: 'tower', title: 'Tower', origin: 'observed',
     kind: 'component', external: false, surface: 'surface', rect: { gx: 4, gy: 4, w: 4, d: 4 },
     heightUnits: 4, shape: { kind: 'block' }, lines: ['Tower'],
     floors: [
@@ -429,7 +429,7 @@ test.concurrent('every surface label stays in the compact edge band', () => {
       { key: 'island:system', kind: 'system', name: 'System', element: null, rect: { gx: 10, gy: 4, w: 12, d: 12 } },
     ],
     zones: [{ key: 'group:system:one', name: 'Group', parent: 'island:system', members: [], rect: { gx: 12, gy: 6, w: 5, d: 5 } }],
-    slabs: [{ representationId: 'container:one', id: 'one', name: 'Container', origin: 'observed', island: 'island:system', rect: { gx: 16, gy: 8, w: 5, d: 6 } }],
+    slabs: [{ representationId: 'container:one', id: 'one', title: 'Container', origin: 'observed', island: 'island:system', rect: { gx: 16, gy: 8, w: 5, d: 6 } }],
     buildings: [],
     routes: [],
   }, projectProfile)

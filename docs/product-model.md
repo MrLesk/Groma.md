@@ -6,20 +6,21 @@ the same repo is already out of date.
 
 The architecture model owns identity. Source code is evidence. Groma is the
 only writer of architecture element and revision files. The project owner
-controls the project name and description in `groma/README.md`, directly or
-through the web map. The [component Markdown contract](component-markdown.md)
-defines the architecture document format.
+controls the project title, optional concise description, and long overview in
+`groma/project.md`, directly or through the web map. The
+[architecture Markdown contract](component-markdown.md) defines the strict OKF
+v0.2 Groma profile.
 
 ## What you do
 
 People and agents use Groma. They do not edit architecture element or revision
 Markdown by hand. Groma writes those files so paths, identity, and metadata
-stay consistent. The root `groma/README.md` is different: its H1 is the project
-name and the remaining Markdown body is the project description. Bare `groma`
-opens a terminal launcher for the current repository: Up and Down choose an
-action and Enter runs it. Without an interactive terminal, it prints the same
-context and actions as plain text. `groma instructions` is the local instruction
-hub.
+stay consistent. The root `groma/project.md` is different: standard `title` and
+optional `description` fields are frontmatter, while its normal Markdown body
+is the complete project overview. Bare `groma` opens a terminal launcher for
+the current repository: Up and Down choose an action and Enter runs it. Without
+an interactive terminal, it prints the same context and actions as plain text.
+`groma instructions` is the local instruction hub.
 
 1. Open a viewer: see the world. `groma web` scans the repository and starts
    the browser map. On a TTY, `groma view` scans and starts the terminal map.
@@ -29,7 +30,7 @@ hub.
    view` when stdout is not a TTY, prints the merged world as plain text
    without scanning and does not start the TUI.
    `groma view <id|plan|file>` prints one record as plain text: an
-   element, a plan, or the element whose `code` names that
+   element, a plan, or the element whose `groma.code` names that
    repository-relative file. When several elements share the file, the
    command fails.
 2. `groma scan`: scan this repo. Core folds the findings into Markdown.
@@ -44,8 +45,9 @@ hub.
      <element-id> --plan <plan-id>` restates that ID.
    - An **explanation** of an existing part (notes that describe it without
      changing it) stays on the observed document. `groma edit
-     <element-id> --description <prose>` updates that lead prose.
-     `groma edit <plan-id> --description <prose>` sets the plan Outcome.
+     <element-id> --overview <markdown>` updates that leading body prose.
+     `groma edit <plan-id> --overview <markdown>` sets the plan Outcome. The
+     optional concise OKF field is changed separately with `--description`.
    - A **known existing part** that has no source evidence is authored with
      `groma create <name> --observed`.
    - Atomic scan evidence is curated with `groma edit`: combine empty scan
@@ -54,8 +56,9 @@ hub.
    - An observed collaboration is authored with `groma relate <source-id>
      <target-id> --description <prose> --technology <text>` and removed with
      the same command plus `--remove`.
-   - The web map's project pencil edits only the project name and description
-     in `groma/README.md`; it does not edit architecture.
+   - The web map's project pencil edits only the project title, concise
+     description, and body overview in `groma/project.md`; it does not edit C4
+     concepts.
 4. `groma accept <id>`: accept that ghost, only if a scan has matched it.
    Groma may scan first if needed. No match: the command fails and the
    ghost stays planned. A scan never accepts a ghost on its own.
@@ -91,12 +94,13 @@ Observed architecture is what is known to exist. It lives under
 `groma/observed/`. It may be empty. Groma writes it from direct observed
 creation, a scan, accepted plans, and curation people apply through Groma.
 
-After the first write of a document, later scans may refresh only `code`
-frontmatter. They do not rewrite explanations or other authored prose.
+After the first write of a document, later scans may refresh only nested
+`groma.code` frontmatter. They do not rewrite explanations, unowned metadata,
+or other authored prose.
 
-`technology`, a free-text frontmatter line with comma-separated parts, is
-authored through Groma. Core reads it and both details panes show it under
-How it's built. Only a system may be marked `external`.
+`groma.technology`, a free-text value with comma-separated parts, is authored
+through Groma. Core reads it and both details panes show it under How it's
+built. Only a system may have `groma.external: true`.
 
 ## Scanning
 
@@ -117,7 +121,7 @@ failure therefore cannot publish a partial batch.
 
 Core applies the batch like this:
 
-1. An existing `code` file match keeps its element and authored body. Symbols
+1. An existing `groma.code` file match keeps its element and authored body. Symbols
    refresh from current evidence, but every curated file remains on that
    element, including files grouped together by a person.
 2. Placement inferred from imports, directories, or projects chooses a scope
@@ -131,9 +135,10 @@ A scan never turns a ghost into observed architecture.
 
 A plan is a fragment of desired architecture, not a second complete system.
 It lives under `groma/plans/<plan-id>/`. Groma creates and updates that
-directory. The plan README declares an immutable kebab-case ID. The directory
-holds only element documents that are not yet accepted. When none remain, the
-plan is complete; its README stays as the record.
+directory. The directory name is its immutable kebab-case ID; the reserved
+`index.md` contains its readable context and optional Outcome. The directory
+holds only C4 concepts that are not yet accepted. When none remain, the plan is
+complete; its index stays as the record.
 
 A plan describes outcomes and requirements. It does not specify frameworks,
 file layouts, or other implementation detail unless a requirement forces it.
@@ -150,9 +155,9 @@ accept fails and the ghost stays a ghost.
 
 On success, Groma applies the planned document to observed architecture: a
 new ID becomes observed; a restated ID updates the existing observed
-document. Groma writes the matching `code`, updates paths and metadata, and
-removes the planned file. Implementation still happens in source. Accept
-does not invent evidence.
+document. Groma writes the matching `groma.code`, updates paths and metadata,
+and removes the planned file. Implementation still happens in source. Accept
+does not invent evidence or human verification.
 
 ## One world
 
@@ -162,10 +167,12 @@ every plan directory under `groma/plans/`, merges them into one world, and
 lays that world out before any viewer sees it: `world-layout` gives the TUI
 map its bounds and routes, the `sheet` gives the web map its cells, floors
 and lanes. A viewer plugin projects what core computed. It never reads the
-files itself. The minimum tree is `groma/README.md`, `groma/observed/README.md`,
-`groma/missing/README.md`, and the `groma/plans/` directory.
+files itself. The package requires `groma/index.md` with only the OKF v0.2
+declaration and `groma/project.md` with the explicit Groma architecture marker.
+Revision context lives in `groma/observed/index.md`, `groma/missing/index.md`,
+`groma/plans/index.md`, and each plan's `index.md`.
 
-Core also counts the lines of each element's `code` files; an unreadable
+Core also counts the lines of each element's `groma.code` files; an unreadable
 file counts 0. In the web map, every source file belongs to one visible floor
 group. Component file counts map project-relative from one to five floors, so
 the component with the fewest files has one floor and the component with the
@@ -177,8 +184,9 @@ centred on one tower axis, and facade patterns come from normalized file
 extensions. The
 terminal details pane keeps the aggregate count as `N files · ~M lines`.
 
-A plan README is not an element. Other prose without C4 frontmatter is not an
-element.
+A reserved index is not an element. Other typed OKF concepts may coexist in a
+marked package, but only the four exact C4 types enter Groma's architecture
+world. A generic OKF package without the Groma project marker is rejected.
 
 Parents resolve by `id` across this merged world. A relationship target is
 the element whose document the row's link reaches; a link that does not
@@ -191,8 +199,9 @@ relationship, and a parent row with no lower pin yet, stay as written.
 Viewers treat an authored A → B as also connecting exclusive ancestors of
 A and B. Layout keeps one route per authored relationship.
 
-Runtime annotations are derived from location and are never written into
-frontmatter:
+Runtime origin annotations are derived from location. They are distinct from
+the standard top-level lifecycle `status`, which is `draft` for planned
+representations and `stable` for observed, missing, and accepted ones:
 
 - `observed`: the ID lives under `groma/observed/`
 - `planned`: the ID lives in a plan
@@ -212,7 +221,7 @@ default status plus one `task list --json` summary containing every configured
 task, including terminal history. It reads `task view <id> --json` only for the
 task whose full details a developer opens. The last configured status is
 terminal. Groma watches `backlog/tasks` and never writes a task. A task touches
-every element whose `code` maps one of its modified files, then every element
+every element whose `groma.code` maps one of its modified files, then every element
 it references by exact `id`. The terminal map marks the assignees of each task
 In Progress on those elements. The web map stands one pin per assignee and task
 on the element the task touched last; an unassigned mapped task gets one generic

@@ -3,6 +3,7 @@ import path from 'node:path'
 
 import { buildArchitectureModel } from './architecture-model.ts'
 import { loadArchitecture } from './architecture-reader.ts'
+import { requireGromaMapping } from './okf-profile.ts'
 import type {
   AnnotatedArchitectureModel,
   AnnotatedElement,
@@ -42,6 +43,13 @@ function relativeElementFilename(
   )
 }
 
+function documentId(document: ArchitectureDocument): unknown {
+  return requireGromaMapping(
+    document.frontmatter,
+    document.sourceFilename,
+  ).id
+}
+
 function documentsResolvedAgainstObserved(
   observed: RevisionRecord,
   revisionRecord: RevisionRecord,
@@ -51,10 +59,10 @@ function documentsResolvedAgainstObserved(
   }
 
   const suppliedIds = new Set(
-    revisionRecord.documents.map(document => document.frontmatter.id),
+    revisionRecord.documents.map(documentId),
   )
   const fallbackDocuments = observed.documents
-    .filter(document => !suppliedIds.has(document.frontmatter.id))
+    .filter(document => !suppliedIds.has(documentId(document)))
     .map(document => ({
       ...document,
       sourceFilename: path.posix.join(
@@ -94,7 +102,7 @@ function annotateRevision(
     ? revisionRecord.revision.name
     : undefined
   const suppliedIds = new Set(
-    revisionRecord.documents.map(document => document.frontmatter.id),
+    revisionRecord.documents.map(documentId),
   )
   const model = buildArchitectureModel({
     revision: revisionRecord.revision,
@@ -114,8 +122,9 @@ function annotateRevision(
         representationId: ownRepresentation(element.id),
         id: element.id,
         kind: element.kind,
-        name: element.name,
-        description: element.description,
+        title: element.title,
+        ...(element.description === undefined ? {} : { description: element.description }),
+        overview: element.overview,
         parent: element.parentId === null
           ? null
           : resolvedRepresentation(element.parentId),

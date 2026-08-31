@@ -57,61 +57,70 @@ async function createWorld(
   const root = await mkdtemp(path.join(os.tmpdir(), 'groma-accept-'))
   t.after(() => rm(root, { recursive: true, force: true }))
   await writeTree(root, {
-    'groma/observed/README.md': '# Observed\n',
-    'groma/missing/README.md': '# Missing\n',
-    'groma/plans/README.md': '# Plans\n',
-    'groma/observed/systems/shop/system.md': `---
-id: shop
-kind: system
+    'groma/index.md': '---\nokf_version: "0.2"\n---\n',
+    'groma/project.md': `---
+type: Groma Project
+title: Shop architecture
+groma:
+  profile: architecture
 ---
 
-# Shop
+Describes the shop used by acceptance tests.
+`,
+    'groma/observed/index.md': '# Observed\n',
+    'groma/missing/index.md': '# Missing\n',
+    'groma/plans/index.md': '# Plans\n',
+    'groma/observed/systems/shop/system.md': `---
+type: C4 System
+title: Shop
+status: stable
+groma:
+  id: shop
+---
 
 Lets customers place orders.
 `,
     'groma/observed/systems/shop/containers/api/container.md': `---
-id: api
-kind: container
-parent: shop
+type: C4 Container
+title: Api
+status: stable
+groma:
+  id: api
+  parent: shop
 ---
-
-# Api
 
 Takes order requests.
 `,
-    'groma/plans/next/README.md': `---
-id: next
----
-
-# Next
-`,
+    'groma/plans/next/index.md': '# Next\n',
     ...files,
   })
   return root
 }
 
 const inventoryDocument = `---
-id: inventory
-kind: component
-parent: api
+type: C4 Component
+title: Inventory
+status: draft
+groma:
+  id: inventory
+  parent: api
 ---
-
-# Inventory
 
 Tracks stock for the shop.
 `
 
 const matchedInventoryDocument = `---
-id: inventory
-kind: component
-parent: api
-code:
-  - scanner: typescript
-    file: src/inventory.ts
-    symbol: Inventory
+type: C4 Component
+title: Inventory
+status: draft
+groma:
+  id: inventory
+  parent: api
+  code:
+    - scanner: typescript
+      file: src/inventory.ts
+      symbol: Inventory
 ---
-
-# Inventory
 
 Tracks stock for the shop.
 `
@@ -138,7 +147,7 @@ test('acceptGhost applies a matched new ghost into observed', async t => {
     ),
     'utf8',
   )
-  assert.equal(observed, matchedInventoryDocument)
+  assert.equal(observed, matchedInventoryDocument.replace('status: draft', 'status: stable'))
   await missing(path.join(
     root,
     'groma/plans/next/systems/shop/containers/api/components/inventory.md',
@@ -148,29 +157,31 @@ test('acceptGhost applies a matched new ghost into observed', async t => {
 test('acceptGhost updates a restated observed document and removes the ghost', async t => {
   const root = await createWorld(t, {
     'groma/observed/systems/shop/containers/api/components/orders.md': `---
-id: orders
-kind: component
-parent: api
-code:
-  - scanner: typescript
-    file: src/orders.ts
+type: C4 Component
+title: Orders
+status: stable
+groma:
+  id: orders
+  parent: api
+  code:
+    - scanner: typescript
+      file: src/orders.ts
 ---
-
-# Orders
 
 Places orders.
 `,
     'groma/plans/next/systems/shop/containers/api/components/orders.md': `---
-id: orders
-kind: component
-parent: api
-code:
-  - scanner: typescript
-    file: src/orders.ts
-    symbol: placeOrder
+type: C4 Component
+title: Orders
+status: draft
+groma:
+  id: orders
+  parent: api
+  code:
+    - scanner: typescript
+      file: src/orders.ts
+      symbol: placeOrder
 ---
-
-# Orders
 
 Places and tracks customer orders.
 `,
@@ -197,35 +208,38 @@ Places and tracks customer orders.
 test('acceptGhost moves a restated ghost when the observed path changes', async t => {
   const root = await createWorld(t, {
     'groma/observed/systems/shop/containers/warehouse/container.md': `---
-id: warehouse
-kind: container
-parent: shop
+type: C4 Container
+title: Warehouse
+status: stable
+groma:
+  id: warehouse
+  parent: shop
 ---
-
-# Warehouse
 
 Stores stock.
 `,
     'groma/observed/systems/shop/containers/api/components/orders.md': `---
-id: orders
-kind: component
-parent: api
+type: C4 Component
+title: Orders
+status: stable
+groma:
+  id: orders
+  parent: api
 ---
-
-# Orders
 
 Places orders.
 `,
     'groma/plans/next/systems/shop/containers/warehouse/components/orders.md': `---
-id: orders
-kind: component
-parent: warehouse
-code:
-  - scanner: typescript
-    file: src/orders.ts
+type: C4 Component
+title: Orders
+status: draft
+groma:
+  id: orders
+  parent: warehouse
+  code:
+    - scanner: typescript
+      file: src/orders.ts
 ---
-
-# Orders
 
 Picks stock in the warehouse.
 `,
@@ -325,15 +339,26 @@ async function createScanRepo(
   await writeTree(root, {
     'package.json': JSON.stringify({ name: 'shop', bin: { shop: 'src/cli.ts' } }),
     '.gitignore': 'node_modules/\n',
-    'groma/observed/README.md': '# Observed\n',
-    'groma/missing/README.md': '# Missing\n',
-    'groma/plans/README.md': '# Plans\n',
-    'groma/observed/systems/shop/system.md': `---
-id: shop
-kind: system
+    'groma/index.md': '---\nokf_version: "0.2"\n---\n',
+    'groma/project.md': `---
+type: Groma Project
+title: Shop architecture
+groma:
+  profile: architecture
 ---
 
-# Shop
+Describes the scanned shop used by acceptance tests.
+`,
+    'groma/observed/index.md': '# Observed\n',
+    'groma/missing/index.md': '# Missing\n',
+    'groma/plans/index.md': '# Plans\n',
+    'groma/observed/systems/shop/system.md': `---
+type: C4 System
+title: Shop
+status: stable
+groma:
+  id: shop
+---
 
 Lets customers place orders.
 `,
@@ -350,19 +375,15 @@ Lets customers place orders.
 
 test('groma accept applies a ghost after it scans a name match', async t => {
   const root = await createScanRepo(t, {
-    'groma/plans/next/README.md': `---
-id: next
----
-
-# Next
-`,
+    'groma/plans/next/index.md': '# Next\n',
     'groma/plans/next/systems/shop/containers/cli/components/scanner.md': `---
-id: scanner
-kind: component
-parent: cli
+type: C4 Component
+title: Scanner
+status: draft
+groma:
+  id: scanner
+  parent: cli
 ---
-
-# Scanner
 
 Reads the shop source.
 `,
@@ -393,19 +414,15 @@ Reads the shop source.
 
 test('groma accept fails when a scan does not match the ghost', async t => {
   const root = await createScanRepo(t, {
-    'groma/plans/next/README.md': `---
-id: next
----
-
-# Next
-`,
+    'groma/plans/next/index.md': '# Next\n',
     'groma/plans/next/systems/shop/containers/api/components/widget.md': `---
-id: widget
-kind: component
-parent: api
+type: C4 Component
+title: Widget
+status: draft
+groma:
+  id: widget
+  parent: api
 ---
-
-# Widget
 
 Does not exist in source.
 `,

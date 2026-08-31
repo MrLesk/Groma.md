@@ -1,14 +1,18 @@
 import { existsSync } from 'node:fs'
 import path from 'node:path'
 
+import { parseFrontmatter } from 'comark'
+
 import { buildArchitectureModel } from './architecture-model.ts'
 import { architectureElementPath } from './architecture-path.ts'
 import {
   readDocument,
   removeDocument,
   replaceLeadProse,
-  withCodeFrontmatter,
-  withFrontmatterField,
+  withDescription,
+  withGromaCode,
+  withGromaField,
+  withRepresentationStatus,
   writeObservedDocument,
 } from './markdown-emitter.ts'
 import type {
@@ -19,6 +23,7 @@ import type {
 
 export interface CurateObservedInput {
   id: string
+  overview?: string
   description?: string
   group?: string
   ungroup?: boolean
@@ -51,11 +56,7 @@ function observedRevision(revisions: RevisionRecord[]): RevisionRecord {
 }
 
 function requiresEmptyMeaning(source: string, id: string): void {
-  const heading = source.match(/^# .+$/m)
-  const trailing = heading?.index === undefined
-    ? source
-    : source.slice(heading.index + heading[0].length)
-  if (trailing.trim() !== '') {
+  if (parseFrontmatter(source).content.trim() !== '') {
     throw new Error(`cannot structurally replace "${id}" because it has authored meaning`)
   }
 }
@@ -165,7 +166,7 @@ function groupedSource(
   if (target.kind !== 'component') {
     throw new Error('--group and --ungroup are only valid on components')
   }
-  return withFrontmatterField(
+  return withGromaField(
     source,
     'group',
     input.ungroup === true ? undefined : input.group?.trim(),
@@ -191,7 +192,7 @@ function movedTarget(
   requireUnrelated(context.model.relationships, new Set([target.id]))
   requiresEmptyMeaning(source, target.id)
   return {
-    source: withFrontmatterField(source, 'parent', parent.id),
+    source: withGromaField(source, 'parent', parent.id),
     destination: architectureElementPath({
       root: 'groma/observed',
       kind: target.kind,
@@ -256,15 +257,19 @@ async function combineElements(
         id: child.id,
         parentSourceFilename: target.sourceFilename,
       }),
-      source: withFrontmatterField(
+      source: withGromaField(
         await readDocument(context.repositoryRoot, child.sourceFilename),
         'parent',
         target.id,
+        'stable',
       ),
     })
   }
   return {
-    targetSource: withCodeFrontmatter(targetSource, combinedCode([target, ...sources])),
+    targetSource: withGromaCode(
+      targetSource,
+      combinedCode([target, ...sources]),
+    ),
     rewrites,
     removals: sources.map(source => source.sourceFilename),
   }
@@ -285,14 +290,15 @@ export async function curateObserved(
   const grouped = groupedSource(target, originalSource, input)
   const moved = movedTarget(context, target, grouped, input.parent)
   const combined = await combineElements(context, target, moved.source, input.combine)
-  const targetSource = input.description === undefined
+  let targetSource = input.overview === undefined
     ? combined.targetSource
-    : replaceLeadProse(combined.targetSource, input.description)
+    : replaceLeadProse(combined.targetSource, input.overview)
+  targetSource = withDescription(targetSource, input.description)
   const rewrites = [...combined.rewrites]
   rewrites.unshift({
     sourceFilename: target.sourceFilename,
     destinationFilename: moved.destination,
-    source: targetSource,
+    source: withRepresentationStatus(targetSource, 'stable'),
   })
   validateDestinations(repositoryRoot, rewrites)
   await applyRewrites(repositoryRoot, rewrites, combined.removals)

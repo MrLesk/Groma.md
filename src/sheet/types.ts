@@ -12,7 +12,7 @@ export interface CellRect {
 export interface SheetItem {
   representationId: string
   id: string
-  name: string
+  title: string
   origin: Origin
 }
 
@@ -68,7 +68,7 @@ export interface Building extends SheetItem {
   heightUnits: number
   shape: Shape
   floors: BuildingFloor[]
-  /** The name as laid on the roof, one or two lines. */
+  /** The title as laid on the roof, one or two lines. */
   lines: string[]
 }
 

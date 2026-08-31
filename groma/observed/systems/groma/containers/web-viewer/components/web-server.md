@@ -1,21 +1,22 @@
 ---
-id: web-server
-kind: component
-parent: web-viewer
-group: "Web runtime"
-code:
-  - scanner: typescript
-    file: src/viewers/web/server.ts
-    symbol: startWebViewer
-    dependencies: 14
-    dependents: 1
-  - scanner: typescript
-    file: src/viewers/web/payload.ts
-    dependencies: 5
-    dependents: 8
+type: C4 Component
+title: Web server
+status: stable
+groma:
+  id: web-server
+  parent: web-viewer
+  group: Web runtime
+  code:
+    - scanner: typescript
+      file: src/viewers/web/server.ts
+      symbol: startWebViewer
+      dependencies: 14
+      dependents: 1
+    - scanner: typescript
+      file: src/viewers/web/payload.ts
+      dependencies: 5
+      dependents: 8
 ---
-
-# Web server
 
 Serves the page and browser bundle from the latest cached project, architecture, sheet, and work snapshots. It handles profile edits and on-demand task, source, and revision reads without recomposing unrelated state.
 

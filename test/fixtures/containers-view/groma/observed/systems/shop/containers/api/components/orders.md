@@ -1,9 +1,10 @@
 ---
-id: orders
-kind: component
-parent: api
+type: C4 Component
+title: Orders
+status: stable
+groma:
+  id: orders
+  parent: api
 ---
-
-# Orders
 
 Records an order.

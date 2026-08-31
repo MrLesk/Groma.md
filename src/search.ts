@@ -5,7 +5,7 @@ import type { AnnotatedElement } from './types.ts'
 
 export interface ArchitectureSearchResult {
   element: AnnotatedElement
-  /** Ancestor names from the architecture root to the element's parent. */
+  /** Ancestor titles from the architecture root to the element's parent. */
   path: readonly string[]
 }
 
@@ -20,7 +20,7 @@ function ancestorPath(
   const path: string[] = []
   let parent = element.parent === null ? undefined : byId.get(element.parent)
   while (parent !== undefined) {
-    path.unshift(parent.name)
+    path.unshift(parent.title)
     parent = parent.parent === null ? undefined : byId.get(parent.parent)
   }
   return path
@@ -39,10 +39,10 @@ export function createArchitectureSearch(
     threshold: 0.35,
     ignoreLocation: true,
     keys: [
-      { name: 'element.name', weight: 0.55 },
+      { name: 'element.title', weight: 0.55 },
       { name: 'element.id', weight: 0.25 },
       { name: 'pathText', weight: 0.15 },
-      { name: 'element.description', weight: 0.05 },
+      { name: 'element.overview', weight: 0.05 },
     ],
   })
 

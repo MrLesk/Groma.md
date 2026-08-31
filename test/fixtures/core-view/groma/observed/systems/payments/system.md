@@ -1,9 +1,10 @@
 ---
-id: payments
-kind: system
-external: true
+type: C4 System
+title: Payments
+status: stable
+groma:
+  id: payments
+  external: true
 ---
-
-# Payments
 
 Authorizes customer payments.

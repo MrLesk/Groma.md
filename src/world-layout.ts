@@ -58,12 +58,12 @@ const minimumSizes: Record<C4Kind, Pick<Bounds, 'width' | 'height'>> = {
   system: { width: 44, height: 40 },
 }
 
-// Viewers draw the name on the box at roughly 3 units per monospace
-// glyph; the box must give the name that room plus a side margin.
+// Viewers draw the title on the box at roughly 3 units per monospace
+// glyph; the box must give the title that room plus a side margin.
 function elementWidth(element: AnnotatedElement): number {
   return Math.max(
     minimumSizes[element.kind].width,
-    element.name.length * 3 + 6,
+    element.title.length * 3 + 6,
   )
 }
 

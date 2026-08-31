@@ -1,19 +1,23 @@
 ---
-id: edit
-kind: component
-parent: cli
-group: "Architecture authoring"
-code:
-  - scanner: typescript
-    file: src/edit.ts
-    symbol: editArchitecture
-    dependencies: 6
-    dependents: 1
+type: C4 Component
+title: Edit
+status: stable
+groma:
+  id: edit
+  parent: cli
+  group: Architecture authoring
+  code:
+    - scanner: typescript
+      file: src/edit.ts
+      symbol: editArchitecture
+      dependencies: 7
+      dependents: 1
 ---
 
-# Edit
-
-Updates current meaning or restates an existing element in a plan while preserving the rest of its authored document.
+Updates body overview or the optional concise description independently, or
+restates an existing concept as a draft plan representation. It preserves
+unowned OKF metadata, nested Groma metadata outside the requested structural
+change, and every named Markdown section.
 
 ## Relationships
 

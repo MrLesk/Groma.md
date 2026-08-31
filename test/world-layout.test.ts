@@ -12,40 +12,40 @@ import type {
 const elements: AnnotatedArchitectureModel['elements'] = [
   {
     representationId: 'observed:architect', id: 'architect', kind: 'actor',
-    name: 'Architect', description: 'Reviews the design.', parent: null,
+    title: 'Architect', overview: 'Reviews the design.', parent: null,
     children: [], external: false, code: [], origin: 'observed',
   },
   {
     representationId: 'observed:shop', id: 'shop', kind: 'system',
-    name: 'Shop', description: 'Sells products.', parent: null,
+    title: 'Shop', overview: 'Sells products.', parent: null,
     children: ['observed:api', 'observed:worker'], external: false, code: [],
     origin: 'observed', group: 'Platform',
   },
   {
     representationId: 'observed:api', id: 'api', kind: 'container',
-    name: 'API', description: 'Serves requests.', parent: 'observed:shop',
+    title: 'API', overview: 'Serves requests.', parent: 'observed:shop',
     children: ['planned:checkout'], external: false, code: [], origin: 'observed',
     group: 'Runtime',
   },
   {
     representationId: 'planned:checkout', id: 'checkout', kind: 'component',
-    name: 'Checkout', description: 'Places orders.', parent: 'observed:api',
+    title: 'Checkout', overview: 'Places orders.', parent: 'observed:api',
     children: [], external: false, code: [], origin: 'planned', plan: 'checkout',
   },
   {
     representationId: 'observed:worker', id: 'worker', kind: 'container',
-    name: 'Worker', description: 'Runs jobs.', parent: 'observed:shop',
+    title: 'Worker', overview: 'Runs jobs.', parent: 'observed:shop',
     children: ['missing:fulfilment'], external: false, code: [], origin: 'observed',
     group: 'Runtime',
   },
   {
     representationId: 'missing:fulfilment', id: 'fulfilment', kind: 'component',
-    name: 'Fulfilment', description: 'Ships orders.', parent: 'observed:worker',
+    title: 'Fulfilment', overview: 'Ships orders.', parent: 'observed:worker',
     children: [], external: false, code: [], origin: 'missing',
   },
   {
     representationId: 'observed:payments', id: 'payments', kind: 'system',
-    name: 'Payments', description: 'Authorizes payments.', parent: null,
+    title: 'Payments', overview: 'Authorizes payments.', parent: null,
     children: [], external: true, code: [], origin: 'observed',
     group: 'Platform',
   },

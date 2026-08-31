@@ -30,7 +30,7 @@ shows that body on hover without repeating its subject. A selected commit
 opens the complete architecture and source measurements from that same Git
 snapshot. Historical views are read-only,
 carry no current Backlog work, and keep their full commit id in the URL.
-Commits written with an obsolete Groma Markdown contract remain visible but
+Commits without the required OKF v0.2 Groma project profile remain visible but
 are marked Unsupported and cannot be selected. Returning to Current revision
 resumes live architecture and work updates.
 
@@ -74,7 +74,7 @@ keep the actor or component in the details pane. If details are closed, a flow
 toggle keeps them closed. Actors do not repeat Commands as relationships
 or build information.
 How it's built holds the evidence: the technology the element's Markdown
-declares (`technology: SVG, Bun serve` renders as one chip per
+declares (`groma.technology: SVG, Bun serve` renders as one chip per
 comma-separated part), named TypeScript structure under Code, and exact
 authored source references with file measurements under Files. Code follows
 the authored file order. It includes exported and module-private top-level
@@ -107,8 +107,8 @@ semantic sheet without moving its cells. The grid itself runs to the edge of
 the map pane at any zoom. One strong outer frame defines the band;
 its small compass scales with the sheet and keeps north on the grid's up-right
 axis, so the actors island is due west. A title plate in the band shows the
-project name and up to three lines of the Markdown description from
-`groma/README.md`. It fits its width to lines up to 80 characters; longer
+project title and up to three lines of the Markdown body overview from
+`groma/project.md`. It fits its width to lines up to 80 characters; longer
 content remains in the editor instead of growing the plate. A compact boxed
 pencil sits inside its lower corner. Small
 unlabeled calibration ticks line its two front edges.
@@ -273,9 +273,9 @@ the details pane closes. Click the boxed isometric pencil in the title plate to
 open the upright project-profile editor beside it. Its bounded Write view keeps
 long Markdown scrollable, and Preview renders it through Comark's sanitized HTML renderer. The
 title plate projects the same parsed Markdown semantics onto the isometric sheet.
-Saving asks the web host to update only
-`groma/README.md`; the published world event repaints every open map without a
-browser reload.
+Saving asks the web host to update the standard title and optional concise
+description plus the Markdown body overview in `groma/project.md`; the
+published world event repaints every open map without a browser reload.
 Backlog work is loaded from one task-list summary and shows as pins. Every
 configured task, including terminal history, puts one pin per assignee on the
 element the task touched last: the element whose code holds the task's newest

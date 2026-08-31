@@ -12,7 +12,7 @@ const sheet: SheetScene = {
     key: 'system',
     kind: 'system',
     name: 'System',
-    element: { representationId: 'observed:system', id: 'system', name: 'System', origin: 'observed' },
+    element: { representationId: 'observed:system', id: 'system', title: 'System', origin: 'observed' },
     rect: { gx: 3, gy: 3, w: 7, d: 7 },
   }],
   zones: [],
@@ -20,7 +20,7 @@ const sheet: SheetScene = {
   buildings: [{
     representationId: 'observed:component',
     id: 'component',
-    name: 'Component',
+    title: 'Component',
     origin: 'observed',
     kind: 'component',
     external: false,
@@ -43,9 +43,9 @@ const sheet: SheetScene = {
 
 test.concurrent('camera focus fits task routes with context room', () => {
   const scene = projectScene(sheet, {
-    name: 'System',
-    description: 'System architecture.',
-    descriptionBlocks: [{ spans: [{ text: 'System architecture.', styles: [] }] }],
+    title: 'System',
+    overview: 'System architecture.',
+    overviewBlocks: [{ spans: [{ text: 'System architecture.', styles: [] }] }],
   })
   const viewport = { width: 800, height: 500 }
   const camera = fitHighlights(scene, ['observed:system', 'missing', 'observed:component'], viewport, 4)

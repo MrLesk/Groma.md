@@ -48,9 +48,19 @@ async function createLiveRepo(): Promise<string> {
   await writeTree(root, {
     'package.json': JSON.stringify({ name: 'shop', bin: { shop: 'src/cli.ts' } }),
     '.gitignore': 'node_modules/\n',
-    'groma/observed/README.md': '# Observed\n',
-    'groma/missing/README.md': '# Missing\n',
-    'groma/plans/README.md': '# Plans\n',
+    'groma/index.md': '---\nokf_version: "0.2"\n---\n',
+    'groma/project.md': `---
+type: Groma Project
+title: Shop architecture
+groma:
+  profile: architecture
+---
+
+Describes the shop used by live viewer tests.
+`,
+    'groma/observed/index.md': '# Observed\n',
+    'groma/missing/index.md': '# Missing\n',
+    'groma/plans/index.md': '# Plans\n',
     'src/cli.ts': "import { scan } from './scanner.ts'\nexport function run() {}\n",
     'src/scanner.ts': 'export function scan() {}\n',
   })
@@ -139,7 +149,7 @@ test.concurrent('groma view applies an architecture Markdown change without R', 
 
     const document = path.join(root, 'groma/observed/systems/shop/system.md')
     const markdown = await Bun.file(document).text()
-    await writeFile(document, markdown.replace('# Shop', '# Shopfront'))
+    await writeFile(document, markdown.replace('title: Shop', 'title: Shopfront'))
     await waitUntil(async () => {
       await setup.renderOnce()
       return /Shopfront/.test(setup.captureCharFrame())
@@ -169,7 +179,7 @@ test.concurrent('R reloads Markdown without scanning while the watch is running'
 
     const document = path.join(root, 'groma/observed/systems/shop/system.md')
     const markdown = await Bun.file(document).text()
-    await writeFile(document, markdown.replace('# Shop', '# Shopfront'))
+    await writeFile(document, markdown.replace('title: Shop', 'title: Shopfront'))
     setup.mockInput.pressKey('r')
     await app.refresh()
     await setup.renderOnce()

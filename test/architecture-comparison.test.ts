@@ -13,8 +13,8 @@ function system(id: string): ArchitectureElement {
   return {
     id,
     kind: 'system',
-    name: id,
-    description: `${id} system`,
+    title: id,
+    overview: `${id} system`,
     parentId: null,
     external: false,
     code: [],
@@ -49,18 +49,18 @@ function model(
   }
 }
 
-test('treats soft-wrapped descriptions as equivalent without hiding text changes', () => {
+test('treats soft-wrapped overviews as equivalent without hiding text changes', () => {
   const observedElement = {
     ...system('groma'),
-    description: 'Reports supported source without executing code.',
+    overview: 'Reports supported source without executing code.',
   }
   const softWrappedPlanElement = {
     ...observedElement,
-    description: 'Reports supported source without\nexecuting code.',
+    overview: 'Reports supported source without\nexecuting code.',
   }
   const changedPlanElement = {
     ...observedElement,
-    description: 'Reports generalized source without\nexecuting code.',
+    overview: 'Reports generalized source without\nexecuting code.',
   }
 
   const equivalent = compareArchitectureModels(
@@ -84,8 +84,8 @@ test('preserves both containment histories for a moved shared element', () => {
       ...system('moved-container'),
       id: 'moved-container',
       kind: 'container',
-      name: 'Moved container',
-      description: 'Moves between systems.',
+      title: 'Moved container',
+      overview: 'Moves between systems.',
       parentId: 'old-system',
       external: false,
     },
@@ -97,8 +97,8 @@ test('preserves both containment histories for a moved shared element', () => {
       ...system('moved-container'),
       id: 'moved-container',
       kind: 'container',
-      name: 'Moved container',
-      description: 'Moves between systems.',
+      title: 'Moved container',
+      overview: 'Moves between systems.',
       parentId: 'new-system',
       external: false,
     },
@@ -115,9 +115,9 @@ test('preserves both containment histories for a moved shared element', () => {
   assert.equal(moved.plannedParentId, 'new-system')
   assert.deepEqual(moved.comparisonMove, {
     observedParentId: 'old-system',
-    observedParentName: 'old-system',
+    observedParentTitle: 'old-system',
     plannedParentId: 'new-system',
-    plannedParentName: 'new-system',
+    plannedParentTitle: 'new-system',
   })
 })
 

@@ -4,9 +4,10 @@ Groma is this repo's architecture in Git: Markdown you can read, one C4 world
 you can walk. Solid boxes exist. Ghosts are next. A generated picture of the
 same repo is already out of date.
 
-The architecture Markdown remains useful even if you stop using Groma. People
-and agents change architecture records through Groma. The project profile in
-`groma/README.md` is user-owned and editable from the web map.
+The architecture Markdown remains useful even if you stop using Groma. It is
+an OKF v0.2 bundle with Groma's explicit architecture profile. People and
+agents change architecture records through Groma. The project profile in
+`groma/project.md` is user-owned and editable from the web map.
 
 ## Product promise
 
@@ -39,10 +40,12 @@ for input.
    built in; C# solution and project scans require a .NET 10 SDK.
 3. Change the architecture through Groma. New parts and required changes
    become plan ghosts: `groma create <name> --plan <plan-id> --kind <kind>
-   --description <prose>` (plus `--parent <id>` for a container or
-   component) authors a new part, and `groma edit <id> --plan <plan-id>`
-   restates an existing one. Explanations of an existing part stay on
-   that observed document: `groma edit <id> --description <prose>`.
+   --overview <markdown>` (plus `--parent <id>` for a container or component,
+   and optional `--description <text>`) authors a new part. `groma edit <id>
+   --plan <plan-id>` restates an existing one. Long explanations of an
+   existing part stay in that observed document's body: `groma edit <id>
+   --overview <markdown>`. The optional concise OKF description is edited
+   separately with `--description <text>`.
 4. `groma accept <id>`: apply the ghost once a scan has matched it. If
    none has, accept scans first and fails when the scan still does not
    match. A scan never accepts a ghost on its own.

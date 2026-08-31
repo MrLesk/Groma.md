@@ -2,7 +2,8 @@
 
 Groma keeps architecture in Git as Markdown you can read and one C4 world you
 can walk. Solid boxes exist. Ghosts are next. Groma writes architecture
-records; the project profile in `groma/README.md` belongs to the project owner.
+records as a strict OKF v0.2 application profile; the project context in
+`groma/project.md` belongs to the project owner.
 
 ## See
 
@@ -15,6 +16,7 @@ instructions` prints the shipped workflow guide.
 - [Scanners](scanners/index.md)
 - [Viewers](viewers/index.md)
 - [Web viewer and live work](viewers/web/index.md)
+- [Architecture Markdown contract](component-markdown.md)
 - [Agent instructions for curating a scan](agent-instructions/index.md)
 
 ## Change and accept

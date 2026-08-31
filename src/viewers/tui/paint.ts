@@ -139,12 +139,12 @@ export function paintWorld(
     })
   }
   const litCommand = world.relationships.find(item => item.id === options.lit.id)
-  const names = new Map(world.elements.map(item => [item.representationId, item.name]))
-  const nameOf = (id: string): string => names.get(id) ?? id
+  const titles = new Map(world.elements.map(item => [item.representationId, item.title]))
+  const titleOf = (id: string): string => titles.get(id) ?? id
   const actionTitle = litCommand === undefined
     ? undefined
     : step === undefined
-      ? actionCaption(litCommand, true, nameOf).title
+      ? actionCaption(litCommand, true, titleOf).title
       : `leg ${step.index + 1}/${step.total} · ${flowEndpointLabel(step.source)}`
         + ` → ${flowEndpointLabel(step.target)} · ${step.description}`
   const system = world.elements.find(element =>
@@ -166,7 +166,7 @@ export function paintWorld(
     }).length > 0,
     system === undefined
       ? undefined
-      : `${system.name} · ${commands.length} flows · ${world.elements.length} elements`
+      : `${system.title} · ${commands.length} flows · ${world.elements.length} elements`
         + (options.workFocus === undefined ? '' : ' · Work'),
   )
 }
@@ -175,6 +175,6 @@ function searchLine(search: SearchState): string {
   const match = search.matches[search.index]
   const position = match === undefined
     ? search.query.trim().length === 0 ? '' : 'no matches'
-    : `${search.index + 1} of ${search.matches.length} · ${match.name}`
+    : `${search.index + 1} of ${search.matches.length} · ${match.title}`
   return `/ ${search.query}▏  ${position}   ↑↓ next   enter keep   esc back`
 }

@@ -26,8 +26,8 @@ function element(
     representationId: id,
     id,
     kind,
-    name: extra.name ?? id,
-    description: extra.description ?? '',
+    title: extra.title ?? id,
+    overview: extra.overview ?? '',
     parent,
     children,
     external: extra.external ?? false,
@@ -44,7 +44,7 @@ function world(): ArchitectureWorld {
     groups: [],
     elements: [
       element('groma', 'system', null, ['core', 'web'], {
-        description: 'this repo',
+        overview: 'this repo',
         bounds: { x: 20, y: 0, width: 60, height: 40 },
       }),
       element('git', 'system', null, [], {
@@ -83,15 +83,15 @@ test.concurrent('details list children, promoted peers, and files', () => {
   const groma = inspectDetails(fixture.elements[0]!, fixture)
   expect(groma.kindLabel).toBe('System')
   expect(groma.origin).toBe('observed')
-  expect(groma.description).toBe('this repo')
-  expect(groma.children.map(child => child.name)).toEqual(['core', 'web'])
+  expect(groma.overview).toBe('this repo')
+  expect(groma.children.map(child => child.title)).toEqual(['core', 'web'])
   expect(groma.relationships).toEqual([])
 
   const core = inspectDetails(fixture.elements[2]!, fixture)
   expect(core.relationships).toEqual([{
     outgoing: true,
     peerId: 'web',
-    peerName: 'web',
+    peerTitle: 'web',
     peerKind: 'container',
     peerExternal: false,
     description: 'supplies positions',
@@ -115,7 +115,7 @@ test.concurrent('a declared technology becomes chips; none stays empty', () => {
 
 test.concurrent('the tabs split meaning from build evidence', () => {
   expect(tabSections('what')).toEqual([
-    'description',
+    'overview',
     'relationships',
     'commands',
     'flowsThrough',

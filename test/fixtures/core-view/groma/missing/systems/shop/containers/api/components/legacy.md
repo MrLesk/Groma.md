@@ -1,13 +1,14 @@
 ---
-id: legacy
-kind: component
-parent: api
-code:
-  - scanner: typescript
-    file: src/legacy.ts
+type: C4 Component
+title: Legacy ordering
+status: stable
+groma:
+  id: legacy
+  parent: api
+  code:
+    - scanner: typescript
+      file: src/legacy.ts
 ---
-
-# Legacy ordering
 
 Retains the last known legacy ordering responsibility.
 

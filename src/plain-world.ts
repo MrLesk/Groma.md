@@ -90,7 +90,7 @@ function countLine(elements: readonly AnnotatedElement[]): string {
 }
 
 function headerTokens(element: AnnotatedElement): string[] {
-  const tokens = [element.id, element.kind, element.name]
+  const tokens = [element.id, element.kind, element.title]
   if (element.external) tokens.push('external')
   if (element.origin === 'planned' && element.plan !== undefined) {
     tokens.push(`planned:${element.plan}`)
@@ -123,6 +123,63 @@ function planOutcomes(revisions: readonly RevisionRecord[]): PlanOutcome[] {
   })
 }
 
+function childrenByArchitectureId(
+  winners: readonly AnnotatedElement[],
+  byRepresentation: Map<string, AnnotatedElement>,
+): Map<string | null, AnnotatedElement[]> {
+  const children = new Map<string | null, AnnotatedElement[]>()
+  for (const element of winners) {
+    const parentId = parentArchitectureId(element, byRepresentation)
+    const siblings = children.get(parentId) ?? []
+    siblings.push(element)
+    children.set(parentId, siblings)
+  }
+  for (const [parentId, siblings] of children) {
+    siblings.sort((left, right) => parentId === null
+      ? rootRank(left) - rootRank(right) || compareIds(left.id, right.id)
+      : compareIds(left.id, right.id))
+  }
+  return children
+}
+
+function emitElement(
+  lines: string[],
+  element: AnnotatedElement,
+  depth: number,
+  children: Map<string | null, AnnotatedElement[]>,
+  relationships: readonly AnnotatedRelationship[],
+  byRepresentation: Map<string, AnnotatedElement>,
+): void {
+  const indent = '  '.repeat(depth)
+  const bodyIndent = '  '.repeat(depth + 1)
+  lines.push(`${indent}${headerTokens(element).join('  ')}`)
+  if (element.overview !== '') lines.push(`${bodyIndent}${element.overview}`)
+  for (const edge of outgoingEdges(element, relationships, byRepresentation)) {
+    lines.push(`${bodyIndent}->  ${edge.description}  ${edge.targetId}`)
+  }
+  for (const child of children.get(element.id) ?? []) {
+    emitElement(lines, child, depth + 1, children, relationships, byRepresentation)
+  }
+}
+
+function appendPlans(
+  lines: string[],
+  plans: readonly PlanOutcome[],
+  winners: readonly AnnotatedElement[],
+): void {
+  if (plans.length === 0) return
+  if (lines.length > 0) lines.push('')
+  lines.push('plans')
+  for (const plan of plans) {
+    lines.push(plan.id)
+    if (plan.outcome !== '') lines.push(`  ${plan.outcome}`)
+    const ghosts = winners
+      .filter(element => element.origin === 'planned' && element.plan === plan.id)
+      .sort((left, right) => compareIds(left.id, right.id))
+    for (const ghost of ghosts) lines.push(`  ${ghost.id}`)
+  }
+}
+
 export function formatPlainWorld(
   model: AnnotatedArchitectureModel,
   plans: readonly PlanOutcome[] = [],
@@ -131,50 +188,12 @@ export function formatPlainWorld(
   const byRepresentation = new Map(
     model.elements.map(element => [element.representationId, element]),
   )
-  const childrenOf = new Map<string | null, AnnotatedElement[]>()
-  for (const element of winners) {
-    const parentId = parentArchitectureId(element, byRepresentation)
-    const siblings = childrenOf.get(parentId) ?? []
-    siblings.push(element)
-    childrenOf.set(parentId, siblings)
-  }
-  for (const [parentId, siblings] of childrenOf) {
-    siblings.sort((left, right) => {
-      if (parentId === null) {
-        return rootRank(left) - rootRank(right) || compareIds(left.id, right.id)
-      }
-      return compareIds(left.id, right.id)
-    })
-  }
-
+  const children = childrenByArchitectureId(winners, byRepresentation)
   const lines: string[] = []
-
-  function emit(element: AnnotatedElement, depth: number): void {
-    const indent = '  '.repeat(depth)
-    const bodyIndent = '  '.repeat(depth + 1)
-    lines.push(`${indent}${headerTokens(element).join('  ')}`)
-    if (element.description !== '') lines.push(`${bodyIndent}${element.description}`)
-    for (const edge of outgoingEdges(element, model.relationships, byRepresentation)) {
-      lines.push(`${bodyIndent}->  ${edge.description}  ${edge.targetId}`)
-    }
-    for (const child of childrenOf.get(element.id) ?? []) emit(child, depth + 1)
+  for (const root of children.get(null) ?? []) {
+    emitElement(lines, root, 0, children, model.relationships, byRepresentation)
   }
-
-  for (const root of childrenOf.get(null) ?? []) emit(root, 0)
-
-  if (plans.length > 0) {
-    if (lines.length > 0) lines.push('')
-    lines.push('plans')
-    for (const plan of plans) {
-      lines.push(plan.id)
-      if (plan.outcome !== '') lines.push(`  ${plan.outcome}`)
-      const ghosts = winners
-        .filter(element => element.origin === 'planned' && element.plan === plan.id)
-        .sort((left, right) => compareIds(left.id, right.id))
-      for (const ghost of ghosts) lines.push(`  ${ghost.id}`)
-    }
-  }
-
+  appendPlans(lines, plans, winners)
   if (lines.length > 0) lines.push('')
   lines.push(countLine(winners))
   return lines.join('\n')
@@ -205,7 +224,7 @@ function formatElementRecord(
   if (file !== undefined) lines.push(`code: ${file}`)
 
   const sections = [lines.join('\n')]
-  if (element.description !== '') sections.push(element.description)
+  if (element.overview !== '') sections.push(element.overview)
   const edges = outgoingEdges(element, model.relationships, byRepresentation)
   if (edges.length > 0) {
     sections.push(

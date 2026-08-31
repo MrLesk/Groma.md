@@ -6,21 +6,15 @@ import test from 'node:test'
 import type { TestContext } from 'node:test'
 import { fileURLToPath } from 'node:url'
 
-import { validateRepository, validateRevision } from '../scripts/validate-architecture.ts'
+import { validateRepository } from '../scripts/validate-architecture.ts'
 
-const fixtureRoot = path.resolve(
-  path.dirname(fileURLToPath(import.meta.url)),
-  'fixtures',
-  'validate',
-)
-const observedFixture = path.join(fixtureRoot, 'groma', 'observed')
+const fixtureRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), 'fixtures', 'validate')
 
-async function copyObserved(t: TestContext): Promise<string> {
+async function copyPackage(t: TestContext): Promise<string> {
   const temporaryRoot = await mkdtemp(path.join(os.tmpdir(), 'groma-validation-'))
-  const revisionRoot = path.join(temporaryRoot, 'revision')
-  await cp(observedFixture, revisionRoot, { recursive: true })
+  await cp(fixtureRoot, temporaryRoot, { recursive: true })
   t.after(() => rm(temporaryRoot, { recursive: true, force: true }))
-  return revisionRoot
+  return temporaryRoot
 }
 
 async function replaceInFile(file: string, search: string, replacement: string): Promise<void> {
@@ -29,77 +23,68 @@ async function replaceInFile(file: string, search: string, replacement: string):
   await writeFile(file, source.replace(search, replacement))
 }
 
-test('a fixture with each C4 kind and a relationship validates', async () => {
+test('a marked OKF profile validates every C4 kind and ignores an ordinary OKF concept', async () => {
   const results = await validateRepository(fixtureRoot)
   const kinds = new Set(results[0]?.elements.map(element => element.kind))
 
-  assert.deepEqual(
-    results.map(result => path.basename(result.revisionRoot)),
-    ['observed', 'next'],
-  )
-  assert.deepEqual(results.map(result => result.elementCount), [5, 1])
-  assert.ok(kinds.has('actor'))
-  assert.ok(kinds.has('system'))
-  assert.ok(kinds.has('container'))
-  assert.ok(kinds.has('component'))
-  assert.ok((results[0]?.relationshipCount ?? 0) >= 1)
+  assert.deepEqual(results.map(result => path.basename(result.revisionRoot)), [
+    'observed',
+    'missing',
+    'next',
+  ])
+  assert.deepEqual(results.map(result => result.elementCount), [5, 1, 1])
+  assert.deepEqual(kinds, new Set(['actor', 'system', 'container', 'component']))
+  assert.equal(results[0]?.relationshipCount, 2)
 })
 
-test('a container parent must be a known system', async t => {
-  const revisionRoot = await copyObserved(t)
+test('a generic OKF package is rejected before architecture validation', async t => {
+  const repositoryRoot = await copyPackage(t)
   await replaceInFile(
-    path.join(revisionRoot, 'systems', 'shop', 'containers', 'api', 'container.md'),
+    path.join(repositoryRoot, 'groma', 'project.md'),
+    'type: Groma Project',
+    'type: Project',
+  )
+
+  await assert.rejects(validateRepository(repositoryRoot), /type must be "Groma Project"/)
+})
+
+test('the root index contains only the pinned OKF declaration', async t => {
+  const repositoryRoot = await copyPackage(t)
+  await replaceInFile(
+    path.join(repositoryRoot, 'groma', 'index.md'),
+    'okf_version: "0.2"',
+    'okf_version: "0.2"\ngroma: architecture',
+  )
+
+  await assert.rejects(validateRepository(repositoryRoot), /must contain only okf_version/)
+})
+
+test('canonical C4 containment remains strict', async t => {
+  const repositoryRoot = await copyPackage(t)
+  await replaceInFile(
+    path.join(repositoryRoot, 'groma', 'observed', 'systems', 'shop', 'containers', 'api', 'container.md'),
     'parent: shop',
     'parent: missing-system',
   )
 
-  await assert.rejects(
-    validateRevision(revisionRoot),
-    /unknown parent id "missing-system"/,
-  )
+  await assert.rejects(validateRepository(repositoryRoot), /unknown parent id "missing-system"/)
 })
 
-test('technology is optional non-empty frontmatter', async t => {
-  const revisionRoot = await copyObserved(t)
-  const container = path.join(
-    revisionRoot,
-    'systems',
-    'shop',
-    'containers',
-    'api',
-    'container.md',
-  )
-  await replaceInFile(container, 'parent: shop', 'parent: shop\ntechnology: HTTP')
-  await validateRevision(revisionRoot)
-  await replaceInFile(container, 'technology: HTTP', 'technology: ""')
-  await assert.rejects(
-    validateRevision(revisionRoot),
-    /technology must be a non-empty string when present/,
-  )
+test('canonical relationship targets must resolve even when generic links do not', async t => {
+  const repositoryRoot = await copyPackage(t)
+  const shop = path.join(repositoryRoot, 'groma', 'observed', 'systems', 'shop', 'system.md')
+  await replaceInFile(shop, '../git/system.md', '../git/missing.md')
+
+  await assert.rejects(validateRepository(repositoryRoot), /does not resolve in this revision/)
 })
 
-test('a completed plan may contain only its README', async t => {
-  const revisionRoot = await mkdtemp(path.join(os.tmpdir(), 'groma-complete-plan-'))
-  t.after(() => rm(revisionRoot, { recursive: true, force: true }))
-  await writeFile(revisionRoot + '/README.md', '---\nid: done\n---\n\n# Done\n')
-
-  await assert.rejects(validateRevision(revisionRoot), /contains no element documents/)
-  assert.equal(
-    (await validateRevision(revisionRoot, { allowEmpty: true })).elementCount,
-    0,
-  )
-})
-
-test('a relationship target must resolve', async t => {
-  const revisionRoot = await copyObserved(t)
-  await replaceInFile(
-    path.join(revisionRoot, 'systems', 'shop', 'system.md'),
-    '../git/system.md',
-    '../git/missing.md',
-  )
+test('a Groma relationship table keeps its canonical columns', async t => {
+  const repositoryRoot = await copyPackage(t)
+  const shop = path.join(repositoryRoot, 'groma', 'observed', 'systems', 'shop', 'system.md')
+  await replaceInFile(shop, '| Target | Description | Technology |', '| Target | Detail | Technology |')
 
   await assert.rejects(
-    validateRevision(revisionRoot),
-    /broken relationship link "\.\.\/git\/missing\.md"/,
+    validateRepository(repositoryRoot),
+    /relationship table must use columns "Target \| Description \| Technology"/,
   )
 })

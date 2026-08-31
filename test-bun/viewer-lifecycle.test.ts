@@ -101,7 +101,7 @@ test.concurrent('R reloads the world from core and keeps the current view', asyn
     const markdown = await readFile(document, 'utf8')
     await writeFile(
       document,
-      markdown.replace('# Legacy ordering', '# Legacy queue'),
+      markdown.replace('title: Legacy ordering', 'title: Legacy queue'),
     )
 
     setup.mockInput.pressKey('r')

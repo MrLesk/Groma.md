@@ -26,7 +26,7 @@ export function paintSource(
   back.addEventListener('click', onBack)
   const context = document.createElement('span')
   context.className = 'file-context'
-  context.textContent = `Component · ${component.name}`
+  context.textContent = `Component · ${component.title}`
   const sourceLines = payload?.source.replace(/\r\n/g, '\n').split('\n')
   if (sourceLines?.at(-1) === '') sourceLines.pop()
   const facts = document.createElement('span')

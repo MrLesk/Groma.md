@@ -169,7 +169,7 @@ export function paintTaskSummary(
       const link = document.createElement('button')
       link.type = 'button'
       link.className = 'link'
-      link.append(marked(element.kind, element.external, element.name))
+      link.append(marked(element.kind, element.external, element.title))
       link.addEventListener('click', event => onSelect(element.representationId, event.shiftKey))
       row.append(link)
     }

@@ -57,14 +57,14 @@ export function flowRowState(
 export function flowRow(
   row: FlowRowData,
   active: readonly FlowRef[],
-  actorName: (actorId: string) => string | undefined,
+  actorTitle: (actorId: string) => string | undefined,
   onToggle: (flow: FlowRef) => void,
 ): HTMLButtonElement {
   const state = flowRowState(row.flow, active)
   const shownFlow = state.toggleTarget
   const scope = shownFlow.actorId === undefined
     ? 'Global'
-    : `From ${actorName(shownFlow.actorId) ?? shownFlow.actorId}`
+    : `From ${actorTitle(shownFlow.actorId) ?? shownFlow.actorId}`
 
   const button = document.createElement('button')
   button.type = 'button'

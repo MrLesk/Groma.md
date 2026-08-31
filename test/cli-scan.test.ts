@@ -53,9 +53,19 @@ async function createScanRepo(t: TestContext): Promise<string> {
   await writeTree(root, {
     'package.json': JSON.stringify({ name: 'shop', bin: { shop: 'src/cli.ts' } }),
     '.gitignore': 'node_modules/\n',
-    'groma/observed/README.md': '# Observed\n',
-    'groma/missing/README.md': '# Missing\n',
-    'groma/plans/README.md': '# Plans\n',
+    'groma/index.md': '---\nokf_version: "0.2"\n---\n',
+    'groma/project.md': `---
+type: Groma Project
+title: Shop architecture
+groma:
+  profile: architecture
+---
+
+Describes the scanned shop used by CLI tests.
+`,
+    'groma/observed/index.md': '# Observed\n',
+    'groma/missing/index.md': '# Missing\n',
+    'groma/plans/index.md': '# Plans\n',
     'src/cli.ts': "import { scan } from './scanner.ts'\nexport function run() {}\n",
     'src/scanner.ts': 'export function scan() {}\n',
   })

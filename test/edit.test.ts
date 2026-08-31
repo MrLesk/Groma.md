@@ -23,16 +23,17 @@ const plannedOrdersPath =
   'groma/plans/next/systems/shop/containers/api/components/orders.md'
 
 const observedOrders = `---
-id: orders
-kind: component
-parent: api
-code:
-  - scanner: typescript
-    file: src/orders.ts
-    symbol: placeOrder
+type: C4 Component
+title: Orders
+status: stable
+groma:
+  id: orders
+  parent: api
+  code:
+    - scanner: typescript
+      file: src/orders.ts
+      symbol: placeOrder
 ---
-
-# Orders
 
 Owns the order lifecycle.
 
@@ -44,16 +45,17 @@ Owns the order lifecycle.
 `
 
 const editedOrders = `---
-id: orders
-kind: component
-parent: api
-code:
-  - scanner: typescript
-    file: src/orders.ts
-    symbol: placeOrder
+type: C4 Component
+title: Orders
+status: stable
+groma:
+  id: orders
+  parent: api
+  code:
+    - scanner: typescript
+      file: src/orders.ts
+      symbol: placeOrder
 ---
-
-# Orders
 
 Places and tracks customer orders.
 
@@ -65,12 +67,13 @@ Places and tracks customer orders.
 `
 
 const restatedOrders = `---
-id: orders
-kind: component
-parent: api
+type: C4 Component
+title: Orders
+status: draft
+groma:
+  id: orders
+  parent: api
 ---
-
-# Orders
 
 Places an order through a guided checkout.
 
@@ -82,12 +85,13 @@ Places an order through a guided checkout.
 `
 
 const copiedOrders = `---
-id: orders
-kind: component
-parent: api
+type: C4 Component
+title: Orders
+status: draft
+groma:
+  id: orders
+  parent: api
 ---
-
-# Orders
 
 Owns the order lifecycle.
 
@@ -98,18 +102,9 @@ Owns the order lifecycle.
 | [Stock](stock.md) | talks to | Function call |
 `
 
-const approvedPlanReadme = `---
-id: next
----
+const approvedPlanIndex = '# Next\n'
 
-# Next
-`
-
-const approvedOutcome = `---
-id: next
----
-
-# Next
+const approvedOutcome = `# Next
 
 ## Outcome
 
@@ -179,12 +174,12 @@ function readRelative(root: string, relative: string): Promise<string> {
   return readFile(path.join(root, ...relative.split('/')), 'utf8')
 }
 
-test('groma edit element --description replaces only the owning lead prose', async t => {
+test('groma edit element --overview replaces only the owning lead prose', async t => {
   const root = await createRepo(t)
   const result = await groma(root, [
     'edit',
     'orders',
-    '--description',
+    '--overview',
     'Places and tracks customer orders.',
   ])
 
@@ -194,14 +189,14 @@ test('groma edit element --description replaces only the owning lead prose', asy
   assert.equal(await readRelative(root, observedOrdersPath), editedOrders)
 })
 
-test('groma edit element --plan restates the id without code and creates the plan README', async t => {
+test('groma edit element --plan restates the id without code and creates the plan index', async t => {
   const root = await createRepo(t)
   const result = await groma(root, [
     'edit',
     'orders',
     '--plan',
     'next',
-    '--description',
+    '--overview',
     'Places an order through a guided checkout.',
   ])
   const world = await groma(root, ['view', '--plain'])
@@ -211,62 +206,53 @@ test('groma edit element --plan restates the id without code and creates the pla
   assert.equal(await readRelative(root, plannedOrdersPath), restatedOrders)
   assert.equal(await readRelative(root, observedOrdersPath), observedOrders)
   assert.equal(
-    await readRelative(root, 'groma/plans/next/README.md'),
-    approvedPlanReadme,
+    await readRelative(root, 'groma/plans/next/index.md'),
+    approvedPlanIndex,
   )
   assert.match(world.stdout, /orders {2}component {2}Orders {2}planned:next/)
 
   const existingRoot = await createRepo(t)
-  const customReadme = `---
-id: next
----
-
-# Custom heading
-`
-  await writeTree(existingRoot, { 'groma/plans/next/README.md': customReadme })
+  const customIndex = '# Custom heading\n'
+  await writeTree(existingRoot, { 'groma/plans/next/index.md': customIndex })
   const existing = await groma(existingRoot, [
     'edit',
     'orders',
     '--plan',
     'next',
-    '--description',
+    '--overview',
     'Places an order through a guided checkout.',
   ])
   assert.equal(existing.code, 0, existing.stderr)
   assert.equal(
-    await readRelative(existingRoot, 'groma/plans/next/README.md'),
-    customReadme,
+    await readRelative(existingRoot, 'groma/plans/next/index.md'),
+    customIndex,
   )
 })
 
-test('groma edit plan --description sets the plan README Outcome body', async t => {
+test('groma edit plan --overview sets the plan index Outcome body', async t => {
   const root = await createRepo(t)
-  await writeTree(root, { 'groma/plans/next/README.md': approvedPlanReadme })
+  await writeTree(root, { 'groma/plans/next/index.md': approvedPlanIndex })
   const created = await groma(root, [
     'edit',
     'next',
-    '--description',
+    '--overview',
     'The next release adds stock checks.',
   ])
 
   assert.equal(created.code, 0, created.stderr)
   assert.equal(created.stdout, 'ok\nnext\n')
-  assert.equal(await readRelative(root, 'groma/plans/next/README.md'), approvedOutcome)
+  assert.equal(await readRelative(root, 'groma/plans/next/index.md'), approvedOutcome)
 
   const replaced = await groma(root, [
     'edit',
     'next',
-    '--description',
+    '--overview',
     'Stock checks ship next.',
   ])
   assert.equal(replaced.code, 0, replaced.stderr)
   assert.equal(
-    await readRelative(root, 'groma/plans/next/README.md'),
-    `---
-id: next
----
-
-# Next
+    await readRelative(root, 'groma/plans/next/index.md'),
+    `# Next
 
 ## Outcome
 
@@ -275,7 +261,7 @@ Stock checks ship next.
   )
 })
 
-test('a restated ghost copies current lead when --description is omitted and later edits the planned owner', async t => {
+test('a restated ghost copies current overview when --overview is omitted and later edits the planned owner', async t => {
   const root = await createRepo(t)
   const copied = await groma(root, ['edit', 'orders', '--plan', 'next'])
   assert.equal(copied.code, 0, copied.stderr)
@@ -291,7 +277,7 @@ test('a restated ghost copies current lead when --description is omitted and lat
     'orders',
     '--plan',
     'next',
-    '--description',
+    '--overview',
     'Places an order through a guided checkout.',
   ])
   assert.equal(restated.code, 0, restated.stderr)
@@ -301,7 +287,7 @@ test('a restated ghost copies current lead when --description is omitted and lat
   const owned = await groma(root, [
     'edit',
     'orders',
-    '--description',
+    '--overview',
     'Places and tracks customer orders.',
   ])
   assert.equal(owned.code, 0, owned.stderr)
@@ -315,16 +301,11 @@ test('a restated ghost copies current lead when --description is omitted and lat
   assert.equal(await readRelative(root, observedOrdersPath), observedOrders)
 })
 
-test('unknown id, missing --description, --plan on a plan, non-kebab plan id, and a claimed id fail without writes', async t => {
+test('unknown id, missing --overview, --plan on a plan, non-kebab plan id, and a claimed id fail without writes', async t => {
   const root = await createRepo(t)
   await writeTree(root, {
-    'groma/plans/next/README.md': approvedPlanReadme,
-    'groma/plans/other/README.md': `---
-id: other
----
-
-# Other
-`,
+    'groma/plans/next/index.md': approvedPlanIndex,
+    'groma/plans/other/index.md': '# Other\n',
     'groma/plans/other/systems/shop/containers/api/components/orders.md': copiedOrders,
   })
   const before = await readTree(root)
@@ -332,37 +313,37 @@ id: other
   const cases: Array<{ name: string, args: string[], pattern: RegExp }> = [
     {
       name: 'unknown id',
-      args: ['edit', 'nope', '--description', 'Missing.'],
+      args: ['edit', 'nope', '--overview', 'Missing.'],
       pattern: /unknown id "nope"/,
     },
     {
-      name: 'unknown id without description',
+      name: 'unknown id without overview',
       args: ['edit', 'nope'],
       pattern: /unknown id "nope"/,
     },
     {
-      name: 'missing description on an element',
+      name: 'missing overview on an element',
       args: ['edit', 'orders'],
-      pattern: /--description/,
+      pattern: /--overview/,
     },
     {
-      name: 'missing description on a plan',
+      name: 'missing overview on a plan',
       args: ['edit', 'next'],
-      pattern: /--description/,
+      pattern: /--overview/,
     },
     {
       name: '--plan on a plan id',
-      args: ['edit', 'next', '--plan', 'other', '--description', 'Nope.'],
+      args: ['edit', 'next', '--plan', 'other', '--overview', 'Nope.'],
       pattern: /--plan is only valid on an element/,
     },
     {
       name: 'non-kebab plan id',
-      args: ['edit', 'stock', '--plan', 'Next', '--description', 'Nope.'],
+      args: ['edit', 'stock', '--plan', 'Next', '--overview', 'Nope.'],
       pattern: /plan id must be lowercase kebab-case/,
     },
     {
       name: 'id claimed by another plan',
-      args: ['edit', 'orders', '--plan', 'next', '--description', 'Nope.'],
+      args: ['edit', 'orders', '--plan', 'next', '--overview', 'Nope.'],
       pattern: /already claimed by other/,
     },
   ]

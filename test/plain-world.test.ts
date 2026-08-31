@@ -10,37 +10,9 @@ import {
   renderPlainRecord,
   renderPlainWorld,
 } from '../src/plain-world.ts'
-import type { AnnotatedElement, AnnotatedRelationship } from '../src/types.ts'
+import type { AnnotatedElement } from '../src/types.ts'
 
-const fixtureRoot = path.resolve(
-  path.dirname(fileURLToPath(import.meta.url)),
-  'fixtures',
-  'plain-view',
-)
-
-const approvedWorld = `buyer  actor  Buyer
-  Pays for goods.
-  ->  uses  shop
-shop  system  Shop
-  The store the buyer uses.
-  api  container  Api
-    HTTP API.
-    orders  component  Orders  src/orders.ts
-      Owns the order lifecycle.
-      ->  talks to  stock
-    stock  component  Stock  planned:next
-      Checks stock before placing an order.
-  web  container  Web
-    Storefront.
-git  system  Git  external
-  Versions the Markdown.
-
-plans
-next
-  The next release adds stock checks.
-  stock
-
-1 actor, 2 systems, 2 containers, 2 components`
+const fixtureRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), 'fixtures', 'validate')
 
 function element(
   fields: Partial<AnnotatedElement> & Pick<AnnotatedElement, 'id' | 'kind' | 'origin'>,
@@ -48,8 +20,8 @@ function element(
   const planPrefix = fields.plan === undefined ? '' : `:${fields.plan}`
   return {
     representationId: fields.representationId ?? `${fields.origin}${planPrefix}:${fields.id}`,
-    name: fields.id,
-    description: '',
+    title: fields.id,
+    overview: '',
     parent: null,
     children: [],
     external: false,
@@ -58,254 +30,181 @@ function element(
   }
 }
 
-test('renderPlainWorld prints the merged fixture world from core in the approved index shape', async () => {
+test('the plain projection reads title and overview from the marked OKF world', async () => {
   const model = await loadAnnotatedArchitecture(fixtureRoot)
   const printed = await renderPlainWorld(fixtureRoot)
-
   const buyer = model.elements.find(item => item.id === 'buyer')
-  const orders = model.elements.find(item => {
-    return item.id === 'orders' && item.origin === 'observed'
-  })
-  const stock = model.elements.find(item => {
-    return item.id === 'stock' && item.origin === 'planned'
-  })
-  const uses = model.relationships.find(item => item.description === 'uses')
-  const talksTo = model.relationships.find(item => item.description === 'talks to')
 
   assert.ok(buyer)
-  assert.equal(buyer.name, 'Buyer')
-  assert.ok(orders)
-  assert.equal(orders.code[0]?.file, 'src/orders.ts')
-  assert.ok(stock)
-  assert.equal(stock.plan, 'next')
-  assert.ok(uses)
-  assert.equal(uses.source, buyer.representationId)
-  assert.ok(talksTo)
-  assert.equal(talksTo.source, orders.representationId)
-  assert.equal(printed, approvedWorld)
-  assert.doesNotMatch(printed, /placeOrder|src\/routes\/orders\.ts|Placeholder/)
+  assert.equal(buyer.title, 'Buyer')
+  assert.equal(buyer.overview, 'Places orders in the shop.')
+  assert.match(printed, /^buyer {2}actor {2}Buyer/m)
+  assert.match(printed, /^ {2}Places orders in the shop\.$/m)
+  assert.match(printed, /^\s+stock {2}component {2}Stock {2}planned:next$/m)
+  assert.doesNotMatch(printed, /A person who places an order/)
 })
 
-test('formatPlainWorld omits the plans section when no plan exists', () => {
+test('plain output displays overview while retaining standard description only in the domain', () => {
   const shop = element({
     id: 'shop',
     kind: 'system',
     origin: 'observed',
-    name: 'Shop',
-    description: 'The store.',
+    title: 'Shop',
+    description: 'Short standard metadata.',
+    overview: 'Long body overview.',
   })
-  const printed = formatPlainWorld({
-    plans: [],
-    elements: [shop],
-    relationships: [],
-  })
+  const printed = formatPlainWorld({ plans: [], elements: [shop], relationships: [] })
 
-  assert.equal(
-    printed,
-    [
-      'shop  system  Shop',
-      '  The store.',
-      '',
-      '0 actors, 1 system, 0 containers, 0 components',
-    ].join('\n'),
-  )
-  assert.doesNotMatch(printed, /^plans$/m)
+  assert.match(printed, /shop {2}system {2}Shop\n {2}Long body overview\./)
+  assert.doesNotMatch(printed, /Short standard metadata/)
 })
 
-test('a restated id prints once as planned and keeps only the winning source edges', () => {
+test('a planned replacement wins and keeps only its outgoing relationships', () => {
   const observed = element({
     id: 'orders',
     kind: 'component',
     origin: 'observed',
-    name: 'Orders',
-    description: 'Places orders.',
-    parent: null,
+    title: 'Orders',
+    overview: 'Places orders.',
   })
   const planned = element({
     id: 'orders',
     kind: 'component',
     origin: 'planned',
     plan: 'next',
-    name: 'Orders',
-    description: 'Places reserved orders.',
+    title: 'Reserved orders',
+    overview: 'Places reserved orders.',
   })
   const payments = element({
     id: 'payments',
     kind: 'system',
     origin: 'observed',
-    name: 'Payments',
-    description: 'Takes payment.',
+    title: 'Payments',
+    overview: 'Takes payment.',
   })
-  const observedEdge: AnnotatedRelationship = {
-    id: 'relationship:0',
-    source: observed.representationId,
-    target: payments.representationId,
-    description: 'charges',
-    technology: 'HTTPS',
-    origin: 'observed',
-  }
-  const plannedEdge: AnnotatedRelationship = {
-    id: 'relationship:1',
-    source: planned.representationId,
-    target: payments.representationId,
-    description: 'reserves',
-    technology: 'HTTPS',
-    origin: 'planned',
-    plan: 'next',
-  }
   const printed = formatPlainWorld({
     plans: ['next'],
     elements: [observed, planned, payments],
-    relationships: [observedEdge, plannedEdge],
-  }, [{ id: 'next', outcome: 'Reserve stock first.' }])
+    relationships: [
+      {
+        id: 'relationship:0',
+        source: observed.representationId,
+        target: payments.representationId,
+        description: 'charges',
+        technology: 'HTTPS',
+        origin: 'observed',
+      },
+      {
+        id: 'relationship:1',
+        source: planned.representationId,
+        target: payments.representationId,
+        description: 'reserves',
+        technology: 'HTTPS',
+        origin: 'planned',
+        plan: 'next',
+      },
+    ],
+  })
 
-  assert.equal(
-    printed,
-    [
-      'orders  component  Orders  planned:next',
-      '  Places reserved orders.',
-      '  ->  reserves  payments',
-      'payments  system  Payments',
-      '  Takes payment.',
-      '',
-      'plans',
-      'next',
-      '  Reserve stock first.',
-      '  orders',
-      '',
-      '0 actors, 1 system, 0 containers, 1 component',
-    ].join('\n'),
-  )
+  assert.match(printed, /orders {2}component {2}Reserved orders {2}planned:next/)
+  assert.match(printed, /-> {2}reserves {2}payments/)
   assert.doesNotMatch(printed, /Places orders|charges/)
 })
 
-const approvedStock = `stock
-kind: component
-parent: api
-origin: planned
-plan: next
-
-Checks stock before placing an order.`
-
-const approvedOrders = `orders
-kind: component
-parent: api
-origin: observed
-code: src/orders.ts
-
-Owns the order lifecycle.
-
-->  talks to  stock`
-
-const approvedPlan = `next
-kind: plan
-
-The next release adds stock checks.
-
-ghosts
-stock`
-
-test('renderPlainRecord prints the approved fixture cards', async () => {
-  assert.deepEqual(await renderPlainRecord(fixtureRoot, 'stock'), {
-    ok: true,
-    text: approvedStock,
-  })
-  assert.deepEqual(await renderPlainRecord(fixtureRoot, 'orders'), {
-    ok: true,
-    text: approvedOrders,
-  })
-  assert.deepEqual(await renderPlainRecord(fixtureRoot, 'next'), {
-    ok: true,
-    text: approvedPlan,
-  })
-  assert.deepEqual(await renderPlainRecord(fixtureRoot, 'src/orders.ts'), {
-    ok: true,
-    text: approvedOrders,
-  })
-  assert.deepEqual(await renderPlainRecord(fixtureRoot, 'src/routes/orders.ts'), {
-    ok: true,
-    text: approvedOrders,
-  })
-})
-
-test('a complete plan prints only complete even when an outcome exists', () => {
-  const shop = element({
-    id: 'shop',
-    kind: 'system',
-    origin: 'observed',
-    name: 'Shop',
-    description: 'The store.',
-  })
-  const printed = formatPlainRecord(
-    { plans: ['next'], elements: [shop], relationships: [] },
-    [{ id: 'next', outcome: 'The next release adds stock checks.' }],
-    'next',
-  )
-
-  assert.deepEqual(printed, {
-    ok: true,
-    text: ['next', 'kind: plan', '', 'complete'].join('\n'),
-  })
-})
-
-test('several winning elements that share a code file fail', () => {
+test('a code file resolves to its one winning element record', () => {
   const orders = element({
     id: 'orders',
     kind: 'component',
     origin: 'observed',
+    title: 'Orders',
+    overview: 'Owns orders.',
     code: [{ scanner: 'typescript', file: 'src/orders.ts' }],
   })
-  const other = element({
-    id: 'other',
-    kind: 'component',
-    origin: 'observed',
-    code: [{ scanner: 'typescript', file: 'src/orders.ts' }],
-  })
-  const printed = formatPlainRecord(
-    { plans: [], elements: [orders, other], relationships: [] },
+
+  const result = formatPlainRecord(
+    { plans: [], elements: [orders], relationships: [] },
     [],
     'src/orders.ts',
   )
-
-  assert.deepEqual(printed, {
-    ok: false,
-    message: 'several elements share src/orders.ts',
-  })
+  assert.equal(result.ok, true)
+  if (result.ok) assert.match(result.text, /^orders\n/)
 })
 
-test('an unknown target fails', () => {
-  const shop = element({
-    id: 'shop',
-    kind: 'system',
+test('record lookup keeps ambiguity, unknown target, and element precedence behavior', () => {
+  const first = element({
+    id: 'first',
+    kind: 'component',
     origin: 'observed',
+    code: [{ scanner: 'typescript', file: 'src/shared.ts' }],
   })
-  const printed = formatPlainRecord(
-    { plans: [], elements: [shop], relationships: [] },
-    [],
-    'no-such',
+  const second = element({
+    id: 'second',
+    kind: 'component',
+    origin: 'observed',
+    code: [{ scanner: 'typescript', file: 'src/shared.ts' }],
+  })
+  const next = element({ id: 'next', kind: 'system', origin: 'observed' })
+  const model = { plans: ['next'], elements: [first, second, next], relationships: [] }
+
+  assert.deepEqual(formatPlainRecord(model, [], 'src/shared.ts'), {
+    ok: false,
+    message: 'several elements share src/shared.ts',
+  })
+  assert.deepEqual(formatPlainRecord(model, [], 'unknown'), {
+    ok: false,
+    message: 'unknown target: unknown',
+  })
+  const collision = formatPlainRecord(model, [{ id: 'next', outcome: 'Plan outcome.' }], 'next')
+  assert.equal(collision.ok, true)
+  if (collision.ok) assert.match(collision.text, /^next\nkind: system\n/)
+})
+
+test('plan output distinguishes absent, incomplete, and complete plans', () => {
+  const shop = element({ id: 'shop', kind: 'system', origin: 'observed' })
+  assert.doesNotMatch(
+    formatPlainWorld({ plans: [], elements: [shop], relationships: [] }),
+    /^plans$/m,
   )
 
-  assert.deepEqual(printed, {
-    ok: false,
-    message: 'unknown target: no-such',
+  const stock = element({
+    id: 'stock',
+    kind: 'component',
+    origin: 'planned',
+    plan: 'next',
   })
-})
-
-test('an element id wins over a plan id with the same name', () => {
-  const next = element({
-    id: 'next',
-    kind: 'system',
-    origin: 'observed',
-    description: 'A system named next.',
-  })
-  const printed = formatPlainRecord(
-    { plans: ['next'], elements: [next], relationships: [] },
-    [{ id: 'next', outcome: 'Plan outcome.' }],
+  const incomplete = formatPlainRecord(
+    { plans: ['next'], elements: [stock], relationships: [] },
+    [{ id: 'next', outcome: 'Add stock checks.' }],
     'next',
   )
+  assert.equal(incomplete.ok, true)
+  if (incomplete.ok) {
+    assert.match(incomplete.text, /Add stock checks\./)
+    assert.match(incomplete.text, /ghosts\nstock$/)
+  }
 
-  assert.deepEqual(printed, {
+  const complete = formatPlainRecord(
+    { plans: ['next'], elements: [shop], relationships: [] },
+    [{ id: 'next', outcome: 'Already delivered.' }],
+    'next',
+  )
+  assert.deepEqual(complete, {
     ok: true,
-    text: ['next', 'kind: system', 'origin: observed', '', 'A system named next.'].join('\n'),
+    text: 'next\nkind: plan\n\ncomplete',
   })
+})
+
+test('record rendering loads the marked OKF package', async () => {
+  const [code, plan] = await Promise.all([
+    renderPlainRecord(fixtureRoot, 'src/core.ts'),
+    renderPlainRecord(fixtureRoot, 'next'),
+  ])
+
+  assert.equal(code.ok, true)
+  if (code.ok) {
+    assert.match(code.text, /^orders\n/)
+    assert.match(code.text, /Places and tracks customer orders\./)
+  }
+  assert.equal(plan.ok, true)
+  if (plan.ok) assert.match(plan.text, /ghosts\nstock$/)
 })

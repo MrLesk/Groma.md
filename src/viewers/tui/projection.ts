@@ -24,7 +24,7 @@ export interface ProjectedMapItem {
   key: string
   representationId?: string
   id?: string
-  name: string
+  title: string
   kind: MapKind
   origin: Origin
   external: boolean
@@ -106,13 +106,13 @@ function elementItem(
   element: AnnotatedElement,
   shape: MapShape,
   bounds: Bounds,
-  lines = [item.name],
+  lines = [item.title],
 ): Omit<ProjectedMapItem, 'cellBounds'> {
   return {
     key: item.representationId,
     representationId: item.representationId,
     id: item.id,
-    name: item.name,
+    title: item.title,
     kind: element.kind,
     origin: item.origin,
     external: element.external,
@@ -136,7 +136,7 @@ function leafCards(
   const cards = (side: 'left' | 'right') => {
     const members = buildings
       .filter(building => side === 'left' ? building.kind === 'actor' : building.external)
-      .sort((left, right) => left.rect.gy - right.rect.gy || left.name.localeCompare(right.name))
+      .sort((left, right) => left.rect.gy - right.rect.gy || left.title.localeCompare(right.title))
     const heights = members.map(() => 5)
     const total = heights.reduce((sum, height) => sum + height, 0)
       + Math.max(0, members.length - 1) * 2
@@ -148,7 +148,7 @@ function leafCards(
     return members.flatMap(member => {
       const element = elements.get(member.representationId)
       if (!element) return []
-      const width = Math.max(15, member.name.length + 7)
+      const width = Math.max(15, member.title.length + 7)
       const bounds = {
         x: side === 'left' ? edge.left - width - 3 : edge.right + 3,
         y,
@@ -196,7 +196,7 @@ function rootItems(model: TerminalViewModel): Array<Omit<ProjectedMapItem, 'cell
     const raw = scaledRect(slab.rect, rootScale)
     const width = Math.max(
       raw.width,
-      slab.name.length + 7,
+      slab.title.length + 7,
       minimumSlabWidth.get(slab.representationId) ?? 0,
     )
     return element
@@ -214,7 +214,7 @@ function rootItems(model: TerminalViewModel): Array<Omit<ProjectedMapItem, 'cell
       : Math.max(parent.x + 1, Math.min(proposed.x, parent.x + parent.width - width - 1))
     return {
       key: zone.key,
-      name: zone.name,
+      title: zone.name,
       kind: 'group' as const,
       origin: 'observed' as const,
       external: false,
@@ -248,7 +248,7 @@ function componentItems(
     .filter(zone => zone.parent === container.representationId)
     .map(zone => ({
       key: zone.key,
-      name: zone.name,
+      title: zone.name,
       kind: 'group' as const,
       origin: 'observed' as const,
       external: false,

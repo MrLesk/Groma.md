@@ -1,9 +1,11 @@
 ---
-id: api
-kind: container
-parent: shop
+type: C4 Container
+title: Api
+status: stable
+groma:
+  id: api
+  parent: shop
+  technology: HTTP
 ---
-
-# Api
 
 Takes order requests.

@@ -22,7 +22,7 @@ import {
 export interface InspectedRelationship {
   outgoing: boolean
   peerId: string
-  peerName: string
+  peerTitle: string
   peerKind: C4Kind | null
   peerExternal: boolean
   description: string
@@ -30,16 +30,16 @@ export interface InspectedRelationship {
 
 export interface InspectedChild {
   id: string
-  name: string
+  title: string
   kind: C4Kind
   external: boolean
 }
 
 export interface Inspected {
-  name: string
+  title: string
   kindLabel: string
   origin: Origin
-  description: string
+  overview: string
   relationships: InspectedRelationship[]
   commands: FlowRowData[]
   flowsThrough: FlowRowData[]
@@ -68,7 +68,7 @@ export function detailsTabAfterWork(
 }
 
 type Section =
-  | 'description'
+  | 'overview'
   | 'relationships'
   | 'commands'
   | 'flowsThrough'
@@ -80,7 +80,7 @@ type Section =
 /** The pane's split: meaning on one tab, build evidence on the other. */
 export function tabSections(tab: Exclude<DetailsTab, 'tasks'>): Section[] {
   return tab === 'what'
-    ? ['description', 'relationships', 'commands', 'flowsThrough', 'children']
+    ? ['overview', 'relationships', 'commands', 'flowsThrough', 'children']
     : ['technology', 'code', 'files']
 }
 
@@ -112,7 +112,7 @@ export function inspectDetails(
     relationships.push({
       outgoing: ends.outgoing,
       peerId,
-      peerName: peer?.name ?? peerId,
+      peerTitle: peer?.title ?? peerId,
       peerKind: peer?.kind ?? null,
       peerExternal: peer?.external ?? false,
       description: relationship.description,
@@ -123,16 +123,16 @@ export function inspectDetails(
     const child = byId.get(childId)
     children.push({
       id: childId,
-      name: child?.name ?? childId,
+      title: child?.title ?? childId,
       kind: child?.kind ?? 'component',
       external: child?.external ?? false,
     })
   }
   return {
-    name: element.name,
+    title: element.title,
     kindLabel: kindLabel(element.kind, element.external),
     origin: element.origin,
-    description: element.description,
+    overview: element.overview,
     relationships,
     commands: commandRelationships.map(command => ({
       flow: { commandId: command.id, actorId: element.representationId },
@@ -296,7 +296,7 @@ interface DetailsOptions {
   onSelect: (id: string, additive: boolean) => void,
   onToggleFlow: (flow: FlowRef) => void,
   activeFlows: readonly FlowRef[]
-  actorName: (actorId: string) => string | undefined,
+  actorTitle: (actorId: string) => string | undefined,
   tab: DetailsTab
   onTab: (tab: DetailsTab) => void,
   code: readonly CodeFile[]
@@ -306,12 +306,12 @@ interface DetailsOptions {
 }
 
 export function paintDetails(host: HTMLElement, inspected: Inspected, options: DetailsOptions): void {
-  const { onSelect, onToggleFlow, activeFlows, actorName, tab, onTab, code, onSource, workGroups, onTask } = options
+  const { onSelect, onToggleFlow, activeFlows, actorTitle, tab, onTab, code, onSource, workGroups, onTask } = options
   const title = host.querySelector('h1')!
   const meta = host.querySelector('.meta')!
   const tabsHost = host.querySelector<HTMLElement>('.tabs')!
   const body = host.querySelector('.body')!
-  title.textContent = inspected.name
+  title.textContent = inspected.title
   meta.textContent = `${inspected.kindLabel} · ${inspected.origin}`
 
   const availableTabs = detailsTabs(inspected, workGroups)
@@ -333,11 +333,11 @@ export function paintDetails(host: HTMLElement, inspected: Inspected, options: D
 
   body.replaceChildren()
   const sections: Record<Section, () => void> = {
-    description: () => {
-      if (inspected.description === '') return
+    overview: () => {
+      if (inspected.overview === '') return
       const paragraph = document.createElement('p')
-      paragraph.className = 'description'
-      paragraph.textContent = inspected.description
+      paragraph.className = 'overview'
+      paragraph.textContent = inspected.overview
       body.append(paragraph)
     },
 
@@ -356,13 +356,13 @@ export function paintDetails(host: HTMLElement, inspected: Inspected, options: D
           : kindLabel(relationship.peerKind, relationship.peerExternal).toLowerCase()
         link.setAttribute(
           'aria-label',
-          `Select ${peerKind} ${relationship.peerName}: ${relationship.description}`,
+          `Select ${peerKind} ${relationship.peerTitle}: ${relationship.description}`,
         )
-        link.title = `Select ${relationship.peerName}: ${relationship.description}`
+        link.title = `Select ${relationship.peerTitle}: ${relationship.description}`
         const peer = marked(
           relationship.peerKind,
           relationship.peerExternal,
-          relationship.peerName,
+          relationship.peerTitle,
         )
         peer.classList.add('relationship-peer')
         const detail = document.createElement('span')
@@ -386,7 +386,7 @@ export function paintDetails(host: HTMLElement, inspected: Inspected, options: D
       const list = document.createElement('div')
       list.className = 'flow-list'
       for (const command of inspected.commands) {
-        list.append(flowRow(command, activeFlows, actorName, onToggleFlow))
+        list.append(flowRow(command, activeFlows, actorTitle, onToggleFlow))
       }
       body.append(list)
     },
@@ -397,7 +397,7 @@ export function paintDetails(host: HTMLElement, inspected: Inspected, options: D
       const list = document.createElement('div')
       list.className = 'flow-list'
       for (const flow of inspected.flowsThrough) {
-        list.append(flowRow(flow, activeFlows, actorName, onToggleFlow))
+        list.append(flowRow(flow, activeFlows, actorTitle, onToggleFlow))
       }
       body.append(list)
     },
@@ -411,7 +411,7 @@ export function paintDetails(host: HTMLElement, inspected: Inspected, options: D
         const link = document.createElement('button')
         link.type = 'button'
         link.className = 'link'
-        link.append(marked(child.kind, child.external, child.name))
+        link.append(marked(child.kind, child.external, child.title))
         link.addEventListener('click', event => onSelect(child.id, event.shiftKey))
         item.append(link)
         list.append(item)
@@ -466,7 +466,7 @@ export function paintRelationship(
     const link = document.createElement('button')
     link.type = 'button'
     link.className = 'link'
-    link.append(prefix, marked(end.kind, end.external, end.name))
+    link.append(prefix, marked(end.kind, end.external, end.title))
     link.addEventListener('click', event => onSelect(id, event.shiftKey))
     item.append(link)
     list.append(item)

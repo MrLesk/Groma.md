@@ -1,8 +1,9 @@
 ---
-id: shop
-kind: system
+type: C4 System
+title: Shop
+status: stable
+groma:
+  id: shop
 ---
-
-# Shop
 
 Lets customers place orders.

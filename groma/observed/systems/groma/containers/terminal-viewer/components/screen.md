@@ -1,25 +1,26 @@
 ---
-id: screen
-kind: component
-parent: terminal-viewer
-group: "Terminal presentation"
-code:
-  - scanner: typescript
-    file: src/viewers/tui/terminal-viewer.ts
-    dependencies: 10
-    dependents: 1
-  - scanner: typescript
-    file: src/viewers/tui/layout.ts
-    dependencies: 1
-    dependents: 4
-  - scanner: typescript
-    file: src/viewers/tui/model.ts
-    symbol: TerminalViewModel
-    dependencies: 2
-    dependents: 9
+type: C4 Component
+title: Screen
+status: stable
+groma:
+  id: screen
+  parent: terminal-viewer
+  group: Terminal presentation
+  code:
+    - scanner: typescript
+      file: src/viewers/tui/terminal-viewer.ts
+      dependencies: 10
+      dependents: 1
+    - scanner: typescript
+      file: src/viewers/tui/layout.ts
+      dependencies: 1
+      dependents: 4
+    - scanner: typescript
+      file: src/viewers/tui/model.ts
+      symbol: TerminalViewModel
+      dependencies: 2
+      dependents: 9
 ---
-
-# Screen
 
 Mounts the terminal viewer and reserves one fixed layout for header, hierarchy, map, details, footer, and Backlog recap.
 

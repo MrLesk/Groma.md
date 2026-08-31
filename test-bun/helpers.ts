@@ -20,6 +20,7 @@ export const repositoryRoot = path.resolve(
   '..',
 )
 export const fixtureRoot = path.join(repositoryRoot, 'test', 'fixtures', 'core-view')
+export const okfFixtureRoot = path.join(repositoryRoot, 'test', 'fixtures', 'validate')
 export const containersFixtureRoot = path.join(
   repositoryRoot,
   'test',
@@ -92,8 +93,8 @@ export function box(
     representationId: extra.representationId ?? `observed:${id}`,
     id,
     kind,
-    name: extra.name ?? id,
-    description: extra.description ?? '',
+    title: extra.title ?? id,
+    overview: extra.overview ?? '',
     parent: extra.parent ?? null,
     children: extra.children ?? [],
     external: extra.external ?? false,

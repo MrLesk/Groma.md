@@ -1,10 +1,11 @@
 ---
-id: router
-kind: component
-parent: gateway
+type: C4 Component
+title: Router
+status: stable
+groma:
+  id: router
+  parent: gateway
 ---
-
-# Router
 
 Sends each request to its handler.
 

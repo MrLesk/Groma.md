@@ -1,9 +1,10 @@
 ---
-id: gateway
-kind: container
-parent: shop
+type: C4 Container
+title: Gateway
+status: stable
+groma:
+  id: gateway
+  parent: shop
 ---
-
-# Gateway
 
 Lets the outside reach the shop.

@@ -94,8 +94,8 @@ function projectPlateGroup(plate: ProjectPlate, view: ProjectionView): SVGGEleme
   const group = svg('g', {}, 'project-plate')
   group.append(
     svg('polygon', { points: pointsAttribute(plate.polygon) }, 'plate'),
-    plateText(plate.name, 'project-name', view),
-    richPlateText(plate.description, 'project-description', view),
+    plateText(plate.title, 'project-title', view),
+    richPlateText(plate.overview, 'project-overview', view),
     plateText(plate.meta, 'project-meta', view),
   )
   const edit = svg('g', {
@@ -151,7 +151,7 @@ export function paintIslands(layer: SVGGElement, scene: ProjectedScene): Map<str
 export function paintSlabs(layer: SVGGElement, scene: ProjectedScene): Map<string, Element> {
   const nodes = new Map<string, Element>()
   for (const { slab, faces, text } of scene.slabs) {
-    const group = svg('g', { 'aria-label': slab.name }, `slab${slab.origin === 'observed' ? '' : ` ghost ${slab.origin}`}`)
+    const group = svg('g', { 'aria-label': slab.title }, `slab${slab.origin === 'observed' ? '' : ` ghost ${slab.origin}`}`)
     group.dataset.id = slab.representationId
     for (const face of faces) group.append(svg('polygon', { points: pointsAttribute(face.points) }, `face ${face.side}`))
     const top = faces.find(face => face.side === 'top')!

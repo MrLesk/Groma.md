@@ -116,11 +116,11 @@ test.concurrent('flow steps keep exact endpoints while marking their visible anc
     0,
   )
 
-  assert.equal(step?.source.name, 'write')
-  assert.equal(step?.source.visibleName, 'service')
+  assert.equal(step?.source.title, 'write')
+  assert.equal(step?.source.visibleTitle, 'service')
   assert.equal(step?.source.visibleKey, 'observed:service')
   assert.equal(flowEndpointLabel(step!.source), 'service / write')
-  assert.equal(step?.target.name, 'vendor')
+  assert.equal(step?.target.title, 'vendor')
   assert.equal(step?.target.visibleKey, 'observed:vendor')
 
   const local = projectFlowStep(model, projectWorld(model, {

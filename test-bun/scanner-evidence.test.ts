@@ -12,6 +12,39 @@ import {
 import { listTypeScriptFiles } from '../src/scanner/typescript/files.ts'
 import { scanTypeScriptSource } from '../src/scanner/typescript/scan.ts'
 
+const packageFiles = {
+  'groma/index.md': '---\nokf_version: "0.2"\n---\n',
+  'groma/project.md': `---
+type: Groma Project
+title: Shop architecture
+groma:
+  profile: architecture
+---
+
+Describes the shop used by scanner tests.
+`,
+  'groma/observed/index.md': '# Observed\n',
+  'groma/missing/index.md': '# Missing\n',
+  'groma/plans/index.md': '# Plans\n',
+  'groma/observed/systems/shop/system.md': `---
+type: C4 System
+title: Shop
+status: stable
+groma:
+  id: shop
+---
+`,
+  'groma/observed/systems/shop/containers/api/container.md': `---
+type: C4 Container
+title: Api
+status: stable
+groma:
+  id: api
+  parent: shop
+---
+`,
+}
+
 async function writeTree(root: string, files: Record<string, string>): Promise<void> {
   for (const [relative, source] of Object.entries(files)) {
     const filename = path.join(root, ...relative.split('/'))
@@ -127,28 +160,25 @@ test.concurrent('TypeScript emits one file fact and separate inferred placement'
 
 test.concurrent('reconciliation keeps curated multi-file ownership and isolates new files', async () => {
   const profile = `---
-id: profile
-kind: component
-parent: api
-code:
-  - scanner: typescript
-    file: src/profile.ts
-    symbol: oldProfile
-  - scanner: typescript
-    file: src/profile-markdown.ts
-    symbol: oldMarkdown
+type: C4 Component
+title: Profile
+status: stable
+groma:
+  id: profile
+  parent: api
+  code:
+    - scanner: typescript
+      file: src/profile.ts
+      symbol: oldProfile
+    - scanner: typescript
+      file: src/profile-markdown.ts
+      symbol: oldMarkdown
 ---
-
-# Profile
 
 Curated responsibility.
 `
   const root = await temporaryTree({
-    'groma/observed/README.md': '# Observed\n',
-    'groma/missing/README.md': '# Missing\n',
-    'groma/plans/README.md': '# Plans\n',
-    'groma/observed/systems/shop/system.md': '---\nid: shop\nkind: system\n---\n\n# Shop\n',
-    'groma/observed/systems/shop/containers/api/container.md': '---\nid: api\nkind: container\nparent: shop\n---\n\n# Api\n',
+    ...packageFiles,
     'groma/observed/systems/shop/containers/api/components/profile.md': profile,
   })
   try {
@@ -201,18 +231,15 @@ Curated responsibility.
 
 test.concurrent('an observed name alone never claims an unknown file', async () => {
   const root = await temporaryTree({
-    'groma/observed/README.md': '# Observed\n',
-    'groma/missing/README.md': '# Missing\n',
-    'groma/plans/README.md': '# Plans\n',
-    'groma/observed/systems/shop/system.md': '---\nid: shop\nkind: system\n---\n\n# Shop\n',
-    'groma/observed/systems/shop/containers/api/container.md': '---\nid: api\nkind: container\nparent: shop\n---\n\n# Api\n',
+    ...packageFiles,
     'groma/observed/systems/shop/containers/api/components/orders.md': `---
-id: orders
-kind: component
-parent: api
+type: C4 Component
+title: Orders
+status: stable
+groma:
+  id: orders
+  parent: api
 ---
-
-# Orders
 
 Curated without source evidence.
 `,
@@ -240,11 +267,7 @@ Curated without source evidence.
 
 test.concurrent('a qualified empty project container is reused on repeat scans', async () => {
   const root = await temporaryTree({
-    'groma/observed/README.md': '# Observed\n',
-    'groma/missing/README.md': '# Missing\n',
-    'groma/plans/README.md': '# Plans\n',
-    'groma/observed/systems/shop/system.md': '---\nid: shop\nkind: system\n---\n\n# Shop\n',
-    'groma/observed/systems/shop/containers/api/container.md': '---\nid: api\nkind: container\nparent: shop\n---\n\n# Api\n',
+    ...packageFiles,
   })
   const emptyProject = createScanObservation({
     scanner: { language: 'csharp', engine: 'test', engineVersion: '1' },

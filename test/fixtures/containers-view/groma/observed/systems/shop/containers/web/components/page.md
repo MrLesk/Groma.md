@@ -1,10 +1,11 @@
 ---
-id: page
-kind: component
-parent: web
+type: C4 Component
+title: Page
+status: stable
+groma:
+  id: page
+  parent: web
 ---
-
-# Page
 
 Renders the order.
 

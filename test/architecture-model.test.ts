@@ -10,18 +10,14 @@ import {
   revisionRecord,
 } from './architecture-model-helpers.ts'
 
-test('exports a revision model builder', () => {
-  assert.equal(typeof buildArchitectureModel, 'function')
-})
-
 test('builds a serializable revision-local C4 graph with Code references', async () => {
   const loadedRevision = await loadRevision(
-    path.join(repositoryRoot, 'test', 'fixtures', 'core-view'),
+    path.join(repositoryRoot, 'test', 'fixtures', 'validate'),
     { kind: 'observed' },
   )
   const model = buildArchitectureModel(loadedRevision)
   const reloadedModel = buildArchitectureModel(await loadRevision(
-    path.join(repositoryRoot, 'test', 'fixtures', 'core-view'),
+    path.join(repositoryRoot, 'test', 'fixtures', 'validate'),
     { kind: 'observed' },
   ))
 
@@ -33,46 +29,53 @@ test('builds a serializable revision-local C4 graph with Code references', async
   })
   assert.deepEqual(
     model.elements.map(element => element.id),
-    ['api', 'orders', 'payments', 'shop'],
+    ['api', 'buyer', 'git', 'orders', 'shop'],
   )
   assert.deepEqual(
     model.elements.find(element => element.id === 'orders'),
     {
       id: 'orders',
       kind: 'component',
-      name: 'Orders',
-      description: 'Places and tracks customer orders.',
+      title: 'Orders',
+      overview: 'Places and tracks customer orders.',
       parentId: 'api',
       external: false,
+      group: 'Commerce',
       code: [
         {
           scanner: 'typescript',
-          file: 'src/orders.ts',
-          symbol: 'placeOrder',
-          dependencies: 3,
-          dependents: 5,
-        },
-        {
-          scanner: 'routes',
-          file: 'src/routes/orders.ts',
+          file: 'src/core.ts',
+          symbol: 'loadAnnotatedArchitecture',
         },
       ],
       sourceFilename:
         'groma/observed/systems/shop/containers/api/components/orders.md',
     },
   )
-  assert.equal(model.relationships.length, 1)
   assert.deepEqual(
-    model.relationships[0],
+    model.elements.find(element => element.id === 'buyer'),
     {
-      sourceId: 'orders',
-      targetId: 'payments',
-      description: 'Requests payment authorization',
-      technology: 'HTTPS',
-      sourceFilename:
-        'groma/observed/systems/shop/containers/api/components/orders.md',
-      targetSourceFilename:
-        'groma/observed/systems/payments/system.md',
+      id: 'buyer',
+      kind: 'actor',
+      title: 'Buyer',
+      description: 'A person who places an order.',
+      overview: 'Places orders in the shop.',
+      parentId: null,
+      external: false,
+      code: [],
+      sourceFilename: 'groma/observed/actors/buyer.md',
+    },
+  )
+  assert.equal(model.relationships.length, 2)
+  assert.deepEqual(
+    model.relationships.find(relationship => relationship.sourceId === 'shop'),
+    {
+      sourceId: 'shop',
+      targetId: 'git',
+      description: 'Versions architecture',
+      technology: 'Git',
+      sourceFilename: 'groma/observed/systems/shop/system.md',
+      targetSourceFilename: 'groma/observed/systems/git/system.md',
     },
   )
   assert.doesNotThrow(() => JSON.stringify(model))
@@ -104,6 +107,27 @@ test('keeps the group on the element and omits it otherwise', () => {
   assert.equal(grouped?.group, 'Edge services')
   assert.ok(plain)
   assert.equal(Object.hasOwn(plain, 'group'), false)
+})
+
+test('preserves every leading prose paragraph in overview', () => {
+  const document = elementDocument({
+    id: 'catalog',
+    kind: 'system',
+    sourceFilename: 'groma/plans/test-revision/systems/catalog/system.md',
+  })
+  document.nodes = [
+    ['p', {}, 'Owns the product catalog.'],
+    ['p', {}, 'Keeps product details available to shoppers.'],
+    ['h2', { id: 'requirements' }, 'Requirements'],
+    ['p', {}, 'This named section is not part of the overview.'],
+  ]
+
+  const model = buildArchitectureModel(revisionRecord([document]))
+
+  assert.equal(
+    model.elements[0]?.overview,
+    'Owns the product catalog.\n\nKeeps product details available to shoppers.',
+  )
 })
 
 test('resolves a relationship link to the target document stable id', () => {
@@ -174,7 +198,7 @@ test('orders equivalent unchanged revisions deterministically', () => {
 
 test('contains no presentation state', async () => {
   const loadedRevision = await loadRevision(
-    path.join(repositoryRoot, 'test', 'fixtures', 'core-view'),
+    path.join(repositoryRoot, 'test', 'fixtures', 'validate'),
     { kind: 'observed' },
   )
 
