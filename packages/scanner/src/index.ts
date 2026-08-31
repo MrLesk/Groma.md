@@ -55,6 +55,12 @@ export interface ScanObservation {
   diagnostics: ScanDiagnostic[]
 }
 
+export interface ScannerPlugin {
+  id: string
+  matchesFile(relativePath: string): boolean
+  scan(repositoryRoot: string): Promise<ScanObservation | undefined>
+}
+
 type ObservationInput = Omit<ScanObservation, 'schemaVersion' | 'complete'>
 
 function compare(...values: string[]): string {

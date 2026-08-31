@@ -9,5 +9,5 @@ The scanner completes all Roslyn work and validates the observation before writi
 Run the focused C# suite with:
 
 ```sh
-dotnet test src/scanner/csharp/test/Groma.CSharpScanner.Tests.csproj
+dotnet test plugins/scanners/csharp/dotnet/test/Groma.CSharpScanner.Tests.csproj
 ```

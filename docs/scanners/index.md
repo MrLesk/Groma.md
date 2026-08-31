@@ -1,6 +1,6 @@
 # Scanners
 
-`groma scan` collects every supported language observation before core writes architecture Markdown. It prints `ok` and counts of created, refreshed, and planned matches. If any scanner fails, reconciliation does not start.
+`groma scan` loads scanner modules from one registry and collects every complete language observation before core writes architecture Markdown. It prints `ok` and counts of created, refreshed, and planned matches. If any scanner fails, reconciliation does not start.
 
 ```text
 source → complete scanner observations → core reconciliation → Markdown

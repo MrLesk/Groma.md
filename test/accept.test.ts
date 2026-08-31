@@ -7,8 +7,9 @@ import test from 'node:test'
 import type { TestContext } from 'node:test'
 import { fileURLToPath } from 'node:url'
 
+import { createScanObservation } from '@groma/scanner'
+
 import { acceptGhost, reconcileScanObservations } from '../src/core.ts'
-import { createScanObservation } from '../src/scanner/observation.ts'
 
 const projectRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),

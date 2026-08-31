@@ -1,13 +1,14 @@
 import { readFile } from 'node:fs/promises'
 import path from 'node:path'
 
-import { displayName, kebabCase } from '../../naming.ts'
-import type { ScanSymbol } from '../observation.ts'
+import type { ScanSymbol } from '@groma/scanner'
+
 import {
   defaultTypeScriptScannerConfig,
   listTypeScriptFiles,
   type TypeScriptScannerConfig,
 } from './files.ts'
+import { displayName, kebabCase } from './naming.ts'
 
 export interface ImportGraphNode {
   file: string
