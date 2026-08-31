@@ -7,7 +7,8 @@ import { Command } from 'commander'
 import { acceptGhost } from './core.ts'
 import { createArchitectureElement } from './create.ts'
 import { editArchitecture } from './edit.ts'
-import { instructionGuide } from './instructions.ts'
+import { agentInstructionGuide } from './agent-instructions.ts'
+import { humanInstructionGuide } from './instructions.ts'
 import { relateObserved, removeObservedRelationship } from './relate.ts'
 import { formatScanSummary, scanRepository, watchScan } from './scanner.ts'
 import {
@@ -275,10 +276,10 @@ program
 
 program
   .command('instructions')
-  .description('Open or print a shipped instruction guide')
+  .description('Open or print a shipped human guide')
   .argument('[guide]', 'overview or authoring')
   .action(async (guide: string | undefined) => {
-    const selected = instructionGuide(guide)
+    const selected = humanInstructionGuide(guide)
     if (selected === undefined) {
       console.error(`unknown guide: ${guide}`)
       process.exitCode = 1
@@ -294,6 +295,20 @@ program
     }
     const action = await startWelcome(process.cwd(), 'instructions')
     if (action !== undefined) await runWelcomeAction(action)
+  })
+
+program
+  .command('agent-instructions')
+  .description('Print a shipped agent instruction guide')
+  .argument('[guide]', 'curation')
+  .action(async (guide: string | undefined) => {
+    const selected = await agentInstructionGuide(guide)
+    if (selected === undefined) {
+      console.error(`unknown agent guide: ${guide}`)
+      process.exitCode = 1
+      return
+    }
+    console.log(selected.content)
   })
 
 await program.parseAsync()

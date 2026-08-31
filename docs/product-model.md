@@ -27,7 +27,10 @@ selects Overview by default, and shows each shipped guide below its guide table.
 Up and Down choose a guide. J and K scroll its content one line; Page Up and
 Page Down move one page. Backspace or the Back row returns to the launcher.
 Bare `groma instructions` opens this screen on a TTY. Named guides,
-non-interactive use, and `--plain` remain plain text.
+non-interactive use, and `--plain` remain plain text. This catalog is for
+people. `groma agent-instructions [guide]` is a separate, always-plain catalog
+of agent operating rules; `curation` is its default guide. Every shipped guide
+points readers to both catalogs.
 
 1. Open a viewer: see the world. `groma web` scans the repository and starts
    the browser map. On a TTY, `groma view` scans and starts the terminal map.

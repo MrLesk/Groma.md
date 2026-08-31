@@ -133,3 +133,8 @@ The curation is complete when:
 Reducing the component count is useful evidence, but it is not an acceptance
 criterion. A review may restore a component when combining it made the
 architecture less truthful.
+
+## More instructions
+
+Run `groma instructions` for human guides and `groma agent-instructions` for
+agent operating rules.
