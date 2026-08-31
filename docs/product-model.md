@@ -18,12 +18,16 @@ Markdown by hand. Groma writes those files so paths, identity, and metadata
 stay consistent. The root `groma/project.md` is different: standard `title` and
 optional `description` fields are frontmatter, while its normal Markdown body
 is the complete project overview. Bare `groma` opens a terminal launcher for
-the current repository: Up and Down choose an executable action or the
-Advanced commands row. Enter runs an action or toggles that row. Its expanded
-commands are read-only syntax references: `<name>` is required, `[option]` is
-optional, and `…` means more options. Without an interactive terminal, Groma
-prints the same context, actions, and expanded references as plain text.
-`groma instructions` is the local instruction hub.
+the current repository: Up and Down choose an executable action, Instructions,
+or the Advanced commands row. Enter runs an action, opens
+Instructions, or toggles Advanced commands. The expanded advanced commands are
+read-only syntax references: `<name>` is required, `[option]` is optional, and
+`…` means more options. Instructions uses the same logo and repository context,
+selects Overview by default, and shows each shipped guide below its guide table.
+Up and Down choose a guide. J and K scroll its content one line; Page Up and
+Page Down move one page. Backspace or the Back row returns to the launcher.
+Bare `groma instructions` opens this screen on a TTY. Named guides,
+non-interactive use, and `--plain` remain plain text.
 
 1. Open a viewer: see the world. `groma web` scans the repository and starts
    the browser map. On a TTY, `groma view` scans and starts the terminal map.

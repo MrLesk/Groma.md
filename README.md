@@ -25,12 +25,15 @@ Groma is the only writer of architecture element and revision files under
 `groma/`.
 
 Run bare `groma` in a terminal to open the repository launcher. Move through
-its actions with Up and Down, then press Enter to run one. Piped `groma` and
+its actions with Up and Down, then press Enter to run one or open Instructions.
+The Instructions screen keeps the same repository context, starts on Overview,
+and lets you choose a shipped guide or return with Backspace. Piped `groma` and
 `groma --plain` print the same repository context and actions without waiting
 for input. The interactive launcher keeps less common syntax under a collapsed
 Advanced commands row. Enter toggles its read-only references; `<name>` marks a
 required parameter, `[option]` an optional one, and `…` additional options.
-Plain output includes those references without requiring interaction.
+Plain output includes those references without requiring interaction. A named
+guide such as `groma instructions authoring` also stays plain text.
 
 1. Open a viewer: see the world. `groma web` scans this repo and opens the
    browser map. On a TTY, `groma view` scans and opens the terminal map;

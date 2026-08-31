@@ -13,4 +13,4 @@ groma:
       dependents: 1
 ---
 
-Owns the shipped overview and authoring guides so developers and agents can follow the supported Groma workflow without external context.
+Owns the shipped guide catalog and its Markdown source. Overview explains what Groma is and how source, architecture Markdown, and viewers connect. Authoring explains the supported workflow. The same catalog supplies interactive Instructions and stable plain-text guide output.
