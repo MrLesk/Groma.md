@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@codex'
 created_date: '2026-08-30 21:44'
-updated_date: '2026-08-31 00:25'
+updated_date: '2026-08-31 00:50'
 labels: []
 milestone: m-5
 dependencies:
@@ -78,6 +78,8 @@ Make Groma the single safe writer of its OKF profile. Creating, editing, scannin
 8. Apply the accepted cold-review deletions only: remove duplicate project input parsing, leave lifecycle status with each final writer, delete decorative help-prose assertions, then rerun directly affected checks without entering the TASK-225.3 migration boundary.
 
 9. Apply the accepted final hot-review cleanup only: centralize submitted description semantics in withDescription, name nested-profile mutations withGromaField and withGromaCode, reuse requireGromaMapping, then rerun affected proof without adding behavior or tests.
+
+10. Close the completion-audit gap by permanently asserting standard and unknown metadata preservation through restatement, scan refresh, and structural curation; change production code only if those behavior assertions expose a failure, then rerun review and repository gates.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
@@ -144,10 +146,18 @@ Final hot review: curation now calls withDescription directly and uses withGroma
 Final hot-review verification: the existing OKF writer suite passes 8/8 with 75 assertions, including description omission/change/clear; architecture-model tests pass 6/6; typecheck and targeted Biome over markdown-emitter, edit, and curate pass; git diff --check passes. Files are 259, 271, and 306 lines, with the unchanged writer test at 481. Search finds no retired helper names, private gromaMapping, or caller-side empty-description translation. No test, behavior, compatibility, or TASK-225.3 file was added.
 
 Final writer reviews: PASS. Cold review removed duplicate project parsing, repeated lifecycle assignments, and decorative help prose. The full-context review centralized description preserve/remove/replace semantics, named nested Groma mutations explicitly, and reused the shared Groma mapping validator. Writer tests pass 8/8 with 75 assertions, and the complete final repository check passes Node 91/91 and Bun 207/207.
+
+Post-completion audit reopened this task because preservation was implemented and partially tested, but restatement, scan refresh, and structural curation did not each assert the full standard/unknown metadata set. This is an evidence gap against AC #2 and AC #5, not authorization for new behavior.
+
+Completion-audit evidence fix in test-bun/okf-writers.test.ts: restatement now asserts the complete remaining groma mapping plus preserved description, provenance, audience, and named Markdown; structural curation asserts group changed while id, parent, code, description, provenance, audience, overview, and named Markdown remain; scan refresh asserts updated code/lifecycle while description, provenance, audience, and named Markdown remain. No production file changed.
+
+Completion-audit verification: the writer suite passes 8/8 with 83 assertions; typecheck, targeted Biome for the changed test, 490-line file-size check, and git diff --check pass. No production code changed. The required full bun run check was attempted twice and reached 89/91 Node tests, but the two unrelated scan-watch tests failed because the host returned EMFILE: too many open files; an isolated sequential rerun reproduced the same resource failure. The changed writer suite is green and no TASK-225.3 or scan-watch file was touched.
+
+Completion-audit final evidence: the cold simplicity review and full-context defensive-architecture review both passed. The exact candidate tree passes bun run check with Node 91/91 and Bun 207/207. The focused writer suite passes 8/8 with 83 assertions; typecheck, targeted Biome, the 490-line file limit, git diff --check, and Groma validation at 69 elements/69 relationships pass. Pinned Google commit ad30107c31c06aec8a7d5636e0d1058118604e6f validates 140 concepts and 40 indexes across nine packages; its reference visualizer loads 70 live concepts, 69 Markdown bodies, and 69 edges with zero invented trust/provenance fields. The follow-up changed only preservation assertions in test-bun/okf-writers.test.ts; production code is unchanged.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
-Moved create, edit, scan, restate, accept, curation, project save, CLI, and Web editing onto one value-preserving OKF writer contract. Writer checks pass 8/8 with 75 assertions, both review gates passed, and the final full suite is green.
+Completed the OKF writer profile and its permanent preservation proof. Restatement, structural curation, and scan refresh now explicitly guard standard, unknown, Markdown, and nested Groma metadata ownership; cold and full-context reviews passed, the full repository check passes 91 Node and 207 Bun tests, and pinned Google validation passes 140 concepts across nine packages.
 <!-- SECTION:FINAL_SUMMARY:END -->

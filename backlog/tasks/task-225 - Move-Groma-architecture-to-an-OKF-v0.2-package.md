@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@codex'
 created_date: '2026-08-30 21:44'
-updated_date: '2026-08-31 00:25'
+updated_date: '2026-08-31 00:50'
 labels: []
 milestone: m-5
 dependencies: []
@@ -54,16 +54,22 @@ When a developer opens the groma directory with a standard OKF reader, the reade
 2. Move every supported writer and lifecycle transition onto that profile through TASK-225.2.
 3. Rewrite the live bundle, fixtures, and documentation and prove official-reader interoperability through TASK-225.3.
 4. Run cold simplicity, specification, quality, and full-context architecture reviews; resolve findings; then verify and finalize the milestone.
+
+5. Close the writer-preservation regression-proof gap in TASK-225.2, rerun cold and full-context reviews, then reverify the exact commit before completing the goal.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
 
 <!-- SECTION:NOTES:BEGIN -->
 Delivered as one atomic direct replacement through three reviewed subtasks. The final package is outbound-interoperable OKF v0.2 but Groma accepts only its explicit architecture profile. Standard type/title/description, Markdown overview, nested Groma metadata, lifecycle, strict C4 containment and relationships, all writers, live data, fixtures, docs, Web, TUI, history, and scanning now share one contract. Cold and full-context architecture reviews passed with no remaining authority-backed finding. Pinned upstream validation passes 140 concepts and 40 indexes across nine packages; the reference visualizer loads 70 live concepts, 69 bodies, and 69 edges; bun run check passes Node 91/91 and Bun 207/207.
+
+A fresh completion audit proved the runtime contract and upstream interoperability but found missing permanent assertions for unknown metadata in three writer paths. Parent completion is reopened until TASK-225.2 closes that evidence gap and the full gates pass again.
+
+Completion audit closed: TASK-225.2 now permanently proves metadata preservation through restatement, structural curation, and scan refresh. Both final cold and full-context architecture reviews pass and recommend the current domain-grouped design. The exact candidate passes bun run check at Node 91/91 and Bun 207/207, Groma validation at 69 elements/69 relationships, pinned Google OKFDocument validation at 140 concepts and 40 indexes across nine packages, and the reference visualizer at 70 concepts, 69 non-empty Markdown bodies, and 69 relationship edges. No production code changed in the audit follow-up and no authority-backed blocker remains.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
-Moved Groma to an outbound-interoperable OKF v0.2 package without removing Groma features or adding generic-OKF input support. The pinned reference implementation, visualizer, Groma validation, complete test suite, TUI walkthrough, cold reviews, and full-context architecture reviews all pass.
+Moved Groma to a strict outbound-interoperable OKF v0.2 profile without removing Groma behavior. The live bundle, eight fixtures, readers, domain model, writers, scanner, history, Web, TUI, tests, and documentation now share the profile; Google validation, the reference visualizer, Groma validation, cold/hot reviews, and the complete 91 Node plus 207 Bun test gate all pass.
 <!-- SECTION:FINAL_SUMMARY:END -->
