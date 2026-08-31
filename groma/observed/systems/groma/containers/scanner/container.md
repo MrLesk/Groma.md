@@ -8,4 +8,4 @@ groma:
   technology: TypeScript, Roslyn
 ---
 
-Collects complete TypeScript and C# source observations and reconciles their atomic evidence with human-curated architecture.
+Loads scanner modules through one public contract, collects their complete source observations, and reconciles the atomic evidence with human-curated architecture.

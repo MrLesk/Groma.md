@@ -7,7 +7,7 @@ import {
 } from './markdown-emitter.ts'
 import { displayName, kebabCase } from './naming.ts'
 import { c4Kind, requireGromaMapping } from './okf-profile.ts'
-import type { ScanFile, ScanObservation, ScanScope } from './scanner/observation.ts'
+import type { ScanFile, ScanObservation, ScanScope } from '@groma/scanner'
 import type {
   C4Kind,
   CodeReference,

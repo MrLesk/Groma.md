@@ -5,11 +5,9 @@ import path from 'node:path'
 
 import { reconcileScanObservations } from './core.ts'
 import {
-  isCSharpScanFile,
-  scanCSharpSource,
-} from './scanner/csharp/adapter.ts'
-import { isTypeScriptScanFile } from './scanner/typescript/files.ts'
-import { scanTypeScriptSource } from './scanner/typescript/scan.ts'
+  collectScanObservations,
+  isScannerFile,
+} from './scanner/registry.ts'
 import type { ScanSummary } from './types.ts'
 
 const SETTLE_MS = 150
@@ -22,10 +20,7 @@ export function formatScanSummary(summary: ScanSummary): string {
 export async function scanRepository(
   repositoryRoot: string,
 ): Promise<ScanSummary> {
-  const observations = (await Promise.all([
-    scanTypeScriptSource(repositoryRoot),
-    scanCSharpSource(repositoryRoot),
-  ])).filter(observation => observation !== undefined)
+  const observations = await collectScanObservations(repositoryRoot)
   return reconcileScanObservations(repositoryRoot, observations)
 }
 
@@ -94,10 +89,7 @@ export function watchScan(
   function onSourceEvent(prefix: string, filename: string | null): void {
     if (closed) return
     const relative = sourceRelative(prefix, filename)
-    if (
-      relative === undefined
-      || (!isTypeScriptScanFile(relative) && !isCSharpScanFile(relative))
-    ) return
+    if (relative === undefined || !isScannerFile(relative)) return
     void stat(path.join(root, relative)).then(info => {
       if (!closed && info.mtimeMs >= startedAt) schedule()
     }, () => {

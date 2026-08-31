@@ -2,11 +2,11 @@ import { existsSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import path from 'node:path'
 
-import { displayName, kebabCase } from '../../naming.ts'
 import {
   createScanObservation,
   type ScanObservation,
-} from '../observation.ts'
+} from '@groma/scanner'
+
 import {
   defaultTypeScriptScannerConfig,
   type TypeScriptScannerConfig,
@@ -19,6 +19,7 @@ import {
   type ImportGraph,
   type ImportGraphNode,
 } from './graph.ts'
+import { displayName, kebabCase } from './naming.ts'
 
 function isPaintFile(file: string, node: ImportGraphNode): boolean {
   const segments = file.split('/')
@@ -44,6 +45,39 @@ async function packageBins(repositoryRoot: string): Promise<string[]> {
   return []
 }
 
+function includeImportedScopes(
+  scopes: Set<string>,
+  structuralImports: (file: string) => string[],
+  liveImporters: (file: string) => string[],
+): void {
+  for (const scope of [...scopes]) {
+    for (const imported of structuralImports(scope)) {
+      if (structuralImports(imported).length === 0) continue
+      if (liveImporters(imported).every(importer => scopes.has(importer))) scopes.add(imported)
+    }
+  }
+}
+
+function includeSharedScopes(
+  graph: ImportGraph,
+  scopes: Set<string>,
+  excluded: Set<string>,
+  structuralImports: (file: string) => string[],
+  liveImporters: (file: string) => string[],
+): void {
+  let grew = true
+  while (grew) {
+    grew = false
+    for (const node of graph.files) {
+      if (excluded.has(node.file) || scopes.has(node.file)) continue
+      if (structuralImports(node.file).length === 0) continue
+      if (liveImporters(node.file).filter(importer => scopes.has(importer)).length < 2) continue
+      scopes.add(node.file)
+      grew = true
+    }
+  }
+}
+
 function inferScopeFiles(graph: ImportGraph, bins: string[]): string[] {
   const byFile = new Map(graph.files.map(node => [node.file, node]))
   const excluded = new Set(graph.files.flatMap(node => {
@@ -65,24 +99,8 @@ function inferScopeFiles(graph: ImportGraph, bins: string[]): string[] {
     })
   const scopes = new Set(bins.filter(file => byFile.has(file)))
   if (scopes.size === 0 && roots[0] !== undefined) scopes.add(roots[0].file)
-
-  for (const scope of [...scopes]) {
-    for (const imported of structuralImports(scope)) {
-      if (structuralImports(imported).length === 0) continue
-      if (liveImporters(imported).every(importer => scopes.has(importer))) scopes.add(imported)
-    }
-  }
-  let grew = true
-  while (grew) {
-    grew = false
-    for (const node of graph.files) {
-      if (excluded.has(node.file) || scopes.has(node.file)) continue
-      if (structuralImports(node.file).length === 0) continue
-      if (liveImporters(node.file).filter(importer => scopes.has(importer)).length < 2) continue
-      scopes.add(node.file)
-      grew = true
-    }
-  }
+  includeImportedScopes(scopes, structuralImports, liveImporters)
+  includeSharedScopes(graph, scopes, excluded, structuralImports, liveImporters)
   if (scopes.size === 0 && graph.files[0] !== undefined) scopes.add(graph.files[0].file)
   return [...scopes].sort()
 }
@@ -95,6 +113,34 @@ function commonDirectorySegments(left: string, right: string): number {
   return count
 }
 
+function importerScope(
+  importedBy: string[],
+  byFile: Map<string, ImportGraphNode>,
+  scopeSet: Set<string>,
+): string | undefined {
+  const seen = new Set<string>()
+  let frontier = importedBy
+  while (frontier.length > 0) {
+    const placed = frontier.filter(file => scopeSet.has(file)).sort()[0]
+    if (placed !== undefined) return placed
+    const next: string[] = []
+    for (const file of frontier) {
+      if (seen.has(file)) continue
+      seen.add(file)
+      next.push(...(byFile.get(file)?.importedBy ?? []))
+    }
+    frontier = next
+  }
+  return undefined
+}
+
+function nearestDirectoryScope(file: string, scopeFiles: string[]): string | undefined {
+  return [...scopeFiles].sort((left, right) => {
+    return commonDirectorySegments(file, right) - commonDirectorySegments(file, left)
+      || left.localeCompare(right)
+  })[0]
+}
+
 function placementByFile(graph: ImportGraph, scopeFiles: string[]): Map<string, string> {
   const byFile = new Map(graph.files.map(node => [node.file, node]))
   const scopeSet = new Set(scopeFiles)
@@ -105,27 +151,8 @@ function placementByFile(graph: ImportGraph, scopeFiles: string[]): Map<string, 
       placements.set(node.file, node.file)
       continue
     }
-    const seen = new Set<string>()
-    let frontier = [...node.importedBy]
-    let placed: string | undefined
-    while (frontier.length > 0 && placed === undefined) {
-      const hits = frontier.filter(file => scopeSet.has(file)).sort()
-      if (hits[0] !== undefined) {
-        placed = hits[0]
-        break
-      }
-      const next: string[] = []
-      for (const file of frontier) {
-        if (seen.has(file)) continue
-        seen.add(file)
-        next.push(...(byFile.get(file)?.importedBy ?? []))
-      }
-      frontier = next
-    }
-    placed ??= [...scopeFiles].sort((left, right) => {
-      return commonDirectorySegments(node.file, right) - commonDirectorySegments(node.file, left)
-        || left.localeCompare(right)
-    })[0]
+    const placed = importerScope(node.importedBy, byFile, scopeSet)
+      ?? nearestDirectoryScope(node.file, scopeFiles)
     if (placed !== undefined) placements.set(node.file, placed)
   }
   return placements
@@ -187,7 +214,11 @@ export async function scanTypeScriptSource(
 
   const name = await packageName(repositoryRoot)
   return createScanObservation({
-    scanner: { language: 'typescript', engine: 'groma-source', engineVersion: '1' },
+    scanner: {
+      language: 'typescript',
+      engine: 'groma-source',
+      engineVersion: '1',
+    },
     root: {
       kind: 'package',
       name,

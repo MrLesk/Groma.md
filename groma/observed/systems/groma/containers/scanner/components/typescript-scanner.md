@@ -8,21 +8,25 @@ groma:
   group: Language scanners
   code:
     - scanner: typescript
-      file: src/scanner/typescript/files.ts
+      file: plugins/scanners/typescript/src/index.ts
+      dependencies: 2
+      dependents: 0
+    - scanner: typescript
+      file: plugins/scanners/typescript/src/files.ts
       dependencies: 0
       dependents: 3
     - scanner: typescript
-      file: src/scanner/typescript/graph.ts
-      dependencies: 3
+      file: plugins/scanners/typescript/src/graph.ts
+      dependencies: 2
       dependents: 1
     - scanner: typescript
-      file: src/scanner/typescript/scan.ts
+      file: plugins/scanners/typescript/src/scan.ts
       symbol: scanTypeScriptSource
-      dependencies: 4
+      dependencies: 3
       dependents: 1
 ---
 
-Reports supported TypeScript source files and named symbols separately, using imports and entry points only as evidence for placement and dependency counts.
+Exports the embedded TypeScript scanner module and reports supported source files and named symbols separately, using imports and entry points only as evidence for placement and dependency counts.
 
 ## Relationships
 

@@ -4,12 +4,12 @@ import os from 'node:os'
 import path from 'node:path'
 
 import { parseFrontmatter } from 'comark'
+import { createScanObservation } from '@groma/scanner'
 
 import { acceptGhost, loadAnnotatedArchitecture, reconcileScanObservations } from '../src/core.ts'
 import { createArchitectureElement } from '../src/create.ts'
 import { editArchitecture } from '../src/edit.ts'
 import { saveProjectProfile } from '../src/project-profile.ts'
-import { createScanObservation } from '../src/scanner/observation.ts'
 
 const cli = path.join(import.meta.dir, '..', 'src', 'cli.ts')
 

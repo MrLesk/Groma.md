@@ -1,16 +1,20 @@
 import { expect, test } from 'bun:test'
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 
-import { reconcileScanObservations } from '../src/core.ts'
-import { isCSharpScanFile } from '../src/scanner/csharp/adapter.ts'
 import {
   createScanObservation,
   parseScanObservation,
-} from '../src/scanner/observation.ts'
-import { listTypeScriptFiles } from '../src/scanner/typescript/files.ts'
-import { scanTypeScriptSource } from '../src/scanner/typescript/scan.ts'
+} from '@groma/scanner'
+
+import {
+  isCSharpScanFile,
+  scanCSharpSource,
+} from '../plugins/scanners/csharp/src/adapter.ts'
+import { listTypeScriptFiles } from '../plugins/scanners/typescript/src/files.ts'
+import { scanTypeScriptSource } from '../plugins/scanners/typescript/src/scan.ts'
+import { reconcileScanObservations } from '../src/core.ts'
 
 const packageFiles = {
   'groma/index.md': '---\nokf_version: "0.2"\n---\n',
@@ -298,4 +302,35 @@ test.concurrent('C# watch evidence includes projects and excludes build output',
   expect(isCSharpScanFile('Shop.sln')).toBeTrue()
   expect(isCSharpScanFile('src/obj/Debug/Generated.cs')).toBeFalse()
   expect(isCSharpScanFile('src/bin/Debug/Generated.cs')).toBeFalse()
+})
+
+test.concurrent('C# adapter uses its plugin package and the shared contract', async () => {
+  const expected = createScanObservation({
+    scanner: { language: 'csharp', engine: 'test', engineVersion: '1' },
+    root: { kind: 'project', name: 'Shop', file: 'Shop.csproj' },
+    scopes: [{ id: 'scope:Shop.csproj', name: 'Shop' }],
+    files: [],
+    placements: [],
+    relationships: [],
+    diagnostics: [],
+  })
+  const root = await temporaryTree({
+    'Shop.csproj': '<Project />',
+    'dotnet-host.mjs': `#!/usr/bin/env node
+const args = process.argv.slice(2).map(value => value.replaceAll('\\\\', '/'))
+if (args[0] === 'build') {
+  if (!args[1]?.endsWith('plugins/scanners/csharp/dotnet/Groma.CSharpScanner.csproj')) process.exit(2)
+  process.exit(0)
+}
+if (!args[0]?.endsWith('plugins/scanners/csharp/dotnet/bin/Debug/net10.0/Groma.CSharpScanner.dll')) process.exit(3)
+process.stdout.write(${JSON.stringify(JSON.stringify(expected))})
+`,
+  })
+  try {
+    const host = path.join(root, 'dotnet-host.mjs')
+    await chmod(host, 0o755)
+    expect(await scanCSharpSource(root, host)).toEqual(expected)
+  } finally {
+    await rm(root, { recursive: true, force: true })
+  }
 })

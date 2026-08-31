@@ -7,6 +7,8 @@
   },
   "files": {
     "includes": [
+      "packages/**/*.ts",
+      "plugins/**/*.ts",
       "src/**/*.ts",
       "scripts/**/*.ts",
       "test/**/*.ts",

@@ -3,9 +3,12 @@ import { readdir } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-import { parseScanObservation, type ScanObservation } from '../observation.ts'
+import { parseScanObservation, type ScanObservation } from '@groma/scanner'
 
-const scannerDirectory = path.dirname(fileURLToPath(import.meta.url))
+const scannerDirectory = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  '../dotnet',
+)
 const scannerProject = path.join(scannerDirectory, 'Groma.CSharpScanner.csproj')
 const scannerDll = path.join(
   scannerDirectory,
@@ -64,10 +67,10 @@ export async function findCSharpInput(repositoryRoot: string): Promise<string | 
 
 export async function scanCSharpSource(
   repositoryRoot: string,
+  dotnet: string = process.env.DOTNET_HOST_PATH || 'dotnet',
 ): Promise<ScanObservation | undefined> {
   const input = await findCSharpInput(repositoryRoot)
   if (input === undefined) return undefined
-  const dotnet = process.env.DOTNET_HOST_PATH || 'dotnet'
   await run(dotnet, ['build', scannerProject, '--nologo', '--verbosity', 'quiet'], scannerDirectory)
   const { stdout } = await run(dotnet, [scannerDll, input], repositoryRoot)
   return parseScanObservation(stdout)

@@ -8,12 +8,16 @@ groma:
   group: Language scanners
   code:
     - scanner: typescript
-      file: src/scanner/csharp/adapter.ts
+      file: plugins/scanners/csharp/src/index.ts
       dependencies: 1
+      dependents: 0
+    - scanner: typescript
+      file: plugins/scanners/csharp/src/adapter.ts
+      dependencies: 0
       dependents: 1
 ---
 
-Starts the Roslyn scanner adapter for a repository solution or project and returns its complete C# observation through the shared contract.
+Exports the C# scanner module, starts its Roslyn adapter for a repository solution or project, and returns one complete observation through the shared contract.
 
 ## Relationships
 

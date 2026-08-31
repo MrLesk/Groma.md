@@ -8,9 +8,9 @@ groma:
   group: Scan lifecycle
   code:
     - scanner: typescript
-      file: src/scanner/observation.ts
+      file: packages/scanner/src/index.ts
       dependencies: 0
-      dependents: 4
+      dependents: 0
 ---
 
-Defines and validates the complete language-neutral observation contract for source files, scopes, placements, source dependencies, and diagnostics.
+Publishes the scanner-module interface and validates complete language-neutral observations for source files, scopes, placements, source dependencies, and diagnostics.
