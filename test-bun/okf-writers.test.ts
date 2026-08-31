@@ -206,9 +206,10 @@ test.concurrent('edit and restate preserve unowned OKF metadata and Markdown', a
     const planned = await source(root, plannedPath)
     const plannedMetadata = metadata(planned)
     expect(plannedMetadata.status).toBe('draft')
-    expect(mapping(plannedMetadata.groma).code).toBeUndefined()
+    expect(plannedMetadata.groma).toEqual({ id: 'orders', parent: 'api' })
     expect(plannedMetadata.description).toBe('A revised concise description.')
     expect(plannedMetadata.provenance).toEqual({ source: 'architecture workshop' })
+    expect(plannedMetadata.audience).toBe('developers')
     expect(planned).toContain('## Notes\n\nKeep this authored section.')
     expect(metadata(await source(root, 'groma/plans/next/index.md'))).toEqual({})
 
@@ -240,9 +241,15 @@ test.concurrent('structural edit changes only owned Groma metadata', async () =>
     await editArchitecture(root, { id: 'orders', group: 'Commerce' })
     const edited = await source(root, ordersPath)
     const data = metadata(edited)
-    expect(mapping(data.groma).group).toBe('Commerce')
+    const groma = mapping(data.groma)
+    expect(groma.group).toBe('Commerce')
+    expect(groma.id).toBe('orders')
+    expect(groma.parent).toBe('api')
+    expect(groma.code).toEqual(mapping(metadata(ordersSource).groma).code)
     expect(data.status).toBe('stable')
+    expect(data.description).toBe('A standard short description.')
     expect(data.provenance).toEqual({ source: 'architecture workshop' })
+    expect(data.audience).toBe('developers')
     expect(edited).toContain('Owns the order lifecycle.')
     expect(edited).toContain('Keep this authored section.')
   } finally {
@@ -282,7 +289,9 @@ test.concurrent('scan refreshes and creates only owned stable profile fields', a
     const refreshedMetadata = metadata(refreshed)
     expect(refreshedMetadata.status).toBe('stable')
     expect(mappings(mapping(refreshedMetadata.groma).code)[0]?.symbol).toBe('placeOrder')
+    expect(refreshedMetadata.description).toBe('A standard short description.')
     expect(refreshedMetadata.provenance).toEqual({ source: 'architecture workshop' })
+    expect(refreshedMetadata.audience).toBe('developers')
     expect(refreshed).toContain('Keep this authored section.')
 
     const helperPath = 'groma/observed/systems/shop/containers/api/components/helper.md'
