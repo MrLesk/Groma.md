@@ -121,12 +121,12 @@ export const mapCss = `
   #map .compass .north { fill: var(--map-line); }
   #map .compass .text { fill: var(--ink); font-weight: 600; }
   #map .project-plate .plate { fill: var(--paper); fill-opacity: 0.72; }
-  #map .project-plate .project-name .text { font-weight: 650; letter-spacing: 0.06em; }
-  #map .project-plate .project-description .text { fill: var(--muted); }
-  #map .project-plate .project-description .md-strong { font-weight: 700; fill: var(--ink); }
-  #map .project-plate .project-description .md-emphasis { font-style: italic; }
-  #map .project-plate .project-description .md-code { font-family: 'SF Mono', ui-monospace, Menlo, monospace; fill: var(--ink); }
-  #map .project-plate .project-description .md-link { text-decoration: underline; text-underline-offset: 2px; }
+  #map .project-plate .project-title .text { font-weight: 650; letter-spacing: 0.06em; }
+  #map .project-plate .project-overview .text { fill: var(--muted); }
+  #map .project-plate .project-overview .md-strong { font-weight: 700; fill: var(--ink); }
+  #map .project-plate .project-overview .md-emphasis { font-style: italic; }
+  #map .project-plate .project-overview .md-code { font-family: 'SF Mono', ui-monospace, Menlo, monospace; fill: var(--ink); }
+  #map .project-plate .project-overview .md-link { text-decoration: underline; text-underline-offset: 2px; }
   #map .project-plate .project-meta .text { fill: var(--muted); letter-spacing: 0.14em; }
   #map .project-edit { pointer-events: all; cursor: pointer; outline: none; }
   #map .project-edit .edit-frame { fill: transparent; pointer-events: all; }

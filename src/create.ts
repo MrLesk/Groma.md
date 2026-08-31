@@ -4,10 +4,11 @@ import path from 'node:path'
 import { architectureElementPath } from './architecture-path.ts'
 import { loadArchitecture } from './architecture-reader.ts'
 import {
-  renderObservedDocument,
+  renderArchitectureDocument,
   writeObservedDocument,
 } from './markdown-emitter.ts'
 import { displayName, kebabCase } from './naming.ts'
+import { c4Kind, requireGromaMapping } from './okf-profile.ts'
 import type { C4Kind, RevisionRecord } from './types.ts'
 
 const expectedParentKinds = new Map<C4Kind, C4Kind>([
@@ -28,7 +29,8 @@ interface CreateArchitectureElementInput {
   plan?: string
   observed?: boolean
   kind: string
-  description: string
+  overview: string
+  description?: string
   parent?: string
   external?: boolean
   technology?: string
@@ -39,7 +41,8 @@ interface ValidatedCreateInput {
   observed: boolean
   planId?: string
   kind: C4Kind
-  description: string
+  overview: string
+  description?: string
   parentId?: string
   external: boolean
   technology?: string
@@ -52,12 +55,13 @@ function indexWorld(revisions: RevisionRecord[]) {
     if (record.revision.kind === 'missing') continue
     const origin = record.revision.kind === 'plan' ? 'planned' : 'observed'
     for (const document of record.documents) {
-      const id = document.frontmatter.id
-      const kind = document.frontmatter.kind
-      if (typeof id !== 'string' || !supportedKinds.has(kind as C4Kind)) continue
+      const groma = requireGromaMapping(document.frontmatter, document.sourceFilename)
+      const id = groma.id
+      const kind = c4Kind(document.frontmatter.type)
+      if (typeof id !== 'string' || kind === undefined) continue
       const worldRecord: WorldRecord = {
         id,
-        kind: kind as C4Kind,
+        kind,
         sourceFilename: document.sourceFilename,
       }
       const existing = byId.get(id)
@@ -70,17 +74,17 @@ function indexWorld(revisions: RevisionRecord[]) {
   return byId
 }
 
-async function ensureObservedReadme(repositoryRoot: string): Promise<void> {
-  const filename = path.join(repositoryRoot, 'groma', 'observed', 'README.md')
+async function ensureObservedIndex(repositoryRoot: string): Promise<void> {
+  const filename = path.join(repositoryRoot, 'groma', 'observed', 'index.md')
   if (existsSync(filename)) return
   await writeObservedDocument(
     repositoryRoot,
-    'groma/observed/README.md',
+    'groma/observed/index.md',
     '# Observed architecture\n',
   )
 }
 
-export async function ensurePlanReadme(
+export async function ensurePlanIndex(
   repositoryRoot: string,
   planId: string,
   revisions: RevisionRecord[],
@@ -91,8 +95,8 @@ export async function ensurePlanReadme(
   if (planExists) return
   await writeObservedDocument(
     repositoryRoot,
-    `groma/plans/${planId}/README.md`,
-    `---\nid: ${planId}\n---\n\n# ${displayName(planId)}\n`,
+    `groma/plans/${planId}/index.md`,
+    `# ${displayName(planId)}\n`,
   )
 }
 
@@ -133,7 +137,7 @@ function validateCreateInput(input: CreateArchitectureElementInput): ValidatedCr
     throw new Error('exactly one of --observed or --plan is required')
   }
   const kind = requireKind(requireText(input.kind, 'kind'))
-  if (input.description === undefined) throw new Error('description is required')
+  if (input.overview === undefined) throw new Error('overview is required')
   if (planId !== undefined && planId !== kebabCase(planId)) {
     throw new Error('plan id must be lowercase kebab-case')
   }
@@ -152,7 +156,8 @@ function validateCreateInput(input: CreateArchitectureElementInput): ValidatedCr
     observed,
     planId,
     kind,
-    description: input.description,
+    overview: input.overview,
+    ...(input.description === undefined ? {} : { description: input.description }),
     parentId,
     ...metadata,
   }
@@ -185,12 +190,13 @@ export async function createArchitectureElement(
     observed,
     planId,
     kind,
+    overview,
     description,
     parentId,
     external,
     technology,
   } = validateCreateInput(input)
-  if (observed) await ensureObservedReadme(repositoryRoot)
+  if (observed) await ensureObservedIndex(repositoryRoot)
   const revisions = await loadArchitecture(repositoryRoot)
   const byId = indexWorld(revisions)
   const id = kebabCase(name)
@@ -201,7 +207,7 @@ export async function createArchitectureElement(
   const parent = resolveParent(byId, kind, parentId)
 
   if (planId !== undefined) {
-    await ensurePlanReadme(repositoryRoot, planId, revisions)
+    await ensurePlanIndex(repositoryRoot, planId, revisions)
   }
   await writeObservedDocument(
     repositoryRoot,
@@ -211,14 +217,16 @@ export async function createArchitectureElement(
       id,
       parentSourceFilename: parent?.sourceFilename,
     }),
-    renderObservedDocument({
+    renderArchitectureDocument({
       id,
       kind,
       parent: parent?.id,
       external,
       technology,
       name,
-      responsibility: description,
+      description,
+      overview,
+      status: planId === undefined ? 'stable' : 'draft',
     }),
   )
   return id

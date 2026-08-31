@@ -44,7 +44,7 @@ export function drawCard(
     selected ? theme.selected : theme[item.origin],
     background,
   )
-  const lines = item.lines.length === 0 ? [item.name] : item.lines
+  const lines = item.lines.length === 0 ? [item.title] : item.lines
   const available = Math.max(0, bounds.width - 5)
   const firstY = bounds.y + Math.max(1, Math.floor((bounds.height - lines.length) / 2))
   for (const [index, line] of lines.slice(0, Math.max(1, bounds.height - 2)).entries()) {

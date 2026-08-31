@@ -1,9 +1,10 @@
 ---
-id: stock
-kind: component
-parent: api
+type: C4 Component
+title: Stock
+status: draft
+groma:
+  id: stock
+  parent: api
 ---
-
-# Stock
 
 Checks stock before placing an order.

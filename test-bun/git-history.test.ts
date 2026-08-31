@@ -7,6 +7,18 @@ import { test } from 'bun:test'
 
 import { listGitRevisions, withGitRevision } from '../src/history/git.ts'
 
+function projectSource(title: string, overview: string): string {
+  return `---
+type: Groma Project
+title: ${title}
+groma:
+  profile: architecture
+---
+
+${overview}
+`
+}
+
 function git(root: string, ...arguments_: string[]): Promise<void> {
   return new Promise((resolve, reject) => {
     const child = spawn('git', arguments_, { cwd: root, stdio: ['ignore', 'ignore', 'pipe'] })
@@ -42,11 +54,12 @@ test.concurrent('Git history lists only current-branch commits that changed grom
   try {
     await git(root, 'init')
     await mkdir(path.join(root, 'groma'), { recursive: true })
-    await writeFile(path.join(root, 'groma', 'README.md'), '# First\n')
+    await writeFile(path.join(root, 'groma', 'index.md'), '---\nokf_version: "0.2"\n---\n')
+    await writeFile(path.join(root, 'groma', 'project.md'), projectSource('First', 'First map.'))
     await commit(root, 'First architecture')
     await writeFile(path.join(root, 'source.ts'), 'export const current = true\n')
     await commit(root, 'Source only')
-    await writeFile(path.join(root, 'groma', 'README.md'), '# Second\n')
+    await writeFile(path.join(root, 'groma', 'project.md'), projectSource('Second', 'Second map.'))
     await commit(root, 'Second architecture', 'Complete second map.')
     await git(root, 'tag', 'v2.0.0')
 
@@ -72,23 +85,27 @@ test.concurrent('a Git revision loads a complete isolated repository snapshot', 
   try {
     await git(root, 'init')
     await mkdir(path.join(root, 'groma'), { recursive: true })
-    await writeFile(path.join(root, 'groma', 'README.md'), '# Historical\n')
+    await writeFile(path.join(root, 'groma', 'index.md'), '---\nokf_version: "0.2"\n---\n')
+    await writeFile(path.join(root, 'groma', 'project.md'), projectSource('Historical', 'Historical map.'))
     await writeFile(path.join(root, 'source.ts'), 'old source\n')
     await commit(root, 'Historical architecture')
     const [revision] = await listGitRevisions(root)
-    await writeFile(path.join(root, 'groma', 'README.md'), '# Current\n')
+    await writeFile(path.join(root, 'groma', 'project.md'), projectSource('Current', 'Current map.'))
     await writeFile(path.join(root, 'source.ts'), 'current source\n')
 
     const snapshot = await withGitRevision(root, revision!.id, async snapshotRoot => ({
-      architecture: await readFile(path.join(snapshotRoot, 'groma', 'README.md'), 'utf8'),
+      architecture: await readFile(path.join(snapshotRoot, 'groma', 'project.md'), 'utf8'),
       source: await readFile(path.join(snapshotRoot, 'source.ts'), 'utf8'),
       root: snapshotRoot,
     }))
 
-    assert.equal(snapshot.architecture, '# Historical\n')
+    assert.equal(snapshot.architecture, projectSource('Historical', 'Historical map.'))
     assert.equal(snapshot.source, 'old source\n')
     await assert.rejects(access(snapshot.root))
-    assert.equal(await readFile(path.join(root, 'groma', 'README.md'), 'utf8'), '# Current\n')
+    assert.equal(
+      await readFile(path.join(root, 'groma', 'project.md'), 'utf8'),
+      projectSource('Current', 'Current map.'),
+    )
   } finally {
     await rm(root, { recursive: true, force: true })
   }

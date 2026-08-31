@@ -200,8 +200,8 @@ function paintViewState(commitUrl = true): void {
   paintMapState(task, activeTaskItems)
   paintTree()
   const commands = worldCommands(world)
-  const actorName = (actorId: string): string | undefined => worldElement(actorId)?.name
-  paintFlows(flowsHost, commands, activeFlows, actorName, toggleFlow)
+  const actorTitle = (actorId: string): string | undefined => worldElement(actorId)?.title
+  paintFlows(flowsHost, commands, activeFlows, actorTitle, toggleFlow)
   paintWorldStats(statsHost, world, commands.length)
   const selected = worldElement(selectedId)
   const relationship = worldRelationship(selectedId)
@@ -213,7 +213,7 @@ function paintViewState(commitUrl = true): void {
       onSelect: select,
       onToggleFlow: toggleFlow,
       activeFlows,
-      actorName,
+      actorTitle,
       tab: detailsTab,
       onTab: tab => {
         detailsTab = tab

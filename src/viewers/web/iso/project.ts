@@ -403,7 +403,7 @@ export function projectScene(
   const slabs = paintOrder(scene.slabs, view).map(slab => ({
     slab,
     faces: boxFaces(slab.rect, -SLAB_HANG / HEIGHT_UNIT, 0, view),
-    text: bandText(slab.rect, 0, [slab.name], view),
+    text: bandText(slab.rect, 0, [slab.title], view),
   }))
   const buildings = paintOrder(scene.buildings, view).map(building => ({
     building,

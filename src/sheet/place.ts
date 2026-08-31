@@ -57,7 +57,7 @@ function item(element: AnnotatedElement): SheetItem {
   return {
     representationId: element.representationId,
     id: element.id,
-    name: element.name,
+    title: element.title,
     origin: element.origin,
   }
 }
@@ -66,7 +66,7 @@ function buildingNode(element: AnnotatedElement, ranges: FileMeasureRanges, degr
   const shape: Shape = element.kind === 'actor'
     ? { kind: 'round' }
     : element.external ? { kind: 'pill' } : { kind: 'block' }
-  const lines = shape.kind === 'pill' ? [element.name] : roofLines(element.name)
+  const lines = shape.kind === 'pill' ? [element.title] : roofLines(element.title)
   const base = footprintOf(lines, shape, degree)
   const floors = element.kind === 'component'
     ? floorsOf(element.origin, element.code, ranges, base)
@@ -83,7 +83,7 @@ function buildingNode(element: AnnotatedElement, ranges: FileMeasureRanges, degr
 function nameWidth(paint: Node['paint']): number {
   if (paint.kind === 'island') return nameCells(paint.name.toUpperCase(), ISLAND_FONT, ISLAND_SPACING)
   if (paint.kind === 'zone') return nameCells(paint.name, SURFACE_FONT)
-  if (paint.kind === 'slab') return nameCells(paint.element.name, SURFACE_FONT)
+  if (paint.kind === 'slab') return nameCells(paint.element.title, SURFACE_FONT)
   return 0
 }
 
@@ -233,7 +233,7 @@ export function placeWorld(world: ArchitectureGraph): Placement {
     return packed(
       system.representationId,
       withZones(system.representationId, containers.map(slab), containers, world.relationships),
-      { kind: 'island', islandKind: 'system', name: system.name, element: system },
+      { kind: 'island', islandKind: 'system', name: system.title, element: system },
       world.relationships,
     )
   }

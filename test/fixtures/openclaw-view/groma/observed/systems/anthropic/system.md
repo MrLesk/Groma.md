@@ -1,10 +1,11 @@
 ---
-id: anthropic
-kind: system
-external: true
+type: C4 System
+title: Anthropic
+status: stable
+groma:
+  id: anthropic
+  external: true
 ---
-
-# Anthropic
 
 Claude, the model OpenClaw's docs recommend for the assistant. The Agent
 Runtime calls it with an API key or setup-token as `anthropic/<model>`.

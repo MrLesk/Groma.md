@@ -1,9 +1,10 @@
 ---
-id: order-page
-kind: component
-parent: order-viewer
+type: C4 Component
+title: Order page
+status: stable
+groma:
+  id: order-page
+  parent: order-viewer
 ---
-
-# Order page
 
 Draws one order.

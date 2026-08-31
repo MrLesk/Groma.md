@@ -1,16 +1,17 @@
 ---
-id: terminal-host
-kind: component
-parent: view-host
-code:
-  - scanner: typescript
-    file: src/view-host.ts
-    symbol: startTerminalViewer
-    dependencies: 7
-    dependents: 1
+type: C4 Component
+title: Terminal host
+status: stable
+groma:
+  id: terminal-host
+  parent: view-host
+  code:
+    - scanner: typescript
+      file: src/view-host.ts
+      symbol: startTerminalViewer
+      dependencies: 7
+      dependents: 1
 ---
-
-# Terminal host
 
 Starts the terminal map and publishes the newest architecture and work snapshots while their independent watches run.
 

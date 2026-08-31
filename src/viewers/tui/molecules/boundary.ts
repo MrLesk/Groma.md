@@ -35,8 +35,8 @@ function drawTitle(
 ): void {
   const bounds = item.cellBounds
   const title = item.kind === 'group'
-    ? item.name
-    : `${kindGlyph(item.kind)} ${item.name}`
+    ? item.title
+    : `${kindGlyph(item.kind)} ${item.title}`
   const inset = item.kind === 'group' ? 1 : 2
   const x = Math.max(bounds.x + inset, projection.viewport.x + 1)
   const y = Math.max(bounds.y, projection.viewport.y)

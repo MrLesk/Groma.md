@@ -10,7 +10,7 @@ const COMPASS_RADIUS = 0.55
 const COMPASS_LETTER = 0.22
 const PROJECT_META = 'GROMA  /  ARCHITECTURE MAP'
 const MAX_PLATE_LINE_CHARACTERS = 80
-const MAX_PLATE_DESCRIPTION_LINES = 3
+const MAX_PLATE_OVERVIEW_LINES = 3
 
 type Projector = (gx: number, gy: number, z: number) => Point
 
@@ -48,8 +48,8 @@ export interface RichPlateText extends Omit<PlateText, 'lines'> {
 
 export interface ProjectPlate {
   polygon: Point[]
-  name: PlateText
-  description: RichPlateText
+  title: PlateText
+  overview: RichPlateText
   meta: PlateText
   edit: {
     polygon: Point[]
@@ -189,33 +189,33 @@ function projectPlate(
   const editSize = 0.82 * scale
   const editInset = 0.16 * scale
   const editReservationWidth = editSize + editInset * 2
-  const nameSize = 11 * scale
-  const nameLineHeight = 12.5 * scale
-  const descriptionSize = 6 * scale
-  const descriptionLineHeight = 7.5 * scale
+  const titleSize = 11 * scale
+  const titleLineHeight = 12.5 * scale
+  const overviewSize = 6 * scale
+  const overviewLineHeight = 7.5 * scale
   const metaSize = 4.5 * scale
   const contentInset = 0.25 * scale
   const pencilGutter = 0.5 * scale
   const horizontalPadding = contentInset + pencilGutter
   const limitedWidth = (text: string, size: number): number =>
     textWidth(text.slice(0, MAX_PLATE_LINE_CHARACTERS), size)
-  const descriptionWidth = Math.max(...profile.descriptionBlocks.map(block => limitedWidth(
+  const overviewWidth = Math.max(...profile.overviewBlocks.map(block => limitedWidth(
     `${block.marker === undefined ? '' : `${block.marker} `}${block.spans.map(span => span.text).join('')}`,
-    descriptionSize,
+    overviewSize,
   )), 0)
   const desiredContentWidth = Math.max(
-    limitedWidth(profile.name, nameSize),
-    descriptionWidth,
+    limitedWidth(profile.title, titleSize),
+    overviewWidth,
     limitedWidth(PROJECT_META, metaSize),
   )
   const width = Math.min(sheet.w, editReservationWidth + horizontalPadding + desiredContentWidth / PLANE)
   const contentWidth = (width - editReservationWidth - horizontalPadding) * PLANE
-  const nameLines = wrapPlain(profile.name, contentWidth, nameSize)
-  const descriptionLines = wrapMarkdown(profile.descriptionBlocks, contentWidth, descriptionSize)
-    .slice(0, MAX_PLATE_DESCRIPTION_LINES)
-  const nameTop = 0.18 * scale
-  const descriptionTop = nameTop + nameLines.length * nameLineHeight / PLANE + 0.18 * scale
-  const metaTop = descriptionTop + descriptionLines.length * descriptionLineHeight / PLANE + 0.2 * scale
+  const titleLines = wrapPlain(profile.title, contentWidth, titleSize)
+  const overviewLines = wrapMarkdown(profile.overviewBlocks, contentWidth, overviewSize)
+    .slice(0, MAX_PLATE_OVERVIEW_LINES)
+  const titleTop = 0.18 * scale
+  const overviewTop = titleTop + titleLines.length * titleLineHeight / PLANE + 0.18 * scale
+  const metaTop = overviewTop + overviewLines.length * overviewLineHeight / PLANE + 0.2 * scale
   const depth = Math.max(metaTop + 0.45 * scale, editSize + editInset * 2)
   const rect = {
     gx: sheet.gx + sheet.w + (FRAME_MARGIN - 0.4) * scale - width,
@@ -240,13 +240,13 @@ function projectPlate(
     rect,
     plate: {
       polygon: corners(rect, project),
-      name: {
-        origin: project(rect.gx + contentInset, rect.gy + nameTop, 0),
-        lines: nameLines, fontSize: nameSize, lineHeight: nameLineHeight, maxWidth: contentWidth,
+      title: {
+        origin: project(rect.gx + contentInset, rect.gy + titleTop, 0),
+        lines: titleLines, fontSize: titleSize, lineHeight: titleLineHeight, maxWidth: contentWidth,
       },
-      description: {
-        origin: project(rect.gx + contentInset, rect.gy + descriptionTop, 0),
-        lines: descriptionLines, fontSize: descriptionSize, lineHeight: descriptionLineHeight, maxWidth: contentWidth,
+      overview: {
+        origin: project(rect.gx + contentInset, rect.gy + overviewTop, 0),
+        lines: overviewLines, fontSize: overviewSize, lineHeight: overviewLineHeight, maxWidth: contentWidth,
       },
       meta: {
         origin: project(rect.gx + contentInset, rect.gy + metaTop, 0),

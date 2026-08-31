@@ -26,17 +26,18 @@ export const authoring = `# Authoring
 
 Say what must be true, not how to build it. Do not specify frameworks, file layouts, or implementation detail unless a requirement forces it.
 
-- New part: groma create <name> --plan <plan-id> --kind <kind> [--parent <id>] --description <prose>
+- New part: groma create <name> --plan <plan-id> --kind <kind> [--parent <id>] --overview <markdown> [--description <text>]
   The id is the kebab-case of the name and stays that id when accepted.
-- Existing semantic part without source evidence: groma create <name> --observed --kind <kind> [--parent <id>] [--external] [--technology <text>] --description <prose>
-- Required change to something that exists: groma edit <id> --plan <plan-id> [--description <prose>]
-  Same box, shown as planned until accepted. Omit --description to keep the current lead prose.
-- Current meaning of an existing id: groma edit <id> --description <prose>
+- Existing semantic part without source evidence: groma create <name> --observed --kind <kind> [--parent <id>] [--external] [--technology <text>] --overview <markdown> [--description <text>]
+- Required change to something that exists: groma edit <id> --plan <plan-id> [--overview <markdown>] [--description <text>]
+  Same box, shown as planned until accepted. Omit either field to preserve its current value.
+- Current long overview: groma edit <id> --overview <markdown>
+- Optional concise description: groma edit <id> --description <text>. Pass an empty value to remove it.
 - Group or ungroup a component: groma edit <id> --group <name> or groma edit <id> --ungroup
 - Move an empty scanned component: groma edit <id> --parent <container-id>
 - Combine empty scan records into one responsibility: groma edit <target-id> --combine <source-id...>
 - Observed collaboration: groma relate <source-id> <target-id> --description <prose> --technology <text>
 - Remove the only observed collaboration between two parts: groma relate <source-id> <target-id> --remove
-- Plan outcome prose: groma edit <plan-id> --description <prose>
+- Plan outcome prose: groma edit <plan-id> --overview <markdown>
 
 Kinds are actor, system, container, and component. Containers need a system parent. Components need a container parent. Structural edits refuse to remove authored prose or relationships.`

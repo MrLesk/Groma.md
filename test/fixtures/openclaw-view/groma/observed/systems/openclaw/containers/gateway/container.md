@@ -1,10 +1,11 @@
 ---
-id: gateway
-kind: container
-parent: openclaw
+type: C4 Container
+title: Gateway
+status: stable
+groma:
+  id: gateway
+  parent: openclaw
 ---
-
-# Gateway
 
 The single long-lived control plane on the host (`ws://127.0.0.1:18789` by
 default). It owns the typed WebSocket API for CLI, Control UI, and nodes,

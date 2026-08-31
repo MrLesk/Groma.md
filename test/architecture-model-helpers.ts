@@ -9,6 +9,7 @@ import type {
   MarkdownNode,
   RevisionRecord,
 } from '../src/types.ts'
+import { c4Type } from '../src/okf-profile.ts'
 
 export const repositoryRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -38,35 +39,50 @@ interface RelationshipFixture {
 interface ElementDocumentFixture {
   id: string
   kind: C4Kind
+  title?: string
+  description?: string
   sourceFilename: string
   parent?: string | null
   external?: unknown
   group?: unknown
+  technology?: unknown
+  code?: unknown
   relationships?: RelationshipFixture[]
 }
 
 export function elementDocument({
   id,
   kind,
+  title = id,
+  description,
   sourceFilename,
   parent,
   external,
   group,
+  technology,
+  code,
   relationships = [],
 }: ElementDocumentFixture): ArchitectureDocument {
-  const frontmatter: ArchitectureFrontmatter = { id, kind }
+  const groma: Record<string, unknown> = { id }
+  const frontmatter: ArchitectureFrontmatter = {
+    type: c4Type(kind),
+    title,
+    ...(description === undefined ? {} : { description }),
+    groma,
+  }
   if (parent !== undefined) {
-    frontmatter.parent = parent
+    groma.parent = parent
   }
   if (external !== undefined) {
-    frontmatter.external = external
+    groma.external = external
   }
   if (group !== undefined) {
-    frontmatter.group = group
+    groma.group = group
   }
+  if (technology !== undefined) groma.technology = technology
+  if (code !== undefined) groma.code = code
 
   const nodes: MarkdownNode[] = [
-    ['h1', { id }, id],
     ['p', {}, `${id} responsibility`],
   ]
 
@@ -102,5 +118,5 @@ export function elementDocument({
     )
   }
 
-  return { sourceFilename, frontmatter, nodes }
+  return { sourceFilename, body: `${id} responsibility`, frontmatter, nodes }
 }

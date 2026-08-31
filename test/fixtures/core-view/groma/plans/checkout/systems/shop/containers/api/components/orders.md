@@ -1,14 +1,15 @@
 ---
-id: orders
-kind: component
-parent: api
-code:
-  - scanner: typescript
-    file: src/checkout-orders.ts
-    symbol: checkout
+type: C4 Component
+title: Checkout orders
+status: draft
+groma:
+  id: orders
+  parent: api
+  code:
+    - scanner: typescript
+      file: src/checkout-orders.ts
+      symbol: checkout
 ---
-
-# Checkout orders
 
 Places an order through a guided checkout.
 

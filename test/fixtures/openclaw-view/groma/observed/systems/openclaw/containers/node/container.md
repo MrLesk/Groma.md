@@ -1,10 +1,11 @@
 ---
-id: node
-kind: container
-parent: openclaw
+type: C4 Container
+title: Node
+status: stable
+groma:
+  id: node
+  parent: openclaw
 ---
-
-# Node
 
 A paired companion (macOS menu bar, iOS, Android, or headless
 `openclaw node`) on the same WebSocket with `role: node`. It is a

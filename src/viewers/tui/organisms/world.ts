@@ -98,9 +98,9 @@ export function drawWorld(
       drawFlowMarker(buffer, source, projection, theme, '●')
     }
     if (target) {
-      const label = trace.step.target.visibleName === trace.step.target.name
+      const label = trace.step.target.visibleTitle === trace.step.target.title
         ? `▶ ${trace.step.index + 1}/${trace.step.total}`
-        : `▶ ${trace.step.target.name}`
+        : `▶ ${trace.step.target.title}`
       drawFlowMarker(buffer, target, projection, theme, label)
     }
   }

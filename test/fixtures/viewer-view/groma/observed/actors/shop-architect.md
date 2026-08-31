@@ -1,9 +1,10 @@
 ---
-id: shop-architect
-kind: actor
+type: C4 Actor
+title: Shop architect
+status: stable
+groma:
+  id: shop-architect
 ---
-
-# Shop architect
 
 Designs how the shop fits together.
 

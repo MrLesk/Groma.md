@@ -1,28 +1,29 @@
 ---
-id: task-diff
-kind: component
-parent: web-viewer
-group: "Work"
-code:
-  - scanner: typescript
-    file: src/viewers/web/task-diff/control.ts
-    dependencies: 3
-    dependents: 1
-  - scanner: typescript
-    file: src/viewers/web/task-diff/project.ts
-    dependencies: 0
-    dependents: 2
-  - scanner: typescript
-    file: src/viewers/web/task-diff/read.ts
-    dependencies: 3
-    dependents: 3
-  - scanner: typescript
-    file: src/viewers/web/task-diff/view.ts
-    dependencies: 6
-    dependents: 2
+type: C4 Component
+title: Task diff
+status: stable
+groma:
+  id: task-diff
+  parent: web-viewer
+  group: Work
+  code:
+    - scanner: typescript
+      file: src/viewers/web/task-diff/control.ts
+      dependencies: 3
+      dependents: 1
+    - scanner: typescript
+      file: src/viewers/web/task-diff/project.ts
+      dependencies: 0
+      dependents: 2
+    - scanner: typescript
+      file: src/viewers/web/task-diff/read.ts
+      dependencies: 3
+      dependents: 3
+    - scanner: typescript
+      file: src/viewers/web/task-diff/view.ts
+      dependencies: 6
+      dependents: 2
 ---
-
-# Task diff
 
 Loads a selected Backlog task recorded files and Git states on demand and shows their unified diffs inside Details.
 

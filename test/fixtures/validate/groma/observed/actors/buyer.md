@@ -1,9 +1,13 @@
 ---
-id: buyer
-kind: actor
+type: C4 Actor
+title: Buyer
+description: A person who places an order.
+status: stable
+groma:
+  id: buyer
+tags:
+  - customer
 ---
-
-# Buyer
 
 Places orders in the shop.
 

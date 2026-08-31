@@ -123,7 +123,7 @@ export function drawHierarchy(
     const suffix = row.hasChildren && !row.expanded ? ` (${row.count})` : ''
     const indent = `${'  '.repeat(row.depth)}${expand} `
     const mark = kindGlyph(row.kind)
-    const name = `${row.name}${suffix}`
+    const title = `${row.title}${suffix}`
     const attributes = row.external ? TextAttributes.DIM : 0
     let x = bounds.x + 2
     const remaining = (): number => Math.max(0, bounds.x + 1 + width - x)
@@ -131,11 +131,11 @@ export function drawHierarchy(
     x += [...indent].length
     text(buffer, mark, x, y, remaining(), theme[row.kind], background, attributes)
     x += [...mark].length
-    const nameColor = active ? theme.background : theme.foreground
-    const nameAttributes = row.origin === 'observed' && !row.external
+    const titleColor = active ? theme.background : theme.foreground
+    const titleAttributes = row.origin === 'observed' && !row.external
       ? 0
       : TextAttributes.DIM
-    text(buffer, ` ${name}`, x, y, remaining(), nameColor, background, nameAttributes)
+    text(buffer, ` ${title}`, x, y, remaining(), titleColor, background, titleAttributes)
   }
 
   if (legendHeight === 0) return

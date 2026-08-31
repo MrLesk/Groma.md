@@ -1,11 +1,12 @@
 import { loadArchitecture } from './architecture-reader.ts'
 import { architectureElementPath } from './architecture-path.ts'
 import {
-  renderObservedDocument,
+  renderArchitectureDocument,
   upsertCode,
   writeObservedDocument,
 } from './markdown-emitter.ts'
 import { displayName, kebabCase } from './naming.ts'
+import { c4Kind, requireGromaMapping } from './okf-profile.ts'
 import type { ScanFile, ScanObservation, ScanScope } from './scanner/observation.ts'
 import type {
   C4Kind,
@@ -73,33 +74,43 @@ interface World {
   byCodeFile: Map<string, WorldRecord>
 }
 
-function indexWorld(revisions: RevisionRecord[]): World {
-  const byId = new Map<string, WorldRecord>()
-  const byCodeFile = new Map<string, WorldRecord>()
+function worldRecord(
+  document: RevisionRecord['documents'][number],
+  origin: Origin,
+): WorldRecord | undefined {
+  const groma = requireGromaMapping(document.frontmatter, document.sourceFilename)
+  const { id, parent } = groma
+  const kind = c4Kind(document.frontmatter.type)
+  if (typeof id !== 'string' || kind === undefined) return undefined
+  if (parent !== undefined && parent !== null && typeof parent !== 'string') return undefined
+  return {
+    id,
+    kind,
+    parent,
+    origin,
+    sourceFilename: document.sourceFilename,
+    code: readCode(groma.code),
+  }
+}
 
-  for (const revision of revisions) {
-    if (revision.revision.kind === 'missing') continue
-    const origin: Origin = revision.revision.kind === 'plan' ? 'planned' : 'observed'
-    for (const document of revision.documents) {
-      const { id, kind, parent } = document.frontmatter
-      if (typeof id !== 'string' || typeof kind !== 'string') continue
-      if (!['actor', 'system', 'container', 'component'].includes(kind)) continue
-      const record: WorldRecord = {
-        id,
-        kind: kind as C4Kind,
-        parent,
-        origin,
-        sourceFilename: document.sourceFilename,
-        code: readCode(document.frontmatter.code),
-      }
-      const existing = byId.get(id)
-      if (existing === undefined || origin === 'planned') byId.set(id, record)
-      for (const reference of record.code) {
-        byCodeFile.set(codeFileKey(reference.scanner, reference.file), record)
-      }
+function indexRevision(revision: RevisionRecord, world: World): void {
+  if (revision.revision.kind === 'missing') return
+  const origin: Origin = revision.revision.kind === 'plan' ? 'planned' : 'observed'
+  for (const document of revision.documents) {
+    const record = worldRecord(document, origin)
+    if (record === undefined) continue
+    const existing = world.byId.get(record.id)
+    if (existing === undefined || origin === 'planned') world.byId.set(record.id, record)
+    for (const reference of record.code) {
+      world.byCodeFile.set(codeFileKey(reference.scanner, reference.file), record)
     }
   }
-  return { byId, byCodeFile }
+}
+
+function indexWorld(revisions: RevisionRecord[]): World {
+  const world: World = { byId: new Map(), byCodeFile: new Map() }
+  for (const revision of revisions) indexRevision(revision, world)
+  return world
 }
 
 function availableId(world: World, name: string, parent?: WorldRecord): string {
@@ -140,12 +151,13 @@ async function createRecord(
   await writeObservedDocument(
     repositoryRoot,
     record.sourceFilename,
-    renderObservedDocument({
+    renderArchitectureDocument({
       id,
       kind: input.kind,
       parent: input.parent?.id,
       name: input.name,
-      responsibility: '',
+      overview: '',
+      status: 'stable',
       code: record.code,
     }),
   )
@@ -199,7 +211,12 @@ async function refreshCuratedCode(
       const found = evidence.get(codeFileKey(reference.scanner, reference.file))
       return found === undefined ? reference : refreshedReference(reference, found.file, found.counts)
     })
-    await upsertCode(repositoryRoot, record.sourceFilename, record.code)
+    await upsertCode(
+      repositoryRoot,
+      record.sourceFilename,
+      record.code,
+      record.origin === 'planned' ? 'draft' : 'stable',
+    )
     if (record.origin === 'planned') summary.matched += 1
     else summary.refreshed += 1
   }
@@ -254,21 +271,22 @@ async function attachReference(
   reference: CodeReference,
 ): Promise<void> {
   record.code = [...record.code, reference]
-  await upsertCode(repositoryRoot, record.sourceFilename, record.code)
+  await upsertCode(
+    repositoryRoot,
+    record.sourceFilename,
+    record.code,
+    record.origin === 'planned' ? 'draft' : 'stable',
+  )
   world.byCodeFile.set(codeFileKey(reference.scanner, reference.file), record)
 }
 
-async function reconcileObservation(
+async function observationSystem(
   repositoryRoot: string,
   world: World,
   observation: ScanObservation,
+  inferred: Map<string, WorldRecord | undefined>,
   summary: ScanSummary,
-): Promise<void> {
-  const counts = sourceCounts(observation)
-  const inferred = new Map(observation.scopes.map(scope => [
-    scope.id,
-    inferredContainer(world, observation, scope),
-  ]))
+): Promise<WorldRecord> {
   let system = mostFrequent([...inferred.values()].flatMap(record => {
     const candidate = systemFor(world, record)
     return candidate === undefined ? [] : [candidate]
@@ -281,7 +299,17 @@ async function reconcileObservation(
     })
     summary.created += 1
   }
+  return system
+}
 
+async function observationContainers(
+  repositoryRoot: string,
+  world: World,
+  observation: ScanObservation,
+  system: WorldRecord,
+  inferred: Map<string, WorldRecord | undefined>,
+  summary: ScanSummary,
+): Promise<Map<string, WorldRecord>> {
   const containers = new Map<string, WorldRecord>()
   for (const scope of observation.scopes) {
     let container = inferred.get(scope.id)
@@ -296,7 +324,31 @@ async function reconcileObservation(
     }
     containers.set(scope.id, container)
   }
+  return containers
+}
 
+function scanReference(
+  observation: ScanObservation,
+  file: ScanFile,
+  counts: Map<string, SourceCounts>,
+): CodeReference {
+  const symbol = file.symbols.length === 1 ? file.symbols[0]?.name : undefined
+  return {
+    scanner: observation.scanner.language,
+    file: file.file,
+    ...(symbol === undefined ? {} : { symbol }),
+    ...counts.get(file.file)!,
+  }
+}
+
+async function reconcileFiles(
+  repositoryRoot: string,
+  world: World,
+  observation: ScanObservation,
+  containers: Map<string, WorldRecord>,
+  summary: ScanSummary,
+): Promise<void> {
+  const counts = sourceCounts(observation)
   const placementByFile = new Map(observation.placements.map(placement => [
     placement.file,
     placement.scope,
@@ -307,13 +359,7 @@ async function reconcileObservation(
     const scope = placementByFile.get(file.file)
     const parent = scope === undefined ? undefined : containers.get(scope)
     if (parent === undefined) continue
-    const symbol = file.symbols.length === 1 ? file.symbols[0]?.name : undefined
-    const reference: CodeReference = {
-      scanner: observation.scanner.language,
-      file: file.file,
-      ...(symbol === undefined ? {} : { symbol }),
-      ...counts.get(file.file)!,
-    }
+    const reference = scanReference(observation, file, counts)
     const name = fileDisplayName(file.file)
     const named = existingChild(world, 'component', name, parent)
     if (named?.origin === 'planned' && named.code.length === 0) {
@@ -329,6 +375,34 @@ async function reconcileObservation(
     })
     summary.created += 1
   }
+}
+
+async function reconcileObservation(
+  repositoryRoot: string,
+  world: World,
+  observation: ScanObservation,
+  summary: ScanSummary,
+): Promise<void> {
+  const inferred = new Map(observation.scopes.map(scope => [
+    scope.id,
+    inferredContainer(world, observation, scope),
+  ]))
+  const system = await observationSystem(
+    repositoryRoot,
+    world,
+    observation,
+    inferred,
+    summary,
+  )
+  const containers = await observationContainers(
+    repositoryRoot,
+    world,
+    observation,
+    system,
+    inferred,
+    summary,
+  )
+  await reconcileFiles(repositoryRoot, world, observation, containers, summary)
 }
 
 export async function reconcileScanObservations(

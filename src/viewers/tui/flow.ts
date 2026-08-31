@@ -4,9 +4,9 @@ import type { TerminalViewModel } from './model.ts'
 import { visibleEndpointFor, type TerminalProjection } from './projection.ts'
 
 export interface ProjectedFlowEndpoint {
-  name: string
+  title: string
   visibleKey?: string
-  visibleName?: string
+  visibleTitle?: string
 }
 
 export interface ProjectedFlowStep {
@@ -22,7 +22,7 @@ function visibleEndpoint(
   id: string,
   world: TerminalViewModel,
   projection: TerminalProjection,
-): { key: string; name: string; representationId?: string } | undefined {
+): { key: string; title: string; representationId?: string } | undefined {
   const byId = new Map(world.elements.map(element => [element.representationId, element]))
   const visible = new Map(projection.items.flatMap(item => {
     return item.representationId === undefined ? [] : [[item.representationId, item] as const]
@@ -53,9 +53,9 @@ export function projectFlowStep(
     const visibleIsAncestor = visible?.representationId !== undefined
       && ancestorIds(id, parentOf).includes(visible.representationId)
     return {
-      name: exact?.name ?? id,
+      title: exact?.title ?? id,
       visibleKey: visible?.key,
-      visibleName: visibleIsAncestor ? visible.name : undefined,
+      visibleTitle: visibleIsAncestor ? visible.title : undefined,
     }
   }
   return {
@@ -69,7 +69,7 @@ export function projectFlowStep(
 }
 
 export function flowEndpointLabel(endpoint: ProjectedFlowEndpoint): string {
-  return endpoint.visibleName === undefined || endpoint.visibleName === endpoint.name
-    ? endpoint.name
-    : `${endpoint.visibleName} / ${endpoint.name}`
+  return endpoint.visibleTitle === undefined || endpoint.visibleTitle === endpoint.title
+    ? endpoint.title
+    : `${endpoint.visibleTitle} / ${endpoint.title}`
 }

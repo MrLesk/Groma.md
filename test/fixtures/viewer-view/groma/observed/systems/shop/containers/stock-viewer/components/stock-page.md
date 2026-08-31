@@ -1,10 +1,11 @@
 ---
-id: stock-page
-kind: component
-parent: stock-viewer
+type: C4 Component
+title: Stock page
+status: stable
+groma:
+  id: stock-page
+  parent: stock-viewer
 ---
-
-# Stock page
 
 Draws the shelf counts.
 

@@ -1,7 +1,15 @@
 import { readdir, readFile } from 'node:fs/promises'
 import path from 'node:path'
 
-import { parse } from 'comark'
+import { parse, parseFrontmatter } from 'comark'
+
+import {
+  c4Kind,
+  requireBundleIndex,
+  requireConceptType,
+  requireProjectMetadata,
+  requireProjectOverview,
+} from './okf-profile.ts'
 
 import type {
   ArchitectureDocument,
@@ -121,9 +129,17 @@ function identifyRevision(descriptor: unknown): Revision {
   }
 }
 
-function isElementDocument(document: ArchitectureDocument): boolean {
-  return Object.hasOwn(document.frontmatter, 'id')
-    && Object.hasOwn(document.frontmatter, 'kind')
+function isReservedDocument(filename: string): boolean {
+  const basename = path.posix.basename(filename)
+  return basename === 'index.md' || basename === 'log.md'
+}
+
+function requireReservedFrontmatter(document: ArchitectureDocument): void {
+  if (Object.keys(document.frontmatter).length > 0) {
+    throw new TypeError(
+      `${document.sourceFilename}: only the bundle-root index may have frontmatter`,
+    )
+  }
 }
 
 async function parseDocument(
@@ -150,14 +166,79 @@ async function parseDocument(
   }
 
   try {
+    const { content } = parseFrontmatter(source)
     return deepFreeze(JSON.parse(JSON.stringify({
       sourceFilename,
+      body: content,
       nodes: tree.nodes,
       frontmatter: tree.frontmatter,
     })) as ArchitectureDocument)
   } catch (error) {
     throw new ArchitectureReadError(sourceFilename, revision, 'serialize', error)
   }
+}
+
+async function requireGromaPackage(
+  repositoryRoot: string,
+  revision: Revision,
+  onFilesystemAccess?: FilesystemAccessHandler,
+): Promise<void> {
+  const index = await parseDocument(
+    repositoryRoot,
+    revision,
+    path.join(repositoryRoot, 'groma', 'index.md'),
+    onFilesystemAccess,
+  )
+  requireBundleIndex(index.frontmatter, index.sourceFilename)
+  const project = await parseDocument(
+    repositoryRoot,
+    revision,
+    path.join(repositoryRoot, 'groma', 'project.md'),
+    onFilesystemAccess,
+  )
+  requireProjectMetadata(project.frontmatter, project.sourceFilename)
+  requireProjectOverview(project.nodes, project.body, project.sourceFilename)
+}
+
+async function loadRevisionRecord(
+  repositoryRoot: string,
+  revision: Revision,
+  onFilesystemAccess?: FilesystemAccessHandler,
+): Promise<RevisionRecord> {
+  const revisionRoot = path.join(repositoryRoot, revision.sourceDirectory)
+  const contextFile = path.join(revisionRoot, 'index.md')
+  const markdownFiles = await listMarkdownFiles(revisionRoot, onFilesystemAccess)
+  let context: ArchitectureDocument | undefined
+  const documents: ArchitectureDocument[] = []
+
+  for (const filename of markdownFiles) {
+    const document = await parseDocument(
+      repositoryRoot,
+      revision,
+      filename,
+      onFilesystemAccess,
+    )
+
+    if (isReservedDocument(document.sourceFilename)) {
+      requireReservedFrontmatter(document)
+      if (filename === contextFile) context = document
+      continue
+    }
+
+    const type = requireConceptType(document.frontmatter, document.sourceFilename)
+    if (c4Kind(type) !== undefined) documents.push(document)
+  }
+
+  if (!context) {
+    context = await parseDocument(
+      repositoryRoot,
+      revision,
+      contextFile,
+      onFilesystemAccess,
+    )
+  }
+
+  return deepFreeze({ revision, context, documents })
 }
 
 export async function loadRevision(
@@ -168,44 +249,8 @@ export async function loadRevision(
   const { onFilesystemAccess } = options
   const absoluteRepositoryRoot = path.resolve(repositoryRoot)
   const revision = deepFreeze(identifyRevision(revisionDescriptor))
-  const revisionRoot = path.join(absoluteRepositoryRoot, revision.sourceDirectory)
-  const contextFile = path.join(revisionRoot, 'README.md')
-  const markdownFiles = await listMarkdownFiles(
-    revisionRoot,
-    onFilesystemAccess,
-  )
-  let context: ArchitectureDocument | undefined
-  const documents: ArchitectureDocument[] = []
-
-  for (const filename of markdownFiles) {
-    const document = await parseDocument(
-      absoluteRepositoryRoot,
-      revision,
-      filename,
-      onFilesystemAccess,
-    )
-
-    if (filename === contextFile) {
-      context = document
-    } else if (isElementDocument(document)) {
-      documents.push(document)
-    }
-  }
-
-  if (!context) {
-    context = await parseDocument(
-      absoluteRepositoryRoot,
-      revision,
-      contextFile,
-      onFilesystemAccess,
-    )
-  }
-
-  return deepFreeze({
-    revision,
-    context,
-    documents,
-  })
+  await requireGromaPackage(absoluteRepositoryRoot, revision, onFilesystemAccess)
+  return loadRevisionRecord(absoluteRepositoryRoot, revision, onFilesystemAccess)
 }
 
 export async function loadArchitecture(
@@ -214,6 +259,12 @@ export async function loadArchitecture(
 ): Promise<RevisionRecord[]> {
   const { onFilesystemAccess } = options
   const absoluteRepositoryRoot = path.resolve(repositoryRoot)
+  const packageRevision = deepFreeze(identifyRevision({ kind: 'observed' }))
+  await requireGromaPackage(
+    absoluteRepositoryRoot,
+    packageRevision,
+    onFilesystemAccess,
+  )
   const plansRoot = path.join(absoluteRepositoryRoot, 'groma', 'plans')
   recordFilesystemAccess(onFilesystemAccess, 'read-directory', plansRoot)
   const planEntries = await readdir(plansRoot, { withFileTypes: true })
@@ -229,10 +280,10 @@ export async function loadArchitecture(
   const revisions: RevisionRecord[] = []
 
   for (const revision of revisionDescriptors) {
-    revisions.push(await loadRevision(
+    revisions.push(await loadRevisionRecord(
       absoluteRepositoryRoot,
-      revision,
-      options,
+      deepFreeze(identifyRevision(revision)),
+      onFilesystemAccess,
     ))
   }
 

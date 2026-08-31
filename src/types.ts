@@ -42,16 +42,15 @@ export type RevisionDescriptor =
   | { kind: 'plan'; name: string }
 
 export interface ArchitectureFrontmatter extends Record<string, unknown> {
-  id?: unknown
-  kind?: unknown
-  parent?: string | null
-  external?: unknown
-  group?: unknown
-  code?: CodeReference[]
+  type?: unknown
+  title?: unknown
+  description?: unknown
+  groma?: unknown
 }
 
 export interface ArchitectureDocument {
   sourceFilename: string
+  body: string
   nodes: MarkdownNode[]
   frontmatter: ArchitectureFrontmatter
 }
@@ -121,8 +120,9 @@ export interface WorkSnapshot {
 export interface ArchitectureElement {
   id: string
   kind: C4Kind
-  name: string
-  description: string
+  title: string
+  description?: string
+  overview: string
   parentId: string | null
   external: boolean
   group?: string
@@ -150,8 +150,9 @@ export interface AnnotatedElement {
   representationId: string
   id: string
   kind: C4Kind
-  name: string
-  description: string
+  title: string
+  description?: string
+  overview: string
   parent: string | null
   children: string[]
   external: boolean

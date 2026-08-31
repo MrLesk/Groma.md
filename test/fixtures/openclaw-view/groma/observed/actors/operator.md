@@ -1,9 +1,10 @@
 ---
-id: operator
-kind: actor
+type: C4 Actor
+title: Operator
+status: stable
+groma:
+  id: operator
 ---
-
-# Operator
 
 Runs a personal OpenClaw on their own machine. They message the assistant on
 the chats they already use, and they onboard, pair, and inspect the Gateway

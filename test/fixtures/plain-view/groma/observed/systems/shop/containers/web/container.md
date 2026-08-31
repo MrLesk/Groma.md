@@ -1,9 +1,10 @@
 ---
-id: web
-kind: container
-parent: shop
+type: C4 Container
+title: Web
+status: stable
+groma:
+  id: web
+  parent: shop
 ---
-
-# Web
 
 Storefront.

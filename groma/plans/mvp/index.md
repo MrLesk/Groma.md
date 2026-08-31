@@ -1,7 +1,3 @@
----
-id: mvp
----
-
 # MVP
 
 ## Outcome
@@ -28,4 +24,4 @@ matched it.
 6. Core merges observed architecture and every plan into one world and
    returns that world to a viewer plugin.
 
-This plan is complete. Its README remains as the record.
+This plan is complete. Its index remains as the record.

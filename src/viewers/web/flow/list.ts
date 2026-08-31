@@ -11,14 +11,14 @@ export function paintFlows(
   host: HTMLElement,
   commands: readonly AnnotatedRelationship[],
   active: readonly FlowRef[],
-  actorName: (actorId: string) => string | undefined,
+  actorTitle: (actorId: string) => string | undefined,
   onToggle: (flow: FlowRef) => void,
 ): void {
   host.replaceChildren()
   if (commands.length === 0) return
   const heading = sectionHeading('Flows', unfolded, () => {
     unfolded = !unfolded
-    paintFlows(host, commands, active, actorName, onToggle)
+    paintFlows(host, commands, active, actorTitle, onToggle)
   })
   const list = document.createElement('div')
   list.hidden = !unfolded
@@ -26,7 +26,7 @@ export function paintFlows(
     list.append(flowRow(
       { flow: { commandId: command.id }, title: command.description },
       active,
-      actorName,
+      actorTitle,
       onToggle,
     ))
   }

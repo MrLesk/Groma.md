@@ -74,8 +74,8 @@ export function paintHierarchy(
     const name = document.createElement('span')
     name.className = 'name'
     name.textContent = row.hasChildren && !row.expanded
-      ? `${row.name} (${row.count})`
-      : row.name
+      ? `${row.title} (${row.count})`
+      : row.title
 
     button.append(...branches, twist, mark, name)
     button.addEventListener('click', event => onSelect(row.id, event.shiftKey))

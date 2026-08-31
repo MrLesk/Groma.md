@@ -1,10 +1,11 @@
 ---
-id: inventory
-kind: component
-parent: api
+type: C4 Component
+title: Inventory
+status: draft
+groma:
+  id: inventory
+  parent: api
 ---
-
-# Inventory
 
 Reserves stock for an order.
 

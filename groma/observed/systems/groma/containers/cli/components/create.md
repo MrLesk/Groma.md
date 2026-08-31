@@ -1,22 +1,26 @@
 ---
-id: create
-kind: component
-parent: cli
-group: "Architecture authoring"
-code:
-  - scanner: typescript
-    file: src/create.ts
-    dependencies: 5
-    dependents: 2
-  - scanner: typescript
-    file: src/naming.ts
-    dependencies: 0
-    dependents: 5
+type: C4 Component
+title: Create
+status: stable
+groma:
+  id: create
+  parent: cli
+  group: Architecture authoring
+  code:
+    - scanner: typescript
+      file: src/create.ts
+      dependencies: 6
+      dependents: 2
+    - scanner: typescript
+      file: src/naming.ts
+      dependencies: 0
+      dependents: 5
 ---
 
-# Create
-
-Authors new planned or observed architecture elements with stable IDs, valid containment, and optional system or technology annotations.
+Authors a new planned or observed C4 concept with standard OKF metadata,
+nested Groma identity and containment, and body overview prose. Planned writes
+are draft; observed writes are stable. `--overview` owns the long body and the
+optional `--description` owns only the concise standard field.
 
 ## Relationships
 

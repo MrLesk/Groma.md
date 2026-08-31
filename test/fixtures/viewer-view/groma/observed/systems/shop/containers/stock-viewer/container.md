@@ -1,9 +1,10 @@
 ---
-id: stock-viewer
-kind: container
-parent: shop
+type: C4 Container
+title: Stock viewer
+status: stable
+groma:
+  id: stock-viewer
+  parent: shop
 ---
-
-# Stock viewer
 
 Shows what is left on the shelves.

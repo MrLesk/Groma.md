@@ -125,14 +125,15 @@ export function createProjectEditor(
 ) {
   const dialog = document.createElement('dialog')
   dialog.id = 'project-editor'
-  dialog.innerHTML = '<span class="anchor-line" aria-hidden="true"></span><form><h1></h1><label>Name<input name="name" required></label><div class="markdown-field"><div class="markdown-head"><span class="markdown-label">Description</span><div class="markdown-modes" role="tablist"><button type="button" role="tab" data-mode="write" aria-selected="true">Write</button><button type="button" role="tab" data-mode="preview" aria-selected="false">Preview</button></div></div><textarea name="description" required aria-label="Description Markdown"></textarea><div class="markdown-preview" role="tabpanel" hidden></div></div><p class="error" role="status"></p><div class="actions"><button type="button" data-cancel>Cancel</button><button type="submit">Save</button></div></form>'
+  dialog.innerHTML = '<span class="anchor-line" aria-hidden="true"></span><form><h1></h1><label>Title<input name="title" required></label><label>Description<input name="description"></label><div class="markdown-field"><div class="markdown-head"><span class="markdown-label">Overview</span><div class="markdown-modes" role="tablist"><button type="button" role="tab" data-mode="write" aria-selected="true">Write</button><button type="button" role="tab" data-mode="preview" aria-selected="false">Preview</button></div></div><textarea name="overview" required aria-label="Overview Markdown"></textarea><div class="markdown-preview" role="tabpanel" hidden></div></div><p class="error" role="status"></p><div class="actions"><button type="button" data-cancel>Cancel</button><button type="submit">Save</button></div></form>'
   document.body.append(dialog)
 
   const line = dialog.querySelector<HTMLElement>('.anchor-line')!
   const form = dialog.querySelector('form')!
-  const title = form.querySelector('h1')!
-  const name = form.elements.namedItem('name') as HTMLInputElement
-  const description = form.elements.namedItem('description') as HTMLTextAreaElement
+  const heading = form.querySelector('h1')!
+  const title = form.elements.namedItem('title') as HTMLInputElement
+  const description = form.elements.namedItem('description') as HTMLInputElement
+  const overview = form.elements.namedItem('overview') as HTMLTextAreaElement
   const preview = form.querySelector<HTMLElement>('.markdown-preview')!
   const modes = [...form.querySelectorAll<HTMLButtonElement>('[data-mode]')]
   const cancel = form.querySelector<HTMLButtonElement>('[data-cancel]')!
@@ -149,11 +150,11 @@ export function createProjectEditor(
     modes.forEach(button => {
       button.setAttribute('aria-selected', String(button.dataset.mode === mode))
     })
-    description.hidden = mode === 'preview'
+    overview.hidden = mode === 'preview'
     preview.hidden = mode === 'write'
     if (mode === 'write') return
     const version = ++previewVersion
-    const html = await renderMarkdown(description.value)
+    const html = await renderMarkdown(overview.value)
     if (version !== previewVersion) return
     preview.innerHTML = html
   }
@@ -161,7 +162,7 @@ export function createProjectEditor(
   modes.forEach(button => {
     button.addEventListener('click', () => void showMode(button.dataset.mode as 'write' | 'preview'))
   })
-  description.addEventListener('input', () => {
+  overview.addEventListener('input', () => {
     if (!preview.hidden) void showMode('preview')
   })
   cancel.addEventListener('click', () => dialog.close())
@@ -170,7 +171,11 @@ export function createProjectEditor(
     submit.disabled = true
     error.textContent = ''
     try {
-      await save({ name: name.value, description: description.value })
+      await save({
+        title: title.value,
+        overview: overview.value,
+        description: description.value,
+      })
       dialog.close()
     } catch (cause) {
       error.textContent = cause instanceof Error ? cause.message : String(cause)
@@ -182,14 +187,15 @@ export function createProjectEditor(
   return {
     open(profile: ProjectProfile) {
       anchor = document.querySelector('[data-project-edit]')!
-      title.textContent = `Edit ${profile.name}`
-      name.value = profile.name
-      description.value = profile.description
+      heading.textContent = `Edit ${profile.title}`
+      title.value = profile.title
+      description.value = profile.description ?? ''
+      overview.value = profile.overview
       error.textContent = ''
       void showMode('write')
       dialog.showModal()
       placeEditor(dialog, anchor, line)
-      name.focus()
+      title.focus()
     },
   }
 }

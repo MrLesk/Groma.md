@@ -187,7 +187,7 @@ export function paintSearchResults(
     mark.textContent = kindGlyph(result.element.kind)
     const name = document.createElement('span')
     name.className = 'search-name'
-    name.textContent = result.element.name
+    name.textContent = result.element.title
     const meta = document.createElement('span')
     meta.className = 'search-meta'
     meta.textContent = `${kindLabel(result.element.kind, result.element.external)} · ${result.element.origin}`

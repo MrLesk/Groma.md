@@ -1,7 +1,3 @@
----
-id: next
----
-
 # Next
 
 ## Outcome

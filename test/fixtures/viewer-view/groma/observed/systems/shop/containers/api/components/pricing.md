@@ -1,9 +1,10 @@
 ---
-id: pricing
-kind: component
-parent: api
+type: C4 Component
+title: Pricing
+status: stable
+groma:
+  id: pricing
+  parent: api
 ---
-
-# Pricing
 
 Works out what an order costs.

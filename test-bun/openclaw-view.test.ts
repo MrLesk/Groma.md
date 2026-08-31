@@ -6,8 +6,8 @@ import { openclawFixtureRoot } from './helpers.ts'
 
 test.concurrent('openclaw-view loads as a Groma 3 world without scanner leftovers', async () => {
   const { world } = await loadArchitectureViewModel(openclawFixtureRoot)
-  const names = world.elements.map(element => element.name).sort()
-  assert.deepEqual(names, [
+  const titles = world.elements.map(element => element.title).sort()
+  assert.deepEqual(titles, [
     'Agent Runtime',
     'Anthropic',
     'CLI',

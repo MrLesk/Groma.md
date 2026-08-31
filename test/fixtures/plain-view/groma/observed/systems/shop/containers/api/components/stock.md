@@ -1,9 +1,10 @@
 ---
-id: stock
-kind: component
-parent: api
+type: C4 Component
+title: Stock
+status: stable
+groma:
+  id: stock
+  parent: api
 ---
-
-# Stock
 
 Placeholder so the observed orders edge can resolve.

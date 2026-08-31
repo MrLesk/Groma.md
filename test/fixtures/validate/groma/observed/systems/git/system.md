@@ -1,9 +1,10 @@
 ---
-id: git
-kind: system
-external: true
+type: C4 System
+title: Git
+status: stable
+groma:
+  id: git
+  external: true
 ---
-
-# Git
 
 Keeps history for the architecture files.

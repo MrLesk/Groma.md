@@ -1,22 +1,27 @@
 ---
-id: scan-lifecycle
-kind: component
-parent: scanner
-group: "Scan lifecycle"
-code:
-  - scanner: typescript
-    file: src/scanner.ts
-    dependencies: 5
-    dependents: 3
-  - scanner: typescript
-    file: src/scan-reconciler.ts
-    dependencies: 6
-    dependents: 2
+type: C4 Component
+title: Scan lifecycle
+status: stable
+groma:
+  id: scan-lifecycle
+  parent: scanner
+  group: Scan lifecycle
+  code:
+    - scanner: typescript
+      file: src/scanner.ts
+      dependencies: 5
+      dependents: 3
+    - scanner: typescript
+      file: src/scan-reconciler.ts
+      dependencies: 7
+      dependents: 2
 ---
 
-# Scan lifecycle
-
-Runs one complete multi-language scan or watched rescan, then reconciles the full evidence batch with stable authored ownership before writing Markdown.
+Runs one complete multi-language scan or watched rescan, then reconciles the
+full evidence batch with stable authored ownership. A new observed C4 concept
+uses the OKF profile with stable status and may have an empty body overview;
+refresh and ghost matching update only nested Code evidence and lifecycle
+status before writing Markdown.
 
 ## Relationships
 

@@ -1,18 +1,22 @@
 ---
-id: project-profile
-kind: component
-parent: "core"
-code:
-  - scanner: typescript
-    file: src/project-profile.ts
-    dependencies: 1
-    dependents: 6
-  - scanner: typescript
-    file: src/project-markdown.ts
-    dependencies: 0
-    dependents: 2
+type: C4 Component
+title: Project profile
+status: stable
+groma:
+  id: project-profile
+  parent: core
+  code:
+    - scanner: typescript
+      file: src/project-profile.ts
+      dependencies: 2
+      dependents: 6
+    - scanner: typescript
+      file: src/project-markdown.ts
+      dependencies: 0
+      dependents: 2
 ---
 
-# Project profile
-
-Strictly reads and saves the project-owned Groma README as one name and Markdown description, and derives the rich blocks used by the blueprint title plate.
+Strictly reads and saves `groma/project.md` as a `Groma Project` concept with
+standard title, optional concise description, the explicit architecture
+profile marker, and a long body overview. It preserves unowned metadata and
+derives the rich overview blocks used by the blueprint title plate.

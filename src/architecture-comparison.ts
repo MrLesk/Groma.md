@@ -20,9 +20,9 @@ type RelationshipContent = Pick<
 
 interface ComparisonMove {
   observedParentId: string | null
-  observedParentName: string
+  observedParentTitle: string
   plannedParentId: string | null
-  plannedParentName: string
+  plannedParentTitle: string
 }
 
 interface ComparedRelationship extends RelationshipContent {
@@ -73,8 +73,8 @@ function relationshipEndpointKey(relationship: RelationshipContent): string {
   ].join('\0')
 }
 
-function comparisonDescription(description: string): string {
-  return description.replace(/\r?\n/g, ' ')
+function comparisonText(value: string | undefined): string | undefined {
+  return value?.replace(/\r?\n/g, ' ')
 }
 
 function outgoingRelationshipsByElement(
@@ -107,8 +107,9 @@ function architectureContent(
 ) {
   return {
     kind: element.kind,
-    name: element.name,
-    description: comparisonDescription(element.description),
+    title: element.title,
+    description: comparisonText(element.description),
+    overview: comparisonText(element.overview),
     parentId: element.parentId,
     external: element.external,
     relationships: outgoingRelationships.get(element.id) ?? [],
@@ -140,13 +141,13 @@ function comparisonMove(
 
   return {
     observedParentId: observedElement.parentId,
-    observedParentName: observedElement.parentId === null
+    observedParentTitle: observedElement.parentId === null
       ? 'Top level'
-      : observedById.get(observedElement.parentId)?.name ?? observedElement.parentId,
+      : observedById.get(observedElement.parentId)?.title ?? observedElement.parentId,
     plannedParentId: plannedElement.parentId,
-    plannedParentName: plannedElement.parentId === null
+    plannedParentTitle: plannedElement.parentId === null
       ? 'Top level'
-      : plannedById.get(plannedElement.parentId)?.name ?? plannedElement.parentId,
+      : plannedById.get(plannedElement.parentId)?.title ?? plannedElement.parentId,
   }
 }
 

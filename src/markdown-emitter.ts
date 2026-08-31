@@ -1,82 +1,93 @@
 import { mkdir, readFile, unlink, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 
+import { parseFrontmatter } from 'comark'
+import { renderFrontmatter } from 'comark/render'
+
+import { c4Type, requireGromaMapping } from './okf-profile.ts'
 import type { C4Kind, CodeReference } from './types.ts'
 
-function renderCodeLines(code: CodeReference[]): string[] {
-  if (code.length === 0) return []
-  const lines = ['code:']
-  for (const reference of code) {
-    lines.push(`  - scanner: ${reference.scanner}`)
-    lines.push(`    file: ${reference.file}`)
-    if (reference.symbol !== undefined) {
-      lines.push(`    symbol: ${reference.symbol}`)
-    }
-    if (reference.dependencies !== undefined) {
-      lines.push(`    dependencies: ${reference.dependencies}`)
-    }
-    if (reference.dependents !== undefined) {
-      lines.push(`    dependents: ${reference.dependents}`)
-    }
-  }
-  return lines
+export type RepresentationStatus = 'draft' | 'stable'
+
+function sourceWithFrontmatter(
+  frontmatter: Record<string, unknown>,
+  content: string,
+): string {
+  return `---\n${renderFrontmatter(frontmatter)}\n---${content}`
 }
 
-export function withCodeFrontmatter(
+function documentParts(source: string): {
+  content: string
+  data: Record<string, unknown>
+  frontmatterText: string
+} {
+  const parts = parseFrontmatter(source)
+  if (!source.startsWith('---\n') || parts.frontmatterText === '') {
+    throw new Error('document requires YAML frontmatter')
+  }
+  return parts
+}
+
+function withGromaChange(
+  source: string,
+  change: (groma: Record<string, unknown>) => void,
+  status?: RepresentationStatus,
+): string {
+  const { content, data } = documentParts(source)
+  const nextGroma = { ...requireGromaMapping(data, 'document') }
+  change(nextGroma)
+  return sourceWithFrontmatter({
+    ...data,
+    ...(status === undefined ? {} : { status }),
+    groma: nextGroma,
+  }, content)
+}
+
+export function withGromaCode(
   source: string,
   code: CodeReference[],
+  status?: RepresentationStatus,
 ): string {
-  if (!source.startsWith('---\n')) {
-    throw new Error('document requires YAML frontmatter')
-  }
-  const close = source.indexOf('\n---\n', 4)
-  if (close === -1) {
-    throw new Error('document requires YAML frontmatter')
-  }
-
-  const kept: string[] = []
-  let skippingCode = false
-  for (const line of source.slice(4, close).split('\n')) {
-    if (line === 'code:' || line.startsWith('code:')) {
-      skippingCode = true
-      continue
-    }
-    if (skippingCode && (/^[ \t]/.test(line) || line === '')) {
-      continue
-    }
-    skippingCode = false
-    if (line !== '') kept.push(line)
-  }
-
-  const header = [...kept, ...renderCodeLines(code)].join('\n')
-  return `---\n${header}\n---\n${source.slice(close + 5)}`
+  return withGromaChange(source, groma => {
+    if (code.length === 0) delete groma.code
+    else groma.code = code
+  }, status)
 }
 
-export function withFrontmatterField(
+export function withGromaField(
   source: string,
   field: 'group' | 'parent',
   value: string | undefined,
+  status?: RepresentationStatus,
 ): string {
-  if (!source.startsWith('---\n')) {
-    throw new Error('document requires YAML frontmatter')
-  }
-  const close = source.indexOf('\n---\n', 4)
-  if (close === -1) {
-    throw new Error('document requires YAML frontmatter')
-  }
+  return withGromaChange(source, groma => {
+    if (value === undefined) delete groma[field]
+    else groma[field] = value
+  }, status)
+}
 
-  const lines = source.slice(4, close).split('\n')
-  const existing = lines.findIndex(line => line.startsWith(`${field}:`))
-  if (existing !== -1) lines.splice(existing, 1)
-  if (value !== undefined) {
-    const code = lines.indexOf('code:')
-    lines.splice(code === -1 ? lines.length : code, 0, `${field}: ${JSON.stringify(value)}`)
-  }
-  return `---\n${lines.join('\n')}\n---\n${source.slice(close + 5)}`
+export function withRepresentationStatus(
+  source: string,
+  status: RepresentationStatus,
+): string {
+  const { content, data } = documentParts(source)
+  return sourceWithFrontmatter({ ...data, status }, content)
+}
+
+export function withDescription(
+  source: string,
+  description: string | undefined,
+): string {
+  if (description === undefined) return source
+  const { content, data } = documentParts(source)
+  const next = { ...data }
+  if (description === '') delete next.description
+  else next.description = description
+  return sourceWithFrontmatter(next, content)
 }
 
 export function omitCode(source: string): string {
-  return withCodeFrontmatter(source, [])
+  return withGromaCode(source, [])
 }
 
 function afterHeading(source: string, heading: RegExp) {
@@ -101,10 +112,24 @@ function replaceHeadingBody(
   return `${range.prefix}\n\n${next}${range.suffix === '' ? '\n' : `\n${range.suffix}`}`
 }
 
+const nonProseBlock = '(?: {0,3}(?:#{1,6}[ \\t]|[-+*][ \\t]+'
+  + '|\\d+[.)][ \\t]+|>[ \\t]?|```|~~~|\\|[ \\t]|<)| {4}\\S)'
+
+function leadingProseEnd(content: string, start: number): number {
+  const body = content.slice(start)
+  if (new RegExp(`^${nonProseBlock}`).test(body)) return start
+  const boundary = body.search(new RegExp(`\n[ \t]*\n(?=${nonProseBlock})`))
+  return boundary === -1 ? content.length : start + boundary
+}
+
 export function replaceLeadProse(source: string, prose: string): string {
-  const next = replaceHeadingBody(source, /^# .+$/m, prose)
-  if (next === undefined) throw new Error('document requires a heading')
-  return next
+  const { content, frontmatterText } = documentParts(source)
+  const bodyStart = content.search(/\S/)
+  const start = bodyStart === -1 ? content.length : bodyStart
+  const end = leadingProseEnd(content, start)
+  const suffix = content.slice(end).trimStart()
+  return `---\n${frontmatterText}\n---\n\n${prose.trim()}`
+    + `${suffix === '' ? '\n' : `\n\n${suffix}`}`
 }
 
 export function setOutcomeSection(source: string, prose: string): string {
@@ -115,30 +140,36 @@ export function setOutcomeSection(source: string, prose: string): string {
   return inserted
 }
 
-export function renderObservedDocument(input: {
+export function renderArchitectureDocument(input: {
   id: string
   kind: C4Kind
   parent?: string | null
   external?: boolean
   technology?: string
   name: string
-  responsibility: string
+  description?: string
+  overview: string
+  status: RepresentationStatus
   code?: CodeReference[]
 }): string {
-  const lines = ['---', `id: ${input.id}`, `kind: ${input.kind}`]
+  const groma: Record<string, unknown> = { id: input.id }
   if (input.kind === 'container' || input.kind === 'component') {
     if (!input.parent) {
       throw new Error(`${input.kind} ${input.id} requires a parent`)
     }
-    lines.push(`parent: ${input.parent}`)
+    groma.parent = input.parent
   }
-  if (input.external === true) lines.push('external: true')
-  if (input.technology !== undefined) {
-    lines.push(`technology: ${JSON.stringify(input.technology)}`)
-  }
-  lines.push(...renderCodeLines(input.code ?? []))
-  lines.push('---', '', `# ${input.name}`, '', input.responsibility, '')
-  return lines.join('\n')
+  if (input.external === true) groma.external = true
+  if (input.technology !== undefined) groma.technology = input.technology
+  if ((input.code?.length ?? 0) > 0) groma.code = input.code
+  const content = input.overview.trim() === '' ? '\n' : `\n\n${input.overview.trim()}\n`
+  return sourceWithFrontmatter({
+    type: c4Type(input.kind),
+    title: input.name,
+    ...(input.description === undefined ? {} : { description: input.description }),
+    status: input.status,
+    groma,
+  }, content)
 }
 
 export function withRelationship(
@@ -196,10 +227,11 @@ export async function upsertCode(
   repositoryRoot: string,
   sourceFilename: string,
   code: CodeReference[],
+  status: RepresentationStatus,
 ): Promise<void> {
   const filename = absoluteFilename(repositoryRoot, sourceFilename)
   const source = await readFile(filename, 'utf8')
-  await writeFile(filename, withCodeFrontmatter(source, code))
+  await writeFile(filename, withGromaCode(source, code, status))
 }
 
 export async function writeObservedDocument(

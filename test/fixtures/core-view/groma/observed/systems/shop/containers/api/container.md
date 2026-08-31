@@ -1,9 +1,10 @@
 ---
-id: api
-kind: container
-parent: shop
+type: C4 Container
+title: Shop API
+status: stable
+groma:
+  id: api
+  parent: shop
 ---
-
-# Shop API
 
 Coordinates ordering operations.

@@ -11,5 +11,5 @@ export function paintWorldStats(host: HTMLElement, world: ArchitectureGraph, flo
   const system = primarySystem(world)
   host.textContent = system === undefined
     ? ''
-    : `${system.name} · ${flowCount} flows · ${world.elements.length} elements`
+    : `${system.title} · ${flowCount} flows · ${world.elements.length} elements`
 }

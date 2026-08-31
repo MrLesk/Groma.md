@@ -1,20 +1,35 @@
 import assert from 'node:assert/strict'
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
+import { fileURLToPath } from 'node:url'
 
-import {
-  loadProjectProfile,
-  parseProjectProfile,
-  saveProjectProfile,
-} from '../src/project-profile.ts'
+import { loadProjectProfile, parseProjectProfile } from '../src/project-profile.ts'
 
-test('the project profile is the H1 and its Markdown body', async () => {
-  const profile = await parseProjectProfile('# Supply map\n\nShows **supply** responsibilities with `code`.\n\nAcross the whole repo.\n\n## Notes\n\nNot part of the profile.\n')
-  assert.equal(profile.name, 'Supply map')
-  assert.equal(profile.description, 'Shows **supply** responsibilities with `code`.\n\nAcross the whole repo.\n\n## Notes\n\nNot part of the profile.')
-  assert.deepEqual(profile.descriptionBlocks[0], {
+const source = `---
+type: Groma Project
+title: Supply map
+description: The standard short description.
+groma:
+  profile: architecture
+audience: developers
+---
+
+Shows **supply** responsibilities with \`code\`.
+
+Across the whole repo.
+
+## Notes
+
+More detail stays in the body.
+`
+
+test('the marked project concept owns title, description, and body overview', async () => {
+  const profile = await parseProjectProfile(source)
+
+  assert.equal(profile.title, 'Supply map')
+  assert.equal(profile.description, 'The standard short description.')
+  assert.match(profile.overview, /^Shows \*\*supply\*\*/)
+  assert.deepEqual(profile.overviewBlocks[0], {
     spans: [
       { text: 'Shows ', styles: [] },
       { text: 'supply', styles: ['strong'] },
@@ -23,33 +38,24 @@ test('the project profile is the H1 and its Markdown body', async () => {
       { text: '.', styles: [] },
     ],
   })
-  assert.deepEqual(profile.descriptionBlocks[2], {
-    spans: [{ text: 'Notes', styles: ['strong'] }],
-  })
-  assert.equal(profile.descriptionBlocks[3]!.spans[0]!.text, 'Not part of the profile.')
-  await assert.rejects(() => parseProjectProfile('No heading\n'), /project name heading/)
-  await assert.rejects(() => parseProjectProfile('# Nameless description\n'), /description is required/)
+  assert.equal(profile.overviewBlocks.at(-1)?.spans[0]?.text, 'More detail stays in the body.')
 })
 
-test('saving a project profile replaces its document in the supported shape', async () => {
-  const root = await mkdtemp(path.join(tmpdir(), 'groma-project-profile-'))
-  try {
-    await mkdir(path.join(root, 'groma'))
-    await writeFile(path.join(root, 'groma', 'README.md'), '# Incomplete\n')
-    assert.equal(await loadProjectProfile(root), undefined)
-    const saved = await saveProjectProfile(root, {
-      name: ' Supply map ',
-      description: ' ## Scope\n\nShows the current supply architecture. ',
-    })
-    assert.equal(saved.name, 'Supply map')
-    assert.equal(saved.description, '## Scope\n\nShows the current supply architecture.')
-    assert.equal(saved.descriptionBlocks[0]!.spans[0]!.text, 'Scope')
-    assert.equal(
-      await readFile(path.join(root, 'groma', 'README.md'), 'utf8'),
-      '# Supply map\n\n## Scope\n\nShows the current supply architecture.\n',
-    )
-    assert.deepEqual(await loadProjectProfile(root), saved)
-  } finally {
-    await rm(root, { recursive: true, force: true })
-  }
+test('the project body cannot duplicate its canonical title', async () => {
+  await assert.rejects(
+    parseProjectProfile(source.replace('Shows **supply**', '# Supply map\n\nShows **supply**')),
+    /must not duplicate title/,
+  )
+})
+
+test('loads the project profile from groma/project.md', async () => {
+  const fixtureRoot = path.resolve(
+    path.dirname(fileURLToPath(import.meta.url)),
+    'fixtures',
+    'validate',
+  )
+  const profile = await loadProjectProfile(fixtureRoot)
+
+  assert.equal(profile?.title, 'Example architecture')
+  assert.match(profile?.overview ?? '', /small shop/)
 })

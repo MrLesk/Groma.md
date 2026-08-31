@@ -1,18 +1,21 @@
 ---
-id: accept
-kind: component
-parent: core
-group: "Architecture changes"
-code:
-  - scanner: typescript
-    file: src/accept.ts
-    dependencies: 5
-    dependents: 1
+type: C4 Component
+title: Accept
+status: stable
+groma:
+  id: accept
+  parent: core
+  group: Architecture changes
+  code:
+    - scanner: typescript
+      file: src/accept.ts
+      dependencies: 6
+      dependents: 1
 ---
 
-# Accept
-
-Applies a scan-matched planned element to observed architecture, preserving its stable identity, writing its evidence, and removing the planned document.
+Applies a scan-matched draft concept to observed architecture, preserves its
+stable identity and complete authored OKF document, attaches the matching Code
+evidence, changes lifecycle status to stable, and removes the planned file.
 
 ## Relationships
 

@@ -20,22 +20,18 @@ const fixtureRoot = path.resolve(
 )
 
 const approvedStock = `---
-id: stock
-kind: component
-parent: api
+type: C4 Component
+title: Stock
+status: draft
+groma:
+  id: stock
+  parent: api
 ---
-
-# Stock
 
 Checks stock before placing an order.
 `
 
-const approvedPlanReadme = `---
-id: next
----
-
-# Next
-`
+const approvedPlanIndex = '# Next\n'
 
 function run(command: string, args: string[], cwd: string) {
   return new Promise<{
@@ -105,7 +101,7 @@ const approvedArgs = [
   'component',
   '--parent',
   'api',
-  '--description',
+  '--overview',
   'Checks stock before placing an order.',
 ]
 
@@ -137,7 +133,7 @@ test('a created container or component is planned under the given parent', async
     'container',
     '--parent',
     'shop',
-    '--description',
+    '--overview',
     'Stores goods.',
   ])
 
@@ -166,7 +162,7 @@ test('groma create --observed rebuilds the observed scaffold without a plan', as
     '--observed',
     '--kind',
     'system',
-    '--description',
+    '--overview',
     'Sells goods.',
   ])
   const container = await groma(root, [
@@ -179,7 +175,7 @@ test('groma create --observed rebuilds the observed scaffold without a plan', as
     'shop',
     '--technology',
     'HTTP',
-    '--description',
+    '--overview',
     'Handles orders.',
   ])
   const external = await groma(root, [
@@ -189,7 +185,7 @@ test('groma create --observed rebuilds the observed scaffold without a plan', as
     '--kind',
     'system',
     '--external',
-    '--description',
+    '--overview',
     'Keeps history.',
   ])
 
@@ -202,7 +198,7 @@ test('groma create --observed rebuilds the observed scaffold without a plan', as
   assert.equal(model.elements.find(element => element.id === 'api')?.technology, 'HTTP')
   assert.equal(model.elements.find(element => element.id === 'git')?.external, true)
   assert.equal(
-    await readFile(path.join(root, 'groma', 'observed', 'README.md'), 'utf8'),
+    await readFile(path.join(root, 'groma', 'observed', 'index.md'), 'utf8'),
     '# Observed architecture\n',
   )
 })
@@ -217,7 +213,7 @@ test('--parent is required for container and component and forbidden for actor a
     'next',
     '--kind',
     'component',
-    '--description',
+    '--overview',
     'Checks stock.',
   ])
   const missingContainerParent = await groma(root, [
@@ -227,7 +223,7 @@ test('--parent is required for container and component and forbidden for actor a
     'next',
     '--kind',
     'container',
-    '--description',
+    '--overview',
     'Stores goods.',
   ])
   const actorParent = await groma(root, [
@@ -239,7 +235,7 @@ test('--parent is required for container and component and forbidden for actor a
     'actor',
     '--parent',
     'shop',
-    '--description',
+    '--overview',
     'Pays for goods.',
   ])
   const systemParent = await groma(root, [
@@ -251,7 +247,7 @@ test('--parent is required for container and component and forbidden for actor a
     'system',
     '--parent',
     'shop',
-    '--description',
+    '--overview',
     'Versions the Markdown.',
   ])
 
@@ -273,7 +269,7 @@ test('--parent is required for container and component and forbidden for actor a
     'next',
     '--kind',
     'actor',
-    '--description',
+    '--overview',
     'Pays for goods.',
   ])
   assert.equal(actor.code, 0, actor.stderr)
@@ -286,46 +282,43 @@ test('--parent is required for container and component and forbidden for actor a
   assert.equal(
     await readFile(path.join(root, 'groma/plans/next/actors/buyer.md'), 'utf8'),
     `---
-id: buyer
-kind: actor
+type: C4 Actor
+title: Buyer
+status: draft
+groma:
+  id: buyer
 ---
-
-# Buyer
 
 Pays for goods.
 `,
   )
 })
 
-test('first use of a kebab-case plan id writes the plan README and leaves an existing README alone', async t => {
+test('first use of a kebab-case plan id writes the plan index and leaves an existing index alone', async t => {
   const firstRoot = await createRepo(t)
   const first = await groma(firstRoot, approvedArgs)
   assert.equal(first.code, 0, first.stderr)
   assert.equal(
-    await readFile(path.join(firstRoot, 'groma/plans/next/README.md'), 'utf8'),
-    approvedPlanReadme,
+    await readFile(path.join(firstRoot, 'groma/plans/next/index.md'), 'utf8'),
+    approvedPlanIndex,
   )
 
   const existingRoot = await createRepo(t)
-  const existingReadme = `---
-id: next
----
-
-# Custom heading
-`
-  await writeTree(existingRoot, { 'groma/plans/next/README.md': existingReadme })
+  const existingIndex = '# Custom heading\n'
+  await writeTree(existingRoot, { 'groma/plans/next/index.md': existingIndex })
   const existing = await groma(existingRoot, approvedArgs)
   assert.equal(existing.code, 0, existing.stderr)
   assert.equal(
-    await readFile(path.join(existingRoot, 'groma/plans/next/README.md'), 'utf8'),
-    existingReadme,
+    await readFile(path.join(existingRoot, 'groma/plans/next/index.md'), 'utf8'),
+    existingIndex,
   )
 })
 
 test('duplicate id, unknown parent, missing flag, illegal kind or parent, and non-kebab plan id fail without writes', async t => {
   const root = await createRepo(t)
   await writeTree(root, {
-    'groma/observed/systems/shop/containers/api/components/stock.md': approvedStock,
+    'groma/observed/systems/shop/containers/api/components/stock.md':
+      approvedStock.replace('status: draft', 'status: stable'),
   })
   const before = await readTree(root)
 
@@ -346,7 +339,7 @@ test('duplicate id, unknown parent, missing flag, illegal kind or parent, and no
         'component',
         '--parent',
         'nope',
-        '--description',
+        '--overview',
         'Tracks stock.',
       ],
       pattern: /unknown parent "nope"/,
@@ -360,7 +353,7 @@ test('duplicate id, unknown parent, missing flag, illegal kind or parent, and no
         'component',
         '--parent',
         'api',
-        '--description',
+        '--overview',
         'Tracks stock.',
       ],
       pattern: /--plan/,
@@ -374,13 +367,13 @@ test('duplicate id, unknown parent, missing flag, illegal kind or parent, and no
         'next',
         '--parent',
         'api',
-        '--description',
+        '--overview',
         'Tracks stock.',
       ],
       pattern: /--kind/,
     },
     {
-      name: 'missing description',
+      name: 'missing overview',
       args: [
         'create',
         'Inventory',
@@ -391,7 +384,7 @@ test('duplicate id, unknown parent, missing flag, illegal kind or parent, and no
         '--parent',
         'api',
       ],
-      pattern: /--description/,
+      pattern: /--overview/,
     },
     {
       name: 'illegal kind',
@@ -404,7 +397,7 @@ test('duplicate id, unknown parent, missing flag, illegal kind or parent, and no
         'person',
         '--parent',
         'api',
-        '--description',
+        '--overview',
         'Tracks stock.',
       ],
       pattern: /unknown kind "person"/,
@@ -420,7 +413,7 @@ test('duplicate id, unknown parent, missing flag, illegal kind or parent, and no
         'component',
         '--parent',
         'shop',
-        '--description',
+        '--overview',
         'Tracks stock.',
       ],
       pattern: /component requires a container parent, but "shop" is a system/,
@@ -436,7 +429,7 @@ test('duplicate id, unknown parent, missing flag, illegal kind or parent, and no
         'component',
         '--parent',
         'api',
-        '--description',
+        '--overview',
         'Tracks stock.',
       ],
       pattern: /plan id must be lowercase kebab-case/,
@@ -452,7 +445,7 @@ test('duplicate id, unknown parent, missing flag, illegal kind or parent, and no
         '--parent',
         'api',
         '--external',
-        '--description',
+        '--overview',
         'Tracks stock.',
       ],
       pattern: /--external is allowed only for systems/,

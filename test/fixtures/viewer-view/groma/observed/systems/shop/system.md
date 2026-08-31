@@ -1,9 +1,10 @@
 ---
-id: shop
-kind: system
+type: C4 System
+title: Shop
+status: stable
+groma:
+  id: shop
 ---
-
-# Shop
 
 Sells goods and records what was ordered.
 

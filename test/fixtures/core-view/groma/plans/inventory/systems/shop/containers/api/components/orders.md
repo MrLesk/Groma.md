@@ -1,13 +1,14 @@
 ---
-id: orders
-kind: component
-parent: api
-code:
-  - scanner: typescript
-    file: src/inventory-orders.ts
+type: C4 Component
+title: Inventory-aware orders
+status: draft
+groma:
+  id: orders
+  parent: api
+  code:
+    - scanner: typescript
+      file: src/inventory-orders.ts
 ---
-
-# Inventory-aware orders
 
 Places an order only after inventory is reserved.
 

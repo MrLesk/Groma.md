@@ -58,7 +58,7 @@ export async function relateObserved(
     repositoryRoot,
     source.sourceFilename,
     withRelationship(current, {
-      targetName: target.name,
+      targetName: target.title,
       targetHref: href,
       description,
       technology,
@@ -84,7 +84,7 @@ export async function removeObservedRelationship(
   if (matches.length > 1) throw new Error('relationship removal is ambiguous')
   const relationship = matches[0]!
   const href = relationshipHref(source.sourceFilename, target.sourceFilename)
-  const row = `| [${target.name}](${href}) | ${relationship.description} | ${relationship.technology} |`
+  const row = `| [${target.title}](${href}) | ${relationship.description} | ${relationship.technology} |`
   const current = await readDocument(repositoryRoot, source.sourceFilename)
   await writeObservedDocument(
     repositoryRoot,

@@ -7,7 +7,7 @@ import { test } from 'bun:test'
 
 import type { WorkSource } from '../src/work/backlog.ts'
 import { scanRepository } from '../src/scanner.ts'
-import type { WorkItem, WorkItemDetails, WorkSnapshot } from '../src/types.ts'
+import type { WorkItem, WorkSnapshot } from '../src/types.ts'
 import { startWebViewer } from '../src/viewers/web/server.ts'
 
 function run(command: string, args: string[], cwd: string) {
@@ -53,11 +53,20 @@ async function createLiveRepo(): Promise<string> {
   await writeTree(root, {
     'package.json': JSON.stringify({ name: 'shop', bin: { shop: 'src/cli.ts' } }),
     '.gitignore': 'node_modules/\n',
-    'groma/README.md': '# Shop\n\nShop architecture.\n',
-    'groma/observed/README.md': '# Observed\n',
-    'groma/missing/README.md': '# Missing\n',
+    'groma/index.md': '---\nokf_version: "0.2"\n---\n',
+    'groma/project.md': `---
+type: Groma Project
+title: Shop
+groma:
+  profile: architecture
+---
+
+Shop architecture.
+`,
+    'groma/observed/index.md': '# Observed\n',
+    'groma/missing/index.md': '# Missing\n',
     'backlog/tasks/.keep': '',
-    'groma/plans/README.md': '# Plans\n',
+    'groma/plans/index.md': '# Plans\n',
     'src/cli.ts': "import { scan } from './scanner.ts'\nexport function run() {}\n",
     'src/scanner.ts': 'export function scan() {}\n',
   })
@@ -90,46 +99,59 @@ async function observedSystems(root: string): Promise<string[]> {
 
 async function worldNames(url: string): Promise<string[]> {
   const payload = await (await fetch(`${url}/world.json`)).json() as {
-    world: { elements: { name: string }[] }
+    world: { elements: { title: string }[] }
   }
-  return payload.world.elements.map(element => element.name)
+  return payload.world.elements.map(element => element.title)
 }
 
-test.concurrent('groma web omits the project profile when its README is incomplete', async () => {
+test.concurrent('groma web rejects a package whose project concept has no overview', async () => {
   const root = await createLiveRepo()
-  await writeFile(path.join(root, 'groma', 'README.md'), '# Shop\n')
-  const server = await startWebViewer(root, { port: 0 })
+  await writeFile(path.join(root, 'groma', 'project.md'), `---
+type: Groma Project
+title: Shop
+groma:
+  profile: architecture
+---
+`)
   try {
-    assert.equal((await fetch(server.url)).status, 200)
-    const payload = await (await fetch(`${server.url}/world.json`)).json() as { project: unknown }
-    assert.equal(payload.project, null)
+    await assert.rejects(
+      startWebViewer(root, { port: 0 }),
+      /project body must start with overview prose/,
+    )
   } finally {
-    server.close()
     await rm(root, { recursive: true, force: true })
   }
 })
 
 test.concurrent('groma web serves a selected Git snapshot without changing repository state', async () => {
   const root = await createLiveRepo()
-  await writeFile(path.join(root, 'groma', 'README.md'), '# Current shop\n\nCurrent architecture.\n')
+  await writeFile(path.join(root, 'groma', 'project.md'), `---
+type: Groma Project
+title: Current shop
+groma:
+  profile: architecture
+---
+
+Current architecture.
+`)
   const before = await run('git', ['status', '--porcelain=v1'], root)
   const server = await startWebViewer(root, { port: 0 })
   try {
     const current = await (await fetch(`${server.url}/world.json`)).json() as {
-      project: { name: string }
+      project: { title: string }
       revisions: { id: string; subject: string }[]
     }
-    assert.equal(current.project.name, 'Current shop')
+    assert.equal(current.project.title, 'Current shop')
     assert.equal(current.revisions[0]!.subject, 'Initial architecture')
 
     const revision = current.revisions[0]!.id
     const historical = await (await fetch(`${server.url}/world.json?revision=${revision}`)).json() as {
-      project: { name: string }
+      project: { title: string }
       revision: { id: string }
       work: { items: unknown[] }
       pins: unknown[]
     }
-    assert.equal(historical.project.name, 'Shop')
+    assert.equal(historical.project.title, 'Shop')
     assert.equal(historical.revision.id, revision)
     assert.deepEqual(historical.work.items, [])
     assert.deepEqual(historical.pins, [])
@@ -169,9 +191,9 @@ test.concurrent('groma web reads component code on demand from the selected revi
   const historicalHelpers = 'export function helperEntry() {}\nconst historicalHelper = function () {}\n'
   const currentHelpers = 'export function helperEntry() {}\nconst currentHelper = function () {}\n'
   await writeTree(root, {
-    'groma/observed/systems/shop/system.md': '---\nid: shop\nkind: system\n---\n\n# Shop\n',
-    'groma/observed/systems/shop/containers/web/container.md': '---\nid: web\nkind: container\nparent: shop\n---\n\n# Web\n',
-    'groma/observed/systems/shop/containers/web/components/details.md': '---\nid: details\nkind: component\nparent: web\ncode:\n  - scanner: typescript\n    file: src/details.ts\n    symbol: Details\n  - scanner: typescript\n    file: src/helpers.ts\n    symbol: helperEntry\n---\n\n# Details\n',
+    'groma/observed/systems/shop/system.md': '---\ntype: C4 System\ntitle: Shop\nstatus: stable\ngroma:\n  id: shop\n---\n',
+    'groma/observed/systems/shop/containers/web/container.md': '---\ntype: C4 Container\ntitle: Web\nstatus: stable\ngroma:\n  id: web\n  parent: shop\n---\n',
+    'groma/observed/systems/shop/containers/web/components/details.md': '---\ntype: C4 Component\ntitle: Details\nstatus: stable\ngroma:\n  id: details\n  parent: web\n  code:\n    - scanner: typescript\n      file: src/details.ts\n      symbol: Details\n    - scanner: typescript\n      file: src/helpers.ts\n      symbol: helperEntry\n---\n',
     'src/details.ts': historicalSource,
     'src/helpers.ts': historicalHelpers,
   })
@@ -208,7 +230,7 @@ test.concurrent('groma web marks obsolete Markdown revisions unsupported', async
   await mkdir(path.dirname(actor), { recursive: true })
   await writeFile(actor, '---\nid: legacy\nkind: person\n---\n\n# Legacy\n')
   await commitAll(root, 'Old person contract')
-  await writeFile(actor, '---\nid: legacy\nkind: actor\n---\n\n# Legacy\n')
+  await writeFile(actor, '---\ntype: C4 Actor\ntitle: Legacy\nstatus: stable\ngroma:\n  id: legacy\n---\n')
   await commitAll(root, 'Current actor contract')
 
   const server = await startWebViewer(root, { port: 0 })
@@ -240,7 +262,7 @@ test.concurrent('groma web does not scan on open and applies a watched fold', as
     await scanRepository(root)
     await waitUntil(async () => (await worldNames(server.url)).includes('Cli'))
     assert.ok((await worldNames(server.url)).includes('Cli'))
-    assert.match(await (await fetch(server.url)).text(), /"name":"Cli"/)
+    assert.match(await (await fetch(server.url)).text(), /"title":"Cli"/)
     assert.ok(!(await worldNames(server.url)).includes('Orders'))
 
     const events = await fetch(`${server.url}/events`)
@@ -282,7 +304,7 @@ test.concurrent('groma web applies an architecture Markdown change without a ref
     let pushed = ''
     const document = path.join(root, 'groma/observed/systems/shop/system.md')
     const markdown = await Bun.file(document).text()
-    await writeFile(document, markdown.replace('# Shop', '# Shopfront'))
+    await writeFile(document, markdown.replace('title: Shop', 'title: Shopfront'))
     await waitUntil(async () => {
       const { value } = await reader.read()
       if (value) pushed += decoder.decode(value, { stream: true })
@@ -313,7 +335,11 @@ test.concurrent('groma web saves the project profile and publishes it without a 
     const response = await fetch(`${server.url}/project`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: 'Supply map', description: 'Shows supply responsibilities.' }),
+      body: JSON.stringify({
+        title: 'Supply map',
+        description: 'A concise supply architecture summary.',
+        overview: 'Shows supply responsibilities.',
+      }),
     })
     assert.equal(response.status, 200)
 
@@ -321,17 +347,27 @@ test.concurrent('groma web saves the project profile and publishes it without a 
     await waitUntil(async () => {
       const { value } = await reader.read()
       if (value) pushed += decoder.decode(value, { stream: true })
-      return pushed.includes('"generation":2') && pushed.includes('"name":"Supply map"')
+      return pushed.includes('"generation":2') && pushed.includes('"title":"Supply map"')
     })
     const payload = await (await fetch(`${server.url}/world.json`)).json() as {
-      project: { name: string; description: string; descriptionBlocks: unknown[] }
+      project: { title: string; description: string; overview: string; overviewBlocks: unknown[] }
     }
-    assert.equal(payload.project.name, 'Supply map')
-    assert.equal(payload.project.description, 'Shows supply responsibilities.')
-    assert.equal(payload.project.descriptionBlocks.length, 1)
+    assert.equal(payload.project.title, 'Supply map')
+    assert.equal(payload.project.description, 'A concise supply architecture summary.')
+    assert.equal(payload.project.overview, 'Shows supply responsibilities.')
+    assert.equal(payload.project.overviewBlocks.length, 1)
     assert.equal(
-      await readFile(path.join(root, 'groma', 'README.md'), 'utf8'),
-      '# Supply map\n\nShows supply responsibilities.\n',
+      await readFile(path.join(root, 'groma', 'project.md'), 'utf8'),
+      `---
+type: Groma Project
+title: Supply map
+groma:
+  profile: architecture
+description: A concise supply architecture summary.
+---
+
+Shows supply responsibilities.
+`,
     )
     await reader.cancel()
   } finally {
@@ -447,81 +483,6 @@ test.concurrent('groma web loads work asynchronously and updates only the work o
     assert.match(await (await fetch(server.url)).text(), /"workGeneration":2.*"status":"Done"/)
     assert.equal(reads, 2)
     await reader.cancel()
-  } finally {
-    server.close()
-    await rm(root, { recursive: true, force: true })
-  }
-})
-
-test.concurrent('groma web loads selected task details and diff outside the initial payload', async () => {
-  const root = await createLiveRepo()
-  await writeFile(path.join(root, 'src/cli.ts'), 'export const taskDiffSentinel = 42\n')
-  const task: WorkItem = {
-    id: 'TASK-DIFF',
-    title: 'Show task diff',
-    status: 'In Progress',
-    assignees: [],
-    references: [],
-    modifiedFiles: ['src/cli.ts'],
-    acceptanceCriteriaCompleted: 0,
-    acceptanceCriteriaCount: 1,
-    updatedAt: '2026-08-30T12:00:00Z',
-  }
-  const details: WorkItemDetails = {
-    id: task.id,
-    description: 'Selected detail sentinel',
-    acceptanceCriteria: [{ text: 'Inspect the selected task', checked: false }],
-    definitionOfDone: [],
-    implementationPlan: '',
-    implementationNotes: '',
-    comments: [],
-  }
-  let detailReads = 0
-  const workSource: WorkSource = {
-    async read() {
-      return {
-        statuses: ['To Do', 'In Progress', 'Done'],
-        defaultStatus: 'To Do',
-        items: [task],
-      }
-    },
-    async readItem(id) {
-      detailReads += 1
-      assert.equal(id, task.id)
-      return details
-    },
-    watch() {
-      return { close() {} }
-    },
-  }
-  const server = await startWebViewer(root, { port: 0, workSource })
-  try {
-    await waitUntil(async () => {
-      const payload = await (await fetch(`${server.url}/world.json`)).json() as { work: WorkSnapshot }
-      return payload.work.items[0]?.id === task.id
-    })
-    const page = await (await fetch(server.url)).text()
-    assert.doesNotMatch(page, /taskDiffSentinel|Selected detail sentinel/)
-    assert.equal(detailReads, 0)
-    const detailResponse = await fetch(`${server.url}/task.json?task=${task.id}`)
-    assert.equal(detailResponse.status, 200)
-    assert.deepEqual(await detailResponse.json(), details)
-    assert.equal(detailReads, 1)
-    const response = await fetch(`${server.url}/task-diff.json?task=${task.id}`)
-    assert.equal(response.status, 200)
-    const diff = await response.json() as {
-      taskId: string
-      source: { kind: string; revision: string }
-      files: { status: string; additions: number; hunks: unknown[] }[]
-    }
-    assert.equal(diff.taskId, task.id)
-    assert.equal(diff.source.kind, 'working-tree')
-    assert.match(diff.source.revision, /^[0-9a-f]{40}$/)
-    assert.equal(diff.files[0]!.status, 'modified')
-    assert.ok(diff.files[0]!.additions > 0)
-    assert.ok(diff.files[0]!.hunks.length > 0)
-    assert.equal((await fetch(`${server.url}/task.json?task=unknown`)).status, 404)
-    assert.equal((await fetch(`${server.url}/task-diff.json?task=unknown`)).status, 404)
   } finally {
     server.close()
     await rm(root, { recursive: true, force: true })

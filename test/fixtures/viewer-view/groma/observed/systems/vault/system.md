@@ -1,9 +1,10 @@
 ---
-id: vault
-kind: system
-external: true
+type: C4 System
+title: Vault
+status: stable
+groma:
+  id: vault
+  external: true
 ---
-
-# Vault
 
 Holds money outside the shop.

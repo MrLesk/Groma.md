@@ -218,7 +218,7 @@ const style = `
   #details-close:hover { background: var(--hover); }
   #details .meta { margin: 0 0 6px; }
   #details h1 { font-size: 21px; font-weight: 600; line-height: 1.3; margin: 0 0 16px; overflow-wrap: anywhere; }
-  #details .description { margin: 0 0 10px; line-height: 1.65; }
+  #details .overview { margin: 0 0 10px; line-height: 1.65; }
   #details .section {
     margin: 26px 0 10px;
     padding-bottom: 6px;

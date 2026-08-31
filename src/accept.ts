@@ -3,8 +3,10 @@ import { architectureRelative } from './architecture-path.ts'
 import {
   readDocument,
   removeDocument,
+  withRepresentationStatus,
   writeObservedDocument,
 } from './markdown-emitter.ts'
+import { requireGromaMapping } from './okf-profile.ts'
 import { readCode } from './scan-reconciler.ts'
 import type { ArchitectureDocument, RevisionRecord } from './types.ts'
 
@@ -18,7 +20,9 @@ function findDocument(
   const kind = origin === 'planned' ? 'plan' : 'observed'
   for (const record of revisions) {
     if (record.revision.kind !== kind) continue
-    const document = record.documents.find(entry => entry.frontmatter.id === id)
+    const document = record.documents.find(entry => {
+      return requireGromaMapping(entry.frontmatter, entry.sourceFilename).id === id
+    })
     if (document !== undefined) return document
   }
 }
@@ -30,14 +34,21 @@ export async function acceptGhost(
   const revisions = await loadArchitecture(repositoryRoot)
   const planned = findDocument(revisions, 'planned', id)
   if (planned === undefined) return 'missing'
-  if (readCode(planned.frontmatter.code).length === 0) return 'unmatched'
+  const plannedGroma = requireGromaMapping(
+    planned.frontmatter,
+    planned.sourceFilename,
+  )
+  if (readCode(plannedGroma.code).length === 0) return 'unmatched'
 
   const observedPath = `groma/observed/${architectureRelative(planned.sourceFilename)}`
   const observed = findDocument(revisions, 'observed', id)
   await writeObservedDocument(
     repositoryRoot,
     observedPath,
-    await readDocument(repositoryRoot, planned.sourceFilename),
+    withRepresentationStatus(
+      await readDocument(repositoryRoot, planned.sourceFilename),
+      'stable',
+    ),
   )
   if (observed !== undefined && observed.sourceFilename !== observedPath) {
     await removeDocument(repositoryRoot, observed.sourceFilename)

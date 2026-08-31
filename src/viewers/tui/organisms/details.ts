@@ -141,9 +141,9 @@ function detailsRows(
     return { rows, cursorLine }
   }
 
-  if (element.description) {
+  if (element.overview) {
     rows.push([])
-    for (const row of wrap(element.description, width)) rows.push([plain(row)])
+    for (const row of wrap(element.overview, width)) rows.push([plain(row)])
   }
 
   const byId = new Map(world.elements.map(item => [item.representationId, item]))
@@ -165,7 +165,7 @@ function detailsRows(
       const caption = actionCaption(
         relationship,
         outgoing,
-        id => byId.get(id)?.name,
+        id => byId.get(id)?.title,
       )
       const rest = caption.detail === '' ? '' : ` · ${caption.detail}`
       const peerMark = outgoing || peer === undefined
@@ -195,7 +195,7 @@ function detailsRows(
         rows.push([plain(childId)])
         continue
       }
-      rows.push([mark(child.kind, child.external), plain(` ${child.name}`)])
+      rows.push([mark(child.kind, child.external), plain(` ${child.title}`)])
     }
   }
 
@@ -236,7 +236,7 @@ export function drawDetails(
   drawBorder(buffer, bounds, element.origin, color, background)
   text(
     buffer,
-    ` ${element.name} `,
+    ` ${element.title} `,
     bounds.x + 2,
     bounds.y,
     width,

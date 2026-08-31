@@ -1,9 +1,10 @@
 ---
-id: order-viewer
-kind: container
-parent: shop
+type: C4 Container
+title: Order viewer
+status: stable
+groma:
+  id: order-viewer
+  parent: shop
 ---
-
-# Order viewer
 
 Shows orders as they arrive.

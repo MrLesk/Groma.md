@@ -55,19 +55,20 @@ Stable conceptual identity matters more than filenames or directory layout.
 Preserve explanations of responsibilities and collaborations that a reader
 can understand; do not reduce architecture to machine-oriented structure.
 
-The first description of an element may come from an accepted plan or from a
-first scan. Once that document exists, core may update only its `code`
-frontmatter from later scan results; it never rewrites the Markdown body.
+The first overview of an element may come from an accepted plan. A first scan
+may leave that overview empty. Once the document exists, core may update only
+its nested `groma.code` evidence from later scan results; it never rewrites
+the Markdown body.
 
 ## Code is evidence, not architecture
 
 Source files, imports, directories, and framework conventions may provide
 evidence to a scanner, but they do not become architecture merely because
-they exist. A component may keep a small Code overview in frontmatter: which
-scanner found an exact source file and, when useful, which symbol it
+they exist. A component may keep a small `groma.code` list in frontmatter:
+which scanner found an exact source file and, when useful, which symbol it
 recognized there. This evidence helps explain the component without turning
-the architecture into a source inventory. Groma does not require
-architecture metadata in application source.
+the architecture into a source inventory. Groma does not require architecture
+metadata in application source.
 
 ## Keep reality, intent, and history distinct
 
@@ -76,7 +77,7 @@ outcome. Git is the history of how those states change. A plan is not proof
 that source exists. `groma accept` applies a ghost only when a scan has
 matched it. Scanners cannot infer that a ghost is built. People and agents
 do not edit architecture element or revision files by hand. The root
-`groma/README.md` is their project profile, not an architecture record.
+`groma/project.md` is their project profile, not a C4 element.
 
 ## Plans describe outcomes, not work
 

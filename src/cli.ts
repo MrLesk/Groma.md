@@ -137,7 +137,8 @@ program
   .option('--plan <plan-id>', 'plan id')
   .option('--observed', 'write directly to observed architecture')
   .requiredOption('--kind <kind>', 'actor, system, container, or component')
-  .requiredOption('--description <prose>', 'element description')
+  .requiredOption('--overview <markdown>', 'long architecture overview')
+  .option('--description <text>', 'concise OKF description')
   .option('--parent <id>', 'parent element id')
   .option('--external', 'mark a system outside the architecture boundary')
   .option('--technology <text>', 'implementation technology')
@@ -148,6 +149,7 @@ program
         plan: options.plan,
         observed: options.observed,
         kind: options.kind,
+        overview: options.overview,
         description: options.description,
         parent: options.parent,
         external: options.external,
@@ -165,7 +167,8 @@ program
   .command('edit')
   .description('Update authored meaning')
   .argument('<id>', 'element id or plan id')
-  .option('--description <prose>', 'lead prose or plan Outcome')
+  .option('--overview <markdown>', 'long overview or plan Outcome')
+  .option('--description <text>', 'concise OKF description; empty removes it')
   .option('--plan <plan-id>', 'restate this element in the plan')
   .option('--group <name>', 'assign this component to a sibling group')
   .option('--ungroup', 'remove this component from its group')
@@ -175,6 +178,7 @@ program
     try {
       const edited = await editArchitecture(process.cwd(), {
         id,
+        overview: options.overview,
         description: options.description,
         plan: options.plan,
         group: options.group,

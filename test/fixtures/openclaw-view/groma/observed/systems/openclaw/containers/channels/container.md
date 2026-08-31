@@ -1,10 +1,11 @@
 ---
-id: channels
-kind: container
-parent: openclaw
+type: C4 Container
+title: Channels
+status: stable
+groma:
+  id: channels
+  parent: openclaw
 ---
-
-# Channels
 
 The messaging edge the Gateway owns. This world keeps the two onboarding
 paths the docs treat as first-class: WhatsApp Web and Telegram. DM pairing

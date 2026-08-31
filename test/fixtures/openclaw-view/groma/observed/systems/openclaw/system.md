@@ -1,9 +1,10 @@
 ---
-id: openclaw
-kind: system
+type: C4 System
+title: OpenClaw
+status: stable
+groma:
+  id: openclaw
 ---
-
-# OpenClaw
 
 A self-hosted personal assistant. One Gateway on the operator's host is the
 control plane for sessions, channels, tools, and events; the product is the

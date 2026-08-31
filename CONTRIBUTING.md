@@ -6,7 +6,9 @@ Thank you for helping build Groma. This guide takes you from a fresh checkout to
 
 Read the [Groma manifesto](MANIFESTO.md) to understand the product principles, then use the
 [documentation index](docs/index.md) to find the contract or product flow relevant to your change. Architecture Markdown
-is the source of truth for what Groma represents and shows.
+is the source of truth for what Groma represents and shows. It follows Groma's strict OKF v0.2 architecture profile;
+the [component Markdown contract](docs/component-markdown.md) defines its reserved files, metadata, body, and
+relationships.
 
 Keep each contribution focused on one approved outcome and one supported example. Use Backlog.md for tracked product or
 code work; small documentation corrections can be made directly.
@@ -41,6 +43,8 @@ Confirm that the actor, entry point, observable result, and approved example are
 
 - Follow the nearest existing implementation pattern and keep the path from entry point to result easy to explain.
 - Update canonical Markdown when the represented architecture or product contract changes.
+- Keep C4 identity and ownership in the nested `groma` mapping, standard OKF metadata at the top level, and long overview
+  prose in the Markdown body. Do not add a duplicate level-one heading.
 - Add focused lower-level tests for implementation rules that do not belong in a product-flow scenario.
 - Do not add compatibility behavior, fallbacks, or speculative abstractions without an explicit product requirement.
 - For Backlog-tracked work, record each changed file and each affected element `id` on the task as you go, before

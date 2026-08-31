@@ -73,7 +73,7 @@ for (const {
     ],
     code: 'INVALID_ELEMENT_LOCATION',
     sourceFilename: 'groma/plans/test-revision/people/misplaced-actor.md',
-    message: /actor "misplaced-actor" must be stored directly under groma\/plans\/test-revision\/actors\//,
+    message: /actor "misplaced-actor" is not stored at its canonical C4 path/,
   },
   {
     name: 'reports an external actor',
@@ -154,9 +154,9 @@ for (const {
         sourceFilename: 'groma/plans/test-revision/actors/null-parent-actor.md',
       }),
     ],
-    code: 'INVALID_PARENT',
+    code: 'INVALID_ELEMENT',
     sourceFilename: 'groma/plans/test-revision/actors/null-parent-actor.md',
-    message: /actor "null-parent-actor" cannot declare a parent/,
+    message: /parent must be a non-empty string when present/,
   },
   {
     name: 'reports a root C4 element with an empty parent',
@@ -169,10 +169,10 @@ for (const {
           'groma/plans/test-revision/systems/empty-parent-system/system.md',
       }),
     ],
-    code: 'INVALID_PARENT',
+    code: 'INVALID_ELEMENT',
     sourceFilename:
       'groma/plans/test-revision/systems/empty-parent-system/system.md',
-    message: /system "empty-parent-system" cannot declare a parent/,
+    message: /parent must be a non-empty string when present/,
   },
   {
     name: 'reports a root C4 element that declares a parent',
@@ -215,11 +215,11 @@ for (const {
           + 'null-parent-component.md',
       }),
     ],
-    code: 'INVALID_PARENT',
+    code: 'INVALID_ELEMENT',
     sourceFilename:
       'groma/plans/test-revision/systems/groma/containers/viewer/components/'
       + 'null-parent-component.md',
-    message: /component "null-parent-component" requires a container parent id/,
+    message: /parent must be a non-empty string when present/,
   },
   {
     name: 'reports an unresolved relationship link at its source document',

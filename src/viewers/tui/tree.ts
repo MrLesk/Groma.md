@@ -10,7 +10,7 @@ export interface TreeState {
 
 export interface TreeRow {
   id: string
-  name: string
+  title: string
   kind: C4Kind
   external: boolean
   depth: number
@@ -84,7 +84,7 @@ function rows<Element extends AnnotatedElement>(
     const expanded = expandedFor(element)
     rows.push({
       id: element.representationId,
-      name: element.name,
+      title: element.title,
       kind: element.kind,
       external: element.external,
       depth,

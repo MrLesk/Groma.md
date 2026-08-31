@@ -1,9 +1,10 @@
 ---
-id: human-architect
-kind: actor
+type: C4 Actor
+title: Human architect
+status: stable
+groma:
+  id: human-architect
 ---
-
-# Human architect
 
 Understands, plans, and reviews the architecture of a software system. They judge whether scan evidence is recognizable, curate it through Groma, and accept planned work once source evidence matches.
 
