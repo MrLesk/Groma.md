@@ -5,6 +5,12 @@
   "exports": {
     ".": "./src/index.ts"
   },
+  "groma": {
+    "scanner": {
+      "id": "csharp",
+      "entry": "./src/index.ts"
+    }
+  },
   "dependencies": {
     "@groma/scanner": "workspace:*"
   }

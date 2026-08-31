@@ -169,7 +169,7 @@ export async function startWebViewer(
     })
   }
 
-  const sourceWatch = watchScan(repositoryRoot, {
+  const sourceWatch = await watchScan(repositoryRoot, {
     onFold: publishWorld,
   })
   const architectureWatch = watchArchitecture(repositoryRoot, {

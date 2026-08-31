@@ -150,7 +150,7 @@ export async function exportWebViewer(
     })
   }
 
-  const sourceWatch = options.watch ? watchScan(repositoryRoot, {
+  const sourceWatch = options.watch ? await watchScan(repositoryRoot, {
     onFold: schedule,
     onError: options.onError,
   }) : undefined

@@ -17,7 +17,9 @@ groma:
       dependents: 1
 ---
 
-Exports the C# scanner module, starts its Roslyn adapter for a repository solution or project, and returns one complete observation through the shared contract.
+Exports the optional C# scanner module. When a project enables it, the module
+starts its Roslyn adapter for a repository solution or project and returns one
+complete observation through the shared contract.
 
 ## Relationships
 

@@ -19,6 +19,26 @@ const scanner = {
 export default scanner
 ```
 
+Declare the module entry in the package manifest:
+
+```json
+{
+  "name": "@example/groma-scanner-python",
+  "version": "1.0.0",
+  "type": "module",
+  "groma": {
+    "scanner": {
+      "id": "python",
+      "entry": "./src/index.ts"
+    }
+  }
+}
+```
+
+The manifest ID must match the default export. The entry must be a file inside
+the package. Scanner packages are TypeScript or JavaScript modules and must not
+depend on installation scripts.
+
 `id` identifies the scanner inside Groma. `matchesFile` receives a
 repository-relative path and lets the shared watch lifecycle decide whether to
 rescan. `scan` receives the repository root and returns one complete
@@ -37,7 +57,30 @@ One successful call returns exactly one complete observation:
 All paths are repository-relative. Scope and relationship endpoints must exist in the same observation. Duplicate primary keys and incomplete JSON are rejected before core reconciliation.
 
 Language-specific project rules stay inside the scanner. The scanner registry
-loads every registered module through the same contract, and core applies the rules
+loads every enabled module through the same contract, and core applies the rules
 in the [scanner overview](index.md). A scanner must include a fixture proving
 deterministic output, atomic files, placement, relationships, and failure
 without partial output.
+
+## Add a scanner
+
+Use an exact npm version or a project-relative local package:
+
+```sh
+groma scanner add @example/groma-scanner-python@1.0.0
+groma scanner add ./plugins/scanners/python
+```
+
+`add` validates the installed package before writing `groma/scanners.json`.
+Npm packages live in Groma's shared `~/.groma/cache/scanners` cache. Local
+packages run directly from the configured path.
+
+```sh
+groma scanner list
+groma scanner install
+groma scanner remove python
+```
+
+`install` restores configured npm packages. `remove` disables a scanner without
+deleting shared cache data. Scan and watch never install packages, search global
+packages, or load an unconfigured module.

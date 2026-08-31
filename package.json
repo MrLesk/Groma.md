@@ -26,7 +26,6 @@
   },
   "dependencies": {
     "@groma/scanner": "workspace:*",
-    "@groma/scanner-csharp": "workspace:*",
     "@groma/scanner-typescript": "workspace:*",
     "@comark/html": "0.5.1",
     "@opentui/core": "0.5.1",

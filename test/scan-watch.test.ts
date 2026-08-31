@@ -94,7 +94,7 @@ async function observedSystems(root: string): Promise<string[]> {
 test('watchScan folds a settled TypeScript change and ignores plugin test files', async t => {
   const root = await createWatchRepo(t)
   const folds: number[] = []
-  const session = watchScan(root, {
+  const session = await watchScan(root, {
     onFold: () => {
       folds.push(Date.now())
     },
