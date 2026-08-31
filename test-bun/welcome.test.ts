@@ -33,6 +33,23 @@ test.concurrent('up and down choose one action before enter', async () => {
   assert.equal(await selected, 'view')
 })
 
+test.concurrent('advanced command rows never become launcher actions', async () => {
+  const setup = await createTestRenderer({ width: 110, height: 45 })
+  const selected = mountWelcomeLauncher(
+    setup.renderer,
+    '/workspace/example',
+  )
+
+  for (let index = 0; index < 4; index++) setup.mockInput.pressArrow('down')
+  setup.mockInput.pressEnter()
+  setup.mockInput.pressArrow('down')
+  setup.mockInput.pressEnter()
+  setup.mockInput.pressArrow('up')
+  setup.mockInput.pressEnter()
+
+  assert.equal(await selected, 'help')
+})
+
 test.concurrent('escape and q close without choosing an action', async () => {
   for (const key of ['ESCAPE', 'q'] as const) {
     const setup = await createTestRenderer({ width: 100, height: 30 })

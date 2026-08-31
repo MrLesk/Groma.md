@@ -13,4 +13,4 @@ groma:
       dependents: 1
 ---
 
-Owns the bare Groma repository welcome, ordered actions, stable non-interactive text, and keyboard launcher that returns one selected action to Commands.
+Owns the bare Groma repository welcome, executable action order, the read-only advanced command accordion, stable non-interactive text, and the keyboard launcher that returns one selected action to Commands.
