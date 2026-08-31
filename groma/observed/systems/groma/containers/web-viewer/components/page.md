@@ -11,7 +11,7 @@ groma:
       file: src/viewers/web/page.ts
       symbol: renderPage
       dependencies: 22
-      dependents: 1
+      dependents: 2
 ---
 
 Serves the browser HTML shell with the three panes and embedded project, architecture, sheet, palette, and feature styles.

@@ -33,10 +33,19 @@ an interactive terminal, it prints the same context and actions as plain text.
    element, a plan, or the element whose `groma.code` names that
    repository-relative file. When several elements share the file, the
    command fails.
-2. `groma scan`: scan this repo. Core folds the findings into Markdown.
+2. Publish a snapshot with `groma export <directory>`. The generated static
+   site contains the current project profile, architecture map and flows,
+   mapped Backlog work with task details and diffs, and architecture-owned
+   source inspection. It has no editor and never reads the repository or a
+   running Groma server. Everything in the output directory is public data.
+   `--watch` replaces the static snapshot after supported source,
+   architecture Markdown, or Backlog changes; an open page adopts each
+   replacement without reloading. Hosting and access control belong to the
+   chosen static host, outside Groma.
+3. `groma scan`: scan this repo. Core folds the findings into Markdown.
    The command prints `ok` and a short summary. It does not print the
    architecture.
-3. Change the architecture through Groma's commands; no viewer edits element
+4. Change the architecture through Groma's commands; no viewer edits element
    or revision documents.
    - A **new part** becomes a ghost in a plan. `groma create` authors that
      ghost.
@@ -59,12 +68,12 @@ an interactive terminal, it prints the same context and actions as plain text.
    - The web map's project pencil edits only the project title, concise
      description, and body overview in `groma/project.md`; it does not edit C4
      concepts.
-4. `groma accept <id>`: accept that ghost, only if a scan has matched it.
+5. `groma accept <id>`: accept that ghost, only if a scan has matched it.
    Groma may scan first if needed. No match: the command fails and the
    ghost stays planned. A scan never accepts a ghost on its own.
 
-An architect who only wants to see the repo uses 1 and 2. A builder adding
-parts from elsewhere asks Groma to put them in a plan, then uses 1 and 4.
+An architect who only wants to see the repo uses 1 and 3. A builder adding
+parts from elsewhere asks Groma to put them in a plan, then uses 1 and 5.
 An expert or agent uses the same commands, including from an empty world.
 
 ## Identity

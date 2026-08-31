@@ -10,8 +10,9 @@ records as a strict OKF v0.2 application profile; the project context in
 `groma scan` updates Markdown from this repo and prints `ok`. A viewer
 shows the world. `groma view` opens the terminal map (text without a
 TTY). `groma web` serves the isometric web map in the browser and pins
-live Backlog work on the element each task touched last. `groma
-instructions` prints the shipped workflow guide.
+live Backlog work on the element each task touched last. `groma export
+<directory>` writes the current Web view as a read-only static site.
+`groma instructions` prints the shipped workflow guide.
 
 - [Scanners](scanners/index.md)
 - [Viewers](viewers/index.md)

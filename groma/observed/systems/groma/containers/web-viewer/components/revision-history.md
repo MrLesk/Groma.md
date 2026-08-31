@@ -9,7 +9,7 @@ groma:
     - scanner: typescript
       file: src/viewers/web/revision/control.ts
       symbol: createRevisionControl
-      dependencies: 1
+      dependencies: 2
       dependents: 1
     - scanner: typescript
       file: src/viewers/web/revision/view.ts

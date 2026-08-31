@@ -10,7 +10,7 @@ groma:
     - scanner: typescript
       file: src/work/backlog.ts
       dependencies: 1
-      dependents: 2
+      dependents: 3
 ---
 
 Reads the configured Backlog workflow and tasks and watches task records without blocking architecture rendering.

@@ -10,6 +10,7 @@ import { createMapDebugPanel } from './chrome/map-debug.ts'
 import { animateControl, createThemeTransition } from './chrome/motion.ts'
 import { createWebShell, mapFrame, type MapFrame } from './chrome/shell.ts'
 import { paintWorldStats, primarySystem } from './chrome/stats.ts'
+import { createWebDataSource } from './data.ts'
 import { paintFlows } from './flow/list.ts'
 import { toggleFlowActivation } from './flow/state.ts'
 import { fitHighlights, fitCamera, keyAction, keyTarget, pan, wheelAction, zoomAbout, zoomLimits, zoomReadout } from './iso/camera.ts'
@@ -28,14 +29,15 @@ import { createRevisionControl } from './revision/control.ts'
 import { createSearchSession } from './search/session.ts'
 import { createWorkIsland } from './work/island.ts'
 import { toggleWorkSelection } from './work/selection.ts'
-import type { WebPayload, WebWorkPayload } from './payload.ts'
+import type { WebBootPayload, WebPayload, WebWorkPayload } from './payload.ts'
 import { noSelection, primarySelection, retainSelection, selectArchitecture, selectedArchitecture, selectTask } from './selection.ts'
 import { createSourceControl } from './source/control.ts'
 import { createTaskDiffControl } from './task-diff/control.ts'
 import { readView, writeView } from './url.ts'
 
 const ZOOM_STEP = 1.25
-const boot = JSON.parse(document.getElementById('world')!.textContent!) as WebPayload
+const boot = JSON.parse(document.getElementById('world')!.textContent!) as WebBootPayload
+const data = createWebDataSource(boot)
 let world = boot.world
 let work = boot.work
 let sheet = boot.sheet
@@ -67,14 +69,7 @@ const zoomHost = document.getElementById('zoom')!
 const hierarchyContent = document.getElementById('hierarchy-content')!
 const hierarchyToggle = document.getElementById('hierarchy-toggle') as HTMLButtonElement
 const map = createMap(host)
-const projectEditor = createProjectEditor(async profile => {
-  const response = await fetch('/project', {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(profile),
-  })
-  if (!response.ok) throw new Error(await response.text())
-})
+const projectEditor = data.saveProject === undefined ? undefined : createProjectEditor(data.saveProject)
 const shell = createWebShell(document.body, hierarchyContent, hierarchyToggle, detailsHost, map.svg)
 const tip = createTip(host)
 const pins = createPins(host, id => map.anchorOf(id), id => toggleTask(id), tip)
@@ -94,15 +89,18 @@ let activeTaskIds: string[] = selection.kind === 'task' ? [selection.id] : []
 let detailsTab: DetailsTab = opened.tab
 let theme = opened.theme
 const revisionControl = createRevisionControl({
-  control: revisionSelect, body: document.body, boot,
+  control: revisionSelect, body: document.body, boot, data,
   applyRevision: payload => applyWorld(payload, true), applyWorld, applyWork,
 })
 const source = createSourceControl({
   host: detailsHost, initialFile: opened.file, initialLine: opened.line,
-  element: () => worldElement(primarySelection(selection)),
+  element: () => worldElement(primarySelection(selection)), readCode: data.readCode, readSource: data.readSource,
   revision: () => revisionControl.selected, repaint: paintViewState,
 })
-const taskDiff = createTaskDiffControl({ host: detailsHost, world: () => world, repaint: paintViewState, select })
+const taskDiff = createTaskDiffControl({
+  host: detailsHost, world: () => world, readDetails: data.readTask, readDiff: data.readTaskDiff,
+  repaint: paintViewState, select,
+})
 /** The full-screen grid surrounds a safe camera frame between the floating chrome. */
 function viewport(): MapFrame {
   return mapFrame(
@@ -332,13 +330,13 @@ bindMapPointer(map, {
   select,
   deselect,
   editProject() {
-    if (revisionControl.selected === undefined && project !== undefined) projectEditor.open(project)
+    if (revisionControl.selected === undefined && project !== undefined) projectEditor?.open(project)
   },
 })
 map.svg.addEventListener('keydown', event => {
   if (!map.isProjectEdit(event.target) || (event.key !== 'Enter' && event.key !== ' ')) return
   event.preventDefault()
-  if (revisionControl.selected === undefined && project !== undefined) projectEditor.open(project)
+  if (revisionControl.selected === undefined && project !== undefined) projectEditor?.open(project)
 })
 
 document.getElementById('zoom-in')!.addEventListener('click', event => zoomStep(ZOOM_STEP, event.currentTarget as HTMLElement))
@@ -464,7 +462,9 @@ function applyWorld(payload: WebPayload, reset = false): void {
   pins.paint(currentPins)
   island.paint(payload.pins, work.statuses, work.defaultStatus)
   applyCamera()
+  taskDiff.invalidate()
   paintViewState()
+  source.restore()
 }
 /** Repaints only the optional Backlog layer; map projection, painting and camera state stay unchanged. */
 function applyWork(payload: WebWorkPayload): void {

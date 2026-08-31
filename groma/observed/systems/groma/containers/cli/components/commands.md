@@ -9,7 +9,7 @@ groma:
   code:
     - scanner: typescript
       file: src/cli.ts
-      dependencies: 10
+      dependencies: 11
       dependents: 0
 ---
 
@@ -21,3 +21,4 @@ Routes every named Groma command and the bare-terminal launcher to one owning op
 | --- | --- | --- |
 | [Observed curation](observed-curation.md) | Curates scan evidence and collaborations | groma edit and groma relate |
 | [Scan lifecycle](../../scanner/components/scan-lifecycle.md) | Runs a complete scan | groma scan |
+| [Export](../../web-viewer/components/export.md) | Publishes the current Web view as static files | CLI |

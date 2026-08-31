@@ -14,8 +14,12 @@ groma:
       dependents: 1
     - scanner: typescript
       file: src/viewers/web/payload.ts
-      dependencies: 5
-      dependents: 8
+      dependencies: 8
+      dependents: 11
+    - scanner: typescript
+      file: src/viewers/web/runtime.ts
+      dependencies: 4
+      dependents: 2
 ---
 
 Serves the page and browser bundle from the latest cached project, architecture, sheet, and work snapshots. It handles profile edits and on-demand task, source, and revision reads without recomposing unrelated state.

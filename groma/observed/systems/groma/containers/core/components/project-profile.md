@@ -9,7 +9,7 @@ groma:
     - scanner: typescript
       file: src/project-profile.ts
       dependencies: 2
-      dependents: 6
+      dependents: 8
     - scanner: typescript
       file: src/project-markdown.ts
       dependencies: 0
