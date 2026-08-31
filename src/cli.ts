@@ -1,5 +1,7 @@
 #!/usr/bin/env bun
 
+import path from 'node:path'
+
 import { Command } from 'commander'
 
 import { acceptGhost } from './core.ts'
@@ -30,6 +32,25 @@ async function openTerminalMap(): Promise<void> {
   const { startTerminalViewer } = await import('./view-host.ts')
   const viewer = await startTerminalViewer(root)
   await viewer.closed
+}
+
+async function exportWeb(directory: string, watch: boolean): Promise<void> {
+  const root = process.cwd()
+  await scanRepository(root)
+  const { exportWebViewer } = await import('./viewers/web/export.ts')
+  const exported = await exportWebViewer(root, directory, {
+    watch,
+    onError: error => console.error(error instanceof Error ? error.message : String(error)),
+  })
+  console.log(`groma export at ${path.resolve(directory)}`)
+  if (!watch) {
+    exported.close()
+    return
+  }
+  const stop = () => exported.close()
+  process.once('SIGINT', stop)
+  process.once('SIGTERM', stop)
+  await exported.closed
 }
 
 async function scanOnce(): Promise<void> {
@@ -74,6 +95,15 @@ program
   .option('--port <number>', 'port to listen on', Number)
   .action(async options => {
     await openWeb(options.port)
+  })
+
+program
+  .command('export')
+  .description('Export the browser map as a read-only static site')
+  .argument('<directory>', 'output directory')
+  .option('--watch', 'refresh the static snapshot when local inputs change')
+  .action(async (directory: string, options) => {
+    await exportWeb(directory, options.watch === true)
   })
 
 program

@@ -35,10 +35,15 @@ for input.
    world instead. Both live viewers continue with the same watch as `groma
    scan --watch`. Architecture Markdown changes update the map without
    scanning.
-2. `groma scan`: scan this repo. Core updates Markdown. The command
+2. Publish the browser map without exposing Groma or the repository as a
+   server. `groma export <directory>` scans this repo and writes a read-only
+   static site with the current architecture, mapped Backlog work, task diffs,
+   and architecture-owned source inspection. Add `--watch` to replace the
+   static snapshot when local source, architecture, or Backlog work changes.
+3. `groma scan`: scan this repo. Core updates Markdown. The command
    prints `ok` and a short summary, not the architecture. TypeScript is
    built in; C# solution and project scans require a .NET 10 SDK.
-3. Change the architecture through Groma. New parts and required changes
+4. Change the architecture through Groma. New parts and required changes
    become plan ghosts: `groma create <name> --plan <plan-id> --kind <kind>
    --overview <markdown>` (plus `--parent <id>` for a container or component,
    and optional `--description <text>`) authors a new part. `groma edit <id>
@@ -46,7 +51,7 @@ for input.
    existing part stay in that observed document's body: `groma edit <id>
    --overview <markdown>`. The optional concise OKF description is edited
    separately with `--description <text>`.
-4. `groma accept <id>`: apply the ghost once a scan has matched it. If
+5. `groma accept <id>`: apply the ghost once a scan has matched it. If
    none has, accept scans first and fails when the scan still does not
    match. A scan never accepts a ghost on its own.
 
@@ -84,3 +89,5 @@ bun src/cli.ts view
 ```
 
 `bun src/cli.ts web` opens the browser map at http://localhost:4747.
+`bun src/cli.ts export ./groma-site` writes the same current map as static
+files that can be served by any static host.

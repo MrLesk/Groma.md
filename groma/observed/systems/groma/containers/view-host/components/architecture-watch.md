@@ -11,7 +11,7 @@ groma:
       file: src/architecture-watch.ts
       symbol: watchArchitecture
       dependencies: 0
-      dependents: 2
+      dependents: 3
 ---
 
 Watches observed, planned, and missing architecture Markdown and settles changes so a live host republishes without scanning.

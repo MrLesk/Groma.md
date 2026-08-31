@@ -10,7 +10,7 @@ groma:
     - scanner: typescript
       file: src/core.ts
       dependencies: 7
-      dependents: 6
+      dependents: 7
 ---
 
 Loads every revision into one annotated architecture graph, resolves winning representations, stable relationships, direct children, and source-file measurements for all viewers.

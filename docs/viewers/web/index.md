@@ -7,6 +7,27 @@ It does not scan on open. The live process starts the same watch as
 This page is the browser surface. The shared viewer rules live in
 [Viewers](../index.md).
 
+## Static publication
+
+`groma export <directory>` writes the current Web view as static HTML,
+JavaScript, snapshot, and generation files. The read-only page includes the
+project profile, architecture and flows, mapped Backlog tasks with their
+details and diffs, and source inspection for files owned by architecture
+components. It does not include revision history or the project editor, and
+it does not contact a Groma server or read the repository.
+
+The export is a public disclosure boundary: every project description, task,
+diff, and source file copied into the output can be read by anyone who can
+access the static host. Groma supplies no public server, authentication, or
+access control. Publish the directory only through a static host whose access
+rules match the project.
+
+With `--watch`, Groma keeps running locally and atomically replaces the static
+snapshot after supported source, architecture Markdown, or Backlog changes.
+An already-open page polls only the small `version.js` file on its static host,
+then loads `snapshot.js` when the generation changes. It adopts that snapshot
+without a reload. No inbound connection to Groma is opened.
+
 ## Layout
 
 The isometric grid fills the screen. Inset 35%-paper frosted chrome floats

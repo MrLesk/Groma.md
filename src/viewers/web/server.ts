@@ -3,13 +3,13 @@ import { loadArchitecture } from '../../architecture-reader.ts'
 import { listGitRevisions, withGitGromaRevision, withGitRevision } from '../../history/git.ts'
 import { createBacklogPlugin, EMPTY_WORK_SNAPSHOT } from '../../work/backlog.ts'
 import type { WorkSource } from '../../work/backlog.ts'
-import { annotateArchitecture, loadAnnotatedArchitecture } from '../../core.ts'
-import { loadProjectProfile, saveProjectProfile } from '../../project-profile.ts'
+import { annotateArchitecture } from '../../core.ts'
+import { saveProjectProfile } from '../../project-profile.ts'
 import { watchScan } from '../../scanner.ts'
-import { measuredSheetScene } from '../../sheet/scene.ts'
 import { pinsOf } from '../../work/pins.ts'
 import { renderPage } from './page.ts'
 import type { WebMapPayload, WebPayload, WebRevision, WebWorkPayload } from './payload.ts'
+import { bundleRenderer, loadMapRoot } from './runtime.ts'
 import { readSource } from './source/read.ts'
 import { readCodeStructure } from './source/structure.ts'
 import { readTaskDiff } from './task-diff/read.ts'
@@ -45,43 +45,6 @@ async function sourceResponse(
       : Response.json(source)
   } catch {
     return new Response('Source file not found', { status: 404 })
-  }
-}
-
-async function bundleRenderer(): Promise<string> {
-  const build = await Bun.build({
-    entrypoints: [new URL('./render.ts', import.meta.url).pathname],
-    target: 'browser',
-  })
-  return build.outputs[0]!.text()
-}
-
-/** Loads the architecture map without consulting optional work plugins. */
-async function loadMapRoot(repositoryRoot: string): Promise<Pick<WebMapPayload, 'project' | 'world' | 'sheet' | 'timings'>> {
-  const started = performance.now()
-  const [architecture, project] = await Promise.all([
-    (async () => {
-      const loadStarted = performance.now()
-      const world = await loadAnnotatedArchitecture(repositoryRoot)
-      return { world, milliseconds: performance.now() - loadStarted }
-    })(),
-    loadProjectProfile(repositoryRoot),
-  ])
-  const world = {
-    elements: architecture.world.elements,
-    relationships: architecture.world.relationships,
-  }
-  const sheet = measuredSheetScene(world)
-  return {
-    project: project ?? null,
-    world,
-    sheet: sheet.scene,
-    timings: {
-      architectureLoadMilliseconds: architecture.milliseconds,
-      placementMilliseconds: sheet.timings.placementMilliseconds,
-      routingMilliseconds: sheet.timings.routingMilliseconds,
-      totalMilliseconds: performance.now() - started,
-    },
   }
 }
 
@@ -293,7 +256,7 @@ export async function startWebViewer(
   async function pageResponse(url: URL): Promise<Response> {
     const selected = await payloadAt(url.searchParams.get('revision'))
     if (selected instanceof Response) return selected
-    return new Response(renderPage(selected), {
+    return new Response(renderPage({ ...selected, delivery: { kind: 'live' } }), {
       headers: {
         'Content-Type': 'text/html; charset=utf-8',
         'Cache-Control': 'no-store',

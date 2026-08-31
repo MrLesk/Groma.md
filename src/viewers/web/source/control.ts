@@ -20,6 +20,8 @@ interface SourceControlOptions {
   initialLine?: number
   element(): AnnotatedElement | undefined
   revision(): string | undefined
+  readCode(element: string, revision?: string): Promise<readonly CodeFile[]>
+  readSource(element: string, file: string, revision?: string): Promise<SourcePayload>
   repaint(): void
 }
 
@@ -87,12 +89,8 @@ export function createSourceControl(options: SourceControlOptions): SourceContro
     payload = undefined
     error = undefined
     options.repaint()
-    const query = new URLSearchParams({ element: elementId, file: nextFile })
-    if (revision !== undefined) query.set('revision', revision)
     try {
-      const response = await fetch(`/source.json?${query}`)
-      if (!response.ok) throw new Error(await response.text())
-      const loaded = await response.json() as SourcePayload
+      const loaded = await options.readSource(elementId, nextFile, revision)
       if (!sameRequest(options, request, activeRequest, revision, elementId)) return
       payload = loaded
     } catch (reason) {
@@ -104,12 +102,8 @@ export function createSourceControl(options: SourceControlOptions): SourceContro
 
   async function loadStructure(element: AnnotatedElement, revision: string | undefined): Promise<void> {
     const activeRequest = ++structureRequest
-    const query = new URLSearchParams({ element: element.representationId })
-    if (revision !== undefined) query.set('revision', revision)
     try {
-      const response = await fetch(`/code.json?${query}`)
-      if (!response.ok) throw new Error(await response.text())
-      const loaded = await response.json() as CodeFile[]
+      const loaded = await options.readCode(element.representationId, revision)
       if (activeRequest !== structureRequest || structureElement !== element || structureRevision !== revision) return
       codeFiles = loaded
     } catch {

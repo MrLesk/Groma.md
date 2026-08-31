@@ -1,9 +1,11 @@
-import type { WebPayload, WebWorkPayload } from '../payload.ts'
+import type { WebDataSource } from '../data.ts'
+import type { WebBootPayload, WebPayload, WebWorkPayload } from '../payload.ts'
 
 interface RevisionControlOptions {
   control: HTMLDetailsElement
   body: HTMLElement
-  boot: WebPayload
+  boot: WebBootPayload
+  data: WebDataSource
   applyRevision: (payload: WebPayload) => void
   applyWorld: (payload: WebPayload) => void
   applyWork: (payload: WebWorkPayload) => void
@@ -57,9 +59,9 @@ function revisionTooltip(control: HTMLElement): () => void {
   return hide
 }
 
-/** Owns the compact revision selector and fetches only server-built map payloads. */
+/** Owns the compact revision selector and applies live or published snapshots. */
 export function createRevisionControl(options: RevisionControlOptions) {
-  const { control, body, boot, applyRevision, applyWorld, applyWork } = options
+  const { control, body, boot, data, applyRevision, applyWorld, applyWork } = options
   const label = control.querySelector<HTMLElement>('.revision-current')!
   const liveLabel = control.querySelector<HTMLElement>('[data-revision=""]')!.textContent!
   const hideTooltip = revisionTooltip(control)
@@ -96,10 +98,8 @@ export function createRevisionControl(options: RevisionControlOptions) {
     control.setAttribute('aria-busy', 'true')
     option.blur()
     const revisionId = option.dataset.revision
-    const query = revisionId === '' ? '' : `?revision=${revisionId}`
     try {
-      const response = await fetch(`/world.json${query}`)
-      const payload = await response.json() as WebPayload
+      const payload = await data.readWorld(revisionId === '' ? undefined : revisionId)
       appliedWorld = payload.generation
       appliedWork = payload.workGeneration
       show(payload)
@@ -110,19 +110,18 @@ export function createRevisionControl(options: RevisionControlOptions) {
     }
   })
 
-  const events = new EventSource('/events')
-  events.addEventListener('world', event => {
-    const payload = JSON.parse(event.data) as WebPayload
-    if (selected !== undefined || payload.generation <= appliedWorld) return
-    appliedWorld = payload.generation
-    appliedWork = Math.max(appliedWork, payload.workGeneration)
-    applyWorld(payload)
-  })
-  events.addEventListener('work', event => {
-    const payload = JSON.parse(event.data) as WebWorkPayload
-    if (selected !== undefined || payload.workGeneration <= appliedWork) return
-    appliedWork = payload.workGeneration
-    applyWork(payload)
+  data.subscribe({
+    world(payload) {
+      if (selected !== undefined || payload.generation <= appliedWorld) return
+      appliedWorld = payload.generation
+      appliedWork = Math.max(appliedWork, payload.workGeneration)
+      applyWorld(payload)
+    },
+    work(payload) {
+      if (selected !== undefined || payload.workGeneration <= appliedWork) return
+      appliedWork = payload.workGeneration
+      applyWork(payload)
+    },
   })
 
   localizeDates(control)
@@ -132,7 +131,10 @@ export function createRevisionControl(options: RevisionControlOptions) {
       return selected
     },
     paintProjectEdit(root: ParentNode) {
-      root.querySelector('[data-project-edit]')?.toggleAttribute('hidden', selected !== undefined)
+      root.querySelector('[data-project-edit]')?.toggleAttribute(
+        'hidden',
+        selected !== undefined || data.saveProject === undefined,
+      )
     },
   }
 }

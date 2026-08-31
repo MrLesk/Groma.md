@@ -3,12 +3,15 @@ import type { TaskDiffPayload } from './read.ts'
 import { leaveTaskDiff, paintTaskFile, paintTaskSummary } from './view.ts'
 
 export interface TaskDiffControl {
+  invalidate(): void
   paint(item: WorkItem | undefined): boolean
 }
 
 interface TaskDiffControlOptions {
   host: HTMLElement
   world(): ArchitectureGraph
+  readDetails(id: string): Promise<WorkItemDetails>
+  readDiff(id: string): Promise<TaskDiffPayload>
   repaint(): void
   select(id: string, additive: boolean): void
 }
@@ -51,9 +54,7 @@ export function createTaskDiffControl(options: TaskDiffControlOptions): TaskDiff
 
   async function loadDiff(nextItem: WorkItem, activeRequest: number): Promise<void> {
     try {
-      const response = await fetch(`/task-diff.json?${new URLSearchParams({ task: nextItem.id })}`)
-      if (!response.ok) throw new Error(await response.text())
-      const loaded = await response.json() as TaskDiffPayload
+      const loaded = await options.readDiff(nextItem.id)
       if (activeRequest !== diffRequest || item?.id !== loaded.taskId) return
       payload = loaded
     } catch (reason) {
@@ -65,9 +66,7 @@ export function createTaskDiffControl(options: TaskDiffControlOptions): TaskDiff
 
   async function loadDetails(nextItem: WorkItem, activeRequest: number): Promise<void> {
     try {
-      const response = await fetch(`/task.json?${new URLSearchParams({ task: nextItem.id })}`)
-      if (!response.ok) throw new Error(await response.text())
-      const loaded = await response.json() as WorkItemDetails
+      const loaded = await options.readDetails(nextItem.id)
       if (activeRequest !== detailsRequest || item?.id !== loaded.id) return
       details = loaded
       options.repaint()
@@ -79,6 +78,11 @@ export function createTaskDiffControl(options: TaskDiffControlOptions): TaskDiff
   }
 
   return {
+    invalidate() {
+      payload = undefined
+      error = undefined
+      if (item !== undefined) void loadDiff(item, ++diffRequest)
+    },
     paint(nextItem) {
       if (nextItem === undefined) {
         diffRequest += 1

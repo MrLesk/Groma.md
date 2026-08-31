@@ -11,7 +11,7 @@ import { motionCss } from './chrome/motion.ts'
 import { flowRowCss } from './flow/row.ts'
 import { mapCss } from './iso/style.ts'
 import { tipCss } from './organisms/tip.ts'
-import type { WebPayload } from './payload.ts'
+import type { WebBootPayload } from './payload.ts'
 import { projectEditorCss } from './project/editor.ts'
 import { revisionControl, revisionCss } from './revision/view.ts'
 import { searchControl, searchCss } from './search/view.ts'
@@ -83,6 +83,8 @@ const style = `
   }
   body.hierarchy-collapsed { --hierarchy-inset: 44px; }
   body.details-hidden { --details-inset: 0px; }
+  body[data-delivery="published"] #revision,
+  body[data-delivery="published"] .project-edit { display: none; }
   body.hud-hidden { min-width: 0; display: block; padding: 0; }
   body.hud-hidden #header,
   body.hud-hidden #hierarchy,
@@ -323,10 +325,10 @@ function legend(): string {
   }).join('')
 }
 
-export function renderPage(payload: WebPayload): string {
+export function renderPage(payload: WebBootPayload): string {
   const json = JSON.stringify(payload).replace(/</g, '\\u003c')
   return '<!doctype html><html><head><meta charset="utf-8"><title>groma.md</title>'
-    + `<style>${style}</style></head><body>`
+    + `<style>${style}</style></head><body data-delivery="${payload.delivery.kind}">`
     + `<header id="header">${lockup}<span id="stats"></span>${revisionControl(payload, { history: historyIcon, loader: revisionLoader })}`
     + `<div class="header-actions"><div id="map-controls" class="controls" aria-label="Map controls"><button id="fit" aria-label="Fit map">${fitIcon}<span>Fit</span></button><button id="zoom-out" aria-label="Zoom out"><span class="control-glyph">−</span></button><span id="zoom" aria-live="polite"></span><button id="zoom-in" aria-label="Zoom in"><span class="control-glyph">+</span></button></div><details id="help"><summary>Help</summary><div class="help-panel"><p>Drag or scroll to pan<br>Pinch, + or − to zoom<br>0 or Fit shows the whole map<br>/ or Cmd/Ctrl+K searches<br>F1 toggles map only<br>F2 toggles layers<br>In layers: drag orbits; Shift-drag pans<br>F3 toggles map debug<br>Escape clears selection</p></div></details><button id="theme" data-next-theme="dark"><span class="theme-icon dark">${moonIcon}</span><span class="theme-icon blueprint">${blueprintIcon}</span><span class="theme-icon light">${sunIcon}</span><span class="label">Dark</span></button>${searchControl({ search: searchIcon, close: closeIcon })}</div>`
     + '</header>'
@@ -334,6 +336,6 @@ export function renderPage(payload: WebPayload): string {
     + '<div id="map"></div>'
     + `<aside id="details" aria-label="Details"><button id="details-close" aria-label="Close details">${closeIcon}</button><p class="meta"></p><h1></h1><nav class="controls tabs"></nav><div class="body"></div></aside>`
     + `<script type="application/json" id="world">${json}</script>`
-    + '<script src="/render.js"></script>'
+    + '<script src="./render.js"></script>'
     + '</body></html>'
 }
