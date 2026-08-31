@@ -6,6 +6,15 @@ Every project is a scope. Every source file is a separate evidence entry contain
 
 The scanner completes all Roslyn work and validates the observation before writing JSON. A missing project, workspace failure, or invalid input returns an error with no partial standard output. Groma parses that JSON through the same contract used by TypeScript before core sees it.
 
+Enable the scanner from this repository with:
+
+```sh
+groma scanner add ./plugins/scanners/csharp
+```
+
+The scanner remains a direct local input. It requires a .NET 10 SDK only when
+Groma executes a C# scan.
+
 Run the focused C# suite with:
 
 ```sh

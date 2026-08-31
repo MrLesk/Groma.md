@@ -4,10 +4,8 @@ import { stat } from 'node:fs/promises'
 import path from 'node:path'
 
 import { reconcileScanObservations } from './core.ts'
-import {
-  collectScanObservations,
-  isScannerFile,
-} from './scanner/registry.ts'
+import { loadScannerRegistry } from './scanner/registry.ts'
+import type { ScannerRegistry } from './scanner/registry.ts'
 import type { ScanSummary } from './types.ts'
 
 const SETTLE_MS = 150
@@ -20,7 +18,15 @@ export function formatScanSummary(summary: ScanSummary): string {
 export async function scanRepository(
   repositoryRoot: string,
 ): Promise<ScanSummary> {
-  const observations = await collectScanObservations(repositoryRoot)
+  const registry = await loadScannerRegistry(repositoryRoot)
+  return scanWithRegistry(repositoryRoot, registry)
+}
+
+async function scanWithRegistry(
+  repositoryRoot: string,
+  registry: ScannerRegistry,
+): Promise<ScanSummary> {
+  const observations = await registry.collectObservations(repositoryRoot)
   return reconcileScanObservations(repositoryRoot, observations)
 }
 
@@ -46,14 +52,15 @@ function sourceWatchRoots(repositoryRoot: string): { directory: string; prefix: 
   return roots
 }
 
-export function watchScan(
+export async function watchScan(
   repositoryRoot: string,
   options: {
     onFold?: (summary: ScanSummary) => void | Promise<void>
     onError?: (error: unknown) => void
   } = {},
-): { close(): void } {
+): Promise<{ close(): void }> {
   const root = path.resolve(repositoryRoot)
+  const registry = await loadScannerRegistry(root)
   const startedAt = Date.now()
   let timer: ReturnType<typeof setTimeout> | undefined
   let running = false
@@ -64,7 +71,7 @@ export function watchScan(
     if (closed) return
     running = true
     try {
-      const summary = await scanRepository(root)
+      const summary = await scanWithRegistry(root, registry)
       if (!closed) await options.onFold?.(summary)
     } catch (error) {
       if (!closed) options.onError?.(error)
@@ -89,7 +96,7 @@ export function watchScan(
   function onSourceEvent(prefix: string, filename: string | null): void {
     if (closed) return
     const relative = sourceRelative(prefix, filename)
-    if (relative === undefined || !isScannerFile(relative)) return
+    if (relative === undefined || !registry.matchesFile(relative)) return
     void stat(path.join(root, relative)).then(info => {
       if (!closed && info.mtimeMs >= startedAt) schedule()
     }, () => {

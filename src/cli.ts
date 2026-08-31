@@ -10,6 +10,7 @@ import { editArchitecture } from './edit.ts'
 import { agentInstructionGuide } from './agent-instructions.ts'
 import { humanInstructionGuide } from './instructions.ts'
 import { relateObserved, removeObservedRelationship } from './relate.ts'
+import { registerScannerCommands } from './scanner/cli.ts'
 import { formatScanSummary, scanRepository, watchScan } from './scanner.ts'
 import {
   renderPlainWelcome,
@@ -58,6 +59,27 @@ async function scanOnce(): Promise<void> {
   const summary = await scanRepository(process.cwd())
   console.log('ok')
   console.log(formatScanSummary(summary))
+}
+
+async function runScan(watchEnabled: boolean): Promise<void> {
+  if (!watchEnabled) return scanOnce()
+  const session = await watchScan(process.cwd(), {
+    onFold: summary => {
+      console.log('ok')
+      console.log(formatScanSummary(summary))
+    },
+    onError: error => {
+      console.error(error instanceof Error ? error.message : String(error))
+    },
+  })
+  await new Promise<void>(resolve => {
+    const stop = () => {
+      session.close()
+      resolve()
+    }
+    process.once('SIGINT', stop)
+    process.once('SIGTERM', stop)
+  })
 }
 
 function unhandledWelcomeAction(action: never): never {
@@ -136,29 +158,15 @@ program
   .description('Scan this repo and fold findings into Markdown')
   .option('--watch', 'scan again when supported source changes')
   .action(async options => {
-    const root = process.cwd()
-    if (options.watch) {
-      const session = watchScan(root, {
-        onFold: summary => {
-          console.log('ok')
-          console.log(formatScanSummary(summary))
-        },
-        onError: error => {
-          console.error(error instanceof Error ? error.message : String(error))
-        },
-      })
-      await new Promise<void>(resolve => {
-        const stop = () => {
-          session.close()
-          resolve()
-        }
-        process.once('SIGINT', stop)
-        process.once('SIGTERM', stop)
-      })
-      return
+    try {
+      await runScan(options.watch === true)
+    } catch (error) {
+      console.error(error instanceof Error ? error.message : String(error))
+      process.exitCode = 1
     }
-    await scanOnce()
   })
+
+registerScannerCommands(program)
 
 program
   .command('create')

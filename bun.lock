@@ -7,7 +7,6 @@
       "dependencies": {
         "@comark/html": "0.5.1",
         "@groma/scanner": "workspace:*",
-        "@groma/scanner-csharp": "workspace:*",
         "@groma/scanner-typescript": "workspace:*",
         "@opentui/core": "0.5.1",
         "comark": "0.5.1",
