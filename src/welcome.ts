@@ -1,385 +1,74 @@
-import { createRequire } from 'node:module'
-import { homedir } from 'node:os'
-import path from 'node:path'
+import { createCliRenderer, FrameBufferRenderable } from '@opentui/core'
+import type { CliRenderer, KeyEvent } from '@opentui/core'
 
 import {
-  createCliRenderer,
-  FrameBufferRenderable,
-  RGBA,
-  TextAttributes,
-} from '@opentui/core'
-import type {
-  CliRenderer,
-  KeyEvent,
-  OptimizedBuffer,
-} from '@opentui/core'
+  advancedIndex,
+  instructionViews,
+  instructionsIndex,
+  welcomeActions,
+  welcomeModel,
+  welcomeSheet,
+} from './welcome/model.ts'
+import type { WelcomeActionId } from './welcome/model.ts'
+import {
+  paintInstructions,
+  paintLauncher,
+} from './welcome/view.ts'
+import type { InstructionsPaintResult } from './welcome/view.ts'
 
-import { text } from './viewers/tui/atoms/text.ts'
+export { renderPlainWelcome } from './welcome/model.ts'
+export type { WelcomeActionId } from './welcome/model.ts'
 
-const { version } = createRequire(import.meta.url)('../package.json') as {
-  version: string
+export type WelcomeScreen = 'launcher' | 'instructions'
+
+interface LauncherState {
+  kind: 'launcher'
+  selectedIndex: number
+  advancedExpanded: boolean
 }
 
-const documentationUrl = 'https://groma.md'
-const brandGreen = RGBA.fromHex('#1D9E75')
-const terminalForeground = RGBA.defaultForeground()
-const terminalBackground = RGBA.defaultBackground()
-const mark = [
-  '      ●',
-  '      │',
-  '  ┌───┼───┐',
-  '  │   │   │',
-  '  ▼   │   ▼',
-  '    ──┴──',
-] as const
-
-const welcomeActions = [
-  {
-    id: 'web',
-    command: 'groma web',
-    description: 'scan and open the browser map',
-  },
-  {
-    id: 'view',
-    command: 'groma view',
-    description: 'scan and open the terminal map',
-  },
-  {
-    id: 'scan',
-    command: 'groma scan',
-    description: 'refresh architecture from source',
-  },
-  {
-    id: 'help',
-    command: 'groma --help',
-    description: 'all commands and options',
-  },
-] as const
-
-const advancedCommands = [
-  {
-    command: 'groma export <directory> [--watch]',
-    description: 'output folder; watch refreshes',
-  },
-  {
-    command: 'groma create <name> --kind <kind> …',
-    description: 'overview + plan/observed',
-  },
-  {
-    command: 'groma edit <id> …',
-    description: 'id + change options',
-  },
-  {
-    command: 'groma relate <from> <to> …',
-    description: 'details + tech or remove',
-  },
-  {
-    command: 'groma accept <id>',
-    description: 'matched plan id',
-  },
-  {
-    command: 'groma instructions [guide]',
-    description: 'guide: overview or authoring',
-  },
-] as const
-
-const advancedLabel = 'Advanced commands'
-const parameterLegend = '<required> [optional] […more]'
-
-export type WelcomeActionId = typeof welcomeActions[number]['id']
-
-interface WelcomeModel {
-  project: string
-  folder: string
-  status: string
+interface InstructionsState {
+  kind: 'instructions'
+  selectedIndex: number
+  scroll: number
 }
 
-interface WelcomeSheet {
-  commandWidth: number
-  descriptionWidth: number
-  innerWidth: number
+type WelcomeState = LauncherState | InstructionsState
+
+function launcherState(selectedIndex = 0): LauncherState {
+  return { kind: 'launcher', selectedIndex, advancedExpanded: false }
 }
 
-interface PaintedText {
-  value: string
-  color?: RGBA
-  attributes?: number
+function instructionsState(): InstructionsState {
+  return { kind: 'instructions', selectedIndex: 1, scroll: 0 }
 }
 
-interface WelcomeRow {
-  command: string
-  description: string
-  selected: boolean
-  dim: boolean
+function initialState(screen: WelcomeScreen): WelcomeState {
+  return screen === 'instructions' ? instructionsState() : launcherState()
 }
 
-function displayFolder(repositoryRoot: string): string {
-  const root = path.resolve(repositoryRoot)
-  const home = homedir()
-  return root === home || root.startsWith(`${home}${path.sep}`)
-    ? `~${root.slice(home.length)}`
-    : root
+type ReadingDirection = 'up' | 'down' | 'pageup' | 'pagedown'
+
+function readingDirection(key: KeyEvent): ReadingDirection | undefined {
+  if (key.name === 'pageup' || key.name === 'pagedown') return key.name
+  if (key.name === 'k') return 'up'
+  if (key.name === 'j') return 'down'
+  return undefined
 }
 
-function welcomeModel(repositoryRoot: string): WelcomeModel {
-  const root = path.resolve(repositoryRoot)
-  return {
-    project: path.basename(root),
-    folder: displayFolder(root),
-    status: 'Architecture ready',
-  }
-}
-
-function welcomeSheet(model: WelcomeModel): WelcomeSheet {
-  const context = ` project: ${model.project} │ folder: ${model.folder} │ status: ${model.status} `
-  const commands = [
-    ...welcomeActions.map(action => action.command),
-    `▸ ${advancedLabel}`,
-    ...advancedCommands.map(command => `  ${command.command}`),
-  ]
-  const descriptions = [
-    ...welcomeActions.map(action => action.description),
-    parameterLegend,
-    ...advancedCommands.map(command => command.description),
-  ]
-  const commandWidth = Math.max(
-    ...commands.map(command => command.length + 2),
-  )
-  const descriptionWidth = Math.max(
-    ...descriptions.map(description => description.length),
-  )
-  const innerWidth = Math.max(
-    context.length,
-    commandWidth + descriptionWidth + 5,
-  )
-  return {
-    commandWidth,
-    descriptionWidth: innerWidth - commandWidth - 5,
-    innerWidth,
-  }
-}
-
-export function renderPlainWelcome(repositoryRoot: string): string {
-  const model = welcomeModel(repositoryRoot)
-  return [
-    `groma.md v${version}`,
-    'architecture in Git',
-    `docs: ${documentationUrl}`,
-    '',
-    `project: ${model.project}`,
-    `folder: ${model.folder}`,
-    `status: ${model.status}`,
-    '',
-    ...welcomeActions.map(action => `${action.command} — ${action.description}`),
-    '',
-    `${advancedLabel} — ${parameterLegend}`,
-    ...advancedCommands.map(command => `${command.command} — ${command.description}`),
-  ].join('\n')
-}
-
-function welcomeRows(selectedIndex: number, advancedExpanded: boolean): WelcomeRow[] {
-  const rows: WelcomeRow[] = welcomeActions.map((action, index) => ({
-    command: action.command,
-    description: action.description,
-    selected: index === selectedIndex,
-    dim: action.id === 'scan' || action.id === 'help',
-  }))
-  rows.push({
-    command: `${advancedExpanded ? '▾' : '▸'} ${advancedLabel}`,
-    description: parameterLegend,
-    selected: selectedIndex === welcomeActions.length,
-    dim: false,
-  })
-  if (advancedExpanded) {
-    rows.push(...advancedCommands.map(command => ({
-      command: `  ${command.command}`,
-      description: command.description,
-      selected: false,
-      dim: true,
-    })))
-  }
-  return rows
-}
-
-function commandParts(row: WelcomeRow, arrowVisible: boolean): PaintedText[] {
-  const attributes = row.selected
-    ? TextAttributes.BOLD
-    : row.dim ? TextAttributes.DIM : 0
-  return [
-    {
-      value: row.selected && arrowVisible ? '> ' : '  ',
-      color: row.selected ? brandGreen : terminalForeground,
-    },
-    {
-      value: row.command,
-      color: row.selected ? brandGreen : terminalForeground,
-      attributes,
-    },
-  ]
-}
-
-function drawParts(
-  buffer: OptimizedBuffer,
-  parts: readonly PaintedText[],
-  x: number,
-  y: number,
-): void {
-  let cursor = x
-  for (const part of parts) {
-    text(
-      buffer,
-      part.value,
-      cursor,
-      y,
-      [...part.value].length,
-      part.color ?? terminalForeground,
-      terminalBackground,
-      part.attributes,
-    )
-    cursor += [...part.value].length
-  }
-}
-
-function commandBorder(
-  sheet: WelcomeSheet,
-  left: string,
-  middle: string,
-  right: string,
-): string {
-  return left
-    + '─'.repeat(sheet.commandWidth + 2)
-    + middle
-    + '─'.repeat(sheet.descriptionWidth + 2)
-    + right
-}
-
-function drawContext(
-  buffer: OptimizedBuffer,
-  sheet: WelcomeSheet,
-  model: WelcomeModel,
-  x: number,
-  y: number,
-): void {
-  const width = sheet.innerWidth + 2
-  text(buffer, `┌${'─'.repeat(sheet.innerWidth)}┐`, x, y, width, terminalForeground, terminalBackground)
-  text(buffer, `│${' '.repeat(sheet.innerWidth)}│`, x, y + 1, width, terminalForeground, terminalBackground)
-  drawParts(buffer, [
-    { value: 'project: ', attributes: TextAttributes.DIM },
-    { value: model.project, color: brandGreen },
-    { value: ' │ folder: ', attributes: TextAttributes.DIM },
-    { value: model.folder, color: brandGreen },
-    { value: ' │ status: ', attributes: TextAttributes.DIM },
-    { value: model.status, color: brandGreen },
-  ], x + 2, y + 1)
-  text(buffer, `└${'─'.repeat(sheet.innerWidth)}┘`, x, y + 2, width, terminalForeground, terminalBackground)
-}
-
-function drawCommands(
-  buffer: OptimizedBuffer,
-  sheet: WelcomeSheet,
-  rows: readonly WelcomeRow[],
-  arrowVisible: boolean,
-  x: number,
-  y: number,
-): void {
-  const width = sheet.innerWidth + 2
-  text(buffer, commandBorder(sheet, '┌', '┬', '┐'), x, y, width, terminalForeground, terminalBackground)
-  for (const [index, rowData] of rows.entries()) {
-    const row = y + index * 2 + 1
-    text(
-      buffer,
-      `│ ${' '.repeat(sheet.commandWidth)} │ ${' '.repeat(sheet.descriptionWidth)} │`,
-      x,
-      row,
-      width,
-      terminalForeground,
-      terminalBackground,
-    )
-    drawParts(buffer, commandParts(rowData, arrowVisible), x + 2, row)
-    text(
-      buffer,
-      rowData.description,
-      x + sheet.commandWidth + 5,
-      row,
-      sheet.descriptionWidth,
-      terminalForeground,
-      terminalBackground,
-      rowData.dim ? TextAttributes.DIM : 0,
-    )
-    if (index < rows.length - 1) {
-      text(
-        buffer,
-        commandBorder(sheet, '├', '┼', '┤'),
-        x,
-        row + 1,
-        width,
-        terminalForeground,
-        terminalBackground,
-      )
-    }
-  }
-  const bottom = y + rows.length * 2
-  text(buffer, commandBorder(sheet, '└', '┴', '┘'), x, bottom, width, terminalForeground, terminalBackground)
-}
-
-function paintWelcome(
-  buffer: OptimizedBuffer,
-  model: WelcomeModel,
-  sheet: WelcomeSheet,
-  selectedIndex: number,
-  advancedExpanded: boolean,
-  arrowVisible: boolean,
-): void {
-  const width = sheet.innerWidth + 2
-  const x = 2
-  const y = 2
-  buffer.clear(terminalBackground)
-
-  for (const [row, line] of mark.entries()) {
-    text(buffer, line, x, y + row, width, terminalForeground, terminalBackground)
-  }
-  drawParts(buffer, [
-    { value: 'groma', attributes: TextAttributes.BOLD },
-    { value: '.md', color: brandGreen, attributes: TextAttributes.BOLD },
-    { value: `  v${version}`, attributes: TextAttributes.DIM },
-  ], x + 16, y + 2)
-  drawParts(buffer, [
-    { value: 'architecture in Git  │  docs: ', attributes: TextAttributes.DIM },
-    { value: documentationUrl, color: brandGreen },
-  ], x + 16, y + 3)
-
-  const contextY = y + mark.length + 1
-  drawContext(buffer, sheet, model, x, contextY)
-  const commandsY = contextY + 4
-  const rows = welcomeRows(selectedIndex, advancedExpanded)
-  drawCommands(
-    buffer,
-    sheet,
-    rows,
-    arrowVisible,
-    x,
-    commandsY,
-  )
-  text(
-    buffer,
-    '↑/↓ navigate  │  Enter run/toggle  │  Esc/Q quit',
-    x + 2,
-    commandsY + rows.length * 2 + 2,
-    width - 4,
-    terminalForeground,
-    terminalBackground,
-    TextAttributes.DIM,
-  )
-}
-
-export function mountWelcomeLauncher(
+export function mountWelcome(
   renderer: CliRenderer,
   repositoryRoot: string,
+  initialScreen: WelcomeScreen = 'launcher',
 ): Promise<WelcomeActionId | undefined> {
   const model = welcomeModel(repositoryRoot)
   const sheet = welcomeSheet(model)
-  let selectedIndex = 0
-  let advancedExpanded = false
+  let state = initialState(initialScreen)
+  let instructionsPaint: InstructionsPaintResult = {
+    maxScroll: 0,
+    pageSize: 1,
+    scroll: 0,
+  }
   let arrowVisible = true
   let closed = false
   let resolveSelected!: (selection: WelcomeActionId | undefined) => void
@@ -400,14 +89,27 @@ export function mountWelcomeLauncher(
 
   function repaint(): void {
     if (closed || frame.isDestroyed) return
-    paintWelcome(
-      frame.frameBuffer,
-      model,
-      sheet,
-      selectedIndex,
-      advancedExpanded,
-      arrowVisible,
-    )
+    if (state.kind === 'launcher') {
+      paintLauncher(
+        frame.frameBuffer,
+        model,
+        sheet,
+        state.selectedIndex,
+        state.advancedExpanded,
+        arrowVisible,
+      )
+    } else {
+      instructionsPaint = paintInstructions(
+        frame.frameBuffer,
+        model,
+        sheet,
+        state.selectedIndex,
+        Math.max(0, state.selectedIndex - 1),
+        state.scroll,
+        arrowVisible,
+      )
+      state.scroll = instructionsPaint.scroll
+    }
     frame.requestRender()
   }
 
@@ -430,14 +132,90 @@ export function mountWelcomeLauncher(
     close(undefined)
   }
 
-  function moveSelection(key: 'up' | 'down'): void {
+  function showLauncher(): void {
+    state = launcherState(instructionsIndex)
+    arrowVisible = true
+    repaint()
+  }
+
+  function showInstructions(): void {
+    state = instructionsState()
+    arrowVisible = true
+    repaint()
+  }
+
+  function moveLauncher(key: 'up' | 'down'): void {
+    if (state.kind !== 'launcher') return
     const movement = key === 'up' ? -1 : 1
-    selectedIndex = Math.max(
+    state.selectedIndex = Math.max(
       0,
-      Math.min(welcomeActions.length, selectedIndex + movement),
+      Math.min(advancedIndex, state.selectedIndex + movement),
     )
     arrowVisible = true
     repaint()
+  }
+
+  function enterLauncher(): void {
+    if (state.kind !== 'launcher') return
+    if (state.selectedIndex === advancedIndex) {
+      state.advancedExpanded = !state.advancedExpanded
+      arrowVisible = true
+      repaint()
+      return
+    }
+    if (state.selectedIndex === instructionsIndex) {
+      showInstructions()
+      return
+    }
+    close(welcomeActions[state.selectedIndex]?.id)
+  }
+
+  function moveInstruction(key: 'up' | 'down'): void {
+    if (state.kind !== 'instructions') return
+    const movement = key === 'up' ? -1 : 1
+    const selectedIndex = Math.max(
+      0,
+      Math.min(instructionViews.length, state.selectedIndex + movement),
+    )
+    if (selectedIndex > 0 && selectedIndex !== state.selectedIndex) {
+      state.scroll = 0
+    }
+    state.selectedIndex = selectedIndex
+    arrowVisible = true
+    repaint()
+  }
+
+  function scrollInstructions(direction: ReadingDirection): void {
+    if (state.kind !== 'instructions') return
+    const distance = direction === 'pageup' || direction === 'pagedown'
+      ? instructionsPaint.pageSize
+      : 1
+    const movement = direction === 'up' || direction === 'pageup'
+      ? -distance
+      : distance
+    state.scroll = Math.max(
+      0,
+      Math.min(instructionsPaint.maxScroll, state.scroll + movement),
+    )
+    repaint()
+  }
+
+  function handleLauncherKey(key: KeyEvent): void {
+    if (key.name === 'up' || key.name === 'down') moveLauncher(key.name)
+    else if (key.name === 'return') enterLauncher()
+  }
+
+  function handleInstructionsKey(key: KeyEvent): void {
+    if (key.name === 'backspace') {
+      showLauncher()
+      return
+    }
+    const reading = readingDirection(key)
+    if (key.name === 'up' || key.name === 'down') moveInstruction(key.name)
+    else if (reading !== undefined) scrollInstructions(reading)
+    else if (key.name === 'return' && state.kind === 'instructions' && state.selectedIndex === 0) {
+      showLauncher()
+    }
   }
 
   function onKeypress(key: KeyEvent): void {
@@ -450,19 +228,8 @@ export function mountWelcomeLauncher(
       close(undefined)
       return
     }
-    if (key.name === 'up' || key.name === 'down') {
-      moveSelection(key.name)
-      return
-    }
-    if (key.name === 'return') {
-      if (selectedIndex === welcomeActions.length) {
-        advancedExpanded = !advancedExpanded
-        arrowVisible = true
-        repaint()
-        return
-      }
-      close(welcomeActions[selectedIndex]!.id)
-    }
+    if (state.kind === 'launcher') handleLauncherKey(key)
+    else handleInstructionsKey(key)
   }
 
   renderer.keyInput.on('keypress', onKeypress)
@@ -472,8 +239,9 @@ export function mountWelcomeLauncher(
   return selected
 }
 
-export async function startWelcomeLauncher(
+export async function startWelcome(
   repositoryRoot: string,
+  initialScreen: WelcomeScreen = 'launcher',
 ): Promise<WelcomeActionId | undefined> {
   const renderer = await createCliRenderer({
     clearOnShutdown: true,
@@ -483,7 +251,7 @@ export async function startWelcomeLauncher(
     useMouse: false,
   })
   try {
-    return await mountWelcomeLauncher(renderer, repositoryRoot)
+    return await mountWelcome(renderer, repositoryRoot, initialScreen)
   } catch (error) {
     renderer.destroy()
     throw error

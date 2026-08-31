@@ -1,6 +1,14 @@
 export const overview = `# Overview
 
-Groma is this repository's architecture in Git. Solid boxes exist. Ghosts are next. Groma is the only writer of files under groma/.
+Groma is this repository's architecture in Git: Markdown that people and agents can read, and one C4 world that its viewers can walk. Solid boxes exist. Ghosts are next. Groma is the only writer of files under groma/.
+
+## How it works
+
+\`\`\`text
+source code ──scan──▶ groma/*.md ──view──▶ maps
+                           ▲
+                 create · edit · relate
+\`\`\`
 
 ## Workflow
 
@@ -41,3 +49,23 @@ Say what must be true, not how to build it. Do not specify frameworks, file layo
 - Plan outcome prose: groma edit <plan-id> --overview <markdown>
 
 Kinds are actor, system, container, and component. Containers need a system parent. Components need a container parent. Structural edits refuse to remove authored prose or relationships.`
+
+export const instructionGuides = [
+  {
+    id: 'overview',
+    title: 'Overview',
+    description: 'what Groma is and how it works',
+    content: overview,
+  },
+  {
+    id: 'authoring',
+    title: 'Authoring',
+    description: 'create and change architecture',
+    content: authoring,
+  },
+] as const
+
+export function instructionGuide(id: string | undefined) {
+  const selected = id ?? 'overview'
+  return instructionGuides.find(guide => guide.id === selected)
+}

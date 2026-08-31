@@ -7,12 +7,12 @@ import { Command } from 'commander'
 import { acceptGhost } from './core.ts'
 import { createArchitectureElement } from './create.ts'
 import { editArchitecture } from './edit.ts'
-import { authoring, overview } from './instructions.ts'
+import { instructionGuide } from './instructions.ts'
 import { relateObserved, removeObservedRelationship } from './relate.ts'
 import { formatScanSummary, scanRepository, watchScan } from './scanner.ts'
 import {
   renderPlainWelcome,
-  startWelcomeLauncher,
+  startWelcome,
 } from './welcome.ts'
 import type { WelcomeActionId } from './welcome.ts'
 
@@ -68,7 +68,6 @@ async function runWelcomeAction(action: WelcomeActionId): Promise<void> {
     case 'web': return openWeb()
     case 'view': return openTerminalMap()
     case 'scan': return scanOnce()
-    case 'help': return program.outputHelp()
     default: return unhandledWelcomeAction(action)
   }
 }
@@ -85,7 +84,7 @@ program
       console.log(renderPlainWelcome(process.cwd()))
       return
     }
-    const selection = await startWelcomeLauncher(process.cwd())
+    const selection = await startWelcome(process.cwd())
     if (selection !== undefined) await runWelcomeAction(selection)
   })
 
@@ -276,19 +275,25 @@ program
 
 program
   .command('instructions')
-  .description('Print a shipped instruction guide')
+  .description('Open or print a shipped instruction guide')
   .argument('[guide]', 'overview or authoring')
-  .action((guide: string | undefined) => {
-    if (guide === undefined || guide === 'overview') {
-      console.log(overview)
+  .action(async (guide: string | undefined) => {
+    const selected = instructionGuide(guide)
+    if (selected === undefined) {
+      console.error(`unknown guide: ${guide}`)
+      process.exitCode = 1
       return
     }
-    if (guide === 'authoring') {
-      console.log(authoring)
+    const interactive = guide === undefined
+      && process.stdin.isTTY === true
+      && process.stdout.isTTY === true
+      && !program.opts().plain
+    if (!interactive) {
+      console.log(selected.content)
       return
     }
-    console.error(`unknown guide: ${guide}`)
-    process.exitCode = 1
+    const action = await startWelcome(process.cwd(), 'instructions')
+    if (action !== undefined) await runWelcomeAction(action)
   })
 
 await program.parseAsync()
