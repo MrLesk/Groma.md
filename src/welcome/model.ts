@@ -2,7 +2,7 @@ import { createRequire } from 'node:module'
 import { homedir } from 'node:os'
 import path from 'node:path'
 
-import { instructionGuides } from '../instructions.ts'
+import { humanInstructionGuides } from '../instructions.ts'
 
 const { version } = createRequire(import.meta.url)('../../package.json') as {
   version: string
@@ -55,6 +55,10 @@ export const advancedCommands = [
     command: 'groma accept <id>',
     description: 'matched plan id',
   },
+  {
+    command: 'groma agent-instructions [guide]',
+    description: 'guide: curation',
+  },
 ] as const
 
 export const instructionsIndex = welcomeActions.length
@@ -90,7 +94,7 @@ export interface InstructionView {
   content: string
 }
 
-export const instructionViews: InstructionView[] = instructionGuides.map(guide => ({
+export const instructionViews: InstructionView[] = humanInstructionGuides.map(guide => ({
   title: guide.title,
   description: guide.description,
   content: guide.content,

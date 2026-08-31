@@ -13,7 +13,8 @@ TTY). `groma web` serves the isometric web map in the browser and pins
 live Backlog work on the element each task touched last. `groma export
 <directory>` writes the current Web view as a read-only static site.
 On a TTY, `groma instructions` opens the local guide screen. A named guide or
-non-interactive use prints the guide as plain text.
+non-interactive use prints the human guide as plain text. Agent operating rules
+stay separate: `groma agent-instructions [guide]` always prints plain Markdown.
 
 - [Scanners](scanners/index.md)
 - [Viewers](viewers/index.md)

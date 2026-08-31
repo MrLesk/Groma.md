@@ -33,7 +33,9 @@ for input. The interactive launcher keeps less common syntax under a collapsed
 Advanced commands row. Enter toggles its read-only references; `<name>` marks a
 required parameter, `[option]` an optional one, and `…` additional options.
 Plain output includes those references without requiring interaction. A named
-guide such as `groma instructions authoring` also stays plain text.
+guide such as `groma instructions authoring` also stays plain text. These are
+human guides. `groma agent-instructions [guide]` separately prints agent
+operating rules as Markdown; its default guide is `curation`.
 
 1. Open a viewer: see the world. `groma web` scans this repo and opens the
    browser map. On a TTY, `groma view` scans and opens the terminal map;
