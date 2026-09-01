@@ -4,12 +4,13 @@ import { stat } from 'node:fs/promises'
 import path from 'node:path'
 
 import { reconcileScanObservations } from './core.ts'
+import { gromaDirectories } from './groma-filesystem.ts'
 import { loadScannerRegistry } from './scanner/registry.ts'
 import type { ScannerRegistry } from './scanner/registry.ts'
 import type { ScanSummary } from './types.ts'
 
 const SETTLE_MS = 150
-const skippedRoots = new Set(['.git', 'groma', 'node_modules'])
+const skippedRoots = new Set(['.git', ...gromaDirectories, 'node_modules'])
 
 export function formatScanSummary(summary: ScanSummary): string {
   return `created ${summary.created}, refreshed ${summary.refreshed}, matched ${summary.matched}`

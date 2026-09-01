@@ -49,17 +49,17 @@ async function commit(root: string, subject: string, body?: string): Promise<voi
   )
 }
 
-test.concurrent('Git history lists only current-branch commits that changed groma', async () => {
+test.concurrent('Git history follows the selected hidden Groma directory', async () => {
   const root = await mkdtemp(path.join(tmpdir(), 'groma-git-history-'))
   try {
     await git(root, 'init')
-    await mkdir(path.join(root, 'groma'), { recursive: true })
-    await writeFile(path.join(root, 'groma', 'index.md'), '---\nokf_version: "0.2"\n---\n')
-    await writeFile(path.join(root, 'groma', 'project.md'), projectSource('First', 'First map.'))
+    await mkdir(path.join(root, '.groma'), { recursive: true })
+    await writeFile(path.join(root, '.groma', 'index.md'), '---\nokf_version: "0.2"\n---\n')
+    await writeFile(path.join(root, '.groma', 'project.md'), projectSource('First', 'First map.'))
     await commit(root, 'First architecture')
     await writeFile(path.join(root, 'source.ts'), 'export const current = true\n')
     await commit(root, 'Source only')
-    await writeFile(path.join(root, 'groma', 'project.md'), projectSource('Second', 'Second map.'))
+    await writeFile(path.join(root, '.groma', 'project.md'), projectSource('Second', 'Second map.'))
     await commit(root, 'Second architecture', 'Complete second map.')
     await git(root, 'tag', 'v2.0.0')
 

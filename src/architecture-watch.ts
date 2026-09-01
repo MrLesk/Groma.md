@@ -1,16 +1,15 @@
-import { existsSync, watch } from 'node:fs'
-import type { FSWatcher } from 'node:fs'
-import { stat } from 'node:fs/promises'
 import path from 'node:path'
 
+import { GromaFileSystem } from './groma-filesystem.ts'
+
 const SETTLE_MS = 150
-const architectureRoots = ['groma/observed', 'groma/plans', 'groma/missing']
+const architectureRoots = ['observed', 'plans', 'missing']
 
 export function watchArchitecture(
   repositoryRoot: string,
   options: { onChange?: () => void | Promise<void> } = {},
 ): { close(): void } {
-  const root = path.resolve(repositoryRoot)
+  const filesystem = GromaFileSystem.open(repositoryRoot)
   const startedAt = Date.now()
   let timer: ReturnType<typeof setTimeout> | undefined
   let running = false
@@ -42,19 +41,18 @@ export function watchArchitecture(
 
   function onEvent(directory: string, filename: string | null): void {
     if (closed || filename === null || !String(filename).endsWith('.md')) return
-    void stat(path.join(directory, String(filename))).then(info => {
-      if (!closed && info.mtimeMs >= startedAt) schedule()
+    void filesystem.modifiedAt(path.posix.join(directory, filename)).then(mtimeMs => {
+      if (!closed && mtimeMs >= startedAt) schedule()
     }, () => {
       if (!closed) schedule()
     })
   }
 
-  const watchers: FSWatcher[] = []
+  const watchers: { close(): void }[] = []
   for (const relative of architectureRoots) {
-    const directory = path.join(root, relative)
-    if (!existsSync(directory)) continue
-    watchers.push(watch(directory, { recursive: true }, (_event, filename) => {
-      onEvent(directory, filename)
+    if (!filesystem.exists(relative)) continue
+    watchers.push(filesystem.watch(relative, { recursive: true }, filename => {
+      onEvent(relative, filename)
     }))
   }
 

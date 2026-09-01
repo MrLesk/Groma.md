@@ -1,17 +1,16 @@
 #!/usr/bin/env bun
 
 import path from 'node:path'
+import { createInterface } from 'node:readline/promises'
 
 import { Command } from 'commander'
 
 import { acceptGhost } from './core.ts'
 import { createArchitectureElement } from './create.ts'
 import { editArchitecture } from './edit.ts'
-import {
-  agentInstructionGuide,
-  initializeAgentInstructions,
-} from './agent-instructions.ts'
+import { agentInstructionGuide } from './agent-instructions.ts'
 import { humanInstructionGuide } from './instructions.ts'
+import { initializeGroma } from './initialize.ts'
 import { relateObserved, removeObservedRelationship } from './relate.ts'
 import { registerScannerCommands } from './scanner/cli.ts'
 import { formatScanSummary, scanRepository, watchScan } from './scanner.ts'
@@ -22,6 +21,39 @@ import {
 import type { WelcomeActionId } from './welcome.ts'
 
 const program = new Command()
+
+async function initializeProject(
+  projectName: string | undefined,
+  directory: string | undefined,
+): Promise<void> {
+  const interactive = process.stdin.isTTY === true && process.stdout.isTTY === true
+  const readline = interactive
+    ? createInterface({ input: process.stdin, output: process.stdout })
+    : undefined
+  try {
+    await initializeGroma(
+      process.cwd(),
+      { projectName, directory },
+      readline === undefined
+        ? undefined
+        : {
+            projectName: () => readline.question('Project name: '),
+            directory: async () => {
+              const answer = await readline.question(
+                'Groma directory (groma or .groma) [groma]: ',
+              )
+              return answer.trim() === '' ? 'groma' : answer
+            },
+          },
+    )
+    console.log('ok')
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : String(error))
+    process.exitCode = 1
+  } finally {
+    readline?.close()
+  }
+}
 
 async function openWeb(port?: number): Promise<void> {
   const root = process.cwd()
@@ -116,10 +148,11 @@ program
 
 program
   .command('init')
-  .description('Register this repository for coding agents')
-  .action(async () => {
-    await initializeAgentInstructions(process.cwd())
-    console.log('ok')
+  .description('Initialize this repository for Groma')
+  .argument('[project-name]', 'project name')
+  .option('--directory <directory>', 'groma or .groma')
+  .action(async (projectName: string | undefined, options) => {
+    await initializeProject(projectName, options.directory)
   })
 
 program

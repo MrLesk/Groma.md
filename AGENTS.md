@@ -302,3 +302,9 @@ trap - EXIT
 ```
 
 Look at the root view, details, a container, and a large size such as 200x60.
+
+<!-- groma:start -->
+## Groma
+
+This project uses Groma. Run `groma agent-instructions` before planning or changing code. Do not edit Groma-owned architecture files directly.
+<!-- groma:end -->

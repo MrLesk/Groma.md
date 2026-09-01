@@ -1,13 +1,9 @@
 import type { C4Kind } from './types.ts'
 
 export function architectureRelative(sourceFilename: string): string {
-  if (sourceFilename.startsWith('groma/plans/')) {
-    const slash = sourceFilename.indexOf('/', 'groma/plans/'.length)
-    return sourceFilename.slice(slash + 1)
-  }
-  if (sourceFilename.startsWith('groma/observed/')) {
-    return sourceFilename.slice('groma/observed/'.length)
-  }
+  const parts = sourceFilename.split('/')
+  if (parts[1] === 'plans' && parts.length > 3) return parts.slice(3).join('/')
+  if (parts[1] === 'observed') return parts.slice(2).join('/')
   return sourceFilename
 }
 

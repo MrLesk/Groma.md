@@ -76,7 +76,7 @@ function managedBlockCount(content: string): number {
 }
 
 async function runInit(root: string) {
-  const result = await run(['init'], root)
+  const result = await run(['init', 'Test project', '--directory', 'groma'], root)
   assert.equal(result.code, 0, result.stderr)
   assert.equal(result.stderr, '')
   assert.equal(result.stdout, 'ok\n')
@@ -161,7 +161,7 @@ test('groma init creates only AGENTS.md when no instruction file exists', { conc
   await temporaryRepository(async root => {
     await runInit(root)
 
-    assert.deepEqual(await readdir(root), ['AGENTS.md'])
+    assert.deepEqual((await readdir(root)).sort(), ['AGENTS.md', 'groma'])
     const content = await readFile(path.join(root, 'AGENTS.md'), 'utf8')
     assert.equal(managedBlockCount(content), 1)
     assert.match(content, /This project uses Groma/)
@@ -186,7 +186,7 @@ test('groma init updates only an existing AGENTS.md and remains idempotent', { c
     assert.equal(managedBlockCount(once), 1)
     assert.ok(once.startsWith(original))
     assert.equal(await readFile(unrelated, 'utf8'), 'unchanged\n')
-    assert.deepEqual((await readdir(root)).sort(), ['AGENTS.md', 'notes.md'])
+    assert.deepEqual((await readdir(root)).sort(), ['AGENTS.md', 'groma', 'notes.md'])
   })
 })
 
@@ -201,7 +201,7 @@ test('groma init updates only an existing CLAUDE.md', { concurrency: true }, asy
     const content = await readFile(claude, 'utf8')
     assert.equal(managedBlockCount(content), 1)
     assert.ok(content.startsWith(original))
-    assert.deepEqual(await readdir(root), ['CLAUDE.md'])
+    assert.deepEqual((await readdir(root)).sort(), ['CLAUDE.md', 'groma'])
   })
 })
 

@@ -1,9 +1,7 @@
-import { mkdir, readFile, unlink, writeFile } from 'node:fs/promises'
-import path from 'node:path'
-
 import { parseFrontmatter } from 'comark'
 import { renderFrontmatter } from 'comark/render'
 
+import { GromaFileSystem } from './groma-filesystem.ts'
 import { c4Type, requireGromaMapping } from './okf-profile.ts'
 import type { C4Kind, CodeReference } from './types.ts'
 
@@ -216,22 +214,18 @@ export function withoutRelationship(source: string, row: string): string {
   return `${lines.join('\n').trimEnd()}\n`
 }
 
-function absoluteFilename(
-  repositoryRoot: string,
-  sourceFilename: string,
-): string {
-  return path.join(repositoryRoot, ...sourceFilename.split('/'))
-}
-
 export async function upsertCode(
   repositoryRoot: string,
   sourceFilename: string,
   code: CodeReference[],
   status: RepresentationStatus,
 ): Promise<void> {
-  const filename = absoluteFilename(repositoryRoot, sourceFilename)
-  const source = await readFile(filename, 'utf8')
-  await writeFile(filename, withGromaCode(source, code, status))
+  const filesystem = GromaFileSystem.open(repositoryRoot)
+  const source = await filesystem.readSource(sourceFilename)
+  await filesystem.writeSource(
+    sourceFilename,
+    withGromaCode(source, code, status),
+  )
 }
 
 export async function writeObservedDocument(
@@ -239,21 +233,19 @@ export async function writeObservedDocument(
   sourceFilename: string,
   source: string,
 ): Promise<void> {
-  const filename = absoluteFilename(repositoryRoot, sourceFilename)
-  await mkdir(path.dirname(filename), { recursive: true })
-  await writeFile(filename, source)
+  await GromaFileSystem.open(repositoryRoot).writeSource(sourceFilename, source)
 }
 
 export async function readDocument(
   repositoryRoot: string,
   sourceFilename: string,
 ): Promise<string> {
-  return readFile(absoluteFilename(repositoryRoot, sourceFilename), 'utf8')
+  return GromaFileSystem.open(repositoryRoot).readSource(sourceFilename)
 }
 
 export async function removeDocument(
   repositoryRoot: string,
   sourceFilename: string,
 ): Promise<void> {
-  await unlink(absoluteFilename(repositoryRoot, sourceFilename))
+  await GromaFileSystem.open(repositoryRoot).removeSource(sourceFilename)
 }

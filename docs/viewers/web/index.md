@@ -43,8 +43,9 @@ centre. The camera fits architecture into the clear area between
 the floating hierarchy and any open details pane, so the grid continues
 beneath the chrome without hiding the fitted world.
 
-The revision menu starts at Current revision, the live `groma/` working tree.
-It lists the current branch's commits that changed `groma/`, newest first. Each
+The revision menu starts at Current revision, the live selected Groma working
+tree. It lists the current branch's commits that changed the selected `groma/`
+or `.groma/` directory, newest first. Each
 two-line row shows the subject, then an exact tag when present, short hash, and
 the commit date and time in the browser's locale. A row with a commit body
 shows that body on hover without repeating its subject. A selected commit
@@ -129,7 +130,7 @@ the map pane at any zoom. One strong outer frame defines the band;
 its small compass scales with the sheet and keeps north on the grid's up-right
 axis, so the actors island is due west. A title plate in the band shows the
 project title and up to three lines of the Markdown body overview from
-`groma/project.md`. It fits its width to lines up to 80 characters; longer
+the selected Groma directory's `project.md`. It fits its width to lines up to 80 characters; longer
 content remains in the editor instead of growing the plate. A compact boxed
 pencil sits inside its lower corner. Small
 unlabeled calibration ticks line its two front edges.
@@ -295,7 +296,8 @@ open the upright project-profile editor beside it. Its bounded Write view keeps
 long Markdown scrollable, and Preview renders it through Comark's sanitized HTML renderer. The
 title plate projects the same parsed Markdown semantics onto the isometric sheet.
 Saving asks the web host to update the standard title and optional concise
-description plus the Markdown body overview in `groma/project.md`; the
+description plus the Markdown body overview in the selected Groma directory's
+`project.md`; the
 published world event repaints every open map without a browser reload.
 Backlog work is loaded from one task-list summary and shows as pins. Every
 configured task, including terminal history, puts one pin per assignee on the

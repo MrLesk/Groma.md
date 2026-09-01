@@ -11,7 +11,10 @@ unmarked, generic OKF bundle as a Groma project.
 
 ## Bundle and project profile
 
-The bundle root is `groma/`. Its reserved `index.md` contains exactly:
+The bundle root is the `groma/` or `.groma/` directory selected by
+`groma init`. Groma resolves that choice once and every architecture command
+uses the same root. In the paths below, `<groma-root>` means that selected
+directory. Its reserved `index.md` contains exactly:
 
 ```yaml
 ---
@@ -19,7 +22,7 @@ okf_version: "0.2"
 ---
 ```
 
-The root index has no body. `groma/project.md` identifies the application
+The root index has no body. `<groma-root>/project.md` identifies the application
 profile:
 
 ```markdown
@@ -46,9 +49,9 @@ level-two `YYYY-MM-DD` date headings. Reserved files are never concepts.
 
 Groma uses the same concept format in three locations:
 
-- `groma/observed/` contains architecture known to exist. It may be empty.
-- `groma/missing/` contains the dotted historical comparison revision.
-- Each directory directly under `groma/plans/` is one desired architecture
+- `<groma-root>/observed/` contains architecture known to exist. It may be empty.
+- `<groma-root>/missing/` contains the dotted historical comparison revision.
+- Each directory directly under `<groma-root>/plans/` is one desired architecture
   fragment.
 
 The plan directory name is its immutable, meaningful lowercase kebab-case ID.

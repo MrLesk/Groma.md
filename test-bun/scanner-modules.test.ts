@@ -52,10 +52,10 @@ async function writeTree(root: string, files: Record<string, string>): Promise<v
   }
 }
 
-async function fixtureRoot(prefix: string): Promise<string> {
+async function fixtureRoot(prefix: string, directory = 'groma'): Promise<string> {
   const root = await mkdtemp(path.join(os.tmpdir(), prefix))
   await writeTree(root, {
-    'groma/index.md': '---\nokf_version: "0.2"\n---\n',
+    [`${directory}/index.md`]: '---\nokf_version: "0.2"\n---\n',
     'package.json': JSON.stringify({ name: 'fixture' }),
     'src/index.ts': 'export const fixture = true\n',
   })
@@ -118,7 +118,7 @@ async function exists(filename: string): Promise<boolean> {
 }
 
 test.concurrent('local scanner configuration drives inventory, loading, and removal', async () => {
-  const root = await fixtureRoot('groma-local-scanner-')
+  const root = await fixtureRoot('groma-local-scanner-', '.groma')
   const cacheRoot = path.join(root, '.cache')
   const rogueMarker = path.join(root, 'rogue-loaded')
   try {
@@ -130,7 +130,7 @@ test.concurrent('local scanner configuration drives inventory, loading, and remo
     await writeScannerPackage(path.join(root, 'node_modules/rogue'), 'rogue', rogueMarker)
 
     await expect(addScanner(root, './plugins/invalid', { cacheRoot })).rejects.toThrow()
-    expect(await exists(path.join(root, 'groma/scanners.json'))).toBe(false)
+    expect(await exists(path.join(root, '.groma/scanners.json'))).toBe(false)
     const added = await addScanner(root, './plugins/python', { cacheRoot })
     expect(added).toEqual({ id: 'python', source: './plugins/python', status: 'found' })
     expect(await scannerInventory(root, { cacheRoot })).toEqual([

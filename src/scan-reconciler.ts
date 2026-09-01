@@ -1,5 +1,6 @@
 import { loadArchitecture } from './architecture-reader.ts'
 import { architectureElementPath } from './architecture-path.ts'
+import { GromaFileSystem } from './groma-filesystem.ts'
 import {
   renderArchitectureDocument,
   upsertCode,
@@ -141,7 +142,7 @@ async function createRecord(
     parent: input.parent?.id,
     origin: 'observed',
     sourceFilename: architectureElementPath({
-      root: 'groma/observed',
+      root: GromaFileSystem.open(repositoryRoot).sourceFilename('observed'),
       kind: input.kind,
       id,
       parentSourceFilename: input.parent?.sourceFilename,
