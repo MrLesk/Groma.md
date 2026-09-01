@@ -130,28 +130,33 @@ function connectorEnd(
   return new Avoid.ConnEnd(new Avoid.Point(point.x, point.y))
 }
 
-function matchingPort(point: Point, connection: BuildingConnection, request: RouteRequest, role: keyof PortPair): RoutePort {
+function matchingPort(
+  point: Point,
+  adjacent: Point,
+  connection: BuildingConnection,
+): RoutePort {
+  const side = Math.abs(adjacent.x - point.x) > PORT_EPSILON
+    ? adjacent.x > point.x ? 'east' : 'west'
+    : adjacent.y > point.y ? 'south' : 'north'
   const distance = (port: RoutePort) => Math.abs(port.wall.x - point.x) + Math.abs(port.wall.y - point.y)
-  const port = [...connection.ports].sort((a, b) => distance(a) - distance(b))[0]
-  if (!port || distance(port) > LANE_GAP / 2 + PORT_EPSILON) {
-    throw new Error(`Libavoid did not select a ${role} building port for ${request.id}`)
-  }
+  const port = connection.ports.filter(port => port.side === side)
+    .sort((a, b) => distance(a) - distance(b))[0]!
   return {
     ...port,
-    wall: { ...point },
     guard: { ...point },
   }
 }
 
 function selectedPort(
   point: Point,
+  adjacent: Point,
   request: RouteRequest,
   role: keyof PortPair,
   connections: ReadonlyMap<string, BuildingConnection>,
   fixed: ReadonlyMap<string, Partial<PortPair>>,
 ): RoutePort {
   const connection = connections.get(request[role])
-  return connection ? matchingPort(point, connection, request, role) : fixedPort(fixed, request, role)
+  return connection ? matchingPort(point, adjacent, connection) : fixedPort(fixed, request, role)
 }
 
 interface RouteEndRun {
@@ -370,8 +375,8 @@ export function routeAll(
     })
     if (points.length < 2) throw new Error(`Libavoid could not route ${request.id}`)
     const pair = {
-      source: selectedPort(points[0]!, request, 'source', connections, fixed),
-      target: selectedPort(points.at(-1)!, request, 'target', connections, fixed),
+      source: selectedPort(points[0]!, points[1]!, request, 'source', connections, fixed),
+      target: selectedPort(points.at(-1)!, points.at(-2)!, request, 'target', connections, fixed),
     }
     return { ...request, points: attachWalls(points, pair) }
   })
