@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@codex'
 created_date: '2026-08-31 18:09'
-updated_date: '2026-09-01 16:58'
+updated_date: '2026-09-01 17:19'
 labels: []
 dependencies:
   - TASK-227
@@ -31,15 +31,16 @@ ordinal: 247000
 ## Description
 
 <!-- SECTION:DESCRIPTION:BEGIN -->
-A developer launches bare Groma. The welcome reads the shared scanner inventory and shows a compact readiness summary without adding scanner management to the primary action list. The Advanced commands section created by TASK-227 contains the scanner management command references.
+A developer launches bare Groma. The welcome keeps the project context compact and shows a fixed one-row plugin strip at the bottom with Backlog, the embedded TypeScript scanner, and configured scanner readiness. Scanner management remains inside Advanced commands.
 <!-- SECTION:DESCRIPTION:END -->
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [x] #1 The welcome shows the embedded TypeScript scanner and every enabled project scanner with built-in, found, or missing readiness derived from the shared scanner inventory.
-- [x] #2 Rendering the welcome resolves manifests and installation state but does not execute third-party scanner code or perform network work.
-- [x] #3 Scanner add, install, list, and remove appear only as read-only references inside Advanced commands, not as primary launcher actions.
-- [x] #4 Interactive and plain welcome output remain understandable when no optional scanner is configured and when one is missing.
+- [x] #1 The bottom of the interactive welcome shows Backlog and the embedded TypeScript scanner as built-in.
+- [x] #2 Enabled project scanners share the bottom strip with found or missing readiness derived from the scanner inventory without executing third-party code or performing network work.
+- [x] #3 The bottom strip remains one row and does not expand or move the command table when more scanners are configured; the complete inventory remains available through scanner list in Advanced commands.
+- [x] #4 Plain welcome output reports the same Backlog and scanner readiness.
+- [x] #5 Scanner add, install, list, and remove remain read-only references inside Advanced commands.
 <!-- AC:END -->
 
 ## Definition of Done
@@ -53,11 +54,11 @@ A developer launches bare Groma. The welcome reads the shared scanner inventory 
 ## Implementation Plan
 
 <!-- SECTION:PLAN:BEGIN -->
-1. Load the shared scanner inventory at the Welcome model boundary and project only scanner id plus built-in/found/missing readiness; keep the controller and painter pure by passing them a fully loaded model.
-2. Add one compact scanner row to the shared interactive context box and plain welcome output, preserving the existing primary launcher actions.
-3. Add scanner add, install, list, and remove only to the existing read-only Advanced commands data.
-4. Cover empty/optional/missing inventory, no plugin execution, plain projection, and unchanged non-dispatch navigation with parallel-safe fixtures.
-5. Update scanner documentation and the observed Welcome relationship/counts, then run focused/full checks and the required simplicity, specification, quality, and full-context complexity reviews.
+1. Project Backlog as one built-in Welcome-only plugin item and append the shared scanner inventory without creating a general plugin runtime.
+2. Remove readiness from the project context box and paint one fixed-height plugin strip directly above the navigation footer.
+3. Keep the strip to one row at every width; expose the complete scanner inventory through the existing Advanced scanner list command.
+4. Update plain output, focused tests, scanner documentation, and observed Welcome architecture.
+5. Run focused/full checks and the required simplicity, specification, quality, and full-context complexity reviews.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
@@ -72,10 +73,24 @@ Cold simplicity review passed with no findings. It confirmed the smallest flow i
 Final full-check evidence: both runs passed Biome/TypeScript and all 94 Node tests. Each concurrent Bun run reached 218/219 but timed out on a different unrelated live watcher; both timed-out cases passed immediately in exact isolated reruns. All 18 task-focused tests and type checking pass.
 
 Specification and quality reviews passed with no findings. The required full-context complexity review also recommends keeping the implementation unchanged: scanner discovery stays in the scanner domain, Welcome projects only id/readiness, one formatter serves both outputs, and Advanced rows remain non-dispatchable.
+
+Reopened after visual review. The approved correction moves readiness from the project box to a fixed bottom strip and includes Backlog as a Welcome-only built-in item; this does not create a Backlog plugin contract.
+
+Moved readiness into a fixed bottom launcher row. The row now starts with Backlog and TypeScript as built-in, appends configured scanner readiness, and is excluded from sheet sizing so scanner count cannot expand the command table. TypeScript, 10 Welcome tests, 9 plain/CLI tests, and a 100x30 rendered frame pass.
+
+Full repository check passes outside the sandbox: 94 Node tests and 220 Bun tests. The same run inside the sandbox hit EMFILE in two unrelated watch tests; both exact cases pass outside the sandbox.
+
+Cold simplicity review found one obsolete scanner-only formatter. Collapsed it into the shared plugin formatter, removing the only unnecessary presentation indirection.
+
+Quality review found the expanded 110x45 Advanced table could push the bottom rows off-screen. Reserved the final two terminal rows for plugin status and navigation, removed unused vertical gaps, and added expanded-frame coverage.
+
+Targeted quality re-review passed: expanded 110x45 keeps table border on row 42, plugins on row 43, and navigation on row 44. Final full check passes with 94 Node and 220 Bun tests.
+
+Full-context complexity review passed with no findings and recommends keeping the architecture unchanged.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
-Bare Groma now loads the shared scanner inventory once and shows compact built-in, found, or missing readiness in both interactive and plain Welcome output. Scanner add, install, list, and remove remain read-only Advanced references. Verified with TypeScript, 9 Welcome tests, 9 CLI/plain tests, a manual 80x50 terminal frame, isolated live-watcher reruns, and cold simplicity, specification, quality, and full-context complexity reviews.
+Moved plugin readiness from the project context to a fixed bottom row that shows Backlog and TypeScript as built-in and appends configured scanner readiness without changing command-table size. Plain output uses the same summary, while the complete scanner inventory remains under Advanced commands. Verified with rendered 100x30 and expanded 110x45 frames, 10 Welcome tests, 9 plain/CLI tests, TypeScript, the full 94 Node and 220 Bun tests, and simplicity, specification, quality, and full-context complexity reviews.
 <!-- SECTION:FINAL_SUMMARY:END -->

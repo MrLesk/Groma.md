@@ -143,15 +143,13 @@ export async function loadWelcomeModel(repositoryRoot: string): Promise<WelcomeM
   }
 }
 
-export function scannerSummary(scanners: readonly WelcomeScanner[]): string {
-  return scanners.map(scanner => `${scanner.id}: ${scanner.status}`).join(' │ ')
+export function pluginSummary(scanners: readonly WelcomeScanner[]): string {
+  const scannerText = scanners.map(scanner => `${scanner.id}: ${scanner.status}`).join(' │ ')
+  return `backlog: built-in │ ${scannerText}`
 }
 
 export function welcomeSheet(model: WelcomeModel): WelcomeSheet {
-  const context = [
-    ` project: ${model.project} │ folder: ${model.folder} │ status: ${model.status} `,
-    ` scanners: ${scannerSummary(model.scanners)} `,
-  ]
+  const context = ` project: ${model.project} │ folder: ${model.folder} │ status: ${model.status} `
   const commands = [
     ...welcomeActions.map(action => action.command),
     instructionsAction.command,
@@ -168,7 +166,7 @@ export function welcomeSheet(model: WelcomeModel): WelcomeSheet {
   ]
   const commandWidth = Math.max(...commands.map(command => command.length + 2))
   const descriptionWidth = Math.max(...descriptions.map(description => description.length))
-  const innerWidth = Math.max(...context.map(line => line.length), commandWidth + descriptionWidth + 5)
+  const innerWidth = Math.max(context.length, commandWidth + descriptionWidth + 5)
   return {
     commandWidth,
     descriptionWidth: innerWidth - commandWidth - 5,
@@ -186,7 +184,7 @@ export async function renderPlainWelcome(repositoryRoot: string): Promise<string
     `project: ${model.project}`,
     `folder: ${model.folder}`,
     `status: ${model.status}`,
-    `scanners: ${scannerSummary(model.scanners)}`,
+    `plugins: ${pluginSummary(model.scanners)}`,
     '',
     ...welcomeActions.map(action => `${action.command} — ${action.description}`),
     `${instructionsAction.command} — ${instructionsAction.description}`,
