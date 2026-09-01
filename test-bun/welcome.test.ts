@@ -71,18 +71,52 @@ test.concurrent('the welcome derives scanner readiness without executing modules
     assert.equal(await exists(marker), false)
 
     const plain = await renderPlainWelcome(root)
-    assert.match(plain, /scanners: typescript: built-in │ python: found │ rust: missing/)
+    assert.match(plain, /plugins: backlog: built-in │ typescript: built-in │ python: found │ rust: missing/)
 
     const setup = await createTestRenderer({ width: 110, height: 35 })
     const selected = mountWelcome(setup.renderer, model)
     await setup.renderOnce()
-    assert.match(setup.captureCharFrame(), /typescript: built-in │ python: found │ rust: missing/)
+    assert.match(
+      setup.captureCharFrame(),
+      /plugins: backlog: built-in │ typescript: built-in │ python: found │ rust: missing/,
+    )
     setup.mockInput.pressEscape()
     await selected
     assert.equal(await exists(marker), false)
   } finally {
     await rm(root, { recursive: true, force: true })
   }
+})
+
+test.concurrent('the bottom plugin strip stays one row as scanners grow', async () => {
+  const compact = await createTestRenderer({ width: 100, height: 30 })
+  const many = await createTestRenderer({ width: 100, height: 30 })
+  const compactSelected = mountWelcome(compact.renderer, welcomeFixture())
+  const manySelected = mountWelcome(many.renderer, {
+    ...welcomeFixture(),
+    scanners: [
+      { id: 'typescript', status: 'built-in' },
+      ...Array.from({ length: 20 }, (_, index) => ({
+        id: `scanner-${index}`,
+        status: index % 2 === 0 ? 'found' as const : 'missing' as const,
+      })),
+    ],
+  })
+
+  await compact.renderOnce()
+  await many.renderOnce()
+  const compactLines = compact.captureCharFrame().split('\n')
+  const manyLines = many.captureCharFrame().split('\n')
+  const row = (lines: string[], value: string) => lines.findIndex(line => line.includes(value))
+
+  assert.equal(row(manyLines, 'groma web'), row(compactLines, 'groma web'))
+  assert.equal(manyLines.filter(line => line.includes('plugins:')).length, 1)
+  assert.ok(row(manyLines, 'plugins: backlog: built-in │ typescript: built-in') > row(manyLines, 'groma web'))
+  assert.ok(row(manyLines, 'navigate') > row(manyLines, 'plugins:'))
+
+  compact.mockInput.pressEscape()
+  many.mockInput.pressEscape()
+  await Promise.all([compactSelected, manySelected])
 })
 
 test.concurrent('the welcome starts on web and returns the entered action', async () => {
@@ -127,6 +161,8 @@ test.concurrent('advanced command rows never become launcher actions', async () 
   for (const command of ['add', 'install', 'list', 'remove']) {
     assert.match(expanded, new RegExp(`groma scanner ${command}`))
   }
+  assert.match(expanded, /plugins: backlog: built-in │ typescript: built-in/)
+  assert.match(expanded, /navigate.*Enter run\/open\/toggle.*quit/)
   setup.mockInput.pressArrow('down')
   setup.mockInput.pressEnter()
   setup.mockInput.pressArrow('up')

@@ -7,7 +7,7 @@ import {
   instructionRows,
   instructionViews,
   launcherRows,
-  scannerSummary,
+  pluginSummary,
   welcomeVersion,
 } from './model.ts'
 import type {
@@ -157,7 +157,6 @@ function drawContext(
   const width = sheet.innerWidth + 2
   text(buffer, `┌${'─'.repeat(sheet.innerWidth)}┐`, x, y, width, terminalForeground, terminalBackground)
   text(buffer, `│${' '.repeat(sheet.innerWidth)}│`, x, y + 1, width, terminalForeground, terminalBackground)
-  text(buffer, `│${' '.repeat(sheet.innerWidth)}│`, x, y + 2, width, terminalForeground, terminalBackground)
   drawParts(buffer, [
     { value: 'project: ', attributes: TextAttributes.DIM },
     { value: model.project, color: brandGreen },
@@ -166,11 +165,7 @@ function drawContext(
     { value: ' │ status: ', attributes: TextAttributes.DIM },
     { value: model.status, color: brandGreen },
   ], x + 2, y + 1)
-  drawParts(buffer, [
-    { value: 'scanners: ', attributes: TextAttributes.DIM },
-    { value: scannerSummary(model.scanners) },
-  ], x + 2, y + 2)
-  text(buffer, `└${'─'.repeat(sheet.innerWidth)}┘`, x, y + 3, width, terminalForeground, terminalBackground)
+  text(buffer, `└${'─'.repeat(sheet.innerWidth)}┘`, x, y + 2, width, terminalForeground, terminalBackground)
 }
 
 function paintShell(
@@ -198,7 +193,7 @@ function paintShell(
 
   const contextY = y + mark.length + 1
   drawContext(buffer, sheet, model, x, contextY)
-  return { contentY: contextY + 5, width, x }
+  return { contentY: contextY + 3, width, x }
 }
 
 function wrap(value: string, width: number): string[] {
@@ -272,11 +267,19 @@ export function paintLauncher(
   const shell = paintShell(buffer, model, sheet)
   const rows = launcherRows(selectedIndex, advancedExpanded)
   drawTable(buffer, sheet, rows, arrowVisible, shell.x, shell.contentY)
+  const pluginsY = Math.max(
+    shell.contentY + rows.length * 2 + 1,
+    buffer.height - 2,
+  )
+  drawParts(buffer, [
+    { value: 'plugins: ', attributes: TextAttributes.DIM },
+    { value: pluginSummary(model.scanners) },
+  ], shell.x + 2, pluginsY)
   text(
     buffer,
     '↑/↓ navigate  │  Enter run/open/toggle  │  Esc/Q quit',
     shell.x + 2,
-    shell.contentY + rows.length * 2 + 2,
+    pluginsY + 1,
     shell.width - 4,
     terminalForeground,
     terminalBackground,
