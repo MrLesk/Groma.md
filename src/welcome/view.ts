@@ -8,6 +8,7 @@ import {
   instructionRows,
   instructionViews,
   launcherRows,
+  nestedPageIndicator,
   pluginSummary,
   welcomeVersion,
 } from './model.ts'
@@ -67,7 +68,7 @@ function commandParts(row: WelcomeRow, arrowVisible: boolean): PaintedText[] {
   const attributes = row.selected
     ? TextAttributes.BOLD
     : row.dim ? TextAttributes.DIM : 0
-  return [
+  const parts: PaintedText[] = [
     {
       value: row.selected && arrowVisible ? '> ' : '  ',
       color: row.selected ? brandGreen : terminalForeground,
@@ -78,6 +79,14 @@ function commandParts(row: WelcomeRow, arrowVisible: boolean): PaintedText[] {
       attributes,
     },
   ]
+  if (row.opensPage) {
+    parts.push({
+      value: nestedPageIndicator,
+      color: brandGreen,
+      attributes,
+    })
+  }
+  return parts
 }
 
 function tableBorder(
@@ -311,6 +320,7 @@ export function paintAdvanced(
     description: '',
     selected: true,
     dim: false,
+    opensPage: false,
   }, arrowVisible), shell.x + 2, shell.contentY)
   text(
     buffer,
@@ -324,13 +334,14 @@ export function paintAdvanced(
   )
 
   const rows = advancedRows()
-  const contentY = shell.contentY + 3
+  const tableY = shell.contentY + 3
   const pluginsY = buffer.height - 2
-  const pageSize = Math.max(0, pluginsY - contentY)
+  const pageSize = Math.max(0, Math.floor((pluginsY - tableY - 1) / 2))
   const maxScroll = Math.max(0, rows.length - pageSize)
   const scroll = Math.max(0, Math.min(requestedScroll, maxScroll))
-  for (const [index, row] of rows.slice(scroll, scroll + pageSize).entries()) {
-    drawCommandRow(buffer, sheet, row, false, shell.x, contentY + index)
+  const visibleRows = rows.slice(scroll, scroll + pageSize)
+  if (visibleRows.length > 0) {
+    drawTable(buffer, sheet, visibleRows, false, shell.x, tableY)
   }
   drawParts(buffer, [
     { value: 'plugins: ', attributes: TextAttributes.DIM },
@@ -366,6 +377,7 @@ export function paintInstructions(
     description: '',
     selected: selectedIndex === 0,
     dim: false,
+    opensPage: false,
   }, arrowVisible), shell.x + 2, shell.contentY)
 
   const rows = instructionRows(selectedIndex)

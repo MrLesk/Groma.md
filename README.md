@@ -30,8 +30,9 @@ The Instructions screen keeps the same repository context, starts on Overview,
 and lets you choose a shipped guide or return with Backspace. Piped `groma` and
 `groma --plain` print the same repository context and actions without waiting
 for input. The interactive launcher keeps less common syntax behind an
-Advanced commands row. Enter opens a read-only screen where `<name>` marks a
-required parameter, `[option]` an optional one, and `…` additional options.
+Advanced commands row. Enter opens a read-only command-and-description table
+where `<name>` marks a required parameter, `[option]` an optional one, and `…`
+additional options.
 When the references exceed the terminal height, J and K scroll one command and
 Page Up and Page Down scroll one page while the repository context, Back row,
 plugin readiness, and footer stay fixed. Enter or Backspace returns to the

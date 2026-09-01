@@ -87,6 +87,7 @@ export const advancedIndex = instructionsIndex + 1
 
 const advancedLabel = 'Advanced commands'
 const parameterLegend = '<required> [optional] […more]'
+export const nestedPageIndicator = ' ›'
 
 export type WelcomeActionId = typeof welcomeActions[number]['id']
 
@@ -114,6 +115,7 @@ export interface WelcomeRow {
   description: string
   selected: boolean
   dim: boolean
+  opensPage: boolean
 }
 
 export interface InstructionView {
@@ -164,20 +166,15 @@ export function pluginSummary(plugins: readonly WelcomePlugin[]): string {
 
 export function welcomeSheet(model: WelcomeModel): WelcomeSheet {
   const context = ` project: ${model.project} │ folder: ${model.folder} │ status: ${model.status} `
-  const commands = [
-    ...welcomeActions.map(action => action.command),
-    instructionsAction.command,
-    advancedLabel,
-    ...advancedCommands.map(command => command.command),
-    ...instructionViews.map(guide => guide.title),
+  const rows = [
+    ...launcherRows(0),
+    ...advancedRows(),
+    ...instructionRows(0),
   ]
-  const descriptions = [
-    ...welcomeActions.map(action => action.description),
-    instructionsAction.description,
-    parameterLegend,
-    ...advancedCommands.map(command => command.description),
-    ...instructionViews.map(guide => guide.description),
-  ]
+  const commands = rows.map(row => (
+    `${row.command}${row.opensPage ? nestedPageIndicator : ''}`
+  ))
+  const descriptions = rows.map(row => row.description)
   const commandWidth = Math.max(...commands.map(command => command.length + 2))
   const descriptionWidth = Math.max(...descriptions.map(description => description.length))
   const innerWidth = Math.max(context.length, commandWidth + descriptionWidth + 5)
@@ -217,16 +214,19 @@ export function launcherRows(selectedIndex: number): WelcomeRow[] {
     description: action.description,
     selected: index === selectedIndex,
     dim: false,
+    opensPage: false,
   }))
   rows.push({
     ...instructionsAction,
     selected: selectedIndex === instructionsIndex,
     dim: false,
+    opensPage: true,
   }, {
     command: advancedLabel,
     description: parameterLegend,
     selected: selectedIndex === advancedIndex,
     dim: false,
+    opensPage: true,
   })
   return rows
 }
@@ -236,7 +236,8 @@ export function advancedRows(): WelcomeRow[] {
     command: command.command,
     description: command.description,
     selected: false,
-    dim: true,
+    dim: false,
+    opensPage: false,
   }))
 }
 
@@ -246,5 +247,6 @@ export function instructionRows(selectedIndex: number): WelcomeRow[] {
     description: guide.description,
     selected: selectedIndex === index + 1,
     dim: false,
+    opensPage: false,
   }))
 }

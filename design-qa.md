@@ -75,3 +75,45 @@ No actionable P0, P1, or P2 differences remain.
 3. Arrow preview initially reused committed architecture selection, which also changed hierarchy and details. Preview now uses the existing map highlight directly; Enter alone calls normal architecture selection. Result: passed.
 
 final result: passed
+
+---
+
+# TASK-227.2 Design QA
+
+## Evidence
+
+- Source visual truth: `/Users/alex/.codex/generated_images/01a058aa-7f3e-7433-bec6-79edc630dd8c/exec-66cce452-5a73-4bc4-8580-0dcbef32fdb4.png`
+- Implementation capture: `/private/tmp/groma-welcome-227-2.png`
+- Combined comparison: `/private/tmp/groma-design-qa-comparison.png`
+- State: Welcome launcher at 110 columns by 30 rows with Advanced commands selected
+- Source pixels: 2109 × 745
+- Implementation pixels: 1130 × 682 from the full-color terminal SVG capture
+- Normalization: the implementation context and table were cropped to 800 × 300; both sides were scaled to 420 pixels high for the combined focused comparison
+
+## Findings
+
+No actionable P0, P1, or P2 differences remain. The implementation places one green trailing chevron after both nested-page labels without changing table geometry, descriptions, selection, or navigation.
+
+- Fonts and typography: both use the existing monospaced terminal typography. The implementation retains terminal-controlled font rendering and selection weight.
+- Spacing and layout rhythm: row heights, column widths, borders, and description alignment remain unchanged. The chevrons fit inside the existing command column.
+- Colors and visual tokens: the chevrons use the existing Groma green. The captured terminal background differs from the mock because Groma deliberately uses terminal default colors.
+- Image quality and asset fidelity: no raster or custom image assets are part of this TUI change. The implementation capture is a full-color SVG converted to PNG for comparison.
+- Copy and content: launcher labels and descriptions match the source. The live selection caret remains visible in the implementation and continues blinking as before.
+
+## Interaction Evidence
+
+- Up and Down still select launcher rows.
+- Enter still opens Instructions or Advanced commands.
+- Advanced commands remains read-only; J/K and PageUp/PageDown scroll complete table rows.
+- Enter or Backspace returns to the launcher with Advanced commands selected.
+- Focused Advanced and Instructions interaction tests pass with no console surface applicable to the TUI.
+
+## Comparison History
+
+The first comparison found no actionable fidelity difference. No visual fixes or repeat comparison were required.
+
+## Follow-up Polish
+
+None.
+
+final result: passed

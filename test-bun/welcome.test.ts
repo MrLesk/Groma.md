@@ -204,24 +204,29 @@ test.concurrent('the Advanced screen scrolls without moving its fixed context', 
   const firstPage = setup.captureCharFrame().split('\n')
 
   assert.equal(row(firstPage, 'project: example'), row(launcher, 'project: example'))
-  assert.ok(row(firstPage, 'groma export') > row(firstPage, 'Advanced commands'))
-  assert.ok(row(firstPage, 'plugins:') > row(firstPage, 'groma edit'))
+  assert.match(firstPage[row(firstPage, 'groma export')]!, /output folder; watch refreshes/)
+  assert.match(firstPage[row(firstPage, 'groma scanner install')]!, /restore configured npm scanners/)
+  assert.ok(row(firstPage, 'plugins:') > row(firstPage, 'groma scanner install'))
   assert.ok(row(firstPage, 'J/K scroll') > row(firstPage, 'plugins:'))
-  assert.equal(row(firstPage, 'groma relate'), -1)
+  assert.equal(row(firstPage, 'groma scanner list'), -1)
 
   setup.mockInput.pressKey('j')
   await setup.renderOnce()
   const oneCommand = setup.captureCharFrame()
   assert.doesNotMatch(oneCommand, /groma export/)
-  assert.match(oneCommand, /groma relate/)
+  assert.match(oneCommand, /groma scanner list.*show built-in\/found\/missing/)
 
   setup.mockInput.pressKey('\u001B[6~')
   await setup.renderOnce()
   const onePage = setup.captureCharFrame()
   assert.doesNotMatch(onePage, /groma export/)
-  assert.match(onePage, /groma agent-instructions/)
+  assert.match(onePage, /groma scanner remove <id>.*disable; keep shared cache/)
 
-  setup.mockInput.pressKey('\u001B[5~')
+  setup.mockInput.pressKey('\u001B[6~')
+  await setup.renderOnce()
+  assert.match(setup.captureCharFrame(), /groma agent-instructions/)
+
+  for (let page = 0; page < 3; page++) setup.mockInput.pressKey('\u001B[5~')
   await setup.renderOnce()
   assert.match(setup.captureCharFrame(), /groma export/)
 
