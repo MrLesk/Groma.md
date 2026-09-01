@@ -28,3 +28,4 @@ sections, and strict relationship tables.
 | Target | Description | Technology |
 | --- | --- | --- |
 | [Git](../../../../git/system.md) | Writes architecture for versioning | Markdown |
+| [Groma filesystem](groma-filesystem.md) | Writes through the selected architecture tree | Filesystem access |

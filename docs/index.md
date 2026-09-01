@@ -2,8 +2,16 @@
 
 Groma keeps architecture in Git as Markdown you can read and one C4 world you
 can walk. Solid boxes exist. Ghosts are next. Groma writes architecture
-records as a strict OKF v0.2 application profile; the project context in
-`groma/project.md` belongs to the project owner.
+records as a strict OKF v0.2 application profile. `groma init` asks for the
+project name and stores the package in the visible `groma/` directory by
+default or the hidden `.groma/` directory when selected. The resulting
+`project.md` belongs to the project owner.
+
+Without a terminal, pass both values explicitly:
+
+```bash
+groma init "Shop" --directory groma
+```
 
 ## See
 

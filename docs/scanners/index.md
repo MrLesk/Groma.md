@@ -17,8 +17,9 @@ Core keeps curated file membership authoritative. Files already assigned to one 
 matches a changed source path. `groma view` and `groma web` run one scan before
 opening, then load one registry for their watch lifecycle.
 
-Optional modules are enabled only through `groma/scanners.json`, normally
-written by `groma scanner add`. `groma scanner list` derives built-in, found,
+Optional modules are enabled only through `scanners.json` in the selected
+`groma/` or `.groma/` directory, normally written by `groma scanner add`.
+`groma scanner list` derives built-in, found,
 and missing readiness without executing third-party code. Network installation
 happens only in `scanner add` and `scanner install`.
 

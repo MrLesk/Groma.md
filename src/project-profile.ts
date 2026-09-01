@@ -1,9 +1,7 @@
-import { readFile, writeFile } from 'node:fs/promises'
-import path from 'node:path'
-
 import { parse, parseFrontmatter } from 'comark'
 import { renderFrontmatter } from 'comark/render'
 
+import { GromaFileSystem } from './groma-filesystem.ts'
 import { requireProjectMetadata, requireProjectOverview } from './okf-profile.ts'
 import { parseProjectMarkdown } from './project-markdown.ts'
 import type { MarkdownBlock } from './project-markdown.ts'
@@ -21,9 +19,6 @@ export interface ProjectProfile {
   overviewBlocks: MarkdownBlock[]
 }
 
-const profileFilename = (repositoryRoot: string): string =>
-  path.join(repositoryRoot, 'groma', 'project.md')
-
 function requireProfileInput(input: unknown): ProjectProfileInput {
   const candidate = input as Partial<ProjectProfileInput> | null
   const title = typeof candidate?.title === 'string' ? candidate.title.trim() : ''
@@ -40,19 +35,38 @@ function requireProfileInput(input: unknown): ProjectProfileInput {
   }
 }
 
-export async function parseProjectProfile(source: string): Promise<ProjectProfile> {
+export async function parseProjectProfile(
+  source: string,
+  sourceFilename = 'project.md',
+): Promise<ProjectProfile> {
   const { frontmatter, nodes } = await parse(source)
   const { content } = parseFrontmatter(source)
-  const metadata = requireProjectMetadata(frontmatter, 'groma/project.md')
-  const overview = requireProjectOverview(nodes, content, 'groma/project.md')
+  const metadata = requireProjectMetadata(frontmatter, sourceFilename)
+  const overview = requireProjectOverview(nodes, content, sourceFilename)
   const overviewBlocks = await parseProjectMarkdown(overview)
   if (overviewBlocks.length === 0) throw new Error('project overview is required')
   return { ...metadata, overview, overviewBlocks }
 }
 
+export async function renderProjectProfile(input: unknown): Promise<string> {
+  const profile = requireProfileInput(input)
+  const source = `---\n${renderFrontmatter({
+    type: 'Groma Project',
+    title: profile.title,
+    groma: { profile: 'architecture' },
+  })}\n---\n\n${profile.overview}\n`
+  await parseProjectProfile(source)
+  return source
+}
+
 export async function loadProjectProfile(repositoryRoot: string): Promise<ProjectProfile | undefined> {
+  const filesystem = GromaFileSystem.find(repositoryRoot)
+  if (filesystem === undefined) return undefined
   try {
-    return await parseProjectProfile(await readFile(profileFilename(repositoryRoot), 'utf8'))
+    return await parseProjectProfile(
+      await filesystem.read('project.md'),
+      filesystem.sourceFilename('project.md'),
+    )
   } catch {
     return undefined
   }
@@ -63,17 +77,18 @@ export async function saveProjectProfile(
   input: unknown,
 ): Promise<ProjectProfile> {
   const profile = requireProfileInput(input)
-  const filename = profileFilename(repositoryRoot)
-  const source = await readFile(filename, 'utf8')
+  const filesystem = GromaFileSystem.open(repositoryRoot)
+  const sourceFilename = filesystem.sourceFilename('project.md')
+  const source = await filesystem.read('project.md')
   const { data } = parseFrontmatter(source)
-  requireProjectMetadata(data, 'groma/project.md')
+  requireProjectMetadata(data, sourceFilename)
   const nextMetadata: Record<string, unknown> = { ...data, title: profile.title }
   if (profile.description !== undefined) {
     if (profile.description === '') delete nextMetadata.description
     else nextMetadata.description = profile.description
   }
   const next = `---\n${renderFrontmatter(nextMetadata)}\n---\n\n${profile.overview}\n`
-  const saved = await parseProjectProfile(next)
-  await writeFile(filename, next)
+  const saved = await parseProjectProfile(next, sourceFilename)
+  await filesystem.write('project.md', next)
   return saved
 }

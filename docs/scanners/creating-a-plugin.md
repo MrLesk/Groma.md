@@ -71,7 +71,8 @@ groma scanner add @example/groma-scanner-python@1.0.0
 groma scanner add ./plugins/scanners/python
 ```
 
-`add` validates the installed package before writing `groma/scanners.json`.
+`add` validates the installed package before writing `scanners.json` in the
+selected `groma/` or `.groma/` directory.
 Npm packages live in Groma's shared `~/.groma/cache/scanners` cache. Local
 packages run directly from the configured path.
 

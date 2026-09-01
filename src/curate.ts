@@ -1,10 +1,8 @@
-import { existsSync } from 'node:fs'
-import path from 'node:path'
-
 import { parseFrontmatter } from 'comark'
 
 import { buildArchitectureModel } from './architecture-model.ts'
 import { architectureElementPath } from './architecture-path.ts'
+import { GromaFileSystem } from './groma-filesystem.ts'
 import {
   readDocument,
   removeDocument,
@@ -38,6 +36,7 @@ interface Rewrite {
 }
 
 interface CurationContext {
+  filesystem: GromaFileSystem
   repositoryRoot: string
   model: ReturnType<typeof buildArchitectureModel>
   byId: Map<string, ArchitectureElement>
@@ -88,11 +87,10 @@ function combinedCode(elements: ArchitectureElement[]): CodeReference[] {
   return [...byFile.values()]
 }
 
-function absoluteFilename(repositoryRoot: string, sourceFilename: string): string {
-  return path.join(repositoryRoot, ...sourceFilename.split('/'))
-}
-
-function validateDestinations(repositoryRoot: string, rewrites: Rewrite[]): void {
+function validateDestinations(
+  filesystem: GromaFileSystem,
+  rewrites: Rewrite[],
+): void {
   const sources = new Set(rewrites.map(rewrite => rewrite.sourceFilename))
   const destinations = new Set<string>()
   for (const rewrite of rewrites) {
@@ -104,7 +102,7 @@ function validateDestinations(repositoryRoot: string, rewrites: Rewrite[]): void
     if (
       destination !== rewrite.sourceFilename
       && !sources.has(destination)
-      && existsSync(absoluteFilename(repositoryRoot, destination))
+      && filesystem.exists(filesystem.relative(destination))
     ) {
       throw new Error(`architecture document already exists at ${destination}`)
     }
@@ -194,7 +192,7 @@ function movedTarget(
   return {
     source: withGromaField(source, 'parent', parent.id),
     destination: architectureElementPath({
-      root: 'groma/observed',
+      root: context.filesystem.sourceFilename('observed'),
       kind: target.kind,
       id: target.id,
       parentSourceFilename: parent.sourceFilename,
@@ -252,7 +250,7 @@ async function combineElements(
     rewrites.push({
       sourceFilename: child.sourceFilename,
       destinationFilename: architectureElementPath({
-        root: 'groma/observed',
+        root: context.filesystem.sourceFilename('observed'),
         kind: child.kind,
         id: child.id,
         parentSourceFilename: target.sourceFilename,
@@ -284,7 +282,8 @@ export async function curateObserved(
   const record = observedRevision(revisions)
   const model = buildArchitectureModel(record)
   const byId = new Map(model.elements.map(element => [element.id, element]))
-  const context = { repositoryRoot, model, byId }
+  const filesystem = GromaFileSystem.open(repositoryRoot)
+  const context = { filesystem, repositoryRoot, model, byId }
   const target = requireElement(byId, input.id)
   const originalSource = await readDocument(repositoryRoot, target.sourceFilename)
   const grouped = groupedSource(target, originalSource, input)
@@ -300,7 +299,7 @@ export async function curateObserved(
     destinationFilename: moved.destination,
     source: withRepresentationStatus(targetSource, 'stable'),
   })
-  validateDestinations(repositoryRoot, rewrites)
+  validateDestinations(filesystem, rewrites)
   await applyRewrites(repositoryRoot, rewrites, combined.removals)
   return target.id
 }

@@ -1,6 +1,8 @@
+import { architectureRelative } from './architecture-path.ts'
 import { loadArchitecture } from './architecture-reader.ts'
 import { ensurePlanIndex } from './create.ts'
 import { curateObserved } from './curate.ts'
+import { GromaFileSystem } from './groma-filesystem.ts'
 import {
   omitCode,
   readDocument,
@@ -190,7 +192,9 @@ async function restateElement(
   }
   if (observed === undefined) throw new Error(`unknown id "${id}"`)
   await ensurePlanIndex(repositoryRoot, planId, revisions)
-  const dest = `groma/plans/${planId}/${observed.sourceFilename.slice('groma/observed/'.length)}`
+  const dest = GromaFileSystem.open(repositoryRoot).sourceFilename(
+    `plans/${planId}/${architectureRelative(observed.sourceFilename)}`,
+  )
   let source = omitCode(
     await readDocument(repositoryRoot, observed.sourceFilename),
   )

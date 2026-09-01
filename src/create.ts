@@ -1,8 +1,6 @@
-import { existsSync } from 'node:fs'
-import path from 'node:path'
-
 import { architectureElementPath } from './architecture-path.ts'
 import { loadArchitecture } from './architecture-reader.ts'
+import { GromaFileSystem } from './groma-filesystem.ts'
 import {
   renderArchitectureDocument,
   writeObservedDocument,
@@ -75,11 +73,11 @@ function indexWorld(revisions: RevisionRecord[]) {
 }
 
 async function ensureObservedIndex(repositoryRoot: string): Promise<void> {
-  const filename = path.join(repositoryRoot, 'groma', 'observed', 'index.md')
-  if (existsSync(filename)) return
+  const filesystem = GromaFileSystem.open(repositoryRoot)
+  if (filesystem.exists('observed/index.md')) return
   await writeObservedDocument(
     repositoryRoot,
-    'groma/observed/index.md',
+    filesystem.sourceFilename('observed/index.md'),
     '# Observed architecture\n',
   )
 }
@@ -93,9 +91,10 @@ export async function ensurePlanIndex(
     return record.revision.kind === 'plan' && record.revision.name === planId
   })
   if (planExists) return
+  const filesystem = GromaFileSystem.open(repositoryRoot)
   await writeObservedDocument(
     repositoryRoot,
-    `groma/plans/${planId}/index.md`,
+    filesystem.sourceFilename(`plans/${planId}/index.md`),
     `# ${displayName(planId)}\n`,
   )
 }
@@ -196,6 +195,7 @@ export async function createArchitectureElement(
     external,
     technology,
   } = validateCreateInput(input)
+  const filesystem = GromaFileSystem.open(repositoryRoot)
   if (observed) await ensureObservedIndex(repositoryRoot)
   const revisions = await loadArchitecture(repositoryRoot)
   const byId = indexWorld(revisions)
@@ -212,7 +212,9 @@ export async function createArchitectureElement(
   await writeObservedDocument(
     repositoryRoot,
     architectureElementPath({
-      root: planId === undefined ? 'groma/observed' : `groma/plans/${planId}`,
+      root: filesystem.sourceFilename(
+        planId === undefined ? 'observed' : `plans/${planId}`,
+      ),
       kind,
       id,
       parentSourceFilename: parent?.sourceFilename,

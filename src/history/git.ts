@@ -3,6 +3,8 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 
+import { GromaFileSystem } from '../groma-filesystem.ts'
+
 export interface GitRevision {
   id: string
   shortId: string
@@ -72,14 +74,15 @@ export async function readGitText(
   }
 }
 
-/** Current-branch commits whose resulting `groma/` tree changed, newest first. */
+/** Current-branch commits whose selected Groma tree changed, newest first. */
 export async function listGitRevisions(repositoryRoot: string): Promise<GitRevision[]> {
+  const filesystem = GromaFileSystem.open(repositoryRoot)
   const output = await runGit([
     'log',
     '--decorate-refs=refs/tags/*',
     '--format=%H%x00%h%x00%cI%x00%s%x00%b%x00%(decorate:prefix=,suffix=,separator=%x1f,tag=)%x00',
     '--',
-    'groma',
+    filesystem.directory,
   ], repositoryRoot)
   const fields = output.split('\0')
   const revisions: GitRevision[] = []
@@ -173,5 +176,10 @@ export function withGitGromaRevision<T>(
   revisionId: string,
   load: (snapshotRoot: string) => Promise<T>,
 ): Promise<T> {
-  return withGitTree(repositoryRoot, revisionId, ['groma'], load)
+  return withGitTree(
+    repositoryRoot,
+    revisionId,
+    [GromaFileSystem.open(repositoryRoot).directory],
+    load,
+  )
 }

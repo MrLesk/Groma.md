@@ -1,5 +1,6 @@
 import { loadArchitecture } from './architecture-reader.ts'
 import { architectureRelative } from './architecture-path.ts'
+import { GromaFileSystem } from './groma-filesystem.ts'
 import {
   readDocument,
   removeDocument,
@@ -40,7 +41,9 @@ export async function acceptGhost(
   )
   if (readCode(plannedGroma.code).length === 0) return 'unmatched'
 
-  const observedPath = `groma/observed/${architectureRelative(planned.sourceFilename)}`
+  const observedPath = GromaFileSystem.open(repositoryRoot).sourceFilename(
+    `observed/${architectureRelative(planned.sourceFilename)}`,
+  )
   const observed = findDocument(revisions, 'observed', id)
   await writeObservedDocument(
     repositoryRoot,

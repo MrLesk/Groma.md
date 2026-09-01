@@ -4,14 +4,14 @@ Run groma instructions for human guides and groma agent-instructions for agent o
 
 export const overview = `# Overview
 
-Groma is this repository's architecture in Git: Markdown that people and agents can read, and one C4 world that its viewers can walk. Solid boxes exist. Ghosts are next. Groma is the only writer of files under groma/.
+Groma is this repository's architecture in Git: Markdown that people and agents can read, and one C4 world that its viewers can walk. Solid boxes exist. Ghosts are next. Groma is the only writer of files in the selected groma/ or .groma/ directory.
 
 ## How it works
 
 \`\`\`text
-source code ──scan──▶ groma/*.md ──view──▶ maps
-                           ▲
-                 create · edit · relate
+source code ──scan──▶ groma|.groma/*.md ──view──▶ maps
+                                 ▲
+                       create · edit · relate
 \`\`\`
 
 ## Workflow
@@ -19,7 +19,7 @@ source code ──scan──▶ groma/*.md ──view──▶ maps
 1. groma web — scan this repo and open the browser map.
 2. groma view — scan this repo and open the terminal map. groma view --plain prints the existing world as text without scanning. groma view <id|path> prints one existing record.
 3. groma scan — scan this repo. Prints ok and a short summary. It does not print the architecture.
-4. Change the architecture through Groma, not by editing groma/ files.
+4. Change the architecture through Groma, not by editing its files.
    - groma create — a new part becomes a ghost in a plan.
    - groma create --observed — author a semantic part that already exists without source evidence.
    - groma edit — update meaning, group scan evidence, move an empty scanned component, or combine empty scan records.
@@ -29,7 +29,7 @@ source code ──scan──▶ groma/*.md ──view──▶ maps
 
 ## Rules of engagement
 
-- Do not edit files under groma/ by hand.
+- Do not edit files under the selected Groma directory by hand.
 - The architecture id is the kebab-case id in Markdown. Source code is evidence.
 - A scan never accepts a ghost.
 - Two plans must not claim the same element id.

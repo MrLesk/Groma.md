@@ -1,5 +1,4 @@
-import { mkdir, readFile, writeFile } from 'node:fs/promises'
-import path from 'node:path'
+import { GromaFileSystem } from '../../groma-filesystem.ts'
 
 export interface ConfiguredScanner {
   id: string
@@ -8,38 +7,43 @@ export interface ConfiguredScanner {
 
 const scannerId = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
 
-function configFilename(repositoryRoot: string): string {
-  return path.join(repositoryRoot, 'groma', 'scanners.json')
-}
-
-function configuredScanner(value: unknown, index: number): ConfiguredScanner {
+function configuredScanner(
+  value: unknown,
+  index: number,
+  sourceFilename: string,
+): ConfiguredScanner {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) {
-    throw new Error(`groma/scanners.json scanners[${index}] must be an object`)
+    throw new Error(`${sourceFilename} scanners[${index}] must be an object`)
   }
   const candidate = value as Record<string, unknown>
   const fields = Object.keys(candidate)
   if (fields.length !== 2 || !fields.includes('id') || !fields.includes('source')) {
-    throw new Error(`groma/scanners.json scanners[${index}] must contain only id and source`)
+    throw new Error(`${sourceFilename} scanners[${index}] must contain only id and source`)
   }
   if (typeof candidate.id !== 'string' || !scannerId.test(candidate.id)) {
-    throw new Error(`groma/scanners.json scanners[${index}].id must be lowercase kebab-case`)
+    throw new Error(`${sourceFilename} scanners[${index}].id must be lowercase kebab-case`)
   }
   if (typeof candidate.source !== 'string' || candidate.source.trim() === '') {
-    throw new Error(`groma/scanners.json scanners[${index}].source must be non-empty`)
+    throw new Error(`${sourceFilename} scanners[${index}].source must be non-empty`)
   }
   return { id: candidate.id, source: candidate.source }
 }
 
-function parseScannerConfig(source: string): ConfiguredScanner[] {
+function parseScannerConfig(
+  source: string,
+  sourceFilename: string,
+): ConfiguredScanner[] {
   const value: unknown = JSON.parse(source)
   if (value === null || typeof value !== 'object' || Array.isArray(value)) {
-    throw new Error('groma/scanners.json must be an object')
+    throw new Error(`${sourceFilename} must be an object`)
   }
   const config = value as Record<string, unknown>
   if (Object.keys(config).length !== 1 || !Array.isArray(config.scanners)) {
-    throw new Error('groma/scanners.json must contain only a scanners array')
+    throw new Error(`${sourceFilename} must contain only a scanners array`)
   }
-  const scanners = config.scanners.map(configuredScanner)
+  const scanners = config.scanners.map((scanner, index) => {
+    return configuredScanner(scanner, index, sourceFilename)
+  })
   const ids = new Set<string>()
   const sources = new Set<string>()
   for (const scanner of scanners) {
@@ -54,8 +58,12 @@ function parseScannerConfig(source: string): ConfiguredScanner[] {
 }
 
 export async function readScannerConfig(repositoryRoot: string): Promise<ConfiguredScanner[]> {
+  const filesystem = GromaFileSystem.open(repositoryRoot)
   try {
-    return parseScannerConfig(await readFile(configFilename(repositoryRoot), 'utf8'))
+    return parseScannerConfig(
+      await filesystem.read('scanners.json'),
+      filesystem.sourceFilename('scanners.json'),
+    )
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') return []
     throw error
@@ -67,7 +75,8 @@ export async function writeScannerConfig(
   scanners: readonly ConfiguredScanner[],
 ): Promise<void> {
   const ordered = [...scanners].sort((left, right) => left.id.localeCompare(right.id))
-  const filename = configFilename(repositoryRoot)
-  await mkdir(path.dirname(filename), { recursive: true })
-  await writeFile(filename, `${JSON.stringify({ scanners: ordered }, null, 2)}\n`)
+  await GromaFileSystem.open(repositoryRoot).write(
+    'scanners.json',
+    `${JSON.stringify({ scanners: ordered }, null, 2)}\n`,
+  )
 }
