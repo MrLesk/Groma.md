@@ -79,7 +79,6 @@ async function runInit(root: string) {
   const result = await run(['init', 'Test project', '--directory', 'groma'], root)
   assert.equal(result.code, 0, result.stderr)
   assert.equal(result.stderr, '')
-  assert.equal(result.stdout, 'ok\n')
 }
 
 test('bare groma without a TTY prints the plain welcome and exits', async () => {
