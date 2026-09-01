@@ -34,11 +34,13 @@ receives it; the sheet owns every footprint, floor, shape, zone, and route on
 whole cells. A live host starts the same watch as `groma scan --watch`
 in-process and reloads the architecture and sheet after each fold. It also
 reloads them when architecture Markdown changes, but it does not scan on open.
-A live host reads active Backlog tasks and refreshes them when a task file
+A live host asks the embedded Backlog work-source plugin for active tasks and
+refreshes them when a task file
 changes: the TUI marks In Progress work on referenced elements, while the web
 stands each task's pins on the element it touched last. A work refresh projects
 onto the cached map instead of composing another sheet. A failed Backlog read
-leaves the map available. Selection and details never lay anything out again.
+leaves the map available. A missing global Backlog.md CLI supplies empty work.
+Selection and details never lay anything out again.
 The first view fits the whole map. Routes stay on the map. One authored
 relationship is one route; on the TUI, relationships that promote to the
 same pair of items at a level share one route. Parents

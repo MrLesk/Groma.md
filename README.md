@@ -63,7 +63,10 @@ operating rules as Markdown; its default guide is `curation`.
    none has, accept scans first and fails when the scan still does not
    match. A scan never accepts a ghost on its own.
 
-Both maps show live Backlog work. The terminal map marks the assignees of
+Both maps show live Backlog work when the global Backlog.md CLI is available.
+Groma embeds the Backlog work-source plugin, but architecture, viewers, and
+exports continue without task data when the CLI is absent. The Welcome reports
+that state and the current `bun i -g backlog.md` install command. The terminal map marks the assignees of
 each task in progress on the elements the task references. The web map
 stands one pin per assignee and task, or one generic pin for an unassigned
 task, on the element the task touched last. Its Live work island filters the

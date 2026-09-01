@@ -5,7 +5,8 @@
   "type": "module",
   "workspaces": [
     "packages/*",
-    "plugins/scanners/*"
+    "plugins/scanners/*",
+    "plugins/work-sources/*"
   ],
   "bin": {
     "groma": "src/cli.ts"
@@ -27,6 +28,8 @@
   "dependencies": {
     "@groma/scanner": "workspace:*",
     "@groma/scanner-typescript": "workspace:*",
+    "@groma/work-source": "workspace:*",
+    "@groma/work-source-backlog": "workspace:*",
     "@comark/html": "0.5.1",
     "@opentui/core": "0.5.1",
     "comark": "0.5.1",

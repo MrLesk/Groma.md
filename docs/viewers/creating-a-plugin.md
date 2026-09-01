@@ -69,11 +69,13 @@ The TUI plugin is `mountTerminalViewer(renderer, viewModel, options)` in
 - `setView({ level, currentId, camera })`: moves the view without a key
   press; every field is optional.
 
-Work comes through a `WorkSource` (`src/work/backlog.ts`): `read()`
+Work comes through the public `@groma/work-source` contract: `read()`
 resolves the configured workflow and available Backlog tasks, and
 `watch(onChange)` returns a handle whose `close()` stops watching the task files. The default is
-`createBacklogPlugin(repositoryRoot)`; both hosts take another source
-through their `workSource` option.
+the embedded `@groma/work-source-backlog` plugin; both hosts take another
+source through their `workSource` option. When the global Backlog.md CLI is
+missing, the embedded plugin supplies empty work so architecture remains
+fully available.
 
 Leave when asked means `destroy`, which Ctrl+C calls. The plugin marks
 itself closed, removes its frame callback and key listener, settles

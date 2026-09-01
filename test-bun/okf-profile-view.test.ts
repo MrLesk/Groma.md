@@ -5,11 +5,12 @@ import path from 'node:path'
 
 import { expect, test } from 'bun:test'
 import { createTestRenderer } from '@opentui/core/testing'
+import { EMPTY_WORK_SNAPSHOT } from '@groma/work-source'
+import type { WorkSource } from '@groma/work-source'
 
 import { loadArchitectureViewModel } from '../src/core.ts'
 import { loadProjectProfile } from '../src/project-profile.ts'
 import { sheetScene } from '../src/sheet/scene.ts'
-import { EMPTY_WORK_SNAPSHOT, type WorkSource } from '../src/work/backlog.ts'
 import { mountTerminalViewer } from '../src/viewers/tui/terminal-viewer.ts'
 import { inspectDetails } from '../src/viewers/web/organisms/details.ts'
 import { projectScene } from '../src/viewers/web/iso/project.ts'

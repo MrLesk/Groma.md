@@ -273,7 +273,7 @@ export function paintLauncher(
   )
   drawParts(buffer, [
     { value: 'plugins: ', attributes: TextAttributes.DIM },
-    { value: pluginSummary(model.scanners) },
+    { value: pluginSummary(model.plugins) },
   ], shell.x + 2, pluginsY)
   text(
     buffer,

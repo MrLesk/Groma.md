@@ -7,8 +7,9 @@ import { test } from 'bun:test'
 
 import { normalizeTerminalPalette } from '@opentui/core'
 import { createTestRenderer } from '@opentui/core/testing'
+import { EMPTY_WORK_SNAPSHOT } from '@groma/work-source'
+import type { WorkSource } from '@groma/work-source'
 
-import { EMPTY_WORK_SNAPSHOT, type WorkSource } from '../src/work/backlog.ts'
 import { scanRepository } from '../src/scanner.ts'
 import { startTerminalViewer } from '../src/view-host.ts'
 

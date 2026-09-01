@@ -2,6 +2,9 @@ import { createRequire } from 'node:module'
 import { homedir } from 'node:os'
 import path from 'node:path'
 
+import type { WorkSourcePlugin } from '@groma/work-source'
+import { backlogPlugin } from '@groma/work-source-backlog'
+
 import { humanInstructionGuides } from '../instructions.ts'
 import { scannerInventory } from '../scanner/modules/inventory.ts'
 import type { ScannerReadiness } from '../scanner/modules/inventory.ts'
@@ -87,16 +90,17 @@ const parameterLegend = '<required> [optional] […more]'
 
 export type WelcomeActionId = typeof welcomeActions[number]['id']
 
-export interface WelcomeScanner {
+export interface WelcomePlugin {
   id: string
   status: ScannerReadiness
+  install?: string
 }
 
 export interface WelcomeModel {
   project: string
   folder: string
   status: string
-  scanners: readonly WelcomeScanner[]
+  plugins: readonly WelcomePlugin[]
 }
 
 export interface WelcomeSheet {
@@ -132,20 +136,29 @@ function displayFolder(repositoryRoot: string): string {
     : root
 }
 
-export async function loadWelcomeModel(repositoryRoot: string): Promise<WelcomeModel> {
+export async function loadWelcomeModel(
+  repositoryRoot: string,
+  workSourcePlugin: WorkSourcePlugin = backlogPlugin,
+): Promise<WelcomeModel> {
   const root = path.resolve(repositoryRoot)
   const scanners = await scannerInventory(root)
+  const workSource = workSourcePlugin.readiness()
   return {
     project: path.basename(root),
     folder: displayFolder(root),
     status: 'Architecture ready',
-    scanners: scanners.map(({ id, status }) => ({ id, status })),
+    plugins: [
+      { id: workSourcePlugin.id, ...workSource },
+      ...scanners.map(({ id, status }) => ({ id, status })),
+    ],
   }
 }
 
-export function pluginSummary(scanners: readonly WelcomeScanner[]): string {
-  const scannerText = scanners.map(scanner => `${scanner.id}: ${scanner.status}`).join(' │ ')
-  return `backlog: built-in │ ${scannerText}`
+export function pluginSummary(plugins: readonly WelcomePlugin[]): string {
+  return plugins.map(plugin => {
+    const install = plugin.install === undefined ? '' : ` (${plugin.install})`
+    return `${plugin.id}: ${plugin.status}${install}`
+  }).join(' │ ')
 }
 
 export function welcomeSheet(model: WelcomeModel): WelcomeSheet {
@@ -174,8 +187,11 @@ export function welcomeSheet(model: WelcomeModel): WelcomeSheet {
   }
 }
 
-export async function renderPlainWelcome(repositoryRoot: string): Promise<string> {
-  const model = await loadWelcomeModel(repositoryRoot)
+export async function renderPlainWelcome(
+  repositoryRoot: string,
+  workSourcePlugin: WorkSourcePlugin = backlogPlugin,
+): Promise<string> {
+  const model = await loadWelcomeModel(repositoryRoot, workSourcePlugin)
   return [
     `groma.md v${welcomeVersion}`,
     'architecture in Git',
@@ -184,7 +200,7 @@ export async function renderPlainWelcome(repositoryRoot: string): Promise<string
     `project: ${model.project}`,
     `folder: ${model.folder}`,
     `status: ${model.status}`,
-    `plugins: ${pluginSummary(model.scanners)}`,
+    `plugins: ${pluginSummary(model.plugins)}`,
     '',
     ...welcomeActions.map(action => `${action.command} — ${action.description}`),
     `${instructionsAction.command} — ${instructionsAction.description}`,
