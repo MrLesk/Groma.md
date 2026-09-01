@@ -204,6 +204,11 @@ Review findings may block completion only when they cite an unmet acceptance cri
 item, or a reproducible failure in the declared supported product flow. Otherwise record them as non-blocking
 follow-ups.
 
+The implementing agent performs the specification and quality reviews itself. The specification review compares the
+result with the task acceptance criteria and Definition of Done. The quality review checks the changed code for
+reproducible defects, unnecessary complexity, unclear ownership, and missing tests in the supported flow. Do not spawn
+separate agents for these reviews.
+
 The first specification and quality reviews may inspect the complete change. Any re-review is limited to the previously
 reported findings and regressions caused by their fixes. Newly noticed non-critical improvements are follow-ups.
 
@@ -227,8 +232,18 @@ may not introduce behavior, requirements, edge cases, compatibility, fallback, r
 abstractions.
 
 The implementer applies accepted simplifications and reruns focused checks. There may be at most one targeted re-review,
-limited to the original simplicity findings and regressions caused by their fixes. The normal specification and quality
-reviews follow only after this gate passes.
+limited to the original simplicity findings and regressions caused by their fixes. The implementer's specification and
+quality reviews follow only after this gate passes.
+
+## Full-context complexity review
+
+After the implementer's specification and quality reviews, run one final review in a separate agent with the full
+conversation context. Ask whether the result could use a simpler or more solid approach, whether atomic components are
+grouped clearly by domain, and whether the architecture prevents as many junior-developer mistakes as possible. Present
+material recommendations to the user before changing the architecture.
+
+The cold simplicity review and the full-context complexity review are the only reviews assigned to separate agents.
+Do not spawn agents for other reviews unless the user explicitly asks.
 
 ## Tests
 
