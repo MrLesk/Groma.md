@@ -124,7 +124,7 @@ test.concurrent('Web history reports a pre-OKF Groma revision as unsupported', a
     expect(response.status).toBe(422)
     expect(await response.text()).toBe('Unsupported Groma revision')
   } finally {
-    server?.close()
+    await server?.close()
     await rm(repositoryRoot, { recursive: true, force: true })
   }
 })

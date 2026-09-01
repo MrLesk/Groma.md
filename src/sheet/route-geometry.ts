@@ -111,10 +111,11 @@ function portAt(endpoint: Endpoint, side: PortSide, share: number): RoutePort {
 }
 
 /** Equivalent building ports from which Libavoid may choose the straightest route. */
-export function buildingPorts(endpoint: Endpoint): RoutePort[] {
+export function buildingPorts(endpoint: Endpoint, capacity = PORT_CAPACITY): RoutePort[] {
+  const portCount = Math.max(PORT_CAPACITY, capacity)
   return (['north', 'east', 'south', 'west'] as const).flatMap(side =>
-    Array.from({ length: PORT_CAPACITY }, (_, index) =>
-      portAt(endpoint, side, portShare(endpoint, side, index, PORT_CAPACITY))))
+    Array.from({ length: portCount }, (_, index) =>
+      portAt(endpoint, side, portShare(endpoint, side, index, portCount))))
 }
 
 function inside(point: Point, polygon: readonly Point[]): boolean {

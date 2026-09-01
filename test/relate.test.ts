@@ -75,5 +75,8 @@ test('groma relate authors one validated observed relationship', async t => {
   const removed = await groma(root, ['relate', 'stock', 'orders', '--remove'])
   assert.equal(removed.code, 0, removed.stderr)
   assert.equal(removed.stdout, 'ok\nstock\n')
-  assert.equal(await readFile(filename, 'utf8'), original)
+  assert.equal(
+    (await readFile(filename, 'utf8')).replaceAll('\r\n', '\n'),
+    original.replaceAll('\r\n', '\n'),
+  )
 })

@@ -13,6 +13,7 @@ import {
   loadWelcomeModel,
 } from '../src/welcome/model.ts'
 import type { WelcomeModel } from '../src/welcome/model.ts'
+import { viewerFixtureRoot } from './helpers.ts'
 
 function welcomeFixture(): WelcomeModel {
   return {
@@ -99,8 +100,8 @@ test.concurrent('the welcome derives scanner readiness without executing modules
 
 test.concurrent('the welcome explains how to install a missing Backlog command', async () => {
   const missingBacklog = createBacklogPlugin(() => null)
-  const model = await loadWelcomeModel('/workspace/example', missingBacklog)
-  const plain = await renderPlainWelcome('/workspace/example', missingBacklog)
+  const model = await loadWelcomeModel(viewerFixtureRoot, missingBacklog)
+  const plain = await renderPlainWelcome(viewerFixtureRoot, missingBacklog)
 
   assert.deepEqual(model.plugins.slice(0, 2), [
     { id: 'backlog.md', status: 'missing', install: 'bun i -g backlog.md' },
@@ -152,6 +153,22 @@ test.concurrent('the welcome starts on web and returns the entered action', asyn
 
   assert.equal(await selected, 'web')
   assert.equal(setup.renderer.isDestroyed, true)
+})
+
+test.concurrent('a production handoff suspends the welcome until its action owns the process', async () => {
+  const setup = await createTestRenderer({ width: 100, height: 30 })
+  const selected = mountWelcome(
+    setup.renderer,
+    welcomeFixture(),
+    'launcher',
+    'suspend',
+  )
+
+  setup.mockInput.pressEnter()
+
+  assert.equal(await selected, 'web')
+  assert.equal(setup.renderer.isDestroyed, false)
+  setup.renderer.destroy()
 })
 
 test.concurrent('arrows choose one action before enter', async () => {

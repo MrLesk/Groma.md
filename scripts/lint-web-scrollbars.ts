@@ -5,8 +5,9 @@ const scrollbarRule = /scrollbar-(?:width|color)|::-webkit-scrollbar/
 const violations: string[] = []
 
 for await (const file of new Bun.Glob('src/viewers/web/**/*.ts').scan('.')) {
-  if (file === owner) continue
-  if (scrollbarRule.test(await Bun.file(file).text())) violations.push(file)
+  const normalized = file.replaceAll('\\', '/')
+  if (normalized === owner) continue
+  if (scrollbarRule.test(await Bun.file(file).text())) violations.push(normalized)
 }
 
 if (violations.length > 0) {

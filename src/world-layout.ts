@@ -1,4 +1,5 @@
 import ELK from 'elkjs'
+import BundledELK from 'elkjs/lib/elk.bundled.js'
 import type {
   ElkNode,
   ElkPoint,
@@ -290,13 +291,10 @@ export async function layoutArchitectureWorld(
   model: AnnotatedArchitectureModel,
 ): Promise<ArchitectureWorld> {
   const graph = graphFor(model)
-  const elk = new ELK({ workerUrl })
-  let laidOut: ElkNode
-  try {
-    laidOut = await elk.layout(graph)
-  } finally {
-    elk.terminateWorker()
-  }
+  const elk = process.versions.bun === undefined
+    ? new BundledELK()
+    : new ELK({ workerUrl })
+  const laidOut = await elk.layout(graph) as ElkNode
   const modelRelationships = new Map(model.relationships.map(relationship => [
     relationship.id,
     relationship,

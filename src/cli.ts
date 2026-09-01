@@ -2,6 +2,7 @@
 
 import path from 'node:path'
 import { createInterface } from 'node:readline/promises'
+import { fileURLToPath } from 'node:url'
 
 import { Command } from 'commander'
 
@@ -18,7 +19,7 @@ import {
   renderPlainWelcome,
   startWelcome,
 } from './welcome.ts'
-import type { WelcomeActionId } from './welcome.ts'
+import type { WelcomeActionId, WelcomeScreen } from './welcome.ts'
 
 const program = new Command()
 
@@ -71,6 +72,17 @@ async function openTerminalMap(): Promise<void> {
   await viewer.closed
 }
 
+async function openTerminalMapFromWelcome(): Promise<void> {
+  const child = Bun.spawn([process.execPath, fileURLToPath(import.meta.url), 'view'], {
+    cwd: process.cwd(),
+    stdin: 'inherit',
+    stdout: 'inherit',
+    stderr: 'inherit',
+  })
+  const exitCode = await child.exited
+  if (exitCode !== 0) process.exitCode = exitCode
+}
+
 async function exportWeb(directory: string, watch: boolean): Promise<void> {
   const root = process.cwd()
   await scanRepository(root)
@@ -81,10 +93,14 @@ async function exportWeb(directory: string, watch: boolean): Promise<void> {
   })
   console.log(`groma export at ${path.resolve(directory)}`)
   if (!watch) {
-    exported.close()
+    await exported.close()
     return
   }
-  const stop = () => exported.close()
+  const stop = () => {
+    process.off('SIGINT', stop)
+    process.off('SIGTERM', stop)
+    void exported.close().then(() => process.exit())
+  }
   process.once('SIGINT', stop)
   process.once('SIGTERM', stop)
   await exported.closed
@@ -107,10 +123,11 @@ async function runScan(watchEnabled: boolean): Promise<void> {
       console.error(error instanceof Error ? error.message : String(error))
     },
   })
-  await new Promise<void>(resolve => {
+  await new Promise<void>(() => {
     const stop = () => {
-      session.close()
-      resolve()
+      process.off('SIGINT', stop)
+      process.off('SIGTERM', stop)
+      void session.close().then(() => process.exit())
     }
     process.once('SIGINT', stop)
     process.once('SIGTERM', stop)
@@ -124,9 +141,23 @@ function unhandledWelcomeAction(action: never): never {
 async function runWelcomeAction(action: WelcomeActionId): Promise<void> {
   switch (action) {
     case 'web': return openWeb()
-    case 'view': return openTerminalMap()
+    case 'view': return openTerminalMapFromWelcome()
     case 'scan': return scanOnce()
     default: return unhandledWelcomeAction(action)
+  }
+}
+
+async function runInteractiveWelcome(screen: WelcomeScreen = 'launcher'): Promise<void> {
+  const lifecycle = setInterval(() => {}, 1000)
+  try {
+    const session = await startWelcome(process.cwd(), screen)
+    try {
+      if (session.selection !== undefined) await runWelcomeAction(session.selection)
+    } finally {
+      session.close()
+    }
+  } finally {
+    clearInterval(lifecycle)
   }
 }
 
@@ -142,8 +173,7 @@ program
       console.log(await renderPlainWelcome(process.cwd()))
       return
     }
-    const selection = await startWelcome(process.cwd())
-    if (selection !== undefined) await runWelcomeAction(selection)
+    await runInteractiveWelcome()
   })
 
 program
@@ -345,8 +375,7 @@ program
       console.log(selected.content)
       return
     }
-    const action = await startWelcome(process.cwd(), 'instructions')
-    if (action !== undefined) await runWelcomeAction(action)
+    await runInteractiveWelcome('instructions')
   })
 
 program

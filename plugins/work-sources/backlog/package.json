@@ -6,6 +6,7 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
-    "@groma/work-source": "workspace:*"
+    "@groma/work-source": "workspace:*",
+    "comark": "0.5.1"
   }
 }

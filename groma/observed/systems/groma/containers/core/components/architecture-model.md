@@ -14,7 +14,7 @@ groma:
     - scanner: typescript
       file: src/types.ts
       dependencies: 0
-      dependents: 74
+      dependents: 73
     - scanner: typescript
       file: src/element-order.ts
       symbol: compareSemanticElements

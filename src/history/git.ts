@@ -109,7 +109,10 @@ function extractArchive(
   paths: string[],
 ): Promise<void> {
   return new Promise((resolve, reject) => {
-    const archive = spawn('git', ['archive', '--format=tar', revisionId, ...paths], {
+    const archive = spawn('git', [
+      '-c', 'core.autocrlf=false',
+      'archive', '--format=tar', revisionId, ...paths,
+    ], {
       cwd: repositoryRoot,
       stdio: ['ignore', 'pipe', 'pipe'],
     })

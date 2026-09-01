@@ -1,6 +1,9 @@
 import { spawn } from 'node:child_process'
 import { accessSync, constants, existsSync, watch } from 'node:fs'
+import { readFile, readdir } from 'node:fs/promises'
 import path from 'node:path'
+
+import { parse } from 'comark'
 
 import {
   EMPTY_WORK_SOURCE,
@@ -18,13 +21,18 @@ type BacklogCommandResolver = () => string | null
 const installCommand = 'bun i -g backlog.md'
 
 function findBacklogCommand(): string | null {
+  const names = process.platform === 'win32'
+    ? ['backlog.exe', 'backlog.cmd', 'backlog']
+    : ['backlog']
   for (const directory of (process.env.PATH ?? '').split(path.delimiter)) {
-    const command = path.join(directory, 'backlog')
-    try {
-      accessSync(command, constants.X_OK)
-      return command
-    } catch {
-      // Keep looking through PATH.
+    for (const name of names) {
+      const command = path.join(directory, name)
+      try {
+        accessSync(command, constants.X_OK)
+        return command
+      } catch {
+        // Keep looking through PATH.
+      }
     }
   }
   return null
@@ -55,35 +63,43 @@ function runBacklog(
   })
 }
 
-interface TaskListJson {
-  tasks: {
-    id: string
-    title: string
-    status: string
-    assignees: string[]
-    references: string[]
-    modifiedFiles: string[]
-    acceptanceCriteriaCompleted: number
-    acceptanceCriteriaCount: number
-    updatedAt: string
-  }[]
+const taskDirectory = (repositoryRoot: string): string => path.join(repositoryRoot, 'backlog', 'tasks')
+
+const textList = (value: unknown): string[] => Array.isArray(value)
+  ? value.filter((entry): entry is string => typeof entry === 'string')
+  : typeof value === 'string' && value !== '' ? [value] : []
+
+function section(source: string, name: string): string {
+  const match = source.match(new RegExp(`<!-- SECTION:${name}:BEGIN -->\\s*([\\s\\S]*?)\\s*<!-- SECTION:${name}:END -->`))
+  return match?.[1]?.trim() ?? ''
 }
 
-interface TaskViewJson {
-  task: {
-    id: string
-    title: string
-    status: string
-    assignees: string[]
-    references: string[]
-    description: string | null
-    modifiedFiles: string[]
-    acceptanceCriteria: { text: string; checked: boolean }[]
-    definitionOfDone: { text: string; checked: boolean }[]
-    implementationPlan: string | null
-    implementationNotes: string | null
-    comments: { body: string; createdAt: string; author: string }[]
-  }
+function checklist(source: string, marker: 'AC' | 'DOD') {
+  const match = source.match(new RegExp(`<!-- ${marker}:BEGIN -->\\s*([\\s\\S]*?)\\s*<!-- ${marker}:END -->`))
+  return (match?.[1] ?? '').split(/\r?\n/).flatMap(line => {
+    const item = line.match(/^- \[([ xX])] (?:#\d+ )?(.*)$/)
+    return item ? [{ text: item[2]!, checked: item[1]!.toLowerCase() === 'x' }] : []
+  })
+}
+
+function comments(source: string) {
+  const body = source.match(/<!-- COMMENTS:BEGIN -->\s*([\s\S]*?)\s*<!-- COMMENTS:END -->/)?.[1] ?? ''
+  const pattern = /(?:^|\r?\n)(?:author: (.*)\r?\n)?created: (.*)\r?\n---\r?\n([\s\S]*?)\r?\n---(?=\r?\n|$)/g
+  return [...body.matchAll(pattern)].map(match => ({
+    author: match[1] ?? '', createdAt: match[2]!, body: match[3]!.trim(),
+  }))
+}
+
+async function taskFiles(repositoryRoot: string): Promise<string[]> {
+  const directory = taskDirectory(repositoryRoot)
+  const names = await readdir(directory)
+  return names.filter(name => name.endsWith('.md')).map(name => path.join(directory, name))
+}
+
+async function readTask(filename: string) {
+  const source = await readFile(filename, 'utf8')
+  const document = await parse(source)
+  return { source, frontmatter: document.frontmatter }
 }
 
 export function createBacklogSource(
@@ -92,32 +108,46 @@ export function createBacklogSource(
 ): WorkSource {
   return {
     async read() {
-      const [listText, statusesText, defaultStatusText] = await Promise.all([
-        run(['task', 'list', '--json'], repositoryRoot),
+      const [files, statusesText, defaultStatusText] = await Promise.all([
+        taskFiles(repositoryRoot),
         run(['config', 'get', 'statuses'], repositoryRoot),
         run(['config', 'get', 'defaultStatus'], repositoryRoot),
       ])
-      const list = JSON.parse(listText) as TaskListJson
+      const items = await Promise.all(files.map(async filename => {
+        const { source, frontmatter } = await readTask(filename)
+        const criteria = checklist(source, 'AC')
+        return {
+          id: String(frontmatter.id ?? ''),
+          title: String(frontmatter.title ?? ''),
+          status: String(frontmatter.status ?? ''),
+          assignees: textList(frontmatter.assignee),
+          references: textList(frontmatter.references),
+          modifiedFiles: textList(frontmatter.modified_files),
+          acceptanceCriteriaCompleted: criteria.filter(item => item.checked).length,
+          acceptanceCriteriaCount: criteria.length,
+          updatedAt: String(frontmatter.updated_date ?? ''),
+        }
+      }))
       const statuses = statusesText.split(',').map(status => status.trim()).filter(Boolean)
-      return { statuses, defaultStatus: defaultStatusText.trim(), items: list.tasks }
+      return { statuses, defaultStatus: defaultStatusText.trim(), items }
     },
     async readItem(id) {
-      const { task } = JSON.parse(await run(
-        ['task', 'view', id, '--json'],
-        repositoryRoot,
-      )) as TaskViewJson
+      const filename = (await taskFiles(repositoryRoot)).find(candidate =>
+        path.basename(candidate).toLowerCase().startsWith(`${id.toLowerCase()} - `))
+      if (!filename) throw new Error(`Backlog task not found: ${id}`)
+      const task = await readTask(filename)
       return {
-        id: task.id,
-        description: task.description ?? '',
-        acceptanceCriteria: task.acceptanceCriteria.map(({ text, checked }) => ({ text, checked })),
-        definitionOfDone: task.definitionOfDone.map(({ text, checked }) => ({ text, checked })),
-        implementationPlan: task.implementationPlan ?? '',
-        implementationNotes: task.implementationNotes ?? '',
-        comments: task.comments.map(({ body, createdAt, author }) => ({ body, createdAt, author })),
+        id,
+        description: section(task.source, 'DESCRIPTION'),
+        acceptanceCriteria: checklist(task.source, 'AC'),
+        definitionOfDone: checklist(task.source, 'DOD'),
+        implementationPlan: section(task.source, 'PLAN'),
+        implementationNotes: section(task.source, 'NOTES'),
+        comments: comments(task.source),
       }
     },
     watch(onChange) {
-      const tasks = path.join(repositoryRoot, 'backlog', 'tasks')
+      const tasks = taskDirectory(repositoryRoot)
       if (!existsSync(tasks)) return { close() {} }
       const watcher = watch(tasks, { recursive: false }, onChange)
       return { close: () => watcher.close() }

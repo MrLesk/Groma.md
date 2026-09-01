@@ -79,7 +79,7 @@ async function revisionHistory(repositoryRoot: string): Promise<WebRevision[]> {
 export async function startWebViewer(
   repositoryRoot: string,
   options: { port?: number; workSource?: WorkSource } = {},
-): Promise<{ url: string; close: () => void }> {
+): Promise<{ url: string; close: () => Promise<void> }> {
   const renderer = await bundleRenderer()
   const workSource = options.workSource ?? backlogPlugin.create(repositoryRoot)
   const revisions = await revisionHistory(repositoryRoot)
@@ -293,11 +293,8 @@ export async function startWebViewer(
 
   return {
     url: `http://localhost:${server.port}`,
-    close() {
+    async close() {
       closed = true
-      sourceWatch.close()
-      architectureWatch.close()
-      workWatch.close()
       for (const client of clients) {
         try {
           client.close()
@@ -306,7 +303,13 @@ export async function startWebViewer(
         }
       }
       clients.clear()
-      server.stop(true)
+      await Promise.all([
+        workWatch.close(),
+        sourceWatch.close(),
+        architectureWatch.close(),
+        workChain,
+        server.stop(true),
+      ])
     },
   }
 }

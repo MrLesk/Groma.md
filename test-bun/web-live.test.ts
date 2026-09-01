@@ -11,6 +11,16 @@ import { scanRepository } from '../src/scanner.ts'
 import type { WorkItem, WorkSnapshot } from '../src/types.ts'
 import { startWebViewer } from '../src/viewers/web/server.ts'
 
+async function removeTree(root: string): Promise<void> {
+  for (let attempt = 0; ; attempt += 1) {
+    try { await rm(root, { recursive: true, force: true }); return }
+    catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'EBUSY' || attempt === 9) throw error
+      await Bun.sleep(100)
+    }
+  }
+}
+
 function run(command: string, args: string[], cwd: string) {
   return new Promise<{ code: number | null; stdout: string; stderr: string }>((resolve, reject) => {
     const child = spawn(command, args, { cwd, stdio: ['ignore', 'pipe', 'pipe'] })
@@ -120,7 +130,7 @@ groma:
       /project body must start with overview prose/,
     )
   } finally {
-    await rm(root, { recursive: true, force: true })
+    await removeTree(root)
   }
 })
 
@@ -162,8 +172,8 @@ Current architecture.
     assert.equal(after.code, 0, after.stderr)
     assert.equal(after.stdout, before.stdout)
   } finally {
-    server.close()
-    await rm(root, { recursive: true, force: true })
+    await server.close()
+    await removeTree(root)
   }
 })
 
@@ -220,8 +230,8 @@ test.concurrent('groma web reads component code on demand from the selected revi
     selected.set('file', 'src/other.ts')
     assert.equal((await fetch(`${server.url}/source.json?${selected}`)).status, 404)
   } finally {
-    server.close()
-    await rm(root, { recursive: true, force: true })
+    await server.close()
+    await removeTree(root)
   }
 })
 
@@ -247,8 +257,8 @@ test.concurrent('groma web marks obsolete Markdown revisions unsupported', async
     assert.equal(response.status, 422)
     assert.equal(await response.text(), 'Unsupported Groma revision')
   } finally {
-    server.close()
-    await rm(root, { recursive: true, force: true })
+    await server.close()
+    await removeTree(root)
   }
 })
 
@@ -276,8 +286,8 @@ test.concurrent('groma web does not scan on open and applies a watched fold', as
     assert.ok((await worldNames(server.url)).includes('Cli'))
     await events.body?.cancel()
   } finally {
-    server.close()
-    await rm(root, { recursive: true, force: true })
+    await server.close()
+    await removeTree(root)
   }
 })
 
@@ -319,8 +329,8 @@ test.concurrent('groma web applies an architecture Markdown change without a ref
     assert.ok(!(await worldNames(server.url)).includes('Orders'))
     await reader.cancel()
   } finally {
-    server.close()
-    await rm(root, { recursive: true, force: true })
+    await server.close()
+    await removeTree(root)
   }
 })
 
@@ -372,8 +382,8 @@ Shows supply responsibilities.
     )
     await reader.cancel()
   } finally {
-    server.close()
-    await rm(root, { recursive: true, force: true })
+    await server.close()
+    await removeTree(root)
   }
 })
 
@@ -485,7 +495,7 @@ test.concurrent('groma web loads work asynchronously and updates only the work o
     assert.equal(reads, 2)
     await reader.cancel()
   } finally {
-    server.close()
-    await rm(root, { recursive: true, force: true })
+    await server.close()
+    await removeTree(root)
   }
 })

@@ -9,7 +9,7 @@ groma:
   code:
     - scanner: typescript
       file: src/scanner/modules/config.ts
-      dependencies: 0
+      dependencies: 1
       dependents: 1
     - scanner: typescript
       file: src/scanner/modules/package.ts
@@ -18,9 +18,10 @@ groma:
     - scanner: typescript
       file: src/scanner/modules/inventory.ts
       dependencies: 2
-      dependents: 2
+      dependents: 3
     - scanner: typescript
       file: src/scanner/cli.ts
+      symbol: registerScannerCommands
       dependencies: 1
       dependents: 1
 ---

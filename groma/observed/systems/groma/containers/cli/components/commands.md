@@ -9,7 +9,7 @@ groma:
   code:
     - scanner: typescript
       file: src/cli.ts
-      dependencies: 11
+      dependencies: 14
       dependents: 0
 ---
 

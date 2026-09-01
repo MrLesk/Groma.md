@@ -59,7 +59,7 @@ export async function watchScan(
     onFold?: (summary: ScanSummary) => void | Promise<void>
     onError?: (error: unknown) => void
   } = {},
-): Promise<{ close(): void }> {
+): Promise<{ close(): Promise<void> }> {
   const root = path.resolve(repositoryRoot)
   const registry = await loadScannerRegistry(root)
   const startedAt = Date.now()
@@ -67,6 +67,11 @@ export async function watchScan(
   let running = false
   let pending = false
   let closed = false
+  let active = Promise.resolve()
+
+  function launch(): void {
+    active = run()
+  }
 
   async function run(): Promise<void> {
     if (closed) return
@@ -80,7 +85,7 @@ export async function watchScan(
       running = false
       if (pending && !closed) {
         pending = false
-        void run()
+        launch()
       }
     }
   }
@@ -90,7 +95,7 @@ export async function watchScan(
     clearTimeout(timer)
     timer = setTimeout(() => {
       if (running) pending = true
-      else void run()
+      else launch()
     }, SETTLE_MS)
   }
 
@@ -112,11 +117,12 @@ export async function watchScan(
   })
 
   return {
-    close() {
+    async close() {
       if (closed) return
       closed = true
       clearTimeout(timer)
       for (const watcher of watchers) watcher.close()
+      await active
     },
   }
 }

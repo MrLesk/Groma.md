@@ -1,3 +1,5 @@
+import { fileURLToPath } from 'node:url'
+
 import { loadAnnotatedArchitecture } from '../../core.ts'
 import { loadProjectProfile } from '../../project-profile.ts'
 import { measuredSheetScene } from '../../sheet/scene.ts'
@@ -6,7 +8,7 @@ import type { WebMapPayload } from './payload.ts'
 /** Builds the same browser runtime used by live and published delivery. */
 export async function bundleRenderer(): Promise<string> {
   const build = await Bun.build({
-    entrypoints: [new URL('./render.ts', import.meta.url).pathname],
+    entrypoints: [fileURLToPath(new URL('./render.ts', import.meta.url))],
     target: 'browser',
   })
   return build.outputs[0]!.text()

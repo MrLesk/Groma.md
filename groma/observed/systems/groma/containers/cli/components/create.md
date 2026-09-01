@@ -9,12 +9,12 @@ groma:
   code:
     - scanner: typescript
       file: src/create.ts
-      dependencies: 6
+      dependencies: 7
       dependents: 2
     - scanner: typescript
       file: src/naming.ts
       dependencies: 0
-      dependents: 5
+      dependents: 3
 ---
 
 Authors a new planned or observed C4 concept with standard OKF metadata,

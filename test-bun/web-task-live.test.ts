@@ -122,7 +122,7 @@ test.concurrent('groma web loads selected task details and diff outside the init
     assert.equal((await fetch(`${server.url}/task.json?task=unknown`)).status, 404)
     assert.equal((await fetch(`${server.url}/task-diff.json?task=unknown`)).status, 404)
   } finally {
-    server.close()
+    await server.close()
     await rm(path.dirname(root), { recursive: true, force: true })
   }
 })
