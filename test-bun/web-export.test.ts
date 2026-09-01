@@ -120,7 +120,7 @@ test.concurrent('groma export writes the read-only browser map without a server'
   const work = workSource()
   try {
     const exported = await exportWebViewer(root, output, { workSource: work.source })
-    exported.close()
+    await exported.close()
     const [page, renderer, snapshot, version] = await Promise.all([
       readFile(path.join(output, 'index.html'), 'utf8'),
       readFile(path.join(output, 'render.js'), 'utf8'),
@@ -178,7 +178,7 @@ test.concurrent('groma export watch replaces the complete published snapshot', a
     work.change('Changed source snapshot')
     await waitUntil(async () => (await snapshot()).includes('publishedSourceChange'))
   } finally {
-    exported.close()
+    await exported.close()
     await rm(parent, { recursive: true, force: true })
   }
 })

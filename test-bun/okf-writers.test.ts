@@ -261,6 +261,7 @@ test.concurrent('scan refreshes and creates only owned stable profile fields', a
   const root = await temporaryWorld()
   const ordersPath = 'groma/observed/systems/shop/containers/api/components/orders.md'
   try {
+    await writeFile(path.join(root, ...ordersPath.split('/')), ordersSource.replaceAll('\n', '\r\n'))
     const observation = createScanObservation({
       scanner: { language: 'typescript', engine: 'test', engineVersion: '1' },
       root: { kind: 'package', name: 'Shop', file: 'package.json' },

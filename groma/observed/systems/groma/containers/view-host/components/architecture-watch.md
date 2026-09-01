@@ -10,7 +10,7 @@ groma:
     - scanner: typescript
       file: src/architecture-watch.ts
       symbol: watchArchitecture
-      dependencies: 0
+      dependencies: 1
       dependents: 3
 ---
 

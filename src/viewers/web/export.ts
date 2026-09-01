@@ -19,7 +19,7 @@ import { readTaskDiff } from './task-diff/read.ts'
 
 export interface WebExportHandle {
   readonly closed: Promise<void>
-  close(): void
+  close(): Promise<void>
 }
 
 function availableWorkSource(repositoryRoot: string): WorkSource {
@@ -157,12 +157,15 @@ export async function exportWebViewer(
 
   return {
     closed: finished,
-    close() {
+    async close() {
       if (closed) return
       closed = true
-      sourceWatch?.close()
-      architectureWatch?.close()
-      workWatch?.close()
+      await Promise.all([
+        workWatch?.close(),
+        sourceWatch?.close(),
+        architectureWatch?.close(),
+        chain,
+      ])
       closePromise()
     },
   }

@@ -22,6 +22,12 @@ export { renderPlainWelcome } from './welcome/model.ts'
 export type { WelcomeActionId } from './welcome/model.ts'
 
 export type WelcomeScreen = 'launcher' | 'instructions'
+type WelcomeSelectionExit = 'destroy' | 'suspend'
+
+export interface WelcomeSession {
+  selection: WelcomeActionId | undefined
+  close(): void
+}
 
 interface LauncherState {
   kind: 'launcher'
@@ -91,6 +97,7 @@ export function mountWelcome(
   renderer: CliRenderer,
   model: WelcomeModel,
   initialScreen: WelcomeScreen = 'launcher',
+  selectionExit: WelcomeSelectionExit = 'destroy',
 ): Promise<WelcomeActionId | undefined> {
   const sheet = welcomeSheet(model)
   let state = initialState(initialScreen)
@@ -171,8 +178,17 @@ export function mountWelcome(
     clearInterval(blinkTimer)
     renderer.keyInput.off('keypress', onKeypress)
     renderer.off('destroy', onRendererDestroy)
-    if (!renderer.isDestroyed) renderer.destroy()
-    resolveSelected(selection)
+    if (selection !== undefined && selectionExit === 'suspend') {
+      renderer.suspend()
+      resolveSelected(selection)
+      return
+    }
+    if (renderer.isDestroyed) {
+      resolveSelected(selection)
+      return
+    }
+    renderer.once('destroy', () => resolveSelected(selection))
+    renderer.destroy()
   }
 
   function onRendererDestroy(): void {
@@ -322,7 +338,7 @@ export function mountWelcome(
 export async function startWelcome(
   repositoryRoot: string,
   initialScreen: WelcomeScreen = 'launcher',
-): Promise<WelcomeActionId | undefined> {
+): Promise<WelcomeSession> {
   const model = await loadWelcomeModel(repositoryRoot)
   const renderer = await createCliRenderer({
     clearOnShutdown: true,
@@ -332,7 +348,8 @@ export async function startWelcome(
     useMouse: false,
   })
   try {
-    return await mountWelcome(renderer, model, initialScreen)
+    const selection = await mountWelcome(renderer, model, initialScreen, 'suspend')
+    return { selection, close: () => renderer.destroy() }
   } catch (error) {
     renderer.destroy()
     throw error

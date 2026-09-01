@@ -9,7 +9,7 @@ groma:
   code:
     - scanner: typescript
       file: src/architecture-reader.ts
-      dependencies: 2
+      dependencies: 3
       dependents: 9
 ---
 

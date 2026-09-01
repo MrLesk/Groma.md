@@ -9,7 +9,7 @@ groma:
   code:
     - scanner: typescript
       file: src/curate.ts
-      dependencies: 4
+      dependencies: 5
       dependents: 1
     - scanner: typescript
       file: src/relate.ts

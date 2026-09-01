@@ -8,6 +8,8 @@ groma:
   code:
     - scanner: typescript
       file: src/initialize.ts
+      dependencies: 3
+      dependents: 1
   group: Command surface
 ---
 

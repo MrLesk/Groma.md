@@ -104,21 +104,25 @@ test('groma scan --watch folds a settled TypeScript change and does not open a v
   child.stderr.on('data', chunk => {
     stderr += chunk
   })
-  t.after(() => {
-    child.kill('SIGTERM')
-  })
+  try {
+    await new Promise(resolve => setTimeout(resolve, 400))
+    assert.equal(child.exitCode, null)
+    assert.equal(stdout, '')
 
-  await new Promise(resolve => setTimeout(resolve, 400))
-  assert.equal(child.exitCode, null)
-  assert.equal(stdout, '')
-
-  await writeFile(path.join(root, 'src/orders.ts'), 'export function placeOrder() {}\n')
-  const start = Date.now()
-  while (Date.now() - start < 8000 && !/^ok\ncreated \d+, refreshed \d+, matched \d+\n/.test(stdout)) {
-    await new Promise(resolve => setTimeout(resolve, 50))
+    await writeFile(path.join(root, 'src/orders.ts'), 'export function placeOrder() {}\n')
+    const start = Date.now()
+    while (Date.now() - start < 8000 && !/^ok\ncreated \d+, refreshed \d+, matched \d+\n/.test(stdout)) {
+      await new Promise(resolve => setTimeout(resolve, 50))
+    }
+    assert.match(stdout, /^ok\ncreated \d+, refreshed \d+, matched \d+\n/)
+    assert.equal(child.exitCode, null)
+    assert.doesNotMatch(stdout, /groma web at|System Context/)
+    assert.equal(stderr, '')
+  } finally {
+    await new Promise<void>(resolve => {
+      if (child.exitCode !== null) return resolve()
+      child.once('exit', () => resolve())
+      child.kill('SIGTERM')
+    })
   }
-  assert.match(stdout, /^ok\ncreated \d+, refreshed \d+, matched \d+\n/)
-  assert.equal(child.exitCode, null)
-  assert.doesNotMatch(stdout, /groma web at|System Context/)
-  assert.equal(stderr, '')
 })

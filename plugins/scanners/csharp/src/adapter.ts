@@ -31,7 +31,8 @@ function run(
   cwd: string,
 ): Promise<{ stdout: string; stderr: string }> {
   return new Promise((resolve, reject) => {
-    const child = spawn(command, args, {
+    const scriptHost = process.platform === 'win32' && /\.[cm]?js$/.test(command)
+    const child = spawn(scriptHost ? process.execPath : command, scriptHost ? [command, ...args] : args, {
       cwd,
       env: { ...process.env, DOTNET_CLI_TELEMETRY_OPTOUT: '1' },
       stdio: ['ignore', 'pipe', 'pipe'],

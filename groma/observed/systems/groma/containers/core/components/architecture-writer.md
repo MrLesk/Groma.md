@@ -10,10 +10,10 @@ groma:
     - scanner: typescript
       file: src/architecture-path.ts
       dependencies: 1
-      dependents: 4
+      dependents: 5
     - scanner: typescript
       file: src/markdown-emitter.ts
-      dependencies: 2
+      dependencies: 3
       dependents: 6
 ---
 

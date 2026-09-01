@@ -17,7 +17,7 @@ groma:
       dependents: 1
     - scanner: typescript
       file: src/history/git.ts
-      dependencies: 0
+      dependencies: 1
       dependents: 6
 ---
 

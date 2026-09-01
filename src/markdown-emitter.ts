@@ -7,6 +7,10 @@ import type { C4Kind, CodeReference } from './types.ts'
 
 export type RepresentationStatus = 'draft' | 'stable'
 
+function normalizeNewlines(source: string): string {
+  return source.replaceAll('\r\n', '\n')
+}
+
 function sourceWithFrontmatter(
   frontmatter: Record<string, unknown>,
   content: string,
@@ -19,8 +23,9 @@ function documentParts(source: string): {
   data: Record<string, unknown>
   frontmatterText: string
 } {
-  const parts = parseFrontmatter(source)
-  if (!source.startsWith('---\n') || parts.frontmatterText === '') {
+  const normalized = normalizeNewlines(source)
+  const parts = parseFrontmatter(normalized)
+  if (!normalized.startsWith('---\n') || parts.frontmatterText === '') {
     throw new Error('document requires YAML frontmatter')
   }
   return parts
@@ -89,6 +94,7 @@ export function omitCode(source: string): string {
 }
 
 function afterHeading(source: string, heading: RegExp) {
+  source = normalizeNewlines(source)
   const match = source.match(heading)
   if (match === null || match.index === undefined) return undefined
   const rest = source.slice(match.index + match[0].length)
@@ -179,6 +185,7 @@ export function withRelationship(
     technology: string
   },
 ): string {
+  source = normalizeNewlines(source)
   const row = `| [${relationship.targetName}](${relationship.targetHref}) | ${relationship.description} | ${relationship.technology} |`
   if (source.includes(row)) throw new Error('relationship already exists')
   const lines = source.trimEnd().split('\n')
@@ -198,6 +205,7 @@ export function withRelationship(
 }
 
 export function withoutRelationship(source: string, row: string): string {
+  source = normalizeNewlines(source)
   const lines = source.trimEnd().split('\n')
   const rowIndex = lines.indexOf(row)
   if (rowIndex === -1) throw new Error('relationship row is missing')

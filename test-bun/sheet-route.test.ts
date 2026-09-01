@@ -180,6 +180,32 @@ test.concurrent('parallel relationships remain individual and use distinct ports
   assert.equal(spacing.sharedPathLength, 0)
 })
 
+test.concurrent('a busy building still routes every relationship', () => {
+  const building = (key: string, gx: number, gy: number): Endpoint => ({
+    key,
+    kind: 'building',
+    rect: { gx, gy, w: 3, d: 2 },
+    owner: 'surface',
+    roof: 1,
+  })
+  const endpoints = new Map<string, Endpoint>([['hub', building('hub', 20, 20)]])
+  const requests = Array.from({ length: 12 }, (_, index) => {
+    const key = `node-${index}`
+    endpoints.set(key, building(key, index * 5, 2 + (index % 2) * 4))
+    return {
+      id: `relationship:${index}`,
+      source: key,
+      target: 'hub',
+      description: 'Uses the hub',
+      origin: 'observed' as const,
+    }
+  })
+
+  const routes = routeAll(endpoints, requests)
+
+  assert.equal(routes.length, requests.length)
+})
+
 test.concurrent('connected elements choose ports independently of their owner surfaces', () => {
   const routeTo = (targetY: number) => routeAll(new Map<string, Endpoint>([
     ['west-owner', { key: 'west-owner', kind: 'slab', rect: { gx: 0, gy: 4, w: 8, d: 8 } }],

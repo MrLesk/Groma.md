@@ -8,13 +8,19 @@ const architectureRoots = ['observed', 'plans', 'missing']
 export function watchArchitecture(
   repositoryRoot: string,
   options: { onChange?: () => void | Promise<void> } = {},
-): { close(): void } {
+): { close(): Promise<void> } {
   const filesystem = GromaFileSystem.open(repositoryRoot)
   const startedAt = Date.now()
   let timer: ReturnType<typeof setTimeout> | undefined
   let running = false
   let pending = false
   let closed = false
+  let active = Promise.resolve()
+
+  function launch(): void {
+    active = run()
+    void active.catch(() => {})
+  }
 
   async function run(): Promise<void> {
     if (closed) return
@@ -25,7 +31,7 @@ export function watchArchitecture(
       running = false
       if (pending && !closed) {
         pending = false
-        void run()
+        launch()
       }
     }
   }
@@ -35,7 +41,7 @@ export function watchArchitecture(
     clearTimeout(timer)
     timer = setTimeout(() => {
       if (running) pending = true
-      else void run()
+      else launch()
     }, SETTLE_MS)
   }
 
@@ -57,11 +63,12 @@ export function watchArchitecture(
   }
 
   return {
-    close() {
+    async close() {
       if (closed) return
       closed = true
       clearTimeout(timer)
       for (const watcher of watchers) watcher.close()
+      await active
     },
   }
 }

@@ -145,81 +145,98 @@ test.concurrent('Work refresh preserves a valid task, initializes delayed work, 
 })
 
 test.concurrent('Backlog plugin reads every task summary once and selected detail on demand', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'groma-backlog-read-'))
+  const tasks = path.join(root, 'backlog', 'tasks')
+  await mkdir(tasks, { recursive: true })
   const calls: string[][] = []
-  const comments = new Map([['TASK-1', [
-    { index: 1, body: 'Review this', createdAt: '2026-08-23T11:00:00Z', author: '@alex' },
-  ]]])
   const run: BacklogCommand = async arguments_ => {
     calls.push(arguments_)
-    if (arguments_[0] === 'config') {
-      return arguments_[2] === 'statuses' ? 'To Do, In Progress, Review, Done\n' : 'To Do\n'
-    }
-    if (arguments_[1] === 'list') {
-      const task = (id: string, status: string) => ({
-        id,
-        title: `Change ${id}`,
-        status,
-        assignees: ['@codex'],
-        references: ['shop', 'https://example.com'],
-        modifiedFiles: ['src/shop.ts'],
-        acceptanceCriteriaCompleted: 1,
-        acceptanceCriteriaCount: 2,
-        updatedAt: '2026-08-23T11:00:00Z',
-      })
-      return JSON.stringify({ tasks: [
-        task('TASK-1', 'In Progress'),
-        task('TASK-2', 'Done'),
-        task('TASK-3', 'Done'),
-        task('TASK-4', 'To Do'),
-        task('TASK-5', 'Review'),
-      ] })
-    }
-    const id = arguments_[2]!
-    const status = { 'TASK-2': 'Done', 'TASK-3': 'Done', 'TASK-4': 'To Do', 'TASK-5': 'Review' }[id] ?? 'In Progress'
-    return JSON.stringify({
-      task: {
-        id,
-        title: `Change ${id}`,
-        status,
-        assignees: ['@codex'],
-        description: id === 'TASK-2' ? null : 'Why it matters',
-        references: ['shop', 'https://example.com'],
-        modifiedFiles: ['src/shop.ts'],
-        acceptanceCriteria: [{ index: 1, text: 'one', checked: true }, { index: 2, text: 'two', checked: false }],
-        definitionOfDone: [{ index: 1, text: 'verified', checked: id === 'TASK-2' }],
-        implementationPlan: id === 'TASK-1' ? 'First plan' : null,
-        implementationNotes: id === 'TASK-1' ? 'First note' : null,
-        comments: comments.get(id) ?? [],
-      },
-    })
+    return arguments_[2] === 'statuses' ? 'To Do, In Progress, Review, Done\n' : 'To Do\n'
   }
+  const taskSource = (id: string, status: string, details = '') => `---
+id: ${id}
+title: Change ${id}
+status: ${status}
+assignee: ['@codex']
+updated_date: '2026-08-23T11:00:00Z'
+references: [shop, 'https://example.com']
+modified_files: [src/shop.ts]
+---
 
-  const work = await createBacklogSource('/repo', run).read()
+## Acceptance Criteria
+<!-- AC:BEGIN -->
+- [x] #1 one
+- [ ] #2 two
+<!-- AC:END -->
+${details}`.replaceAll('\n', '\r\n')
+  const detailSections = `
+## Description
+<!-- SECTION:DESCRIPTION:BEGIN -->
+Why it matters
+<!-- SECTION:DESCRIPTION:END -->
+## Definition of Done
+<!-- DOD:BEGIN -->
+- [ ] #1 verified
+<!-- DOD:END -->
+## Implementation Plan
+<!-- SECTION:PLAN:BEGIN -->
+First plan
+<!-- SECTION:PLAN:END -->
+## Implementation Notes
+<!-- SECTION:NOTES:BEGIN -->
+First note
+<!-- SECTION:NOTES:END -->
+## Comments
+<!-- COMMENTS:BEGIN -->
+author: @alex
+created: 2026-08-23T11:00:00Z
+---
+Review this
+---
 
-  assert.deepEqual(calls, [
-    ['task', 'list', '--json'],
-    ['config', 'get', 'statuses'],
-    ['config', 'get', 'defaultStatus'],
-  ])
-  assert.deepEqual(work.statuses, ['To Do', 'In Progress', 'Review', 'Done'])
-  assert.equal(work.defaultStatus, 'To Do')
-  assert.deepEqual(work.items.map(item => [item.id, item.status, item.acceptanceCriteriaCompleted, item.acceptanceCriteriaCount]), [
-    ['TASK-1', 'In Progress', 1, 2],
-    ['TASK-2', 'Done', 1, 2],
-    ['TASK-3', 'Done', 1, 2],
-    ['TASK-4', 'To Do', 1, 2],
-    ['TASK-5', 'Review', 1, 2],
-  ])
-  assert.deepEqual(work.items[0]!.references, ['shop', 'https://example.com'])
-  const details = await createBacklogSource('/repo', run).readItem('TASK-1')
-  assert.deepEqual(calls.at(-1), ['task', 'view', 'TASK-1', '--json'])
-  assert.deepEqual(details.acceptanceCriteria, [{ text: 'one', checked: true }, { text: 'two', checked: false }])
-  assert.deepEqual(details.definitionOfDone, [{ text: 'verified', checked: false }])
-  assert.equal(details.implementationPlan, 'First plan')
-  assert.equal(details.implementationNotes, 'First note')
-  assert.deepEqual(details.comments, [{
-    body: 'Review this', createdAt: '2026-08-23T11:00:00Z', author: '@alex',
-  }])
+created: 2026-08-23T12:00:00Z
+---
+Recorded without an author
+---
+<!-- COMMENTS:END -->`
+  try {
+    await Promise.all([
+      writeFile(path.join(tasks, 'task-1 - Change.md'), taskSource('TASK-1', 'In Progress', detailSections)),
+      writeFile(path.join(tasks, 'task-2 - Change.md'), taskSource('TASK-2', 'Done')),
+      writeFile(path.join(tasks, 'task-3 - Change.md'), taskSource('TASK-3', 'Done')),
+      writeFile(path.join(tasks, 'task-4 - Change.md'), taskSource('TASK-4', 'To Do')),
+      writeFile(path.join(tasks, 'task-5 - Change.md'), taskSource('TASK-5', 'Review')),
+    ])
+    const source = createBacklogSource(root, run)
+    const work = await source.read()
+    assert.deepEqual(calls, [
+      ['config', 'get', 'statuses'],
+      ['config', 'get', 'defaultStatus'],
+    ])
+    assert.deepEqual(work.statuses, ['To Do', 'In Progress', 'Review', 'Done'])
+    assert.equal(work.defaultStatus, 'To Do')
+    assert.deepEqual(work.items.map(item => [item.id, item.status, item.acceptanceCriteriaCompleted, item.acceptanceCriteriaCount]), [
+      ['TASK-1', 'In Progress', 1, 2],
+      ['TASK-2', 'Done', 1, 2],
+      ['TASK-3', 'Done', 1, 2],
+      ['TASK-4', 'To Do', 1, 2],
+      ['TASK-5', 'Review', 1, 2],
+    ])
+    assert.deepEqual(work.items[0]!.references, ['shop', 'https://example.com'])
+    const details = await source.readItem('TASK-1')
+    assert.equal(calls.length, 2)
+    assert.deepEqual(details.acceptanceCriteria, [{ text: 'one', checked: true }, { text: 'two', checked: false }])
+    assert.deepEqual(details.definitionOfDone, [{ text: 'verified', checked: false }])
+    assert.equal(details.implementationPlan, 'First plan')
+    assert.equal(details.implementationNotes, 'First note')
+    assert.deepEqual(details.comments, [{
+      body: 'Review this', createdAt: '2026-08-23T11:00:00Z', author: '@alex',
+    }, {
+      body: 'Recorded without an author', createdAt: '2026-08-23T12:00:00Z', author: '',
+    }])
+  } finally {
+    await rm(root, { recursive: true, force: true })
+  }
 })
 
 test.concurrent('Backlog plugin signals a task-directory change', async () => {

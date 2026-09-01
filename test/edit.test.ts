@@ -191,6 +191,7 @@ test('groma edit element --overview replaces only the owning lead prose', async 
 
 test('groma edit element --plan restates the id without code and creates the plan index', async t => {
   const root = await createRepo(t)
+  const originalObserved = await readRelative(root, observedOrdersPath)
   const result = await groma(root, [
     'edit',
     'orders',
@@ -204,7 +205,7 @@ test('groma edit element --plan restates the id without code and creates the pla
   assert.equal(result.code, 0, result.stderr)
   assert.equal(result.stdout, 'ok\norders\n')
   assert.equal(await readRelative(root, plannedOrdersPath), restatedOrders)
-  assert.equal(await readRelative(root, observedOrdersPath), observedOrders)
+  assert.equal(await readRelative(root, observedOrdersPath), originalObserved)
   assert.equal(
     await readRelative(root, 'groma/plans/next/index.md'),
     approvedPlanIndex,
@@ -263,6 +264,7 @@ Stock checks ship next.
 
 test('a restated ghost copies current overview when --overview is omitted and later edits the planned owner', async t => {
   const root = await createRepo(t)
+  const originalObserved = await readRelative(root, observedOrdersPath)
   const copied = await groma(root, ['edit', 'orders', '--plan', 'next'])
   assert.equal(copied.code, 0, copied.stderr)
   assert.equal(copied.stdout, 'ok\norders\n')
@@ -282,7 +284,7 @@ test('a restated ghost copies current overview when --overview is omitted and la
   ])
   assert.equal(restated.code, 0, restated.stderr)
   assert.equal(await readRelative(root, plannedOrdersPath), restatedOrders)
-  assert.equal(await readRelative(root, observedOrdersPath), observedOrders)
+  assert.equal(await readRelative(root, observedOrdersPath), originalObserved)
 
   const owned = await groma(root, [
     'edit',
@@ -298,7 +300,7 @@ test('a restated ghost copies current overview when --overview is omitted and la
       'Places and tracks customer orders.',
     ),
   )
-  assert.equal(await readRelative(root, observedOrdersPath), observedOrders)
+  assert.equal(await readRelative(root, observedOrdersPath), originalObserved)
 })
 
 test('unknown id, missing --overview, --plan on a plan, non-kebab plan id, and a claimed id fail without writes', async t => {

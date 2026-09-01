@@ -65,8 +65,14 @@ const CONNECTION_DIRECTION: Record<RoutePort['side'], number> = {
 function buildingConnections(
   router: AvoidRouter,
   endpoints: ReadonlyMap<string, Endpoint>,
+  requests: readonly RouteRequest[],
 ): Map<string, BuildingConnection> {
   const connections = new Map<string, BuildingConnection>()
+  const degrees = new Map<string, number>()
+  for (const request of requests) {
+    degrees.set(request.source, (degrees.get(request.source) ?? 0) + 1)
+    degrees.set(request.target, (degrees.get(request.target) ?? 0) + 1)
+  }
   for (const endpoint of endpoints.values()) {
     if (endpoint.kind !== 'building') continue
     const points = visibleObstacle(endpoint, STRAIGHT_RUN)
@@ -77,7 +83,7 @@ function buildingConnections(
     const shape = new Avoid.ShapeRef(router, polygon)
     const minX = Math.min(...points.map(point => point.x))
     const minY = Math.min(...points.map(point => point.y))
-    const ports = buildingPorts(endpoint)
+    const ports = buildingPorts(endpoint, degrees.get(endpoint.key))
     const pins = ports.map(port => {
       const outward = {
         x: port.wall.x + (port.side === 'east' ? STRAIGHT_RUN : port.side === 'west' ? -STRAIGHT_RUN : 0),
@@ -342,7 +348,7 @@ export function routeAll(
     'nudgeSharedPathsWithCommonEndPoint',
   ] as const) router.setRoutingOption(enumNumber(Avoid.RoutingOption[name]), true)
 
-  const connections = buildingConnections(router, endpoints)
+  const connections = buildingConnections(router, endpoints, requests)
   const fixed = assignFixedPorts(endpoints, requests)
   const connectors = requests.map(request => {
     const connector = new Avoid.ConnRef(

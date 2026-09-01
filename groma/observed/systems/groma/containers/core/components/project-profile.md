@@ -8,8 +8,8 @@ groma:
   code:
     - scanner: typescript
       file: src/project-profile.ts
-      dependencies: 2
-      dependents: 8
+      dependencies: 3
+      dependents: 9
     - scanner: typescript
       file: src/project-markdown.ts
       dependencies: 0
