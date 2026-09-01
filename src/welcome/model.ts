@@ -167,8 +167,8 @@ export function welcomeSheet(model: WelcomeModel): WelcomeSheet {
   const commands = [
     ...welcomeActions.map(action => action.command),
     instructionsAction.command,
-    `▸ ${advancedLabel}`,
-    ...advancedCommands.map(command => `  ${command.command}`),
+    advancedLabel,
+    ...advancedCommands.map(command => command.command),
     ...instructionViews.map(guide => guide.title),
   ]
   const descriptions = [
@@ -211,7 +211,7 @@ export async function renderPlainWelcome(
   ].join('\n')
 }
 
-export function launcherRows(selectedIndex: number, advancedExpanded: boolean): WelcomeRow[] {
+export function launcherRows(selectedIndex: number): WelcomeRow[] {
   const rows: WelcomeRow[] = welcomeActions.map((action, index) => ({
     command: action.command,
     description: action.description,
@@ -223,20 +223,21 @@ export function launcherRows(selectedIndex: number, advancedExpanded: boolean): 
     selected: selectedIndex === instructionsIndex,
     dim: false,
   }, {
-    command: `${advancedExpanded ? '▾' : '▸'} ${advancedLabel}`,
+    command: advancedLabel,
     description: parameterLegend,
     selected: selectedIndex === advancedIndex,
     dim: false,
   })
-  if (advancedExpanded) {
-    rows.push(...advancedCommands.map(command => ({
-      command: `  ${command.command}`,
-      description: command.description,
-      selected: false,
-      dim: true,
-    })))
-  }
   return rows
+}
+
+export function advancedRows(): WelcomeRow[] {
+  return advancedCommands.map(command => ({
+    command: command.command,
+    description: command.description,
+    selected: false,
+    dim: true,
+  }))
 }
 
 export function instructionRows(selectedIndex: number): WelcomeRow[] {

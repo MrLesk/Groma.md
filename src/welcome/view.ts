@@ -3,6 +3,7 @@ import type { OptimizedBuffer } from '@opentui/core'
 
 import { text } from '../viewers/tui/atoms/text.ts'
 import {
+  advancedRows,
   documentationUrl,
   instructionRows,
   instructionViews,
@@ -34,7 +35,7 @@ interface PaintedText {
   attributes?: number
 }
 
-export interface InstructionsPaintResult {
+export interface ScrollPaintResult {
   maxScroll: number
   pageSize: number
   scroll: number
@@ -92,6 +93,27 @@ function tableBorder(
     + right
 }
 
+function drawCommandRow(
+  buffer: OptimizedBuffer,
+  sheet: WelcomeSheet,
+  row: WelcomeRow,
+  arrowVisible: boolean,
+  x: number,
+  y: number,
+): void {
+  drawParts(buffer, commandParts(row, arrowVisible), x + 2, y)
+  text(
+    buffer,
+    row.description,
+    x + sheet.commandWidth + 5,
+    y,
+    sheet.descriptionWidth,
+    terminalForeground,
+    terminalBackground,
+    row.dim ? TextAttributes.DIM : 0,
+  )
+}
+
 function drawTable(
   buffer: OptimizedBuffer,
   sheet: WelcomeSheet,
@@ -113,17 +135,7 @@ function drawTable(
       terminalForeground,
       terminalBackground,
     )
-    drawParts(buffer, commandParts(rowData, arrowVisible), x + 2, row)
-    text(
-      buffer,
-      rowData.description,
-      x + sheet.commandWidth + 5,
-      row,
-      sheet.descriptionWidth,
-      terminalForeground,
-      terminalBackground,
-      rowData.dim ? TextAttributes.DIM : 0,
-    )
+    drawCommandRow(buffer, sheet, rowData, arrowVisible, x, row)
     if (index < rows.length - 1) {
       text(
         buffer,
@@ -261,11 +273,10 @@ export function paintLauncher(
   model: WelcomeModel,
   sheet: WelcomeSheet,
   selectedIndex: number,
-  advancedExpanded: boolean,
   arrowVisible: boolean,
 ): void {
   const shell = paintShell(buffer, model, sheet)
-  const rows = launcherRows(selectedIndex, advancedExpanded)
+  const rows = launcherRows(selectedIndex)
   drawTable(buffer, sheet, rows, arrowVisible, shell.x, shell.contentY)
   const pluginsY = Math.max(
     shell.contentY + rows.length * 2 + 1,
@@ -277,7 +288,7 @@ export function paintLauncher(
   ], shell.x + 2, pluginsY)
   text(
     buffer,
-    '↑/↓ navigate  │  Enter run/open/toggle  │  Esc/Q quit',
+    '↑/↓ navigate  │  Enter run/open  │  Esc/Q quit',
     shell.x + 2,
     pluginsY + 1,
     shell.width - 4,
@@ -285,6 +296,59 @@ export function paintLauncher(
     terminalBackground,
     TextAttributes.DIM,
   )
+}
+
+export function paintAdvanced(
+  buffer: OptimizedBuffer,
+  model: WelcomeModel,
+  sheet: WelcomeSheet,
+  requestedScroll: number,
+  arrowVisible: boolean,
+): ScrollPaintResult {
+  const shell = paintShell(buffer, model, sheet)
+  drawParts(buffer, commandParts({
+    command: '← Back',
+    description: '',
+    selected: true,
+    dim: false,
+  }, arrowVisible), shell.x + 2, shell.contentY)
+  text(
+    buffer,
+    'Advanced commands',
+    shell.x + 2,
+    shell.contentY + 2,
+    shell.width - 4,
+    terminalForeground,
+    terminalBackground,
+    TextAttributes.BOLD,
+  )
+
+  const rows = advancedRows()
+  const contentY = shell.contentY + 3
+  const pluginsY = buffer.height - 2
+  const pageSize = Math.max(0, pluginsY - contentY)
+  const maxScroll = Math.max(0, rows.length - pageSize)
+  const scroll = Math.max(0, Math.min(requestedScroll, maxScroll))
+  for (const [index, row] of rows.slice(scroll, scroll + pageSize).entries()) {
+    drawCommandRow(buffer, sheet, row, false, shell.x, contentY + index)
+  }
+  drawParts(buffer, [
+    { value: 'plugins: ', attributes: TextAttributes.DIM },
+    { value: pluginSummary(model.plugins) },
+  ], shell.x + 2, pluginsY)
+  text(
+    buffer,
+    maxScroll > 0
+      ? 'J/K scroll │ PgUp/PgDn page │ Enter/Backspace back │ Esc/Q quit'
+      : 'Enter/Backspace back │ Esc/Q quit',
+    shell.x + 2,
+    pluginsY + 1,
+    shell.width - 4,
+    terminalForeground,
+    terminalBackground,
+    TextAttributes.DIM,
+  )
+  return { maxScroll, pageSize, scroll }
 }
 
 export function paintInstructions(
@@ -295,7 +359,7 @@ export function paintInstructions(
   guideIndex: number,
   requestedScroll: number,
   arrowVisible: boolean,
-): InstructionsPaintResult {
+): ScrollPaintResult {
   const shell = paintShell(buffer, model, sheet)
   drawParts(buffer, commandParts({
     command: '← Back',

@@ -11,10 +11,11 @@ import {
 } from './welcome/model.ts'
 import type { WelcomeActionId, WelcomeModel } from './welcome/model.ts'
 import {
+  paintAdvanced,
   paintInstructions,
   paintLauncher,
 } from './welcome/view.ts'
-import type { InstructionsPaintResult } from './welcome/view.ts'
+import type { ScrollPaintResult } from './welcome/view.ts'
 
 export { renderPlainWelcome } from './welcome/model.ts'
 export type { WelcomeActionId } from './welcome/model.ts'
@@ -24,7 +25,11 @@ export type WelcomeScreen = 'launcher' | 'instructions'
 interface LauncherState {
   kind: 'launcher'
   selectedIndex: number
-  advancedExpanded: boolean
+}
+
+interface AdvancedState {
+  kind: 'advanced'
+  scroll: number
 }
 
 interface InstructionsState {
@@ -33,10 +38,14 @@ interface InstructionsState {
   scroll: number
 }
 
-type WelcomeState = LauncherState | InstructionsState
+type WelcomeState = LauncherState | AdvancedState | InstructionsState
 
 function launcherState(selectedIndex = 0): LauncherState {
-  return { kind: 'launcher', selectedIndex, advancedExpanded: false }
+  return { kind: 'launcher', selectedIndex }
+}
+
+function advancedState(): AdvancedState {
+  return { kind: 'advanced', scroll: 0 }
 }
 
 function instructionsState(): InstructionsState {
@@ -56,6 +65,20 @@ function readingDirection(key: KeyEvent): ReadingDirection | undefined {
   return undefined
 }
 
+function readingScroll(
+  current: number,
+  direction: ReadingDirection,
+  paint: ScrollPaintResult,
+): number {
+  const distance = direction === 'pageup' || direction === 'pagedown'
+    ? paint.pageSize
+    : 1
+  const movement = direction === 'up' || direction === 'pageup'
+    ? -distance
+    : distance
+  return Math.max(0, Math.min(paint.maxScroll, current + movement))
+}
+
 export function mountWelcome(
   renderer: CliRenderer,
   model: WelcomeModel,
@@ -63,7 +86,12 @@ export function mountWelcome(
 ): Promise<WelcomeActionId | undefined> {
   const sheet = welcomeSheet(model)
   let state = initialState(initialScreen)
-  let instructionsPaint: InstructionsPaintResult = {
+  let advancedPaint: ScrollPaintResult = {
+    maxScroll: 0,
+    pageSize: 0,
+    scroll: 0,
+  }
+  let instructionsPaint: ScrollPaintResult = {
     maxScroll: 0,
     pageSize: 1,
     scroll: 0,
@@ -94,9 +122,17 @@ export function mountWelcome(
         model,
         sheet,
         state.selectedIndex,
-        state.advancedExpanded,
         arrowVisible,
       )
+    } else if (state.kind === 'advanced') {
+      advancedPaint = paintAdvanced(
+        frame.frameBuffer,
+        model,
+        sheet,
+        state.scroll,
+        arrowVisible,
+      )
+      state.scroll = advancedPaint.scroll
     } else {
       instructionsPaint = paintInstructions(
         frame.frameBuffer,
@@ -131,8 +167,14 @@ export function mountWelcome(
     close(undefined)
   }
 
-  function showLauncher(): void {
-    state = launcherState(instructionsIndex)
+  function showLauncher(selectedIndex: number): void {
+    state = launcherState(selectedIndex)
+    arrowVisible = true
+    repaint()
+  }
+
+  function showAdvanced(): void {
+    state = advancedState()
     arrowVisible = true
     repaint()
   }
@@ -157,9 +199,7 @@ export function mountWelcome(
   function enterLauncher(): void {
     if (state.kind !== 'launcher') return
     if (state.selectedIndex === advancedIndex) {
-      state.advancedExpanded = !state.advancedExpanded
-      arrowVisible = true
-      repaint()
+      showAdvanced()
       return
     }
     if (state.selectedIndex === instructionsIndex) {
@@ -186,16 +226,13 @@ export function mountWelcome(
 
   function scrollInstructions(direction: ReadingDirection): void {
     if (state.kind !== 'instructions') return
-    const distance = direction === 'pageup' || direction === 'pagedown'
-      ? instructionsPaint.pageSize
-      : 1
-    const movement = direction === 'up' || direction === 'pageup'
-      ? -distance
-      : distance
-    state.scroll = Math.max(
-      0,
-      Math.min(instructionsPaint.maxScroll, state.scroll + movement),
-    )
+    state.scroll = readingScroll(state.scroll, direction, instructionsPaint)
+    repaint()
+  }
+
+  function scrollAdvanced(direction: ReadingDirection): void {
+    if (state.kind !== 'advanced') return
+    state.scroll = readingScroll(state.scroll, direction, advancedPaint)
     repaint()
   }
 
@@ -204,16 +241,25 @@ export function mountWelcome(
     else if (key.name === 'return') enterLauncher()
   }
 
+  function handleAdvancedKey(key: KeyEvent): void {
+    if (key.name === 'backspace' || key.name === 'return') {
+      showLauncher(advancedIndex)
+      return
+    }
+    const reading = readingDirection(key)
+    if (reading !== undefined) scrollAdvanced(reading)
+  }
+
   function handleInstructionsKey(key: KeyEvent): void {
     if (key.name === 'backspace') {
-      showLauncher()
+      showLauncher(instructionsIndex)
       return
     }
     const reading = readingDirection(key)
     if (key.name === 'up' || key.name === 'down') moveInstruction(key.name)
     else if (reading !== undefined) scrollInstructions(reading)
     else if (key.name === 'return' && state.kind === 'instructions' && state.selectedIndex === 0) {
-      showLauncher()
+      showLauncher(instructionsIndex)
     }
   }
 
@@ -228,6 +274,7 @@ export function mountWelcome(
       return
     }
     if (state.kind === 'launcher') handleLauncherKey(key)
+    else if (state.kind === 'advanced') handleAdvancedKey(key)
     else handleInstructionsKey(key)
   }
 
