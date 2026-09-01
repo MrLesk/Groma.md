@@ -8,7 +8,10 @@ import { createTestRenderer } from '@opentui/core/testing'
 import { createBacklogPlugin } from '@groma/work-source-backlog'
 
 import { mountWelcome, renderPlainWelcome } from '../src/welcome.ts'
-import { advancedIndex, loadWelcomeModel } from '../src/welcome/model.ts'
+import {
+  advancedIndex,
+  loadWelcomeModel,
+} from '../src/welcome/model.ts'
 import type { WelcomeModel } from '../src/welcome/model.ts'
 
 function welcomeFixture(): WelcomeModel {
@@ -181,8 +184,14 @@ test.concurrent('advanced command references never become launcher actions', asy
     assert.match(expanded, new RegExp(`groma scanner ${command}`))
   }
   assert.match(expanded, /plugins: backlog\.md: ✓ ready │ typescript: built-in/)
-  assert.doesNotMatch(expanded, /J\/K scroll/)
-  setup.mockInput.pressArrow('down')
+  assert.match(expanded, /> groma export/)
+  assert.match(expanded, /Writes the current architecture/)
+
+  setup.mockInput.pressEnter()
+  await setup.renderOnce()
+  assert.match(setup.captureCharFrame(), /> groma export/)
+
+  setup.mockInput.pressArrow('up')
   setup.mockInput.pressEnter()
   setup.mockInput.pressArrow('up')
   setup.mockInput.pressArrow('up')
@@ -191,7 +200,7 @@ test.concurrent('advanced command references never become launcher actions', asy
   assert.equal(await selected, 'scan')
 })
 
-test.concurrent('the Advanced screen scrolls without moving its fixed context', async () => {
+test.concurrent('the Advanced cursor keeps its command visible while navigating', async () => {
   const setup = await createTestRenderer({ width: 110, height: 24 })
   const selected = mountWelcome(setup.renderer, welcomeFixture())
   await setup.renderOnce()
@@ -205,30 +214,54 @@ test.concurrent('the Advanced screen scrolls without moving its fixed context', 
 
   assert.equal(row(firstPage, 'project: example'), row(launcher, 'project: example'))
   assert.match(firstPage[row(firstPage, 'groma export')]!, /output folder; watch refreshes/)
-  assert.match(firstPage[row(firstPage, 'groma scanner install')]!, /restore configured npm scanners/)
-  assert.ok(row(firstPage, 'plugins:') > row(firstPage, 'groma scanner install'))
+  assert.ok(row(firstPage, 'Writes the current architecture') > row(firstPage, 'groma export'))
+  assert.ok(row(firstPage, 'plugins:') > row(firstPage, 'Writes the current architecture'))
   assert.ok(row(firstPage, 'J/K scroll') > row(firstPage, 'plugins:'))
-  assert.equal(row(firstPage, 'groma scanner list'), -1)
+  assert.equal(row(firstPage, 'groma scanner add'), -1)
+
+  for (let command = 0; command < 3; command++) setup.mockInput.pressArrow('down')
+  await setup.renderOnce()
+  const arrowScrolled = setup.captureCharFrame()
+  assert.doesNotMatch(arrowScrolled, /groma export/)
+  assert.match(arrowScrolled, /> groma scanner list/)
+  assert.match(arrowScrolled, /Lists every configured scanner/)
+
+  setup.mockInput.pressArrow('down')
+  setup.mockInput.pressArrow('down')
+  await setup.renderOnce()
+  const descriptionTop = setup.captureCharFrame()
+  assert.match(descriptionTop, /> groma create/)
+  assert.match(descriptionTop, /Creates an architecture element/)
+  assert.doesNotMatch(descriptionTop, /Containers and components require --parent/)
 
   setup.mockInput.pressKey('j')
   await setup.renderOnce()
-  const oneCommand = setup.captureCharFrame()
-  assert.doesNotMatch(oneCommand, /groma export/)
-  assert.match(oneCommand, /groma scanner list.*show built-in\/found\/missing/)
+  const lineScrolled = setup.captureCharFrame()
+  assert.match(lineScrolled, /> groma create/)
+  assert.doesNotMatch(lineScrolled, /Creates an architecture element/)
+  assert.match(lineScrolled, /Containers and components require --parent/)
+
+  setup.mockInput.pressKey('k')
+  await setup.renderOnce()
+  assert.match(setup.captureCharFrame(), /Creates an architecture element/)
 
   setup.mockInput.pressKey('\u001B[6~')
   await setup.renderOnce()
-  const onePage = setup.captureCharFrame()
-  assert.doesNotMatch(onePage, /groma export/)
-  assert.match(onePage, /groma scanner remove <id>.*disable; keep shared cache/)
-
-  setup.mockInput.pressKey('\u001B[6~')
+  assert.match(setup.captureCharFrame(), /Containers and components require --parent/)
+  setup.mockInput.pressKey('\u001B[5~')
   await setup.renderOnce()
-  assert.match(setup.captureCharFrame(), /groma agent-instructions/)
+  assert.match(setup.captureCharFrame(), /Creates an architecture element/)
 
-  for (let page = 0; page < 3; page++) setup.mockInput.pressKey('\u001B[5~')
+  for (let command = 0; command < 4; command++) setup.mockInput.pressArrow('down')
   await setup.renderOnce()
-  assert.match(setup.captureCharFrame(), /groma export/)
+  assert.match(setup.captureCharFrame(), /> groma agent-instructions/)
+  setup.mockInput.pressKey('j')
+  setup.mockInput.pressArrow('down')
+  await setup.renderOnce()
+  const finalBoundary = setup.captureCharFrame()
+  assert.match(finalBoundary, /> groma agent-instructions/)
+  assert.doesNotMatch(finalBoundary, /Prints a Markdown guide/)
+  assert.match(finalBoundary, /This command always stays plain text/)
 
   setup.mockInput.pressBackspace()
   await setup.renderOnce()
@@ -239,9 +272,14 @@ test.concurrent('the Advanced screen scrolls without moving its fixed context', 
   setup.mockInput.pressEnter()
   await setup.renderOnce()
   const reopened = setup.captureCharFrame()
-  assert.match(reopened, /groma export/)
+  assert.match(reopened, /> groma export/)
+  assert.match(reopened, /Writes the current architecture/)
   assert.doesNotMatch(reopened, /groma relate/)
 
+  setup.mockInput.pressEnter()
+  await setup.renderOnce()
+  assert.match(setup.captureCharFrame(), /> groma export/)
+  setup.mockInput.pressArrow('up')
   setup.mockInput.pressEnter()
   await setup.renderOnce()
   assert.match(setup.captureCharFrame(), /> Advanced commands/)

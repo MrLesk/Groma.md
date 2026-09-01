@@ -22,10 +22,12 @@ the current repository: Up and Down choose an executable action, Instructions,
 or the Advanced commands row. Enter runs an action or opens the selected screen.
 The Advanced commands screen contains a read-only table with one concise
 description beside each command: `<name>` is required, `[option]` is optional,
-and `…` means more options. When the table overflows, J and K scroll one complete
-command row and Page Up and Page Down scroll one page without moving the
-repository context, Back row, plugin readiness, or footer. Enter or Backspace
-returns to the launcher with Advanced commands still selected.
+and `…` means more options. Up and Down select a command, the table keeps it
+visible, and its explanation appears below the table. J and K scroll that
+explanation one line; Page Up and Page Down move it one page. The repository
+context, Back row, plugin readiness, and footer remain fixed. Commands stay
+read-only. Enter returns from the selected Back row; Backspace always returns
+with Advanced commands still selected.
 Instructions uses the same logo and repository context,
 selects Overview by default, and shows each shipped guide below its guide table.
 Up and Down choose a guide. J and K scroll its content one line; Page Up and
