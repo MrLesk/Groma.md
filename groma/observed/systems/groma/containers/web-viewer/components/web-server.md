@@ -10,7 +10,7 @@ groma:
     - scanner: typescript
       file: src/viewers/web/server.ts
       symbol: startWebViewer
-      dependencies: 14
+      dependencies: 13
       dependents: 1
     - scanner: typescript
       file: src/viewers/web/payload.ts

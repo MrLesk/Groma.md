@@ -8,7 +8,7 @@ groma:
   code:
     - scanner: typescript
       file: src/viewers/web/export.ts
-      dependencies: 10
+      dependencies: 9
       dependents: 1
   group: Web runtime
 ---

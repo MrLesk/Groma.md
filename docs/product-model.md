@@ -235,7 +235,8 @@ changing as ghosts are accepted.
 
 ## Work
 
-Groma reads Backlog through the `backlog` CLI: the configured statuses and
+The embedded Backlog work-source plugin reads through the global `backlog` CLI:
+the configured statuses and
 default status plus one `task list --json` summary containing every configured
 task, including terminal history. It reads `task view <id> --json` only for the
 task whose full details a developer opens. The last configured status is
@@ -247,4 +248,5 @@ on the element the task touched last; an unassigned mapped task gets one generic
 Backlog pin. The Live work island filters pins and chips by the configured
 statuses, showing a filter only while that status has a mapped pin. A filter
 appears when the first matching pin arrives. The default and terminal statuses
-start hidden and every other configured status starts shown.
+start hidden and every other configured status starts shown. Without the CLI,
+the plugin supplies empty work and every architecture flow remains available.

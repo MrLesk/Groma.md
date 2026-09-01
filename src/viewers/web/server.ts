@@ -1,8 +1,10 @@
+import { EMPTY_WORK_SNAPSHOT } from '@groma/work-source'
+import type { WorkSource } from '@groma/work-source'
+import { backlogPlugin } from '@groma/work-source-backlog'
+
 import { watchArchitecture } from '../../architecture-watch.ts'
 import { loadArchitecture } from '../../architecture-reader.ts'
 import { listGitRevisions, withGitGromaRevision, withGitRevision } from '../../history/git.ts'
-import { createBacklogPlugin, EMPTY_WORK_SNAPSHOT } from '../../work/backlog.ts'
-import type { WorkSource } from '../../work/backlog.ts'
 import { annotateArchitecture } from '../../core.ts'
 import { saveProjectProfile } from '../../project-profile.ts'
 import { watchScan } from '../../scanner.ts'
@@ -79,7 +81,7 @@ export async function startWebViewer(
   options: { port?: number; workSource?: WorkSource } = {},
 ): Promise<{ url: string; close: () => void }> {
   const renderer = await bundleRenderer()
-  const workSource = options.workSource ?? createBacklogPlugin(repositoryRoot)
+  const workSource = options.workSource ?? backlogPlugin.create(repositoryRoot)
   const revisions = await revisionHistory(repositoryRoot)
   let map: WebMapPayload = {
     generation: 1,

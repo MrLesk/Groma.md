@@ -6,12 +6,14 @@ import { test } from 'bun:test'
 
 import { normalizeTerminalPalette } from '@opentui/core'
 import { createTestRenderer } from '@opentui/core/testing'
-
+import { EMPTY_WORK_SNAPSHOT } from '@groma/work-source'
+import type { WorkSource } from '@groma/work-source'
 import {
   createBacklogPlugin,
+  createBacklogSource,
   type BacklogCommand,
-  type WorkSource,
-} from '../src/work/backlog.ts'
+} from '@groma/work-source-backlog'
+
 import type { WorkItem, WorkSnapshot } from '../src/types.ts'
 import { startTerminalViewer } from '../src/view-host.ts'
 import { projectWorld } from '../src/viewers/tui/projection.ts'
@@ -192,7 +194,7 @@ test.concurrent('Backlog plugin reads every task summary once and selected detai
     })
   }
 
-  const work = await createBacklogPlugin('/repo', run).read()
+  const work = await createBacklogSource('/repo', run).read()
 
   assert.deepEqual(calls, [
     ['task', 'list', '--json'],
@@ -209,7 +211,7 @@ test.concurrent('Backlog plugin reads every task summary once and selected detai
     ['TASK-5', 'Review', 1, 2],
   ])
   assert.deepEqual(work.items[0]!.references, ['shop', 'https://example.com'])
-  const details = await createBacklogPlugin('/repo', run).readItem('TASK-1')
+  const details = await createBacklogSource('/repo', run).readItem('TASK-1')
   assert.deepEqual(calls.at(-1), ['task', 'view', 'TASK-1', '--json'])
   assert.deepEqual(details.acceptanceCriteria, [{ text: 'one', checked: true }, { text: 'two', checked: false }])
   assert.deepEqual(details.definitionOfDone, [{ text: 'verified', checked: false }])
@@ -224,7 +226,7 @@ test.concurrent('Backlog plugin signals a task-directory change', async () => {
   const root = await mkdtemp(path.join(tmpdir(), 'groma-backlog-watch-'))
   const tasks = path.join(root, 'backlog', 'tasks')
   await mkdir(tasks, { recursive: true })
-  const plugin = createBacklogPlugin(root, async () => JSON.stringify({ tasks: [] }))
+  const plugin = createBacklogSource(root, async () => JSON.stringify({ tasks: [] }))
   let signal!: () => void
   const changed = new Promise<void>(resolve => {
     signal = resolve
@@ -245,10 +247,32 @@ test.concurrent('Backlog plugin signals a task-directory change', async () => {
 test.concurrent('Backlog plugin needs no watcher when the project has no Backlog tasks', async () => {
   const root = await mkdtemp(path.join(tmpdir(), 'groma-no-backlog-'))
   try {
-    createBacklogPlugin(root).watch(() => assert.fail('unexpected work change')).close()
+    createBacklogPlugin(() => null).create(root)
+      .watch(() => assert.fail('unexpected work change')).close()
   } finally {
     await rm(root, { recursive: true, force: true })
   }
+})
+
+test.concurrent('a missing Backlog command reports install help and supplies empty work', async () => {
+  const missing = createBacklogPlugin(() => null)
+  const found = createBacklogPlugin(() => '/usr/local/bin/backlog')
+
+  assert.deepEqual(missing.readiness(), {
+    status: 'missing',
+    install: 'bun i -g backlog.md',
+  })
+  assert.deepEqual(found.readiness(), { status: 'found' })
+  assert.deepEqual(await missing.create('/repo').read(), EMPTY_WORK_SNAPSHOT)
+
+  const setup = await createTestRenderer({ width: 120, height: 36 })
+  const viewer = await startTerminalViewer(viewerFixtureRoot, {
+    renderer: setup.renderer,
+    palette: normalizeTerminalPalette(),
+    workSource: missing.create(viewerFixtureRoot),
+  })
+  viewer.destroy()
+  if (!setup.renderer.isDestroyed) setup.renderer.destroy()
 })
 
 test.concurrent('host opens the viewer without waiting for a Backlog read', async () => {

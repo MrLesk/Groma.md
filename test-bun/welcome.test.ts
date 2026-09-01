@@ -5,6 +5,7 @@ import path from 'node:path'
 import { test } from 'bun:test'
 
 import { createTestRenderer } from '@opentui/core/testing'
+import { createBacklogPlugin } from '@groma/work-source-backlog'
 
 import { mountWelcome, renderPlainWelcome } from '../src/welcome.ts'
 import { loadWelcomeModel } from '../src/welcome/model.ts'
@@ -15,7 +16,10 @@ function welcomeFixture(): WelcomeModel {
     project: 'example',
     folder: '/workspace/example',
     status: 'Architecture ready',
-    scanners: [{ id: 'typescript', status: 'built-in' }],
+    plugins: [
+      { id: 'backlog.md', status: 'found' },
+      { id: 'typescript', status: 'built-in' },
+    ],
   }
 }
 
@@ -62,23 +66,25 @@ test.concurrent('the welcome derives scanner readiness without executing modules
       }),
     })
 
-    const model = await loadWelcomeModel(root)
-    assert.deepEqual(model.scanners, [
+    const foundBacklog = createBacklogPlugin(() => '/usr/local/bin/backlog')
+    const model = await loadWelcomeModel(root, foundBacklog)
+    assert.deepEqual(model.plugins, [
+      { id: 'backlog.md', status: 'found' },
       { id: 'typescript', status: 'built-in' },
       { id: 'python', status: 'found' },
       { id: 'rust', status: 'missing' },
     ])
     assert.equal(await exists(marker), false)
 
-    const plain = await renderPlainWelcome(root)
-    assert.match(plain, /plugins: backlog: built-in │ typescript: built-in │ python: found │ rust: missing/)
+    const plain = await renderPlainWelcome(root, foundBacklog)
+    assert.match(plain, /plugins: backlog\.md: found │ typescript: built-in │ python: found │ rust: missing/)
 
     const setup = await createTestRenderer({ width: 110, height: 35 })
     const selected = mountWelcome(setup.renderer, model)
     await setup.renderOnce()
     assert.match(
       setup.captureCharFrame(),
-      /plugins: backlog: built-in │ typescript: built-in │ python: found │ rust: missing/,
+      /plugins: backlog\.md: found │ typescript: built-in │ python: found │ rust: missing/,
     )
     setup.mockInput.pressEscape()
     await selected
@@ -88,13 +94,26 @@ test.concurrent('the welcome derives scanner readiness without executing modules
   }
 })
 
+test.concurrent('the welcome explains how to install a missing Backlog command', async () => {
+  const missingBacklog = createBacklogPlugin(() => null)
+  const model = await loadWelcomeModel('/workspace/example', missingBacklog)
+  const plain = await renderPlainWelcome('/workspace/example', missingBacklog)
+
+  assert.deepEqual(model.plugins.slice(0, 2), [
+    { id: 'backlog.md', status: 'missing', install: 'bun i -g backlog.md' },
+    { id: 'typescript', status: 'built-in' },
+  ])
+  assert.match(plain, /plugins: backlog\.md: missing \(bun i -g backlog\.md\) │ typescript: built-in/)
+})
+
 test.concurrent('the bottom plugin strip stays one row as scanners grow', async () => {
   const compact = await createTestRenderer({ width: 100, height: 30 })
   const many = await createTestRenderer({ width: 100, height: 30 })
   const compactSelected = mountWelcome(compact.renderer, welcomeFixture())
   const manySelected = mountWelcome(many.renderer, {
     ...welcomeFixture(),
-    scanners: [
+    plugins: [
+      { id: 'backlog.md', status: 'found' },
       { id: 'typescript', status: 'built-in' },
       ...Array.from({ length: 20 }, (_, index) => ({
         id: `scanner-${index}`,
@@ -111,7 +130,7 @@ test.concurrent('the bottom plugin strip stays one row as scanners grow', async 
 
   assert.equal(row(manyLines, 'groma web'), row(compactLines, 'groma web'))
   assert.equal(manyLines.filter(line => line.includes('plugins:')).length, 1)
-  assert.ok(row(manyLines, 'plugins: backlog: built-in │ typescript: built-in') > row(manyLines, 'groma web'))
+  assert.ok(row(manyLines, 'plugins: backlog.md: found │ typescript: built-in') > row(manyLines, 'groma web'))
   assert.ok(row(manyLines, 'navigate') > row(manyLines, 'plugins:'))
 
   compact.mockInput.pressEscape()
@@ -161,7 +180,7 @@ test.concurrent('advanced command rows never become launcher actions', async () 
   for (const command of ['add', 'install', 'list', 'remove']) {
     assert.match(expanded, new RegExp(`groma scanner ${command}`))
   }
-  assert.match(expanded, /plugins: backlog: built-in │ typescript: built-in/)
+  assert.match(expanded, /plugins: backlog\.md: found │ typescript: built-in/)
   assert.match(expanded, /navigate.*Enter run\/open\/toggle.*quit/)
   setup.mockInput.pressArrow('down')
   setup.mockInput.pressEnter()

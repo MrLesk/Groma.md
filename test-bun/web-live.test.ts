@@ -5,7 +5,8 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { test } from 'bun:test'
 
-import type { WorkSource } from '../src/work/backlog.ts'
+import type { WorkSource } from '@groma/work-source'
+
 import { scanRepository } from '../src/scanner.ts'
 import type { WorkItem, WorkSnapshot } from '../src/types.ts'
 import { startWebViewer } from '../src/viewers/web/server.ts'

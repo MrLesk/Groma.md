@@ -74,48 +74,13 @@ export interface ScanSummary {
   matched: number
 }
 
-export interface WorkChecklistItem {
-  text: string
-  checked: boolean
-}
-
-export interface WorkComment {
-  body: string
-  createdAt: string
-  author: string
-}
-
-/** A Backlog task summary available to maps, navigation, and component work history. */
-export interface WorkItem {
-  id: string
-  title: string
-  status: string
-  assignees: string[]
-  references: string[]
-  /** Repository-relative paths the task recorded as touched, oldest first. */
-  modifiedFiles: string[]
-  acceptanceCriteriaCompleted: number
-  acceptanceCriteriaCount: number
-  updatedAt: string
-}
-
-/** Heavy task content loaded only for the task a developer opens. */
-export interface WorkItemDetails {
-  id: string
-  description: string
-  acceptanceCriteria: WorkChecklistItem[]
-  definitionOfDone: WorkChecklistItem[]
-  implementationPlan: string
-  implementationNotes: string
-  comments: WorkComment[]
-}
-
-/** The Backlog workflow and tasks read together, so viewers interpret every status against the same configuration. */
-export interface WorkSnapshot {
-  statuses: string[]
-  defaultStatus: string
-  items: WorkItem[]
-}
+export type {
+  WorkChecklistItem,
+  WorkComment,
+  WorkItem,
+  WorkItemDetails,
+  WorkSnapshot,
+} from '@groma/work-source'
 
 export interface ArchitectureElement {
   id: string

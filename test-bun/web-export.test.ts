@@ -5,7 +5,9 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { test } from 'bun:test'
 
-import type { WorkSource } from '../src/work/backlog.ts'
+import type { WorkSource } from '@groma/work-source'
+import { createBacklogPlugin } from '@groma/work-source-backlog'
+
 import type { WorkItem, WorkItemDetails, WorkSnapshot } from '../src/types.ts'
 import { exportWebViewer } from '../src/viewers/web/export.ts'
 import { repositoryRoot } from './helpers.ts'
@@ -136,6 +138,22 @@ test.concurrent('groma export writes the read-only browser map without a server'
     assert.match(snapshot, /Commit not found for TASK-MISSING-COMMIT/)
     assert.match(version, /groma:published-version/)
     assert.match(version, /detail: \d+/)
+  } finally {
+    await rm(parent, { recursive: true, force: true })
+  }
+})
+
+test.concurrent('groma export completes without a global Backlog command', async () => {
+  const { parent, root } = await createRepository()
+  const output = path.join(parent, 'site')
+  const missing = createBacklogPlugin(() => null)
+  try {
+    const exported = await exportWebViewer(root, output, {
+      workSource: missing.create(root),
+    })
+    exported.close()
+    assert.match(await readFile(path.join(output, 'index.html'), 'utf8'), /data-delivery="published"/)
+    assert.doesNotMatch(await readFile(path.join(output, 'snapshot.js'), 'utf8'), /"TASK-/)
   } finally {
     await rm(parent, { recursive: true, force: true })
   }

@@ -9,7 +9,7 @@ groma:
     - scanner: typescript
       file: src/view-host.ts
       symbol: startTerminalViewer
-      dependencies: 7
+      dependencies: 6
       dependents: 1
 ---
 

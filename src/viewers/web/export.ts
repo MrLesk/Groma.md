@@ -2,10 +2,12 @@ import { existsSync } from 'node:fs'
 import { mkdir, rename, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 
+import { EMPTY_WORK_SOURCE } from '@groma/work-source'
+import type { WorkSource } from '@groma/work-source'
+import { backlogPlugin } from '@groma/work-source-backlog'
+
 import { watchArchitecture } from '../../architecture-watch.ts'
 import { watchScan } from '../../scanner.ts'
-import type { WorkSource } from '../../work/backlog.ts'
-import { createBacklogPlugin, EMPTY_WORK_SNAPSHOT } from '../../work/backlog.ts'
 import { pinsOf } from '../../work/pins.ts'
 import { renderPage } from './page.ts'
 import { PUBLISHED_EVENT, PUBLISHED_VERSION_EVENT } from './payload.ts'
@@ -20,14 +22,10 @@ export interface WebExportHandle {
   close(): void
 }
 
-const NO_WORK: WorkSource = {
-  read: async () => EMPTY_WORK_SNAPSHOT,
-  readItem: async id => { throw new Error(`Task not found: ${id}`) },
-  watch: () => ({ close() {} }),
-}
-
 function availableWorkSource(repositoryRoot: string): WorkSource {
-  return existsSync(path.join(repositoryRoot, 'backlog')) ? createBacklogPlugin(repositoryRoot) : NO_WORK
+  return existsSync(path.join(repositoryRoot, 'backlog'))
+    ? backlogPlugin.create(repositoryRoot)
+    : EMPTY_WORK_SOURCE
 }
 
 async function publishedTaskDiff(repositoryRoot: string, item: WebPayload['work']['items'][number], work: WebPayload['work']) {

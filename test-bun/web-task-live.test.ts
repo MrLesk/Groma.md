@@ -5,7 +5,9 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { test } from 'bun:test'
 
-import type { WorkSource } from '../src/work/backlog.ts'
+import type { WorkSource } from '@groma/work-source'
+import { createBacklogPlugin } from '@groma/work-source-backlog'
+
 import type { WorkItem, WorkItemDetails, WorkSnapshot } from '../src/types.ts'
 import { startWebViewer } from '../src/viewers/web/server.ts'
 
@@ -119,6 +121,24 @@ test.concurrent('groma web loads selected task details and diff outside the init
     assert.ok(diff.files[0]!.hunks.length > 0)
     assert.equal((await fetch(`${server.url}/task.json?task=unknown`)).status, 404)
     assert.equal((await fetch(`${server.url}/task-diff.json?task=unknown`)).status, 404)
+  } finally {
+    server.close()
+    await rm(path.dirname(root), { recursive: true, force: true })
+  }
+})
+
+test.concurrent('groma web opens without a global Backlog command', async () => {
+  const root = await createRepository()
+  const missing = createBacklogPlugin(() => null)
+  const server = await startWebViewer(root, {
+    port: 0,
+    workSource: missing.create(root),
+  })
+  try {
+    const response = await fetch(`${server.url}/world.json`)
+    const payload = await response.json() as { work: WorkSnapshot }
+    assert.equal(response.status, 200)
+    assert.deepEqual(payload.work.items, [])
   } finally {
     server.close()
     await rm(path.dirname(root), { recursive: true, force: true })

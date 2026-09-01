@@ -1,29 +1,42 @@
 import { spawn } from 'node:child_process'
-import { existsSync, watch } from 'node:fs'
+import { accessSync, constants, existsSync, watch } from 'node:fs'
 import path from 'node:path'
 
-import type { WorkItemDetails, WorkSnapshot } from '../types.ts'
+import {
+  EMPTY_WORK_SOURCE,
+  type WorkSource,
+  type WorkSourcePlugin,
+} from '@groma/work-source'
 
 export type BacklogCommand = (
   arguments_: string[],
   repositoryRoot: string,
 ) => Promise<string>
 
-export interface WorkSource {
-  read(): Promise<WorkSnapshot>
-  readItem(id: string): Promise<WorkItemDetails>
-  watch(onChange: () => void): { close(): void }
+type BacklogCommandResolver = () => string | null
+
+const installCommand = 'bun i -g backlog.md'
+
+function findBacklogCommand(): string | null {
+  for (const directory of (process.env.PATH ?? '').split(path.delimiter)) {
+    const command = path.join(directory, 'backlog')
+    try {
+      accessSync(command, constants.X_OK)
+      return command
+    } catch {
+      // Keep looking through PATH.
+    }
+  }
+  return null
 }
 
-export const EMPTY_WORK_SNAPSHOT: WorkSnapshot = {
-  statuses: [],
-  defaultStatus: '',
-  items: [],
-}
-
-function runBacklog(arguments_: string[], repositoryRoot: string): Promise<string> {
+function runBacklog(
+  command: string,
+  arguments_: string[],
+  repositoryRoot: string,
+): Promise<string> {
   return new Promise((resolve, reject) => {
-    const child = spawn('backlog', arguments_, {
+    const child = spawn(command, arguments_, {
       cwd: repositoryRoot,
       stdio: ['ignore', 'pipe', 'pipe'],
     })
@@ -73,9 +86,9 @@ interface TaskViewJson {
   }
 }
 
-export function createBacklogPlugin(
+export function createBacklogSource(
   repositoryRoot: string,
-  run: BacklogCommand = runBacklog,
+  run: BacklogCommand,
 ): WorkSource {
   return {
     async read() {
@@ -111,3 +124,26 @@ export function createBacklogPlugin(
     },
   }
 }
+
+export function createBacklogPlugin(
+  resolveCommand: BacklogCommandResolver = findBacklogCommand,
+): WorkSourcePlugin {
+  return {
+    id: 'backlog.md',
+    readiness() {
+      return resolveCommand() === null
+        ? { status: 'missing', install: installCommand }
+        : { status: 'found' }
+    },
+    create(repositoryRoot) {
+      const command = resolveCommand()
+      return command === null
+        ? EMPTY_WORK_SOURCE
+        : createBacklogSource(repositoryRoot, (arguments_, root) => {
+          return runBacklog(command, arguments_, root)
+        })
+    },
+  }
+}
+
+export const backlogPlugin = createBacklogPlugin()

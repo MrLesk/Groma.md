@@ -3,10 +3,11 @@ import {
   normalizeTerminalPalette,
 } from '@opentui/core'
 import type { CliRenderer, NormalizedTerminalPalette } from '@opentui/core'
+import { EMPTY_WORK_SNAPSHOT } from '@groma/work-source'
+import type { WorkSource } from '@groma/work-source'
+import { backlogPlugin } from '@groma/work-source-backlog'
 
 import { watchArchitecture } from './architecture-watch.ts'
-import { createBacklogPlugin, EMPTY_WORK_SNAPSHOT } from './work/backlog.ts'
-import type { WorkSource } from './work/backlog.ts'
 import { loadAnnotatedArchitecture } from './core.ts'
 import { watchScan } from './scanner.ts'
 import { sheetScene } from './sheet/scene.ts'
@@ -24,7 +25,7 @@ export async function startTerminalViewer(
   repositoryRoot: string,
   options: StartViewerOptions = {},
 ): Promise<TerminalViewer> {
-  const workSource = options.workSource ?? createBacklogPlugin(repositoryRoot)
+  const workSource = options.workSource ?? backlogPlugin.create(repositoryRoot)
   let work = EMPTY_WORK_SNAPSHOT
   let viewer: TerminalViewer
   let map: TerminalViewModel

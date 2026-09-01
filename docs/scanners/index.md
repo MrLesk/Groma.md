@@ -22,9 +22,9 @@ written by `groma scanner add`. `groma scanner list` derives built-in, found,
 and missing readiness without executing third-party code. Network installation
 happens only in `scanner add` and `scanner install`.
 
-Bare `groma` shows scanner readiness beside the built-in Backlog integration
-in one fixed bottom row. The complete inventory and scanner management syntax
-remain under Advanced commands.
+Bare `groma` shows scanner readiness beside the embedded Backlog work-source
+readiness in one fixed bottom row. The complete scanner inventory and scanner
+management syntax remain under Advanced commands.
 
 ## Scanners
 
