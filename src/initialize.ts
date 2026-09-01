@@ -4,8 +4,10 @@ import {
   type GromaDirectory,
 } from './groma-filesystem.ts'
 import {
+  type ProjectProfile,
   parseProjectProfile,
   renderProjectProfile,
+  saveProjectProfile,
 } from './project-profile.ts'
 
 export interface GromaInitInput {
@@ -14,31 +16,36 @@ export interface GromaInitInput {
 }
 
 export interface GromaInitPrompts {
-  projectName(): Promise<string>
+  projectName(current?: string): Promise<string>
   directory(): Promise<string>
 }
 
 export interface GromaInitResult {
   directory: GromaDirectory
   projectName: string
+  status: 'initialized' | 'unchanged' | 'updated'
 }
 
-async function existingProjectName(
+async function existingProjectProfile(
   filesystem: GromaFileSystem | undefined,
-): Promise<string | undefined> {
+): Promise<ProjectProfile | undefined> {
   if (filesystem === undefined || !filesystem.exists('project.md')) return undefined
   const sourceFilename = filesystem.sourceFilename('project.md')
-  return (await parseProjectProfile(
+  return parseProjectProfile(
     await filesystem.read('project.md'),
     sourceFilename,
-  )).title
+  )
 }
 
 async function requiredProjectName(
   supplied: string | undefined,
+  current: string | undefined,
   prompts: GromaInitPrompts | undefined,
 ): Promise<string> {
-  const projectName = (supplied ?? await prompts?.projectName())?.trim()
+  const selected = supplied ?? (prompts === undefined
+    ? current
+    : await prompts.projectName(current))
+  const projectName = selected?.trim()
   if (!projectName) {
     throw new Error('project name is required when Groma is not initialized')
   }
@@ -70,26 +77,46 @@ export async function initializeGroma(
   prompts?: GromaInitPrompts,
 ): Promise<GromaInitResult> {
   const existing = GromaFileSystem.find(repositoryRoot)
-  const storedProjectName = await existingProjectName(existing)
-  const projectName = storedProjectName
-    ?? await requiredProjectName(input.projectName, prompts)
+  if (existing !== undefined && input.directory !== undefined) {
+    GromaFileSystem.initialize(repositoryRoot, input.directory)
+  }
+  const storedProfile = await existingProjectProfile(existing)
+  const projectName = await requiredProjectName(
+    input.projectName,
+    storedProfile?.title,
+    prompts,
+  )
   const requestedDirectory = existing?.directory
     ?? await requiredDirectory(input.directory, prompts)
   const filesystem = GromaFileSystem.initialize(
     repositoryRoot,
     existing === undefined ? requestedDirectory : input.directory,
   )
-  const projectSource = await renderProjectProfile({
-    title: projectName,
-    overview: `Architecture for ${projectName}.`,
-  })
 
   await writeMissing(filesystem, 'index.md', '---\nokf_version: "0.2"\n---\n')
-  await writeMissing(filesystem, 'project.md', projectSource)
+  const status = storedProfile === undefined
+    ? 'initialized'
+    : storedProfile.title === projectName ? 'unchanged' : 'updated'
+  if (status === 'initialized') {
+    await filesystem.write('project.md', await renderProjectProfile({
+      title: projectName,
+      overview: `Architecture for ${projectName}.`,
+    }))
+  } else if (storedProfile !== undefined && status === 'updated') {
+    await saveProjectProfile(repositoryRoot, {
+      title: projectName,
+      description: storedProfile.description,
+      overview: storedProfile.overview,
+    })
+  }
   await writeMissing(filesystem, 'observed/index.md', '# Observed architecture\n')
   await writeMissing(filesystem, 'missing/index.md', '# Missing architecture\n')
   await writeMissing(filesystem, 'plans/index.md', '# Plans\n')
   await initializeAgentInstructions(repositoryRoot)
 
-  return { directory: filesystem.directory, projectName }
+  return {
+    directory: filesystem.directory,
+    projectName,
+    status,
+  }
 }

@@ -1,7 +1,6 @@
 #!/usr/bin/env bun
 
 import path from 'node:path'
-import { createInterface } from 'node:readline/promises'
 import { fileURLToPath } from 'node:url'
 
 import { Command } from 'commander'
@@ -10,8 +9,8 @@ import { acceptGhost } from './core.ts'
 import { createArchitectureElement } from './create.ts'
 import { editArchitecture } from './edit.ts'
 import { agentInstructionGuide } from './agent-instructions.ts'
+import { runInitCommand } from './init-command.ts'
 import { humanInstructionGuide } from './instructions.ts'
-import { initializeGroma } from './initialize.ts'
 import { relateObserved, removeObservedRelationship } from './relate.ts'
 import { registerScannerCommands } from './scanner/cli.ts'
 import { formatScanSummary, scanRepository, watchScan } from './scanner.ts'
@@ -23,50 +22,17 @@ import type { WelcomeActionId, WelcomeScreen } from './welcome.ts'
 
 const program = new Command()
 
-async function initializeProject(
-  projectName: string | undefined,
-  directory: string | undefined,
-): Promise<void> {
-  const interactive = process.stdin.isTTY === true && process.stdout.isTTY === true
-  const readline = interactive
-    ? createInterface({ input: process.stdin, output: process.stdout })
-    : undefined
-  try {
-    await initializeGroma(
-      process.cwd(),
-      { projectName, directory },
-      readline === undefined
-        ? undefined
-        : {
-            projectName: () => readline.question('Project name: '),
-            directory: async () => {
-              const answer = await readline.question(
-                'Groma directory (groma or .groma) [groma]: ',
-              )
-              return answer.trim() === '' ? 'groma' : answer
-            },
-          },
-    )
-    console.log('ok')
-  } catch (error) {
-    console.error(error instanceof Error ? error.message : String(error))
-    process.exitCode = 1
-  } finally {
-    readline?.close()
-  }
-}
-
-async function openWeb(port?: number): Promise<void> {
+async function openWeb(port?: number, scan = true): Promise<void> {
   const root = process.cwd()
-  await scanRepository(root)
+  if (scan) await scanRepository(root)
   const { startWebViewer } = await import('./viewers/web/server.ts')
   const { url } = await startWebViewer(root, { port })
   console.log(`groma web at ${url}`)
 }
 
-async function openTerminalMap(): Promise<void> {
+async function openTerminalMap(scan = true): Promise<void> {
   const root = process.cwd()
-  await scanRepository(root)
+  if (scan) await scanRepository(root)
   const { startTerminalViewer } = await import('./view-host.ts')
   const viewer = await startTerminalViewer(root)
   await viewer.closed
@@ -81,6 +47,28 @@ async function openTerminalMapFromWelcome(): Promise<void> {
   })
   const exitCode = await child.exited
   if (exitCode !== 0) process.exitCode = exitCode
+}
+
+async function initializeProject(
+  projectName: string | undefined,
+  directory: string | undefined,
+): Promise<void> {
+  try {
+    const outcome = await runInitCommand({
+      repositoryRoot: process.cwd(),
+      projectName,
+      directory,
+      interactive: process.stdin.isTTY === true && process.stdout.isTTY === true,
+    }, {
+      openViewer: viewer => viewer === 'web'
+        ? openWeb(undefined, false)
+        : openTerminalMap(false),
+    })
+    if (outcome === 'cancelled') process.exitCode = 1
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : String(error))
+    process.exitCode = 1
+  }
 }
 
 async function exportWeb(directory: string, watch: boolean): Promise<void> {

@@ -1,3 +1,5 @@
+import { GROMA_ACCENT, GROMA_ACCENT_ON_LIGHT } from '../../../brand.ts'
+
 /** Every colour the page and the map use, as CSS variable values; the map's level tints mix paper and ink in its stylesheet. */
 export interface Palette {
   paper: string
@@ -33,7 +35,7 @@ export const palettes: Record<WebTheme, Palette> = {
     paper: '#FFFFFF',
     ink: '#22262E',
     muted: '#585B62',
-    accentText: '#147A59',
+    accentText: GROMA_ACCENT_ON_LIGHT,
     highlight: '#1D9E75',
     highlightText: '#147A59',
     hairline: '#E4E6EA',
@@ -53,9 +55,9 @@ export const palettes: Record<WebTheme, Palette> = {
     paper: '#111315',
     ink: '#E6E8EB',
     muted: '#9AA0A8',
-    accentText: '#1D9E75',
-    highlight: '#1D9E75',
-    highlightText: '#1D9E75',
+    accentText: GROMA_ACCENT,
+    highlight: GROMA_ACCENT,
+    highlightText: GROMA_ACCENT,
     hairline: '#2A2E33',
     hover: 'rgba(230, 232, 235, 0.08)',
     line: '#6B717A',
@@ -73,7 +75,7 @@ export const palettes: Record<WebTheme, Palette> = {
     paper: '#04182B',
     ink: '#D8F3FF',
     muted: '#79A9BD',
-    accentText: '#1D9E75',
+    accentText: GROMA_ACCENT,
     highlight: '#D8F3FF',
     highlightText: '#D8F3FF',
     hairline: '#164764',
@@ -108,7 +110,7 @@ export function themeLabel(theme: WebTheme): string {
 }
 
 /** Brand signals shared by every theme. */
-export const accent = '#1D9E75'
+export const accent = GROMA_ACCENT
 /** Dark foreground for saturated accent and work-marker surfaces. */
 export const onColour = '#020B12'
 

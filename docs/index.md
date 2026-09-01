@@ -2,10 +2,14 @@
 
 Groma keeps architecture in Git as Markdown you can read and one C4 world you
 can walk. Solid boxes exist. Ghosts are next. Groma writes architecture
-records as a strict OKF v0.2 application profile. `groma init` asks for the
-project name and stores the package in the visible `groma/` directory by
-default or the hidden `.groma/` directory when selected. The resulting
-`project.md` belongs to the project owner.
+records as a strict OKF v0.2 application profile. `groma init` opens a guided
+setup for the project name and storage root. It uses the visible `groma/`
+directory by default or the hidden `.groma/` directory when selected. Running
+it again edits the current project name, keeps the chosen root, and refreshes
+Groma's managed agent instructions. Setup can install Backlog.md when it is
+missing. When the architecture has no observed components, setup can run the
+first scan and open either viewer. The resulting `project.md` belongs to the
+project owner.
 
 Without a terminal, pass both values explicitly:
 
