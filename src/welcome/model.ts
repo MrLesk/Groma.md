@@ -157,7 +157,8 @@ export async function loadWelcomeModel(
 export function pluginSummary(plugins: readonly WelcomePlugin[]): string {
   return plugins.map(plugin => {
     const install = plugin.install === undefined ? '' : ` (${plugin.install})`
-    return `${plugin.id}: ${plugin.status}${install}`
+    const status = plugin.status === 'found' ? '✓ ready' : plugin.status
+    return `${plugin.id}: ${status}${install}`
   }).join(' │ ')
 }
 

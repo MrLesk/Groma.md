@@ -64,7 +64,7 @@ test('bare groma without a TTY prints the plain welcome and exits', async () => 
   assert.match(result.stdout, /https:\/\/groma\.md/)
   assert.ok(result.stdout.includes(`project: ${path.basename(projectRoot)}`))
   assert.ok(result.stdout.indexOf('groma web') < result.stdout.indexOf('groma view'))
-  assert.match(result.stdout, /plugins: backlog\.md: (?:found|missing \(bun i -g backlog\.md\)) │ typescript: built-in/)
+  assert.match(result.stdout, /plugins: backlog\.md: (?:✓ ready|missing \(bun i -g backlog\.md\)) │ typescript: built-in/)
   assert.match(result.stdout, /groma scanner add <source>/)
   assert.match(result.stdout, /groma scanner remove <id>/)
   assert.match(result.stdout, /groma agent-instructions \[guide\]/)
