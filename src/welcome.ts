@@ -5,11 +5,11 @@ import {
   advancedIndex,
   instructionViews,
   instructionsIndex,
+  loadWelcomeModel,
   welcomeActions,
-  welcomeModel,
   welcomeSheet,
 } from './welcome/model.ts'
-import type { WelcomeActionId } from './welcome/model.ts'
+import type { WelcomeActionId, WelcomeModel } from './welcome/model.ts'
 import {
   paintInstructions,
   paintLauncher,
@@ -58,10 +58,9 @@ function readingDirection(key: KeyEvent): ReadingDirection | undefined {
 
 export function mountWelcome(
   renderer: CliRenderer,
-  repositoryRoot: string,
+  model: WelcomeModel,
   initialScreen: WelcomeScreen = 'launcher',
 ): Promise<WelcomeActionId | undefined> {
-  const model = welcomeModel(repositoryRoot)
   const sheet = welcomeSheet(model)
   let state = initialState(initialScreen)
   let instructionsPaint: InstructionsPaintResult = {
@@ -243,6 +242,7 @@ export async function startWelcome(
   repositoryRoot: string,
   initialScreen: WelcomeScreen = 'launcher',
 ): Promise<WelcomeActionId | undefined> {
+  const model = await loadWelcomeModel(repositoryRoot)
   const renderer = await createCliRenderer({
     clearOnShutdown: true,
     consoleMode: 'disabled',
@@ -251,7 +251,7 @@ export async function startWelcome(
     useMouse: false,
   })
   try {
-    return await mountWelcome(renderer, repositoryRoot, initialScreen)
+    return await mountWelcome(renderer, model, initialScreen)
   } catch (error) {
     renderer.destroy()
     throw error

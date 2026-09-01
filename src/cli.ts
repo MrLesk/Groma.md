@@ -104,7 +104,7 @@ program
       && process.stdout.isTTY === true
       && !program.opts().plain
     if (!interactive) {
-      console.log(renderPlainWelcome(process.cwd()))
+      console.log(await renderPlainWelcome(process.cwd()))
       return
     }
     const selection = await startWelcome(process.cwd())

@@ -3,6 +3,8 @@ import { homedir } from 'node:os'
 import path from 'node:path'
 
 import { humanInstructionGuides } from '../instructions.ts'
+import { scannerInventory } from '../scanner/modules/inventory.ts'
+import type { ScannerReadiness } from '../scanner/modules/inventory.ts'
 
 const { version } = createRequire(import.meta.url)('../../package.json') as {
   version: string
@@ -40,6 +42,22 @@ export const advancedCommands = [
     description: 'output folder; watch refreshes',
   },
   {
+    command: 'groma scanner add <source>',
+    description: 'exact package@version or ./path',
+  },
+  {
+    command: 'groma scanner install',
+    description: 'restore configured npm scanners',
+  },
+  {
+    command: 'groma scanner list',
+    description: 'show built-in/found/missing',
+  },
+  {
+    command: 'groma scanner remove <id>',
+    description: 'disable; keep shared cache',
+  },
+  {
     command: 'groma create <name> --kind <kind> …',
     description: 'overview + plan/observed',
   },
@@ -69,10 +87,16 @@ const parameterLegend = '<required> [optional] […more]'
 
 export type WelcomeActionId = typeof welcomeActions[number]['id']
 
+export interface WelcomeScanner {
+  id: string
+  status: ScannerReadiness
+}
+
 export interface WelcomeModel {
   project: string
   folder: string
   status: string
+  scanners: readonly WelcomeScanner[]
 }
 
 export interface WelcomeSheet {
@@ -108,17 +132,26 @@ function displayFolder(repositoryRoot: string): string {
     : root
 }
 
-export function welcomeModel(repositoryRoot: string): WelcomeModel {
+export async function loadWelcomeModel(repositoryRoot: string): Promise<WelcomeModel> {
   const root = path.resolve(repositoryRoot)
+  const scanners = await scannerInventory(root)
   return {
     project: path.basename(root),
     folder: displayFolder(root),
     status: 'Architecture ready',
+    scanners: scanners.map(({ id, status }) => ({ id, status })),
   }
 }
 
+export function scannerSummary(scanners: readonly WelcomeScanner[]): string {
+  return scanners.map(scanner => `${scanner.id}: ${scanner.status}`).join(' │ ')
+}
+
 export function welcomeSheet(model: WelcomeModel): WelcomeSheet {
-  const context = ` project: ${model.project} │ folder: ${model.folder} │ status: ${model.status} `
+  const context = [
+    ` project: ${model.project} │ folder: ${model.folder} │ status: ${model.status} `,
+    ` scanners: ${scannerSummary(model.scanners)} `,
+  ]
   const commands = [
     ...welcomeActions.map(action => action.command),
     instructionsAction.command,
@@ -135,7 +168,7 @@ export function welcomeSheet(model: WelcomeModel): WelcomeSheet {
   ]
   const commandWidth = Math.max(...commands.map(command => command.length + 2))
   const descriptionWidth = Math.max(...descriptions.map(description => description.length))
-  const innerWidth = Math.max(context.length, commandWidth + descriptionWidth + 5)
+  const innerWidth = Math.max(...context.map(line => line.length), commandWidth + descriptionWidth + 5)
   return {
     commandWidth,
     descriptionWidth: innerWidth - commandWidth - 5,
@@ -143,8 +176,8 @@ export function welcomeSheet(model: WelcomeModel): WelcomeSheet {
   }
 }
 
-export function renderPlainWelcome(repositoryRoot: string): string {
-  const model = welcomeModel(repositoryRoot)
+export async function renderPlainWelcome(repositoryRoot: string): Promise<string> {
+  const model = await loadWelcomeModel(repositoryRoot)
   return [
     `groma.md v${welcomeVersion}`,
     'architecture in Git',
@@ -153,6 +186,7 @@ export function renderPlainWelcome(repositoryRoot: string): string {
     `project: ${model.project}`,
     `folder: ${model.folder}`,
     `status: ${model.status}`,
+    `scanners: ${scannerSummary(model.scanners)}`,
     '',
     ...welcomeActions.map(action => `${action.command} — ${action.description}`),
     `${instructionsAction.command} — ${instructionsAction.description}`,

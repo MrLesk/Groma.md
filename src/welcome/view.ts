@@ -7,6 +7,7 @@ import {
   instructionRows,
   instructionViews,
   launcherRows,
+  scannerSummary,
   welcomeVersion,
 } from './model.ts'
 import type {
@@ -156,6 +157,7 @@ function drawContext(
   const width = sheet.innerWidth + 2
   text(buffer, `┌${'─'.repeat(sheet.innerWidth)}┐`, x, y, width, terminalForeground, terminalBackground)
   text(buffer, `│${' '.repeat(sheet.innerWidth)}│`, x, y + 1, width, terminalForeground, terminalBackground)
+  text(buffer, `│${' '.repeat(sheet.innerWidth)}│`, x, y + 2, width, terminalForeground, terminalBackground)
   drawParts(buffer, [
     { value: 'project: ', attributes: TextAttributes.DIM },
     { value: model.project, color: brandGreen },
@@ -164,7 +166,11 @@ function drawContext(
     { value: ' │ status: ', attributes: TextAttributes.DIM },
     { value: model.status, color: brandGreen },
   ], x + 2, y + 1)
-  text(buffer, `└${'─'.repeat(sheet.innerWidth)}┘`, x, y + 2, width, terminalForeground, terminalBackground)
+  drawParts(buffer, [
+    { value: 'scanners: ', attributes: TextAttributes.DIM },
+    { value: scannerSummary(model.scanners) },
+  ], x + 2, y + 2)
+  text(buffer, `└${'─'.repeat(sheet.innerWidth)}┘`, x, y + 3, width, terminalForeground, terminalBackground)
 }
 
 function paintShell(
@@ -192,7 +198,7 @@ function paintShell(
 
   const contextY = y + mark.length + 1
   drawContext(buffer, sheet, model, x, contextY)
-  return { contentY: contextY + 4, width, x }
+  return { contentY: contextY + 5, width, x }
 }
 
 function wrap(value: string, width: number): string[] {
