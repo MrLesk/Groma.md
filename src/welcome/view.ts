@@ -3,6 +3,7 @@ import type { OptimizedBuffer } from '@opentui/core'
 
 import { text } from '../viewers/tui/atoms/text.ts'
 import {
+  advancedCommands,
   advancedRows,
   documentationUrl,
   instructionRows,
@@ -40,6 +41,10 @@ export interface ScrollPaintResult {
   maxScroll: number
   pageSize: number
   scroll: number
+}
+
+export interface AdvancedPaintResult extends ScrollPaintResult {
+  tableScroll: number
 }
 
 function drawParts(
@@ -277,6 +282,26 @@ function markdownRows(source: string, width: number): PaintedText[][] {
   return rows
 }
 
+function drawMarkdownViewport(
+  buffer: OptimizedBuffer,
+  source: string,
+  width: number,
+  x: number,
+  y: number,
+  height: number,
+  requestedScroll: number,
+): ScrollPaintResult {
+  const rows = markdownRows(source, width)
+  const pageSize = Math.max(1, height)
+  const maxScroll = Math.max(0, rows.length - pageSize)
+  const scroll = Math.max(0, Math.min(requestedScroll, maxScroll))
+  for (const line of rows.slice(scroll, scroll + pageSize)) {
+    drawParts(buffer, line, x, y)
+    y += 1
+  }
+  return { maxScroll, pageSize, scroll }
+}
+
 export function paintLauncher(
   buffer: OptimizedBuffer,
   model: WelcomeModel,
@@ -311,14 +336,16 @@ export function paintAdvanced(
   buffer: OptimizedBuffer,
   model: WelcomeModel,
   sheet: WelcomeSheet,
-  requestedScroll: number,
+  selectedIndex: number,
+  requestedTableScroll: number,
+  requestedDescriptionScroll: number,
   arrowVisible: boolean,
-): ScrollPaintResult {
+): AdvancedPaintResult {
   const shell = paintShell(buffer, model, sheet)
   drawParts(buffer, commandParts({
     command: '← Back',
     description: '',
-    selected: true,
+    selected: selectedIndex === 0,
     dim: false,
     opensPage: false,
   }, arrowVisible), shell.x + 2, shell.contentY)
@@ -333,25 +360,47 @@ export function paintAdvanced(
     TextAttributes.BOLD,
   )
 
-  const rows = advancedRows()
+  const rows = advancedRows(selectedIndex)
   const tableY = shell.contentY + 3
   const pluginsY = buffer.height - 2
-  const pageSize = Math.max(0, Math.floor((pluginsY - tableY - 1) / 2))
-  const maxScroll = Math.max(0, rows.length - pageSize)
-  const scroll = Math.max(0, Math.min(requestedScroll, maxScroll))
-  const visibleRows = rows.slice(scroll, scroll + pageSize)
-  if (visibleRows.length > 0) {
-    drawTable(buffer, sheet, visibleRows, false, shell.x, tableY)
+  const tablePageSize = Math.min(
+    5,
+    rows.length,
+    Math.max(1, Math.floor((pluginsY - tableY - 5) / 2)),
+  )
+  const maxTableScroll = Math.max(0, rows.length - tablePageSize)
+  const selectedRow = selectedIndex - 1
+  let tableScroll = selectedIndex === 0
+    ? 0
+    : Math.max(0, Math.min(requestedTableScroll, maxTableScroll))
+  if (selectedRow >= 0) {
+    if (selectedRow < tableScroll) tableScroll = selectedRow
+    if (selectedRow >= tableScroll + tablePageSize) {
+      tableScroll = selectedRow - tablePageSize + 1
+    }
   }
+  const visibleRows = rows.slice(tableScroll, tableScroll + tablePageSize)
+  if (visibleRows.length > 0) {
+    drawTable(buffer, sheet, visibleRows, arrowVisible, shell.x, tableY)
+  }
+  const descriptionY = tableY + visibleRows.length * 2 + 2
+  const selectedCommand = advancedCommands[selectedIndex - 1]
+  const descriptionPaint = drawMarkdownViewport(
+    buffer,
+    selectedCommand?.content ?? '',
+    sheet.innerWidth - 2,
+    shell.x + 2,
+    descriptionY,
+    pluginsY - descriptionY,
+    requestedDescriptionScroll,
+  )
   drawParts(buffer, [
     { value: 'plugins: ', attributes: TextAttributes.DIM },
     { value: pluginSummary(model.plugins) },
   ], shell.x + 2, pluginsY)
   text(
     buffer,
-    maxScroll > 0
-      ? 'J/K scroll │ PgUp/PgDn page │ Enter/Backspace back │ Esc/Q quit'
-      : 'Enter/Backspace back │ Esc/Q quit',
+    '↑/↓ command │ J/K scroll │ PgUp/PgDn page │ Backspace back │ Esc/Q quit',
     shell.x + 2,
     pluginsY + 1,
     shell.width - 4,
@@ -359,7 +408,7 @@ export function paintAdvanced(
     terminalBackground,
     TextAttributes.DIM,
   )
-  return { maxScroll, pageSize, scroll }
+  return { ...descriptionPaint, tableScroll }
 }
 
 export function paintInstructions(
@@ -384,16 +433,16 @@ export function paintInstructions(
   const tableY = shell.contentY + 2
   drawTable(buffer, sheet, rows, arrowVisible, shell.x, tableY)
   const contentY = tableY + rows.length * 2 + 2
-  const pageSize = Math.max(1, buffer.height - contentY - 3)
   const guide = instructionViews[guideIndex] ?? instructionViews[0]!
-  const content = markdownRows(guide.content, sheet.innerWidth - 2)
-  const maxScroll = Math.max(0, content.length - pageSize)
-  const scroll = Math.max(0, Math.min(requestedScroll, maxScroll))
-  let y = contentY
-  for (const line of content.slice(scroll, scroll + pageSize)) {
-    drawParts(buffer, line, shell.x + 2, y)
-    y += 1
-  }
+  const contentPaint = drawMarkdownViewport(
+    buffer,
+    guide.content,
+    sheet.innerWidth - 2,
+    shell.x + 2,
+    contentY,
+    buffer.height - contentY - 3,
+    requestedScroll,
+  )
   text(
     buffer,
     '↑/↓ guide │ J/K scroll │ PgUp/PgDn page │ Backspace back │ Esc/Q quit',
@@ -404,5 +453,5 @@ export function paintInstructions(
     terminalBackground,
     TextAttributes.DIM,
   )
-  return { maxScroll, pageSize, scroll }
+  return contentPaint
 }

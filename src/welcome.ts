@@ -2,6 +2,7 @@ import { createCliRenderer, FrameBufferRenderable } from '@opentui/core'
 import type { CliRenderer, KeyEvent } from '@opentui/core'
 
 import {
+  advancedCommands,
   advancedIndex,
   instructionViews,
   instructionsIndex,
@@ -15,7 +16,7 @@ import {
   paintInstructions,
   paintLauncher,
 } from './welcome/view.ts'
-import type { ScrollPaintResult } from './welcome/view.ts'
+import type { AdvancedPaintResult, ScrollPaintResult } from './welcome/view.ts'
 
 export { renderPlainWelcome } from './welcome/model.ts'
 export type { WelcomeActionId } from './welcome/model.ts'
@@ -29,7 +30,9 @@ interface LauncherState {
 
 interface AdvancedState {
   kind: 'advanced'
-  scroll: number
+  selectedIndex: number
+  tableScroll: number
+  descriptionScroll: number
 }
 
 interface InstructionsState {
@@ -45,7 +48,12 @@ function launcherState(selectedIndex = 0): LauncherState {
 }
 
 function advancedState(): AdvancedState {
-  return { kind: 'advanced', scroll: 0 }
+  return {
+    kind: 'advanced',
+    selectedIndex: 1,
+    tableScroll: 0,
+    descriptionScroll: 0,
+  }
 }
 
 function instructionsState(): InstructionsState {
@@ -86,10 +94,11 @@ export function mountWelcome(
 ): Promise<WelcomeActionId | undefined> {
   const sheet = welcomeSheet(model)
   let state = initialState(initialScreen)
-  let advancedPaint: ScrollPaintResult = {
+  let advancedPaint: AdvancedPaintResult = {
     maxScroll: 0,
     pageSize: 0,
     scroll: 0,
+    tableScroll: 0,
   }
   let instructionsPaint: ScrollPaintResult = {
     maxScroll: 0,
@@ -129,10 +138,13 @@ export function mountWelcome(
         frame.frameBuffer,
         model,
         sheet,
-        state.scroll,
+        state.selectedIndex,
+        state.tableScroll,
+        state.descriptionScroll,
         arrowVisible,
       )
-      state.scroll = advancedPaint.scroll
+      state.tableScroll = advancedPaint.tableScroll
+      state.descriptionScroll = advancedPaint.scroll
     } else {
       instructionsPaint = paintInstructions(
         frame.frameBuffer,
@@ -230,9 +242,26 @@ export function mountWelcome(
     repaint()
   }
 
+  function moveAdvanced(key: 'up' | 'down'): void {
+    if (state.kind !== 'advanced') return
+    const movement = key === 'up' ? -1 : 1
+    const selectedIndex = Math.max(
+      0,
+      Math.min(advancedCommands.length, state.selectedIndex + movement),
+    )
+    if (selectedIndex !== state.selectedIndex) state.descriptionScroll = 0
+    state.selectedIndex = selectedIndex
+    arrowVisible = true
+    repaint()
+  }
+
   function scrollAdvanced(direction: ReadingDirection): void {
     if (state.kind !== 'advanced') return
-    state.scroll = readingScroll(state.scroll, direction, advancedPaint)
+    state.descriptionScroll = readingScroll(
+      state.descriptionScroll,
+      direction,
+      advancedPaint,
+    )
     repaint()
   }
 
@@ -242,12 +271,17 @@ export function mountWelcome(
   }
 
   function handleAdvancedKey(key: KeyEvent): void {
-    if (key.name === 'backspace' || key.name === 'return') {
+    if (key.name === 'backspace') {
+      showLauncher(advancedIndex)
+      return
+    }
+    if (key.name === 'return' && state.kind === 'advanced' && state.selectedIndex === 0) {
       showLauncher(advancedIndex)
       return
     }
     const reading = readingDirection(key)
-    if (reading !== undefined) scrollAdvanced(reading)
+    if (key.name === 'up' || key.name === 'down') moveAdvanced(key.name)
+    else if (reading !== undefined) scrollAdvanced(reading)
   }
 
   function handleInstructionsKey(key: KeyEvent): void {

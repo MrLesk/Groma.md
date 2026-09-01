@@ -43,42 +43,62 @@ export const advancedCommands = [
   {
     command: 'groma export <directory> [--watch]',
     description: 'output folder; watch refreshes',
+    content: 'Writes the current architecture to <directory>. Add --watch to refresh that output after source changes.',
   },
   {
     command: 'groma scanner add <source>',
     description: 'exact package@version or ./path',
+    content: 'Adds a scanner from an exact npm package version or a local directory to this project.',
   },
   {
     command: 'groma scanner install',
     description: 'restore configured npm scanners',
+    content: 'Installs the exact npm scanner versions already configured for this project. Built-in and local scanners need no installation.',
   },
   {
     command: 'groma scanner list',
     description: 'show built-in/found/missing',
+    content: 'Lists every configured scanner and whether it is built-in, ready, or missing.',
   },
   {
     command: 'groma scanner remove <id>',
     description: 'disable; keep shared cache',
+    content: 'Removes a scanner from this project. Shared downloaded packages remain cached for other projects.',
   },
   {
     command: 'groma create <name> --kind <kind> …',
     description: 'overview + plan/observed',
+    content: [
+      'Creates an architecture element.',
+      'Use --plan <id> for planned work.',
+      'Use --observed for current meaning without source evidence.',
+      'Containers and components require --parent.',
+    ].join('\n'),
   },
   {
     command: 'groma edit <id> …',
     description: 'id + change options',
+    content: 'Changes an architecture element by id: update its meaning or curate its scanned structure.',
   },
   {
     command: 'groma relate <from> <to> …',
     description: 'details + tech or remove',
+    content: 'Adds, changes, or removes a directed relationship between two architecture elements.',
   },
   {
     command: 'groma accept <id>',
     description: 'matched plan id',
+    content: 'Accepts a planned element only after a scan has matched that id.',
   },
   {
     command: 'groma agent-instructions [guide]',
     description: 'guide: curation',
+    content: [
+      'Prints a Markdown guide for coding agents.',
+      'Pass [guide] to choose one.',
+      'The default guide is curation.',
+      'This command always stays plain text.',
+    ].join('\n'),
   },
 ] as const
 
@@ -231,11 +251,11 @@ export function launcherRows(selectedIndex: number): WelcomeRow[] {
   return rows
 }
 
-export function advancedRows(): WelcomeRow[] {
-  return advancedCommands.map(command => ({
+export function advancedRows(selectedIndex = 0): WelcomeRow[] {
+  return advancedCommands.map((command, index) => ({
     command: command.command,
     description: command.description,
-    selected: false,
+    selected: selectedIndex === index + 1,
     dim: false,
     opensPage: false,
   }))

@@ -30,13 +30,14 @@ The Instructions screen keeps the same repository context, starts on Overview,
 and lets you choose a shipped guide or return with Backspace. Piped `groma` and
 `groma --plain` print the same repository context and actions without waiting
 for input. The interactive launcher keeps less common syntax behind an
-Advanced commands row. Enter opens a read-only command-and-description table
-where `<name>` marks a required parameter, `[option]` an optional one, and `…`
-additional options.
-When the references exceed the terminal height, J and K scroll one command and
-Page Up and Page Down scroll one page while the repository context, Back row,
-plugin readiness, and footer stay fixed. Enter or Backspace returns to the
-launcher. Plain output includes those references without requiring interaction.
+Advanced commands row. Enter opens a read-only command table where `<name>`
+marks a required parameter, `[option]` an optional one, and `…` additional
+options. Up and Down select a command, the table keeps that row visible, and a
+short explanation appears below it. J and K scroll the explanation one line;
+Page Up and Page Down move it one page. The repository context, Back row,
+plugin readiness, and footer stay fixed. Enter returns from the selected Back
+row; Backspace always returns. Plain output includes those references without
+requiring interaction.
 A named guide such as `groma instructions authoring` also stays plain text.
 These are human guides. `groma agent-instructions [guide]` separately prints
 agent operating rules as Markdown; its default guide is `curation`.
