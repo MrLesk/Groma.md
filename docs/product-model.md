@@ -32,6 +32,14 @@ people. `groma agent-instructions [guide]` is a separate, always-plain catalog
 of agent operating rules; `curation` is its default guide. Every shipped guide
 points readers to both catalogs.
 
+`groma init` is the explicit repository-registration action for coding agents.
+It reconciles one short managed Groma block in each distinct root `AGENTS.md`
+or `CLAUDE.md` that already exists. If neither exists, it creates only
+`AGENTS.md`. Files that resolve to the same target through a symlink are written
+once, the symlink and surrounding instructions remain unchanged, and repeated
+runs keep one block. No other command performs this reconciliation; in
+particular, `groma web` remains a scan-and-view action.
+
 1. Open a viewer: see the world. `groma web` scans the repository and starts
    the browser map. On a TTY, `groma view` scans and starts the terminal map.
    Each live process then starts the same watch as `groma scan --watch`, so a

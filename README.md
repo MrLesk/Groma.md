@@ -37,6 +37,12 @@ guide such as `groma instructions authoring` also stays plain text. These are
 human guides. `groma agent-instructions [guide]` separately prints agent
 operating rules as Markdown; its default guide is `curation`.
 
+Run `groma init` once to register the repository for coding agents. It adds one
+managed Groma nudge to each distinct root `AGENTS.md` or `CLAUDE.md` that
+already exists, or creates only `AGENTS.md` when neither exists. Repeated runs
+reconcile that block without changing the surrounding instructions. This setup
+runs only through `groma init`, never as part of `groma web`.
+
 1. Open a viewer: see the world. `groma web` scans this repo and opens the
    browser map. On a TTY, `groma view` scans and opens the terminal map;
    without a TTY, with `--plain`, or with a target, it prints the existing

@@ -7,7 +7,10 @@ import { Command } from 'commander'
 import { acceptGhost } from './core.ts'
 import { createArchitectureElement } from './create.ts'
 import { editArchitecture } from './edit.ts'
-import { agentInstructionGuide } from './agent-instructions.ts'
+import {
+  agentInstructionGuide,
+  initializeAgentInstructions,
+} from './agent-instructions.ts'
 import { humanInstructionGuide } from './instructions.ts'
 import { relateObserved, removeObservedRelationship } from './relate.ts'
 import { registerScannerCommands } from './scanner/cli.ts'
@@ -109,6 +112,14 @@ program
     }
     const selection = await startWelcome(process.cwd())
     if (selection !== undefined) await runWelcomeAction(selection)
+  })
+
+program
+  .command('init')
+  .description('Register this repository for coding agents')
+  .action(async () => {
+    await initializeAgentInstructions(process.cwd())
+    console.log('ok')
   })
 
 program

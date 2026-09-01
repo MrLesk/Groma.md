@@ -6,6 +6,11 @@ groma:
   id: agent-instructions
   parent: cli
   group: Command surface
+  code:
+    - scanner: typescript
+      file: src/agent-instructions.ts
+      dependencies: 0
+      dependents: 1
 ---
 
-Owns the separate, always-plain catalog of agent operating rules. Its default Curation guide is loaded from the shipped agent-instructions document so the CLI and documentation share one source.
+Owns the separate, always-plain catalog of agent operating rules and the explicit repository registration that installs its managed nudge in root agent-instruction files.
