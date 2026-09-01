@@ -54,7 +54,7 @@ function run(args: string[]) {
 
 test('bare groma without a TTY prints the plain welcome and exits', async () => {
   const result = await run([])
-  const expected = renderPlainWelcome(projectRoot)
+  const expected = await renderPlainWelcome(projectRoot)
 
   assert.equal(result.code, 0, result.stderr)
   assert.equal(result.stderr, '')
@@ -64,6 +64,9 @@ test('bare groma without a TTY prints the plain welcome and exits', async () => 
   assert.match(result.stdout, /https:\/\/groma\.md/)
   assert.ok(result.stdout.includes(`project: ${path.basename(projectRoot)}`))
   assert.ok(result.stdout.indexOf('groma web') < result.stdout.indexOf('groma view'))
+  assert.match(result.stdout, /scanners: typescript: built-in/)
+  assert.match(result.stdout, /groma scanner add <source>/)
+  assert.match(result.stdout, /groma scanner remove <id>/)
   assert.match(result.stdout, /groma agent-instructions \[guide\]/)
   assert.doesNotMatch(result.stdout, /System Context/)
 })
@@ -141,7 +144,7 @@ test('groma --help still lists the commands', async () => {
   const result = await run(['--help'])
 
   assert.equal(result.code, 0, result.stderr)
-  assert.notEqual(result.stdout, `${renderPlainWelcome(projectRoot)}\n`)
+  assert.notEqual(result.stdout, `${await renderPlainWelcome(projectRoot)}\n`)
   for (const name of [
     'web',
     'view',

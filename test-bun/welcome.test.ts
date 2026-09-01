@@ -1,15 +1,95 @@
 import assert from 'node:assert/strict'
+import { mkdir, mkdtemp, rm, stat, writeFile } from 'node:fs/promises'
+import os from 'node:os'
+import path from 'node:path'
 import { test } from 'bun:test'
 
 import { createTestRenderer } from '@opentui/core/testing'
 
-import { mountWelcome } from '../src/welcome.ts'
+import { mountWelcome, renderPlainWelcome } from '../src/welcome.ts'
+import { loadWelcomeModel } from '../src/welcome/model.ts'
+import type { WelcomeModel } from '../src/welcome/model.ts'
+
+function welcomeFixture(): WelcomeModel {
+  return {
+    project: 'example',
+    folder: '/workspace/example',
+    status: 'Architecture ready',
+    scanners: [{ id: 'typescript', status: 'built-in' }],
+  }
+}
+
+async function writeTree(root: string, files: Record<string, string>): Promise<void> {
+  for (const [relative, source] of Object.entries(files)) {
+    const filename = path.join(root, ...relative.split('/'))
+    await mkdir(path.dirname(filename), { recursive: true })
+    await writeFile(filename, source)
+  }
+}
+
+async function exists(filename: string): Promise<boolean> {
+  try {
+    await stat(filename)
+    return true
+  } catch {
+    return false
+  }
+}
+
+test.concurrent('the welcome derives scanner readiness without executing modules', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'groma-welcome-scanners-'))
+  const marker = path.join(root, 'python-loaded')
+  try {
+    await writeTree(root, {
+      'groma/scanners.json': JSON.stringify({
+        scanners: [
+          { id: 'python', source: './plugins/python' },
+          { id: 'rust', source: './plugins/rust' },
+        ],
+      }),
+      'plugins/python/package.json': JSON.stringify({
+        name: 'fixture-python',
+        version: '1.0.0',
+        type: 'module',
+        groma: { scanner: { id: 'python', entry: './index.js' } },
+      }),
+      'plugins/python/index.js': `await Bun.write(${JSON.stringify(marker)}, 'loaded')\nexport default {}\n`,
+      'plugins/rust/package.json': JSON.stringify({
+        name: 'fixture-rust',
+        version: '1.0.0',
+        type: 'module',
+        groma: { scanner: { id: 'rust', entry: './index.js' } },
+      }),
+    })
+
+    const model = await loadWelcomeModel(root)
+    assert.deepEqual(model.scanners, [
+      { id: 'typescript', status: 'built-in' },
+      { id: 'python', status: 'found' },
+      { id: 'rust', status: 'missing' },
+    ])
+    assert.equal(await exists(marker), false)
+
+    const plain = await renderPlainWelcome(root)
+    assert.match(plain, /scanners: typescript: built-in │ python: found │ rust: missing/)
+
+    const setup = await createTestRenderer({ width: 110, height: 35 })
+    const selected = mountWelcome(setup.renderer, model)
+    await setup.renderOnce()
+    assert.match(setup.captureCharFrame(), /typescript: built-in │ python: found │ rust: missing/)
+    setup.mockInput.pressEscape()
+    await selected
+    assert.equal(await exists(marker), false)
+  } finally {
+    await rm(root, { recursive: true, force: true })
+  }
+})
 
 test.concurrent('the welcome starts on web and returns the entered action', async () => {
   const setup = await createTestRenderer({ width: 100, height: 30 })
   const selected = mountWelcome(
     setup.renderer,
-    '/workspace/example',
+    welcomeFixture(),
   )
 
   setup.mockInput.pressEnter()
@@ -22,7 +102,7 @@ test.concurrent('arrows choose one action before enter', async () => {
   const setup = await createTestRenderer({ width: 100, height: 30 })
   const selected = mountWelcome(
     setup.renderer,
-    '/workspace/example',
+    welcomeFixture(),
   )
 
   setup.mockInput.pressArrow('down')
@@ -37,11 +117,16 @@ test.concurrent('advanced command rows never become launcher actions', async () 
   const setup = await createTestRenderer({ width: 110, height: 45 })
   const selected = mountWelcome(
     setup.renderer,
-    '/workspace/example',
+    welcomeFixture(),
   )
 
   for (let index = 0; index < 4; index++) setup.mockInput.pressArrow('down')
   setup.mockInput.pressEnter()
+  await setup.renderOnce()
+  const expanded = setup.captureCharFrame()
+  for (const command of ['add', 'install', 'list', 'remove']) {
+    assert.match(expanded, new RegExp(`groma scanner ${command}`))
+  }
   setup.mockInput.pressArrow('down')
   setup.mockInput.pressEnter()
   setup.mockInput.pressArrow('up')
@@ -55,7 +140,7 @@ test.concurrent('instructions change guide, page content, and return to the laun
   const setup = await createTestRenderer({ width: 110, height: 38 })
   const selected = mountWelcome(
     setup.renderer,
-    '/workspace/example',
+    welcomeFixture(),
     'instructions',
   )
 
@@ -93,7 +178,7 @@ test.concurrent('the visible Back row returns to the launcher', async () => {
   const setup = await createTestRenderer({ width: 110, height: 35 })
   const selected = mountWelcome(
     setup.renderer,
-    '/workspace/example',
+    welcomeFixture(),
   )
 
   for (let index = 0; index < 3; index++) setup.mockInput.pressArrow('down')
@@ -111,7 +196,7 @@ test.concurrent('escape and q close without choosing an action', async () => {
     const setup = await createTestRenderer({ width: 100, height: 30 })
     const selected = mountWelcome(
       setup.renderer,
-      '/workspace/example',
+      welcomeFixture(),
     )
 
     setup.mockInput.pressKey(key)
@@ -125,7 +210,7 @@ test.concurrent('the welcome uses terminal defaults and the exact brand green', 
   const setup = await createTestRenderer({ width: 100, height: 30 })
   const selected = mountWelcome(
     setup.renderer,
-    '/workspace/example',
+    welcomeFixture(),
   )
 
   await setup.renderOnce()
@@ -148,7 +233,7 @@ test.concurrent('control-c closes the welcome and releases its input handler', a
   const inputListeners = setup.renderer.keyInput.listenerCount('keypress')
   const selected = mountWelcome(
     setup.renderer,
-    '/workspace/example',
+    welcomeFixture(),
   )
 
   assert.equal(
