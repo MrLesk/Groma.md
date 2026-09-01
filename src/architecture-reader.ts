@@ -137,7 +137,7 @@ function identifyRevision(
   }
 }
 
-function isReservedDocument(filename: string): boolean {
+export function isReservedDocument(filename: string): boolean {
   const basename = path.posix.basename(filename)
   return basename === 'index.md' || basename === 'log.md'
 }

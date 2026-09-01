@@ -1,4 +1,4 @@
-import { loadArchitecture } from './architecture-reader.ts'
+import { isReservedDocument, loadArchitecture } from './architecture-reader.ts'
 import { architectureElementPath } from './architecture-path.ts'
 import { GromaFileSystem } from './groma-filesystem.ts'
 import {
@@ -117,7 +117,7 @@ function indexWorld(revisions: RevisionRecord[]): World {
 function availableId(world: World, name: string, parent?: WorldRecord): string {
   const base = kebabCase(name) || 'source'
   const existing = world.byId.get(base)
-  if (existing === undefined) return base
+  if (existing === undefined && !isReservedDocument(`${base}.md`)) return base
   const qualified = `${parent?.id ?? 'source'}-${base}`
   if (!world.byId.has(qualified)) return qualified
   let suffix = 2
@@ -149,6 +149,9 @@ async function createRecord(
     }),
     code: input.code ?? [],
   }
+  const name = isReservedDocument(`${kebabCase(input.name)}.md`)
+    ? displayName(id)
+    : input.name
   await writeObservedDocument(
     repositoryRoot,
     record.sourceFilename,
@@ -156,7 +159,7 @@ async function createRecord(
       id,
       kind: input.kind,
       parent: input.parent?.id,
-      name: input.name,
+      name,
       overview: '',
       status: 'stable',
       code: record.code,

@@ -14,6 +14,7 @@ import {
 } from '../plugins/scanners/csharp/src/adapter.ts'
 import { listTypeScriptFiles } from '../plugins/scanners/typescript/src/files.ts'
 import { scanTypeScriptSource } from '../plugins/scanners/typescript/src/scan.ts'
+import { loadArchitecture } from '../src/architecture-reader.ts'
 import { reconcileScanObservations } from '../src/core.ts'
 
 const packageFiles = {
@@ -264,6 +265,43 @@ Curated without source evidence.
     expect(summary).toEqual({ created: 1, refreshed: 0, matched: 0 })
     expect(curated).not.toContain('code:')
     expect(added).toContain('file: src/orders.ts')
+  } finally {
+    await rm(root, { recursive: true, force: true })
+  }
+})
+
+test.concurrent('reconciliation qualifies reserved document names', async () => {
+  const root = await temporaryTree(packageFiles)
+  try {
+    expect(await reconcileScanObservations(root, [observation([
+      { file: 'src/index.ts' },
+      { file: 'src/log.ts' },
+    ])])).toEqual({ created: 2, refreshed: 0, matched: 0 })
+
+    const observed = (await loadArchitecture(root)).find(revision => {
+      return revision.revision.kind === 'observed'
+    })
+    const qualified = observed?.documents.flatMap(document => {
+      if (!document.sourceFilename.includes('/components/api-')) return []
+      const groma = document.frontmatter.groma as { id?: unknown }
+      return [{
+        id: groma.id,
+        title: document.frontmatter.title,
+        sourceFilename: document.sourceFilename,
+      }]
+    })
+    expect(qualified).toEqual([
+      {
+        id: 'api-index',
+        title: 'Api index',
+        sourceFilename: 'groma/observed/systems/shop/containers/api/components/api-index.md',
+      },
+      {
+        id: 'api-log',
+        title: 'Api log',
+        sourceFilename: 'groma/observed/systems/shop/containers/api/components/api-log.md',
+      },
+    ])
   } finally {
     await rm(root, { recursive: true, force: true })
   }
