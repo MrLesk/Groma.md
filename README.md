@@ -29,13 +29,16 @@ its actions with Up and Down, then press Enter to run one or open Instructions.
 The Instructions screen keeps the same repository context, starts on Overview,
 and lets you choose a shipped guide or return with Backspace. Piped `groma` and
 `groma --plain` print the same repository context and actions without waiting
-for input. The interactive launcher keeps less common syntax under a collapsed
-Advanced commands row. Enter toggles its read-only references; `<name>` marks a
+for input. The interactive launcher keeps less common syntax behind an
+Advanced commands row. Enter opens a read-only screen where `<name>` marks a
 required parameter, `[option]` an optional one, and `…` additional options.
-Plain output includes those references without requiring interaction. A named
-guide such as `groma instructions authoring` also stays plain text. These are
-human guides. `groma agent-instructions [guide]` separately prints agent
-operating rules as Markdown; its default guide is `curation`.
+When the references exceed the terminal height, J and K scroll one command and
+Page Up and Page Down scroll one page while the repository context, Back row,
+plugin readiness, and footer stay fixed. Enter or Backspace returns to the
+launcher. Plain output includes those references without requiring interaction.
+A named guide such as `groma instructions authoring` also stays plain text.
+These are human guides. `groma agent-instructions [guide]` separately prints
+agent operating rules as Markdown; its default guide is `curation`.
 
 Run `groma init` once to register the repository for coding agents. It adds one
 managed Groma nudge to each distinct root `AGENTS.md` or `CLAUDE.md` that

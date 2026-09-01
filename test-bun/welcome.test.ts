@@ -8,7 +8,7 @@ import { createTestRenderer } from '@opentui/core/testing'
 import { createBacklogPlugin } from '@groma/work-source-backlog'
 
 import { mountWelcome, renderPlainWelcome } from '../src/welcome.ts'
-import { loadWelcomeModel } from '../src/welcome/model.ts'
+import { advancedIndex, loadWelcomeModel } from '../src/welcome/model.ts'
 import type { WelcomeModel } from '../src/welcome/model.ts'
 
 function welcomeFixture(): WelcomeModel {
@@ -166,14 +166,14 @@ test.concurrent('arrows choose one action before enter', async () => {
   assert.equal(await selected, 'view')
 })
 
-test.concurrent('advanced command rows never become launcher actions', async () => {
+test.concurrent('advanced command references never become launcher actions', async () => {
   const setup = await createTestRenderer({ width: 110, height: 45 })
   const selected = mountWelcome(
     setup.renderer,
     welcomeFixture(),
   )
 
-  for (let index = 0; index < 4; index++) setup.mockInput.pressArrow('down')
+  for (let index = 0; index < advancedIndex; index++) setup.mockInput.pressArrow('down')
   setup.mockInput.pressEnter()
   await setup.renderOnce()
   const expanded = setup.captureCharFrame()
@@ -181,7 +181,7 @@ test.concurrent('advanced command rows never become launcher actions', async () 
     assert.match(expanded, new RegExp(`groma scanner ${command}`))
   }
   assert.match(expanded, /plugins: backlog\.md: ✓ ready │ typescript: built-in/)
-  assert.match(expanded, /navigate.*Enter run\/open\/toggle.*quit/)
+  assert.doesNotMatch(expanded, /J\/K scroll/)
   setup.mockInput.pressArrow('down')
   setup.mockInput.pressEnter()
   setup.mockInput.pressArrow('up')
@@ -189,6 +189,60 @@ test.concurrent('advanced command rows never become launcher actions', async () 
   setup.mockInput.pressEnter()
 
   assert.equal(await selected, 'scan')
+})
+
+test.concurrent('the Advanced screen scrolls without moving its fixed context', async () => {
+  const setup = await createTestRenderer({ width: 110, height: 24 })
+  const selected = mountWelcome(setup.renderer, welcomeFixture())
+  await setup.renderOnce()
+  const launcher = setup.captureCharFrame().split('\n')
+  const row = (lines: string[], value: string) => lines.findIndex(line => line.includes(value))
+
+  for (let index = 0; index < advancedIndex; index++) setup.mockInput.pressArrow('down')
+  setup.mockInput.pressEnter()
+  await setup.renderOnce()
+  const firstPage = setup.captureCharFrame().split('\n')
+
+  assert.equal(row(firstPage, 'project: example'), row(launcher, 'project: example'))
+  assert.ok(row(firstPage, 'groma export') > row(firstPage, 'Advanced commands'))
+  assert.ok(row(firstPage, 'plugins:') > row(firstPage, 'groma edit'))
+  assert.ok(row(firstPage, 'J/K scroll') > row(firstPage, 'plugins:'))
+  assert.equal(row(firstPage, 'groma relate'), -1)
+
+  setup.mockInput.pressKey('j')
+  await setup.renderOnce()
+  const oneCommand = setup.captureCharFrame()
+  assert.doesNotMatch(oneCommand, /groma export/)
+  assert.match(oneCommand, /groma relate/)
+
+  setup.mockInput.pressKey('\u001B[6~')
+  await setup.renderOnce()
+  const onePage = setup.captureCharFrame()
+  assert.doesNotMatch(onePage, /groma export/)
+  assert.match(onePage, /groma agent-instructions/)
+
+  setup.mockInput.pressKey('\u001B[5~')
+  await setup.renderOnce()
+  assert.match(setup.captureCharFrame(), /groma export/)
+
+  setup.mockInput.pressBackspace()
+  await setup.renderOnce()
+  const returned = setup.captureCharFrame()
+  assert.match(returned, /> Advanced commands/)
+  assert.doesNotMatch(returned, /groma export/)
+
+  setup.mockInput.pressEnter()
+  await setup.renderOnce()
+  const reopened = setup.captureCharFrame()
+  assert.match(reopened, /groma export/)
+  assert.doesNotMatch(reopened, /groma relate/)
+
+  setup.mockInput.pressEnter()
+  await setup.renderOnce()
+  assert.match(setup.captureCharFrame(), /> Advanced commands/)
+
+  setup.mockInput.pressEscape()
+  assert.equal(await selected, undefined)
 })
 
 test.concurrent('instructions change guide, page content, and return to the launcher', async () => {

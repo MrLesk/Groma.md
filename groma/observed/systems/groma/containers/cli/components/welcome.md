@@ -21,7 +21,7 @@ groma:
       dependents: 1
 ---
 
-Owns the shared terminal welcome shell and its Launcher and Instructions screens. The Launcher presents repository context, executable actions, a fixed bottom row for Backlog and scanner readiness, and a read-only advanced command accordion. Instructions presents the shipped guide table and Markdown content. The controller owns keyboard navigation, paging, return to the Launcher, stable non-interactive text, and dispatches only selected executable actions to Commands.
+Owns the shared terminal welcome shell and its Launcher, Advanced commands, and Instructions screens. The Launcher presents repository context, executable actions, and a fixed bottom row for Backlog and scanner readiness. Advanced commands presents read-only syntax references that scroll without moving its context, Back row, plugin readiness, or footer. Instructions presents the shipped guide table and Markdown content. The controller owns keyboard navigation, paging, return to the Launcher, stable non-interactive text, and dispatches only selected executable actions to Commands.
 
 ## Relationships
 
