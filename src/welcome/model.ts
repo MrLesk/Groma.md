@@ -216,7 +216,7 @@ export function launcherRows(selectedIndex: number, advancedExpanded: boolean): 
     command: action.command,
     description: action.description,
     selected: index === selectedIndex,
-    dim: action.id === 'scan',
+    dim: false,
   }))
   rows.push({
     ...instructionsAction,
