@@ -20,11 +20,12 @@ optional `description` fields are frontmatter, while its normal Markdown body
 is the complete project overview. Bare `groma` opens a terminal launcher for
 the current repository: Up and Down choose an executable action, Instructions,
 or the Advanced commands row. Enter runs an action or opens the selected screen.
-The Advanced commands screen contains read-only syntax references: `<name>` is
-required, `[option]` is optional, and `…` means more options. When they overflow,
-J and K scroll one reference and Page Up and Page Down scroll one page without
-moving the repository context, Back row, plugin readiness, or footer. Enter or
-Backspace returns to the launcher with Advanced commands still selected.
+The Advanced commands screen contains a read-only table with one concise
+description beside each command: `<name>` is required, `[option]` is optional,
+and `…` means more options. When the table overflows, J and K scroll one complete
+command row and Page Up and Page Down scroll one page without moving the
+repository context, Back row, plugin readiness, or footer. Enter or Backspace
+returns to the launcher with Advanced commands still selected.
 Instructions uses the same logo and repository context,
 selects Overview by default, and shows each shipped guide below its guide table.
 Up and Down choose a guide. J and K scroll its content one line; Page Up and
