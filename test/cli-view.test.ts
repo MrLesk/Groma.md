@@ -68,7 +68,7 @@ test('groma view --plain exits when output is interactive', async () => {
   assert.equal(result.code, 0, result.stderr)
 })
 
-test('groma view resolves element, plan, and source-file targets', async () => {
+test('groma view resolves element, draft, and source-file targets', async () => {
   for (const target of ['stock', 'orders', 'next', 'src/orders.ts']) {
     const result = await run(['view', target], fixtureRoot)
     const plain = await run(['view', target, '--plain'], fixtureRoot)
@@ -90,7 +90,7 @@ test('groma view fails when several elements share a code file', async (t: TestC
   const root = path.join(parent, 'repo')
   await cp(fixtureRoot, root, { recursive: true })
   await writeFile(
-    path.join(root, 'groma/observed/systems/shop/containers/api/components/other.md'),
+    path.join(root, 'groma/systems/shop/containers/api/components/other.md'),
     [
       '---',
       'type: C4 Component',

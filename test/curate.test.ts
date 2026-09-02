@@ -1,81 +1,29 @@
 import assert from 'node:assert/strict'
-import { spawn } from 'node:child_process'
-import { cp, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises'
-import os from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
-import type { TestContext } from 'node:test'
-import { fileURLToPath } from 'node:url'
 
-const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
+import { copyFixture, groma, projectRoot, readRelative, readTree, writeTree } from './cli-helpers.ts'
+
 const fixtureRoot = path.join(projectRoot, 'test', 'fixtures', 'edit')
-const ordersPath = 'groma/observed/systems/shop/containers/api/components/orders.md'
-
-function groma(root: string, args: string[]) {
-  return new Promise<{ code: number | null, stderr: string }>(
-    (resolve, reject) => {
-      const child = spawn(
-        'bun',
-        [path.join(projectRoot, 'src/cli.ts'), ...args],
-        { cwd: root, stdio: ['ignore', 'ignore', 'pipe'] },
-      )
-      let stderr = ''
-      child.stderr.setEncoding('utf8')
-      child.stderr.on('data', chunk => { stderr += chunk })
-      child.on('error', reject)
-      child.on('close', code => { resolve({ code, stderr }) })
-    },
-  )
-}
-
-async function createRepo(t: TestContext): Promise<string> {
-  const parent = await mkdtemp(path.join(os.tmpdir(), 'groma-curate-'))
-  t.after(() => rm(parent, { recursive: true, force: true }))
-  const root = path.join(parent, 'repo')
-  await cp(fixtureRoot, root, { recursive: true })
-  return root
-}
-
-async function readTree(root: string, relative = 'groma'): Promise<Record<string, string>> {
-  const directory = path.join(root, relative)
-  const tree: Record<string, string> = {}
-  for (const entry of await readdir(directory, { withFileTypes: true })) {
-    const child = `${relative}/${entry.name}`
-    if (entry.isDirectory()) Object.assign(tree, await readTree(root, child))
-    else tree[child] = await readFile(path.join(root, child), 'utf8')
-  }
-  return tree
-}
-
-async function writeTree(root: string, files: Record<string, string>): Promise<void> {
-  for (const [relative, source] of Object.entries(files)) {
-    const filename = path.join(root, relative)
-    await mkdir(path.dirname(filename), { recursive: true })
-    await writeFile(filename, source)
-  }
-}
-
-function readRelative(root: string, relative: string): Promise<string> {
-  return readFile(path.join(root, relative), 'utf8')
-}
+const ordersPath = 'groma/systems/shop/containers/api/components/orders.md'
 
 test('groma edit assigns and clears a component group without changing its meaning', async t => {
-  const root = await createRepo(t)
+  const root = await copyFixture(t, fixtureRoot, 'groma-curate-')
   const grouped = await groma(root, ['edit', 'orders', '--group', 'Commerce'])
 
   assert.equal(grouped.code, 0, grouped.stderr)
   const groupedSource = await readRelative(root, ordersPath)
-  assert.match(groupedSource, /^  group: Commerce$/m)
+  assert.match(groupedSource, /^ {2}group: Commerce$/m)
   assert.match(groupedSource, /Owns the order lifecycle\./)
   assert.match(groupedSource, /\[Stock\]\(stock\.md\)/)
 
   const ungrouped = await groma(root, ['edit', 'orders', '--ungroup'])
   assert.equal(ungrouped.code, 0, ungrouped.stderr)
-  assert.doesNotMatch(await readRelative(root, ordersPath), /^  group:/m)
+  assert.doesNotMatch(await readRelative(root, ordersPath), /^ {2}group:/m)
 })
 
 test('groma edit moves an empty scanned component to another container', async t => {
-  const root = await createRepo(t)
+  const root = await copyFixture(t, fixtureRoot, 'groma-curate-')
   const helper = `---
 type: C4 Component
 title: Helper
@@ -89,7 +37,7 @@ groma:
 ---
 `
   await writeTree(root, {
-    'groma/observed/systems/shop/containers/worker/container.md': `---
+    'groma/systems/shop/containers/worker/container.md': `---
 type: C4 Container
 title: Worker
 status: stable
@@ -100,23 +48,23 @@ groma:
 
 Runs background jobs.
 `,
-    'groma/observed/systems/shop/containers/api/components/helper.md': helper,
+    'groma/systems/shop/containers/api/components/helper.md': helper,
   })
 
   const moved = await groma(root, ['edit', 'helper', '--parent', 'worker'])
 
   assert.equal(moved.code, 0, moved.stderr)
-  await assert.rejects(readRelative(root, 'groma/observed/systems/shop/containers/api/components/helper.md'))
+  await assert.rejects(readRelative(root, 'groma/systems/shop/containers/api/components/helper.md'))
   assert.equal(
-    await readRelative(root, 'groma/observed/systems/shop/containers/worker/components/helper.md'),
+    await readRelative(root, 'groma/systems/shop/containers/worker/components/helper.md'),
     helper.replace('parent: api', 'parent: worker'),
   )
 })
 
 test('groma edit combines empty scanned components into one authored responsibility', async t => {
-  const root = await createRepo(t)
+  const root = await copyFixture(t, fixtureRoot, 'groma-curate-')
   await writeTree(root, {
-    'groma/observed/systems/shop/containers/api/components/read.md': `---
+    'groma/systems/shop/containers/api/components/read.md': `---
 type: C4 Component
 title: Read
 status: stable
@@ -128,7 +76,7 @@ groma:
       file: src/read.ts
 ---
 `,
-    'groma/observed/systems/shop/containers/api/components/write.md': `---
+    'groma/systems/shop/containers/api/components/write.md': `---
 type: C4 Component
 title: Write
 status: stable
@@ -154,18 +102,18 @@ groma:
   ])
 
   assert.equal(combined.code, 0, combined.stderr)
-  const source = await readRelative(root, 'groma/observed/systems/shop/containers/api/components/read.md')
-  assert.match(source, /^  group: Persistence$/m)
+  const source = await readRelative(root, 'groma/systems/shop/containers/api/components/read.md')
+  assert.match(source, /^ {2}group: Persistence$/m)
   assert.match(source, /file: src\/read\.ts/)
   assert.match(source, /file: src\/write\.ts/)
   assert.match(source, /Reads and writes order data\./)
-  await assert.rejects(readRelative(root, 'groma/observed/systems/shop/containers/api/components/write.md'))
+  await assert.rejects(readRelative(root, 'groma/systems/shop/containers/api/components/write.md'))
 })
 
 test('groma edit combines an empty scanned container and reparents its empty children', async t => {
-  const root = await createRepo(t)
+  const root = await copyFixture(t, fixtureRoot, 'groma-curate-')
   await writeTree(root, {
-    'groma/observed/systems/shop/containers/worker/container.md': `---
+    'groma/systems/shop/containers/worker/container.md': `---
 type: C4 Container
 title: Worker
 status: stable
@@ -174,7 +122,7 @@ groma:
   parent: shop
 ---
 `,
-    'groma/observed/systems/shop/containers/worker/components/helper.md': `---
+    'groma/systems/shop/containers/worker/components/helper.md': `---
 type: C4 Component
 title: Helper
 status: stable
@@ -191,18 +139,18 @@ groma:
   const combined = await groma(root, ['edit', 'api', '--combine', 'worker'])
 
   assert.equal(combined.code, 0, combined.stderr)
-  await assert.rejects(readRelative(root, 'groma/observed/systems/shop/containers/worker/container.md'))
-  await assert.rejects(readRelative(root, 'groma/observed/systems/shop/containers/worker/components/helper.md'))
+  await assert.rejects(readRelative(root, 'groma/systems/shop/containers/worker/container.md'))
+  await assert.rejects(readRelative(root, 'groma/systems/shop/containers/worker/components/helper.md'))
   assert.match(
-    await readRelative(root, 'groma/observed/systems/shop/containers/api/components/helper.md'),
+    await readRelative(root, 'groma/systems/shop/containers/api/components/helper.md'),
     /parent: api/,
   )
 })
 
 test('structural edits reject authored or related elements before writing', async t => {
-  const root = await createRepo(t)
+  const root = await copyFixture(t, fixtureRoot, 'groma-curate-')
   await writeTree(root, {
-    'groma/observed/systems/shop/containers/api/components/grouped.md': `---
+    'groma/systems/shop/containers/api/components/grouped.md': `---
 type: C4 Component
 title: Grouped
 status: stable
@@ -215,7 +163,7 @@ groma:
       file: src/grouped.ts
 ---
 `,
-    'groma/observed/systems/shop/containers/api/components/typed.md': `---
+    'groma/systems/shop/containers/api/components/typed.md': `---
 type: C4 Component
 title: Typed
 status: stable

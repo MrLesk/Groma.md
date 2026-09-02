@@ -265,10 +265,10 @@ test.concurrent('roof text and file measurements size a building', () => {
   assert.equal(heightUnitsOf('observed', 450, range), 1.5)
   assert.equal(heightUnitsOf('observed', 2000, range), 4)
   assert.equal(heightUnitsOf('observed', 700, { min: 700, max: 700 }), 1)
-  assert.equal(heightUnitsOf('planned', 2000, range), 1)
+  assert.equal(heightUnitsOf('draft', 2000, range), 1)
   assert.equal(areaUnitsOf('observed', 0, { min: 0, max: 9 }), 0)
   assert.equal(areaUnitsOf('observed', 9, { min: 0, max: 9 }), 3)
-  assert.equal(areaUnitsOf('planned', 9, { min: 0, max: 9 }), 0)
+  assert.equal(areaUnitsOf('draft', 9, { min: 0, max: 9 }), 0)
 
   const scene = sheetScene(worldOf([
     box('ann', 'actor', unit, { title: 'Ann the architect' }),

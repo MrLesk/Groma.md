@@ -109,9 +109,6 @@ export async function initializeGroma(
       overview: storedProfile.overview,
     })
   }
-  await writeMissing(filesystem, 'observed/index.md', '# Observed architecture\n')
-  await writeMissing(filesystem, 'missing/index.md', '# Missing architecture\n')
-  await writeMissing(filesystem, 'plans/index.md', '# Plans\n')
   await initializeAgentInstructions(repositoryRoot)
 
   return {

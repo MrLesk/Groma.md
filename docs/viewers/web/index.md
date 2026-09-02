@@ -202,8 +202,8 @@ patterns stop below readable size while every floor face remains, and the
 minor grid yields to its major lines only at the most distant scale.
 Sibling groups are flat hatched zones around their members. A
 translucent chip lies under every island, slab and zone name. Line
-style means origin: observed items are solid, planned ghosts dashed,
-missing ghosts dotted, and only a route leaving an element an active
+style means origin: observed items are solid, draft ghosts dashed,
+and only a route leaving an element an active
 task touches for one it does not adds accent dots; ghosts are hollow,
 with no fill, pattern or chip, and slightly faded.
 

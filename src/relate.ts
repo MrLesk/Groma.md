@@ -6,21 +6,18 @@ import {
   readDocument,
   withoutRelationship,
   withRelationship,
-  writeObservedDocument,
+  writeDocument,
 } from './markdown-emitter.ts'
 
-interface RelateObservedInput {
+interface RelateInput {
   source: string
   target: string
   description: string
   technology: string
 }
 
-async function observedModel(repositoryRoot: string) {
-  const revisions = await loadArchitecture(repositoryRoot)
-  const observed = revisions.find(record => record.revision.kind === 'observed')
-  if (observed === undefined) throw new Error('observed architecture is required')
-  return buildArchitectureModel(observed)
+async function loadModel(repositoryRoot: string) {
+  return buildArchitectureModel((await loadArchitecture(repositoryRoot)).documents)
 }
 
 function relationshipHref(sourceFilename: string, targetFilename: string): string {
@@ -32,17 +29,17 @@ function requireText(value: string, flag: string): string {
   return value
 }
 
-export async function relateObserved(
+export async function relateElements(
   repositoryRoot: string,
-  input: RelateObservedInput,
+  input: RelateInput,
 ): Promise<string> {
   const description = requireText(input.description, '--description')
   const technology = requireText(input.technology, '--technology')
-  const model = await observedModel(repositoryRoot)
+  const model = await loadModel(repositoryRoot)
   const source = model.elements.find(element => element.id === input.source)
-  if (source === undefined) throw new Error(`unknown observed source "${input.source}"`)
+  if (source === undefined) throw new Error(`unknown source "${input.source}"`)
   const target = model.elements.find(element => element.id === input.target)
-  if (target === undefined) throw new Error(`unknown observed target "${input.target}"`)
+  if (target === undefined) throw new Error(`unknown target "${input.target}"`)
   if (model.relationships.some(relationship => {
     return relationship.sourceId === source.id
       && relationship.targetId === target.id
@@ -54,7 +51,7 @@ export async function relateObserved(
 
   const current = await readDocument(repositoryRoot, source.sourceFilename)
   const href = relationshipHref(source.sourceFilename, target.sourceFilename)
-  await writeObservedDocument(
+  await writeDocument(
     repositoryRoot,
     source.sourceFilename,
     withRelationship(current, {
@@ -67,16 +64,16 @@ export async function relateObserved(
   return source.id
 }
 
-export async function removeObservedRelationship(
+export async function removeRelationship(
   repositoryRoot: string,
   sourceId: string,
   targetId: string,
 ): Promise<string> {
-  const model = await observedModel(repositoryRoot)
+  const model = await loadModel(repositoryRoot)
   const source = model.elements.find(element => element.id === sourceId)
-  if (source === undefined) throw new Error(`unknown observed source "${sourceId}"`)
+  if (source === undefined) throw new Error(`unknown source "${sourceId}"`)
   const target = model.elements.find(element => element.id === targetId)
-  if (target === undefined) throw new Error(`unknown observed target "${targetId}"`)
+  if (target === undefined) throw new Error(`unknown target "${targetId}"`)
   const matches = model.relationships.filter(relationship => {
     return relationship.sourceId === source.id && relationship.targetId === target.id
   })
@@ -86,7 +83,7 @@ export async function removeObservedRelationship(
   const href = relationshipHref(source.sourceFilename, target.sourceFilename)
   const row = `| [${target.title}](${href}) | ${relationship.description} | ${relationship.technology} |`
   const current = await readDocument(repositoryRoot, source.sourceFilename)
-  await writeObservedDocument(
+  await writeDocument(
     repositoryRoot,
     source.sourceFilename,
     withoutRelationship(current, row),

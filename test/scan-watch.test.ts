@@ -1,41 +1,12 @@
 import assert from 'node:assert/strict'
-import { spawn } from 'node:child_process'
-import { mkdir, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, readdir, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
 import type { TestContext } from 'node:test'
 
 import { watchScan } from '../src/scanner.ts'
-
-function run(command: string, args: string[], cwd: string) {
-  return new Promise<{
-    code: number | null
-    stderr: string
-  }>((resolve, reject) => {
-    const child = spawn(command, args, { cwd, stdio: ['ignore', 'ignore', 'pipe'] })
-    let stderr = ''
-    child.stderr.setEncoding('utf8')
-    child.stderr.on('data', chunk => {
-      stderr += chunk
-    })
-    child.on('error', reject)
-    child.on('close', code => {
-      resolve({ code, stderr })
-    })
-  })
-}
-
-async function writeTree(
-  root: string,
-  files: Record<string, string>,
-): Promise<void> {
-  for (const [relative, source] of Object.entries(files)) {
-    const filename = path.join(root, ...relative.split('/'))
-    await mkdir(path.dirname(filename), { recursive: true })
-    await writeFile(filename, source)
-  }
-}
+import { run, writeTree } from './cli-helpers.ts'
 
 async function createWatchRepo(t: TestContext): Promise<string> {
   const root = await mkdtemp(path.join(os.tmpdir(), 'groma-scan-watch-'))
@@ -53,9 +24,6 @@ groma:
 
 Describes the scanned shop used by watcher tests.
 `,
-    'groma/observed/index.md': '# Observed\n',
-    'groma/missing/index.md': '# Missing\n',
-    'groma/plans/index.md': '# Plans\n',
     'src/cli.ts': "import { scan } from './scanner.ts'\nexport function run() {}\n",
     'src/scanner.ts': 'export function scan() {}\n',
   })
@@ -77,7 +45,7 @@ async function waitUntil(
 }
 
 async function observedSystems(root: string): Promise<string[]> {
-  const directory = path.join(root, 'groma/observed/systems')
+  const directory = path.join(root, 'groma/systems')
   try {
     return await readdir(directory)
   } catch {

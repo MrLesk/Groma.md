@@ -4,16 +4,17 @@ import { GromaFileSystem } from './groma-filesystem.ts'
 import {
   renderArchitectureDocument,
   upsertCode,
-  writeObservedDocument,
+  writeDocument,
 } from './markdown-emitter.ts'
 import { displayName, kebabCase } from './naming.ts'
 import { c4Kind, requireGromaMapping } from './okf-profile.ts'
 import type { ScanFile, ScanObservation, ScanScope } from '@groma/scanner'
 import type {
+  ArchitectureDocument,
+  ArchitectureRecords,
   C4Kind,
   CodeReference,
-  Origin,
-  RevisionRecord,
+  ElementStatus,
   ScanSummary,
 } from './types.ts'
 
@@ -65,7 +66,7 @@ interface WorldRecord {
   id: string
   kind: C4Kind
   parent?: string | null
-  origin: Origin
+  status: ElementStatus
   sourceFilename: string
   code: CodeReference[]
 }
@@ -75,10 +76,7 @@ interface World {
   byCodeFile: Map<string, WorldRecord>
 }
 
-function worldRecord(
-  document: RevisionRecord['documents'][number],
-  origin: Origin,
-): WorldRecord | undefined {
+function worldRecord(document: ArchitectureDocument): WorldRecord | undefined {
   const groma = requireGromaMapping(document.frontmatter, document.sourceFilename)
   const { id, parent } = groma
   const kind = c4Kind(document.frontmatter.type)
@@ -88,29 +86,22 @@ function worldRecord(
     id,
     kind,
     parent,
-    origin,
+    status: document.frontmatter.status === 'draft' ? 'draft' : 'stable',
     sourceFilename: document.sourceFilename,
     code: readCode(groma.code),
   }
 }
 
-function indexRevision(revision: RevisionRecord, world: World): void {
-  if (revision.revision.kind === 'missing') return
-  const origin: Origin = revision.revision.kind === 'plan' ? 'planned' : 'observed'
-  for (const document of revision.documents) {
-    const record = worldRecord(document, origin)
+function indexWorld(records: ArchitectureRecords): World {
+  const world: World = { byId: new Map(), byCodeFile: new Map() }
+  for (const document of records.documents) {
+    const record = worldRecord(document)
     if (record === undefined) continue
-    const existing = world.byId.get(record.id)
-    if (existing === undefined || origin === 'planned') world.byId.set(record.id, record)
+    world.byId.set(record.id, record)
     for (const reference of record.code) {
       world.byCodeFile.set(codeFileKey(reference.scanner, reference.file), record)
     }
   }
-}
-
-function indexWorld(revisions: RevisionRecord[]): World {
-  const world: World = { byId: new Map(), byCodeFile: new Map() }
-  for (const revision of revisions) indexRevision(revision, world)
   return world
 }
 
@@ -140,9 +131,9 @@ async function createRecord(
     id,
     kind: input.kind,
     parent: input.parent?.id,
-    origin: 'observed',
+    status: 'stable',
     sourceFilename: architectureElementPath({
-      root: GromaFileSystem.open(repositoryRoot).sourceFilename('observed'),
+      root: GromaFileSystem.open(repositoryRoot).sourceFilename(),
       kind: input.kind,
       id,
       parentSourceFilename: input.parent?.sourceFilename,
@@ -152,7 +143,7 @@ async function createRecord(
   const name = isReservedDocument(`${kebabCase(input.name)}.md`)
     ? displayName(id)
     : input.name
-  await writeObservedDocument(
+  await writeDocument(
     repositoryRoot,
     record.sourceFilename,
     renderArchitectureDocument({
@@ -215,13 +206,8 @@ async function refreshCuratedCode(
       const found = evidence.get(codeFileKey(reference.scanner, reference.file))
       return found === undefined ? reference : refreshedReference(reference, found.file, found.counts)
     })
-    await upsertCode(
-      repositoryRoot,
-      record.sourceFilename,
-      record.code,
-      record.origin === 'planned' ? 'draft' : 'stable',
-    )
-    if (record.origin === 'planned') summary.matched += 1
+    await upsertCode(repositoryRoot, record.sourceFilename, record.code)
+    if (record.status === 'draft') summary.matched += 1
     else summary.refreshed += 1
   }
 }
@@ -275,12 +261,7 @@ async function attachReference(
   reference: CodeReference,
 ): Promise<void> {
   record.code = [...record.code, reference]
-  await upsertCode(
-    repositoryRoot,
-    record.sourceFilename,
-    record.code,
-    record.origin === 'planned' ? 'draft' : 'stable',
-  )
+  await upsertCode(repositoryRoot, record.sourceFilename, record.code)
   world.byCodeFile.set(codeFileKey(reference.scanner, reference.file), record)
 }
 
@@ -366,7 +347,7 @@ async function reconcileFiles(
     const reference = scanReference(observation, file, counts)
     const name = fileDisplayName(file.file)
     const named = existingChild(world, 'component', name, parent)
-    if (named?.origin === 'planned' && named.code.length === 0) {
+    if (named?.status === 'draft' && named.code.length === 0) {
       await attachReference(repositoryRoot, world, named, reference)
       summary.matched += 1
       continue

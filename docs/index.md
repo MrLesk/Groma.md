@@ -36,9 +36,9 @@ stay separate: `groma agent-instructions [guide]` always prints plain Markdown.
 
 ## Change and accept
 
-Change the architecture through Groma. Required changes and new parts become
-plan ghosts. Explanations stay on the observed element. `groma create`,
-`groma edit`, and `groma relate` author ghosts, observed meaning, scan
+Change the architecture through Groma. New parts are drafted as ghosts at
+the path they will keep. Explanations stay on the element. `groma draft`,
+`groma edit`, and `groma relate` author ghosts, meaning, draft tags, scan
 curation, and collaborations. `groma accept <id>` applies a ghost only after
 a scan has matched it.
 

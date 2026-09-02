@@ -11,39 +11,39 @@ const fixtureRoot = path.resolve(
   'validate',
 )
 
-test('reconstructs observed, missing, and planned representations from the OKF profile', async () => {
+test('reconstructs observed elements, ghosts, and drafts from the OKF profile', async () => {
   const model = await loadArchitectureViewModel(fixtureRoot)
 
-  assert.deepEqual(model.plans, ['next'])
-  assert.deepEqual(model.elements.map(element => element.representationId), [
-    'observed:api',
-    'observed:buyer',
-    'observed:git',
-    'observed:orders',
-    'observed:shop',
-    'missing:legacy',
-    'planned:next:stock',
+  assert.deepEqual(model.drafts, ['next'])
+  assert.deepEqual(model.elements.map(element => element.id), [
+    'api',
+    'buyer',
+    'git',
+    'orders',
+    'shop',
+    'stock',
   ])
-  const buyer = model.elements.find(element => element.representationId === 'observed:buyer')
+  assert.ok(model.elements.every(element => element.representationId === element.id))
+  const buyer = model.elements.find(element => element.id === 'buyer')
   assert.ok(buyer)
   assert.equal(buyer.title, 'Buyer')
   assert.equal(buyer.description, 'A person who places an order.')
   assert.equal(buyer.overview, 'Places orders in the shop.')
 
-  const api = model.elements.find(element => element.representationId === 'observed:api')
-  assert.deepEqual(api?.children, [
-    'missing:legacy',
-    'observed:orders',
-    'planned:next:stock',
-  ])
-  assert.equal(model.elements.find(element => element.id === 'legacy')?.origin, 'missing')
-  assert.equal(model.elements.find(element => element.id === 'stock')?.origin, 'planned')
+  const api = model.elements.find(element => element.id === 'api')
+  assert.deepEqual(api?.children, ['orders', 'stock'])
+  const stock = model.elements.find(element => element.id === 'stock')
+  assert.equal(stock?.origin, 'draft')
+  assert.equal(stock?.draft, 'next')
+  assert.equal(model.elements.find(element => element.id === 'orders')?.origin, 'observed')
+  assert.equal(model.elements.find(element => element.id === 'git')?.external, true)
   assert.deepEqual(model.relationships.map(relationship => [
     relationship.source,
     relationship.target,
+    relationship.origin,
   ]), [
-    ['observed:buyer', 'observed:shop'],
-    ['observed:shop', 'observed:git'],
+    ['buyer', 'shop', 'observed'],
+    ['shop', 'git', 'observed'],
   ])
   assert.ok(model.world.bounds.width > 0)
   assert.doesNotThrow(() => JSON.stringify(model))

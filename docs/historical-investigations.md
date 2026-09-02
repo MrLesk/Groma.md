@@ -1,7 +1,7 @@
 # Historical investigations
 
 These branches preserve disposable investigations that informed Groma's current
-plans. They are evidence, not implementation branches, and must never be merged
+direction. They are evidence, not implementation branches, and must never be merged
 into `main`.
 
 ## Semantic-zoom renderer selection

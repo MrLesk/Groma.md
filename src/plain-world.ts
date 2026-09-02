@@ -1,44 +1,17 @@
+import { draftRecordOf } from './architecture-model.ts'
 import { annotateArchitecture } from './core.ts'
 import { loadArchitecture } from './architecture-reader.ts'
 import type {
   AnnotatedArchitectureModel,
   AnnotatedElement,
   AnnotatedRelationship,
+  ArchitectureRecords,
   C4Kind,
-  MarkdownNode,
-  Origin,
-  RevisionRecord,
 } from './types.ts'
 
-interface PlanOutcome {
+interface DraftOutcome {
   id: string
   outcome: string
-}
-
-const originRank: Record<Origin, number> = {
-  missing: 0,
-  observed: 1,
-  planned: 2,
-}
-
-function nodeText(node: MarkdownNode | undefined): string {
-  if (typeof node === 'string') return node
-  if (!Array.isArray(node)) return ''
-  return (node.slice(2) as MarkdownNode[]).map(nodeText).join('')
-}
-
-function firstSectionParagraph(nodes: readonly MarkdownNode[], headingId: string): string {
-  let inSection = false
-  for (const node of nodes) {
-    if (!Array.isArray(node)) continue
-    if (node[0] === 'h2') {
-      if (inSection) break
-      inSection = node[1]?.id === headingId
-      continue
-    }
-    if (inSection && node[0] === 'p') return nodeText(node).trim()
-  }
-  return ''
 }
 
 function compareIds(left: string, right: string): number {
@@ -48,25 +21,6 @@ function compareIds(left: string, right: string): number {
 function rootRank(element: AnnotatedElement): number {
   if (element.kind === 'actor') return 0
   return element.external ? 2 : 1
-}
-
-function winningElements(elements: readonly AnnotatedElement[]): AnnotatedElement[] {
-  const winners = new Map<string, AnnotatedElement>()
-  for (const element of elements) {
-    const current = winners.get(element.id)
-    if (current === undefined || originRank[element.origin] > originRank[current.origin]) {
-      winners.set(element.id, element)
-    }
-  }
-  return [...winners.values()]
-}
-
-function parentArchitectureId(
-  element: AnnotatedElement,
-  byRepresentation: Map<string, AnnotatedElement>,
-): string | null {
-  if (element.parent === null) return null
-  return byRepresentation.get(element.parent)?.id ?? null
 }
 
 function plural(count: number, singular: string, many: string): string {
@@ -92,8 +46,8 @@ function countLine(elements: readonly AnnotatedElement[]): string {
 function headerTokens(element: AnnotatedElement): string[] {
   const tokens = [element.id, element.kind, element.title]
   if (element.external) tokens.push('external')
-  if (element.origin === 'planned' && element.plan !== undefined) {
-    tokens.push(`planned:${element.plan}`)
+  if (element.origin === 'draft') {
+    tokens.push(element.draft === undefined ? 'draft' : `draft:${element.draft}`)
   }
   const file = element.code[0]?.file
   if (file !== undefined) tokens.push(file)
@@ -103,36 +57,28 @@ function headerTokens(element: AnnotatedElement): string[] {
 function outgoingEdges(
   element: AnnotatedElement,
   relationships: readonly AnnotatedRelationship[],
-  byRepresentation: Map<string, AnnotatedElement>,
 ): Array<{ description: string; targetId: string }> {
   return relationships.flatMap(relationship => {
-    if (relationship.source !== element.representationId) return []
-    const target = byRepresentation.get(relationship.target)
-    if (target === undefined) return []
-    return [{ description: relationship.description, targetId: target.id }]
+    if (relationship.source !== element.id) return []
+    return [{ description: relationship.description, targetId: relationship.target }]
   })
 }
 
-function planOutcomes(revisions: readonly RevisionRecord[]): PlanOutcome[] {
-  return revisions.flatMap(record => {
-    if (record.revision.kind !== 'plan') return []
-    return [{
-      id: record.revision.name,
-      outcome: firstSectionParagraph(record.context.nodes, 'outcome'),
-    }]
-  })
+function draftOutcomes(records: ArchitectureRecords): DraftOutcome[] {
+  return records.drafts
+    .map(document => draftRecordOf(document))
+    .map(record => ({ id: record.id, outcome: record.outcome }))
+    .sort((left, right) => compareIds(left.id, right.id))
 }
 
-function childrenByArchitectureId(
-  winners: readonly AnnotatedElement[],
-  byRepresentation: Map<string, AnnotatedElement>,
+function childrenByParent(
+  elements: readonly AnnotatedElement[],
 ): Map<string | null, AnnotatedElement[]> {
   const children = new Map<string | null, AnnotatedElement[]>()
-  for (const element of winners) {
-    const parentId = parentArchitectureId(element, byRepresentation)
-    const siblings = children.get(parentId) ?? []
+  for (const element of elements) {
+    const siblings = children.get(element.parent) ?? []
     siblings.push(element)
-    children.set(parentId, siblings)
+    children.set(element.parent, siblings)
   }
   for (const [parentId, siblings] of children) {
     siblings.sort((left, right) => parentId === null
@@ -148,60 +94,69 @@ function emitElement(
   depth: number,
   children: Map<string | null, AnnotatedElement[]>,
   relationships: readonly AnnotatedRelationship[],
-  byRepresentation: Map<string, AnnotatedElement>,
 ): void {
   const indent = '  '.repeat(depth)
   const bodyIndent = '  '.repeat(depth + 1)
   lines.push(`${indent}${headerTokens(element).join('  ')}`)
   if (element.overview !== '') lines.push(`${bodyIndent}${element.overview}`)
-  for (const edge of outgoingEdges(element, relationships, byRepresentation)) {
+  for (const edge of outgoingEdges(element, relationships)) {
     lines.push(`${bodyIndent}->  ${edge.description}  ${edge.targetId}`)
   }
   for (const child of children.get(element.id) ?? []) {
-    emitElement(lines, child, depth + 1, children, relationships, byRepresentation)
+    emitElement(lines, child, depth + 1, children, relationships)
   }
 }
 
-function appendPlans(
+/** Elements carrying a draft's tag: ghosts first, then the stable parts the draft touches. */
+function draftItems(
+  draft: DraftOutcome,
+  elements: readonly AnnotatedElement[],
+): AnnotatedElement[] {
+  return elements
+    .filter(element => element.draft === draft.id)
+    .sort((left, right) => {
+      if (left.origin !== right.origin) return left.origin === 'draft' ? -1 : 1
+      return compareIds(left.id, right.id)
+    })
+}
+
+function itemLine(element: AnnotatedElement): string {
+  return element.origin === 'draft' ? element.id : `${element.id}  stable`
+}
+
+function appendDrafts(
   lines: string[],
-  plans: readonly PlanOutcome[],
-  winners: readonly AnnotatedElement[],
+  drafts: readonly DraftOutcome[],
+  elements: readonly AnnotatedElement[],
 ): void {
-  if (plans.length === 0) return
+  if (drafts.length === 0) return
   if (lines.length > 0) lines.push('')
-  lines.push('plans')
-  for (const plan of plans) {
-    lines.push(plan.id)
-    if (plan.outcome !== '') lines.push(`  ${plan.outcome}`)
-    const ghosts = winners
-      .filter(element => element.origin === 'planned' && element.plan === plan.id)
-      .sort((left, right) => compareIds(left.id, right.id))
-    for (const ghost of ghosts) lines.push(`  ${ghost.id}`)
+  lines.push('drafts')
+  for (const draft of drafts) {
+    lines.push(draft.id)
+    if (draft.outcome !== '') lines.push(`  ${draft.outcome}`)
+    for (const item of draftItems(draft, elements)) lines.push(`  ${itemLine(item)}`)
   }
 }
 
 export function formatPlainWorld(
   model: AnnotatedArchitectureModel,
-  plans: readonly PlanOutcome[] = [],
+  drafts: readonly DraftOutcome[] = [],
 ): string {
-  const winners = winningElements(model.elements)
-  const byRepresentation = new Map(
-    model.elements.map(element => [element.representationId, element]),
-  )
-  const children = childrenByArchitectureId(winners, byRepresentation)
+  const children = childrenByParent(model.elements)
   const lines: string[] = []
   for (const root of children.get(null) ?? []) {
-    emitElement(lines, root, 0, children, model.relationships, byRepresentation)
+    emitElement(lines, root, 0, children, model.relationships)
   }
-  appendPlans(lines, plans, winners)
+  appendDrafts(lines, drafts, model.elements)
   if (lines.length > 0) lines.push('')
-  lines.push(countLine(winners))
+  lines.push(countLine(model.elements))
   return lines.join('\n')
 }
 
 export async function renderPlainWorld(repositoryRoot: string): Promise<string> {
-  const revisions = await loadArchitecture(repositoryRoot)
-  return formatPlainWorld(annotateArchitecture(revisions), planOutcomes(revisions))
+  const records = await loadArchitecture(repositoryRoot)
+  return formatPlainWorld(annotateArchitecture(records), draftOutcomes(records))
 }
 
 export type PlainRecordResult =
@@ -211,21 +166,17 @@ export type PlainRecordResult =
 function formatElementRecord(
   element: AnnotatedElement,
   model: AnnotatedArchitectureModel,
-  byRepresentation: Map<string, AnnotatedElement>,
 ): string {
   const lines = [element.id, `kind: ${element.kind}`]
-  const parentId = parentArchitectureId(element, byRepresentation)
-  if (parentId !== null) lines.push(`parent: ${parentId}`)
+  if (element.parent !== null) lines.push(`parent: ${element.parent}`)
   lines.push(`origin: ${element.origin}`)
-  if (element.origin === 'planned' && element.plan !== undefined) {
-    lines.push(`plan: ${element.plan}`)
-  }
+  if (element.draft !== undefined) lines.push(`draft: ${element.draft}`)
   const file = element.code[0]?.file
   if (file !== undefined) lines.push(`code: ${file}`)
 
   const sections = [lines.join('\n')]
   if (element.overview !== '') sections.push(element.overview)
-  const edges = outgoingEdges(element, model.relationships, byRepresentation)
+  const edges = outgoingEdges(element, model.relationships)
   if (edges.length > 0) {
     sections.push(
       edges.map(edge => `->  ${edge.description}  ${edge.targetId}`).join('\n'),
@@ -234,51 +185,38 @@ function formatElementRecord(
   return sections.join('\n\n')
 }
 
-function formatPlanRecord(
-  plan: PlanOutcome,
-  ghosts: readonly AnnotatedElement[],
+function formatDraftRecord(
+  draft: DraftOutcome,
+  items: readonly AnnotatedElement[],
 ): string {
-  const header = `${plan.id}\nkind: plan`
-  if (ghosts.length === 0) return `${header}\n\ncomplete`
-  const ghostBlock = ['ghosts', ...ghosts.map(ghost => ghost.id)].join('\n')
-  if (plan.outcome === '') return `${header}\n\n${ghostBlock}`
-  return `${header}\n\n${plan.outcome}\n\n${ghostBlock}`
+  const sections = [`${draft.id}\nkind: draft`]
+  if (draft.outcome !== '') sections.push(draft.outcome)
+  if (!items.some(item => item.origin === 'draft')) sections.push('complete')
+  if (items.length > 0) sections.push(['items', ...items.map(itemLine)].join('\n'))
+  return sections.join('\n\n')
 }
 
 export function formatPlainRecord(
   model: AnnotatedArchitectureModel,
-  plans: readonly PlanOutcome[],
+  drafts: readonly DraftOutcome[],
   target: string,
 ): PlainRecordResult {
-  const winners = winningElements(model.elements)
-  const byRepresentation = new Map(
-    model.elements.map(element => [element.representationId, element]),
-  )
-  const element = winners.find(item => item.id === target)
+  const element = model.elements.find(item => item.id === target)
   if (element !== undefined) {
-    return {
-      ok: true,
-      text: formatElementRecord(element, model, byRepresentation),
-    }
+    return { ok: true, text: formatElementRecord(element, model) }
   }
-  const plan = plans.find(item => item.id === target)
-  if (plan !== undefined) {
-    const ghosts = winners
-      .filter(item => item.origin === 'planned' && item.plan === plan.id)
-      .sort((left, right) => compareIds(left.id, right.id))
-    return { ok: true, text: formatPlanRecord(plan, ghosts) }
+  const draft = drafts.find(item => item.id === target)
+  if (draft !== undefined) {
+    return { ok: true, text: formatDraftRecord(draft, draftItems(draft, model.elements)) }
   }
-  const [match, extra] = winners.filter(item => {
+  const [match, extra] = model.elements.filter(item => {
     return item.code.some(reference => reference.file === target)
   })
   if (extra !== undefined) {
     return { ok: false, message: `several elements share ${target}` }
   }
   if (match !== undefined) {
-    return {
-      ok: true,
-      text: formatElementRecord(match, model, byRepresentation),
-    }
+    return { ok: true, text: formatElementRecord(match, model) }
   }
   return { ok: false, message: `unknown target: ${target}` }
 }
@@ -287,10 +225,10 @@ export async function renderPlainRecord(
   repositoryRoot: string,
   target: string,
 ): Promise<PlainRecordResult> {
-  const revisions = await loadArchitecture(repositoryRoot)
+  const records = await loadArchitecture(repositoryRoot)
   return formatPlainRecord(
-    annotateArchitecture(revisions),
-    planOutcomes(revisions),
+    annotateArchitecture(records),
+    draftOutcomes(records),
     target,
   )
 }

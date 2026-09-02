@@ -15,7 +15,7 @@ import test from 'node:test'
 import { fileURLToPath } from 'node:url'
 
 import { loadArchitecture } from '../src/architecture-reader.ts'
-import { createArchitectureElement } from '../src/create.ts'
+import { draftElement } from '../src/draft.ts'
 import {
   inferPackageInstaller,
   type InitCommandDependencies,
@@ -67,6 +67,20 @@ async function missing(filename: string): Promise<boolean> {
     return false
   } catch {
     return true
+  }
+}
+
+/** A scanned-looking world: one stable component is what makes onboarding unnecessary. */
+async function writeStableWorld(root: string): Promise<void> {
+  const documents: Record<string, string> = {
+    'groma/systems/shop/system.md': '---\ntype: C4 System\ntitle: Shop\nstatus: stable\ngroma:\n  id: shop\n---\n\nRuns the shop.\n',
+    'groma/systems/shop/containers/api/container.md': '---\ntype: C4 Container\ntitle: API\nstatus: stable\ngroma:\n  id: api\n  parent: shop\n---\n\nServes requests.\n',
+    'groma/systems/shop/containers/api/components/orders.md': '---\ntype: C4 Component\ntitle: Orders\nstatus: stable\ngroma:\n  id: orders\n  parent: api\n---\n\nHandles orders.\n',
+  }
+  for (const [relative, source] of Object.entries(documents)) {
+    const filename = path.join(root, ...relative.split('/'))
+    await mkdir(path.dirname(filename), { recursive: true })
+    await writeFile(filename, source)
   }
 }
 
@@ -165,13 +179,10 @@ test('interactive initialization asks for identity and storage before creating G
     })
     assert.deepEqual((await readdir(path.join(root, 'groma'))).sort(), [
       'index.md',
-      'missing',
-      'observed',
-      'plans',
       'project.md',
     ])
     assert.equal((await loadProjectProfile(root))?.title, 'Visible project')
-    assert.equal((await loadArchitecture(root)).length, 2)
+    assert.equal((await loadArchitecture(root)).documents.length, 0)
   })
 })
 
@@ -187,16 +198,15 @@ test('non-interactive initialization creates and uses hidden Groma storage', {
     assert.equal(result.code, 0, result.stderr)
     assert.equal(await missing(path.join(root, 'groma')), true)
     assert.equal((await loadProjectProfile(root))?.title, 'Hidden project')
-    await createArchitectureElement(root, {
-      name: 'Owner',
-      observed: true,
-      kind: 'actor',
+    await draftElement(root, {
+      kind: 'system',
+      name: 'Owner shop',
       overview: 'Owns the hidden architecture.',
     })
     const architecture = await loadArchitecture(root)
     assert.equal(
-      architecture[0]?.documents[0]?.sourceFilename,
-      '.groma/observed/actors/owner.md',
+      architecture.documents[0]?.sourceFilename,
+      '.groma/systems/owner-shop/system.md',
     )
   })
 })
@@ -319,26 +329,7 @@ test('interactive re-init edits the current title and skips onboarding for an es
       projectName: 'Existing project',
       directory: 'groma',
     })
-    const system = await createArchitectureElement(root, {
-      name: 'Shop',
-      observed: true,
-      kind: 'system',
-      overview: 'Runs the shop.',
-    })
-    const container = await createArchitectureElement(root, {
-      name: 'API',
-      observed: true,
-      kind: 'container',
-      parent: system,
-      overview: 'Serves requests.',
-    })
-    await createArchitectureElement(root, {
-      name: 'Orders',
-      observed: true,
-      kind: 'component',
-      parent: container,
-      overview: 'Handles orders.',
-    })
+    await writeStableWorld(root)
     const { events, ui } = initUi({ projectName: 'Renamed project' })
 
     await runInitCommand({

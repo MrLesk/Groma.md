@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url'
 import { validateRepository } from '../scripts/validate-architecture.ts'
 
 const fixtureRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), 'fixtures', 'validate')
+const shopPath = ['groma', 'systems', 'shop', 'system.md']
 
 async function copyPackage(t: TestContext): Promise<string> {
   const temporaryRoot = await mkdtemp(path.join(os.tmpdir(), 'groma-validation-'))
@@ -23,18 +24,14 @@ async function replaceInFile(file: string, search: string, replacement: string):
   await writeFile(file, source.replace(search, replacement))
 }
 
-test('a marked OKF profile validates every C4 kind and ignores an ordinary OKF concept', async () => {
-  const results = await validateRepository(fixtureRoot)
-  const kinds = new Set(results[0]?.elements.map(element => element.kind))
+test('a marked OKF profile validates every C4 kind, counts drafts, and ignores an ordinary OKF concept', async () => {
+  const result = await validateRepository(fixtureRoot)
+  const kinds = new Set(result.elements.map(element => element.kind))
 
-  assert.deepEqual(results.map(result => path.basename(result.revisionRoot)), [
-    'observed',
-    'missing',
-    'next',
-  ])
-  assert.deepEqual(results.map(result => result.elementCount), [5, 1, 1])
+  assert.equal(result.elementCount, 6)
   assert.deepEqual(kinds, new Set(['actor', 'system', 'container', 'component']))
-  assert.equal(results[0]?.relationshipCount, 2)
+  assert.equal(result.relationshipCount, 2)
+  assert.equal(result.draftCount, 1)
 })
 
 test('a generic OKF package is rejected before architecture validation', async t => {
@@ -62,7 +59,7 @@ test('the root index contains only the pinned OKF declaration', async t => {
 test('canonical C4 containment remains strict', async t => {
   const repositoryRoot = await copyPackage(t)
   await replaceInFile(
-    path.join(repositoryRoot, 'groma', 'observed', 'systems', 'shop', 'containers', 'api', 'container.md'),
+    path.join(repositoryRoot, 'groma', 'systems', 'shop', 'containers', 'api', 'container.md'),
     'parent: shop',
     'parent: missing-system',
   )
@@ -72,16 +69,22 @@ test('canonical C4 containment remains strict', async t => {
 
 test('canonical relationship targets must resolve even when generic links do not', async t => {
   const repositoryRoot = await copyPackage(t)
-  const shop = path.join(repositoryRoot, 'groma', 'observed', 'systems', 'shop', 'system.md')
-  await replaceInFile(shop, '../git/system.md', '../git/missing.md')
+  await replaceInFile(
+    path.join(repositoryRoot, ...shopPath),
+    '../../externals/git.md',
+    '../../externals/missing.md',
+  )
 
   await assert.rejects(validateRepository(repositoryRoot))
 })
 
 test('a Groma relationship table keeps its canonical columns', async t => {
   const repositoryRoot = await copyPackage(t)
-  const shop = path.join(repositoryRoot, 'groma', 'observed', 'systems', 'shop', 'system.md')
-  await replaceInFile(shop, '| Target | Description | Technology |', '| Target | Detail | Technology |')
+  await replaceInFile(
+    path.join(repositoryRoot, ...shopPath),
+    '| Target | Description | Technology |',
+    '| Target | Detail | Technology |',
+  )
 
   await assert.rejects(validateRepository(repositoryRoot))
 })

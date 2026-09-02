@@ -74,10 +74,7 @@ groma:
 
 Shop architecture.
 `,
-    'groma/observed/index.md': '# Observed\n',
-    'groma/missing/index.md': '# Missing\n',
     'backlog/tasks/.keep': '',
-    'groma/plans/index.md': '# Plans\n',
     'src/cli.ts': "import { scan } from './scanner.ts'\nexport function run() {}\n",
     'src/scanner.ts': 'export function scan() {}\n',
   })
@@ -100,7 +97,7 @@ async function waitUntil(
 }
 
 async function observedSystems(root: string): Promise<string[]> {
-  const directory = path.join(root, 'groma/observed/systems')
+  const directory = path.join(root, 'groma/systems')
   try {
     return await readdir(directory)
   } catch {
@@ -199,9 +196,9 @@ test.concurrent('groma web reads component code on demand from the selected revi
   const historicalHelpers = 'export function helperEntry() {}\nconst historicalHelper = function () {}\n'
   const currentHelpers = 'export function helperEntry() {}\nconst currentHelper = function () {}\n'
   await writeTree(root, {
-    'groma/observed/systems/shop/system.md': '---\ntype: C4 System\ntitle: Shop\nstatus: stable\ngroma:\n  id: shop\n---\n',
-    'groma/observed/systems/shop/containers/web/container.md': '---\ntype: C4 Container\ntitle: Web\nstatus: stable\ngroma:\n  id: web\n  parent: shop\n---\n',
-    'groma/observed/systems/shop/containers/web/components/details.md': '---\ntype: C4 Component\ntitle: Details\nstatus: stable\ngroma:\n  id: details\n  parent: web\n  code:\n    - scanner: typescript\n      file: src/details.ts\n      symbol: Details\n    - scanner: typescript\n      file: src/helpers.ts\n      symbol: helperEntry\n---\n',
+    'groma/systems/shop/system.md': '---\ntype: C4 System\ntitle: Shop\nstatus: stable\ngroma:\n  id: shop\n---\n',
+    'groma/systems/shop/containers/web/container.md': '---\ntype: C4 Container\ntitle: Web\nstatus: stable\ngroma:\n  id: web\n  parent: shop\n---\n',
+    'groma/systems/shop/containers/web/components/details.md': '---\ntype: C4 Component\ntitle: Details\nstatus: stable\ngroma:\n  id: details\n  parent: web\n  code:\n    - scanner: typescript\n      file: src/details.ts\n      symbol: Details\n    - scanner: typescript\n      file: src/helpers.ts\n      symbol: helperEntry\n---\n',
     'src/details.ts': historicalSource,
     'src/helpers.ts': historicalHelpers,
   })
@@ -216,14 +213,14 @@ test.concurrent('groma web reads component code on demand from the selected revi
       revisions: { id: string; subject: string }[]
     }
     const revision = world.revisions.find(candidate => candidate.subject === 'Versioned source component')!
-    const selected = new URLSearchParams({ element: 'observed:details', file: 'src/details.ts' })
+    const selected = new URLSearchParams({ element: 'details', file: 'src/details.ts' })
     const current = await (await fetch(`${server.url}/source.json?${selected}`)).json() as { source: string }
     assert.equal(current.source, currentSource)
-    assert.deepEqual(await (await fetch(`${server.url}/code.json?element=observed:details`)).json(), expectedCode('current'))
+    assert.deepEqual(await (await fetch(`${server.url}/code.json?element=details`)).json(), expectedCode('current'))
     selected.set('revision', revision.id)
     const historical = await (await fetch(`${server.url}/source.json?${selected}`)).json() as { source: string }
     assert.equal(historical.source, historicalSource)
-    assert.deepEqual(await (await fetch(`${server.url}/code.json?element=observed:details&revision=${revision.id}`)).json(), expectedCode('historical'))
+    assert.deepEqual(await (await fetch(`${server.url}/code.json?element=details&revision=${revision.id}`)).json(), expectedCode('historical'))
     selected.set('file', 'src/other.ts')
     assert.equal((await fetch(`${server.url}/source.json?${selected}`)).status, 404)
   } finally {
@@ -234,7 +231,7 @@ test.concurrent('groma web reads component code on demand from the selected revi
 
 test.concurrent('groma web marks obsolete Markdown revisions unsupported', async () => {
   const root = await createLiveRepo()
-  const actor = path.join(root, 'groma', 'observed', 'actors', 'legacy.md')
+  const actor = path.join(root, 'groma', 'actors', 'legacy.md')
   await mkdir(path.dirname(actor), { recursive: true })
   await writeFile(actor, '---\nid: legacy\nkind: person\n---\n\n# Legacy\n')
   await commitAll(root, 'Old person contract')
@@ -310,7 +307,7 @@ test.concurrent('groma web applies an architecture Markdown change without a ref
     const reader = events.body!.getReader()
     const decoder = new TextDecoder()
     let pushed = ''
-    const document = path.join(root, 'groma/observed/systems/shop/system.md')
+    const document = path.join(root, 'groma/systems/shop/system.md')
     const markdown = await Bun.file(document).text()
     await writeFile(document, markdown.replace('title: Shop', 'title: Shopfront'))
     await waitUntil(async () => {
@@ -465,7 +462,7 @@ test.concurrent('groma web loads work asynchronously and updates only the work o
     assert.deepEqual(loaded.work.statuses, ['To Do', 'In Progress', 'Done'])
     assert.equal(loaded.work.defaultStatus, 'To Do')
     assert.deepEqual(loaded.work.items.map(item => item.id), ['TASK-PIN'])
-    assert.deepEqual(loaded.pins.map(pin => [pin.key, pin.elementId, pin.done, pin.total]), [['@codex TASK-PIN', 'observed:shop', 1, 2]])
+    assert.deepEqual(loaded.pins.map(pin => [pin.key, pin.elementId, pin.done, pin.total]), [['@codex TASK-PIN', 'shop', 1, 2]])
 
     await fetch(server.url)
     assert.equal(reads, 1)

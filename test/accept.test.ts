@@ -1,59 +1,18 @@
 import assert from 'node:assert/strict'
-import { spawn } from 'node:child_process'
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, rm } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
 import type { TestContext } from 'node:test'
-import { fileURLToPath } from 'node:url'
 
 import { createScanObservation } from '@groma/scanner'
 
 import { acceptGhost, reconcileScanObservations } from '../src/core.ts'
+import { groma, readRelative, run, writeTree } from './cli-helpers.ts'
 
-const projectRoot = path.resolve(
-  path.dirname(fileURLToPath(import.meta.url)),
-  '..',
-)
-
-function run(command: string, args: string[], cwd: string) {
-  return new Promise<{
-    code: number | null
-    stderr: string
-  }>((resolve, reject) => {
-    const child = spawn(command, args, { cwd, stdio: ['ignore', 'ignore', 'pipe'] })
-    let stderr = ''
-    child.stderr.setEncoding('utf8')
-    child.stderr.on('data', chunk => {
-      stderr += chunk
-    })
-    child.on('error', reject)
-    child.on('close', code => {
-      resolve({ code, stderr })
-    })
-  })
-}
-
-async function writeTree(
-  root: string,
-  files: Record<string, string>,
-): Promise<void> {
-  for (const [relative, source] of Object.entries(files)) {
-    const filename = path.join(root, ...relative.split('/'))
-    await mkdir(path.dirname(filename), { recursive: true })
-    await writeFile(filename, source)
-  }
-}
-
-async function createWorld(
-  t: TestContext,
-  files: Record<string, string>,
-): Promise<string> {
-  const root = await mkdtemp(path.join(os.tmpdir(), 'groma-accept-'))
-  t.after(() => rm(root, { recursive: true, force: true }))
-  await writeTree(root, {
-    'groma/index.md': '---\nokf_version: "0.2"\n---\n',
-    'groma/project.md': `---
+const shopFiles = {
+  'groma/index.md': '---\nokf_version: "0.2"\n---\n',
+  'groma/project.md': `---
 type: Groma Project
 title: Shop architecture
 groma:
@@ -62,10 +21,7 @@ groma:
 
 Describes the shop used by acceptance tests.
 `,
-    'groma/observed/index.md': '# Observed\n',
-    'groma/missing/index.md': '# Missing\n',
-    'groma/plans/index.md': '# Plans\n',
-    'groma/observed/systems/shop/system.md': `---
+  'groma/systems/shop/system.md': `---
 type: C4 System
 title: Shop
 status: stable
@@ -75,7 +31,7 @@ groma:
 
 Lets customers place orders.
 `,
-    'groma/observed/systems/shop/containers/api/container.md': `---
+  'groma/systems/shop/containers/api/container.md': `---
 type: C4 Container
 title: Api
 status: stable
@@ -86,11 +42,28 @@ groma:
 
 Takes order requests.
 `,
-    'groma/plans/next/index.md': '# Next\n',
-    ...files,
-  })
+  'groma/drafts/next.md': `---
+type: Draft
+title: Next
+groma:
+  id: next
+---
+
+The next release tracks stock.
+`,
+}
+
+async function createWorld(
+  t: TestContext,
+  files: Record<string, string>,
+): Promise<string> {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'groma-accept-'))
+  t.after(() => rm(root, { recursive: true, force: true }))
+  await writeTree(root, { ...shopFiles, ...files })
   return root
 }
+
+const inventoryPath = 'groma/systems/shop/containers/api/components/inventory.md'
 
 const inventoryDocument = `---
 type: C4 Component
@@ -99,6 +72,7 @@ status: draft
 groma:
   id: inventory
   parent: api
+  draft: next
 ---
 
 Tracks stock for the shop.
@@ -111,6 +85,7 @@ status: draft
 groma:
   id: inventory
   parent: api
+  draft: next
   code:
     - scanner: typescript
       file: src/inventory.ts
@@ -120,179 +95,31 @@ groma:
 Tracks stock for the shop.
 `
 
-async function missing(filename: string): Promise<void> {
-  await assert.rejects(
-    readFile(filename),
-    (error: NodeJS.ErrnoException) => error.code === 'ENOENT',
-  )
-}
-
-test('acceptGhost applies a matched new ghost into observed', async t => {
-  const root = await createWorld(t, {
-    'groma/plans/next/systems/shop/containers/api/components/inventory.md':
-      matchedInventoryDocument,
-  })
+test('acceptGhost flips a matched ghost to stable in its own file and keeps the draft tag', async t => {
+  const root = await createWorld(t, { [inventoryPath]: matchedInventoryDocument })
 
   assert.equal(await acceptGhost(root, 'inventory'), 'accepted')
 
-  const observed = await readFile(
-    path.join(
-      root,
-      'groma/observed/systems/shop/containers/api/components/inventory.md',
-    ),
-    'utf8',
-  )
-  assert.equal(observed, matchedInventoryDocument.replace('status: draft', 'status: stable'))
-  await missing(path.join(
-    root,
-    'groma/plans/next/systems/shop/containers/api/components/inventory.md',
-  ))
-})
-
-test('acceptGhost updates a restated observed document and removes the ghost', async t => {
-  const root = await createWorld(t, {
-    'groma/observed/systems/shop/containers/api/components/orders.md': `---
-type: C4 Component
-title: Orders
-status: stable
-groma:
-  id: orders
-  parent: api
-  code:
-    - scanner: typescript
-      file: src/orders.ts
----
-
-Places orders.
-`,
-    'groma/plans/next/systems/shop/containers/api/components/orders.md': `---
-type: C4 Component
-title: Orders
-status: draft
-groma:
-  id: orders
-  parent: api
-  code:
-    - scanner: typescript
-      file: src/orders.ts
-      symbol: placeOrder
----
-
-Places and tracks customer orders.
-`,
-  })
-
-  assert.equal(await acceptGhost(root, 'orders'), 'accepted')
-
-  const observed = await readFile(
-    path.join(
-      root,
-      'groma/observed/systems/shop/containers/api/components/orders.md',
-    ),
-    'utf8',
-  )
-  assert.match(observed, /Places and tracks customer orders\./)
-  assert.match(observed, /symbol: placeOrder/)
-  assert.doesNotMatch(observed, /Places orders\.\n/)
-  await missing(path.join(
-    root,
-    'groma/plans/next/systems/shop/containers/api/components/orders.md',
-  ))
-})
-
-test('acceptGhost moves a restated ghost when the observed path changes', async t => {
-  const root = await createWorld(t, {
-    'groma/observed/systems/shop/containers/warehouse/container.md': `---
-type: C4 Container
-title: Warehouse
-status: stable
-groma:
-  id: warehouse
-  parent: shop
----
-
-Stores stock.
-`,
-    'groma/observed/systems/shop/containers/api/components/orders.md': `---
-type: C4 Component
-title: Orders
-status: stable
-groma:
-  id: orders
-  parent: api
----
-
-Places orders.
-`,
-    'groma/plans/next/systems/shop/containers/warehouse/components/orders.md': `---
-type: C4 Component
-title: Orders
-status: draft
-groma:
-  id: orders
-  parent: warehouse
-  code:
-    - scanner: typescript
-      file: src/orders.ts
----
-
-Picks stock in the warehouse.
-`,
-  })
-
-  assert.equal(await acceptGhost(root, 'orders'), 'accepted')
-
-  const observed = await readFile(
-    path.join(
-      root,
-      'groma/observed/systems/shop/containers/warehouse/components/orders.md',
-    ),
-    'utf8',
-  )
-  assert.match(observed, /parent: warehouse/)
-  assert.match(observed, /Picks stock in the warehouse\./)
-  await missing(path.join(
-    root,
-    'groma/observed/systems/shop/containers/api/components/orders.md',
-  ))
-  await missing(path.join(
-    root,
-    'groma/plans/next/systems/shop/containers/warehouse/components/orders.md',
-  ))
+  const accepted = await readRelative(root, inventoryPath)
+  assert.equal(accepted, matchedInventoryDocument.replace('status: draft', 'status: stable'))
+  assert.match(accepted, /^ {2}draft: next$/m)
 })
 
 test('acceptGhost fails when the ghost has no scan match', async t => {
-  const root = await createWorld(t, {
-    'groma/plans/next/systems/shop/containers/api/components/inventory.md':
-      inventoryDocument,
-  })
+  const root = await createWorld(t, { [inventoryPath]: inventoryDocument })
 
   assert.equal(await acceptGhost(root, 'inventory'), 'unmatched')
-  await missing(path.join(
-    root,
-    'groma/observed/systems/shop/containers/api/components/inventory.md',
-  ))
-  const planned = await readFile(
-    path.join(
-      root,
-      'groma/plans/next/systems/shop/containers/api/components/inventory.md',
-    ),
-    'utf8',
-  )
-  assert.equal(planned, inventoryDocument)
+  assert.equal(await readRelative(root, inventoryPath), inventoryDocument)
 })
 
-test('acceptGhost fails when the id is not a planned ghost', async t => {
+test('acceptGhost fails when the id is not a ghost', async t => {
   const root = await createWorld(t, {})
-  assert.equal(await acceptGhost(root, 'api'), 'missing')
-  assert.equal(await acceptGhost(root, 'unknown'), 'missing')
+  assert.equal(await acceptGhost(root, 'api'), 'not-draft')
+  assert.equal(await acceptGhost(root, 'unknown'), 'not-draft')
 })
 
-test('a scan match leaves the ghost planned until accept', async t => {
-  const root = await createWorld(t, {
-    'groma/plans/next/systems/shop/containers/api/components/inventory.md':
-      inventoryDocument,
-  })
+test('a scan match leaves the ghost a draft until accept', async t => {
+  const root = await createWorld(t, { [inventoryPath]: inventoryDocument })
 
   const summary = await reconcileScanObservations(root, [createScanObservation({
     scanner: { language: 'typescript', engine: 'test', engineVersion: '1' },
@@ -308,21 +135,15 @@ test('a scan match leaves the ghost planned until accept', async t => {
   })])
 
   assert.deepEqual(summary, { created: 0, refreshed: 0, matched: 1 })
-  await missing(path.join(
-    root,
-    'groma/observed/systems/shop/containers/api/components/inventory.md',
-  ))
+  const matched = await readRelative(root, inventoryPath)
+  assert.match(matched, /^status: draft$/m)
+  assert.match(matched, /file: src\/inventory\.ts/)
+
   assert.equal(await acceptGhost(root, 'inventory'), 'accepted')
-  const observed = await readFile(
-    path.join(
-      root,
-      'groma/observed/systems/shop/containers/api/components/inventory.md',
-    ),
-    'utf8',
-  )
-  assert.match(observed, /Tracks stock for the shop\./)
-  assert.match(observed, /file: src\/inventory\.ts/)
-  assert.doesNotMatch(observed, /This must not accept the ghost/)
+  const accepted = await readRelative(root, inventoryPath)
+  assert.match(accepted, /^status: stable$/m)
+  assert.match(accepted, /Tracks stock for the shop\./)
+  assert.match(accepted, /file: src\/inventory\.ts/)
 })
 
 async function createScanRepo(
@@ -334,28 +155,17 @@ async function createScanRepo(
   await writeTree(root, {
     'package.json': JSON.stringify({ name: 'shop', bin: { shop: 'src/cli.ts' } }),
     '.gitignore': 'node_modules/\n',
-    'groma/index.md': '---\nokf_version: "0.2"\n---\n',
-    'groma/project.md': `---
-type: Groma Project
-title: Shop architecture
-groma:
-  profile: architecture
----
-
-Describes the scanned shop used by acceptance tests.
-`,
-    'groma/observed/index.md': '# Observed\n',
-    'groma/missing/index.md': '# Missing\n',
-    'groma/plans/index.md': '# Plans\n',
-    'groma/observed/systems/shop/system.md': `---
-type: C4 System
-title: Shop
+    ...shopFiles,
+    'groma/systems/shop/containers/cli/container.md': `---
+type: C4 Container
+title: Cli
 status: stable
 groma:
-  id: shop
+  id: cli
+  parent: shop
 ---
 
-Lets customers place orders.
+Runs the shop from a terminal.
 `,
     'src/cli.ts': "import { scan } from './scanner.ts'\nexport function run() {}\n",
     'src/scanner.ts': 'export function scan() {}\n',
@@ -368,10 +178,11 @@ Lets customers place orders.
   return root
 }
 
+const scannerPath = 'groma/systems/shop/containers/cli/components/scanner.md'
+
 test('groma accept applies a ghost after it scans a name match', async t => {
   const root = await createScanRepo(t, {
-    'groma/plans/next/index.md': '# Next\n',
-    'groma/plans/next/systems/shop/containers/cli/components/scanner.md': `---
+    [scannerPath]: `---
 type: C4 Component
 title: Scanner
 status: draft
@@ -384,32 +195,18 @@ Reads the shop source.
 `,
   })
 
-  const result = await run(
-    'bun',
-    [path.join(projectRoot, 'src/cli.ts'), 'accept', 'scanner'],
-    root,
-  )
+  const result = await groma(root, ['accept', 'scanner'])
 
   assert.equal(result.code, 0, result.stderr)
-  const observed = await readFile(
-    path.join(
-      root,
-      'groma/observed/systems/shop/containers/cli/components/scanner.md',
-    ),
-    'utf8',
-  )
-  assert.match(observed, /Reads the shop source\./)
-  assert.match(observed, /file: src\/scanner\.ts/)
-  await missing(path.join(
-    root,
-    'groma/plans/next/systems/shop/containers/cli/components/scanner.md',
-  ))
+  const accepted = await readRelative(root, scannerPath)
+  assert.match(accepted, /^status: stable$/m)
+  assert.match(accepted, /Reads the shop source\./)
+  assert.match(accepted, /file: src\/scanner\.ts/)
 })
 
 test('groma accept fails when a scan does not match the ghost', async t => {
-  const root = await createScanRepo(t, {
-    'groma/plans/next/index.md': '# Next\n',
-    'groma/plans/next/systems/shop/containers/api/components/widget.md': `---
+  const widgetPath = 'groma/systems/shop/containers/api/components/widget.md'
+  const widget = `---
 type: C4 Component
 title: Widget
 status: draft
@@ -419,27 +216,11 @@ groma:
 ---
 
 Does not exist in source.
-`,
-  })
+`
+  const root = await createScanRepo(t, { [widgetPath]: widget })
 
-  const result = await run(
-    'bun',
-    [path.join(projectRoot, 'src/cli.ts'), 'accept', 'widget'],
-    root,
-  )
+  const result = await groma(root, ['accept', 'widget'])
 
   assert.equal(result.code, 1)
-  const planned = await readFile(
-    path.join(
-      root,
-      'groma/plans/next/systems/shop/containers/api/components/widget.md',
-    ),
-    'utf8',
-  )
-  assert.match(planned, /Does not exist in source\./)
-  assert.doesNotMatch(planned, /\ncode:\n/)
-  await missing(path.join(
-    root,
-    'groma/observed/systems/shop/containers/api/components/widget.md',
-  ))
+  assert.equal(await readRelative(root, widgetPath), widget)
 })

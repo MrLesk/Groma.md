@@ -3,33 +3,20 @@ import path from 'node:path'
 import test from 'node:test'
 
 import { buildArchitectureModel } from '../src/architecture-model.ts'
-import { loadRevision } from '../src/architecture-reader.ts'
-import {
-  elementDocument,
-  repositoryRoot,
-  revisionRecord,
-} from './architecture-model-helpers.ts'
+import { loadArchitecture } from '../src/architecture-reader.ts'
+import { elementDocument, repositoryRoot } from './architecture-model-helpers.ts'
 
-test('builds a serializable revision-local C4 graph with Code references', async () => {
-  const loadedRevision = await loadRevision(
-    path.join(repositoryRoot, 'test', 'fixtures', 'validate'),
-    { kind: 'observed' },
-  )
-  const model = buildArchitectureModel(loadedRevision)
-  const reloadedModel = buildArchitectureModel(await loadRevision(
-    path.join(repositoryRoot, 'test', 'fixtures', 'validate'),
-    { kind: 'observed' },
-  ))
+const validateRoot = path.join(repositoryRoot, 'test', 'fixtures', 'validate')
+
+test('builds a serializable C4 graph with Code references from the one tree', async () => {
+  const model = buildArchitectureModel((await loadArchitecture(validateRoot)).documents)
+  const reloadedModel = buildArchitectureModel((await loadArchitecture(validateRoot)).documents)
 
   assert.deepEqual(model, reloadedModel)
-  assert.deepEqual(Object.keys(model), ['revision', 'elements', 'relationships'])
-  assert.deepEqual(model.revision, {
-    kind: 'observed',
-    sourceDirectory: 'groma/observed',
-  })
+  assert.deepEqual(Object.keys(model), ['elements', 'relationships'])
   assert.deepEqual(
     model.elements.map(element => element.id),
-    ['api', 'buyer', 'git', 'orders', 'shop'],
+    ['api', 'buyer', 'git', 'orders', 'shop', 'stock'],
   )
   assert.deepEqual(
     model.elements.find(element => element.id === 'orders'),
@@ -48,8 +35,8 @@ test('builds a serializable revision-local C4 graph with Code references', async
           symbol: 'loadAnnotatedArchitecture',
         },
       ],
-      sourceFilename:
-        'groma/observed/systems/shop/containers/api/components/orders.md',
+      status: 'stable',
+      sourceFilename: 'groma/systems/shop/containers/api/components/orders.md',
     },
   )
   assert.deepEqual(
@@ -63,9 +50,14 @@ test('builds a serializable revision-local C4 graph with Code references', async
       parentId: null,
       external: false,
       code: [],
-      sourceFilename: 'groma/observed/actors/buyer.md',
+      status: 'stable',
+      sourceFilename: 'groma/actors/buyer.md',
     },
   )
+  const stock = model.elements.find(element => element.id === 'stock')
+  assert.equal(stock?.status, 'draft')
+  assert.equal(stock?.draft, 'next')
+  assert.equal(model.elements.find(element => element.id === 'git')?.external, true)
   assert.equal(model.relationships.length, 2)
   assert.deepEqual(
     model.relationships.find(relationship => relationship.sourceId === 'shop'),
@@ -74,13 +66,12 @@ test('builds a serializable revision-local C4 graph with Code references', async
       targetId: 'git',
       description: 'Versions architecture',
       technology: 'Git',
-      sourceFilename: 'groma/observed/systems/shop/system.md',
-      targetSourceFilename: 'groma/observed/systems/git/system.md',
+      sourceFilename: 'groma/systems/shop/system.md',
+      targetSourceFilename: 'groma/externals/git.md',
     },
   )
   assert.doesNotThrow(() => JSON.stringify(model))
   assert.ok(Object.isFrozen(model))
-  assert.ok(Object.isFrozen(model.revision))
   assert.ok(Object.isFrozen(model.elements))
   assert.ok(Object.isFrozen(model.elements[0]))
   assert.ok(Object.isFrozen(model.relationships))
@@ -88,19 +79,19 @@ test('builds a serializable revision-local C4 graph with Code references', async
 })
 
 test('keeps the group on the element and omits it otherwise', () => {
-  const model = buildArchitectureModel(revisionRecord([
+  const model = buildArchitectureModel([
     elementDocument({
       id: 'grouped-system',
       kind: 'system',
       group: 'Edge services',
-      sourceFilename: 'groma/plans/test-revision/systems/grouped-system/system.md',
+      sourceFilename: 'groma/systems/grouped-system/system.md',
     }),
     elementDocument({
       id: 'plain-system',
       kind: 'system',
-      sourceFilename: 'groma/plans/test-revision/systems/plain-system/system.md',
+      sourceFilename: 'groma/systems/plain-system/system.md',
     }),
-  ]))
+  ])
 
   const grouped = model.elements.find(element => element.id === 'grouped-system')
   const plain = model.elements.find(element => element.id === 'plain-system')
@@ -109,11 +100,25 @@ test('keeps the group on the element and omits it otherwise', () => {
   assert.equal(Object.hasOwn(plain, 'group'), false)
 })
 
+test('a stable element may carry the tag of the draft that touches it', () => {
+  const model = buildArchitectureModel([
+    elementDocument({
+      id: 'touched-system',
+      kind: 'system',
+      draft: 'next',
+      sourceFilename: 'groma/systems/touched-system/system.md',
+    }),
+  ])
+
+  assert.equal(model.elements[0]?.status, 'stable')
+  assert.equal(model.elements[0]?.draft, 'next')
+})
+
 test('preserves every leading prose paragraph in overview', () => {
   const document = elementDocument({
     id: 'catalog',
     kind: 'system',
-    sourceFilename: 'groma/plans/test-revision/systems/catalog/system.md',
+    sourceFilename: 'groma/systems/catalog/system.md',
   })
   document.nodes = [
     ['p', {}, 'Owns the product catalog.'],
@@ -122,7 +127,7 @@ test('preserves every leading prose paragraph in overview', () => {
     ['p', {}, 'This named section is not part of the overview.'],
   ]
 
-  const model = buildArchitectureModel(revisionRecord([document]))
+  const model = buildArchitectureModel([document])
 
   assert.equal(
     model.elements[0]?.overview,
@@ -134,7 +139,7 @@ test('resolves a relationship link to the target document stable id', () => {
   const source = elementDocument({
     id: 'architect',
     kind: 'actor',
-    sourceFilename: 'groma/plans/test-revision/actors/architect.md',
+    sourceFilename: 'groma/actors/architect.md',
     relationships: [{
       href: '../systems/platform/system.md#context',
       label: 'Readable platform name',
@@ -145,31 +150,31 @@ test('resolves a relationship link to the target document stable id', () => {
   const target = elementDocument({
     id: 'stable-platform-id',
     kind: 'system',
-    sourceFilename: 'groma/plans/test-revision/systems/platform/system.md',
+    sourceFilename: 'groma/systems/platform/system.md',
   })
 
-  const model = buildArchitectureModel(revisionRecord([target, source]))
+  const model = buildArchitectureModel([target, source])
 
   assert.deepEqual(model.relationships, [{
     sourceId: 'architect',
     targetId: 'stable-platform-id',
     description: 'Uses the platform',
     technology: 'Browser',
-    sourceFilename: 'groma/plans/test-revision/actors/architect.md',
-    targetSourceFilename: 'groma/plans/test-revision/systems/platform/system.md',
+    sourceFilename: 'groma/actors/architect.md',
+    targetSourceFilename: 'groma/systems/platform/system.md',
   }])
 })
 
-test('orders equivalent unchanged revisions deterministically', () => {
+test('orders equivalent unchanged trees deterministically', () => {
   const system = elementDocument({
     id: 'z-system',
     kind: 'system',
-    sourceFilename: 'groma/plans/test-revision/systems/z/system.md',
+    sourceFilename: 'groma/systems/z/system.md',
   })
   const actor = elementDocument({
     id: 'a-actor',
     kind: 'actor',
-    sourceFilename: 'groma/plans/test-revision/actors/a.md',
+    sourceFilename: 'groma/actors/a.md',
     relationships: [
       {
         href: '../systems/z/system.md',
@@ -184,8 +189,8 @@ test('orders equivalent unchanged revisions deterministically', () => {
     ],
   })
 
-  const first = buildArchitectureModel(revisionRecord([system, actor]))
-  const second = buildArchitectureModel(revisionRecord([actor, system]))
+  const first = buildArchitectureModel([system, actor])
+  const second = buildArchitectureModel([actor, system])
 
   assert.deepEqual(first, second)
   assert.deepEqual(first.elements.map(element => element.id), ['a-actor', 'z-system'])
@@ -195,14 +200,8 @@ test('orders equivalent unchanged revisions deterministically', () => {
   )
 })
 
-
 test('contains no presentation state', async () => {
-  const loadedRevision = await loadRevision(
-    path.join(repositoryRoot, 'test', 'fixtures', 'validate'),
-    { kind: 'observed' },
-  )
-
-  const model = buildArchitectureModel(loadedRevision)
+  const model = buildArchitectureModel((await loadArchitecture(validateRoot)).documents)
   const forbiddenKeys = new Set([
     'coordinates',
     'x',

@@ -5,7 +5,7 @@ import {
   ArchitectureModelError,
   buildArchitectureModel,
 } from '../src/architecture-model.ts'
-import { elementDocument, revisionRecord } from './architecture-model-helpers.ts'
+import { elementDocument } from './architecture-model-helpers.ts'
 
 for (const {
   name,
@@ -15,52 +15,107 @@ for (const {
   message,
 } of [
   {
-    name: 'reports a quoted external true value instead of coercing it',
+    name: 'reports a component stored under externals',
     documents: [
       elementDocument({
-        id: 'quoted-external-system',
-        kind: 'system',
-        external: 'true',
-        sourceFilename:
-          'groma/plans/test-revision/systems/quoted-external-system/system.md',
+        id: 'stray',
+        kind: 'component',
+        parent: 'api',
+        sourceFilename: 'groma/externals/stray.md',
       }),
     ],
     code: 'INVALID_ELEMENT',
-    sourceFilename:
-      'groma/plans/test-revision/systems/quoted-external-system/system.md',
-    message: /external must be a boolean/,
+    sourceFilename: 'groma/externals/stray.md',
+    message: /only a system can live under externals\/.*"stray" is a component/,
   },
   {
-    name: 'reports an explicitly false external field',
+    name: 'reports an actor stored under externals',
     documents: [
       elementDocument({
-        id: 'false-external-system',
-        kind: 'system',
-        external: false,
-        sourceFilename:
-          'groma/plans/test-revision/systems/false-external-system/system.md',
+        id: 'external-actor',
+        kind: 'actor',
+        sourceFilename: 'groma/externals/external-actor.md',
       }),
     ],
     code: 'INVALID_ELEMENT',
-    sourceFilename:
-      'groma/plans/test-revision/systems/false-external-system/system.md',
-    message: /external may only be present with the value true/,
+    sourceFilename: 'groma/externals/external-actor.md',
+    message: /only a system can live under externals\/.*"external-actor" is a actor/,
   },
   {
-    name: 'reports a null external value instead of coercing it',
+    name: 'reports a container inside an external system',
     documents: [
       elementDocument({
-        id: 'null-external-system',
+        id: 'vault',
         kind: 'system',
-        external: null,
-        sourceFilename:
-          'groma/plans/test-revision/systems/null-external-system/system.md',
+        sourceFilename: 'groma/externals/vault.md',
+      }),
+      elementDocument({
+        id: 'safe',
+        kind: 'container',
+        parent: 'vault',
+        sourceFilename: 'groma/systems/vault/containers/safe/container.md',
+      }),
+    ],
+    code: 'INVALID_PARENT',
+    sourceFilename: 'groma/systems/vault/containers/safe/container.md',
+    message: /container "safe" cannot live inside external system "vault"/,
+  },
+  {
+    name: 'reports the external flag as an unsupported field',
+    documents: [
+      elementDocument({
+        id: 'flagged-system',
+        kind: 'system',
+        extraGroma: { external: true },
+        sourceFilename: 'groma/systems/flagged-system/system.md',
       }),
     ],
     code: 'INVALID_ELEMENT',
-    sourceFilename:
-      'groma/plans/test-revision/systems/null-external-system/system.md',
-    message: /external must be a boolean/,
+    sourceFilename: 'groma/systems/flagged-system/system.md',
+    message: /unsupported groma field\(s\): external/,
+  },
+  {
+    name: 'reports a missing lifecycle status',
+    documents: [
+      elementDocument({
+        id: 'unlabelled-system',
+        kind: 'system',
+        status: null,
+        sourceFilename: 'groma/systems/unlabelled-system/system.md',
+      }),
+    ],
+    code: 'INVALID_ELEMENT',
+    sourceFilename: 'groma/systems/unlabelled-system/system.md',
+    message: /status must be draft or stable/,
+  },
+  {
+    name: 'reports a status outside the OKF lifecycle',
+    documents: [
+      elementDocument({
+        id: 'planned-system',
+        kind: 'system',
+        status: 'planned',
+        sourceFilename: 'groma/systems/planned-system/system.md',
+      }),
+    ],
+    code: 'INVALID_ELEMENT',
+    sourceFilename: 'groma/systems/planned-system/system.md',
+    message: /status must be draft or stable/,
+  },
+  {
+    name: 'reports a draft tag that is not a kebab-case id',
+    documents: [
+      elementDocument({
+        id: 'tagged-system',
+        kind: 'system',
+        status: 'draft',
+        draft: 'Next Release',
+        sourceFilename: 'groma/systems/tagged-system/system.md',
+      }),
+    ],
+    code: 'INVALID_ELEMENT',
+    sourceFilename: 'groma/systems/tagged-system/system.md',
+    message: /draft must name a draft record by its kebab-case id/,
   },
   {
     name: 'reports an actor outside the actors directory',
@@ -68,26 +123,12 @@ for (const {
       elementDocument({
         id: 'misplaced-actor',
         kind: 'actor',
-        sourceFilename: 'groma/plans/test-revision/people/misplaced-actor.md',
+        sourceFilename: 'groma/people/misplaced-actor.md',
       }),
     ],
     code: 'INVALID_ELEMENT_LOCATION',
-    sourceFilename: 'groma/plans/test-revision/people/misplaced-actor.md',
+    sourceFilename: 'groma/people/misplaced-actor.md',
     message: /actor "misplaced-actor" is not stored at its canonical C4 path/,
-  },
-  {
-    name: 'reports an external actor',
-    documents: [
-      elementDocument({
-        id: 'external-actor',
-        kind: 'actor',
-        external: true,
-        sourceFilename: 'groma/plans/test-revision/actors/external-actor.md',
-      }),
-    ],
-    code: 'INVALID_ELEMENT',
-    sourceFilename: 'groma/plans/test-revision/actors/external-actor.md',
-    message: /only a system can be external.*"external-actor" has kind "actor"/,
   },
   {
     name: 'reports a duplicate stable id at the second document',
@@ -95,16 +136,16 @@ for (const {
       elementDocument({
         id: 'same-id',
         kind: 'actor',
-        sourceFilename: 'groma/plans/test-revision/actors/first.md',
+        sourceFilename: 'groma/actors/first.md',
       }),
       elementDocument({
         id: 'same-id',
         kind: 'system',
-        sourceFilename: 'groma/plans/test-revision/systems/second/system.md',
+        sourceFilename: 'groma/systems/second/system.md',
       }),
     ],
     code: 'DUPLICATE_ID',
-    sourceFilename: 'groma/plans/test-revision/systems/second/system.md',
+    sourceFilename: 'groma/systems/second/system.md',
     message: /duplicate id "same-id".*actors\/first\.md/,
   },
   {
@@ -114,13 +155,11 @@ for (const {
         id: 'orphan',
         kind: 'container',
         parent: 'missing-system',
-        sourceFilename:
-          'groma/plans/test-revision/systems/groma/containers/orphan/container.md',
+        sourceFilename: 'groma/systems/groma/containers/orphan/container.md',
       }),
     ],
     code: 'UNKNOWN_PARENT_ID',
-    sourceFilename:
-      'groma/plans/test-revision/systems/groma/containers/orphan/container.md',
+    sourceFilename: 'groma/systems/groma/containers/orphan/container.md',
     message: /unknown parent id "missing-system"/,
   },
   {
@@ -129,19 +168,17 @@ for (const {
       elementDocument({
         id: 'actor-parent',
         kind: 'actor',
-        sourceFilename: 'groma/plans/test-revision/actors/actor-parent.md',
+        sourceFilename: 'groma/actors/actor-parent.md',
       }),
       elementDocument({
         id: 'wrongly-contained',
         kind: 'container',
         parent: 'actor-parent',
-        sourceFilename:
-          'groma/plans/test-revision/systems/groma/containers/wrong/container.md',
+        sourceFilename: 'groma/systems/groma/containers/wrong/container.md',
       }),
     ],
     code: 'INVALID_PARENT',
-    sourceFilename:
-      'groma/plans/test-revision/systems/groma/containers/wrong/container.md',
+    sourceFilename: 'groma/systems/groma/containers/wrong/container.md',
     message: /container "wrongly-contained" requires a system parent.*has kind "actor"/,
   },
   {
@@ -151,11 +188,11 @@ for (const {
         id: 'null-parent-actor',
         kind: 'actor',
         parent: null,
-        sourceFilename: 'groma/plans/test-revision/actors/null-parent-actor.md',
+        sourceFilename: 'groma/actors/null-parent-actor.md',
       }),
     ],
     code: 'INVALID_ELEMENT',
-    sourceFilename: 'groma/plans/test-revision/actors/null-parent-actor.md',
+    sourceFilename: 'groma/actors/null-parent-actor.md',
     message: /parent must be a non-empty string when present/,
   },
   {
@@ -165,13 +202,11 @@ for (const {
         id: 'empty-parent-system',
         kind: 'system',
         parent: '',
-        sourceFilename:
-          'groma/plans/test-revision/systems/empty-parent-system/system.md',
+        sourceFilename: 'groma/systems/empty-parent-system/system.md',
       }),
     ],
     code: 'INVALID_ELEMENT',
-    sourceFilename:
-      'groma/plans/test-revision/systems/empty-parent-system/system.md',
+    sourceFilename: 'groma/systems/empty-parent-system/system.md',
     message: /parent must be a non-empty string when present/,
   },
   {
@@ -181,11 +216,11 @@ for (const {
         id: 'nested-actor',
         kind: 'actor',
         parent: 'some-system',
-        sourceFilename: 'groma/plans/test-revision/actors/nested-actor.md',
+        sourceFilename: 'groma/actors/nested-actor.md',
       }),
     ],
     code: 'INVALID_PARENT',
-    sourceFilename: 'groma/plans/test-revision/actors/nested-actor.md',
+    sourceFilename: 'groma/actors/nested-actor.md',
     message: /actor "nested-actor" cannot declare a parent/,
   },
   {
@@ -194,13 +229,11 @@ for (const {
       elementDocument({
         id: 'missing-parent-container',
         kind: 'container',
-        sourceFilename:
-          'groma/plans/test-revision/systems/groma/containers/missing/container.md',
+        sourceFilename: 'groma/systems/groma/containers/missing/container.md',
       }),
     ],
     code: 'INVALID_PARENT',
-    sourceFilename:
-      'groma/plans/test-revision/systems/groma/containers/missing/container.md',
+    sourceFilename: 'groma/systems/groma/containers/missing/container.md',
     message: /container "missing-parent-container" requires a system parent id/,
   },
   {
@@ -211,14 +244,12 @@ for (const {
         kind: 'component',
         parent: null,
         sourceFilename:
-          'groma/plans/test-revision/systems/groma/containers/viewer/components/'
-          + 'null-parent-component.md',
+          'groma/systems/groma/containers/viewer/components/null-parent-component.md',
       }),
     ],
     code: 'INVALID_ELEMENT',
     sourceFilename:
-      'groma/plans/test-revision/systems/groma/containers/viewer/components/'
-      + 'null-parent-component.md',
+      'groma/systems/groma/containers/viewer/components/null-parent-component.md',
     message: /parent must be a non-empty string when present/,
   },
   {
@@ -227,7 +258,7 @@ for (const {
       elementDocument({
         id: 'architect',
         kind: 'actor',
-        sourceFilename: 'groma/plans/test-revision/actors/architect.md',
+        sourceFilename: 'groma/actors/architect.md',
         relationships: [{
           href: '../systems/missing/system.md',
           description: 'Uses missing software',
@@ -236,7 +267,7 @@ for (const {
       }),
     ],
     code: 'UNKNOWN_RELATIONSHIP_TARGET',
-    sourceFilename: 'groma/plans/test-revision/actors/architect.md',
+    sourceFilename: 'groma/actors/architect.md',
     message: /relationship target.*systems\/missing\/system\.md.*does not resolve/,
   },
   {
@@ -246,13 +277,11 @@ for (const {
         id: 'numeric-group-system',
         kind: 'system',
         group: 7,
-        sourceFilename:
-          'groma/plans/test-revision/systems/numeric-group-system/system.md',
+        sourceFilename: 'groma/systems/numeric-group-system/system.md',
       }),
     ],
     code: 'INVALID_ELEMENT',
-    sourceFilename:
-      'groma/plans/test-revision/systems/numeric-group-system/system.md',
+    sourceFilename: 'groma/systems/numeric-group-system/system.md',
     message: /group must be a non-empty string when present/,
   },
   {
@@ -262,19 +291,17 @@ for (const {
         id: 'blank-group-system',
         kind: 'system',
         group: '  ',
-        sourceFilename:
-          'groma/plans/test-revision/systems/blank-group-system/system.md',
+        sourceFilename: 'groma/systems/blank-group-system/system.md',
       }),
     ],
     code: 'INVALID_ELEMENT',
-    sourceFilename:
-      'groma/plans/test-revision/systems/blank-group-system/system.md',
+    sourceFilename: 'groma/systems/blank-group-system/system.md',
     message: /group must be a non-empty string when present/,
   },
 ]) {
   test(name, () => {
     assert.throws(
-      () => buildArchitectureModel(revisionRecord(documents)),
+      () => buildArchitectureModel(documents),
       error => {
         assert.ok(error instanceof ArchitectureModelError)
         assert.equal(error.code, code)

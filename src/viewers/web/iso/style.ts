@@ -80,8 +80,8 @@ function tokens(level: Level): string {
  * The map's own stylesheet. Every level group sets its tokens from the
  * scale, with the system island half a tint step lighter on that scale. One
  * rule turns them into strokes (times the state's emphasis and the camera's
- * zoom weight) and fills; no literal width or tint lives here. Line style means origin; only a route leaving a touched element for an untouched one adds accent dots: observed solid, planned
- * dashed, missing dotted; patterns mean kind, and component facade windows mean file type. Selection
+ * zoom weight) and fills; no literal width or tint lives here. Line style means origin; only a route leaving a touched element for an untouched one adds accent dots: observed solid, draft
+ * dashed; patterns mean kind, and component facade windows mean file type. Selection
  * and context change strokes, never fills.
  */
 export const mapCss = `
@@ -166,10 +166,8 @@ export const mapCss = `
   #map .ghost { opacity: 0.8; }
   #map .ghost .face, #map .ghost .ground { fill: none; }
   #map .ghost .pattern, #map .ghost .chip { display: none; }
-  #map .ghost.planned .face, #map .ghost.planned .ground,
-  #map .route-base.ghost.planned, #map .route.ghost.planned .line { stroke-dasharray: 4 3; }
-  #map .ghost.missing .face, #map .ghost.missing .ground,
-  #map .route-base.ghost.missing, #map .route.ghost.missing .line { stroke-dasharray: 1 3; }
+  #map .ghost.draft .face, #map .ghost.draft .ground,
+  #map .route-base.ghost.draft, #map .route.ghost.draft .line { stroke-dasharray: 4 3; }
   #map .text { fill: var(--ink); pointer-events: none; }
   #map :is(.island, .slab, .zone) > .label .text { font-weight: 600; }
   #map .route-base, #map .route .line { fill: none; stroke-linecap: round; opacity: 0.9; }

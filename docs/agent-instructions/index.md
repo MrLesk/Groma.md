@@ -22,14 +22,16 @@ facts. Semantic curation belongs to the agent and human using Groma.
 6. Then group the resulting independently meaningful sibling components by
    domain. A skyscraper may also be a member of a group.
 7. Apply the curation through Groma:
-   - `groma create <name> --observed` adds a semantic actor, system, container,
-     or component that the scan cannot infer.
+   - `groma draft <kind> <name> --parent <id>` drafts a system, container, or
+     component that does not exist yet, as a ghost at the path it will keep.
+     The scanner alone creates stable software; it never writes actors or
+     external systems.
    - `groma edit <target> --combine <source...>` folds empty scan records into
      one responsibility and preserves their unique Code references.
    - `groma edit <component> --parent <container>` moves empty scan evidence.
    - `groma edit <component> --group <name>` groups siblings; `--ungroup`
      clears the group.
-   - `groma relate <source> <target>` restores one observed collaboration;
+   - `groma relate <source> <target>` restores one collaboration;
      `--remove` removes the only collaboration between that pair.
    These operations validate the complete change before writing. Do not edit
    Groma-owned architecture Markdown with generic file tools.

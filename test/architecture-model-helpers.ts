@@ -7,7 +7,6 @@ import type {
   C4Kind,
   MarkdownElement,
   MarkdownNode,
-  RevisionRecord,
 } from '../src/types.ts'
 import { c4Type } from '../src/okf-profile.ts'
 
@@ -15,19 +14,6 @@ export const repositoryRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   '..',
 )
-
-export function revisionRecord(
-  documents: ArchitectureDocument[],
-): Pick<RevisionRecord, 'revision' | 'documents'> {
-  return {
-    revision: {
-      kind: 'plan',
-      name: 'test-revision',
-      sourceDirectory: 'groma/plans/test-revision',
-    },
-    documents,
-  }
-}
 
 interface RelationshipFixture {
   href: string
@@ -42,11 +28,15 @@ interface ElementDocumentFixture {
   title?: string
   description?: string
   sourceFilename: string
+  /** The OKF lifecycle word; pass null to build a document without one. */
+  status?: unknown
   parent?: string | null
-  external?: unknown
+  draft?: unknown
   group?: unknown
   technology?: unknown
   code?: unknown
+  /** Extra groma fields, for documents that claim something the profile does not know. */
+  extraGroma?: Record<string, unknown>
   relationships?: RelationshipFixture[]
 }
 
@@ -56,26 +46,27 @@ export function elementDocument({
   title = id,
   description,
   sourceFilename,
+  status = 'stable',
   parent,
-  external,
+  draft,
   group,
   technology,
   code,
+  extraGroma = {},
   relationships = [],
 }: ElementDocumentFixture): ArchitectureDocument {
-  const groma: Record<string, unknown> = { id }
+  const groma: Record<string, unknown> = { id, ...extraGroma }
   const frontmatter: ArchitectureFrontmatter = {
     type: c4Type(kind),
     title,
     ...(description === undefined ? {} : { description }),
+    ...(status === null ? {} : { status }),
     groma,
   }
   if (parent !== undefined) {
     groma.parent = parent
   }
-  if (external !== undefined) {
-    groma.external = external
-  }
+  if (draft !== undefined) groma.draft = draft
   if (group !== undefined) {
     groma.group = group
   }

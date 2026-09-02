@@ -7,7 +7,7 @@ import { parseFrontmatter } from 'comark'
 import { createScanObservation } from '@groma/scanner'
 
 import { acceptGhost, loadAnnotatedArchitecture, reconcileScanObservations } from '../src/core.ts'
-import { createArchitectureElement } from '../src/create.ts'
+import { draftElement } from '../src/draft.ts'
 import { editArchitecture } from '../src/edit.ts'
 import { saveProjectProfile } from '../src/project-profile.ts'
 
@@ -51,6 +51,20 @@ Owns the order lifecycle.
 Keep this authored section.
 `
 
+const nextDraft = `---
+type: Draft
+title: Next
+groma:
+  id: next
+---
+
+The next release adds stock checks.
+`
+
+const ordersPath = 'groma/systems/shop/containers/api/components/orders.md'
+const stockPath = 'groma/systems/shop/containers/api/components/stock.md'
+const draftPath = 'groma/drafts/next.md'
+
 async function writeTree(root: string, files: Record<string, string>): Promise<void> {
   for (const [relative, source] of Object.entries(files)) {
     const filename = path.join(root, ...relative.split('/'))
@@ -64,10 +78,7 @@ async function temporaryWorld(extra: Record<string, string> = {}): Promise<strin
   await writeTree(root, {
     'groma/index.md': '---\nokf_version: "0.2"\n---\n',
     'groma/project.md': projectSource,
-    'groma/observed/index.md': '# Observed\n',
-    'groma/missing/index.md': '# Missing\n',
-    'groma/plans/index.md': '# Plans\n',
-    'groma/observed/systems/shop/system.md': `---
+    'groma/systems/shop/system.md': `---
 type: C4 System
 title: Shop
 status: stable
@@ -77,7 +88,7 @@ groma:
 
 Lets customers place orders.
 `,
-    'groma/observed/systems/shop/containers/api/container.md': `---
+    'groma/systems/shop/containers/api/container.md': `---
 type: C4 Container
 title: Api
 status: stable
@@ -88,7 +99,8 @@ groma:
 
 Takes order requests.
 `,
-    'groma/observed/systems/shop/containers/api/components/orders.md': ordersSource,
+    [ordersPath]: ordersSource,
+    [draftPath]: nextDraft,
     ...extra,
   })
   return root
@@ -123,64 +135,46 @@ async function runCli(root: string, args: string[]) {
   return process.exited
 }
 
-test.concurrent('create emits canonical draft and stable OKF concepts and reserved indexes', async () => {
+test.concurrent('draft emits a canonical draft OKF concept and leaves the bundle documents alone', async () => {
   const root = await temporaryWorld()
   try {
     const rootIndex = await source(root, 'groma/index.md')
     const project = await source(root, 'groma/project.md')
-    await createArchitectureElement(root, {
-      name: 'Stock',
-      plan: 'next',
+    await draftElement(root, {
       kind: 'component',
+      name: 'Stock',
       parent: 'api',
       overview: 'Checks stock before an order.',
       description: 'Checks stock availability.',
-    })
-    await createArchitectureElement(root, {
-      name: 'Git',
-      observed: true,
-      kind: 'system',
-      overview: 'Keeps architecture history.',
-      external: true,
+      draft: 'next',
     })
 
-    const planned = await source(
-      root,
-      'groma/plans/next/systems/shop/containers/api/components/stock.md',
-    )
-    expect(metadata(planned)).toEqual({
+    const drafted = await source(root, stockPath)
+    expect(metadata(drafted)).toEqual({
       type: 'C4 Component',
       title: 'Stock',
       description: 'Checks stock availability.',
       status: 'draft',
-      groma: { id: 'stock', parent: 'api' },
+      groma: { id: 'stock', parent: 'api', draft: 'next' },
     })
-    expect(planned).not.toContain('\n# Stock\n')
-    expect(parseFrontmatter(planned).content.trim()).toBe('Checks stock before an order.')
-    expect(metadata(await source(root, 'groma/observed/systems/git/system.md'))).toEqual({
-      type: 'C4 System',
-      title: 'Git',
-      status: 'stable',
-      groma: { id: 'git', external: true },
-    })
-    expect(metadata(await source(root, 'groma/plans/next/index.md'))).toEqual({})
+    expect(drafted).not.toContain('\n# Stock\n')
+    expect(parseFrontmatter(drafted).content.trim()).toBe('Checks stock before an order.')
     expect(await source(root, 'groma/index.md')).toBe(rootIndex)
     expect(await source(root, 'groma/project.md')).toBe(project)
+    expect(await source(root, draftPath)).toBe(nextDraft)
   } finally {
     await rm(root, { recursive: true, force: true })
   }
 })
 
-test.concurrent('edit and restate preserve unowned OKF metadata and Markdown', async () => {
+test.concurrent('edit preserves unowned OKF metadata and Markdown while it changes meaning and tags', async () => {
   const root = await temporaryWorld()
-  const observedPath = 'groma/observed/systems/shop/containers/api/components/orders.md'
-  const plannedPath = 'groma/plans/next/systems/shop/containers/api/components/orders.md'
   try {
     await editArchitecture(root, {
       id: 'orders',
       overview: 'Places and tracks customer orders.',
     })
-    const edited = await source(root, observedPath)
+    const edited = await source(root, ordersPath)
     const editedMetadata = metadata(edited)
     expect(editedMetadata.description).toBe('A standard short description.')
     expect(editedMetadata.status).toBe('stable')
@@ -193,37 +187,41 @@ test.concurrent('edit and restate preserve unowned OKF metadata and Markdown', a
       id: 'orders',
       description: 'A revised concise description.',
     })
-    const described = await source(root, observedPath)
+    const described = await source(root, ordersPath)
     expect(metadata(described).description).toBe('A revised concise description.')
     expect(described).toContain('Places and tracks customer orders.')
 
-    await editArchitecture(root, { id: 'orders', plan: 'next' })
-    const planned = await source(root, plannedPath)
-    const plannedMetadata = metadata(planned)
-    expect(plannedMetadata.status).toBe('draft')
-    expect(plannedMetadata.groma).toEqual({ id: 'orders', parent: 'api' })
-    expect(plannedMetadata.description).toBe('A revised concise description.')
-    expect(plannedMetadata.provenance).toEqual({ source: 'architecture workshop' })
-    expect(plannedMetadata.audience).toBe('developers')
-    expect(planned).toContain('## Notes\n\nKeep this authored section.')
-    expect(metadata(await source(root, 'groma/plans/next/index.md'))).toEqual({})
+    await editArchitecture(root, { id: 'orders', draft: 'next' })
+    const tagged = await source(root, ordersPath)
+    const taggedMetadata = metadata(tagged)
+    expect(taggedMetadata.status).toBe('stable')
+    expect(taggedMetadata.groma).toEqual({
+      id: 'orders',
+      parent: 'api',
+      code: mapping(metadata(ordersSource).groma).code,
+      draft: 'next',
+    })
+    expect(taggedMetadata.description).toBe('A revised concise description.')
+    expect(taggedMetadata.provenance).toEqual({ source: 'architecture workshop' })
+    expect(taggedMetadata.audience).toBe('developers')
+    expect(tagged).toContain('## Notes\n\nKeep this authored section.')
 
     await editArchitecture(root, {
       id: 'orders',
-      overview: 'Ships planned orders.',
+      overview: 'Ships tagged orders.',
       description: '',
     })
-    const revisedPlan = metadata(await source(root, plannedPath))
-    expect(revisedPlan.status).toBe('draft')
-    expect(revisedPlan.description).toBeUndefined()
+    const revised = metadata(await source(root, ordersPath))
+    expect(revised.status).toBe('stable')
+    expect(revised.description).toBeUndefined()
 
     await editArchitecture(root, {
       id: 'next',
       overview: 'The next release ships revised orders.',
     })
-    const planIndex = await source(root, 'groma/plans/next/index.md')
-    expect(metadata(planIndex)).toEqual({})
-    expect(planIndex).toContain('## Outcome\n\nThe next release ships revised orders.')
+    const draft = await source(root, draftPath)
+    expect(metadata(draft)).toEqual({ type: 'Draft', title: 'Next', groma: { id: 'next' } })
+    expect(parseFrontmatter(draft).content.trim()).toBe('The next release ships revised orders.')
   } finally {
     await rm(root, { recursive: true, force: true })
   }
@@ -231,7 +229,6 @@ test.concurrent('edit and restate preserve unowned OKF metadata and Markdown', a
 
 test.concurrent('structural edit changes only owned Groma metadata', async () => {
   const root = await temporaryWorld()
-  const ordersPath = 'groma/observed/systems/shop/containers/api/components/orders.md'
   try {
     await editArchitecture(root, { id: 'orders', group: 'Commerce' })
     const edited = await source(root, ordersPath)
@@ -254,7 +251,6 @@ test.concurrent('structural edit changes only owned Groma metadata', async () =>
 
 test.concurrent('scan refreshes and creates only owned stable profile fields', async () => {
   const root = await temporaryWorld()
-  const ordersPath = 'groma/observed/systems/shop/containers/api/components/orders.md'
   try {
     await writeFile(path.join(root, ...ordersPath.split('/')), ordersSource.replaceAll('\n', '\r\n'))
     const observation = createScanObservation({
@@ -290,7 +286,7 @@ test.concurrent('scan refreshes and creates only owned stable profile fields', a
     expect(refreshedMetadata.audience).toBe('developers')
     expect(refreshed).toContain('Keep this authored section.')
 
-    const helperPath = 'groma/observed/systems/shop/containers/api/components/helper.md'
+    const helperPath = 'groma/systems/shop/containers/api/components/helper.md'
     const helper = await source(root, helperPath)
     expect(metadata(helper)).toEqual({
       type: 'C4 Component',
@@ -316,11 +312,10 @@ test.concurrent('scan refreshes and creates only owned stable profile fields', a
   }
 })
 
-test.concurrent('scan matching stays draft and accept preserves the complete concept as stable', async () => {
-  const plannedPath = 'groma/plans/next/systems/shop/containers/api/components/inventory.md'
+test.concurrent('scan matching stays draft and accept flips the complete concept to stable in place', async () => {
+  const inventoryPath = 'groma/systems/shop/containers/api/components/inventory.md'
   const root = await temporaryWorld({
-    'groma/plans/next/index.md': '# Next\n',
-    [plannedPath]: `---
+    [inventoryPath]: `---
 type: C4 Component
 title: Inventory
 description: Standard inventory description.
@@ -328,6 +323,7 @@ status: draft
 groma:
   id: inventory
   parent: api
+  draft: next
 provenance:
   source: planning workshop
 audience: operators
@@ -337,7 +333,7 @@ Tracks available stock.
 
 ## Notes
 
-Preserve this plan note.
+Preserve this draft note.
 `,
   })
   try {
@@ -355,22 +351,18 @@ Preserve this plan note.
     })
     expect(await reconcileScanObservations(root, [observation]))
       .toEqual({ created: 0, refreshed: 0, matched: 1 })
-    expect(metadata(await source(root, plannedPath)).status)
-      .toBe('draft')
+    expect(metadata(await source(root, inventoryPath)).status).toBe('draft')
 
     expect(await acceptGhost(root, 'inventory')).toBe('accepted')
-    const accepted = await source(
-      root,
-      'groma/observed/systems/shop/containers/api/components/inventory.md',
-    )
+    const accepted = await source(root, inventoryPath)
     const data = metadata(accepted)
     expect(data.status).toBe('stable')
     expect(data.description).toBe('Standard inventory description.')
     expect(data.provenance).toEqual({ source: 'planning workshop' })
     expect(data.audience).toBe('operators')
+    expect(mapping(data.groma).draft).toBe('next')
     expect(mappings(mapping(data.groma).code)[0]?.file).toBe('src/inventory.ts')
-    expect(accepted).toContain('Preserve this plan note.')
-    await expect(readFile(path.join(root, plannedPath))).rejects.toThrow()
+    expect(accepted).toContain('Preserve this draft note.')
   } finally {
     await rm(root, { recursive: true, force: true })
   }
@@ -418,24 +410,22 @@ test.concurrent('project save preserves the profile marker and unowned OKF metad
 
 test.concurrent('CLI writes overview and optional description to separate owners', async () => {
   const root = await temporaryWorld()
-  const plannedPath = 'groma/plans/next/systems/shop/containers/api/components/stock.md'
   try {
-    const created = await runCli(root, [
-      'create',
-      'Stock',
-      '--plan',
-      'next',
-      '--kind',
+    const drafted = await runCli(root, [
+      'draft',
       'component',
+      'Stock',
       '--parent',
       'api',
       '--overview',
       'Checks stock before an order.',
       '--description',
       'Concise stock role.',
+      '--draft',
+      'next',
     ])
-    expect(created).toBe(0)
-    const authored = await source(root, plannedPath)
+    expect(drafted).toBe(0)
+    const authored = await source(root, stockPath)
     expect(metadata(authored).description).toBe('Concise stock role.')
     expect(parseFrontmatter(authored).content.trim()).toBe('Checks stock before an order.')
 
@@ -446,7 +436,7 @@ test.concurrent('CLI writes overview and optional description to separate owners
       'Ships stock checks.',
     ])
     expect(overviewOnly).toBe(0)
-    const preserved = await source(root, plannedPath)
+    const preserved = await source(root, stockPath)
     expect(metadata(preserved).description).toBe('Concise stock role.')
     expect(parseFrontmatter(preserved).content.trim()).toBe('Ships stock checks.')
 
@@ -457,7 +447,7 @@ test.concurrent('CLI writes overview and optional description to separate owners
       '',
     ])
     expect(edited).toBe(0)
-    const revised = await source(root, plannedPath)
+    const revised = await source(root, stockPath)
     expect(metadata(revised).description).toBeUndefined()
     expect(parseFrontmatter(revised).content.trim()).toBe('Ships stock checks.')
   } finally {

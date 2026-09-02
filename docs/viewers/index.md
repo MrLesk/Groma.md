@@ -1,9 +1,9 @@
 # Viewers
 
 A viewer shows the one architecture world Groma core already has: observed
-boxes, planned ghosts, missing items, and the relationships between them.
+boxes, draft ghosts, and the relationships between them.
 People use a viewer to judge a scan and walk the architecture. Changes and
-ghost acceptance go through `groma create`, `groma edit` and
+ghost acceptance go through `groma draft`, `groma edit` and
 `groma accept`.
 
 Viewers are plugins. The TUI is one plugin, not the product. A web page or

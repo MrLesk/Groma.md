@@ -66,12 +66,11 @@ export const advancedCommands = [
     content: 'Removes a scanner from this project. Shared downloaded packages remain cached for other projects.',
   },
   {
-    command: 'groma create <name> --kind <kind> …',
-    description: 'overview + plan/observed',
+    command: 'groma draft <kind> <name> …',
+    description: 'kind, overview, optional draft',
     content: [
-      'Creates an architecture element.',
-      'Use --plan <id> for planned work.',
-      'Use --observed for current meaning without source evidence.',
+      'Drafts a system, container, or component as a ghost at the path it will keep.',
+      'Use --draft <id> to file it under a draft record.',
       'Containers and components require --parent.',
     ].join('\n'),
   },
@@ -87,8 +86,8 @@ export const advancedCommands = [
   },
   {
     command: 'groma accept <id>',
-    description: 'matched plan id',
-    content: 'Accepts a planned element only after a scan has matched that id.',
+    description: 'matched draft id',
+    content: 'Accepts a drafted element only after a scan has matched that id.',
   },
   {
     command: 'groma agent-instructions [guide]',

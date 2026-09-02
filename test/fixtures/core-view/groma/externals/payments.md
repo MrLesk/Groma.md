@@ -1,0 +1,9 @@
+---
+type: C4 System
+title: Payments
+status: stable
+groma:
+  id: payments
+---
+
+Authorizes customer payments.
