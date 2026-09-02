@@ -34,6 +34,8 @@ export const viewerFixtureRoot = path.join(
   'fixtures',
   'viewer-view',
 )
+/** The generated large world: four systems, twenty containers, three hundred components. */
+export const largeWorldFixtureRoot = path.join(repositoryRoot, 'test', 'fixtures', 'large-world')
 /** Upper-band product world authored from OpenClaw docs, not its old scanner dump. */
 export const openclawFixtureRoot = path.join(
   repositoryRoot,

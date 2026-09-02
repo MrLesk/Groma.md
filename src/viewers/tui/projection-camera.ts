@@ -87,6 +87,22 @@ export function projectBounds(
   return { ...bounds, ...point }
 }
 
+/** True when any segment of an orthogonal route crosses the viewport. */
+export function routeTouches(route: readonly Point[], viewport: Bounds): boolean {
+  return route.some((point, index) => {
+    if (index === 0) return false
+    const previous = route[index - 1]!
+    const x = Math.min(previous.x, point.x)
+    const y = Math.min(previous.y, point.y)
+    return visibleIn({
+      x,
+      y,
+      width: Math.abs(point.x - previous.x) + 1,
+      height: Math.abs(point.y - previous.y) + 1,
+    }, viewport)
+  })
+}
+
 export function visibleIn(bounds: Bounds, viewport: Bounds): boolean {
   return bounds.x < viewport.x + viewport.width
     && bounds.x + bounds.width > viewport.x
