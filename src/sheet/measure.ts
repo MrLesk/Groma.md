@@ -169,7 +169,7 @@ export function floorsOf(
 
 /**
  * Observed code lines raise a file floor by its share of the project range,
- * in half height units. Planned files and equal ranges stay one unit high.
+ * in half height units. Draft files and equal ranges stay one unit high.
  */
 export function heightUnitsOf(
   origin: Origin,

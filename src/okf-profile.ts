@@ -3,6 +3,7 @@ import type { C4Kind } from './types.ts'
 export const OKF_VERSION = '0.2'
 export const GROMA_PROJECT_TYPE = 'Groma Project'
 export const GROMA_PROFILE = 'architecture'
+export const DRAFT_TYPE = 'Draft'
 
 const typeByKind: Record<C4Kind, string> = {
   actor: 'C4 Actor',

@@ -24,24 +24,24 @@ const elements: AnnotatedArchitectureModel['elements'] = [
   {
     representationId: 'observed:api', id: 'api', kind: 'container',
     title: 'API', overview: 'Serves requests.', parent: 'observed:shop',
-    children: ['planned:checkout'], external: false, code: [], origin: 'observed',
+    children: ['draft:checkout'], external: false, code: [], origin: 'observed',
     group: 'Runtime',
   },
   {
-    representationId: 'planned:checkout', id: 'checkout', kind: 'component',
+    representationId: 'draft:checkout', id: 'checkout', kind: 'component',
     title: 'Checkout', overview: 'Places orders.', parent: 'observed:api',
-    children: [], external: false, code: [], origin: 'planned', plan: 'checkout',
+    children: [], external: false, code: [], origin: 'draft', draft: 'checkout',
   },
   {
     representationId: 'observed:worker', id: 'worker', kind: 'container',
     title: 'Worker', overview: 'Runs jobs.', parent: 'observed:shop',
-    children: ['missing:fulfilment'], external: false, code: [], origin: 'observed',
+    children: ['draft:fulfilment'], external: false, code: [], origin: 'observed',
     group: 'Runtime',
   },
   {
-    representationId: 'missing:fulfilment', id: 'fulfilment', kind: 'component',
+    representationId: 'draft:fulfilment', id: 'fulfilment', kind: 'component',
     title: 'Fulfilment', overview: 'Ships orders.', parent: 'observed:worker',
-    children: [], external: false, code: [], origin: 'missing',
+    children: [], external: false, code: [], origin: 'draft',
   },
   {
     representationId: 'observed:payments', id: 'payments', kind: 'system',
@@ -54,23 +54,23 @@ const elements: AnnotatedArchitectureModel['elements'] = [
 const relationships: AnnotatedArchitectureModel['relationships'] = [
   {
     id: 'relationship:0',
-    source: 'observed:architect', target: 'planned:checkout',
+    source: 'observed:architect', target: 'draft:checkout',
     description: 'Reviews checkout', technology: 'Terminal', origin: 'observed',
   },
   {
     id: 'relationship:1',
-    source: 'planned:checkout', target: 'missing:fulfilment',
-    description: 'Starts fulfilment', technology: 'Queue', origin: 'planned',
-    plan: 'checkout',
+    source: 'draft:checkout', target: 'draft:fulfilment',
+    description: 'Starts fulfilment', technology: 'Queue', origin: 'draft',
+    draft: 'checkout',
   },
   {
     id: 'relationship:2',
-    source: 'missing:fulfilment', target: 'observed:payments',
-    description: 'Confirms payment', technology: 'HTTPS', origin: 'missing',
+    source: 'draft:fulfilment', target: 'observed:payments',
+    description: 'Confirms payment', technology: 'HTTPS', origin: 'draft',
   },
 ]
 
-const model: AnnotatedArchitectureModel = { plans: ['checkout'], elements, relationships }
+const model: AnnotatedArchitectureModel = { drafts: ['checkout'], elements, relationships }
 
 function contains(outer: Bounds, inner: Bounds): boolean {
   return inner.x >= outer.x

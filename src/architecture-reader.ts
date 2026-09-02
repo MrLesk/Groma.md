@@ -13,20 +13,16 @@ import { GromaFileSystem } from './groma-filesystem.ts'
 
 import type {
   ArchitectureDocument,
+  ArchitectureRecords,
   FilesystemAccessHandler,
-  Revision,
-  RevisionDescriptor,
-  RevisionRecord,
 } from './types.ts'
 
 export class ArchitectureReadError extends Error {
   readonly sourceFilename: string
-  readonly revision: Revision
   readonly stage: 'read' | 'parse' | 'serialize'
 
   constructor(
     sourceFilename: string,
-    revision: Revision,
     stage: 'read' | 'parse' | 'serialize',
     cause: unknown,
   ) {
@@ -40,7 +36,6 @@ export class ArchitectureReadError extends Error {
     super(message, { cause })
     this.name = 'ArchitectureReadError'
     this.sourceFilename = sourceFilename
-    this.revision = revision
     this.stage = stage
   }
 }
@@ -96,63 +91,17 @@ async function listMarkdownFiles(
   return files.sort()
 }
 
-function identifyRevision(
-  filesystem: GromaFileSystem,
-  descriptor: unknown,
-): Revision {
-  const revision = descriptor as Partial<RevisionDescriptor> | null
-  if (revision?.kind === 'observed') {
-    return {
-      kind: 'observed',
-      sourceDirectory: filesystem.sourceFilename('observed'),
-    }
-  }
+/** The two root documents describe the bundle and the project, never an element. */
+const rootDocuments = new Set(['index.md', 'project.md'])
 
-  if (revision?.kind === 'missing') {
-    return {
-      kind: 'missing',
-      sourceDirectory: filesystem.sourceFilename('missing'),
-    }
-  }
-
-  if (
-    revision?.kind !== 'plan'
-    || typeof revision.name !== 'string'
-    || revision.name.length === 0
-    || revision.name === '.'
-    || revision.name === '..'
-    || revision.name.includes('/')
-    || revision.name.includes('\\')
-  ) {
-    throw new TypeError(
-      'A revision must be { kind: "observed" }, { kind: "missing" }, '
-      + 'or { kind: "plan", name: "<directory>" }',
-    )
-  }
-
-  return {
-    kind: 'plan',
-    name: revision.name,
-    sourceDirectory: filesystem.sourceFilename(`plans/${revision.name}`),
-  }
-}
-
+/** Names the scanner must never hand to an element, since Markdown tooling reserves them. */
 export function isReservedDocument(filename: string): boolean {
   const basename = path.posix.basename(filename)
   return basename === 'index.md' || basename === 'log.md'
 }
 
-function requireReservedFrontmatter(document: ArchitectureDocument): void {
-  if (Object.keys(document.frontmatter).length > 0) {
-    throw new TypeError(
-      `${document.sourceFilename}: only the bundle-root index may have frontmatter`,
-    )
-  }
-}
-
 async function parseDocument(
   filesystem: GromaFileSystem,
-  revision: Revision,
   relativeFilename: string,
   onFilesystemAccess?: FilesystemAccessHandler,
 ): Promise<ArchitectureDocument> {
@@ -167,14 +116,14 @@ async function parseDocument(
     )
     source = await filesystem.read(relativeFilename)
   } catch (error) {
-    throw new ArchitectureReadError(sourceFilename, revision, 'read', error)
+    throw new ArchitectureReadError(sourceFilename, 'read', error)
   }
 
   let tree: Awaited<ReturnType<typeof parse>>
   try {
     tree = await parse(source)
   } catch (error) {
-    throw new ArchitectureReadError(sourceFilename, revision, 'parse', error)
+    throw new ArchitectureReadError(sourceFilename, 'parse', error)
   }
 
   try {
@@ -186,125 +135,42 @@ async function parseDocument(
       frontmatter: tree.frontmatter,
     })) as ArchitectureDocument)
   } catch (error) {
-    throw new ArchitectureReadError(sourceFilename, revision, 'serialize', error)
+    throw new ArchitectureReadError(sourceFilename, 'serialize', error)
   }
 }
 
 async function requireGromaPackage(
   filesystem: GromaFileSystem,
-  revision: Revision,
   onFilesystemAccess?: FilesystemAccessHandler,
 ): Promise<void> {
-  const index = await parseDocument(
-    filesystem,
-    revision,
-    'index.md',
-    onFilesystemAccess,
-  )
+  const index = await parseDocument(filesystem, 'index.md', onFilesystemAccess)
   requireBundleIndex(index.frontmatter, index.sourceFilename)
-  const project = await parseDocument(
-    filesystem,
-    revision,
-    'project.md',
-    onFilesystemAccess,
-  )
+  const project = await parseDocument(filesystem, 'project.md', onFilesystemAccess)
   requireProjectMetadata(project.frontmatter, project.sourceFilename)
   requireProjectOverview(project.nodes, project.body, project.sourceFilename)
 }
 
-async function loadRevisionRecord(
-  filesystem: GromaFileSystem,
-  revision: Revision,
-  onFilesystemAccess?: FilesystemAccessHandler,
-): Promise<RevisionRecord> {
-  const revisionRoot = filesystem.relative(revision.sourceDirectory)
-  const contextFile = path.posix.join(revisionRoot, 'index.md')
-  const markdownFiles = await listMarkdownFiles(
-    filesystem,
-    revisionRoot,
-    onFilesystemAccess,
-  )
-  let context: ArchitectureDocument | undefined
+/** Reads the one architecture tree: element documents wherever they sit, draft records under drafts/. */
+export async function loadArchitecture(
+  repositoryRoot: string,
+  options: { onFilesystemAccess?: FilesystemAccessHandler } = {},
+): Promise<ArchitectureRecords> {
+  const { onFilesystemAccess } = options
+  const filesystem = GromaFileSystem.open(repositoryRoot)
+  await requireGromaPackage(filesystem, onFilesystemAccess)
   const documents: ArchitectureDocument[] = []
+  const drafts: ArchitectureDocument[] = []
 
-  for (const filename of markdownFiles) {
-    const document = await parseDocument(
-      filesystem,
-      revision,
-      filename,
-      onFilesystemAccess,
-    )
-
-    if (isReservedDocument(document.sourceFilename)) {
-      requireReservedFrontmatter(document)
-      if (filename === contextFile) context = document
+  for (const filename of await listMarkdownFiles(filesystem, '', onFilesystemAccess)) {
+    if (rootDocuments.has(filename) || isReservedDocument(filename)) continue
+    const document = await parseDocument(filesystem, filename, onFilesystemAccess)
+    if (filename.startsWith('drafts/')) {
+      drafts.push(document)
       continue
     }
-
     const type = requireConceptType(document.frontmatter, document.sourceFilename)
     if (c4Kind(type) !== undefined) documents.push(document)
   }
 
-  if (!context) {
-    context = await parseDocument(
-      filesystem,
-      revision,
-      contextFile,
-      onFilesystemAccess,
-    )
-  }
-
-  return deepFreeze({ revision, context, documents })
-}
-
-export async function loadRevision(
-  repositoryRoot: string,
-  revisionDescriptor: unknown,
-  options: { onFilesystemAccess?: FilesystemAccessHandler } = {},
-): Promise<RevisionRecord> {
-  const { onFilesystemAccess } = options
-  const filesystem = GromaFileSystem.open(repositoryRoot)
-  const revision = deepFreeze(identifyRevision(filesystem, revisionDescriptor))
-  await requireGromaPackage(filesystem, revision, onFilesystemAccess)
-  return loadRevisionRecord(filesystem, revision, onFilesystemAccess)
-}
-
-export async function loadArchitecture(
-  repositoryRoot: string,
-  options: { onFilesystemAccess?: FilesystemAccessHandler } = {},
-): Promise<RevisionRecord[]> {
-  const { onFilesystemAccess } = options
-  const filesystem = GromaFileSystem.open(repositoryRoot)
-  const packageRevision = deepFreeze(identifyRevision(filesystem, { kind: 'observed' }))
-  await requireGromaPackage(
-    filesystem,
-    packageRevision,
-    onFilesystemAccess,
-  )
-  recordFilesystemAccess(
-    onFilesystemAccess,
-    'read-directory',
-    filesystem.absolute('plans'),
-  )
-  const planEntries = await filesystem.list('plans')
-  const revisionDescriptors: RevisionDescriptor[] = [
-    { kind: 'observed' },
-    { kind: 'missing' },
-    ...planEntries
-      .filter(entry => entry.isDirectory())
-      .map(entry => entry.name)
-      .sort()
-      .map(name => ({ kind: 'plan' as const, name })),
-  ]
-  const revisions: RevisionRecord[] = []
-
-  for (const revision of revisionDescriptors) {
-    revisions.push(await loadRevisionRecord(
-      filesystem,
-      deepFreeze(identifyRevision(filesystem, revision)),
-      onFilesystemAccess,
-    ))
-  }
-
-  return deepFreeze(revisions)
+  return deepFreeze({ documents, drafts })
 }

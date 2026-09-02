@@ -3,9 +3,7 @@ import { renderFrontmatter } from 'comark/render'
 
 import { GromaFileSystem } from './groma-filesystem.ts'
 import { c4Type, requireGromaMapping } from './okf-profile.ts'
-import type { C4Kind, CodeReference } from './types.ts'
-
-export type RepresentationStatus = 'draft' | 'stable'
+import type { C4Kind, CodeReference, ElementStatus } from './types.ts'
 
 function normalizeNewlines(source: string): string {
   return source.replaceAll('\r\n', '\n')
@@ -34,45 +32,32 @@ function documentParts(source: string): {
 function withGromaChange(
   source: string,
   change: (groma: Record<string, unknown>) => void,
-  status?: RepresentationStatus,
 ): string {
   const { content, data } = documentParts(source)
   const nextGroma = { ...requireGromaMapping(data, 'document') }
   change(nextGroma)
-  return sourceWithFrontmatter({
-    ...data,
-    ...(status === undefined ? {} : { status }),
-    groma: nextGroma,
-  }, content)
+  return sourceWithFrontmatter({ ...data, groma: nextGroma }, content)
 }
 
-export function withGromaCode(
-  source: string,
-  code: CodeReference[],
-  status?: RepresentationStatus,
-): string {
+export function withGromaCode(source: string, code: CodeReference[]): string {
   return withGromaChange(source, groma => {
     if (code.length === 0) delete groma.code
     else groma.code = code
-  }, status)
+  })
 }
 
 export function withGromaField(
   source: string,
-  field: 'group' | 'parent',
+  field: 'group' | 'parent' | 'draft',
   value: string | undefined,
-  status?: RepresentationStatus,
 ): string {
   return withGromaChange(source, groma => {
     if (value === undefined) delete groma[field]
     else groma[field] = value
-  }, status)
+  })
 }
 
-export function withRepresentationStatus(
-  source: string,
-  status: RepresentationStatus,
-): string {
+export function withStatus(source: string, status: ElementStatus): string {
   const { content, data } = documentParts(source)
   return sourceWithFrontmatter({ ...data, status }, content)
 }
@@ -87,33 +72,6 @@ export function withDescription(
   if (description === '') delete next.description
   else next.description = description
   return sourceWithFrontmatter(next, content)
-}
-
-export function omitCode(source: string): string {
-  return withGromaCode(source, [])
-}
-
-function afterHeading(source: string, heading: RegExp) {
-  source = normalizeNewlines(source)
-  const match = source.match(heading)
-  if (match === null || match.index === undefined) return undefined
-  const rest = source.slice(match.index + match[0].length)
-  const next = rest.search(/\n#{1,6} /)
-  return {
-    prefix: source.slice(0, match.index + match[0].length),
-    suffix: next === -1 ? '' : rest.slice(next),
-  }
-}
-
-function replaceHeadingBody(
-  source: string,
-  heading: RegExp,
-  body: string,
-): string | undefined {
-  const range = afterHeading(source, heading)
-  if (range === undefined) return undefined
-  const next = body.trim()
-  return `${range.prefix}\n\n${next}${range.suffix === '' ? '\n' : `\n${range.suffix}`}`
 }
 
 const nonProseBlock = '(?: {0,3}(?:#{1,6}[ \\t]|[-+*][ \\t]+'
@@ -136,24 +94,16 @@ export function replaceLeadProse(source: string, prose: string): string {
     + `${suffix === '' ? '\n' : `\n\n${suffix}`}`
 }
 
-export function setOutcomeSection(source: string, prose: string): string {
-  const replaced = replaceHeadingBody(source, /^## Outcome$/m, prose)
-  if (replaced !== undefined) return replaced
-  const inserted = replaceHeadingBody(source, /^# .+$/m, `## Outcome\n\n${prose}`)
-  if (inserted === undefined) throw new Error('document requires a heading')
-  return inserted
-}
-
 export function renderArchitectureDocument(input: {
   id: string
   kind: C4Kind
   parent?: string | null
-  external?: boolean
   technology?: string
+  draft?: string
   name: string
   description?: string
   overview: string
-  status: RepresentationStatus
+  status: ElementStatus
   code?: CodeReference[]
 }): string {
   const groma: Record<string, unknown> = { id: input.id }
@@ -163,8 +113,8 @@ export function renderArchitectureDocument(input: {
     }
     groma.parent = input.parent
   }
-  if (input.external === true) groma.external = true
   if (input.technology !== undefined) groma.technology = input.technology
+  if (input.draft !== undefined) groma.draft = input.draft
   if ((input.code?.length ?? 0) > 0) groma.code = input.code
   const content = input.overview.trim() === '' ? '\n' : `\n\n${input.overview.trim()}\n`
   return sourceWithFrontmatter({
@@ -226,17 +176,13 @@ export async function upsertCode(
   repositoryRoot: string,
   sourceFilename: string,
   code: CodeReference[],
-  status: RepresentationStatus,
 ): Promise<void> {
   const filesystem = GromaFileSystem.open(repositoryRoot)
   const source = await filesystem.readSource(sourceFilename)
-  await filesystem.writeSource(
-    sourceFilename,
-    withGromaCode(source, code, status),
-  )
+  await filesystem.writeSource(sourceFilename, withGromaCode(source, code))
 }
 
-export async function writeObservedDocument(
+export async function writeDocument(
   repositoryRoot: string,
   sourceFilename: string,
   source: string,

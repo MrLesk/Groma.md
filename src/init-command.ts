@@ -148,12 +148,10 @@ function completionMessage(
 }
 
 async function hasObservedComponents(repositoryRoot: string): Promise<boolean> {
-  const revisions = await loadArchitecture(repositoryRoot)
-  return revisions.some(revision => {
-    return revision.revision.kind === 'observed'
-      && revision.documents.some(document => {
-        return c4Kind(document.frontmatter.type) === 'component'
-      })
+  const records = await loadArchitecture(repositoryRoot)
+  return records.documents.some(document => {
+    return c4Kind(document.frontmatter.type) === 'component'
+      && document.frontmatter.status === 'stable'
   })
 }
 

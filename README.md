@@ -34,7 +34,7 @@ Groma scans your repository, writes its architecture as one Markdown file per el
 - **Works without AI.** The scanner and the authoring commands are a plain CLI. An agent can run the same commands, but nothing in Groma requires one.
 - **Nothing to lock you in.** The folder is an [Open Knowledge Format](docs/component-markdown.md) 0.2 bundle. Uninstall Groma and you keep a readable `groma/` that renders on GitHub as it is.
 - **Local by design.** No server, no account, no telemetry. `groma web` serves only your machine. `groma export` writes a static site when you decide to share.
-- **Plans live on the same map.** A planned part is a dashed ghost beside what exists. `groma accept` turns it solid only after a scan has found the code.
+- **Drafts live on the same map.** A drafted part is a dashed ghost beside what exists, at the path it will keep. `groma accept` turns it solid only after a scan has found the code.
 
 ## Quick start
 
@@ -55,7 +55,7 @@ Prefer the terminal? Run bare `groma` for the launcher, or `groma view` for the 
 
 ## What a record looks like
 
-One component, one file, written by Groma at `groma/observed/systems/shop/containers/commerce-api/components/ordering.md`:
+One component, one file, written by Groma at `groma/systems/shop/containers/commerce-api/components/ordering.md`:
 
 ```markdown
 ---
@@ -92,7 +92,7 @@ The frontmatter carries identity, containment, and scanner evidence. The body is
 ```text
 source code ──scan──▶ groma/**/*.md ──view──▶ browser map · terminal map
                             ▲
-                create · edit · relate · accept
+                 draft · edit · relate · accept
 ```
 
 Groma follows the [C4 model](https://c4model.com): actors and systems, the containers inside a system, the components inside a container. Code is evidence attached to components, not a fourth level.
@@ -134,7 +134,7 @@ Agents use the same CLI you do. `groma agent-instructions` prints the curation g
 
 ## Working without coding agents
 
-Everything above is a command you can type. `groma create` authors a part the scanner cannot infer, such as a database or a person. `groma edit` changes meaning and folds evidence. `groma relate` writes a collaboration. `groma create --plan` and `groma accept` describe what comes next and confirm it when it lands.
+Everything above is a command you can type. `groma draft` describes a part that does not exist yet as a ghost. `groma edit` changes meaning, folds evidence, and tags a part with the draft that touches it. `groma relate` writes a collaboration. `groma accept` confirms a ghost once a scan has found its code.
 
 ## Live work from Backlog.md
 
@@ -157,10 +157,10 @@ writes the browser map as a static site with the architecture, flows, source ins
 | `groma web` | Scan, then open the browser map |
 | `groma view [id]` | Scan, then open the terminal map, or print one record as text |
 | `groma scan [--watch]` | Scan and fold findings into Markdown |
-| `groma create <name>` | Author an observed or planned element |
-| `groma edit <id>` | Change meaning, combine, move, group, or restate in a plan |
+| `groma draft <kind> <name>` | Draft a system, container, or component as a ghost |
+| `groma edit <id>` | Change meaning, combine, move, group, or tag with a draft |
 | `groma relate <from> <to>` | Author or remove one relationship |
-| `groma accept <id>` | Apply a planned ghost once a scan has matched it |
+| `groma accept <id>` | Accept a ghost once a scan has matched it |
 | `groma export <dir>` | Write a read-only static site |
 | `groma scanner …` | Add, list, install, or remove scanner plugins |
 | `groma instructions` | Human guides. `groma agent-instructions` prints the agent guide |
@@ -181,7 +181,7 @@ If something in the first scan looks wrong, that is the curation step, not a bug
 ## Learn more
 
 - [Documentation index](docs/index.md)
-- [Product model](docs/product-model.md), the exact rules for identity, plans, scans, and the merged world
+- [Product model](docs/product-model.md), the exact rules for identity, drafts, scans, and the one world
 - [Architecture Markdown contract](docs/component-markdown.md)
 - [Browser map](docs/viewers/web/index.md) and [terminal map](docs/viewers/tui/index.md)
 - [The Groma manifesto](MANIFESTO.md)

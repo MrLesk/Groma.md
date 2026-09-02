@@ -28,10 +28,7 @@ groma:
 
 Describes the shop used by scanner tests.
 `,
-  'groma/observed/index.md': '# Observed\n',
-  'groma/missing/index.md': '# Missing\n',
-  'groma/plans/index.md': '# Plans\n',
-  'groma/observed/systems/shop/system.md': `---
+  'groma/systems/shop/system.md': `---
 type: C4 System
 title: Shop
 status: stable
@@ -39,7 +36,7 @@ groma:
   id: shop
 ---
 `,
-  'groma/observed/systems/shop/containers/api/container.md': `---
+  'groma/systems/shop/containers/api/container.md': `---
 type: C4 Container
 title: Api
 status: stable
@@ -184,7 +181,7 @@ Curated responsibility.
 `
   const root = await temporaryTree({
     ...packageFiles,
-    'groma/observed/systems/shop/containers/api/components/profile.md': profile,
+    'groma/systems/shop/containers/api/components/profile.md': profile,
   })
   try {
     const scan = observation([
@@ -201,19 +198,19 @@ Curated responsibility.
     const summary = await reconcileScanObservations(root, [scan])
     await reconcileScanObservations(root, [scan])
     const curated = await readFile(
-      path.join(root, 'groma/observed/systems/shop/containers/api/components/profile.md'),
+      path.join(root, 'groma/systems/shop/containers/api/components/profile.md'),
       'utf8',
     )
     const added = await readFile(
-      path.join(root, 'groma/observed/systems/shop/containers/api/components/new-helper.md'),
+      path.join(root, 'groma/systems/shop/containers/api/components/new-helper.md'),
       'utf8',
     )
     const qualified = await readFile(
-      path.join(root, 'groma/observed/systems/shop/containers/api/components/api-new-helper.md'),
+      path.join(root, 'groma/systems/shop/containers/api/components/api-new-helper.md'),
       'utf8',
     )
     const scopeFile = await readFile(
-      path.join(root, 'groma/observed/systems/shop/containers/api/components/api-api.md'),
+      path.join(root, 'groma/systems/shop/containers/api/components/api-api.md'),
       'utf8',
     )
 
@@ -237,7 +234,7 @@ Curated responsibility.
 test.concurrent('an observed name alone never claims an unknown file', async () => {
   const root = await temporaryTree({
     ...packageFiles,
-    'groma/observed/systems/shop/containers/api/components/orders.md': `---
+    'groma/systems/shop/containers/api/components/orders.md': `---
 type: C4 Component
 title: Orders
 status: stable
@@ -254,11 +251,11 @@ Curated without source evidence.
       { file: 'src/orders.ts', symbols: ['placeOrder'] },
     ])])
     const curated = await readFile(
-      path.join(root, 'groma/observed/systems/shop/containers/api/components/orders.md'),
+      path.join(root, 'groma/systems/shop/containers/api/components/orders.md'),
       'utf8',
     )
     const added = await readFile(
-      path.join(root, 'groma/observed/systems/shop/containers/api/components/api-orders.md'),
+      path.join(root, 'groma/systems/shop/containers/api/components/api-orders.md'),
       'utf8',
     )
 
@@ -278,10 +275,7 @@ test.concurrent('reconciliation qualifies reserved document names', async () => 
       { file: 'src/log.ts' },
     ])])).toEqual({ created: 2, refreshed: 0, matched: 0 })
 
-    const observed = (await loadArchitecture(root)).find(revision => {
-      return revision.revision.kind === 'observed'
-    })
-    const qualified = observed?.documents.flatMap(document => {
+    const qualified = (await loadArchitecture(root)).documents.flatMap(document => {
       if (!document.sourceFilename.includes('/components/api-')) return []
       const groma = document.frontmatter.groma as { id?: unknown }
       return [{
@@ -294,12 +288,12 @@ test.concurrent('reconciliation qualifies reserved document names', async () => 
       {
         id: 'api-index',
         title: 'Api index',
-        sourceFilename: 'groma/observed/systems/shop/containers/api/components/api-index.md',
+        sourceFilename: 'groma/systems/shop/containers/api/components/api-index.md',
       },
       {
         id: 'api-log',
         title: 'Api log',
-        sourceFilename: 'groma/observed/systems/shop/containers/api/components/api-log.md',
+        sourceFilename: 'groma/systems/shop/containers/api/components/api-log.md',
       },
     ])
   } finally {
@@ -326,7 +320,7 @@ test.concurrent('a qualified empty project container is reused on repeat scans',
     expect(await reconcileScanObservations(root, [emptyProject]))
       .toEqual({ created: 0, refreshed: 0, matched: 0 })
     expect(await readFile(
-      path.join(root, 'groma/observed/systems/warehouse/containers/warehouse-api/container.md'),
+      path.join(root, 'groma/systems/warehouse/containers/warehouse-api/container.md'),
       'utf8',
     )).toContain('id: warehouse-api')
   } finally {

@@ -1,6 +1,5 @@
 import { parseFrontmatter } from 'comark'
 
-import { buildArchitectureModel } from './architecture-model.ts'
 import { architectureElementPath } from './architecture-path.ts'
 import { GromaFileSystem } from './groma-filesystem.ts'
 import {
@@ -10,16 +9,15 @@ import {
   withDescription,
   withGromaCode,
   withGromaField,
-  withRepresentationStatus,
-  writeObservedDocument,
+  writeDocument,
 } from './markdown-emitter.ts'
 import type {
   ArchitectureElement,
+  ArchitectureModel,
   CodeReference,
-  RevisionRecord,
 } from './types.ts'
 
-export interface CurateObservedInput {
+export interface CurateInput {
   id: string
   overview?: string
   description?: string
@@ -38,7 +36,7 @@ interface Rewrite {
 interface CurationContext {
   filesystem: GromaFileSystem
   repositoryRoot: string
-  model: ReturnType<typeof buildArchitectureModel>
+  model: ArchitectureModel
   byId: Map<string, ArchitectureElement>
 }
 
@@ -48,12 +46,6 @@ interface CurationChange {
   removals: string[]
 }
 
-function observedRevision(revisions: RevisionRecord[]): RevisionRecord {
-  const observed = revisions.find(record => record.revision.kind === 'observed')
-  if (observed === undefined) throw new Error('observed architecture is missing')
-  return observed
-}
-
 function requiresEmptyMeaning(source: string, id: string): void {
   if (parseFrontmatter(source).content.trim() !== '') {
     throw new Error(`cannot structurally replace "${id}" because it has authored meaning`)
@@ -61,7 +53,7 @@ function requiresEmptyMeaning(source: string, id: string): void {
 }
 
 function requireUnrelated(
-  relationships: ReturnType<typeof buildArchitectureModel>['relationships'],
+  relationships: ArchitectureModel['relationships'],
   ids: Set<string>,
 ): void {
   const relationship = relationships.find(entry => {
@@ -115,7 +107,7 @@ async function applyRewrites(
   removals: string[],
 ): Promise<void> {
   for (const rewrite of rewrites) {
-    await writeObservedDocument(
+    await writeDocument(
       repositoryRoot,
       rewrite.destinationFilename,
       rewrite.source,
@@ -139,11 +131,11 @@ function requireElement(
   id: string,
 ): ArchitectureElement {
   const element = byId.get(id)
-  if (element === undefined) throw new Error(`unknown observed id "${id}"`)
+  if (element === undefined) throw new Error(`unknown id "${id}"`)
   return element
 }
 
-function validateCurationInput(input: CurateObservedInput): void {
+function validateCurationInput(input: CurateInput): void {
   if (input.group !== undefined && input.ungroup === true) {
     throw new Error('--group and --ungroup cannot be used together')
   }
@@ -158,7 +150,7 @@ function validateCurationInput(input: CurateObservedInput): void {
 function groupedSource(
   target: ArchitectureElement,
   source: string,
-  input: CurateObservedInput,
+  input: CurateInput,
 ): string {
   if (input.group === undefined && input.ungroup !== true) return source
   if (target.kind !== 'component') {
@@ -192,7 +184,7 @@ function movedTarget(
   return {
     source: withGromaField(source, 'parent', parent.id),
     destination: architectureElementPath({
-      root: context.filesystem.sourceFilename('observed'),
+      root: context.filesystem.sourceFilename(),
       kind: target.kind,
       id: target.id,
       parentSourceFilename: parent.sourceFilename,
@@ -250,7 +242,7 @@ async function combineElements(
     rewrites.push({
       sourceFilename: child.sourceFilename,
       destinationFilename: architectureElementPath({
-        root: context.filesystem.sourceFilename('observed'),
+        root: context.filesystem.sourceFilename(),
         kind: child.kind,
         id: child.id,
         parentSourceFilename: target.sourceFilename,
@@ -259,7 +251,6 @@ async function combineElements(
         await readDocument(context.repositoryRoot, child.sourceFilename),
         'parent',
         target.id,
-        'stable',
       ),
     })
   }
@@ -273,14 +264,13 @@ async function combineElements(
   }
 }
 
-export async function curateObserved(
+/** Structural curation of one element: group, move, or fold empty scan records into it; each element keeps its own status. */
+export async function curateElement(
   repositoryRoot: string,
-  revisions: RevisionRecord[],
-  input: CurateObservedInput,
+  model: ArchitectureModel,
+  input: CurateInput,
 ): Promise<string> {
   validateCurationInput(input)
-  const record = observedRevision(revisions)
-  const model = buildArchitectureModel(record)
   const byId = new Map(model.elements.map(element => [element.id, element]))
   const filesystem = GromaFileSystem.open(repositoryRoot)
   const context = { filesystem, repositoryRoot, model, byId }
@@ -297,7 +287,7 @@ export async function curateObserved(
   rewrites.unshift({
     sourceFilename: target.sourceFilename,
     destinationFilename: moved.destination,
-    source: withRepresentationStatus(targetSource, 'stable'),
+    source: targetSource,
   })
   validateDestinations(filesystem, rewrites)
   await applyRewrites(repositoryRoot, rewrites, combined.removals)

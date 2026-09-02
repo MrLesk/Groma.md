@@ -144,7 +144,7 @@ test.concurrent('groma export watch replaces the complete published snapshot', a
     work.change('Changed published task')
     await waitUntil(async () => (await snapshot()).includes('Changed published task'))
 
-    const system = path.join(root, 'groma/observed/systems/shop/system.md')
+    const system = path.join(root, 'groma/systems/shop/system.md')
     await writeFile(system, (await readFile(system, 'utf8')).replace('title: Shop', 'title: Store'))
     work.change('Changed architecture snapshot')
     await waitUntil(async () => (await snapshot()).includes('"title":"Store"'))

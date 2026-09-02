@@ -1,5 +1,7 @@
 export type C4Kind = 'actor' | 'system' | 'container' | 'component'
-export type Origin = 'observed' | 'planned' | 'missing'
+export type Origin = 'observed' | 'draft'
+/** The OKF lifecycle word every element document carries. */
+export type ElementStatus = 'draft' | 'stable'
 export type TerminalLevel = 'context' | 'components'
 
 export interface Point {
@@ -31,16 +33,6 @@ export type MarkdownElement = [
   ...MarkdownNode[],
 ]
 
-export type Revision =
-  | { kind: 'observed'; sourceDirectory: string }
-  | { kind: 'missing'; sourceDirectory: string }
-  | { kind: 'plan'; name: string; sourceDirectory: string }
-
-export type RevisionDescriptor =
-  | { kind: 'observed' }
-  | { kind: 'missing' }
-  | { kind: 'plan'; name: string }
-
 export interface ArchitectureFrontmatter extends Record<string, unknown> {
   type?: unknown
   title?: unknown
@@ -55,10 +47,12 @@ export interface ArchitectureDocument {
   frontmatter: ArchitectureFrontmatter
 }
 
-export interface RevisionRecord {
-  revision: Revision
-  context: ArchitectureDocument
+/** Every Markdown record under the Groma directory, read in one pass. */
+export interface ArchitectureRecords {
+  /** C4 element documents, ghosts (status draft) included. */
   documents: ArchitectureDocument[]
+  /** Draft records under drafts/. */
+  drafts: ArchitectureDocument[]
 }
 
 export interface FilesystemAccess {
@@ -93,6 +87,9 @@ export interface ArchitectureElement {
   group?: string
   technology?: string
   code: CodeReference[]
+  status: ElementStatus
+  /** The draft record this element belongs to; a stable element may carry it too. */
+  draft?: string
   sourceFilename: string
 }
 
@@ -106,7 +103,6 @@ export interface ArchitectureRelationship {
 }
 
 export interface ArchitectureModel {
-  revision: Revision
   elements: ArchitectureElement[]
   relationships: ArchitectureRelationship[]
 }
@@ -127,7 +123,7 @@ export interface AnnotatedElement {
   /** Total lines across the code files; absent only in hand-built worlds. */
   codeLines?: number
   origin: Origin
-  plan?: string
+  draft?: string
 }
 
 export interface AnnotatedRelationship {
@@ -137,7 +133,7 @@ export interface AnnotatedRelationship {
   description: string
   technology: string
   origin: Origin
-  plan?: string
+  draft?: string
 }
 
 /** Semantic architecture needed by a view before any renderer adds geometry. */
@@ -147,7 +143,7 @@ export interface ArchitectureGraph {
 }
 
 export interface AnnotatedArchitectureModel extends ArchitectureGraph {
-  plans: string[]
+  drafts: string[]
 }
 
 export interface WorldElement extends AnnotatedElement {

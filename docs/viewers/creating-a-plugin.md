@@ -14,12 +14,10 @@ ArchitectureWorld → sheetScene (blueprint sheet) → TUI plugin
 
 ## What every viewer does
 
-- Show one world, one box per representation: an observed element and a
-  plan's restatement of it are two boxes sharing one architecture ID.
-  Planned IDs are ghosts.
+- Show one world, one box per element. Drafted elements are ghosts.
 - Let someone walk System Context, Containers, and Components without
   moving the architecture.
-- Leave changes to `groma create`, `groma edit` and `groma accept`; no
+- Leave changes to `groma draft`, `groma edit` and `groma accept`; no
   viewer edits architecture.
 - Leave when asked, without leaving presentation state in the model.
 
@@ -29,8 +27,8 @@ project profile; the viewer still cannot write architecture records.
 
 ## The world
 
-Core returns the merged observed, planned and missing architecture with origin
-annotations, then composes one `SheetScene`: islands, slabs, buildings, zones,
+Core returns the one architecture with its origin annotations, observed or
+draft, then composes one `SheetScene`: islands, slabs, buildings, zones,
 and lattice routes on whole cells. Both hosts give that fixed scene to their
 viewer. Keys, pointers, projection, camera, paint, and widgets are plugin
 concerns.

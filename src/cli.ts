@@ -6,12 +6,12 @@ import { fileURLToPath } from 'node:url'
 import { Command } from 'commander'
 
 import { acceptGhost } from './core.ts'
-import { createArchitectureElement } from './create.ts'
+import { draftElement } from './draft.ts'
 import { editArchitecture } from './edit.ts'
 import { agentInstructionGuide } from './agent-instructions.ts'
 import { runInitCommand } from './init-command.ts'
 import { humanInstructionGuide } from './instructions.ts'
-import { relateObserved, removeObservedRelationship } from './relate.ts'
+import { relateElements, removeRelationship } from './relate.ts'
 import { registerScannerCommands } from './scanner/cli.ts'
 import { formatScanSummary, scanRepository, watchScan } from './scanner.ts'
 import {
@@ -193,7 +193,7 @@ program
 program
   .command('view')
   .description('Scan this repo and open the terminal map')
-  .argument('[target]', 'element id, plan id, or repository-relative source file')
+  .argument('[target]', 'element id, draft id, or repository-relative source file')
   .option('--plain', 'print the merged world as plain text')
   .action(async (target: string | undefined, options) => {
     if (target) {
@@ -231,29 +231,25 @@ program
 registerScannerCommands(program)
 
 program
-  .command('create')
-  .description('Author an observed or planned element')
+  .command('draft')
+  .description('Draft a system, container, or component as a ghost')
+  .argument('<kind>', 'system, container, or component')
   .argument('<name>', 'element name')
-  .option('--plan <plan-id>', 'plan id')
-  .option('--observed', 'write directly to observed architecture')
-  .requiredOption('--kind <kind>', 'actor, system, container, or component')
   .requiredOption('--overview <markdown>', 'long architecture overview')
   .option('--description <text>', 'concise OKF description')
   .option('--parent <id>', 'parent element id')
-  .option('--external', 'mark a system outside the architecture boundary')
   .option('--technology <text>', 'implementation technology')
-  .action(async (name: string, options) => {
+  .option('--draft <draft-id>', 'the draft record this ghost belongs to')
+  .action(async (kind: string, name: string, options) => {
     try {
-      const id = await createArchitectureElement(process.cwd(), {
+      const id = await draftElement(process.cwd(), {
+        kind,
         name,
-        plan: options.plan,
-        observed: options.observed,
-        kind: options.kind,
         overview: options.overview,
         description: options.description,
         parent: options.parent,
-        external: options.external,
         technology: options.technology,
+        draft: options.draft,
       })
       console.log('ok')
       console.log(id)
@@ -266,21 +262,21 @@ program
 program
   .command('edit')
   .description('Update authored meaning')
-  .argument('<id>', 'element id or plan id')
-  .option('--overview <markdown>', 'long overview or plan Outcome')
+  .argument('<id>', 'element id or draft id')
+  .option('--overview <markdown>', 'long overview, or the outcome of a draft')
   .option('--description <text>', 'concise OKF description; empty removes it')
-  .option('--plan <plan-id>', 'restate this element in the plan')
+  .option('--draft <draft-id>', 'tag this element with the draft that touches it')
   .option('--group <name>', 'assign this component to a sibling group')
   .option('--ungroup', 'remove this component from its group')
-  .option('--parent <id>', 'move an empty observed component to this container')
-  .option('--combine <ids...>', 'combine empty scan elements into this observed element')
+  .option('--parent <id>', 'move an empty scanned component to this container')
+  .option('--combine <ids...>', 'combine empty scan elements into this element')
   .action(async (id: string, options) => {
     try {
       const edited = await editArchitecture(process.cwd(), {
         id,
         overview: options.overview,
         description: options.description,
-        plan: options.plan,
+        draft: options.draft,
         group: options.group,
         ungroup: options.ungroup,
         parent: options.parent,
@@ -296,8 +292,8 @@ program
 
 program
   .command('accept')
-  .description('Apply a matched planned ghost into observed')
-  .argument('<id>', 'planned element id')
+  .description('Accept a ghost once a scan has matched it')
+  .argument('<id>', 'draft element id')
   .action(async (id: string) => {
     let result = await acceptGhost(process.cwd(), id)
     if (result === 'unmatched') {
@@ -308,15 +304,15 @@ program
       console.log('ok')
       return
     }
-    console.error(result === 'missing' ? 'not a planned ghost' : 'no scan match')
+    console.error(result === 'not-draft' ? 'not a draft' : 'no scan match')
     process.exitCode = 1
   })
 
 program
   .command('relate')
-  .description('Author an observed relationship')
-  .argument('<source-id>', 'observed source element id')
-  .argument('<target-id>', 'observed target element id')
+  .description('Author a relationship between two elements')
+  .argument('<source-id>', 'source element id')
+  .argument('<target-id>', 'target element id')
   .option('--description <prose>', 'how the source uses the target')
   .option('--technology <text>', 'interaction mechanism')
   .option('--remove', 'remove the only relationship between these elements')
@@ -329,8 +325,8 @@ program
         throw new Error('--description and --technology are required')
       }
       const related = options.remove
-        ? await removeObservedRelationship(process.cwd(), source, target)
-        : await relateObserved(process.cwd(), {
+        ? await removeRelationship(process.cwd(), source, target)
+        : await relateElements(process.cwd(), {
           source,
           target,
           description: options.description,

@@ -3,7 +3,6 @@ import path from 'node:path'
 import { GromaFileSystem } from './groma-filesystem.ts'
 
 const SETTLE_MS = 150
-const architectureRoots = ['observed', 'plans', 'missing']
 
 export function watchArchitecture(
   repositoryRoot: string,
@@ -54,20 +53,16 @@ export function watchArchitecture(
     })
   }
 
-  const watchers: { close(): void }[] = []
-  for (const relative of architectureRoots) {
-    if (!filesystem.exists(relative)) continue
-    watchers.push(filesystem.watch(relative, { recursive: true }, filename => {
-      onEvent(relative, filename)
-    }))
-  }
+  const watcher = filesystem.watch('', { recursive: true }, filename => {
+    onEvent('', filename)
+  })
 
   return {
     async close() {
       if (closed) return
       closed = true
       clearTimeout(timer)
-      for (const watcher of watchers) watcher.close()
+      watcher.close()
       await active
     },
   }
