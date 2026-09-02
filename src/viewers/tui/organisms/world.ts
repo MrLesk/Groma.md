@@ -1,7 +1,7 @@
 import type { OptimizedBuffer } from '@opentui/core'
 
 import type { ViewerTheme } from '../atoms/theme.ts'
-import { visibleIn } from '../projection-camera.ts'
+import { routeTouches, visibleIn } from '../projection-camera.ts'
 import {
   drawBoundaryFrame,
   drawPinnedBoundaryTitle,
@@ -11,9 +11,20 @@ import { drawCard } from '../molecules/card.ts'
 import { drawFlowMarker } from '../molecules/flow-marker.ts'
 import { drawRoute, drawRouteLabel } from '../molecules/route.ts'
 import type { ProjectedFlowStep } from '../flow.ts'
-import type { TerminalProjection } from '../projection.ts'
+import type { ProjectedMapItem, ProjectedMapRoute, TerminalProjection } from '../projection.ts'
 import type { WorkMap } from '../work/model.ts'
 import { drawWorkMarker } from '../work/paint.ts'
+
+/** The items and routes the painter visits: only what touches the viewport. */
+export function paintedWorld(projection: TerminalProjection): {
+  items: ProjectedMapItem[]
+  routes: ProjectedMapRoute[]
+} {
+  return {
+    items: projection.items.filter(item => visibleIn(item.cellBounds, projection.viewport)),
+    routes: projection.relationships.filter(route => routeTouches(route.cellRoute, projection.viewport)),
+  }
+}
 
 export function drawWorld(
   buffer: OptimizedBuffer,
@@ -35,17 +46,13 @@ export function drawWorld(
     projection.viewport.height,
   )
   const tracing = trace.pathIds.size > 0
-  const activeRoutes = projection.relationships.filter(route => {
-    return route.ids.some(id => trace.pathIds.has(id))
-  })
-  const visibleItems = projection.items.filter(item => {
-    return visibleIn(item.cellBounds, projection.viewport)
-  })
+  const { items: visibleItems, routes } = paintedWorld(projection)
+  const activeRoutes = routes.filter(route => route.ids.some(id => trace.pathIds.has(id)))
 
   for (const item of visibleItems.filter(item => item.shape !== 'card')) {
     fillBoundary(buffer, item, theme)
   }
-  for (const route of projection.relationships) {
+  for (const route of routes) {
     const flowActive = route.ids.some(id => trace.pathIds.has(id))
     const active = flowActive || trace.work.touched.has(route.source)
     drawRoute(

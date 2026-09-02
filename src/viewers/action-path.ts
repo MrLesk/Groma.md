@@ -3,7 +3,11 @@ import {
   parentOfElements,
   promotedPeer,
 } from './relationship-text.ts'
-import type { AnnotatedRelationship, ArchitectureGraph } from '../types.ts'
+import type {
+  AnnotatedElement,
+  AnnotatedRelationship,
+  ArchitectureGraph,
+} from '../types.ts'
 
 /** One command flow, optionally limited to the actor who starts it. */
 export interface FlowRef {
@@ -161,8 +165,20 @@ export function flowRouteIds(
   ]))
 }
 
+/**
+ * Commands per world. Finding launchers walks the whole world per actor target, which costs
+ * a frame on a large world, so every paint and keypress reuses the first walk. The walk reads
+ * the elements and the relationships, so the cache is keyed on both arrays; a reload replaces
+ * them and a work-only update keeps them.
+ */
+const commandsByWorld = new WeakMap<readonly AnnotatedElement[], WeakMap<readonly AnnotatedRelationship[], AnnotatedRelationship[]>>()
+
 /** Every actor command in the world, deduped across the actors who share it. */
 export function worldCommands(world: ArchitectureGraph): AnnotatedRelationship[] {
+  const byRelationships = commandsByWorld.get(world.elements) ?? new WeakMap()
+  commandsByWorld.set(world.elements, byRelationships)
+  const cached = byRelationships.get(world.relationships)
+  if (cached) return cached
   const seen = new Set<string>()
   const commands: AnnotatedRelationship[] = []
   for (const actor of world.elements) {
@@ -173,6 +189,7 @@ export function worldCommands(world: ArchitectureGraph): AnnotatedRelationship[]
       commands.push(action)
     }
   }
+  byRelationships.set(world.relationships, commands)
   return commands
 }
 
