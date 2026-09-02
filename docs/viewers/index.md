@@ -33,7 +33,7 @@ lays the world out. Core composes the blueprint sheet before either viewer
 receives it; the sheet owns every footprint, floor, shape, zone, and route on
 whole cells. A live host starts the same watch as `groma scan --watch`
 in-process and reloads the architecture and sheet after each fold. It also
-reloads them when architecture Markdown changes, but it does not scan on open.
+reloads them when architecture Markdown changes. `groma view` and `groma web` run one scan before opening.
 A live host asks the embedded Backlog work-source plugin for active tasks and
 refreshes them when a task file
 changes: the TUI marks In Progress work on referenced elements, while the web

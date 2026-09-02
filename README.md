@@ -1,115 +1,204 @@
-# Groma
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset=".github/assets/lockup-dark.svg">
+    <img src=".github/assets/lockup.svg" alt="groma.md" width="300">
+  </picture>
+</p>
 
-Groma is this repo's architecture in Git: Markdown you can read, one C4 world
-you can walk. Solid boxes exist. Ghosts are next. A generated picture of the
-same repo is already out of date.
+<p align="center">
+  <strong>Your software architecture as Markdown in Git, and one C4 map you can walk.</strong><br>
+  Solid boxes exist. Ghosts are next.
+</p>
 
-The architecture Markdown remains useful even if you stop using Groma. It is
-an OKF v0.2 bundle with Groma's explicit architecture profile. People and
-agents change architecture records through Groma. The project profile in
-`groma/project.md` is user-owned and editable from the web map.
+<p align="center">
+  <a href="https://www.npmjs.com/package/groma.md"><img src="https://img.shields.io/npm/v/groma.md?color=1D9E75&label=npm" alt="npm version"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-1D9E75" alt="MIT license"></a>
+  <a href="https://groma.md"><img src="https://img.shields.io/badge/docs-groma.md-1D9E75" alt="Documentation"></a>
+</p>
 
-## Product promise
+<p align="center"><code>npm i -g groma.md</code></p>
 
-A scan succeeds when a person can recognize the resulting architecture well
-enough to navigate and improve it. Later scans refresh Code references and
-must not rewrite curated prose.
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset=".github/assets/web-blueprint.png">
+    <img src=".github/assets/web-core.png" alt="The Groma browser map: an isometric blueprint of this repository with the Core container selected" width="100%">
+  </picture>
+</p>
 
-A plan succeeds when the next parts, and required changes to existing parts,
-are visible as ghosts on the same world, and can be accepted without inventing
-a second identity.
+Groma scans your repository, writes its architecture as one Markdown file per element under `groma/`, and draws that folder as an isometric map in the browser or a map in the terminal. You and your coding agents fix the meaning through a small CLI. The files stay in Git, next to the code, so the architecture ages with the code instead of in a wiki.
 
-## What you do
+## Why
 
-Groma is the only writer of architecture element and revision files under
-`groma/`.
+- **Diagrams rot. Files in Git do not.** Every element is a Markdown file. Every change is a diff, a blame, and a pull request review.
+- **The scanner finds evidence. People write meaning.** `groma scan` reads TypeScript and C# and attaches the exact source files behind each component. Later scans refresh only those code references. They never rewrite prose you wrote.
+- **Works without AI.** The scanner and the authoring commands are a plain CLI. An agent can run the same commands, but nothing in Groma requires one.
+- **Nothing to lock you in.** The folder is an [Open Knowledge Format](docs/component-markdown.md) 0.2 bundle. Uninstall Groma and you keep a readable `groma/` that renders on GitHub as it is.
+- **Local by design.** No server, no account, no telemetry. `groma web` serves only your machine. `groma export` writes a static site when you decide to share.
+- **Plans live on the same map.** A planned part is a dashed ghost beside what exists. `groma accept` turns it solid only after a scan has found the code.
 
-Run bare `groma` in a terminal to open the repository launcher. Move through
-its actions with Up and Down, then press Enter to run one or open Instructions.
-The Instructions screen keeps the same repository context, starts on Overview,
-and lets you choose a shipped guide or return with Backspace. Piped `groma` and
-`groma --plain` print the same repository context and actions without waiting
-for input. The interactive launcher keeps less common syntax behind an
-Advanced commands row. Enter opens a read-only command table where `<name>`
-marks a required parameter, `[option]` an optional one, and `…` additional
-options. Up and Down select a command, the table keeps that row visible, and a
-short explanation appears below it. J and K scroll the explanation one line;
-Page Up and Page Down move it one page. The repository context, Back row,
-plugin readiness, and footer stay fixed. Enter returns from the selected Back
-row; Backspace always returns. Plain output includes those references without
-requiring interaction.
-A named guide such as `groma instructions authoring` also stays plain text.
-These are human guides. `groma agent-instructions [guide]` separately prints
-agent operating rules as Markdown; its default guide is `curation`.
+## Quick start
 
-Run `groma init` once to register the repository for coding agents. It adds one
-managed Groma nudge to each distinct root `AGENTS.md` or `CLAUDE.md` that
-already exists, or creates only `AGENTS.md` when neither exists. Repeated runs
-reconcile that block without changing the surrounding instructions. This setup
-runs only through `groma init`, never as part of `groma web`.
+```sh
+npm i -g groma.md      # or: bun add -g groma.md
+cd your-repo
+groma init
+groma web
+```
 
-1. Open a viewer: see the world. `groma web` scans this repo and opens the
-   browser map. On a TTY, `groma view` scans and opens the terminal map;
-   without a TTY, with `--plain`, or with a target, it prints the existing
-   world instead. Both live viewers continue with the same watch as `groma
-   scan --watch`. Architecture Markdown changes update the map without
-   scanning.
-2. Publish the browser map without exposing Groma or the repository as a
-   server. `groma export <directory>` scans this repo and writes a read-only
-   static site with the current architecture, mapped Backlog work, task diffs,
-   and architecture-owned source inspection. Add `--watch` to replace the
-   static snapshot when local source, architecture, or Backlog work changes.
-3. `groma scan`: scan this repo. Core updates Markdown. The command
-   prints `ok` and a short summary, not the architecture. TypeScript is
-   built in; C# solution and project scans require a .NET 10 SDK.
-4. Change the architecture through Groma. New parts and required changes
-   become plan ghosts: `groma create <name> --plan <plan-id> --kind <kind>
-   --overview <markdown>` (plus `--parent <id>` for a container or component,
-   and optional `--description <text>`) authors a new part. `groma edit <id>
-   --plan <plan-id>` restates an existing one. Long explanations of an
-   existing part stay in that observed document's body: `groma edit <id>
-   --overview <markdown>`. The optional concise OKF description is edited
-   separately with `--description <text>`.
-5. `groma accept <id>`: apply the ghost once a scan has matched it. If
-   none has, accept scans first and fails when the scan still does not
-   match. A scan never accepts a ghost on its own.
+`groma init` asks for a project name, creates `groma/`, and adds a short block to your `AGENTS.md` or `CLAUDE.md` so coding agents know Groma is here. `groma web` scans the repository, writes the first architecture, and opens the map at `http://localhost:4747`. While it runs, saved source files and Markdown changes update the map without a reload.
 
-Both maps show live Backlog work when the global Backlog.md CLI is available.
-Groma embeds the Backlog work-source plugin, but architecture, viewers, and
-exports continue without task data when the CLI is absent. The Welcome reports
-that state and the current `bun i -g backlog.md` install command. The terminal map marks the assignees of
-each task in progress on the elements the task references. The web map
-stands one pin per assignee and task, or one generic pin for an unassigned
-task, on the element the task touched last. Its Live work island filters the
-pins and chips by the configured Backlog statuses, opens a task's details
-from its pin or chip, and outlines the elements the task touches.
+Prefer the terminal? Run bare `groma` for the launcher, or `groma view` for the terminal map.
 
-## The C4 layers
+<p align="center">
+  <img src=".github/assets/launcher.svg" alt="The Groma terminal launcher" width="800">
+</p>
 
-- **System Context** shows the actors and software systems involved and how
-  they interact.
-- **Container** opens one system to show the applications and data stores
-  that make it work.
-- **Component** opens one container to show its cohesive responsibilities
-  and their collaborations.
-- Component details show the scanner, exact file, and optional symbol behind
-  that component. Code is not a separate viewer level.
+## What a record looks like
 
-The terminal map walks these levels one at a time; the web map shows all
-of them on one sheet.
+One component, one file, written by Groma at `groma/observed/systems/shop/containers/commerce-api/components/ordering.md`:
 
-See the [documentation index](docs/index.md) and the
-[product model](docs/product-model.md) for the exact rules.
+```markdown
+---
+type: C4 Component
+title: Ordering
+description: Order lifecycle coordinator
+status: stable
+groma:
+  id: ordering
+  parent: commerce-api
+  code:
+    - scanner: typescript
+      file: packages/orders/src/orders-service.ts
+      symbol: OrdersService
+---
 
-## Try Groma
+Owns the lifecycle of an order from placement through completion.
 
-From this repository:
+## Technology
+
+TypeScript, NestJS, and PostgreSQL.
+
+## Relationships
+
+| Target | Description | Technology |
+| --- | --- | --- |
+| [Payments](../payments.md) | Requests payment authorization | Internal API |
+```
+
+The frontmatter carries identity, containment, and scanner evidence. The body is yours. The relationship table is the only source of arrows on the map. Delete Groma tomorrow and this file still explains the component.
+
+## How it works
+
+```text
+source code ──scan──▶ groma/**/*.md ──view──▶ browser map · terminal map
+                            ▲
+                create · edit · relate · accept
+```
+
+Groma follows the [C4 model](https://c4model.com): actors and systems, the containers inside a system, the components inside a container. Code is evidence attached to components, not a fourth level.
+
+The first scan produces file-shaped components. That is deliberate. You then fold files that share one responsibility into one component, group siblings by domain, and name the collaborations:
+
+```sh
+groma edit ordering --combine order-repository order-events   # one responsibility, several files
+groma edit ordering --group "Checkout"                        # a named domain on the map
+groma relate ordering payments --description "Requests payment authorization" --technology "Internal API"
+groma edit ordering --overview "Owns the lifecycle of an order from placement through completion."
+```
+
+Every command validates the whole change before writing. Scans that run afterwards keep your curation. Scanners are plugins. TypeScript is built in. The C# scanner in this repository is enabled with `groma scanner add` and needs a .NET 10 SDK. The [scanner contract](docs/scanners/creating-a-plugin.md) is small enough to add your own language.
+
+## Two viewers, one world
+
+The browser map is one isometric blueprint drawn as SVG. Systems are islands, containers are slabs, components are buildings whose size follows the code behind them, and every authored relationship is one route. Click anything for what it does and how it is built, down to the exact file and symbol. Light, dark, and blueprint themes. Every view has a URL.
+
+The terminal map shows the same world in fixed chrome: hierarchy, map, and details. Arrow keys move between neighbours, Enter opens a container, Backspace goes back up.
+
+<p align="center">
+  <img src=".github/assets/terminal-map.svg" alt="The Groma terminal map inside a container" width="100%">
+</p>
+
+The browser map also walks Git history. Its revision menu lists every commit that touched `groma/` and opens the architecture exactly as it was at that commit.
+
+## Working with coding agents
+
+`groma init` adds this to `AGENTS.md` or `CLAUDE.md`:
+
+```markdown
+## Groma
+
+This project uses Groma. Run `groma agent-instructions` before planning or changing code. Do not edit Groma-owned architecture files directly.
+```
+
+Agents use the same CLI you do. `groma agent-instructions` prints the curation guide, `--help` on any command is the schema, output is plain text, and errors say what to fix. There is no MCP server to run and no JSON to parse. An agent that curates a fresh scan into recognisable components is the workflow Groma was built for, and the human reviews the result on the map.
+
+## Working without coding agents
+
+Everything above is a command you can type. `groma create` authors a part the scanner cannot infer, such as a database or a person. `groma edit` changes meaning and folds evidence. `groma relate` writes a collaboration. `groma create --plan` and `groma accept` describe what comes next and confirm it when it lands.
+
+## Live work from Backlog.md
+
+If [Backlog.md](https://github.com/MrLesk/Backlog.md) is installed, both viewers pin its tasks onto the architecture they touch. A task's modified files map to the components that own them, so a pin stands on the building that a teammate or agent is changing right now. Open a pin for the task's description, acceptance criteria, and diff. Groma never writes a task.
+
+## Publish a snapshot
+
+```sh
+groma export ./site
+```
+
+writes the browser map as a static site with the architecture, flows, source inspection, and mapped tasks. It has no server and no editor. Everything in that folder is public data once you host it, so check what is inside before you push it anywhere.
+
+## Commands
+
+| Command | What it does |
+| --- | --- |
+| `groma` | Launcher for this repository |
+| `groma init [name]` | Create `groma/` and register the repository for agents |
+| `groma web` | Scan, then open the browser map |
+| `groma view [id]` | Scan, then open the terminal map, or print one record as text |
+| `groma scan [--watch]` | Scan and fold findings into Markdown |
+| `groma create <name>` | Author an observed or planned element |
+| `groma edit <id>` | Change meaning, combine, move, group, or restate in a plan |
+| `groma relate <from> <to>` | Author or remove one relationship |
+| `groma accept <id>` | Apply a planned ghost once a scan has matched it |
+| `groma export <dir>` | Write a read-only static site |
+| `groma scanner …` | Add, list, install, or remove scanner plugins |
+| `groma instructions` | Human guides. `groma agent-instructions` prints the agent guide |
+
+Every command documents its required and optional parameters under `--help`.
+
+## Status
+
+Groma is early. What is true today:
+
+- Scanners exist for TypeScript (built in) and C# (a module you enable). Other languages need a [plugin](docs/scanners/creating-a-plugin.md).
+- The browser edits the project title and overview. Architecture edits go through the CLI. Editing components in the browser is the next chapter.
+- The terminal map runs on macOS, Linux, and Windows terminals.
+- The Markdown contract is strict on Groma's own fields and preserves anything else you put in a file.
+
+If something in the first scan looks wrong, that is the curation step, not a bug. If a command does something surprising, that is a bug. Please open an issue.
+
+## Learn more
+
+- [Documentation index](docs/index.md)
+- [Product model](docs/product-model.md), the exact rules for identity, plans, scans, and the merged world
+- [Architecture Markdown contract](docs/component-markdown.md)
+- [Browser map](docs/viewers/web/index.md) and [terminal map](docs/viewers/tui/index.md)
+- [The Groma manifesto](MANIFESTO.md)
+
+## The name
+
+A groma was the Roman surveyor's cross-staff, the instrument that transferred a plan onto the ground. Every Roman road, camp, and city was laid out behind one. The people who used it were the gromatici.
+
+## Contributing
 
 ```sh
 bun install
-bun src/cli.ts view
+bun run check
 ```
 
-`bun src/cli.ts web` opens the browser map at http://localhost:4747.
-`bun src/cli.ts export ./groma-site` writes the same current map as static
-files that can be served by any static host.
+`bun run check` lints, typechecks, and runs both test suites. See [CONTRIBUTING.md](CONTRIBUTING.md) for the workflow.
+
+## License
+
+[MIT](LICENSE)

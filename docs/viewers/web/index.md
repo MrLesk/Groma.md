@@ -1,7 +1,7 @@
 # Web viewer
 
 The web plugin shows Groma's world in a browser. `groma web` starts it.
-It does not scan on open. The live process starts the same watch as
+It runs one scan before opening. The live process then starts the same watch as
 `groma scan --watch`.
 
 This page is the browser surface. The shared viewer rules live in
