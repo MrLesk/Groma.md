@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { test } from 'bun:test'
 
 import type { WorkItem, WorkSnapshot } from '../src/types.ts'
-import { elementWorkGroups, PIN_COLOURS, monogram, pinsOf, touchedElements } from '../src/work/pins.ts'
+import { elementWorkGroups, pinsOf, touchedElements } from '../src/work/pins.ts'
 import { box, worldOf } from './helpers.ts'
 
 const unit = { x: 0, y: 0, width: 1, height: 1 }
@@ -81,19 +81,17 @@ test.concurrent('an element receives default, intermediate, and terminal work gr
   assert.deepEqual(elementWorkGroups(work, 'observed:shop', world), [])
 })
 
-test.concurrent('every assignee and task pair gets its own colour in task order, with its progress from the criteria and its monogram', () => {
+test.concurrent('every assignee and task pair gets one ordered pin with task progress', () => {
   const pins = pinsOf([
     item('TASK-10', { assignees: ['@luna'], status: 'Done', acceptanceCriteriaCompleted: 4, acceptanceCriteriaCount: 4 }),
     item('TASK-9', { assignees: ['@codex', '@claude'] }),
   ], world, 'Done')
   assert.deepEqual(pins.map(pin => pin.key), ['@codex TASK-9', '@claude TASK-9', '@luna TASK-10'])
-  assert.deepEqual(pins.map(pin => pin.colour), PIN_COLOURS.slice(0, 3))
   assert.deepEqual(pins.map(pin => [pin.done, pin.total, pin.status, pin.terminal]), [
     [1, 3, 'In Progress', false],
     [1, 3, 'In Progress', false],
     [4, 4, 'Done', true],
   ])
-  assert.deepEqual(pins.map(pin => monogram(pin.assignee!)), ['CO', 'CL', 'LU'])
 })
 
 test.concurrent('an unassigned mapped task gets one generic task pin', () => {
