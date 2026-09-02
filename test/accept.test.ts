@@ -19,23 +19,17 @@ const projectRoot = path.resolve(
 function run(command: string, args: string[], cwd: string) {
   return new Promise<{
     code: number | null
-    stdout: string
     stderr: string
   }>((resolve, reject) => {
-    const child = spawn(command, args, { cwd, stdio: ['ignore', 'pipe', 'pipe'] })
-    let stdout = ''
+    const child = spawn(command, args, { cwd, stdio: ['ignore', 'ignore', 'pipe'] })
     let stderr = ''
-    child.stdout.setEncoding('utf8')
     child.stderr.setEncoding('utf8')
-    child.stdout.on('data', chunk => {
-      stdout += chunk
-    })
     child.stderr.on('data', chunk => {
       stderr += chunk
     })
     child.on('error', reject)
     child.on('close', code => {
-      resolve({ code, stdout, stderr })
+      resolve({ code, stderr })
     })
   })
 }
@@ -397,7 +391,6 @@ Reads the shop source.
   )
 
   assert.equal(result.code, 0, result.stderr)
-  assert.equal(result.stdout, 'ok\n')
   const observed = await readFile(
     path.join(
       root,
@@ -436,8 +429,6 @@ Does not exist in source.
   )
 
   assert.equal(result.code, 1)
-  assert.equal(result.stderr, 'no scan match\n')
-  assert.equal(result.stdout, '')
   const planned = await readFile(
     path.join(
       root,

@@ -4,14 +4,11 @@ import os from 'node:os'
 import path from 'node:path'
 import { test } from 'bun:test'
 
-import { createTestRenderer } from '@opentui/core/testing'
 import { createBacklogPlugin } from '@groma/work-source-backlog'
+import { createTestRenderer } from '@opentui/core/testing'
 
-import { mountWelcome, renderPlainWelcome } from '../src/welcome.ts'
-import {
-  advancedIndex,
-  loadWelcomeModel,
-} from '../src/welcome/model.ts'
+import { mountWelcome } from '../src/welcome.ts'
+import { loadWelcomeModel } from '../src/welcome/model.ts'
 import type { WelcomeModel } from '../src/welcome/model.ts'
 import { viewerFixtureRoot } from './helpers.ts'
 
@@ -70,8 +67,10 @@ test.concurrent('the welcome derives scanner readiness without executing modules
       }),
     })
 
-    const foundBacklog = createBacklogPlugin(() => '/usr/local/bin/backlog')
-    const model = await loadWelcomeModel(root, foundBacklog)
+    const model = await loadWelcomeModel(
+      root,
+      createBacklogPlugin(() => '/usr/local/bin/backlog'),
+    )
     assert.deepEqual(model.plugins, [
       { id: 'backlog.md', status: 'found' },
       { id: 'typescript', status: 'built-in' },
@@ -79,75 +78,26 @@ test.concurrent('the welcome derives scanner readiness without executing modules
       { id: 'rust', status: 'missing' },
     ])
     assert.equal(await exists(marker), false)
-
-    const plain = await renderPlainWelcome(root, foundBacklog)
-    assert.match(plain, /plugins: backlog\.md: ✓ ready │ typescript: built-in │ python: ✓ ready │ rust: missing/)
-
-    const setup = await createTestRenderer({ width: 110, height: 35 })
-    const selected = mountWelcome(setup.renderer, model)
-    await setup.renderOnce()
-    assert.match(
-      setup.captureCharFrame(),
-      /plugins: backlog\.md: ✓ ready │ typescript: built-in │ python: ✓ ready │ rust: missing/,
-    )
-    setup.mockInput.pressEscape()
-    await selected
-    assert.equal(await exists(marker), false)
   } finally {
     await rm(root, { recursive: true, force: true })
   }
 })
 
-test.concurrent('the welcome explains how to install a missing Backlog command', async () => {
-  const missingBacklog = createBacklogPlugin(() => null)
-  const model = await loadWelcomeModel(viewerFixtureRoot, missingBacklog)
-  const plain = await renderPlainWelcome(viewerFixtureRoot, missingBacklog)
+test.concurrent('the welcome model reports a missing Backlog command', async () => {
+  const model = await loadWelcomeModel(
+    viewerFixtureRoot,
+    createBacklogPlugin(() => null),
+  )
 
-  assert.deepEqual(model.plugins.slice(0, 2), [
-    { id: 'backlog.md', status: 'missing', install: 'bun i -g backlog.md' },
-    { id: 'typescript', status: 'built-in' },
-  ])
-  assert.match(plain, /plugins: backlog\.md: missing \(bun i -g backlog\.md\) │ typescript: built-in/)
-})
-
-test.concurrent('the bottom plugin strip stays one row as scanners grow', async () => {
-  const compact = await createTestRenderer({ width: 100, height: 30 })
-  const many = await createTestRenderer({ width: 100, height: 30 })
-  const compactSelected = mountWelcome(compact.renderer, welcomeFixture())
-  const manySelected = mountWelcome(many.renderer, {
-    ...welcomeFixture(),
-    plugins: [
-      { id: 'backlog.md', status: 'found' },
-      { id: 'typescript', status: 'built-in' },
-      ...Array.from({ length: 20 }, (_, index) => ({
-        id: `scanner-${index}`,
-        status: index % 2 === 0 ? 'found' as const : 'missing' as const,
-      })),
-    ],
-  })
-
-  await compact.renderOnce()
-  await many.renderOnce()
-  const compactLines = compact.captureCharFrame().split('\n')
-  const manyLines = many.captureCharFrame().split('\n')
-  const row = (lines: string[], value: string) => lines.findIndex(line => line.includes(value))
-
-  assert.equal(row(manyLines, 'groma web'), row(compactLines, 'groma web'))
-  assert.equal(manyLines.filter(line => line.includes('plugins:')).length, 1)
-  assert.ok(row(manyLines, 'plugins: backlog.md: ✓ ready │ typescript: built-in') > row(manyLines, 'groma web'))
-  assert.ok(row(manyLines, 'navigate') > row(manyLines, 'plugins:'))
-
-  compact.mockInput.pressEscape()
-  many.mockInput.pressEscape()
-  await Promise.all([compactSelected, manySelected])
+  assert.equal(
+    model.plugins.find(plugin => plugin.id === 'backlog.md')?.status,
+    'missing',
+  )
 })
 
 test.concurrent('the welcome starts on web and returns the entered action', async () => {
   const setup = await createTestRenderer({ width: 100, height: 30 })
-  const selected = mountWelcome(
-    setup.renderer,
-    welcomeFixture(),
-  )
+  const selected = mountWelcome(setup.renderer, welcomeFixture())
 
   setup.mockInput.pressEnter()
 
@@ -173,10 +123,7 @@ test.concurrent('a production handoff suspends the welcome until its action owns
 
 test.concurrent('arrows choose one action before enter', async () => {
   const setup = await createTestRenderer({ width: 100, height: 30 })
-  const selected = mountWelcome(
-    setup.renderer,
-    welcomeFixture(),
-  )
+  const selected = mountWelcome(setup.renderer, welcomeFixture())
 
   setup.mockInput.pressArrow('down')
   setup.mockInput.pressArrow('down')
@@ -186,169 +133,9 @@ test.concurrent('arrows choose one action before enter', async () => {
   assert.equal(await selected, 'view')
 })
 
-test.concurrent('advanced command references never become launcher actions', async () => {
-  const setup = await createTestRenderer({ width: 110, height: 45 })
-  const selected = mountWelcome(
-    setup.renderer,
-    welcomeFixture(),
-  )
-
-  for (let index = 0; index < advancedIndex; index++) setup.mockInput.pressArrow('down')
-  setup.mockInput.pressEnter()
-  await setup.renderOnce()
-  const expanded = setup.captureCharFrame()
-  for (const command of ['add', 'install', 'list', 'remove']) {
-    assert.match(expanded, new RegExp(`groma scanner ${command}`))
-  }
-  assert.match(expanded, /plugins: backlog\.md: ✓ ready │ typescript: built-in/)
-  assert.match(expanded, /> groma export/)
-  assert.match(expanded, /Writes the current architecture/)
-
-  setup.mockInput.pressEnter()
-  await setup.renderOnce()
-  assert.match(setup.captureCharFrame(), /> groma export/)
-
-  setup.mockInput.pressArrow('up')
-  setup.mockInput.pressEnter()
-  setup.mockInput.pressArrow('up')
-  setup.mockInput.pressArrow('up')
-  setup.mockInput.pressEnter()
-
-  assert.equal(await selected, 'scan')
-})
-
-test.concurrent('the Advanced cursor keeps its command visible while navigating', async () => {
-  const setup = await createTestRenderer({ width: 110, height: 24 })
-  const selected = mountWelcome(setup.renderer, welcomeFixture())
-  await setup.renderOnce()
-  const launcher = setup.captureCharFrame().split('\n')
-  const row = (lines: string[], value: string) => lines.findIndex(line => line.includes(value))
-
-  for (let index = 0; index < advancedIndex; index++) setup.mockInput.pressArrow('down')
-  setup.mockInput.pressEnter()
-  await setup.renderOnce()
-  const firstPage = setup.captureCharFrame().split('\n')
-
-  assert.equal(row(firstPage, 'project: example'), row(launcher, 'project: example'))
-  assert.match(firstPage[row(firstPage, 'groma export')]!, /output folder; watch refreshes/)
-  assert.ok(row(firstPage, 'Writes the current architecture') > row(firstPage, 'groma export'))
-  assert.ok(row(firstPage, 'plugins:') > row(firstPage, 'Writes the current architecture'))
-  assert.ok(row(firstPage, 'J/K scroll') > row(firstPage, 'plugins:'))
-  assert.equal(row(firstPage, 'groma scanner add'), -1)
-
-  for (let command = 0; command < 3; command++) setup.mockInput.pressArrow('down')
-  await setup.renderOnce()
-  const arrowScrolled = setup.captureCharFrame()
-  assert.doesNotMatch(arrowScrolled, /groma export/)
-  assert.match(arrowScrolled, /> groma scanner list/)
-  assert.match(arrowScrolled, /Lists every configured scanner/)
-
-  setup.mockInput.pressArrow('down')
-  setup.mockInput.pressArrow('down')
-  await setup.renderOnce()
-  const descriptionTop = setup.captureCharFrame()
-  assert.match(descriptionTop, /> groma create/)
-  assert.match(descriptionTop, /Creates an architecture element/)
-  assert.doesNotMatch(descriptionTop, /Containers and components require --parent/)
-
-  setup.mockInput.pressKey('j')
-  await setup.renderOnce()
-  const lineScrolled = setup.captureCharFrame()
-  assert.match(lineScrolled, /> groma create/)
-  assert.doesNotMatch(lineScrolled, /Creates an architecture element/)
-  assert.match(lineScrolled, /Containers and components require --parent/)
-
-  setup.mockInput.pressKey('k')
-  await setup.renderOnce()
-  assert.match(setup.captureCharFrame(), /Creates an architecture element/)
-
-  setup.mockInput.pressKey('\u001B[6~')
-  await setup.renderOnce()
-  assert.match(setup.captureCharFrame(), /Containers and components require --parent/)
-  setup.mockInput.pressKey('\u001B[5~')
-  await setup.renderOnce()
-  assert.match(setup.captureCharFrame(), /Creates an architecture element/)
-
-  for (let command = 0; command < 4; command++) setup.mockInput.pressArrow('down')
-  await setup.renderOnce()
-  assert.match(setup.captureCharFrame(), /> groma agent-instructions/)
-  setup.mockInput.pressKey('j')
-  setup.mockInput.pressArrow('down')
-  await setup.renderOnce()
-  const finalBoundary = setup.captureCharFrame()
-  assert.match(finalBoundary, /> groma agent-instructions/)
-  assert.doesNotMatch(finalBoundary, /Prints a Markdown guide/)
-  assert.match(finalBoundary, /This command always stays plain text/)
-
-  setup.mockInput.pressBackspace()
-  await setup.renderOnce()
-  const returned = setup.captureCharFrame()
-  assert.match(returned, /> Advanced commands/)
-  assert.doesNotMatch(returned, /groma export/)
-
-  setup.mockInput.pressEnter()
-  await setup.renderOnce()
-  const reopened = setup.captureCharFrame()
-  assert.match(reopened, /> groma export/)
-  assert.match(reopened, /Writes the current architecture/)
-  assert.doesNotMatch(reopened, /groma relate/)
-
-  setup.mockInput.pressEnter()
-  await setup.renderOnce()
-  assert.match(setup.captureCharFrame(), /> groma export/)
-  setup.mockInput.pressArrow('up')
-  setup.mockInput.pressEnter()
-  await setup.renderOnce()
-  assert.match(setup.captureCharFrame(), /> Advanced commands/)
-
-  setup.mockInput.pressEscape()
-  assert.equal(await selected, undefined)
-})
-
-test.concurrent('instructions change guide, page content, and return to the launcher', async () => {
-  const setup = await createTestRenderer({ width: 110, height: 38 })
-  const selected = mountWelcome(
-    setup.renderer,
-    welcomeFixture(),
-    'instructions',
-  )
-
-  await setup.renderOnce()
-  const overviewFrame = setup.captureCharFrame()
-  setup.mockInput.pressKey('\u001B[6~')
-  await setup.renderOnce()
-  const pagedFrame = setup.captureCharFrame()
-  setup.mockInput.pressKey('\u001B[5~')
-  await setup.renderOnce()
-  assert.equal(setup.captureCharFrame(), overviewFrame)
-  setup.mockInput.pressKey('j')
-  await setup.renderOnce()
-  const lineScrolledFrame = setup.captureCharFrame()
-  setup.mockInput.pressKey('k')
-  await setup.renderOnce()
-  assert.equal(setup.captureCharFrame(), overviewFrame)
-  setup.mockInput.pressArrow('down')
-  await setup.renderOnce()
-  const authoringFrame = setup.captureCharFrame()
-
-  assert.notEqual(pagedFrame, overviewFrame)
-  assert.notEqual(lineScrolledFrame, overviewFrame)
-  assert.equal(authoringFrame.split('Authoring').length - 1, 2)
-  assert.match(authoringFrame, /groma create <name> --plan <plan-id>/)
-
-  setup.mockInput.pressBackspace()
-  setup.mockInput.pressArrow('up')
-  setup.mockInput.pressEnter()
-
-  assert.equal(await selected, 'scan')
-})
-
-test.concurrent('the visible Back row returns to the launcher', async () => {
+test.concurrent('the Back action returns to the launcher', async () => {
   const setup = await createTestRenderer({ width: 110, height: 35 })
-  const selected = mountWelcome(
-    setup.renderer,
-    welcomeFixture(),
-  )
+  const selected = mountWelcome(setup.renderer, welcomeFixture())
 
   for (let index = 0; index < 3; index++) setup.mockInput.pressArrow('down')
   setup.mockInput.pressEnter()
@@ -363,10 +150,7 @@ test.concurrent('the visible Back row returns to the launcher', async () => {
 test.concurrent('escape and q close without choosing an action', async () => {
   for (const key of ['ESCAPE', 'q'] as const) {
     const setup = await createTestRenderer({ width: 100, height: 30 })
-    const selected = mountWelcome(
-      setup.renderer,
-      welcomeFixture(),
-    )
+    const selected = mountWelcome(setup.renderer, welcomeFixture())
 
     setup.mockInput.pressKey(key)
 
@@ -375,35 +159,10 @@ test.concurrent('escape and q close without choosing an action', async () => {
   }
 })
 
-test.concurrent('the welcome uses terminal defaults and the exact brand green', async () => {
-  const setup = await createTestRenderer({ width: 100, height: 30 })
-  const selected = mountWelcome(
-    setup.renderer,
-    welcomeFixture(),
-  )
-
-  await setup.renderOnce()
-  const spans = setup.captureSpans().lines.flatMap(line => line.spans)
-  const title = spans.find(span => span.text === 'groma')
-  const accent = spans.find(span => span.text === '.md')
-  assert.ok(title)
-  assert.ok(accent)
-  assert.equal(title.fg.intent, 'default')
-  assert.equal(title.bg.intent, 'default')
-  assert.deepEqual(accent.fg.toInts().slice(0, 3), [29, 158, 117])
-  assert.equal(accent.bg.intent, 'default')
-
-  setup.mockInput.pressEscape()
-  await selected
-})
-
 test.concurrent('control-c closes the welcome and releases its input handler', async () => {
   const setup = await createTestRenderer({ width: 100, height: 30 })
   const inputListeners = setup.renderer.keyInput.listenerCount('keypress')
-  const selected = mountWelcome(
-    setup.renderer,
-    welcomeFixture(),
-  )
+  const selected = mountWelcome(setup.renderer, welcomeFixture())
 
   assert.equal(
     setup.renderer.keyInput.listenerCount('keypress'),

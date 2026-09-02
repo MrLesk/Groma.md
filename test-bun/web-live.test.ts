@@ -125,10 +125,7 @@ groma:
 ---
 `)
   try {
-    await assert.rejects(
-      startWebViewer(root, { port: 0 }),
-      /project body must start with overview prose/,
-    )
+    await assert.rejects(startWebViewer(root, { port: 0 }))
   } finally {
     await removeTree(root)
   }

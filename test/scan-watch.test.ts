@@ -11,23 +11,17 @@ import { watchScan } from '../src/scanner.ts'
 function run(command: string, args: string[], cwd: string) {
   return new Promise<{
     code: number | null
-    stdout: string
     stderr: string
   }>((resolve, reject) => {
-    const child = spawn(command, args, { cwd, stdio: ['ignore', 'pipe', 'pipe'] })
-    let stdout = ''
+    const child = spawn(command, args, { cwd, stdio: ['ignore', 'ignore', 'pipe'] })
     let stderr = ''
-    child.stdout.setEncoding('utf8')
     child.stderr.setEncoding('utf8')
-    child.stdout.on('data', chunk => {
-      stdout += chunk
-    })
     child.stderr.on('data', chunk => {
       stderr += chunk
     })
     child.on('error', reject)
     child.on('close', code => {
-      resolve({ code, stdout, stderr })
+      resolve({ code, stderr })
     })
   })
 }

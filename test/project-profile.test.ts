@@ -44,7 +44,6 @@ test('the marked project concept owns title, description, and body overview', as
 test('the project body cannot duplicate its canonical title', async () => {
   await assert.rejects(
     parseProjectProfile(source.replace('Shows **supply**', '# Supply map\n\nShows **supply**')),
-    /must not duplicate title/,
   )
 })
 

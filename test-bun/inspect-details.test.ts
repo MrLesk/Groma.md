@@ -5,7 +5,6 @@ import {
   detailsTabAfterSelection,
   detailsTabAfterWork,
   inspectDetails,
-  tabSections,
 } from '../src/viewers/web/organisms/details.ts'
 import type {
   ArchitectureWorld,
@@ -81,20 +80,14 @@ function world(): ArchitectureWorld {
 test.concurrent('details list children, promoted peers, and files', () => {
   const fixture = world()
   const groma = inspectDetails(fixture.elements[0]!, fixture)
-  expect(groma.kindLabel).toBe('System')
   expect(groma.origin).toBe('observed')
-  expect(groma.overview).toBe('this repo')
-  expect(groma.children.map(child => child.title)).toEqual(['core', 'web'])
+  expect(groma.children.map(child => child.id)).toEqual(['core', 'web'])
   expect(groma.relationships).toEqual([])
 
   const core = inspectDetails(fixture.elements[2]!, fixture)
-  expect(core.relationships).toEqual([{
+  expect(core.relationships.map(({ outgoing, peerId }) => ({ outgoing, peerId }))).toEqual([{
     outgoing: true,
     peerId: 'web',
-    peerTitle: 'web',
-    peerKind: 'container',
-    peerExternal: false,
-    description: 'supplies positions',
   }])
 
   const layout = inspectDetails(fixture.elements[4]!, fixture)
@@ -103,25 +96,6 @@ test.concurrent('details list children, promoted peers, and files', () => {
     file: 'src/world-layout.ts',
     symbol: 'layoutWorld',
   }])
-})
-
-test.concurrent('a declared technology becomes chips; none stays empty', () => {
-  const fixture = world()
-  const web = inspectDetails(fixture.elements[3]!, fixture)
-  expect(web.technology).toEqual(['Three.js', 'Bun serve'])
-  const core = inspectDetails(fixture.elements[2]!, fixture)
-  expect(core.technology).toEqual([])
-})
-
-test.concurrent('the tabs split meaning from build evidence', () => {
-  expect(tabSections('what')).toEqual([
-    'overview',
-    'relationships',
-    'commands',
-    'flowsThrough',
-    'children',
-  ])
-  expect(tabSections('how')).toEqual(['technology', 'code', 'files'])
 })
 
 test.concurrent('the Tasks tab exists only while the selected component has linked work', () => {

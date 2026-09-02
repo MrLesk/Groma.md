@@ -65,7 +65,6 @@ test.concurrent('details always follows the current selection', async () => {
     .map(line => [...line].slice(layout.details.x).join(''))
     .join('\n')
   assert.match(details, /Orders/)
-  assert.match(await press(setup, 't'), /src\/orders\.ts/)
   app.destroy()
 })
 

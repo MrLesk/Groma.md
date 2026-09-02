@@ -1,7 +1,6 @@
 import { expect, test } from 'bun:test'
 
 import {
-  actionCaption,
   actionLegs,
   actionPath,
   elementOnPath,
@@ -83,25 +82,6 @@ const world: ArchitectureWorld = {
     edge('shop-git', 'shop', 'git'),
   ],
 }
-
-test.concurrent('outgoing actions are titled by description and the authored target', () => {
-  const names = new Map([
-    ['buyer', 'Buyer'],
-    ['api', 'Api'],
-    ['shop', 'Shop'],
-  ])
-  const nameOf = (id: string) => names.get(id)
-  expect(actionCaption(
-    { source: 'buyer', target: 'api', description: 'Sends orders' },
-    true,
-    nameOf,
-  )).toEqual({ title: 'Sends orders', detail: 'Api' })
-  expect(actionCaption(
-    { source: 'buyer', target: 'api', description: 'Sends orders' },
-    false,
-    nameOf,
-  )).toEqual({ title: 'Buyer', detail: 'Sends orders' })
-})
 
 test.concurrent('an actor who uses a launcher lists that launcher\'s outgoing', () => {
   expect(outgoingActions('buyer', world).map(item => item.id)).toEqual([

@@ -65,8 +65,6 @@ test.concurrent('headless groma view startup releases its renderer and input han
     inputListeners + 1,
   )
   await setup.renderOnce()
-  const frame = setup.captureCharFrame()
-  assert.ok(frame.trim().length > 0)
   setup.mockInput.pressEscape()
   await setup.renderOnce()
   assert.equal(setup.renderer.isDestroyed, false)

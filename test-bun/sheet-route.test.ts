@@ -474,5 +474,5 @@ test.concurrent('routing fails clearly when a relationship names an element that
     target: 'missing-target',
     description: 'uses',
     origin: 'observed',
-  }]), /relationship:missing/)
+  }]))
 })

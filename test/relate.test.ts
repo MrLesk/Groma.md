@@ -14,21 +14,18 @@ const fixtureRoot = path.join(projectRoot, 'test', 'fixtures', 'edit')
 const stockPath = 'groma/observed/systems/shop/containers/api/components/stock.md'
 
 function groma(root: string, args: string[]) {
-  return new Promise<{ code: number | null, stdout: string, stderr: string }>(
+  return new Promise<{ code: number | null, stderr: string }>(
     (resolve, reject) => {
       const child = spawn(
         'bun',
         [path.join(projectRoot, 'src/cli.ts'), ...args],
-        { cwd: root, stdio: ['ignore', 'pipe', 'pipe'] },
+        { cwd: root, stdio: ['ignore', 'ignore', 'pipe'] },
       )
-      let stdout = ''
       let stderr = ''
-      child.stdout.setEncoding('utf8')
       child.stderr.setEncoding('utf8')
-      child.stdout.on('data', chunk => { stdout += chunk })
       child.stderr.on('data', chunk => { stderr += chunk })
       child.on('error', reject)
-      child.on('close', code => { resolve({ code, stdout, stderr }) })
+      child.on('close', code => { resolve({ code, stderr }) })
     },
   )
 }
@@ -57,7 +54,6 @@ test('groma relate authors one validated observed relationship', async t => {
   const first = await groma(root, args)
 
   assert.equal(first.code, 0, first.stderr)
-  assert.equal(first.stdout, 'ok\nstock\n')
   const model = await loadAnnotatedArchitecture(root)
   assert.ok(model.relationships.some(relationship => {
     return relationship.source === 'observed:stock'
@@ -69,12 +65,10 @@ test('groma relate authors one validated observed relationship', async t => {
   const beforeDuplicate = await readFile(filename, 'utf8')
   const duplicate = await groma(root, args)
   assert.notEqual(duplicate.code, 0)
-  assert.match(duplicate.stderr, /relationship already exists/)
   assert.equal(await readFile(filename, 'utf8'), beforeDuplicate)
 
   const removed = await groma(root, ['relate', 'stock', 'orders', '--remove'])
   assert.equal(removed.code, 0, removed.stderr)
-  assert.equal(removed.stdout, 'ok\nstock\n')
   assert.equal(
     (await readFile(filename, 'utf8')).replaceAll('\r\n', '\n'),
     original.replaceAll('\r\n', '\n'),

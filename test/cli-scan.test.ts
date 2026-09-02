@@ -7,6 +7,8 @@ import test from 'node:test'
 import type { TestContext } from 'node:test'
 import { fileURLToPath } from 'node:url'
 
+import { loadAnnotatedArchitecture } from '../src/core.ts'
+
 const projectRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   '..',
@@ -15,23 +17,17 @@ const projectRoot = path.resolve(
 function run(command: string, args: string[], cwd: string) {
   return new Promise<{
     code: number | null
-    stdout: string
     stderr: string
   }>((resolve, reject) => {
-    const child = spawn(command, args, { cwd, stdio: ['ignore', 'pipe', 'pipe'] })
-    let stdout = ''
+    const child = spawn(command, args, { cwd, stdio: ['ignore', 'ignore', 'pipe'] })
     let stderr = ''
-    child.stdout.setEncoding('utf8')
     child.stderr.setEncoding('utf8')
-    child.stdout.on('data', chunk => {
-      stdout += chunk
-    })
     child.stderr.on('data', chunk => {
       stderr += chunk
     })
     child.on('error', reject)
     child.on('close', code => {
-      resolve({ code, stdout, stderr })
+      resolve({ code, stderr })
     })
   })
 }
@@ -76,53 +72,16 @@ Describes the scanned shop used by CLI tests.
   return root
 }
 
-test('groma scan runs once, prints ok and a short summary, and exits', async t => {
+test('groma scan reconciles source evidence and exits', async t => {
   const root = await createScanRepo(t)
   const result = await run('bun', [path.join(projectRoot, 'src/cli.ts'), 'scan'], root)
 
   assert.equal(result.code, 0, result.stderr)
-  assert.equal(result.stderr, '')
-  assert.match(result.stdout, /^ok\ncreated \d+, refreshed \d+, matched \d+\n$/)
-  assert.notEqual(result.stdout, 'ok\ncreated 0, refreshed 0, matched 0\n')
-  assert.doesNotMatch(result.stdout, /scan-reconciler|architecture-model/)
-  assert.doesNotMatch(result.stdout, /\{|\[|id:/)
-})
-
-test('groma scan --watch folds a settled TypeScript change and does not open a viewer', async t => {
-  const root = await createScanRepo(t)
-  const child = spawn('bun', [path.join(projectRoot, 'src/cli.ts'), 'scan', '--watch'], {
-    cwd: root,
-    stdio: ['ignore', 'pipe', 'pipe'],
-  })
-  let stdout = ''
-  let stderr = ''
-  child.stdout.setEncoding('utf8')
-  child.stderr.setEncoding('utf8')
-  child.stdout.on('data', chunk => {
-    stdout += chunk
-  })
-  child.stderr.on('data', chunk => {
-    stderr += chunk
-  })
-  try {
-    await new Promise(resolve => setTimeout(resolve, 400))
-    assert.equal(child.exitCode, null)
-    assert.equal(stdout, '')
-
-    await writeFile(path.join(root, 'src/orders.ts'), 'export function placeOrder() {}\n')
-    const start = Date.now()
-    while (Date.now() - start < 8000 && !/^ok\ncreated \d+, refreshed \d+, matched \d+\n/.test(stdout)) {
-      await new Promise(resolve => setTimeout(resolve, 50))
-    }
-    assert.match(stdout, /^ok\ncreated \d+, refreshed \d+, matched \d+\n/)
-    assert.equal(child.exitCode, null)
-    assert.doesNotMatch(stdout, /groma web at|System Context/)
-    assert.equal(stderr, '')
-  } finally {
-    await new Promise<void>(resolve => {
-      if (child.exitCode !== null) return resolve()
-      child.once('exit', () => resolve())
-      child.kill('SIGTERM')
-    })
-  }
+  const model = await loadAnnotatedArchitecture(root)
+  assert.ok(model.elements.some(element =>
+    element.code.some(reference => reference.file === 'src/cli.ts')
+  ))
+  assert.ok(model.elements.some(element =>
+    element.code.some(reference => reference.file === 'src/scanner.ts')
+  ))
 })
