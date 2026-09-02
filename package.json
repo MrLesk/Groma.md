@@ -1,6 +1,32 @@
 {
   "name": "groma",
   "version": "0.1.0",
+  "description": "Your architecture as Markdown in Git, and one C4 map you can walk. Scanned from source, curated by people and agents.",
+  "license": "MIT",
+  "author": "Alex Gavrilescu",
+  "homepage": "https://groma.md",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/MrLesk/groma3.git"
+  },
+  "bugs": {
+    "url": "https://github.com/MrLesk/groma3/issues"
+  },
+  "keywords": [
+    "architecture",
+    "c4",
+    "c4-model",
+    "markdown",
+    "documentation",
+    "diagram",
+    "git",
+    "cli",
+    "tui",
+    "isometric",
+    "okf",
+    "coding-agents",
+    "backlog"
+  ],
   "private": true,
   "type": "module",
   "workspaces": [
