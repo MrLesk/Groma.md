@@ -1,5 +1,6 @@
 import type { ViewerTheme } from '../atoms/theme.ts'
-import type { SearchState, ViewerFocus } from '../navigation.ts'
+import type { ViewerFocus } from '../navigation.ts'
+import type { SearchState } from '../navigation-search.ts'
 import { accent, bold, dim, type Line } from './text.ts'
 
 const paneHints: Record<ViewerFocus, string> = {

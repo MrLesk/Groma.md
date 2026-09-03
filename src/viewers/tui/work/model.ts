@@ -1,3 +1,4 @@
+import type { PaneVisibility } from '../layout.ts'
 import type { TerminalLevel, WorkItem, WorkSnapshot } from '../../../types.ts'
 import { touchedElements } from '../../../work/pins.ts'
 import type { TerminalViewModel } from '../model.ts'
@@ -5,7 +6,7 @@ import { visibleEndpointFor, type TerminalProjection } from '../projection.ts'
 
 export interface WorkPresentationSnapshot {
   focus: 'architecture' | 'hierarchy' | 'details'
-  details: boolean
+  panes: PaneVisibility
   detailsScroll: number
   actionCursor?: string
 }

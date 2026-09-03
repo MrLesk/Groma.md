@@ -13,7 +13,7 @@ export function reduceWorkFocus(
       ...current,
       work: undefined,
       focus: work.before.focus,
-      panes: { ...current.panes, details: work.before.details },
+      panes: work.before.panes,
       detailsScroll: work.before.detailsScroll,
       actionCursor: work.before.actionCursor,
     }

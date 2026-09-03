@@ -48,7 +48,7 @@ const item = (id: string, extra: Partial<WorkItem> = {}): WorkItem => ({
 
 const beforeWork = {
   focus: 'architecture' as const,
-  details: true,
+  panes: { hierarchy: true, details: true },
   detailsScroll: 0,
 }
 

@@ -6,10 +6,10 @@ import {
   defaultSelection,
   initialState,
   litAction,
-  reduceSearch,
   reduceViewer,
   type ViewerState,
 } from '../src/viewers/tui/navigation.ts'
+import { reduceSearch } from '../src/viewers/tui/navigation-search.ts'
 import { selectedWorkId } from '../src/viewers/tui/work/model.ts'
 import {
   box,
@@ -161,7 +161,7 @@ test.concurrent('map edges lead to the fixed hierarchy and details panes', () =>
   const right = reduceViewer(model, {
     ...initialState(model),
     currentId: 'observed:ext',
-    panes: { details: false },
+    panes: { hierarchy: true, details: false },
   }, 'right')
   assert.equal(right.focus, 'details')
   assert.equal(right.panes.details, true)
@@ -329,7 +329,7 @@ test.concurrent('Work focus keeps architecture and flow state while tasks own th
     ...initialState(model),
     currentId: 'observed:product',
     focus: 'hierarchy',
-    panes: { details: false },
+    panes: { hierarchy: true, details: false },
     detailsScroll: 4,
     activeActionId: 'buyer-api',
     actionCursor: 'buyer-api',

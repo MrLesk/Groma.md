@@ -2,6 +2,7 @@ import { TextAttributes } from '@opentui/core'
 
 import { actionCaption, outgoingActions, travelledBy } from '../../action-path.ts'
 import { kindLabel } from '../../atoms/kind.ts'
+import type { ProjectProfile } from '../../../project-profile.ts'
 import { parentOfElements, promotedPeer } from '../../relationship-text.ts'
 import type { ViewerTheme } from '../atoms/theme.ts'
 import { flowEndpointLabel, type ProjectedFlowStep } from '../flow.ts'
@@ -171,4 +172,10 @@ export function taskLines(theme: ViewerTheme, item: WorkItem, width: number): Li
     for (const reference of item.references) lines.push(...wrap(reference, width).map(row => [plain(theme, row)]))
   }
   return lines
+}
+
+/** The project profile, read-only: its description, then the overview. */
+export function profileLines(theme: ViewerTheme, project: ProjectProfile, width: number): Line[] {
+  const description = project.description === undefined ? [] : wrap(project.description, width).map(row => [dim(theme, row)])
+  return [...description, ...(description.length === 0 ? [] : [[]]), ...wrap(project.overview, width).map(row => [plain(theme, row)])]
 }

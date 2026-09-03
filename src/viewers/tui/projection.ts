@@ -428,3 +428,11 @@ export function projectWorld(
     ),
   }
 }
+
+/** The topmost painted element under a map cell: items list outer before inner, so a container wins over its system. */
+export function itemAt(items: readonly ProjectedMapItem[], x: number, y: number): ProjectedMapItem | undefined {
+  return items.findLast(item => {
+    const b = item.cellBounds
+    return item.representationId !== undefined && x >= b.x && x < b.x + b.width && y >= b.y && y < b.y + b.height
+  })
+}

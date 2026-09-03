@@ -3,8 +3,7 @@ import { fileURLToPath } from 'node:url'
 
 import type { createTestRenderer } from '@opentui/core/testing'
 
-import { loadAnnotatedArchitecture } from '../src/core.ts'
-import { DETAILS_PANE_WIDTH, HIERARCHY_PANE_WIDTH } from '../src/viewers/tui/layout.ts'
+import { DETAILS_PANE_WIDTH, HIERARCHY_PANE_WIDTH, type PaneVisibility } from '../src/viewers/tui/layout.ts'
 import { sheetScene } from '../src/sheet/scene.ts'
 import type { TerminalViewModel } from '../src/viewers/tui/model.ts'
 import type {
@@ -44,16 +43,13 @@ export const openclawFixtureRoot = path.join(
   'openclaw-view',
 )
 
-export async function terminalModel(root: string): Promise<TerminalViewModel> {
-  const model = await loadAnnotatedArchitecture(root)
-  return { ...model, sheet: sheetScene(model) }
-}
+export { loadTerminalModel as terminalModel } from '../src/view-host.ts'
 
 /** Where the screen puts its panes at a terminal size: one row above and below, the frames, and the recap row. */
-export function paneLayout(width: number, height: number, panes: { details: boolean } = { details: true }) {
+export function paneLayout(width: number, height: number, panes: PaneVisibility = { hierarchy: true, details: true }) {
   const body = { y: 2, height: Math.max(1, height - 4) }
   const detailsWidth = panes.details ? DETAILS_PANE_WIDTH : 0
-  const hierarchy = { x: 0, ...body, width: HIERARCHY_PANE_WIDTH }
+  const hierarchy = { x: 0, ...body, width: panes.hierarchy ? HIERARCHY_PANE_WIDTH : 0 }
   const details = { x: Math.max(hierarchy.width, width - detailsWidth), ...body, width: detailsWidth }
   const map = { x: hierarchy.width, ...body, width: Math.max(3, details.x - hierarchy.width) }
   return {

@@ -8,6 +8,7 @@ import { backlogPlugin } from '@groma/work-source-backlog'
 
 import { watchArchitecture } from './architecture-watch.ts'
 import { loadAnnotatedArchitecture } from './core.ts'
+import { loadProjectProfile } from './project-profile.ts'
 import { watchScan } from './scanner.ts'
 import { sheetScene } from './sheet/scene.ts'
 import { mountTerminalViewer } from './viewers/tui/terminal-viewer.ts'
@@ -17,6 +18,12 @@ import type { TerminalViewModel } from './viewers/tui/model.ts'
 interface StartViewerOptions {
   renderer?: CliRenderer
   workSource?: WorkSource
+}
+
+/** The architecture, its sheet geometry and the project profile, as the terminal viewer reads them. */
+export async function loadTerminalModel(repositoryRoot: string): Promise<TerminalViewModel> {
+  const model = await loadAnnotatedArchitecture(repositoryRoot)
+  return { ...model, sheet: sheetScene(model), project: await loadProjectProfile(repositoryRoot) }
 }
 
 export async function startTerminalViewer(
@@ -29,14 +36,10 @@ export async function startTerminalViewer(
   let map: TerminalViewModel
   let closed = false
   let publishChain = Promise.resolve()
-  const loadMap = async (): Promise<TerminalViewModel> => {
-    const model = await loadAnnotatedArchitecture(repositoryRoot)
-    return { ...model, sheet: sheetScene(model) }
-  }
   const publish = () => {
     const run = publishChain.then(async () => {
       if (closed) return
-      const next = await loadMap()
+      const next = await loadTerminalModel(repositoryRoot)
       if (closed) return
       map = next
       viewer.update({ ...map, work })
@@ -57,11 +60,11 @@ export async function startTerminalViewer(
     consoleMode: 'disabled',
     exitOnCtrlC: false,
     screenMode: 'alternate-screen',
-    useMouse: false,
+    useMouse: true,
   })
 
   try {
-    map = await loadMap()
+    map = await loadTerminalModel(repositoryRoot)
     viewer = mountTerminalViewer(renderer, { ...map, work }, { onRefresh: publish })
     void pullWork()
     const sourceWatch = await watchScan(repositoryRoot, { onFold: publish })
