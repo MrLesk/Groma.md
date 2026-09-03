@@ -1,9 +1,13 @@
 # Terminal viewer
 
 Run `groma view` to scan the repository and inspect its architecture in a
-terminal. The screen has a header, a persistent hierarchy pane, a map, an
-optional details pane, and a footer. Panes reserve their columns and never cover
-the map.
+terminal. The screen has a header, a hierarchy pane, a map, a details pane, and
+a footer. Panes reserve their columns and never cover the map. They start folded
+by width so the map keeps at least 60 columns: both open at 120 columns and
+wider, the hierarchy alone from 90 to 119, none under 90. `[` folds or opens the
+hierarchy and `]` the details at any width; with the details folded the footer
+names the selection. Inside a container map the header shows the scope path with
+the component count.
 
 ## Map scopes
 
@@ -44,7 +48,7 @@ component glyphs, with `▾` and `▸` disclosure and `▌` for the current item
 
 ## Details and flows
 
-The details pane opens by default and describes the current architecture selection.
+The details pane describes the current architecture selection.
 While a flow row has hierarchy focus, it instead shows that flow and its current
 leg. `]` closes or reopens the pane, reserving or releasing its columns. `t`
 switches between what an architecture element does and how it is built.
@@ -94,7 +98,9 @@ arrowheads remain fixed.
 - Backspace returns from a container map to root.
 - Tab moves between the hierarchy and map, or between tasks and task details in Work focus. Escape leaves the current focused mode.
 - `/` searches architecture; Enter keeps a match and Escape restores the prior view.
-- `w` toggles Work focus. `]` toggles details, `t` changes its architecture tab, `s` steps a flow, and `x` clears it.
+- `w` toggles Work focus. `[` toggles the hierarchy, `]` the details, `t` changes the details tab, `s` steps a flow, and `x` clears it.
+- `p` shows the project profile read-only in the details pane; `p` or Escape returns to the selection.
+- A mouse click on a hierarchy row or a map building selects it.
 - `r` refreshes and Ctrl+C exits.
 
 Refresh preserves valid architecture and task selections, map scope, pane state,

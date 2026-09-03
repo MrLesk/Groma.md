@@ -12,6 +12,8 @@ export interface PaneLines {
   lines: Line[]
   /** The row the pane keeps in view: the hierarchy cursor, or the command row the details cursor rests on. */
   cursor?: number
+  /** What each row stands for, so a click can find it; rules and headings have no id. */
+  ids?: readonly (string | undefined)[]
 }
 
 export function chunk(text: string, fg?: RGBA, attributes = 0, bg?: RGBA): TextChunk {

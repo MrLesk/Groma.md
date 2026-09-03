@@ -13,10 +13,10 @@ import {
   moveView,
 } from './navigation-spatial.ts'
 import { compareSemanticElements } from '../../element-order.ts'
-import type { ArchitectureSearch } from '../../search.ts'
 import { ancestorsOf, initialTree, semanticTreeRows } from './tree.ts'
 import type { TreeState } from './tree.ts'
 import type { TerminalViewModel } from './model.ts'
+import type { SearchState } from './navigation-search.ts'
 import { initialWorkFocus } from './work/model.ts'
 import type { WorkFocus } from './work/model.ts'
 import { reduceWorkFocus } from './work/navigation.ts'
@@ -36,28 +36,13 @@ export type ViewerAction =
   | MapDirection
   | 'tab'
   | 'toggle-details'
+  | 'toggle-hierarchy'
+  | 'toggle-profile'
   | 'dismiss'
   | 'clear-action'
   | 'step-action'
   | 'toggle-details-tab'
   | 'toggle-work'
-
-export type SearchInput =
-  | { type: 'open' }
-  | { type: 'char'; char: string }
-  | { type: 'delete' }
-  | { type: 'next' }
-  | { type: 'previous' }
-  | { type: 'accept' }
-  | { type: 'cancel' }
-
-export interface SearchState {
-  query: string
-  index: number
-  matches: AnnotatedElement[]
-  /** The view to restore when search is cancelled. */
-  before: { level: TerminalLevel; currentId?: string }
-}
 
 export interface ViewerState {
   level: TerminalLevel
@@ -68,6 +53,8 @@ export interface ViewerState {
   /** First hidden content row of an overflowing details pane. */
   detailsScroll: number
   detailsTab: DetailsTab
+  /** The project profile is showing in the details pane instead of the selection. */
+  profile?: boolean
   /** One actor command. Survives leaving the actor until x or another pick. */
   activeActionId?: string
   /** The actor the command was picked from; scopes the walk's approach to them. */
@@ -116,7 +103,7 @@ export function initialState(world: TerminalViewModel): ViewerState {
     currentId: defaultSelection(world, 'context')?.representationId,
     focus: 'architecture',
     tree: initialTree(),
-    panes: { details: true },
+    panes: { hierarchy: true, details: true },
     detailsScroll: 0,
     detailsTab: 'what',
   }
@@ -125,8 +112,9 @@ export function initialState(world: TerminalViewModel): ViewerState {
 /** The pickable command rows the details pane shows for its tab. */
 export function detailsCommands(
   world: TerminalViewModel,
-  state: Pick<ViewerState, 'currentId' | 'detailsTab'>,
+  state: Pick<ViewerState, 'currentId' | 'detailsTab' | 'profile'>,
 ): AnnotatedRelationship[] {
+  if (state.profile) return []
   if (state.detailsTab === 'how') {
     return state.currentId === undefined ? [] : travelledBy(state.currentId, world)
   }
@@ -176,7 +164,7 @@ function resolve(
  * Selection changes keep the panes in step: the tree cursor follows,
  * its path unhides, and the details scroll returns to the top.
  */
-function syncTree(world: TerminalViewModel, state: ViewerState): ViewerState {
+export function syncTree(world: TerminalViewModel, state: ViewerState): ViewerState {
   const path = ancestorsOf(state.currentId, elementsById(world))
   const collapsed = new Set(
     [...state.tree.collapsed].filter(id => !path.has(id)),
@@ -278,12 +266,13 @@ export function reduceViewer(
       ...current,
       work: initialWorkFocus(world.work, {
         focus: current.focus,
-        details: current.panes.details,
+        panes: current.panes,
         detailsScroll: current.detailsScroll,
         actionCursor: current.actionCursor,
       }),
       focus: 'hierarchy',
-      panes: { ...current.panes, details: true },
+      panes: { hierarchy: true, details: true },
+      profile: false,
       detailsScroll: 0,
       actionCursor: undefined,
     }
@@ -295,16 +284,13 @@ export function reduceViewer(
     return syncTree(world, {
       ...current,
       focus: 'hierarchy',
+      panes: { ...current.panes, hierarchy: true },
     })
   }
-  if (action === 'toggle-details') {
-    const details = !current.panes.details
-    return {
-      ...current,
-      panes: { ...current.panes, details },
-      focus: !details && current.focus === 'details' ? 'architecture' : current.focus,
-    }
+  if (action === 'toggle-details' || action === 'toggle-hierarchy' || action === 'toggle-profile') {
+    return reducePaneKeys(world, current, action)
   }
+  if (action === 'dismiss' && current.profile) return { ...current, profile: false, detailsScroll: 0 }
   if (action === 'clear-action') {
     return {
       ...current,
@@ -404,6 +390,42 @@ export function reduceViewer(
   })
 }
 
+/**
+ * The pane keys: [ and ] fold or open a pane, p shows the project profile. A folding pane drops its
+ * focus to the map and folding the details ends the profile; the profile needs a project.
+ */
+function reducePaneKeys(
+  world: TerminalViewModel,
+  current: ViewerState,
+  action: 'toggle-details' | 'toggle-hierarchy' | 'toggle-profile',
+): ViewerState {
+  if (action === 'toggle-details' || action === 'toggle-hierarchy') {
+    const pane = action === 'toggle-details' ? 'details' : 'hierarchy'
+    const open = !current.panes[pane]
+    return {
+      ...current,
+      panes: { ...current.panes, [pane]: open },
+      focus: !open && current.focus === pane ? 'architecture' : current.focus,
+      profile: current.profile === true && !(pane === 'details' && !open),
+    }
+  }
+  if (world.project === undefined) return current
+  return current.profile
+    ? { ...current, profile: false, detailsScroll: 0 }
+    : { ...current, profile: true, panes: { ...current.panes, details: true }, detailsScroll: 0 }
+}
+
+/** A click on the map: the element under the cell becomes the selection. */
+export function selectMapItem(world: TerminalViewModel, state: ViewerState, id: string): ViewerState {
+  if (state.work !== undefined) return state
+  return syncTree(world, { ...state, currentId: id, focus: 'architecture', mapStep: undefined })
+}
+
+/** A click on a hierarchy row: the cursor lands there and Enter follows. */
+export function clickTreeRow(world: TerminalViewModel, state: ViewerState, id: string): ViewerState {
+  return reduceViewer(world, { ...state, focus: 'hierarchy', tree: { ...state.tree, cursor: id } }, 'enter')
+}
+
 /** Details focus starts with the cursor on the already-picked command. */
 function enterDetails(current: ViewerState): ViewerState {
   return {
@@ -412,66 +434,4 @@ function enterDetails(current: ViewerState): ViewerState {
     actionCursor: current.activeActionId,
     panes: { ...current.panes, details: true },
   }
-}
-
-/** The current match drives selection live; no match leaves the view alone. */
-function followMatch(world: TerminalViewModel, state: ViewerState): ViewerState {
-  const search = state.search
-  if (!search) return state
-  const match = search.matches[search.index]
-  if (!match) return state
-  return syncTree(world, {
-    ...state,
-    level: levelFor(match),
-    currentId: match.representationId,
-    mapStep: undefined,
-  })
-}
-
-export function reduceSearch(
-  world: TerminalViewModel,
-  architectureSearch: ArchitectureSearch,
-  state: ViewerState,
-  input: SearchInput,
-): ViewerState {
-  if (input.type === 'open') {
-    return {
-      ...state,
-      search: {
-        query: '',
-        index: 0,
-        matches: [],
-        before: { level: state.level, currentId: state.currentId },
-      },
-    }
-  }
-  const search = state.search
-  if (!search) return state
-  if (input.type === 'char' || input.type === 'delete') {
-    const query = input.type === 'char'
-      ? search.query + input.char
-      : search.query.slice(0, -1)
-    const matches = architectureSearch.find(query).map(result => result.element)
-    return followMatch(world, {
-      ...state,
-      search: { ...search, query, matches, index: 0 },
-    })
-  }
-  if (input.type === 'next' || input.type === 'previous') {
-    const count = search.matches.length
-    if (count === 0) return state
-    const step = input.type === 'next' ? 1 : -1
-    const index = (search.index + step + count) % count
-    return followMatch(world, { ...state, search: { ...search, index } })
-  }
-  if (input.type === 'accept') {
-    return { ...state, search: undefined }
-  }
-  return syncTree(world, {
-    ...state,
-    search: undefined,
-    level: search.before.level,
-    currentId: search.before.currentId,
-    mapStep: undefined,
-  })
 }

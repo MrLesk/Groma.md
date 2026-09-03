@@ -34,7 +34,8 @@ export interface ScreenView {
   stats: string | undefined
   focus: ViewerFocus
   footer: string
-  hierarchy: PaneLines
+  /** Absent while the hierarchy pane is folded. */
+  hierarchy: PaneLines | undefined
   /** The kind legend under the tree; absent in Work focus. */
   legend: Line[] | undefined
   /** Absent while the details pane is folded. */
@@ -50,6 +51,14 @@ export interface Screen {
   destroy(): void
 }
 
+export interface ScreenHandlers {
+  onMapResize(): void
+  /** A click on a hierarchy row, by the id the row stands for. */
+  onHierarchyRow(id: string): void
+  /** A click on the map, in the map's own cells. */
+  onMapCell(x: number, y: number): void
+}
+
 const noFill = { shouldFill: false } as const
 
 interface ScrollPane {
@@ -59,7 +68,7 @@ interface ScrollPane {
   show(row: number): void
 }
 
-function scrollPane(renderer: CliRenderer, paddingX: number): ScrollPane {
+function scrollPane(renderer: CliRenderer, paddingX: number, onRow?: (row: number) => void): ScrollPane {
   const box = new ScrollBoxRenderable(renderer, {
     flexGrow: 1,
     scrollX: false,
@@ -80,6 +89,9 @@ function scrollPane(renderer: CliRenderer, paddingX: number): ScrollPane {
     onSizeChange() {
       box.scrollTo(wanted)
       box.requestRender()
+    },
+    onMouseDown(event) {
+      onRow?.(event.y - text.y)
     },
   })
   box.add(text)
@@ -121,7 +133,7 @@ function keptInView(pane: PaneLines, requested: number, height: number): number 
  * the map with its recap row, the details pane, the footer, one blank row. Panes reserve
  * their columns and never overlay the map.
  */
-export function mountScreen(renderer: CliRenderer, theme: ViewerTheme, onMapResize: () => void): Screen {
+export function mountScreen(renderer: CliRenderer, theme: ViewerTheme, handlers: ScreenHandlers): Screen {
   const root = new BoxRenderable(renderer, {
     id: 'groma-screen', width: '100%', height: '100%', flexDirection: 'column', paddingTop: 1, paddingBottom: 1, ...noFill,
   })
@@ -132,7 +144,11 @@ export function mountScreen(renderer: CliRenderer, theme: ViewerTheme, onMapResi
   const hierarchyBox = new BoxRenderable(renderer, {
     width: HIERARCHY_PANE_WIDTH, height: '100%', flexDirection: 'column', border: true, borderStyle: 'rounded', borderColor: theme.quiet, ...noFill,
   })
-  const hierarchy = scrollPane(renderer, 0)
+  let hierarchyIds: readonly (string | undefined)[] | undefined
+  const hierarchy = scrollPane(renderer, 0, row => {
+    const id = hierarchyIds?.[row]
+    if (id !== undefined) handlers.onHierarchyRow(id)
+  })
   const legend = new TextRenderable(renderer, { height: 3, content: '', wrapMode: 'none' })
   hierarchyBox.add(hierarchy.box)
   hierarchyBox.add(legend)
@@ -140,7 +156,15 @@ export function mountScreen(renderer: CliRenderer, theme: ViewerTheme, onMapResi
   const mapBox = new BoxRenderable(renderer, {
     flexGrow: 1, height: '100%', flexDirection: 'column', border: true, borderStyle: 'rounded', borderColor: theme.selected, ...noFill,
   })
-  const map = new FrameBufferRenderable(renderer, { width: 1, height: 1, flexGrow: 1, onSizeChange: onMapResize })
+  const map = new FrameBufferRenderable(renderer, {
+    width: 1,
+    height: 1,
+    flexGrow: 1,
+    onSizeChange: handlers.onMapResize,
+    onMouseDown(event) {
+      handlers.onMapCell(event.x - map.x, event.y - map.y)
+    },
+  })
   map.width = '100%'
   const recap = new TextRenderable(renderer, { height: 1, content: '', wrapMode: 'none' })
   mapBox.add(map)
@@ -162,6 +186,17 @@ export function mountScreen(renderer: CliRenderer, theme: ViewerTheme, onMapResi
   root.add(footer)
   renderer.root.add(root)
 
+  const applyDetails = (view: DetailsView | undefined): void => {
+    detailsBox.visible = view !== undefined
+    if (view === undefined) return
+    detailsBox.title = ` ${view.title} `
+    detailsBox.titleColor = view.titleColor
+    tabs.visible = view.tab !== undefined
+    if (view.tab !== undefined) tabs.content = styledLines([tabLine(theme, view.tab)])
+    details.text.content = styledLines(view.lines.lines)
+    details.show(keptInView(view.lines, view.scroll, details.box.viewport.height))
+  }
+
   return {
     map,
     mapViewport() {
@@ -170,22 +205,19 @@ export function mountScreen(renderer: CliRenderer, theme: ViewerTheme, onMapResi
     apply(view) {
       header.content = styledLines([headerLine(theme, renderer.width, view.stats)])
       footer.content = styledLines([[plain(theme, ` ${view.footer}`)]])
+      hierarchyBox.visible = view.hierarchy !== undefined
       hierarchyBox.borderColor = view.focus === 'hierarchy' ? theme.selected : theme.quiet
       mapBox.borderColor = view.focus === 'architecture' ? theme.selected : theme.quiet
       detailsBox.borderColor = view.focus === 'details' ? theme.selected : theme.quiet
-      hierarchy.text.content = styledLines(view.hierarchy.lines)
-      hierarchy.show(centred(view.hierarchy, hierarchy.box.viewport.height))
+      hierarchyIds = view.hierarchy?.ids
+      if (view.hierarchy !== undefined) {
+        hierarchy.text.content = styledLines(view.hierarchy.lines)
+        hierarchy.show(centred(view.hierarchy, hierarchy.box.viewport.height))
+      }
       legend.visible = view.legend !== undefined
       if (view.legend !== undefined) legend.content = styledLines(view.legend)
       recap.content = view.recap === undefined ? '' : styledLines([view.recap])
-      detailsBox.visible = view.details !== undefined
-      if (view.details === undefined) return
-      detailsBox.title = ` ${view.details.title} `
-      detailsBox.titleColor = view.details.titleColor
-      tabs.visible = view.details.tab !== undefined
-      if (view.details.tab !== undefined) tabs.content = styledLines([tabLine(theme, view.details.tab)])
-      details.text.content = styledLines(view.details.lines.lines)
-      details.show(keptInView(view.details.lines, view.details.scroll, details.box.viewport.height))
+      applyDetails(view.details)
     },
     destroy() {
       renderer.root.remove(root)

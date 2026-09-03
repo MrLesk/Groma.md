@@ -3,18 +3,23 @@ import type { CliRenderer, KeyEvent } from '@opentui/core'
 import { actionLegs } from '../action-path.ts'
 import { createArchitectureSearch } from '../../search.ts'
 import { projectFlowStep } from './flow.ts'
+import { panesForWidth } from './layout.ts'
 import {
+  clickTreeRow,
   initialState,
   litAction,
-  reduceSearch,
   reduceViewer,
+  selectMapItem,
 } from './navigation.ts'
-import type { SearchInput, ViewerAction, ViewerState } from './navigation.ts'
+import type { ViewerAction, ViewerState } from './navigation.ts'
+import { reduceSearch } from './navigation-search.ts'
+import type { SearchInput } from './navigation-search.ts'
 import { viewerTheme } from './atoms/theme.ts'
 import { paintMap } from './paint.ts'
 import { mountScreen } from './panes/screen.ts'
 import { screenView } from './panes/view.ts'
-import { projectWorld } from './projection.ts'
+import { itemAt, mapAnchors, projectWorld } from './projection.ts'
+import type { TerminalProjection } from './projection.ts'
 import type { TerminalCamera } from './projection-camera.ts'
 import type { TerminalViewModel } from './model.ts'
 import { reconcileWorkFocus, selectedWorkId, workView } from './work/model.ts'
@@ -26,7 +31,9 @@ const VIEWER_ACTION_BY_KEY: Readonly<Record<string, ViewerAction>> = {
   return: 'enter',
   backspace: 'leave',
   tab: 'tab',
+  '[': 'toggle-hierarchy',
   ']': 'toggle-details',
+  p: 'toggle-profile',
   x: 'clear-action',
   s: 'step-action',
   t: 'toggle-details-tab',
@@ -65,6 +72,7 @@ export function mountTerminalViewer(
   let architectureSearch = createArchitectureSearch(response.elements)
   let state: ViewerState = {
     ...initialState(response),
+    panes: panesForWidth(renderer.width),
     ...(options.level === undefined ? {} : { level: options.level }),
     ...(options.currentId === undefined ? {} : { currentId: options.currentId }),
   }
@@ -77,7 +85,21 @@ export function mountTerminalViewer(
   let camera = options.camera
   let animationPhase = 0
   let animationTimer: ReturnType<typeof setInterval> | undefined
-  const screen = mountScreen(renderer, theme, () => repaint())
+  // Map clicks resolve against the projection last painted.
+  let lastProjection: TerminalProjection | undefined
+  const screen = mountScreen(renderer, theme, {
+    onMapResize: () => repaint(),
+    onHierarchyRow(id) {
+      transition(clickTreeRow(viewModel, state, id))
+    },
+    onMapCell(x, y) {
+      const id = lastProjection === undefined ? undefined : itemAt(lastProjection.items, x, y)?.representationId
+      // Only what the arrows can reach at this level is selectable.
+      if (id !== undefined && mapAnchors(viewModel, state.level, state.currentId).has(id)) {
+        transition(selectMapItem(viewModel, state, id))
+      }
+    },
+  })
 
   function snapshot(): TerminalCamera | undefined {
     return camera === undefined ? undefined : { ...camera }
@@ -128,6 +150,7 @@ export function mountTerminalViewer(
       workFocus: state.work,
       animationPhase,
     })
+    lastProjection = projection
     screen.apply(screenView(theme, viewModel, state, projection, lit, step))
     screen.map.requestRender()
   }

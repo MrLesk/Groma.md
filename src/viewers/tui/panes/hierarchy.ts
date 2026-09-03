@@ -43,22 +43,24 @@ export function hierarchyLines(
   focused: boolean,
 ): PaneLines {
   const lines: Line[] = []
+  const ids: (string | undefined)[] = []
   let cursor: number | undefined
-  const push = (id: string, line: Line, lit: boolean): void => {
-    const atCursor = id === cursorId
+  const push = (id: string | undefined, line: Line, lit: boolean): void => {
+    const atCursor = id !== undefined && id === cursorId
     if (atCursor) cursor = lines.length
+    ids.push(id)
     lines.push(styleRow(theme, line, width, lit, atCursor && focused))
   }
   if (commands.length > 0) {
-    lines.push([dim(theme, ' Flows')])
+    push(undefined, [dim(theme, ' Flows')], false)
     for (const command of commands) {
       const lit = command.id === activeActionId
       push(command.id, [marker(theme, lit), plain(theme, `→ ${command.title}`)], lit)
     }
-    lines.push([dim(theme, '─'.repeat(width))])
+    push(undefined, [dim(theme, '─'.repeat(width))], false)
   }
   for (const row of rows) push(row.id, treeRow(theme, row, row.id === selectionId), false)
-  return { lines, cursor }
+  return { lines, cursor, ids }
 }
 
 export function legendLines(theme: ViewerTheme, width: number): Line[] {
