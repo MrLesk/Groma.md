@@ -62,7 +62,10 @@ component glyphs, with `▾` and `▸` disclosure and `▌` for the current item
 The details pane describes the current architecture selection.
 While a flow row has hierarchy focus, it instead shows that flow and its current
 leg. `]` closes or reopens the pane, reserving or releasing its columns. `t`
-switches between what an architecture element does and how it is built.
+switches between what an architecture element does and how it is built. In the
+How tab the Code section lists each file with its line count and the declarations
+under it in authored order; Enter on a declaration opens the source read-only at
+that line. A task record's modified files open their unified diff. Escape returns.
 
 The hierarchy lists actor flows above the architecture tree. Picking a flow lights
 its visible promoted routes without hiding or moving unrelated architecture. The

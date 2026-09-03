@@ -9,6 +9,9 @@ import { backlogPlugin } from '@groma/work-source-backlog'
 import { watchArchitecture } from './architecture-watch.ts'
 import { loadAnnotatedArchitecture } from './core.ts'
 import { loadProjectProfile } from './project-profile.ts'
+import { readTaskDiff } from './viewers/source/diff.ts'
+import { readSource } from './viewers/source/read.ts'
+import { readCodeStructure } from './viewers/source/structure.ts'
 import { watchScan } from './scanner.ts'
 import { sheetScene } from './sheet/scene.ts'
 import { mountTerminalViewer } from './viewers/tui/terminal-viewer.ts'
@@ -65,7 +68,16 @@ export async function startTerminalViewer(
 
   try {
     map = await loadTerminalModel(repositoryRoot)
-    viewer = mountTerminalViewer(renderer, { ...map, work }, { onRefresh: publish, readTask: id => workSource.readItem(id) })
+    viewer = mountTerminalViewer(renderer, { ...map, work }, {
+      onRefresh: publish,
+      readTask: id => workSource.readItem(id),
+      readStructure: elementId => readCodeStructure(repositoryRoot, map, null, elementId),
+      readSource: (elementId, file) => readSource(repositoryRoot, map, null, elementId, file),
+      readDiff: async (taskId, file) => {
+        const item = work.items.find(candidate => candidate.id === taskId)
+        return item === undefined ? undefined : (await readTaskDiff(repositoryRoot, item, work)).files.find(candidate => candidate.file === file)
+      },
+    })
     void pullWork()
     const sourceWatch = await watchScan(repositoryRoot, { onFold: publish })
     const architectureWatch = watchArchitecture(repositoryRoot, { onChange: publish })

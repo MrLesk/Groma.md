@@ -1,5 +1,5 @@
 import type { ArchitectureGraph, WorkItem, WorkItemDetails } from '../../../types.ts'
-import type { TaskDiffPayload } from './read.ts'
+import type { TaskDiffPayload } from '../../source/diff.ts'
 import { leaveTaskDiff, paintTaskFile, paintTaskSummary } from './view.ts'
 
 export interface TaskDiffControl {

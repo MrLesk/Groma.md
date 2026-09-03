@@ -15,6 +15,12 @@ import { ancestorsOf, initialTree, semanticTreeRows } from './tree.ts'
 import type { TreeState } from './tree.ts'
 import type { TerminalViewModel } from './model.ts'
 import type { SearchState } from './navigation-search.ts'
+import {
+  reduceDetailsNavigation,
+  type CodeStructureState,
+  type DiffViewState,
+  type SourceViewState,
+} from './navigation-details.ts'
 import { initialWorkFocus } from './work/model.ts'
 import type { WorkFocus } from './work/model.ts'
 import { reduceWorkFocus } from './work/navigation.ts'
@@ -59,6 +65,12 @@ export interface ViewerState {
   keys?: boolean
   /** The full record of one task is showing in the details pane; its details arrive from the work source. */
   taskRecord?: { id: string; details?: WorkItemDetails }
+  /** The declarations of the selected component's TypeScript files, read once per selection for the How tab. */
+  codeStructure?: CodeStructureState
+  /** A source file open read-only in the details pane at one line; its text arrives from the reader. */
+  sourceView?: SourceViewState
+  /** A task's modified file open as a unified diff in the details pane; the diff arrives from the reader. */
+  diffView?: DiffViewState
   /** One actor command. Survives leaving the actor until x or another pick. */
   activeActionId?: string
   /** The actor the command was picked from; scopes the walk's approach to them. */
@@ -305,6 +317,8 @@ export function reduceViewer(
   if (action === 'toggle-details' || action === 'toggle-hierarchy' || action === 'toggle-profile' || action === 'toggle-keys') {
     return reducePaneKeys(world, current, action)
   }
+  if (action === 'dismiss' && current.sourceView !== undefined) return { ...current, sourceView: undefined, detailsScroll: 0 }
+  if (action === 'dismiss' && current.diffView !== undefined) return { ...current, diffView: undefined, detailsScroll: 0 }
   if (action === 'dismiss' && current.taskRecord !== undefined) return { ...current, taskRecord: undefined, detailsScroll: 0 }
   if (action === 'dismiss' && current.keys) return { ...current, keys: false, detailsScroll: 0 }
   if (action === 'dismiss' && current.profile) return { ...current, profile: false, detailsScroll: 0 }
@@ -351,26 +365,18 @@ export function reduceViewer(
     return reduceTree(world, current, action)
   }
   if (current.focus === 'details') {
-    if (action === 'up' || action === 'down') {
-      const step = action === 'down' ? 1 : -1
-      const stops = current.taskRecord === undefined
-        ? [...detailsCommands(world, current).map(item => item.id), ...detailsTasks(world, current)]
-        : []
-      if (stops.length === 0) {
-        return { ...current, detailsScroll: Math.max(0, current.detailsScroll + step) }
-      }
-      const index = stops.indexOf(current.actionCursor ?? '')
-      const next = index < 0
-        ? (step > 0 ? 0 : stops.length - 1)
-        : Math.max(0, Math.min(stops.length - 1, index + step))
-      // Each previewed walk starts unstepped.
-      return { ...current, actionCursor: stops[next], actionStep: undefined }
-    }
-    if (action === 'enter' && current.actionCursor !== undefined && detailsTasks(world, current).includes(current.actionCursor)) {
-      return { ...current, taskRecord: { id: current.actionCursor }, detailsScroll: 0 }
-    }
+    const commands = detailsCommands(world, current)
+    const tasks = detailsTasks(world, current)
+    const handled = reduceDetailsNavigation(
+      world,
+      current,
+      action,
+      commands.map(item => item.id),
+      tasks,
+    )
+    if (handled !== undefined) return handled
     if (action === 'enter') {
-      const picked = detailsCommands(world, current).find(item => item.id === current.actionCursor)
+      const picked = commands.find(item => item.id === current.actionCursor)
       if (picked === undefined) return current
       // Enter on the row already lit follows the relationship to its other end.
       if (picked.id === current.activeActionId) return followRelationship(world, current, picked)

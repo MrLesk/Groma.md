@@ -2,8 +2,8 @@ import type { ArchitectureGraph, C4Kind, WorkItem, WorkItemDetails } from '../..
 import { chromeButton } from '../atoms/button.ts'
 import { kindGlyph } from '../../atoms/kind.ts'
 import { highlightedLine } from '../source/highlight.ts'
-import type { TaskFileDiff } from './project.ts'
-import type { TaskDiffPayload } from './read.ts'
+import type { TaskFileDiff } from '../../source/diff-lines.ts'
+import type { TaskDiffPayload } from '../../source/diff.ts'
 
 const statusMark = { added: 'A', deleted: 'D', modified: 'M', unchanged: '·' } as const
 const statusLabel = { added: 'Added', deleted: 'Removed', modified: 'Modified', unchanged: 'Unchanged' } as const

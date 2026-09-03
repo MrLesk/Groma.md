@@ -15,9 +15,8 @@ import {
   type SourceFile,
 } from 'typescript/unstable/ast'
 
-import { withGitRevision } from '../../../history/git.ts'
-import type { ArchitectureGraph } from '../../../types.ts'
-import type { WebRevision } from '../payload.ts'
+import { withGitRevision } from '../../history/git.ts'
+import type { ArchitectureGraph } from '../../types.ts'
 
 type DeclarationScope = 'export' | 'internal'
 type MemberScope = 'public' | 'protected' | 'private'
@@ -211,7 +210,7 @@ async function sourceStructure(
 export async function readCodeStructure(
   repositoryRoot: string,
   world: ArchitectureGraph,
-  revision: WebRevision | null,
+  revision: string | null,
   elementId: string,
 ): Promise<CodeFile[] | undefined> {
   const references = typeScriptReferences(world, elementId)
@@ -219,5 +218,5 @@ export async function readCodeStructure(
   const load = (root: string) => sourceStructure(root, references)
   return revision === null
     ? load(repositoryRoot)
-    : withGitRevision(repositoryRoot, revision.id, load)
+    : withGitRevision(repositoryRoot, revision, load)
 }

@@ -8,7 +8,7 @@ import type { TerminalProjection } from '../projection.ts'
 import { semanticTreeRows } from '../tree.ts'
 import { mappedStatuses, selectedWorkItem, shownStatuses, workGroups, workRows, type WorkFocus } from '../work/model.ts'
 import { footerHint, searchLine } from './chrome.ts'
-import { DETAILS_TABS, detailsLines, flowLines, keysLines, profileLines, taskLines, taskRecordLines } from './details.ts'
+import { DETAILS_TABS, detailsLines, diffLines, flowLines, keysLines, profileLines, sourceLines, taskLines, taskRecordLines } from './details.ts'
 import { hierarchyLines, legendLines, workListLines } from './hierarchy.ts'
 import { DETAILS_CONTENT_WIDTH, HIERARCHY_CONTENT_WIDTH, type DetailsView, type ScreenView } from './screen.ts'
 import { plain, type Line, type PaneLines } from './text.ts'
@@ -54,6 +54,12 @@ function rootStats(world: TerminalViewModel, flows: number, workOpen: boolean): 
 
 /** The keys box or the project profile, shown over whatever the pane held. */
 function modeView(theme: ViewerTheme, world: TerminalViewModel, state: ViewerState): DetailsView | undefined {
+  if (state.sourceView !== undefined) {
+    return { title: `${state.sourceView.file}:${state.sourceView.line}`, titleColor: theme.foreground, lines: { lines: sourceLines(theme, state.sourceView, DETAILS_CONTENT_WIDTH) }, scroll: state.detailsScroll }
+  }
+  if (state.diffView !== undefined) {
+    return { title: state.diffView.file, titleColor: theme.foreground, lines: { lines: diffLines(theme, state.diffView, DETAILS_CONTENT_WIDTH) }, scroll: state.detailsScroll }
+  }
   const record = state.taskRecord === undefined ? undefined : world.work?.items.find(item => item.id === state.taskRecord?.id)
   if (record !== undefined) {
     return { title: record.id, titleColor: theme.selected, lines: { lines: taskRecordLines(theme, record, state.taskRecord?.details, DETAILS_CONTENT_WIDTH) }, scroll: state.detailsScroll }
@@ -107,7 +113,7 @@ function detailsView(
     title: selected.title,
     titleColor: state.focus === 'details' ? theme.selected : theme[selected.origin],
     tab: DETAILS_TABS.indexOf(state.detailsTab),
-    lines: detailsLines(theme, selected, world, DETAILS_CONTENT_WIDTH, state.detailsTab, state.activeActionId, state.actionCursor),
+    lines: detailsLines(theme, selected, world, DETAILS_CONTENT_WIDTH, state.detailsTab, state.activeActionId, state.actionCursor, state.codeStructure?.elementId === selected.representationId ? state.codeStructure.files : undefined),
     scroll: state.detailsScroll,
   }
 }
@@ -131,7 +137,7 @@ function footerLine(
   const named = !state.panes.details && selected !== undefined
     ? `${kindGlyph(selected.kind)} ${selected.title}   ${hint}`
     : hint
-  if (state.taskRecord !== undefined) return `esc back   ↑↓ scroll   ${named}`
+  if (state.sourceView !== undefined || state.diffView !== undefined || state.taskRecord !== undefined) return `esc back   ↑↓ scroll   ${named}`
   if (state.keys) return `? close   esc close   ${named}`
   return state.profile ? `p back   esc back   ${named}` : named
 }

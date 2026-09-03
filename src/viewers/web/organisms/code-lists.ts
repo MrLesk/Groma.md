@@ -1,6 +1,6 @@
 import type { CodeReference } from '../../../types.ts'
 import { fileTypeOf } from '../../../sheet/measure.ts'
-import type { CodeDeclaration, CodeFile } from '../source/structure.ts'
+import type { CodeDeclaration, CodeFile } from '../../source/structure.ts'
 
 function countFact(count: number, singular: string, plural: string): string {
   return `${count} ${count === 1 ? singular : plural}`
