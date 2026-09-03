@@ -3,7 +3,7 @@ import type { OptimizedBuffer } from '@opentui/core'
 import type { ViewerTheme } from '../atoms/theme.ts'
 import { routeTouches, visibleIn } from '../projection-camera.ts'
 import { drawSurfaceFrame, fillSurface } from '../molecules/surface.ts'
-import { drawCard } from '../molecules/card.ts'
+import { drawBuilding } from '../molecules/building.ts'
 import { drawFlowMarker } from '../molecules/flow-marker.ts'
 import { drawRoute, drawRouteLabel } from '../molecules/route.ts'
 import { drawRow } from '../molecules/row.ts'
@@ -103,13 +103,10 @@ function drawRowsAndCards(
   for (const item of items) {
     if (item.shape === 'row') drawRow(buffer, item, theme, item.representationId === projection.currentId)
     if (item.shape !== 'card') continue
-    drawCard(
-      buffer,
-      item,
-      projection,
-      theme,
-      tracing && item.representationId !== undefined && !trace.onPath(item.representationId),
-      trace.work.touched.has(item.key),
-    )
+    drawBuilding(buffer, item, theme, {
+      selected: item.representationId === projection.currentId,
+      dimmed: tracing && item.representationId !== undefined && !trace.onPath(item.representationId),
+      accented: trace.work.touched.has(item.key),
+    })
   }
 }
