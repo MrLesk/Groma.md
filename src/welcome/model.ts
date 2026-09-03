@@ -66,6 +66,14 @@ export const advancedCommands = [
     content: 'Removes a scanner from this project. Shared downloaded packages remain cached for other projects.',
   },
   {
+    command: 'groma add <thing> <name> …',
+    description: 'actor, external or draft',
+    content: [
+      'Declares a person, an external system, or a draft record with its overview.',
+      'The scanner never sees those; scanned software is drafted instead.',
+    ].join('\n'),
+  },
+  {
     command: 'groma draft <kind> <name> …',
     description: 'kind, overview, optional draft',
     content: [
@@ -83,6 +91,11 @@ export const advancedCommands = [
     command: 'groma relate <from> <to> …',
     description: 'details + tech or remove',
     content: 'Adds, changes, or removes a directed relationship between two architecture elements.',
+  },
+  {
+    command: 'groma remove <id>',
+    description: 'person, external, ghost, draft',
+    content: 'Removes a person, an external system, a ghost, or a draft no ghost belongs to. Scanned software stays.',
   },
   {
     command: 'groma accept <id>',

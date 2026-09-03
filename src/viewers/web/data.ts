@@ -1,3 +1,4 @@
+import type { AddInput } from '../../add.ts'
 import type { DraftElementInput } from '../../draft.ts'
 import type { ProjectProfileInput } from '../../project-profile.ts'
 import type { WorkItemDetails } from '../../types.ts'
@@ -14,8 +15,10 @@ export interface WebDataSource {
   readTask(id: string): Promise<WorkItemDetails>
   readTaskDiff(id: string): Promise<TaskDiffPayload>
   saveProject?(profile: ProjectProfileInput): Promise<void>
-  /** Drafts an element through the server; absent in the published delivery, which has no writer. */
+  /** The writers, absent in the published delivery, which has none. */
   draft?(input: DraftElementInput): Promise<void>
+  add?(input: AddInput): Promise<void>
+  remove?(id: string): Promise<void>
   subscribe(handlers: {
     world(payload: WebPayload): void
     work(payload: WebWorkPayload): void
@@ -26,6 +29,15 @@ async function responseJson<T>(path: string): Promise<T> {
   const response = await fetch(path)
   if (!response.ok) throw new Error(await response.text())
   return response.json() as Promise<T>
+}
+
+async function send(path: string, method: 'POST' | 'PUT', body: unknown): Promise<void> {
+  const response = await fetch(path, {
+    method,
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  if (!response.ok) throw new Error(await response.text())
 }
 
 function selected(path: string, values: Record<string, string | undefined>): string {
@@ -53,22 +65,10 @@ function liveDataSource(): WebDataSource {
     readTaskDiff(id) {
       return responseJson(selected('/task-diff.json', { task: id }))
     },
-    async saveProject(profile) {
-      const response = await fetch('/project', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(profile),
-      })
-      if (!response.ok) throw new Error(await response.text())
-    },
-    async draft(input) {
-      const response = await fetch('/draft', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(input),
-      })
-      if (!response.ok) throw new Error(await response.text())
-    },
+    saveProject: profile => send('/project', 'PUT', profile),
+    draft: input => send('/draft', 'POST', input),
+    add: input => send('/add', 'POST', input),
+    remove: id => send('/remove', 'POST', { id }),
     subscribe(handlers) {
       const events = new EventSource('/events')
       events.addEventListener('world', event => {

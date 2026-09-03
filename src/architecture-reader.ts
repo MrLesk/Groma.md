@@ -9,6 +9,7 @@ import {
   requireProjectMetadata,
   requireProjectOverview,
 } from './okf-profile.ts'
+import { isReservedDocument } from './architecture-path.ts'
 import { GromaFileSystem } from './groma-filesystem.ts'
 
 import type {
@@ -93,12 +94,6 @@ async function listMarkdownFiles(
 
 /** The two root documents describe the bundle and the project, never an element. */
 const rootDocuments = new Set(['index.md', 'project.md'])
-
-/** Names the scanner must never hand to an element, since Markdown tooling reserves them. */
-export function isReservedDocument(filename: string): boolean {
-  const basename = path.posix.basename(filename)
-  return basename === 'index.md' || basename === 'log.md'
-}
 
 async function parseDocument(
   filesystem: GromaFileSystem,

@@ -2,7 +2,7 @@ import { parseFrontmatter } from 'comark'
 import { renderFrontmatter } from 'comark/render'
 
 import { GromaFileSystem } from './groma-filesystem.ts'
-import { c4Type, requireGromaMapping } from './okf-profile.ts'
+import { DRAFT_TYPE, c4Type, requireGromaMapping } from './okf-profile.ts'
 import type { C4Kind, CodeReference, ElementStatus } from './types.ts'
 
 function normalizeNewlines(source: string): string {
@@ -124,6 +124,18 @@ export function renderArchitectureDocument(input: {
     status: input.status,
     groma,
   }, content)
+}
+
+export function renderDraftDocument(input: {
+  id: string
+  title: string
+  outcome: string
+}): string {
+  return sourceWithFrontmatter({
+    type: DRAFT_TYPE,
+    title: input.title,
+    groma: { id: input.id },
+  }, `\n\n${input.outcome.trim()}\n`)
 }
 
 export function withRelationship(

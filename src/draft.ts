@@ -1,14 +1,14 @@
 import {
   buildArchitectureModel,
-  draftRecordOf,
+  freeId,
   expectedParentKinds,
   requireDraftRecord,
 } from './architecture-model.ts'
 import { architectureElementPath } from './architecture-path.ts'
-import { isReservedDocument, loadArchitecture } from './architecture-reader.ts'
+import { loadArchitecture } from './architecture-reader.ts'
 import { GromaFileSystem } from './groma-filesystem.ts'
 import { renderArchitectureDocument, writeDocument } from './markdown-emitter.ts'
-import { kebabCase } from './naming.ts'
+import { requireText } from './naming.ts'
 import type { ArchitectureElement, C4Kind } from './types.ts'
 
 export interface DraftElementInput {
@@ -23,13 +23,6 @@ export interface DraftElementInput {
 
 /** Only software is drafted: people and externals are declared, never drafted. */
 const draftableKinds = new Set<C4Kind>(['system', 'container', 'component'])
-
-function requireText(value: string | undefined, flag: string): string {
-  if (value === undefined || value.trim().length === 0) {
-    throw new Error(`${flag} is required`)
-  }
-  return value
-}
 
 function requireKind(kind: string): C4Kind {
   if (!draftableKinds.has(kind as C4Kind)) {
@@ -75,13 +68,7 @@ export async function draftElement(
   const records = await loadArchitecture(repositoryRoot)
   const model = buildArchitectureModel(records.documents)
   const byId = new Map(model.elements.map(element => [element.id, element]))
-  const id = kebabCase(name)
-  if (id === '') throw new Error('name must contain a letter or a digit')
-  if (byId.has(id)) throw new Error(`id "${id}" already exists`)
-  if (records.drafts.some(document => draftRecordOf(document).id === id)) {
-    throw new Error(`id "${id}" already names a draft`)
-  }
-  if (isReservedDocument(`${id}.md`)) throw new Error(`"${id}" is a reserved document name`)
+  const id = freeId(records, model, name)
   const draft = input.draft === undefined || input.draft === ''
     ? undefined
     : requireDraftRecord(records, input.draft)

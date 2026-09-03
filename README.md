@@ -92,7 +92,7 @@ The frontmatter carries identity, containment, and scanner evidence. The body is
 ```text
 source code ──scan──▶ groma/**/*.md ──view──▶ browser map · terminal map
                             ▲
-                 draft · edit · relate · accept
+           add · draft · edit · relate · remove · accept
 ```
 
 Groma follows the [C4 model](https://c4model.com): actors and systems, the containers inside a system, the components inside a container. Code is evidence attached to components, not a fourth level.
@@ -134,7 +134,7 @@ Agents use the same CLI you do. `groma agent-instructions` prints the curation g
 
 ## Working without coding agents
 
-Everything above is a command you can type. `groma draft` describes a part that does not exist yet as a ghost. `groma edit` changes meaning, folds evidence, and tags a part with the draft that touches it. `groma relate` writes a collaboration. `groma accept` confirms a ghost once a scan has found its code.
+Everything above is a command you can type. `groma add` declares what no scan can see: a person, an outside system, or a draft. `groma draft` describes a part that does not exist yet as a ghost. `groma edit` changes meaning, folds evidence, and tags a part with the draft that touches it. `groma relate` writes a collaboration. `groma remove` takes one of those away again. `groma accept` confirms a ghost once a scan has found its code.
 
 ## Live work from Backlog.md
 
@@ -157,9 +157,11 @@ writes the browser map as a static site with the architecture, flows, source ins
 | `groma web` | Scan, then open the browser map |
 | `groma view [id]` | Scan, then open the terminal map, or print one record as text |
 | `groma scan [--watch]` | Scan and fold findings into Markdown |
+| `groma add <thing> <name>` | Declare a person, an external system, or a draft |
 | `groma draft <kind> <name>` | Draft a system, container, or component as a ghost |
 | `groma edit <id>` | Change meaning, combine, move, group, or tag with a draft |
 | `groma relate <from> <to>` | Author or remove one relationship |
+| `groma remove <id>` | Remove a person, an external, a ghost, or an empty draft |
 | `groma accept <id>` | Accept a ghost once a scan has matched it |
 | `groma export <dir>` | Write a read-only static site |
 | `groma scanner …` | Add, list, install, or remove scanner plugins |

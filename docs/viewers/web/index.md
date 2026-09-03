@@ -37,6 +37,13 @@ system), and a Draft form that posts the same input as `groma draft system`.
 The first element replaces it without a reload. A published snapshot shows
 the invitation without the form.
 
+The hierarchy pane's plus button opens one dialog that declares a person, an
+external system, or a draft with the same input `groma add` takes. The
+details pane ends with a Remove control only where `groma remove` would
+succeed: a person or external nothing relates to, or a ghost that contains
+nothing and that nothing relates to. One click asks, the second removes, and a
+refusal shows the server's sentence.
+
 The isometric grid fills the screen. Inset 35%-paper frosted chrome floats
 above it as one technical instrument. The header shows the groma.md lockup,
 the observed system's name with live flow and element counts, one compact

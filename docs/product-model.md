@@ -98,8 +98,17 @@ repository without Groma.
    - A collaboration is authored with `groma relate <source-id> <target-id>
      --description <prose> --technology <text>` and removed with the same
      command plus `--remove`.
-   - Actors and external systems are declared by people. The scanner never
-     writes them.
+   - **People and outside systems** are declared, never scanned: `groma add
+     actor <name> --overview <markdown>` and `groma add external <name>
+     [--technology <text>] --overview <markdown>` write them stable at once.
+     `groma add draft <name> --overview <markdown>` writes a draft record.
+     `groma add component <name>` refuses and names `groma draft`.
+   - **Removing** takes the id alone: `groma remove <id>` deletes a person, an
+     external, a ghost, or a draft record no ghost belongs to; it refuses and
+     names what blocks it while other elements relate to the part, while a
+     ghost still contains parts, or while ghosts still carry the draft's tag.
+     Stable software is the scanner's: remove its code or combine it instead.
+     Removing a draft record clears its tag from the stable parts it touched.
    - The web map's project pencil edits only the project title, concise
      description, and body overview in `groma/project.md`; it does not edit C4
      concepts.

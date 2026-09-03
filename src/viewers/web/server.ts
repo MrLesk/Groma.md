@@ -5,9 +5,11 @@ import { backlogPlugin } from '@groma/work-source-backlog'
 import { watchArchitecture } from '../../architecture-watch.ts'
 import { loadArchitecture } from '../../architecture-reader.ts'
 import { listGitRevisions, withGitGromaRevision, withGitRevision } from '../../history/git.ts'
+import { addThing } from '../../add.ts'
 import { annotateArchitecture } from '../../core.ts'
 import { draftElement } from '../../draft.ts'
 import { saveProjectProfile } from '../../project-profile.ts'
+import { removeThing } from '../../remove.ts'
 import { watchScan } from '../../scanner.ts'
 import { pinsOf } from '../../work/pins.ts'
 import { renderPage } from './page.ts'
@@ -235,9 +237,13 @@ export async function startWebViewer(
     }
   }
 
-  async function draftResponse(request: Request): Promise<Response> {
+  /** A write answers with the id it touched, or with the core sentence and 400; the world is published before the answer. */
+  async function writeResponse<Input>(
+    request: Request,
+    write: (repositoryRoot: string, input: Input) => Promise<string>,
+  ): Promise<Response> {
     try {
-      const id = await draftElement(repositoryRoot, await request.json())
+      const id = await write(repositoryRoot, await request.json() as Input)
       await publishWorld()
       return Response.json({ id })
     } catch (error) {
@@ -287,10 +293,18 @@ export async function startWebViewer(
     ['/events', eventsResponse],
   ])
 
+  /** The writes the CLI has, at the path of their verb; each posts the input the CLI builds from its flags. */
+  const writes = new Map<string, (request: Request) => Promise<Response>>([
+    ['/draft', request => writeResponse(request, draftElement)],
+    ['/add', request => writeResponse(request, addThing)],
+    ['/remove', request => writeResponse(request, (root, input: { id: string }) => removeThing(root, input.id))],
+  ])
+
   async function responseFor(request: Request): Promise<Response> {
     const url = new URL(request.url)
     if (url.pathname === '/project' && request.method === 'PUT') return projectResponse(request)
-    if (url.pathname === '/draft' && request.method === 'POST') return draftResponse(request)
+    const write = request.method === 'POST' ? writes.get(url.pathname) : undefined
+    if (write !== undefined) return write(request)
     const route = routes.get(url.pathname)
     return route === undefined ? pageResponse(url) : route(request, url)
   }

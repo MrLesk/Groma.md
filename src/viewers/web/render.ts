@@ -5,12 +5,13 @@ import { elementOnPath, flowRouteIds, worldCommands } from '../action-path.ts'
 import type { FlowRef } from '../action-path.ts'
 import { initialTree, semanticTreeRows, toggleExpansion } from '../tui/tree.ts'
 import type { TreeRow } from '../tui/tree.ts'
-import { nextTheme, themeLabel } from './atoms/theme.ts'
+import { createAddControl } from './chrome/add.ts'
 import { createEmptyState } from './chrome/empty.ts'
 import { createMapDebugPanel } from './chrome/map-debug.ts'
-import { animateControl, createThemeTransition } from './chrome/motion.ts'
+import { animateControl } from './chrome/motion.ts'
 import { createWebShell, mapFrame, type MapFrame } from './chrome/shell.ts'
 import { bindShortcuts } from './chrome/shortcuts.ts'
+import { bindThemeControl } from './chrome/theme-control.ts'
 import { paintWorldStats, primarySystem } from './chrome/stats.ts'
 import { createWebDataSource } from './data.ts'
 import { paintFlows } from './flow/list.ts'
@@ -61,10 +62,8 @@ const hierarchyHost = document.getElementById('hierarchy')!
 const treeHost = document.getElementById('tree')!
 const flowsHost = document.getElementById('flows')!
 const statsHost = document.getElementById('stats')!
-const themeButton = document.getElementById('theme')!
 const revisionSelect = document.getElementById('revision') as HTMLDetailsElement
 const searchRoot = document.getElementById('architecture-search')!
-const themeText = themeButton.querySelector<HTMLElement>('.label')!
 const detailsHost = document.getElementById('details')!
 const detailsClose = document.getElementById('details-close') as HTMLButtonElement
 const zoomHost = document.getElementById('zoom')!
@@ -72,13 +71,16 @@ const hierarchyContent = document.getElementById('hierarchy-content')!
 const hierarchyToggle = document.getElementById('hierarchy-toggle') as HTMLButtonElement
 const map = createMap(host)
 const projectEditor = data.saveProject === undefined ? undefined : createProjectEditor(data.saveProject)
+const remove = data.remove
 const emptyState = createEmptyState(document.getElementById('empty')!, data.draft)
+if (data.add !== undefined) createAddControl(document.getElementById('add')!, data.add)
 const shell = createWebShell(document.body, hierarchyContent, hierarchyToggle, detailsHost, map.svg)
 const tip = createTip(host)
 const pins = createPins(host, id => map.anchorOf(id), id => toggleTask(id), tip)
 const island = createWorkIsland(host, id => toggleTask(id), pins.show, tip)
 let tree = initialTree()
 const opened = readView(location.search, world, work.items, boot.revisions)
+const themeControl = bindThemeControl(document.getElementById('theme')!, opened.theme, syncUrl)
 let hudVisible = opened.hudVisible
 shell.setHud(hudVisible)
 let selection = opened.selection
@@ -90,7 +92,6 @@ if (boot.revision === null && selection.kind === 'none' && initial !== undefined
 /** Tasks activated from pins or chips, in activation order; selection is independent and this order supplies its deactivation fallback. */
 let activeTaskIds: string[] = selection.kind === 'task' ? [selection.id] : []
 let detailsTab: DetailsTab = opened.tab
-let theme = opened.theme
 const revisionControl = createRevisionControl({
   control: revisionSelect, body: document.body, boot, data,
   applyRevision: payload => applyWorld(payload, true), applyWorld, applyWork,
@@ -176,7 +177,7 @@ function syncUrl(): void {
     ...(source.line === undefined ? {} : { line: source.line }),
     selection, flows: activeFlows,
     tab: detailsTab,
-    theme,
+    theme: themeControl.current,
     hudVisible,
   }, world, work.items)
   history.replaceState(null, '', `${location.pathname}${query}`)
@@ -224,6 +225,7 @@ function paintViewState(commitUrl = true): void {
       onSource: source.open,
       workGroups: selected.kind === 'component' ? elementWorkGroups(work, selected.representationId, world) : [],
       onTask: toggleTask,
+      ...(remove === undefined || revisionControl.selected !== undefined ? {} : { onRemove: () => remove(selected.id) }),
     })
   }
 }
@@ -380,21 +382,6 @@ const layerAnimator = createLayerAnimator(layerMotion, repaintLayerScene)
 function toggleLayers(): void {
   layerAnimator.toggle()
 }
-function applyTheme(): void {
-  const next = nextTheme(theme)
-  themeButton.dataset.nextTheme = next
-  themeText.textContent = themeLabel(next)
-  if (theme === 'light') delete document.documentElement.dataset.theme
-  else document.documentElement.dataset.theme = theme
-  syncUrl()
-}
-
-const transitionTheme = createThemeTransition(document.body)
-themeButton.addEventListener('click', () => transitionTheme(() => {
-  theme = nextTheme(theme)
-  applyTheme()
-}))
-applyTheme()
 
 bindShortcuts({
   hud: toggleHud,
