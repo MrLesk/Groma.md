@@ -1,4 +1,4 @@
-import type { IsoMap } from './map.ts'
+import type { IsoMap, ZoneAddress } from './map.ts'
 
 export interface MapPointerActions {
   orbiting(): boolean
@@ -7,6 +7,8 @@ export interface MapPointerActions {
   select(id: string, additive: boolean): void
   deselect(): void
   editProject(): void
+  /** True when the press was taken; otherwise the zone's container is selected. */
+  editGroup(group: ZoneAddress): boolean
 }
 
 const DRAG_THRESHOLD = 4
@@ -22,6 +24,7 @@ export function bindMapPointer(map: IsoMap, actions: MapPointerActions): void {
     targetId: string | undefined
     onSheet: boolean
     projectEdit: boolean
+    group: ZoneAddress | undefined
     additive: boolean
   } | null = null
 
@@ -36,6 +39,7 @@ export function bindMapPointer(map: IsoMap, actions: MapPointerActions): void {
       targetId: map.hitId(event.target),
       onSheet: map.isSheet(event.target),
       projectEdit: map.isProjectEdit(event.target),
+      group: map.hitGroup(event.target),
       additive: event.shiftKey,
     }
     map.svg.setPointerCapture(event.pointerId)
@@ -52,13 +56,17 @@ export function bindMapPointer(map: IsoMap, actions: MapPointerActions): void {
     pointer.y = event.clientY
   })
 
+  /** A press without a drag: a zone, the project pencil, an element or route, or the empty sheet. */
+  function tap(pressed: NonNullable<typeof pointer>): void {
+    if (pressed.group !== undefined && actions.editGroup(pressed.group)) return
+    if (pressed.projectEdit) actions.editProject()
+    else if (pressed.targetId !== undefined) actions.select(pressed.targetId, pressed.additive)
+    else if (pressed.onSheet) actions.deselect()
+  }
+
   map.svg.addEventListener('pointerup', event => {
     if (pointer === null || pointer.id !== event.pointerId) return
-    if (!pointer.dragging) {
-      if (pointer.projectEdit) actions.editProject()
-      else if (pointer.targetId !== undefined) actions.select(pointer.targetId, pointer.additive)
-      else if (pointer.onSheet) actions.deselect()
-    }
+    if (!pointer.dragging) tap(pointer)
     pointer = null
   })
   map.svg.addEventListener('pointercancel', () => {

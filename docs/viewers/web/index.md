@@ -60,6 +60,12 @@ title and its technology below, both editable in place, and ends with a Remove
 control; they post the inputs `groma edit relation` and `groma remove relation`
 take.
 
+Shift-click selects several components; their pane then starts with Group as
+(a name for the selection) and Combine into (the survivor picked among them),
+posting the inputs `groma add group` and `groma edit --combine` take. Pressing
+a zone on the map opens the group's dialog with Rename and Dissolve; on a
+published or past map the press selects the zone's container as before.
+
 The isometric grid fills the screen. Inset 35%-paper frosted chrome floats
 above it as one technical instrument. The header shows the groma.md lockup,
 the observed system's name with live flow and element counts, one compact

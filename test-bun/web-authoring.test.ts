@@ -145,3 +145,24 @@ test.concurrent('the web relates through add, edit and remove, and groma view pr
     await rm(root, { recursive: true, force: true })
   }
 })
+
+test.concurrent('the web groups sibling components through add, edit and remove', async () => {
+  const root = await createRepo()
+  const server = await startWebViewer(root, { port: 0 })
+  const groups = async () => {
+    const payload = await (await fetch(`${server.url}/world.json`)).json() as { world: { elements: { id: string; group?: string }[] } }
+    return Object.fromEntries(payload.world.elements.filter(item => item.id === 'orders' || item.id === 'stock').map(item => [item.id, item.group]))
+  }
+  try {
+    const added = await post(server.url, 'add', { thing: 'group', name: 'Checkout', members: ['orders', 'stock'] })
+    assert.equal(added.status, 200)
+    assert.deepEqual(await added.json(), { id: 'api/checkout' })
+    assert.equal((await post(server.url, 'edit', { id: 'api/checkout', title: 'Order flow' })).status, 200)
+    assert.deepEqual(await groups(), { orders: 'Order flow', stock: 'Order flow' })
+    assert.equal((await post(server.url, 'remove', { id: 'api/order-flow', members: ['stock'] })).status, 200)
+    assert.deepEqual(await groups(), { orders: 'Order flow', stock: undefined })
+  } finally {
+    await server.close()
+    await rm(root, { recursive: true, force: true })
+  }
+})
