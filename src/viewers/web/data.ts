@@ -1,4 +1,4 @@
-import type { AddInput, DraftElementInput, EditArchitectureInput } from '../../authoring.ts'
+import type { AddInput, DraftElementInput, EditArchitectureInput, RemoveInput } from '../../authoring.ts'
 import type { WorkItemDetails } from '../../types.ts'
 import { PUBLISHED_EVENT, PUBLISHED_VERSION_EVENT } from './payload.ts'
 import type { WebBootPayload, WebPayload, WebWorkPayload } from './payload.ts'
@@ -15,7 +15,7 @@ export interface WebDataSource {
   /** The writers, absent in the published delivery, which has none. */
   draft?(input: DraftElementInput): Promise<void>
   add?(input: AddInput): Promise<void>
-  remove?(id: string): Promise<void>
+  remove?(input: RemoveInput): Promise<void>
   edit?(input: EditArchitectureInput): Promise<void>
   subscribe(handlers: {
     world(payload: WebPayload): void
@@ -65,7 +65,7 @@ function liveDataSource(): WebDataSource {
     },
     draft: input => send('/draft', input),
     add: input => send('/add', input),
-    remove: id => send('/remove', { id }),
+    remove: input => send('/remove', input),
     edit: input => send('/edit', input),
     subscribe(handlers) {
       const events = new EventSource('/events')

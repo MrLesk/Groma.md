@@ -20,6 +20,6 @@ Routes every named Groma command and the bare-terminal launcher to one owning op
 | Target | Description | Technology |
 | --- | --- | --- |
 | [Init command](init-command.md) | Runs the interactive setup or non-interactive initialization flow | groma init |
-| [Observed curation](observed-curation.md) | Curates scan evidence and collaborations | groma edit and groma relate |
 | [Scan lifecycle](../../scanner/components/scan-lifecycle.md) | Runs a complete scan | groma scan |
 | [Export](../../web-viewer/components/export.md) | Publishes the current Web view as static files | CLI |
+| [Observed curation](observed-curation.md) | Curates scan evidence and collaborations | groma edit and groma add relation |

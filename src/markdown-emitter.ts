@@ -154,7 +154,6 @@ export function withRelationship(
 ): string {
   source = normalizeNewlines(source)
   const row = `| [${relationship.targetName}](${relationship.targetHref}) | ${relationship.description} | ${relationship.technology} |`
-  if (source.includes(row)) throw new Error('relationship already exists')
   const lines = source.trimEnd().split('\n')
   const heading = lines.indexOf('## Relationships')
   if (heading === -1) {
@@ -171,10 +170,15 @@ export function withRelationship(
   return `${lines.join('\n')}\n`
 }
 
-export function withoutRelationship(source: string, row: string): string {
+/** Removes the row with this target link, description and technology; the link text may have aged since the target was renamed. */
+export function withoutRelationship(
+  source: string,
+  row: { targetHref: string; description: string; technology: string },
+): string {
   source = normalizeNewlines(source)
   const lines = source.trimEnd().split('\n')
-  const rowIndex = lines.indexOf(row)
+  const tail = `](${row.targetHref}) | ${row.description} | ${row.technology} |`
+  const rowIndex = lines.findIndex(line => line.startsWith('| [') && line.endsWith(tail))
   if (rowIndex === -1) throw new Error('relationship row is missing')
   lines.splice(rowIndex, 1)
 

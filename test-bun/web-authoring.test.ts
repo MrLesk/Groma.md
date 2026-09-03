@@ -10,25 +10,27 @@ import { repositoryRoot } from './helpers.ts'
 
 const fixtureRoot = path.join(repositoryRoot, 'test', 'fixtures', 'plain-view')
 
-function run(command: string, args: string[], root: string): Promise<number | null> {
+/** One process run: its exit code and stdout. */
+function run(command: string, args: string[], root: string): Promise<{ code: number | null; stdout: string }> {
   return new Promise((resolve, reject) => {
-    const child = spawn(command, args, { cwd: root, stdio: 'ignore' })
+    const child = spawn(command, args, { cwd: root, stdio: ['ignore', 'pipe', 'ignore'] })
+    let stdout = ''
+    child.stdout.on('data', chunk => {
+      stdout += chunk
+    })
     child.on('error', reject)
-    child.on('close', resolve)
+    child.on('close', code => resolve({ code, stdout }))
   })
 }
 
 const gitInit = (root: string) => run('git', ['init'], root)
 const cli = path.join(repositoryRoot, 'src', 'cli.ts')
-/** Relations have no web verb yet, so the fixture is wired through the CLI. */
-const relate = (root: string, source: string, target: string) => run('bun', [
-  cli, 'relate', source, target, '--description', 'Asks before placing', '--technology', 'Function call',
-], root)
+const view = (id: string, root: string) => run('bun', [cli, 'view', id], root)
 
 async function createRepo(): Promise<string> {
   const root = await mkdtemp(path.join(tmpdir(), 'groma-web-authoring-'))
   await cp(fixtureRoot, root, { recursive: true })
-  assert.equal(await gitInit(root), 0)
+  assert.equal((await gitInit(root)).code, 0)
   return root
 }
 
@@ -83,7 +85,9 @@ test.concurrent('a refused write answers with the CLI sentence and changes nothi
     assert.equal((await post(server.url, 'draft', {
       kind: 'component', name: 'Stock check', parent: 'api', overview: 'Checks stock levels.',
     })).status, 200)
-    assert.equal(await relate(root, 'orders', 'stock-check'), 0)
+    assert.equal((await post(server.url, 'add', {
+      thing: 'relation', name: 'orders', relation: 'stock-check', description: 'Asks before placing', technology: 'Function call',
+    })).status, 200)
     const related = await post(server.url, 'remove', { id: 'stock-check' })
     assert.equal(related.status, 400)
     assert.equal(await related.text(), 'cannot remove stock-check: orders relate to it')
@@ -106,6 +110,36 @@ test.concurrent('the web edits meaning through the edit verb', async () => {
     const orders = payload.world.elements.find(element => element.id === 'orders')
     assert.equal(orders?.title, 'Order intake')
     assert.equal(orders?.technology, 'Bun')
+  } finally {
+    await server.close()
+    await rm(root, { recursive: true, force: true })
+  }
+})
+
+test.concurrent('the web relates through add, edit and remove, and groma view prints the row', async () => {
+  const root = await createRepo()
+  const server = await startWebViewer(root, { port: 0 })
+  try {
+    const ends = { name: 'stock', relation: 'orders' }
+    const added = await post(server.url, 'add', {
+      thing: 'relation', ...ends, description: 'Informs order placement', technology: 'In-process data',
+    })
+    assert.equal(added.status, 200)
+    assert.match((await view('stock', root)).stdout, /->\s+Informs order placement\s+orders/)
+    const twice = await post(server.url, 'add', { thing: 'relation', ...ends, description: 'Again', technology: 'Queue' })
+    assert.equal(twice.status, 400)
+    assert.match(await twice.text(), /groma edit relation stock orders/)
+
+    assert.equal((await post(server.url, 'edit', { id: 'stock', relation: 'orders', technology: 'Queue' })).status, 200)
+    const payload = await (await fetch(`${server.url}/world.json`)).json() as {
+      world: { relationships: { source: string; target: string; description: string; technology: string }[] }
+    }
+    const row = payload.world.relationships.find(item => item.source === 'stock' && item.target === 'orders')
+    assert.equal(row?.description, 'Informs order placement')
+    assert.equal(row?.technology, 'Queue')
+
+    assert.equal((await post(server.url, 'remove', { id: 'stock', relation: 'orders' })).status, 200)
+    assert.doesNotMatch((await view('stock', root)).stdout, /Informs order placement/)
   } finally {
     await server.close()
     await rm(root, { recursive: true, force: true })

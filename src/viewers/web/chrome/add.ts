@@ -8,7 +8,7 @@ export const addDialogCss = `
   }
   #add:hover { color: var(--ink); background: var(--hover); }
   body.hierarchy-collapsed #add, body[data-revision] #add { display: none; }
-  #add-dialog {
+  .verb-dialog {
     width: min(420px, calc(100vw - 32px));
     margin: auto;
     padding: 0;
@@ -19,12 +19,12 @@ export const addDialogCss = `
     box-shadow: 0 16px 48px color-mix(in srgb, var(--ink) 18%, transparent);
     backdrop-filter: blur(18px);
   }
-  #add-dialog::backdrop { background: color-mix(in srgb, var(--ink) 8%, transparent); }
-  #add-dialog form { display: grid; gap: 12px; padding: 20px; }
-  #add-dialog h1 { margin: 0; font-size: 18px; line-height: 1.3; }
-  #add-dialog label { display: grid; gap: 6px; color: var(--muted); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; }
-  #add-dialog label[hidden] { display: none; }
-  #add-dialog input, #add-dialog select, #add-dialog textarea {
+  .verb-dialog::backdrop { background: color-mix(in srgb, var(--ink) 8%, transparent); }
+  .verb-dialog form { display: grid; gap: 12px; padding: 20px; }
+  .verb-dialog h1 { margin: 0; font-size: 18px; line-height: 1.3; }
+  .verb-dialog label { display: grid; gap: 6px; color: var(--muted); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; }
+  .verb-dialog label[hidden] { display: none; }
+  .verb-dialog input, .verb-dialog select, .verb-dialog textarea {
     width: 100%;
     border: 1px solid var(--hairline);
     border-radius: 6px;
@@ -34,20 +34,21 @@ export const addDialogCss = `
     font: 12px/1.5 'SF Mono', ui-monospace, Menlo, monospace;
     resize: none;
   }
-  #add-dialog textarea { height: 120px; }
-  #add-dialog input:focus, #add-dialog select:focus, #add-dialog textarea:focus { outline: 2px solid var(--highlight); outline-offset: -1px; }
-  #add-dialog .error { min-height: 1.5em; margin: -6px 0 0; color: var(--highlight-text); font-size: 11px; }
-  #add-dialog .error:empty { display: none; }
-  #add-dialog .actions { display: flex; justify-content: flex-end; gap: 8px; }
-  #add-dialog button { border: 1px solid var(--hairline); border-radius: 6px; padding: 7px 12px; background: transparent; }
-  #add-dialog button[type="submit"] { border-color: var(--accent); color: var(--accent-text); }
-  #add-dialog button:disabled { opacity: 0.5; cursor: wait; }
+  .verb-dialog textarea { height: 120px; }
+  .verb-dialog input:focus, .verb-dialog select:focus, .verb-dialog textarea:focus { outline: 2px solid var(--highlight); outline-offset: -1px; }
+  .verb-dialog .error { min-height: 1.5em; margin: -6px 0 0; color: var(--highlight-text); font-size: 11px; }
+  .verb-dialog .error:empty { display: none; }
+  .verb-dialog .actions { display: flex; justify-content: flex-end; gap: 8px; }
+  .verb-dialog button { border: 1px solid var(--hairline); border-radius: 6px; padding: 7px 12px; background: transparent; }
+  .verb-dialog button[type="submit"] { border-color: var(--accent); color: var(--accent-text); }
+  .verb-dialog button:disabled { opacity: 0.5; cursor: wait; }
 `
 
 /** The plus button of the hierarchy pane: one dialog declares a person, an external system, or a draft. */
 export function createAddControl(button: HTMLElement, add: (input: AddInput) => Promise<void>): void {
   const dialog = document.createElement('dialog')
   dialog.id = 'add-dialog'
+  dialog.className = 'verb-dialog'
   dialog.innerHTML = '<form><h1>Add</h1>'
     + '<label>What<select name="thing"><option value="actor">Person</option><option value="external">External system</option><option value="draft">Draft</option></select></label>'
     + '<label>Name<input name="name" required></label>'

@@ -181,8 +181,9 @@ edits overview or owned metadata.
 ```
 
 Each row declares one direction: the current concept is the source. The link
-must resolve to another C4 concept in the tree. `groma relate` adds or removes
-a relationship row.
+must resolve to another C4 concept in the tree. `groma add relation`,
+`groma edit relation` and `groma remove relation` add, reword or remove a
+relationship row.
 
 A software-to-software relationship is authored on the lowest concepts that
 exist. Once two components participate, write the row there, not again on

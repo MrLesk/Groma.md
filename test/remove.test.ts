@@ -36,7 +36,7 @@ test('a ghost leaves once nothing relates to it, and a draft record once no ghos
     'draft', 'component', 'Stock check', '--parent', 'api', '--draft', 'next', '--overview', 'Checks stock levels.',
   ])).code, 0)
   assert.equal((await groma(root, [
-    'relate', 'orders', 'stock-check', '--description', 'Asks before placing', '--technology', 'Function call',
+    'add', 'relation', 'orders', 'stock-check', '--description', 'Asks before placing', '--technology', 'Function call',
   ])).code, 0)
   const related = await groma(root, ['remove', 'stock-check'])
   assert.notEqual(related.code, 0)
@@ -46,7 +46,7 @@ test('a ghost leaves once nothing relates to it, and a draft record once no ghos
   assert.notEqual(recordWhileGhost.code, 0)
   assert.match(recordWhileGhost.stderr, /ghosts stock-check still belong to it/)
 
-  assert.equal((await groma(root, ['relate', 'orders', 'stock-check', '--remove'])).code, 0)
+  assert.equal((await groma(root, ['remove', 'relation', 'orders', 'stock-check'])).code, 0)
   const ghost = await groma(root, ['remove', 'stock-check'])
   assert.equal(ghost.code, 0, ghost.stderr)
   assert.equal(await exists(root, 'groma/systems/shop/containers/api/components/stock-check.md'), false)

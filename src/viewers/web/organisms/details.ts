@@ -60,6 +60,26 @@ export interface Inspected {
 /** What the edit verb changes from the pane; the id is the selected element's. */
 export type MeaningEdit = Pick<EditArchitectureInput, 'title' | 'description' | 'overview' | 'technology' | 'draft'>
 
+export interface RelateControl {
+  /** True while the map waits for the target of a relation from the selected element. */
+  armed: boolean
+  toggle: () => void
+}
+
+/** The write hooks an element pane gets on the current revision of a live map. */
+export interface PaneWrites {
+  onRemove?: () => Promise<void>
+  onEdit?: (input: MeaningEdit) => Promise<void>
+  drafts?: readonly string[]
+  relate?: RelateControl
+}
+
+/** The write hooks a relationship pane gets on the current revision of a live map. */
+export interface RelationWrites {
+  onEdit?: (input: { description?: string; technology?: string }) => Promise<void>
+  onRemove?: () => Promise<void>
+}
+
 export type DetailsTab = 'what' | 'how' | 'tasks'
 
 /** A new architecture item starts with its meaning instead of inheriting build evidence. */
@@ -259,7 +279,7 @@ function marked(
   return row
 }
 
-interface DetailsOptions {
+interface DetailsOptions extends PaneWrites {
   onSelect: (id: string, additive: boolean) => void,
   onToggleFlow: (flow: FlowRef) => void,
   activeFlows: readonly FlowRef[]
@@ -270,14 +290,10 @@ interface DetailsOptions {
   onSource: (file: string, line?: number) => void,
   workGroups: readonly ElementWorkGroup[]
   onTask: (id: string) => void
-  onRemove?: () => Promise<void>
-  /** The draft records the pane can tag with, present with onEdit. */
-  drafts?: readonly string[]
-  onEdit?: (input: MeaningEdit) => Promise<void>
 }
 
 export function paintDetails(host: HTMLElement, inspected: Inspected, options: DetailsOptions): void {
-  const { onSelect, onToggleFlow, activeFlows, actorTitle, tab, onTab, code, onSource, workGroups, onTask, onRemove, drafts, onEdit } = options
+  const { onSelect, onToggleFlow, activeFlows, actorTitle, tab, onTab, code, onSource, workGroups, onTask, onRemove, drafts, onEdit, relate } = options
   const title = host.querySelector('h1')!
   const meta = host.querySelector('.meta')!
   const tabsHost = host.querySelector<HTMLElement>('.tabs')!
@@ -416,20 +432,44 @@ export function paintDetails(host: HTMLElement, inspected: Inspected, options: D
   }
   if (shownTab === 'tasks') paintElementWork(body, workGroups, onTask)
   else for (const key of tabSections(shownTab)) sections[key]()
+  if (shownTab === 'what' && relate !== undefined) paintRelateControl(body, relate)
   if (shownTab === 'what' && inspected.removable && onRemove !== undefined) {
     paintRemoveControl(body, inspected.title, onRemove)
   }
 }
 
-/** The pane for a selected relationship: its description as the title, then both ends as links. */
+/** Relate to arms the map; while armed the button says what the next click does and a second click cancels. */
+function paintRelateControl(body: Element, relate: RelateControl): void {
+  const button = document.createElement('button')
+  button.type = 'button'
+  button.className = 'relate'
+  button.textContent = relate.armed ? 'Click the target' : 'Relate to'
+  button.setAttribute('aria-pressed', String(relate.armed))
+  button.addEventListener('click', relate.toggle)
+  body.append(button)
+}
+
+/** The pane for a selected relationship: its description as the title, its technology, then both ends as links; editable and removable on a live map. */
 export function paintRelationship(
   host: HTMLElement,
   relationship: AnnotatedRelationship,
   world: ArchitectureGraph,
   onSelect: (id: string, additive: boolean) => void,
+  writes: RelationWrites,
 ): void {
   const byId = new Map(world.elements.map(item => [item.representationId, item]))
-  host.querySelector('h1')!.textContent = relationship.description
+  const title = host.querySelector('h1')!
+  title.replaceChildren()
+  const body = host.querySelector('.body')!
+  body.replaceChildren()
+  if (writes.onEdit === undefined) {
+    title.textContent = relationship.description
+    if (relationship.technology !== '') body.append(paragraph('description', relationship.technology))
+  } else {
+    const onEdit = writes.onEdit
+    paintEditable(title, { className: 'title', label: 'Description', value: relationship.description, save: description => onEdit({ description }) })
+    paintEditable(body, { className: 'technology', label: 'Technology', value: relationship.technology, save: technology => onEdit({ technology }) })
+  }
   host.querySelector('.meta')!.textContent = `Relationship · ${relationship.origin}`
   host.querySelector('.tabs')!.replaceChildren()
   const list = document.createElement('ul')
@@ -444,7 +484,8 @@ export function paintRelationship(
     item.append(link)
     list.append(item)
   }
-  host.querySelector('.body')!.replaceChildren(list)
+  body.append(list)
+  if (writes.onRemove !== undefined) paintRemoveControl(body, relationship.description, writes.onRemove)
 }
 
 /** Empties the pane while nothing is selected. */

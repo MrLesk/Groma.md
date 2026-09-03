@@ -52,6 +52,14 @@ element with one of the draft records. Each field posts the input `groma edit`
 takes, and a refusal appears under the field it belongs to. A past revision
 shows plain text.
 
+Relate to, at the end of an element's pane, arms the map: the next element
+click is the target and one dialog asks how the source uses it and through
+what, posting the input `groma add relation` takes; clicking the source again
+or pressing Escape disarms. A selected route shows its description as the
+title and its technology below, both editable in place, and ends with a Remove
+control; they post the inputs `groma edit relation` and `groma remove relation`
+take.
+
 The isometric grid fills the screen. Inset 35%-paper frosted chrome floats
 above it as one technical instrument. The header shows the groma.md lockup,
 the observed system's name with live flow and element counts, one compact

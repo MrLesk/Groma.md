@@ -16,10 +16,13 @@ import {
 } from './markdown-emitter.ts'
 import { requireText } from './naming.ts'
 import { loadProjectProfile, saveProjectProfile } from './project-profile.ts'
+import { editRelation } from './relation.ts'
 import type { ArchitectureElement, ArchitectureRecords } from './types.ts'
 
 export interface EditArchitectureInput {
   id: string
+  /** The target id of the relationship from id to edit instead of the element itself. */
+  relation?: string
   title?: string
   overview?: string
   description?: string
@@ -106,6 +109,14 @@ export async function editArchitecture(
   repositoryRoot: string,
   input: EditArchitectureInput,
 ): Promise<string> {
+  if (input.relation !== undefined) {
+    if (input.title !== undefined || input.overview !== undefined || input.draft !== undefined || isStructural(input)) {
+      throw new Error('only --description and --technology are valid on a relation')
+    }
+    return editRelation(repositoryRoot, {
+      source: input.id, target: input.relation, description: input.description, technology: input.technology,
+    })
+  }
   if (input.id === 'project') return editProject(repositoryRoot, input)
   const records = await loadArchitecture(repositoryRoot)
   const model = buildArchitectureModel(records.documents)

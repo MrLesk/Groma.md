@@ -92,7 +92,7 @@ The frontmatter carries identity, containment, and scanner evidence. The body is
 ```text
 source code ──scan──▶ groma/**/*.md ──view──▶ browser map · terminal map
                             ▲
-           add · draft · edit · relate · remove · accept
+              add · draft · edit · remove · accept
 ```
 
 Groma follows the [C4 model](https://c4model.com): actors and systems, the containers inside a system, the components inside a container. Code is evidence attached to components, not a fourth level.
@@ -102,7 +102,7 @@ The first scan produces file-shaped components. That is deliberate. You then fol
 ```sh
 groma edit ordering --combine order-repository order-events   # one responsibility, several files
 groma edit ordering --group "Checkout"                        # a named domain on the map
-groma relate ordering payments --description "Requests payment authorization" --technology "Internal API"
+groma add relation ordering payments --description "Requests payment authorization" --technology "Internal API"
 groma edit ordering --overview "Owns the lifecycle of an order from placement through completion."
 ```
 
@@ -134,7 +134,7 @@ Agents use the same CLI you do. `groma agent-instructions` prints the curation g
 
 ## Working without coding agents
 
-Everything above is a command you can type. `groma add` declares what no scan can see: a person, an outside system, or a draft. `groma draft` describes a part that does not exist yet as a ghost. `groma edit` changes meaning, folds evidence, and tags a part with the draft that touches it. `groma relate` writes a collaboration. `groma remove` takes one of those away again. `groma accept` confirms a ghost once a scan has found its code.
+Everything above is a command you can type. `groma add` declares what no scan can see: a person, an outside system, or a draft. `groma draft` describes a part that does not exist yet as a ghost. `groma edit` changes meaning, folds evidence, and tags a part with the draft that touches it. `groma add relation` writes a collaboration between two parts, and `edit relation` rewords it. `groma remove` takes any of those away again. `groma accept` confirms a ghost once a scan has found its code.
 
 ## Live work from Backlog.md
 
@@ -157,11 +157,10 @@ writes the browser map as a static site with the architecture, flows, source ins
 | `groma web` | Scan, then open the browser map |
 | `groma view [id]` | Scan, then open the terminal map, or print one record as text |
 | `groma scan [--watch]` | Scan and fold findings into Markdown |
-| `groma add <thing> <name>` | Declare a person, an external system, or a draft |
+| `groma add <thing> <name>` | Declare a person, an external system, a draft, or a relation between two ids |
 | `groma draft <kind> <name>` | Draft a system, container, or component as a ghost |
 | `groma edit <id>` | Rename, describe, set technology, combine, move, group, or tag with a draft; `edit project` for the project record |
-| `groma relate <from> <to>` | Author or remove one relationship |
-| `groma remove <id>` | Remove a person, an external, a ghost, or an empty draft |
+| `groma remove <id>` | Remove a person, an external, a ghost, an empty draft, or a relation |
 | `groma accept <id>` | Accept a ghost once a scan has matched it |
 | `groma export <dir>` | Write a read-only static site |
 | `groma scanner …` | Add, list, install, or remove scanner plugins |
@@ -174,7 +173,7 @@ Every command documents its required and optional parameters under `--help`.
 Groma is early. What is true today:
 
 - Scanners exist for TypeScript (built in) and C# (a module you enable). Other languages need a [plugin](docs/scanners/creating-a-plugin.md).
-- The browser adds, removes, renames and describes through the same verbs as the CLI. Relationships and groups still go through the CLI.
+- The browser adds, removes, renames, describes and relates through the same verbs as the CLI. Groups still go through the CLI.
 - The terminal map runs on macOS, Linux, and Windows terminals.
 - The Markdown contract is strict on Groma's own fields and preserves anything else you put in a file.
 

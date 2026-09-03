@@ -40,8 +40,10 @@ facts. Semantic curation belongs to the agent and human using Groma.
    - `groma edit <component> --parent <container>` moves empty scan evidence.
    - `groma edit <component> --group <name>` groups siblings; `--ungroup`
      clears the group.
-   - `groma relate <source> <target>` restores one collaboration;
-     `--remove` removes the only collaboration between that pair.
+   - `groma add relation <source> <target> --description <prose> --technology
+     <text>` writes the one collaboration per ordered pair; `groma edit relation
+     <source> <target>` rewords it; `groma remove relation <source> <target>`
+     removes it.
    These operations validate the complete change before writing. Do not edit
    Groma-owned architecture Markdown with generic file tools.
 8. Run `groma scan` twice, then open the map again and review it with the human.

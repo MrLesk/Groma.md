@@ -8,10 +8,14 @@ import {
   writeDocument,
 } from './markdown-emitter.ts'
 import { requireText } from './naming.ts'
+import { addRelation } from './relation.ts'
 
 export interface AddInput {
   thing: string
+  /** The name of a person, an external or a draft, or the source id of a relation. */
   name: string
+  /** With thing relation: the target id. */
+  relation?: string
   overview?: string
   description?: string
   technology?: string
@@ -52,6 +56,15 @@ function renderThing(thing: DeclaredThing, id: string, input: AddInput, overview
 
 /** Writes what no scan can see: a person, an outside system, or the record of a draft. */
 export async function addThing(repositoryRoot: string, input: AddInput): Promise<string> {
+  if (input.thing === 'relation') {
+    return addRelation(repositoryRoot, {
+      source: input.name,
+      target: requireText(input.relation, 'target'),
+      description: input.description,
+      technology: input.technology,
+    })
+  }
+  if (input.relation !== undefined) throw new Error('only a relation takes a second id')
   const name = requireText(input.name, 'name')
   const thing = requireThing(input.thing, name)
   const overview = requireText(input.overview, '--overview')

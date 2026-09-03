@@ -99,9 +99,13 @@ repository without Groma.
    - Atomic scan evidence is curated with `groma edit`: combine empty scan
      records, move an empty scanned component, and group or ungroup sibling
      components. These operations validate the whole change before writing.
-   - A collaboration is authored with `groma relate <source-id> <target-id>
-     --description <prose> --technology <text>` and removed with the same
-     command plus `--remove`.
+   - A collaboration is authored with `groma add relation <source-id>
+     <target-id> --description <prose> --technology <text>`, one per ordered
+     pair on the source document; `groma edit relation <source-id> <target-id>`
+     rewords it and `groma remove relation <source-id> <target-id>` removes it.
+     In the web map, Relate to on a selected element takes the target from the
+     next map click and asks for the sentence; a selected route edits its
+     description and technology in place and ends with Remove.
    - **People and outside systems** are declared, never scanned: `groma add
      actor <name> --overview <markdown>` and `groma add external <name>
      [--technology <text>] --overview <markdown>` write them stable at once.

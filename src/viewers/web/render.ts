@@ -23,12 +23,12 @@ import { bindMapPointer } from './iso/pointer.ts'
 import { projectScene } from './iso/project.ts'
 import { sceneAtSeparation } from './layers/separation.ts'
 import { createLayerAnimator, createLayerMotion } from './layers/orbit.ts'
-import type { MeaningEdit } from './organisms/details.ts'
 import { clearDetails, detailsTabAfterSelection, detailsTabAfterWork, type DetailsTab, inspectDetails, paintDetails, paintRelationship } from './organisms/details.ts'
 import { paintHierarchy } from './organisms/hierarchy.ts'
 import { createPins } from './work/pins.ts'
 import { createTip } from './organisms/tip.ts'
 import { createProjectEditor } from './project/editor.ts'
+import { createAuthoring } from './authoring.ts'
 import { createRevisionControl } from './revision/control.ts'
 import { createSearchSession } from './search/session.ts'
 import { createWorkIsland } from './work/island.ts'
@@ -73,7 +73,6 @@ const hierarchyToggle = document.getElementById('hierarchy-toggle') as HTMLButto
 const map = createMap(host)
 const edit = data.edit
 const projectEditor = edit === undefined ? undefined : createProjectEditor(input => edit({ id: 'project', ...input }))
-const remove = data.remove
 const emptyState = createEmptyState(document.getElementById('empty')!, data.draft)
 if (data.add !== undefined) createAddControl(document.getElementById('add')!, data.add)
 const shell = createWebShell(document.body, hierarchyContent, hierarchyToggle, detailsHost, map.svg)
@@ -97,6 +96,12 @@ let detailsTab: DetailsTab = opened.tab
 const revisionControl = createRevisionControl({
   control: revisionSelect, body: document.body, boot, data,
   applyRevision: payload => applyWorld(payload, true), applyWorld, applyWork,
+})
+const authoring = createAuthoring(data, {
+  live: () => revisionControl.selected === undefined,
+  drafts: () => world.drafts,
+  titleOf: id => worldElement(id)?.title ?? id,
+  repaint: () => paintViewState(),
 })
 const source = createSourceControl({
   host: detailsHost, initialFile: opened.file, initialLine: opened.line,
@@ -195,19 +200,6 @@ function paintMapState(task: WorkItem | undefined, activeTaskItems: WorkItem[]):
   map.setLitRoutes(litIds, id => elementOnPath(id, litIds, world))
 }
 
-/** The pane's write hooks and the draft records to tag with: only on the current revision of a live map. */
-function paneWrites(selectedId: string): {
-  onRemove?: () => Promise<void>
-  onEdit?: (input: MeaningEdit) => Promise<void>
-  drafts?: readonly string[]
-} {
-  if (revisionControl.selected !== undefined) return {}
-  return {
-    ...(remove === undefined ? {} : { onRemove: () => remove(selectedId) }),
-    ...(edit === undefined ? {} : { onEdit: (input: MeaningEdit) => edit({ id: selectedId, ...input }), drafts: world.drafts }),
-  }
-}
-
 function paintViewState(commitUrl = true): void {
   if (commitUrl) syncUrl()
   shell.paint(selection)
@@ -224,8 +216,9 @@ function paintViewState(commitUrl = true): void {
   const relationship = worldRelationship(selectedId)
   if (source.paint(selected)) return
   if (taskDiff.paint(task)) return
-  if (relationship !== undefined) paintRelationship(detailsHost, relationship, world, select)
-  else if (selected !== undefined) {
+  if (relationship !== undefined) {
+    paintRelationship(detailsHost, relationship, world, select, authoring.relationWrites(relationship.source, relationship.target))
+  } else if (selected !== undefined) {
     paintDetails(detailsHost, inspectDetails(selected, world), {
       onSelect: select,
       onToggleFlow: toggleFlow,
@@ -240,7 +233,7 @@ function paintViewState(commitUrl = true): void {
       onSource: source.open,
       workGroups: selected.kind === 'component' ? elementWorkGroups(work, selected.representationId, world) : [],
       onTask: toggleTask,
-      ...paneWrites(selected.id),
+      ...authoring.paneWrites(selected.id),
     })
   }
 }
@@ -262,6 +255,7 @@ function toggleRow(row: TreeRow): void {
 
 function select(id: string, additive = false): void {
   if (worldElement(id) === undefined && worldRelationship(id) === undefined) return
+  if (!additive && authoring.takeTarget(id)) return
   source.clear()
   const next = selectArchitecture(selection, id, additive)
   detailsTab = detailsTabAfterSelection(detailsTab, primarySelection(selection), primarySelection(next))
@@ -296,6 +290,7 @@ function toggleTask(id: string): void {
 }
 
 function deselect(): void {
+  authoring.disarm()
   source.clear()
   selection = noSelection
   activeTaskIds = []
@@ -434,6 +429,7 @@ function applyWorld(payload: WebPayload, reset = false): void {
   scene = projectedLayerScene()
   fitted = fitScene(viewport())
   if (reset) {
+    authoring.disarm()
     source.clear()
     tree = initialTree()
     activeTaskIds = []
