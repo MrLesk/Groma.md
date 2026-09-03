@@ -21,7 +21,11 @@ to the nearest visible row when their authored endpoint is hidden.
 
 Enter on a container row opens its map: the container fitted to the map width
 and centered, its groups stacked as zones with the buildings wrapped into lines,
-and the neighbouring containers of the same system peeking on both sides. An
+and the neighbouring containers of the same system peeking on both sides. Each
+component stands as a building: its name and glyph in the top border, one row per
+floor inside naming the floor's largest file with +N for the rest, dim; a draft
+building shows one empty row in a dashed frame; the selected building draws heavy
+in the brand green. An
 endpoint in a peeking neighbour attaches to that slab; any other outside endpoint
 attaches to the container itself. Backspace
 returns to root with the container's row selected. Escape also returns to root

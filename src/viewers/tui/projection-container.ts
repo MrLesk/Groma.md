@@ -6,7 +6,6 @@ import { byPlacement, fittedWidth, rootIslands } from './projection-root.ts'
 
 const CARD_GAP = 2
 const LINE_GAP = 2
-const CARD_HEIGHT = 4
 
 /** The buildings of one zone, or the ungrouped ones before any zone. */
 interface Band {
@@ -14,8 +13,26 @@ interface Band {
   buildings: Building[]
 }
 
-function cardWidth(building: Building): number {
-  return Math.max(...building.lines.map(line => line.length), building.title.length) + 7
+/** One row per floor: the floor's largest file and +N for the rest; a ghost or a building without files shows one empty row. */
+export function floorRows(building: Building): string[] {
+  const rows = building.floors.map(floor => {
+    const largest = floor.files[0]?.split('/').at(-1) ?? ''
+    return floor.files.length > 1 ? `${largest} +${floor.files.length - 1}` : largest
+  })
+  return rows.length === 0 ? [''] : rows
+}
+
+/** A building with its rows and the frame around them: as wide as the name with its glyph, a space each side and the corners, or the widest row two columns in. */
+interface Sized {
+  building: Building
+  rows: string[]
+  width: number
+  height: number
+}
+
+function sized(building: Building): Sized {
+  const rows = floorRows(building)
+  return { building, rows, width: Math.max(building.title.length + 6, ...rows.map(row => row.length + 4)), height: rows.length + 2 }
 }
 
 /** The container's component buildings in placement order. */
@@ -34,24 +51,24 @@ function bands(model: TerminalViewModel, container: AnnotatedElement): Band[] {
   ]
 }
 
-/** Cards left to right, wrapping into a new line when the next one would leave the band. */
-function lines(buildings: readonly Building[], width: number): Building[][] {
-  const result: Building[][] = []
+/** Buildings left to right, wrapping into a new line when the next one would leave the band. */
+function lines(buildings: readonly Sized[], width: number): Sized[][] {
+  const result: Sized[][] = []
   let used = 0
-  for (const building of buildings) {
+  for (const entry of buildings) {
     const line = result.at(-1)
-    if (line === undefined || used + CARD_GAP + cardWidth(building) > width) {
-      result.push([building])
-      used = cardWidth(building)
+    if (line === undefined || used + CARD_GAP + entry.width > width) {
+      result.push([entry])
+      used = entry.width
     } else {
-      line.push(building)
-      used += CARD_GAP + cardWidth(building)
+      line.push(entry)
+      used += CARD_GAP + entry.width
     }
   }
   return result
 }
 
-function card(building: Building, element: AnnotatedElement, bounds: Bounds): WorldItem {
+function card({ building, rows }: Sized, element: AnnotatedElement, bounds: Bounds): WorldItem {
   return {
     key: building.representationId,
     representationId: building.representationId,
@@ -61,7 +78,7 @@ function card(building: Building, element: AnnotatedElement, bounds: Bounds): Wo
     origin: building.origin,
     external: element.external,
     shape: 'card',
-    lines: building.lines,
+    lines: rows,
     worldBounds: bounds,
   }
 }
@@ -87,14 +104,16 @@ function bandItems(band: Band, byId: ReadonlyMap<string, AnnotatedElement>, widt
   const left = framed ? 4 : 2
   const items: WorldItem[] = []
   let lineY = framed ? y + 2 : y + 1
-  for (const line of lines(band.buildings, width - 2 * left)) {
+  const bandWidth = width - 2 * left
+  for (const line of lines(band.buildings.map(sized), bandWidth)) {
     let x = left
-    for (const building of line) {
-      const element = byId.get(building.representationId)
-      if (element !== undefined) items.push(card(building, element, { x, y: lineY, width: cardWidth(building), height: CARD_HEIGHT }))
-      x += cardWidth(building) + CARD_GAP
+    for (const entry of line) {
+      const element = byId.get(entry.building.representationId)
+      const bounds = { x, y: lineY, width: Math.min(entry.width, bandWidth), height: entry.height }
+      if (element !== undefined) items.push(card(entry, element, bounds))
+      x += bounds.width + CARD_GAP
     }
-    lineY += CARD_HEIGHT + LINE_GAP
+    lineY += Math.max(...line.map(entry => entry.height)) + LINE_GAP
   }
   const height = lineY - y - (framed ? 1 : 0)
   if (band.zone !== undefined) {
@@ -125,8 +144,8 @@ function siblingRows(model: TerminalViewModel, container: AnnotatedElement): Ann
 export function containerLayout(model: TerminalViewModel, container: AnnotatedElement, mapWidth: number): WorldItem[] {
   const byId = new Map(model.elements.map(element => [element.representationId, element]))
   const stacked = bands(model, container)
-  const widest = Math.max(container.title.length + 6, ...stacked.flatMap(band => band.buildings.map(cardWidth)).map(width => width + 8))
-  const width = Math.max(widest, fittedWidth(mapWidth))
+  // The slab keeps the fitted width; a building wider than its band is capped and its rows end in an ellipsis.
+  const width = Math.max(container.title.length + 6, fittedWidth(mapWidth))
   const items: WorldItem[] = []
   let y = 2
   for (const band of stacked) {
