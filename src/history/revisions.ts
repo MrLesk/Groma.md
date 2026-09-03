@@ -3,8 +3,12 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 
+import { loadArchitecture } from '../architecture-reader.ts'
+import { annotateArchitecture } from '../core.ts'
 import { GromaFileSystem } from '../groma-filesystem.ts'
+import { loadProjectProfile } from '../project-profile.ts'
 
+/** One current-branch revision that changed the selected Groma tree. */
 export interface GitRevision {
   id: string
   shortId: string
@@ -12,6 +16,10 @@ export interface GitRevision {
   subject: string
   body: string
   tag?: string
+}
+
+export interface GromaRevision extends GitRevision {
+  compatible: boolean
 }
 
 function runGit(arguments_: string[], repositoryRoot: string): Promise<string> {
@@ -107,6 +115,22 @@ export async function listGitRevisions(repositoryRoot: string): Promise<GitRevis
     })
   }
   return revisions
+}
+
+/** Current-branch Groma revisions, including commits the current reader cannot open. */
+export async function listGromaRevisions(repositoryRoot: string): Promise<GromaRevision[]> {
+  return Promise.all((await listGitRevisions(repositoryRoot)).map(async revision => ({
+    ...revision,
+    compatible: await withGitGromaRevision(repositoryRoot, revision.id, async snapshotRoot => {
+      try {
+        if (await loadProjectProfile(snapshotRoot) === undefined) return false
+        annotateArchitecture(await loadArchitecture(snapshotRoot))
+        return true
+      } catch {
+        return false
+      }
+    }),
+  })))
 }
 
 function extractArchive(

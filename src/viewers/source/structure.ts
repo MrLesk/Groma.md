@@ -15,7 +15,7 @@ import {
   type SourceFile,
 } from 'typescript/unstable/ast'
 
-import { withGitRevision } from '../../history/git.ts'
+import { withGitRevision } from '../../history/revisions.ts'
 import type { ArchitectureGraph } from '../../types.ts'
 
 type DeclarationScope = 'export' | 'internal'

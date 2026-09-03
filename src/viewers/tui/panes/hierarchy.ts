@@ -6,6 +6,7 @@ import type { TreeRow } from '../tree.ts'
 import type { WorkRow, WorkSelection } from '../work/model.ts'
 import { accent, bold, dim, kindMark, plain, styleRow, type Line, type PaneLines } from './text.ts'
 import type { WorkItem } from '../../../types.ts'
+import type { GromaRevision } from '../../../history/revisions.ts'
 
 const legendKinds = [['actor', 'system'], ['container', 'component']] as const
 
@@ -68,6 +69,29 @@ export function legendLines(theme: ViewerTheme, width: number): Line[] {
     [dim(theme, '─'.repeat(width))],
     ...legendKinds.map(kinds => [plain(theme, ` ${kinds.map(kind => `${kindGlyph(kind)} ${kindLabel(kind)}`).join('  ')}`)]),
   ]
+}
+
+/** Current-branch Groma commits, newest first, with unsupported revisions left visible. */
+export function revisionLines(
+  theme: ViewerTheme,
+  width: number,
+  revisions: readonly GromaRevision[],
+  cursor: number,
+  selectedId: string | undefined,
+  focused: boolean,
+): PaneLines {
+  const lines: Line[] = [[accent(theme, ' History')], []]
+  const ids: (string | undefined)[] = [undefined, undefined]
+  let cursorRow: number | undefined
+  for (const [index, revision] of revisions.entries()) {
+    const atCursor = index === cursor
+    if (atCursor) cursorRow = lines.length
+    const selected = revision.id === selectedId
+    lines.push(styleRow(theme, [marker(theme, selected), plain(theme, ` ${revision.subject}`)], width, selected, atCursor && focused))
+    lines.push(styleRow(theme, [plain(theme, ' '), dim(theme, `  ${revision.shortId} · ${revision.date.slice(0, 10)}${revision.compatible ? '' : ' · Unsupported'}`)], width, false, atCursor && focused))
+    ids.push(revision.id, revision.id)
+  }
+  return { lines, ids, cursor: cursorRow }
 }
 
 /** Work focus: every configured status with its tasks, two rows per task; a status that is a toggle carries its shown mark. */

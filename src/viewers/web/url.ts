@@ -1,4 +1,4 @@
-import type { GitRevision } from '../../history/git.ts'
+import type { GitRevision } from '../../history/revisions.ts'
 import type { AnnotatedElement, AnnotatedRelationship, ArchitectureGraph, C4Kind, WorkItem } from '../../types.ts'
 import type { FlowRef } from '../action-path.ts'
 import type { WebTheme } from './atoms/theme.ts'

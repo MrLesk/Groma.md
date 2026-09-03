@@ -9,7 +9,7 @@ import { semanticTreeRows } from '../tree.ts'
 import { mappedStatuses, selectedWorkItem, shownStatuses, workGroups, workRows, type WorkFocus } from '../work/model.ts'
 import { footerHint, searchLine } from './chrome.ts'
 import { DETAILS_TABS, detailsLines, diffLines, flowLines, keysLines, profileLines, sourceLines, taskLines, taskRecordLines } from './details.ts'
-import { hierarchyLines, legendLines, workListLines } from './hierarchy.ts'
+import { hierarchyLines, legendLines, revisionLines, workListLines } from './hierarchy.ts'
 import { DETAILS_CONTENT_WIDTH, HIERARCHY_CONTENT_WIDTH, type DetailsView, type ScreenView } from './screen.ts'
 import { plain, type Line, type PaneLines } from './text.ts'
 import type { AnnotatedElement } from '../../../types.ts'
@@ -126,6 +126,7 @@ function footerLine(
   lit: LitAction,
   step: ProjectedFlowStep | undefined,
 ): string {
+  if (state.history !== undefined) return '↑↓ revision   enter open   h close   esc close'
   if (state.work !== undefined) {
     return state.focus === 'details'
       ? '↑↓ scroll   ← tasks   w close work   ] details'
@@ -139,7 +140,8 @@ function footerLine(
     : hint
   if (state.sourceView !== undefined || state.diffView !== undefined || state.taskRecord !== undefined) return `esc back   ↑↓ scroll   ${named}`
   if (state.keys) return `? close   esc close   ${named}`
-  return state.profile ? `p back   esc back   ${named}` : named
+  if (state.profile) return `p back   esc back   ${named}`
+  return world.revision === undefined ? named : `esc Current   h history   ${named}`
 }
 
 /** The flows and tree, or the task list in Work focus; absent while the pane is folded. */
@@ -151,6 +153,16 @@ function hierarchyView(
   selectionId: string | undefined,
 ): PaneLines | undefined {
   if (!state.panes.hierarchy) return undefined
+  if (state.history !== undefined) {
+    return revisionLines(
+      theme,
+      HIERARCHY_CONTENT_WIDTH,
+      world.revisions ?? [],
+      state.history.cursor,
+      world.revision?.id,
+      state.focus === 'hierarchy',
+    )
+  }
   if (state.work !== undefined) {
     return workListLines(theme, HIERARCHY_CONTENT_WIDTH, workRows(world), state.work.selection, shownStatuses(world, state.work), state.focus === 'hierarchy')
   }
@@ -179,12 +191,15 @@ export function screenView(
   const selectionId = projection.currentId ?? undefined
   const selected = world.elements.find(element => element.representationId === selectionId)
   const workOpen = state.work !== undefined
+  const historyOpen = state.history !== undefined
   return {
-    stats: scopeStats(world, state, selected) ?? rootStats(world, commands.length, workOpen),
+    stats: world.revision === undefined
+      ? scopeStats(world, state, selected) ?? rootStats(world, commands.length, workOpen)
+      : `${world.revision.shortId} · ${world.revision.subject}`,
     focus: state.focus,
     footer: footerLine(world, state, selected, lit, step),
     hierarchy: hierarchyView(theme, world, state, commands, selectionId),
-    legend: workOpen ? undefined : legendLines(theme, HIERARCHY_CONTENT_WIDTH),
+    legend: workOpen || historyOpen ? undefined : legendLines(theme, HIERARCHY_CONTENT_WIDTH),
     details: detailsView(theme, world, state, selected, lit, step, commands),
     recap: recapLine(theme, world, state.work),
   }

@@ -13,12 +13,14 @@ groma:
       dependents: 1
     - scanner: typescript
       file: src/viewers/web/revision/view.ts
-      dependencies: 1
+      dependencies: 2
       dependents: 1
-    - scanner: typescript
-      file: src/history/git.ts
-      dependencies: 1
-      dependents: 6
 ---
 
-Selects a Git revision for the browser map and supplies exact historical file content to revision-aware inspection.
+Controls browser revision selection and presents current and historical options.
+
+## Relationships
+
+| Target | Description | Technology |
+| --- | --- | --- |
+| [Revisions](../../view-host/components/revisions.md) | Reads and opens Groma revisions | TypeScript |

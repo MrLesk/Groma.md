@@ -3,12 +3,10 @@ import type { WorkSource } from '@groma/work-source'
 import { backlogPlugin } from '@groma/work-source-backlog'
 
 import { watchArchitecture } from '../../architecture-watch.ts'
-import { loadArchitecture } from '../../architecture-reader.ts'
-import { listGitRevisions, withGitGromaRevision, withGitRevision } from '../../history/git.ts'
-import { annotateArchitecture } from '../../core.ts'
 import { writes } from '../../authoring.ts'
 import { watchScan } from '../../scanner.ts'
 import { pinsOf } from '../../work/pins.ts'
+import { listGromaRevisions, withGitRevision } from '../../history/revisions.ts'
 import { renderPage } from './page.ts'
 import type { WebMapPayload, WebPayload, WebRevision, WebWorkPayload } from './payload.ts'
 import { bundleRenderer, loadMapRoot } from './runtime.ts'
@@ -61,20 +59,6 @@ async function loadMap(
   return { ...snapshot, revision, revisions }
 }
 
-async function revisionHistory(repositoryRoot: string): Promise<WebRevision[]> {
-  return Promise.all((await listGitRevisions(repositoryRoot)).map(async revision => ({
-    ...revision,
-    compatible: await withGitGromaRevision(repositoryRoot, revision.id, async snapshotRoot => {
-      try {
-        annotateArchitecture(await loadArchitecture(snapshotRoot))
-        return true
-      } catch {
-        return false
-      }
-    }),
-  })))
-}
-
 /** Starts the map server and returns its URL. */
 export async function startWebViewer(
   repositoryRoot: string,
@@ -82,7 +66,7 @@ export async function startWebViewer(
 ): Promise<{ url: string; close: () => Promise<void> }> {
   const renderer = await bundleRenderer()
   const workSource = options.workSource ?? backlogPlugin.create(repositoryRoot)
-  const revisions = await revisionHistory(repositoryRoot)
+  const revisions = await listGromaRevisions(repositoryRoot)
   let map: WebMapPayload = {
     generation: 1,
     ...(await loadMap(repositoryRoot, revisions, null)),
