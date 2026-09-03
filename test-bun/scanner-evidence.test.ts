@@ -231,6 +231,72 @@ Curated responsibility.
   }
 })
 
+test.concurrent('reconciliation drops missing Code files without changing authored architecture', async () => {
+  const profilePath = 'groma/systems/shop/containers/api/components/profile.md'
+  const legacyPath = 'groma/systems/shop/containers/api/components/legacy.md'
+  const root = await temporaryTree({
+    ...packageFiles,
+    'src/profile.ts': 'export function readProfile() {}\n',
+    [profilePath]: `---
+type: C4 Component
+title: Profile
+status: stable
+groma:
+  id: profile
+  parent: api
+  group: Data
+  code:
+    - scanner: typescript
+      file: src/profile.ts
+      symbol: oldProfile
+    - scanner: typescript
+      file: src/moved-profile.ts
+      symbol: movedProfile
+---
+
+Reads the customer profile.
+
+## Relationships
+
+| Target | Description | Technology |
+| --- | --- | --- |
+| [Api](../container.md) | Shares the profile | Function call |
+`,
+    [legacyPath]: `---
+type: C4 Component
+title: Legacy
+status: stable
+groma:
+  id: legacy
+  parent: api
+  code:
+    - scanner: typescript
+      file: src/legacy.ts
+---
+
+Keeps an authored responsibility after its only source file moves.
+`,
+  })
+  try {
+    const summary = await reconcileScanObservations(root, [observation([
+      { file: 'src/profile.ts', symbols: ['readProfile'] },
+    ])])
+    const curated = await readFile(path.join(root, profilePath), 'utf8')
+    const legacy = await readFile(path.join(root, legacyPath), 'utf8')
+
+    expect(summary).toEqual({ created: 0, refreshed: 2, matched: 0 })
+    expect(curated).toContain('file: src/profile.ts')
+    expect(curated).not.toContain('src/moved-profile.ts')
+    expect(curated).toContain('group: Data')
+    expect(curated).toContain('Reads the customer profile.')
+    expect(curated).toContain('| [Api](../container.md) | Shares the profile | Function call |')
+    expect(legacy).not.toContain('src/legacy.ts')
+    expect(legacy).toContain('Keeps an authored responsibility after its only source file moves.')
+  } finally {
+    await rm(root, { recursive: true, force: true })
+  }
+})
+
 test.concurrent('an observed name alone never claims an unknown file', async () => {
   const root = await temporaryTree({
     ...packageFiles,
