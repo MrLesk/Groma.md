@@ -1,6 +1,8 @@
 import { draftRecordOf } from './architecture-model.ts'
 import { annotateArchitecture } from './core.ts'
 import { loadArchitecture } from './architecture-reader.ts'
+import { emptyWorldLines, isEmptyWorld } from './empty-world.ts'
+import { loadProjectProfile } from './project-profile.ts'
 import type {
   AnnotatedArchitectureModel,
   AnnotatedElement,
@@ -156,7 +158,12 @@ export function formatPlainWorld(
 
 export async function renderPlainWorld(repositoryRoot: string): Promise<string> {
   const records = await loadArchitecture(repositoryRoot)
-  return formatPlainWorld(annotateArchitecture(records), draftOutcomes(records))
+  const model = annotateArchitecture(records)
+  if (isEmptyWorld(model)) {
+    const project = await loadProjectProfile(repositoryRoot)
+    return emptyWorldLines(project?.title ?? '').join('\n')
+  }
+  return formatPlainWorld(model, draftOutcomes(records))
 }
 
 export type PlainRecordResult =
