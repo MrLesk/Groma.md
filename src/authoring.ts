@@ -5,8 +5,9 @@ import type { DraftElementInput } from './draft.ts'
 import { editArchitecture } from './edit.ts'
 import type { EditArchitectureInput } from './edit.ts'
 import { removeThing } from './remove.ts'
+import type { RemoveInput } from './remove.ts'
 
-export type { AddInput, DraftElementInput, EditArchitectureInput }
+export type { AddInput, DraftElementInput, EditArchitectureInput, RemoveInput }
 
 /** The writes the web shares with the CLI, by verb. The CLI builds each input from its flags and the web posts the same input. */
 export const writes = {
