@@ -37,7 +37,6 @@ const PAN_MS = 30
 interface ViewerOptions {
   level?: TerminalLevel
   currentId?: string
-  camera?: TerminalCamera
   onRefresh?: () => void | Promise<void>
   /** The full record of one task, read when the details pane opens it. */
   readTask?: (id: string) => Promise<WorkItemDetails>
@@ -92,7 +91,7 @@ export function mountTerminalViewer(
     resolveClosed = resolve
   })
   const theme = viewerTheme()
-  let camera = options.camera
+  let camera: TerminalCamera | undefined
   let animationPhase = 0
   let animationTimer: ReturnType<typeof setInterval> | undefined
   // Map clicks resolve against the projection last painted.
