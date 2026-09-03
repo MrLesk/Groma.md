@@ -64,8 +64,8 @@ export interface ViewerState {
   /** The command row the details cursor rests on; Enter picks it. */
   actionCursor?: string
   search?: SearchState
-  /** The map edge just crossed, used to step through a containing boundary. */
-  mapStep?: { fromId: string; direction: MapDirection }
+  /** The map's columns, which the fitted layouts and their arrows depend on; the viewer keeps it in step with the screen. */
+  mapWidth: number
   /** Present only while the terminal is using its task-focused side panes. */
   work?: WorkFocus
 }
@@ -106,6 +106,7 @@ export function initialState(world: TerminalViewModel): ViewerState {
     panes: { hierarchy: true, details: true },
     detailsScroll: 0,
     detailsTab: 'what',
+    mapWidth: 80,
   }
 }
 
@@ -236,7 +237,6 @@ function reduceTree(
       tree,
       level: levelFor(element),
       currentId: element.representationId,
-      mapStep: undefined,
     })
   }
   return current
@@ -321,7 +321,6 @@ export function reduceViewer(
       ...view,
       focus: 'architecture',
       panes: { ...current.panes, details: false },
-      mapStep: undefined,
     })
   }
   if (action === 'leave') {
@@ -329,7 +328,6 @@ export function reduceViewer(
       ...current,
       ...leaveView(world, current, resolved.selected),
       focus: 'architecture',
-      mapStep: undefined,
     })
   }
   if (current.focus === 'hierarchy') {
@@ -369,7 +367,6 @@ export function reduceViewer(
       return syncTree(world, {
         ...current,
         ...enterView(world, resolved.selected),
-        mapStep: undefined,
       })
     }
     return enterDetails(current)
@@ -383,11 +380,7 @@ export function reduceViewer(
     if (action === 'left') return reduceViewer(world, current, 'tab')
     if (action === 'right') return enterDetails(current)
   }
-  return syncTree(world, {
-    ...current,
-    ...moved,
-    mapStep: { fromId: resolved.selected.representationId, direction: action },
-  })
+  return syncTree(world, { ...current, ...moved })
 }
 
 /**
@@ -418,7 +411,7 @@ function reducePaneKeys(
 /** A click on the map: the element under the cell becomes the selection. */
 export function selectMapItem(world: TerminalViewModel, state: ViewerState, id: string): ViewerState {
   if (state.work !== undefined) return state
-  return syncTree(world, { ...state, currentId: id, focus: 'architecture', mapStep: undefined })
+  return syncTree(world, { ...state, currentId: id, focus: 'architecture' })
 }
 
 /** A click on a hierarchy row: the cursor lands there and Enter follows. */

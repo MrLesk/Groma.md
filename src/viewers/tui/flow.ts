@@ -28,7 +28,7 @@ function visibleEndpoint(
     return item.representationId === undefined ? [] : [[item.representationId, item] as const]
   }))
   const boundary = projection.level === 'components'
-    ? projection.items.find(item => item.kind === 'container')
+    ? projection.items.find(item => item.representationId === projection.scope)
     : undefined
   return visibleEndpointFor(id, visible, byId, boundary)
 }

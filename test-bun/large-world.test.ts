@@ -11,6 +11,7 @@ import { writeLargeWorld } from '../scripts/large-world-fixture.ts'
 import type { TerminalViewModel } from '../src/viewers/tui/model.ts'
 import { canEnter, enterView } from '../src/viewers/tui/navigation-spatial.ts'
 import { initialState, reduceViewer, type MapDirection, type ViewerState } from '../src/viewers/tui/navigation.ts'
+import { encloses, type TerminalCamera } from '../src/viewers/tui/projection-camera.ts'
 import { paintedWorld } from '../src/viewers/tui/organisms/world.ts'
 import { routeTouches, visibleIn } from '../src/viewers/tui/projection-camera.ts'
 import { mapAnchors, projectWorld } from '../src/viewers/tui/projection.ts'
@@ -40,8 +41,7 @@ function reachableByArrows(world: TerminalViewModel, start: ViewerState): Set<st
   const queue = [start]
   while (queue.length > 0) {
     const state = queue.shift()!
-    // moveView reads mapStep to step through a boundary, so it is part of the state key.
-    const key = `${state.currentId}|${state.mapStep?.fromId}|${state.mapStep?.direction}`
+    const key = state.currentId ?? ''
     if (visited.has(key)) continue
     visited.add(key)
     if (state.currentId !== undefined) seen.add(state.currentId)
@@ -72,13 +72,13 @@ test.concurrent('the large world is big enough and its generator reproduces it',
 test.concurrent('arrow keys reach every element of the root map and of every container map', async () => {
   const world = await largeWorld
   const root = initialState(world)
-  const rootAnchors = [...mapAnchors(world, 'context', undefined).keys()]
+  const rootAnchors = [...mapAnchors(world, 'context', undefined, root.mapWidth).keys()]
   const rootReached = reachableByArrows(world, root)
   assert.deepEqual(rootAnchors.filter(id => !rootReached.has(id)), [])
 
   for (const container of world.elements.filter(canEnter)) {
     const start = { ...root, ...enterView(world, container) }
-    const anchors = [...mapAnchors(world, 'components', start.currentId).keys()]
+    const anchors = [...mapAnchors(world, 'components', start.currentId, start.mapWidth).keys()]
     const reached = reachableByArrows(world, start)
     assert.deepEqual(anchors.filter(id => !reached.has(id)), [], `container ${container.id}`)
   }
@@ -115,4 +115,30 @@ test.concurrent('a route is painted when a segment crosses the viewport, not whe
   const around = [{ x: 0, y: 5 }, { x: 40, y: 5 }, { x: 40, y: 25 }]
   assert.equal(routeTouches(through, viewport), true)
   assert.equal(routeTouches(around, viewport), false)
+})
+
+test.concurrent('the selected island or container stays centred after every arrow move and the map scrolls only as far as the selection needs', async () => {
+  const world = await largeWorld
+  const viewport = { x: 0, y: 0, width: 100, height: 20 }
+  let state = { ...initialState(world), mapWidth: viewport.width }
+  let camera: TerminalCamera | undefined
+  const walk = ['down', 'down', 'down', 'right', 'right', 'down', 'down', 'down', 'down', 'down', 'down', 'up', 'left', 'enter',
+    'right', 'right', 'right', 'right', 'right', 'down', 'down', 'right', 'right', 'up', 'left', 'left', 'left', 'left', 'left', 'left', 'left'] as const
+  for (const action of walk) {
+    const before = state
+    state = reduceViewer(world, state, action)
+    if (state.level !== before.level) camera = undefined
+    const projection = projectWorld(world, { viewport, level: state.level, currentId: state.currentId, camera })
+    const selected = projection.items.find(item => item.representationId === projection.currentId)!
+    const holder = projection.items.find(item => (item.shape === 'island' || item.shape === 'slab') && encloses(item.worldBounds, selected.worldBounds))!
+    if (projection.worldBounds.width > viewport.width) {
+      assert.ok(Math.abs(holder.cellBounds.x + holder.cellBounds.width / 2 - viewport.width / 2) <= 1, `${action}: ${holder.title} off centre`)
+    }
+    assert.ok(selected.cellBounds.y >= 0 && selected.cellBounds.y + selected.cellBounds.height <= viewport.height, `${action}: ${selected.title} hidden`)
+    const wasVisible = camera !== undefined
+      && selected.worldBounds.y >= camera.y + 1
+      && selected.worldBounds.y + selected.worldBounds.height <= camera.y + viewport.height - 1
+    if (wasVisible) assert.equal(projection.camera.y, camera!.y, `${action}: scrolled without need`)
+    camera = projection.camera
+  }
 })

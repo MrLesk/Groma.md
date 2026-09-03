@@ -11,35 +11,42 @@ the component count.
 
 ## Map scopes
 
-The root map shows actors, internal systems and their containers, collapsed named
-groups, and external systems. Component cards are hidden. Relationships attach to
-the nearest visible architecture element when their authored endpoint is hidden.
+The root map is one row of islands west to east: the actors, each internal
+system, and the external systems. An island lists one row per child in the
+sheet's placement order: the kind glyph and name, then one block per component
+(observed ▪, draft ▫ dim). An island is never wider than the map minus its side
+padding; a longer row wraps its blocks and the island grows down. No count
+appears on the map. Groups appear only in the container map. Relationships attach
+to the nearest visible row when their authored endpoint is hidden.
 
-Enter opens a selected container. That scope shows the container boundary, its
-named groups, and its direct components. An endpoint outside the container attaches
-to the container boundary. Backspace returns to root with the container selected.
-Escape also returns to root and closes details. No other element opens a map
-scope.
+Enter on a container row opens its map: the container fitted to the map width
+and centered, its groups stacked as zones with the buildings wrapped into lines,
+and the neighbouring containers of the same system peeking on both sides. An
+endpoint in a peeking neighbour attaches to that slab; any other outside endpoint
+attaches to the container itself. Backspace
+returns to root with the container's row selected. Escape also returns to root
+and closes details. No other element opens a map scope.
 
-The terminal viewer consumes the same sheet scene as the web viewer. It keeps
-that scene immutable while translating sheet cells and routes into terminal
-columns and rows.
+The terminal viewer reads the same sheet scene as the web viewer for what exists,
+its order and its groups; it lays islands and containers out in its own columns
+and rows.
 
 ## Camera and selection
 
-The map has one readable scale. It has no fit-all state, zoom keys, zoom readout,
-or camera animation. A larger terminal reveals more of the same canvas.
+The map has one readable scale. It has no fit-all state, zoom keys or zoom
+readout. A wider terminal widens the fitted islands and container; a taller one
+shows more rows.
 
-Arrow keys follow visual rows and columns without changing scope. Each system
-boundary is one navigation step: moving inward stops on the system before a
-second press reaches the first child edge along that path; the entry ray breaks
-equal-edge ties. Moving outward stops on the system before a second press leaves
-it. Same-lane siblings still win within a boundary. When the
-selected element would leave the map pane, the camera pans only enough to reveal
-it. The same rule applies left, right, up, and down. Selection, pane changes,
-and details never change world geometry. Stepping a flow uses the same minimal
-pan to reveal its visible destination without changing architecture selection
-or map scope.
+At root, Up and Down walk the rows of an island, the island itself being one stop
+above its first row; Left and Right cross to the neighbouring island, which
+becomes centered with a short animated pan while its neighbours peek in the side
+padding. In a container map the arrows follow the lines of buildings; Right past
+the last building or Left past the first crosses to the neighbouring container
+and selects its first building. A small world fits without wrapping or panning.
+The map scrolls down and up only as far as a selection needs. Selection and
+details never change the world layout; only the map width re-fits it. Stepping
+a flow reveals its visible destination vertically the same way, without changing
+selection or map scope.
 
 The hierarchy and `/` search can select architecture outside the current scope.
 Selecting a component opens its parent container; selecting any outer element
@@ -76,8 +83,8 @@ The selected task accents every element touched by its modified files and exact
 architecture references, plus routes leaving those elements. If all touched elements
 belong to one container, Work temporarily opens that component map. Otherwise it uses
 the root map and promotes hidden components to their visible containers. The camera
-frames the complete visible touched set at the same fixed scale. Closing Work focus
-with `w` or Escape restores the exact pre-Work view.
+keeps the selection's island or container centred and scrolls vertically to the
+touched set. Closing Work focus with `w` or Escape restores the exact pre-Work view.
 
 ## Appearance
 

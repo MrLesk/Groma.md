@@ -32,7 +32,6 @@ function followMatch(world: TerminalViewModel, state: ViewerState): ViewerState 
     ...state,
     level: levelFor(match),
     currentId: match.representationId,
-    mapStep: undefined,
   })
 }
 
@@ -80,6 +79,5 @@ export function reduceSearch(
     search: undefined,
     level: search.before.level,
     currentId: search.before.currentId,
-    mapStep: undefined,
   })
 }

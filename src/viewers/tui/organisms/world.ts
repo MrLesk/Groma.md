@@ -6,10 +6,13 @@ import { drawSurfaceFrame, fillSurface } from '../molecules/surface.ts'
 import { drawCard } from '../molecules/card.ts'
 import { drawFlowMarker } from '../molecules/flow-marker.ts'
 import { drawRoute, drawRouteLabel } from '../molecules/route.ts'
+import { drawRow } from '../molecules/row.ts'
 import type { ProjectedFlowStep } from '../flow.ts'
-import type { ProjectedMapItem, ProjectedMapRoute, TerminalProjection } from '../projection.ts'
+import type { MapShape, ProjectedMapItem, ProjectedMapRoute, TerminalProjection } from '../projection.ts'
 import type { WorkMap } from '../work/model.ts'
 import { drawWorkMarker } from '../molecules/work-marker.ts'
+
+const SURFACES: ReadonlySet<MapShape> = new Set(['island', 'slab', 'group'])
 
 /** The items and routes the painter visits: only what touches the viewport. */
 export function paintedWorld(projection: TerminalProjection): {
@@ -44,7 +47,7 @@ export function drawWorld(
   const tracing = trace.pathIds.size > 0
   const { items: visibleItems, routes } = paintedWorld(projection)
   const activeRoutes = routes.filter(route => route.ids.some(id => trace.pathIds.has(id)))
-  const surfaces = visibleItems.filter(item => item.shape !== 'card')
+  const surfaces = visibleItems.filter(item => SURFACES.has(item.shape))
   const accented = (item: ProjectedMapItem): boolean => {
     return item.representationId === projection.currentId || trace.work.touched.has(item.key)
   }
@@ -64,16 +67,7 @@ export function drawWorld(
     )
   }
   for (const item of surfaces) drawSurfaceFrame(buffer, item, theme, accented(item))
-  for (const item of visibleItems.filter(item => item.shape === 'card')) {
-    drawCard(
-      buffer,
-      item,
-      projection,
-      theme,
-      tracing && item.representationId !== undefined && !trace.onPath(item.representationId),
-      trace.work.touched.has(item.key),
-    )
-  }
+  drawRowsAndCards(buffer, visibleItems, projection, theme, trace, tracing)
   for (const route of activeRoutes) {
     drawRouteLabel(buffer, route, projection, theme, true)
   }
@@ -95,4 +89,27 @@ export function drawWorld(
     }
   }
   buffer.popScissorRect()
+}
+
+/** Rows inside their islands, then buildings: dimmed off a lit walk, accented when touched by work. */
+function drawRowsAndCards(
+  buffer: OptimizedBuffer,
+  items: readonly ProjectedMapItem[],
+  projection: TerminalProjection,
+  theme: ViewerTheme,
+  trace: { onPath: (elementId: string) => boolean; work: WorkMap },
+  tracing: boolean,
+): void {
+  for (const item of items) {
+    if (item.shape === 'row') drawRow(buffer, item, theme, item.representationId === projection.currentId)
+    if (item.shape !== 'card') continue
+    drawCard(
+      buffer,
+      item,
+      projection,
+      theme,
+      tracing && item.representationId !== undefined && !trace.onPath(item.representationId),
+      trace.work.touched.has(item.key),
+    )
+  }
 }

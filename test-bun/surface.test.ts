@@ -50,7 +50,8 @@ function grainCells(painted: Painted, sharedRows: [number, number]): string[] {
 
 test.concurrent('a container map grains its slab, hatches its zone and leaves the ground plain', async () => {
   const { projection, at } = await paintedMap('components', 'page')
-  const slab = projection.items.find(item => item.kind === 'container')!.cellBounds
+  // The selected slab and the neighbours peeking beside it are all slabs.
+  const slabs = projection.items.filter(item => item.kind === 'container').map(item => item.cellBounds)
   const zone = projection.items.find(item => item.kind === 'group')!.cellBounds
   const buildings = projection.items.filter(item => item.shape === 'card').map(item => item.cellBounds)
   const seen = { zone: new Set<string>(), slab: new Set<string>(), ground: new Set<string>() }
@@ -58,7 +59,7 @@ test.concurrent('a container map grains its slab, hatches its zone and leaves th
     for (let x = 0; x < VIEWPORT.width; x += 1) {
       const glyph = at(x, y)
       if (!PATTERN_GLYPHS.has(glyph) || buildings.some(bounds => inside(bounds, x, y))) continue
-      seen[inside(zone, x, y) ? 'zone' : inside(slab, x, y) ? 'slab' : 'ground'].add(glyph)
+      seen[inside(zone, x, y) ? 'zone' : slabs.some(bounds => inside(bounds, x, y)) ? 'slab' : 'ground'].add(glyph)
     }
   }
   assert.deepEqual([...seen.zone], ['╱'])
