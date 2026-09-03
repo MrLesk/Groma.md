@@ -11,6 +11,7 @@ import {
   withGromaField,
   writeDocument,
 } from './markdown-emitter.ts'
+import { moveBlocker } from './move.ts'
 import type {
   ArchitectureElement,
   ArchitectureModel,
@@ -179,8 +180,8 @@ function movedTarget(
   if (parent.kind !== 'container') {
     throw new Error(`component requires a container parent, but "${parent.id}" is a ${parent.kind}`)
   }
-  requireUnrelated(context.model.relationships, new Set([target.id]))
-  requiresEmptyMeaning(source, target.id)
+  const blocker = moveBlocker(target, context.model.relationships, parseFrontmatter(source).content)
+  if (blocker !== undefined) throw new Error(blocker)
   return {
     source: withGromaField(source, 'parent', parent.id),
     destination: architectureElementPath({

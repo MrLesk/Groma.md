@@ -5,7 +5,6 @@ import { fileURLToPath } from 'node:url'
 
 import { Command } from 'commander'
 
-import { acceptGhost } from './core.ts'
 import { writes } from './authoring.ts'
 import { isGroupAddress } from './naming.ts'
 import type { AddInput, RemoveInput } from './authoring.ts'
@@ -399,17 +398,19 @@ program
   .description('Accept a ghost once a scan has matched it')
   .argument('<id>', 'draft element id')
   .action(async (id: string) => {
-    let result = await acceptGhost(process.cwd(), id)
-    if (result === 'unmatched') {
-      await scanRepository(process.cwd())
-      result = await acceptGhost(process.cwd(), id)
-    }
-    if (result === 'accepted') {
+    try {
+      try {
+        await writes.accept(process.cwd(), { id })
+      } catch (error) {
+        if (!(error instanceof Error) || error.message !== 'no scan match') throw error
+        await scanRepository(process.cwd())
+        await writes.accept(process.cwd(), { id })
+      }
       console.log('ok')
-      return
+    } catch (error) {
+      console.error(error instanceof Error ? error.message : String(error))
+      process.exitCode = 1
     }
-    console.error(result === 'not-draft' ? 'not a draft' : 'no scan match')
-    process.exitCode = 1
   })
 
 program

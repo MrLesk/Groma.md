@@ -18,7 +18,14 @@ import { codeList, fileList } from './code-lists.ts'
 import { heading, paragraph } from '../atoms/text.ts'
 import { paintEditable } from './editable.ts'
 import type { PaneWrites, RelationWrites } from './writes.ts'
-import { paintDraftSelect, paintMeaning, paintRelateControl, paintSelectionControls } from './writes.ts'
+import {
+  paintAcceptControl,
+  paintDraftSelect,
+  paintMeaning,
+  paintParentSelect,
+  paintRelateControl,
+  paintSelectionControls,
+} from './writes.ts'
 import { paintRemoveControl } from './remove.ts'
 import {
   parentOfElements,
@@ -57,6 +64,11 @@ export interface Inspected {
   removable: boolean
   /** The draft record this element belongs to or that touches it. */
   draft?: string
+  /** A draft with scan evidence can be accepted. */
+  matchedGhost: boolean
+  /** An empty, unrelated component can move to another container. */
+  movable: boolean
+  parent: string | null
 }
 
 export type DetailsTab = 'what' | 'how' | 'tasks'
@@ -104,6 +116,10 @@ export function detailsTabs(
     ...(inspected.technology.length > 0 || inspected.files.length > 0 ? ['how' as const] : []),
     ...(workGroups.some(group => group.items.length > 0) ? ['tasks' as const] : []),
   ]
+}
+
+function isMatchedGhost(element: AnnotatedElement): boolean {
+  return element.origin === 'draft' && element.code.length > 0
 }
 
 export function inspectDetails(
@@ -163,6 +179,9 @@ export function inspectDetails(
       .filter(part => part.length > 0),
     files: element.code,
     removable: removalBlocker(world, element.id) === undefined,
+    matchedGhost: isMatchedGhost(element),
+    movable: element.movable === true,
+    parent: element.parent,
     ...(element.draft === undefined ? {} : { draft: element.draft }),
   }
 }
@@ -215,7 +234,7 @@ function paintTabs(tabsHost: HTMLElement, availableTabs: DetailsTab[], shownTab:
 }
 
 export function paintDetails(host: HTMLElement, inspected: Inspected, options: DetailsOptions): void {
-  const { onSelect, onToggleFlow, activeFlows, actorTitle, tab, onTab, code, onSource, workGroups, onTask, onRemove, drafts, onEdit, relate, selection } = options
+  const { onSelect, onToggleFlow, activeFlows, actorTitle, tab, onTab, code, onSource, workGroups, onTask, onRemove, onAccept, drafts, parents, onEdit, relate, selection } = options
   const title = host.querySelector('h1')!
   const meta = host.querySelector('.meta')!
   const tabsHost = host.querySelector<HTMLElement>('.tabs')!
@@ -234,6 +253,7 @@ export function paintDetails(host: HTMLElement, inspected: Inspected, options: D
     overview: () => {
       paintMeaning(body, inspected, onEdit)
       if (onEdit !== undefined) paintDraftSelect(body, inspected, drafts ?? [], onEdit)
+      if (inspected.movable && onEdit !== undefined) paintParentSelect(body, inspected.parent, parents ?? [], onEdit)
     },
 
     relationships: () => {
@@ -342,6 +362,7 @@ export function paintDetails(host: HTMLElement, inspected: Inspected, options: D
   if (shownTab === 'what' && selection !== undefined) paintSelectionControls(body, selection)
   if (shownTab === 'tasks') paintElementWork(body, workGroups, onTask)
   else for (const key of tabSections(shownTab)) sections[key]()
+  if (shownTab === 'what' && inspected.matchedGhost && onAccept !== undefined) paintAcceptControl(body, onAccept)
   if (shownTab === 'what' && relate !== undefined) paintRelateControl(body, relate)
   if (shownTab === 'what' && inspected.removable && onRemove !== undefined) {
     paintRemoveControl(body, inspected.title, onRemove)

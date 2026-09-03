@@ -11,7 +11,7 @@ const coreWriteImport = /from '(?:\.\.\/)+(?:add|draft|edit|remove|curate|relati
 /** Writers a read module re-exports beside its reads. */
 const writerNames = /saveProjectProfile|acceptGhost/
 
-test.concurrent('viewers reach every write through the authoring table', async () => {
+test.concurrent('the CLI and viewers reach every write through the authoring table', async () => {
   const viewers = path.join(repositoryRoot, 'src', 'viewers')
   const offenders: string[] = []
   for (const name of await readdir(viewers, { recursive: true })) {
@@ -19,5 +19,7 @@ test.concurrent('viewers reach every write through the authoring table', async (
     const source = await readFile(path.join(viewers, name), 'utf8')
     if (coreWriteImport.test(source) || writerNames.test(source)) offenders.push(name)
   }
+  const cli = await readFile(path.join(repositoryRoot, 'src', 'cli.ts'), 'utf8')
+  if (coreWriteImport.test(cli) || writerNames.test(cli)) offenders.push('src/cli.ts')
   assert.deepEqual(offenders, [])
 })

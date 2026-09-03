@@ -3,6 +3,7 @@ import path from 'node:path'
 
 import { buildArchitectureModel, draftRecordOf } from './architecture-model.ts'
 import { loadArchitecture } from './architecture-reader.ts'
+import { moveBlocker } from './move.ts'
 import type {
   AnnotatedArchitectureModel,
   AnnotatedElement,
@@ -42,6 +43,7 @@ export function annotateArchitecture(
 ): AnnotatedArchitectureModel {
   const model = buildArchitectureModel(records.documents)
   const byId = new Map(model.elements.map(element => [element.id, element]))
+  const documents = new Map(records.documents.map(document => [document.sourceFilename, document]))
   const elements = model.elements.map<AnnotatedElement>(element => ({
     representationId: element.id,
     id: element.id,
@@ -55,6 +57,7 @@ export function annotateArchitecture(
     ...(element.group === undefined ? {} : { group: element.group }),
     ...(element.technology === undefined ? {} : { technology: element.technology }),
     code: element.code,
+    movable: moveBlocker(element, model.relationships, documents.get(element.sourceFilename)!.body) === undefined,
     origin: originOf(element.status),
     ...(element.draft === undefined ? {} : { draft: element.draft }),
   }))

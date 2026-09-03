@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
-import { cp, mkdtemp, rm } from 'node:fs/promises'
+import { cp, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { test } from 'bun:test'
@@ -110,6 +110,57 @@ test.concurrent('the web edits meaning through the edit verb', async () => {
     const orders = payload.world.elements.find(element => element.id === 'orders')
     assert.equal(orders?.title, 'Order intake')
     assert.equal(orders?.technology, 'Bun')
+  } finally {
+    await server.close()
+    await rm(root, { recursive: true, force: true })
+  }
+})
+
+test.concurrent('the web accepts a matched ghost and moves an empty component through shared writes', async () => {
+  const root = await createRepo()
+  const components = path.join(root, 'groma', 'systems', 'shop', 'containers', 'api', 'components')
+  await writeFile(path.join(components, 'matched.md'), `---
+type: C4 Component
+title: Matched
+status: draft
+groma:
+  id: matched
+  parent: api
+  draft: next
+  code:
+    - scanner: typescript
+      file: src/matched.ts
+---
+`)
+  await writeFile(path.join(components, 'movable.md'), `---
+type: C4 Component
+title: Movable
+status: stable
+groma:
+  id: movable
+  parent: api
+  code:
+    - scanner: typescript
+      file: src/movable.ts
+---
+`)
+  const server = await startWebViewer(root, { port: 0 })
+  try {
+    const accepted = await post(server.url, 'accept', { id: 'matched' })
+    assert.equal(accepted.status, 200)
+    assert.deepEqual(await accepted.json(), { id: 'matched' })
+    const refused = await post(server.url, 'accept', { id: 'orders' })
+    assert.equal(refused.status, 400)
+    assert.equal(await refused.text(), 'not a draft')
+
+    const moved = await post(server.url, 'edit', { id: 'movable', parent: 'web' })
+    assert.equal(moved.status, 200)
+    assert.deepEqual(await moved.json(), { id: 'movable' })
+    const payload = await (await fetch(`${server.url}/world.json`)).json() as {
+      world: { elements: { id: string; origin: string; parent: string | null }[] }
+    }
+    assert.equal(payload.world.elements.find(element => element.id === 'matched')?.origin, 'observed')
+    assert.equal(payload.world.elements.find(element => element.id === 'movable')?.parent, 'web')
   } finally {
     await server.close()
     await rm(root, { recursive: true, force: true })

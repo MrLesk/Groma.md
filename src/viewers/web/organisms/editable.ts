@@ -7,12 +7,12 @@ export const editableCss = `
   }
   #details .editable-text:hover, #details .editable-text:focus-visible { background: var(--hover); outline: 0; }
   #details .editable-text:empty::before { content: attr(data-label); color: var(--muted); }
-  #details .editable input, #details .editable textarea, #details select.draft {
+  #details .editable input, #details .editable textarea, #details .editable select {
     width: 100%; border: 1px solid var(--hairline); border-radius: 4px; padding: 4px 6px;
     color: var(--ink); background: color-mix(in srgb, var(--paper) 72%, transparent); font: inherit; line-height: inherit; resize: none;
   }
   #details .editable textarea { min-height: 120px; }
-  #details .editable input:focus, #details .editable textarea:focus { outline: 2px solid var(--highlight); outline-offset: -1px; }
+  #details .editable input:focus, #details .editable textarea:focus, #details .editable select:focus { outline: 2px solid var(--highlight); outline-offset: -1px; }
   #details .editable .error { margin: 0; color: var(--highlight-text); font-size: 11px; }
   #details .editable .error:empty { display: none; }
 `

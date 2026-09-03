@@ -1,4 +1,4 @@
-import type { AddInput, DraftElementInput, EditArchitectureInput, RemoveInput } from '../../authoring.ts'
+import type { AcceptInput, AddInput, DraftElementInput, EditArchitectureInput, RemoveInput } from '../../authoring.ts'
 import type { WorkItemDetails } from '../../types.ts'
 import { PUBLISHED_EVENT, PUBLISHED_VERSION_EVENT } from './payload.ts'
 import type { WebBootPayload, WebPayload, WebWorkPayload } from './payload.ts'
@@ -17,6 +17,7 @@ export interface WebDataSource {
   add?(input: AddInput): Promise<void>
   remove?(input: RemoveInput): Promise<void>
   edit?(input: EditArchitectureInput): Promise<void>
+  accept?(input: AcceptInput): Promise<void>
   subscribe(handlers: {
     world(payload: WebPayload): void
     work(payload: WebWorkPayload): void
@@ -67,6 +68,7 @@ function liveDataSource(): WebDataSource {
     add: input => send('/add', input),
     remove: input => send('/remove', input),
     edit: input => send('/edit', input),
+    accept: input => send('/accept', input),
     subscribe(handlers) {
       const events = new EventSource('/events')
       events.addEventListener('world', event => {
