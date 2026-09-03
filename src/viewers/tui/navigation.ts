@@ -1,4 +1,5 @@
 import { outgoingActions, travelledBy, worldCommands } from '../action-path.ts'
+import { elementWorkGroups } from '../../work/pins.ts'
 import { parentOfElements, promotedPeer } from '../relationship-text.ts'
 import { litLegs } from './flow.ts'
 import type { PaneVisibility } from './layout.ts'
@@ -22,6 +23,7 @@ import type {
   AnnotatedRelationship,
   C4Kind,
   TerminalLevel,
+  WorkItemDetails,
 } from '../../types.ts'
 
 export type ViewerFocus = 'architecture' | 'hierarchy' | 'details'
@@ -55,6 +57,8 @@ export interface ViewerState {
   profile?: boolean
   /** The keys box is showing in the details pane, over whatever it showed before. */
   keys?: boolean
+  /** The full record of one task is showing in the details pane; its details arrive from the work source. */
+  taskRecord?: { id: string; details?: WorkItemDetails }
   /** One actor command. Survives leaving the actor until x or another pick. */
   activeActionId?: string
   /** The actor the command was picked from; scopes the walk's approach to them. */
@@ -118,6 +122,12 @@ export function detailsCommands(
   if (state.profile || state.keys) return []
   if (state.currentId === undefined) return []
   return state.detailsTab === 'how' ? travelledBy(state.currentId, world) : selectionRelationships(world, state.currentId)
+}
+
+/** The tasks touching the selection, in the details pane's order: to do, in progress, done. */
+export function detailsTasks(world: TerminalViewModel, state: Pick<ViewerState, 'currentId' | 'detailsTab' | 'profile' | 'keys'>): string[] {
+  if (state.currentId === undefined || state.detailsTab === 'how' || state.profile || state.keys || world.work === undefined) return []
+  return elementWorkGroups(world.work, state.currentId, world).flatMap(group => group.items.map(item => item.id))
 }
 
 /** The selection's relationships in the details pane's order: its own outgoing ones, then everything pointing at it or its promoted parent. */
@@ -295,6 +305,7 @@ export function reduceViewer(
   if (action === 'toggle-details' || action === 'toggle-hierarchy' || action === 'toggle-profile' || action === 'toggle-keys') {
     return reducePaneKeys(world, current, action)
   }
+  if (action === 'dismiss' && current.taskRecord !== undefined) return { ...current, taskRecord: undefined, detailsScroll: 0 }
   if (action === 'dismiss' && current.keys) return { ...current, keys: false, detailsScroll: 0 }
   if (action === 'dismiss' && current.profile) return { ...current, profile: false, detailsScroll: 0 }
   if (action === 'clear-action') {
@@ -342,16 +353,21 @@ export function reduceViewer(
   if (current.focus === 'details') {
     if (action === 'up' || action === 'down') {
       const step = action === 'down' ? 1 : -1
-      const actions = detailsCommands(world, current)
-      if (actions.length === 0) {
+      const stops = current.taskRecord === undefined
+        ? [...detailsCommands(world, current).map(item => item.id), ...detailsTasks(world, current)]
+        : []
+      if (stops.length === 0) {
         return { ...current, detailsScroll: Math.max(0, current.detailsScroll + step) }
       }
-      const index = actions.findIndex(item => item.id === current.actionCursor)
+      const index = stops.indexOf(current.actionCursor ?? '')
       const next = index < 0
-        ? (step > 0 ? 0 : actions.length - 1)
-        : Math.max(0, Math.min(actions.length - 1, index + step))
+        ? (step > 0 ? 0 : stops.length - 1)
+        : Math.max(0, Math.min(stops.length - 1, index + step))
       // Each previewed walk starts unstepped.
-      return { ...current, actionCursor: actions[next]!.id, actionStep: undefined }
+      return { ...current, actionCursor: stops[next], actionStep: undefined }
+    }
+    if (action === 'enter' && current.actionCursor !== undefined && detailsTasks(world, current).includes(current.actionCursor)) {
+      return { ...current, taskRecord: { id: current.actionCursor }, detailsScroll: 0 }
     }
     if (action === 'enter') {
       const picked = detailsCommands(world, current).find(item => item.id === current.actionCursor)

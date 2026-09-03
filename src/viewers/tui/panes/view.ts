@@ -6,22 +6,25 @@ import { kindGlyph } from '../../atoms/kind.ts'
 import { ancestorOfKind, detailsCommands, type LitAction, type ViewerState } from '../navigation.ts'
 import type { TerminalProjection } from '../projection.ts'
 import { semanticTreeRows } from '../tree.ts'
-import { selectedWorkId, selectedWorkItem, workGroups } from '../work/model.ts'
+import { mappedStatuses, selectedWorkItem, shownStatuses, workGroups, workRows, type WorkFocus } from '../work/model.ts'
 import { footerHint, searchLine } from './chrome.ts'
-import { DETAILS_TABS, detailsLines, flowLines, keysLines, profileLines, taskLines } from './details.ts'
+import { DETAILS_TABS, detailsLines, flowLines, keysLines, profileLines, taskLines, taskRecordLines } from './details.ts'
 import { hierarchyLines, legendLines, workListLines } from './hierarchy.ts'
 import { DETAILS_CONTENT_WIDTH, HIERARCHY_CONTENT_WIDTH, type DetailsView, type ScreenView } from './screen.ts'
 import { plain, type Line, type PaneLines } from './text.ts'
 import type { AnnotatedElement } from '../../../types.ts'
 
-function recapLine(theme: ViewerTheme, world: TerminalViewModel, workOpen: boolean): Line | undefined {
-  const terminal = world.work?.statuses.at(-1)
+/** The count per status; a status that is a toggle carries its shown mark. */
+function recapLine(theme: ViewerTheme, world: TerminalViewModel, focus: WorkFocus | undefined): Line | undefined {
   const groups = workGroups(world.work)
-  const actionable = groups.filter(group => group.status !== terminal)
-  const shown = (actionable.length === 0 ? groups : actionable).slice(0, 2)
-  if (shown.length === 0) return undefined
-  const counts = shown.map(group => `${group.items.length} ${group.status}`).join(' · ')
-  return [plain(theme, ` Backlog · ${counts} · w ${workOpen ? 'close' : 'task details'} `)]
+  if (groups.length === 0) return undefined
+  const toggles = new Set(mappedStatuses(world))
+  const shown = new Set(shownStatuses(world, focus))
+  const counts = groups.map(group => {
+    const mark = toggles.has(group.status) ? (shown.has(group.status) ? '✓ ' : '○ ') : ''
+    return `${mark}${group.items.length} ${group.status}`
+  }).join(' · ')
+  return [plain(theme, ` Backlog · ${counts} · w ${focus === undefined ? 'task details' : 'close'} `)]
 }
 
 function actionTitle(world: TerminalViewModel, lit: LitAction, step: ProjectedFlowStep | undefined): string | undefined {
@@ -51,6 +54,10 @@ function rootStats(world: TerminalViewModel, flows: number, workOpen: boolean): 
 
 /** The keys box or the project profile, shown over whatever the pane held. */
 function modeView(theme: ViewerTheme, world: TerminalViewModel, state: ViewerState): DetailsView | undefined {
+  const record = state.taskRecord === undefined ? undefined : world.work?.items.find(item => item.id === state.taskRecord?.id)
+  if (record !== undefined) {
+    return { title: record.id, titleColor: theme.selected, lines: { lines: taskRecordLines(theme, record, state.taskRecord?.details, DETAILS_CONTENT_WIDTH) }, scroll: state.detailsScroll }
+  }
   if (state.keys) {
     return { title: 'Keys', titleColor: theme.foreground, lines: { lines: keysLines(theme, DETAILS_CONTENT_WIDTH) }, scroll: state.detailsScroll }
   }
@@ -124,6 +131,7 @@ function footerLine(
   const named = !state.panes.details && selected !== undefined
     ? `${kindGlyph(selected.kind)} ${selected.title}   ${hint}`
     : hint
+  if (state.taskRecord !== undefined) return `esc back   ↑↓ scroll   ${named}`
   if (state.keys) return `? close   esc close   ${named}`
   return state.profile ? `p back   esc back   ${named}` : named
 }
@@ -138,7 +146,7 @@ function hierarchyView(
 ): PaneLines | undefined {
   if (!state.panes.hierarchy) return undefined
   if (state.work !== undefined) {
-    return workListLines(theme, HIERARCHY_CONTENT_WIDTH, workGroups(world.work), selectedWorkId(state.work), state.focus === 'hierarchy')
+    return workListLines(theme, HIERARCHY_CONTENT_WIDTH, workRows(world), state.work.selection, shownStatuses(world, state.work), state.focus === 'hierarchy')
   }
   return hierarchyLines(
     theme,
@@ -172,6 +180,6 @@ export function screenView(
     hierarchy: hierarchyView(theme, world, state, commands, selectionId),
     legend: workOpen ? undefined : legendLines(theme, HIERARCHY_CONTENT_WIDTH),
     details: detailsView(theme, world, state, selected, lit, step, commands),
-    recap: recapLine(theme, world, workOpen),
+    recap: recapLine(theme, world, state.work),
   }
 }

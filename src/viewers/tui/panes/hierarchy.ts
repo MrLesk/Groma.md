@@ -3,7 +3,7 @@ import type { TextChunk } from '@opentui/core'
 import { kindGlyph, kindLabel } from '../../atoms/kind.ts'
 import type { ViewerTheme } from '../atoms/theme.ts'
 import type { TreeRow } from '../tree.ts'
-import type { WorkGroup } from '../work/model.ts'
+import type { WorkRow, WorkSelection } from '../work/model.ts'
 import { accent, bold, dim, kindMark, plain, styleRow, type Line, type PaneLines } from './text.ts'
 import type { WorkItem } from '../../../types.ts'
 
@@ -70,26 +70,33 @@ export function legendLines(theme: ViewerTheme, width: number): Line[] {
   ]
 }
 
-/** Work focus: every configured status with its tasks, two rows per task. */
+/** Work focus: every configured status with its tasks, two rows per task; a status that is a toggle carries its shown mark. */
 export function workListLines(
   theme: ViewerTheme,
   width: number,
-  groups: readonly WorkGroup[],
-  taskId: string | undefined,
+  rows: readonly WorkRow[],
+  selection: WorkSelection,
+  shown: readonly string[],
   focused: boolean,
 ): PaneLines {
   const lines: Line[] = [[accent(theme, ' Tasks (Work focus)')], []]
   let cursor: number | undefined
   const task = (item: WorkItem): void => {
-    const selected = item.id === taskId
+    const selected = selection.state === 'selected' && item.id === selection.taskId
     if (selected) cursor = lines.length
     const head: Line = [marker(theme, selected), plain(theme, `  ${[item.id, ...item.assignees].join('  ')}`)]
     lines.push(styleRow(theme, head, width, selected, selected && focused))
     lines.push(styleRow(theme, [plain(theme, ' '), dim(theme, `  ${item.title}`)], width, false, selected && focused))
   }
-  for (const group of groups) {
-    lines.push([plain(theme, ' ▾ '), bold(theme, `${group.status} (${group.items.length})`)])
-    for (const item of group.items) task(item)
+  for (const row of rows) {
+    if (row.kind === 'task') {
+      task(row.item)
+      continue
+    }
+    const atCursor = selection.state === 'status' && selection.status === row.status
+    if (atCursor) cursor = lines.length
+    const mark = row.toggle ? (shown.includes(row.status) ? '✓ ' : '○ ') : ''
+    lines.push(styleRow(theme, [plain(theme, ' ▾ '), bold(theme, `${mark}${row.status} (${row.count})`)], width, false, atCursor && focused))
   }
   return { lines, cursor }
 }

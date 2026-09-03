@@ -2,8 +2,8 @@ import type { WorkPin } from '../../../work/pins.ts'
 import type { Tip } from '../organisms/tip.ts'
 import { BACKLOG_MARK } from './backlog-mark.ts'
 import { fillWorkBadge, finishingWorkKeys, WORK_BADGE, WORK_BADGE_FLIP_MS } from './badge.ts'
-import { preservedWorkStatuses, toggleWorkStatus, workStatusFilters } from './status-filter.ts'
-import type { WorkStatusFilterState } from './status-filter.ts'
+import { preservedWorkStatuses, toggleWorkStatus, workStatusFilters } from '../../../work/status-filter.ts'
+import type { WorkStatusFilterState } from '../../../work/status-filter.ts'
 
 const icon = (paths: string): string =>
   `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${paths}</svg>`

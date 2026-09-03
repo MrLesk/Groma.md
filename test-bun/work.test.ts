@@ -15,8 +15,11 @@ import {
 
 import type { WorkItem, WorkSnapshot } from '../src/types.ts'
 import { startTerminalViewer } from '../src/view-host.ts'
+import { initialState, reduceViewer, type ViewerState } from '../src/viewers/tui/navigation.ts'
 import { projectWorld } from '../src/viewers/tui/projection.ts'
+import { mountTerminalViewer } from '../src/viewers/tui/terminal-viewer.ts'
 import {
+  toggleShownStatus,
   initialWorkFocus,
   moveWorkFocus,
   projectWork,
@@ -60,9 +63,13 @@ test.concurrent('Work focus follows active, default, then terminal workflow grou
   ])
 
   assert.deepEqual(workGroups(work).map(group => group.status), ['In Progress', 'To Do', 'Done'])
+  const model = { ...navigationWorld(), work }
   const first = initialWorkFocus(work, beforeWork)
   assert.equal(selectedWorkId(first), 'TASK-ACTIVE')
-  assert.equal(selectedWorkId(moveWorkFocus(work, first, 1)), 'TASK-TODO')
+  // Down walks onto the next status header, then its first task.
+  const header = moveWorkFocus(model, first, 1)
+  assert.deepEqual(header.selection, { state: 'status', status: 'To Do' })
+  assert.equal(selectedWorkId(moveWorkFocus(model, header, 1)), 'TASK-TODO')
 })
 
 test.concurrent('Work projection shares modified-file and reference touch meaning with the web', () => {
@@ -90,14 +97,16 @@ test.concurrent('Work projection shares modified-file and reference touch meanin
   const work = projectWork(model, projection, {
     selection: { state: 'selected', taskId: 'TASK-1' },
     before: beforeWork,
+    shown: ['In Progress'],
   })
 
+  const corner = (elementId: string, selected: boolean) => ({ elementId, taskId: 'TASK-1', others: 0, stage: 'progress', selected })
   assert.deepEqual(projectWork(model, projection, undefined), {
-    anchors: [{ elementId: 'observed:cleft', count: 1, active: false }],
+    corners: [corner('observed:cleft', false), corner('observed:cright', false)],
     touched: new Set(),
   })
   assert.deepEqual([...work.touched].sort(), ['observed:cleft', 'observed:cright'])
-  assert.deepEqual(work.anchors, [{ elementId: 'observed:cleft', count: 1, active: true }])
+  assert.deepEqual(work.corners, [corner('observed:cleft', true), corner('observed:cright', true)])
   assert.deepEqual({
     items: projection.items.map(item => [item.key, item.cellBounds]),
     routes: projection.relationships.map(route => route.cellRoute),
@@ -116,6 +125,7 @@ test.concurrent('Work chooses component scope for one container and root for sev
   const focus = (taskId: string) => ({
     selection: { state: 'selected' as const, taskId },
     before: beforeWork,
+    shown: [] as string[],
   })
 
   assert.deepEqual(workView(model, focus('TASK-LOCAL')), {
@@ -395,4 +405,83 @@ test.concurrent('host refreshes the viewer from a changed work snapshot', async 
     viewer.destroy()
     if (!setup.renderer.isDestroyed) setup.renderer.destroy()
   }
+})
+
+test.concurrent('corners follow the shown statuses and name the selected task first', () => {
+  const base = navigationWorld()
+  const model = {
+    ...base,
+    work: snapshot([
+      item('TASK-ACTIVE', { title: 'Active', references: ['cleft'] }),
+      item('TASK-TODO', { title: 'Todo', status: 'To Do', references: ['cleft'] }),
+      item('TASK-DONE', { title: 'Done', status: 'Done', references: ['cright'] }),
+    ]),
+  }
+  const projection = projectWorld(model, { viewport: mapViewportOf({ width: 120, height: 36 }), currentId: 'observed:alpha' })
+  const focus = (taskId: string, shown: string[]) => ({ selection: { state: 'selected' as const, taskId }, before: beforeWork, shown })
+
+  // At first only the active status shows: the to-do task counts nowhere and the done one has no corner.
+  assert.deepEqual(projectWork(model, projection, undefined).corners, [{ elementId: 'observed:cleft', taskId: 'TASK-ACTIVE', others: 0, stage: 'progress', selected: false }])
+  const all = projectWork(model, projection, focus('TASK-TODO', ['In Progress', 'To Do', 'Done'])).corners
+  assert.deepEqual(all.find(corner => corner.elementId === 'observed:cleft'), { elementId: 'observed:cleft', taskId: 'TASK-TODO', others: 1, stage: 'todo', selected: true })
+  assert.deepEqual(all.find(corner => corner.elementId === 'observed:cright'), { elementId: 'observed:cright', taskId: 'TASK-DONE', others: 0, stage: 'done', selected: false })
+})
+
+test.concurrent('at root a component task stands on its container row and never on the island', () => {
+  const model = { ...navigationWorld(), work: snapshot([item('TASK-DEEP', { title: 'Deep', references: ['pleft'] })]) }
+  const corners = projectWork(model, projectWorld(model, { viewport: mapViewportOf({ width: 120, height: 36 }), currentId: 'observed:alpha' }), undefined).corners
+  assert.deepEqual(corners.map(corner => corner.elementId), ['observed:cleft'])
+})
+
+test.concurrent('status toggles start without the default and final statuses and flip one status without moving the map', () => {
+  const work = snapshot([
+    item('TASK-ACTIVE', { title: 'Active', references: ['cleft'] }),
+    item('TASK-DONE', { title: 'Done', status: 'Done', references: ['cright'] }),
+  ])
+  const model = { ...navigationWorld(), work }
+  const first = initialWorkFocus(work, beforeWork)
+  assert.deepEqual(first.shown, ['In Progress'])
+  assert.deepEqual(toggleShownStatus(first, 'Done').shown, ['In Progress', 'Done'])
+  assert.deepEqual(toggleShownStatus(toggleShownStatus(first, 'Done'), 'Done').shown, ['In Progress'])
+
+  let state = reduceViewer(model, initialState(model), 'toggle-work')
+  state = reduceViewer(model, state, 'down')
+  assert.deepEqual(state.work?.selection, { state: 'status', status: 'Done' })
+  const toggled = reduceViewer(model, state, 'enter')
+  assert.deepEqual(toggled.work?.shown, ['In Progress', 'Done'])
+  assert.deepEqual([toggled.level, toggled.currentId, toggled.work?.selection], [state.level, state.currentId, state.work?.selection])
+})
+
+test.concurrent('the details pane walks the tasks touching the selection and Enter opens the record', () => {
+  const model = { ...navigationWorld(), work: snapshot([item('TASK-HERE', { title: 'Here', references: ['ann'], acceptanceCriteriaCompleted: 1, acceptanceCriteriaCount: 3 })]) }
+  let state: ViewerState = { ...initialState(model), currentId: 'observed:ann', focus: 'details' }
+  state = reduceViewer(model, state, 'down')
+  assert.equal(state.actionCursor, 'TASK-HERE')
+  state = reduceViewer(model, state, 'enter')
+  assert.deepEqual(state.taskRecord, { id: 'TASK-HERE' })
+  assert.equal(reduceViewer(model, state, 'dismiss').taskRecord, undefined)
+})
+
+test.concurrent('the viewer reads the opened record through the host', async () => {
+  const model = { ...navigationWorld(), work: snapshot([item('TASK-READ', { title: 'Read me', references: ['ann'] })]) }
+  const setup = await createTestRenderer({ width: 120, height: 36 })
+  const read: string[] = []
+  const app = mountTerminalViewer(setup.renderer, model, {
+    currentId: 'observed:ann',
+    readTask: async id => {
+      read.push(id)
+      return { id, description: 'A record body.', acceptanceCriteria: [{ text: 'Criterion', checked: true }], definitionOfDone: [], implementationPlan: '', implementationNotes: '', comments: [] }
+    },
+  })
+  await setup.renderOnce()
+  // Enter on an actor focuses its details; Down reaches its task; Enter opens the record.
+  await press(setup, 'enter')
+  await press(setup, 'down')
+  const opened = await press(setup, 'enter')
+  assert.deepEqual(read, ['TASK-READ'])
+  assert.ok(opened.includes('TASK-READ'))
+  await new Promise(resolve => setTimeout(resolve, 20))
+  await setup.renderOnce()
+  assert.ok(setup.captureCharFrame().includes('A record body.'))
+  app.destroy()
 })
