@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 
 import { test } from 'bun:test'
 
-import { loadAnnotatedArchitecture, loadArchitectureViewModel } from '../src/core.ts'
+import { loadAnnotatedArchitecture } from '../src/core.ts'
 import { GAP, ISLAND_GAP, NESTED_CONTENT_PAD } from '../src/sheet/forces.ts'
 import { EMPTY, MARGIN, PAD, ROOF_SHADOW, contains, overlaps, shadeOf } from '../src/sheet/grid.ts'
 import {
@@ -356,7 +356,7 @@ test.concurrent('the sheet is the islands plus the margin, starting at the margi
 })
 
 test.concurrent('empty containers retain at least the nested-surface padding', async () => {
-  const { world: fixture } = await loadArchitectureViewModel(openclawFixtureRoot)
+  const fixture = await loadAnnotatedArchitecture(openclawFixtureRoot)
   const scene = sheetScene(fixture)
   assert.equal(scene.slabs.length, 6)
   for (const slab of scene.slabs) {

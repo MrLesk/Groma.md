@@ -2,8 +2,7 @@ import type { AnnotatedElement, Bounds, C4Kind, TerminalLevel } from '../../type
 import type { TerminalViewModel } from './model.ts'
 import type { MapDirection, ViewerState } from './navigation.ts'
 import { mapAnchors } from './projection.ts'
-import { firstBuilding, neighbourContainer } from './projection-container.ts'
-import { rootStops } from './projection-root.ts'
+import { firstBuilding } from './projection-container.ts'
 
 function elementsById(model: TerminalViewModel): Map<string, AnnotatedElement> {
   return new Map(model.elements.map(element => [element.representationId, element]))
@@ -95,7 +94,6 @@ function nearestInDirection(
   selectedId: string,
   originBounds: Bounds,
   direction: MapDirection,
-  sameLane = false,
 ): string | undefined {
   const origin = directionalBounds(originBounds, direction)
   let best: { id: string; cross: number; forward: number; distance: number } | undefined
@@ -104,7 +102,6 @@ function nearestInDirection(
     const candidate = directionalBounds(bounds, direction)
     if (!inDirection(origin, candidate)) continue
     const cross = perpendicularGap(origin, candidate)
-    if (sameLane && cross > 0) continue
     const forward = middle(candidate.start, candidate.end) - middle(origin.start, origin.end)
     const perpendicular = middle(candidate.crossStart, candidate.crossEnd)
       - middle(origin.crossStart, origin.crossEnd)
@@ -127,32 +124,7 @@ function nearestInDirection(
   return best?.id
 }
 
-/** Root stops: Up and Down walk an island's rows with the system one stop above them; Left and Right cross to the neighbouring island. */
-function moveRoot(model: TerminalViewModel, currentId: string, direction: MapDirection): string | undefined {
-  const islands = rootStops(model)
-  const at = islands.findIndex(stops => stops.includes(currentId))
-  if (at < 0) return undefined
-  const stops = islands[at]!
-  const index = stops.indexOf(currentId)
-  if (direction === 'up') return stops[index - 1]
-  if (direction === 'down') return stops[index + 1]
-  return islands[at + (direction === 'right' ? 1 : -1)]?.[0]
-}
-
-/** Reading order, band by band and line by line; past the first or last building, the neighbouring container's first. */
-function readOn(model: TerminalViewModel, anchors: ReadonlyMap<string, Bounds>, selected: AnnotatedElement, direction: 'left' | 'right'): string | undefined {
-  const keys = [...anchors.keys()]
-  const next = keys[keys.indexOf(selected.representationId) + (direction === 'right' ? 1 : -1)]
-  if (next !== undefined) return next
-  const container = ancestorOfKind(selected, 'container', elementsById(model))
-  const neighbour = container === undefined ? undefined : neighbourContainer(model, container, direction)
-  return neighbour === undefined ? undefined : firstBuilding(model, neighbour)
-}
-
-/**
- * In a container map Left and Right walk the buildings in reading order and cross to the neighbouring
- * container past the first or last one; Up and Down take the nearest building in that direction, a same-lane one first.
- */
+/** Every arrow selects the nearest visible peer in that direction without changing scope. */
 export function moveView(
   model: TerminalViewModel,
   state: ViewerState,
@@ -160,15 +132,9 @@ export function moveView(
   direction: MapDirection,
 ): Pick<ViewerState, 'level' | 'currentId'> {
   const level = state.level
-  if (level === 'context') {
-    return { level, currentId: moveRoot(model, selected.representationId, direction) ?? selected.representationId }
-  }
-  const anchors = mapAnchors(model, level, selected.representationId, state.mapWidth)
+  const anchors = mapAnchors(model, level, selected.representationId)
   const origin = anchors.get(selected.representationId)
   if (origin === undefined) return { level, currentId: selected.representationId }
-  const next = direction === 'left' || direction === 'right'
-    ? readOn(model, anchors, selected, direction)
-    : nearestInDirection(anchors, selected.representationId, origin, direction, true)
-      ?? nearestInDirection(anchors, selected.representationId, origin, direction)
+  const next = nearestInDirection(anchors, selected.representationId, origin, direction)
   return { level, currentId: next ?? selected.representationId }
 }

@@ -171,7 +171,3 @@ export interface ArchitectureWorld {
   groups: WorldGroup[]
   relationships: WorldRelationship[]
 }
-
-export interface ArchitectureViewModel extends AnnotatedArchitectureModel {
-  world: ArchitectureWorld
-}

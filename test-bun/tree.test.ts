@@ -119,10 +119,11 @@ test.concurrent('tree focus moves the cursor and enter drives selection and leve
 
   state = reduceViewer(world, state, 'dismiss')
   assert.equal(state.focus, 'architecture')
-  // Back at root the map walks the island's rows: the next container is one row down.
+  assert.equal(state.level, 'context')
+  assert.equal(state.currentId, 'observed:cleft')
   state = reduceViewer(world, state, 'down')
+  assert.equal(state.level, 'context')
   assert.equal(state.tree.cursor, state.currentId)
-  assert.equal(state.currentId, 'observed:cright')
   assert.equal(state.tree.collapsed.has('observed:cleft'), true)
 })
 

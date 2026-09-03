@@ -87,8 +87,6 @@ export interface ViewerState {
   history?: HistoryState
   /** The commit the viewer should show; absent means the live working tree. */
   revisionId?: string
-  /** The map's columns, which the fitted layouts and their arrows depend on; the viewer keeps it in step with the screen. */
-  mapWidth: number
   /** Present only while the terminal is using its task-focused side panes. */
   work?: WorkFocus
 }
@@ -117,7 +115,6 @@ export function initialState(world: TerminalViewModel): ViewerState {
     panes: { hierarchy: true, details: true },
     detailsScroll: 0,
     detailsTab: 'what',
-    mapWidth: 80,
     revisionId: world.revision?.id,
   }
 }

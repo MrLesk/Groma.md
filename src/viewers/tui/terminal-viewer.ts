@@ -111,7 +111,7 @@ export function mountTerminalViewer(
     onMapCell(x, y) {
       const id = lastProjection === undefined ? undefined : itemAt(lastProjection.items, x, y)?.representationId
       // Only what the arrows can reach at this level is selectable.
-      if (id !== undefined && mapAnchors(viewModel, state.level, state.currentId, state.mapWidth).has(id)) {
+      if (id !== undefined && mapAnchors(viewModel, state.level, state.currentId).has(id)) {
         transition(selectMapItem(viewModel, state, id))
       }
     },
@@ -152,8 +152,6 @@ export function mountTerminalViewer(
 
   function repaint(panFrom?: number): void {
     if (closed || screen.map.isDestroyed) return
-    const mapWidth = screen.mapViewport().width
-    if (state.mapWidth !== mapWidth) state = { ...state, mapWidth }
     const projection = project()
     const lit = litAction(viewModel, state)
     syncAnimation(lit.id !== undefined)

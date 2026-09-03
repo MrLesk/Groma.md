@@ -7,13 +7,14 @@ import type {
   TerminalLevel,
 } from '../../types.ts'
 import type { TerminalViewModel } from './model.ts'
-import { encloses, projectBounds, projectPoint, type TerminalCamera } from './projection-camera.ts'
+import { projectBounds, projectPoint, type TerminalCamera } from './projection-camera.ts'
 import { containerLayout } from './projection-container.ts'
 import { rootLayout } from './projection-root.ts'
-import { routeBetween } from './projection-routes.ts'
+import { attachRoute } from './projection-routes.ts'
+import { terminalPoint } from './projection-sheet.ts'
 
 export type MapKind = C4Kind | 'group'
-export type MapShape = 'slab' | 'card' | 'group' | 'island' | 'row'
+export type MapShape = 'slab' | 'card' | 'group' | 'island'
 
 export interface ProjectedMapItem {
   key: string
@@ -99,28 +100,70 @@ export function visibleEndpointFor(
   return fallback
 }
 
-/** The fitted camera: the subject centred, or the whole world when it fits; scrolled only as far as the selection needs. */
+/** One camera axis: centre a small world; otherwise move only enough to reveal the selection. */
+function revealedAxis(
+  worldStart: number,
+  worldSize: number,
+  viewportSize: number,
+  previous: number | undefined,
+  selectionStart: number | undefined,
+  selectionSize: number | undefined,
+): number {
+  if (worldSize <= viewportSize) return worldStart - Math.floor((viewportSize - worldSize) / 2)
+  const last = worldStart + worldSize - viewportSize
+  let next = Math.max(worldStart, Math.min(last, previous ?? worldStart))
+  if (selectionStart === undefined || selectionSize === undefined) return next
+  if (selectionSize >= viewportSize) {
+    if (previous === undefined) {
+      return Math.max(worldStart, Math.min(last, selectionStart + (selectionSize - viewportSize) / 2))
+    }
+    const selectionEnd = selectionStart + selectionSize
+    if (selectionEnd <= next) next = selectionEnd - 1
+    else if (selectionStart >= next + viewportSize) next = selectionStart - viewportSize + 1
+    return Math.max(worldStart, Math.min(last, next))
+  }
+  if (selectionStart < next + 1) next = selectionStart - 1
+  if (selectionStart + selectionSize > next + viewportSize - 1) {
+    next = selectionStart + selectionSize - viewportSize + 1
+  }
+  return Math.max(worldStart, Math.min(last, next))
+}
+
 function fittedCamera(
-  subject: Bounds,
-  revealBounds: Bounds | undefined,
+  reveal: Bounds | undefined,
   world: Bounds,
   viewport: Bounds,
   previous: TerminalCamera | undefined,
 ): TerminalCamera {
-  const x = world.width <= viewport.width
-    ? world.x - Math.floor((viewport.width - world.width) / 2)
-    : Math.round(subject.x + subject.width / 2 - viewport.width / 2)
-  return { x, y: scrolledTo(previous?.y ?? world.y, revealBounds, world, viewport) }
+  return {
+    x: revealedAxis(world.x, world.width, viewport.width, previous?.x, reveal?.x, reveal?.width),
+    y: revealedAxis(world.y, world.height, viewport.height, previous?.y, reveal?.y, reveal?.height),
+  }
 }
 
-/** Scrolls down or up only as far as the selection needs, never above the top of the world. */
-function scrolledTo(y: number, selection: Bounds | undefined, world: Bounds, viewport: Bounds): number {
-  if (selection === undefined) return Math.max(world.y, y)
-  let next = y
-  if (selection.y + selection.height > next + viewport.height - 1) next = selection.y + selection.height - viewport.height + 1
-  // The top rule wins, so a selection taller than the viewport shows its title.
-  if (selection.y < next + 1) next = selection.y - 1
-  return Math.max(world.y, next)
+/** A large surface focuses its readable north-west label; a system initially opens over its first container. */
+function selectionReveal(
+  model: TerminalViewModel,
+  selected: WorldItem | undefined,
+  visible: ReadonlyMap<string, WorldItem>,
+  viewport: Bounds,
+): Bounds | undefined {
+  if (selected === undefined) return undefined
+  const firstSlab = selected.shape === 'island'
+    ? model.sheet.slabs.find(slab => slab.island === selected.key)
+    : undefined
+  const item = firstSlab === undefined ? selected : visible.get(firstSlab.representationId) ?? selected
+  if (item.shape !== 'island' && item.shape !== 'slab' && item.shape !== 'group') return item.worldBounds
+  return {
+    x: item.worldBounds.x,
+    y: item.worldBounds.y,
+    width: item.worldBounds.width < viewport.width - 2
+      ? item.worldBounds.width
+      : Math.min(item.worldBounds.width, item.title.length + 4),
+    height: item.worldBounds.height < viewport.height - 2
+      ? item.worldBounds.height
+      : Math.min(item.worldBounds.height, 3),
+  }
 }
 
 /** True when the element or one of its ancestors is the scope. */
@@ -133,16 +176,10 @@ function withinScope(elements: ReadonlyMap<string, AnnotatedElement>, scopeId: s
   return false
 }
 
-/** The island a root item stands on, or the item itself when it is one. */
-function islandOf(items: readonly WorldItem[], item: WorldItem): WorldItem | undefined {
-  return items.find(candidate => candidate.shape === 'island' && encloses(candidate.worldBounds, item.worldBounds))
-}
-
 /** The visible shapes a sheet route joins at this level, or nothing when the level does not draw it. */
 function routeEnds(
   route: { source: string; target: string },
   level: TerminalLevel,
-  items: readonly WorldItem[],
   visible: ReadonlyMap<string, WorldItem>,
   elements: ReadonlyMap<string, AnnotatedElement>,
   boundary: WorldItem | undefined,
@@ -153,8 +190,6 @@ function routeEnds(
   if (!source || !target || source.key === target.key) return undefined
   const scopeId = boundary?.representationId
   if (level === 'components' && scopeId !== undefined && !withinScope(elements, scopeId, route.source) && !withinScope(elements, scopeId, route.target)) return undefined
-  // Rows of one island sit line on line, so a route between them has no room; those wait for the container map.
-  if (level === 'context' && islandOf(items, source) === islandOf(items, target)) return undefined
   return { source, target }
 }
 
@@ -175,7 +210,7 @@ function projectRelationships(
   const pairs = new Map<string, ProjectedMapRoute>()
   for (const route of model.sheet.routes) {
     const relationship = authored.get(route.id)
-    const ends = relationship === undefined ? undefined : routeEnds(route, level, items, visible, elements, boundary)
+    const ends = relationship === undefined ? undefined : routeEnds(route, level, visible, elements, boundary)
     if (relationship === undefined || ends === undefined) continue
     const pair = `${ends.source.key}\0${ends.target.key}`
     const existing = pairs.get(pair)
@@ -183,8 +218,11 @@ function projectRelationships(
       existing.ids.push(route.id)
       continue
     }
-    // The fitted layouts are the terminal's own, so a route is the shortest bend between the shapes it joins.
-    const worldRoute = routeBetween(ends.source.worldBounds, ends.target.worldBounds)
+    const worldRoute = attachRoute(
+      route.points.map(terminalPoint),
+      ends.source.worldBounds,
+      ends.target.worldBounds,
+    )
     if (worldRoute.length < 2) continue
     pairs.set(pair, {
       ids: [route.id],
@@ -199,12 +237,12 @@ function projectRelationships(
   return [...pairs.values()]
 }
 
-/** What a level shows: the root's islands and rows, or the container map around the selection. */
-function levelItems(model: TerminalViewModel, level: TerminalLevel, currentId: string | undefined, mapWidth: number): { items: WorldItem[]; focus: AnnotatedElement | undefined } {
+/** What a level shows: the root sheet or one container's stable part of that sheet. */
+function levelItems(model: TerminalViewModel, level: TerminalLevel, currentId: string | undefined): { items: WorldItem[]; focus: AnnotatedElement | undefined } {
   const focus = level === 'components' ? focusContainer(model, currentId) : undefined
   const items = level === 'context'
-    ? rootLayout(model, mapWidth)
-    : focus === undefined ? [] : containerLayout(model, focus, mapWidth)
+    ? rootLayout(model)
+    : focus === undefined ? [] : containerLayout(model, focus)
   return { items, focus }
 }
 
@@ -212,9 +250,8 @@ export function mapAnchors(
   model: TerminalViewModel,
   level: TerminalLevel,
   currentId: string | undefined,
-  mapWidth: number,
 ): Map<string, Bounds> {
-  const { items } = levelItems(model, level, currentId, mapWidth)
+  const { items } = levelItems(model, level, currentId)
   return new Map(items.flatMap(item => {
     return item.representationId === undefined
       || (level === 'components' && item.kind !== 'component')
@@ -228,7 +265,7 @@ export function projectWorld(
   options: TerminalProjectionOptions,
 ): TerminalProjection {
   const level = options.level ?? 'context'
-  const { items: worldItems, focus } = levelItems(model, level, options.currentId, options.viewport.width)
+  const { items: worldItems, focus } = levelItems(model, level, options.currentId)
   const worldBounds = unionBounds(worldItems)
   const visible = new Map(worldItems.flatMap(item => {
     return item.representationId === undefined ? [] : [[item.representationId, item] as const]
@@ -244,11 +281,12 @@ export function projectWorld(
     return item === undefined ? [] : [[item.key, item] as const]
   })).values()]
   const attentionBounds = attention.length === 0 ? undefined : unionBounds(attention, 0)
-  // The island or slab holding the selection is what the camera centres.
-  const holder = selected === undefined
-    ? undefined
-    : worldItems.find(item => (item.shape === 'island' || item.shape === 'slab') && encloses(item.worldBounds, selected.worldBounds))
-  const camera = fittedCamera(holder?.worldBounds ?? worldBounds, attentionBounds ?? selected?.worldBounds, worldBounds, options.viewport, options.camera)
+  const camera = fittedCamera(
+    attentionBounds ?? selectionReveal(model, selected, visible, options.viewport),
+    worldBounds,
+    options.viewport,
+    options.camera,
+  )
   const items = worldItems.map(item => ({
     ...item,
     cellBounds: projectBounds(item.worldBounds, camera, options.viewport),

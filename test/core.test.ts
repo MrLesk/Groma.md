@@ -3,7 +3,7 @@ import path from 'node:path'
 import test from 'node:test'
 import { fileURLToPath } from 'node:url'
 
-import { annotateArchitecture, loadArchitectureViewModel } from '../src/core.ts'
+import { annotateArchitecture, loadAnnotatedArchitecture } from '../src/core.ts'
 import { elementDocument } from './architecture-model-helpers.ts'
 
 const fixtureRoot = path.resolve(
@@ -13,7 +13,7 @@ const fixtureRoot = path.resolve(
 )
 
 test('reconstructs observed elements, ghosts, and drafts from the OKF profile', async () => {
-  const model = await loadArchitectureViewModel(fixtureRoot)
+  const model = await loadAnnotatedArchitecture(fixtureRoot)
 
   assert.deepEqual(model.drafts, ['next'])
   assert.deepEqual(model.elements.map(element => element.id), [
@@ -46,7 +46,6 @@ test('reconstructs observed elements, ghosts, and drafts from the OKF profile', 
     ['buyer', 'shop', 'observed'],
     ['shop', 'git', 'observed'],
   ])
-  assert.ok(model.world.bounds.width > 0)
   assert.doesNotThrow(() => JSON.stringify(model))
 })
 
