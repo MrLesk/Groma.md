@@ -7,7 +7,8 @@ import { Command } from 'commander'
 
 import { acceptGhost } from './core.ts'
 import { writes } from './authoring.ts'
-import type { RemoveInput } from './authoring.ts'
+import { isGroupAddress } from './naming.ts'
+import type { AddInput, RemoveInput } from './authoring.ts'
 import { agentInstructionGuide } from './agent-instructions.ts'
 import { ensureInitialized, runInitCommand } from './init-command.ts'
 import { humanInstructionGuide } from './instructions.ts'
@@ -281,34 +282,52 @@ program
     }
   })
 
-/** `<verb> relation <a> <b>` names the relationship from a to b; every other id stands alone. */
-function relationEnds(id: string, ids: string[]): RemoveInput {
-  if (id !== 'relation') {
-    if (ids.length > 0) throw new Error(`${id} takes no further id`)
-    return { id }
+/** `<verb> relation <a> <b>` names a relationship and `<verb> group <address> [ids...]` a group; every other id stands alone. Only remove reads the members. */
+function addressed(id: string, ids: string[]): RemoveInput {
+  if (id === 'relation') {
+    const [source, target] = ids
+    if (source === undefined || target === undefined || ids.length > 2) {
+      throw new Error('relation takes a source id and a target id')
+    }
+    return { id: source, relation: target }
   }
-  const [source, target] = ids
-  if (source === undefined || target === undefined || ids.length > 2) {
-    throw new Error('relation takes a source id and a target id')
+  if (id === 'group') {
+    const [address, ...members] = ids
+    if (address === undefined || !isGroupAddress(address)) {
+      throw new Error('group takes an address <container-id>/<group-kebab>')
+    }
+    return { id: address, members }
   }
-  return { id: source, relation: target }
+  if (ids.length > 0) throw new Error(`${id} takes no further id`)
+  return { id }
+}
+
+/** `add relation <a> <b>` and `add group <name> <ids...>` carry ids after the name; nothing else does. */
+function addedIds(thing: string, ids: string[]): Pick<AddInput, 'relation' | 'members'> {
+  if (thing === 'relation') {
+    if (ids.length !== 1) throw new Error('add relation takes a source id and a target id')
+    return { relation: ids[0] }
+  }
+  if (thing === 'group') return { members: ids }
+  if (ids.length > 0) throw new Error('add takes one name; quote a name with spaces')
+  return {}
 }
 
 program
   .command('add')
-  .description('Declare a person, an external system, a draft, or a relation')
-  .argument('<thing>', 'actor, external, draft, or relation')
+  .description('Declare a person, an external system, a draft, a relation, or a group')
+  .argument('<thing>', 'actor, external, draft, relation, or group')
   .argument('<name>', 'name, or the source id of a relation')
-  .argument('[target]', 'target id of a relation')
+  .argument('[ids...]', 'target id of a relation, or the member ids of a group')
   .option('--overview <markdown>', 'long overview, or the outcome of a draft')
   .option('--description <text>', 'concise OKF description, or how the source uses the target')
   .option('--technology <text>', 'technology of an external, or the interaction mechanism of a relation')
-  .action(async (thing: string, name: string, target: string | undefined, options) => {
+  .action(async (thing: string, name: string, ids: string[], options) => {
     try {
       const id = await writes.add(process.cwd(), {
         thing,
         name,
-        relation: target,
+        ...addedIds(thing, ids),
         overview: options.overview,
         description: options.description,
         technology: options.technology,
@@ -323,12 +342,12 @@ program
 
 program
   .command('remove')
-  .description('Remove a person, an external, a ghost, a draft nothing belongs to, or a relation')
-  .argument('<id>', 'element id, draft id, or relation')
-  .argument('[ids...]', 'with relation: the source id and the target id')
+  .description('Remove a person, an external, a ghost, a draft nothing belongs to, a relation, or a group')
+  .argument('<id>', 'element id, draft id, relation, or group')
+  .argument('[ids...]', 'with relation: the source id and the target id; with group: the address and the members leaving')
   .action(async (id: string, ids: string[]) => {
     try {
-      const removed = await writes.remove(process.cwd(), relationEnds(id, ids))
+      const removed = await writes.remove(process.cwd(), addressed(id, ids))
       console.log('ok')
       console.log(removed)
     } catch (error) {
@@ -340,9 +359,9 @@ program
 program
   .command('edit')
   .description('Update authored meaning')
-  .argument('<id>', 'element id, draft id, project, or relation')
-  .argument('[ids...]', 'with relation: the source id and the target id')
-  .option('--title <text>', 'new title; the id stays')
+  .argument('<id>', 'element id, draft id, project, relation, or group')
+  .argument('[ids...]', 'with relation: the source id and the target id; with group: the address')
+  .option('--title <text>', 'new title; the id stays, or the new name of a group')
   .option('--overview <markdown>', 'long overview, or the outcome of a draft')
   .option('--description <text>', 'concise OKF description (empty removes it), or how a relation works')
   .option('--technology <text>', 'technology of an element (empty removes it) or of a relation')
@@ -353,8 +372,10 @@ program
   .option('--combine <ids...>', 'combine empty scan elements into this element')
   .action(async (id: string, ids: string[], options) => {
     try {
+      const { id: target, relation } = addressed(id, ids)
       const edited = await writes.edit(process.cwd(), {
-        ...relationEnds(id, ids),
+        id: target,
+        relation,
         title: options.title,
         overview: options.overview,
         description: options.description,

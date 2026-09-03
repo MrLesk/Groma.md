@@ -99,6 +99,13 @@ repository without Groma.
    - Atomic scan evidence is curated with `groma edit`: combine empty scan
      records, move an empty scanned component, and group or ungroup sibling
      components. These operations validate the whole change before writing.
+   - A group is a name on each sibling component and is addressed as
+     `<container-id>/<group-kebab>`: `groma add group <name> <ids...>` names
+     it, `groma edit group <address> --title <text>` renames every member,
+     `groma remove group <address> [ids...]` takes members out or dissolves
+     it. In the web map a multi-selection of components offers Group as and
+     Combine into (the person picks the survivor), and a pressed zone opens
+     Rename and Dissolve.
    - A collaboration is authored with `groma add relation <source-id>
      <target-id> --description <prose> --technology <text>`, one per ordered
      pair on the source document; `groma edit relation <source-id> <target-id>`

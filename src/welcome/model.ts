@@ -67,9 +67,9 @@ export const advancedCommands = [
   },
   {
     command: 'groma add <thing> <name> …',
-    description: 'actor, external, draft, relation',
+    description: 'actor, external, draft, relation, group',
     content: [
-      'Declares a person, an external system, or a draft record with its overview, or a relation from one id to another.',
+      'Declares a person, an external system, or a draft record with its overview, a relation from one id to another, or a group of sibling components.',
       'The scanner never sees those; scanned software is drafted instead.',
     ].join('\n'),
   },
@@ -89,8 +89,8 @@ export const advancedCommands = [
   },
   {
     command: 'groma remove <id>',
-    description: 'person, external, ghost, draft, relation',
-    content: 'Removes a person, an external system, a ghost, a draft no ghost belongs to, or a relation. Scanned software stays.',
+    description: 'person, external, ghost, draft, relation, group',
+    content: 'Removes a person, an external system, a ghost, a draft no ghost belongs to, a relation, or a group. Scanned software stays.',
   },
   {
     command: 'groma accept <id>',

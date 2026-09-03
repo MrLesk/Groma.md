@@ -14,9 +14,11 @@ import { kindGlyph, kindLabel } from '../../atoms/kind.ts'
 import { flowRow, type FlowRowData } from '../flow/row.ts'
 import type { CodeFile } from '../source/structure.ts'
 import { paintElementWork } from '../work/component-tasks.ts'
-import type { EditArchitectureInput } from '../../../authoring.ts'
 import { codeList, fileList } from './code-lists.ts'
-import { message, paintEditable } from './editable.ts'
+import { heading, paragraph } from '../atoms/text.ts'
+import { paintEditable } from './editable.ts'
+import type { PaneWrites, RelationWrites } from './writes.ts'
+import { paintDraftSelect, paintMeaning, paintRelateControl, paintSelectionControls } from './writes.ts'
 import { paintRemoveControl } from './remove.ts'
 import {
   parentOfElements,
@@ -55,29 +57,6 @@ export interface Inspected {
   removable: boolean
   /** The draft record this element belongs to or that touches it. */
   draft?: string
-}
-
-/** What the edit verb changes from the pane; the id is the selected element's. */
-export type MeaningEdit = Pick<EditArchitectureInput, 'title' | 'description' | 'overview' | 'technology' | 'draft'>
-
-export interface RelateControl {
-  /** True while the map waits for the target of a relation from the selected element. */
-  armed: boolean
-  toggle: () => void
-}
-
-/** The write hooks an element pane gets on the current revision of a live map. */
-export interface PaneWrites {
-  onRemove?: () => Promise<void>
-  onEdit?: (input: MeaningEdit) => Promise<void>
-  drafts?: readonly string[]
-  relate?: RelateControl
-}
-
-/** The write hooks a relationship pane gets on the current revision of a live map. */
-export interface RelationWrites {
-  onEdit?: (input: { description?: string; technology?: string }) => Promise<void>
-  onRemove?: () => Promise<void>
 }
 
 export type DetailsTab = 'what' | 'how' | 'tasks'
@@ -188,80 +167,6 @@ export function inspectDetails(
   }
 }
 
-function heading(label: string): HTMLElement {
-  const row = document.createElement('h2')
-  row.className = 'section'
-  row.textContent = label
-  return row
-}
-
-function paragraph(className: string, text: string): HTMLElement {
-  const row = document.createElement('p')
-  row.className = className
-  row.textContent = text
-  return row
-}
-
-/** Description and overview: read-only prose, or fields that save in place. */
-function paintMeaning(body: Element, inspected: Inspected, onEdit: DetailsOptions['onEdit']): void {
-  if (onEdit === undefined) {
-    if (inspected.description !== '') body.append(paragraph('description', inspected.description))
-    if (inspected.overview !== '') body.append(paragraph('overview', inspected.overview))
-    return
-  }
-  paintEditable(body, {
-    className: 'description', label: 'Description', value: inspected.description,
-    save: description => onEdit({ description }),
-  })
-  paintEditable(body, {
-    className: 'overview', label: 'Overview', value: inspected.overview, multiline: true,
-    save: overview => onEdit({ overview }),
-  })
-  // Technology is edited here because the How tab, where its chips are read, exists only once an element has technology or files.
-  body.append(heading('Technology'))
-  paintEditable(body, {
-    className: 'technology', label: 'Technology', value: inspected.technology.join(', '),
-    save: technology => onEdit({ technology }),
-  })
-}
-
-/** The draft records to tag the element with; a tag never comes off from here, as the CLI has no flag for it. */
-function paintDraftSelect(body: Element, inspected: Inspected, drafts: readonly string[], onEdit: (input: MeaningEdit) => Promise<void>): void {
-  if (drafts.length === 0) return
-  body.append(heading('Draft'))
-  const select = document.createElement('select')
-  select.className = 'draft'
-  select.setAttribute('aria-label', 'Draft')
-  const none = document.createElement('option')
-  none.value = ''
-  none.textContent = 'None'
-  none.disabled = inspected.draft !== undefined
-  select.append(none)
-  for (const draft of drafts) {
-    const option = document.createElement('option')
-    option.value = draft
-    option.textContent = draft
-    select.append(option)
-  }
-  select.value = inspected.draft ?? ''
-  const error = paragraph('error', '')
-  error.setAttribute('role', 'status')
-  select.addEventListener('change', async () => {
-    error.textContent = ''
-    select.disabled = true
-    try {
-      await onEdit({ draft: select.value })
-    } catch (cause) {
-      error.textContent = message(cause)
-      select.disabled = false
-    }
-  })
-  const box = document.createElement('div')
-  box.className = 'editable draft'
-  box.append(select, error)
-  body.append(box)
-}
-
 function marked(
   kind: C4Kind | null,
   external: boolean,
@@ -279,7 +184,7 @@ function marked(
   return row
 }
 
-interface DetailsOptions extends PaneWrites {
+export interface DetailsOptions extends PaneWrites {
   onSelect: (id: string, additive: boolean) => void,
   onToggleFlow: (flow: FlowRef) => void,
   activeFlows: readonly FlowRef[]
@@ -292,19 +197,7 @@ interface DetailsOptions extends PaneWrites {
   onTask: (id: string) => void
 }
 
-export function paintDetails(host: HTMLElement, inspected: Inspected, options: DetailsOptions): void {
-  const { onSelect, onToggleFlow, activeFlows, actorTitle, tab, onTab, code, onSource, workGroups, onTask, onRemove, drafts, onEdit, relate } = options
-  const title = host.querySelector('h1')!
-  const meta = host.querySelector('.meta')!
-  const tabsHost = host.querySelector<HTMLElement>('.tabs')!
-  const body = host.querySelector('.body')!
-  title.replaceChildren()
-  if (onEdit === undefined) title.textContent = inspected.title
-  else paintEditable(title, { className: 'title', label: 'Title', value: inspected.title, save: value => onEdit({ title: value }) })
-  meta.textContent = `${inspected.kindLabel} · ${inspected.origin}`
-
-  const availableTabs = detailsTabs(inspected, workGroups)
-  const shownTab = availableTabs.includes(tab) ? tab : 'what'
+function paintTabs(tabsHost: HTMLElement, availableTabs: DetailsTab[], shownTab: DetailsTab, onTab: (tab: DetailsTab) => void): void {
   tabsHost.replaceChildren()
   tabsHost.hidden = availableTabs.length === 1
   tabsHost.setAttribute('aria-label', 'Details view')
@@ -319,6 +212,22 @@ export function paintDetails(host: HTMLElement, inspected: Inspected, options: D
     button.addEventListener('click', () => onTab(key))
     tabsHost.append(button)
   }
+}
+
+export function paintDetails(host: HTMLElement, inspected: Inspected, options: DetailsOptions): void {
+  const { onSelect, onToggleFlow, activeFlows, actorTitle, tab, onTab, code, onSource, workGroups, onTask, onRemove, drafts, onEdit, relate, selection } = options
+  const title = host.querySelector('h1')!
+  const meta = host.querySelector('.meta')!
+  const tabsHost = host.querySelector<HTMLElement>('.tabs')!
+  const body = host.querySelector('.body')!
+  title.replaceChildren()
+  if (onEdit === undefined) title.textContent = inspected.title
+  else paintEditable(title, { className: 'title', label: 'Title', value: inspected.title, save: value => onEdit({ title: value }) })
+  meta.textContent = `${inspected.kindLabel} · ${inspected.origin}`
+
+  const availableTabs = detailsTabs(inspected, workGroups)
+  const shownTab = availableTabs.includes(tab) ? tab : 'what'
+  paintTabs(tabsHost, availableTabs, shownTab, onTab)
 
   body.replaceChildren()
   const sections: Record<Section, () => void> = {
@@ -430,6 +339,7 @@ export function paintDetails(host: HTMLElement, inspected: Inspected, options: D
     },
 
   }
+  if (shownTab === 'what' && selection !== undefined) paintSelectionControls(body, selection)
   if (shownTab === 'tasks') paintElementWork(body, workGroups, onTask)
   else for (const key of tabSections(shownTab)) sections[key]()
   if (shownTab === 'what' && relate !== undefined) paintRelateControl(body, relate)
@@ -438,16 +348,6 @@ export function paintDetails(host: HTMLElement, inspected: Inspected, options: D
   }
 }
 
-/** Relate to arms the map; while armed the button says what the next click does and a second click cancels. */
-function paintRelateControl(body: Element, relate: RelateControl): void {
-  const button = document.createElement('button')
-  button.type = 'button'
-  button.className = 'relate'
-  button.textContent = relate.armed ? 'Click the target' : 'Relate to'
-  button.setAttribute('aria-pressed', String(relate.armed))
-  button.addEventListener('click', relate.toggle)
-  body.append(button)
-}
 
 /** The pane for a selected relationship: its description as the title, its technology, then both ends as links; editable and removable on a live map. */
 export function paintRelationship(

@@ -233,7 +233,7 @@ function paintViewState(commitUrl = true): void {
       onSource: source.open,
       workGroups: selected.kind === 'component' ? elementWorkGroups(work, selected.representationId, world) : [],
       onTask: toggleTask,
-      ...authoring.paneWrites(selected.id),
+      ...authoring.paneWrites(selected.id, selectedArchitecture(selection)),
     })
   }
 }
@@ -347,6 +347,7 @@ bindMapPointer(map, {
   editProject() {
     if (revisionControl.selected === undefined && project !== undefined) projectEditor?.open(project)
   },
+  editGroup: authoring.editGroup,
 })
 map.svg.addEventListener('keydown', event => {
   if (!map.isProjectEdit(event.target) || (event.key !== 'Enter' && event.key !== ' ')) return

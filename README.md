@@ -101,7 +101,7 @@ The first scan produces file-shaped components. That is deliberate. You then fol
 
 ```sh
 groma edit ordering --combine order-repository order-events   # one responsibility, several files
-groma edit ordering --group "Checkout"                        # a named domain on the map
+groma add group "Checkout" ordering payments                  # a named domain on the map
 groma add relation ordering payments --description "Requests payment authorization" --technology "Internal API"
 groma edit ordering --overview "Owns the lifecycle of an order from placement through completion."
 ```
@@ -157,10 +157,10 @@ writes the browser map as a static site with the architecture, flows, source ins
 | `groma web` | Scan, then open the browser map |
 | `groma view [id]` | Scan, then open the terminal map, or print one record as text |
 | `groma scan [--watch]` | Scan and fold findings into Markdown |
-| `groma add <thing> <name>` | Declare a person, an external system, a draft, or a relation between two ids |
+| `groma add <thing> <name>` | Declare a person, an external system, a draft, a relation between two ids, or a group of sibling components |
 | `groma draft <kind> <name>` | Draft a system, container, or component as a ghost |
 | `groma edit <id>` | Rename, describe, set technology, combine, move, group, or tag with a draft; `edit project` for the project record |
-| `groma remove <id>` | Remove a person, an external, a ghost, an empty draft, or a relation |
+| `groma remove <id>` | Remove a person, an external, a ghost, an empty draft, a relation, or a group |
 | `groma accept <id>` | Accept a ghost once a scan has matched it |
 | `groma export <dir>` | Write a read-only static site |
 | `groma scanner …` | Add, list, install, or remove scanner plugins |
@@ -173,7 +173,7 @@ Every command documents its required and optional parameters under `--help`.
 Groma is early. What is true today:
 
 - Scanners exist for TypeScript (built in) and C# (a module you enable). Other languages need a [plugin](docs/scanners/creating-a-plugin.md).
-- The browser adds, removes, renames, describes and relates through the same verbs as the CLI. Groups still go through the CLI.
+- The browser adds, removes, renames, describes, relates, groups and combines through the same verbs as the CLI.
 - The terminal map runs on macOS, Linux, and Windows terminals.
 - The Markdown contract is strict on Groma's own fields and preserves anything else you put in a file.
 

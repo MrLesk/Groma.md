@@ -1,6 +1,8 @@
+import { createGroupDialog } from './chrome/group.ts'
 import { createRelateDialog } from './chrome/relate.ts'
 import type { WebDataSource } from './data.ts'
-import type { MeaningEdit, PaneWrites, RelationWrites } from './organisms/details.ts'
+import type { ZoneAddress } from './iso/map.ts'
+import type { MeaningEdit, PaneWrites, RelationWrites, SelectionWrites } from './organisms/writes.ts'
 
 export interface AuthoringDependencies {
   /** True on the current revision of a live map, the only place writes are offered. */
@@ -14,6 +16,7 @@ export interface AuthoringDependencies {
 export function createAuthoring(data: WebDataSource, deps: AuthoringDependencies) {
   const { add, edit, remove } = data
   const dialog = add === undefined ? undefined : createRelateDialog(add)
+  const groupDialog = edit === undefined || remove === undefined ? undefined : createGroupDialog(edit, remove)
   let armed: string | undefined
 
   function disarm(): void {
@@ -21,10 +24,22 @@ export function createAuthoring(data: WebDataSource, deps: AuthoringDependencies
     document.body.classList.remove('relating')
   }
 
-  function paneWrites(selectedId: string): PaneWrites {
+  /** Group as and Combine into, while several components are selected. */
+  function selectionWrites(ids: readonly string[]): SelectionWrites | undefined {
+    if (ids.length < 2 || add === undefined || edit === undefined) return undefined
+    return {
+      members: ids.map(id => ({ id, title: deps.titleOf(id) })),
+      onGroup: name => add({ thing: 'group', name, members: [...ids] }),
+      onCombine: survivor => edit({ id: survivor, combine: ids.filter(id => id !== survivor) }),
+    }
+  }
+
+  function paneWrites(selectedId: string, selectedIds: readonly string[]): PaneWrites {
     if (armed !== undefined && armed !== selectedId) disarm()
     if (!deps.live()) return {}
+    const selection = selectionWrites(selectedIds)
     return {
+      ...(selection === undefined ? {} : { selection }),
       ...(remove === undefined ? {} : { onRemove: () => remove({ id: selectedId }) }),
       ...(edit === undefined ? {} : { onEdit: (input: MeaningEdit) => edit({ id: selectedId, ...input }), drafts: deps.drafts() }),
       ...(dialog === undefined ? {} : {
@@ -63,5 +78,12 @@ export function createAuthoring(data: WebDataSource, deps: AuthoringDependencies
     return true
   }
 
-  return { paneWrites, relationWrites, takeTarget, disarm }
+  /** A pressed zone opens the group dialog on the current revision of a live map; elsewhere the press selects as before. */
+  function editGroup(group: ZoneAddress): boolean {
+    if (!deps.live() || groupDialog === undefined) return false
+    groupDialog.open(group)
+    return true
+  }
+
+  return { paneWrites, relationWrites, takeTarget, disarm, editGroup }
 }

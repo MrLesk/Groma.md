@@ -228,6 +228,13 @@ const style = `
   #details .meta { margin: 0 0 6px; }
   #details h1 { font-size: 21px; font-weight: 600; line-height: 1.3; margin: 0 0 16px; overflow-wrap: anywhere; }
   #details .description { margin: 0 0 10px; color: var(--muted); }
+  #details .selection-writes { display: grid; gap: 8px; margin: 0 0 16px; }
+  #details .selection-writes form { display: flex; gap: 8px; }
+  #details .selection-writes input, #details .selection-writes select { flex: 1; min-width: 0; border: 1px solid var(--hairline); border-radius: 4px; padding: 4px 6px; color: var(--ink); background: color-mix(in srgb, var(--paper) 72%, transparent); font: inherit; }
+  #details .selection-writes button { border: 1px solid var(--hairline); border-radius: 6px; padding: 4px 10px; background: transparent; color: var(--muted); white-space: nowrap; }
+  #details .selection-writes button:hover { color: var(--ink); background: var(--hover); }
+  #details .selection-writes .error { margin: 0; color: var(--highlight-text); font-size: 11px; }
+  #details .selection-writes .error:empty { display: none; }
   #details .overview { margin: 0 0 10px; line-height: 1.65; }
   #details .section {
     margin: 26px 0 10px;

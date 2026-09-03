@@ -14,8 +14,9 @@ import {
   withTitle,
   writeDocument,
 } from './markdown-emitter.ts'
-import { requireText } from './naming.ts'
+import { isGroupAddress, requireText } from './naming.ts'
 import { loadProjectProfile, saveProjectProfile } from './project-profile.ts'
+import { editGroup } from './group.ts'
 import { editRelation } from './relation.ts'
 import type { ArchitectureElement, ArchitectureRecords } from './types.ts'
 
@@ -105,10 +106,15 @@ async function editElementMeaning(
   return element.id
 }
 
-export async function editArchitecture(
-  repositoryRoot: string,
-  input: EditArchitectureInput,
-): Promise<string> {
+/** A group address or a relation target names something other than an element; the flags of elements are refused there. */
+function editAddressed(repositoryRoot: string, input: EditArchitectureInput): Promise<string> | undefined {
+  if (isGroupAddress(input.id)) {
+    if (input.relation !== undefined || input.overview !== undefined || input.description !== undefined
+      || input.technology !== undefined || input.draft !== undefined || isStructural(input)) {
+      throw new Error('only --title is valid on a group')
+    }
+    return editGroup(repositoryRoot, { address: input.id, title: input.title })
+  }
   if (input.relation !== undefined) {
     if (input.title !== undefined || input.overview !== undefined || input.draft !== undefined || isStructural(input)) {
       throw new Error('only --description and --technology are valid on a relation')
@@ -117,6 +123,15 @@ export async function editArchitecture(
       source: input.id, target: input.relation, description: input.description, technology: input.technology,
     })
   }
+  return undefined
+}
+
+export async function editArchitecture(
+  repositoryRoot: string,
+  input: EditArchitectureInput,
+): Promise<string> {
+  const addressed = editAddressed(repositoryRoot, input)
+  if (addressed !== undefined) return addressed
   if (input.id === 'project') return editProject(repositoryRoot, input)
   const records = await loadArchitecture(repositoryRoot)
   const model = buildArchitectureModel(records.documents)

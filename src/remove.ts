@@ -7,6 +7,8 @@ import {
   withGromaField,
   writeDocument,
 } from './markdown-emitter.ts'
+import { removeGroup } from './group.ts'
+import { isGroupAddress } from './naming.ts'
 import { removeRelation } from './relation.ts'
 import { draftRemovalBlocker, removalBlocker } from './removable.ts'
 
@@ -14,10 +16,13 @@ export interface RemoveInput {
   id: string
   /** The target id of the relationship from id to remove instead of the element itself. */
   relation?: string
+  /** With a group address: the members leaving; none dissolves the group. */
+  members?: string[]
 }
 
 /** Removes a person, an external, a ghost, or a draft record nothing still belongs to; the scanner keeps what it found. */
-export async function removeThing(repositoryRoot: string, { id, relation }: RemoveInput): Promise<string> {
+export async function removeThing(repositoryRoot: string, { id, relation, members }: RemoveInput): Promise<string> {
+  if (isGroupAddress(id)) return removeGroup(repositoryRoot, { address: id, members })
   if (relation !== undefined) return removeRelation(repositoryRoot, { source: id, target: relation })
   const records = await loadArchitecture(repositoryRoot)
   const graph = annotateArchitecture(records)

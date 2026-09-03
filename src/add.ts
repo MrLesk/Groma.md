@@ -7,6 +7,7 @@ import {
   renderDraftDocument,
   writeDocument,
 } from './markdown-emitter.ts'
+import { addGroup } from './group.ts'
 import { requireText } from './naming.ts'
 import { addRelation } from './relation.ts'
 
@@ -16,6 +17,8 @@ export interface AddInput {
   name: string
   /** With thing relation: the target id. */
   relation?: string
+  /** With thing group: the member ids. */
+  members?: string[]
   overview?: string
   description?: string
   technology?: string
@@ -64,7 +67,7 @@ export async function addThing(repositoryRoot: string, input: AddInput): Promise
       technology: input.technology,
     })
   }
-  if (input.relation !== undefined) throw new Error('only a relation takes a second id')
+  if (input.thing === 'group') return addGroup(repositoryRoot, { name: input.name, members: input.members ?? [] })
   const name = requireText(input.name, 'name')
   const thing = requireThing(input.thing, name)
   const overview = requireText(input.overview, '--overview')

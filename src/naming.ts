@@ -18,3 +18,13 @@ export function requireText(value: string | undefined, flag: string): string {
   if (value === undefined || value.trim().length === 0) throw new Error(`${flag} is required`)
   return value
 }
+
+/** A group has no id of its own: it is addressed as <container-id>/<group-kebab>. */
+export function groupAddress(container: string, name: string): string {
+  return `${container}/${kebabCase(name)}`
+}
+
+/** The slash of a group address tells it apart from an element id. */
+export function isGroupAddress(id: string): boolean {
+  return id.includes('/')
+}
