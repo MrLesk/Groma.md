@@ -10,7 +10,7 @@ import {
 import { draftRemovalBlocker, removalBlocker } from './removable.ts'
 
 /** Removes a person, an external, a ghost, or a draft record nothing still belongs to; the scanner keeps what it found. */
-export async function removeThing(repositoryRoot: string, id: string): Promise<string> {
+export async function removeThing(repositoryRoot: string, { id }: { id: string }): Promise<string> {
   const records = await loadArchitecture(repositoryRoot)
   const graph = annotateArchitecture(records)
   const model = buildArchitectureModel(records.documents)

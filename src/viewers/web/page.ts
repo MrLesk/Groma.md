@@ -13,6 +13,7 @@ import { mapDebugCss } from './chrome/map-debug.ts'
 import { motionCss } from './chrome/motion.ts'
 import { flowRowCss } from './flow/row.ts'
 import { mapCss } from './iso/style.ts'
+import { editableCss } from './organisms/editable.ts'
 import { removeCss } from './organisms/remove.ts'
 import { tipCss } from './organisms/tip.ts'
 import type { WebBootPayload } from './payload.ts'
@@ -225,6 +226,7 @@ const style = `
   #details-close:hover { background: var(--hover); }
   #details .meta { margin: 0 0 6px; }
   #details h1 { font-size: 21px; font-weight: 600; line-height: 1.3; margin: 0 0 16px; overflow-wrap: anywhere; }
+  #details .description { margin: 0 0 10px; color: var(--muted); }
   #details .overview { margin: 0 0 10px; line-height: 1.65; }
   #details .section {
     margin: 26px 0 10px;
@@ -322,7 +324,7 @@ const style = `
 ${chromeCss}${anchoredPopoverCss}${motionCss}${revisionCss}${searchCss}${highlightCss}${sourceCss}${taskDiffCss}${backlogMarkCss}${workBadgeCss}${workDetailsCss}${flowRowCss}${mapCss}${pinsCss}${workCss}${tipCss}${projectEditorCss}
 ${emptyStateCss}
 ${addDialogCss}
-${removeCss}${mapDebugCss}`
+${removeCss}${editableCss}${mapDebugCss}`
 
 function legend(): string {
   return legendKinds.map(line => {

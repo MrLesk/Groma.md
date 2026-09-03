@@ -30,6 +30,7 @@ export async function loadMapRoot(
   const world = {
     elements: architecture.world.elements,
     relationships: architecture.world.relationships,
+    drafts: architecture.world.drafts,
   }
   const sheet = measuredSheetScene(world)
   return {

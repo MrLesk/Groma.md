@@ -48,13 +48,18 @@ export function withGromaCode(source: string, code: CodeReference[]): string {
 
 export function withGromaField(
   source: string,
-  field: 'group' | 'parent' | 'draft',
+  field: 'group' | 'parent' | 'draft' | 'technology',
   value: string | undefined,
 ): string {
   return withGromaChange(source, groma => {
     if (value === undefined) delete groma[field]
     else groma[field] = value
   })
+}
+
+export function withTitle(source: string, title: string): string {
+  const { content, data } = documentParts(source)
+  return sourceWithFrontmatter({ ...data, title }, content)
 }
 
 export function withStatus(source: string, status: ElementStatus): string {

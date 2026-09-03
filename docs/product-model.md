@@ -91,7 +91,11 @@ repository without Groma.
      changing it) stays on its document. `groma edit <element-id> --overview
      <markdown>` updates that leading body prose. `groma edit <draft-id>
      --overview <markdown>` sets the draft outcome. The optional concise OKF
-     field is changed separately with `--description`.
+     field is changed separately with `--description`. `--title` renames a
+     part or a draft record while its id and file stay; `--technology` sets or
+     clears an element's technology. In the web map the details pane edits
+     title, description, overview and technology in place and tags the element
+     with a draft; every field posts the input `groma edit` takes.
    - Atomic scan evidence is curated with `groma edit`: combine empty scan
      records, move an empty scanned component, and group or ungroup sibling
      components. These operations validate the whole change before writing.
@@ -109,9 +113,10 @@ repository without Groma.
      ghost still contains parts, or while ghosts still carry the draft's tag.
      Stable software is the scanner's: remove its code or combine it instead.
      Removing a draft record clears its tag from the stable parts it touched.
-   - The web map's project pencil edits only the project title, concise
-     description, and body overview in `groma/project.md`; it does not edit C4
-     concepts.
+   - The project record is the reserved id `project`: `groma edit project
+     --title <text> --description <text> --overview <markdown>` merges the
+     given fields into `groma/project.md`. The web map's project pencil posts
+     the same input.
 5. `groma accept <id>`: accept that ghost, only if a scan has matched it.
    Groma may scan first if needed. No match: the command fails and the
    ghost stays a draft. A scan never accepts a ghost on its own. The file

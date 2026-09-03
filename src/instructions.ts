@@ -22,7 +22,7 @@ source code ──scan──▶ groma|.groma/*.md ──view──▶ maps
 4. Change the architecture through Groma, not by editing its files.
    - groma add — declare a person, an external system, or a draft; the scanner never sees those.
    - groma draft — a new system, container or component becomes a ghost at the path it will keep.
-   - groma edit — update meaning, tag a part with a draft, group scan evidence, move an empty scanned component, or combine empty scan records.
+   - groma edit — rename, update meaning or technology, tag a part with a draft, group scan evidence, move an empty scanned component, combine empty scan records, or change the project record.
    - groma relate — author one collaboration between existing parts.
    - groma remove — take away a person, an external, a ghost, or a draft nothing belongs to.
 5. groma accept <id> — accept a ghost only if a scan has matched it. The file stays where it is; only its status changes.
@@ -46,6 +46,8 @@ Say what must be true, not how to build it. Do not specify frameworks, file layo
   Kinds are system, container, and component. The id is the kebab-case of the name and stays that id when accepted. --draft names the draft record the ghost belongs to.
 - Part an existing draft touches: groma edit <id> --draft <draft-id>
   Same box, still solid; the tag says the draft changes it.
+- Rename a part or a draft record, id unchanged: groma edit <id> --title <text>
+- Technology of an element: groma edit <id> --technology <text>. Pass an empty value to remove it.
 - Current long overview: groma edit <id> --overview <markdown>
 - Optional concise description: groma edit <id> --description <text>. Pass an empty value to remove it.
 - Group or ungroup a component: groma edit <id> --group <name> or groma edit <id> --ungroup
@@ -54,6 +56,7 @@ Say what must be true, not how to build it. Do not specify frameworks, file layo
 - Collaboration: groma relate <source-id> <target-id> --description <prose> --technology <text>
 - Remove the only collaboration between two parts: groma relate <source-id> <target-id> --remove
 - Draft outcome prose: groma edit <draft-id> --overview <markdown>
+- Project record: groma edit project [--title <text>] [--description <text>] [--overview <markdown>]
 - Remove a person, an external, a ghost, or a draft no ghost belongs to: groma remove <id>. It refuses while other parts relate to it, while a ghost still contains parts, or while ghosts carry the draft's tag, and it never removes scanned software.
 
 Containers need a system parent. Components need a container parent. An external system has no containers. Structural edits refuse to remove authored prose or relationships.

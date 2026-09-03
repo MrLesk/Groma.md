@@ -92,3 +92,22 @@ test.concurrent('a refused write answers with the CLI sentence and changes nothi
     await rm(root, { recursive: true, force: true })
   }
 })
+
+test.concurrent('the web edits meaning through the edit verb', async () => {
+  const root = await createRepo()
+  const server = await startWebViewer(root, { port: 0 })
+  try {
+    const renamed = await post(server.url, 'edit', { id: 'orders', title: 'Order intake', technology: 'Bun' })
+    assert.equal(renamed.status, 200)
+    assert.deepEqual(await renamed.json(), { id: 'orders' })
+    const payload = await (await fetch(`${server.url}/world.json`)).json() as {
+      world: { elements: { id: string; title: string; technology?: string }[] }
+    }
+    const orders = payload.world.elements.find(element => element.id === 'orders')
+    assert.equal(orders?.title, 'Order intake')
+    assert.equal(orders?.technology, 'Bun')
+  } finally {
+    await server.close()
+    await rm(root, { recursive: true, force: true })
+  }
+})

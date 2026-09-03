@@ -6,10 +6,7 @@ import { fileURLToPath } from 'node:url'
 import { Command } from 'commander'
 
 import { acceptGhost } from './core.ts'
-import { addThing } from './add.ts'
-import { draftElement } from './draft.ts'
-import { removeThing } from './remove.ts'
-import { editArchitecture } from './edit.ts'
+import { writes } from './authoring.ts'
 import { agentInstructionGuide } from './agent-instructions.ts'
 import { ensureInitialized, runInitCommand } from './init-command.ts'
 import { humanInstructionGuide } from './instructions.ts'
@@ -267,7 +264,7 @@ program
   .option('--draft <draft-id>', 'the draft record this ghost belongs to')
   .action(async (kind: string, name: string, options) => {
     try {
-      const id = await draftElement(process.cwd(), {
+      const id = await writes.draft(process.cwd(), {
         kind,
         name,
         overview: options.overview,
@@ -294,7 +291,7 @@ program
   .option('--technology <text>', 'implementation technology of an external')
   .action(async (thing: string, name: string, options) => {
     try {
-      const id = await addThing(process.cwd(), {
+      const id = await writes.add(process.cwd(), {
         thing,
         name,
         overview: options.overview,
@@ -315,7 +312,7 @@ program
   .argument('<id>', 'element id or draft id')
   .action(async (id: string) => {
     try {
-      const removed = await removeThing(process.cwd(), id)
+      const removed = await writes.remove(process.cwd(), { id })
       console.log('ok')
       console.log(removed)
     } catch (error) {
@@ -327,9 +324,11 @@ program
 program
   .command('edit')
   .description('Update authored meaning')
-  .argument('<id>', 'element id or draft id')
+  .argument('<id>', 'element id, draft id, or project')
+  .option('--title <text>', 'new title; the id stays')
   .option('--overview <markdown>', 'long overview, or the outcome of a draft')
   .option('--description <text>', 'concise OKF description; empty removes it')
+  .option('--technology <text>', 'technology of an element; empty removes it')
   .option('--draft <draft-id>', 'tag this element with the draft that touches it')
   .option('--group <name>', 'assign this component to a sibling group')
   .option('--ungroup', 'remove this component from its group')
@@ -337,10 +336,12 @@ program
   .option('--combine <ids...>', 'combine empty scan elements into this element')
   .action(async (id: string, options) => {
     try {
-      const edited = await editArchitecture(process.cwd(), {
+      const edited = await writes.edit(process.cwd(), {
         id,
+        title: options.title,
         overview: options.overview,
         description: options.description,
+        technology: options.technology,
         draft: options.draft,
         group: options.group,
         ungroup: options.ungroup,

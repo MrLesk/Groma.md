@@ -1,4 +1,4 @@
-import type { AddInput } from '../../../add.ts'
+import type { AddInput } from '../../../authoring.ts'
 
 export const addDialogCss = `
   #add {

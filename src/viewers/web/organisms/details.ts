@@ -8,13 +8,15 @@ import type {
 } from '../../../types.ts'
 import type { ElementWorkGroup } from '../../../work/pins.ts'
 import { removalBlocker } from '../../../removable.ts'
-import { fileTypeOf } from '../../../sheet/measure.ts'
 import { pickableActions, travelledBy } from '../../action-path.ts'
 import type { FlowRef } from '../../action-path.ts'
 import { kindGlyph, kindLabel } from '../../atoms/kind.ts'
 import { flowRow, type FlowRowData } from '../flow/row.ts'
-import type { CodeDeclaration, CodeFile } from '../source/structure.ts'
+import type { CodeFile } from '../source/structure.ts'
 import { paintElementWork } from '../work/component-tasks.ts'
+import type { EditArchitectureInput } from '../../../authoring.ts'
+import { codeList, fileList } from './code-lists.ts'
+import { message, paintEditable } from './editable.ts'
 import { paintRemoveControl } from './remove.ts'
 import {
   parentOfElements,
@@ -39,6 +41,7 @@ export interface InspectedChild {
 
 export interface Inspected {
   title: string
+  description: string
   kindLabel: string
   origin: Origin
   overview: string
@@ -50,7 +53,12 @@ export interface Inspected {
   files: CodeReference[]
   /** True when groma remove would succeed on it right now. */
   removable: boolean
+  /** The draft record this element belongs to or that touches it. */
+  draft?: string
 }
+
+/** What the edit verb changes from the pane; the id is the selected element's. */
+export type MeaningEdit = Pick<EditArchitectureInput, 'title' | 'description' | 'overview' | 'technology' | 'draft'>
 
 export type DetailsTab = 'what' | 'how' | 'tasks'
 
@@ -134,6 +142,7 @@ export function inspectDetails(
   }
   return {
     title: element.title,
+    description: element.description ?? '',
     kindLabel: kindLabel(element.kind, element.external),
     origin: element.origin,
     overview: element.overview,
@@ -155,6 +164,7 @@ export function inspectDetails(
       .filter(part => part.length > 0),
     files: element.code,
     removable: removalBlocker(world, element.id) === undefined,
+    ...(element.draft === undefined ? {} : { draft: element.draft }),
   }
 }
 
@@ -165,119 +175,71 @@ function heading(label: string): HTMLElement {
   return row
 }
 
-function countFact(count: number, singular: string, plural: string): string {
-  return `${count} ${count === 1 ? singular : plural}`
-}
-
-function fileFacts(reference: CodeReference): string {
-  const facts = [fileTypeOf(reference.file)]
-  if (reference.lines !== undefined) facts.push(`${reference.lines} lines`)
-  if (reference.dependencies !== undefined) facts.push(countFact(reference.dependencies, 'dependency', 'dependencies'))
-  if (reference.dependents !== undefined) facts.push(countFact(reference.dependents, 'dependent', 'dependents'))
-  if (reference.symbol !== undefined) facts.push(reference.symbol)
-  facts.push(reference.scanner)
-  return facts.join(' · ')
-}
-
-function fileList(references: CodeReference[], onSource: (file: string) => void): HTMLElement {
-  const list = document.createElement('ul')
-  list.className = 'file-groups'
-  for (const reference of references) {
-    const item = document.createElement('li')
-    const file = document.createElement('button')
-    file.type = 'button'
-    file.className = 'link source-file'
-    file.textContent = reference.file
-    file.setAttribute('aria-label', `Open source ${reference.file}`)
-    file.addEventListener('click', () => onSource(reference.file))
-    const extra = document.createElement('span')
-    extra.className = 'ghost'
-    extra.textContent = fileFacts(reference)
-    item.append(file, extra)
-    list.append(item)
-  }
-  return list
-}
-
-function codeFacts(entry: boolean, scope: string, line: number, kind?: string): string {
-  return [entry ? 'entry' : undefined, scope, kind, `line ${line}`]
-    .filter(fact => fact !== undefined)
-    .join(' · ')
-}
-
-function codeEntry(
-  file: string,
-  name: string,
-  line: number,
-  facts: string,
-  callable: boolean,
-  onSource: (file: string, line?: number) => void,
-): HTMLElement {
-  const row = document.createElement('div')
-  row.className = 'code-entry'
-  const link = document.createElement('button')
-  link.type = 'button'
-  link.className = 'link code-declaration'
-  link.textContent = callable ? `${name}()` : name
-  link.setAttribute('aria-label', `Open ${name} in ${file} at line ${line}`)
-  link.addEventListener('click', () => onSource(file, line))
-  const meta = document.createElement('span')
-  meta.className = 'ghost'
-  meta.textContent = facts
-  row.append(link, meta)
+function paragraph(className: string, text: string): HTMLElement {
+  const row = document.createElement('p')
+  row.className = className
+  row.textContent = text
   return row
 }
 
-function declarationItem(
-  file: string,
-  declaration: CodeDeclaration,
-  onSource: (file: string, line?: number) => void,
-): HTMLElement {
-  const item = document.createElement('li')
-  item.append(codeEntry(
-    file,
-    declaration.name,
-    declaration.line,
-    codeFacts(declaration.entry, declaration.scope, declaration.line, declaration.kind === 'class' ? 'class' : undefined),
-    declaration.kind === 'function',
-    onSource,
-  ))
-  if (declaration.kind === 'class' && declaration.members.length > 0) {
-    const members = document.createElement('ul')
-    members.className = 'code-members'
-    for (const member of declaration.members) {
-      const child = document.createElement('li')
-      child.append(codeEntry(
-        file,
-        member.name,
-        member.line,
-        codeFacts(member.entry, member.scope, member.line),
-        true,
-        onSource,
-      ))
-      members.append(child)
-    }
-    item.append(members)
+/** Description and overview: read-only prose, or fields that save in place. */
+function paintMeaning(body: Element, inspected: Inspected, onEdit: DetailsOptions['onEdit']): void {
+  if (onEdit === undefined) {
+    if (inspected.description !== '') body.append(paragraph('description', inspected.description))
+    if (inspected.overview !== '') body.append(paragraph('overview', inspected.overview))
+    return
   }
-  return item
+  paintEditable(body, {
+    className: 'description', label: 'Description', value: inspected.description,
+    save: description => onEdit({ description }),
+  })
+  paintEditable(body, {
+    className: 'overview', label: 'Overview', value: inspected.overview, multiline: true,
+    save: overview => onEdit({ overview }),
+  })
+  // Technology is edited here because the How tab, where its chips are read, exists only once an element has technology or files.
+  body.append(heading('Technology'))
+  paintEditable(body, {
+    className: 'technology', label: 'Technology', value: inspected.technology.join(', '),
+    save: technology => onEdit({ technology }),
+  })
 }
 
-function codeList(files: readonly CodeFile[], onSource: (file: string, line?: number) => void): HTMLElement {
-  const list = document.createElement('ul')
-  list.className = 'file-groups'
-  for (const file of files) {
-    const group = document.createElement('li')
-    const name = document.createElement('div')
-    name.className = 'code-file-name'
-    name.textContent = file.file
-    const declarations = document.createElement('ul')
-    for (const declaration of file.declarations) {
-      declarations.append(declarationItem(file.file, declaration, onSource))
-    }
-    group.append(name, declarations)
-    list.append(group)
+/** The draft records to tag the element with; a tag never comes off from here, as the CLI has no flag for it. */
+function paintDraftSelect(body: Element, inspected: Inspected, drafts: readonly string[], onEdit: (input: MeaningEdit) => Promise<void>): void {
+  if (drafts.length === 0) return
+  body.append(heading('Draft'))
+  const select = document.createElement('select')
+  select.className = 'draft'
+  select.setAttribute('aria-label', 'Draft')
+  const none = document.createElement('option')
+  none.value = ''
+  none.textContent = 'None'
+  none.disabled = inspected.draft !== undefined
+  select.append(none)
+  for (const draft of drafts) {
+    const option = document.createElement('option')
+    option.value = draft
+    option.textContent = draft
+    select.append(option)
   }
-  return list
+  select.value = inspected.draft ?? ''
+  const error = paragraph('error', '')
+  error.setAttribute('role', 'status')
+  select.addEventListener('change', async () => {
+    error.textContent = ''
+    select.disabled = true
+    try {
+      await onEdit({ draft: select.value })
+    } catch (cause) {
+      error.textContent = message(cause)
+      select.disabled = false
+    }
+  })
+  const box = document.createElement('div')
+  box.className = 'editable draft'
+  box.append(select, error)
+  body.append(box)
 }
 
 function marked(
@@ -309,15 +271,20 @@ interface DetailsOptions {
   workGroups: readonly ElementWorkGroup[]
   onTask: (id: string) => void
   onRemove?: () => Promise<void>
+  /** The draft records the pane can tag with, present with onEdit. */
+  drafts?: readonly string[]
+  onEdit?: (input: MeaningEdit) => Promise<void>
 }
 
 export function paintDetails(host: HTMLElement, inspected: Inspected, options: DetailsOptions): void {
-  const { onSelect, onToggleFlow, activeFlows, actorTitle, tab, onTab, code, onSource, workGroups, onTask, onRemove } = options
+  const { onSelect, onToggleFlow, activeFlows, actorTitle, tab, onTab, code, onSource, workGroups, onTask, onRemove, drafts, onEdit } = options
   const title = host.querySelector('h1')!
   const meta = host.querySelector('.meta')!
   const tabsHost = host.querySelector<HTMLElement>('.tabs')!
   const body = host.querySelector('.body')!
-  title.textContent = inspected.title
+  title.replaceChildren()
+  if (onEdit === undefined) title.textContent = inspected.title
+  else paintEditable(title, { className: 'title', label: 'Title', value: inspected.title, save: value => onEdit({ title: value }) })
   meta.textContent = `${inspected.kindLabel} · ${inspected.origin}`
 
   const availableTabs = detailsTabs(inspected, workGroups)
@@ -340,11 +307,8 @@ export function paintDetails(host: HTMLElement, inspected: Inspected, options: D
   body.replaceChildren()
   const sections: Record<Section, () => void> = {
     overview: () => {
-      if (inspected.overview === '') return
-      const paragraph = document.createElement('p')
-      paragraph.className = 'overview'
-      paragraph.textContent = inspected.overview
-      body.append(paragraph)
+      paintMeaning(body, inspected, onEdit)
+      if (onEdit !== undefined) paintDraftSelect(body, inspected, drafts ?? [], onEdit)
     },
 
     relationships: () => {

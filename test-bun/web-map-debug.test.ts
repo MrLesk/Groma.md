@@ -32,7 +32,7 @@ test.concurrent('map debug snapshots counts without changing the map', () => {
       routingMilliseconds: 40,
       totalMilliseconds: 53,
     },
-    world,
+    world: { ...world, drafts: [] },
     sheet,
   }, { projectionMilliseconds: 2, paintMilliseconds: 3 })
 

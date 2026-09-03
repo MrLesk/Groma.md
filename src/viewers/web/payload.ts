@@ -1,7 +1,7 @@
 import type { GitRevision } from '../../history/git.ts'
 import type { SheetScene } from '../../sheet/types.ts'
 import type { ProjectProfile } from '../../project-profile.ts'
-import type { ArchitectureGraph, WorkItemDetails, WorkSnapshot } from '../../types.ts'
+import type { AnnotatedArchitectureModel, WorkItemDetails, WorkSnapshot } from '../../types.ts'
 import type { WorkPin } from '../../work/pins.ts'
 import type { SourcePayload } from './source/read.ts'
 import type { CodeFile } from './source/structure.ts'
@@ -27,7 +27,7 @@ export interface WebMapPayload {
   project: ProjectProfile | null
   revision: WebRevision | null
   revisions: WebRevision[]
-  world: ArchitectureGraph
+  world: AnnotatedArchitectureModel
   sheet: SheetScene
   timings: WebMapTimings
 }

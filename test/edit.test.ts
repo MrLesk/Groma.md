@@ -4,6 +4,7 @@ import test from 'node:test'
 import { fileURLToPath } from 'node:url'
 
 import { loadAnnotatedArchitecture } from '../src/core.ts'
+import { loadProjectProfile } from '../src/project-profile.ts'
 import { copyFixture, groma, readRelative, readTree, writeTree } from './cli-helpers.ts'
 
 const fixtureRoot = path.resolve(
@@ -133,6 +134,26 @@ test('unknown ids, empty edits, element flags on a draft record, and a tag with 
       args: ['edit', 'next', '--draft', 'next'],
     },
     {
+      name: '--technology on a draft record',
+      args: ['edit', 'next', '--technology', 'Bun'],
+    },
+    {
+      name: 'an empty title',
+      args: ['edit', 'orders', '--title', ' '],
+    },
+    {
+      name: '--title combined with structure',
+      args: ['edit', 'orders', '--title', 'Order intake', '--group', 'Commerce'],
+    },
+    {
+      name: 'nothing to change on the project',
+      args: ['edit', 'project'],
+    },
+    {
+      name: '--draft on the project',
+      args: ['edit', 'project', '--draft', 'next'],
+    },
+    {
       name: 'structure on a draft record',
       args: ['edit', 'next', '--group', 'Commerce'],
     },
@@ -147,4 +168,39 @@ test('unknown ids, empty edits, element flags on a draft record, and a tag with 
     assert.notEqual(result.code, 0, item.name)
     assert.deepEqual(await readTree(root), before, item.name)
   }
+})
+
+test('groma edit --title and --technology change an element and a draft record in place', async t => {
+  const root = await copyFixture(t, fixtureRoot, 'groma-edit-')
+  await writeTree(root, { [draftPath]: emptyDraft })
+  const element = await groma(root, ['edit', 'orders', '--title', 'Order intake', '--technology', 'Bun'])
+  assert.equal(element.code, 0, element.stderr)
+  const record = await groma(root, ['edit', 'next', '--title', 'Next quarter'])
+  assert.equal(record.code, 0, record.stderr)
+
+  const world = await loadAnnotatedArchitecture(root)
+  const orders = world.elements.find(candidate => candidate.id === 'orders')
+  assert.equal(orders?.title, 'Order intake')
+  assert.equal(orders?.technology, 'Bun')
+  assert.deepEqual(world.drafts, ['next'])
+  assert.match(await readRelative(root, draftPath), /^title: Next quarter$/m)
+
+  const cleared = await groma(root, ['edit', 'orders', '--technology', ''])
+  assert.equal(cleared.code, 0, cleared.stderr)
+  assert.doesNotMatch(await readRelative(root, ordersPath), /technology/)
+})
+
+test('groma edit project merges title, description and overview into the project record', async t => {
+  const root = await copyFixture(t, fixtureRoot, 'groma-edit-')
+  const titled = await groma(root, ['edit', 'project', '--title', 'Supply map'])
+  assert.equal(titled.code, 0, titled.stderr)
+  const described = await groma(root, [
+    'edit', 'project', '--description', 'Where goods go.', '--overview', 'Shows supply responsibilities.',
+  ])
+  assert.equal(described.code, 0, described.stderr)
+
+  const profile = await loadProjectProfile(root)
+  assert.equal(profile?.title, 'Supply map')
+  assert.equal(profile?.description, 'Where goods go.')
+  assert.equal(profile?.overview, 'Shows supply responsibilities.')
 })
