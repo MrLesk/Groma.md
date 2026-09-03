@@ -3,15 +3,18 @@ import { fileURLToPath } from 'node:url'
 
 import type { C4Kind } from '../../types.ts'
 import { chromeCss } from './atoms/chrome.ts'
+import { escaped } from './atoms/escape.ts'
 import { anchoredPopoverCss } from './atoms/popover.ts'
 import { kindGlyph, kindLabel } from '../atoms/kind.ts'
 import { cssBlock, palettes } from './atoms/theme.ts'
+import { emptyStateCss } from './chrome/empty.ts'
 import { mapDebugCss } from './chrome/map-debug.ts'
 import { motionCss } from './chrome/motion.ts'
 import { flowRowCss } from './flow/row.ts'
 import { mapCss } from './iso/style.ts'
 import { tipCss } from './organisms/tip.ts'
 import type { WebBootPayload } from './payload.ts'
+import { isEmptyWorld } from '../../empty-world.ts'
 import { projectEditorCss } from './project/editor.ts'
 import { revisionControl, revisionCss } from './revision/view.ts'
 import { searchControl, searchCss } from './search/view.ts'
@@ -314,7 +317,8 @@ const style = `
   @media (prefers-reduced-motion: reduce) {
     #hierarchy, #hierarchy-toggle .hierarchy-chevron, #hierarchy-content, #hierarchy-title .pane-label, #details, body.details-hidden #details, body #work { transition: none; }
   }
-${chromeCss}${anchoredPopoverCss}${motionCss}${revisionCss}${searchCss}${highlightCss}${sourceCss}${taskDiffCss}${backlogMarkCss}${workBadgeCss}${workDetailsCss}${flowRowCss}${mapCss}${pinsCss}${workCss}${tipCss}${projectEditorCss}${mapDebugCss}`
+${chromeCss}${anchoredPopoverCss}${motionCss}${revisionCss}${searchCss}${highlightCss}${sourceCss}${taskDiffCss}${backlogMarkCss}${workBadgeCss}${workDetailsCss}${flowRowCss}${mapCss}${pinsCss}${workCss}${tipCss}${projectEditorCss}
+${emptyStateCss}${mapDebugCss}`
 
 function legend(): string {
   return legendKinds.map(line => {
@@ -323,6 +327,17 @@ function legend(): string {
     }).join('')
     return `<div>${marks}</div>`
   }).join('')
+}
+
+/** The invitation shown while the current world has nothing to draw; history is read-only, so a selected revision never shows it. */
+function emptyState(payload: WebBootPayload): string {
+  const hidden = payload.revision === null && isEmptyWorld(payload.world) ? '' : ' hidden'
+  const form = payload.delivery.kind === 'live'
+    ? '<form><input name="name" placeholder="System name" aria-label="System name" required><textarea name="overview" placeholder="What it will do" aria-label="Overview" required></textarea><p class="error" role="status"></p><button type="submit">Draft</button></form>'
+    : ''
+  return `<section id="empty" aria-label="Empty map"${hidden}><div class="empty-card"><h1>${escaped(payload.project?.title ?? '')}</h1>`
+    + '<p>Nothing on the map yet.</p><p>Build something and the next scan draws it, or draft the first system now.</p>'
+    + `${form}</div></section>`
 }
 
 export function renderPage(payload: WebBootPayload): string {
@@ -334,6 +349,7 @@ export function renderPage(payload: WebBootPayload): string {
     + '</header>'
     + `<nav id="hierarchy" aria-label="Hierarchy"><div id="hierarchy-title"><span class="pane-label">Hierarchy</span><button id="hierarchy-toggle" type="button" aria-controls="hierarchy-content">${hierarchyIcon}</button></div><div id="hierarchy-content"><div id="flows"></div><div id="tree"></div><div id="legend">${legend()}</div></div></nav>`
     + '<div id="map"></div>'
+    + emptyState(payload)
     + `<aside id="details" aria-label="Details"><button id="details-close" aria-label="Close details">${closeIcon}</button><p class="meta"></p><h1></h1><nav class="controls tabs"></nav><div class="body"></div></aside>`
     + `<script type="application/json" id="world">${json}</script>`
     + '<script src="./render.js"></script>'

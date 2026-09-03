@@ -30,6 +30,13 @@ without a reload. No inbound connection to Groma is opened.
 
 ## Layout
 
+While the world has no elements the page shows an invitation over the
+grid instead of empty ground: the project name, one line saying the map is
+empty, the two ways forward (build something and scan, or draft the first
+system), and a Draft form that posts the same input as `groma draft system`.
+The first element replaces it without a reload. A published snapshot shows
+the invitation without the form.
+
 The isometric grid fills the screen. Inset 35%-paper frosted chrome floats
 above it as one technical instrument. The header shows the groma.md lockup,
 the observed system's name with live flow and element counts, one compact

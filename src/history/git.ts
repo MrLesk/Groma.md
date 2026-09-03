@@ -74,9 +74,16 @@ export async function readGitText(
   }
 }
 
+/** A repository whose branch has no commit yet has no history to offer. */
+function hasCommits(repositoryRoot: string): Promise<boolean> {
+  return runGit(['rev-parse', '--verify', '--quiet', 'HEAD'], repositoryRoot)
+    .then(() => true, () => false)
+}
+
 /** Current-branch commits whose selected Groma tree changed, newest first. */
 export async function listGitRevisions(repositoryRoot: string): Promise<GitRevision[]> {
   const filesystem = GromaFileSystem.open(repositoryRoot)
+  if (!await hasCommits(repositoryRoot)) return []
   const output = await runGit([
     'log',
     '--decorate-refs=refs/tags/*',

@@ -9,7 +9,7 @@ import { acceptGhost } from './core.ts'
 import { draftElement } from './draft.ts'
 import { editArchitecture } from './edit.ts'
 import { agentInstructionGuide } from './agent-instructions.ts'
-import { runInitCommand } from './init-command.ts'
+import { ensureInitialized, runInitCommand } from './init-command.ts'
 import { humanInstructionGuide } from './instructions.ts'
 import { relateElements, removeRelationship } from './relate.ts'
 import { registerScannerCommands } from './scanner/cli.ts'
@@ -22,8 +22,21 @@ import type { WelcomeActionId, WelcomeScreen } from './welcome.ts'
 
 const program = new Command()
 
+function interactiveTerminal(): boolean {
+  return process.stdin.isTTY === true && process.stdout.isTTY === true
+}
+
 async function openWeb(port?: number, scan = true): Promise<void> {
   const root = process.cwd()
+  const door = await ensureInitialized({
+    repositoryRoot: root,
+    interactive: interactiveTerminal(),
+    opensViewer: true,
+  })
+  if (door !== 'ready') {
+    if (door !== 'declined') process.exitCode = 1
+    return
+  }
   if (scan) await scanRepository(root)
   const { startWebViewer } = await import('./viewers/web/server.ts')
   const { url } = await startWebViewer(root, { port })
@@ -58,7 +71,7 @@ async function initializeProject(
       repositoryRoot: process.cwd(),
       projectName,
       directory,
-      interactive: process.stdin.isTTY === true && process.stdout.isTTY === true,
+      interactive: interactiveTerminal(),
     }, {
       openViewer: viewer => viewer === 'web'
         ? openWeb(undefined, false)
@@ -196,6 +209,16 @@ program
   .argument('[target]', 'element id, draft id, or repository-relative source file')
   .option('--plain', 'print the merged world as plain text')
   .action(async (target: string | undefined, options) => {
+    const plain = program.opts().plain || options.plain
+    const door = await ensureInitialized({
+      repositoryRoot: process.cwd(),
+      interactive: interactiveTerminal() && target === undefined && !plain,
+      opensViewer: true,
+    })
+    if (door !== 'ready') {
+      if (door !== 'declined') process.exitCode = 1
+      return
+    }
     if (target) {
       const { renderPlainRecord } = await import('./plain-world.ts')
       const result = await renderPlainRecord(process.cwd(), target)
@@ -207,7 +230,7 @@ program
       console.log(result.text)
       return
     }
-    if (program.opts().plain || options.plain || !process.stdout.isTTY) {
+    if (plain || !process.stdout.isTTY) {
       const { renderPlainWorld } = await import('./plain-world.ts')
       console.log(await renderPlainWorld(process.cwd()))
       return

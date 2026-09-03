@@ -6,14 +6,16 @@ import type { FlowRef } from '../action-path.ts'
 import { initialTree, semanticTreeRows, toggleExpansion } from '../tui/tree.ts'
 import type { TreeRow } from '../tui/tree.ts'
 import { nextTheme, themeLabel } from './atoms/theme.ts'
+import { createEmptyState } from './chrome/empty.ts'
 import { createMapDebugPanel } from './chrome/map-debug.ts'
 import { animateControl, createThemeTransition } from './chrome/motion.ts'
 import { createWebShell, mapFrame, type MapFrame } from './chrome/shell.ts'
+import { bindShortcuts } from './chrome/shortcuts.ts'
 import { paintWorldStats, primarySystem } from './chrome/stats.ts'
 import { createWebDataSource } from './data.ts'
 import { paintFlows } from './flow/list.ts'
 import { toggleFlowActivation } from './flow/state.ts'
-import { fitHighlights, fitCamera, keyAction, keyTarget, pan, wheelAction, zoomAbout, zoomLimits, zoomReadout } from './iso/camera.ts'
+import { fitHighlights, fitCamera, pan, wheelAction, zoomAbout, zoomLimits, zoomReadout } from './iso/camera.ts'
 import type { Camera } from './iso/camera.ts'
 import { createMap } from './iso/map.ts'
 import { bindMapPointer } from './iso/pointer.ts'
@@ -70,6 +72,7 @@ const hierarchyContent = document.getElementById('hierarchy-content')!
 const hierarchyToggle = document.getElementById('hierarchy-toggle') as HTMLButtonElement
 const map = createMap(host)
 const projectEditor = data.saveProject === undefined ? undefined : createProjectEditor(data.saveProject)
+const emptyState = createEmptyState(document.getElementById('empty')!, data.draft)
 const shell = createWebShell(document.body, hierarchyContent, hierarchyToggle, detailsHost, map.svg)
 const tip = createTip(host)
 const pins = createPins(host, id => map.anchorOf(id), id => toggleTask(id), tip)
@@ -393,24 +396,14 @@ themeButton.addEventListener('click', () => transitionTheme(() => {
 }))
 applyTheme()
 
-document.addEventListener('keydown', event => {
-  if (event.metaKey || event.ctrlKey || event.altKey) return
-  const shortcut = event.key === 'F1' ? toggleHud
-    : event.key === 'F2' ? toggleLayers
-    : event.key === 'F3' ? debug.toggle
-    : undefined
-  if (shortcut !== undefined) {
-    event.preventDefault()
-    shortcut()
-    return
-  }
-  const action = keyAction(event.key, keyTarget(event.target))
-  if (action === undefined) return
-  event.preventDefault()
-  if (action === 'in') zoomStep(ZOOM_STEP, document.getElementById('zoom-in')!)
-  else if (action === 'out') zoomStep(1 / ZOOM_STEP, document.getElementById('zoom-out')!)
-  else if (action === 'fit') fitControl()
-  else if (action === 'deselect') deselect()
+bindShortcuts({
+  hud: toggleHud,
+  layers: toggleLayers,
+  debug: debug.toggle,
+  zoomIn: () => zoomStep(ZOOM_STEP, document.getElementById('zoom-in')!),
+  zoomOut: () => zoomStep(1 / ZOOM_STEP, document.getElementById('zoom-out')!),
+  fit: fitControl,
+  deselect,
 })
 
 let lastViewport = viewport()
@@ -461,6 +454,7 @@ function applyWorld(payload: WebPayload, reset = false): void {
   revisionControl.paintProjectEdit(map.svg)
   pins.paint(currentPins)
   island.paint(payload.pins, work.statuses, work.defaultStatus)
+  emptyState.paint(world, project, revisionControl.selected !== undefined)
   applyCamera()
   taskDiff.invalidate()
   paintViewState()
@@ -494,6 +488,7 @@ debug.paint(() => map.paint(scene))
 revisionControl.paintProjectEdit(map.svg)
 pins.paint(currentPins)
 island.paint(boot.pins, work.statuses, work.defaultStatus)
+emptyState.paint(world, project, revisionControl.selected !== undefined)
 applyCamera()
 paintViewState()
 source.restore()

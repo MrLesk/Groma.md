@@ -197,6 +197,10 @@ export function createClackInitUi(): InitCommandUi {
       'Backlog.md is not installed. Install it now?',
       accent,
     )),
+    confirmInit: async () => selected(await confirmPrompt(
+      'Groma is not initialized here. Initialize now?',
+      accent,
+    )),
     confirmScan: async () => selected(await confirmPrompt(
       'Run your first architecture scan now?',
       accent,
