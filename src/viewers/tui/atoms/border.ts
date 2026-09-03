@@ -54,23 +54,13 @@ export function borderCharacters(origin: Origin, style: BorderStyle): BorderChar
       vertical: '│',
     }
   }
-  if (origin === 'planned') {
-    return {
-      bottomLeft: '└',
-      bottomRight: '┘',
-      horizontal: '╌',
-      topLeft: '┌',
-      topRight: '┐',
-      vertical: '┆',
-    }
-  }
   return {
     bottomLeft: '└',
     bottomRight: '┘',
-    horizontal: '┈',
+    horizontal: '╌',
     topLeft: '┌',
     topRight: '┐',
-    vertical: '┊',
+    vertical: '┆',
   }
 }
 

@@ -1,7 +1,8 @@
 /**
  * Writes the large world the terminal map is checked against: four internal systems,
- * twenty containers, three hundred components and more than five hundred relationships.
- * Deterministic: the same call always writes the same files.
+ * twenty containers, three hundred components and more than five hundred relationships,
+ * as one tree of actors, externals and systems. Deterministic: the same call always
+ * writes the same files.
  *
  *   bun scripts/large-world-fixture.ts            # regenerates test/fixtures/large-world
  */
@@ -59,7 +60,7 @@ function componentRecord(container: Container, index: number, containers: Contai
   if (index === 0) relationships.push({ target: across(containers[(container.index + 1) % containers.length]!, 0), description: 'Forwards requests' })
   // Cross-system links stay with the container chain: extra long routes into a slab defeat the sheet router's shared-path safety check.
   const lastOfSystem = container.index % CONTAINERS_PER_SYSTEM === CONTAINERS_PER_SYSTEM - 1 && index === COMPONENTS_PER_CONTAINER - 1
-  if (lastOfSystem) relationships.push({ target: `../../../../${EXTERNAL.id}/system.md`, description: 'Charges cards' })
+  if (lastOfSystem) relationships.push({ target: `../../../../../externals/${EXTERNAL.id}.md`, description: 'Charges cards' })
   return record('C4 Component', name, {
     id,
     parent: container.id,
@@ -75,20 +76,17 @@ export async function writeLargeWorld(root: string): Promise<void> {
   const files = new Map<string, string>()
   files.set('project.md', '---\ntype: Groma Project\ntitle: Large world architecture\ngroma:\n  profile: architecture\n---\n\nA generated world large enough to test the terminal map at scale.\n')
   files.set('index.md', '---\nokf_version: "0.2"\n---\n')
-  files.set('observed/index.md', '# Observed\n')
-  files.set('missing/index.md', '# Missing\n')
-  files.set('plans/index.md', '# Plans\n')
   const containers: Container[] = SYSTEMS.flatMap(system => system.containers.map((id, index) => ({ system, id, index: SYSTEMS.indexOf(system) * CONTAINERS_PER_SYSTEM + index })))
   for (const actor of ACTORS) {
-    files.set(`observed/actors/${actor.id}.md`, record('C4 Actor', actor.title, { id: actor.id }, `${actor.title} of the shop.`,
+    files.set(`actors/${actor.id}.md`, record('C4 Actor', actor.title, { id: actor.id }, `${actor.title} of the shop.`,
       SYSTEMS.map(system => ({ target: `../systems/${system.id}/containers/${system.containers[actor.uses]}/container.md`, description: `Uses ${system.containers[actor.uses]}` }))))
   }
-  files.set(`observed/systems/${EXTERNAL.id}/system.md`, record('C4 System', EXTERNAL.title, { id: EXTERNAL.id, external: true }, 'Takes the money.'))
+  files.set(`externals/${EXTERNAL.id}.md`, record('C4 System', EXTERNAL.title, { id: EXTERNAL.id }, 'Takes the money.'))
   for (const system of SYSTEMS) {
-    files.set(`observed/systems/${system.id}/system.md`, record('C4 System', title(system.id), { id: system.id }, `${title(system.id)} of the shop.`))
+    files.set(`systems/${system.id}/system.md`, record('C4 System', title(system.id), { id: system.id }, `${title(system.id)} of the shop.`))
   }
   for (const container of containers) {
-    const base = `observed/systems/${container.system.id}/containers/${container.id}`
+    const base = `systems/${container.system.id}/containers/${container.id}`
     files.set(`${base}/container.md`, record('C4 Container', title(container.id), { id: container.id, parent: container.system.id }, `${title(container.id)} of ${title(container.system.id)}.`))
     for (let index = 0; index < COMPONENTS_PER_CONTAINER; index += 1) {
       files.set(`${base}/components/${container.id}-${PARTS[index]!.toLowerCase()}.md`, componentRecord(container, index, containers))

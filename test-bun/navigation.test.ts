@@ -269,7 +269,7 @@ test.concurrent('search follows matches live and cancel restores the prior view'
   const matches = state.search?.matches ?? []
   assert.deepEqual(
     matches.map(element => element.representationId).sort(),
-    ['observed:order-page', 'observed:order-viewer', 'observed:stock-page', 'observed:stock-viewer'],
+    ['order-page', 'order-viewer', 'stock-page', 'stock-viewer'],
   )
 
   assert.equal(state.currentId, matches[0]!.representationId)
@@ -279,7 +279,7 @@ test.concurrent('search follows matches live and cancel restores the prior view'
 
   const cancelled = reduceSearch(model, search, state, { type: 'cancel' })
   assert.equal(cancelled.search, undefined)
-  assert.equal(cancelled.currentId, 'observed:shop')
+  assert.equal(cancelled.currentId, 'shop')
 })
 
 test.concurrent('flow preview, commit, step, and clear share one navigation state', () => {

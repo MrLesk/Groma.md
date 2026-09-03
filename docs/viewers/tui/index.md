@@ -77,15 +77,15 @@ with `w` or Escape restores the exact pre-Work view.
 
 ## Appearance
 
-Neutral surface shades are mixed from the terminal foreground and background, so
-light and dark terminal themes keep their own contrast. Actors, systems,
-containers, groups, components, and external systems use distinct grayscale
-fills and frames. Observed, planned, and missing architecture uses solid,
-dashed, and dotted treatment.
+Every colour is the terminal's own: its default foreground and background, its
+bright black for quiet frames and draft elements, and the brand green `#1D9E75`
+for the selection, active flows, their endpoints, and active work. Nothing is
+sampled from the palette, so switching the terminal theme recolours the viewer
+live.
 
-The terminal green is the map's only chromatic accent. It marks selection, active
-flows, their endpoints, and active work. Active routes march from source to
-target while their geometry, labels, and arrowheads remain fixed.
+Observed architecture uses solid frames and routes; drafts use dashed ones.
+Active routes march from source to target while their geometry, labels, and
+arrowheads remain fixed.
 
 ## Keys
 

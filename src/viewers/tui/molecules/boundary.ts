@@ -6,24 +6,17 @@ import type { BorderStyle } from '../atoms/border.ts'
 import { cell } from '../atoms/cell.ts'
 import { kindGlyph } from '../../atoms/kind.ts'
 import { text } from '../atoms/text.ts'
-import { surfaceTint, type ViewerTheme } from '../atoms/theme.ts'
+import type { ViewerTheme } from '../atoms/theme.ts'
 import type { ProjectedMapItem, TerminalProjection } from '../projection.ts'
 
-function titleColor(item: ProjectedMapItem, theme: ViewerTheme, accented: boolean): RGBA {
-  if (accented) return theme.selected
-  return item.kind === 'group' ? theme.foreground : theme[item.kind]
+function titleColor(theme: ViewerTheme, accented: boolean): RGBA {
+  return accented ? theme.selected : theme.foreground
 }
 
 function frameStyle(item: ProjectedMapItem): BorderStyle {
   if (item.kind === 'group') return 'group'
   if (item.kind === 'system') return 'system'
   return 'container'
-}
-
-function backgroundFor(item: ProjectedMapItem, theme: ViewerTheme): RGBA {
-  return item.origin === 'observed'
-    ? surfaceTint(theme, item.kind, item.external)
-    : theme.background
 }
 
 function drawTitle(
@@ -62,7 +55,7 @@ export function fillBoundary(
   theme: ViewerTheme,
 ): void {
   const bounds = item.cellBounds
-  const background = backgroundFor(item, theme)
+  const background = theme.background
   if (bounds.width > 2 && bounds.height > 2) {
     buffer.fillRect(bounds.x + 1, bounds.y + 1, bounds.width - 2, bounds.height - 2, background)
   }
@@ -76,8 +69,8 @@ export function drawBoundaryFrame(
   accented = false,
 ): void {
   const bounds = item.cellBounds
-  const background = backgroundFor(item, theme)
-  const color = titleColor(item, theme, accented)
+  const background = theme.background
+  const color = titleColor(theme, accented)
   const style = frameStyle(item)
   drawBorder(buffer, bounds, item.origin, color, background, style, TextAttributes.DIM)
 
@@ -101,8 +94,8 @@ export function drawPinnedBoundaryTitle(
   theme: ViewerTheme,
 ): void {
   if (item.cellBounds.y >= projection.viewport.y) return
-  const color = titleColor(item, theme, item.representationId === projection.currentId)
-  const background = backgroundFor(item, theme)
+  const color = titleColor(theme, item.representationId === projection.currentId)
+  const background = theme.background
   const characters = borderCharacters(item.origin, frameStyle(item))
   const left = Math.max(item.cellBounds.x, projection.viewport.x)
   const right = Math.min(

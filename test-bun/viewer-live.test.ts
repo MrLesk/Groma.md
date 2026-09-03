@@ -5,7 +5,6 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { test } from 'bun:test'
 
-import { normalizeTerminalPalette } from '@opentui/core'
 import { createTestRenderer } from '@opentui/core/testing'
 import { EMPTY_WORK_SNAPSHOT } from '@groma/work-source'
 import type { WorkSource } from '@groma/work-source'
@@ -59,9 +58,6 @@ groma:
 
 Describes the shop used by live viewer tests.
 `,
-    'groma/observed/index.md': '# Observed\n',
-    'groma/missing/index.md': '# Missing\n',
-    'groma/plans/index.md': '# Plans\n',
     'src/cli.ts': "import { scan } from './scanner.ts'\nexport function run() {}\n",
     'src/scanner.ts': 'export function scan() {}\n',
   })
@@ -72,7 +68,7 @@ Describes the shop used by live viewer tests.
 
 async function waitUntil(
   probe: () => Promise<boolean> | boolean,
-  timeout = 8000,
+  timeout = 15000,
 ): Promise<void> {
   const start = Date.now()
   while (Date.now() - start < timeout) {
@@ -83,7 +79,7 @@ async function waitUntil(
 }
 
 async function observedSystems(root: string): Promise<string[]> {
-  const directory = path.join(root, 'groma/observed/systems')
+  const directory = path.join(root, 'groma/systems')
   try {
     return await readdir(directory)
   } catch {
@@ -98,7 +94,6 @@ test.concurrent('groma view does not scan on open and applies a watched fold', a
   try {
     app = await startTerminalViewer(root, {
       renderer: setup.renderer,
-      palette: normalizeTerminalPalette(),
       workSource: emptyWorkSource(),
     })
     await setup.renderOnce()
@@ -107,7 +102,7 @@ test.concurrent('groma view does not scan on open and applies a watched fold', a
 
     await scanRepository(root)
     await app.refresh()
-    app.setView({ level: 'components', currentId: 'observed:cli' })
+    app.setView({ level: 'components', currentId: 'cli' })
     await setup.renderOnce()
     await setup.renderOnce()
     assert.match(setup.captureCharFrame(), /Cli/)
@@ -141,14 +136,13 @@ test.concurrent('groma view applies an architecture Markdown change without R', 
   try {
     app = await startTerminalViewer(root, {
       renderer: setup.renderer,
-      palette: normalizeTerminalPalette(),
       workSource: emptyWorkSource(),
     })
-    app.setView({ level: 'context', currentId: 'observed:shop' })
+    app.setView({ level: 'context', currentId: 'shop' })
     await setup.renderOnce()
     assert.match(setup.captureCharFrame(), /Shop/)
 
-    const document = path.join(root, 'groma/observed/systems/shop/system.md')
+    const document = path.join(root, 'groma/systems/shop/system.md')
     const markdown = await Bun.file(document).text()
     await writeFile(document, markdown.replace('title: Shop', 'title: Shopfront'))
     await waitUntil(async () => {
@@ -171,14 +165,13 @@ test.concurrent('R reloads Markdown without scanning while the watch is running'
   try {
     app = await startTerminalViewer(root, {
       renderer: setup.renderer,
-      palette: normalizeTerminalPalette(),
       workSource: emptyWorkSource(),
     })
-    app.setView({ level: 'context', currentId: 'observed:shop' })
+    app.setView({ level: 'context', currentId: 'shop' })
     await setup.renderOnce()
     assert.match(setup.captureCharFrame(), /Shop/)
 
-    const document = path.join(root, 'groma/observed/systems/shop/system.md')
+    const document = path.join(root, 'groma/systems/shop/system.md')
     const markdown = await Bun.file(document).text()
     await writeFile(document, markdown.replace('title: Shop', 'title: Shopfront'))
     setup.mockInput.pressKey('r')

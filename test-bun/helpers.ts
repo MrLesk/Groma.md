@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url'
 import type { createTestRenderer } from '@opentui/core/testing'
 
 import { loadAnnotatedArchitecture } from '../src/core.ts'
-import { paneLayout } from '../src/viewers/tui/layout.ts'
+import { DETAILS_PANE_WIDTH, HIERARCHY_PANE_WIDTH } from '../src/viewers/tui/layout.ts'
 import { sheetScene } from '../src/sheet/scene.ts'
 import type { TerminalViewModel } from '../src/viewers/tui/model.ts'
 import type {
@@ -49,6 +49,23 @@ export async function terminalModel(root: string): Promise<TerminalViewModel> {
   return { ...model, sheet: sheetScene(model) }
 }
 
+/** Where the screen puts its panes at a terminal size: one row above and below, the frames, and the recap row. */
+export function paneLayout(width: number, height: number, panes: { details: boolean } = { details: true }) {
+  const body = { y: 2, height: Math.max(1, height - 4) }
+  const detailsWidth = panes.details ? DETAILS_PANE_WIDTH : 0
+  const hierarchy = { x: 0, ...body, width: HIERARCHY_PANE_WIDTH }
+  const details = { x: Math.max(hierarchy.width, width - detailsWidth), ...body, width: detailsWidth }
+  const map = { x: hierarchy.width, ...body, width: Math.max(3, details.x - hierarchy.width) }
+  return {
+    header: { x: 0, y: 1, width, height: 1 },
+    hierarchy,
+    map,
+    mapViewport: { x: map.x + 1, y: map.y + 1, width: Math.max(1, map.width - 2), height: Math.max(1, map.height - 3) },
+    details,
+    footer: { x: 0, y: height - 2, width, height: 1 },
+  }
+}
+
 export function mapViewportOf(size: { width: number; height: number }): Bounds {
   return paneLayout(size.width, size.height).mapViewport
 }
@@ -67,6 +84,7 @@ export async function press(
 ): Promise<string> {
   for (const key of keys) {
     if (key === 'enter') setup.mockInput.pressEnter()
+    else if (key === 'tab') setup.mockInput.pressTab()
     else if (key === 'escape') {
       setup.mockInput.pressEscape()
       await new Promise(resolve => setTimeout(resolve, 50))
@@ -152,7 +170,7 @@ export function navigationWorld(): ArchitectureWorld & TerminalViewModel {
       }),
     ],
   }
-  return { ...world, plans: [], sheet: sheetScene(world) }
+  return { ...world, drafts: [], sheet: sheetScene(world) }
 }
 
 /** A world of hand-built boxes with no layout bounds of its own. */
@@ -166,7 +184,7 @@ export function worldOf(
     groups: [],
     relationships,
   }
-  return { ...world, plans: [], sheet: sheetScene(world) }
+  return { ...world, drafts: [], sheet: sheetScene(world) }
 }
 
 /** An observed relationship between two boxes, by id. */

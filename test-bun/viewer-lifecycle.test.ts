@@ -4,7 +4,6 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { test } from 'bun:test'
 
-import { normalizeTerminalPalette } from '@opentui/core'
 import { createTestRenderer } from '@opentui/core/testing'
 import { EMPTY_WORK_SNAPSHOT } from '@groma/work-source'
 import type { WorkSource } from '@groma/work-source'
@@ -56,7 +55,6 @@ test.concurrent('headless groma view startup releases its renderer and input han
   const inputListeners = setup.renderer.keyInput.listenerCount('keypress')
   const app = await startTerminalViewer(fixtureRoot, {
     renderer: setup.renderer,
-    palette: normalizeTerminalPalette(),
     workSource: emptyWorkSource(),
   })
 
@@ -86,29 +84,28 @@ test.concurrent('R reloads the world from core and keeps the current view', asyn
     await cp(fixtureRoot, root, { recursive: true })
     app = await startTerminalViewer(root, {
       renderer: setup.renderer,
-      palette: normalizeTerminalPalette(),
       workSource: emptyWorkSource(),
     })
-    app.setView({ level: 'components', currentId: 'missing:legacy' })
+    app.setView({ level: 'components', currentId: 'inventory' })
     await setup.renderOnce()
-    assert.match(setup.captureCharFrame(), /Legacy ordering/)
+    assert.match(setup.captureCharFrame(), /Inventory/)
 
     const document = path.join(
       root,
-      'groma/missing/systems/shop/containers/api/components/legacy.md',
+      'groma/systems/shop/containers/api/components/inventory.md',
     )
     const markdown = await readFile(document, 'utf8')
     await writeFile(
       document,
-      markdown.replace('title: Legacy ordering', 'title: Legacy queue'),
+      markdown.replace('title: Inventory', 'title: Stock queue'),
     )
 
     setup.mockInput.pressKey('r')
     await app.refresh()
     await setup.renderOnce()
     const after = setup.captureCharFrame()
-    assert.match(after, /Legacy queue/)
-    assert.doesNotMatch(after, /Legacy ordering/)
+    assert.match(after, /Stock queue/)
+    assert.doesNotMatch(after, /Inventory/)
   } finally {
     app?.destroy()
     if (!setup.renderer.isDestroyed) setup.renderer.destroy()

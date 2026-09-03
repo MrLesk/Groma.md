@@ -13,7 +13,7 @@ import { drawRoute, drawRouteLabel } from '../molecules/route.ts'
 import type { ProjectedFlowStep } from '../flow.ts'
 import type { ProjectedMapItem, ProjectedMapRoute, TerminalProjection } from '../projection.ts'
 import type { WorkMap } from '../work/model.ts'
-import { drawWorkMarker } from '../work/paint.ts'
+import { drawWorkMarker } from '../molecules/work-marker.ts'
 
 /** The items and routes the painter visits: only what touches the viewport. */
 export function paintedWorld(projection: TerminalProjection): {

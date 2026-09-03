@@ -4,8 +4,7 @@ import type { OptimizedBuffer } from '@opentui/core'
 import { drawBorder } from '../atoms/border.ts'
 import { kindGlyph } from '../../atoms/kind.ts'
 import { text } from '../atoms/text.ts'
-import { surfaceTint, type ViewerTheme } from '../atoms/theme.ts'
-import { drawHatch } from './hatch.ts'
+import type { ViewerTheme } from '../atoms/theme.ts'
 import { drawSpine } from './spine.ts'
 import type { ProjectedMapItem, TerminalProjection } from '../projection.ts'
 
@@ -19,10 +18,10 @@ export function drawCard(
 ): void {
   const bounds = item.cellBounds
   const selected = item.representationId === projection.currentId
-  const color = accented || selected ? theme.selected : theme[item.kind === 'group' ? 'component' : item.kind]
+  const color = accented || selected ? theme.selected : theme.foreground
   const background = selected
-    ? theme.selectedTint
-    : surfaceTint(theme, item.kind, item.external)
+    ? theme.background
+    : theme.background
   if (item.origin === 'observed' && bounds.width > 2 && bounds.height > 2) {
     buffer.fillRect(bounds.x + 1, bounds.y + 1, bounds.width - 2, bounds.height - 2, background)
   }
@@ -35,7 +34,6 @@ export function drawCard(
     item.kind === 'actor' || item.external ? 'actor' : 'card',
     accented || selected ? TextAttributes.BOLD : dimmed || item.external ? TextAttributes.DIM : 0,
   )
-  if (item.origin === 'missing') drawHatch(buffer, bounds, theme.missing, background)
   if (bounds.width < 7 || bounds.height < 3) return
 
   drawSpine(

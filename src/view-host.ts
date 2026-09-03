@@ -1,8 +1,7 @@
 import {
   createCliRenderer,
-  normalizeTerminalPalette,
 } from '@opentui/core'
-import type { CliRenderer, NormalizedTerminalPalette } from '@opentui/core'
+import type { CliRenderer } from '@opentui/core'
 import { EMPTY_WORK_SNAPSHOT } from '@groma/work-source'
 import type { WorkSource } from '@groma/work-source'
 import { backlogPlugin } from '@groma/work-source-backlog'
@@ -17,7 +16,6 @@ import type { TerminalViewModel } from './viewers/tui/model.ts'
 
 interface StartViewerOptions {
   renderer?: CliRenderer
-  palette?: NormalizedTerminalPalette
   workSource?: WorkSource
 }
 
@@ -63,14 +61,8 @@ export async function startTerminalViewer(
   })
 
   try {
-    const palette = options.palette ?? normalizeTerminalPalette(
-      await renderer.getPalette({ timeout: 100 }),
-    )
     map = await loadMap()
-    viewer = mountTerminalViewer(renderer, { ...map, work }, {
-      palette,
-      onRefresh: publish,
-    })
+    viewer = mountTerminalViewer(renderer, { ...map, work }, { onRefresh: publish })
     void pullWork()
     const sourceWatch = await watchScan(repositoryRoot, { onFold: publish })
     const architectureWatch = watchArchitecture(repositoryRoot, { onChange: publish })
