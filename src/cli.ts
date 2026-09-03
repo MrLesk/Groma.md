@@ -7,10 +7,10 @@ import { Command } from 'commander'
 
 import { acceptGhost } from './core.ts'
 import { writes } from './authoring.ts'
+import type { RemoveInput } from './authoring.ts'
 import { agentInstructionGuide } from './agent-instructions.ts'
 import { ensureInitialized, runInitCommand } from './init-command.ts'
 import { humanInstructionGuide } from './instructions.ts'
-import { relateElements, removeRelationship } from './relate.ts'
 import { registerScannerCommands } from './scanner/cli.ts'
 import { formatScanSummary, scanRepository, watchScan } from './scanner.ts'
 import {
@@ -281,19 +281,34 @@ program
     }
   })
 
+/** `<verb> relation <a> <b>` names the relationship from a to b; every other id stands alone. */
+function relationEnds(id: string, ids: string[]): RemoveInput {
+  if (id !== 'relation') {
+    if (ids.length > 0) throw new Error(`${id} takes no further id`)
+    return { id }
+  }
+  const [source, target] = ids
+  if (source === undefined || target === undefined || ids.length > 2) {
+    throw new Error('relation takes a source id and a target id')
+  }
+  return { id: source, relation: target }
+}
+
 program
   .command('add')
-  .description('Declare a person, an external system, or a draft')
-  .argument('<thing>', 'actor, external, or draft')
-  .argument('<name>', 'name')
-  .requiredOption('--overview <markdown>', 'long overview, or the outcome of a draft')
-  .option('--description <text>', 'concise OKF description')
-  .option('--technology <text>', 'implementation technology of an external')
-  .action(async (thing: string, name: string, options) => {
+  .description('Declare a person, an external system, a draft, or a relation')
+  .argument('<thing>', 'actor, external, draft, or relation')
+  .argument('<name>', 'name, or the source id of a relation')
+  .argument('[target]', 'target id of a relation')
+  .option('--overview <markdown>', 'long overview, or the outcome of a draft')
+  .option('--description <text>', 'concise OKF description, or how the source uses the target')
+  .option('--technology <text>', 'technology of an external, or the interaction mechanism of a relation')
+  .action(async (thing: string, name: string, target: string | undefined, options) => {
     try {
       const id = await writes.add(process.cwd(), {
         thing,
         name,
+        relation: target,
         overview: options.overview,
         description: options.description,
         technology: options.technology,
@@ -308,11 +323,12 @@ program
 
 program
   .command('remove')
-  .description('Remove a person, an external, a ghost, or a draft nothing belongs to')
-  .argument('<id>', 'element id or draft id')
-  .action(async (id: string) => {
+  .description('Remove a person, an external, a ghost, a draft nothing belongs to, or a relation')
+  .argument('<id>', 'element id, draft id, or relation')
+  .argument('[ids...]', 'with relation: the source id and the target id')
+  .action(async (id: string, ids: string[]) => {
     try {
-      const removed = await writes.remove(process.cwd(), { id })
+      const removed = await writes.remove(process.cwd(), relationEnds(id, ids))
       console.log('ok')
       console.log(removed)
     } catch (error) {
@@ -324,20 +340,21 @@ program
 program
   .command('edit')
   .description('Update authored meaning')
-  .argument('<id>', 'element id, draft id, or project')
+  .argument('<id>', 'element id, draft id, project, or relation')
+  .argument('[ids...]', 'with relation: the source id and the target id')
   .option('--title <text>', 'new title; the id stays')
   .option('--overview <markdown>', 'long overview, or the outcome of a draft')
-  .option('--description <text>', 'concise OKF description; empty removes it')
-  .option('--technology <text>', 'technology of an element; empty removes it')
+  .option('--description <text>', 'concise OKF description (empty removes it), or how a relation works')
+  .option('--technology <text>', 'technology of an element (empty removes it) or of a relation')
   .option('--draft <draft-id>', 'tag this element with the draft that touches it')
   .option('--group <name>', 'assign this component to a sibling group')
   .option('--ungroup', 'remove this component from its group')
   .option('--parent <id>', 'move an empty scanned component to this container')
   .option('--combine <ids...>', 'combine empty scan elements into this element')
-  .action(async (id: string, options) => {
+  .action(async (id: string, ids: string[], options) => {
     try {
       const edited = await writes.edit(process.cwd(), {
-        id,
+        ...relationEnds(id, ids),
         title: options.title,
         overview: options.overview,
         description: options.description,
@@ -372,38 +389,6 @@ program
     }
     console.error(result === 'not-draft' ? 'not a draft' : 'no scan match')
     process.exitCode = 1
-  })
-
-program
-  .command('relate')
-  .description('Author a relationship between two elements')
-  .argument('<source-id>', 'source element id')
-  .argument('<target-id>', 'target element id')
-  .option('--description <prose>', 'how the source uses the target')
-  .option('--technology <text>', 'interaction mechanism')
-  .option('--remove', 'remove the only relationship between these elements')
-  .action(async (source: string, target: string, options) => {
-    try {
-      if (options.remove && (options.description !== undefined || options.technology !== undefined)) {
-        throw new Error('--remove cannot include --description or --technology')
-      }
-      if (!options.remove && (options.description === undefined || options.technology === undefined)) {
-        throw new Error('--description and --technology are required')
-      }
-      const related = options.remove
-        ? await removeRelationship(process.cwd(), source, target)
-        : await relateElements(process.cwd(), {
-          source,
-          target,
-          description: options.description,
-          technology: options.technology,
-        })
-      console.log('ok')
-      console.log(related)
-    } catch (error) {
-      console.error(error instanceof Error ? error.message : String(error))
-      process.exitCode = 1
-    }
   })
 
 program

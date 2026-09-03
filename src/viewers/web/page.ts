@@ -8,6 +8,7 @@ import { anchoredPopoverCss } from './atoms/popover.ts'
 import { kindGlyph, kindLabel } from '../atoms/kind.ts'
 import { cssBlock, palettes } from './atoms/theme.ts'
 import { addDialogCss } from './chrome/add.ts'
+import { relateCss } from './chrome/relate.ts'
 import { emptyStateCss } from './chrome/empty.ts'
 import { mapDebugCss } from './chrome/map-debug.ts'
 import { motionCss } from './chrome/motion.ts'
@@ -323,7 +324,7 @@ const style = `
   }
 ${chromeCss}${anchoredPopoverCss}${motionCss}${revisionCss}${searchCss}${highlightCss}${sourceCss}${taskDiffCss}${backlogMarkCss}${workBadgeCss}${workDetailsCss}${flowRowCss}${mapCss}${pinsCss}${workCss}${tipCss}${projectEditorCss}
 ${emptyStateCss}
-${addDialogCss}
+${addDialogCss}${relateCss}
 ${removeCss}${editableCss}${mapDebugCss}`
 
 function legend(): string {

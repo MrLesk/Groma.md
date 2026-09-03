@@ -11,7 +11,7 @@ Groma is this repository's architecture in Git: Markdown that people and agents 
 \`\`\`text
 source code ──scan──▶ groma|.groma/*.md ──view──▶ maps
                                  ▲
-                  add · draft · edit · relate · remove
+                    add · draft · edit · remove
 \`\`\`
 
 ## Workflow
@@ -23,7 +23,7 @@ source code ──scan──▶ groma|.groma/*.md ──view──▶ maps
    - groma add — declare a person, an external system, or a draft; the scanner never sees those.
    - groma draft — a new system, container or component becomes a ghost at the path it will keep.
    - groma edit — rename, update meaning or technology, tag a part with a draft, group scan evidence, move an empty scanned component, combine empty scan records, or change the project record.
-   - groma relate — author one collaboration between existing parts.
+   - groma add relation, groma edit relation, groma remove relation — author, reword, or take away one collaboration between two parts.
    - groma remove — take away a person, an external, a ghost, or a draft nothing belongs to.
 5. groma accept <id> — accept a ghost only if a scan has matched it. The file stays where it is; only its status changes.
 
@@ -53,8 +53,9 @@ Say what must be true, not how to build it. Do not specify frameworks, file layo
 - Group or ungroup a component: groma edit <id> --group <name> or groma edit <id> --ungroup
 - Move an empty scanned component: groma edit <id> --parent <container-id>
 - Combine empty scan records into one responsibility: groma edit <target-id> --combine <source-id...>
-- Collaboration: groma relate <source-id> <target-id> --description <prose> --technology <text>
-- Remove the only collaboration between two parts: groma relate <source-id> <target-id> --remove
+- Collaboration: groma add relation <source-id> <target-id> --description <prose> --technology <text>. One relationship per ordered pair.
+- Reword it: groma edit relation <source-id> <target-id> [--description <prose>] [--technology <text>]
+- Remove it: groma remove relation <source-id> <target-id>
 - Draft outcome prose: groma edit <draft-id> --overview <markdown>
 - Project record: groma edit project [--title <text>] [--description <text>] [--overview <markdown>]
 - Remove a person, an external, a ghost, or a draft no ghost belongs to: groma remove <id>. It refuses while other parts relate to it, while a ghost still contains parts, or while ghosts carry the draft's tag, and it never removes scanned software.

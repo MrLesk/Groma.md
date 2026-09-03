@@ -38,7 +38,7 @@ stay separate: `groma agent-instructions [guide]` always prints plain Markdown.
 
 Change the architecture through Groma. New parts are drafted as ghosts at
 the path they will keep. Explanations stay on the element. `groma draft`,
-`groma edit`, and `groma relate` author ghosts, meaning, draft tags, scan
+`groma edit`, and `groma add relation` author ghosts, meaning, draft tags, scan
 curation, and collaborations. `groma accept <id>` applies a ghost only after
 a scan has matched it.
 
