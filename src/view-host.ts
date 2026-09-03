@@ -9,6 +9,7 @@ import { backlogPlugin } from '@groma/work-source-backlog'
 import { watchArchitecture } from './architecture-watch.ts'
 import { loadAnnotatedArchitecture } from './core.ts'
 import { loadProjectProfile } from './project-profile.ts'
+import { listGromaRevisions, withGitRevision, type GromaRevision } from './history/revisions.ts'
 import { readTaskDiff } from './viewers/source/diff.ts'
 import { readSource } from './viewers/source/read.ts'
 import { readCodeStructure } from './viewers/source/structure.ts'
@@ -37,13 +38,15 @@ export async function startTerminalViewer(
   let work = EMPTY_WORK_SNAPSHOT
   let viewer: TerminalViewer
   let map: TerminalViewModel
+  let revisions: GromaRevision[] = []
+  let wantedRevision: string | null = null
   let closed = false
   let publishChain = Promise.resolve()
   const publish = () => {
     const run = publishChain.then(async () => {
-      if (closed) return
-      const next = await loadTerminalModel(repositoryRoot)
-      if (closed) return
+      if (closed || wantedRevision !== null || map.revision !== undefined) return
+      const next = { ...await loadTerminalModel(repositoryRoot), revisions }
+      if (closed || wantedRevision !== null || map.revision !== undefined) return
       map = next
       viewer.update({ ...map, work })
     }).catch(() => {})
@@ -54,9 +57,27 @@ export async function startTerminalViewer(
     const run = workSource.read().then(snapshot => {
       if (closed) return
       work = snapshot
-      viewer.update({ ...map, work })
+      if (map.revision === undefined && wantedRevision === null) viewer.update({ ...map, work })
     }).catch(() => {})
     return run
+  }
+  const readRevision = async (revisionId?: string): Promise<TerminalViewModel | undefined> => {
+    const wanted = revisionId ?? null
+    wantedRevision = wanted
+    const revision = revisionId === undefined
+      ? undefined
+      : revisions.find(candidate => candidate.id === revisionId && candidate.compatible)
+    if (revisionId !== undefined && revision === undefined) return undefined
+    const next = revision === undefined
+      ? { ...await loadTerminalModel(repositoryRoot), revisions }
+      : {
+          ...await withGitRevision(repositoryRoot, revision.id, loadTerminalModel),
+          revisions,
+          revision,
+        }
+    if (closed || wantedRevision !== wanted) return undefined
+    map = next
+    return { ...next, work: revision === undefined ? work : EMPTY_WORK_SNAPSHOT }
   }
   const renderer = options.renderer ?? await createCliRenderer({
     clearOnShutdown: true,
@@ -67,16 +88,18 @@ export async function startTerminalViewer(
   })
 
   try {
-    map = await loadTerminalModel(repositoryRoot)
+    revisions = await listGromaRevisions(repositoryRoot)
+    map = { ...await loadTerminalModel(repositoryRoot), revisions }
     viewer = mountTerminalViewer(renderer, { ...map, work }, {
       onRefresh: publish,
       readTask: id => workSource.readItem(id),
-      readStructure: elementId => readCodeStructure(repositoryRoot, map, null, elementId),
-      readSource: (elementId, file) => readSource(repositoryRoot, map, null, elementId, file),
+      readStructure: elementId => readCodeStructure(repositoryRoot, map, map.revision?.id ?? null, elementId),
+      readSource: (elementId, file) => readSource(repositoryRoot, map, map.revision?.id ?? null, elementId, file),
       readDiff: async (taskId, file) => {
         const item = work.items.find(candidate => candidate.id === taskId)
         return item === undefined ? undefined : (await readTaskDiff(repositoryRoot, item, work)).files.find(candidate => candidate.file === file)
       },
+      readRevision,
     })
     void pullWork()
     const sourceWatch = await watchScan(repositoryRoot, { onFold: publish })

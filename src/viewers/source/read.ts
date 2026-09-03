@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises'
 import path from 'node:path'
 
-import { withGitRevision } from '../../history/git.ts'
+import { withGitRevision } from '../../history/revisions.ts'
 import type { ArchitectureGraph } from '../../types.ts'
 
 export interface SourcePayload {

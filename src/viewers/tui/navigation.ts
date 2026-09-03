@@ -15,6 +15,7 @@ import { ancestorsOf, initialTree, semanticTreeRows } from './tree.ts'
 import type { TreeState } from './tree.ts'
 import type { TerminalViewModel } from './model.ts'
 import type { SearchState } from './navigation-search.ts'
+import { reduceHistoryNavigation, type HistoryState } from './navigation-history.ts'
 import {
   reduceDetailsNavigation,
   type CodeStructureState,
@@ -44,11 +45,14 @@ export type ViewerAction =
   | 'toggle-hierarchy'
   | 'toggle-profile'
   | 'toggle-keys'
+  | 'toggle-history'
   | 'dismiss'
   | 'clear-action'
   | 'step-action'
   | 'toggle-details-tab'
   | 'toggle-work'
+
+type MapViewerAction = Exclude<ViewerAction, 'toggle-history'>
 
 export interface ViewerState {
   level: TerminalLevel
@@ -80,6 +84,10 @@ export interface ViewerState {
   /** The command row the details cursor rests on; Enter picks it. */
   actionCursor?: string
   search?: SearchState
+  /** The current-branch revision list shown in the hierarchy pane. */
+  history?: HistoryState
+  /** The commit the viewer should show; absent means the live working tree. */
+  revisionId?: string
   /** The map's columns, which the fitted layouts and their arrows depend on; the viewer keeps it in step with the screen. */
   mapWidth: number
   /** Present only while the terminal is using its task-focused side panes. */
@@ -123,6 +131,7 @@ export function initialState(world: TerminalViewModel): ViewerState {
     detailsScroll: 0,
     detailsTab: 'what',
     mapWidth: 80,
+    revisionId: world.revision?.id,
   }
 }
 
@@ -277,10 +286,10 @@ function expandRow(tree: TreeState, id: string): TreeState {
   return { ...tree, expanded, collapsed }
 }
 
-export function reduceViewer(
+function reduceMapNavigation(
   world: TerminalViewModel,
   state: ViewerState,
-  action: ViewerAction,
+  action: MapViewerAction,
 ): ViewerState {
   const resolved = resolve(world, state)
   const current: ViewerState = {
@@ -411,6 +420,16 @@ export function reduceViewer(
     if (action === 'right') return enterDetails(current)
   }
   return syncTree(world, { ...current, ...moved })
+}
+
+/** The one terminal reducer: history owns its modal rules, then the normal map handles everything else. */
+export function reduceViewer(
+  world: TerminalViewModel,
+  state: ViewerState,
+  action: ViewerAction,
+): ViewerState {
+  if (action === 'toggle-history') return reduceHistoryNavigation(world, state, action) ?? state
+  return reduceHistoryNavigation(world, state, action) ?? reduceMapNavigation(world, state, action)
 }
 
 /**

@@ -1,4 +1,4 @@
-import type { GitRevision } from '../../history/git.ts'
+import type { GromaRevision } from '../../history/revisions.ts'
 import type { SheetScene } from '../../sheet/types.ts'
 import type { ProjectProfile } from '../../project-profile.ts'
 import type { AnnotatedArchitectureModel, WorkItemDetails, WorkSnapshot } from '../../types.ts'
@@ -10,9 +10,7 @@ import type { TaskDiffPayload } from '../source/diff.ts'
 export const PUBLISHED_EVENT = 'groma:published'
 export const PUBLISHED_VERSION_EVENT = 'groma:published-version'
 
-export interface WebRevision extends GitRevision {
-  compatible: boolean
-}
+export type WebRevision = GromaRevision
 
 export interface WebMapTimings {
   architectureLoadMilliseconds: number

@@ -57,6 +57,18 @@ Selecting a component opens its parent container; selecting any outer element
 returns to root. The hierarchy uses `●` actor, `■` system, `▱` container, and `▪`
 component glyphs, with `▾` and `▸` disclosure and `▌` for the current item.
 
+## Revision history
+
+`h` gives the hierarchy pane to the current branch commits that changed the
+Groma directory, newest first. Each row shows the subject, short hash, and date.
+Commits without the current Groma project profile remain visible as Unsupported
+but cannot be opened. `h` or Escape closes the list.
+
+Enter opens a compatible commit as a read-only world. The header names that
+revision, source inspection reads from the same commit, and Backlog work is
+absent. Escape returns to Current; the live architecture and work watchers then
+resume updating the map.
+
 ## Details and flows
 
 The details pane describes the current architecture selection.
@@ -135,6 +147,7 @@ other end.
 - Backspace returns from a container map to root.
 - Tab moves between the hierarchy and map, or between tasks and task details in Work focus. Escape leaves the current focused mode.
 - `/` searches architecture; Enter keeps a match and Escape restores the prior view.
+- `h` lists Groma revisions; Enter opens one and Escape returns to Current.
 - `w` toggles Work focus. `[` toggles the hierarchy, `]` the details, `t` changes the details tab, `s` steps a flow, and `x` clears it.
 - `p` shows the project profile read-only in the details pane; `p` or Escape returns to the selection.
 - `?` shows the keys box in the details pane, opening it if folded; `?` or Escape closes it.

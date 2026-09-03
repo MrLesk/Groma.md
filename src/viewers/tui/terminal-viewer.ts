@@ -5,6 +5,7 @@ import { litLegs, projectFlowStep } from './flow.ts'
 import { panesForWidth } from './layout.ts'
 import {
   clickTreeRow,
+  defaultSelection,
   initialState,
   litAction,
   reduceViewer,
@@ -26,6 +27,7 @@ import { reconcileWorkFocus, selectedWorkId, workView } from './work/model.ts'
 import type { TerminalLevel, WorkItemDetails } from '../../types.ts'
 import type { TaskFileDiff } from '../source/diff-lines.ts'
 import type { CodeFile } from '../source/structure.ts'
+import { clickHistoryRevision } from './navigation-history.ts'
 
 const FLOW_ANIMATION_MS = 120
 const FLOW_ANIMATION_PHASES = 3
@@ -45,6 +47,8 @@ interface ViewerOptions {
   readSource?: (elementId: string, file: string) => Promise<{ source: string } | undefined>
   /** One modified file of a task as a diff, read when the record opens it. */
   readDiff?: (taskId: string, file: string) => Promise<TaskFileDiff | undefined>
+  /** The live working tree or one compatible historical model, read when revision state changes. */
+  readRevision?: (revisionId?: string) => Promise<TerminalViewModel | undefined>
 }
 
 export interface TerminalViewer {
@@ -96,10 +100,13 @@ export function mountTerminalViewer(
   // A selection change at the same level slides the map from the camera it had to the one it gets.
   let slide: { distance: number; left: number } | undefined
   let slideTimer: ReturnType<typeof setTimeout> | undefined
+  let loadingRevision: string | null | false = false
   const screen = mountScreen(renderer, theme, {
     onMapResize: () => repaint(),
     onHierarchyRow(id) {
-      transition(clickTreeRow(viewModel, state, id))
+      transition(state.history === undefined
+        ? clickTreeRow(viewModel, state, id)
+        : clickHistoryRevision(viewModel, state, id))
     },
     onMapCell(x, y) {
       const id = lastProjection === undefined ? undefined : itemAt(lastProjection.items, x, y)?.representationId
@@ -208,11 +215,26 @@ export function mountTerminalViewer(
   function update(next: TerminalViewModel): void {
     if (closed) return
     const previousView = workView(viewModel, state.work)
+    const revisionChanged = next.revision?.id !== viewModel.revision?.id
     viewModel = next
     architectureSearch = createArchitectureSearch(next.elements)
-    const work = reconcileWorkFocus(next.work, state.work)
-    state = { ...state, work }
-    if (JSON.stringify(workView(next, work)) !== JSON.stringify(previousView)) camera = undefined
+    const work = next.revision === undefined ? reconcileWorkFocus(next.work, state.work) : undefined
+    const currentId = next.elements.some(element => element.representationId === state.currentId)
+      ? state.currentId
+      : defaultSelection(next, state.level)?.representationId
+    state = {
+      ...state,
+      currentId,
+      work,
+      revisionId: next.revision?.id,
+      ...(revisionChanged ? {
+        taskRecord: undefined,
+        sourceView: undefined,
+        diffView: undefined,
+        codeStructure: undefined,
+      } : {}),
+    }
+    if (revisionChanged || JSON.stringify(workView(next, work)) !== JSON.stringify(previousView)) camera = undefined
     repaint()
   }
 
@@ -263,8 +285,22 @@ export function mountTerminalViewer(
     repaint(panFrom)
   }
 
-  /** Whatever the details pane opened and still lacks: a record, a component's structure, a source file, a diff. */
+  function loadPendingRevision(): void {
+    const wantedRevision = state.revisionId ?? null
+    const shownRevision = viewModel.revision?.id ?? null
+    const readRevision = options.readRevision
+    if (readRevision === undefined || wantedRevision === shownRevision || loadingRevision === wantedRevision) return
+    loadingRevision = wantedRevision
+    void readRevision(state.revisionId).then(next => {
+      if (closed || (state.revisionId ?? null) !== wantedRevision) return
+      loadingRevision = false
+      if (next !== undefined) update(next)
+    })
+  }
+
+  /** Whatever the details pane opened and still lacks: a revision, record, structure, source file, or diff. */
   function loadPending(): void {
+    loadPendingRevision()
     const { taskRecord, sourceView, diffView, currentId } = state
     if (taskRecord !== undefined && taskRecord.details === undefined) {
       void options.readTask?.(taskRecord.id).then(details => {

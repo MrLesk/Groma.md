@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { test } from 'bun:test'
 
-import { listGitRevisions, withGitRevision } from '../src/history/git.ts'
+import { listGitRevisions, withGitRevision } from '../src/history/revisions.ts'
 
 function projectSource(title: string, overview: string): string {
   return `---
