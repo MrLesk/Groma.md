@@ -104,8 +104,14 @@ island bold, a slab plain, a zone dim and dashed; the selection draws heavy in t
 brand green. The name and kind glyph sit in the top border.
 
 Observed architecture uses solid frames and routes; drafts use dashed ones.
-Active routes march from source to target while their geometry, labels, and
-arrowheads remain fixed.
+Routes draw dim and thin until they touch the selection, a lit flow or a task's
+element; then they draw heavy in the brand green with an arrowhead at the target,
+a port dot on the border cell of each end (none on a top border, where the name
+sits) and a label on their longest run when it fits over plain ground. Where two
+unlit routes cross, a junction glyph marks the crossing. A lit flow marches from
+source to target while its cells stay fixed. Enter on a relationship row in the
+details pane lights that route alone and names both ends; Enter again selects the
+other end.
 
 ## Keys
 

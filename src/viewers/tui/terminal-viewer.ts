@@ -1,8 +1,7 @@
 import type { CliRenderer, KeyEvent } from '@opentui/core'
 
-import { actionLegs } from '../action-path.ts'
 import { createArchitectureSearch } from '../../search.ts'
-import { projectFlowStep } from './flow.ts'
+import { litLegs, projectFlowStep } from './flow.ts'
 import { panesForWidth } from './layout.ts'
 import {
   clickTreeRow,
@@ -125,7 +124,7 @@ export function mountTerminalViewer(
     const taskView = workView(viewModel, state.work)
     const flowAttention = state.actionStep === undefined
       ? undefined
-      : actionLegs(lit.id, viewModel, lit.actorId)[state.actionStep]?.target
+      : litLegs(viewModel, lit)[state.actionStep]?.target
     return projectWorld(viewModel, {
       viewport: screen.mapViewport(),
       level: taskView?.level ?? state.level,

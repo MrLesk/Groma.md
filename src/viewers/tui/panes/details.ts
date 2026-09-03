@@ -5,8 +5,9 @@ import { kindLabel } from '../../atoms/kind.ts'
 import type { ProjectProfile } from '../../../project-profile.ts'
 import { parentOfElements, promotedPeer } from '../../relationship-text.ts'
 import type { ViewerTheme } from '../atoms/theme.ts'
+import type { TerminalViewModel } from '../model.ts'
 import { flowEndpointLabel, type ProjectedFlowStep } from '../flow.ts'
-import type { DetailsTab } from '../navigation.ts'
+import { selectionRelationships, type DetailsTab } from '../navigation.ts'
 import type {
   AnnotatedElement,
   AnnotatedRelationship,
@@ -61,20 +62,15 @@ interface RelationshipRow {
   peer: AnnotatedElement | undefined
 }
 
-/** Outgoing commands first, then everything that points at the element or its promoted parent. */
-function relationshipRows(element: AnnotatedElement, world: ArchitectureGraph, byId: Elements): RelationshipRow[] {
+/** The selection's relationships in pick order, each with the peer it points at or arrives from. */
+function relationshipRows(element: AnnotatedElement, world: TerminalViewModel, byId: Elements): RelationshipRow[] {
   const parentOf = parentOfElements(world.elements)
-  const incoming = world.relationships.filter(relationship => {
-    return promotedPeer(relationship, element.representationId, parentOf)?.outgoing === false
+  const outgoing = new Set(outgoingActions(element.representationId, world).map(relationship => relationship.id))
+  return selectionRelationships(world, element.representationId).map(relationship => {
+    const isOutgoing = outgoing.has(relationship.id)
+    const peerId = isOutgoing ? relationship.target : promotedPeer(relationship, element.representationId, parentOf)?.peerId ?? relationship.source
+    return { relationship, outgoing: isOutgoing, peer: byId.get(peerId) }
   })
-  return [
-    ...outgoingActions(element.representationId, world).map(relationship => ({ relationship, outgoing: true, peer: byId.get(relationship.target) })),
-    ...incoming.map(relationship => ({
-      relationship,
-      outgoing: false,
-      peer: byId.get(promotedPeer(relationship, element.representationId, parentOf)?.peerId ?? relationship.source),
-    })),
-  ]
 }
 
 function relationshipLines(theme: ViewerTheme, row: RelationshipRow, byId: Elements, width: number, lit: boolean, atCursor: boolean): Line[] {
@@ -83,12 +79,18 @@ function relationshipLines(theme: ViewerTheme, row: RelationshipRow, byId: Eleme
   const rest = caption.detail === '' ? '' : ` · ${caption.detail}`
   const peerMark: Line = row.outgoing || row.peer === undefined ? [] : [kindMark(theme, row.peer.kind, row.peer.external), plain(theme, ' ')]
   const markWidth = peerMark.length === 0 ? 0 : 2
+  // The lit row names both ends beneath it; Enter on it follows the relationship there.
+  const ends = lit
+    ? wrap(`${byId.get(row.relationship.source)?.title ?? row.relationship.source} → ${byId.get(row.relationship.target)?.title ?? row.relationship.target}`, width - 2)
+      .map(line => [dim(theme, `  ${line}`)])
+    : []
   if (arrow.length + markWidth + caption.title.length + rest.length <= width) {
-    return [styleRow(theme, [dim(theme, arrow), ...peerMark, plain(theme, caption.title), dim(theme, rest)], width, lit, atCursor)]
+    return [styleRow(theme, [dim(theme, arrow), ...peerMark, plain(theme, caption.title), dim(theme, rest)], width, lit, atCursor), ...ends]
   }
   return [
     styleRow(theme, [dim(theme, arrow), ...peerMark, plain(theme, caption.title)], width, lit, atCursor),
     ...wrap(caption.detail, width - arrow.length).map(line => styleRow(theme, [dim(theme, `${' '.repeat(arrow.length)}${line}`)], width, lit, false)),
+    ...ends,
   ]
 }
 
@@ -100,7 +102,7 @@ function childRows(theme: ViewerTheme, element: AnnotatedElement, byId: Elements
   })]
 }
 
-function whatLines(theme: ViewerTheme, element: AnnotatedElement, world: ArchitectureGraph, byId: Elements, width: number, activeActionId: string | undefined, actionCursor: string | undefined): PaneLines {
+function whatLines(theme: ViewerTheme, element: AnnotatedElement, world: TerminalViewModel, byId: Elements, width: number, activeActionId: string | undefined, actionCursor: string | undefined): PaneLines {
   const lines: Line[] = element.overview ? [[], ...wrap(element.overview, width).map(row => [plain(theme, row)])] : []
   let cursor: number | undefined
   const rows = relationshipRows(element, world, byId)
@@ -118,7 +120,7 @@ function whatLines(theme: ViewerTheme, element: AnnotatedElement, world: Archite
 export function detailsLines(
   theme: ViewerTheme,
   element: AnnotatedElement,
-  world: ArchitectureGraph,
+  world: TerminalViewModel,
   width: number,
   tab: DetailsTab,
   activeActionId: string | undefined,
