@@ -8,7 +8,7 @@ import type { TerminalProjection } from '../projection.ts'
 import { semanticTreeRows } from '../tree.ts'
 import { selectedWorkId, selectedWorkItem, workGroups } from '../work/model.ts'
 import { footerHint, searchLine } from './chrome.ts'
-import { DETAILS_TABS, detailsLines, flowLines, profileLines, taskLines } from './details.ts'
+import { DETAILS_TABS, detailsLines, flowLines, keysLines, profileLines, taskLines } from './details.ts'
 import { hierarchyLines, legendLines, workListLines } from './hierarchy.ts'
 import { DETAILS_CONTENT_WIDTH, HIERARCHY_CONTENT_WIDTH, type DetailsView, type ScreenView } from './screen.ts'
 import { plain, type Line, type PaneLines } from './text.ts'
@@ -49,6 +49,22 @@ function rootStats(world: TerminalViewModel, flows: number, workOpen: boolean): 
   return `${system.title} · ${flows} flows · ${world.elements.length} elements${workOpen ? ' · Work' : ''}`
 }
 
+/** The keys box or the project profile, shown over whatever the pane held. */
+function modeView(theme: ViewerTheme, world: TerminalViewModel, state: ViewerState): DetailsView | undefined {
+  if (state.keys) {
+    return { title: 'Keys', titleColor: theme.foreground, lines: { lines: keysLines(theme, DETAILS_CONTENT_WIDTH) }, scroll: state.detailsScroll }
+  }
+  if (state.profile && world.project !== undefined) {
+    return {
+      title: world.project.title,
+      titleColor: theme.foreground,
+      lines: { lines: profileLines(theme, world.project, DETAILS_CONTENT_WIDTH) },
+      scroll: state.detailsScroll,
+    }
+  }
+  return undefined
+}
+
 function detailsView(
   theme: ViewerTheme,
   world: TerminalViewModel,
@@ -59,14 +75,8 @@ function detailsView(
   commands: ReturnType<typeof worldCommands>,
 ): DetailsView | undefined {
   if (!state.panes.details) return undefined
-  if (state.profile && world.project !== undefined) {
-    return {
-      title: world.project.title,
-      titleColor: theme.foreground,
-      lines: { lines: profileLines(theme, world.project, DETAILS_CONTENT_WIDTH) },
-      scroll: state.detailsScroll,
-    }
-  }
+  const mode = modeView(theme, world, state)
+  if (mode !== undefined) return mode
   if (state.work !== undefined) {
     const item = selectedWorkItem(world.work, state.work)
     return {
@@ -114,6 +124,7 @@ function footerLine(
   const named = !state.panes.details && selected !== undefined
     ? `${kindGlyph(selected.kind)} ${selected.title}   ${hint}`
     : hint
+  if (state.keys) return `? close   esc close   ${named}`
   return state.profile ? `p back   esc back   ${named}` : named
 }
 

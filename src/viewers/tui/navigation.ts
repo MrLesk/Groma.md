@@ -35,6 +35,7 @@ export type ViewerAction =
   | 'toggle-details'
   | 'toggle-hierarchy'
   | 'toggle-profile'
+  | 'toggle-keys'
   | 'dismiss'
   | 'clear-action'
   | 'step-action'
@@ -52,6 +53,8 @@ export interface ViewerState {
   detailsTab: DetailsTab
   /** The project profile is showing in the details pane instead of the selection. */
   profile?: boolean
+  /** The keys box is showing in the details pane, over whatever it showed before. */
+  keys?: boolean
   /** One actor command. Survives leaving the actor until x or another pick. */
   activeActionId?: string
   /** The actor the command was picked from; scopes the walk's approach to them. */
@@ -110,9 +113,9 @@ export function initialState(world: TerminalViewModel): ViewerState {
 /** The pickable command rows the details pane shows for its tab. */
 export function detailsCommands(
   world: TerminalViewModel,
-  state: Pick<ViewerState, 'currentId' | 'detailsTab' | 'profile'>,
+  state: Pick<ViewerState, 'currentId' | 'detailsTab' | 'profile' | 'keys'>,
 ): AnnotatedRelationship[] {
-  if (state.profile) return []
+  if (state.profile || state.keys) return []
   if (state.currentId === undefined) return []
   return state.detailsTab === 'how' ? travelledBy(state.currentId, world) : selectionRelationships(world, state.currentId)
 }
@@ -289,9 +292,10 @@ export function reduceViewer(
       panes: { ...current.panes, hierarchy: true },
     })
   }
-  if (action === 'toggle-details' || action === 'toggle-hierarchy' || action === 'toggle-profile') {
+  if (action === 'toggle-details' || action === 'toggle-hierarchy' || action === 'toggle-profile' || action === 'toggle-keys') {
     return reducePaneKeys(world, current, action)
   }
+  if (action === 'dismiss' && current.keys) return { ...current, keys: false, detailsScroll: 0 }
   if (action === 'dismiss' && current.profile) return { ...current, profile: false, detailsScroll: 0 }
   if (action === 'clear-action') {
     return {
@@ -388,14 +392,16 @@ export function reduceViewer(
 }
 
 /**
- * The pane keys: [ and ] fold or open a pane, p shows the project profile. A folding pane drops its
- * focus to the map and folding the details ends the profile; the profile needs a project.
+ * The pane keys: [ and ] fold or open a pane, p shows the project profile, ? the keys box. A folding pane
+ * drops its focus to the map and folding the details ends the profile and the box; the profile needs a project.
  */
 function reducePaneKeys(
   world: TerminalViewModel,
   current: ViewerState,
-  action: 'toggle-details' | 'toggle-hierarchy' | 'toggle-profile',
+  action: 'toggle-details' | 'toggle-hierarchy' | 'toggle-profile' | 'toggle-keys',
 ): ViewerState {
+  if (action === 'toggle-keys') return toggleDetailsMode(current, 'keys')
+  if (action === 'toggle-profile') return world.project === undefined ? current : toggleDetailsMode(current, 'profile')
   if (action === 'toggle-details' || action === 'toggle-hierarchy') {
     const pane = action === 'toggle-details' ? 'details' : 'hierarchy'
     const open = !current.panes[pane]
@@ -404,12 +410,17 @@ function reducePaneKeys(
       panes: { ...current.panes, [pane]: open },
       focus: !open && current.focus === pane ? 'architecture' : current.focus,
       profile: current.profile === true && !(pane === 'details' && !open),
+      keys: current.keys === true && !(pane === 'details' && !open),
     }
   }
-  if (world.project === undefined) return current
-  return current.profile
-    ? { ...current, profile: false, detailsScroll: 0 }
-    : { ...current, profile: true, panes: { ...current.panes, details: true }, detailsScroll: 0 }
+  return current
+}
+
+/** A details mode, the profile or the keys box, closes when showing and otherwise opens the pane with it. */
+function toggleDetailsMode(current: ViewerState, mode: 'profile' | 'keys'): ViewerState {
+  return current[mode]
+    ? { ...current, [mode]: false, detailsScroll: 0 }
+    : { ...current, [mode]: true, panes: { ...current.panes, details: true }, detailsScroll: 0 }
 }
 
 /** The other end of a relationship becomes the selection, at its own level. */

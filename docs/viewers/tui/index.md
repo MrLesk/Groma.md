@@ -122,6 +122,7 @@ other end.
 - `/` searches architecture; Enter keeps a match and Escape restores the prior view.
 - `w` toggles Work focus. `[` toggles the hierarchy, `]` the details, `t` changes the details tab, `s` steps a flow, and `x` clears it.
 - `p` shows the project profile read-only in the details pane; `p` or Escape returns to the selection.
+- `?` shows the keys box in the details pane, opening it if folded; `?` or Escape closes it.
 - A mouse click on a hierarchy row or a map building selects it.
 - `r` refreshes and Ctrl+C exits.
 

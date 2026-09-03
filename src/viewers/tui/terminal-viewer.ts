@@ -11,6 +11,7 @@ import {
   selectMapItem,
 } from './navigation.ts'
 import type { ViewerAction, ViewerState } from './navigation.ts'
+import { MAP_KEYS } from './keys.ts'
 import { reduceSearch } from './navigation-search.ts'
 import type { SearchInput } from './navigation-search.ts'
 import { viewerTheme } from './atoms/theme.ts'
@@ -28,22 +29,6 @@ const FLOW_ANIMATION_MS = 120
 const FLOW_ANIMATION_PHASES = 3
 const PAN_FRAMES = 4
 const PAN_MS = 30
-const VIEWER_ACTION_BY_KEY: Readonly<Record<string, ViewerAction>> = {
-  return: 'enter',
-  backspace: 'leave',
-  tab: 'tab',
-  '[': 'toggle-hierarchy',
-  ']': 'toggle-details',
-  p: 'toggle-profile',
-  x: 'clear-action',
-  s: 'step-action',
-  t: 'toggle-details-tab',
-  w: 'toggle-work',
-  up: 'up',
-  down: 'down',
-  left: 'left',
-  right: 'right',
-}
 
 interface ViewerOptions {
   level?: TerminalLevel
@@ -222,7 +207,7 @@ export function mountTerminalViewer(
   }
 
   function actionFor(key: KeyEvent): ViewerAction | undefined {
-    return key.ctrl || key.name === undefined ? undefined : VIEWER_ACTION_BY_KEY[key.name]
+    return MAP_KEYS.find(entry => entry.name === key.name && Boolean(entry.ctrl) === key.ctrl)?.action
   }
 
   let searchReturnCamera: TerminalCamera | undefined

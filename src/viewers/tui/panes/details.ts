@@ -7,6 +7,7 @@ import { parentOfElements, promotedPeer } from '../../relationship-text.ts'
 import type { ViewerTheme } from '../atoms/theme.ts'
 import type { TerminalViewModel } from '../model.ts'
 import { flowEndpointLabel, type ProjectedFlowStep } from '../flow.ts'
+import { KEYS_BOX } from '../keys.ts'
 import { selectionRelationships, type DetailsTab } from '../navigation.ts'
 import type {
   AnnotatedElement,
@@ -180,4 +181,13 @@ export function taskLines(theme: ViewerTheme, item: WorkItem, width: number): Li
 export function profileLines(theme: ViewerTheme, project: ProjectProfile, width: number): Line[] {
   const description = project.description === undefined ? [] : wrap(project.description, width).map(row => [dim(theme, row)])
   return [...description, ...(description.length === 0 ? [] : [[]]), ...wrap(project.overview, width).map(row => [plain(theme, row)])]
+}
+
+/** The keys box: every key the viewer handles, its label bold and its meaning dim beside it. */
+export function keysLines(theme: ViewerTheme, width: number): Line[] {
+  const labelWidth = Math.max(...KEYS_BOX.map(row => row.label.length)) + 2
+  return KEYS_BOX.flatMap(row => wrap(row.meaning, Math.max(1, width - labelWidth)).map((line, index) => [
+    bold(theme, (index === 0 ? row.label : '').padEnd(labelWidth)),
+    dim(theme, line),
+  ]))
 }
