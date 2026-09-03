@@ -7,7 +7,7 @@ import {
   type GromaInitPrompts,
 } from './initialize.ts'
 import { formatScanSummary, scanRepository } from './scanner.ts'
-import type { GromaDirectory } from './groma-filesystem.ts'
+import { GromaFileSystem, NOT_INITIALIZED, type GromaDirectory } from './groma-filesystem.ts'
 import { c4Kind } from './okf-profile.ts'
 
 export type InitViewer = 'web' | 'view'
@@ -18,11 +18,14 @@ export interface InitCommandInput {
   interactive: boolean
   projectName?: string
   repositoryRoot: string
+  /** The caller scans and opens a viewer afterwards, so the wizard skips its scan and viewer questions. */
+  opensViewer?: boolean
 }
 
 export interface InitCommandUi {
   cancel(message: string): void
   confirmBacklogInstall(): Promise<boolean | undefined>
+  confirmInit(): Promise<boolean | undefined>
   confirmScan(): Promise<boolean | undefined>
   directory(): Promise<GromaDirectory | undefined>
   error(message: string): void
@@ -37,6 +40,7 @@ export interface InitCommandUi {
 
 export interface InitCommandDependencies {
   backlogAvailable(): boolean
+  error(message: string): void
   executablePath(): Promise<string>
   install(installer: PackageInstaller): Promise<boolean>
   output(message: string): void
@@ -87,6 +91,7 @@ async function installBacklog(installer: PackageInstaller): Promise<boolean> {
 
 const defaultDependencies: InitCommandDependencies = {
   backlogAvailable: () => Bun.which('backlog') !== null,
+  error: message => console.error(message),
   executablePath: currentExecutablePath,
   install: installBacklog,
   output: message => console.log(message),
@@ -147,6 +152,34 @@ function completionMessage(
   return `${verb} Groma project: ${projectName}`
 }
 
+/** The first scan and the choice of viewer; a caller that scans and opens a viewer itself skips both. */
+async function offerFirstScan(
+  input: InitCommandInput,
+  dependencies: InitCommandDependencies,
+  actions: InitCommandActions,
+  completed: string,
+): Promise<void> {
+  const ui = dependencies.ui
+  if (input.opensViewer) {
+    ui.outro(completed)
+    return
+  }
+  const runScan = await ui.confirmScan()
+  if (runScan === undefined) cancelled()
+  if (!runScan) {
+    commandReminder(ui)
+    ui.outro(completed)
+    return
+  }
+  const summary = await dependencies.scan(input.repositoryRoot)
+  ui.note(formatScanSummary(summary), 'First scan complete')
+  const viewer = await ui.viewer()
+  if (viewer === undefined) cancelled()
+  commandReminder(ui)
+  ui.outro(completed)
+  if (viewer !== 'finish') await actions.openViewer(viewer)
+}
+
 async function hasObservedComponents(repositoryRoot: string): Promise<boolean> {
   const records = await loadArchitecture(repositoryRoot)
   return records.documents.some(document => {
@@ -182,26 +215,40 @@ export async function runInitCommand(
       ui.outro(completed)
       return 'completed'
     }
-
-    const runScan = await ui.confirmScan()
-    if (runScan === undefined) cancelled()
-    if (!runScan) {
-      commandReminder(ui)
-      ui.outro(completed)
-      return 'completed'
-    }
-
-    const summary = await dependencies.scan(input.repositoryRoot)
-    ui.note(formatScanSummary(summary), 'First scan complete')
-    const viewer = await ui.viewer()
-    if (viewer === undefined) cancelled()
-    commandReminder(ui)
-    ui.outro(completed)
-    if (viewer !== 'finish') await actions.openViewer(viewer)
+    await offerFirstScan(input, dependencies, actions, completed)
     return 'completed'
   } catch (error) {
     if (!(error instanceof InitializationCancelled)) throw error
     if (input.interactive) ui.cancel('Initialization cancelled.')
     return 'cancelled'
   }
+}
+
+export type FirstRunOutcome = 'ready' | 'declined' | 'missing' | 'cancelled'
+
+/**
+ * The door a viewer passes on its way in. Nothing to do when the Groma directory exists;
+ * one sentence and a failure without a TTY; on a TTY, the offer to run the init wizard.
+ */
+export async function ensureInitialized(
+  input: InitCommandInput,
+  overrides: Partial<InitCommandDependencies> = {},
+): Promise<FirstRunOutcome> {
+  if (GromaFileSystem.find(input.repositoryRoot) !== undefined) return 'ready'
+  const dependencies = { ...defaultDependencies, ...overrides }
+  if (!input.interactive) {
+    dependencies.error(NOT_INITIALIZED)
+    return 'missing'
+  }
+  const wanted = await dependencies.ui.confirmInit()
+  if (wanted === undefined) {
+    dependencies.ui.cancel('Initialization cancelled.')
+    return 'cancelled'
+  }
+  if (!wanted) {
+    dependencies.output('Run groma init when you are ready.')
+    return 'declined'
+  }
+  const outcome = await runInitCommand(input, { openViewer: async () => undefined }, overrides)
+  return outcome === 'completed' ? 'ready' : 'cancelled'
 }

@@ -1,3 +1,4 @@
+import type { DraftElementInput } from '../../draft.ts'
 import type { ProjectProfileInput } from '../../project-profile.ts'
 import type { WorkItemDetails } from '../../types.ts'
 import { PUBLISHED_EVENT, PUBLISHED_VERSION_EVENT } from './payload.ts'
@@ -13,6 +14,8 @@ export interface WebDataSource {
   readTask(id: string): Promise<WorkItemDetails>
   readTaskDiff(id: string): Promise<TaskDiffPayload>
   saveProject?(profile: ProjectProfileInput): Promise<void>
+  /** Drafts an element through the server; absent in the published delivery, which has no writer. */
+  draft?(input: DraftElementInput): Promise<void>
   subscribe(handlers: {
     world(payload: WebPayload): void
     work(payload: WebWorkPayload): void
@@ -55,6 +58,14 @@ function liveDataSource(): WebDataSource {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(profile),
+      })
+      if (!response.ok) throw new Error(await response.text())
+    },
+    async draft(input) {
+      const response = await fetch('/draft', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(input),
       })
       if (!response.ok) throw new Error(await response.text())
     },

@@ -6,6 +6,7 @@ import { watchArchitecture } from '../../architecture-watch.ts'
 import { loadArchitecture } from '../../architecture-reader.ts'
 import { listGitRevisions, withGitGromaRevision, withGitRevision } from '../../history/git.ts'
 import { annotateArchitecture } from '../../core.ts'
+import { draftElement } from '../../draft.ts'
 import { saveProjectProfile } from '../../project-profile.ts'
 import { watchScan } from '../../scanner.ts'
 import { pinsOf } from '../../work/pins.ts'
@@ -234,6 +235,16 @@ export async function startWebViewer(
     }
   }
 
+  async function draftResponse(request: Request): Promise<Response> {
+    try {
+      const id = await draftElement(repositoryRoot, await request.json())
+      await publishWorld()
+      return Response.json({ id })
+    } catch (error) {
+      return new Response(error instanceof Error ? error.message : String(error), { status: 400 })
+    }
+  }
+
   function eventsResponse(): Response {
     let controller: ReadableStreamDefaultController<Uint8Array>
     const stream = new ReadableStream<Uint8Array>({
@@ -279,6 +290,7 @@ export async function startWebViewer(
   async function responseFor(request: Request): Promise<Response> {
     const url = new URL(request.url)
     if (url.pathname === '/project' && request.method === 'PUT') return projectResponse(request)
+    if (url.pathname === '/draft' && request.method === 'POST') return draftResponse(request)
     const route = routes.get(url.pathname)
     return route === undefined ? pageResponse(url) : route(request, url)
   }

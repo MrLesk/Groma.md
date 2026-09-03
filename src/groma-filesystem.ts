@@ -12,6 +12,9 @@ import path from 'node:path'
 
 export const gromaDirectories = ['groma', '.groma'] as const
 
+/** The one sentence every command prints when the repository has no Groma directory. */
+export const NOT_INITIALIZED = 'Groma is not initialized here. Run groma init.'
+
 export type GromaDirectory = typeof gromaDirectories[number]
 
 function isGromaDirectory(value: string): value is GromaDirectory {
@@ -47,7 +50,7 @@ export class GromaFileSystem {
   static open(repositoryRoot: string): GromaFileSystem {
     const filesystem = GromaFileSystem.find(repositoryRoot)
     if (filesystem === undefined) {
-      throw new Error('Groma is not initialized; run groma init')
+      throw new Error(NOT_INITIALIZED)
     }
     return filesystem
   }

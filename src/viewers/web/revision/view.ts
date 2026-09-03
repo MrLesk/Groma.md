@@ -1,3 +1,4 @@
+import { escaped } from '../atoms/escape.ts'
 import type { WebPayload } from '../payload.ts'
 
 export const revisionCss = `
@@ -72,13 +73,6 @@ export const revisionCss = `
   }
 `
 
-function escaped(value: string): string {
-  return value
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-}
 
 function revisionOption(revision: WebPayload['revisions'][number], selected: boolean): string {
   const unsupported = revision.compatible ? '' : ' disabled'
