@@ -6,7 +6,7 @@ import {
   preservedWorkStatuses,
   toggleWorkStatus,
   workStatusFilters,
-} from '../src/viewers/web/work/status-filter.ts'
+} from '../src/work/status-filter.ts'
 
 const statuses = ['To Do', 'In Progress', 'Done']
 

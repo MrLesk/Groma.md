@@ -23,7 +23,7 @@ import type { TerminalProjection } from './projection.ts'
 import type { TerminalCamera } from './projection-camera.ts'
 import type { TerminalViewModel } from './model.ts'
 import { reconcileWorkFocus, selectedWorkId, workView } from './work/model.ts'
-import type { TerminalLevel } from '../../types.ts'
+import type { TerminalLevel, WorkItemDetails } from '../../types.ts'
 
 const FLOW_ANIMATION_MS = 120
 const FLOW_ANIMATION_PHASES = 3
@@ -35,6 +35,8 @@ interface ViewerOptions {
   currentId?: string
   camera?: TerminalCamera
   onRefresh?: () => void | Promise<void>
+  /** The full record of one task, read when the details pane opens it. */
+  readTask?: (id: string) => Promise<WorkItemDetails>
 }
 
 export interface TerminalViewer {
@@ -223,25 +225,45 @@ export function mountTerminalViewer(
     return undefined
   }
 
-  // The camera follows any selection change through one framing rule.
-  function transition(next: ViewerState): void {
+  /** What a state change means for the camera: a new scope or task starts afresh, leaving Work restores, a same-level selection change slides. */
+  function changeOf(next: ViewerState): { restores: boolean; afresh: boolean; slides: boolean; enteringWork: boolean } {
     const changedScope = next.level !== state.level
     const enteringWork = state.work === undefined && next.work !== undefined
     const leavingWork = state.work !== undefined && next.work === undefined
     const changedTask = selectedWorkId(next.work) !== selectedWorkId(state.work)
-    if (enteringWork) workReturnCamera = snapshot()
-    const slides = !changedScope && !enteringWork && !leavingWork && next.currentId !== state.currentId
-    const panFrom = slides ? camera?.x : undefined
+    return {
+      enteringWork,
+      restores: leavingWork,
+      afresh: enteringWork || changedTask || changedScope,
+      slides: !changedScope && !enteringWork && !leavingWork && next.currentId !== state.currentId,
+    }
+  }
+
+  // The camera follows any selection change through one framing rule.
+  function transition(next: ViewerState): void {
+    const change = changeOf(next)
+    if (change.enteringWork) workReturnCamera = snapshot()
+    const panFrom = change.slides ? camera?.x : undefined
     state = next
-    if (leavingWork) {
+    if (next.taskRecord !== undefined && next.taskRecord.details === undefined) loadRecord(next.taskRecord.id)
+    if (change.restores) {
       camera = workReturnCamera
       workReturnCamera = undefined
-    } else if (enteringWork || changedTask) {
-      camera = undefined
-    } else if (changedScope) {
+    } else if (change.afresh) {
       camera = undefined
     }
     repaint(panFrom)
+  }
+
+  /** The record's details arrive after the pane opened on the summary. */
+  function loadRecord(id: string): void {
+    const read = options.readTask
+    if (read === undefined) return
+    void read(id).then(details => {
+      if (closed || state.taskRecord?.id !== id) return
+      state = { ...state, taskRecord: { id, details } }
+      repaint()
+    })
   }
 
   function onSearchKey(key: KeyEvent): void {

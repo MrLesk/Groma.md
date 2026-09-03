@@ -1,6 +1,7 @@
 import type { PaneVisibility } from '../layout.ts'
 import type { TerminalLevel, WorkItem, WorkSnapshot } from '../../../types.ts'
-import { touchedElements } from '../../../work/pins.ts'
+import { touchedElements, type WorkStage } from '../../../work/pins.ts'
+import { toggleWorkStatus, workStatusFilters } from '../../../work/status-filter.ts'
 import type { TerminalViewModel } from '../model.ts'
 import { visibleEndpointFor, type TerminalProjection } from '../projection.ts'
 
@@ -14,26 +15,37 @@ export interface WorkPresentationSnapshot {
 export type WorkSelection =
   | { state: 'waiting' }
   | { state: 'selected'; taskId: string }
+  | { state: 'status'; status: string }
   | { state: 'cleared' }
 
 export interface WorkFocus {
   selection: WorkSelection
   before: WorkPresentationSnapshot
+  /** The statuses whose tasks show on the map, in the corners and in the recap marks. */
+  shown: string[]
 }
+
+/** One line of the Work focus list: a status header, a toggle when a task of that status touches an element, or a task. */
+export type WorkRow =
+  | { kind: 'status'; status: string; count: number; toggle: boolean }
+  | { kind: 'task'; item: WorkItem }
 
 export interface WorkGroup {
   status: string
   items: WorkItem[]
 }
 
-export interface WorkAnchor {
+/** The corner of a touched element: the task naming it and how many other shown tasks touch it. */
+export interface WorkCorner {
   elementId: string
-  count: number
-  active: boolean
+  taskId: string
+  others: number
+  stage: WorkStage
+  selected: boolean
 }
 
 export interface WorkMap {
-  anchors: WorkAnchor[]
+  corners: WorkCorner[]
   touched: Set<string>
 }
 
@@ -75,6 +87,19 @@ export function selectedWorkId(focus: WorkFocus | undefined): string | undefined
   return focus?.selection.state === 'selected' ? focus.selection.taskId : undefined
 }
 
+/** The statuses with a task that touches an element: the ones worth a toggle. */
+export function mappedStatuses(model: TerminalViewModel): string[] {
+  const mapped = new Set(itemsOf(model.work).filter(item => touchedElements(item, model).length > 0).map(item => item.status))
+  return (model.work?.statuses ?? []).filter(status => mapped.has(status))
+}
+
+/** The statuses whose tasks show: the focus's choice, or at first every configured status but the default and final ones. */
+export function shownStatuses(model: TerminalViewModel, focus: WorkFocus | undefined): string[] {
+  const work = model.work
+  if (work === undefined) return []
+  return focus?.shown ?? workStatusFilters(work.statuses, work.defaultStatus, []).enabled
+}
+
 export function initialWorkFocus(
   work: WorkSnapshot | undefined,
   before: WorkPresentationSnapshot,
@@ -83,21 +108,37 @@ export function initialWorkFocus(
   return {
     selection: taskId === undefined ? { state: 'waiting' } : { state: 'selected', taskId },
     before,
+    shown: work === undefined ? [] : workStatusFilters(work.statuses, work.defaultStatus, []).enabled,
   }
 }
 
-export function moveWorkFocus(
-  work: WorkSnapshot | undefined,
-  focus: WorkFocus,
-  step: -1 | 1,
-): WorkFocus {
-  const items = workGroups(work).flatMap(group => group.items)
-  if (items.length === 0) return { ...focus, selection: { state: 'cleared' } }
-  const current = items.findIndex(item => item.id === selectedWorkId(focus))
-  const index = current < 0
-    ? 0
-    : Math.max(0, Math.min(items.length - 1, current + step))
-  return { ...focus, selection: { state: 'selected', taskId: items[index]!.id } }
+/** The Work focus list: each status with its count and, when it is a toggle, then its tasks. */
+export function workRows(model: TerminalViewModel): WorkRow[] {
+  const toggles = new Set(mappedStatuses(model))
+  return workGroups(model.work).flatMap(group => [
+    { kind: 'status' as const, status: group.status, count: group.items.length, toggle: toggles.has(group.status) },
+    ...group.items.map(item => ({ kind: 'task' as const, item })),
+  ])
+}
+
+function rowIndex(rows: readonly WorkRow[], selection: WorkSelection): number {
+  return rows.findIndex(row => selection.state === 'selected'
+    ? row.kind === 'task' && row.item.id === selection.taskId
+    : selection.state === 'status' && row.kind === 'status' && row.status === selection.status)
+}
+
+/** Up and Down walk the list, statuses and tasks alike. */
+export function moveWorkFocus(model: TerminalViewModel, focus: WorkFocus, step: -1 | 1): WorkFocus {
+  const rows = workRows(model)
+  if (rows.length === 0) return { ...focus, selection: { state: 'cleared' } }
+  const current = rowIndex(rows, focus.selection)
+  const row = rows[current < 0 ? 0 : Math.max(0, Math.min(rows.length - 1, current + step))]!
+  return { ...focus, selection: row.kind === 'task' ? { state: 'selected', taskId: row.item.id } : { state: 'status', status: row.status } }
+}
+
+/** Shows or hides one status's tasks on the map, in the corners and in the recap marks. */
+export function toggleShownStatus(focus: WorkFocus, status: string): WorkFocus {
+  return { ...focus, shown: toggleWorkStatus({ available: [], enabled: focus.shown }, status).enabled }
 }
 
 export function reconcileWorkFocus(
@@ -141,6 +182,7 @@ export function workView(
   return { level, currentId: attentionIds[0]!, attentionIds }
 }
 
+/** Every visible element's corner and the elements the selected task touches, counting only the shown statuses. */
 export function projectWork(
   model: TerminalViewModel,
   projection: TerminalProjection,
@@ -150,25 +192,21 @@ export function projectWork(
     return item.representationId === undefined ? [] : [[item.representationId, item] as const]
   }))
   const elements = new Map(model.elements.map(element => [element.representationId, element]))
-  const visibleElementId = (id: string): string | undefined => {
-    return visibleEndpointFor(id, visible, elements, undefined)?.representationId
-  }
-  const selected = selectedWorkItem(model.work, focus)
-  const touched = new Set((selected === undefined ? [] : touchedElements(selected, model))
-    .map(visibleElementId)
+  const visibleIds = (item: WorkItem): Set<string> => new Set(touchedElements(item, model)
+    .map(id => visibleEndpointFor(id, visible, elements, undefined)?.representationId)
     .filter((id): id is string => id !== undefined))
-  const anchors = new Map<string, WorkAnchor>()
-  for (const item of itemsOf(model.work)) {
-    const exact = touchedElements(item, model)[0]
-    const elementId = exact === undefined ? undefined : visibleElementId(exact)
-    if (elementId === undefined) continue
-    const current = anchors.get(elementId)
-    if (current === undefined) {
-      anchors.set(elementId, { elementId, count: 1, active: item.id === selected?.id })
-    } else {
-      current.count += 1
-      current.active ||= item.id === selected?.id
-    }
+  const selected = selectedWorkItem(model.work, focus)
+  const touched = selected === undefined ? new Set<string>() : visibleIds(selected)
+  const shown = new Set(shownStatuses(model, focus))
+  const terminal = model.work?.statuses.at(-1)
+  const stageOf = (item: WorkItem): WorkStage => item.status === model.work?.defaultStatus ? 'todo' : item.status === terminal ? 'done' : 'progress'
+  const byElement = new Map<string, WorkItem[]>()
+  for (const item of workGroups(model.work).flatMap(group => group.items).filter(item => shown.has(item.status))) {
+    for (const elementId of visibleIds(item)) byElement.set(elementId, [...(byElement.get(elementId) ?? []), item])
   }
-  return { anchors: [...anchors.values()], touched }
+  const corners = [...byElement].map(([elementId, items]) => {
+    const current = items.find(item => item.id === selected?.id) ?? items[0]!
+    return { elementId, taskId: current.id, others: items.length - 1, stage: stageOf(current), selected: current.id === selected?.id }
+  })
+  return { corners, touched }
 }

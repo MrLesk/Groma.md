@@ -65,7 +65,7 @@ export async function startTerminalViewer(
 
   try {
     map = await loadTerminalModel(repositoryRoot)
-    viewer = mountTerminalViewer(renderer, { ...map, work }, { onRefresh: publish })
+    viewer = mountTerminalViewer(renderer, { ...map, work }, { onRefresh: publish, readTask: id => workSource.readItem(id) })
     void pullWork()
     const sourceWatch = await watchScan(repositoryRoot, { onFold: publish })
     const architectureWatch = watchArchitecture(repositoryRoot, { onChange: publish })

@@ -10,7 +10,7 @@ import { drawRow } from '../molecules/row.ts'
 import type { ProjectedFlowStep } from '../flow.ts'
 import type { MapShape, ProjectedMapItem, ProjectedMapRoute, TerminalProjection } from '../projection.ts'
 import type { WorkMap } from '../work/model.ts'
-import { drawWorkMarker } from '../molecules/work-marker.ts'
+import { drawWorkCorner } from '../molecules/work-marker.ts'
 
 const SURFACES: ReadonlySet<MapShape> = new Set(['island', 'slab', 'group'])
 
@@ -75,9 +75,9 @@ export function drawWorld(
   // Port dots sit on the shapes' frames, so they follow the shapes; labels last, over plain ground.
   for (const route of litRoutes) drawPorts(buffer, route, projection.viewport, theme, ends(route))
   for (const route of litRoutes) drawRouteLabel(buffer, route, projection.level, theme, visibleItems)
-  for (const anchor of trace.work.anchors) {
-    const item = visibleItems.find(candidate => candidate.representationId === anchor.elementId)
-    if (item !== undefined) drawWorkMarker(buffer, item, projection, anchor, theme)
+  for (const corner of trace.work.corners) {
+    const item = visibleItems.find(candidate => candidate.representationId === corner.elementId)
+    if (item !== undefined) drawWorkCorner(buffer, item, corner, theme)
   }
   if (trace.step) {
     const source = visibleItems.find(item => item.key === trace.step?.source.visibleKey)

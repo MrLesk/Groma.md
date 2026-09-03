@@ -13,8 +13,11 @@ import type {
   AnnotatedElement,
   AnnotatedRelationship,
   ArchitectureGraph,
+  WorkChecklistItem,
   WorkItem,
+  WorkItemDetails,
 } from '../../../types.ts'
+import { elementWorkGroups, type WorkStage } from '../../../work/pins.ts'
 import { accent, bold, chunk, dim, kindMark, plain, styleRow, wrap, type Line, type PaneLines } from './text.ts'
 
 export const DETAILS_TABS: readonly DetailsTab[] = ['what', 'how']
@@ -103,6 +106,26 @@ function childRows(theme: ViewerTheme, element: AnnotatedElement, byId: Elements
   })]
 }
 
+const STAGE_LABEL: Record<WorkStage, string> = { todo: 'To do', progress: 'In progress', done: 'Done' }
+
+/** The tasks touching the element under To do, In progress and Done, each with its acceptance progress. */
+function workRows(theme: ViewerTheme, element: AnnotatedElement, world: TerminalViewModel, width: number, actionCursor: string | undefined): PaneLines {
+  const lines: Line[] = []
+  let cursor: number | undefined
+  if (world.work === undefined) return { lines }
+  for (const group of elementWorkGroups(world.work, element.representationId, world)) {
+    lines.push([], heading(theme, `${STAGE_LABEL[group.stage]} · ${group.items.length}`, width))
+    for (const item of group.items) {
+      const atCursor = item.id === actionCursor
+      if (atCursor) cursor = lines.length
+      const progress = item.acceptanceCriteriaCount > 0 ? ` ${item.acceptanceCriteriaCompleted}/${item.acceptanceCriteriaCount}` : ''
+      lines.push(styleRow(theme, [bold(theme, item.id), dim(theme, progress)], width, false, atCursor))
+      lines.push(...wrap(item.title, width - 2).map(row => [dim(theme, `  ${row}`)]))
+    }
+  }
+  return { lines, cursor }
+}
+
 function whatLines(theme: ViewerTheme, element: AnnotatedElement, world: TerminalViewModel, byId: Elements, width: number, activeActionId: string | undefined, actionCursor: string | undefined): PaneLines {
   const lines: Line[] = element.overview ? [[], ...wrap(element.overview, width).map(row => [plain(theme, row)])] : []
   let cursor: number | undefined
@@ -114,6 +137,9 @@ function whatLines(theme: ViewerTheme, element: AnnotatedElement, world: Termina
     lines.push(...relationshipLines(theme, row, byId, width, row.relationship.id === activeActionId, atCursor))
   }
   lines.push(...childRows(theme, element, byId, width))
+  const work = workRows(theme, element, world, width, actionCursor)
+  if (work.cursor !== undefined) cursor = lines.length + work.cursor
+  lines.push(...work.lines)
   return { lines, cursor }
 }
 
@@ -190,4 +216,32 @@ export function keysLines(theme: ViewerTheme, width: number): Line[] {
     bold(theme, (index === 0 ? row.label : '').padEnd(labelWidth)),
     dim(theme, line),
   ]))
+}
+
+function checklist(theme: ViewerTheme, title: string, items: readonly WorkChecklistItem[], width: number): Line[] {
+  if (items.length === 0) return []
+  const done = items.filter(item => item.checked).length
+  return [[], heading(theme, `${title} · ${done} of ${items.length}`, width), ...items.flatMap(item => {
+    return wrap(item.text, width - 2).map((row, index) => [plain(theme, index === 0 ? (item.checked ? '✓ ' : '○ ') : '  '), (item.checked ? dim : plain)(theme, row)])
+  })]
+}
+
+function prose(theme: ViewerTheme, title: string, value: string, width: number): Line[] {
+  if (value.trim() === '') return []
+  return [[], heading(theme, title, width), ...value.split('\n').flatMap(paragraph => paragraph === '' ? [[]] : wrap(paragraph, width).map(row => [plain(theme, row)]))]
+}
+
+/** The full task record: the summary, then its description, criteria, Definition of Done, plan, notes and comments. */
+export function taskRecordLines(theme: ViewerTheme, item: WorkItem, details: WorkItemDetails | undefined, width: number): Line[] {
+  const lines = taskLines(theme, item, width)
+  if (details === undefined) return lines
+  return [
+    ...lines,
+    ...prose(theme, 'Description', details.description, width),
+    ...checklist(theme, 'Acceptance criteria', details.acceptanceCriteria, width),
+    ...checklist(theme, 'Definition of Done', details.definitionOfDone, width),
+    ...prose(theme, 'Plan', details.implementationPlan, width),
+    ...prose(theme, 'Notes', details.implementationNotes, width),
+    ...details.comments.flatMap(comment => prose(theme, comment.author, comment.body, width)),
+  ]
 }

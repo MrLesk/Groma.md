@@ -90,6 +90,18 @@ the root map and promotes hidden components to their visible containers. The cam
 keeps the selection's island or container centred and scrolls vertically to the
 touched set. Closing Work focus with `w` or Escape restores the exact pre-Work view.
 
+Every touched row, slab or building carries its task in a corner: the selected task
+when it touches the element, else the first shown task in work order, with +N for
+the other shown tasks; in progress in the brand green, to do plain, done dim, the
+selected task bold. In the root map a task on a component stands on its container
+row and a system carries only tasks that touch the system. The Work focus list has
+one toggle per status with a mapped task: Enter on its header shows or hides those
+tasks on the map, in the corners and in the recap marks without changing the
+selection, scope or camera; the default and final statuses start hidden. The recap
+row counts every status and marks the shown ones. The details pane lists the tasks
+touching the selection under To do, In progress and Done with their acceptance
+progress; Enter on one opens its full record and Escape returns.
+
 ## Appearance
 
 Every colour is the terminal's own: its default foreground and background, its
