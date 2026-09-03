@@ -1,12 +1,24 @@
-import type { AnnotatedElement, Bounds, TerminalLevel } from '../../types.ts'
+import type { AnnotatedElement, Bounds, C4Kind, TerminalLevel } from '../../types.ts'
 import type { TerminalViewModel } from './model.ts'
-import { ancestorOfKind, type MapDirection, type ViewerState } from './navigation.ts'
+import type { MapDirection, ViewerState } from './navigation.ts'
 import { mapAnchors } from './projection.ts'
 import { firstBuilding, neighbourContainer } from './projection-container.ts'
 import { rootStops } from './projection-root.ts'
 
 function elementsById(model: TerminalViewModel): Map<string, AnnotatedElement> {
   return new Map(model.elements.map(element => [element.representationId, element]))
+}
+
+export function ancestorOfKind(
+  element: AnnotatedElement | undefined,
+  kind: C4Kind,
+  byId: Map<string, AnnotatedElement>,
+): AnnotatedElement | undefined {
+  let current = element
+  while (current && current.kind !== kind) {
+    current = current.parent === null ? undefined : byId.get(current.parent)
+  }
+  return current
 }
 
 export function canEnter(element: AnnotatedElement): boolean {

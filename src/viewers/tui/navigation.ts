@@ -28,7 +28,6 @@ import { reduceWorkFocus } from './work/navigation.ts'
 import type {
   AnnotatedElement,
   AnnotatedRelationship,
-  C4Kind,
   TerminalLevel,
   WorkItemDetails,
 } from '../../types.ts'
@@ -107,18 +106,6 @@ export function defaultSelection(
     return ranked.find(element => element.kind === 'system' && !element.external)
   }
   return ranked.find(element => element.kind === 'component')
-}
-
-export function ancestorOfKind(
-  element: AnnotatedElement | undefined,
-  kind: C4Kind,
-  byId: Map<string, AnnotatedElement>,
-): AnnotatedElement | undefined {
-  let current = element
-  while (current && current.kind !== kind) {
-    current = current.parent === null ? undefined : byId.get(current.parent)
-  }
-  return current
 }
 
 export function initialState(world: TerminalViewModel): ViewerState {
