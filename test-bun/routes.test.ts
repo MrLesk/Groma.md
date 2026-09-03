@@ -89,7 +89,7 @@ test.concurrent('routes touching the selection light while the others stay thin'
 
 test.concurrent('a picked relationship lights its own route and Enter follows it to the other end', () => {
   const model = linkedWorld()
-  let state: ViewerState = { ...initialState(model), level: 'components', currentId: 'observed:a', focus: 'details', mapWidth: 60 }
+  let state: ViewerState = { ...initialState(model), level: 'components', currentId: 'observed:a', focus: 'details' }
   state = reduceViewer(model, state, 'down')
   assert.equal(state.actionCursor, 'a-reads-b')
   const lit = litAction(model, state)
@@ -108,7 +108,7 @@ test.concurrent('routes keep their cells while the selection stays on its island
     box('beta', 'system', CELL, { children: ['observed:c3'] }),
     box('c3', 'container', CELL, { parent: 'observed:beta' }),
   ], [uses('c1-c3', 'c1', 'c3')])
-  const viewport = { x: 0, y: 0, width: 40, height: 12 }
+  const viewport = { x: 0, y: 0, width: 200, height: 100 }
   const first = projectWorld(model, { viewport, currentId: 'observed:c1' })
   const second = projectWorld(model, { viewport, currentId: 'observed:c2', camera: first.camera })
   assert.ok(first.relationships.length === 1)

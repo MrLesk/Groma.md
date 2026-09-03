@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 
 import { test } from 'bun:test'
 
-import { loadArchitectureViewModel } from '../src/core.ts'
+import { loadAnnotatedArchitecture } from '../src/core.ts'
 import {
   LANE_GAP,
   ROUTE_CLEARANCE,
@@ -19,7 +19,7 @@ import { artifactRouteIds, orthogonal, routeSpacingIndex } from '../src/sheet/ro
 import { routeAll } from '../src/sheet/route.ts'
 import { sheetScene } from '../src/sheet/scene.ts'
 import type { SheetScene } from '../src/sheet/types.ts'
-import type { ArchitectureWorld } from '../src/types.ts'
+import type { ArchitectureGraph } from '../src/types.ts'
 import { box, openclawFixtureRoot, uses, viewerFixtureRoot, worldOf } from './helpers.ts'
 
 const unit = { x: 0, y: 0, width: 1, height: 1 }
@@ -115,8 +115,8 @@ function routesCross(a: FlatRoute, b: FlatRoute): boolean {
   return false
 }
 
-async function fixture(root: string): Promise<{ scene: SheetScene; world: ArchitectureWorld }> {
-  const { world } = await loadArchitectureViewModel(root)
+async function fixture(root: string): Promise<{ scene: SheetScene; world: ArchitectureGraph }> {
+  const world = await loadAnnotatedArchitecture(root)
   return { scene: sheetScene(world), world }
 }
 

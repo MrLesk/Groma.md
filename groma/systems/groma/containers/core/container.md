@@ -5,7 +5,7 @@ status: stable
 groma:
   id: core
   parent: groma
-  technology: Comark, ELK
+  technology: Comark
 ---
 
 Owns architecture identity, Markdown interpretation, semantic models, project metadata, sheet composition, and architecture change primitives shared by every entry point.

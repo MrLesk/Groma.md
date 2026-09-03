@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 
 import { test } from 'bun:test'
 
-import { loadArchitectureViewModel } from '../src/core.ts'
+import { loadAnnotatedArchitecture } from '../src/core.ts'
 import { PAD, ROOF_SHADOW, centredRect } from '../src/sheet/grid.ts'
 import { PLANE, ROOF_PAD, curved, roofBlock, textWidth } from '../src/sheet/measure.ts'
 import { sheetScene } from '../src/sheet/scene.ts'
@@ -41,7 +41,7 @@ const groundPoint = ({ x, y }: Point): RoutePoint => ({
 })
 
 async function fixtureScene(root: string): Promise<ProjectedScene> {
-  const { world } = await loadArchitectureViewModel(root)
+  const world = await loadAnnotatedArchitecture(root)
   return projectScene(sheetScene(world), projectProfile)
 }
 
@@ -307,7 +307,7 @@ test.concurrent('blueprint decorations scale with the sheet and the project plat
 })
 
 test.concurrent('every relationship has a polyline whose arrowhead lies on the sheet along its last step', async () => {
-  const { world } = await loadArchitectureViewModel(viewerFixtureRoot)
+  const world = await loadAnnotatedArchitecture(viewerFixtureRoot)
   const scene = projectScene(sheetScene(world), projectProfile)
   assert.deepEqual(scene.routes.map(item => item.route.id), world.relationships.map(item => item.id))
   for (const { route, points, arrow } of scene.routes) {
@@ -444,7 +444,7 @@ test.concurrent('every surface label stays in the compact edge band', () => {
 })
 
 test.concurrent('projecting a frozen world leaves it untouched', async () => {
-  const { world } = await loadArchitectureViewModel(viewerFixtureRoot)
+  const world = await loadAnnotatedArchitecture(viewerFixtureRoot)
   const frozen = Object.freeze(structuredClone(world))
   const before = structuredClone(frozen)
   projectScene(sheetScene(frozen), projectProfile)

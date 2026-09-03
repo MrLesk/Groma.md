@@ -40,9 +40,3 @@ title, and optional description directly; derives overview from leading body
 prose; and reads stable identity, containment, groups, technology, and Code
 ownership from the nested Groma metadata. It resolves strict directed
 relationship tables into graph edges.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [World layout](world-layout.md) | Supplies the semantic graph for terminal layout | In-process data |

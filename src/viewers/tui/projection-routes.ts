@@ -59,7 +59,7 @@ function port(to: Point, bounds: Bounds): Point {
  * Clips a path out of the shapes it joins: the first and last cells sit immediately
  * outside them, ready for a port and an arrowhead.
  */
-function attachRoute(
+export function attachRoute(
   route: readonly Point[],
   source: Bounds,
   target: Bounds,
@@ -89,22 +89,4 @@ function attachRoute(
   const start = port(firstDirection, source)
   const end = port(lastDirection, target)
   return orthogonalRoute([start, ...clipped, end])
-}
-
-/** The terminal's route between two shapes: centre to centre with one bend, clipped to their facing sides. */
-export function routeBetween(source: Bounds, target: Bounds): Point[] {
-  const sourceCenter = {
-    x: Math.floor(source.x + source.width / 2),
-    y: Math.floor(source.y + source.height / 2),
-  }
-  const targetCenter = {
-    x: Math.floor(target.x + target.width / 2),
-    y: Math.floor(target.y + target.height / 2),
-  }
-  const horizontal = Math.abs(targetCenter.x - sourceCenter.x)
-    >= Math.abs(targetCenter.y - sourceCenter.y)
-  const bend = horizontal
-    ? { x: targetCenter.x, y: sourceCenter.y }
-    : { x: sourceCenter.x, y: targetCenter.y }
-  return attachRoute([sourceCenter, bend, targetCenter], source, target)
 }

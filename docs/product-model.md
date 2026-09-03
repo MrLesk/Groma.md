@@ -229,10 +229,11 @@ not invent evidence or human verification.
 
 Core is the only runtime that reads architecture Markdown. It loads every C4
 element document under the Groma directory and every draft record under
-`drafts/`, merges them into one world, and lays that world out before any
-viewer sees it: `world-layout` gives the TUI map its bounds and routes, the
-`sheet` gives the web map its cells, floors and lanes. A viewer plugin
-projects what core computed. It never reads the files itself. The package
+`drafts/`, merges them into one world, and composes one shared sheet before any
+viewer sees it. The sheet gives both maps their surfaces, buildings, groups,
+and route paths. Each viewer only projects those fixed cells for its own
+screen. It never reads the architecture files or creates another world layout.
+The package
 requires `groma/index.md` with only the OKF v0.2 declaration and
 `groma/project.md` with the explicit Groma architecture marker.
 

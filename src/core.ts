@@ -8,7 +8,6 @@ import type {
   AnnotatedArchitectureModel,
   AnnotatedElement,
   ArchitectureRecords,
-  ArchitectureViewModel,
   ElementStatus,
   FilesystemAccessHandler,
   Origin,
@@ -112,16 +111,4 @@ export async function loadAnnotatedArchitecture(
   const model = annotateArchitecture(await loadArchitecture(repositoryRoot, options))
   await attachCodeLines(repositoryRoot, model.elements)
   return model
-}
-
-export async function loadArchitectureViewModel(
-  repositoryRoot: string,
-  options: { onFilesystemAccess?: FilesystemAccessHandler } = {},
-): Promise<ArchitectureViewModel> {
-  const model = await loadAnnotatedArchitecture(repositoryRoot, options)
-  const { layoutArchitectureWorld } = await import('./world-layout.ts')
-  return {
-    ...model,
-    world: await layoutArchitectureWorld(model),
-  }
 }
