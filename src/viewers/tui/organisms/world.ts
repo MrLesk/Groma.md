@@ -5,7 +5,7 @@ import { routeTouches, visibleIn } from '../projection-camera.ts'
 import { drawSurfaceFrame, fillSurface } from '../molecules/surface.ts'
 import { drawBuilding } from '../molecules/building.ts'
 import { drawFlowMarker } from '../molecules/flow-marker.ts'
-import { drawRoute, drawRouteLabel } from '../molecules/route.ts'
+import { drawPorts, drawRoute, drawRouteLabel, type Occupied } from '../molecules/route.ts'
 import { drawRow } from '../molecules/row.ts'
 import type { ProjectedFlowStep } from '../flow.ts'
 import type { MapShape, ProjectedMapItem, ProjectedMapRoute, TerminalProjection } from '../projection.ts'
@@ -33,7 +33,6 @@ export function drawWorld(
     pathIds: Set<string>
     onPath: (elementId: string) => boolean
     work: WorkMap
-    tracedId?: string
     step?: ProjectedFlowStep
     animationPhase: number
   },
@@ -46,31 +45,36 @@ export function drawWorld(
   )
   const tracing = trace.pathIds.size > 0
   const { items: visibleItems, routes } = paintedWorld(projection)
-  const activeRoutes = routes.filter(route => route.ids.some(id => trace.pathIds.has(id)))
   const surfaces = visibleItems.filter(item => SURFACES.has(item.shape))
   const accented = (item: ProjectedMapItem): boolean => {
     return item.representationId === projection.currentId || trace.work.touched.has(item.key)
   }
+  // A route lights when it carries a lit flow or touches the selection or a work-touched element.
+  const onFlow = (route: ProjectedMapRoute): boolean => route.ids.some(id => trace.pathIds.has(id))
+  const lit = (route: ProjectedMapRoute): boolean => onFlow(route)
+    || route.source === projection.currentId || route.target === projection.currentId
+    || trace.work.touched.has(route.source) || trace.work.touched.has(route.target)
+  const boundsByKey = new Map(projection.items.map(item => [item.key, item.cellBounds]))
+  const ends = (route: ProjectedMapRoute) => ({ source: boundsByKey.get(route.source), target: boundsByKey.get(route.target) })
+  const litRoutes = routes.filter(lit)
 
   for (const item of surfaces) fillSurface(buffer, item, projection.viewport, theme)
-  for (const route of routes) {
-    const flowActive = route.ids.some(id => trace.pathIds.has(id))
-    const active = flowActive || trace.work.touched.has(route.source)
-    drawRoute(
-      buffer,
-      route,
-      projection,
-      theme,
-      active,
-      trace.tracedId !== undefined && route.ids.includes(trace.tracedId),
-      flowActive ? trace.animationPhase : undefined,
-    )
+  const occupied: Occupied = new Map()
+  for (const route of routes.filter(route => !lit(route))) {
+    drawRoute(buffer, route, projection.viewport, theme, { lit: false, ends: ends(route), occupied })
+  }
+  for (const route of litRoutes) {
+    drawRoute(buffer, route, projection.viewport, theme, {
+      lit: true,
+      ends: ends(route),
+      ...(onFlow(route) ? { animationPhase: trace.animationPhase } : {}),
+    })
   }
   for (const item of surfaces) drawSurfaceFrame(buffer, item, theme, accented(item))
   drawRowsAndCards(buffer, visibleItems, projection, theme, trace, tracing)
-  for (const route of activeRoutes) {
-    drawRouteLabel(buffer, route, projection, theme, true)
-  }
+  // Port dots sit on the shapes' frames, so they follow the shapes; labels last, over plain ground.
+  for (const route of litRoutes) drawPorts(buffer, route, projection.viewport, theme, ends(route))
+  for (const route of litRoutes) drawRouteLabel(buffer, route, projection.level, theme, visibleItems)
   for (const anchor of trace.work.anchors) {
     const item = visibleItems.find(candidate => candidate.representationId === anchor.elementId)
     if (item !== undefined) drawWorkMarker(buffer, item, projection, anchor, theme)

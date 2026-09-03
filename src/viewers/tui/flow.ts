@@ -1,4 +1,6 @@
 import { actionLegs } from '../action-path.ts'
+import type { AnnotatedRelationship } from '../../types.ts'
+import type { LitAction } from './navigation.ts'
 import { ancestorIds, parentOfElements } from '../relationship-text.ts'
 import type { TerminalViewModel } from './model.ts'
 import { visibleEndpointFor, type TerminalProjection } from './projection.ts'
@@ -33,6 +35,14 @@ function visibleEndpoint(
   return visibleEndpointFor(id, visible, byId, boundary)
 }
 
+/** An actor's pick lights its whole walk; any other picked relationship lights itself alone. */
+export function litLegs(world: TerminalViewModel, lit: LitAction): AnnotatedRelationship[] {
+  const picked = world.relationships.find(relationship => relationship.id === lit.id)
+  if (picked === undefined) return []
+  const source = world.elements.find(element => element.representationId === picked.source)
+  return source?.kind === 'actor' ? actionLegs(picked.id, world, lit.actorId) : [picked]
+}
+
 /** Exact authored endpoints paired with the cards that represent them in the current scope. */
 export function projectFlowStep(
   world: TerminalViewModel,
@@ -42,7 +52,7 @@ export function projectFlowStep(
   step: number | undefined,
 ): ProjectedFlowStep | undefined {
   if (step === undefined) return undefined
-  const legs = actionLegs(actionId, world, actorId)
+  const legs = litLegs(world, { id: actionId, actorId })
   const leg = legs[step]
   if (!leg) return undefined
   const byId = new Map(world.elements.map(element => [element.representationId, element]))

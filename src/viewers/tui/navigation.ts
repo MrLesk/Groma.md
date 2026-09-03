@@ -1,9 +1,6 @@
-import {
-  actionLegs,
-  pickableActions,
-  travelledBy,
-  worldCommands,
-} from '../action-path.ts'
+import { outgoingActions, travelledBy, worldCommands } from '../action-path.ts'
+import { parentOfElements, promotedPeer } from '../relationship-text.ts'
+import { litLegs } from './flow.ts'
 import type { PaneVisibility } from './layout.ts'
 import {
   canEnter,
@@ -116,10 +113,15 @@ export function detailsCommands(
   state: Pick<ViewerState, 'currentId' | 'detailsTab' | 'profile'>,
 ): AnnotatedRelationship[] {
   if (state.profile) return []
-  if (state.detailsTab === 'how') {
-    return state.currentId === undefined ? [] : travelledBy(state.currentId, world)
-  }
-  return pickableActions(state.currentId, world)
+  if (state.currentId === undefined) return []
+  return state.detailsTab === 'how' ? travelledBy(state.currentId, world) : selectionRelationships(world, state.currentId)
+}
+
+/** The selection's relationships in the details pane's order: its own outgoing ones, then everything pointing at it or its promoted parent. */
+export function selectionRelationships(world: TerminalViewModel, elementId: string): AnnotatedRelationship[] {
+  const parentOf = parentOfElements(world.elements)
+  const incoming = world.relationships.filter(relationship => promotedPeer(relationship, elementId, parentOf)?.outgoing === false)
+  return [...outgoingActions(elementId, world), ...incoming]
 }
 
 /** A lit walk: its command and, for an actor's own pick, the picker. */
@@ -301,7 +303,7 @@ export function reduceViewer(
   }
   if (action === 'step-action') {
     const lit = litAction(world, current)
-    const legs = actionLegs(lit.id, world, lit.actorId)
+    const legs = litLegs(world, lit)
     if (legs.length === 0) return current
     return { ...current, actionStep: ((current.actionStep ?? -1) + 1) % legs.length }
   }
@@ -348,8 +350,10 @@ export function reduceViewer(
       return { ...current, actionCursor: actions[next]!.id, actionStep: undefined }
     }
     if (action === 'enter') {
-      const actions = detailsCommands(world, current)
-      if (!actions.some(item => item.id === current.actionCursor)) return current
+      const picked = detailsCommands(world, current).find(item => item.id === current.actionCursor)
+      if (picked === undefined) return current
+      // Enter on the row already lit follows the relationship to its other end.
+      if (picked.id === current.activeActionId) return followRelationship(world, current, picked)
       // Enter commits the walk the map is already lighting.
       const lit = litAction(world, current)
       return {
@@ -406,6 +410,14 @@ function reducePaneKeys(
   return current.profile
     ? { ...current, profile: false, detailsScroll: 0 }
     : { ...current, profile: true, panes: { ...current.panes, details: true }, detailsScroll: 0 }
+}
+
+/** The other end of a relationship becomes the selection, at its own level. */
+function followRelationship(world: TerminalViewModel, current: ViewerState, relationship: AnnotatedRelationship): ViewerState {
+  const peerId = relationship.source === current.currentId ? relationship.target : relationship.source
+  const peer = elementsById(world).get(peerId)
+  if (peer === undefined) return current
+  return syncTree(world, { ...current, level: levelFor(peer), currentId: peer.representationId, actionCursor: undefined })
 }
 
 /** A click on the map: the element under the cell becomes the selection. */
