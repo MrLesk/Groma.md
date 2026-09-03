@@ -24,6 +24,8 @@ import type { TerminalCamera } from './projection-camera.ts'
 import type { TerminalViewModel } from './model.ts'
 import { reconcileWorkFocus, selectedWorkId, workView } from './work/model.ts'
 import type { TerminalLevel, WorkItemDetails } from '../../types.ts'
+import type { TaskFileDiff } from '../source/diff-lines.ts'
+import type { CodeFile } from '../source/structure.ts'
 
 const FLOW_ANIMATION_MS = 120
 const FLOW_ANIMATION_PHASES = 3
@@ -37,6 +39,12 @@ interface ViewerOptions {
   onRefresh?: () => void | Promise<void>
   /** The full record of one task, read when the details pane opens it. */
   readTask?: (id: string) => Promise<WorkItemDetails>
+  /** The declarations of a component's TypeScript files, read when its How tab shows. */
+  readStructure?: (elementId: string) => Promise<CodeFile[] | undefined>
+  /** A component's source file, read when a declaration opens it. */
+  readSource?: (elementId: string, file: string) => Promise<{ source: string } | undefined>
+  /** One modified file of a task as a diff, read when the record opens it. */
+  readDiff?: (taskId: string, file: string) => Promise<TaskFileDiff | undefined>
 }
 
 export interface TerminalViewer {
@@ -245,7 +253,7 @@ export function mountTerminalViewer(
     if (change.enteringWork) workReturnCamera = snapshot()
     const panFrom = change.slides ? camera?.x : undefined
     state = next
-    if (next.taskRecord !== undefined && next.taskRecord.details === undefined) loadRecord(next.taskRecord.id)
+    loadPending()
     if (change.restores) {
       camera = workReturnCamera
       workReturnCamera = undefined
@@ -255,15 +263,37 @@ export function mountTerminalViewer(
     repaint(panFrom)
   }
 
-  /** The record's details arrive after the pane opened on the summary. */
-  function loadRecord(id: string): void {
-    const read = options.readTask
-    if (read === undefined) return
-    void read(id).then(details => {
-      if (closed || state.taskRecord?.id !== id) return
-      state = { ...state, taskRecord: { id, details } }
-      repaint()
-    })
+  /** Whatever the details pane opened and still lacks: a record, a component's structure, a source file, a diff. */
+  function loadPending(): void {
+    const { taskRecord, sourceView, diffView, currentId } = state
+    if (taskRecord !== undefined && taskRecord.details === undefined) {
+      void options.readTask?.(taskRecord.id).then(details => {
+        if (!closed && state.taskRecord?.id === taskRecord.id) take({ taskRecord: { id: taskRecord.id, details } })
+      })
+    }
+    const component = viewModel.elements.find(element => element.representationId === currentId && element.kind === 'component')
+    if (state.detailsTab === 'how' && component !== undefined && state.codeStructure?.elementId !== component.representationId) {
+      state = { ...state, codeStructure: { elementId: component.representationId, files: [] } }
+      void options.readStructure?.(component.representationId).then(files => {
+        if (!closed && state.currentId === component.representationId) take({ codeStructure: { elementId: component.representationId, files: files ?? [] } })
+      })
+    }
+    if (sourceView !== undefined && sourceView.text === undefined && currentId !== undefined) {
+      void options.readSource?.(currentId, sourceView.file).then(payload => {
+        if (!closed && state.sourceView?.file === sourceView.file) take({ sourceView: { ...sourceView, text: payload?.source ?? '' } })
+      })
+    }
+    if (diffView !== undefined && diffView.diff === undefined) {
+      void options.readDiff?.(diffView.taskId, diffView.file).then(diff => {
+        if (!closed && state.diffView?.file === diffView.file && diff !== undefined) take({ diffView: { ...diffView, diff } })
+      })
+    }
+  }
+
+  /** A read arrived: the state takes it and the screen repaints. */
+  function take(part: Partial<ViewerState>): void {
+    state = { ...state, ...part }
+    repaint()
   }
 
   function onSearchKey(key: KeyEvent): void {

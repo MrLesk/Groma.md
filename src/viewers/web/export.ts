@@ -13,9 +13,9 @@ import { renderPage } from './page.ts'
 import { PUBLISHED_EVENT, PUBLISHED_VERSION_EVENT } from './payload.ts'
 import type { PublishedReads, WebBootPayload, WebPayload } from './payload.ts'
 import { bundleRenderer, loadMapRoot } from './runtime.ts'
-import { readSource } from './source/read.ts'
-import { readCodeStructure } from './source/structure.ts'
-import { readTaskDiff } from './task-diff/read.ts'
+import { readSource } from '../source/read.ts'
+import { readCodeStructure } from '../source/structure.ts'
+import { readTaskDiff } from '../source/diff.ts'
 
 export interface WebExportHandle {
   readonly closed: Promise<void>

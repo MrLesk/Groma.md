@@ -1,9 +1,8 @@
 import { readFile } from 'node:fs/promises'
 import path from 'node:path'
 
-import { withGitRevision } from '../../../history/git.ts'
-import type { ArchitectureGraph } from '../../../types.ts'
-import type { WebRevision } from '../payload.ts'
+import { withGitRevision } from '../../history/git.ts'
+import type { ArchitectureGraph } from '../../types.ts'
 
 export interface SourcePayload {
   source: string
@@ -13,7 +12,7 @@ export interface SourcePayload {
 export async function readSource(
   repositoryRoot: string,
   world: ArchitectureGraph,
-  revision: WebRevision | null,
+  revision: string | null,
   elementId: string,
   file: string,
 ): Promise<SourcePayload | undefined> {
@@ -30,5 +29,5 @@ export async function readSource(
   }
   return revision === null
     ? load(repositoryRoot)
-    : withGitRevision(repositoryRoot, revision.id, load)
+    : withGitRevision(repositoryRoot, revision, load)
 }

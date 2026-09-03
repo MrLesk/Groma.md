@@ -17,7 +17,7 @@ groma:
       dependents: 2
 ---
 
-Loads a selected Backlog task recorded files and Git states on demand and shows their unified diffs inside Details.
+Controls browser task-file selection and presents unified diffs inside Details.
 
 ## Relationships
 
@@ -26,3 +26,4 @@ Loads a selected Backlog task recorded files and Git states on demand and shows 
 | [Revision history](revision-history.md) | Reads exact task commits and file versions | Git |
 | [Source viewer](source-viewer.md) | Reuses source highlighting and drill-down | DOM and CSS |
 | [Web server](web-server.md) | Loads task diffs only after selection | JSON |
+| [Source inspection](../../view-host/components/read-read.md) | Reads the selected task file diff | TypeScript |

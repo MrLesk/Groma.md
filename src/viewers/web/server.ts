@@ -12,9 +12,9 @@ import { pinsOf } from '../../work/pins.ts'
 import { renderPage } from './page.ts'
 import type { WebMapPayload, WebPayload, WebRevision, WebWorkPayload } from './payload.ts'
 import { bundleRenderer, loadMapRoot } from './runtime.ts'
-import { readSource } from './source/read.ts'
-import { readCodeStructure } from './source/structure.ts'
-import { readTaskDiff } from './task-diff/read.ts'
+import { readSource } from '../source/read.ts'
+import { readCodeStructure } from '../source/structure.ts'
+import { readTaskDiff } from '../source/diff.ts'
 
 const defaultPort = 4747
 
@@ -24,7 +24,7 @@ async function structureResponse(
   element: string,
 ): Promise<Response> {
   try {
-    const structure = await readCodeStructure(repositoryRoot, selected.world, selected.revision, element)
+    const structure = await readCodeStructure(repositoryRoot, selected.world, selected.revision?.id ?? null, element)
     return structure === undefined
       ? new Response('Component not found', { status: 404 })
       : Response.json(structure)
@@ -41,7 +41,7 @@ async function sourceResponse(
 ): Promise<Response> {
   if (file === null) return new Response('Source selection required', { status: 400 })
   try {
-    const source = await readSource(repositoryRoot, selected.world, selected.revision, element, file)
+    const source = await readSource(repositoryRoot, selected.world, selected.revision?.id ?? null, element, file)
     return source === undefined
       ? new Response('Source file not found', { status: 404 })
       : Response.json(source)

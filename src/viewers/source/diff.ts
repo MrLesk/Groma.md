@@ -6,9 +6,9 @@ import {
   findGitCommitBySubject,
   parentGitRevision,
   readGitText,
-} from '../../../history/git.ts'
-import type { WorkItem, WorkSnapshot } from '../../../types.ts'
-import { projectTaskFileDiff, type TaskFileDiff } from './project.ts'
+} from '../../history/git.ts'
+import type { WorkItem, WorkSnapshot } from '../../types.ts'
+import { projectTaskFileDiff, type TaskFileDiff } from './diff-lines.ts'
 
 export interface TaskDiffPayload {
   taskId: string

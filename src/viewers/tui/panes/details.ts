@@ -12,12 +12,13 @@ import { selectionRelationships, type DetailsTab } from '../navigation.ts'
 import type {
   AnnotatedElement,
   AnnotatedRelationship,
-  ArchitectureGraph,
   WorkChecklistItem,
   WorkItem,
   WorkItemDetails,
 } from '../../../types.ts'
 import { elementWorkGroups, type WorkStage } from '../../../work/pins.ts'
+import type { TaskFileDiff } from '../../source/diff-lines.ts'
+import type { CodeDeclaration, CodeFile } from '../../source/structure.ts'
 import { accent, bold, chunk, dim, kindMark, plain, styleRow, wrap, type Line, type PaneLines } from './text.ts'
 
 export const DETAILS_TABS: readonly DetailsTab[] = ['what', 'how']
@@ -35,21 +36,48 @@ function technologyRows(theme: ViewerTheme, element: AnnotatedElement, width: nu
   return [[], heading(theme, 'Technology', width), [plain(theme, technology.join(' · '))]]
 }
 
-function codeRows(theme: ViewerTheme, element: AnnotatedElement, width: number): Line[] {
-  if (element.code.length === 0) return []
-  const files = new Set(element.code.map(reference => reference.file)).size
-  const measure: Line[] = (element.codeLines ?? 0) > 0
-    ? [[dim(theme, `${files} ${files === 1 ? 'file' : 'files'} · ~${element.codeLines} lines`)]]
-    : []
-  return [[], heading(theme, 'Code', width), ...measure, ...element.code.flatMap(reference => [
-    [plain(theme, reference.file)],
-    [dim(theme, reference.symbol === undefined ? reference.scanner : `${reference.symbol} · ${reference.scanner}`)],
-  ])]
+/** A function with its parentheses, a class, or a member: its line and what it is. */
+function declarationRows(theme: ViewerTheme, file: string, declaration: CodeDeclaration, width: number, actionCursor: string | undefined, indent = ''): PaneLines {
+  const facts = [declaration.entry ? 'entry' : undefined, declaration.scope, declaration.kind === 'class' ? 'class' : undefined, `line ${declaration.line}`].filter(fact => fact !== undefined).join(' · ')
+  const name = declaration.kind === 'function' ? `${declaration.name}()` : declaration.name
+  const key = `${file}:${declaration.line}`
+  const lines: Line[] = [styleRow(theme, [plain(theme, `${indent}${name}`), dim(theme, ` · ${facts}`)], width, false, key === actionCursor)]
+  let cursor = key === actionCursor ? 0 : undefined
+  if (declaration.kind === 'class') {
+    for (const member of declaration.members) {
+      const memberKey = `${file}:${member.line}`
+      if (memberKey === actionCursor) cursor = lines.length
+      lines.push(styleRow(theme, [plain(theme, `${indent}  ${member.name}()`), dim(theme, ` · ${member.scope} · line ${member.line}`)], width, false, memberKey === actionCursor))
+    }
+  }
+  return { lines, cursor }
 }
 
-function howLines(theme: ViewerTheme, element: AnnotatedElement, world: ArchitectureGraph, width: number, activeActionId: string | undefined, actionCursor: string | undefined): PaneLines {
-  const lines: Line[] = [...technologyRows(theme, element, width), ...codeRows(theme, element, width)]
+/** Each file with its line count, then its declarations in authored order once the structure is read. */
+function codeRows(theme: ViewerTheme, element: AnnotatedElement, width: number, structure: readonly CodeFile[] | undefined, actionCursor: string | undefined): PaneLines {
+  if (element.code.length === 0) return { lines: [] }
+  const lines: Line[] = [[], heading(theme, 'Code', width)]
   let cursor: number | undefined
+  const seen = new Set<string>()
+  for (const reference of element.code) {
+    if (seen.has(reference.file)) continue
+    seen.add(reference.file)
+    const count = reference.lines === undefined ? '' : ` · ${reference.lines} lines`
+    lines.push([plain(theme, reference.file), dim(theme, count)])
+    for (const declaration of structure?.find(file => file.file === reference.file)?.declarations ?? []) {
+      const rows = declarationRows(theme, reference.file, declaration, width, actionCursor, '  ')
+      if (rows.cursor !== undefined) cursor = lines.length + rows.cursor
+      lines.push(...rows.lines)
+    }
+  }
+  return { lines, cursor }
+}
+
+function howLines(theme: ViewerTheme, element: AnnotatedElement, world: TerminalViewModel, width: number, activeActionId: string | undefined, actionCursor: string | undefined, structure: readonly CodeFile[] | undefined): PaneLines {
+  const code = codeRows(theme, element, width, structure, actionCursor)
+  const lines: Line[] = [...technologyRows(theme, element, width)]
+  let cursor = code.cursor === undefined ? undefined : lines.length + code.cursor
+  lines.push(...code.lines)
   const travelled = travelledBy(element.representationId, world)
   if (travelled.length > 0) lines.push([], heading(theme, 'Travelled by', width))
   for (const walk of travelled) {
@@ -152,6 +180,7 @@ export function detailsLines(
   tab: DetailsTab,
   activeActionId: string | undefined,
   actionCursor: string | undefined,
+  structure: readonly CodeFile[] | undefined,
 ): PaneLines {
   const byId: Elements = new Map(world.elements.map(item => [item.representationId, item]))
   const head: Line = [
@@ -161,7 +190,7 @@ export function detailsLines(
     chunk(element.origin, theme[element.origin], TextAttributes.BOLD),
   ]
   const body = tab === 'how'
-    ? howLines(theme, element, world, width, activeActionId, actionCursor)
+    ? howLines(theme, element, world, width, activeActionId, actionCursor, structure)
     : whatLines(theme, element, world, byId, width, activeActionId, actionCursor)
   return {
     lines: [head, ...body.lines],
@@ -244,4 +273,33 @@ export function taskRecordLines(theme: ViewerTheme, item: WorkItem, details: Wor
     ...prose(theme, 'Notes', details.implementationNotes, width),
     ...details.comments.flatMap(comment => prose(theme, comment.author, comment.body, width)),
   ]
+}
+
+/** A source file read-only: numbered lines, the opened line in the accent. */
+export function sourceLines(theme: ViewerTheme, view: { file: string; line: number; text?: string }, width: number): Line[] {
+  if (view.text === undefined) return [[dim(theme, view.file)]]
+  const rows = view.text.split('\n')
+  const gutter = String(rows.length).length
+  return rows.map((row, index) => {
+    const number = String(index + 1).padStart(gutter)
+    const opened = index + 1 === view.line
+    return [(opened ? accent : dim)(theme, `${number} `), (opened ? accent : plain)(theme, row.slice(0, Math.max(0, width - gutter - 1)))]
+  })
+}
+
+/** A task's file as a unified diff: its hunks, added lines marked +, removed lines marked - and dim. */
+export function diffLines(theme: ViewerTheme, view: { file: string; diff?: TaskFileDiff }, width: number): Line[] {
+  const diff = view.diff
+  if (diff === undefined) return [[dim(theme, view.file)]]
+  const lines: Line[] = [[plain(theme, diff.file), dim(theme, ` · ${diff.status} · +${diff.additions} -${diff.deletions}`)]]
+  for (const hunk of diff.hunks) {
+    lines.push([], [dim(theme, hunk.header)])
+    for (const line of hunk.lines) {
+      const text = line.text.slice(0, Math.max(0, width - 2))
+      if (line.kind === 'added') lines.push([accent(theme, '+ '), plain(theme, text)])
+      else if (line.kind === 'removed') lines.push([dim(theme, '- '), dim(theme, text)])
+      else lines.push([dim(theme, '  '), dim(theme, text)])
+    }
+  }
+  return lines
 }

@@ -1,6 +1,6 @@
 import type { AnnotatedElement } from '../../../types.ts'
-import type { SourcePayload } from './read.ts'
-import type { CodeFile } from './structure.ts'
+import type { SourcePayload } from '../../source/read.ts'
+import type { CodeFile } from '../../source/structure.ts'
 import { leaveSource, paintSource } from './view.ts'
 
 export interface SourceControl {

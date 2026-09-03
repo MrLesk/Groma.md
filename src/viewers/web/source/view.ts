@@ -1,7 +1,7 @@
 import type { AnnotatedElement } from '../../../types.ts'
 import { chromeButton } from '../atoms/button.ts'
 import { highlightedLine } from './highlight.ts'
-import type { SourcePayload } from './read.ts'
+import type { SourcePayload } from '../../source/read.ts'
 
 /** Paints the selected file as one level deeper inside the existing details pane. */
 export function paintSource(

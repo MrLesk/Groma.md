@@ -2,9 +2,9 @@ import type { AddInput, DraftElementInput, EditArchitectureInput, RemoveInput } 
 import type { WorkItemDetails } from '../../types.ts'
 import { PUBLISHED_EVENT, PUBLISHED_VERSION_EVENT } from './payload.ts'
 import type { WebBootPayload, WebPayload, WebWorkPayload } from './payload.ts'
-import type { SourcePayload } from './source/read.ts'
-import type { CodeFile } from './source/structure.ts'
-import type { TaskDiffPayload } from './task-diff/read.ts'
+import type { SourcePayload } from '../source/read.ts'
+import type { CodeFile } from '../source/structure.ts'
+import type { TaskDiffPayload } from '../source/diff.ts'
 
 export interface WebDataSource {
   readWorld(revision?: string): Promise<WebPayload>

@@ -20,7 +20,7 @@ groma:
       dependents: 3
 ---
 
-Reads a selected component named TypeScript structure on demand from the active working tree or full Git revision. Files preserve authored order; top-level callables include exports and module-private helpers, while classes group public, protected, and private methods. Every declaration opens the exact source line inside Details without changing the component selection.
+Controls browser source inspection and presents selected declarations and code inside Details.
 
 ## Relationships
 
@@ -28,3 +28,4 @@ Reads a selected component named TypeScript structure on demand from the active 
 | --- | --- | --- |
 | [Web server](web-server.md) | Requests only selected Code from the active revision | HTTP |
 | [Web viewer details](web-viewer-details.md) | Reuses the selected component inspector | DOM |
+| [Source inspection](../../view-host/components/read-read.md) | Reads selected component structure and source | TypeScript |

@@ -6,7 +6,7 @@ import path from 'node:path'
 import { test } from 'bun:test'
 
 import type { WorkItem, WorkSnapshot } from '../src/types.ts'
-import { readTaskDiff } from '../src/viewers/web/task-diff/read.ts'
+import { readTaskDiff } from '../src/viewers/source/diff.ts'
 
 function git(root: string, ...arguments_: string[]): Promise<string> {
   return new Promise((resolve, reject) => {
