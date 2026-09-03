@@ -8,7 +8,6 @@ import { test } from 'bun:test'
 import { createTestRenderer } from '@opentui/core/testing'
 
 import { writeLargeWorld } from '../scripts/large-world-fixture.ts'
-import { paneLayout } from '../src/viewers/tui/layout.ts'
 import type { TerminalViewModel } from '../src/viewers/tui/model.ts'
 import { canEnter, enterView } from '../src/viewers/tui/navigation-spatial.ts'
 import { initialState, reduceViewer, type MapDirection, type ViewerState } from '../src/viewers/tui/navigation.ts'
@@ -16,7 +15,7 @@ import { paintedWorld } from '../src/viewers/tui/organisms/world.ts'
 import { routeTouches, visibleIn } from '../src/viewers/tui/projection-camera.ts'
 import { mapAnchors, projectWorld } from '../src/viewers/tui/projection.ts'
 import { mountTerminalViewer } from '../src/viewers/tui/terminal-viewer.ts'
-import { largeWorldFixtureRoot, terminalModel } from './helpers.ts'
+import { largeWorldFixtureRoot, paneLayout, terminalModel } from './helpers.ts'
 
 const DIRECTIONS: MapDirection[] = ['up', 'down', 'left', 'right']
 /** Composing the sheet for the large world takes seconds; the immutable model is loaded once and never changed by a test. */

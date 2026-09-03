@@ -58,7 +58,7 @@ function arrow(from: Point, to: Point): string {
 
 function routeColor(route: ProjectedMapRoute, theme: ViewerTheme, active: boolean): RGBA {
   if (active) return theme.selected
-  return route.origin === 'planned' ? theme.planned : theme.missing
+  return theme[route.origin]
 }
 
 export function drawRoute(

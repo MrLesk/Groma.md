@@ -4,7 +4,6 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { test } from 'bun:test'
 
-import { normalizeTerminalPalette } from '@opentui/core'
 import { createTestRenderer } from '@opentui/core/testing'
 import { EMPTY_WORK_SNAPSHOT } from '@groma/work-source'
 import type { WorkSource } from '@groma/work-source'
@@ -288,7 +287,6 @@ test.concurrent('a missing Backlog command reports readiness and supplies empty 
   const setup = await createTestRenderer({ width: 120, height: 36 })
   const viewer = await startTerminalViewer(viewerFixtureRoot, {
     renderer: setup.renderer,
-    palette: normalizeTerminalPalette(),
     workSource: missing.create(viewerFixtureRoot),
   })
   viewer.destroy()
@@ -311,12 +309,11 @@ test.concurrent('host opens the viewer without waiting for a Backlog read', asyn
   const started = Date.now()
   const viewer = await startTerminalViewer(viewerFixtureRoot, {
     renderer: setup.renderer,
-    palette: normalizeTerminalPalette(),
     workSource,
   })
   try {
     assert.ok(Date.now() - started < 2000)
-    viewer.setView({ level: 'context', currentId: 'observed:shop' })
+    viewer.setView({ level: 'context', currentId: 'shop' })
     await setup.renderOnce()
     assert.doesNotMatch(setup.captureCharFrame(), /TASK-HANG/)
     assert.equal(readStarted, true)
@@ -341,11 +338,10 @@ test.concurrent('a failed Backlog read leaves architecture refresh working', asy
   const setup = await createTestRenderer({ width: 120, height: 36 })
   const viewer = await startTerminalViewer(viewerFixtureRoot, {
     renderer: setup.renderer,
-    palette: normalizeTerminalPalette(),
     workSource,
   })
   try {
-    viewer.setView({ level: 'context', currentId: 'observed:shop' })
+    viewer.setView({ level: 'context', currentId: 'shop' })
     await setup.renderOnce()
     await new Promise(resolve => setTimeout(resolve, 20))
     const afterOpen = reads
@@ -373,11 +369,10 @@ test.concurrent('host refreshes the viewer from a changed work snapshot', async 
   const setup = await createTestRenderer({ width: 120, height: 36 })
   const viewer = await startTerminalViewer(viewerFixtureRoot, {
     renderer: setup.renderer,
-    palette: normalizeTerminalPalette(),
     workSource,
   })
   try {
-    viewer.setView({ level: 'context', currentId: 'observed:shop' })
+    viewer.setView({ level: 'context', currentId: 'shop' })
     await setup.renderOnce()
     assert.doesNotMatch(setup.captureCharFrame(), /TASK-LIVE/)
 

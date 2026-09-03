@@ -1,16 +1,8 @@
-import {
-  FrameBufferRenderable,
-  normalizeTerminalPalette,
-} from '@opentui/core'
-import type {
-  CliRenderer,
-  KeyEvent,
-  NormalizedTerminalPalette,
-} from '@opentui/core'
+import type { CliRenderer, KeyEvent } from '@opentui/core'
 
 import { actionLegs } from '../action-path.ts'
 import { createArchitectureSearch } from '../../search.ts'
-import { paneLayout } from './layout.ts'
+import { projectFlowStep } from './flow.ts'
 import {
   initialState,
   litAction,
@@ -18,7 +10,10 @@ import {
   reduceViewer,
 } from './navigation.ts'
 import type { SearchInput, ViewerAction, ViewerState } from './navigation.ts'
-import { paintWorld, themeFromPalette } from './paint.ts'
+import { viewerTheme } from './atoms/theme.ts'
+import { paintMap } from './paint.ts'
+import { mountScreen } from './panes/screen.ts'
+import { screenView } from './panes/view.ts'
 import { projectWorld } from './projection.ts'
 import type { TerminalCamera } from './projection-camera.ts'
 import type { TerminalViewModel } from './model.ts'
@@ -46,7 +41,6 @@ interface ViewerOptions {
   level?: TerminalLevel
   currentId?: string
   camera?: TerminalCamera
-  palette?: NormalizedTerminalPalette
   onRefresh?: () => void | Promise<void>
 }
 
@@ -79,31 +73,14 @@ export function mountTerminalViewer(
   const closedPromise = new Promise<void>(resolve => {
     resolveClosed = resolve
   })
-  const theme = themeFromPalette(
-    options.palette ?? normalizeTerminalPalette(),
-  )
+  const theme = viewerTheme()
   let camera = options.camera
   let animationPhase = 0
   let animationTimer: ReturnType<typeof setInterval> | undefined
-  const frame = new FrameBufferRenderable(renderer, {
-    id: 'architecture-world',
-    width: Math.max(1, renderer.width),
-    height: Math.max(1, renderer.height),
-    onSizeChange() {
-      repaint()
-    },
-  })
-  frame.width = '100%'
-  frame.height = '100%'
-  renderer.root.add(frame)
+  const screen = mountScreen(renderer, theme, () => repaint())
 
   function snapshot(): TerminalCamera | undefined {
     return camera === undefined ? undefined : { ...camera }
-  }
-
-  function currentLayout() {
-    const { width, height } = frame.frameBuffer
-    return paneLayout(width, height, state.panes)
   }
 
   function project(next?: TerminalCamera) {
@@ -113,7 +90,7 @@ export function mountTerminalViewer(
       ? undefined
       : actionLegs(lit.id, viewModel, lit.actorId)[state.actionStep]?.target
     return projectWorld(viewModel, {
-      viewport: currentLayout().mapViewport,
+      viewport: screen.mapViewport(),
       level: taskView?.level ?? state.level,
       currentId: taskView?.currentId ?? state.currentId,
       attentionIds: taskView?.attentionIds ?? (flowAttention === undefined ? [] : [flowAttention]),
@@ -136,7 +113,7 @@ export function mountTerminalViewer(
   }
 
   function repaint(): void {
-    if (closed || frame.isDestroyed) return
+    if (closed || screen.map.isDestroyed) return
     const projection = project()
     const lit = litAction(viewModel, state)
     syncAnimation(lit.id !== undefined)
@@ -144,20 +121,15 @@ export function mountTerminalViewer(
     if (state.work === undefined) {
       state = { ...state, currentId: projection.currentId ?? undefined }
     }
-    paintWorld(frame.frameBuffer, currentLayout(), projection, viewModel, theme, {
-      focus: state.focus,
-      tree: state.tree,
-      detailsScroll: state.detailsScroll,
-      search: state.search,
-      activeActionId: state.activeActionId,
+    const step = projectFlowStep(viewModel, projection, lit.id, lit.actorId, state.actionStep)
+    paintMap(screen.map.frameBuffer, projection, viewModel, theme, {
       lit,
-      actionStep: state.actionStep,
-      actionCursor: state.actionCursor,
-      detailsTab: state.detailsTab,
+      step,
       workFocus: state.work,
       animationPhase,
     })
-    frame.requestRender()
+    screen.apply(screenView(theme, viewModel, state, projection, lit, step))
+    screen.map.requestRender()
   }
 
   function release(): void {

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { test } from 'bun:test'
 
 import { initialState, reduceViewer } from '../src/viewers/tui/navigation.ts'
-import { scrollOffset } from '../src/viewers/tui/organisms/hierarchy.ts'
+import { scrollOffset } from '../src/viewers/tui/panes/hierarchy.ts'
 import { initialTree, semanticTreeRows, toggleExpansion } from '../src/viewers/tui/tree.ts'
 import { navigationWorld } from './helpers.ts'
 

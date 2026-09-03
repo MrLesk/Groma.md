@@ -1,64 +1,32 @@
 import { RGBA } from '@opentui/core'
-import type { NormalizedTerminalPalette } from '@opentui/core'
 
-import type { C4Kind, Origin } from '../../../types.ts'
+import type { Origin } from '../../../types.ts'
 
-export interface ViewerTheme extends Record<Origin | C4Kind, RGBA> {
+/** The brand green, the one colour that is not the terminal's own. */
+export const ACCENT = '#1D9E75'
+
+export interface ViewerTheme extends Record<Origin, RGBA> {
   background: RGBA
   foreground: RGBA
+  /** The palette's bright black: frames and text that stay quiet. */
+  quiet: RGBA
   selected: RGBA
-  observedTint: RGBA
-  selectedTint: RGBA
-  actorTint: RGBA
-  systemTint: RGBA
-  containerTint: RGBA
-  componentTint: RGBA
-  groupTint: RGBA
-  externalTint: RGBA
 }
 
-function mix(left: RGBA, right: RGBA, rightWeight: number): RGBA {
-  const leftValues = left.toInts()
-  const rightValues = right.toInts()
-  const mixed = leftValues.slice(0, 3).map((value, index) => {
-    return Math.round(value * (1 - rightWeight) + rightValues[index]! * rightWeight)
-  })
-  return RGBA.fromInts(mixed[0]!, mixed[1]!, mixed[2]!)
-}
-
-export function themeFromPalette(palette: NormalizedTerminalPalette): ViewerTheme {
-  const background = palette.defaultBackground
-  const foreground = palette.defaultForeground
-  const accent = palette.palette[2]
-
+/**
+ * Every colour is an intent the terminal resolves itself: its default foreground and
+ * background, its bright black, or the brand green. Nothing is sampled from the palette,
+ * so switching the terminal theme recolours the viewer live, as the splash does.
+ */
+export function viewerTheme(): ViewerTheme {
+  const foreground = RGBA.defaultForeground()
+  const quiet = RGBA.fromIndex(8)
   return {
-    background,
+    background: RGBA.defaultBackground(),
     foreground,
+    quiet,
+    selected: RGBA.fromHex(ACCENT),
     observed: foreground,
-    planned: mix(background, foreground, 0.68),
-    missing: mix(background, foreground, 0.48),
-    selected: accent,
-    observedTint: mix(background, foreground, 0.06),
-    selectedTint: mix(background, accent, 0.18),
-    actorTint: mix(background, foreground, 0.08),
-    systemTint: mix(background, foreground, 0.03),
-    containerTint: mix(background, foreground, 0.06),
-    componentTint: mix(background, foreground, 0.09),
-    groupTint: mix(background, foreground, 0.1),
-    externalTint: mix(background, foreground, 0.12),
-    actor: mix(background, foreground, 0.82),
-    system: mix(background, foreground, 0.92),
-    container: mix(background, foreground, 0.72),
-    component: mix(background, foreground, 0.82),
+    draft: quiet,
   }
-}
-
-export function surfaceTint(
-  theme: ViewerTheme,
-  kind: C4Kind | 'group',
-  external: boolean,
-): RGBA {
-  if (external) return theme.externalTint
-  if (kind === 'group') return theme.groupTint
-  return theme[`${kind}Tint`]
 }
