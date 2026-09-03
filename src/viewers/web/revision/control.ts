@@ -133,7 +133,7 @@ export function createRevisionControl(options: RevisionControlOptions) {
     paintProjectEdit(root: ParentNode) {
       root.querySelector('[data-project-edit]')?.toggleAttribute(
         'hidden',
-        selected !== undefined || data.saveProject === undefined,
+        selected !== undefined || data.edit === undefined,
       )
     },
   }

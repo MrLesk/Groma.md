@@ -337,10 +337,11 @@ test.concurrent('groma web saves the project profile and publishes it without a 
     const decoder = new TextDecoder()
     await reader.read()
 
-    const response = await fetch(`${server.url}/project`, {
-      method: 'PUT',
+    const response = await fetch(`${server.url}/edit`, {
+      method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
+        id: 'project',
         title: 'Supply map',
         description: 'A concise supply architecture summary.',
         overview: 'Shows supply responsibilities.',

@@ -23,6 +23,7 @@ import { bindMapPointer } from './iso/pointer.ts'
 import { projectScene } from './iso/project.ts'
 import { sceneAtSeparation } from './layers/separation.ts'
 import { createLayerAnimator, createLayerMotion } from './layers/orbit.ts'
+import type { MeaningEdit } from './organisms/details.ts'
 import { clearDetails, detailsTabAfterSelection, detailsTabAfterWork, type DetailsTab, inspectDetails, paintDetails, paintRelationship } from './organisms/details.ts'
 import { paintHierarchy } from './organisms/hierarchy.ts'
 import { createPins } from './work/pins.ts'
@@ -70,7 +71,8 @@ const zoomHost = document.getElementById('zoom')!
 const hierarchyContent = document.getElementById('hierarchy-content')!
 const hierarchyToggle = document.getElementById('hierarchy-toggle') as HTMLButtonElement
 const map = createMap(host)
-const projectEditor = data.saveProject === undefined ? undefined : createProjectEditor(data.saveProject)
+const edit = data.edit
+const projectEditor = edit === undefined ? undefined : createProjectEditor(input => edit({ id: 'project', ...input }))
 const remove = data.remove
 const emptyState = createEmptyState(document.getElementById('empty')!, data.draft)
 if (data.add !== undefined) createAddControl(document.getElementById('add')!, data.add)
@@ -193,6 +195,19 @@ function paintMapState(task: WorkItem | undefined, activeTaskItems: WorkItem[]):
   map.setLitRoutes(litIds, id => elementOnPath(id, litIds, world))
 }
 
+/** The pane's write hooks and the draft records to tag with: only on the current revision of a live map. */
+function paneWrites(selectedId: string): {
+  onRemove?: () => Promise<void>
+  onEdit?: (input: MeaningEdit) => Promise<void>
+  drafts?: readonly string[]
+} {
+  if (revisionControl.selected !== undefined) return {}
+  return {
+    ...(remove === undefined ? {} : { onRemove: () => remove(selectedId) }),
+    ...(edit === undefined ? {} : { onEdit: (input: MeaningEdit) => edit({ id: selectedId, ...input }), drafts: world.drafts }),
+  }
+}
+
 function paintViewState(commitUrl = true): void {
   if (commitUrl) syncUrl()
   shell.paint(selection)
@@ -225,7 +240,7 @@ function paintViewState(commitUrl = true): void {
       onSource: source.open,
       workGroups: selected.kind === 'component' ? elementWorkGroups(work, selected.representationId, world) : [],
       onTask: toggleTask,
-      ...(remove === undefined || revisionControl.selected !== undefined ? {} : { onRemove: () => remove(selected.id) }),
+      ...paneWrites(selected.id),
     })
   }
 }

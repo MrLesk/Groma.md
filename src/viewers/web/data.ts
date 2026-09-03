@@ -1,6 +1,4 @@
-import type { AddInput } from '../../add.ts'
-import type { DraftElementInput } from '../../draft.ts'
-import type { ProjectProfileInput } from '../../project-profile.ts'
+import type { AddInput, DraftElementInput, EditArchitectureInput } from '../../authoring.ts'
 import type { WorkItemDetails } from '../../types.ts'
 import { PUBLISHED_EVENT, PUBLISHED_VERSION_EVENT } from './payload.ts'
 import type { WebBootPayload, WebPayload, WebWorkPayload } from './payload.ts'
@@ -14,11 +12,11 @@ export interface WebDataSource {
   readSource(element: string, file: string, revision?: string): Promise<SourcePayload>
   readTask(id: string): Promise<WorkItemDetails>
   readTaskDiff(id: string): Promise<TaskDiffPayload>
-  saveProject?(profile: ProjectProfileInput): Promise<void>
   /** The writers, absent in the published delivery, which has none. */
   draft?(input: DraftElementInput): Promise<void>
   add?(input: AddInput): Promise<void>
   remove?(id: string): Promise<void>
+  edit?(input: EditArchitectureInput): Promise<void>
   subscribe(handlers: {
     world(payload: WebPayload): void
     work(payload: WebWorkPayload): void
@@ -31,9 +29,9 @@ async function responseJson<T>(path: string): Promise<T> {
   return response.json() as Promise<T>
 }
 
-async function send(path: string, method: 'POST' | 'PUT', body: unknown): Promise<void> {
+async function send(path: string, body: unknown): Promise<void> {
   const response = await fetch(path, {
-    method,
+    method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   })
@@ -65,10 +63,10 @@ function liveDataSource(): WebDataSource {
     readTaskDiff(id) {
       return responseJson(selected('/task-diff.json', { task: id }))
     },
-    saveProject: profile => send('/project', 'PUT', profile),
-    draft: input => send('/draft', 'POST', input),
-    add: input => send('/add', 'POST', input),
-    remove: id => send('/remove', 'POST', { id }),
+    draft: input => send('/draft', input),
+    add: input => send('/add', input),
+    remove: id => send('/remove', { id }),
+    edit: input => send('/edit', input),
     subscribe(handlers) {
       const events = new EventSource('/events')
       events.addEventListener('world', event => {

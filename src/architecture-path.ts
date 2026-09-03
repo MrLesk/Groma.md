@@ -38,5 +38,5 @@ export function isExternalPath(sourceFilename: string): boolean {
 /** Names no element may take, since Markdown tooling reserves them. */
 export function isReservedDocument(filename: string): boolean {
   const basename = filename.slice(filename.lastIndexOf('/') + 1)
-  return basename === 'index.md' || basename === 'log.md'
+  return basename === 'index.md' || basename === 'log.md' || basename === 'project.md'
 }

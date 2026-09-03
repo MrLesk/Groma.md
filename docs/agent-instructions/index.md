@@ -31,6 +31,10 @@ facts. Semantic curation belongs to the agent and human using Groma.
    - `groma remove <id>` takes away a person, an external, a ghost, or a draft
      record; it refuses while something still depends on it and never removes
      scanned software.
+   - `groma edit <id> --title <text>` renames an element or a draft record
+     while its id stays; `--technology <text>` sets an element's technology
+     and an empty value clears it. `groma edit project --title --description
+     --overview` edits the project record.
    - `groma edit <target> --combine <source...>` folds empty scan records into
      one responsibility and preserves their unique Code references.
    - `groma edit <component> --parent <container>` moves empty scan evidence.

@@ -1,7 +1,7 @@
 import { createRender } from '@comark/html'
 import security from 'comark/plugins/security'
 
-import type { ProjectProfile, ProjectProfileInput } from '../../../project-profile.ts'
+import type { ProjectProfile } from '../../../project-profile.ts'
 
 const renderMarkdown = createRender({
   plugins: [security({
@@ -121,7 +121,7 @@ function placeEditor(dialog: HTMLDialogElement, anchor: Element, line: HTMLEleme
 }
 
 export function createProjectEditor(
-  save: (profile: ProjectProfileInput) => Promise<void>,
+  save: (input: { title: string; description: string; overview: string }) => Promise<void>,
 ) {
   const dialog = document.createElement('dialog')
   dialog.id = 'project-editor'

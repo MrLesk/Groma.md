@@ -1,4 +1,4 @@
-import type { DraftElementInput } from '../../../draft.ts'
+import type { DraftElementInput } from '../../../authoring.ts'
 import { isEmptyWorld } from '../../../empty-world.ts'
 import type { ProjectProfile } from '../../../project-profile.ts'
 import type { ArchitectureGraph } from '../../../types.ts'

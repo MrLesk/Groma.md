@@ -44,6 +44,14 @@ succeed: a person or external nothing relates to, or a ghost that contains
 nothing and that nothing relates to. One click asks, the second removes, and a
 refusal shows the server's sentence.
 
+On the current revision of a live map the details pane edits in place: the
+title, description, overview and technology are text that becomes its own
+field on click. Enter saves a line, Cmd or Ctrl with Enter saves the overview,
+leaving the field saves too, and Escape cancels. A Draft select tags the
+element with one of the draft records. Each field posts the input `groma edit`
+takes, and a refusal appears under the field it belongs to. A past revision
+shows plain text.
+
 The isometric grid fills the screen. Inset 35%-paper frosted chrome floats
 above it as one technical instrument. The header shows the groma.md lockup,
 the observed system's name with live flow and element counts, one compact
@@ -309,9 +317,9 @@ the details pane closes. Click the boxed isometric pencil in the title plate to
 open the upright project-profile editor beside it. Its bounded Write view keeps
 long Markdown scrollable, and Preview renders it through Comark's sanitized HTML renderer. The
 title plate projects the same parsed Markdown semantics onto the isometric sheet.
-Saving asks the web host to update the standard title and optional concise
-description plus the Markdown body overview in the selected Groma directory's
-`project.md`; the
+Saving posts the same input as `groma edit project` and updates the standard
+title and optional concise description plus the Markdown body overview in the
+selected Groma directory's `project.md`; the
 published world event repaints every open map without a browser reload.
 Backlog work is loaded from one task-list summary and shows as pins. Every
 configured task, including terminal history, puts one pin per assignee on the

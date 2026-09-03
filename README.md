@@ -159,7 +159,7 @@ writes the browser map as a static site with the architecture, flows, source ins
 | `groma scan [--watch]` | Scan and fold findings into Markdown |
 | `groma add <thing> <name>` | Declare a person, an external system, or a draft |
 | `groma draft <kind> <name>` | Draft a system, container, or component as a ghost |
-| `groma edit <id>` | Change meaning, combine, move, group, or tag with a draft |
+| `groma edit <id>` | Rename, describe, set technology, combine, move, group, or tag with a draft; `edit project` for the project record |
 | `groma relate <from> <to>` | Author or remove one relationship |
 | `groma remove <id>` | Remove a person, an external, a ghost, or an empty draft |
 | `groma accept <id>` | Accept a ghost once a scan has matched it |
@@ -174,7 +174,7 @@ Every command documents its required and optional parameters under `--help`.
 Groma is early. What is true today:
 
 - Scanners exist for TypeScript (built in) and C# (a module you enable). Other languages need a [plugin](docs/scanners/creating-a-plugin.md).
-- The browser edits the project title and overview. Architecture edits go through the CLI. Editing components in the browser is the next chapter.
+- The browser adds, removes, renames and describes through the same verbs as the CLI. Relationships and groups still go through the CLI.
 - The terminal map runs on macOS, Linux, and Windows terminals.
 - The Markdown contract is strict on Groma's own fields and preserves anything else you put in a file.
 

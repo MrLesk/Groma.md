@@ -5,11 +5,8 @@ import { backlogPlugin } from '@groma/work-source-backlog'
 import { watchArchitecture } from '../../architecture-watch.ts'
 import { loadArchitecture } from '../../architecture-reader.ts'
 import { listGitRevisions, withGitGromaRevision, withGitRevision } from '../../history/git.ts'
-import { addThing } from '../../add.ts'
 import { annotateArchitecture } from '../../core.ts'
-import { draftElement } from '../../draft.ts'
-import { saveProjectProfile } from '../../project-profile.ts'
-import { removeThing } from '../../remove.ts'
+import { writes } from '../../authoring.ts'
 import { watchScan } from '../../scanner.ts'
 import { pinsOf } from '../../work/pins.ts'
 import { renderPage } from './page.ts'
@@ -226,17 +223,6 @@ export async function startWebViewer(
     }
   }
 
-  async function projectResponse(request: Request): Promise<Response> {
-    try {
-      const profile = await saveProjectProfile(repositoryRoot, await request.json())
-      map = { ...map, generation: map.generation + 1, project: profile }
-      broadcast(worldEvent())
-      return Response.json(profile)
-    } catch (error) {
-      return new Response(error instanceof Error ? error.message : String(error), { status: 400 })
-    }
-  }
-
   /** A write answers with the id it touched, or with the core sentence and 400; the world is published before the answer. */
   async function writeResponse<Input>(
     request: Request,
@@ -293,17 +279,17 @@ export async function startWebViewer(
     ['/events', eventsResponse],
   ])
 
-  /** The writes the CLI has, at the path of their verb; each posts the input the CLI builds from its flags. */
-  const writes = new Map<string, (request: Request) => Promise<Response>>([
-    ['/draft', request => writeResponse(request, draftElement)],
-    ['/add', request => writeResponse(request, addThing)],
-    ['/remove', request => writeResponse(request, (root, input: { id: string }) => removeThing(root, input.id))],
+  /** The shared writes at the path of their verb; each posts the input the CLI builds from its flags. */
+  const writeRoutes = new Map<string, (request: Request) => Promise<Response>>([
+    ['/draft', request => writeResponse(request, writes.draft)],
+    ['/add', request => writeResponse(request, writes.add)],
+    ['/edit', request => writeResponse(request, writes.edit)],
+    ['/remove', request => writeResponse(request, writes.remove)],
   ])
 
   async function responseFor(request: Request): Promise<Response> {
     const url = new URL(request.url)
-    if (url.pathname === '/project' && request.method === 'PUT') return projectResponse(request)
-    const write = request.method === 'POST' ? writes.get(url.pathname) : undefined
+    const write = request.method === 'POST' ? writeRoutes.get(url.pathname) : undefined
     if (write !== undefined) return write(request)
     const route = routes.get(url.pathname)
     return route === undefined ? pageResponse(url) : route(request, url)
