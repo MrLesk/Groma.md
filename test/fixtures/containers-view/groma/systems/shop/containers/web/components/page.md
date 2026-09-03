@@ -5,6 +5,7 @@ status: stable
 groma:
   id: page
   parent: web
+  group: Pages
 ---
 
 Renders the order.
