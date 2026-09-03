@@ -2,11 +2,7 @@ import type { OptimizedBuffer } from '@opentui/core'
 
 import type { ViewerTheme } from '../atoms/theme.ts'
 import { routeTouches, visibleIn } from '../projection-camera.ts'
-import {
-  drawBoundaryFrame,
-  drawPinnedBoundaryTitle,
-  fillBoundary,
-} from '../molecules/boundary.ts'
+import { drawSurfaceFrame, fillSurface } from '../molecules/surface.ts'
 import { drawCard } from '../molecules/card.ts'
 import { drawFlowMarker } from '../molecules/flow-marker.ts'
 import { drawRoute, drawRouteLabel } from '../molecules/route.ts'
@@ -48,10 +44,12 @@ export function drawWorld(
   const tracing = trace.pathIds.size > 0
   const { items: visibleItems, routes } = paintedWorld(projection)
   const activeRoutes = routes.filter(route => route.ids.some(id => trace.pathIds.has(id)))
-
-  for (const item of visibleItems.filter(item => item.shape !== 'card')) {
-    fillBoundary(buffer, item, theme)
+  const surfaces = visibleItems.filter(item => item.shape !== 'card')
+  const accented = (item: ProjectedMapItem): boolean => {
+    return item.representationId === projection.currentId || trace.work.touched.has(item.key)
   }
+
+  for (const item of surfaces) fillSurface(buffer, item, projection.viewport, theme)
   for (const route of routes) {
     const flowActive = route.ids.some(id => trace.pathIds.has(id))
     const active = flowActive || trace.work.touched.has(route.source)
@@ -65,15 +63,7 @@ export function drawWorld(
       flowActive ? trace.animationPhase : undefined,
     )
   }
-  for (const item of visibleItems.filter(item => item.shape !== 'card')) {
-    drawBoundaryFrame(
-      buffer,
-      item,
-      projection,
-      theme,
-      item.representationId === projection.currentId || trace.work.touched.has(item.key),
-    )
-  }
+  for (const item of surfaces) drawSurfaceFrame(buffer, item, theme, accented(item))
   for (const item of visibleItems.filter(item => item.shape === 'card')) {
     drawCard(
       buffer,
@@ -87,13 +77,6 @@ export function drawWorld(
   for (const route of activeRoutes) {
     drawRouteLabel(buffer, route, projection, theme, true)
   }
-  const scope = projection.items.find(item => {
-    return item.representationId === projection.currentId
-      && (item.kind === 'system' || item.kind === 'container')
-  }) ?? projection.items.find(item => {
-    return projection.level === 'context' ? item.kind === 'system' : item.kind === 'container'
-  })
-  if (scope) drawPinnedBoundaryTitle(buffer, scope, projection, theme)
   for (const anchor of trace.work.anchors) {
     const item = visibleItems.find(candidate => candidate.representationId === anchor.elementId)
     if (item !== undefined) drawWorkMarker(buffer, item, projection, anchor, theme)

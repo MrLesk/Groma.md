@@ -1,7 +1,7 @@
 import { TextAttributes } from '@opentui/core'
 import type { OptimizedBuffer } from '@opentui/core'
 
-import { drawBorder } from '../atoms/border.ts'
+import { borderCharacters, drawBorder } from '../atoms/border.ts'
 import { kindGlyph } from '../../atoms/kind.ts'
 import { text } from '../atoms/text.ts'
 import type { ViewerTheme } from '../atoms/theme.ts'
@@ -28,10 +28,9 @@ export function drawCard(
   drawBorder(
     buffer,
     bounds,
-    item.origin,
+    borderCharacters(item.origin, item.kind === 'actor' || item.external ? 'surface' : 'building'),
     color,
     background,
-    item.kind === 'actor' || item.external ? 'actor' : 'card',
     accented || selected ? TextAttributes.BOLD : dimmed || item.external ? TextAttributes.DIM : 0,
   )
   if (bounds.width < 7 || bounds.height < 3) return

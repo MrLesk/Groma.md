@@ -87,6 +87,11 @@ for the selection, active flows, their endpoints, and active work. Nothing is
 sampled from the palette, so switching the terminal theme recolours the viewer
 live.
 
+Surfaces carry the pattern of their kind, dim: a slab a grain, a zone a hatch, a
+system island plain; the ground between them stays plain. Frames weigh by depth: an
+island bold, a slab plain, a zone dim and dashed; the selection draws heavy in the
+brand green. The name and kind glyph sit in the top border.
+
 Observed architecture uses solid frames and routes; drafts use dashed ones.
 Active routes march from source to target while their geometry, labels, and
 arrowheads remain fixed.

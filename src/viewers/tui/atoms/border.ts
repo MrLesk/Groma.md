@@ -3,9 +3,10 @@ import type { OptimizedBuffer, RGBA } from '@opentui/core'
 import { cell } from './cell.ts'
 import type { Bounds, Origin } from '../../../types.ts'
 
-export type BorderStyle = 'card' | 'actor' | 'system' | 'container' | 'group'
+/** Buildings stand square; surfaces are rounded; zones dash their lines. */
+export type BorderStyle = 'building' | 'surface' | 'zone'
 
-interface BorderCharacters {
+export interface BorderCharacters {
   bottomLeft: string
   bottomRight: string
   horizontal: string
@@ -14,68 +15,27 @@ interface BorderCharacters {
   vertical: string
 }
 
-export function borderCharacters(origin: Origin, style: BorderStyle): BorderCharacters {
-  if (style === 'group') {
-    return {
-      bottomLeft: '╰',
-      bottomRight: '╯',
-      horizontal: '╌',
-      topLeft: '╭',
-      topRight: '╮',
-      vertical: '┆',
-    }
+/** The frame glyphs of a style; drafts dash their lines; heavy is the box a selected surface draws. */
+export function borderCharacters(origin: Origin, style: BorderStyle, heavy = false): BorderCharacters {
+  const dashed = style === 'zone' || origin !== 'observed'
+  if (heavy) {
+    return { topLeft: '┏', topRight: '┓', bottomLeft: '┗', bottomRight: '┛', horizontal: dashed ? '┅' : '━', vertical: dashed ? '┇' : '┃' }
   }
-  if (style === 'actor') {
-    return {
-      ...borderCharacters(origin, 'card'),
-      bottomLeft: '╰',
-      bottomRight: '╯',
-      topLeft: '╭',
-      topRight: '╮',
-    }
-  }
-  if (origin === 'observed' && style === 'system') {
-    return {
-      bottomLeft: '╰',
-      bottomRight: '╯',
-      horizontal: '─',
-      topLeft: '╭',
-      topRight: '╮',
-      vertical: '│',
-    }
-  }
-  if (origin === 'observed') {
-    return {
-      bottomLeft: '└',
-      bottomRight: '┘',
-      horizontal: '─',
-      topLeft: '┌',
-      topRight: '┐',
-      vertical: '│',
-    }
-  }
-  return {
-    bottomLeft: '└',
-    bottomRight: '┘',
-    horizontal: '╌',
-    topLeft: '┌',
-    topRight: '┐',
-    vertical: '┆',
-  }
+  const lines = { horizontal: dashed ? '╌' : '─', vertical: dashed ? '┆' : '│' }
+  if (style === 'building') return { topLeft: '┌', topRight: '┐', bottomLeft: '└', bottomRight: '┘', ...lines }
+  return { topLeft: '╭', topRight: '╮', bottomLeft: '╰', bottomRight: '╯', ...lines }
 }
 
 export function drawBorder(
   buffer: OptimizedBuffer,
   bounds: Bounds,
-  origin: Origin,
+  characters: BorderCharacters,
   color: RGBA,
   background: RGBA,
-  style: BorderStyle = 'card',
   attributes = 0,
 ): void {
   const { x, y, width, height } = bounds
   if (width < 2 || height < 2) return
-  const characters = borderCharacters(origin, style)
 
   for (let column = x + 1; column < x + width - 1; column += 1) {
     cell(buffer, column, y, characters.horizontal, color, background, attributes)
