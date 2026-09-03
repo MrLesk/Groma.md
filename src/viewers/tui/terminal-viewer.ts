@@ -1,5 +1,6 @@
 import type { CliRenderer, KeyEvent } from '@opentui/core'
 
+import { isEmptyWorld } from '../../empty-world.ts'
 import { createArchitectureSearch } from '../../search.ts'
 import { litLegs, projectFlowStep } from './flow.ts'
 import { panesForWidth } from './layout.ts'
@@ -360,12 +361,20 @@ export function mountTerminalViewer(
     return true
   }
 
+  function handleEmptyWorldKey(key: KeyEvent): boolean {
+    if (!isEmptyWorld(viewModel)) return false
+    if (key.name === 'escape' || key.name === 'q') destroy()
+    else if (key.name === 'r' && !key.ctrl) void refresh()
+    return true
+  }
+
   function onKeypress(key: KeyEvent): void {
     if (key.eventType === 'release') return
     if (key.ctrl && key.name === 'c') {
       destroy()
       return
     }
+    if (handleEmptyWorldKey(key)) return
     if (state.search) {
       onSearchKey(key)
       return

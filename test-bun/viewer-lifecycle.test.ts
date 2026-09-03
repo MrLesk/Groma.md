@@ -9,6 +9,7 @@ import { EMPTY_WORK_SNAPSHOT } from '@groma/work-source'
 import type { WorkSource } from '@groma/work-source'
 
 import { startTerminalViewer } from '../src/view-host.ts'
+import { renderPlainWorld } from '../src/plain-world.ts'
 import { mountTerminalViewer } from '../src/viewers/tui/terminal-viewer.ts'
 import {
   fixtureRoot,
@@ -17,6 +18,8 @@ import {
   terminalModel,
   viewerFixtureRoot,
 } from './helpers.ts'
+
+const emptyFixtureRoot = path.join(repositoryRoot, 'test', 'fixtures', 'empty-project')
 
 function emptyWorkSource(): WorkSource {
   return {
@@ -129,3 +132,50 @@ test.concurrent('headless keys drive the viewer and leave world coordinates unch
   assert.deepEqual(response.sheet, before)
   app.destroy()
 }, 20000)
+
+test.concurrent('an empty world shows its next steps until a live update supplies the map', async () => {
+  const empty = await terminalModel(emptyFixtureRoot)
+  const full = await terminalModel(viewerFixtureRoot)
+  const setup = await createTestRenderer({ width: 120, height: 36 })
+  let refreshes = 0
+  const app = mountTerminalViewer(setup.renderer, empty, {
+    onRefresh: () => { refreshes += 1 },
+  })
+
+  await setup.renderOnce()
+  const before = setup.captureCharFrame()
+  assert.match(before, /Fresh <shop>/)
+  assert.match(before, /groma scan/)
+  assert.match(before, /groma add draft/)
+
+  await press(setup, 'r')
+  assert.equal(refreshes, 1)
+
+  app.update(full)
+  await setup.renderOnce()
+  assert.doesNotMatch(setup.captureCharFrame(), /Architecture is empty/)
+  app.destroy()
+})
+
+test.concurrent('Escape, q and Ctrl+C each leave the empty viewer', async () => {
+  const empty = await terminalModel(emptyFixtureRoot)
+  for (const key of ['escape', 'q', 'ctrl-c'] as const) {
+    const setup = await createTestRenderer({ width: 120, height: 36 })
+    const app = mountTerminalViewer(setup.renderer, empty)
+    await setup.renderOnce()
+    if (key === 'escape') setup.mockInput.pressEscape()
+    else if (key === 'ctrl-c') setup.mockInput.pressCtrlC()
+    else setup.mockInput.pressKey(key)
+    await app.closed
+    assert.equal(setup.renderer.isDestroyed, true)
+  }
+})
+
+test.concurrent('plain output gives the same empty-project commands', async () => {
+  const output = await renderPlainWorld(emptyFixtureRoot)
+
+  assert.match(output, /^Fresh <shop>/)
+  assert.match(output, /groma scan/)
+  assert.match(output, /groma add draft/)
+  assert.match(output, /groma draft component/)
+})

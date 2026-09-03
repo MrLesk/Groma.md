@@ -1,11 +1,13 @@
 import type { OptimizedBuffer } from '@opentui/core'
 
 import { elementOnPath } from '../action-path.ts'
+import { isEmptyWorld } from '../../empty-world.ts'
 import type { ViewerTheme } from './atoms/theme.ts'
 import type { ProjectedFlowStep } from './flow.ts'
 import type { TerminalViewModel } from './model.ts'
 import type { LitAction } from './navigation.ts'
 import { drawWorld } from './organisms/world.ts'
+import { drawEmptyWorld } from './organisms/empty.ts'
 import type { TerminalProjection } from './projection.ts'
 import { litLegs } from './flow.ts'
 import { projectWork } from './work/model.ts'
@@ -26,6 +28,10 @@ export function paintMap(
   },
 ): void {
   buffer.clear(theme.background)
+  if (isEmptyWorld(world)) {
+    drawEmptyWorld(buffer, world.project?.title ?? '', theme)
+    return
+  }
   const legs = litLegs(world, options.lit)
   const pathIds = new Set(legs.map(leg => leg.id))
   const selectionId = projection.currentId ?? undefined
