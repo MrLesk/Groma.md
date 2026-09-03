@@ -422,6 +422,17 @@ function segmentsCross(a0: Point, a1: Point, b0: Point, b1: Point): boolean {
     && between(horizontal0.y, vertical0.y, vertical1.y)
 }
 
+function segmentsSharePath(a0: Point, a1: Point, b0: Point, b1: Point): boolean {
+  const aHorizontal = Math.abs(a0.y - a1.y) < EPSILON
+  const bHorizontal = Math.abs(b0.y - b1.y) < EPSILON
+  if (aHorizontal !== bHorizontal) return false
+  const coordinate = aHorizontal ? 'y' : 'x'
+  const along = aHorizontal ? 'x' : 'y'
+  return Math.abs(a0[coordinate] - b0[coordinate]) < EPSILON
+    && Math.min(Math.max(a0[along], a1[along]), Math.max(b0[along], b1[along]))
+      - Math.max(Math.min(a0[along], a1[along]), Math.min(b0[along], b1[along])) > EPSILON
+}
+
 export function routesCross(a: FlatRoute, b: FlatRoute): boolean {
   for (let left = 1; left < a.points.length; left += 1) {
     for (let right = 1; right < b.points.length; right += 1) {
@@ -429,6 +440,11 @@ export function routesCross(a: FlatRoute, b: FlatRoute): boolean {
     }
   }
   return false
+}
+
+function routesSharePath(a: FlatRoute, b: FlatRoute): boolean {
+  return a.points.slice(1).some((a1, left) => b.points.slice(1).some((b1, right) =>
+    segmentsSharePath(a.points[left]!, a1, b.points[right]!, b1)))
 }
 
 function crossingPairs(routes: readonly FlatRoute[], touching: ReadonlySet<string>): Set<string> {
@@ -443,12 +459,17 @@ function crossingPairs(routes: readonly FlatRoute[], touching: ReadonlySet<strin
   return result
 }
 
-/** Checks whether moving the selected routes introduces a new proper crossing. */
+/** Checks whether selected routes cross a route they did not previously cross or overlap. */
 export function newRouteCrossingFor(
   routes: readonly FlatRoute[],
   touching: ReadonlySet<string>,
 ): (candidate: readonly FlatRoute[]) => boolean {
   const before = crossingPairs(routes, touching)
+  for (let left = 0; left < routes.length; left += 1) for (let right = left + 1; right < routes.length; right += 1) {
+    const a = routes[left]!
+    const b = routes[right]!
+    if ((touching.has(a.id) || touching.has(b.id)) && routesSharePath(a, b)) before.add(`${a.id}\0${b.id}`)
+  }
   return candidate => [...crossingPairs(candidate, touching)].some(pair => !before.has(pair))
 }
 

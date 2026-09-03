@@ -23,7 +23,7 @@ interface RouteSegment {
   routeId: string
   index: number
   axis: 'horizontal' | 'vertical'
-  transition: 'source' | 'target' | null
+  transition: 'source' | 'target' | 'both' | null
   terminal: boolean
   coordinate: number
   start: number
@@ -61,7 +61,6 @@ function routeSegments(routes: readonly FlatRoute[]): RouteSegment[] {
   }
   return result
 }
-
 function segmentTransition(index: number, finalSegmentIndex: number): RouteSegment['transition'] | 'both' {
   const source = index === 1 && index < finalSegmentIndex
   const target = index === finalSegmentIndex || (index === finalSegmentIndex - 1 && index > 0)
@@ -78,8 +77,7 @@ function routeSegment(route: FlatRoute, index: number): RouteSegment | null {
   const length = Math.abs(along[1]! - along[0]!)
   const finalSegmentIndex = route.points.length - 2
   const transition = segmentTransition(segmentIndex, finalSegmentIndex)
-  if (length < EPSILON || transition === 'both'
-    || transition !== null && length < TRANSITION * 2) return null
+  if (length < EPSILON || transition !== null && length < TRANSITION * 2) return null
   return {
     routeId: route.id,
     index: segmentIndex,
@@ -91,18 +89,15 @@ function routeSegment(route: FlatRoute, index: number): RouteSegment | null {
     end: Math.max(...along),
   }
 }
-
 function overlap(a: RouteSegment, b: RouteSegment): number {
   return Math.min(a.end, b.end) - Math.max(a.start, b.start)
 }
-
 function componentKey(group: readonly RouteSegment[]): string {
   return group
     .map(segment => `${segment.axis}:${segment.routeId}:${segment.index}:${segment.coordinate.toFixed(3)}`)
     .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
     .join('|')
 }
-
 function conflictComponents(segments: readonly RouteSegment[], desiredGap = LANE_GAP): RouteSegment[][] {
   const parents = segments.map((_, index) => index)
   const find = (index: number): number => {
@@ -139,19 +134,16 @@ function conflictComponents(segments: readonly RouteSegment[], desiredGap = LANE
       || b.length - a.length
       || componentKey(a).localeCompare(componentKey(b), undefined, { numeric: true }))
 }
-
 function orderedSegments(group: readonly RouteSegment[]): RouteSegment[] {
   return [...group].sort((a, b) => a.coordinate - b.coordinate
     || a.routeId.localeCompare(b.routeId, undefined, { numeric: true })
     || a.index - b.index)
 }
-
 interface ObstacleBounds {
   endpoint: Endpoint
   x: [number, number]
   y: [number, number]
 }
-
 function obstacleBounds(endpoints: ReadonlyMap<string, Endpoint>): ObstacleBounds[] {
   return [...endpoints.values()]
     .filter(endpoint => endpoint.kind === 'building')
@@ -164,7 +156,6 @@ function obstacleBounds(endpoints: ReadonlyMap<string, Endpoint>): ObstacleBound
       }
     })
 }
-
 function overlappingPairs(ordered: readonly RouteSegment[]): Array<[number, number]> {
   const pairs: Array<[number, number]> = []
   for (let left = 0; left < ordered.length; left += 1) {
@@ -175,7 +166,6 @@ function overlappingPairs(ordered: readonly RouteSegment[]): Array<[number, numb
   }
   return pairs
 }
-
 function segmentBounds(
   segment: RouteSegment,
   route: FlatRoute,
@@ -198,7 +188,6 @@ function segmentBounds(
   }
   return [lower, upper]
 }
-
 function allBounds(
   ordered: readonly RouteSegment[],
   routesById: ReadonlyMap<string, FlatRoute>,
@@ -220,7 +209,6 @@ function allBounds(
   }
   return result
 }
-
 function solveLanes(
   ordered: readonly RouteSegment[],
   pairs: readonly [number, number][],
@@ -243,7 +231,6 @@ function solveLanes(
   new Solver(variables, constraints).solve()
   return fixed.some(item => Math.abs(item.variable.position() - item.position) > EPSILON) ? null : variables
 }
-
 function widestSolution(
   ordered: readonly RouteSegment[],
   pairs: readonly [number, number][],
@@ -264,12 +251,10 @@ function widestSolution(
   }
   return variables ? { variables, gap: lower } : null
 }
-
 function stableCoordinate(value: number): number {
   const rounded = Math.round(value)
   return Math.abs(value - rounded) < EPSILON ? rounded : Math.round(value * 1_000_000) / 1_000_000
 }
-
 function constrainedTargets(
   endpoints: ReadonlyMap<string, Endpoint>,
   routes: readonly FlatRoute[],
@@ -291,26 +276,30 @@ function constrainedTargets(
       : stableCoordinate(solution.variables[index]!.position()),
   ]))
 }
-
 function shiftedPoint(point: Point, axis: RouteSegment['axis'], coordinate: number): Point {
   return axis === 'horizontal' ? { x: point.x, y: coordinate } : { x: coordinate, y: point.y }
 }
-
 function transitionPoint(from: Point, to: Point, axis: RouteSegment['axis'], fromStart: boolean): Point {
   const along = axis === 'horizontal' ? 'x' : 'y'
   const direction = Math.sign(to[along] - from[along])
   const anchor = fromStart ? from : to
   return { ...anchor, [along]: anchor[along] + direction * TRANSITION * (fromStart ? 1 : -1) }
 }
-
-function shiftSegment(points: Point[], segment: RouteSegment, coordinate: number): void {
+function shiftSegment(points: Point[], segment: RouteSegment, coordinate: number,
+  bothTransition: 'source' | 'target' | 'both'): void {
   const index = segment.index
   const from = points[index]!
   const to = points[index + 1]!
-  if (segment.transition === 'source') {
+  const transition = segment.transition === 'both' ? bothTransition : segment.transition
+  if (transition === 'both') {
+    const source = transitionPoint(from, to, segment.axis, true)
+    const target = transitionPoint(from, to, segment.axis, false)
+    points.splice(index + 1, 1, source, shiftedPoint(source, segment.axis, coordinate),
+      shiftedPoint(target, segment.axis, coordinate), target, to)
+  } else if (transition === 'source') {
     const stub = transitionPoint(from, to, segment.axis, true)
     points.splice(index + 1, 1, stub, shiftedPoint(stub, segment.axis, coordinate), shiftedPoint(to, segment.axis, coordinate))
-  } else if (segment.transition === 'target') {
+  } else if (transition === 'target') {
     const stub = transitionPoint(from, to, segment.axis, false)
     points.splice(index, 1, shiftedPoint(from, segment.axis, coordinate), shiftedPoint(stub, segment.axis, coordinate), stub)
   } else {
@@ -318,7 +307,6 @@ function shiftSegment(points: Point[], segment: RouteSegment, coordinate: number
     points[index + 1] = shiftedPoint(to, segment.axis, coordinate)
   }
 }
-
 function applyLanes(
   routes: readonly FlatRoute[],
   group: readonly RouteSegment[],
@@ -328,14 +316,18 @@ function applyLanes(
   return routes.map(route => {
     const entries = byRoute.get(route.id)
     if (!entries) return route
+    const sharedSource = routes.some(other => byRoute.has(other.id) && other.id !== route.id
+      && (other.source === route.source || other.target === route.source))
+    const sharedTarget = routes.some(other => byRoute.has(other.id) && other.id !== route.id
+      && (other.source === route.target || other.target === route.target))
+    const bothTransition = sharedSource === sharedTarget ? 'both' : sharedSource ? 'source' : 'target'
     const points = route.points.map(point => ({ ...point }))
     for (const segment of [...entries].sort((a, b) => b.index - a.index)) {
-      shiftSegment(points, segment, targets.get(`${segment.routeId}\0${segment.index}`)!)
+      shiftSegment(points, segment, targets.get(`${segment.routeId}\0${segment.index}`)!, bothTransition)
     }
     return { ...route, points: compactRoute(points) }
   })
 }
-
 function endpointsUnchanged(before: readonly FlatRoute[], after: readonly FlatRoute[]): boolean {
   const originals = new Map(before.map(route => [route.id, route]))
   return after.every(route => {
@@ -346,24 +338,20 @@ function endpointsUnchanged(before: readonly FlatRoute[], after: readonly FlatRo
 function segmentLength(a: Point, b: Point): number {
   return Math.abs(a.x - b.x) + Math.abs(a.y - b.y)
 }
-
 function runDirection(from: Point, to: Point): string {
   return Math.abs(from.x - to.x) < EPSILON
     ? `vertical:${Math.sign(to.y - from.y)}`
     : `horizontal:${Math.sign(to.x - from.x)}`
 }
-
 function preservesEndpointDirections(before: readonly Point[], after: readonly Point[]): boolean {
   return runDirection(before[0]!, before[1]!) === runDirection(after[0]!, after[1]!)
     && runDirection(before.at(-2)!, before.at(-1)!) === runDirection(after.at(-2)!, after.at(-1)!)
 }
-
 function collapsibleDogleg(lengths: readonly number[], index: number, pointCount: number): boolean {
   if (lengths.every(length => length < LANE_GAP - EPSILON)) return true
   const touchesEndpoint = index === 0 || index + 3 === pointCount - 1
   return touchesEndpoint && lengths[1]! <= ROUTE_UNIT + EPSILON
 }
-
 function collapseDoglegs(route: FlatRoute, crosses: CrossingChecker, crossesClearance: CrossingChecker): FlatRoute {
   let points = route.points.map(point => ({ ...point }))
   for (let index = 0; index + 3 < points.length;) {
@@ -401,7 +389,6 @@ function collapseDoglegs(route: FlatRoute, crosses: CrossingChecker, crossesClea
   }
   return { ...route, points }
 }
-
 function improves(before: RouteSpacing, after: RouteSpacing): boolean {
   if (after.sharedPathLength < before.sharedPathLength - EPSILON) return true
   if (after.sharedPathLength > before.sharedPathLength + EPSILON) return false
