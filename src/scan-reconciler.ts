@@ -1,4 +1,5 @@
-import { isReservedDocument, loadArchitecture } from './architecture-reader.ts'
+import { isReservedDocument } from './architecture-path.ts'
+import { loadArchitecture } from './architecture-reader.ts'
 import { architectureElementPath } from './architecture-path.ts'
 import { GromaFileSystem } from './groma-filesystem.ts'
 import {

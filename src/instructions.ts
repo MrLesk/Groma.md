@@ -11,7 +11,7 @@ Groma is this repository's architecture in Git: Markdown that people and agents 
 \`\`\`text
 source code ──scan──▶ groma|.groma/*.md ──view──▶ maps
                                  ▲
-                        draft · edit · relate
+                  add · draft · edit · relate · remove
 \`\`\`
 
 ## Workflow
@@ -20,9 +20,11 @@ source code ──scan──▶ groma|.groma/*.md ──view──▶ maps
 2. groma view — scan this repo and open the terminal map. groma view --plain prints the existing world as text without scanning. groma view <id|path> prints one existing record.
 3. groma scan — scan this repo. Prints ok and a short summary. It does not print the architecture. The scanner alone creates systems, containers and components; nothing hand-writes them.
 4. Change the architecture through Groma, not by editing its files.
+   - groma add — declare a person, an external system, or a draft; the scanner never sees those.
    - groma draft — a new system, container or component becomes a ghost at the path it will keep.
    - groma edit — update meaning, tag a part with a draft, group scan evidence, move an empty scanned component, or combine empty scan records.
    - groma relate — author one collaboration between existing parts.
+   - groma remove — take away a person, an external, a ghost, or a draft nothing belongs to.
 5. groma accept <id> — accept a ghost only if a scan has matched it. The file stays where it is; only its status changes.
 
 ## Rules of engagement
@@ -38,6 +40,8 @@ export const authoring = `# Authoring
 
 Say what must be true, not how to build it. Do not specify frameworks, file layouts, or implementation detail unless a requirement forces it.
 
+- Person or outside system: groma add actor <name> --overview <markdown> [--description <text>], groma add external <name> [--technology <text>] --overview <markdown> [--description <text>]
+- Draft record: groma add draft <name> --overview <markdown>
 - New part: groma draft <kind> <name> [--parent <id>] --overview <markdown> [--description <text>] [--technology <text>] [--draft <draft-id>]
   Kinds are system, container, and component. The id is the kebab-case of the name and stays that id when accepted. --draft names the draft record the ghost belongs to.
 - Part an existing draft touches: groma edit <id> --draft <draft-id>
@@ -50,6 +54,7 @@ Say what must be true, not how to build it. Do not specify frameworks, file layo
 - Collaboration: groma relate <source-id> <target-id> --description <prose> --technology <text>
 - Remove the only collaboration between two parts: groma relate <source-id> <target-id> --remove
 - Draft outcome prose: groma edit <draft-id> --overview <markdown>
+- Remove a person, an external, a ghost, or a draft no ghost belongs to: groma remove <id>. It refuses while other parts relate to it, while a ghost still contains parts, or while ghosts carry the draft's tag, and it never removes scanned software.
 
 Containers need a system parent. Components need a container parent. An external system has no containers. Structural edits refuse to remove authored prose or relationships.
 

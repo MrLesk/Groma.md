@@ -205,3 +205,33 @@ test.concurrent('actor commands are scoped flows and stay separate from peer rel
   }])
   expect(api.flowsThrough.map(flow => flow.flow.commandId)).toEqual(['api-web', 'api-jobs'])
 })
+
+test.concurrent('the details pane offers Remove only where the verb would succeed', () => {
+  const fixture: ArchitectureWorld = {
+    bounds: { x: 0, y: 0, width: 40, height: 20 },
+    groups: [],
+    elements: [
+      element('ann', 'actor', null, []),
+      element('vault', 'system', null, [], { external: true }),
+      element('shop', 'system', null, ['api']),
+      element('api', 'container', 'shop', ['bins']),
+      element('bins', 'component', 'api', [], { origin: 'draft' }),
+    ],
+    relationships: [{
+      id: 'ann-vault',
+      source: 'ann',
+      target: 'vault',
+      description: 'pays',
+      technology: '',
+      origin: 'observed',
+      route: [],
+      label: null,
+    }],
+  }
+  const removable = (id: string) =>
+    inspectDetails(fixture.elements.find(element => element.id === id)!, fixture).removable
+  expect(removable('ann')).toBe(true)
+  expect(removable('bins')).toBe(true)
+  expect(removable('vault')).toBe(false)
+  expect(removable('shop')).toBe(false)
+})

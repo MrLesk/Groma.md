@@ -7,6 +7,7 @@ import type {
   Origin,
 } from '../../../types.ts'
 import type { ElementWorkGroup } from '../../../work/pins.ts'
+import { removalBlocker } from '../../../removable.ts'
 import { fileTypeOf } from '../../../sheet/measure.ts'
 import { pickableActions, travelledBy } from '../../action-path.ts'
 import type { FlowRef } from '../../action-path.ts'
@@ -14,6 +15,7 @@ import { kindGlyph, kindLabel } from '../../atoms/kind.ts'
 import { flowRow, type FlowRowData } from '../flow/row.ts'
 import type { CodeDeclaration, CodeFile } from '../source/structure.ts'
 import { paintElementWork } from '../work/component-tasks.ts'
+import { paintRemoveControl } from './remove.ts'
 import {
   parentOfElements,
   promotedPeer,
@@ -46,6 +48,8 @@ export interface Inspected {
   children: InspectedChild[]
   technology: string[]
   files: CodeReference[]
+  /** True when groma remove would succeed on it right now. */
+  removable: boolean
 }
 
 export type DetailsTab = 'what' | 'how' | 'tasks'
@@ -150,6 +154,7 @@ export function inspectDetails(
       .map(part => part.trim())
       .filter(part => part.length > 0),
     files: element.code,
+    removable: removalBlocker(world, element.id) === undefined,
   }
 }
 
@@ -303,10 +308,11 @@ interface DetailsOptions {
   onSource: (file: string, line?: number) => void,
   workGroups: readonly ElementWorkGroup[]
   onTask: (id: string) => void
+  onRemove?: () => Promise<void>
 }
 
 export function paintDetails(host: HTMLElement, inspected: Inspected, options: DetailsOptions): void {
-  const { onSelect, onToggleFlow, activeFlows, actorTitle, tab, onTab, code, onSource, workGroups, onTask } = options
+  const { onSelect, onToggleFlow, activeFlows, actorTitle, tab, onTab, code, onSource, workGroups, onTask, onRemove } = options
   const title = host.querySelector('h1')!
   const meta = host.querySelector('.meta')!
   const tabsHost = host.querySelector<HTMLElement>('.tabs')!
@@ -446,6 +452,9 @@ export function paintDetails(host: HTMLElement, inspected: Inspected, options: D
   }
   if (shownTab === 'tasks') paintElementWork(body, workGroups, onTask)
   else for (const key of tabSections(shownTab)) sections[key]()
+  if (shownTab === 'what' && inspected.removable && onRemove !== undefined) {
+    paintRemoveControl(body, inspected.title, onRemove)
+  }
 }
 
 /** The pane for a selected relationship: its description as the title, then both ends as links. */

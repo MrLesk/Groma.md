@@ -6,7 +6,9 @@ import { fileURLToPath } from 'node:url'
 import { Command } from 'commander'
 
 import { acceptGhost } from './core.ts'
+import { addThing } from './add.ts'
 import { draftElement } from './draft.ts'
+import { removeThing } from './remove.ts'
 import { editArchitecture } from './edit.ts'
 import { agentInstructionGuide } from './agent-instructions.ts'
 import { ensureInitialized, runInitCommand } from './init-command.ts'
@@ -276,6 +278,46 @@ program
       })
       console.log('ok')
       console.log(id)
+    } catch (error) {
+      console.error(error instanceof Error ? error.message : String(error))
+      process.exitCode = 1
+    }
+  })
+
+program
+  .command('add')
+  .description('Declare a person, an external system, or a draft')
+  .argument('<thing>', 'actor, external, or draft')
+  .argument('<name>', 'name')
+  .requiredOption('--overview <markdown>', 'long overview, or the outcome of a draft')
+  .option('--description <text>', 'concise OKF description')
+  .option('--technology <text>', 'implementation technology of an external')
+  .action(async (thing: string, name: string, options) => {
+    try {
+      const id = await addThing(process.cwd(), {
+        thing,
+        name,
+        overview: options.overview,
+        description: options.description,
+        technology: options.technology,
+      })
+      console.log('ok')
+      console.log(id)
+    } catch (error) {
+      console.error(error instanceof Error ? error.message : String(error))
+      process.exitCode = 1
+    }
+  })
+
+program
+  .command('remove')
+  .description('Remove a person, an external, a ghost, or a draft nothing belongs to')
+  .argument('<id>', 'element id or draft id')
+  .action(async (id: string) => {
+    try {
+      const removed = await removeThing(process.cwd(), id)
+      console.log('ok')
+      console.log(removed)
     } catch (error) {
       console.error(error instanceof Error ? error.message : String(error))
       process.exitCode = 1
