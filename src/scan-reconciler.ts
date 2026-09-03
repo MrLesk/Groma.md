@@ -1,3 +1,6 @@
+import { existsSync } from 'node:fs'
+import path from 'node:path'
+
 import { isReservedDocument } from './architecture-path.ts'
 import { loadArchitecture } from './architecture-reader.ts'
 import { architectureElementPath } from './architecture-path.ts'
@@ -188,6 +191,7 @@ async function refreshCuratedCode(
   summary: ScanSummary,
 ): Promise<void> {
   const evidence = new Map<string, { file: ScanFile; counts: SourceCounts }>()
+  const activeScanners = new Set(observations.map(observation => observation.scanner.language))
   for (const observation of observations) {
     const counts = sourceCounts(observation)
     for (const file of observation.files) {
@@ -200,13 +204,20 @@ async function refreshCuratedCode(
 
   const records = [...new Set(world.byCodeFile.values())]
   for (const record of records) {
-    if (!record.code.some(reference => evidence.has(codeFileKey(reference.scanner, reference.file)))) {
-      continue
-    }
-    record.code = record.code.map(reference => {
+    let touched = false
+    const code = record.code.flatMap(reference => {
       const found = evidence.get(codeFileKey(reference.scanner, reference.file))
-      return found === undefined ? reference : refreshedReference(reference, found.file, found.counts)
+      if (found !== undefined) {
+        touched = true
+        return [refreshedReference(reference, found.file, found.counts)]
+      }
+      const missing = activeScanners.has(reference.scanner)
+        && !existsSync(path.join(repositoryRoot, reference.file))
+      if (missing) touched = true
+      return missing ? [] : [reference]
     })
+    if (!touched) continue
+    record.code = code
     await upsertCode(repositoryRoot, record.sourceFilename, record.code)
     if (record.status === 'draft') summary.matched += 1
     else summary.refreshed += 1

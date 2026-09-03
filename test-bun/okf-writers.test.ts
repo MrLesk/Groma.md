@@ -99,6 +99,7 @@ groma:
 
 Takes order requests.
 `,
+    'src/orders.ts': 'export function placeOrder() {}\n',
     [ordersPath]: ordersSource,
     [draftPath]: nextDraft,
     ...extra,

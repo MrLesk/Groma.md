@@ -12,14 +12,6 @@ groma:
       dependencies: 3
       dependents: 1
     - scanner: typescript
-      file: src/viewers/web/task-diff/project.ts
-      dependencies: 0
-      dependents: 2
-    - scanner: typescript
-      file: src/viewers/web/task-diff/read.ts
-      dependencies: 3
-      dependents: 6
-    - scanner: typescript
       file: src/viewers/web/task-diff/view.ts
       dependencies: 6
       dependents: 2
