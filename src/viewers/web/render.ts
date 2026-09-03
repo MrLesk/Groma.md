@@ -100,6 +100,10 @@ const revisionControl = createRevisionControl({
 const authoring = createAuthoring(data, {
   live: () => revisionControl.selected === undefined,
   drafts: () => world.drafts,
+  parents: () => world.elements
+    .filter(element => element.kind === 'container')
+    .map(element => ({ id: element.id, title: element.title }))
+    .sort((left, right) => left.title.localeCompare(right.title) || left.id.localeCompare(right.id)),
   titleOf: id => worldElement(id)?.title ?? id,
   repaint: () => paintViewState(),
 })

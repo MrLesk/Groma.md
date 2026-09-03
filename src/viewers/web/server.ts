@@ -269,6 +269,7 @@ export async function startWebViewer(
     ['/add', request => writeResponse(request, writes.add)],
     ['/edit', request => writeResponse(request, writes.edit)],
     ['/remove', request => writeResponse(request, writes.remove)],
+    ['/accept', request => writeResponse(request, writes.accept)],
   ])
 
   async function responseFor(request: Request): Promise<Response> {

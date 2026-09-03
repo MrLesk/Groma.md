@@ -3,7 +3,12 @@ import type { EditArchitectureInput } from '../../../authoring.ts'
 import { message, paintEditable } from './editable.ts'
 
 /** What the edit verb changes from the pane; the id is the selected element's. */
-export type MeaningEdit = Pick<EditArchitectureInput, 'title' | 'description' | 'overview' | 'technology' | 'draft'>
+export type MeaningEdit = Pick<EditArchitectureInput, 'title' | 'description' | 'overview' | 'technology' | 'draft' | 'parent'>
+
+export interface ParentOption {
+  id: string
+  title: string
+}
 
 export interface SelectionWrites {
   members: { id: string; title: string }[]
@@ -20,8 +25,10 @@ export interface RelateControl {
 /** The write hooks an element pane gets on the current revision of a live map. */
 export interface PaneWrites {
   onRemove?: () => Promise<void>
+  onAccept?: () => Promise<void>
   onEdit?: (input: MeaningEdit) => Promise<void>
   drafts?: readonly string[]
+  parents?: readonly ParentOption[]
   relate?: RelateControl
   /** Present while several components are selected on a live map. */
   selection?: SelectionWrites
@@ -97,6 +104,68 @@ export function paintDraftSelect(body: Element, inspected: Meaning, drafts: read
   })
   const box = document.createElement('div')
   box.className = 'editable draft'
+  box.append(select, error)
+  body.append(box)
+}
+
+/** A matched ghost becomes stable through the same accept input as the CLI. */
+export function paintAcceptControl(body: Element, accept: () => Promise<void>): void {
+  const button = document.createElement('button')
+  button.type = 'button'
+  button.className = 'accept'
+  button.textContent = 'Accept'
+  const error = paragraph('error', '')
+  error.setAttribute('role', 'status')
+  button.addEventListener('click', async () => {
+    error.textContent = ''
+    button.disabled = true
+    try {
+      await accept()
+    } catch (cause) {
+      error.textContent = message(cause)
+      button.disabled = false
+    }
+  })
+  const box = document.createElement('div')
+  box.className = 'selection-writes accept'
+  box.append(button, error)
+  body.append(box)
+}
+
+/** An empty component moves by choosing one of the world's containers by title. */
+export function paintParentSelect(
+  body: Element,
+  current: string | null,
+  parents: readonly ParentOption[],
+  onEdit: (input: MeaningEdit) => Promise<void>,
+): void {
+  if (current === null || !parents.some(parent => parent.id !== current)) return
+  body.append(heading('Parent'))
+  const select = document.createElement('select')
+  select.className = 'parent'
+  select.setAttribute('aria-label', 'Parent')
+  for (const parent of parents) {
+    const option = document.createElement('option')
+    option.value = parent.id
+    option.textContent = parent.title
+    select.append(option)
+  }
+  select.value = current
+  const error = paragraph('error', '')
+  error.setAttribute('role', 'status')
+  select.addEventListener('change', async () => {
+    error.textContent = ''
+    select.disabled = true
+    try {
+      await onEdit({ parent: select.value })
+    } catch (cause) {
+      error.textContent = message(cause)
+      select.value = current
+      select.disabled = false
+    }
+  })
+  const box = document.createElement('div')
+  box.className = 'editable parent'
   box.append(select, error)
   body.append(box)
 }

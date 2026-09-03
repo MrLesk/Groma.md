@@ -122,6 +122,8 @@ export interface AnnotatedElement {
   code: CodeReference[]
   /** Total lines across the code files; absent only in hand-built worlds. */
   codeLines?: number
+  /** Core decision that this element may move; absent only in hand-built worlds. */
+  movable?: boolean
   origin: Origin
   draft?: string
 }

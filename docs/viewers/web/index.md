@@ -52,6 +52,12 @@ element with one of the draft records. Each field posts the input `groma edit`
 takes, and a refusal appears under the field it belongs to. A past revision
 shows plain text.
 
+A ghost whose scan has found code ends with Accept. It posts the same input as
+`groma accept`; the accepted element becomes stable in place. An empty
+component with no relationships shows a Parent select listing containers by
+title. Choosing one posts the same `groma edit --parent` input as the CLI and
+moves the component without changing its ID.
+
 Relate to, at the end of an element's pane, arms the map: the next element
 click is the target and one dialog asks how the source uses it and through
 what, posting the input `groma add relation` takes; clicking the source again

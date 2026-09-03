@@ -3,7 +3,8 @@ import path from 'node:path'
 import test from 'node:test'
 import { fileURLToPath } from 'node:url'
 
-import { loadArchitectureViewModel } from '../src/core.ts'
+import { annotateArchitecture, loadArchitectureViewModel } from '../src/core.ts'
+import { elementDocument } from './architecture-model-helpers.ts'
 
 const fixtureRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -47,4 +48,42 @@ test('reconstructs observed elements, ghosts, and drafts from the OKF profile', 
   ])
   assert.ok(model.world.bounds.width > 0)
   assert.doesNotThrow(() => JSON.stringify(model))
+})
+
+test('move eligibility uses the complete Markdown body', () => {
+  const system = elementDocument({
+    id: 'shop',
+    kind: 'system',
+    sourceFilename: 'groma/systems/shop/system.md',
+  })
+  const container = elementDocument({
+    id: 'api',
+    kind: 'container',
+    parent: 'shop',
+    sourceFilename: 'groma/systems/shop/containers/api/container.md',
+  })
+  const empty = elementDocument({
+    id: 'empty',
+    kind: 'component',
+    parent: 'api',
+    sourceFilename: 'groma/systems/shop/containers/api/components/empty.md',
+  })
+  empty.body = ''
+  empty.nodes = []
+  const sectioned = elementDocument({
+    id: 'sectioned',
+    kind: 'component',
+    parent: 'api',
+    sourceFilename: 'groma/systems/shop/containers/api/components/sectioned.md',
+  })
+  sectioned.body = '## Requirements\n\nKeep this requirement.'
+  sectioned.nodes = [
+    ['h2', { id: 'requirements' }, 'Requirements'],
+    ['p', {}, 'Keep this requirement.'],
+  ]
+
+  const model = annotateArchitecture({ documents: [system, container, empty, sectioned], drafts: [] })
+
+  assert.equal(model.elements.find(element => element.id === 'empty')?.movable, true)
+  assert.equal(model.elements.find(element => element.id === 'sectioned')?.movable, false)
 })

@@ -32,6 +32,7 @@ function element(
     external: extra.external ?? false,
     ...(extra.technology === undefined ? {} : { technology: extra.technology }),
     code: extra.code ?? [],
+    ...(extra.movable === undefined ? {} : { movable: extra.movable }),
     origin: extra.origin ?? 'observed',
     bounds,
   }
@@ -234,4 +235,25 @@ test.concurrent('the details pane offers Remove only where the verb would succee
   expect(removable('bins')).toBe(true)
   expect(removable('vault')).toBe(false)
   expect(removable('shop')).toBe(false)
+})
+
+test.concurrent('Accept and Parent reflect the core-projected element states', () => {
+  const fixture = world()
+  const matched = element('matched', 'component', 'core', [], {
+    origin: 'draft',
+    code: [{ scanner: 'typescript', file: 'src/matched.ts' }],
+  })
+  const unmatched = element('unmatched', 'component', 'core', [], { origin: 'draft' })
+  const empty = element('empty', 'component', 'core', [], { movable: true })
+  const authored = element('authored', 'component', 'core', [], {
+    overview: 'Owns a product responsibility.',
+    movable: false,
+  })
+  fixture.elements.push(matched, unmatched, empty, authored)
+
+  expect(inspectDetails(matched, fixture).matchedGhost).toBe(true)
+  expect(inspectDetails(unmatched, fixture).matchedGhost).toBe(false)
+  expect(inspectDetails(empty, fixture).movable).toBe(true)
+  expect(inspectDetails(authored, fixture).movable).toBe(false)
+  expect(inspectDetails(fixture.elements.find(item => item.id === 'layout')!, fixture).movable).toBe(false)
 })

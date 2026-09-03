@@ -2,19 +2,20 @@ import { createGroupDialog } from './chrome/group.ts'
 import { createRelateDialog } from './chrome/relate.ts'
 import type { WebDataSource } from './data.ts'
 import type { ZoneAddress } from './iso/map.ts'
-import type { MeaningEdit, PaneWrites, RelationWrites, SelectionWrites } from './organisms/writes.ts'
+import type { MeaningEdit, PaneWrites, ParentOption, RelationWrites, SelectionWrites } from './organisms/writes.ts'
 
 export interface AuthoringDependencies {
   /** True on the current revision of a live map, the only place writes are offered. */
   live: () => boolean
   drafts: () => readonly string[]
+  parents: () => readonly ParentOption[]
   titleOf: (id: string) => string
   repaint: () => void
 }
 
 /** The write hooks the panes get, and the armed relation: Relate to waits for the next element click to be the target. */
 export function createAuthoring(data: WebDataSource, deps: AuthoringDependencies) {
-  const { add, edit, remove } = data
+  const { accept, add, edit, remove } = data
   const dialog = add === undefined ? undefined : createRelateDialog(add)
   const groupDialog = edit === undefined || remove === undefined ? undefined : createGroupDialog(edit, remove)
   let armed: string | undefined
@@ -41,7 +42,12 @@ export function createAuthoring(data: WebDataSource, deps: AuthoringDependencies
     return {
       ...(selection === undefined ? {} : { selection }),
       ...(remove === undefined ? {} : { onRemove: () => remove({ id: selectedId }) }),
-      ...(edit === undefined ? {} : { onEdit: (input: MeaningEdit) => edit({ id: selectedId, ...input }), drafts: deps.drafts() }),
+      ...(accept === undefined ? {} : { onAccept: () => accept({ id: selectedId }) }),
+      ...(edit === undefined ? {} : {
+        onEdit: (input: MeaningEdit) => edit({ id: selectedId, ...input }),
+        drafts: deps.drafts(),
+        parents: deps.parents(),
+      }),
       ...(dialog === undefined ? {} : {
         relate: {
           armed: armed === selectedId,
