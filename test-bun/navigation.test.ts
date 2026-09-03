@@ -40,26 +40,14 @@ function actionWorld() {
   ])
 }
 
+/** Four buildings that wrap into two lines of two at a 40-column map. */
 function laneNavigationWorld() {
-  const ids = ['top-left', 'top-right', 'middle-left', 'bottom-left', 'middle-right']
+  const ids = ['a', 'b', 'c', 'd']
+  const cell = { x: 0, y: 0, width: 1, height: 1 }
   const model = worldOf([
-    box('system', 'system', { x: 0, y: 0, width: 1, height: 1 }, {
-      children: ['observed:container'],
-    }),
-    box('container', 'container', { x: 0, y: 0, width: 1, height: 1 }, {
-      parent: 'observed:system',
-      children: ids.map(id => `observed:${id}`),
-    }),
-    ...ids.map(id => box(id, 'component', { x: 0, y: 0, width: 1, height: 1 }, {
-      parent: 'observed:container',
-    })),
-  ])
-  const rects = new Map([
-    ['observed:top-left', { gx: 10, gy: 5, w: 6, d: 4 }],
-    ['observed:top-right', { gx: 20, gy: 5, w: 6, d: 4 }],
-    ['observed:middle-left', { gx: 10, gy: 11, w: 6, d: 4 }],
-    ['observed:bottom-left', { gx: 11, gy: 17, w: 6, d: 4 }],
-    ['observed:middle-right', { gx: 24, gy: 11, w: 6, d: 4 }],
+    box('system', 'system', cell, { children: ['observed:container'] }),
+    box('container', 'container', cell, { parent: 'observed:system', children: ids.map(id => `observed:${id}`) }),
+    ...ids.map(id => box(id, 'component', cell, { parent: 'observed:container' })),
   ])
   return {
     ...model,
@@ -67,7 +55,7 @@ function laneNavigationWorld() {
       ...model.sheet,
       buildings: model.sheet.buildings.map(building => ({
         ...building,
-        rect: rects.get(building.representationId) ?? building.rect,
+        rect: { gx: ids.indexOf(building.id) * 10, gy: 0, w: 6, d: 4 },
       })),
     },
   }
@@ -93,17 +81,10 @@ function containmentNavigationWorld() {
     ...model,
     sheet: {
       ...model.sheet,
+      // The island row west to east: actors, north, system, south, external.
       islands: model.sheet.islands.map(island => {
-        if (island.element?.id === 'system') {
-          return { ...island, rect: { gx: 20, gy: 20, w: 72, d: 80 } }
-        }
-        if (island.element?.id === 'north') {
-          return { ...island, rect: { gx: 20, gy: 0, w: 72, d: 10 } }
-        }
-        if (island.element?.id === 'south') {
-          return { ...island, rect: { gx: 20, gy: 110, w: 72, d: 10 } }
-        }
-        return island
+        const gx = { actors: 0, north: 20, system: 40, south: 60, external: 80 }[island.element?.id ?? island.kind]
+        return gx === undefined ? island : { ...island, rect: { ...island.rect, gx, gy: 0 } }
       }),
       slabs: model.sheet.slabs.map(slab => ({
         ...slab,
@@ -167,76 +148,43 @@ test.concurrent('map edges lead to the fixed hierarchy and details panes', () =>
   assert.equal(right.panes.details, true)
 })
 
-test.concurrent('map navigation follows visual rows and columns before diagonals', () => {
+test.concurrent('container arrows follow the lines of buildings', () => {
   const model = laneNavigationWorld()
-  let state: ViewerState = {
-    ...initialState(model),
-    level: 'components',
-    currentId: 'observed:top-right',
-  }
+  let state: ViewerState = { ...initialState(model), level: 'components', currentId: 'observed:a', mapWidth: 40 }
 
-  state = reduceViewer(model, state, 'left')
-  assert.equal(state.currentId, 'observed:top-left')
+  // Right reads on: along the line, then onto the next line.
   state = reduceViewer(model, state, 'right')
-  assert.equal(state.currentId, 'observed:top-right')
-
-  state = { ...state, currentId: 'observed:top-left' }
+  assert.equal(state.currentId, 'observed:b')
+  state = reduceViewer(model, state, 'right')
+  assert.equal(state.currentId, 'observed:c')
+  state = reduceViewer(model, state, 'left')
+  assert.equal(state.currentId, 'observed:b')
   state = reduceViewer(model, state, 'down')
-  assert.equal(state.currentId, 'observed:middle-left')
-  state = reduceViewer(model, state, 'down')
-  assert.equal(state.currentId, 'observed:bottom-left')
+  assert.equal(state.currentId, 'observed:d')
+  state = reduceViewer(model, state, 'up')
+  assert.equal(state.currentId, 'observed:b')
+  // Past the last building with no neighbouring container, the map hands over to the pane.
+  assert.equal(reduceViewer(model, { ...state, currentId: 'observed:d' }, 'right').focus, 'details')
 })
 
-test.concurrent('map navigation stays with directional siblings before crossing a boundary', () => {
+test.concurrent('root arrows walk the rows of an island and cross to its neighbours', () => {
   const model = containmentNavigationWorld()
-  const start: ViewerState = {
-    ...initialState(model),
-    currentId: 'observed:lower',
-  }
+  const start: ViewerState = { ...initialState(model), currentId: 'observed:lower' }
 
   const up = reduceViewer(model, start, 'up')
   assert.equal(up.currentId, 'observed:upper')
+  const island = reduceViewer(model, up, 'up')
+  assert.equal(island.currentId, 'observed:system')
+  assert.equal(reduceViewer(model, island, 'up').currentId, 'observed:system')
+  assert.equal(reduceViewer(model, island, 'down').currentId, 'observed:upper')
+  assert.equal(reduceViewer(model, start, 'down').currentId, 'observed:lower')
 
-  const boundary = reduceViewer(model, start, 'left')
-  assert.equal(boundary.currentId, 'observed:system')
-  const outside = reduceViewer(model, boundary, 'left')
-  assert.equal(outside.currentId, 'observed:actor')
-
-  let inward: ViewerState = {
-    ...initialState(model),
-    currentId: 'observed:actor',
-  }
-  inward = reduceViewer(model, inward, 'right')
-  assert.equal(inward.currentId, 'observed:system')
-  inward = reduceViewer(model, inward, 'right')
-  assert.equal(inward.currentId, 'observed:lower')
-
-  let reverse: ViewerState = {
-    ...initialState(model),
-    currentId: 'observed:external',
-  }
-  reverse = reduceViewer(model, reverse, 'left')
-  assert.equal(reverse.currentId, 'observed:system')
-  reverse = reduceViewer(model, reverse, 'left')
-  assert.equal(reverse.currentId, 'observed:lower')
-
-  let downward: ViewerState = {
-    ...initialState(model),
-    currentId: 'observed:north',
-  }
-  downward = reduceViewer(model, downward, 'down')
-  assert.equal(downward.currentId, 'observed:system')
-  downward = reduceViewer(model, downward, 'down')
-  assert.equal(downward.currentId, 'observed:upper')
-
-  let upward: ViewerState = {
-    ...initialState(model),
-    currentId: 'observed:south',
-  }
-  upward = reduceViewer(model, upward, 'up')
-  assert.equal(upward.currentId, 'observed:system')
-  upward = reduceViewer(model, upward, 'up')
-  assert.equal(upward.currentId, 'observed:lower')
+  const west = reduceViewer(model, start, 'left')
+  assert.equal(west.currentId, 'observed:north')
+  assert.equal(reduceViewer(model, west, 'left').currentId, 'observed:actor')
+  const east = reduceViewer(model, start, 'right')
+  assert.equal(east.currentId, 'observed:south')
+  assert.equal(reduceViewer(model, east, 'right').currentId, 'observed:external')
 })
 
 test.concurrent('dismiss closes details and returns container scope to the root map', () => {

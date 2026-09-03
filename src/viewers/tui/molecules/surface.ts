@@ -71,7 +71,8 @@ function frameLook(item: ProjectedMapItem, theme: ViewerTheme, accented: boolean
 /** The name and kind glyph right after the top corner; a zone shows its name alone, dim. */
 function drawSurfaceTitle(buffer: OptimizedBuffer, item: ProjectedMapItem, look: FrameLook, theme: ViewerTheme): void {
   const bounds = item.cellBounds
-  const title = item.kind === 'group' ? item.title : `${kindGlyph(item.kind)} ${item.title}`
+  // A zone and the shared actors and external islands show their name alone.
+  const title = item.kind === 'group' || item.representationId === undefined ? item.title : `${kindGlyph(item.kind)} ${item.title}`
   const attributes = item.kind === 'group' ? TextAttributes.DIM : TextAttributes.BOLD
   text(buffer, ` ${title} `, bounds.x + 1, bounds.y, Math.max(0, bounds.width - 2), look.color, theme.background, attributes)
 }

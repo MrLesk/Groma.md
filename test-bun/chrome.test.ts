@@ -4,6 +4,7 @@ import { test } from 'bun:test'
 import { createTestRenderer } from '@opentui/core/testing'
 
 import { panesForWidth } from '../src/viewers/tui/layout.ts'
+import type { Bounds } from '../src/types.ts'
 import { initialState, reduceViewer } from '../src/viewers/tui/navigation.ts'
 import { projectWorld } from '../src/viewers/tui/projection.ts'
 import { mountTerminalViewer } from '../src/viewers/tui/terminal-viewer.ts'
@@ -16,29 +17,25 @@ import {
   viewerFixtureRoot,
 } from './helpers.ts'
 
-test.concurrent('details changes pane width without changing camera or world cells', () => {
+test.concurrent('details changes pane width and the selection stays centred in either map width', () => {
   const model = navigationWorld()
   let state = initialState(model)
   state = reduceViewer(model, state, 'toggle-details')
   assert.equal(state.panes.details, false)
   assert.equal(reduceViewer(model, state, 'tab').focus, 'hierarchy')
 
-  const narrow = paneLayout(120, 36)
-  const wide = paneLayout(120, 36, { hierarchy: true, details: false })
-  const first = projectWorld(model, {
-    viewport: narrow.mapViewport,
-    currentId: 'observed:alpha',
-  })
-  const second = projectWorld(model, {
-    viewport: wide.mapViewport,
-    currentId: 'observed:alpha',
-    camera: first.camera,
-  })
-  assert.deepEqual(second.camera, first.camera)
-  assert.deepEqual(
-    second.items.map(item => [item.key, item.cellBounds.x, item.cellBounds.y]),
-    first.items.map(item => [item.key, item.cellBounds.x, item.cellBounds.y]),
-  )
+  // The selected island sits on the map's centre, or the whole row does when it fits, whatever the map width.
+  const centre = (viewport: Bounds) => {
+    const projection = projectWorld(model, { viewport, currentId: 'observed:alpha' })
+    const subject = projection.worldBounds.width <= viewport.width
+      ? projection.worldBounds
+      : projection.items.find(item => item.representationId === 'observed:alpha')!.worldBounds
+    return subject.x + subject.width / 2 - projection.camera.x
+  }
+  const narrow = paneLayout(120, 36).mapViewport
+  const wide = paneLayout(120, 36, { hierarchy: true, details: false }).mapViewport
+  assert.ok(Math.abs(centre(narrow) - narrow.width / 2) <= 1)
+  assert.ok(Math.abs(centre(wide) - wide.width / 2) <= 1)
 })
 
 test.concurrent('details always follows the current selection', async () => {
@@ -132,22 +129,27 @@ function detailsTitle(frame: string, width: number): string {
   return [...frame.split('\n')[2]!].slice(paneLayout(width, 36).details.x).join('')
 }
 
-test.concurrent('a folded hierarchy gives its columns to the map without moving cells', async () => {
+test.concurrent('a folded hierarchy gives its columns to the map and the selected island stays centred', async () => {
   const model = await terminalModel(viewerFixtureRoot)
   const setup = await createTestRenderer({ width: 120, height: 36 })
   const app = mountTerminalViewer(setup.renderer, model)
   await setup.renderOnce()
-  const selected = model.elements.find(element => element.representationId === initialState(model).currentId)!
+  const selectedId = initialState(model).currentId!
+  const selected = model.elements.find(element => element.representationId === selectedId)!
   const layout = paneLayout(120, 36)
-  // Where the selected card's title sits in the map's own columns, below the header.
-  const inMap = (frame: string, mapX: number) => frame.split('\n').slice(layout.map.y)
-    .map(row => [...row].slice(mapX, layout.details.x).join('').indexOf(selected.title))
-    .find(index => index >= 0)
-  const before = inMap(setup.captureCharFrame(), layout.map.x)
-  const after = inMap(await press(setup, '['), 0)
-  assert.ok(before !== undefined)
-  assert.equal(after, before)
-  assert.ok(detailsTitle(setup.captureCharFrame(), 120).includes(selected.title))
+  const folded = paneLayout(120, 36, { hierarchy: false, details: true })
+  // The island's centre in the map's own columns, for either map width.
+  const centre = (viewport: Bounds) => {
+    const island = projectWorld(model, { viewport: { ...viewport, x: 0, y: 0 }, currentId: selectedId }).items
+      .find(item => item.representationId === selectedId)!
+    return island.cellBounds.x + island.cellBounds.width / 2
+  }
+  assert.ok(Math.abs(centre(layout.mapViewport) - layout.mapViewport.width / 2) <= 1)
+  assert.ok(Math.abs(centre(folded.mapViewport) - folded.mapViewport.width / 2) <= 1)
+  const frame = await press(setup, '[')
+  const titled = frame.split('\n').slice(layout.map.y).map(row => [...row].slice(0, layout.details.x).join('')).find(row => row.includes(selected.title))
+  assert.ok(titled !== undefined)
+  assert.ok(detailsTitle(frame, 120).includes(selected.title))
   app.destroy()
 })
 

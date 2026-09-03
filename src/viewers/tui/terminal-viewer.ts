@@ -27,6 +27,8 @@ import type { TerminalLevel } from '../../types.ts'
 
 const FLOW_ANIMATION_MS = 120
 const FLOW_ANIMATION_PHASES = 3
+const PAN_FRAMES = 4
+const PAN_MS = 30
 const VIEWER_ACTION_BY_KEY: Readonly<Record<string, ViewerAction>> = {
   return: 'enter',
   backspace: 'leave',
@@ -63,6 +65,16 @@ export interface TerminalViewer {
   }): void
 }
 
+/** The projection drawn `dx` columns to the right, for the frames of a pan. */
+function shifted(projection: TerminalProjection, dx: number): TerminalProjection {
+  if (dx === 0) return projection
+  return {
+    ...projection,
+    items: projection.items.map(item => ({ ...item, cellBounds: { ...item.cellBounds, x: item.cellBounds.x + dx } })),
+    relationships: projection.relationships.map(route => ({ ...route, cellRoute: route.cellRoute.map(point => ({ ...point, x: point.x + dx })) })),
+  }
+}
+
 export function mountTerminalViewer(
   renderer: CliRenderer,
   response: TerminalViewModel,
@@ -87,6 +99,9 @@ export function mountTerminalViewer(
   let animationTimer: ReturnType<typeof setInterval> | undefined
   // Map clicks resolve against the projection last painted.
   let lastProjection: TerminalProjection | undefined
+  // A selection change at the same level slides the map from the camera it had to the one it gets.
+  let slide: { distance: number; left: number } | undefined
+  let slideTimer: ReturnType<typeof setTimeout> | undefined
   const screen = mountScreen(renderer, theme, {
     onMapResize: () => repaint(),
     onHierarchyRow(id) {
@@ -95,7 +110,7 @@ export function mountTerminalViewer(
     onMapCell(x, y) {
       const id = lastProjection === undefined ? undefined : itemAt(lastProjection.items, x, y)?.representationId
       // Only what the arrows can reach at this level is selectable.
-      if (id !== undefined && mapAnchors(viewModel, state.level, state.currentId).has(id)) {
+      if (id !== undefined && mapAnchors(viewModel, state.level, state.currentId, state.mapWidth).has(id)) {
         transition(selectMapItem(viewModel, state, id))
       }
     },
@@ -134,8 +149,10 @@ export function mountTerminalViewer(
     }, FLOW_ANIMATION_MS)
   }
 
-  function repaint(): void {
+  function repaint(panFrom?: number): void {
     if (closed || screen.map.isDestroyed) return
+    const mapWidth = screen.mapViewport().width
+    if (state.mapWidth !== mapWidth) state = { ...state, mapWidth }
     const projection = project()
     const lit = litAction(viewModel, state)
     syncAnimation(lit.id !== undefined)
@@ -144,7 +161,7 @@ export function mountTerminalViewer(
       state = { ...state, currentId: projection.currentId ?? undefined }
     }
     const step = projectFlowStep(viewModel, projection, lit.id, lit.actorId, state.actionStep)
-    paintMap(screen.map.frameBuffer, projection, viewModel, theme, {
+    paintMap(screen.map.frameBuffer, shifted(projection, slideShift(projection.camera.x, panFrom)), viewModel, theme, {
       lit,
       step,
       workFocus: state.work,
@@ -153,6 +170,20 @@ export function mountTerminalViewer(
     lastProjection = projection
     screen.apply(screenView(theme, viewModel, state, projection, lit, step))
     screen.map.requestRender()
+    slideOn()
+  }
+
+  /** The columns the map still lags behind its new camera; a fresh pan starts from the camera it left. */
+  function slideShift(cameraX: number, panFrom: number | undefined): number {
+    if (panFrom !== undefined && panFrom !== cameraX) slide = { distance: cameraX - panFrom, left: PAN_FRAMES }
+    return slide === undefined ? 0 : Math.round(slide.distance * slide.left / PAN_FRAMES)
+  }
+
+  function slideOn(): void {
+    if (slide === undefined) return
+    slide = slide.left > 1 ? { ...slide, left: slide.left - 1 } : undefined
+    clearTimeout(slideTimer)
+    slideTimer = setTimeout(() => repaint(), PAN_MS)
   }
 
   function release(): void {
@@ -215,6 +246,8 @@ export function mountTerminalViewer(
     const leavingWork = state.work !== undefined && next.work === undefined
     const changedTask = selectedWorkId(next.work) !== selectedWorkId(state.work)
     if (enteringWork) workReturnCamera = snapshot()
+    const slides = !changedScope && !enteringWork && !leavingWork && next.currentId !== state.currentId
+    const panFrom = slides ? camera?.x : undefined
     state = next
     if (leavingWork) {
       camera = workReturnCamera
@@ -224,7 +257,7 @@ export function mountTerminalViewer(
     } else if (changedScope) {
       camera = undefined
     }
-    repaint()
+    repaint(panFrom)
   }
 
   function onSearchKey(key: KeyEvent): void {
@@ -293,7 +326,6 @@ export function mountTerminalViewer(
         ...state,
         level: next.level ?? state.level,
         currentId: next.currentId ?? state.currentId,
-        mapStep: undefined,
       }
       repaint()
     },

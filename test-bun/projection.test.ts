@@ -37,16 +37,16 @@ function groupedWorld() {
   ])
 }
 
-test.concurrent('root projection shows the architecture surfaces without component cards', () => {
+test.concurrent('root projection shows islands listing rows, without cards or groups', () => {
   const model = groupedWorld()
   const projection = projectWorld(model, { viewport: mapViewportOf({ width: 200, height: 60 }) })
 
-  assert.ok(projection.items.some(item => item.kind === 'actor' && item.shape === 'card'))
-  assert.ok(projection.items.some(item => item.kind === 'system' && !item.external))
-  assert.ok(projection.items.some(item => item.kind === 'system' && item.external))
-  assert.ok(projection.items.some(item => item.kind === 'container' && item.shape === 'boundary'))
-  assert.ok(projection.items.some(item => item.kind === 'group' && item.shape === 'group'))
-  assert.equal(projection.items.some(item => item.kind === 'component'), false)
+  assert.ok(projection.items.some(item => item.shape === 'island' && item.kind === 'actor'))
+  assert.ok(projection.items.some(item => item.shape === 'row' && item.kind === 'actor'))
+  assert.ok(projection.items.some(item => item.shape === 'island' && item.kind === 'system' && !item.external))
+  assert.ok(projection.items.some(item => item.shape === 'island' && item.external))
+  assert.ok(projection.items.some(item => item.shape === 'row' && item.kind === 'container'))
+  assert.equal(projection.items.some(item => item.shape === 'card' || item.kind === 'group' || item.kind === 'component'), false)
   assert.equal(projection.currentId, 'observed:product')
 })
 
@@ -64,12 +64,12 @@ test.concurrent('container projection contains only its groups and component car
     new Set(['observed:service', 'observed:read', 'observed:write']),
   )
   assert.equal(projection.items.filter(item => item.kind === 'group').length, 2)
-  assert.equal(mapAnchors(model, 'components', 'observed:read').has('observed:service'), false)
+  assert.equal(mapAnchors(model, 'components', 'observed:read', 120).has('observed:service'), false)
 })
 
 test.concurrent('selection changes the camera but never the world layout', () => {
   const model = navigationWorld()
-  const viewport = mapViewportOf({ width: 80, height: 24 })
+  const viewport = mapViewportOf({ width: 120, height: 36 })
   const start = projectWorld(model, { viewport, currentId: 'observed:alpha' })
   const before = structuredClone(model.sheet)
   const moved = projectWorld(model, {
@@ -132,9 +132,9 @@ test.concurrent('flow steps keep exact endpoints while marking their visible anc
   assert.equal(flowEndpointLabel(local!.target), 'vendor')
 })
 
-test.concurrent('flow attention reveals its destination without changing selection', () => {
+test.concurrent('flow attention changes neither the selection nor the centred island', () => {
   const model = groupedWorld()
-  const viewport = mapViewportOf({ width: 60, height: 24 })
+  const viewport = mapViewportOf({ width: 120, height: 36 })
   const start = projectWorld(model, { viewport, currentId: 'observed:product' })
   const followed = projectWorld(model, {
     viewport,
@@ -142,11 +142,9 @@ test.concurrent('flow attention reveals its destination without changing selecti
     attentionIds: ['observed:vendor'],
     camera: start.camera,
   })
-  const target = followed.items.find(item => item.representationId === 'observed:vendor')
 
   assert.equal(followed.currentId, 'observed:product')
-  assert.ok(target)
-  assert.equal(visibleIn(target.cellBounds, viewport), true)
+  assert.equal(followed.camera.x, start.camera.x)
 })
 
 test.concurrent('task attention frames every visible touched element together', () => {
@@ -169,20 +167,13 @@ test.concurrent('task attention frames every visible touched element together', 
   assert.equal(touched.every(item => visibleIn(item.cellBounds, viewport)), true)
 })
 
-test.concurrent('oversized task attention keeps the complete set centered', () => {
-  const viewport = { x: 0, y: 0, width: 20, height: 8 }
-  const projection = projectWorld(navigationWorld(), {
-    viewport,
-    currentId: 'observed:alpha',
-    attentionIds: ['observed:cleft', 'observed:cright'],
-  })
-  const touched = projection.items.filter(item => {
-    return item.representationId === 'observed:cleft'
-      || item.representationId === 'observed:cright'
-  })
-  const left = Math.min(...touched.map(item => item.worldBounds.x))
-  const right = Math.max(...touched.map(item => item.worldBounds.x + item.worldBounds.width))
-
-  assert.equal(right - left > viewport.width, true)
-  assert.ok(Math.abs(projection.camera.x + viewport.width / 2 - (left + right) / 2) <= 0.5)
+test.concurrent('a selection the root does not show stands on its container row and centres that island', () => {
+  const model = navigationWorld()
+  const viewport = mapViewportOf({ width: 120, height: 36 })
+  const projection = projectWorld(model, { viewport, currentId: 'observed:pleft' })
+  assert.equal(projection.currentId, 'observed:cleft')
+  const island = projection.items.find(item => item.representationId === 'observed:alpha')!
+  if (projection.worldBounds.width > viewport.width) {
+    assert.ok(Math.abs(island.cellBounds.x + island.cellBounds.width / 2 - viewport.x - viewport.width / 2) <= 1)
+  }
 })

@@ -1,32 +1,12 @@
-import { compareSemanticElements } from '../../element-order.ts'
-import type { AnnotatedElement, Bounds, C4Kind, TerminalLevel } from '../../types.ts'
+import type { AnnotatedElement, Bounds, TerminalLevel } from '../../types.ts'
 import type { TerminalViewModel } from './model.ts'
 import { ancestorOfKind, type MapDirection, type ViewerState } from './navigation.ts'
 import { mapAnchors } from './projection.ts'
+import { firstBuilding, neighbourContainer } from './projection-container.ts'
+import { rootStops } from './projection-root.ts'
 
 function elementsById(model: TerminalViewModel): Map<string, AnnotatedElement> {
   return new Map(model.elements.map(element => [element.representationId, element]))
-}
-
-function children(
-  element: AnnotatedElement | undefined,
-  byId: ReadonlyMap<string, AnnotatedElement>,
-): AnnotatedElement[] {
-  if (!element) return []
-  return element.children
-    .flatMap(id => {
-      const child = byId.get(id)
-      return child === undefined ? [] : [child]
-    })
-    .sort(compareSemanticElements)
-}
-
-function firstChildOfKind(
-  element: AnnotatedElement | undefined,
-  kind: C4Kind,
-  byId: ReadonlyMap<string, AnnotatedElement>,
-): AnnotatedElement | undefined {
-  return children(element, byId).find(child => child.kind === kind)
 }
 
 export function canEnter(element: AnnotatedElement): boolean {
@@ -35,15 +15,12 @@ export function canEnter(element: AnnotatedElement): boolean {
     && element.children.length > 0
 }
 
+/** Opens a container map on its first building in map order. */
 export function enterView(
   model: TerminalViewModel,
   element: AnnotatedElement,
 ): Pick<ViewerState, 'level' | 'currentId'> {
-  const component = firstChildOfKind(element, 'component', elementsById(model))
-  return {
-    level: 'components',
-    currentId: component?.representationId ?? element.representationId,
-  }
+  return { level: 'components', currentId: firstBuilding(model, element) ?? element.representationId }
 }
 
 export function leaveView(
@@ -101,63 +78,17 @@ function perpendicularGap(from: DirectionalBounds, to: DirectionalBounds): numbe
   )
 }
 
-function crossesPerpendicularCentre(
-  from: DirectionalBounds,
-  to: DirectionalBounds,
-): boolean {
-  const coordinate = middle(from.crossStart, from.crossEnd)
-  return coordinate >= to.crossStart && coordinate <= to.crossEnd
-}
-
-function forwardEdgeGap(from: DirectionalBounds, to: DirectionalBounds): number {
-  return Math.max(0, to.start - from.end)
-}
-
-function nearestChildAcrossBoundary(
-  anchors: ReadonlyMap<string, Bounds>,
-  elements: ReadonlyMap<string, AnnotatedElement>,
-  parentId: string,
-  originBounds: Bounds,
-  direction: MapDirection,
-): string | undefined {
-  const origin = directionalBounds(originBounds, direction)
-  return [...anchors]
-    .filter(([id, bounds]) => {
-      return elements.get(id)?.parent === parentId
-        && inDirection(origin, directionalBounds(bounds, direction))
-    })
-    .map(([id, bounds]) => {
-      const candidate = directionalBounds(bounds, direction)
-      return {
-        id,
-        edge: forwardEdgeGap(origin, candidate),
-        missesCentre: Number(!crossesPerpendicularCentre(origin, candidate)),
-        cross: perpendicularGap(origin, candidate),
-        perpendicular: Math.abs(
-          middle(candidate.crossStart, candidate.crossEnd)
-          - middle(origin.crossStart, origin.crossEnd),
-        ),
-      }
-    })
-    .sort((left, right) => left.edge - right.edge
-      || left.missesCentre - right.missesCentre
-      || left.cross - right.cross
-      || left.perpendicular - right.perpendicular
-      || left.id.localeCompare(right.id))[0]?.id
-}
-
 function nearestInDirection(
   anchors: ReadonlyMap<string, Bounds>,
   selectedId: string,
   originBounds: Bounds,
   direction: MapDirection,
-  include: (id: string) => boolean,
   sameLane = false,
 ): string | undefined {
   const origin = directionalBounds(originBounds, direction)
   let best: { id: string; cross: number; forward: number; distance: number } | undefined
   for (const [id, bounds] of anchors) {
-    if (id === selectedId || !include(id)) continue
+    if (id === selectedId) continue
     const candidate = directionalBounds(bounds, direction)
     if (!inDirection(origin, candidate)) continue
     const cross = perpendicularGap(origin, candidate)
@@ -184,56 +115,48 @@ function nearestInDirection(
   return best?.id
 }
 
+/** Root stops: Up and Down walk an island's rows with the system one stop above them; Left and Right cross to the neighbouring island. */
+function moveRoot(model: TerminalViewModel, currentId: string, direction: MapDirection): string | undefined {
+  const islands = rootStops(model)
+  const at = islands.findIndex(stops => stops.includes(currentId))
+  if (at < 0) return undefined
+  const stops = islands[at]!
+  const index = stops.indexOf(currentId)
+  if (direction === 'up') return stops[index - 1]
+  if (direction === 'down') return stops[index + 1]
+  return islands[at + (direction === 'right' ? 1 : -1)]?.[0]
+}
+
+/** Reading order, band by band and line by line; past the first or last building, the neighbouring container's first. */
+function readOn(model: TerminalViewModel, anchors: ReadonlyMap<string, Bounds>, selected: AnnotatedElement, direction: 'left' | 'right'): string | undefined {
+  const keys = [...anchors.keys()]
+  const next = keys[keys.indexOf(selected.representationId) + (direction === 'right' ? 1 : -1)]
+  if (next !== undefined) return next
+  const container = ancestorOfKind(selected, 'container', elementsById(model))
+  const neighbour = container === undefined ? undefined : neighbourContainer(model, container, direction)
+  return neighbour === undefined ? undefined : firstBuilding(model, neighbour)
+}
+
+/**
+ * In a container map Left and Right walk the buildings in reading order and cross to the neighbouring
+ * container past the first or last one; Up and Down take the nearest building in that direction, a same-lane one first.
+ */
 export function moveView(
   model: TerminalViewModel,
   state: ViewerState,
   selected: AnnotatedElement,
   direction: MapDirection,
 ): Pick<ViewerState, 'level' | 'currentId'> {
-  const anchors = mapAnchors(model, state.level, selected.representationId)
-  const originBounds = anchors.get(selected.representationId)
-  if (!originBounds) return { level: state.level, currentId: selected.representationId }
-  const byId = elementsById(model)
-  const previous = state.mapStep?.direction === direction
-    ? byId.get(state.mapStep.fromId)
-    : undefined
-  const previousBounds = previous === undefined
-    ? undefined
-    : anchors.get(previous.representationId)
-  if (
-    previous !== undefined
-    && previousBounds !== undefined
-    && previous.parent !== selected.representationId
-  ) {
-    const child = nearestChildAcrossBoundary(
-      anchors,
-      byId,
-      selected.representationId,
-      previousBounds,
-      direction,
-    )
-    if (child !== undefined) return { level: state.level, currentId: child }
+  const level = state.level
+  if (level === 'context') {
+    return { level, currentId: moveRoot(model, selected.representationId, direction) ?? selected.representationId }
   }
-  const sibling = nearestInDirection(
-    anchors,
-    selected.representationId,
-    originBounds,
-    direction,
-    id => byId.get(id)?.parent === selected.parent,
-    true,
-  )
-  const parent = selected.parent !== null && anchors.has(selected.parent)
-    ? selected.parent
-    : undefined
-  const next = sibling ?? parent ?? nearestInDirection(
-    anchors,
-    selected.representationId,
-    originBounds,
-    direction,
-    () => true,
-  )
-  return {
-    level: state.level,
-    currentId: next ?? selected.representationId,
-  }
+  const anchors = mapAnchors(model, level, selected.representationId, state.mapWidth)
+  const origin = anchors.get(selected.representationId)
+  if (origin === undefined) return { level, currentId: selected.representationId }
+  const next = direction === 'left' || direction === 'right'
+    ? readOn(model, anchors, selected, direction)
+    : nearestInDirection(anchors, selected.representationId, origin, direction, true)
+      ?? nearestInDirection(anchors, selected.representationId, origin, direction)
+  return { level, currentId: next ?? selected.representationId }
 }
