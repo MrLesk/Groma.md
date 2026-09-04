@@ -76,9 +76,10 @@ The isometric grid fills the screen. Inset 35%-paper frosted chrome floats
 above it as one technical instrument. The header shows the groma.md lockup,
 the observed system's name with live flow and element counts, one compact
 revision menu, one compact Fit, `-`, zoom-readout and `+` group, Help, and an icon-labelled theme
-control whose label names the next choice. Help opens the short map-control
-guide. The control cycles the whole viewer through Light, Dark, Blueprint,
-then Light. Blueprint uses a deep navy field, pale cyan drafting lines, and
+dropdown. Help opens the short map-control guide. The dropdown lists Auto,
+Light, Dark and Blueprint. Auto is the default for a browser profile with no
+saved choice and follows that browser's light or dark colour preference. A
+choice is saved for later visits. Blueprint uses a deep navy field, pale cyan drafting lines, and
 restrained calibration marks while keeping the same architecture, compass,
 and accent green. The full footer is absent, and Live work keeps the bottom
 centre. The camera fits architecture into the clear area between
@@ -422,8 +423,8 @@ parameters keep their order; `task=<id>` names a selected task instead.
 component's source and `line=<number>` marks a declaration in that file.
 Repeated `flow=<source>/<target>` entries preserve active flow order; an
 actor-scoped flow uses `flow=<actor>/<source>/<target>`. Active flows do not
-create a selection or own details. `theme=dark|blueprint` names a non-default
-theme, and `hud=off` hides the page chrome. Defaults stay out of the URL;
+create a selection or own details. `theme=light|dark|blueprint` names an
+explicit theme, and `hud=off` hides the page chrome. Auto stays out of the URL;
 reading accepts any parameter order and ignores unknown values.
 A watched TypeScript change folds and rebuilds the map without a
 browser refresh. An architecture Markdown change does the same

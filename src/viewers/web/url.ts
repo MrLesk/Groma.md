@@ -1,7 +1,7 @@
 import type { GitRevision } from '../../history/revisions.ts'
 import type { AnnotatedElement, AnnotatedRelationship, ArchitectureGraph, C4Kind, WorkItem } from '../../types.ts'
 import type { FlowRef } from '../action-path.ts'
-import type { WebTheme } from './atoms/theme.ts'
+import { isThemeMode, type WebThemeMode } from './atoms/theme.ts'
 import type { DetailsTab } from './organisms/details.ts'
 import { noSelection, selectTask } from './selection.ts'
 import type { Selection } from './selection.ts'
@@ -14,7 +14,7 @@ export interface ViewState {
   selection: Selection
   flows: readonly FlowRef[]
   tab: DetailsTab
-  theme: WebTheme
+  theme: WebThemeMode
   hudVisible: boolean
 }
 
@@ -115,7 +115,7 @@ function appendSourceState(
  * Reads the ordered architecture selection (repeated `<kind>=<id>` and
  * `relationship=<source id>/<target id>` entries) or `task=<id>`,
  * repeated active flows (`flow=<source>/<target>` or `flow=<actor>/<source>/<target>`),
- * `tab=how|tasks`, `theme=dark|blueprint` and `hud=off`. Ids are the authored ids; anything the world
+ * `tab=how|tasks`, `theme=light|dark|blueprint` and `hud=off`. Ids are the authored ids; anything the world
  * or the work does not know is ignored, a kind naming an element of another kind included.
  */
 export function readView(
@@ -123,6 +123,7 @@ export function readView(
   world: ArchitectureGraph,
   work: readonly WorkItem[],
   revisions: readonly GitRevision[] = [],
+  defaultTheme: WebThemeMode = 'auto',
 ): ViewState {
   const params = new URLSearchParams(search)
   const revision = revisions.find(candidate => candidate.id === params.get('revision'))?.id
@@ -146,7 +147,7 @@ export function readView(
     tab: source.file !== undefined || params.get('tab') === 'how'
       ? 'how'
       : params.get('tab') === 'tasks' ? 'tasks' : 'what',
-    theme: selectedTheme === 'dark' || selectedTheme === 'blueprint' ? selectedTheme : 'light',
+    theme: isThemeMode(selectedTheme) ? selectedTheme : defaultTheme,
     hudVisible: params.get('hud') !== 'off',
   }
 }
@@ -219,7 +220,7 @@ export function writeView(state: ViewState, world: ArchitectureGraph, work: read
   if (state.selection.kind === 'architecture' && state.tab !== 'what') pairs.push(['tab', state.tab])
   appendSourceState(pairs, state, selected)
   appendFlows(pairs, state.flows, elements, world)
-  if (state.theme !== 'light') pairs.push(['theme', state.theme])
+  if (state.theme !== 'auto') pairs.push(['theme', state.theme])
   if (!state.hudVisible) pairs.push(['hud', 'off'])
   return pairs.length === 0 ? '' : `?${pairs.map(([key, value]) => `${key}=${value}`).join('&')}`
 }
