@@ -11,7 +11,7 @@ import { createMapDebugPanel } from './chrome/map-debug.ts'
 import { animateControl } from './chrome/motion.ts'
 import { createWebShell, mapFrame, type MapFrame } from './chrome/shell.ts'
 import { bindShortcuts } from './chrome/shortcuts.ts'
-import { bindThemeControl } from './chrome/theme-control.ts'
+import { bindThemeControl, readSavedTheme } from './chrome/theme-control.ts'
 import { paintWorldStats, primarySystem } from './chrome/stats.ts'
 import { createWebDataSource } from './data.ts'
 import { paintFlows } from './flow/list.ts'
@@ -80,8 +80,8 @@ const tip = createTip(host)
 const pins = createPins(host, id => map.anchorOf(id), id => toggleTask(id), tip)
 const island = createWorkIsland(host, id => toggleTask(id), pins.show, tip)
 let tree = initialTree()
-const opened = readView(location.search, world, work.items, boot.revisions)
-const themeControl = bindThemeControl(document.getElementById('theme')!, opened.theme, syncUrl)
+const opened = readView(location.search, world, work.items, boot.revisions, readSavedTheme(localStorage))
+const themeControl = bindThemeControl(document.getElementById('theme') as HTMLDetailsElement, opened.theme, syncUrl)
 let hudVisible = opened.hudVisible
 shell.setHud(hudVisible)
 let selection = opened.selection
@@ -188,7 +188,7 @@ function syncUrl(): void {
     ...(source.line === undefined ? {} : { line: source.line }),
     selection, flows: activeFlows,
     tab: detailsTab,
-    theme: themeControl.current,
+    theme: themeControl.mode,
     hudVisible,
   }, world, work.items)
   history.replaceState(null, '', `${location.pathname}${query}`)

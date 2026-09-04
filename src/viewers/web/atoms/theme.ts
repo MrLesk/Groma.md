@@ -29,6 +29,9 @@ export interface Palette {
 }
 
 export type WebTheme = 'light' | 'dark' | 'blueprint'
+export type WebThemeMode = 'auto' | WebTheme
+
+export const themeModes: readonly WebThemeMode[] = ['auto', 'light', 'dark', 'blueprint']
 
 export const palettes: Record<WebTheme, Palette> = {
   light: {
@@ -93,20 +96,19 @@ export const palettes: Record<WebTheme, Palette> = {
   },
 }
 
-const nextThemes: Record<WebTheme, WebTheme> = {
-  light: 'dark',
-  dark: 'blueprint',
-  blueprint: 'light',
+/** Whether a stored or shared value names a supported user choice. */
+export function isThemeMode(value: string | null | undefined): value is WebThemeMode {
+  return themeModes.includes(value as WebThemeMode)
 }
 
-/** The next theme activated by the header control. */
-export function nextTheme(theme: WebTheme): WebTheme {
-  return nextThemes[theme]
+/** Resolves Auto without making browser preferences part of the palette model. */
+export function resolveTheme(mode: WebThemeMode, prefersDark: boolean): WebTheme {
+  return mode === 'auto' ? prefersDark ? 'dark' : 'light' : mode
 }
 
-/** The short control label for a theme. */
-export function themeLabel(theme: WebTheme): string {
-  return theme[0]!.toUpperCase() + theme.slice(1)
+/** The short control label for a theme choice. */
+export function themeLabel(mode: WebThemeMode): string {
+  return mode[0]!.toUpperCase() + mode.slice(1)
 }
 
 /** Brand signals shared by every theme. */

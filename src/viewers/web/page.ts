@@ -6,7 +6,7 @@ import { chromeCss } from './atoms/chrome.ts'
 import { escaped } from './atoms/escape.ts'
 import { anchoredPopoverCss } from './atoms/popover.ts'
 import { kindGlyph, kindLabel } from '../atoms/kind.ts'
-import { cssBlock, palettes } from './atoms/theme.ts'
+import { cssBlock, palettes, themeLabel, themeModes, type WebThemeMode } from './atoms/theme.ts'
 import { addDialogCss } from './chrome/add.ts'
 import { relateCss } from './chrome/relate.ts'
 import { emptyStateCss } from './chrome/empty.ts'
@@ -44,6 +44,7 @@ const fitIcon = icon('<path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 2
 const moonIcon = icon('<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79Z"/>')
 const sunIcon = icon('<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.42 1.42M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.42-1.42M17.66 6.34l1.41-1.41"/>')
 const blueprintIcon = icon('<circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/>')
+const autoIcon = icon('<rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8M12 17v4"/>')
 const historyIcon = icon('<path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5M12 7v5l3 2"/>', 'revision-history')
 const searchIcon = icon('<circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/>')
 const revisionLoader = icon('<path d="M21 12a9 9 0 1 1-9-9"/>', 'revision-loader')
@@ -128,7 +129,7 @@ const style = `
   #header > svg { height: 26px; width: auto; display: block; }
   #stats { flex: 1; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
   .header-actions { display: flex; align-items: center; gap: 8px; }
-  .header-actions > button, #help summary, #hierarchy-toggle {
+  .header-actions > button, #help summary, #theme summary, #hierarchy-toggle {
     border: 0;
     border-radius: var(--control-radius);
     background: transparent;
@@ -137,13 +138,19 @@ const style = `
     font: inherit;
     cursor: pointer;
   }
-  .header-actions > button:hover, #help summary:hover, #hierarchy-toggle:hover { color: var(--ink); background: var(--hover); }
+  .header-actions > button:hover, #help summary:hover, #theme summary:hover, #hierarchy-toggle:hover { color: var(--ink); background: var(--hover); }
   .control-icon { width: 14px; height: 14px; display: block; flex: none; }
-  #theme { display: flex; align-items: center; gap: 7px; }
-  #theme .theme-icon { display: none; }
-  #theme[data-next-theme="dark"] .dark,
-  #theme[data-next-theme="blueprint"] .blueprint,
-  #theme[data-next-theme="light"] .light { display: block; }
+  #theme { position: relative; transform: translateY(-1px); --popover-width: 160px; }
+  #theme summary { display: flex; align-items: center; gap: 7px; list-style: none; }
+  #theme summary::-webkit-details-marker { display: none; }
+  #theme summary .theme-icon { display: none; }
+  #theme[data-theme-mode="auto"] summary .auto,
+  #theme[data-theme-mode="light"] summary .light,
+  #theme[data-theme-mode="dark"] summary .dark,
+  #theme[data-theme-mode="blueprint"] summary .blueprint { display: block; }
+  #theme .theme-option { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+  #theme .theme-chevron { width: 7px; height: 7px; flex: none; margin-left: 2px; border-right: 1px solid currentColor; border-bottom: 1px solid currentColor; transform: translateY(-2px) rotate(45deg); transition: transform 160ms ease; }
+  #theme[open] .theme-chevron { transform: translateY(2px) rotate(225deg); }
   #help { position: relative; }
   #help summary { list-style: none; }
   #help summary::-webkit-details-marker { display: none; }
@@ -343,6 +350,23 @@ function legend(): string {
   }).join('')
 }
 
+const themeIcons: Record<WebThemeMode, string> = {
+  auto: autoIcon,
+  light: sunIcon,
+  dark: moonIcon,
+  blueprint: blueprintIcon,
+}
+
+function themeControl(): string {
+  const currentIcons = themeModes
+    .map(mode => `<span class="theme-icon ${mode}">${themeIcons[mode]}</span>`)
+    .join('')
+  const options = themeModes
+    .map(mode => `<button class="anchored-option theme-option" type="button" data-theme-mode="${mode}" aria-current="${String(mode === 'auto')}">${themeIcons[mode]}<span>${themeLabel(mode)}</span></button>`)
+    .join('')
+  return `<details id="theme" data-theme-mode="auto"><summary aria-label="Theme">${currentIcons}<span class="label">Auto</span><span class="theme-chevron"></span></summary><div class="anchored-popover theme-menu">${options}</div></details>`
+}
+
 /** The invitation shown while the current world has nothing to draw; history is read-only, so a selected revision never shows it. */
 function emptyState(payload: WebBootPayload): string {
   const hidden = payload.revision === null && isEmptyWorld(payload.world) ? '' : ' hidden'
@@ -359,7 +383,7 @@ export function renderPage(payload: WebBootPayload): string {
   return '<!doctype html><html><head><meta charset="utf-8"><title>groma.md</title>'
     + `<style>${style}</style></head><body data-delivery="${payload.delivery.kind}">`
     + `<header id="header">${lockup}<span id="stats"></span>${revisionControl(payload, { history: historyIcon, loader: revisionLoader })}`
-    + `<div class="header-actions"><div id="map-controls" class="controls" aria-label="Map controls"><button id="fit" aria-label="Fit map">${fitIcon}<span>Fit</span></button><button id="zoom-out" aria-label="Zoom out"><span class="control-glyph">−</span></button><span id="zoom" aria-live="polite"></span><button id="zoom-in" aria-label="Zoom in"><span class="control-glyph">+</span></button></div><details id="help"><summary>Help</summary><div class="help-panel"><p>Drag or scroll to pan<br>Pinch, + or − to zoom<br>0 or Fit shows the whole map<br>/ or Cmd/Ctrl+K searches<br>F1 toggles map only<br>F2 toggles layers<br>In layers: drag orbits; Shift-drag pans<br>F3 toggles map debug<br>Escape clears selection</p></div></details><button id="theme" data-next-theme="dark"><span class="theme-icon dark">${moonIcon}</span><span class="theme-icon blueprint">${blueprintIcon}</span><span class="theme-icon light">${sunIcon}</span><span class="label">Dark</span></button>${searchControl({ search: searchIcon, close: closeIcon })}</div>`
+    + `<div class="header-actions"><div id="map-controls" class="controls" aria-label="Map controls"><button id="fit" aria-label="Fit map">${fitIcon}<span>Fit</span></button><button id="zoom-out" aria-label="Zoom out"><span class="control-glyph">−</span></button><span id="zoom" aria-live="polite"></span><button id="zoom-in" aria-label="Zoom in"><span class="control-glyph">+</span></button></div><details id="help"><summary>Help</summary><div class="help-panel"><p>Drag or scroll to pan<br>Pinch, + or − to zoom<br>0 or Fit shows the whole map<br>/ or Cmd/Ctrl+K searches<br>F1 toggles map only<br>F2 toggles layers<br>In layers: drag orbits; Shift-drag pans<br>F3 toggles map debug<br>Escape clears selection</p></div></details>${themeControl()}${searchControl({ search: searchIcon, close: closeIcon })}</div>`
     + '</header>'
     + `<nav id="hierarchy" aria-label="Hierarchy"><div id="hierarchy-title"><span class="pane-label">Hierarchy</span>${payload.delivery.kind === 'live' ? '<button id="add" type="button" aria-label="Add">+</button>' : ''}<button id="hierarchy-toggle" type="button" aria-controls="hierarchy-content">${hierarchyIcon}</button></div><div id="hierarchy-content"><div id="flows"></div><div id="tree"></div><div id="legend">${legend()}</div></div></nav>`
     + '<div id="map"></div>'
