@@ -6,6 +6,7 @@ import { drawSurfaceFrame, fillSurface } from '../molecules/surface.ts'
 import { drawBuilding } from '../molecules/building.ts'
 import { drawFlowMarker } from '../molecules/flow-marker.ts'
 import { drawPorts, drawRoute, drawRouteLabel, type Occupied } from '../molecules/route.ts'
+import { drawRow } from '../molecules/row.ts'
 import type { ProjectedFlowStep } from '../flow.ts'
 import type { MapShape, ProjectedMapItem, ProjectedMapRoute, TerminalProjection } from '../projection.ts'
 import type { WorkMap } from '../work/model.ts'
@@ -70,7 +71,7 @@ export function drawWorld(
     })
   }
   for (const item of surfaces) drawSurfaceFrame(buffer, item, theme, accented(item))
-  drawCards(buffer, visibleItems, projection, theme, trace, tracing)
+  drawRowsAndCards(buffer, visibleItems, projection, theme, trace, tracing)
   // Port dots sit on the shapes' frames, so they follow the shapes; labels last, over plain ground.
   for (const route of litRoutes) drawPorts(buffer, route, projection.viewport, theme, ends(route))
   for (const route of litRoutes) drawRouteLabel(buffer, route, projection.level, theme, visibleItems)
@@ -94,8 +95,8 @@ export function drawWorld(
   buffer.popScissorRect()
 }
 
-/** Buildings are dimmed off a lit walk and accented when touched by work. */
-function drawCards(
+/** Rows inside their islands, then buildings dimmed off a lit walk and accented by work. */
+function drawRowsAndCards(
   buffer: OptimizedBuffer,
   items: readonly ProjectedMapItem[],
   projection: TerminalProjection,
@@ -104,6 +105,9 @@ function drawCards(
   tracing: boolean,
 ): void {
   for (const item of items) {
+    if (item.shape === 'row') {
+      drawRow(buffer, item, theme, item.representationId === projection.currentId)
+    }
     if (item.shape !== 'card') continue
     drawBuilding(buffer, item, theme, {
       selected: item.representationId === projection.currentId,

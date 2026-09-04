@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { test } from 'bun:test'
 
 import { flowEndpointLabel, projectFlowStep } from '../src/viewers/tui/flow.ts'
+import { initialState } from '../src/viewers/tui/navigation.ts'
 import { visibleIn } from '../src/viewers/tui/projection-camera.ts'
 import { mapAnchors, projectWorld } from '../src/viewers/tui/projection.ts'
 import {
@@ -37,18 +38,23 @@ function groupedWorld() {
   ])
 }
 
-test.concurrent('root projection shows systems, containers, collapsed groups, actors, and external systems', () => {
+test.concurrent('root projection shows islands listing rows, without cards or groups', () => {
   const model = groupedWorld()
   const projection = projectWorld(model, { viewport: mapViewportOf({ width: 200, height: 60 }) })
 
   assert.ok(projection.items.some(item => item.shape === 'island' && item.kind === 'actor'))
-  assert.ok(projection.items.some(item => item.shape === 'card' && item.kind === 'actor'))
+  assert.ok(projection.items.some(item => item.shape === 'row' && item.kind === 'actor'))
   assert.ok(projection.items.some(item => item.shape === 'island' && item.kind === 'system' && !item.external))
   assert.ok(projection.items.some(item => item.shape === 'island' && item.external))
-  assert.ok(projection.items.some(item => item.shape === 'slab' && item.kind === 'container'))
-  assert.ok(projection.items.some(item => item.shape === 'group'))
-  assert.equal(projection.items.some(item => item.kind === 'component'), false)
-  assert.equal(projection.currentId, 'observed:product')
+  assert.ok(projection.items.some(item => item.shape === 'row' && item.kind === 'container'))
+  assert.equal(
+    projection.items.some(item => {
+      return item.shape === 'card' || item.kind === 'group' || item.kind === 'component'
+    }),
+    false,
+  )
+  assert.equal(projection.currentId, 'observed:service')
+  assert.equal(projection.currentId, initialState(model).currentId)
 })
 
 test.concurrent('container projection contains only its groups and component cards', () => {
@@ -65,7 +71,7 @@ test.concurrent('container projection contains only its groups and component car
     new Set(['observed:service', 'observed:read', 'observed:write']),
   )
   assert.equal(projection.items.filter(item => item.kind === 'group').length, 2)
-  assert.equal(mapAnchors(model, 'components', 'observed:read').has('observed:service'), false)
+  assert.equal(mapAnchors(model, 'components', 'observed:read', 120).has('observed:service'), false)
 })
 
 test.concurrent('selection changes the camera but never the world layout', () => {
@@ -84,28 +90,6 @@ test.concurrent('selection changes the camera but never the world layout', () =>
   assert.deepEqual(
     moved.items.map(item => [item.key, item.worldBounds]),
     start.items.map(item => [item.key, item.worldBounds]),
-  )
-})
-
-test.concurrent('a larger viewport reveals more of the same fixed world', () => {
-  const model = navigationWorld()
-  const small = projectWorld(model, {
-    viewport: mapViewportOf({ width: 120, height: 36 }),
-    currentId: 'observed:alpha',
-  })
-  const large = projectWorld(model, {
-    viewport: mapViewportOf({ width: 200, height: 60 }),
-    currentId: 'observed:alpha',
-  })
-
-  assert.deepEqual(large.worldBounds, small.worldBounds)
-  assert.deepEqual(
-    large.items.map(item => [item.key, item.worldBounds]),
-    small.items.map(item => [item.key, item.worldBounds]),
-  )
-  assert.deepEqual(
-    large.relationships.map(route => [route.ids, route.worldRoute]),
-    small.relationships.map(route => [route.ids, route.worldRoute]),
   )
 })
 
@@ -155,7 +139,7 @@ test.concurrent('flow steps keep exact endpoints while marking their visible anc
   assert.equal(flowEndpointLabel(local!.target), 'vendor')
 })
 
-test.concurrent('flow attention reveals its endpoint without changing selection', () => {
+test.concurrent('flow attention changes neither the selection nor the centred island', () => {
   const model = groupedWorld()
   const viewport = mapViewportOf({ width: 120, height: 36 })
   const start = projectWorld(model, { viewport, currentId: 'observed:product' })
@@ -167,12 +151,7 @@ test.concurrent('flow attention reveals its endpoint without changing selection'
   })
 
   assert.equal(followed.currentId, 'observed:product')
-  const vendor = followed.items.find(item => item.representationId === 'observed:vendor')!
-  assert.equal(visibleIn(vendor.cellBounds, viewport), true)
-  assert.deepEqual(
-    followed.items.map(item => [item.key, item.worldBounds]),
-    start.items.map(item => [item.key, item.worldBounds]),
-  )
+  assert.equal(followed.camera.x, start.camera.x)
 })
 
 test.concurrent('task attention frames every visible touched element together', () => {
@@ -195,12 +174,12 @@ test.concurrent('task attention frames every visible touched element together', 
   assert.equal(touched.every(item => visibleIn(item.cellBounds, viewport)), true)
 })
 
-test.concurrent('a component selection at root stands on its visible container', () => {
+test.concurrent('a component selection at root stands on its container row', () => {
   const model = navigationWorld()
   const viewport = mapViewportOf({ width: 120, height: 36 })
   const projection = projectWorld(model, { viewport, currentId: 'observed:pleft' })
   assert.equal(projection.currentId, 'observed:cleft')
   const container = projection.items.find(item => item.representationId === 'observed:cleft')!
-  assert.equal(container.shape, 'slab')
+  assert.equal(container.shape, 'row')
   assert.equal(visibleIn(container.cellBounds, viewport), true)
 })

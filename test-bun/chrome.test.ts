@@ -4,6 +4,7 @@ import { test } from 'bun:test'
 import { createTestRenderer } from '@opentui/core/testing'
 
 import { panesForWidth } from '../src/viewers/tui/layout.ts'
+import type { Bounds } from '../src/types.ts'
 import { initialState, reduceViewer } from '../src/viewers/tui/navigation.ts'
 import { projectWorld } from '../src/viewers/tui/projection.ts'
 import { mountTerminalViewer } from '../src/viewers/tui/terminal-viewer.ts'
@@ -16,22 +17,24 @@ import {
   viewerFixtureRoot,
 } from './helpers.ts'
 
-test.concurrent('details changes pane width without changing world geometry', () => {
+test.concurrent('details changes pane width and the selection stays centred in either map width', () => {
   const model = navigationWorld()
   let state = initialState(model)
   state = reduceViewer(model, state, 'toggle-details')
   assert.equal(state.panes.details, false)
   assert.equal(reduceViewer(model, state, 'tab').focus, 'hierarchy')
 
+  const centre = (viewport: Bounds) => {
+    const projection = projectWorld(model, { viewport, currentId: 'observed:alpha' })
+    const subject = projection.worldBounds.width <= viewport.width
+      ? projection.worldBounds
+      : projection.items.find(item => item.representationId === 'observed:alpha')!.worldBounds
+    return subject.x + subject.width / 2 - projection.camera.x
+  }
   const narrow = paneLayout(120, 36).mapViewport
   const wide = paneLayout(120, 36, { hierarchy: true, details: false }).mapViewport
-  const narrowProjection = projectWorld(model, { viewport: narrow, currentId: 'observed:alpha' })
-  const wideProjection = projectWorld(model, { viewport: wide, currentId: 'observed:alpha' })
-  assert.deepEqual(wideProjection.worldBounds, narrowProjection.worldBounds)
-  assert.deepEqual(
-    wideProjection.items.map(item => [item.key, item.worldBounds]),
-    narrowProjection.items.map(item => [item.key, item.worldBounds]),
-  )
+  assert.ok(Math.abs(centre(narrow) - narrow.width / 2) <= 1)
+  assert.ok(Math.abs(centre(wide) - wide.width / 2) <= 1)
 })
 
 test.concurrent('details always follows the current selection', async () => {
@@ -125,22 +128,25 @@ function detailsTitle(frame: string, width: number): string {
   return [...frame.split('\n')[2]!].slice(paneLayout(width, 36).details.x).join('')
 }
 
-test.concurrent('a folded hierarchy gives its columns to the same fixed map', async () => {
+test.concurrent('a folded hierarchy gives its columns to the map and keeps the selected island centred', async () => {
   const model = await terminalModel(viewerFixtureRoot)
   const setup = await createTestRenderer({ width: 120, height: 36 })
   const app = mountTerminalViewer(setup.renderer, model)
   await setup.renderOnce()
   const selectedId = initialState(model).currentId!
+  const selected = model.elements.find(element => element.representationId === selectedId)!
   const layout = paneLayout(120, 36)
   const folded = paneLayout(120, 36, { hierarchy: false, details: true })
-  const before = projectWorld(model, { viewport: layout.mapViewport, currentId: selectedId })
-  const after = projectWorld(model, { viewport: folded.mapViewport, currentId: selectedId })
-  assert.ok(folded.mapViewport.width > layout.mapViewport.width)
-  assert.deepEqual(
-    after.items.map(item => [item.key, item.worldBounds]),
-    before.items.map(item => [item.key, item.worldBounds]),
-  )
+  const centre = (viewport: Bounds) => {
+    const row = projectWorld(model, { viewport: { ...viewport, x: 0, y: 0 }, currentId: selectedId }).items
+      .find(item => item.representationId === selectedId)!
+    return row.cellBounds.x + row.cellBounds.width / 2
+  }
+  assert.ok(Math.abs(centre(layout.mapViewport) - layout.mapViewport.width / 2) <= 1)
+  assert.ok(Math.abs(centre(folded.mapViewport) - folded.mapViewport.width / 2) <= 1)
   const frame = await press(setup, '[')
+  const titled = frame.split('\n').slice(layout.map.y).map(row => [...row].slice(0, layout.details.x).join('')).find(row => row.includes(selected.title))
+  assert.ok(titled !== undefined)
   assert.ok(detailsTitle(frame, 120).includes(model.elements.find(element => element.representationId === selectedId)!.title))
   app.destroy()
 })
@@ -178,14 +184,15 @@ test.concurrent('a click on a hierarchy row selects it', async () => {
   app.destroy()
 })
 
-test.concurrent('a click on a building selects it', async () => {
+test.concurrent('a click on a root row selects it', async () => {
   const model = await terminalModel(viewerFixtureRoot)
-  const container = model.elements.find(element => element.kind === 'container')!
+  const initialId = initialState(model).currentId
+  const container = model.elements.find(element => element.kind === 'container' && element.representationId !== initialId)!
   const setup = await createTestRenderer({ width: 120, height: 36 })
   const app = mountTerminalViewer(setup.renderer, model)
   await setup.renderOnce()
   const layout = paneLayout(120, 36)
-  // The card's title sits inside its cells, so clicking the title clicks the building.
+  // The title sits inside the row's cells, so clicking it selects the row.
   const rows = setup.captureCharFrame().split('\n')
   const y = rows.findIndex((row, index) => index > layout.map.y && row.slice(layout.map.x, layout.details.x).includes(container.title))
   assert.ok(y > 0)

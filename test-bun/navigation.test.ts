@@ -40,7 +40,7 @@ function actionWorld() {
   ])
 }
 
-/** Four buildings placed in two fixed rows on the shared sheet. */
+/** Four buildings that wrap into two lines of two at a 40-column map. */
 function laneNavigationWorld() {
   const ids = ['a', 'b', 'c', 'd']
   const cell = { x: 0, y: 0, width: 1, height: 1 }
@@ -55,12 +55,41 @@ function laneNavigationWorld() {
       ...model.sheet,
       buildings: model.sheet.buildings.map(building => ({
         ...building,
-        rect: {
-          gx: ids.indexOf(building.id) % 2 * 10,
-          gy: Math.floor(ids.indexOf(building.id) / 2) * 10,
-          w: 6,
-          d: 4,
-        },
+        rect: { gx: ids.indexOf(building.id) * 10, gy: 0, w: 6, d: 4 },
+      })),
+    },
+  }
+}
+
+function containmentNavigationWorld() {
+  const model = worldOf([
+    box('system', 'system', { x: 0, y: 0, width: 1, height: 1 }, {
+      children: ['observed:upper', 'observed:lower'],
+    }),
+    box('upper', 'container', { x: 0, y: 0, width: 1, height: 1 }, {
+      parent: 'observed:system',
+    }),
+    box('lower', 'container', { x: 0, y: 0, width: 1, height: 1 }, {
+      parent: 'observed:system',
+    }),
+    box('north', 'system', { x: 0, y: 0, width: 1, height: 1 }),
+    box('south', 'system', { x: 0, y: 0, width: 1, height: 1 }),
+    box('actor', 'actor', { x: 0, y: 0, width: 1, height: 1 }),
+    box('external', 'system', { x: 0, y: 0, width: 1, height: 1 }, { external: true }),
+  ])
+  return {
+    ...model,
+    sheet: {
+      ...model.sheet,
+      islands: model.sheet.islands.map(island => {
+        const gx = { actors: 0, north: 20, system: 40, south: 60, external: 80 }[island.element?.id ?? island.kind]
+        return gx === undefined ? island : { ...island, rect: { ...island.rect, gx, gy: 0 } }
+      }),
+      slabs: model.sheet.slabs.map(slab => ({
+        ...slab,
+        rect: slab.id === 'upper'
+          ? { gx: 22, gy: 24, w: 18, d: 14 }
+          : { gx: 22, gy: 70, w: 37, d: 14 },
       })),
     },
   }
@@ -68,7 +97,7 @@ function laneNavigationWorld() {
 
 test.concurrent('map navigation enters only containers and returns to the same container', () => {
   const model = navigationWorld()
-  assert.equal(defaultSelection(model, 'context')?.representationId, 'observed:alpha')
+  assert.equal(defaultSelection(model, 'context')?.representationId, 'observed:cleft')
 
   let state: ViewerState = {
     ...initialState(model),
@@ -114,19 +143,41 @@ test.concurrent('map edges lead to the fixed hierarchy and details panes', () =>
   assert.equal(right.panes.details, true)
 })
 
-test.concurrent('container arrows select the nearest building in each direction', () => {
+test.concurrent('container arrows follow the lines of buildings', () => {
   const model = laneNavigationWorld()
-  let state: ViewerState = { ...initialState(model), level: 'components', currentId: 'observed:a' }
+  let state: ViewerState = { ...initialState(model), level: 'components', currentId: 'observed:a', mapWidth: 40 }
 
   state = reduceViewer(model, state, 'right')
   assert.equal(state.currentId, 'observed:b')
+  state = reduceViewer(model, state, 'right')
+  assert.equal(state.currentId, 'observed:c')
+  state = reduceViewer(model, state, 'left')
+  assert.equal(state.currentId, 'observed:b')
   state = reduceViewer(model, state, 'down')
   assert.equal(state.currentId, 'observed:d')
-  state = reduceViewer(model, state, 'left')
-  assert.equal(state.currentId, 'observed:c')
   state = reduceViewer(model, state, 'up')
-  assert.equal(state.currentId, 'observed:a')
+  assert.equal(state.currentId, 'observed:b')
   assert.equal(reduceViewer(model, { ...state, currentId: 'observed:d' }, 'right').focus, 'details')
+})
+
+test.concurrent('root arrows walk the rows of an island and cross to its neighbours', () => {
+  const model = containmentNavigationWorld()
+  const start: ViewerState = { ...initialState(model), currentId: 'observed:lower' }
+
+  const up = reduceViewer(model, start, 'up')
+  assert.equal(up.currentId, 'observed:upper')
+  const island = reduceViewer(model, up, 'up')
+  assert.equal(island.currentId, 'observed:system')
+  assert.equal(reduceViewer(model, island, 'up').currentId, 'observed:system')
+  assert.equal(reduceViewer(model, island, 'down').currentId, 'observed:upper')
+  assert.equal(reduceViewer(model, start, 'down').currentId, 'observed:lower')
+
+  const west = reduceViewer(model, start, 'left')
+  assert.equal(west.currentId, 'observed:north')
+  assert.equal(reduceViewer(model, west, 'left').currentId, 'observed:actor')
+  const east = reduceViewer(model, start, 'right')
+  assert.equal(east.currentId, 'observed:south')
+  assert.equal(reduceViewer(model, east, 'right').currentId, 'observed:external')
 })
 
 test.concurrent('dismiss closes details and returns container scope to the root map', () => {
@@ -154,7 +205,8 @@ test.concurrent('dismiss closes details and returns container scope to the root 
 test.concurrent('search follows matches live and cancel restores the prior view', async () => {
   const model = await terminalModel(viewerFixtureRoot)
   const search = createArchitectureSearch(model.elements)
-  let state = reduceSearch(model, search, initialState(model), { type: 'open' })
+  const before = initialState(model)
+  let state = reduceSearch(model, search, before, { type: 'open' })
   for (const char of 'view') state = reduceSearch(model, search, state, { type: 'char', char })
   const matches = state.search?.matches ?? []
   assert.deepEqual(
@@ -169,7 +221,7 @@ test.concurrent('search follows matches live and cancel restores the prior view'
 
   const cancelled = reduceSearch(model, search, state, { type: 'cancel' })
   assert.equal(cancelled.search, undefined)
-  assert.equal(cancelled.currentId, 'shop')
+  assert.equal(cancelled.currentId, before.currentId)
 })
 
 test.concurrent('flow preview, commit, step, and clear share one navigation state', () => {

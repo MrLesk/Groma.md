@@ -2,7 +2,8 @@ import type { AnnotatedElement, Bounds, C4Kind, TerminalLevel } from '../../type
 import type { TerminalViewModel } from './model.ts'
 import type { MapDirection, ViewerState } from './navigation.ts'
 import { mapAnchors } from './projection.ts'
-import { firstBuilding } from './projection-container.ts'
+import { firstBuilding, neighbourContainer } from './projection-container.ts'
+import { rootStops } from './projection-root.ts'
 
 function elementsById(model: TerminalViewModel): Map<string, AnnotatedElement> {
   return new Map(model.elements.map(element => [element.representationId, element]))
@@ -21,9 +22,7 @@ export function ancestorOfKind(
 }
 
 export function canEnter(element: AnnotatedElement): boolean {
-  return !element.external
-    && element.kind === 'container'
-    && element.children.length > 0
+  return !element.external && element.kind === 'container' && element.children.length > 0
 }
 
 /** Opens a container map on its first building in map order. */
@@ -31,7 +30,10 @@ export function enterView(
   model: TerminalViewModel,
   element: AnnotatedElement,
 ): Pick<ViewerState, 'level' | 'currentId'> {
-  return { level: 'components', currentId: firstBuilding(model, element) ?? element.representationId }
+  return {
+    level: 'components',
+    currentId: firstBuilding(model, element) ?? element.representationId,
+  }
 }
 
 export function leaveView(
@@ -60,7 +62,6 @@ interface DirectionalBounds {
   crossEnd: number
 }
 
-/** Makes every direction increase from start to end along one primary axis. */
 function directionalBounds(bounds: Bounds, direction: MapDirection): DirectionalBounds {
   const horizontal = direction === 'left' || direction === 'right'
   const reversed = direction === 'left' || direction === 'up'
@@ -70,7 +71,7 @@ function directionalBounds(bounds: Bounds, direction: MapDirection): Directional
     start: reversed ? -rawEnd : rawStart,
     end: reversed ? -rawStart : rawEnd,
     crossStart: horizontal ? bounds.y : bounds.x,
-    crossEnd: (horizontal ? bounds.y + bounds.height : bounds.x + bounds.width),
+    crossEnd: horizontal ? bounds.y + bounds.height : bounds.x + bounds.width,
   }
 }
 
@@ -94,6 +95,7 @@ function nearestInDirection(
   selectedId: string,
   originBounds: Bounds,
   direction: MapDirection,
+  sameLane = false,
 ): string | undefined {
   const origin = directionalBounds(originBounds, direction)
   let best: { id: string; cross: number; forward: number; distance: number } | undefined
@@ -102,6 +104,7 @@ function nearestInDirection(
     const candidate = directionalBounds(bounds, direction)
     if (!inDirection(origin, candidate)) continue
     const cross = perpendicularGap(origin, candidate)
+    if (sameLane && cross > 0) continue
     const forward = middle(candidate.start, candidate.end) - middle(origin.start, origin.end)
     const perpendicular = middle(candidate.crossStart, candidate.crossEnd)
       - middle(origin.crossStart, origin.crossEnd)
@@ -124,7 +127,40 @@ function nearestInDirection(
   return best?.id
 }
 
-/** Every arrow selects the nearest visible peer in that direction without changing scope. */
+/** Up and Down walk one island; Left and Right cross to the neighbouring island. */
+function moveRoot(
+  model: TerminalViewModel,
+  currentId: string,
+  direction: MapDirection,
+): string | undefined {
+  const islands = rootStops(model)
+  const at = islands.findIndex(stops => stops.includes(currentId))
+  if (at < 0) return undefined
+  const stops = islands[at]!
+  const index = stops.indexOf(currentId)
+  if (direction === 'up') return stops[index - 1]
+  if (direction === 'down') return stops[index + 1]
+  return islands[at + (direction === 'right' ? 1 : -1)]?.[0]
+}
+
+/** Read buildings in layout order; crossing an end enters the neighbouring container. */
+function readOn(
+  model: TerminalViewModel,
+  anchors: ReadonlyMap<string, Bounds>,
+  selected: AnnotatedElement,
+  direction: 'left' | 'right',
+): string | undefined {
+  const keys = [...anchors.keys()]
+  const next = keys[keys.indexOf(selected.representationId) + (direction === 'right' ? 1 : -1)]
+  if (next !== undefined) return next
+  const container = ancestorOfKind(selected, 'container', elementsById(model))
+  const neighbour = container === undefined
+    ? undefined
+    : neighbourContainer(model, container, direction)
+  return neighbour === undefined ? undefined : firstBuilding(model, neighbour)
+}
+
+/** Apply the approved root and container arrow rules without changing level. */
 export function moveView(
   model: TerminalViewModel,
   state: ViewerState,
@@ -132,9 +168,19 @@ export function moveView(
   direction: MapDirection,
 ): Pick<ViewerState, 'level' | 'currentId'> {
   const level = state.level
-  const anchors = mapAnchors(model, level, selected.representationId)
+  if (level === 'context') {
+    return {
+      level,
+      currentId: moveRoot(model, selected.representationId, direction)
+        ?? selected.representationId,
+    }
+  }
+  const anchors = mapAnchors(model, level, selected.representationId, state.mapWidth)
   const origin = anchors.get(selected.representationId)
   if (origin === undefined) return { level, currentId: selected.representationId }
-  const next = nearestInDirection(anchors, selected.representationId, origin, direction)
+  const next = direction === 'left' || direction === 'right'
+    ? readOn(model, anchors, selected, direction)
+    : nearestInDirection(anchors, selected.representationId, origin, direction, true)
+      ?? nearestInDirection(anchors, selected.representationId, origin, direction)
   return { level, currentId: next ?? selected.representationId }
 }
