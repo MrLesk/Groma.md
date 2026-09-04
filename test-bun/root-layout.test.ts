@@ -1,42 +1,54 @@
 import assert from 'node:assert/strict'
 import { test } from 'bun:test'
 
-import { rootLayout } from '../src/viewers/tui/projection-root.ts'
-import { terminalBounds } from '../src/viewers/tui/projection-sheet.ts'
-import { navigationWorld } from './helpers.ts'
+import { encloses } from '../src/viewers/tui/projection-camera.ts'
+import { MAP_PADDING, rootLayout } from '../src/viewers/tui/projection-root.ts'
+import { box, navigationWorld, worldOf } from './helpers.ts'
 
-test.concurrent('the root shows systems, containers, actors, and external systems but no components', () => {
-  const model = navigationWorld()
-  const items = rootLayout(model)
+test.concurrent('an island lists one row per child with one block per component and no counts', () => {
+  const items = rootLayout(navigationWorld(), 200)
+  const island = items.find(item => item.representationId === 'observed:alpha')!
+  const rows = items.filter(item => {
+    return item.shape === 'row' && encloses(island.worldBounds, item.worldBounds)
+  })
 
   assert.deepEqual(
-    new Set(items.flatMap(item => item.representationId === undefined ? [] : [item.representationId])),
-    new Set([
-      'observed:alpha',
-      'observed:zeta',
-      'observed:empty',
-      'observed:cleft',
-      'observed:cright',
-      'observed:cfar',
-      'observed:ann',
-      'observed:ext',
-    ]),
+    rows.map(row => row.representationId),
+    ['observed:cleft', 'observed:cright'],
   )
-  assert.equal(items.some(item => item.kind === 'component'), false)
+  assert.ok(rows[0]!.lines[0]!.endsWith('▪▪'))
+  assert.ok(rows[1]!.lines[0]!.endsWith('▪'))
+  assert.ok(items.every(item => item.lines.every(line => !/\d/.test(line))))
+  const islands = items.filter(item => item.shape === 'island')
+  for (let index = 1; index < islands.length; index += 1) {
+    const previous = islands[index - 1]!.worldBounds
+    assert.ok(islands[index]!.worldBounds.x >= previous.x + previous.width)
+  }
 })
 
-test.concurrent('root items keep the shared sheet geometry at the fixed terminal scale', () => {
-  const model = navigationWorld()
-  const byKey = new Map(rootLayout(model).map(item => [item.key, item]))
-  const sheetItems = [
-    ...model.sheet.islands.map(item => ({ key: item.key, rect: item.rect })),
-    ...model.sheet.slabs.map(item => ({ key: item.representationId, rect: item.rect })),
-    ...model.sheet.buildings
-      .filter(item => item.kind !== 'component')
-      .map(item => ({ key: item.representationId, rect: item.rect })),
-  ]
-
-  for (const item of sheetItems) {
-    assert.deepEqual(byKey.get(item.key)?.worldBounds, terminalBounds(item.rect), item.key)
+test.concurrent('a wide row wraps its blocks and the island grows down inside the map padding', () => {
+  const ids = Array.from({ length: 40 }, (_, index) => `c${index}`)
+  const cell = { x: 0, y: 0, width: 1, height: 1 }
+  const model = worldOf([
+    box('sys', 'system', cell, { children: ['observed:big'] }),
+    box('big', 'container', cell, {
+      parent: 'observed:sys',
+      children: ids.map(id => `observed:${id}`),
+    }),
+    ...ids.map(id => box(id, 'component', cell, { parent: 'observed:big' })),
+  ])
+  const island = (items: ReturnType<typeof rootLayout>) => {
+    return items.find(item => item.representationId === 'observed:sys')!
   }
+  const row = (items: ReturnType<typeof rootLayout>) => {
+    return items.find(item => item.representationId === 'observed:big')!
+  }
+
+  const wide = rootLayout(model, 200)
+  assert.equal(row(wide).lines.length, 1)
+  const narrow = rootLayout(model, 60)
+  assert.ok(island(narrow).worldBounds.width <= 60 - 2 * MAP_PADDING)
+  assert.ok(row(narrow).lines.length > 1)
+  assert.equal(row(narrow).lines.join('').replace(/[^▪]/g, '').length, 40)
+  assert.equal(island(narrow).worldBounds.height, row(narrow).lines.length + 3)
 })

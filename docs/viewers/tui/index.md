@@ -11,16 +11,18 @@ the component count.
 
 ## Map scopes
 
-The root map projects the shared sheet used by the web viewer. It shows actor,
-internal-system, and external-system islands; container slabs; collapsed group
-zones; and actor or external-system buildings. Component buildings stay hidden.
-Relationships whose exact endpoint is hidden attach to its nearest visible
-ancestor.
+The root map uses Core's sheet placement order to make a compact terminal
+layout. It shows actor, internal-system, and external-system islands. A system
+island lists one row per container and one block per component. Blocks wrap
+inside the fitted island. Component cards, group zones, and container slabs stay
+hidden at root. Relationships whose exact endpoint is hidden attach to its
+visible row or island.
 
-Enter on a container opens only that container's fixed sheet area, its group
-zones, and its component buildings. Other containers do not appear in this
-scope. Backspace returns to root with the container selected. Escape also
-returns to root and closes details. No other element opens a map scope.
+Enter on a container opens its fitted container map. It shows the container
+slab, its group zones, and its component buildings, with the previous and next
+containers peeking at the sides. Backspace returns to root with the container
+selected. Escape also returns to root and closes details. No other element opens
+a map scope.
 
 Each component stands as a building. Its name and glyph sit in the top border,
 and each visible floor names its largest file with +N for the rest. Draft
@@ -29,15 +31,18 @@ brand green.
 
 ## Camera and selection
 
-The map has one readable scale. It has no fit-all state, zoom keys or zoom
-readout. One sheet cell always maps to the same terminal cells. A larger terminal
-reveals more canvas; it does not resize or rearrange the world.
+The map has one readable scale. It has no fit-all state, zoom keys, or zoom
+readout. The active island or container fits the current map width and stays
+centred, leaving room for its neighbours to peek. Changing selection does not
+rearrange cards, rows, routes, or labels.
 
-An arrow selects the nearest visible peer in that direction. Arrows never open
-or leave a container scope. The camera pans only enough to reveal the selection;
-if it is already visible, the camera stays still. Selection, details, pane width,
-and terminal size never change world coordinates. Stepping a flow reveals its
-visible destination without changing selection or map scope.
+At root, Up and Down walk the rows of one island; Left and Right move to the
+neighbouring island. Inside a container, Left and Right read through wrapped
+building rows and cross to the neighbouring container only at an end. Up and
+Down prefer the nearest building in the same column. Arrows never open or leave
+a container scope. The camera pans only enough vertically to reveal the
+selection. Stepping a flow reveals its visible destination without changing
+selection or map scope.
 
 The hierarchy and `/` search can select architecture outside the current scope.
 Selecting a component opens its parent container; selecting any outer element
@@ -80,7 +85,7 @@ recap row at its bottom summarizes current work and points to `w`. Neither treat
 covers or changes the architecture canvas.
 
 `w` gives the hierarchy and details panes to Backlog tasks without changing the
-stored architecture selection, map scope, camera, flow, or sheet geometry. Tasks
+stored architecture selection, map scope, camera, flow, or map layout. Tasks
 follow the configured workflow statuses. Up and Down select one task; Enter focuses
 its task-list details: status, assignees, acceptance progress, modified files, and
 references.
@@ -89,7 +94,7 @@ The selected task accents every element touched by its modified files and exact
 architecture references, plus routes leaving those elements. If all touched elements
 belong to one container, Work temporarily opens that component map. Otherwise it uses
 the root map and promotes hidden components to their visible containers. The camera
-reveals the touched set without changing its fixed geometry. Closing Work focus
+reveals the touched set without rearranging it. Closing Work focus
 with `w` or Escape restores the exact pre-Work view.
 
 Every touched slab or building carries its task in a corner: the selected task
@@ -142,4 +147,4 @@ other end.
 - `r` refreshes and Ctrl+C exits.
 
 Refresh preserves valid architecture and task selections, map scope, pane state,
-and camera. The same world coordinates are projected after every repaint.
+and camera. The current map-width layout stays stable across repaints.

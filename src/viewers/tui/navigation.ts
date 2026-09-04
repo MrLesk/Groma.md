@@ -25,6 +25,7 @@ import {
 import { initialWorkFocus } from './work/model.ts'
 import type { WorkFocus } from './work/model.ts'
 import { reduceWorkFocus } from './work/navigation.ts'
+import { firstRootRow } from './projection-root.ts'
 import type {
   AnnotatedElement,
   AnnotatedRelationship,
@@ -87,6 +88,8 @@ export interface ViewerState {
   history?: HistoryState
   /** The commit the viewer should show; absent means the live working tree. */
   revisionId?: string
+  /** The map columns used by the fitted layouts and their arrow order. */
+  mapWidth: number
   /** Present only while the terminal is using its task-focused side panes. */
   work?: WorkFocus
 }
@@ -101,7 +104,8 @@ export function defaultSelection(
 ): AnnotatedElement | undefined {
   const ranked = [...world.elements].sort(compareSemanticElements)
   if (level === 'context') {
-    return ranked.find(element => element.kind === 'system' && !element.external)
+    return firstRootRow(world)
+      ?? ranked.find(element => element.kind === 'system' && !element.external)
   }
   return ranked.find(element => element.kind === 'component')
 }
@@ -115,6 +119,7 @@ export function initialState(world: TerminalViewModel): ViewerState {
     panes: { hierarchy: true, details: true },
     detailsScroll: 0,
     detailsTab: 'what',
+    mapWidth: 80,
     revisionId: world.revision?.id,
   }
 }

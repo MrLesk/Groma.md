@@ -85,13 +85,16 @@ test.concurrent('tree focus moves the cursor and enter drives selection and leve
   const world = navigationWorld()
   let state = reduceViewer(world, initialState(world), 'tab')
   assert.equal(state.focus, 'hierarchy')
+  assert.equal(state.tree.cursor, 'observed:cleft')
+
+  state = reduceViewer(world, state, 'left')
   assert.equal(state.tree.cursor, 'observed:alpha')
 
   const opened = reduceViewer(world, state, 'enter')
   assert.equal(opened.currentId, 'observed:alpha')
-  assert.ok(opened.tree.expanded.has('observed:alpha'))
   assert.equal(opened.focus, 'hierarchy')
 
+  state = opened
   state = reduceViewer(world, state, 'right')
   state = reduceViewer(world, state, 'down')
   assert.equal(state.tree.cursor, 'observed:cleft')
