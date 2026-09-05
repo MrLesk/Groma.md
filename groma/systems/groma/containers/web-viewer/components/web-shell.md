@@ -41,7 +41,7 @@ groma:
     - scanner: typescript
       file: src/viewers/web/organisms/tip.ts
       dependencies: 0
-      dependents: 4
+      dependents: 5
     - scanner: typescript
       file: scripts/lint-web-scrollbars.ts
       dependencies: 0

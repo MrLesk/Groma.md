@@ -384,8 +384,14 @@ palette. A pin that appears after the map is open bounces once in
 that colour, then returns to the inactive greyscale. The
 Backlog.md Tasks panel, 35%-paper frosted glass with a 28px outer radius
 at the bottom centre of the map, exists while any pin does: folded it is a compact pill with
-the Backlog document mark in greyscale, a dot while a nonterminal task is available,
-and a chevron pointing up; unfolded it keeps the mark greyscale beside Backlog.md with
+the Backlog document mark in greyscale, a small badge counting unique mapped tasks
+in the enabled status filters (including zero), and a chevron pointing up.
+The badge briefly pulses when shown work changes, rolls and bounces when its count
+changes, and flips to a checkmark and back when shown work completes. Initial and
+unchanged snapshots stay quiet. Reduced motion keeps the count without animation.
+Hovering the mark shows the status counts and latest observed change. The badge
+uses the same work snapshot and filters as the expanded panel and adds no label
+or width to the folded pill; unfolded it keeps the mark greyscale beside Backlog.md with
 Tasks on the next line, one
 filter for each configured status in configuration order when that status
 has at least one pin. The filters match the task chips' height, and a vertical

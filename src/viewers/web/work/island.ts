@@ -1,9 +1,11 @@
 import type { WorkPin } from '../../../work/pins.ts'
+import type { WorkSnapshot } from '../../../types.ts'
 import type { Tip } from '../organisms/tip.ts'
 import { BACKLOG_MARK } from './backlog-mark.ts'
 import { fillWorkBadge, finishingWorkKeys, WORK_BADGE, WORK_BADGE_FLIP_MS } from './badge.ts'
 import { preservedWorkStatuses, toggleWorkStatus, workStatusFilters } from '../../../work/status-filter.ts'
 import type { WorkStatusFilterState } from '../../../work/status-filter.ts'
+import { createWorkSummary, workSummaryCss } from './summary.ts'
 
 const icon = (paths: string): string =>
   `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${paths}</svg>`
@@ -12,6 +14,7 @@ const EYE_MARK = icon('<path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7-10-7-10-7z"/><
 const CHEVRON = icon('<path d="M6 15l6-6 6 6"/>')
 
 export const workCss = `
+  ${workSummaryCss}
   /* Centred by margins, not by a translate: a fractional transform would resample the blurred layer and soften the text. */
   #work {
     position: absolute; left: 0; right: 0; bottom: 12px; margin: 0 auto; width: fit-content; box-sizing: border-box; max-width: calc(100% - 24px);
@@ -23,9 +26,7 @@ export const workCss = `
   #work[hidden] { display: none; }
   #work .content { display: contents; }
   #work svg { width: 18px; height: 18px; flex: none; }
-  #work .mark { position: relative; display: grid; place-items: center; width: 28px; height: 28px; }
-  #work .mark .backlog-mark, #work .label .backlog-mark { filter: grayscale(1); }
-  #work .mark .dot { position: absolute; top: 3px; right: 3px; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
+  #work .label .backlog-mark { filter: grayscale(1); }
   #work .divider { width: 1px; height: 24px; background: var(--hairline); flex: none; }
   #work button { display: flex; align-items: center; gap: 6px; border: 0; background: transparent; padding: 4px; border-radius: 14px; }
   #work .label { display: flex; align-items: center; gap: 8px; margin-right: 4px; padding-left: 8px; font-weight: 600; }
@@ -57,7 +58,7 @@ export const workCss = `
 
 export interface WorkIsland {
   /** Rebuilds the island for these pins and configured statuses; nothing shows while there are no pins. */
-  paint(pins: readonly WorkPin[], statuses: readonly string[], defaultStatus: string): void
+  paint(pins: readonly WorkPin[], work: WorkSnapshot): void
   /** Colours the chips of the active tasks, greyscale otherwise, marks those of the selected task (always one of the active ones) and scrolls the first into view. */
   activate(active: readonly string[], selected: string | undefined): void
 }
@@ -101,7 +102,8 @@ export function createWorkIsland(
   const content = document.createElement('div')
   content.className = 'content'
   let pins: readonly WorkPin[] = []
-  let configuredStatuses: readonly string[] = []
+  let work: WorkSnapshot = { statuses: [], defaultStatus: '', items: [] }
+  const summary = createWorkSummary(tip)
   let statusFilters: WorkStatusFilterState | undefined
   /** Done pins kept visible until their flip ends. */
   const finishing = new Set<string>()
@@ -125,18 +127,15 @@ export function createWorkIsland(
   }
   /** The island's changing content for the folded pill or open row. */
   const parts = (): Node[] => {
-    const mark = document.createElement('span')
-    mark.className = 'mark'
-    mark.innerHTML = `${BACKLOG_MARK}${pins.some(pin => !pin.terminal) ? '<span class="dot"></span>' : ''}`
     const divider = document.createElement('span')
     divider.className = 'divider'
-    if (!open) return [mark, divider]
+    if (!open) return [summary.element, divider]
     const label = document.createElement('span')
     label.className = 'label'
     label.innerHTML = `${BACKLOG_MARK}<span>Backlog.md<br>Tasks</span>`
     const strip = document.createElement('div')
     strip.className = 'strip'
-    const order = new Map(configuredStatuses.map((status, index) => [status, index]))
+    const order = new Map(work.statuses.map((status, index) => [status, index]))
     const shown = pins.filter(pin => statusFilters!.enabled.includes(pin.status) || finishing.has(pin.key))
     shown.sort((left, right) => order.get(left.status)! - order.get(right.status)!)
     strip.append(...shown.map(pin => chip(pin, animating.has(pin.key), onToggle, tip)))
@@ -174,6 +173,7 @@ export function createWorkIsland(
     // the strip stays where it was, so a repaint moves it only to reveal a selected chip
     island.querySelector('.strip')?.scrollTo(scrolled, 0)
     mark()
+    summary.update(pins, work, statusFilters?.enabled ?? [], !open)
   }
   const fold = button('fold', CHEVRON, () => {
     open = !open
@@ -211,7 +211,7 @@ export function createWorkIsland(
   island.append(content, fold)
   host.append(island)
   return {
-    paint(nextPins, nextStatuses, defaultStatus) {
+    paint(nextPins, nextWork) {
       const visible = new Set(open
         ? pins
           .filter(pin => statusFilters?.enabled.includes(pin.status) || finishing.has(pin.key))
@@ -224,12 +224,12 @@ export function createWorkIsland(
           animating.add(key)
         } else started.delete(key)
       }
-      const enabled = preservedWorkStatuses(configuredStatuses, statusFilters?.enabled)
+      const enabled = preservedWorkStatuses(work.statuses, statusFilters?.enabled)
       pins = nextPins
-      configuredStatuses = nextStatuses
+      work = nextWork
       statusFilters = workStatusFilters(
-        configuredStatuses,
-        defaultStatus,
+        work.statuses,
+        work.defaultStatus,
         pins.map(pin => pin.status),
         enabled,
       )
