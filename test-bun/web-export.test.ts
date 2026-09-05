@@ -6,7 +6,7 @@ import path from 'node:path'
 import { test } from 'bun:test'
 
 import type { WorkSource } from '@groma/work-source'
-import { createBacklogPlugin } from '@groma/work-source-backlog'
+import { createBacklogPlugin, createBacklogSource } from '@groma/work-source-backlog'
 
 import type { WorkItem, WorkItemDetails, WorkSnapshot } from '../src/types.ts'
 import { exportWebViewer } from '../src/viewers/web/export.ts'
@@ -114,6 +114,42 @@ test.concurrent('groma export writes the read-only browser map without a server'
     for (const filename of ['index.html', 'render.js', 'snapshot.js', 'version.js']) {
       assert.equal((await stat(path.join(output, filename))).isFile(), true)
     }
+  } finally {
+    await rm(parent, { recursive: true, force: true })
+  }
+})
+
+test.concurrent('Backlog export reads only CLI tasks when task storage contains a README', async () => {
+  const { parent, root } = await createRepository()
+  const output = path.join(parent, 'site')
+  const calls: string[][] = []
+  const work = workSource().source
+  const source = createBacklogSource(root, async (args, cwd) => {
+    assert.equal(cwd, root)
+    calls.push(args)
+    if (args.join(' ') === 'config get statuses') return 'To Do, In Progress, Done'
+    if (args.join(' ') === 'config get defaultStatus') return 'To Do'
+    if (args.join(' ') === 'task list --json') {
+      return JSON.stringify({ schemaVersion: 1, kind: 'task-list', tasks: (await work.read()).items })
+    }
+    assert.deepEqual(args, ['task', 'view', 'TASK-PUBLIC', '--json'])
+    return JSON.stringify({ schemaVersion: 1, kind: 'task-view', task: await work.readItem('TASK-PUBLIC') })
+  })
+  try {
+    const tasks = path.join(root, 'backlog', 'tasks')
+    await mkdir(tasks, { recursive: true })
+    await writeFile(path.join(tasks, 'README.md'), '# Task storage\n')
+    const exported = await exportWebViewer(root, output, { workSource: source })
+    await exported.close()
+    assert.deepEqual(calls, [
+      ['task', 'list', '--json'],
+      ['config', 'get', 'statuses'],
+      ['config', 'get', 'defaultStatus'],
+      ['task', 'view', 'TASK-PUBLIC', '--json'],
+    ])
+    const snapshot = await readFile(path.join(output, 'snapshot.js'), 'utf8')
+    assert.match(snapshot, /"tasks":\[{"id":"TASK-PUBLIC","details":/)
+    assert.doesNotMatch(snapshot, /"id":""/)
   } finally {
     await rm(parent, { recursive: true, force: true })
   }

@@ -153,104 +153,81 @@ test.concurrent('Work refresh preserves a valid task, initializes delayed work, 
   assert.equal(reconcileWorkFocus(snapshot(), cleared), cleared)
 })
 
-test.concurrent('Backlog plugin reads every task summary once and selected detail on demand', async () => {
+test.concurrent('Backlog plugin reads CLI summaries once and selected details on demand', async () => {
   const root = await mkdtemp(path.join(tmpdir(), 'groma-backlog-read-'))
   const tasks = path.join(root, 'backlog', 'tasks')
   await mkdir(tasks, { recursive: true })
   const calls: string[][] = []
-  const run: BacklogCommand = async arguments_ => {
+  const summaries = ['In Progress', 'Done', 'To Do', 'Review'].map((status, index) => item(`TASK-${index + 1}`, {
+    status, references: ['shop'], modifiedFiles: ['src/shop.ts'],
+    acceptanceCriteriaCompleted: 1, acceptanceCriteriaCount: 2,
+  }))
+  const run: BacklogCommand = async (arguments_, repositoryRoot) => {
+    assert.equal(repositoryRoot, root)
     calls.push(arguments_)
-    return arguments_[2] === 'statuses' ? 'To Do, In Progress, Review, Done\n' : 'To Do\n'
+    if (arguments_.join(' ') === 'task list --json') {
+      return JSON.stringify({ schemaVersion: 1, kind: 'task-list', tasks: summaries })
+    }
+    if (arguments_.join(' ') === 'config get statuses') return 'To Do, In Progress, Review, Done\n'
+    if (arguments_.join(' ') === 'config get defaultStatus') return 'To Do\n'
+    assert.deepEqual(arguments_, ['task', 'view', 'TASK-1', '--json'])
+    return JSON.stringify({ schemaVersion: 1, kind: 'task-view', task: {
+      id: 'TASK-1', description: 'Why it matters',
+      acceptanceCriteria: [{ index: 1, text: 'one', checked: true }, { index: 2, text: 'two', checked: false }],
+      definitionOfDone: [{ index: 1, text: 'verified', checked: false }],
+      implementationPlan: 'First plan', implementationNotes: 'First note',
+      comments: [
+        { index: 1, body: 'Review this', createdAt: '2026-08-23T11:00:00Z', author: '@alex' },
+        { index: 2, body: 'Recorded without an author', createdAt: '2026-08-23T12:00:00Z', author: null },
+      ],
+    } })
   }
-  const taskSource = (id: string, status: string, details = '') => `---
-id: ${id}
-title: Change ${id}
-status: ${status}
-assignee: ['@codex']
-updated_date: '2026-08-23T11:00:00Z'
-references: [shop, 'https://example.com']
-modified_files: [src/shop.ts]
----
-
-## Acceptance Criteria
-<!-- AC:BEGIN -->
-- [x] #1 one
-- [ ] #2 two
-<!-- AC:END -->
-${details}`.replaceAll('\n', '\r\n')
-  const detailSections = `
-## Description
-<!-- SECTION:DESCRIPTION:BEGIN -->
-Why it matters
-<!-- SECTION:DESCRIPTION:END -->
-## Definition of Done
-<!-- DOD:BEGIN -->
-- [ ] #1 verified
-<!-- DOD:END -->
-## Implementation Plan
-<!-- SECTION:PLAN:BEGIN -->
-First plan
-<!-- SECTION:PLAN:END -->
-## Implementation Notes
-<!-- SECTION:NOTES:BEGIN -->
-First note
-<!-- SECTION:NOTES:END -->
-## Comments
-<!-- COMMENTS:BEGIN -->
-author: @alex
-created: 2026-08-23T11:00:00Z
----
-Review this
----
-
-created: 2026-08-23T12:00:00Z
----
-Recorded without an author
----
-<!-- COMMENTS:END -->`
   try {
-    await Promise.all([
-      writeFile(path.join(tasks, 'task-1 - Change.md'), taskSource('TASK-1', 'In Progress', detailSections)),
-      writeFile(path.join(tasks, 'task-2 - Change.md'), taskSource('TASK-2', 'Done')),
-      writeFile(path.join(tasks, 'task-3 - Change.md'), taskSource('TASK-3', 'Done')),
-      writeFile(path.join(tasks, 'task-4 - Change.md'), taskSource('TASK-4', 'To Do')),
-      writeFile(path.join(tasks, 'task-5 - Change.md'), taskSource('TASK-5', 'Review')),
-    ])
+    // This is explanatory Markdown, not a task. Task identity comes only from the CLI.
+    await writeFile(path.join(tasks, 'README.md'), '# Task storage\n')
     const source = createBacklogSource(root, run)
     const work = await source.read()
     assert.deepEqual(calls, [
+      ['task', 'list', '--json'],
       ['config', 'get', 'statuses'],
       ['config', 'get', 'defaultStatus'],
     ])
     assert.deepEqual(work.statuses, ['To Do', 'In Progress', 'Review', 'Done'])
     assert.equal(work.defaultStatus, 'To Do')
-    assert.deepEqual(work.items.map(item => [
-      item.id,
-      item.status,
-      item.acceptanceCriteriaCompleted,
-      item.acceptanceCriteriaCount,
-    ]).sort((left, right) => String(left[0]).localeCompare(String(right[0]))), [
-      ['TASK-1', 'In Progress', 1, 2],
-      ['TASK-2', 'Done', 1, 2],
-      ['TASK-3', 'Done', 1, 2],
-      ['TASK-4', 'To Do', 1, 2],
-      ['TASK-5', 'Review', 1, 2],
-    ])
-    assert.deepEqual(work.items[0]!.references, ['shop', 'https://example.com'])
+    assert.deepEqual(work.items, summaries)
     const details = await source.readItem('TASK-1')
-    assert.equal(calls.length, 2)
-    assert.deepEqual(details.acceptanceCriteria, [{ text: 'one', checked: true }, { text: 'two', checked: false }])
-    assert.deepEqual(details.definitionOfDone, [{ text: 'verified', checked: false }])
-    assert.equal(details.implementationPlan, 'First plan')
-    assert.equal(details.implementationNotes, 'First note')
-    assert.deepEqual(details.comments, [{
-      body: 'Review this', createdAt: '2026-08-23T11:00:00Z', author: '@alex',
-    }, {
-      body: 'Recorded without an author', createdAt: '2026-08-23T12:00:00Z', author: '',
-    }])
+    assert.equal(calls.length, 4)
+    assert.deepEqual(details, {
+      id: 'TASK-1', description: 'Why it matters',
+      acceptanceCriteria: [{ text: 'one', checked: true }, { text: 'two', checked: false }],
+      definitionOfDone: [{ text: 'verified', checked: false }],
+      implementationPlan: 'First plan', implementationNotes: 'First note',
+      comments: [
+        { body: 'Review this', createdAt: '2026-08-23T11:00:00Z', author: '@alex' },
+        { body: 'Recorded without an author', createdAt: '2026-08-23T12:00:00Z', author: '' },
+      ],
+    })
   } finally {
     await rm(root, { recursive: true, force: true })
   }
+})
+
+test.concurrent('Backlog nullable JSON fields keep the string-based work contract', async () => {
+  const source = createBacklogSource('/repo', async args => {
+    if (args[0] === 'config') return args[2] === 'statuses' ? 'To Do, Done' : 'To Do'
+    if (args[1] === 'list') return JSON.stringify({ tasks: [{ ...item('TASK-1'), updatedAt: null }] })
+    assert.deepEqual(args, ['task', 'view', 'TASK-1', '--json'])
+    return JSON.stringify({ task: {
+      id: 'TASK-1', description: null, implementationPlan: null, implementationNotes: null,
+      acceptanceCriteria: [], definitionOfDone: [],
+      comments: [{ body: 'Note', author: null, createdAt: null }],
+    } })
+  })
+  assert.equal((await source.read()).items[0]!.updatedAt, '')
+  assert.deepEqual(await source.readItem('TASK-1'), {
+    id: 'TASK-1', description: '', implementationPlan: '', implementationNotes: '',
+    acceptanceCriteria: [], definitionOfDone: [], comments: [{ body: 'Note', author: '', createdAt: '' }],
+  })
 })
 
 test.concurrent('Backlog plugin signals a task-directory change', async () => {
