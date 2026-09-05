@@ -203,7 +203,9 @@ function paintViewState(commitUrl = true): void {
   const activeTaskItems = activeTaskIds.map(id => workItem(id)).filter((item): item is WorkItem => item !== undefined)
   paintMapState(task, activeTaskItems)
   paintTree()
-  paintFlows(flowsHost, world, activeFlow, toggleFlow)
+  paintFlows(flowsHost, world, activeFlow, toggleFlow, {
+    title: 'Actors', selectedIds: selectedArchitecture(selection), onSelectActor: select,
+  })
   paintWorldStats(statsHost, world)
   paintBackToFlow(detailsHost, activeFlow !== undefined && selection.kind !== 'flow' ? backToFlow : undefined)
   const flow = world.flows.find(item => item.id === selectedId)
