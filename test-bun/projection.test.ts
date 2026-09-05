@@ -3,7 +3,7 @@ import { test } from 'bun:test'
 
 import { flowEndpointLabel, projectFlowStep } from '../src/viewers/tui/flow.ts'
 import { initialState } from '../src/viewers/tui/navigation.ts'
-import { visibleIn } from '../src/viewers/tui/projection-camera.ts'
+import { visibleIn, type TerminalCamera } from '../src/viewers/tui/projection-camera.ts'
 import { mapAnchors, projectWorld } from '../src/viewers/tui/projection.ts'
 import {
   box,
@@ -72,6 +72,40 @@ test.concurrent('container projection contains only its groups and component car
   )
   assert.equal(projection.items.filter(item => item.kind === 'group').length, 2)
   assert.equal(mapAnchors(model, 'components', 'observed:read', 120).has('observed:service'), false)
+})
+
+test.concurrent('component follow stays within the displayed world without moving its layout', () => {
+  const model = groupedWorld()
+  const viewport = mapViewportOf({ width: 120, height: 36 })
+  const start = projectWorld(model, {
+    viewport,
+    level: 'components',
+    currentId: 'observed:read',
+  })
+  const moved = projectWorld(model, {
+    viewport,
+    level: 'components',
+    currentId: 'observed:write',
+    camera: start.camera,
+  })
+
+  for (const projection of [start, moved]) {
+    const selected = projection.items.find(item => item.representationId === projection.currentId)!
+    assert.ok(visibleIn(selected.cellBounds, viewport))
+    const world = projection.worldBounds
+    if (world.width > viewport.width) {
+      assert.ok(projection.camera.x >= world.x)
+      assert.ok(projection.camera.x + viewport.width <= world.x + world.width)
+    }
+    if (world.height > viewport.height) {
+      assert.ok(projection.camera.y >= world.y)
+      assert.ok(projection.camera.y + viewport.height <= world.y + world.height)
+    }
+  }
+  assert.deepEqual(
+    moved.items.map(item => [item.key, item.worldBounds]),
+    start.items.map(item => [item.key, item.worldBounds]),
+  )
 })
 
 test.concurrent('selection changes the camera but never the world layout', () => {
@@ -182,4 +216,19 @@ test.concurrent('a component selection at root stands on its container row', () 
   const container = projection.items.find(item => item.representationId === 'observed:cleft')!
   assert.equal(container.shape, 'row')
   assert.equal(visibleIn(container.cellBounds, viewport), true)
+})
+
+test.concurrent('a root that fits stays vertically centered across selection and viewport height changes', () => {
+  const model = groupedWorld()
+  let camera: TerminalCamera | undefined
+  for (const height of [36, 60, 30]) {
+    const viewport = mapViewportOf({ width: 200, height })
+    for (const currentId of ['observed:service', 'observed:person', 'observed:vendor']) {
+      const projection = projectWorld(model, { viewport, currentId, camera })
+      const top = Math.min(...projection.items.map(item => item.cellBounds.y))
+      const bottom = Math.max(...projection.items.map(item => item.cellBounds.y + item.cellBounds.height))
+      assert.ok(Math.abs((top - viewport.y) - (viewport.y + viewport.height - bottom)) <= 1)
+      camera = projection.camera
+    }
+  }
 })

@@ -55,21 +55,21 @@ const beforeWork = {
   detailsScroll: 0,
 }
 
-test.concurrent('Work focus follows active, default, then terminal workflow groups', () => {
+test.concurrent('Work orders default, active and terminal groups while selecting an expanded active task', () => {
   const work = snapshot([
     item('TASK-TODO', { title: 'Todo', status: 'To Do' }),
     item('TASK-DONE', { title: 'Done', status: 'Done' }),
     item('TASK-ACTIVE', { title: 'Active' }),
   ])
 
-  assert.deepEqual(workGroups(work).map(group => group.status), ['In Progress', 'To Do', 'Done'])
+  assert.deepEqual(workGroups(work).map(group => group.status), ['To Do', 'In Progress', 'Done'])
   const model = { ...navigationWorld(), work }
   const first = initialWorkFocus(work, beforeWork)
   assert.equal(selectedWorkId(first), 'TASK-ACTIVE')
-  // Down walks onto the next status header, then its first task.
+  // Down reaches Done, whose tasks start folded.
   const header = moveWorkFocus(model, first, 1)
-  assert.deepEqual(header.selection, { state: 'status', status: 'To Do' })
-  assert.equal(selectedWorkId(moveWorkFocus(model, header, 1)), 'TASK-TODO')
+  assert.deepEqual(header.selection, { state: 'status', status: 'Done' })
+  assert.deepEqual(moveWorkFocus(model, header, 1).selection, header.selection)
 })
 
 test.concurrent('Work projection shares modified-file and reference touch meaning with the web', () => {
@@ -447,18 +447,22 @@ test.concurrent('status toggles start without the default and final statuses and
   let state = reduceViewer(model, initialState(model), 'toggle-work')
   state = reduceViewer(model, state, 'down')
   assert.deepEqual(state.work?.selection, { state: 'status', status: 'Done' })
-  const toggled = reduceViewer(model, state, 'enter')
+  const folded = reduceViewer(model, state, 'enter')
+  assert.deepEqual(folded.work?.shown, ['In Progress'])
+  assert.ok(folded.work?.expanded?.includes('Done'))
+  const toggled = reduceViewer(model, folded, 'toggle-selection')
   assert.deepEqual(toggled.work?.shown, ['In Progress', 'Done'])
   assert.deepEqual([toggled.level, toggled.currentId, toggled.work?.selection], [state.level, state.currentId, state.work?.selection])
 })
 
-test.concurrent('the details pane walks the tasks touching the selection and Enter opens the record', () => {
-  const model = { ...navigationWorld(), work: snapshot([item('TASK-HERE', { title: 'Here', references: ['ann'], acceptanceCriteriaCompleted: 1, acceptanceCriteriaCount: 3 })]) }
-  let state: ViewerState = { ...initialState(model), currentId: 'observed:ann', focus: 'details' }
+test.concurrent('the component Tasks tab walks related tasks and Enter opens the record', () => {
+  const model = { ...navigationWorld(), work: snapshot([item('TASK-HERE', { title: 'Here', references: ['pmid'], acceptanceCriteriaCompleted: 1, acceptanceCriteriaCount: 3 })]) }
+  let state: ViewerState = { ...initialState(model), currentId: 'observed:pmid', level: 'components', focus: 'details', detailsTab: 'tasks' }
+  state = reduceViewer(model, state, 'down')
   state = reduceViewer(model, state, 'down')
   assert.equal(state.actionCursor, 'TASK-HERE')
   state = reduceViewer(model, state, 'enter')
-  assert.deepEqual(state.taskRecord, { id: 'TASK-HERE' })
+  assert.deepEqual(state.taskRecord, { id: 'TASK-HERE', row: 0 })
   assert.equal(reduceViewer(model, state, 'dismiss').taskRecord, undefined)
 })
 
@@ -474,9 +478,8 @@ test.concurrent('the viewer reads the opened record through the host', async () 
     },
   })
   await setup.renderOnce()
-  // Enter on an actor focuses its details; Down reaches its task; Enter opens the record.
-  await press(setup, 'enter')
-  await press(setup, 'down')
+  // Work selects the task; Enter opens the same full record used by a component Tasks tab.
+  await press(setup, 'w')
   const opened = await press(setup, 'enter')
   assert.deepEqual(read, ['TASK-READ'])
   assert.ok(opened.includes('TASK-READ'))

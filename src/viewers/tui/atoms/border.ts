@@ -3,7 +3,7 @@ import type { OptimizedBuffer, RGBA } from '@opentui/core'
 import { cell } from './cell.ts'
 import type { Bounds, Origin } from '../../../types.ts'
 
-/** Buildings stand square; surfaces are rounded; zones dash their lines. */
+/** Buildings and zones stand square; surfaces are rounded. Origin controls line style. */
 export type BorderStyle = 'building' | 'surface' | 'zone'
 
 export interface BorderCharacters {
@@ -17,12 +17,12 @@ export interface BorderCharacters {
 
 /** The frame glyphs of a style; drafts dash their lines; heavy is the box a selected surface draws. */
 export function borderCharacters(origin: Origin, style: BorderStyle, heavy = false): BorderCharacters {
-  const dashed = style === 'zone' || origin !== 'observed'
+  const dashed = origin !== 'observed'
   if (heavy) {
     return { topLeft: '┏', topRight: '┓', bottomLeft: '┗', bottomRight: '┛', horizontal: dashed ? '┅' : '━', vertical: dashed ? '┇' : '┃' }
   }
   const lines = { horizontal: dashed ? '╌' : '─', vertical: dashed ? '┆' : '│' }
-  if (style === 'building') return { topLeft: '┌', topRight: '┐', bottomLeft: '└', bottomRight: '┘', ...lines }
+  if (style !== 'surface') return { topLeft: '┌', topRight: '┐', bottomLeft: '└', bottomRight: '┘', ...lines }
   return { topLeft: '╭', topRight: '╮', bottomLeft: '╰', bottomRight: '╯', ...lines }
 }
 

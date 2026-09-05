@@ -24,6 +24,8 @@ export interface ProjectedMapItem {
   origin: Origin
   external: boolean
   shape: MapShape
+  /** A narrow neighbouring surface names itself along its visible edge. */
+  preview?: 'vertical' | 'horizontal'
   lines: string[]
   worldBounds: Bounds
   cellBounds: Bounds
@@ -106,11 +108,26 @@ function fittedCamera(
   world: Bounds,
   viewport: Bounds,
   previous: TerminalCamera | undefined,
+  level: TerminalLevel,
 ): TerminalCamera {
   const x = world.width <= viewport.width
     ? world.x - Math.floor((viewport.width - world.width) / 2)
     : Math.round(subject.x + subject.width / 2 - viewport.width / 2)
-  return { x, y: scrolledTo(previous?.y ?? world.y, reveal, world, viewport) }
+  const y = level === 'context' && world.height <= viewport.height
+    ? world.y - Math.floor((viewport.height - world.height) / 2)
+    : scrolledTo(previous?.y ?? world.y, reveal, world, viewport)
+  return { x, y }
+}
+
+/** Follow a component without exposing space beyond the displayed map. */
+function centeredCamera(selection: Bounds, world: Bounds, viewport: Bounds): TerminalCamera {
+  const axis = (center: number, start: number, size: number, available: number): number => size <= available
+    ? start - Math.floor((available - size) / 2)
+    : Math.max(start, Math.min(start + size - available, Math.round(center - available / 2)))
+  return {
+    x: axis(selection.x + selection.width / 2, world.x, world.width, viewport.width),
+    y: axis(selection.y + selection.height / 2, world.y, world.height, viewport.height),
+  }
 }
 
 function scrolledTo(
@@ -186,7 +203,8 @@ function projectRelationships(
       existing.ids.push(route.id)
       continue
     }
-    const worldRoute = routeBetween(ends.source.worldBounds, ends.target.worldBounds)
+    const obstacles = items.filter(item => (item.shape === 'card' || item.shape === 'row') && item.key !== ends.source.key && item.key !== ends.target.key)
+    const worldRoute = routeBetween(ends.source.worldBounds, ends.target.worldBounds, obstacles.map(item => item.worldBounds))
     if (worldRoute.length < 2) continue
     pairs.set(pair, {
       ids: [route.id],
@@ -259,13 +277,18 @@ export function projectWorld(
       return (item.shape === 'island' || item.shape === 'slab')
         && encloses(item.worldBounds, selected.worldBounds)
     })
-  const camera = fittedCamera(
-    holder?.worldBounds ?? worldBounds,
-    attentionBounds ?? selected?.worldBounds,
-    worldBounds,
-    options.viewport,
-    options.camera,
-  )
+  const camera = level === 'components'
+    && selected?.kind === 'component'
+    && attentionBounds === undefined
+    ? centeredCamera(selected.worldBounds, worldBounds, options.viewport)
+    : fittedCamera(
+      holder?.worldBounds ?? worldBounds,
+      attentionBounds ?? selected?.worldBounds,
+      worldBounds,
+      options.viewport,
+      options.camera,
+      level,
+    )
   const items = worldItems.map(item => ({
     ...item,
     cellBounds: projectBounds(item.worldBounds, camera, options.viewport),

@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict'
+import { detailsScrollOffset } from '../src/viewers/tui/panes/screen.ts'
 import { test } from 'bun:test'
 
 import { createTestRenderer } from '@opentui/core/testing'
 
-import { panesForWidth } from '../src/viewers/tui/layout.ts'
+import { detailsContentWidth, fitPanes, panesForWidth, terminalLayout } from '../src/viewers/tui/layout.ts'
 import type { Bounds } from '../src/types.ts'
 import { initialState, reduceViewer } from '../src/viewers/tui/navigation.ts'
 import { projectWorld } from '../src/viewers/tui/projection.ts'
@@ -21,8 +22,11 @@ test.concurrent('details changes pane width and the selection stays centred in e
   const model = navigationWorld()
   let state = initialState(model)
   state = reduceViewer(model, state, 'toggle-details')
+  assert.equal(state.focus, 'details')
+  assert.equal(state.panes.details, true)
+  state = reduceViewer(model, state, 'toggle-details')
   assert.equal(state.panes.details, false)
-  assert.equal(reduceViewer(model, state, 'tab').focus, 'hierarchy')
+  assert.equal(reduceViewer(model, state, 'toggle-hierarchy').focus, 'hierarchy')
 
   const centre = (viewport: Bounds) => {
     const projection = projectWorld(model, { viewport, currentId: 'observed:alpha' })
@@ -91,16 +95,41 @@ test.concurrent('panes start folded by the width table', () => {
   assert.deepEqual(panesForWidth(120), { hierarchy: true, details: true })
 })
 
-test.concurrent('an 80-column terminal starts map-only and names the selection in the footer', async () => {
-  const model = await terminalModel(viewerFixtureRoot)
-  const setup = await createTestRenderer({ width: 80, height: 30 })
-  const app = mountTerminalViewer(setup.renderer, model)
-  await setup.renderOnce()
-  const rows = setup.captureCharFrame().split('\n')
-  const selected = model.elements.find(element => element.representationId === initialState(model).currentId)!
-  assert.equal([...rows[2]!].filter(cell => cell === '╭').length, 1)
-  assert.ok(rows[28]!.includes(selected.title))
-  app.destroy()
+test.concurrent('reading reserves 80 text columns when possible without changing saved pane choices', () => {
+  const model = navigationWorld()
+  for (const width of [80, 120, 200]) {
+    const before = { ...initialState(model), terminalWidth: width, panes: panesForWidth(width) }
+    const reading = { ...before, focus: 'details' as const, panes: { ...before.panes, details: true }, taskRecord: { id: 'TASK-1', row: 0 } }
+    const saved = { ...reading.panes }
+    const layout = terminalLayout(reading)
+    assert.equal(detailsContentWidth(reading), Math.min(80, width - 4))
+    assert.equal(layout.map, width === 200)
+    if (layout.map) assert.ok(layout.mapWidth >= 40)
+    assert.deepEqual(reading.panes, saved)
+    assert.equal(terminalLayout(before).map, true)
+    const hierarchyFocus = { ...reading, focus: 'hierarchy' as const }
+    assert.equal(detailsContentWidth(hierarchyFocus), width === 200 ? 80 : 28)
+    assert.equal(terminalLayout(hierarchyFocus).map, true)
+  }
+})
+
+test.concurrent('details can scroll past their final link to the end of a record', () => {
+  const pane = { lines: Array.from({ length: 80 }, () => []), cursor: 35 }
+  const height = 20
+  assert.equal(detailsScrollOffset(pane, 0, height), 16)
+  assert.ok(detailsScrollOffset(pane, 40, height) > pane.cursor)
+  assert.equal(detailsScrollOffset(pane, 100, height), pane.lines.length - height)
+})
+
+test.concurrent('shrinking to 80 columns retains map space and permits explicit details focus', () => {
+  const model = navigationWorld()
+  const state = { ...initialState(model), currentId: 'observed:pleft', level: 'components' as const }
+  const panes = fitPanes(80, state.panes, state.focus)
+  assert.equal(panes.details, false)
+  const details = reduceViewer(model, { ...state, panes }, 'enter')
+  const fitted = fitPanes(80, details.panes, details.focus)
+  assert.equal(details.focus, 'details')
+  assert.deepEqual(fitted, { hierarchy: false, details: true })
 })
 
 test.concurrent('Work focus and a folded details pane end the profile', () => {
@@ -110,18 +139,28 @@ test.concurrent('Work focus and a folded details pane end the profile', () => {
   assert.equal(reduceViewer(model, shown, 'toggle-details').profile, false)
   assert.equal(reduceViewer(model, shown, 'toggle-work').profile, false)
   assert.equal(reduceViewer(model, shown, 'toggle-hierarchy').profile, true)
+  assert.equal(reduceViewer(model, shown, 'dismiss').focus, 'architecture')
+  for (const state of [initialState(model), reduceViewer(model, initialState(model), 'toggle-work')]) {
+    const help = reduceViewer(model, state, 'toggle-keys')
+    assert.equal(reduceViewer(model, help, 'dismiss').focus, 'architecture')
+  }
 })
 
-test.concurrent('[ folds the hierarchy and Tab reopens it', () => {
+test.concurrent('pane keys focus, fold and reopen their pane while Tab stays inside details', () => {
   const model = navigationWorld()
-  let state = reduceViewer(model, initialState(model), 'tab')
+  let state = reduceViewer(model, initialState(model), 'toggle-hierarchy')
   assert.equal(state.focus, 'hierarchy')
   state = reduceViewer(model, state, 'toggle-hierarchy')
   assert.equal(state.panes.hierarchy, false)
   assert.equal(state.focus, 'architecture')
-  state = reduceViewer(model, state, 'tab')
+  assert.equal(reduceViewer(model, state, 'tab').focus, 'architecture')
+  state = reduceViewer(model, state, 'toggle-hierarchy')
   assert.equal(state.panes.hierarchy, true)
   assert.equal(state.focus, 'hierarchy')
+  state = reduceViewer(model, state, 'toggle-details')
+  state = reduceViewer(model, state, 'tab')
+  assert.equal(state.detailsTab, 'how')
+  assert.equal(state.focus, 'details')
 })
 
 function detailsTitle(frame: string, width: number): string {
@@ -144,7 +183,7 @@ test.concurrent('a folded hierarchy gives its columns to the map and keeps the s
   }
   assert.ok(Math.abs(centre(layout.mapViewport) - layout.mapViewport.width / 2) <= 1)
   assert.ok(Math.abs(centre(folded.mapViewport) - folded.mapViewport.width / 2) <= 1)
-  const frame = await press(setup, '[')
+  const frame = await press(setup, 't', 't')
   const titled = frame.split('\n').slice(layout.map.y).map(row => [...row].slice(0, layout.details.x).join('')).find(row => row.includes(selected.title))
   assert.ok(titled !== undefined)
   assert.ok(detailsTitle(frame, 120).includes(model.elements.find(element => element.representationId === selectedId)!.title))

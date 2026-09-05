@@ -11,7 +11,7 @@ import { drawEmptyWorld } from './organisms/empty.ts'
 import type { TerminalProjection } from './projection.ts'
 import { litLegs } from './flow.ts'
 import { projectWork } from './work/model.ts'
-import type { WorkFocus } from './work/model.ts'
+import type { WorkFocus, WorkListSettings } from './work/model.ts'
 
 /** Paints the projected world into the map's own buffer; the chrome around it is toolkit renderables. */
 export function paintMap(
@@ -20,10 +20,11 @@ export function paintMap(
   world: TerminalViewModel,
   theme: ViewerTheme,
   options: {
-    /** The walk the map lights: the details preview, or the committed pick. */
+    /** The explicitly selected flow or relationship the map lights. */
     lit: LitAction
     step: ProjectedFlowStep | undefined
     workFocus?: WorkFocus
+    workList?: WorkListSettings
     animationPhase: number
   },
 ): void {
@@ -39,7 +40,7 @@ export function paintMap(
     pathIds,
     onPath: elementId => elementId === selectionId || elementOnPath(elementId, pathIds, world),
     step: options.step,
-    work: projectWork(world, projection, options.workFocus),
+    work: projectWork(world, projection, options.workFocus, options.workList),
     animationPhase: options.animationPhase,
   })
 }

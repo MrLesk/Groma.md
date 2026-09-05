@@ -340,6 +340,7 @@ export function paintAdvanced(
   requestedTableScroll: number,
   requestedDescriptionScroll: number,
   arrowVisible: boolean,
+  reading = false,
 ): AdvancedPaintResult {
   const shell = paintShell(buffer, model, sheet)
   drawParts(buffer, commandParts({
@@ -381,7 +382,7 @@ export function paintAdvanced(
   }
   const visibleRows = rows.slice(tableScroll, tableScroll + tablePageSize)
   if (visibleRows.length > 0) {
-    drawTable(buffer, sheet, visibleRows, arrowVisible, shell.x, tableY)
+    drawTable(buffer, sheet, visibleRows, arrowVisible && !reading, shell.x, tableY)
   }
   const descriptionY = tableY + visibleRows.length * 2 + 2
   const selectedCommand = advancedCommands[selectedIndex - 1]
@@ -400,7 +401,7 @@ export function paintAdvanced(
   ], shell.x + 2, pluginsY)
   text(
     buffer,
-    '↑/↓ command │ J/K scroll │ PgUp/PgDn page │ Backspace back │ Esc/Q quit',
+    readingFooter(reading),
     shell.x + 2,
     pluginsY + 1,
     shell.width - 4,
@@ -419,6 +420,7 @@ export function paintInstructions(
   guideIndex: number,
   requestedScroll: number,
   arrowVisible: boolean,
+  reading = false,
 ): ScrollPaintResult {
   const shell = paintShell(buffer, model, sheet)
   drawParts(buffer, commandParts({
@@ -431,7 +433,7 @@ export function paintInstructions(
 
   const rows = instructionRows(selectedIndex)
   const tableY = shell.contentY + 2
-  drawTable(buffer, sheet, rows, arrowVisible, shell.x, tableY)
+  drawTable(buffer, sheet, rows, arrowVisible && !reading, shell.x, tableY)
   const contentY = tableY + rows.length * 2 + 2
   const guide = instructionViews[guideIndex] ?? instructionViews[0]!
   const contentPaint = drawMarkdownViewport(
@@ -445,7 +447,7 @@ export function paintInstructions(
   )
   text(
     buffer,
-    '↑/↓ guide │ J/K scroll │ PgUp/PgDn page │ Backspace back │ Esc/Q quit',
+    readingFooter(reading),
     shell.x + 2,
     buffer.height - 2,
     shell.width - 4,
@@ -454,4 +456,9 @@ export function paintInstructions(
     TextAttributes.DIM,
   )
   return contentPaint
+}
+
+function readingFooter(reading: boolean): string {
+  const focus = reading ? 'Read [↑↓/j/k] Scroll [Tab] List' : 'List [↑↓] Select [Tab] Read [j/k] Scroll'
+  return `${focus} [PgUp/Dn] [Bksp] Back [Esc/q] Quit`
 }

@@ -8,7 +8,7 @@ import type { CliRenderer, RGBA } from '@opentui/core'
 
 import type { Bounds } from '../../../types.ts'
 import type { ViewerTheme } from '../atoms/theme.ts'
-import { DETAILS_PANE_WIDTH, HIERARCHY_PANE_WIDTH } from '../layout.ts'
+import { DETAILS_PANE_WIDTH, HIERARCHY_PANE_WIDTH, type terminalLayout } from '../layout.ts'
 import type { ViewerFocus } from '../navigation.ts'
 import { DETAILS_TABS, DETAILS_TAB_NAMES } from './details.ts'
 import { headerLine } from './chrome.ts'
@@ -18,19 +18,20 @@ import { accent, plain, quietText, styledLines, type Line, type PaneLines } from
 /** Columns a hierarchy row may use: the pane minus its frame. */
 export const HIERARCHY_CONTENT_WIDTH = HIERARCHY_PANE_WIDTH - 2
 /** Columns a details row may use: the pane minus its frame and one column of inset each side. */
-export const DETAILS_CONTENT_WIDTH = DETAILS_PANE_WIDTH - 4
 
 export interface DetailsView {
   title: string
   titleColor: RGBA
   /** The open tab; absent for flows and tasks, which have no tabs. */
   tab?: number
+  tabCount?: number
   lines: PaneLines
-  /** The first hidden row the reducer asked for; the cursor row still stays in view. */
+  /** Scroll distance after revealing the selected link, or from the top without a link. */
   scroll: number
 }
 
 export interface ScreenView {
+  layout: ReturnType<typeof terminalLayout>
   stats: string | undefined
   focus: ViewerFocus
   footer: string
@@ -65,7 +66,7 @@ interface ScrollPane {
   box: ScrollBoxRenderable
   text: TextRenderable
   /** Scrolls to the row; repeated once the toolkit has laid out new content, since it clamps to the old size. */
-  show(row: number): void
+  show(row: () => number): void
 }
 
 function scrollPane(renderer: CliRenderer, paddingX: number, onRow?: (row: number) => void): ScrollPane {
@@ -82,14 +83,13 @@ function scrollPane(renderer: CliRenderer, paddingX: number, onRow?: (row: numbe
   // The panes scroll from state; the toolkit's scrollbar would take a column and follow the mouse.
   box.verticalScrollBar.visible = false
   box.horizontalScrollBar.visible = false
-  let wanted = 0
+  let wanted = () => 0
+  const scrollAfterLayout = (): void => {
+    if (!box.isDestroyed) box.scrollTo(wanted())
+  }
   const text = new TextRenderable(renderer, {
     wrapMode: 'none',
     content: '',
-    onSizeChange() {
-      box.scrollTo(wanted)
-      box.requestRender()
-    },
     onMouseDown(event) {
       onRow?.(event.y - text.y)
     },
@@ -100,32 +100,38 @@ function scrollPane(renderer: CliRenderer, paddingX: number, onRow?: (row: numbe
     text,
     show(row) {
       wanted = row
-      box.scrollTo(row)
+      box.scrollTo(row())
+      // Content height is final after the frame, including a short diff returning to a long record.
+      renderer.off('frame', scrollAfterLayout)
+      renderer.once('frame', scrollAfterLayout)
     },
   }
 }
 
-/** The two details tabs, the open one in the accent. */
-function tabLine(theme: ViewerTheme, open: number): Line {
-  return DETAILS_TABS.flatMap((tab, index) => [
+/** The selection's available details tabs, with the open tab accented. */
+function tabLine(theme: ViewerTheme, open: number, count = 3): Line {
+  return DETAILS_TABS.slice(0, count).flatMap((tab, index) => [
     plain(theme, index === 0 ? ' ' : '  '),
     index === open ? accent(theme, DETAILS_TAB_NAMES[tab]) : quietText(theme, DETAILS_TAB_NAMES[tab]),
   ])
 }
 
-/** The hierarchy keeps its cursor row centred. */
-function centred(pane: PaneLines, height: number): number {
-  return pane.cursor === undefined ? 0 : scrollOffset(pane.cursor, pane.lines.length, height)
+/** Keep complete shortcut hints within the footer and reserve room for Help. */
+function fitFooter(value: string, width: number): string {
+  const hints = value.split('  ')
+  const help = hints.includes('[?] Help') ? '[?] Help' : ''
+  let line = ''
+  for (const hint of hints.filter(hint => hint !== help)) {
+    if (line.length + hint.length + help.length + 4 >= width - 2) continue
+    line += `${line ? '  ' : ''}${hint}`
+  }
+  return `${line}${help ? `  ${help}` : ''}`
 }
 
-/** The details keep the requested first row unless the cursor row would leave the window. */
-function keptInView(pane: PaneLines, requested: number, height: number): number {
-  let scroll = Math.max(0, Math.min(requested, Math.max(0, pane.lines.length - height)))
-  if (pane.cursor !== undefined && height > 0) {
-    if (pane.cursor < scroll) scroll = pane.cursor
-    if (pane.cursor >= scroll + height) scroll = pane.cursor - height + 1
-  }
-  return scroll
+/** Reveal a cursor only when it leaves the viewport, then apply explicit reading scroll. */
+export function detailsScrollOffset(pane: PaneLines, requested: number, height: number, previous = 0): number {
+  const cursorStart = pane.cursor === undefined ? 0 : scrollOffset(pane.cursor, pane.lines.length, height, previous)
+  return Math.max(0, Math.min(cursorStart + requested, Math.max(0, pane.lines.length - height)))
 }
 
 /**
@@ -138,7 +144,7 @@ export function mountScreen(renderer: CliRenderer, theme: ViewerTheme, handlers:
     id: 'groma-screen', width: '100%', height: '100%', flexDirection: 'column', paddingTop: 1, paddingBottom: 1, ...noFill,
   })
   const header = new TextRenderable(renderer, { height: 1, content: '' })
-  const body = new BoxRenderable(renderer, { flexGrow: 1, flexDirection: 'row', ...noFill })
+  const body = new BoxRenderable(renderer, { flexGrow: 1, flexDirection: 'row', justifyContent: 'center', ...noFill })
   const footer = new TextRenderable(renderer, { height: 1, content: '' })
 
   const hierarchyBox = new BoxRenderable(renderer, {
@@ -167,8 +173,12 @@ export function mountScreen(renderer: CliRenderer, theme: ViewerTheme, handlers:
   })
   map.width = '100%'
   const recap = new TextRenderable(renderer, { height: 1, content: '', wrapMode: 'none' })
+  const recapBox = new BoxRenderable(renderer, {
+    height: 3, flexShrink: 0, alignSelf: 'center', maxWidth: '100%', border: true, borderStyle: 'rounded', borderColor: theme.quiet, ...noFill,
+  })
+  recapBox.add(recap)
   mapBox.add(map)
-  mapBox.add(recap)
+  mapBox.add(recapBox)
 
   const detailsBox = new BoxRenderable(renderer, {
     width: DETAILS_PANE_WIDTH, height: '100%', flexDirection: 'column', border: true, borderStyle: 'rounded', borderColor: theme.quiet, ...noFill,
@@ -186,15 +196,30 @@ export function mountScreen(renderer: CliRenderer, theme: ViewerTheme, handlers:
   root.add(footer)
   renderer.root.add(root)
 
+  // Keep each reading view's position while a source or diff temporarily occupies the pane.
+  const readingOffsets = new Map<string, number>()
+  let hierarchyOffset = 0
   const applyDetails = (view: DetailsView | undefined): void => {
     detailsBox.visible = view !== undefined
     if (view === undefined) return
     detailsBox.title = ` ${view.title} `
     detailsBox.titleColor = view.titleColor
     tabs.visible = view.tab !== undefined
-    if (view.tab !== undefined) tabs.content = styledLines([tabLine(theme, view.tab)])
+    if (view.tab !== undefined) tabs.content = styledLines([tabLine(theme, view.tab, view.tabCount)])
     details.text.content = styledLines(view.lines.lines)
-    details.show(keptInView(view.lines, view.scroll, details.box.viewport.height))
+    const key = `${view.title}:${view.tab ?? ''}`
+    details.show(() => {
+      const height = details.box.viewport.height
+      const base = detailsScrollOffset(view.lines, 0, height, readingOffsets.get(key) ?? 0)
+      readingOffsets.set(key, base)
+      return detailsScrollOffset(view.lines, view.scroll, height, base)
+    })
+  }
+
+  const applyRecap = (line: Line | undefined): void => {
+    recapBox.visible = line !== undefined
+    recap.content = line === undefined ? '' : styledLines([line])
+    recapBox.width = 2 + (line ?? []).reduce((length, part) => length + part.text.length, 0)
   }
 
   return {
@@ -203,20 +228,27 @@ export function mountScreen(renderer: CliRenderer, theme: ViewerTheme, handlers:
       return { x: 0, y: 0, width: Math.max(1, map.frameBuffer.width), height: Math.max(1, map.frameBuffer.height) }
     },
     apply(view) {
+      mapBox.visible = view.layout.map
+      detailsBox.width = view.layout.detailsWidth
       header.content = styledLines([headerLine(theme, renderer.width, view.stats)])
-      footer.content = styledLines([[plain(theme, ` ${view.footer}`)]])
+      footer.content = styledLines([[plain(theme, ` ${fitFooter(view.footer, renderer.width)}`)]])
       hierarchyBox.visible = view.hierarchy !== undefined
       hierarchyBox.borderColor = view.focus === 'hierarchy' ? theme.selected : theme.quiet
       mapBox.borderColor = view.focus === 'architecture' ? theme.selected : theme.quiet
       detailsBox.borderColor = view.focus === 'details' ? theme.selected : theme.quiet
+      hierarchyBox.title = view.focus === 'hierarchy' ? ' Hierarchy · keys ' : ' Hierarchy '
+      mapBox.title = view.focus === 'architecture' ? ' Map · keys ' : ' Map '
       hierarchyIds = view.hierarchy?.ids
       if (view.hierarchy !== undefined) {
         hierarchy.text.content = styledLines(view.hierarchy.lines)
-        hierarchy.show(centred(view.hierarchy, hierarchy.box.viewport.height))
+        hierarchy.show(() => {
+          hierarchyOffset = detailsScrollOffset(view.hierarchy!, 0, hierarchy.box.viewport.height, hierarchyOffset)
+          return hierarchyOffset
+        })
       }
       legend.visible = view.legend !== undefined
-      if (view.legend !== undefined) legend.content = styledLines(view.legend)
-      recap.content = view.recap === undefined ? '' : styledLines([view.recap])
+      legend.content = styledLines(view.legend ?? [])
+      applyRecap(view.recap)
       applyDetails(view.details)
     },
     destroy() {

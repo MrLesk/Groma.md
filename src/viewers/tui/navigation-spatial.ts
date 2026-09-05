@@ -80,7 +80,8 @@ function middle(start: number, end: number): number {
 }
 
 function inDirection(from: DirectionalBounds, to: DirectionalBounds): boolean {
-  return middle(to.start, to.end) > middle(from.start, from.end)
+  const forward = middle(to.start, to.end) - middle(from.start, from.end)
+  return forward > 0 && (to.start >= from.end || perpendicularGap(from, to) === 0)
 }
 
 function perpendicularGap(from: DirectionalBounds, to: DirectionalBounds): number {
@@ -90,38 +91,32 @@ function perpendicularGap(from: DirectionalBounds, to: DirectionalBounds): numbe
   )
 }
 
-function nearestInDirection(
+export function nearestInDirection(
   anchors: ReadonlyMap<string, Bounds>,
   selectedId: string,
   originBounds: Bounds,
   direction: MapDirection,
-  sameLane = false,
 ): string | undefined {
   const origin = directionalBounds(originBounds, direction)
-  let best: { id: string; cross: number; forward: number; distance: number } | undefined
+  let best: { id: string; distance: number; centers: number } | undefined
   for (const [id, bounds] of anchors) {
     if (id === selectedId) continue
     const candidate = directionalBounds(bounds, direction)
     if (!inDirection(origin, candidate)) continue
     const cross = perpendicularGap(origin, candidate)
-    if (sameLane && cross > 0) continue
     const forward = middle(candidate.start, candidate.end) - middle(origin.start, origin.end)
     const perpendicular = middle(candidate.crossStart, candidate.crossEnd)
       - middle(origin.crossStart, origin.crossEnd)
-    const distance = forward * forward + perpendicular * perpendicular
+    const gap = Math.max(0, candidate.start - origin.end)
+    const distance = gap * gap + cross * cross
+    const centers = forward * forward + perpendicular * perpendicular
     if (
       best === undefined
-      || cross < best.cross
-      || (cross === best.cross && forward < best.forward)
-      || (cross === best.cross && forward === best.forward && distance < best.distance)
-      || (
-        cross === best.cross
-        && forward === best.forward
-        && distance === best.distance
-        && id < best.id
-      )
+      || distance < best.distance
+      || (distance === best.distance && centers < best.centers)
+      || (distance === best.distance && centers === best.centers && id < best.id)
     ) {
-      best = { id, cross, forward, distance }
+      best = { id, distance, centers }
     }
   }
   return best?.id
@@ -143,16 +138,12 @@ function moveRoot(
   return islands[at + (direction === 'right' ? 1 : -1)]?.[0]
 }
 
-/** Read buildings in layout order; crossing an end enters the neighbouring container. */
-function readOn(
+/** Crossing a horizontal edge enters the neighbouring container. */
+function crossContainer(
   model: TerminalViewModel,
-  anchors: ReadonlyMap<string, Bounds>,
   selected: AnnotatedElement,
   direction: 'left' | 'right',
 ): string | undefined {
-  const keys = [...anchors.keys()]
-  const next = keys[keys.indexOf(selected.representationId) + (direction === 'right' ? 1 : -1)]
-  if (next !== undefined) return next
   const container = ancestorOfKind(selected, 'container', elementsById(model))
   const neighbour = container === undefined
     ? undefined
@@ -178,9 +169,9 @@ export function moveView(
   const anchors = mapAnchors(model, level, selected.representationId, state.mapWidth)
   const origin = anchors.get(selected.representationId)
   if (origin === undefined) return { level, currentId: selected.representationId }
-  const next = direction === 'left' || direction === 'right'
-    ? readOn(model, anchors, selected, direction)
-    : nearestInDirection(anchors, selected.representationId, origin, direction, true)
-      ?? nearestInDirection(anchors, selected.representationId, origin, direction)
+  const next = nearestInDirection(anchors, selected.representationId, origin, direction)
+    ?? (direction === 'left' || direction === 'right'
+      ? crossContainer(model, selected, direction)
+      : undefined)
   return { level, currentId: next ?? selected.representationId }
 }

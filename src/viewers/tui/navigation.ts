@@ -1,5 +1,5 @@
-import { outgoingActions, travelledBy, worldCommands } from '../action-path.ts'
-import { elementWorkGroups } from '../../work/pins.ts'
+import type { TaskDiffPayload } from '../source/diff.ts'
+import { outgoingActions, travelledBy } from '../action-path.ts'
 import { parentOfElements, promotedPeer } from '../relationship-text.ts'
 import { litLegs } from './flow.ts'
 import type { PaneVisibility } from './layout.ts'
@@ -11,7 +11,7 @@ import {
   moveView,
 } from './navigation-spatial.ts'
 import { compareSemanticElements } from '../../element-order.ts'
-import { ancestorsOf, initialTree, semanticTreeRows } from './tree.ts'
+import { ancestorsOf, initialTree } from './tree.ts'
 import type { TreeState } from './tree.ts'
 import type { TerminalViewModel } from './model.ts'
 import type { SearchState } from './navigation-search.ts'
@@ -23,8 +23,9 @@ import {
   type SourceViewState,
 } from './navigation-details.ts'
 import { initialWorkFocus } from './work/model.ts'
-import type { WorkFocus } from './work/model.ts'
-import { reduceWorkFocus } from './work/navigation.ts'
+import type { WorkFocus, WorkListSettings } from './work/model.ts'
+import { reduceComponentTasks, reduceWorkFocus } from './work/navigation.ts'
+import { reduceTree } from './navigation-tree.ts'
 import { firstRootRow } from './projection-root.ts'
 import type {
   AnnotatedElement,
@@ -34,10 +35,11 @@ import type {
 } from '../../types.ts'
 
 export type ViewerFocus = 'architecture' | 'hierarchy' | 'details'
-export type DetailsTab = 'what' | 'how'
+export type DetailsTab = 'what' | 'how' | 'tasks'
 export type MapDirection = 'up' | 'down' | 'left' | 'right'
 export type ViewerAction =
   | 'enter'
+  | 'toggle-selection'
   | 'leave'
   | MapDirection
   | 'tab'
@@ -49,7 +51,6 @@ export type ViewerAction =
   | 'dismiss'
   | 'clear-action'
   | 'step-action'
-  | 'toggle-details-tab'
   | 'toggle-work'
 
 type MapViewerAction = Exclude<ViewerAction, 'toggle-history'>
@@ -60,7 +61,7 @@ export interface ViewerState {
   focus: ViewerFocus
   tree: TreeState
   panes: PaneVisibility
-  /** First hidden content row of an overflowing details pane. */
+  /** Rows beyond the selected link, or from the top in a plain reading view. */
   detailsScroll: number
   detailsTab: DetailsTab
   /** The project profile is showing in the details pane instead of the selection. */
@@ -68,7 +69,7 @@ export interface ViewerState {
   /** The keys box is showing in the details pane, over whatever it showed before. */
   keys?: boolean
   /** The full record of one task is showing in the details pane; its details arrive from the work source. */
-  taskRecord?: { id: string; details?: WorkItemDetails }
+  taskRecord?: { id: string; row: number; details?: WorkItemDetails; diff?: TaskDiffPayload | null }
   /** The declarations of the selected component's TypeScript files, read once per selection for the How tab. */
   codeStructure?: CodeStructureState
   /** A source file open read-only in the details pane at one line; its text arrives from the reader. */
@@ -79,9 +80,11 @@ export interface ViewerState {
   activeActionId?: string
   /** The actor the command was picked from; scopes the walk's approach to them. */
   activeActionActorId?: string
+  /** Map selection restored when the checked flow is cleared. */
+  beforeFlow?: Pick<ViewerState, 'level' | 'currentId'>
   /** The traced leg of the active command's walk; absent while the whole walk shows. */
   actionStep?: number
-  /** The command row the details cursor rests on; Enter picks it. */
+  /** The relationship, task, file or reference under the details cursor. */
   actionCursor?: string
   search?: SearchState
   /** The current-branch revision list shown in the hierarchy pane. */
@@ -90,8 +93,11 @@ export interface ViewerState {
   revisionId?: string
   /** The map columns used by the fitted layouts and their arrow order. */
   mapWidth: number
+  /** Terminal columns used by the shared pane and reading layout. */
+  terminalWidth: number
   /** Present only while the terminal is using its task-focused side panes. */
   work?: WorkFocus
+  workList?: WorkListSettings
 }
 
 function elementsById(world: TerminalViewModel): Map<string, AnnotatedElement> {
@@ -120,8 +126,16 @@ export function initialState(world: TerminalViewModel): ViewerState {
     detailsScroll: 0,
     detailsTab: 'what',
     mapWidth: 80,
+    terminalWidth: 120,
     revisionId: world.revision?.id,
   }
+}
+
+/** Actor flows have no build tab; component tasks remain beside meaning and evidence. */
+export function detailsTabs(world: TerminalViewModel, currentId: string | undefined): DetailsTab[] {
+  const element = world.elements.find(item => item.representationId === currentId)
+  if (element?.kind === 'actor') return ['what']
+  return element?.kind === 'component' ? ['what', 'how', 'tasks'] : ['what', 'how']
 }
 
 /** The pickable command rows the details pane shows for its tab. */
@@ -129,22 +143,23 @@ export function detailsCommands(
   world: TerminalViewModel,
   state: Pick<ViewerState, 'currentId' | 'detailsTab' | 'profile' | 'keys'>,
 ): AnnotatedRelationship[] {
-  if (state.profile || state.keys) return []
+  if (state.profile || state.keys || state.detailsTab !== 'what') return []
   if (state.currentId === undefined) return []
-  return state.detailsTab === 'how' ? travelledBy(state.currentId, world) : selectionRelationships(world, state.currentId)
+  return [...selectionRelationships(world, state.currentId), ...selectionFlows(world, state.currentId)]
 }
 
-/** The tasks touching the selection, in the details pane's order: to do, in progress, done. */
-export function detailsTasks(world: TerminalViewModel, state: Pick<ViewerState, 'currentId' | 'detailsTab' | 'profile' | 'keys'>): string[] {
-  if (state.currentId === undefined || state.detailsTab === 'how' || state.profile || state.keys || world.work === undefined) return []
-  return elementWorkGroups(world.work, state.currentId, world).flatMap(group => group.items.map(item => item.id))
+/** Actor commands crossing a software element appear as flow checkboxes. */
+export function selectionFlows(world: TerminalViewModel, elementId: string): AnnotatedRelationship[] {
+  return world.elements.some(element => element.representationId === elementId && element.kind === 'actor')
+    ? [] : travelledBy(elementId, world)
 }
 
 /** The selection's relationships in the details pane's order: its own outgoing ones, then everything pointing at it or its promoted parent. */
 export function selectionRelationships(world: TerminalViewModel, elementId: string): AnnotatedRelationship[] {
   const parentOf = parentOfElements(world.elements)
   const incoming = world.relationships.filter(relationship => promotedPeer(relationship, elementId, parentOf)?.outgoing === false)
-  return [...outgoingActions(elementId, world), ...incoming]
+  const flows = new Set(selectionFlows(world, elementId).map(flow => flow.id))
+  return [...outgoingActions(elementId, world), ...incoming].filter(relationship => !flows.has(relationship.id))
 }
 
 /** A lit walk: its command and, for an actor's own pick, the picker. */
@@ -153,25 +168,12 @@ export interface LitAction {
   actorId?: string
 }
 
-/**
- * The walk the map lights: while the details cursor rests on a command
- * that row is previewed, otherwise the committed pick shows.
- */
+/** The one selected flow or relationship, temporarily quiet while Work owns the map. */
 export function litAction(
-  world: TerminalViewModel,
+  _world: TerminalViewModel,
   state: ViewerState,
 ): LitAction {
   if (state.work !== undefined) return {}
-  if (state.focus === 'details' && state.actionCursor !== undefined) {
-    const browsing = detailsCommands(world, state)
-      .some(command => command.id === state.actionCursor)
-    if (browsing) {
-      return {
-        id: state.actionCursor,
-        actorId: state.detailsTab === 'what' ? state.currentId : undefined,
-      }
-    }
-  }
   return { id: state.activeActionId, actorId: state.activeActionActorId }
 }
 
@@ -199,216 +201,105 @@ export function syncTree(world: TerminalViewModel, state: ViewerState): ViewerSt
     ...state,
     tree: { ...state.tree, cursor: state.currentId, collapsed },
     detailsScroll: 0,
+    detailsTab: detailsTabs(world, state.currentId).includes(state.detailsTab) ? state.detailsTab : 'what',
   }
 }
 
-function reduceTree(
-  world: TerminalViewModel,
-  current: ViewerState,
-  action: ViewerAction,
-): ViewerState {
-  // One cursor space: the flow rows sit above the tree rows.
-  const commands = worldCommands(world)
-  const rows = semanticTreeRows(world, current.currentId === undefined ? [] : [current.currentId], current.tree)
-  const ids = [...commands.map(command => command.id), ...rows.map(row => row.id)]
-  if (ids.length === 0) return current
-  const index = Math.max(0, ids.indexOf(current.tree.cursor ?? ''))
-  if (action === 'up' || action === 'down') {
-    const step = action === 'down' ? 1 : -1
-    const next = ids[Math.max(0, Math.min(ids.length - 1, index + step))]!
-    return { ...current, tree: { ...current.tree, cursor: next } }
-  }
-  if (index < commands.length) {
-    if (action === 'enter') {
-      return {
-        ...current,
-        activeActionId: commands[index]!.id,
-        activeActionActorId: undefined,
-        actionStep: undefined,
-      }
-    }
-    if (action === 'right') return { ...current, focus: 'architecture' }
-    return current
-  }
-  const cursor = rows[index - commands.length]!
-  if (action === 'left') {
-    if (cursor.expanded) {
-      const collapsed = new Set(current.tree.collapsed)
-      collapsed.add(cursor.id)
-      const expanded = new Set(current.tree.expanded)
-      expanded.delete(cursor.id)
-      return { ...current, tree: { ...current.tree, expanded, collapsed } }
-    }
-    const parent = elementsById(world).get(cursor.id)?.parent
-    if (parent === null || parent === undefined) return current
-    return { ...current, tree: { ...current.tree, cursor: parent } }
-  }
-  if (action === 'right') {
-    // Nothing left to expand: Right keeps moving, back onto the map.
-    if (!cursor.hasChildren || cursor.expanded) {
-      return { ...current, focus: 'architecture' }
-    }
-    return { ...current, tree: expandRow(current.tree, cursor.id) }
-  }
-  if (action === 'enter') {
-    const element = elementsById(world).get(cursor.id)
-    if (!element) return current
-    // Enter opens what it selects: a collapsed parent expands in place.
-    const tree = cursor.hasChildren && !cursor.expanded
-      ? expandRow(current.tree, cursor.id)
-      : current.tree
-    return syncTree(world, {
-      ...current,
-      tree,
-      level: levelFor(element),
-      currentId: element.representationId,
-    })
-  }
-  return current
-}
-
-function expandRow(tree: TreeState, id: string): TreeState {
-  const expanded = new Set(tree.expanded)
-  expanded.add(id)
-  const collapsed = new Set(tree.collapsed)
-  collapsed.delete(id)
-  return { ...tree, expanded, collapsed }
-}
-
-function reduceMapNavigation(
-  world: TerminalViewModel,
-  state: ViewerState,
-  action: MapViewerAction,
-): ViewerState {
-  const resolved = resolve(world, state)
-  const current: ViewerState = {
-    ...state,
-    currentId: resolved.currentId,
-  }
-
-  if (action === 'toggle-work' && current.work === undefined) {
-    return {
-      ...current,
-      work: initialWorkFocus(world.work, {
-        focus: current.focus,
-        panes: current.panes,
-        detailsScroll: current.detailsScroll,
-        actionCursor: current.actionCursor,
-      }),
-      focus: 'hierarchy',
-      panes: { hierarchy: true, details: true },
-      profile: false,
-      detailsScroll: 0,
-      actionCursor: undefined,
-    }
-  }
-  if (current.work !== undefined) return reduceWorkFocus(world, current, action)
-  if (action === 'toggle-work') return current
-  if (action === 'tab') {
-    if (current.focus === 'hierarchy') return { ...current, focus: 'architecture' }
-    return syncTree(world, {
-      ...current,
-      focus: 'hierarchy',
-      panes: { ...current.panes, hierarchy: true },
-    })
-  }
-  if (action === 'toggle-details' || action === 'toggle-hierarchy' || action === 'toggle-profile' || action === 'toggle-keys') {
-    return reducePaneKeys(world, current, action)
-  }
-  if (action === 'dismiss' && current.sourceView !== undefined) return { ...current, sourceView: undefined, detailsScroll: 0 }
-  if (action === 'dismiss' && current.diffView !== undefined) return { ...current, diffView: undefined, detailsScroll: 0 }
-  if (action === 'dismiss' && current.taskRecord !== undefined) return { ...current, taskRecord: undefined, detailsScroll: 0 }
-  if (action === 'dismiss' && current.keys) return { ...current, keys: false, detailsScroll: 0 }
-  if (action === 'dismiss' && current.profile) return { ...current, profile: false, detailsScroll: 0 }
-  if (action === 'clear-action') {
-    return {
-      ...current,
-      activeActionId: undefined,
-      activeActionActorId: undefined,
-      actionStep: undefined,
-    }
-  }
-  if (action === 'step-action') {
-    const lit = litAction(world, current)
-    const legs = litLegs(world, lit)
-    if (legs.length === 0) return current
-    return { ...current, actionStep: ((current.actionStep ?? -1) + 1) % legs.length }
-  }
-  if (action === 'toggle-details-tab') {
-    return {
-      ...current,
-      detailsTab: current.detailsTab === 'what' ? 'how' : 'what',
-      detailsScroll: 0,
-    }
-  }
-  if (action === 'dismiss') {
-    const view = current.level === 'components'
-      ? leaveView(world, current, resolved.selected)
-      : { level: current.level, currentId: current.currentId }
-    return syncTree(world, {
-      ...current,
-      ...view,
-      focus: 'architecture',
-      panes: { ...current.panes, details: false },
-    })
-  }
+function reduceMapNavigation(world: TerminalViewModel, state: ViewerState, action: MapViewerAction): ViewerState {
+  const { selected, currentId } = resolve(world, state)
+  const current = { ...state, currentId }
+  if (action === 'toggle-keys' || action === 'toggle-details' || action === 'toggle-hierarchy') return reducePaneKeys(world, current, action)
+  const workAction = current.work === undefined ? undefined : reduceWorkFocus(world, current, action)
+  if (workAction !== undefined) return workAction
+  const shortcut = reduceShortcuts(world, current, action)
+  if (shortcut !== undefined) return shortcut
+  if (action === 'dismiss') return { ...current, focus: 'architecture' }
   if (action === 'leave') {
     return syncTree(world, {
-      ...current,
-      ...leaveView(world, current, resolved.selected),
-      focus: 'architecture',
+      ...current, ...leaveView(world, current, selected), focus: 'architecture',
     })
   }
-  if (current.focus === 'hierarchy') {
-    return reduceTree(world, current, action)
-  }
-  if (current.focus === 'details') {
-    const commands = detailsCommands(world, current)
-    const tasks = detailsTasks(world, current)
-    const handled = reduceDetailsNavigation(
-      world,
-      current,
-      action,
-      commands.map(item => item.id),
-      tasks,
-    )
-    if (handled !== undefined) return handled
-    if (action === 'enter') {
-      const picked = commands.find(item => item.id === current.actionCursor)
-      if (picked === undefined) return current
-      // Enter on the row already lit follows the relationship to its other end.
-      if (picked.id === current.activeActionId) return followRelationship(world, current, picked)
-      // Enter commits the walk the map is already lighting.
-      const lit = litAction(world, current)
-      return {
-        ...current,
-        activeActionId: lit.id,
-        activeActionActorId: lit.actorId,
-        actionStep: undefined,
-      }
-    }
-    if (action === 'left') return { ...current, focus: 'architecture' }
-    return current
-  }
+  if (current.focus === 'hierarchy') return reduceTree(world, current, action)
+  if (current.focus === 'details') return reduceSelectionDetails(world, current, action)
   if (action === 'enter') {
-    if (resolved.selected && canEnter(resolved.selected)) {
-      return syncTree(world, {
-        ...current,
-        ...enterView(world, resolved.selected),
-      })
+    return selected && canEnter(selected)
+      ? syncTree(world, { ...current, ...enterView(world, selected) })
+      : enterDetails(current)
+  }
+  if (!selected || !isMapDirection(action)) return current
+  return syncTree(world, { ...current, ...moveView(world, current, selected, action) })
+}
+
+function isMapDirection(action: ViewerAction): action is MapDirection {
+  return action === 'up' || action === 'down' || action === 'left' || action === 'right'
+}
+
+function reduceShortcuts(world: TerminalViewModel, current: ViewerState, action: MapViewerAction): ViewerState | undefined {
+  if (action === 'toggle-work') {
+    return {
+      ...current, work: initialWorkFocus(world.work, current, current.workList), focus: 'hierarchy',
+      panes: { hierarchy: true, details: true }, profile: false, detailsScroll: 0, actionCursor: undefined,
     }
-    return enterDetails(current)
   }
-  if (!resolved.selected) {
-    return current
+  if (action === 'tab') {
+    if (current.focus !== 'details' || current.taskRecord || current.sourceView || current.diffView || current.profile || current.keys) return current
+    const tabs = detailsTabs(world, current.currentId)
+    if (tabs.length < 2) return current
+    return { ...current, detailsTab: tabs[(tabs.indexOf(current.detailsTab) + 1) % tabs.length]!, detailsScroll: 0, actionCursor: undefined }
   }
-  const moved = moveView(world, current, resolved.selected, action)
-  if (moved.level === current.level && moved.currentId === current.currentId) {
-    // Nothing lies further that way; the next stop is the side pane.
-    if (action === 'left') return reduceViewer(world, current, 'tab')
-    if (action === 'right') return enterDetails(current)
+  if (action === 'toggle-profile') {
+    return reducePaneKeys(world, current, action)
   }
-  return syncTree(world, { ...current, ...moved })
+  if (action === 'dismiss') return dismissDetailsMode(current)
+  return reduceFlowKeys(world, current, action)
+}
+
+function dismissDetailsMode(current: ViewerState): ViewerState | undefined {
+  if (current.sourceView !== undefined) return { ...current, sourceView: undefined, detailsScroll: current.sourceView.returnScroll }
+  if (current.diffView !== undefined) return { ...current, diffView: undefined, detailsScroll: 0 }
+  if (current.taskRecord !== undefined) return { ...current, taskRecord: undefined, detailsScroll: 0 }
+  if (current.keys) return { ...current, keys: false, focus: 'architecture', detailsScroll: 0 }
+  if (current.profile) return { ...current, profile: false, focus: 'architecture', detailsScroll: 0 }
+  return undefined
+}
+
+function reduceFlowKeys(world: TerminalViewModel, current: ViewerState, action: MapViewerAction): ViewerState | undefined {
+  if (action === 'clear-action') {
+    return clearFlow(current)
+  }
+  if (action !== 'step-action') return undefined
+  const legs = litLegs(world, litAction(world, current))
+  return legs.length === 0 ? current : { ...current, actionStep: ((current.actionStep ?? -1) + 1) % legs.length }
+}
+
+function clearFlow(current: ViewerState): ViewerState {
+  return { ...current, ...current.beforeFlow, beforeFlow: undefined, activeActionId: undefined, activeActionActorId: undefined, actionStep: undefined, detailsScroll: 0 }
+}
+
+/** A single checked flow temporarily opens the root, preserving the original map selection. */
+export function toggleFlow(current: ViewerState, id: string, actorId?: string): ViewerState {
+  if (current.activeActionId === id) return clearFlow(current)
+  return {
+    ...current, beforeFlow: current.beforeFlow ?? { level: current.level, currentId: current.currentId },
+    level: 'context', activeActionId: id, activeActionActorId: actorId, actionStep: undefined,
+    panes: { ...current.panes, details: true }, detailsScroll: 0,
+  }
+}
+
+function reduceSelectionDetails(world: TerminalViewModel, current: ViewerState, action: MapViewerAction): ViewerState {
+  if (current.detailsTab === 'tasks' && !current.profile && !current.keys && current.taskRecord === undefined) {
+    return reduceComponentTasks(world, current, action)
+  }
+  const commands = detailsCommands(world, current)
+  const handled = reduceDetailsNavigation(world, current, action, commands.map(item => item.id))
+  if (handled !== undefined) return handled
+  if (action !== 'enter' && action !== 'toggle-selection') return current
+  const picked = commands.find(item => item.id === current.actionCursor)
+  if (picked === undefined) return current
+  const actorFlow = current.detailsTab === 'what' && world.elements.some(element => element.representationId === current.currentId && element.kind === 'actor')
+  const flow = actorFlow || selectionFlows(world, current.currentId!).some(flow => flow.id === picked.id)
+  if (!flow && action === 'enter' && picked.id === current.activeActionId) return followRelationship(world, current, picked)
+  return toggleFlow(current, picked.id, actorFlow ? current.currentId : undefined)
 }
 
 /** The one terminal reducer: history owns its modal rules, then the normal map handles everything else. */
@@ -422,7 +313,7 @@ export function reduceViewer(
 }
 
 /**
- * The pane keys: [ and ] fold or open a pane, p shows the project profile, ? the keys box. A folding pane
+ * The pane keys focus their pane, or fold it when already focused. A folding pane
  * drops its focus to the map and folding the details ends the profile and the box; the profile needs a project.
  */
 function reducePaneKeys(
@@ -432,25 +323,23 @@ function reducePaneKeys(
 ): ViewerState {
   if (action === 'toggle-keys') return toggleDetailsMode(current, 'keys')
   if (action === 'toggle-profile') return world.project === undefined ? current : toggleDetailsMode(current, 'profile')
-  if (action === 'toggle-details' || action === 'toggle-hierarchy') {
-    const pane = action === 'toggle-details' ? 'details' : 'hierarchy'
-    const open = !current.panes[pane]
-    return {
-      ...current,
-      panes: { ...current.panes, [pane]: open },
-      focus: !open && current.focus === pane ? 'architecture' : current.focus,
-      profile: current.profile === true && !(pane === 'details' && !open),
-      keys: current.keys === true && !(pane === 'details' && !open),
-    }
+  const pane = action === 'toggle-details' ? 'details' : 'hierarchy'
+  const open = current.focus !== pane || !current.panes[pane]
+  const closingDetails = pane === 'details' && !open
+  return {
+    ...current, panes: { ...current.panes, [pane]: open },
+    tree: pane === 'hierarchy' && open ? { ...current.tree, cursor: current.tree.cursor ?? current.currentId } : current.tree,
+    focus: open ? pane : current.focus === pane ? 'architecture' : current.focus,
+    profile: closingDetails ? false : current.profile,
+    keys: closingDetails ? false : current.keys,
   }
-  return current
 }
 
 /** A details mode, the profile or the keys box, closes when showing and otherwise opens the pane with it. */
 function toggleDetailsMode(current: ViewerState, mode: 'profile' | 'keys'): ViewerState {
   return current[mode]
     ? { ...current, [mode]: false, detailsScroll: 0 }
-    : { ...current, [mode]: true, panes: { ...current.panes, details: true }, detailsScroll: 0 }
+    : { ...current, [mode]: true, focus: 'details', panes: { ...current.panes, details: true }, detailsScroll: 0 }
 }
 
 /** The other end of a relationship becomes the selection, at its own level. */

@@ -20,7 +20,26 @@ test.concurrent('a route runs orthogonally from outside its source to outside it
 
   assertOrthogonal(route)
   assert.equal(route[0]!.x, source.x + source.width)
-  assert.equal(route.at(-1)!.y, target.y - 1)
+  assert.equal(route.at(-1)!.x, target.x - 1)
+})
+
+test.concurrent('routes avoid foreign cards and do not re-enter their endpoints', () => {
+  const source = { x: 0, y: 0, width: 10, height: 6 }
+  const target = { x: 40, y: 12, width: 10, height: 6 }
+  const foreign = { x: 15, y: 0, width: 20, height: 18 }
+  const route = routeBetween(source, target, [foreign])
+  assert.ok(route.length >= 3)
+  assertOrthogonal(route)
+  for (let index = 1; index < route.length; index += 1) {
+    const from = route[index - 1]!
+    const to = route[index]!
+    const length = Math.abs(to.x - from.x) + Math.abs(to.y - from.y)
+    for (let step = 0; step <= length; step += 1) {
+      const x = from.x + Math.sign(to.x - from.x) * step
+      const y = from.y + Math.sign(to.y - from.y) * step
+      assert.ok([source, target, foreign].every(box => x < box.x || x >= box.x + box.width || y < box.y || y >= box.y + box.height))
+    }
+  }
 })
 
 test.concurrent('root routes promote hidden endpoints to their rows and skip rows of one island', () => {

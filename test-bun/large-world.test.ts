@@ -117,11 +117,12 @@ test.concurrent('a route is painted when a segment crosses the viewport, not whe
   assert.equal(routeTouches(around, viewport), false)
 })
 
-test.concurrent('the selected island or container stays centred after every arrow move and the map scrolls only as far as the selection needs', async () => {
+test.concurrent('arrow navigation keeps root framing and bounds component follow', async () => {
   const world = await largeWorld
   const viewport = { x: 0, y: 0, width: 100, height: 20 }
   let state = { ...initialState(world), mapWidth: viewport.width }
   let camera: TerminalCamera | undefined
+  let previousProjection: ReturnType<typeof projectWorld> | undefined
   const walk = ['down', 'down', 'down', 'right', 'right', 'down', 'down', 'down', 'down', 'down', 'down', 'up', 'left', 'enter',
     'right', 'right', 'right', 'right', 'right', 'down', 'down', 'right', 'right', 'up', 'left', 'left', 'left', 'left', 'left', 'left', 'left'] as const
   for (const action of walk) {
@@ -131,14 +132,22 @@ test.concurrent('the selected island or container stays centred after every arro
     const projection = projectWorld(world, { viewport, level: state.level, currentId: state.currentId, camera })
     const selected = projection.items.find(item => item.representationId === projection.currentId)!
     const holder = projection.items.find(item => (item.shape === 'island' || item.shape === 'slab') && encloses(item.worldBounds, selected.worldBounds))!
-    if (projection.worldBounds.width > viewport.width) {
+    if (state.level === 'components') {
+      const bounds = projection.worldBounds
+      assert.ok(projection.camera.x >= bounds.x && projection.camera.x + viewport.width <= bounds.x + bounds.width)
+      assert.ok(projection.camera.y >= bounds.y && projection.camera.y + viewport.height <= bounds.y + bounds.height)
+    } else if (projection.worldBounds.width > viewport.width) {
       assert.ok(Math.abs(holder.cellBounds.x + holder.cellBounds.width / 2 - viewport.width / 2) <= 1, `${action}: ${holder.title} off centre`)
     }
     assert.ok(selected.cellBounds.y >= 0 && selected.cellBounds.y + selected.cellBounds.height <= viewport.height, `${action}: ${selected.title} hidden`)
-    const wasVisible = camera !== undefined
-      && selected.worldBounds.y >= camera.y + 1
-      && selected.worldBounds.y + selected.worldBounds.height <= camera.y + viewport.height - 1
-    if (wasVisible) assert.equal(projection.camera.y, camera!.y, `${action}: scrolled without need`)
+    if (previousProjection?.scope === projection.scope) {
+      assert.deepEqual(
+        projection.items.map(item => [item.key, item.worldBounds]),
+        previousProjection.items.map(item => [item.key, item.worldBounds]),
+        `${action}: world layout moved`,
+      )
+    }
     camera = projection.camera
+    previousProjection = projection
   }
 })
