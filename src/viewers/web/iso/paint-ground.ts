@@ -1,4 +1,3 @@
-import { groupAddress } from '../../../naming.ts'
 import { ISLAND_FONT, ISLAND_SPACING, SURFACE_FONT, textWidth } from '../../../sheet/measure.ts'
 import type { Compass, PlateText, ProjectPlate, RichPlateText, Segment } from './blueprint.ts'
 import type { ProjectedScene, ProjectedZone, ProjectionView } from './project.ts'
@@ -120,8 +119,6 @@ export function paintSheet(layer: SVGGElement, scene: ProjectedScene): void {
 
 function zoneGroup(zone: ProjectedZone, view: ProjectionView): SVGGElement {
   const group = svg('g', {}, 'zone')
-  group.dataset.group = groupAddress(zone.zone.parent, zone.zone.name)
-  group.dataset.groupName = zone.zone.name
   group.append(
     svg('polygon', { points: pointsAttribute(zone.polygon) }, 'ground'),
     surfaceText(zone.text, SURFACE_FONT, 'label', view, true),

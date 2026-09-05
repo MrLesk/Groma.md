@@ -47,12 +47,6 @@ function gridPattern(): { pattern: SVGPatternElement; lines: SVGPathElement[] } 
   return { pattern, lines: paths }
 }
 
-/** A component group on the map: its address <container-id>/<group-kebab> and its name. */
-export interface ZoneAddress {
-  address: string
-  name: string
-}
-
 export interface IsoMap {
   svg: HTMLElement
   /** Applies the camera and reports whether its compositor scale changed. */
@@ -70,8 +64,6 @@ export interface IsoMap {
   isSheet(target: EventTarget | null): boolean
   /** True when a click or key target is the project plate's pencil action. */
   isProjectEdit(target: EventTarget | null): boolean
-  /** The group whose zone was pressed. */
-  hitGroup(target: EventTarget | null): ZoneAddress | undefined
   /** The point a pin's foot stands on: the roof of a building, the top of a slab or the surface of a system island, near its left corner. */
   anchorOf(id: string): Point | undefined
 }
@@ -278,10 +270,6 @@ export function createMap(host: HTMLElement): IsoMap {
     },
     isProjectEdit(target) {
       return target instanceof Element && target.closest('[data-project-edit]') !== null
-    },
-    hitGroup(target) {
-      const zone = target instanceof Element ? target.closest<HTMLElement>('[data-group]') : null
-      return zone === null ? undefined : { address: zone.dataset.group!, name: zone.dataset.groupName! }
     },
     anchorOf(id) {
       const building = painted?.buildings.find(item => item.building.representationId === id)

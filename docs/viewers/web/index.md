@@ -84,7 +84,7 @@ The map gesture toolbar is hidden while its interactions are unfinished.
 Draft software and relationship creation remain available through the CLI.
 
 Shift-click selection still offers Group as and Combine into through the
-shared operations. Pressing a group zone opens Rename and Dissolve. Historical
+shared operations. Group names and zones do not open editing controls. Historical
 and published maps keep reading and navigation but expose no write controls.
 
 Neutral current relationships are solid and neutral draft relationships have
