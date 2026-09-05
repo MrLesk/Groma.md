@@ -67,8 +67,9 @@ export const creditsCss = `
   #credits > summary { width: 32px; padding: 0; list-style: none; }
   #credits > summary::-webkit-details-marker { display: none; }
   #credits .credits-menu { right: 0; padding: 0; }
-  #credits h1 { margin: 0; padding: 14px 16px; border-bottom: 1px solid var(--hairline); font-size: 16px; }
-  #credits .credits-repository { display: block; padding: 12px 16px; border-bottom: 1px solid var(--hairline); }
+  #credits .about-logo { display: block; width: 220px; max-width: 100%; height: auto; }
+  #credits p { margin: 10px 0; line-height: 1.6; white-space: normal; }
+  #credits .credits-repository { display: inline-block; }
   #credits section { padding: 12px 16px 14px; }
   #credits section + section { border-top: 1px solid var(--hairline); }
   #credits h2 { margin: 0 0 6px; color: var(--muted); font-size: 10px; font-weight: 400; letter-spacing: 0.14em; text-transform: uppercase; }
@@ -90,12 +91,14 @@ function creditSection(title: string, credits: Credit[]): string {
   return `<section><h2>${title}</h2><ul>${credits.map(creditRow).join('')}</ul></section>`
 }
 
-/** The header control and its manifest-derived third-party credits. */
-export function creditsControl(infoIcon: string): string {
+/** Introduces Groma above its manifest-derived third-party credits. */
+export function creditsControl(infoIcon: string, lockup: string): string {
   const runtime = creditSection('Runtime libraries', thirdPartyCredits.runtime)
   const development = creditSection('Development tools', thirdPartyCredits.development)
-  return `<details id="credits"><summary class="chrome-button" aria-label="Credits">${infoIcon}</summary>`
-    + '<div class="anchored-popover credits-menu" role="dialog" aria-label="Credits"><h1>Credits</h1>'
+  return `<details id="credits"><summary class="chrome-button" aria-label="About Groma">${infoIcon}</summary>`
+    + '<div class="anchored-popover credits-menu" role="dialog" aria-label="About Groma">'
+    + `<section aria-label="Groma.md"><div class="about-logo">${lockup}</div>`
+    + '<p>Your software architecture as Markdown in Git, and one C4 map you can explore. Groma connects source evidence with the responsibilities and relationships described by people and coding agents.</p>'
     + '<a class="credits-repository" href="https://github.com/MrLesk/Groma.md" target="_blank" rel="noreferrer">Groma repository</a>'
-    + `${runtime}${development}</div></details>`
+    + `</section>${runtime}${development}</div></details>`
 }

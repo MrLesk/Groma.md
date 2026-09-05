@@ -172,6 +172,8 @@ const style = `
   }
   #help section { padding: 10px 14px; }
   #help section + section { border-top: 1px solid var(--hairline); }
+  #help p { margin: 0; line-height: 1.6; white-space: normal; }
+  #help p + p { margin-top: 8px; }
   #help h2 { margin: 0 0 6px; color: var(--muted); font-size: 9px; font-weight: 400; letter-spacing: 0.12em; text-transform: uppercase; }
   #help dl { margin: 0; }
   #help dl > div { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 26px; }
@@ -390,6 +392,19 @@ function themeControl(): string {
 }
 
 function helpControl(): string {
+  const guide = '<section><h2>Reading the map</h2>'
+    + '<p>Systems are islands, containers are slabs, and components are buildings. A container is a running application or data store; a component is a responsibility inside it.</p>'
+    + '<p>Round buildings are actors who use the software. Pill-shaped buildings are external systems. Hatched zones group related components.</p>'
+    + '<p>Solid shapes show existing architecture. Dashed, hollow shapes are drafts. Arrows show authored relationships, pointing from the source to the target.</p></section>'
+    + '<section><h2>Building sizes</h2>'
+    + '<p>Sizes compare source evidence within this project. They are not a score of quality or importance.</p>'
+    + '<p><strong>Floors:</strong> source-file count maps to one to five visible floors, with several files sharing a floor when needed.</p>'
+    + '<p><strong>Height:</strong> more lines of code make a floor taller. <strong>Width:</strong> more source files depend on it. <strong>Depth:</strong> it depends on more source files.</p>'
+    + '<p>A shared floor uses the largest measurement on each axis. Lower floors widen to support those above, and names reserve enough space to remain readable. Drafts and components without measurements use minimum sizes.</p>'
+    + '<p>Wall patterns reflect file extensions. Select a component and open How it’s built to inspect its exact source files.</p></section>'
+    + '<section><h2>Architecture and code</h2>'
+    + '<p>Groma keeps architecture in readable Markdown using the Open Knowledge Format (OKF) and the C4 architecture model. Scans supply code evidence; people and agents curate responsibilities and relationships through Groma.</p>'
+    + '<p>Later scans refresh source evidence without replacing authored meaning. Selecting or moving around the map does not rearrange the architecture.</p></section>'
   const key = (label: string) => `<kbd>${label}</kbd>`
   const sections: [string, [string, string][]][] = [
     ['Map', [
@@ -410,7 +425,7 @@ function helpControl(): string {
   const body = sections.map(([title, rows]) => `<section><h2>${title}</h2><dl>`
     + rows.map(([action, shortcut]) => `<div><dt>${action}</dt><dd>${shortcut}</dd></div>`).join('')
     + '</dl></section>').join('')
-  return `<details id="help"><summary class="chrome-button">Help</summary><div class="anchored-popover help-panel" role="region" aria-label="Help">${body}</div></details>`
+  return `<details id="help"><summary class="chrome-button">Help</summary><div class="anchored-popover help-panel" role="region" aria-label="Help">${guide}${body}</div></details>`
 }
 
 /** The invitation shown while the current world has nothing to draw; history is read-only, so a selected revision never shows it. */
@@ -430,7 +445,7 @@ export function renderPage(payload: WebBootPayload): string {
     + `<style>${style}</style></head><body data-delivery="${payload.delivery.kind}">`
     + `<header id="header"><div class="header-context">${lockup}<span id="stats"></span>${revisionControl(payload, { history: historyIcon, loader: revisionLoader })}</div>`
     + searchControl({ search: searchIcon, close: closeIcon })
-    + `<div class="header-actions"><div id="map-controls" class="controls" aria-label="Map controls"><button id="fit" aria-label="Fit map">${fitIcon}<span>Fit</span></button><button id="zoom-out" aria-label="Zoom out"><span class="control-glyph">−</span></button><span id="zoom" aria-live="polite"></span><button id="zoom-in" aria-label="Zoom in"><span class="control-glyph">+</span></button></div>${themeControl()}<div class="header-utilities">${helpControl()}${creditsControl(infoIcon)}</div></div>`
+    + `<div class="header-actions"><div id="map-controls" class="controls" aria-label="Map controls"><button id="fit" aria-label="Fit map">${fitIcon}<span>Fit</span></button><button id="zoom-out" aria-label="Zoom out"><span class="control-glyph">−</span></button><span id="zoom" aria-live="polite"></span><button id="zoom-in" aria-label="Zoom in"><span class="control-glyph">+</span></button></div>${themeControl()}<div class="header-utilities">${helpControl()}${creditsControl(infoIcon, lockup)}</div></div>`
     + '</header>'
     + `<nav id="hierarchy" aria-label="Hierarchy"><div id="hierarchy-title"><span class="pane-label">Hierarchy</span>${payload.delivery.kind === 'live' ? '<button id="add" type="button" aria-label="Add">+</button>' : ''}<button id="hierarchy-toggle" type="button" aria-controls="hierarchy-content">${hierarchyIcon}</button></div><div id="hierarchy-content"><div id="flows"></div><div id="tree"></div><div id="legend">${legend()}</div></div></nav>`
     + '<div id="map"></div>'
