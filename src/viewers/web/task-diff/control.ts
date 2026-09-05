@@ -40,14 +40,23 @@ export function createTaskDiffControl(options: TaskDiffControlOptions): TaskDiff
   let file: string | undefined
   let diffRequest = 0
   let detailsRequest = 0
+  let summaryScrollTop = 0
 
   function back(): void {
     file = undefined
     options.repaint()
+    const taskId = item?.id
+    const restore = (): void => {
+      if (item?.id === taskId && file === undefined) options.host.scrollTop = summaryScrollTop
+    }
+    restore()
+    // The wider diff pane can clamp the summary scroll until its width settles.
+    void Promise.all(options.host.getAnimations().map(animation => animation.finished)).then(restore, () => {})
   }
 
   function open(nextFile: string): void {
     if (payload?.files.some(candidate => candidate.file === nextFile) !== true) return
+    summaryScrollTop = options.host.scrollTop
     file = nextFile
     options.repaint()
   }

@@ -1,4 +1,4 @@
-import { ownsDetails } from '../selection.ts'
+import { ownsDetails, primarySelection } from '../selection.ts'
 import type { Selection } from '../selection.ts'
 
 export interface WebShell {
@@ -51,6 +51,7 @@ export function createWebShell(
   map: HTMLElement | SVGSVGElement,
 ): WebShell {
   let hierarchyOpen = true
+  let previousSelection: Selection = { kind: 'none' }
 
   const paintHierarchy = (): void => {
     root.classList.toggle('hierarchy-collapsed', !hierarchyOpen)
@@ -71,6 +72,10 @@ export function createWebShell(
       root.classList.toggle('hud-hidden', !visible)
     },
     paint(selection) {
+      if (selection.kind !== previousSelection.kind || primarySelection(selection) !== primarySelection(previousSelection)) {
+        details.scrollTop = 0
+      }
+      previousSelection = selection
       const open = ownsDetails(selection)
       const ownedFocus = details.contains(document.activeElement)
       root.classList.toggle('details-hidden', !open)

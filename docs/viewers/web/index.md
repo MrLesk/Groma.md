@@ -335,7 +335,9 @@ relationship in the details pane with its ends as links. Hold Shift while
 clicking an architecture item or relationship to add or remove it from the
 selection. The map combines their normal selection treatments, the hierarchy
 marks every selected element, and the last item selected owns the details pane.
-Removing that item returns details to the previous item. Click empty
+Removing that item returns details to the previous item. Selecting a different
+architecture item or task starts its details at the heading. Returning from a
+task file diff with Back restores the task's previous reading position. Click empty
 sheet or press Escape to clear the selection, active flows, and active tasks;
 the details pane closes. Click the boxed isometric pencil in the title plate to
 open the upright project-profile editor beside it. Its bounded Write view keeps
