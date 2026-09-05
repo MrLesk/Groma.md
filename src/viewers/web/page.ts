@@ -214,9 +214,9 @@ const style = `
   body.hierarchy-collapsed #hierarchy-title { border-bottom-color: transparent; }
   body.hierarchy-collapsed #hierarchy-title .pane-label { opacity: 0; }
   body.hierarchy-collapsed #hierarchy-content { opacity: 0; pointer-events: none; }
-  #flows { padding: 14px 0 10px; border-bottom: 1px solid var(--hairline); }
+  #flows { padding: 14px 0 10px; }
   #flows:empty { display: none; }
-  #hierarchy .section { margin: 0 0 6px; padding: 0 14px; width: 100%; border: 0; background: transparent; text-align: left; }
+  #hierarchy .section { margin: 0 14px 10px; padding: 0; width: calc(100% - 28px); }
   .tree-section { display: flex; align-items: center; gap: 4px; width: 100%; padding: 0 14px; border: 0; background: transparent; text-align: left; }
   #tree { flex: 1; overflow: auto; padding: 14px 0; }
   #tree .group { padding: 10px 14px 4px; }
@@ -274,15 +274,15 @@ const style = `
   #details .selection-writes .error { margin: 0; color: var(--highlight-text); font-size: 11px; }
   #details .selection-writes .error:empty { display: none; }
   #details .overview { margin: 0 0 10px; line-height: 1.65; }
+  #hierarchy .section, #details .section { padding-bottom: 6px; border-bottom: 1px solid var(--hairline); }
   #details .section {
     margin: 26px 0 10px;
-    padding-bottom: 6px;
-    border-bottom: 1px solid var(--hairline);
     font-size: 10px;
     font-weight: 400;
     letter-spacing: 0.12em;
     text-transform: uppercase;
   }
+  #details .tree-section, #details .flow-tree .row { padding-left: 0; }
   #details ul { margin: 0; padding: 0; list-style: none; }
   #details li { margin: 0 0 6px; }
   #details .relationships li { margin: 0; }
