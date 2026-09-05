@@ -202,7 +202,7 @@ function paintViewState(commitUrl = true): void {
   const activeTaskItems = activeTaskIds.map(id => workItem(id)).filter((item): item is WorkItem => item !== undefined)
   paintMapState(task, activeTaskItems)
   paintTree()
-  paintFlows(flowsHost, world.flows, activeFlow, toggleFlow)
+  paintFlows(flowsHost, world, activeFlow, toggleFlow)
   paintWorldStats(statsHost, world)
   paintBackToFlow(detailsHost, activeFlow !== undefined && selection.kind !== 'flow' ? backToFlow : undefined)
   const flow = world.flows.find(item => item.id === selectedId)
@@ -238,7 +238,7 @@ function paintViewState(commitUrl = true): void {
 function paintTree(): void {
   paintHierarchy(
     treeHost,
-    semanticTreeRows(world, selectedArchitecture(selection), tree),
+    semanticTreeRows(world, selectedArchitecture(selection), tree).filter(row => row.kind !== 'actor'),
     new Set(selectedArchitecture(selection)),
     select,
     toggleRow,

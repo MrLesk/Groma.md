@@ -130,14 +130,18 @@ resumes live architecture and work updates.
 
 The hierarchy pane's boxed double-chevron retracts it to a narrow rail and
 returns it without changing tree, selection, or camera state. Its quiet branch lines keep nested
-rows legible. It starts with the flows list open under its
-Flows heading. Each row is one named, authored scenario. Clicking it opens its
+rows legible. Under Flows, each actor has an accordion that starts collapsed
+and retains its open state across viewer repaints. Each group contains the
+scenarios whose first step starts with that actor. Flows that start with a
+software element appear directly in the list. Each row is one named, authored
+scenario. Clicking it opens its
 purpose and ordered steps in details and focuses its explicit map connections.
 Only one flow is focused at a time; clicking it again clears it. The same
 control appears in an element's Flows list. Structure rows use kind marks and
 neutral selection; their arrows only expand containment. Below it the Structure
-section starts open and groups the merged containment tree under Actors,
-Systems, and External systems labels, omitting an empty group. Containers
+section starts open and groups the software containment tree under Systems
+and External systems labels, omitting an empty group. Actors appear in the
+flow accordions and remain on the map. Containers
 sit under their system and components under their container, in
 hierarchy order; the map places them by flow instead.
 Ghost names and external systems are dim. Every selected element is marked,
