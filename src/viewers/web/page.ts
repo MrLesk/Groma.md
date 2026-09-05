@@ -109,7 +109,7 @@ const style = `
     text-transform: uppercase;
     color: var(--muted);
   }
-  #header, #hierarchy, #details, #help .help-panel {
+  #header, #hierarchy, #details {
     border: 1px solid color-mix(in srgb, var(--ink) 12%, transparent);
     border-radius: var(--chrome-radius);
     backdrop-filter: blur(14px);
@@ -159,20 +159,23 @@ const style = `
   #theme .theme-option { display: flex; align-items: center; gap: 8px; cursor: pointer; }
   #theme .theme-chevron { width: 7px; height: 7px; flex: none; margin-left: 2px; border-right: 1px solid currentColor; border-bottom: 1px solid currentColor; transform: translateY(-2px) rotate(45deg); transition: transform 160ms ease; }
   #theme[open] .theme-chevron { transform: translateY(2px) rotate(225deg); }
-  #help { position: relative; }
+  #help { position: relative; --popover-width: 360px; }
   #help summary { list-style: none; }
   #help summary::-webkit-details-marker { display: none; }
   #help .help-panel {
-    position: absolute;
-    z-index: 20;
-    right: 0;
-    width: 260px;
-    padding: 14px 16px;
-    background: color-mix(in srgb, var(--paper) 82%, transparent);
-    line-height: 1.8;
+    padding: 0;
+    max-height: calc(100vh - 90px);
+    background: var(--paper);
   }
-  #help .help-panel p { margin: 0; }
-  #header .anchored-popover, #help .help-panel {
+  #help section { padding: 10px 14px; }
+  #help section + section { border-top: 1px solid var(--hairline); }
+  #help h2 { margin: 0 0 6px; color: var(--muted); font-size: 9px; font-weight: 400; letter-spacing: 0.12em; text-transform: uppercase; }
+  #help dl { margin: 0; }
+  #help dl > div { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 26px; }
+  #help dt { color: var(--ink); }
+  #help dd { margin: 0; display: flex; align-items: center; gap: 4px; color: var(--muted); white-space: nowrap; }
+  #help kbd { display: inline-grid; place-items: center; min-width: 22px; height: 21px; padding: 0 5px; border: 1px solid var(--hairline); border-radius: var(--control-radius); background: var(--hover); color: var(--ink); font: inherit; font-size: 10px; }
+  #header .anchored-popover {
     top: calc(100% + 22px);
   }
   @media (max-width: 1280px) {
@@ -216,8 +219,7 @@ const style = `
   #map { position: fixed; inset: 0; z-index: 0; overflow: hidden; }
   [data-theme="blueprint"] #header,
   [data-theme="blueprint"] #hierarchy,
-  [data-theme="blueprint"] #details,
-  [data-theme="blueprint"] #help .help-panel {
+  [data-theme="blueprint"] #details {
     border-color: color-mix(in srgb, var(--map-line) 34%, transparent);
     background: var(--chrome-surface);
     box-shadow: 0 0 20px color-mix(in srgb, var(--map-line) 7%, transparent), inset 0 0 18px color-mix(in srgb, var(--map-line) 3%, transparent);
@@ -384,6 +386,30 @@ function themeControl(): string {
   return `<details id="theme" data-theme-mode="auto"><summary class="chrome-button" aria-label="Theme">${currentIcons}<span class="label">Auto</span><span class="theme-chevron"></span></summary><div class="anchored-popover theme-menu">${options}</div></details>`
 }
 
+function helpControl(): string {
+  const key = (label: string) => `<kbd>${label}</kbd>`
+  const sections: [string, [string, string][]][] = [
+    ['Map', [
+      ['Pan', 'Drag or scroll'],
+      ['Zoom', `Pinch or ${key('+')} ${key('−')}`],
+      ['Fit map', `${key('0')}`],
+      ['Clear selection', key('Esc')],
+    ]],
+    ['Search', [
+      ['Open search', `${key('/')} or ${key('Cmd/Ctrl')} ${key('K')}`],
+      ['Preview result', `${key('↑')} ${key('↓')}`],
+      ['Open result', key('Enter')],
+      ['Cancel search', key('Esc')],
+    ]],
+    ['View', [['Map only', key('F1')], ['Layers', key('F2')], ['Map debug', key('F3')]]],
+    ['In layers', [['Orbit', 'Drag'], ['Pan', `${key('Shift')} + drag`]]],
+  ]
+  const body = sections.map(([title, rows]) => `<section><h2>${title}</h2><dl>`
+    + rows.map(([action, shortcut]) => `<div><dt>${action}</dt><dd>${shortcut}</dd></div>`).join('')
+    + '</dl></section>').join('')
+  return `<details id="help"><summary class="chrome-button">Help</summary><div class="anchored-popover help-panel" role="region" aria-label="Help">${body}</div></details>`
+}
+
 /** The invitation shown while the current world has nothing to draw; history is read-only, so a selected revision never shows it. */
 function emptyState(payload: WebBootPayload): string {
   const hidden = payload.revision === null && isEmptyWorld(payload.world) ? '' : ' hidden'
@@ -401,7 +427,7 @@ export function renderPage(payload: WebBootPayload): string {
     + `<style>${style}</style></head><body data-delivery="${payload.delivery.kind}">`
     + `<header id="header"><div class="header-context">${lockup}<span id="stats"></span>${revisionControl(payload, { history: historyIcon, loader: revisionLoader })}</div>`
     + searchControl({ search: searchIcon, close: closeIcon })
-    + `<div class="header-actions"><div id="map-controls" class="controls" aria-label="Map controls"><button id="fit" aria-label="Fit map">${fitIcon}<span>Fit</span></button><button id="zoom-out" aria-label="Zoom out"><span class="control-glyph">−</span></button><span id="zoom" aria-live="polite"></span><button id="zoom-in" aria-label="Zoom in"><span class="control-glyph">+</span></button></div>${themeControl()}<div class="header-utilities"><details id="help"><summary class="chrome-button">Help</summary><div class="help-panel"><p>Drag or scroll to pan<br>Pinch, + or − to zoom<br>0 or Fit shows the whole map<br>/ or Cmd/Ctrl+K searches<br>F1 toggles map only<br>F2 toggles layers<br>In layers: drag orbits; Shift-drag pans<br>F3 toggles map debug<br>Escape clears selection</p></div></details>${creditsControl(infoIcon)}</div></div>`
+    + `<div class="header-actions"><div id="map-controls" class="controls" aria-label="Map controls"><button id="fit" aria-label="Fit map">${fitIcon}<span>Fit</span></button><button id="zoom-out" aria-label="Zoom out"><span class="control-glyph">−</span></button><span id="zoom" aria-live="polite"></span><button id="zoom-in" aria-label="Zoom in"><span class="control-glyph">+</span></button></div>${themeControl()}<div class="header-utilities">${helpControl()}${creditsControl(infoIcon)}</div></div>`
     + '</header>'
     + `<nav id="hierarchy" aria-label="Hierarchy"><div id="hierarchy-title"><span class="pane-label">Hierarchy</span>${payload.delivery.kind === 'live' ? '<button id="add" type="button" aria-label="Add">+</button>' : ''}<button id="hierarchy-toggle" type="button" aria-controls="hierarchy-content">${hierarchyIcon}</button></div><div id="hierarchy-content"><div id="flows"></div><div id="tree"></div><div id="legend">${legend()}</div></div></nav>`
     + '<div id="map"></div>'

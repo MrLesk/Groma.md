@@ -80,7 +80,8 @@ Fit, `-`, zoom readout, `+`, Theme, Help, and Credits. Controls share one
 height, and opening search leaves them in place. Header popups float with
 a clear gap below the bar. At narrower widths the
 counts and the Fit and Theme text give way to the controls.
-Help opens the short map-control guide. The information icon opens
+Help opens a grouped shortcut guide for Map, Search, View, and layer gestures.
+Actions and key labels align in rows on the shared popup surface. The information icon opens
 Credits with a link to the Groma repository, followed by every directly declared
 third-party runtime library and development tool, including its version, license,
 and project link. The dropdown lists Auto,
