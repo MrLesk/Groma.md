@@ -1,9 +1,9 @@
-import { createRender } from '@comark/html'
+import { createHtmlRenderer } from '@comark/html'
 import security from 'comark/plugins/security'
 
 import type { ProjectProfile } from '../../../project-profile.ts'
 
-const renderMarkdown = createRender({
+const renderMarkdown = createHtmlRenderer({
   plugins: [security({
     allowedTags: ['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'strong', 'em', 'code', 'pre', 'blockquote', 'ul', 'ol', 'li', 'a', 'br'],
     allowedProtocols: ['http', 'https', 'mailto'],

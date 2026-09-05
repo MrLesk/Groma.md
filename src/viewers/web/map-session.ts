@@ -156,7 +156,7 @@ export async function createWebMapSession(
   const sourceWatch = await watchScan(repositoryRoot, {
     onFold: publishWorld,
   })
-  const architectureWatch = watchArchitecture(repositoryRoot, {
+  const architectureWatch = await watchArchitecture(repositoryRoot, {
     onChange: publishWorld,
   })
   const workWatch = workSource.watch(() => {

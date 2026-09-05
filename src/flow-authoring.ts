@@ -1,4 +1,4 @@
-import { parse, parseFrontmatter } from 'comark'
+import { parseMarkdown, parseFrontmatter } from 'comark'
 import { renderFrontmatter } from 'comark/render'
 import { buildArchitectureModel, freeId } from './architecture-model.ts'
 import { loadArchitecture } from './architecture-reader.ts'
@@ -18,7 +18,7 @@ export interface FlowChanges {
 }
 
 async function writeFlow(repositoryRoot: string, records: ArchitectureRecords, filename: string, source: string): Promise<void> {
-  const tree = await parse(source)
+  const tree = await parseMarkdown(source)
   const document = { sourceFilename: filename, body: parseFrontmatter(source).content, nodes: tree.nodes, frontmatter: tree.frontmatter } as ArchitectureDocument
   resolveFlows([...records.flows.filter(flow => flow.sourceFilename !== filename), document], buildArchitectureModel(records.documents))
   await writeDocument(repositoryRoot, filename, source)

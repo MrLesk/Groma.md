@@ -15,7 +15,7 @@ code work; small documentation corrections can be made directly.
 
 ## Set up the repository
 
-Groma requires Bun 1.3.14 or newer and Node.js 20.19 or newer.
+Groma requires Bun 1.4.1 or newer and Node.js 20.19 or newer.
 
 ```sh
 bun install

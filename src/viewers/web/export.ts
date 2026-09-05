@@ -152,7 +152,7 @@ export async function exportWebViewer(
     onFold: schedule,
     onError: options.onError,
   }) : undefined
-  const architectureWatch = options.watch ? watchArchitecture(repositoryRoot, { onChange: schedule }) : undefined
+  const architectureWatch = options.watch ? await watchArchitecture(repositoryRoot, { onChange: schedule }) : undefined
   const workWatch = options.watch ? workSource.watch(schedule) : undefined
 
   return {

@@ -1,15 +1,12 @@
-import path from 'node:path'
-
 import { GromaFileSystem } from './groma-filesystem.ts'
 
 const SETTLE_MS = 150
 
-export function watchArchitecture(
+export async function watchArchitecture(
   repositoryRoot: string,
   options: { onChange?: () => void | Promise<void> } = {},
-): { close(): Promise<void> } {
+): Promise<{ close(): Promise<void> }> {
   const filesystem = GromaFileSystem.open(repositoryRoot)
-  const startedAt = Date.now()
   let timer: ReturnType<typeof setTimeout> | undefined
   let running = false
   let pending = false
@@ -44,17 +41,8 @@ export function watchArchitecture(
     }, SETTLE_MS)
   }
 
-  function onEvent(directory: string, filename: string | null): void {
-    if (closed || filename === null || !String(filename).endsWith('.md')) return
-    void filesystem.modifiedAt(path.posix.join(directory, filename)).then(mtimeMs => {
-      if (!closed && mtimeMs >= startedAt) schedule()
-    }, () => {
-      if (!closed) schedule()
-    })
-  }
-
-  const watcher = filesystem.watch('', { recursive: true }, filename => {
-    onEvent('', filename)
+  const watcher = await filesystem.watch(filename => {
+    if (!closed && filename.endsWith('.md')) schedule()
   })
 
   return {
@@ -62,7 +50,7 @@ export function watchArchitecture(
       if (closed) return
       closed = true
       clearTimeout(timer)
-      watcher.close()
+      await watcher.unsubscribe()
       await active
     },
   }

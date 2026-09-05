@@ -1,5 +1,5 @@
-import { parse } from 'comark'
-import type { ComarkElement, ComarkNode } from 'comark'
+import { parseMarkdown } from 'comark'
+import type { ElementNode as ComarkElement, Node as ComarkNode } from 'comark'
 
 export type MarkdownStyle = 'strong' | 'emphasis' | 'code' | 'link'
 
@@ -63,5 +63,5 @@ function blocksOf(nodes: readonly ComarkNode[]): MarkdownBlock[] {
 
 /** Project prose reduced to the rich text that the SVG title plate can paint. */
 export async function parseProjectMarkdown(source: string): Promise<MarkdownBlock[]> {
-  return blocksOf((await parse(source)).nodes)
+  return blocksOf((await parseMarkdown(source)).nodes)
 }

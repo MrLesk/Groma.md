@@ -37,9 +37,9 @@
   "bin": {
     "groma": "src/cli.ts"
   },
-  "packageManager": "bun@1.3.14",
+  "packageManager": "bun@1.4.1",
   "engines": {
-    "bun": ">=1.3.14",
+    "bun": ">=1.4.1",
     "node": ">=20.19.0"
   },
   "scripts": {
@@ -54,25 +54,26 @@
   "dependencies": {
     "@clack/core": "1.4.3",
     "@clack/prompts": "1.7.0",
-    "@comark/html": "0.5.1",
+    "@comark/html": "0.6.2",
     "@groma/scanner": "workspace:*",
     "@groma/scanner-typescript": "workspace:*",
     "@groma/work-source": "workspace:*",
     "@groma/work-source-backlog": "workspace:*",
-    "@opentui/core": "0.5.1",
-    "comark": "0.5.1",
+    "@opentui/core": "0.5.10",
+    "@parcel/watcher": "2.6.0",
+    "comark": "0.6.2",
     "commander": "15.0.0",
     "diff": "9.0.0",
     "fuse.js": "7.5.0",
     "libavoid-js": "0.5.0-beta.5",
-    "typescript": "7.1.0-dev.20260830.1",
+    "typescript": "7.1.0-dev.20260905.1",
     "web-worker": "1.5.0",
     "webcola": "3.4.0"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.4.13",
-    "@types/bun": "1.3.14",
-    "@types/node": "20.19.43",
-    "tsx": "4.23.12"
+    "@biomejs/biome": "2.5.12",
+    "@types/bun": "1.4.1",
+    "@types/node": "26.4.1",
+    "tsx": "4.23.13"
   }
 }

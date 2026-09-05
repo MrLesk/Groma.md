@@ -15,7 +15,9 @@ Core keeps curated file membership authoritative. Files already assigned to one 
 
 `groma scan --watch` repeats the same complete scan after a loaded scanner
 matches a changed source path. `groma view` and `groma web` run one scan before
-opening, then load one registry for their watch lifecycle.
+opening, then load one registry for their watch lifecycle. Source and
+architecture watch subscriptions are ready before viewer startup completes,
+so the first edit can update the open map.
 
 Optional modules are enabled only through `scanners.json` in the selected
 `groma/` or `.groma/` directory, normally written by `groma scanner add`.
