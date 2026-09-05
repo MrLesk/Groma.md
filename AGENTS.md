@@ -6,7 +6,8 @@
 
 This project uses Backlog.md for task and project management.
 
-**For every user request in this project, run `backlog instructions overview` before answering or taking action.**
+Run `backlog instructions overview` before code work or Backlog task administration. Skip it for questions,
+read-only audits, and standalone documentation changes that do not involve Backlog records.
 
 Use the overview to decide whether to search, read, create, or update Backlog tasks.
 
@@ -50,8 +51,7 @@ it. This permission applies only to explicitly scoped Groma artifacts and never 
 As a project-specific override to the overview's general task-creation guidance, create Backlog tasks only when the
 requested work includes code changes. Do not create a task for standalone documentation changes or Backlog record
 administration, such as relabeling, status corrections, or metadata maintenance. Documentation required to deliver an
-in-scope code change may remain part of that code task. Continue to run `backlog instructions overview` for every user
-request.
+in-scope code change may remain part of that code task.
 
 ## Backlog change tracking
 
@@ -104,13 +104,13 @@ For example: `TASK-28.3 - Supply annotated architecture through Groma core`.
 
 ## Minimum sufficient product
 
-Build the simplest real result that matches the approved example. Prefer the fewest concepts, fields, files, dependencies,
-and lines of code or documentation that make the requested observable result work.
+Build the simplest real result that matches the requested outcome and any approved example. Prefer the fewest concepts,
+fields, files, dependencies, and lines of code or documentation that make the requested observable result work.
 
 Simplicity means minimum sufficient information, not vague placeholders or toy behavior. Keep concrete data the supported
 flow actually needs, such as an exact source file when a code reference must be useful, and omit everything the current
-result does not require. Add another field, layer, abstraction, rule, or explanation only when the approved example cannot
-work without it.
+result does not require. Add another field, layer, abstraction, rule, or explanation only when the requested outcome
+cannot work without it.
 
 When multiple approaches produce the same result, choose the one that is shortest and easiest to explain. Do not import
 complexity from an earlier Groma implementation, a generic architecture, or a hypothetical future requirement.
@@ -121,8 +121,10 @@ A source or test file over 500 lines is a code smell. Split it so each file stay
 
 ## Repository checks
 
-Run `bun run check` after changing code. It is the single repository check: Biome lints the supported TypeScript files,
-TypeScript checks their types, and the Node and Bun test suites run.
+Run `bun run check` after the complete code change. It is the single repository check: Biome lints the supported
+TypeScript files, TypeScript checks their types, and the Node and Bun test suites run. Repeat it after fixes that could
+affect its result. Once required checks pass, broaden or repeat validation only for new changes, failures, or unresolved
+concerns. Standalone documentation and instruction edits do not require the code test suite.
 
 Biome uses its recommended lint rules and reports functions whose cognitive complexity is above 15. Existing complexity
 warnings are cleanup targets, not permission to add more. Keep new and changed functions at or below the limit, and prefer
@@ -134,8 +136,7 @@ Biome formatting and import assist are disabled. Do not use Biome to format file
 
 Keep viewport-sized SVG surfaces that use patterns or filters outside groups transformed by the camera. They must be
 siblings of the moving camera group so pan and zoom do not repaint them together with the architecture scene. Measure
-frame rate only when a rendering regression is suspected; do not make manual FPS checks routine. Run `bun run check`
-after code changes so the SVG composition guard still applies.
+frame rate only when a rendering regression is suspected; do not make manual FPS checks routine.
 
 ## UI descriptions
 
@@ -154,13 +155,10 @@ A request to investigate, explain, review, propose, or design does not authorize
 reasonable interpretations would materially change behavior, scope, cost, or complexity, report the difference to the
 user/orchestrator and wait for direction.
 
-Before implementing, the task must make this sentence answerable:
-
-> When `<actor>` uses `<entry point>`, Groma shows `<observable result>`,
-> matching `<approved example>`.
-
-If the actor, entry point, result, or example cannot be identified, report the ambiguity to the user/orchestrator before
-designing a solution.
+For changes to product behavior, identify the actor, entry point, and expected result from the request, acceptance
+criteria, or an approved example. For fixes and internal refactors, restore or preserve the supported behavior; no new
+example is required. Ask only when a missing decision would materially change the result. Make routine implementation
+choices within the approved scope and continue through implementation and verification.
 
 For architecture, scanner, and rendering work, approved hand-authored Markdown and its rendered view are the semantic
 authority. The scanner exists to reproduce that meaning from code. Files, directories, imports, line counts, framework
@@ -186,8 +184,9 @@ exists.
 Groma is moving toward a model that is detached from the filesystem. Treat the current filesystem integration as
 temporary delivery plumbing, not as a foundation to generalize or harden for hypothetical futures.
 
-Before implementing any of the following, stop and report the proposal to the current user/orchestrator for explicit
-approval:
+Do not add the following behaviors outside the approved scope. If the request or acceptance criteria already require
+them, proceed without asking again; compatibility and migrations still require an explicit user request. Otherwise,
+report the proposal to the current user/orchestrator for approval before implementing:
 
 - backward compatibility, migrations, or legacy behavior;
 - handling for an edge case not required by an acceptance criterion or a reproduced failure in the supported product
@@ -217,8 +216,10 @@ evidence, and no authority-backed blocking finding remains.
 
 ## Simplicity review
 
-After implementation and its focused checks pass, but before specification, quality, and finalization reviews, run one
-cold simplicity review.
+For substantial domain or architecture changes, or when explicitly requested, run one cold simplicity review after
+implementation and focused checks pass, before specification, quality, and finalization reviews. Small fixes,
+behavior-preserving refactors, and documentation changes use the implementer's own review unless external review is
+explicitly requested.
 
 Give the reviewer the task, the diff, and the repository without conversation history. The reviewer must briefly explain
 the implemented flow from its entry point through its work to its result, then answer:
@@ -237,10 +238,10 @@ quality reviews follow only after this gate passes.
 
 ## Full-context complexity review
 
-After the implementer's specification and quality reviews, run one final review in a separate agent with the full
-conversation context. Ask whether the result could use a simpler or more solid approach, whether atomic components are
-grouped clearly by domain, and whether the architecture prevents as many junior-developer mistakes as possible. Present
-material recommendations to the user before changing the architecture.
+For the same substantial changes, or when explicitly requested, run one final review in a separate agent with the full
+conversation context after the implementer's specification and quality reviews. Check whether the result could use a
+simpler approach, whether components are grouped clearly by domain, and whether ownership and supported usage are clear.
+Present material recommendations to the user before changing the architecture beyond the approved scope.
 
 The cold simplicity review and the full-context complexity review are the only reviews assigned to separate agents.
 Do not spawn agents for other reviews unless the user explicitly asks.
@@ -264,49 +265,12 @@ prefer one minimal anchor over exhaustive content matching.
 
 ## TUI map
 
-The TUI world is a map inside fixed chrome: a one-row header, a
-hierarchy pane, the map pane, a details pane, and a one-row footer,
-with one blank row above the header and below the footer.
-Panes reserve width; they never overlay the map. Selection never changes the
-world layout; available-width changes may wrap cards and rows. The map uses one fixed,
-readable scale. A larger terminal reveals more canvas; there is no
-geometric zoom or fit-all view.
-
-- The details pane shows the current architecture selection, except while an
-  explicitly focused flow, work record, source, diff, profile or help view is open.
-- The root map shows actor, system and external-system islands, with container
-  rows and miniature component blocks. It does not show groups or component cards.
-- Enter opens only a container, showing that container, its groups and
-  components. Backspace returns to root. Arrows never change scope.
-- Arrowing selects the nearest eligible card by its rectangle, including slight
-  overlap. Map arrows never move pane focus. The camera follows toward the
-  selection, bounded by the displayed map, with no empty space beyond its edges.
-- Cards, routes, and relationship labels keep their world cells across selection
-  changes. Only their camera position changes.
-
-Drive `groma view` with `tui-test`. Read the terminal, send keys, and
-capture a screenshot.
-Compare world geometry across arrow moves; the camera may pan, but cards and
-labels must not rearrange. Do not wait for a human screenshot.
-
-```bash
-GROMA_TUI_SESSION="groma-view-$$"
-GROMA_TUI_ARTIFACTS=$(mktemp -d /tmp/groma-tui-test.XXXXXX)
-trap 'tui-test close --session "$GROMA_TUI_SESSION" >/dev/null 2>&1 || true' EXIT
-tui-test run --session "$GROMA_TUI_SESSION" --cols 120 --rows 36 --cwd "$PWD" bun src/cli.ts view
-tui-test wait idle --session "$GROMA_TUI_SESSION" --timeout 10000
-tui-test text --session "$GROMA_TUI_SESSION"
-tui-test press --session "$GROMA_TUI_SESSION" Enter
-tui-test wait idle --session "$GROMA_TUI_SESSION" --timeout 10000
-tui-test screenshot --session "$GROMA_TUI_SESSION" "$GROMA_TUI_ARTIFACTS/frame.svg"
-tui-test close --session "$GROMA_TUI_SESSION"
-trap - EXIT
-```
-
-Look at the root view, details, a container, and a large size such as 200x60.
+For TUI behavior or rendering work, read [TUI map validation](docs/viewers/tui/validation.md) and use its
+`tui-test` procedure to verify the affected flow.
 
 <!-- groma:start -->
 ## Groma
 
-This project uses Groma. Run `groma agent-instructions` before planning or changing code. Do not edit Groma-owned architecture files directly.
+This project uses Groma. Run `groma agent-instructions` when scanning or curating architecture, or changing scanner or
+architecture-model behavior. Do not edit Groma-owned architecture files directly.
 <!-- groma:end -->
