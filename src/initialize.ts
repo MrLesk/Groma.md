@@ -26,6 +26,15 @@ export interface GromaInitResult {
   status: 'initialized' | 'unchanged' | 'updated'
 }
 
+/** A storage folder alone is not a project; both initialization records must exist. */
+export function gromaInitialization(repositoryRoot: string): { directory?: GromaDirectory; initialized: boolean } {
+  const filesystem = GromaFileSystem.find(repositoryRoot)
+  return {
+    directory: filesystem?.directory,
+    initialized: filesystem?.exists('index.md') === true && filesystem.exists('project.md'),
+  }
+}
+
 async function existingProjectProfile(
   filesystem: GromaFileSystem | undefined,
 ): Promise<ProjectProfile | undefined> {

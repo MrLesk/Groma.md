@@ -1,0 +1,4 @@
+{
+  "name": "startup-example",
+  "bin": { "startup-example": "src/main.ts" }
+}

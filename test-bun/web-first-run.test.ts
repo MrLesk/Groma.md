@@ -5,6 +5,8 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { test } from 'bun:test'
 
+import { hasComponents, isEmptyWorld } from '../src/empty-world.ts'
+import type { ArchitectureWorld } from '../src/types.ts'
 import { startWebViewer } from '../src/viewers/web/server.ts'
 import { repositoryRoot } from './helpers.ts'
 
@@ -45,30 +47,27 @@ async function draft(url: string, input: Record<string, string>): Promise<Respon
   })
 }
 
-test.concurrent('an empty world shows the invitation until the first draft replaces it, never for history', async () => {
+test.concurrent('drafting from an empty world preserves draft architecture until components exist', async () => {
   const root = await createEmptyRepo()
   const server = await startWebViewer(root, { port: 0 })
   try {
-    const before = await (await fetch(server.url)).text()
-    assert.match(before, /<section id="empty" aria-label="Empty map">/)
-    assert.match(before, /<h1>Fresh &lt;shop&gt;<\/h1>/)
-    assert.match(before, /<form>/)
-    const empty = await (await fetch(`${server.url}/world.json`)).json() as { world: { elements: unknown[] } }
-    assert.deepEqual(empty.world.elements, [])
+    const empty = await (await fetch(`${server.url}/world.json`)).json() as { world: ArchitectureWorld }
+    assert.equal(isEmptyWorld(empty.world), true)
+    assert.equal(hasComponents(empty.world), false)
 
     const drafted = await draft(server.url, { kind: 'system', name: 'Shop', overview: 'Sells goods.' })
     assert.equal(drafted.status, 200)
     assert.deepEqual(await drafted.json(), { id: 'shop' })
     const world = await (await fetch(`${server.url}/world.json`)).json() as {
       generation: number
-      world: { elements: { id: string; origin: string }[] }
+      world: ArchitectureWorld
     }
     assert.deepEqual(world.world.elements.map(element => [element.id, element.origin]), [['shop', 'draft']])
-    const after = await (await fetch(server.url)).text()
-    assert.match(after, /<section id="empty" aria-label="Empty map" hidden>/)
+    assert.equal(isEmptyWorld(world.world), false)
+    assert.equal(hasComponents(world.world), false)
     const history = await (await fetch(`${server.url}/world.json`)).json() as { revisions: { id: string }[] }
-    const historical = await (await fetch(`${server.url}/?revision=${history.revisions[0]!.id}`)).text()
-    assert.match(historical, /<section id="empty" aria-label="Empty map" hidden>/)
+    const historical = await (await fetch(`${server.url}/world.json?revision=${history.revisions[0]!.id}`)).json() as { world: ArchitectureWorld }
+    assert.equal(isEmptyWorld(historical.world), true)
   } finally {
     await server.close()
     await rm(root, { recursive: true, force: true })
@@ -100,7 +99,6 @@ test.concurrent('a repository with no commit yet serves the invitation with an e
     }
     assert.deepEqual(payload.revisions, [])
     assert.deepEqual(payload.world.elements, [])
-    assert.match(await (await fetch(server.url)).text(), /<section id="empty" aria-label="Empty map">/)
   } finally {
     await server.close()
     await rm(root, { recursive: true, force: true })

@@ -5,14 +5,20 @@ export function isEmptyWorld(world: Pick<ArchitectureGraph, 'elements'>): boolea
   return world.elements.length === 0
 }
 
+export function hasComponents(world: Pick<ArchitectureGraph, 'elements'>): boolean {
+  return world.elements.some(element => element.kind === 'component')
+}
+
+export const noComponentsTitle = 'No components found'
+export const createComponentsHint = 'Create supported code, or draft your first system.'
+
 /** The shared next steps for an initialized project whose architecture is still empty. */
 export function emptyWorldLines(projectTitle: string): readonly string[] {
   return [
     projectTitle,
     '',
-    'Architecture is empty.',
-    'Observe code: groma scan',
-    'Start a draft: groma add draft <name> --overview <markdown>',
-    'Add its first ghost: groma draft component <name> --parent <id>',
+    noComponentsTitle,
+    createComponentsHint,
+    'groma draft system <name> --overview <markdown>',
   ]
 }

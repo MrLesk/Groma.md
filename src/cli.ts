@@ -26,20 +26,14 @@ function interactiveTerminal(): boolean {
 }
 
 async function openWeb(port?: number, scan = true): Promise<void> {
-  const root = process.cwd()
-  const door = await ensureInitialized({
-    repositoryRoot: root,
-    interactive: interactiveTerminal(),
-    opensViewer: true,
-  })
-  if (door !== 'ready') {
-    if (door !== 'declined') process.exitCode = 1
-    return
+  try {
+    const { startWebViewer } = await import('./viewers/web/server.ts')
+    const { url } = await startWebViewer(process.cwd(), { port, scan })
+    console.log(`groma web at ${url}`)
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : String(error))
+    process.exitCode = 1
   }
-  if (scan) await scanRepository(root)
-  const { startWebViewer } = await import('./viewers/web/server.ts')
-  const { url } = await startWebViewer(root, { port })
-  console.log(`groma web at ${url}`)
 }
 
 async function openTerminalMap(scan = true): Promise<void> {
@@ -48,6 +42,33 @@ async function openTerminalMap(scan = true): Promise<void> {
   const { startTerminalViewer } = await import('./view-host.ts')
   const viewer = await startTerminalViewer(root)
   await viewer.closed
+}
+
+async function openTerminalView(target: string | undefined, plain: boolean): Promise<void> {
+  const door = await ensureInitialized({
+    repositoryRoot: process.cwd(),
+    interactive: interactiveTerminal() && target === undefined && !plain,
+    opensViewer: true,
+  })
+  if (door !== 'ready') {
+    if (door !== 'declined') process.exitCode = 1
+    return
+  }
+  if (target) {
+    const { renderPlainRecord } = await import('./plain-world.ts')
+    const result = await renderPlainRecord(process.cwd(), target)
+    if (!result.ok) {
+      console.error(result.message)
+      process.exitCode = 1
+      return
+    }
+    console.log(result.text)
+  } else if (plain || !process.stdout.isTTY) {
+    const { renderPlainWorld } = await import('./plain-world.ts')
+    console.log(await renderPlainWorld(process.cwd()))
+  } else {
+    await openTerminalMap()
+  }
 }
 
 async function openTerminalMapFromWelcome(): Promise<void> {
@@ -208,33 +229,12 @@ program
   .argument('[target]', 'element id, draft id, or repository-relative source file')
   .option('--plain', 'print the merged world as plain text')
   .action(async (target: string | undefined, options) => {
-    const plain = program.opts().plain || options.plain
-    const door = await ensureInitialized({
-      repositoryRoot: process.cwd(),
-      interactive: interactiveTerminal() && target === undefined && !plain,
-      opensViewer: true,
-    })
-    if (door !== 'ready') {
-      if (door !== 'declined') process.exitCode = 1
-      return
+    try {
+      await openTerminalView(target, Boolean(program.opts().plain || options.plain))
+    } catch (error) {
+      console.error(error instanceof Error ? error.message : String(error))
+      process.exitCode = 1
     }
-    if (target) {
-      const { renderPlainRecord } = await import('./plain-world.ts')
-      const result = await renderPlainRecord(process.cwd(), target)
-      if (!result.ok) {
-        console.error(result.message)
-        process.exitCode = 1
-        return
-      }
-      console.log(result.text)
-      return
-    }
-    if (plain || !process.stdout.isTTY) {
-      const { renderPlainWorld } = await import('./plain-world.ts')
-      console.log(await renderPlainWorld(process.cwd()))
-      return
-    }
-    await openTerminalMap()
   })
 
 program

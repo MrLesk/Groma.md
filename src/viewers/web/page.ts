@@ -3,14 +3,13 @@ import { fileURLToPath } from 'node:url'
 
 import type { C4Kind } from '../../types.ts'
 import { chromeCss } from './atoms/chrome.ts'
-import { escaped } from './atoms/escape.ts'
 import { anchoredPopoverCss } from './atoms/popover.ts'
 import { kindGlyph, kindLabel } from '../atoms/kind.ts'
 import { cssBlock, palettes, themeLabel, themeModes, type WebThemeMode } from './atoms/theme.ts'
 import { addDialogCss } from './chrome/add.ts'
 import { creditsControl, creditsCss } from './chrome/credits.ts'
 import { editorCss } from './editing/gestures.ts'
-import { emptyStateCss } from './chrome/empty.ts'
+import { emptyState, emptyStateCss } from './chrome/empty.ts'
 import { mapDebugCss } from './chrome/map-debug.ts'
 import { motionCss } from './chrome/motion.ts'
 import { flowRowCss } from './flow/row.ts'
@@ -20,7 +19,6 @@ import { removeCss } from './organisms/remove.ts'
 import { relationshipCardCss } from './organisms/relationship-card.ts'
 import { tipCss } from './organisms/tip.ts'
 import type { WebBootPayload } from './payload.ts'
-import { isEmptyWorld } from '../../empty-world.ts'
 import { projectEditorCss } from './project/editor.ts'
 import { revisionControl, revisionCss } from './revision/view.ts'
 import { searchControl, searchCss } from './search/view.ts'
@@ -427,17 +425,6 @@ function helpControl(): string {
     + rows.map(([action, shortcut]) => `<div><dt>${action}</dt><dd>${shortcut}</dd></div>`).join('')
     + '</dl></section>').join('')
   return `<details id="help"><summary class="chrome-button">Help</summary><div class="anchored-popover help-panel" role="region" aria-label="Help">${guide}<div class="help-shortcuts">${body}</div></div></details>`
-}
-
-/** The invitation shown while the current world has nothing to draw; history is read-only, so a selected revision never shows it. */
-function emptyState(payload: WebBootPayload): string {
-  const hidden = payload.revision === null && isEmptyWorld(payload.world) ? '' : ' hidden'
-  const form = payload.delivery.kind === 'live'
-    ? '<form><input name="name" placeholder="System name" aria-label="System name" required><textarea name="overview" placeholder="What it will do" aria-label="Overview" required></textarea><p class="error" role="status"></p><button type="submit">Draft</button></form>'
-    : ''
-  return `<section id="empty" aria-label="Empty map"${hidden}><div class="empty-card"><h1>${escaped(payload.project?.title ?? '')}</h1>`
-    + '<p>Nothing on the map yet.</p><p>Build something and the next scan draws it, or draft the first system now.</p>'
-    + `${form}</div></section>`
 }
 
 export function renderPage(payload: WebBootPayload): string {

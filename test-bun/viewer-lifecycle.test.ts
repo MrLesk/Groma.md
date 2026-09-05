@@ -9,7 +9,7 @@ import { EMPTY_WORK_SNAPSHOT } from '@groma/work-source'
 import type { WorkSource } from '@groma/work-source'
 
 import { startTerminalViewer } from '../src/view-host.ts'
-import { renderPlainWorld } from '../src/plain-world.ts'
+import { noComponentsTitle } from '../src/empty-world.ts'
 import { mountTerminalViewer } from '../src/viewers/tui/terminal-viewer.ts'
 import {
   fixtureRoot,
@@ -144,16 +144,14 @@ test.concurrent('an empty world shows its next steps until a live update supplie
 
   await setup.renderOnce()
   const before = setup.captureCharFrame()
-  assert.match(before, /Fresh <shop>/)
-  assert.match(before, /groma scan/)
-  assert.match(before, /groma add draft/)
+  assert.ok(before.includes(noComponentsTitle))
 
   await press(setup, 'r')
   assert.equal(refreshes, 1)
 
   app.update(full)
   await setup.renderOnce()
-  assert.doesNotMatch(setup.captureCharFrame(), /Architecture is empty/)
+  assert.ok(!setup.captureCharFrame().includes(noComponentsTitle))
   app.destroy()
 })
 
@@ -169,13 +167,4 @@ test.concurrent('Escape, q and Ctrl+C each leave the empty viewer', async () => 
     await app.closed
     assert.equal(setup.renderer.isDestroyed, true)
   }
-})
-
-test.concurrent('plain output gives the same empty-project commands', async () => {
-  const output = await renderPlainWorld(emptyFixtureRoot)
-
-  assert.match(output, /^Fresh <shop>/)
-  assert.match(output, /groma scan/)
-  assert.match(output, /groma add draft/)
-  assert.match(output, /groma draft component/)
 })

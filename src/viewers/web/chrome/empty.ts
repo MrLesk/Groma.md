@@ -1,7 +1,9 @@
 import type { DraftElementInput } from '../../../authoring.ts'
-import { isEmptyWorld } from '../../../empty-world.ts'
+import { createComponentsHint, hasComponents, isEmptyWorld, noComponentsTitle } from '../../../empty-world.ts'
 import type { ProjectProfile } from '../../../project-profile.ts'
 import type { ArchitectureGraph } from '../../../types.ts'
+import { escaped } from '../atoms/escape.ts'
+import type { WebBootPayload } from '../payload.ts'
 
 export const emptyStateCss = `
   #empty { position: fixed; inset: 0; z-index: 2; display: grid; place-items: center; pointer-events: none; }
@@ -20,6 +22,14 @@ export const emptyStateCss = `
   }
   #empty h1 { margin: 0; font-size: 20px; line-height: 1.3; }
   #empty p { margin: 0; }
+  #empty .project { color: var(--muted); font-size: 11px; }
+  #empty.has-architecture { inset: 78px 0 auto; }
+  #empty.has-architecture .empty-card { position: relative; padding: 14px 42px 14px 18px; gap: 4px; }
+  #empty.has-architecture h1 { font-size: 13px; }
+  #empty.has-architecture p { font-size: 11px; }
+  #empty.has-architecture form, #empty.has-architecture .project { display: none; }
+  #empty .dismiss { display: none; }
+  #empty.has-architecture .dismiss { display: block; position: absolute; right: 10px; top: 8px; border: 0; padding: 2px 5px; }
   #empty form { display: grid; gap: 8px; }
   #empty input, #empty textarea {
     width: 100%;
@@ -39,12 +49,29 @@ export const emptyStateCss = `
   #empty button:disabled { opacity: 0.5; cursor: wait; }
 `
 
+/** An empty map invites creation; existing architecture keeps its map beneath a compact notice. */
+export function emptyState(payload: WebBootPayload): string {
+  const hidden = payload.revision === null && !hasComponents(payload.world) ? '' : ' hidden'
+  const className = isEmptyWorld(payload.world) ? '' : ' class="has-architecture"'
+  const form = payload.delivery.kind === 'live'
+    ? '<form><input name="name" placeholder="System name" aria-label="System name" required><textarea name="overview" placeholder="What it will do" aria-label="Overview" required></textarea><p class="error" role="status"></p><button type="submit">Draft system</button></form>'
+    : ''
+  return `<section id="empty" aria-label="Empty map"${className}${hidden}><div class="empty-card">`
+    + `<p class="project">${escaped(payload.project?.title ?? '')}</p><h1>${noComponentsTitle}</h1>`
+    + `<p>${createComponentsHint}</p>${form}<button class="dismiss" type="button" aria-label="Dismiss no-components message">×</button></div></section>`
+}
+
 /** The invitation that stands in for the map while the world has nothing to draw. */
 export function createEmptyState(
   host: HTMLElement,
   draft: ((input: DraftElementInput) => Promise<void>) | undefined,
 ) {
-  const title = host.querySelector('h1')!
+  const title = host.querySelector('.project')!
+  let dismissed = false
+  host.querySelector('.dismiss')!.addEventListener('click', () => {
+    dismissed = true
+    host.hidden = true
+  })
   if (draft !== undefined) {
     const form = host.querySelector<HTMLFormElement>('form')!
     const name = form.elements.namedItem('name') as HTMLInputElement
@@ -69,7 +96,8 @@ export function createEmptyState(
   return {
     /** History is read-only, so a selected revision never shows the invitation. */
     paint(world: Pick<ArchitectureGraph, 'elements'>, project: ProjectProfile | undefined, historical: boolean): void {
-      host.hidden = historical || !isEmptyWorld(world)
+      host.hidden = historical || hasComponents(world) || (dismissed && !isEmptyWorld(world))
+      host.classList.toggle('has-architecture', !isEmptyWorld(world))
       title.textContent = project?.title ?? ''
     },
   }
