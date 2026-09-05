@@ -1,5 +1,6 @@
 import { ownsDetails, primarySelection } from '../selection.ts'
 import type { Selection } from '../selection.ts'
+import { bindPopover } from '../atoms/popover.ts'
 import { bindShortcuts, type ShortcutActions } from './shortcuts.ts'
 
 /** Buttons and keys use the same actions; shell events stay outside map orchestration. */
@@ -9,11 +10,8 @@ export function bindChromeActions(actions: ShortcutActions): void {
   document.getElementById('zoom-out')!.addEventListener('click', actions.zoomOut)
   document.getElementById('fit')!.addEventListener('click', actions.fit)
   document.getElementById('details-close')!.addEventListener('click', actions.deselect)
-  const credits = document.getElementById('credits')!
-  document.addEventListener('pointerdown', event => {
-    if (!credits.hasAttribute('open') || !(event.target instanceof Node) || credits.contains(event.target)) return
-    credits.removeAttribute('open')
-  })
+  bindPopover(document.getElementById('help')!)
+  bindPopover(document.getElementById('credits')!)
 }
 
 export interface WebShell {

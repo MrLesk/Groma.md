@@ -1,4 +1,5 @@
 import type { WebDataSource } from '../data.ts'
+import { bindPopover } from '../atoms/popover.ts'
 import type { WebBootPayload, WebPayload, WebWorkPayload } from '../payload.ts'
 
 interface RevisionControlOptions {
@@ -18,7 +19,7 @@ function localizeDates(control: ParentNode): void {
   }
 }
 
-function revisionTooltip(control: HTMLElement): () => void {
+function revisionTooltip(control: HTMLElement) {
   const tooltip = document.createElement('div')
   tooltip.className = 'revision-tooltip'
   tooltip.setAttribute('role', 'tooltip')
@@ -56,7 +57,7 @@ function revisionTooltip(control: HTMLElement): () => void {
   control.addEventListener('toggle', () => {
     if (!control.hasAttribute('open')) hide()
   })
-  return hide
+  return { element: tooltip, hide }
 }
 
 /** Owns the compact revision selector and applies live or published snapshots. */
@@ -64,19 +65,13 @@ export function createRevisionControl(options: RevisionControlOptions) {
   const { control, body, boot, data, applyRevision, applyWorld, applyWork } = options
   const label = control.querySelector<HTMLElement>('.revision-current')!
   const liveLabel = control.querySelector<HTMLElement>('[data-revision=""]')!.textContent!
-  const hideTooltip = revisionTooltip(control)
+  const { element: tooltip, hide: hideTooltip } = revisionTooltip(control)
   let selected: string | undefined
   let loading = false
   let appliedWorld = boot.generation
   let appliedWork = boot.workGeneration
 
-  document.addEventListener('pointerdown', event => {
-    const target = event.target
-    if (!control.hasAttribute('open') || !(target instanceof Node)) return
-    if (control.contains(target) || (target instanceof Element && target.closest('.revision-tooltip') !== null)) return
-    control.removeAttribute('open')
-    hideTooltip()
-  })
+  bindPopover(control, { companion: tooltip })
 
   const show = (payload: WebPayload): void => {
     selected = payload.revision?.id

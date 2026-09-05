@@ -80,6 +80,9 @@ Fit, `-`, zoom readout, `+`, Theme, Help, and Credits. Controls share one
 height, and opening search leaves them in place. Header popups float with
 a clear gap below the bar. At narrower widths the
 counts and the Fit and Theme text give way to the controls.
+Popup triggers share a pointer cursor. Clicking outside dismisses Help, Credits,
+Theme, Revision, and Search through the same popup behavior. Search cancellation
+restores its saved view; the revision tooltip remains part of its popup.
 Help opens a grouped shortcut guide for Map, Search, View, and layer gestures.
 Actions and key labels align in rows on the shared popup surface. The information icon opens
 Credits with a link to the Groma repository, followed by every directly declared
