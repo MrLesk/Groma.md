@@ -87,10 +87,16 @@ test.concurrent('details list children, promoted peers, and files', () => {
   expect(groma.relationships).toEqual([])
 
   const core = inspectDetails(fixture.elements[2]!, fixture)
-  expect(core.relationships.map(({ outgoing, peerId }) => ({ outgoing, peerId }))).toEqual([{
-    outgoing: true,
-    peerId: 'web',
-  }])
+  const outgoing = core.relationships[0]!
+  expect(outgoing.source.representationId).toBe(core.id)
+  expect(outgoing.target.representationId).toBe('web')
+  expect(outgoing.id).toBe(fixture.relationships[0]!.id)
+
+  const web = inspectDetails(fixture.elements[3]!, fixture)
+  const incoming = web.relationships[0]!
+  expect(incoming.source.representationId).toBe(core.id)
+  expect(incoming.target.representationId).toBe(web.id)
+  expect(incoming.id).toBe(outgoing.id)
 
   const layout = inspectDetails(fixture.elements[4]!, fixture)
   expect(layout.files).toEqual([{
