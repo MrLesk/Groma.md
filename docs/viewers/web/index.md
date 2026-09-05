@@ -131,8 +131,13 @@ The hierarchy pane's boxed double-chevron retracts it to a narrow rail and
 returns it without changing tree, selection, or camera state. Its quiet branch lines keep nested
 rows legible. Under Flows, each actor has an accordion that starts collapsed
 and retains its open state across viewer repaints. Actor rows use the shared
-actor glyph and align with root system rows, with their flow rows one tree
-level deeper. Each group contains the
+actor glyph and sit one level below Flows, with their flow rows one level
+deeper. The sidebar uses a shared 16 px nesting step and compact arrow/icon
+spacing throughout the actor groups and software tree. Both use the same row
+component; actor flow counts and software child counts remain visible when
+expanded. Grouped flow labels
+omit a matching actor-name prefix; the authored title remains in the reader.
+Each group contains the
 scenarios whose first step starts with that actor. Flows that start with a
 software element appear directly in the list. Each row is one named, authored
 scenario. Clicking it opens its
@@ -148,8 +153,7 @@ sit under their system and components under their container, in
 hierarchy order; the map places them by flow instead.
 Ghost names are dim; established external systems use normal text contrast.
 Every selected element is marked,
-and rows are collapsed except the paths to selected items; a collapsed row shows its child
-count. A row's arrow
+and rows are collapsed except the paths to selected items. A row's arrow
 expands or collapses it by hand without changing the selection, while selected paths stay open. The
 tree and the map share one selection. The bottom of the pane is the kind legend.
 Authored sibling groups are invisible to the tree.

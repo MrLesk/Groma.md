@@ -71,6 +71,11 @@ groma:
       file: src/viewers/web/chrome/empty.ts
       dependencies: 4
       dependents: 2
+    - scanner: typescript
+      file: src/viewers/web/organisms/sidebar-row.ts
+      symbol: sidebarRow
+      dependencies: 2
+      dependents: 2
 ---
 
 Owns the fixed browser chrome, theme choice, keyboard shortcuts, shared controls and reading surfaces around the map. It supplies common text and popup presentation, restrained motion and the initial drafting invitation when the architecture is empty.

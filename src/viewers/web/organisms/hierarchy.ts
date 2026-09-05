@@ -1,5 +1,5 @@
-import { kindGlyph } from '../../atoms/kind.ts'
 import type { TreeRow } from '../../tui/tree.ts'
+import { sidebarRow } from './sidebar-row.ts'
 import { sectionHeading } from './sidebar-section.ts'
 
 /** The structure starts open and keeps its state across repaints. */
@@ -25,9 +25,9 @@ function hierarchyRow(
   onToggle: (row: TreeRow) => void,
   hasSibling: boolean,
 ): HTMLButtonElement {
-  const button = document.createElement('button')
-  button.type = 'button'
-  button.className = 'row'
+  const button = sidebarRow(row.title, row.kind, row.hasChildren
+    ? { expanded: row.expanded, count: row.count, toggle: () => onToggle(row) }
+    : undefined)
   button.dataset.id = row.id
   if (selectedIds.has(row.id)) button.classList.add('selected')
   if (row.origin !== 'observed') button.classList.add('ghost')
@@ -42,28 +42,7 @@ function hierarchyRow(
   currentBranch?.classList.add('current')
   if (currentBranch !== undefined && !hasSibling) currentBranch.classList.add('end')
 
-  const twist = document.createElement('span')
-  twist.className = 'twist'
-  twist.textContent = row.hasChildren ? row.expanded ? '▾' : '▸' : ''
-  if (row.hasChildren) {
-    twist.classList.add('toggle')
-    twist.addEventListener('click', event => {
-      event.stopPropagation()
-      onToggle(row)
-    })
-  }
-
-  const mark = document.createElement('span')
-  mark.className = 'mark'
-  mark.textContent = kindGlyph(row.kind)
-
-  const name = document.createElement('span')
-  name.className = 'name'
-  name.textContent = row.hasChildren && !row.expanded
-    ? `${row.title} (${row.count})`
-    : row.title
-
-  button.append(...branches, twist, mark, name)
+  button.prepend(...branches)
   button.addEventListener('click', event => onSelect(row.id, event.shiftKey))
   return button
 }

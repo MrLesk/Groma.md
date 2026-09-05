@@ -196,6 +196,7 @@ const style = `
   }
   #hierarchy, #details { position: absolute; top: 74px; bottom: 12px; min-width: 0; min-height: 0; z-index: 5; }
   #hierarchy {
+    --tree-step: 16px;
     left: 12px;
     width: var(--hierarchy-column);
     display: flex;
@@ -221,8 +222,9 @@ const style = `
   #tree .group { padding: 10px 14px 4px; }
   #tree .group:first-child { padding-top: 4px; }
   #tree .group.external { border-top: 1px solid var(--hairline); margin-top: 10px; padding-top: 14px; }
-  /* Align flow names with depth-one tree names while keeping hover backgrounds full-width. */
-  #flows .actor-flows .flow-row { padding-left: 51px; }
+  #flows .actor-row { padding-left: calc(14px + var(--tree-step)); }
+  /* Flow checks sit below actor names; labels advance by the same tree step. */
+  #flows .actor-flows .flow-row { padding-left: calc(20px + 2 * var(--tree-step)); gap: 4px; }
   #legend { border-top: 1px solid var(--ink); padding: 12px 16px; display: grid; gap: 4px; }
   #legend div { display: flex; gap: 16px; }
   #legend span { display: inline-flex; align-items: center; gap: 6px; }
@@ -324,7 +326,7 @@ const style = `
   .row {
     display: flex;
     align-items: center;
-    gap: 7px;
+    gap: 4px;
     width: 100%;
     border: 0;
     background: transparent;
@@ -333,11 +335,12 @@ const style = `
   }
   .row:hover { background: var(--hover); }
   .row.selected { background: var(--hover); box-shadow: inset 2px 0 color-mix(in srgb, var(--ink) 35%, transparent); }
-  .row .branch { align-self: stretch; width: 16px; flex: none; border-left: 1px solid color-mix(in srgb, var(--ink) 18%, transparent); position: relative; }
-  .row .branch.current::after { content: ''; position: absolute; top: 50%; left: 0; width: 11px; border-top: 1px solid color-mix(in srgb, var(--ink) 18%, transparent); }
+  .row .branch { align-self: stretch; width: calc(var(--tree-step) - 4px); flex: none; border-left: 1px solid color-mix(in srgb, var(--ink) 18%, transparent); position: relative; }
+  .row .branch.current::after { content: ''; position: absolute; top: 50%; left: 0; width: calc(var(--tree-step) - 9px); border-top: 1px solid color-mix(in srgb, var(--ink) 18%, transparent); }
   .row .branch.current.end { height: 50%; align-self: flex-start; }
   .row .branch.current.end::after { top: 100%; }
-  .row .twist { width: 1em; flex: none; color: var(--muted); }
+  .row .twist { width: 6px; flex: none; color: var(--muted); }
+  .row .mark { width: 8px; text-align: center; }
   .row .twist.toggle:hover { color: var(--highlight-text); }
   .row .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .relationship-row {
