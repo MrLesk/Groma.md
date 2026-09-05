@@ -9,6 +9,35 @@ The scanner deliberately reports atomic files, symbols, projects, imports,
 and inferred placement. It cannot decide the architectural meaning of those
 facts. Semantic curation belongs to the agent and human using Groma.
 
+## Backlog task links
+
+When the `backlog` CLI is available and you work on a Backlog task, you must
+keep its changed files and architecture references current. These links let
+Groma place the task on the architecture map.
+
+1. Read the task with `backlog task view <task-id> --plain` before changing code.
+2. Immediately after changing a repository file, and before changing another
+   file, record its repository-relative path in the task's modified-file list.
+   `--modified-file` replaces the complete list: preserve every existing entry
+   and append each newly changed path, using one flag per file in the order
+   the files were first changed.
+3. In that same update, add each affected architecture element's exact
+   `groma.id` with `--add-ref`. Use `groma view <source-file>` to inspect the
+   existing owner of a source file. Architecture references must use real element IDs;
+   file paths, titles, and issue URLs do not identify map elements.
+
+```bash
+backlog task edit <task-id> \
+  --modified-file <previous-path> \
+  --modified-file <new-path> \
+  --add-ref <groma-element-id>
+```
+
+Use Backlog's CLI to update the task; do not edit its Markdown directly.
+Do not wait until testing or task completion to record these links.
+Task metadata stays in Backlog. Groma uses file ownership and element IDs
+to connect it to the map.
+
 ## Workflow
 
 1. Confirm the repository root and the system the human wants to understand.
