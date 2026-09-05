@@ -10,9 +10,9 @@ export const workSummaryCss = `
   #work .mark .badge { position: absolute; top: -3px; right: -5px; width: 20px; height: 16px; }
   #work .mark .card { inset: 0; }
   #work .mark .face { border-radius: 8px; font-size: 10px; letter-spacing: -0.04em; font-variant-numeric: tabular-nums; }
-  #work .mark .front { overflow: hidden; background: var(--accent); color: var(--on-colour); border: 0; }
+  #work .mark .front { overflow: hidden; background: color-mix(in srgb, var(--accent) 85%, transparent); color: var(--on-colour); border: 0; }
   #work .mark .back { font-size: 11px; }
-  #work .mark.empty .front { background: var(--muted); }
+  #work .mark.empty .front { background: color-mix(in srgb, var(--muted) 85%, transparent); }
 `
 
 export interface WorkSummary {

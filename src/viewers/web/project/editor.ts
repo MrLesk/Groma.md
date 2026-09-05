@@ -42,7 +42,7 @@ export const projectEditorCss = `
   #project-editor .markdown-label { color: var(--muted); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; }
   #project-editor .markdown-modes { display: flex; gap: 2px; padding: 2px; border: 1px solid var(--hairline); border-radius: 6px; }
   #project-editor .markdown-modes button { border: 0; padding: 4px 8px; color: var(--muted); font-size: 10px; }
-  #project-editor .markdown-modes button[aria-selected="true"] { color: var(--paper); background: var(--ink); }
+  #project-editor .markdown-modes button[aria-selected="true"] { color: var(--paper); background: color-mix(in srgb, var(--ink) 85%, transparent); }
   #project-editor input, #project-editor textarea {
     width: 100%;
     border: 1px solid var(--hairline);

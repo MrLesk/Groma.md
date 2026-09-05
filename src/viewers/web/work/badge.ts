@@ -22,8 +22,8 @@ export const workBadgeCss = `
     backface-visibility: hidden; font-size: 11px; font-weight: 600; letter-spacing: 0.04em;
   }
   .badge .face svg { width: 18px; height: 18px; }
-  .badge .face.front { background: var(--paper); color: var(--ink); border: 1px solid var(--pin); }
-  .badge .face.back { background: var(--accent); color: var(--on-colour); transform: rotateY(180deg); font-size: 14px; }
+  .badge .face.front { background: color-mix(in srgb, var(--paper) 78%, transparent); color: var(--ink); border: 1px solid var(--pin); }
+  .badge .face.back { background: color-mix(in srgb, var(--accent) 85%, transparent); color: var(--on-colour); transform: rotateY(180deg); font-size: 14px; }
   .work-done .badge .card { transform: rotateY(180deg); }
   .work-finishing .badge .card { animation: work-badge-finish ${WORK_BADGE_FLIP_MS}ms ease both; }
   @keyframes work-badge-finish {

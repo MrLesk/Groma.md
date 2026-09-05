@@ -26,7 +26,7 @@ export const anchoredPopoverCss = `
     padding: 6px;
     border: 1px solid color-mix(in srgb, var(--ink) 14%, transparent);
     border-radius: var(--chrome-radius);
-    background: color-mix(in srgb, var(--paper) 94%, transparent);
+    background: color-mix(in srgb, var(--paper) 78%, transparent);
     backdrop-filter: blur(18px);
     box-shadow: 0 12px 36px color-mix(in srgb, var(--ink) 14%, transparent);
   }

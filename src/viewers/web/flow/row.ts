@@ -16,7 +16,7 @@ export const flowRowCss = `
     display: grid; width: 12px; height: 12px; flex: 0 0 12px;
     place-items: center; border: 1px solid var(--muted); font-size: 9px; line-height: 1;
   }
-  .flow-row.active .flow-check { border-color: var(--highlight); background: var(--highlight); color: var(--on-colour); }
+  .flow-row.active .flow-check { border-color: var(--highlight); background: color-mix(in srgb, var(--highlight) 85%, transparent); color: var(--on-colour); }
   .flow-row .name { overflow: hidden; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
   #details .flow-list .flow-row { padding: 7px 0; }
   #details .flow-list .flow-row + .flow-row { border-top: 1px solid var(--hairline); }

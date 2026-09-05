@@ -101,7 +101,7 @@ const style = `
   body.hud-hidden #details,
   body.hud-hidden #work,
   body.hud-hidden #pins { display: none; }
-  button { font: inherit; color: inherit; cursor: pointer; }
+  button { font: inherit; color: inherit; background: transparent; cursor: pointer; }
   button:focus-visible { outline: 2px solid var(--highlight); outline-offset: -1px; }
   #legend span, #details .meta, #details .section, #hierarchy .section, #tree .group, #zoom, #details .chip, #stats, .pane-label {
     font-size: 10px;
@@ -112,10 +112,14 @@ const style = `
   #header, #hierarchy, #details {
     border: 1px solid color-mix(in srgb, var(--ink) 12%, transparent);
     border-radius: var(--chrome-radius);
-    backdrop-filter: blur(14px);
     box-shadow: 0 4px 14px color-mix(in srgb, var(--ink) 6%, transparent);
   }
-  #header, #hierarchy, #details { background: var(--chrome-surface); }
+  #hierarchy, #details { background: var(--chrome-surface); backdrop-filter: blur(14px); }
+  /* Keep blur off the popup ancestor so menus can blur the map and panes behind them. */
+  #header::before {
+    content: ''; position: absolute; inset: 0; z-index: -1; border-radius: inherit;
+    background: var(--chrome-surface); backdrop-filter: blur(14px); pointer-events: none;
+  }
   #header {
     position: absolute;
     top: 10px;
@@ -165,7 +169,6 @@ const style = `
   #help .help-panel {
     padding: 0;
     max-height: calc(100vh - 90px);
-    background: var(--paper);
   }
   #help section { padding: 10px 14px; }
   #help section + section { border-top: 1px solid var(--hairline); }
@@ -291,7 +294,7 @@ const style = `
     text-transform: uppercase;
   }
   .controls button + button { margin-left: -1px; }
-  .controls button.active { background: var(--ink); color: var(--paper); }
+  .controls button.active { background: color-mix(in srgb, var(--ink) 85%, transparent); color: var(--paper); }
   #map-controls {
     align-items: stretch;
     border: 0;

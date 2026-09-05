@@ -6,7 +6,7 @@
 export const tipCss = `
   #tip {
     position: absolute; z-index: 1; transform: translate(-50%, -100%); padding: 4px 8px; border-radius: 6px;
-    background: var(--ink); color: var(--paper); font-size: 11px; line-height: 1.3; white-space: nowrap; pointer-events: none;
+    background: color-mix(in srgb, var(--ink) 85%, transparent); color: var(--paper); font-size: 11px; line-height: 1.3; white-space: nowrap; pointer-events: none;
   }
 `
 
