@@ -44,9 +44,16 @@ function runBacklog(
   repositoryRoot: string,
 ): Promise<string> {
   return new Promise((resolve, reject) => {
-    const child = spawn(command, arguments_, {
+    const shim = process.platform === 'win32' && command.toLowerCase().endsWith('.cmd')
+    // Only the fixed config queries below reach the command interpreter.
+    const args = shim
+      ? ['/d', '/s', '/c', `""${command}" ${arguments_.join(' ')}"`]
+      : arguments_
+    const child = spawn(shim ? 'cmd.exe' : command, args, {
       cwd: repositoryRoot,
       stdio: ['ignore', 'pipe', 'pipe'],
+      windowsVerbatimArguments: shim,
+      windowsHide: true,
     })
     const stdout: Buffer[] = []
     let stderr = ''
@@ -108,8 +115,8 @@ export function createBacklogSource(
 ): WorkSource {
   return {
     async read() {
-      const [files, statusesText, defaultStatusText] = await Promise.all([
-        taskFiles(repositoryRoot),
+      const files = await taskFiles(repositoryRoot)
+      const [statusesText, defaultStatusText] = await Promise.all([
         run(['config', 'get', 'statuses'], repositoryRoot),
         run(['config', 'get', 'defaultStatus'], repositoryRoot),
       ])

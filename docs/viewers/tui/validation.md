@@ -20,10 +20,36 @@ geometric zoom or fit-all view.
 - Cards, routes, and relationship labels keep their world cells across selection
   changes. Only their camera position changes.
 
+The automated terminal procedure requires `tui-test` on `PATH` in the
+shell running it, plus Bun and the installed project dependencies.
+Check availability with `Get-Command tui-test` in PowerShell or
+`command -v tui-test` in Bash. It is a separate validation tool, not
+a dependency required to run Groma.
+
 Drive `groma view` with `tui-test`. Read the terminal, send keys, and
 capture a screenshot.
 Compare world geometry across arrow moves; the camera may pan, but cards and
 labels must not rearrange. Do not wait for a human screenshot.
+
+### Windows (PowerShell)
+
+```powershell
+$gromaTuiSession = "groma-view-$PID"
+$gromaTuiArtifacts = Join-Path ([System.IO.Path]::GetTempPath()) ("groma-tui-test-" + [guid]::NewGuid())
+New-Item -ItemType Directory -Path $gromaTuiArtifacts | Out-Null
+try {
+    tui-test run --session $gromaTuiSession --cols 120 --rows 36 --cwd (Get-Location).Path bun src/cli.ts view
+    tui-test wait idle --session $gromaTuiSession --timeout 10000
+    tui-test text --session $gromaTuiSession
+    tui-test press --session $gromaTuiSession Enter
+    tui-test wait idle --session $gromaTuiSession --timeout 10000
+    tui-test screenshot --session $gromaTuiSession (Join-Path $gromaTuiArtifacts 'frame.svg')
+} finally {
+    tui-test close --session $gromaTuiSession
+}
+```
+
+### macOS and Linux (Bash)
 
 ```bash
 GROMA_TUI_SESSION="groma-view-$$"
