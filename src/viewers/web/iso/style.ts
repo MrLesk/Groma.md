@@ -188,13 +188,12 @@ export const mapCss = `
   #map .route.lit { --emphasis: ${emphasis(2)}; }
   #map .route.lit .line { stroke: var(--highlight); opacity: 1; stroke-dasharray: 8 5; animation: map-flow 900ms linear infinite; }
   #map .route.lit .arrow { fill: var(--highlight); opacity: 1; }
-  #map .route.focused { --emphasis: ${emphasis(3)}; }
-  #map .route.focused .line { animation: map-flow 900ms linear infinite, map-flow-focus 1600ms ease-in-out infinite; }
+  #map .route.focused { --emphasis: ${emphasis(3)}; animation: map-flow-focus 1600ms ease-in-out infinite; }
   #map :is(.building, .slab, .island).focused { --emphasis: ${emphasis(3)}; animation: map-flow-focus 1600ms ease-in-out infinite; }
   @keyframes map-flow { from { stroke-dashoffset: 0; } to { stroke-dashoffset: -13; } }
   @keyframes map-flow-focus { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
   @media (prefers-reduced-motion: reduce) {
-    #map .route.lit .line, #map :is(.building, .slab, .island).focused { animation: none; }
+    #map .route.lit .line, #map .route.focused, #map :is(.building, .slab, .island).focused { animation: none; }
   }
   #map .camera[data-tracing] .route-base,
   #map .camera[data-tracing] .route:not(.lit) { display: none; }
