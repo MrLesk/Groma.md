@@ -46,6 +46,10 @@ groma:
       file: scripts/lint-web-scrollbars.ts
       dependencies: 0
       dependents: 0
+    - scanner: typescript
+      file: src/viewers/web/chrome/credits.ts
+      dependencies: 1
+      dependents: 1
 ---
 
 Owns the fixed browser chrome, theme, restrained motion, common controls, scroll surfaces, help tips, and optional map diagnostics.

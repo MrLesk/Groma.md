@@ -8,6 +8,7 @@ import { anchoredPopoverCss } from './atoms/popover.ts'
 import { kindGlyph, kindLabel } from '../atoms/kind.ts'
 import { cssBlock, palettes, themeLabel, themeModes, type WebThemeMode } from './atoms/theme.ts'
 import { addDialogCss } from './chrome/add.ts'
+import { creditsControl, creditsCss } from './chrome/credits.ts'
 import { relateCss } from './chrome/relate.ts'
 import { emptyStateCss } from './chrome/empty.ts'
 import { mapDebugCss } from './chrome/map-debug.ts'
@@ -50,6 +51,7 @@ const searchIcon = icon('<circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/>')
 const revisionLoader = icon('<path d="M21 12a9 9 0 1 1-9-9"/>', 'revision-loader')
 const closeIcon = icon('<path d="M18 6 6 18M6 6l12 12"/>')
 const hierarchyIcon = icon('<path d="m11 17-5-5 5-5M18 17l-5-5 5-5"/>', 'hierarchy-chevron')
+const infoIcon = icon('<circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7h.01"/>')
 
 const legendKinds: C4Kind[][] = [
   ['actor', 'system'],
@@ -336,7 +338,7 @@ const style = `
   @media (prefers-reduced-motion: reduce) {
     #hierarchy, #hierarchy-toggle .hierarchy-chevron, #hierarchy-content, #hierarchy-title .pane-label, #details, body.details-hidden #details, body #work { transition: none; }
   }
-${chromeCss}${anchoredPopoverCss}${motionCss}${revisionCss}${searchCss}${highlightCss}${sourceCss}${taskDiffCss}${backlogMarkCss}${workBadgeCss}${workDetailsCss}${flowRowCss}${mapCss}${pinsCss}${workCss}${tipCss}${projectEditorCss}
+${chromeCss}${anchoredPopoverCss}${creditsCss}${motionCss}${revisionCss}${searchCss}${highlightCss}${sourceCss}${taskDiffCss}${backlogMarkCss}${workBadgeCss}${workDetailsCss}${flowRowCss}${mapCss}${pinsCss}${workCss}${tipCss}${projectEditorCss}
 ${emptyStateCss}
 ${addDialogCss}${relateCss}
 ${removeCss}${editableCss}${mapDebugCss}`
@@ -383,7 +385,7 @@ export function renderPage(payload: WebBootPayload): string {
   return '<!doctype html><html><head><meta charset="utf-8"><title>groma.md</title>'
     + `<style>${style}</style></head><body data-delivery="${payload.delivery.kind}">`
     + `<header id="header">${lockup}<span id="stats"></span>${revisionControl(payload, { history: historyIcon, loader: revisionLoader })}`
-    + `<div class="header-actions"><div id="map-controls" class="controls" aria-label="Map controls"><button id="fit" aria-label="Fit map">${fitIcon}<span>Fit</span></button><button id="zoom-out" aria-label="Zoom out"><span class="control-glyph">−</span></button><span id="zoom" aria-live="polite"></span><button id="zoom-in" aria-label="Zoom in"><span class="control-glyph">+</span></button></div><details id="help"><summary>Help</summary><div class="help-panel"><p>Drag or scroll to pan<br>Pinch, + or − to zoom<br>0 or Fit shows the whole map<br>/ or Cmd/Ctrl+K searches<br>F1 toggles map only<br>F2 toggles layers<br>In layers: drag orbits; Shift-drag pans<br>F3 toggles map debug<br>Escape clears selection</p></div></details>${themeControl()}${searchControl({ search: searchIcon, close: closeIcon })}</div>`
+    + `<div class="header-actions"><div id="map-controls" class="controls" aria-label="Map controls"><button id="fit" aria-label="Fit map">${fitIcon}<span>Fit</span></button><button id="zoom-out" aria-label="Zoom out"><span class="control-glyph">−</span></button><span id="zoom" aria-live="polite"></span><button id="zoom-in" aria-label="Zoom in"><span class="control-glyph">+</span></button></div><details id="help"><summary>Help</summary><div class="help-panel"><p>Drag or scroll to pan<br>Pinch, + or − to zoom<br>0 or Fit shows the whole map<br>/ or Cmd/Ctrl+K searches<br>F1 toggles map only<br>F2 toggles layers<br>In layers: drag orbits; Shift-drag pans<br>F3 toggles map debug<br>Escape clears selection</p></div></details>${creditsControl(infoIcon)}${themeControl()}${searchControl({ search: searchIcon, close: closeIcon })}</div>`
     + '</header>'
     + `<nav id="hierarchy" aria-label="Hierarchy"><div id="hierarchy-title"><span class="pane-label">Hierarchy</span>${payload.delivery.kind === 'live' ? '<button id="add" type="button" aria-label="Add">+</button>' : ''}<button id="hierarchy-toggle" type="button" aria-controls="hierarchy-content">${hierarchyIcon}</button></div><div id="hierarchy-content"><div id="flows"></div><div id="tree"></div><div id="legend">${legend()}</div></div></nav>`
     + '<div id="map"></div>'
