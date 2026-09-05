@@ -414,7 +414,8 @@ task pair has its own colour, the pairs in task order over a fixed
 palette. A pin that appears after the map is open bounces once in
 that colour, then returns to the inactive greyscale. The
 Backlog.md Tasks panel, 35%-paper frosted glass with a 28px outer radius
-at the bottom centre of the map, exists while any pin does: folded it is a compact pill with
+at the bottom centre of the map, stays visible while Backlog has a configured workflow,
+even with no mapped tasks: folded it is a compact pill with
 the Backlog document mark in greyscale, a small badge counting unique mapped tasks
 in the enabled status filters (including zero), and a chevron pointing up.
 The badge briefly pulses when shown work changes, rolls and bounces when its count
