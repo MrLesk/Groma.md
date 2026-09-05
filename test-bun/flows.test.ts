@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test'
 import path from 'node:path'
 import { cp, mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { parse } from 'comark'
+import { parseMarkdown } from 'comark'
 import { annotateArchitecture, loadAnnotatedArchitecture } from '../src/core.ts'
 import { loadArchitecture } from '../src/architecture-reader.ts'
 import { buildArchitectureModel } from '../src/architecture-model.ts'
@@ -63,7 +63,7 @@ test.concurrent('a flow rejects a missing directed relationship', async () => {
   const records = await loadArchitecture(fixture)
   const flow = records.flows[0]!
   const body = flow.body.replace('[Requester](../actors/requester.md) | [Entry][entry]', '[Requester](../actors/requester.md) | [Worker][worker]')
-  const changed = { ...flow, body, nodes: (await parse(body)).nodes as MarkdownNode[] }
+  const changed = { ...flow, body, nodes: (await parseMarkdown(body)).nodes as MarkdownNode[] }
   expect(() => annotateArchitecture({ ...records, flows: [changed] })).toThrow('requester → worker must resolve exactly one directed relationship')
 })
 
@@ -72,7 +72,7 @@ test.concurrent('a flow rejects an ambiguous endpoint pair', async () => {
   const document = records.documents.find(document => document.sourceFilename.endsWith('/entry.md'))!
   const row = '| [Worker](worker.md) | Also dispatches | Function call |'
   const body = `${document.body.trimEnd()}\n${row}\n`
-  const changed = { ...document, body, nodes: (await parse(body)).nodes as MarkdownNode[] }
+  const changed = { ...document, body, nodes: (await parseMarkdown(body)).nodes as MarkdownNode[] }
   expect(() => annotateArchitecture({ ...records, documents: records.documents.map(item => item === document ? changed : item) }))
     .toThrow('entry → worker must resolve exactly one directed relationship')
 })

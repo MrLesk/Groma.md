@@ -263,6 +263,15 @@ Tests must be parallel-safe and run concurrently (`test.concurrent` under `bun:t
 fixtures, and temp directories; nothing is shared between tests. When a test needs a text anchor to observe behavior,
 prefer one minimal anchor over exhaustive content matching.
 
+## Test runner validation
+
+- When changing test execution or lifecycle APIs, check the official documentation for the installed runner version
+  and compare it with the version declared by the project.
+- Distinguish concurrency within a file from parallel execution and isolation between files. Validate new runner
+  options before adding them to the repository check.
+- If a test passes alone but fails in the suite, investigate the difference. Do not remove assertions, narrow the
+  scenario, increase timeouts, or add retries merely to obtain a passing result.
+
 ## TUI map
 
 For TUI behavior or rendering work, read [TUI map validation](docs/viewers/tui/validation.md) and use its

@@ -103,7 +103,7 @@ export async function startTerminalViewer(
     })
     void pullWork()
     const sourceWatch = await watchScan(repositoryRoot, { onFold: publish })
-    const architectureWatch = watchArchitecture(repositoryRoot, { onChange: publish })
+    const architectureWatch = await watchArchitecture(repositoryRoot, { onChange: publish })
     const workWatch = workSource.watch(() => {
       void pullWork()
     })

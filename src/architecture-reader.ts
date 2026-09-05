@@ -1,6 +1,6 @@
 import path from 'node:path'
 
-import { parse, parseFrontmatter } from 'comark'
+import { parseMarkdown, parseFrontmatter } from 'comark'
 
 import {
   FLOW_TYPE,
@@ -115,9 +115,9 @@ async function parseDocument(
     throw new ArchitectureReadError(sourceFilename, 'read', error)
   }
 
-  let tree: Awaited<ReturnType<typeof parse>>
+  let tree: Awaited<ReturnType<typeof parseMarkdown>>
   try {
-    tree = await parse(source)
+    tree = await parseMarkdown(source)
   } catch (error) {
     throw new ArchitectureReadError(sourceFilename, 'parse', error)
   }

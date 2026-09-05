@@ -1,10 +1,12 @@
-import { existsSync, watch } from 'node:fs'
-import type { Dirent, FSWatcher, WatchOptions } from 'node:fs'
+import { subscribe } from '@parcel/watcher'
+import type { AsyncSubscription } from '@parcel/watcher'
+import { existsSync } from 'node:fs'
+import type { Dirent } from 'node:fs'
 import {
   mkdir,
   readdir,
   readFile,
-  stat,
+  realpath,
   unlink,
   writeFile,
 } from 'node:fs/promises'
@@ -122,17 +124,11 @@ export class GromaFileSystem {
     return unlink(this.absolute(this.relative(sourceFilename)))
   }
 
-  modifiedAt(relative: string): Promise<number> {
-    return stat(this.absolute(relative)).then(info => info.mtimeMs)
-  }
-
-  watch(
-    relative: string,
-    options: WatchOptions,
-    listener: (filename: string | null) => void,
-  ): FSWatcher {
-    return watch(this.absolute(relative), options, (_event, filename) => {
-      listener(filename === null ? null : String(filename))
+  async watch(listener: (filename: string) => void): Promise<AsyncSubscription> {
+    const root = await realpath(this.absolute(''))
+    return subscribe(root, (error, events) => {
+      if (error) throw error
+      for (const event of events) listener(path.relative(root, event.path).split(path.sep).join('/'))
     })
   }
 }

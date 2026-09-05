@@ -7,6 +7,6 @@
   },
   "dependencies": {
     "@groma/work-source": "workspace:*",
-    "comark": "0.5.1"
+    "comark": "0.6.2"
   }
 }

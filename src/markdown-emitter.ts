@@ -1,4 +1,4 @@
-import { parse, parseFrontmatter } from 'comark'
+import { parseMarkdown, parseFrontmatter } from 'comark'
 import { renderFrontmatter } from 'comark/render'
 
 import { GromaFileSystem } from './groma-filesystem.ts'
@@ -9,7 +9,7 @@ import type { ArchitectureDocument, C4Kind, CodeReference, ElementStatus } from 
 
 /** Save must pass the same semantic validation as the next read before changing the file. */
 export async function validateElementSource(documents: ArchitectureDocument[], sourceFilename: string, source: string): Promise<void> {
-  const tree = await parse(source)
+  const tree = await parseMarkdown(source)
   const document = { sourceFilename, body: parseFrontmatter(source).content, nodes: tree.nodes, frontmatter: tree.frontmatter } as ArchitectureDocument
   buildArchitectureModel([...documents.filter(item => item.sourceFilename !== sourceFilename), document])
 }

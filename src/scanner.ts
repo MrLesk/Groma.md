@@ -1,6 +1,5 @@
-import { readdirSync, watch } from 'node:fs'
-import type { FSWatcher } from 'node:fs'
-import { stat } from 'node:fs/promises'
+import { subscribe } from '@parcel/watcher'
+import { realpath } from 'node:fs/promises'
 import path from 'node:path'
 
 import { reconcileScanObservations } from './core.ts'
@@ -31,28 +30,6 @@ async function scanWithRegistry(
   return reconcileScanObservations(repositoryRoot, observations)
 }
 
-function sourceRelative(directory: string, filename: string | null): string | undefined {
-  if (filename === null) return undefined
-  const joined = directory === ''
-    ? String(filename)
-    : path.join(directory, String(filename))
-  return joined.split(path.sep).join('/')
-}
-
-function sourceWatchRoots(repositoryRoot: string): { directory: string; prefix: string }[] {
-  const roots: { directory: string; prefix: string }[] = [
-    { directory: repositoryRoot, prefix: '' },
-  ]
-  for (const entry of readdirSync(repositoryRoot, { withFileTypes: true })) {
-    if (!entry.isDirectory() || skippedRoots.has(entry.name)) continue
-    roots.push({
-      directory: path.join(repositoryRoot, entry.name),
-      prefix: entry.name,
-    })
-  }
-  return roots
-}
-
 export async function watchScan(
   repositoryRoot: string,
   options: {
@@ -60,15 +37,13 @@ export async function watchScan(
     onError?: (error: unknown) => void
   } = {},
 ): Promise<{ close(): Promise<void> }> {
-  const root = path.resolve(repositoryRoot)
+  const root = await realpath(repositoryRoot)
   const registry = await loadScannerRegistry(root)
-  const startedAt = Date.now()
   let timer: ReturnType<typeof setTimeout> | undefined
   let running = false
   let pending = false
   let closed = false
   let active = Promise.resolve()
-  const watchers = new Map<string, FSWatcher>()
 
   function launch(): void {
     active = run()
@@ -100,37 +75,22 @@ export async function watchScan(
     }, SETTLE_MS)
   }
 
-  function onSourceEvent(prefix: string, filename: string | null): void {
-    if (closed) return
-    const relative = sourceRelative(prefix, filename)
-    if (relative === undefined || skippedRoots.has(relative)) return
-    void stat(path.join(root, relative)).then(info => {
-      if (closed) return
-      if (prefix === '' && info.isDirectory() && !watchers.has(relative)) {
-        watchDirectory(path.join(root, relative), relative)
-        schedule()
-      } else if (registry.matchesFile(relative) && info.mtimeMs >= startedAt) {
-        schedule()
-      }
-    }, () => {
-      if (!closed && registry.matchesFile(relative)) schedule()
-    })
-  }
-
-  function watchDirectory(directory: string, prefix: string): void {
-    watchers.set(prefix, watch(directory, { recursive: prefix !== '' }, (_event, filename) => {
-      onSourceEvent(prefix, filename)
-    }))
-  }
-
-  for (const item of sourceWatchRoots(root)) watchDirectory(item.directory, item.prefix)
+  const watcher = await subscribe(root, (error, events) => {
+    if (error) {
+      options.onError?.(error)
+      return
+    }
+    if (events.some(event => registry.matchesFile(path.relative(root, event.path).split(path.sep).join('/')))) {
+      schedule()
+    }
+  }, { ignore: [...skippedRoots] })
 
   return {
     async close() {
       if (closed) return
       closed = true
       clearTimeout(timer)
-      for (const watcher of watchers.values()) watcher.close()
+      await watcher.unsubscribe()
       await active
     },
   }

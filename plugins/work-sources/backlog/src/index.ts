@@ -3,7 +3,7 @@ import { accessSync, constants, existsSync, watch } from 'node:fs'
 import { readFile, readdir } from 'node:fs/promises'
 import path from 'node:path'
 
-import { parse } from 'comark'
+import { parseMarkdown } from 'comark'
 
 import {
   EMPTY_WORK_SOURCE,
@@ -98,7 +98,7 @@ async function taskFiles(repositoryRoot: string): Promise<string[]> {
 
 async function readTask(filename: string) {
   const source = await readFile(filename, 'utf8')
-  const document = await parse(source)
+  const document = await parseMarkdown(source)
   return { source, frontmatter: document.frontmatter }
 }
 

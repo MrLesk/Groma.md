@@ -1,4 +1,4 @@
-import { parse, parseFrontmatter } from 'comark'
+import { parseMarkdown, parseFrontmatter } from 'comark'
 import { renderFrontmatter } from 'comark/render'
 
 import { GromaFileSystem } from './groma-filesystem.ts'
@@ -39,7 +39,7 @@ export async function parseProjectProfile(
   source: string,
   sourceFilename = 'project.md',
 ): Promise<ProjectProfile> {
-  const { frontmatter, nodes } = await parse(source)
+  const { frontmatter, nodes } = await parseMarkdown(source)
   const { content } = parseFrontmatter(source)
   const metadata = requireProjectMetadata(frontmatter, sourceFilename)
   const overview = requireProjectOverview(nodes, content, sourceFilename)
