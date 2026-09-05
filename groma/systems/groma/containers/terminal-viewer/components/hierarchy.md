@@ -8,17 +8,13 @@ groma:
   group: Navigation
   code:
     - scanner: typescript
-      file: src/viewers/tui/organisms/hierarchy.ts
-      dependencies: 6
-      dependents: 1
-    - scanner: typescript
       file: src/viewers/tui/tree.ts
       dependencies: 2
-      dependents: 5
+      dependents: 6
     - scanner: typescript
       file: src/viewers/tui/panes/hierarchy.ts
-      dependencies: 6
-      dependents: 2
+      dependencies: 8
+      dependents: 3
 ---
 
 Draws the terminal architecture tree and owns its visible rows, expansion state, and focused cursor without changing map geometry.

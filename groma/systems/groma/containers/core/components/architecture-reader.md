@@ -9,8 +9,8 @@ groma:
   code:
     - scanner: typescript
       file: src/architecture-reader.ts
-      dependencies: 3
-      dependents: 10
+      dependencies: 4
+      dependents: 13
 ---
 
 Requires the root OKF v0.2 declaration and explicit Groma project profile,

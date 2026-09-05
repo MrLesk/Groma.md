@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@web-editor'
 created_date: '2026-09-02 21:16'
-updated_date: '2026-09-03 07:58'
+updated_date: '2026-09-03 15:38'
 labels:
   - cli
   - web
@@ -52,6 +52,7 @@ modified_files:
   - docs/index.md
   - docs/component-markdown.md
   - groma/systems/groma/containers/cli/components/commands.md
+  - src/authoring.ts
 parent_task_id: TASK-241
 priority: high
 type: feature

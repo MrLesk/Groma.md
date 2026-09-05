@@ -10,7 +10,7 @@ groma:
     - scanner: typescript
       file: src/viewers/web/iso/map.ts
       dependencies: 12
-      dependents: 2
+      dependents: 4
     - scanner: typescript
       file: src/viewers/web/iso/paint-buildings.ts
       symbol: paintBuildings
@@ -18,7 +18,7 @@ groma:
       dependents: 1
     - scanner: typescript
       file: src/viewers/web/iso/paint-ground.ts
-      dependencies: 5
+      dependencies: 6
       dependents: 1
     - scanner: typescript
       file: src/viewers/web/iso/paint-routes.ts

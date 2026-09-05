@@ -9,17 +9,17 @@ groma:
   code:
     - scanner: typescript
       file: src/architecture-model.ts
-      dependencies: 5
-      dependents: 6
+      dependencies: 6
+      dependents: 9
     - scanner: typescript
       file: src/types.ts
       dependencies: 0
-      dependents: 69
+      dependents: 82
     - scanner: typescript
       file: src/element-order.ts
       symbol: compareSemanticElements
       dependencies: 1
-      dependents: 6
+      dependents: 5
     - scanner: typescript
       file: scripts/validate-architecture.ts
       dependencies: 4
@@ -33,6 +33,10 @@ groma:
       symbol: codeReferencesOf
       dependencies: 1
       dependents: 1
+    - scanner: typescript
+      file: src/okf-profile.ts
+      dependencies: 1
+      dependents: 7
 ---
 
 Turns C4 concepts into a validated semantic graph. It maps standard type,

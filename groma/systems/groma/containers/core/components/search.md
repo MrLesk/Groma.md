@@ -10,7 +10,7 @@ groma:
     - scanner: typescript
       file: src/search.ts
       dependencies: 2
-      dependents: 4
+      dependents: 3
 ---
 
 Builds one ranked semantic index over the current architecture revision so every viewer finds the same elements with ancestor context.

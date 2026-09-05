@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@codex'
 created_date: '2026-09-02 21:04'
-updated_date: '2026-09-03 20:05'
+updated_date: '2026-09-05 15:23'
 labels:
   - tui
   - core
@@ -16,7 +16,6 @@ references:
   - revision-history
   - read-read
   - navigation
-  - keys
   - hierarchy
   - screen
   - terminal-host

@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@codex'
 created_date: '2026-09-04 06:25'
-updated_date: '2026-09-05 15:16'
+updated_date: '2026-09-05 15:23'
 labels:
   - tui
   - render
@@ -16,13 +16,9 @@ references:
   - navigation
   - terminal-painting
   - hierarchy
-  - navigation-spatial
   - work-focus
-  - navigation-details
   - chrome
   - screen
-  - surface
-  - keys
   - details
   - flow
   - welcome

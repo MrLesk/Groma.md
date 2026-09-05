@@ -9,11 +9,11 @@ groma:
     - scanner: typescript
       file: src/draft.ts
       dependencies: 7
-      dependents: 2
+      dependents: 1
     - scanner: typescript
       file: src/naming.ts
       dependencies: 0
-      dependents: 2
+      dependents: 10
   group: Architecture authoring
 ---
 

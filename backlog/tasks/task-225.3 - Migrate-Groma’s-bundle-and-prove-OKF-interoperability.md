@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@codex'
 created_date: '2026-08-30 21:45'
-updated_date: '2026-08-31 00:25'
+updated_date: '2026-09-05 15:23'
 labels: []
 milestone: m-5
 dependencies:
@@ -81,7 +81,6 @@ references:
   - groma
   - architecture-markdown
   - code-reference
-  - okf-profile
 modified_files:
   - groma/index.md
   - groma/project.md

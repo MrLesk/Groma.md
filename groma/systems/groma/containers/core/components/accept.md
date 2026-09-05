@@ -10,7 +10,7 @@ groma:
     - scanner: typescript
       file: src/accept.ts
       dependencies: 3
-      dependents: 1
+      dependents: 2
 ---
 
 Flips a scan-matched ghost to stable in its own file, keeping its identity, its authored OKF document, its Code evidence, and its draft tag.

@@ -4,7 +4,7 @@ title: Make Groma viewers work on Windows
 status: Done
 assignee: []
 created_date: '2026-09-01 18:25'
-updated_date: '2026-09-01 20:10'
+updated_date: '2026-09-05 15:23'
 labels: []
 dependencies: []
 references:
@@ -23,8 +23,6 @@ references:
   - create
   - instructions
   - scanner-modules
-  - cli-agent-instructions
-  - naming
   - work-source
   - welcome
   - architecture-comparison
@@ -36,6 +34,8 @@ references:
   - architecture-reader
   - groma-filesystem
   - project-profile
+  - agent-instructions
+  - typescript-scanner
 modified_files:
   - test-bun/sheet-route.test.ts
   - src/sheet/route-geometry.ts

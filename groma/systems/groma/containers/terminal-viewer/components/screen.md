@@ -9,21 +9,21 @@ groma:
   code:
     - scanner: typescript
       file: src/viewers/tui/terminal-viewer.ts
-      dependencies: 12
+      dependencies: 19
       dependents: 1
     - scanner: typescript
       file: src/viewers/tui/layout.ts
       dependencies: 1
-      dependents: 3
+      dependents: 6
     - scanner: typescript
       file: src/viewers/tui/model.ts
       symbol: TerminalViewModel
-      dependencies: 2
-      dependents: 10
+      dependencies: 4
+      dependents: 17
     - scanner: typescript
       file: src/viewers/tui/panes/view.ts
       symbol: screenView
-      dependencies: 14
+      dependencies: 17
       dependents: 1
 ---
 

@@ -10,19 +10,19 @@ groma:
     - scanner: typescript
       file: src/viewers/web/server.ts
       symbol: startWebViewer
-      dependencies: 13
+      dependencies: 11
       dependents: 1
     - scanner: typescript
       file: src/viewers/web/payload.ts
       dependencies: 8
-      dependents: 11
+      dependents: 9
     - scanner: typescript
       file: src/viewers/web/runtime.ts
       dependencies: 4
       dependents: 2
 ---
 
-Serves the page and browser bundle from the latest cached project, architecture, sheet, and work snapshots. It handles profile edits and on-demand task, source, and revision reads without recomposing unrelated state.
+Serves the page and browser bundle from cached project, architecture, sheet and task snapshots. It dispatches architecture writes through the shared authoring operations, handles project edits and on-demand source, diff and revision reads, and publishes the resulting live updates.
 
 ## Relationships
 

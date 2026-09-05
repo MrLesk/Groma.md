@@ -9,7 +9,7 @@ groma:
   code:
     - scanner: typescript
       file: src/viewers/web/render.ts
-      dependencies: 33
+      dependencies: 36
       dependents: 0
     - scanner: typescript
       file: src/viewers/web/selection.ts
@@ -22,7 +22,7 @@ groma:
     - scanner: typescript
       file: src/viewers/web/data.ts
       dependencies: 6
-      dependents: 2
+      dependents: 3
 ---
 
 Owns browser selection and orchestration: paints the map, hierarchy and details, applies live payloads, and keeps URL state synchronized without changing sheet geometry.

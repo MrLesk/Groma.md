@@ -9,7 +9,7 @@ groma:
   code:
     - scanner: typescript
       file: src/plain-world.ts
-      dependencies: 4
+      dependencies: 6
       dependents: 1
 ---
 

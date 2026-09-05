@@ -43,7 +43,7 @@ groma:
     - scanner: typescript
       file: src/sheet/types.ts
       dependencies: 1
-      dependents: 14
+      dependents: 15
 ---
 
 Composes the semantic graph into one deterministic shared sheet: slabs, groups, component buildings, source-file floors, placement, and route inputs.

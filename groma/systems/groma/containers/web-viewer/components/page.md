@@ -10,7 +10,7 @@ groma:
     - scanner: typescript
       file: src/viewers/web/page.ts
       symbol: renderPage
-      dependencies: 22
+      dependencies: 30
       dependents: 2
 ---
 

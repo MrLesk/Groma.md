@@ -16,11 +16,15 @@ groma:
       dependents: 2
     - scanner: typescript
       file: src/viewers/web/source/highlight.ts
-      dependencies: 0
+      dependencies: 1
       dependents: 3
+    - scanner: typescript
+      file: src/viewers/web/organisms/code-lists.ts
+      dependencies: 3
+      dependents: 1
 ---
 
-Controls browser source inspection and presents selected declarations and code inside Details.
+Controls browser source inspection and renders owned file lists, declarations and highlighted code inside Details. Opening code keeps the architecture selection and uses the shared source readers and syntax tokens.
 
 ## Relationships
 

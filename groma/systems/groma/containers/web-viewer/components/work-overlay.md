@@ -33,10 +33,6 @@ groma:
       symbol: toggleWorkSelection
       dependencies: 0
       dependents: 1
-    - scanner: typescript
-      file: src/viewers/web/work/status-filter.ts
-      dependencies: 0
-      dependents: 1
 ---
 
 Projects shared task anchors into map pins and the Live work island, with status filtering and task selection separate from architecture selection.

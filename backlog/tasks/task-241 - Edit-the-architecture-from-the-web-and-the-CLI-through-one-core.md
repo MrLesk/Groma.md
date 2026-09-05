@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@codex'
 created_date: '2026-09-02 21:15'
-updated_date: '2026-09-03 20:52'
+updated_date: '2026-09-05 15:23'
 labels:
   - cli
   - web
@@ -17,10 +17,8 @@ references:
   - commands
   - render
   - web-server
-  - writes
   - web-viewer-authoring
   - web-viewer-details
-  - editable
   - observed-curation
   - architecture-model
 modified_files:

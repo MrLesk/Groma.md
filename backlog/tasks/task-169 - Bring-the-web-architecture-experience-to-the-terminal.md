@@ -5,14 +5,13 @@ status: Done
 assignee:
   - '@codex'
 created_date: '2026-08-24 19:54'
-updated_date: '2026-08-25 21:00'
+updated_date: '2026-09-05 15:23'
 labels: []
 dependencies: []
 references:
   - semantic-view
   - projection
   - projection-camera
-  - navigation-spatial
   - screen
   - navigation
   - camera

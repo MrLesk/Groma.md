@@ -9,8 +9,8 @@ groma:
   code:
     - scanner: typescript
       file: src/viewers/tui/flow.ts
-      dependencies: 4
-      dependents: 5
+      dependencies: 6
+      dependents: 6
 ---
 
 Projects actor command paths into the visible terminal scope and provides their explanatory labels.

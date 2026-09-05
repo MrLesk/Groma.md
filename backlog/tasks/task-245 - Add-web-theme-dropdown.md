@@ -5,13 +5,13 @@ status: Done
 assignee:
   - '@codex'
 created_date: '2026-09-04 11:10'
-updated_date: '2026-09-04 11:29'
+updated_date: '2026-09-05 15:23'
 labels: []
 dependencies: []
 references:
-  - theme-control
   - page
   - render
+  - web-shell
 modified_files:
   - src/viewers/web/atoms/theme.ts
   - src/viewers/web/chrome/theme-control.ts

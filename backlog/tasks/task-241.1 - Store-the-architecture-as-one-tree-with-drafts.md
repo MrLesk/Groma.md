@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@web-editor'
 created_date: '2026-09-02 21:16'
-updated_date: '2026-09-02 22:33'
+updated_date: '2026-09-05 15:23'
 labels:
   - core
   - cli
@@ -14,7 +14,6 @@ references:
   - 'https://claude.ai/code/artifact/902f8d7d-7267-49cd-b8cd-771e23b93d2b'
   - architecture-model
   - architecture-writer
-  - okf-profile
   - architecture-reader
   - world-loader
   - create
