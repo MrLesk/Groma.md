@@ -177,7 +177,8 @@ scenario. Clicking it checks the flow and opens its purpose and ordered steps.
 Several flows can stay checked; clicking a checked flow removes it. Their
 explicit connections stay highlighted together, and the last checked flow owns
 the reader. Adding or removing a flow centers and adjusts the camera to fit all
-remaining flows' endpoints and routes. Clearing the last flow leaves the camera
+remaining flows' endpoints and routes, stopping at normal readable label size.
+Clearing the last flow leaves the camera
 in place. The same
 control appears in an element's Flows list. Structure rows use kind marks and
 neutral selection; their arrows only expand containment. Below it the Structure
@@ -393,8 +394,9 @@ world, sheet, building, surface, route, and route-point counts. Opening the
 panel only reveals the collected snapshot and never rebuilds the map. Resizing the pane refits the
 map until you move the camera; after that it keeps the same point in
 the centre. Click a building, a slab, a system island, or a tree
-row to select it and center the camera at the closest zoom that fits its complete
-body. Systems and containers include their contained architecture. The fit uses
+row to select it and center the camera on its complete body. Automatic focus
+stops at normal readable label size; larger selections zoom out until they fit.
+Manual zoom can go closer. Systems and containers include their contained architecture. The fit uses
 the displayed nested or separated geometry and the clear area between the side
 panes. Architecture selection from details or an accepted search result uses the
 same fit. Click a route to select and fit its relationship and endpoints, which
