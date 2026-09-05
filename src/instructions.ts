@@ -23,8 +23,8 @@ source code ──scan──▶ groma|.groma/*.md ──view──▶ maps
    - groma add — declare a person, an external system, a draft, a relation, or a group; the scanner never sees those.
    - groma draft — a new system, container or component becomes a ghost at the path it will keep.
    - groma edit — rename, update meaning or technology, tag a part with a draft, group scan evidence, move an empty scanned component, combine empty scan records, or change the project record.
-   - groma add relation, groma edit relation, groma remove relation — author, reword, or take away one collaboration between two parts.
-   - groma remove — take away a person, an external, a ghost, a draft nothing belongs to, a relation, or a group.
+   - groma add relation, groma edit relation, groma remove relation — author, reword, or remove a draft collaboration between two parts. Current relationships cannot be removed.
+   - groma remove — take away a person, an external, a ghost, a draft nothing belongs to, a draft relation, or a group.
 5. groma accept <id> — accept a ghost only if a scan has matched it. The file stays where it is; only its status changes.
 
 ## Rules of engagement
@@ -57,7 +57,7 @@ Say what must be true, not how to build it. Do not specify frameworks, file layo
 - Planned collaboration: groma draft relation <source-id> <target-id> --description <prose> --technology <text>. Its dashed identity is independent of both endpoints.
 - Accept a planned collaboration: groma accept relation <source-id> <target-id>. Scans never accept relationships.
 - Reword it: groma edit relation <source-id> <target-id> [--description <prose>] [--technology <text>]
-- Remove it: groma remove relation <source-id> <target-id>
+- Remove a planned collaboration: groma remove relation <source-id> <target-id>. Only draft relationships without flow references can be removed; current relationships are protected.
 - Draft outcome prose: groma edit <draft-id> --overview <markdown>
 - Project record: groma edit project [--title <text>] [--description <text>] [--overview <markdown>]
 - Remove a person, an external, a ghost, or a draft no ghost belongs to: groma remove <id>. It refuses while other parts relate to it, while a ghost still contains parts, or while ghosts carry the draft's tag, and it never removes scanned software.

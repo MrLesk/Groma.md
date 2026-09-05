@@ -37,9 +37,8 @@ system), and a Draft form that posts the same input as `groma draft system`.
 The first element replaces it without a reload. A published snapshot shows
 the invitation without the form.
 
-The hierarchy pane's plus button opens one dialog that declares a person, an
-external system, or a draft with the same input `groma add` takes. The
-details pane ends with a Remove control only where `groma remove` would
+The hierarchy Add button is hidden while creation controls are unfinished.
+The element details pane ends with a Remove control only where `groma remove` would
 succeed: a person or external nothing relates to, or a ghost that contains
 nothing and that nothing relates to. One click asks, the second removes, and a
 refusal shows the server's sentence.
@@ -56,6 +55,13 @@ where the component can move. Empty optional values clear the
 field. Relationship fields are description and technology. A matched draft
 element exposes Accept; a draft relationship exposes its own explicit Accept.
 Both use `groma accept`, with the relationship addressed by its two endpoints.
+
+Relationship details label the clickable Source and Destination, including
+their kinds, and show Technology separately. A current relationship is labeled
+Current; this means an authored current collaboration, not scanner ownership.
+Only draft relationships offer Remove. Core refuses removal of current
+relationships through every entry point, and a flow reference also blocks
+removal of a draft relationship.
 
 The map gesture toolbar is hidden while its interactions are unfinished.
 Draft software and relationship creation remain available through the CLI.

@@ -184,7 +184,8 @@ edits overview or owned metadata.
 Each row declares one direction: the current concept is the source. The link
 must resolve to another C4 concept in the tree. `groma add relation`,
 `groma edit relation` and `groma remove relation` add, reword or remove a
-relationship row. Each ordered pair has one row.
+relationship row. Removal is allowed only for draft relationships; current
+relationships are protected. Each ordered pair has one row.
 
 Planned links use the same three columns under `## Draft relationships`.
 Their lifecycle is independent of both endpoint statuses, including when both

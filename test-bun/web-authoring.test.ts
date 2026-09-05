@@ -167,7 +167,7 @@ groma:
   }
 })
 
-test.concurrent('the web relates through add, edit and remove, and groma view prints the row', async () => {
+test.concurrent('the web authors and edits current relationships but refuses their removal', async () => {
   const root = await createRepo()
   const server = await startWebViewer(root, { port: 0 })
   try {
@@ -189,8 +189,10 @@ test.concurrent('the web relates through add, edit and remove, and groma view pr
     assert.equal(row?.description, 'Informs order placement')
     assert.equal(row?.technology, 'Queue')
 
-    assert.equal((await post(server.url, 'remove', { id: 'stock', relation: 'orders' })).status, 200)
-    assert.doesNotMatch((await view('stock', root)).stdout, /Informs order placement/)
+    const refused = await post(server.url, 'remove', { id: 'stock', relation: 'orders' })
+    assert.equal(refused.status, 400)
+    assert.match(await refused.text(), /only draft relationships can be removed/)
+    assert.match((await view('stock', root)).stdout, /Informs order placement/)
   } finally {
     await server.close()
     await rm(root, { recursive: true, force: true })
