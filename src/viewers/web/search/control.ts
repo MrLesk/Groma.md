@@ -1,6 +1,7 @@
 import type { WorkItem } from '@groma/work-source'
 
 import type { AnnotatedElement } from '../../../types.ts'
+import { bindPopover } from '../atoms/popover.ts'
 import { createWebSearch, type WebSearchResult } from './model.ts'
 import { paintSearchResults } from './view.ts'
 
@@ -136,9 +137,7 @@ export function createSearchControl(options: SearchControlOptions) {
     activeIndex = Number(row.dataset.searchResult)
     close(true)
   })
-  document.addEventListener('pointerdown', event => {
-    if (opened && event.target instanceof Node && !root.contains(event.target)) close(false)
-  })
+  bindPopover(root, { dismiss: () => close(false) })
 
   function handleOpenedKey(key: string): boolean {
     if (key === 'ArrowDown') move(1)

@@ -1,4 +1,5 @@
 import { isThemeMode, resolveTheme, themeLabel, type WebThemeMode } from '../atoms/theme.ts'
+import { bindPopover } from '../atoms/popover.ts'
 import { createThemeTransition } from './motion.ts'
 
 const THEME_STORAGE_KEY = 'groma.theme'
@@ -59,10 +60,7 @@ export function bindThemeControl(
     })
   })
 
-  document.addEventListener('pointerdown', event => {
-    if (!control.hasAttribute('open') || !(event.target instanceof Node) || control.contains(event.target)) return
-    control.removeAttribute('open')
-  })
+  bindPopover(control)
 
   preference.addEventListener('change', () => {
     if (mode === 'auto') transition(applyTheme)

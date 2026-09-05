@@ -12,6 +12,7 @@ export const chromeCss = `
     padding: 6px 10px;
     background: color-mix(in srgb, var(--paper) 35%, transparent);
     color: var(--muted);
+    cursor: pointer;
   }
   .chrome-button:hover { color: var(--ink); background: var(--hover); }
   * {

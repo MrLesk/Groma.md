@@ -1,3 +1,18 @@
+interface PopoverOptions {
+  dismiss?: () => void
+  companion?: Node
+}
+
+/** Shares outside-click dismissal; search supplies cancellation and revision owns a tooltip. */
+export function bindPopover(root: HTMLElement, options: PopoverOptions = {}): void {
+  const dismiss = options.dismiss ?? (() => root.removeAttribute('open'))
+  document.addEventListener('pointerdown', event => {
+    const target = event.target
+    if (!(target instanceof Node) || root.contains(target) || options.companion?.contains(target)) return
+    dismiss()
+  })
+}
+
 /** Shared anchored menu surface for compact controls in the Web header. */
 export const anchoredPopoverCss = `
   .anchored-popover {
