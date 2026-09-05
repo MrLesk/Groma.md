@@ -181,7 +181,7 @@ const style = `
   #header .anchored-popover {
     top: calc(100% + 22px);
   }
-  @media (max-width: 1280px) {
+  @media (max-width: 1400px) {
     #stats .world-counts { display: none; }
   }
   @media (max-width: 1080px) {

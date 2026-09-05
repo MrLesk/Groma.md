@@ -7,7 +7,17 @@ export function primarySystem(world: ArchitectureGraph): AnnotatedElement | unde
     .sort(compareSemanticElements)[0]
 }
 
-export function paintWorldStats(host: HTMLElement, world: ArchitectureGraph, flowCount: number): void {
+/** Internal C4 levels; actors and external systems stay outside this summary. */
+export function c4Counts(world: Pick<ArchitectureGraph, 'elements'>): { system: number; container: number; component: number } {
+  const counts = { system: 0, container: 0, component: 0 }
+  for (const element of world.elements) {
+    if (element.kind === 'actor' || element.external) continue
+    counts[element.kind] += 1
+  }
+  return counts
+}
+
+export function paintWorldStats(host: HTMLElement, world: ArchitectureGraph): void {
   const system = primarySystem(world)
   host.replaceChildren()
   if (system === undefined) return
@@ -16,6 +26,8 @@ export function paintWorldStats(host: HTMLElement, world: ArchitectureGraph, flo
   name.textContent = system.title
   const counts = document.createElement('span')
   counts.className = 'world-counts'
-  counts.textContent = `${flowCount} flows · ${world.elements.length} elements`
+  counts.textContent = Object.entries(c4Counts(world))
+    .map(([kind, count]) => `${count} ${kind}${count === 1 ? '' : 's'}`)
+    .join(' · ')
   host.append(name, counts)
 }
