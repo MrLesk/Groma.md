@@ -13,7 +13,7 @@ groma:
       dependents: 1
 ---
 
-Prints the world or one selected element, draft, or owning Code record as stable plain text without starting a viewer.
+Prints a compact architecture overview with component group names and a flow index. Resolves element IDs, flow IDs, and exact source-file ownership to complete authored Markdown through the core document reader. Keeps a draft outcome and membership summary. Reads never scan or write architecture.
 
 ## Relationships
 

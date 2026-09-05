@@ -3,6 +3,8 @@ import { annotateArchitecture } from './core.ts'
 import { loadArchitecture } from './architecture-reader.ts'
 import { emptyWorldLines, isEmptyWorld } from './empty-world.ts'
 import { loadProjectProfile } from './project-profile.ts'
+import { readDocument } from './markdown-emitter.ts'
+import { requireGromaMapping } from './okf-profile.ts'
 import type {
   AnnotatedArchitectureModel,
   AnnotatedElement,
@@ -48,6 +50,7 @@ function countLine(elements: readonly AnnotatedElement[]): string {
 function headerTokens(element: AnnotatedElement): string[] {
   const tokens = [element.id, element.kind, element.title]
   if (element.external) tokens.push('external')
+  if (element.group !== undefined) tokens.push(`group:${element.group}`)
   if (element.origin === 'draft') {
     tokens.push(element.draft === undefined ? 'draft' : `draft:${element.draft}`)
   }
@@ -151,6 +154,12 @@ export function formatPlainWorld(
     emitElement(lines, root, 0, children, model.relationships)
   }
   appendDrafts(lines, drafts, model.elements)
+  if (model.flows.length > 0) {
+    lines.push('', 'flows')
+    for (const flow of [...model.flows].sort((left, right) => compareIds(left.id, right.id))) {
+      lines.push(`${flow.id}  ${flow.title}`)
+    }
+  }
   if (lines.length > 0) lines.push('')
   lines.push(countLine(model.elements))
   return lines.join('\n')
@@ -170,28 +179,6 @@ export type PlainRecordResult =
   | { ok: true; text: string }
   | { ok: false; message: string }
 
-function formatElementRecord(
-  element: AnnotatedElement,
-  model: AnnotatedArchitectureModel,
-): string {
-  const lines = [element.id, `kind: ${element.kind}`]
-  if (element.parent !== null) lines.push(`parent: ${element.parent}`)
-  lines.push(`origin: ${element.origin}`)
-  if (element.draft !== undefined) lines.push(`draft: ${element.draft}`)
-  const file = element.code[0]?.file
-  if (file !== undefined) lines.push(`code: ${file}`)
-
-  const sections = [lines.join('\n')]
-  if (element.overview !== '') sections.push(element.overview)
-  const edges = outgoingEdges(element, model.relationships)
-  if (edges.length > 0) {
-    sections.push(
-      edges.map(edge => `->${edge.draft ? ' [draft]' : ''}  ${edge.description}  ${edge.targetId}`).join('\n'),
-    )
-  }
-  return sections.join('\n\n')
-}
-
 function formatDraftRecord(
   draft: DraftOutcome,
   items: readonly AnnotatedElement[],
@@ -203,18 +190,24 @@ function formatDraftRecord(
   return sections.join('\n\n')
 }
 
-export function formatPlainRecord(
-  model: AnnotatedArchitectureModel,
-  drafts: readonly DraftOutcome[],
+export async function renderPlainRecord(
+  repositoryRoot: string,
   target: string,
-): PlainRecordResult {
-  const element = model.elements.find(item => item.id === target)
-  if (element !== undefined) {
-    return { ok: true, text: formatElementRecord(element, model) }
+): Promise<PlainRecordResult> {
+  const records = await loadArchitecture(repositoryRoot)
+  const model = annotateArchitecture(records)
+  const documents = [...records.documents, ...records.flows]
+  const documentById = new Map(documents.map(document => [
+    requireGromaMapping(document.frontmatter, document.sourceFilename).id,
+    document,
+  ]))
+  const document = documentById.get(target)
+  if (document !== undefined) {
+    return { ok: true, text: await readDocument(repositoryRoot, document.sourceFilename) }
   }
-  const draft = drafts.find(item => item.id === target)
+  const draft = draftOutcomes(records).find(item => item.id === target)
   if (draft !== undefined) {
-    return { ok: true, text: formatDraftRecord(draft, draftItems(draft, model.elements)) }
+    return { ok: true, text: `${formatDraftRecord(draft, draftItems(draft, model.elements))}\n` }
   }
   const [match, extra] = model.elements.filter(item => {
     return item.code.some(reference => reference.file === target)
@@ -223,19 +216,7 @@ export function formatPlainRecord(
     return { ok: false, message: `several elements share ${target}` }
   }
   if (match !== undefined) {
-    return { ok: true, text: formatElementRecord(match, model) }
+    return { ok: true, text: await readDocument(repositoryRoot, documentById.get(match.id)!.sourceFilename) }
   }
   return { ok: false, message: `unknown target: ${target}` }
-}
-
-export async function renderPlainRecord(
-  repositoryRoot: string,
-  target: string,
-): Promise<PlainRecordResult> {
-  const records = await loadArchitecture(repositoryRoot)
-  return formatPlainRecord(
-    annotateArchitecture(records),
-    draftOutcomes(records),
-    target,
-  )
 }

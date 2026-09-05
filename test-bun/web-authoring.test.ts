@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
-import { cp, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { cp, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { test } from 'bun:test'
@@ -175,7 +175,9 @@ test.concurrent('the web authors and edits current relationships but refuses the
       thing: 'relation', ...ends, description: 'Informs order placement', technology: 'In-process data',
     })
     assert.equal(added.status, 200)
-    assert.match((await view('stock', root)).stdout, /->\s+Informs order placement\s+orders/)
+    assert.equal((await view('stock', root)).stdout, await readFile(
+      path.join(root, 'groma/systems/shop/containers/api/components/stock.md'), 'utf8',
+    ))
     const twice = await post(server.url, 'add', { thing: 'relation', ...ends, description: 'Again', technology: 'Queue' })
     assert.equal(twice.status, 400)
     assert.match(await twice.text(), /groma edit relation stock orders/)

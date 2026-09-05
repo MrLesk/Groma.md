@@ -56,11 +56,16 @@ operation before opening a map.
    later source change folds and the map updates. An architecture Markdown
    change reloads the world without scanning. `groma view --plain`, or `groma
    view` when stdout is not a TTY, prints the world as plain text without
-   scanning and does not start the TUI.
-   `groma view <id|draft|file>` prints one record as plain text: an
-   element, a draft, or the element whose `groma.code` names that
-   repository-relative file. When several elements share the file, the
-   command fails.
+   scanning and does not start the TUI. This compact overview includes group
+   names on their components and an index of flow IDs and titles.
+   `groma view <element-id|flow-id|file>` returns the exact complete authored
+   Markdown, including metadata, every Code reference, relationships, and
+   named sections. A flow record includes its ordered Steps table. An exact
+   repository-relative source file resolves the element whose `groma.code`
+   names it and returns the same record as that element's ID. A draft ID
+   returns its outcome, completion state, and member summary. Unknown targets
+   and files shared by several elements fail with a clear message. These
+   reads do not scan or change architecture.
    If the Groma directory, index, or project record is missing, `groma web`
    serves browser setup for the project name and architecture folder. Submitting
    setup initializes the project, scans automatically, and opens the map at the
