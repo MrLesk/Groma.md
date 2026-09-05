@@ -367,7 +367,6 @@ bindMapPointer(map, {
   editProject() {
     if (revisionControl.selected === undefined && project !== undefined) projectEditor?.open(project)
   },
-  editGroup: authoring.editGroup,
 })
 map.svg.addEventListener('keydown', event => {
   if (!map.isProjectEdit(event.target) || (event.key !== 'Enter' && event.key !== ' ')) return

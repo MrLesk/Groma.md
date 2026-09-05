@@ -1,8 +1,7 @@
-import { createGroupDialog } from './chrome/group.ts'
 import type { AnnotatedArchitectureModel } from '../../types.ts'
 import { createMapEditor } from './editing/gestures.ts'
 import type { WebDataSource } from './data.ts'
-import type { IsoMap, ZoneAddress } from './iso/map.ts'
+import type { IsoMap } from './iso/map.ts'
 import type { MeaningEdit, PaneWrites, RelationWrites, SelectionWrites } from './organisms/writes.ts'
 
 export interface AuthoringDependencies {
@@ -17,7 +16,6 @@ export function createAuthoring(host: HTMLElement, map: IsoMap, data: WebDataSou
   const gestures = createMapEditor(host, map, data, () => deps.world().elements, deps.live)
   const { accept, add, edit, remove } = data
   const titleOf = (id: string): string => deps.world().elements.find(element => element.id === id)?.title ?? id
-  const groupDialog = edit === undefined || remove === undefined ? undefined : createGroupDialog(edit, remove)
   /** Group as and Combine into, while several components are selected. */
   function selectionWrites(ids: readonly string[]): SelectionWrites | undefined {
     if (ids.length < 2 || add === undefined || edit === undefined) return undefined
@@ -56,12 +54,5 @@ export function createAuthoring(host: HTMLElement, map: IsoMap, data: WebDataSou
     }
   }
 
-  /** A pressed zone opens the group dialog on the current revision of a live map; elsewhere the press selects as before. */
-  function editGroup(group: ZoneAddress): boolean {
-    if (!deps.live() || groupDialog === undefined) return false
-    groupDialog.open(group)
-    return true
-  }
-
-  return { paneWrites, relationWrites, editGroup, ...gestures }
+  return { paneWrites, relationWrites, ...gestures }
 }
