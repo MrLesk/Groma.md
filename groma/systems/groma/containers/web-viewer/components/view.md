@@ -13,4 +13,4 @@ groma:
       dependents: 2
 ---
 
-Renders the expanding Web search field, ranked result popover, scrolling result window, and reduced-motion behavior.
+Renders the permanent Web search field and ranked architecture/task result popover. Owns the five-row scrolling window, result labels, keyboard hints and reduced-motion behavior.

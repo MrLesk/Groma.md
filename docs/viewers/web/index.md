@@ -73,10 +73,13 @@ a zone on the map opens the group's dialog with Rename and Dissolve; on a
 published or past map the press selects the zone's container as before.
 
 The isometric grid fills the screen. Inset 35%-paper frosted chrome floats
-above it as one technical instrument. The header shows the groma.md lockup,
-the observed system's name with live flow and element counts, one compact
-revision menu, one compact Fit, `-`, zoom-readout and `+` group, Help, and an icon-labelled theme
-dropdown. Help opens the short map-control guide. The information icon opens
+above it as one technical instrument. The header groups the groma.md lockup,
+system name, quiet flow and element counts, and revision menu on the left.
+A permanent Search field sits between that context and the view controls:
+Fit, `-`, zoom readout, `+`, Theme, Help, and Credits. Controls share one
+height, and opening search leaves them in place. At narrower widths the
+counts and the Fit and Theme text give way to the controls.
+Help opens the short map-control guide. The information icon opens
 Credits with a link to the Groma repository, followed by every directly declared
 third-party runtime library and development tool, including its version, license,
 and project link. The dropdown lists Auto,
@@ -88,6 +91,15 @@ and accent green. The full footer is absent, and Live work keeps the bottom
 centre. The camera fits architecture into the clear area between
 the floating hierarchy and any open details pane, so the grid continues
 beneath the chrome without hiding the fitted world.
+
+Search opens on focus, `/`, or Cmd/Ctrl+K. It ranks architecture matches
+together with task IDs and titles supplied by the optional work-source plugin.
+Task rows show their ID and status; every supplied status and unmapped task
+is searchable. Without a work plugin, the same field searches architecture.
+Up and Down preview results on the map in a five-row scrolling window.
+Enter or a result click opens the existing architecture or task details;
+opening an active task keeps it active. Escape or a click outside search
+restores the selection and camera from before the search.
 
 The revision menu starts at Current revision, the live selected Groma working
 tree. It lists the current branch's commits that changed the selected `groma/`

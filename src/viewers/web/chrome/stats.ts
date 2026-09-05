@@ -9,7 +9,13 @@ export function primarySystem(world: ArchitectureGraph): AnnotatedElement | unde
 
 export function paintWorldStats(host: HTMLElement, world: ArchitectureGraph, flowCount: number): void {
   const system = primarySystem(world)
-  host.textContent = system === undefined
-    ? ''
-    : `${system.title} · ${flowCount} flows · ${world.elements.length} elements`
+  host.replaceChildren()
+  if (system === undefined) return
+  const name = document.createElement('span')
+  name.className = 'project-name'
+  name.textContent = system.title
+  const counts = document.createElement('span')
+  counts.className = 'world-counts'
+  counts.textContent = `${flowCount} flows · ${world.elements.length} elements`
+  host.append(name, counts)
 }

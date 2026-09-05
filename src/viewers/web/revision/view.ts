@@ -2,20 +2,12 @@ import { escaped } from '../atoms/escape.ts'
 import type { WebPayload } from '../payload.ts'
 
 export const revisionCss = `
-  #revision { position: relative; transform: translateY(-1px); --popover-width: 520px; }
+  #revision { position: relative; flex: none; --popover-width: 520px; }
+  #revision .revision-menu { right: auto; left: 0; }
   #revision summary {
     min-width: 132px;
-    height: 32px;
-    display: flex;
-    align-items: center;
-    gap: 7px;
-    border: 1px solid var(--hairline);
-    border-radius: 6px;
-    padding: 7px 10px;
     background: transparent;
-    color: var(--muted);
     list-style: none;
-    cursor: pointer;
   }
   #revision summary::-webkit-details-marker { display: none; }
   #revision summary:hover { color: var(--ink); background: var(--hover); }
@@ -91,5 +83,5 @@ export function revisionControl(
     .map(revision => revisionOption(revision, revision.id === payload.revision?.id))
     .join('')
   const current = payload.revision?.shortId ?? liveLabel
-  return `<details id="revision"><summary aria-label="Groma revision">${icons.history}${icons.loader}<span class="revision-current">${current}</span><span class="revision-loading">Loading<span class="revision-dots" aria-hidden="true"><span>.</span><span>.</span><span>.</span></span></span><span class="chevron"></span></summary><div class="anchored-popover revision-menu"><button class="anchored-option revision-option current" type="button" data-revision="" aria-current="${String(payload.revision === null)}"><span class="revision-subject">${liveLabel}</span></button>${options}</div></details>`
+  return `<details id="revision"><summary class="chrome-button" aria-label="Groma revision">${icons.history}${icons.loader}<span class="revision-current">${current}</span><span class="revision-loading">Loading<span class="revision-dots" aria-hidden="true"><span>.</span><span>.</span><span>.</span></span></span><span class="chevron"></span></summary><div class="anchored-popover revision-menu"><button class="anchored-option revision-option current" type="button" data-revision="" aria-current="${String(payload.revision === null)}"><span class="revision-subject">${liveLabel}</span></button>${options}</div></details>`
 }

@@ -7,6 +7,8 @@ export interface ArchitectureSearchResult {
   element: AnnotatedElement
   /** Ancestor titles from the architecture root to the element's parent. */
   path: readonly string[]
+  /** Match distance, with zero representing an exact match. */
+  score: number
 }
 
 export interface ArchitectureSearch {
@@ -38,6 +40,7 @@ export function createArchitectureSearch(
   const fuse = new Fuse(records, {
     threshold: 0.35,
     ignoreLocation: true,
+    includeScore: true,
     keys: [
       { name: 'element.title', weight: 0.55 },
       { name: 'element.id', weight: 0.25 },
@@ -50,9 +53,10 @@ export function createArchitectureSearch(
     find(query) {
       const pattern = query.trim()
       if (pattern.length === 0) return []
-      return fuse.search(pattern).map(({ item }) => ({
+      return fuse.search(pattern).map(({ item, score }) => ({
         element: item.element,
         path: item.path,
+        score: score!,
       }))
     },
   }

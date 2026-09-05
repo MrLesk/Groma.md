@@ -123,15 +123,21 @@ const style = `
     left: 12px;
     height: 52px;
     z-index: 20;
-    display: flex;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) clamp(200px, 22vw, 280px) auto;
     align-items: center;
-    gap: 20px;
-    padding: 0 20px;
+    gap: 16px;
+    padding: 0 16px;
   }
-  #header > svg { height: 26px; width: auto; display: block; }
-  #stats { flex: 1; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+  .header-context { min-width: 0; display: flex; align-items: center; gap: 16px; }
+  .header-context > svg { height: 26px; width: auto; display: block; flex: none; }
+  #stats { min-width: 0; flex: 1; display: flex; align-items: center; gap: 10px; white-space: nowrap; }
+  #stats .project-name { overflow: hidden; text-overflow: ellipsis; color: var(--ink); }
+  #stats .world-counts { flex: none; font-size: 9px; letter-spacing: 0.06em; }
   .header-actions { display: flex; align-items: center; gap: 8px; }
-  .header-actions > button, #help summary, #theme summary, #hierarchy-toggle {
+  .header-actions details > summary { border-color: transparent; background: transparent; }
+  .header-utilities { display: flex; align-items: center; gap: 4px; border-left: 1px solid var(--hairline); padding-left: 8px; }
+  #hierarchy-toggle {
     border: 0;
     border-radius: var(--control-radius);
     background: transparent;
@@ -140,9 +146,9 @@ const style = `
     font: inherit;
     cursor: pointer;
   }
-  .header-actions > button:hover, #help summary:hover, #theme summary:hover, #hierarchy-toggle:hover { color: var(--ink); background: var(--hover); }
+  #hierarchy-toggle:hover { color: var(--ink); background: var(--hover); }
   .control-icon { width: 14px; height: 14px; display: block; flex: none; }
-  #theme { position: relative; transform: translateY(-1px); --popover-width: 160px; }
+  #theme { position: relative; --popover-width: 160px; }
   #theme summary { display: flex; align-items: center; gap: 7px; list-style: none; }
   #theme summary::-webkit-details-marker { display: none; }
   #theme summary .theme-icon { display: none; }
@@ -157,16 +163,24 @@ const style = `
   #help summary { list-style: none; }
   #help summary::-webkit-details-marker { display: none; }
   #help .help-panel {
-    position: fixed;
+    position: absolute;
     z-index: 20;
-    top: 74px;
-    right: calc(var(--details-inset) + 24px);
+    top: calc(100% + 8px);
+    right: 0;
     width: 260px;
     padding: 14px 16px;
     background: color-mix(in srgb, var(--paper) 82%, transparent);
     line-height: 1.8;
   }
   #help .help-panel p { margin: 0; }
+  @media (max-width: 1280px) {
+    #stats .world-counts { display: none; }
+  }
+  @media (max-width: 1080px) {
+    #header { gap: 12px; padding: 0 12px; }
+    .header-context { gap: 10px; }
+    #theme summary .label, #fit > span { display: none; }
+  }
   #hierarchy, #details { position: absolute; top: 74px; bottom: 12px; min-width: 0; min-height: 0; z-index: 5; }
   #hierarchy {
     left: 12px;
@@ -280,7 +294,6 @@ const style = `
     border-radius: var(--control-radius);
     box-shadow: inset 0 0 0 1px var(--hairline);
     overflow: hidden;
-    transform: translateY(-1px);
   }
   #map-controls button { display: flex; align-items: center; gap: 6px; border: 0; border-right: 1px solid var(--hairline); }
   #zoom { display: grid; min-width: 54px; place-items: center; padding: 0 8px; border-right: 1px solid var(--hairline); }
@@ -366,7 +379,7 @@ function themeControl(): string {
   const options = themeModes
     .map(mode => `<button class="anchored-option theme-option" type="button" data-theme-mode="${mode}" aria-current="${String(mode === 'auto')}">${themeIcons[mode]}<span>${themeLabel(mode)}</span></button>`)
     .join('')
-  return `<details id="theme" data-theme-mode="auto"><summary aria-label="Theme">${currentIcons}<span class="label">Auto</span><span class="theme-chevron"></span></summary><div class="anchored-popover theme-menu">${options}</div></details>`
+  return `<details id="theme" data-theme-mode="auto"><summary class="chrome-button" aria-label="Theme">${currentIcons}<span class="label">Auto</span><span class="theme-chevron"></span></summary><div class="anchored-popover theme-menu">${options}</div></details>`
 }
 
 /** The invitation shown while the current world has nothing to draw; history is read-only, so a selected revision never shows it. */
@@ -384,8 +397,9 @@ export function renderPage(payload: WebBootPayload): string {
   const json = JSON.stringify(payload).replace(/</g, '\\u003c')
   return '<!doctype html><html><head><meta charset="utf-8"><title>groma.md</title>'
     + `<style>${style}</style></head><body data-delivery="${payload.delivery.kind}">`
-    + `<header id="header">${lockup}<span id="stats"></span>${revisionControl(payload, { history: historyIcon, loader: revisionLoader })}`
-    + `<div class="header-actions"><div id="map-controls" class="controls" aria-label="Map controls"><button id="fit" aria-label="Fit map">${fitIcon}<span>Fit</span></button><button id="zoom-out" aria-label="Zoom out"><span class="control-glyph">−</span></button><span id="zoom" aria-live="polite"></span><button id="zoom-in" aria-label="Zoom in"><span class="control-glyph">+</span></button></div><details id="help"><summary>Help</summary><div class="help-panel"><p>Drag or scroll to pan<br>Pinch, + or − to zoom<br>0 or Fit shows the whole map<br>/ or Cmd/Ctrl+K searches<br>F1 toggles map only<br>F2 toggles layers<br>In layers: drag orbits; Shift-drag pans<br>F3 toggles map debug<br>Escape clears selection</p></div></details>${creditsControl(infoIcon)}${themeControl()}${searchControl({ search: searchIcon, close: closeIcon })}</div>`
+    + `<header id="header"><div class="header-context">${lockup}<span id="stats"></span>${revisionControl(payload, { history: historyIcon, loader: revisionLoader })}</div>`
+    + searchControl({ search: searchIcon, close: closeIcon })
+    + `<div class="header-actions"><div id="map-controls" class="controls" aria-label="Map controls"><button id="fit" aria-label="Fit map">${fitIcon}<span>Fit</span></button><button id="zoom-out" aria-label="Zoom out"><span class="control-glyph">−</span></button><span id="zoom" aria-live="polite"></span><button id="zoom-in" aria-label="Zoom in"><span class="control-glyph">+</span></button></div>${themeControl()}<div class="header-utilities"><details id="help"><summary class="chrome-button">Help</summary><div class="help-panel"><p>Drag or scroll to pan<br>Pinch, + or − to zoom<br>0 or Fit shows the whole map<br>/ or Cmd/Ctrl+K searches<br>F1 toggles map only<br>F2 toggles layers<br>In layers: drag orbits; Shift-drag pans<br>F3 toggles map debug<br>Escape clears selection</p></div></details>${creditsControl(infoIcon)}</div></div>`
     + '</header>'
     + `<nav id="hierarchy" aria-label="Hierarchy"><div id="hierarchy-title"><span class="pane-label">Hierarchy</span>${payload.delivery.kind === 'live' ? '<button id="add" type="button" aria-label="Add">+</button>' : ''}<button id="hierarchy-toggle" type="button" aria-controls="hierarchy-content">${hierarchyIcon}</button></div><div id="hierarchy-content"><div id="flows"></div><div id="tree"></div><div id="legend">${legend()}</div></div></nav>`
     + '<div id="map"></div>'

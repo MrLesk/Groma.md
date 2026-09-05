@@ -9,8 +9,7 @@ import { createAddControl } from './chrome/add.ts'
 import { createEmptyState } from './chrome/empty.ts'
 import { createMapDebugPanel } from './chrome/map-debug.ts'
 import { animateControl } from './chrome/motion.ts'
-import { createWebShell, mapFrame, type MapFrame } from './chrome/shell.ts'
-import { bindShortcuts } from './chrome/shortcuts.ts'
+import { bindChromeActions, createWebShell, mapFrame, type MapFrame } from './chrome/shell.ts'
 import { bindThemeControl, readSavedTheme } from './chrome/theme-control.ts'
 import { paintWorldStats, primarySystem } from './chrome/stats.ts'
 import { createWebDataSource } from './data.ts'
@@ -32,7 +31,7 @@ import { createAuthoring } from './authoring.ts'
 import { createRevisionControl } from './revision/control.ts'
 import { createSearchSession } from './search/session.ts'
 import { createWorkIsland } from './work/island.ts'
-import { toggleWorkSelection } from './work/selection.ts'
+import { openWorkSelection, toggleWorkSelection } from './work/selection.ts'
 import type { WebBootPayload, WebPayload, WebWorkPayload } from './payload.ts'
 import { noSelection, primarySelection, retainSelection, selectArchitecture, selectedArchitecture, selectTask } from './selection.ts'
 import { createSourceControl } from './source/control.ts'
@@ -64,9 +63,8 @@ const treeHost = document.getElementById('tree')!
 const flowsHost = document.getElementById('flows')!
 const statsHost = document.getElementById('stats')!
 const revisionSelect = document.getElementById('revision') as HTMLDetailsElement
-const searchRoot = document.getElementById('architecture-search')!
+const searchRoot = document.getElementById('web-search')!
 const detailsHost = document.getElementById('details')!
-const detailsClose = document.getElementById('details-close') as HTMLButtonElement
 const zoomHost = document.getElementById('zoom')!
 const hierarchyContent = document.getElementById('hierarchy-content')!
 const hierarchyToggle = document.getElementById('hierarchy-toggle') as HTMLButtonElement
@@ -75,11 +73,6 @@ const edit = data.edit
 const projectEditor = edit === undefined ? undefined : createProjectEditor(input => edit({ id: 'project', ...input }))
 const emptyState = createEmptyState(document.getElementById('empty')!, data.draft)
 if (data.add !== undefined) createAddControl(document.getElementById('add')!, data.add)
-const creditsControl = document.getElementById('credits') as HTMLDetailsElement
-document.addEventListener('pointerdown', event => {
-  if (!creditsControl.hasAttribute('open') || !(event.target instanceof Node) || creditsControl.contains(event.target)) return
-  creditsControl.removeAttribute('open')
-})
 const shell = createWebShell(document.body, hierarchyContent, hierarchyToggle, detailsHost, map.svg)
 const tip = createTip(host)
 const pins = createPins(host, id => map.anchorOf(id), id => toggleTask(id), tip)
@@ -288,14 +281,17 @@ function focusActiveTasks(): void {
   applyFocus(fitHighlights(scene, elementIds, frame, zoomLimits(fitted).max), frame)
 }
 
-/** A pin or chip click selects its task; only clicking the selected task again deactivates it. */
-function toggleTask(id: string): void {
-  const next = toggleWorkSelection(activeTaskIds, selection.kind === 'task' ? selection.id : undefined, id)
+/** Every task entry point shares details, highlighting and camera focus. */
+function applyTaskSelection(next: ReturnType<typeof toggleWorkSelection>): void {
   activeTaskIds = next.active
   source.clear()
   selection = next.selected === undefined ? noSelection : selectTask(next.selected)
   paintViewState()
   focusActiveTasks()
+}
+
+function toggleTask(id: string): void {
+  applyTaskSelection(toggleWorkSelection(activeTaskIds, selection.kind === 'task' ? selection.id : undefined, id))
 }
 
 function deselect(): void {
@@ -308,11 +304,14 @@ function deselect(): void {
 }
 
 const searchControl = createSearchSession({
-  root: searchRoot, elements: world.elements, viewport, clearSource: source.clear, anchorOf: id => map.anchorOf(id),
+  root: searchRoot, elements: world.elements, tasks: work.items, viewport,
+  clearSource: source.clear, anchorOf: id => map.anchorOf(id),
+  taskElements: task => touchedElements(task, world),
+  openTask: id => applyTaskSelection(openWorkSelection(activeTaskIds, id)),
   snapshot: () => ({ selection, camera: { ...camera }, touched, detailsTab }),
-  previewMap(id, nextCamera) {
+  previewMap(ids, nextCamera) {
     if (nextCamera !== undefined) { camera = nextCamera; touched = true; applyCamera() }
-    map.select(id === undefined ? selectedArchitecture(selection) : [id])
+    map.select(ids ?? selectedArchitecture(selection))
   },
   apply(next, commitUrl) {
     ({ selection, camera, touched, detailsTab } = next)
@@ -364,11 +363,6 @@ map.svg.addEventListener('keydown', event => {
   if (revisionControl.selected === undefined && project !== undefined) projectEditor?.open(project)
 })
 
-document.getElementById('zoom-in')!.addEventListener('click', event => zoomStep(ZOOM_STEP, event.currentTarget as HTMLElement))
-document.getElementById('zoom-out')!.addEventListener('click', event => zoomStep(1 / ZOOM_STEP, event.currentTarget as HTMLElement))
-document.getElementById('fit')!.addEventListener('click', fitControl)
-detailsClose.addEventListener('click', deselect)
-
 function toggleHud(): void {
   hudVisible = !hudVisible
   shell.setHud(hudVisible)
@@ -399,13 +393,9 @@ function repaintLayerScene(fit: boolean): void {
 
 const layerAnimator = createLayerAnimator(layerMotion, repaintLayerScene)
 
-function toggleLayers(): void {
-  layerAnimator.toggle()
-}
-
-bindShortcuts({
+bindChromeActions({
   hud: toggleHud,
-  layers: toggleLayers,
+  layers: () => layerAnimator.toggle(),
   debug: debug.toggle,
   zoomIn: () => zoomStep(ZOOM_STEP, document.getElementById('zoom-in')!),
   zoomOut: () => zoomStep(1 / ZOOM_STEP, document.getElementById('zoom-out')!),
@@ -458,7 +448,6 @@ function applyWorld(payload: WebPayload, reset = false): void {
     selection = retainSelection(selection, id => known(id))
   }
   debug.paint(() => map.paint(scene))
-  searchControl.update(world.elements)
   revisionControl.paintProjectEdit(map.svg)
   pins.paint(currentPins)
   island.paint(payload.pins, work.statuses, work.defaultStatus)
@@ -467,6 +456,7 @@ function applyWorld(payload: WebPayload, reset = false): void {
   taskDiff.invalidate()
   paintViewState()
   source.restore()
+  searchControl.update(world.elements, work.items)
 }
 /** Repaints only the optional Backlog layer; map projection, painting and camera state stay unchanged. */
 function applyWork(payload: WebWorkPayload): void {
@@ -490,6 +480,7 @@ function applyWork(payload: WebWorkPayload): void {
   if (selection.kind === 'task') {
     if (!taskDiff.paint(task)) clearDetails(detailsHost)
   } else if (selection.kind === 'architecture') paintViewState()
+  searchControl.updateTasks(work.items)
 }
 
 debug.paint(() => map.paint(scene))
