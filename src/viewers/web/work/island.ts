@@ -57,7 +57,7 @@ export const workCss = `
 `
 
 export interface WorkIsland {
-  /** Rebuilds the island for these pins and configured statuses; nothing shows while there are no pins. */
+  /** Rebuilds the island for these pins; it stays visible while Backlog has a configured workflow. */
   paint(pins: readonly WorkPin[], work: WorkSnapshot): void
   /** Colours the chips of the active tasks, greyscale otherwise, marks those of the selected task (always one of the active ones) and scrolls the first into view. */
   activate(active: readonly string[], selected: string | undefined): void
@@ -168,7 +168,7 @@ export function createWorkIsland(
     foldRevision += 1
     content.replaceChildren(...parts())
     animating.clear()
-    island.hidden = pins.length === 0
+    island.hidden = work.statuses.length === 0
     island.classList.toggle('open', open)
     // the strip stays where it was, so a repaint moves it only to reveal a selected chip
     island.querySelector('.strip')?.scrollTo(scrolled, 0)
