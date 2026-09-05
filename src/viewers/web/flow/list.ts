@@ -22,6 +22,7 @@ export function createFlowList() {
     active: FlowRef | undefined,
     onToggle: (flow: FlowRef) => void,
     visibleFlows?: readonly FlowRowData[],
+    title = 'Flows',
   ): void {
     host.classList.add('flow-tree')
     const visibleIds = visibleFlows && new Set(visibleFlows.map(row => row.flow.id))
@@ -32,9 +33,9 @@ export function createFlowList() {
       host.replaceChildren()
       return
     }
-    const heading = sectionHeading('Flows', unfolded, () => {
+    const heading = sectionHeading(title, unfolded, () => {
       unfolded = !unfolded
-      paintFlows(host, world, active, onToggle, visibleFlows)
+      paintFlows(host, world, active, onToggle, visibleFlows, title)
     })
     const list = document.createElement('div')
     list.hidden = !unfolded
@@ -47,7 +48,7 @@ export function createFlowList() {
       const toggle = () => {
         if (expanded) expandedActors.delete(actor.id)
         else expandedActors.add(actor.id)
-        paintFlows(host, world, active, onToggle, visibleFlows)
+        paintFlows(host, world, active, onToggle, visibleFlows, title)
       }
       const heading = sidebarRow(actor.title, 'actor', { expanded, count: actorFlows.length, toggle })
       heading.dataset.id = actor.id
