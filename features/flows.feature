@@ -1,6 +1,23 @@
 Feature: Read an authored architecture flow
   An architect follows a named scenario through its explicit connections.
 
+  Scenario: Fit selected Web flows into the camera
+    Given an architect has panned or zoomed the Web map
+    When the architect selects a flow
+    Then the camera centers and fits every component and route in that flow
+    When the architect adds another flow to the selection
+    Then every component and route of both flows fits together
+    When the architect removes one selected flow
+    Then the camera fits the remaining flow
+    And the architecture geometry remains unchanged
+
+  Scenario: Focus an architecture item in the Web map
+    Given an architect is viewing the nested or separated architecture layers
+    When the architect selects an architecture item
+    Then the camera centers and adjusts zoom to fit its complete displayed body
+    And selecting a system or container includes its contained architecture
+    And the fitted content stays clear of the hierarchy and details panes
+
   Scenario: Read and step through a flow in either viewer
     Given a flow with ordered steps over existing directed relationships
     And a component on the flow has other outgoing relationships

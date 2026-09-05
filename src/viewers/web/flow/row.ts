@@ -29,8 +29,8 @@ export const flowRowCss = `
   .flow-back { align-self: flex-start; margin-bottom: 12px; max-width: 100%; }
 `
 
-export function flowRow(row: FlowRowData, active: FlowRef | undefined, onToggle: (flow: FlowRef) => void): HTMLButtonElement {
-  const selected = active?.id === row.flow.id
+export function flowRow(row: FlowRowData, active: readonly FlowRef[], onToggle: (flow: FlowRef) => void): HTMLButtonElement {
+  const selected = active.some(flow => flow.id === row.flow.id)
   const button = document.createElement('button')
   button.type = 'button'
   button.className = 'flow-row'

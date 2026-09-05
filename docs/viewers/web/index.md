@@ -173,9 +173,12 @@ actor as a group row.
 Each group contains the
 scenarios whose first step starts with that actor. Flows that start with a
 software element appear directly in the list. Each row is one named, authored
-scenario. Clicking it opens its
-purpose and ordered steps in details and focuses its explicit map connections.
-Only one flow is focused at a time; clicking it again clears it. The same
+scenario. Clicking it checks the flow and opens its purpose and ordered steps.
+Several flows can stay checked; clicking a checked flow removes it. Their
+explicit connections stay highlighted together, and the last checked flow owns
+the reader. Adding or removing a flow centers and adjusts the camera to fit all
+remaining flows' endpoints and routes. Clearing the last flow leaves the camera
+in place. The same
 control appears in an element's Flows list. Structure rows use kind marks and
 neutral selection; their arrows only expand containment. Below it the Structure
 section starts open and lists internal systems directly, with an External systems
@@ -221,8 +224,9 @@ action has a marked row; Clear focus removes the extra emphasis. Reduced motion
 keeps a stronger static route stroke. Unrelated routes are hidden and
 task emphasis is quiet while reading a flow. Existing footprints and routes
 stay fixed. Endpoints link to the normal component inspector and source view;
-Back to flow restores the same scenario, step, and original return target.
-Returning to the original element keeps the flow highlighted. Selecting a task leaves flow
+Back to flow restores the same scenario, step, and original return target, and
+fits all checked flows again. Returning to the original element centers and
+fits that element while keeping the flows highlighted. Selecting a task leaves flow
 focus. Escape or a click on empty sheet clears the active selections.
 
 ## What it shows
@@ -389,12 +393,17 @@ world, sheet, building, surface, route, and route-point counts. Opening the
 panel only reveals the collected snapshot and never rebuilds the map. Resizing the pane refits the
 map until you move the camera; after that it keeps the same point in
 the centre. Click a building, a slab, a system island, or a tree
-row to select it; click a route to select its relationship, which
+row to select it and center the camera at the closest zoom that fits its complete
+body. Systems and containers include their contained architecture. The fit uses
+the displayed nested or separated geometry and the clear area between the side
+panes. Architecture selection from details or an accepted search result uses the
+same fit. Click a route to select and fit its relationship and endpoints, which
 draws the route and both of its ends in the accent and shows the
 relationship in the details pane with its ends as links. Hold Shift while
 clicking an architecture item or relationship to add or remove it from the
 selection. The map combines their normal selection treatments, the hierarchy
 marks every selected element, and the last item selected owns the details pane.
+The camera fits the combined architecture selection.
 Removing that item returns details to the previous item. Selecting a different
 architecture item or task starts its details at the heading. Returning from a
 task file diff with Back restores the task's previous reading position. Click empty
@@ -461,7 +470,7 @@ selected task again deactivates it, handing selection to the most recently
 activated remaining task or to nothing. Whenever the active set changes, the
 camera centres the combined projected bodies touched by every active task and the
 highlighted routes leaving them at the closest allowed zoom, with a wider context
-margin around that complete highlight. Switching sidebar selection without changing the active set
+margin around that complete highlight. Switching between active tasks without changing the active set
 keeps that shared fit; removing a task refits to the remaining active work, while
 clearing the final task leaves the camera in place. Selecting
 an element keeps the tasks active. Opening a task loads that task's full
@@ -493,10 +502,12 @@ names the world snapshot. Each selected element's kind names it (`actor=<id>`,
 parameters keep their order; `task=<id>` names a selected task instead.
 `tab=how|tasks` names the details tab, then `file=<path>` opens a selected
 component's source and `line=<number>` marks a declaration in that file.
-`flow=<id>` names one authored scenario and `step=<number>` selects its
-one-based step. With no architecture selection, the flow owns details. An
+Repeated `flow=<id>` parameters name checked scenarios in selection order;
+`step=<number>` selects the last flow's one-based step. With no architecture
+selection, the last flow owns details. An
 architecture selection alongside it opens endpoint inspection while retaining
-the flow and step. `theme=light|dark|blueprint` names an
+the checked flows and focused step. Opening a shared selection fits its content.
+`theme=light|dark|blueprint` names an
 explicit theme, and `hud=off` hides the page chrome. Auto stays out of the URL;
 reading accepts any parameter order and ignores unknown values.
 A watched TypeScript change folds and rebuilds the map without a

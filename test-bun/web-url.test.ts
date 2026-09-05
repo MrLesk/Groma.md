@@ -46,7 +46,7 @@ const fullView = (): ViewState => ({
   file: 'src/scan.ts',
   line: 42,
   selection: { kind: 'architecture', ids: ['observed:tool', 'relationship:1', 'observed:scan'] },
-  flow: { id: 'run', step: 1 },
+  flows: [{ id: 'run', step: 1 }],
   tab: 'how',
   theme: 'dark',
   hudVisible: false,
@@ -65,16 +65,17 @@ test.concurrent('a complete view round-trips through the canonical query hierarc
 
 test.concurrent('defaults write nothing and read back as the default view', () => {
   const world = viewWorld()
-  const rest: ViewState = { selection: noSelection, tab: 'what', theme: 'auto', hudVisible: true }
+  const rest: ViewState = { flows: [], selection: noSelection, tab: 'what', theme: 'auto', hudVisible: true }
   assert.equal(writeView(rest, world, []), '')
   assert.deepEqual(readView('', world, []), rest)
-  assert.equal(writeView({ ...rest, flow: { id: 'run' } }, world, []), '?flow=run')
+  assert.equal(writeView({ ...rest, flows: [{ id: 'run' }] }, world, []), '?flow=run')
   assert.equal(writeView({ ...rest, selection: { kind: 'architecture', ids: ['observed:dev'] } }, world, []), '?actor=dev')
 })
 
 test.concurrent('a known Git revision is shareable while unknown revisions are ignored', () => {
   const world = viewWorld()
   const state: ViewState = {
+    flows: [],
     revision: revision.id,
     selection: noSelection,
     tab: 'what',
@@ -89,6 +90,7 @@ test.concurrent('a known Git revision is shareable while unknown revisions are i
 test.concurrent('a component-owned source file restores and Back clears only the file drill-down', () => {
   const world = viewWorld()
   const source: ViewState = {
+    flows: [],
     selection: { kind: 'architecture', ids: ['observed:layer-modes'] },
     file: 'src/viewers/web/layers/orbit.ts',
     line: 34,
@@ -113,6 +115,7 @@ test.concurrent('a component-owned source file restores and Back clears only the
 test.concurrent('the component Tasks tab is shareable through the existing tab state', () => {
   const world = viewWorld()
   const state: ViewState = {
+    flows: [],
     selection: { kind: 'architecture', ids: ['observed:scan'] },
     tab: 'tasks',
     theme: 'auto',
@@ -124,7 +127,7 @@ test.concurrent('the component Tasks tab is shareable through the existing tab s
 
 test.concurrent('a selected relationship is carried as its source and target ids', () => {
   const world = viewWorld()
-  const state: ViewState = { selection: { kind: 'architecture', ids: ['relationship:1'] }, tab: 'what', theme: 'auto', hudVisible: true }
+  const state: ViewState = { flows: [], selection: { kind: 'architecture', ids: ['relationship:1'] }, tab: 'what', theme: 'auto', hudVisible: true }
   assert.equal(writeView(state, world, []), '?relationship=commands/scan')
   assert.deepEqual(readView('?relationship=commands/scan', world, []), state)
   assert.deepEqual(readView('?relationship=dev/scan', world, []).selection, noSelection)
@@ -136,7 +139,7 @@ test.concurrent('a selected task is carried by its id while the work knows it', 
     id: 'TASK-7', title: 'Change', status: 'In Progress', assignees: [], references: [], modifiedFiles: [],
     acceptanceCriteriaCompleted: 0, acceptanceCriteriaCount: 0, updatedAt: '2026-08-30T12:00:00Z',
   }]
-  const state: ViewState = { selection: selectTask('TASK-7'), tab: 'what', theme: 'auto', hudVisible: true }
+  const state: ViewState = { flows: [], selection: selectTask('TASK-7'), tab: 'what', theme: 'auto', hudVisible: true }
   assert.equal(writeView(state, world, work), '?task=TASK-7')
   assert.equal(writeView({ ...state, tab: 'tasks' }, world, work), '?task=TASK-7')
   assert.deepEqual(readView('?task=TASK-7', world, work), state)
@@ -149,6 +152,7 @@ test.concurrent('unknown ids, kinds and values are ignored', () => {
   assert.deepEqual(readView('?actor=scan', world, []).selection, noSelection)
   assert.deepEqual(readView('?component=nope&flow=dev/scan&by=zed&tab=weird&theme=other', world, []), {
     selection: noSelection,
+    flows: [],
     tab: 'what',
     theme: 'auto',
     hudVisible: true,
@@ -157,7 +161,7 @@ test.concurrent('unknown ids, kinds and values are ignored', () => {
 
 test.concurrent('explicit themes are shareable while an absent theme uses the supplied preference', () => {
   const world = viewWorld()
-  const state: ViewState = { selection: noSelection, tab: 'what', theme: 'blueprint', hudVisible: true }
+  const state: ViewState = { flows: [], selection: noSelection, tab: 'what', theme: 'blueprint', hudVisible: true }
   assert.equal(writeView(state, world, []), '?theme=blueprint')
   assert.deepEqual(readView('?theme=blueprint', world, []), state)
   assert.equal(writeView({ ...state, theme: 'light' }, world, []), '?theme=light')
@@ -168,7 +172,7 @@ test.concurrent('explicit themes are shareable while an absent theme uses the su
 
 test.concurrent('map-only mode is shareable while the HUD remains the default', () => {
   const world = viewWorld()
-  const state: ViewState = { selection: noSelection, tab: 'what', theme: 'auto', hudVisible: false }
+  const state: ViewState = { flows: [], selection: noSelection, tab: 'what', theme: 'auto', hudVisible: false }
   assert.equal(writeView(state, world, []), '?hud=off')
   assert.deepEqual(readView('?hud=off', world, []), state)
   assert.equal(readView('?hud=anything-else', world, []).hudVisible, true)
@@ -177,13 +181,13 @@ test.concurrent('map-only mode is shareable while the HUD remains the default', 
 test.concurrent('an authored flow link opens its reader and restores the ordered step', () => {
   const world = viewWorld()
   const state = readView('?flow=run&step=2', world, [])
-  assert.deepEqual(state.flow, { id: 'run', step: 1 })
+  assert.deepEqual(state.flows, [{ id: 'run', step: 1 }])
   assert.deepEqual(state.selection, { kind: 'flow', id: 'run' })
   assert.equal(writeView(state, world, []), '?flow=run&step=2')
-  assert.deepEqual(readView('?flow=run&step=3', world, []).flow, { id: 'run' })
+  assert.deepEqual(readView('?flow=run&step=3', world, []).flows, [{ id: 'run' }])
   const inspected = readView('?flow=run&step=2&component=scan', world, [])
   assert.deepEqual(inspected.selection, { kind: 'architecture', ids: ['observed:scan'] })
-  assert.deepEqual(inspected.flow, state.flow)
+  assert.deepEqual(inspected.flows, state.flows)
 })
 
 test.concurrent('repeated architecture parameters restore one ordered selection and ignore unknown entries', () => {
@@ -198,4 +202,14 @@ test.concurrent('repeated architecture parameters restore one ordered selection 
     kind: 'architecture',
     ids: ['observed:commands', 'relationship:0', 'observed:dev'],
   })
+})
+
+test.concurrent('a shared multi-flow view restores every checked path and the last reader', () => {
+  const world = viewWorld()
+  world.flows.push({ ...world.flows[0]!, id: 'other', steps: world.flows[0]!.steps.slice(0, 1) })
+  const state = readView('?flow=run&flow=other&step=1', world, [])
+  assert.deepEqual(state.flows, [{ id: 'run' }, { id: 'other', step: 0 }])
+  assert.deepEqual(state.selection, { kind: 'flow', id: 'other' })
+  assert.equal(writeView(state, world, []), '?flow=run&flow=other&step=1')
+  assert.deepEqual(readView(writeView(state, world, []), world, []), state)
 })

@@ -27,7 +27,7 @@ export function createFlowList() {
   return function paintFlows(
     host: HTMLElement,
     world: ArchitectureGraph,
-    active: FlowRef | undefined,
+    active: readonly FlowRef[],
     onToggle: (flow: FlowRef) => void,
     options: FlowListOptions,
   ): void {
