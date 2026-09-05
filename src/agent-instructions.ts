@@ -7,9 +7,9 @@ const managedBlockPattern = /<!-- groma:start -->[\s\S]*?<!-- groma:end -->/g
 const managedAgentInstructions = `<!-- groma:start -->
 ## Groma
 
-This project uses Groma. Run \`groma agent-instructions\` before planning or changing code. Do not edit Groma-owned architecture files directly.
+This project uses Groma. Run \`groma agent-instructions\` when scanning or curating architecture, or changing scanner or architecture-model behavior. Do not edit Groma-owned architecture files directly.
 
-When the \`backlog\` CLI is available and you work on a Backlog task, you must record each changed file in its \`modified_files\` and add affected Groma element IDs to its \`references\`, immediately after each change.
+When the \`backlog\` CLI is available and you work on a Backlog task, immediately record each changed repository-relative file through \`backlog task edit <task-id> --modified-file <path>\`, preserving the full existing modified-file list. Add exact affected \`groma.id\` values to that task's references through \`backlog task edit <task-id> --add-ref <groma-id>\`. After a structural command, record all reported paths and replace absorbed references with surviving IDs through the Backlog CLI before another change. Run \`groma agent-instructions\` for the full procedure.
 <!-- groma:end -->`
 
 export const agentInstructionGuides = [

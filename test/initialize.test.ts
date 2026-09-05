@@ -288,6 +288,7 @@ test('init refreshes the managed agent nudge and preserves surrounding instructi
       projectName: 'Nudge project',
       directory: 'groma',
     })
+    const currentNudge = (await readFile(path.join(root, 'AGENTS.md'), 'utf8')).trimEnd()
     await writeFile(path.join(root, 'AGENTS.md'), `Before
 
 <!-- groma:start -->
@@ -300,9 +301,9 @@ After
     await initializeGroma(root, { projectName: 'Nudge project' })
 
     const source = await readFile(path.join(root, 'AGENTS.md'), 'utf8')
-    assert.match(source, /^Before/m)
-    assert.match(source, /^After/m)
-    assert.doesNotMatch(source, /stale instructions/)
+    assert.equal(source, `Before\n\n${currentNudge}\n\nAfter\n`)
+    await initializeGroma(root, { projectName: 'Nudge project' })
+    assert.equal(await readFile(path.join(root, 'AGENTS.md'), 'utf8'), source)
   })
 })
 

@@ -4,6 +4,7 @@ import { backlogPlugin } from '@groma/work-source-backlog'
 
 import { watchArchitecture } from '../../architecture-watch.ts'
 import { writes } from '../../authoring.ts'
+import type { StructuralResult } from '../../curate.ts'
 import { watchScan } from '../../scanner.ts'
 import { pinsOf } from '../../work/pins.ts'
 import { listGromaRevisions, withGitRevision } from '../../history/revisions.ts'
@@ -205,15 +206,15 @@ export async function createWebMapSession(
     }
   }
 
-  /** A write answers with the id it touched, or with the core sentence and 400; the world is published before the answer. */
+  /** Publish the world, then return the touched id and any structural facts; failures return the core sentence and 400. */
   async function writeResponse<Input>(
     request: Request,
-    write: (repositoryRoot: string, input: Input) => Promise<string>,
+    write: (repositoryRoot: string, input: Input) => Promise<string | StructuralResult>,
   ): Promise<Response> {
     try {
-      const id = await write(repositoryRoot, await request.json() as Input)
+      const result = await write(repositoryRoot, await request.json() as Input)
       await publishWorld()
-      return Response.json({ id })
+      return Response.json(typeof result === 'string' ? { id: result } : result)
     } catch (error) {
       return new Response(error instanceof Error ? error.message : String(error), { status: 400 })
     }

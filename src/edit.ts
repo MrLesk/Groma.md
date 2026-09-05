@@ -6,6 +6,7 @@ import {
 import type { DraftRecord } from './architecture-model.ts'
 import { loadArchitecture } from './architecture-reader.ts'
 import { curateElement } from './curate.ts'
+import type { StructuralResult } from './curate.ts'
 import {
   readDocument,
   replaceLeadProse,
@@ -96,7 +97,7 @@ async function elementMeaning(
 }
 
 /** A group address or a relation target names something other than an element; the flags of elements are refused there. */
-function editAddressed(repositoryRoot: string, input: EditArchitectureInput): Promise<string> | undefined {
+function editAddressed(repositoryRoot: string, input: EditArchitectureInput): Promise<string | StructuralResult> | undefined {
   if (isGroupAddress(input.id)) {
     if (input.relation !== undefined || input.overview !== undefined || input.description !== undefined
       || input.technology !== undefined || input.draft !== undefined || isStructural(input)) {
@@ -118,7 +119,7 @@ function editAddressed(repositoryRoot: string, input: EditArchitectureInput): Pr
 export async function editArchitecture(
   repositoryRoot: string,
   input: EditArchitectureInput,
-): Promise<string> {
+): Promise<string | StructuralResult> {
   const addressed = editAddressed(repositoryRoot, input)
   if (addressed !== undefined) return addressed
   if (input.id === 'project') return editProject(repositoryRoot, input)

@@ -8,6 +8,7 @@ import {
   writeDocument,
 } from './markdown-emitter.ts'
 import { addGroup } from './group.ts'
+import type { StructuralResult } from './curate.ts'
 import { requireText } from './naming.ts'
 import { addRelation } from './relation.ts'
 import { addFlow } from './flow-authoring.ts'
@@ -60,7 +61,9 @@ function renderThing(thing: DeclaredThing, id: string, input: AddInput, overview
 }
 
 /** Writes what no scan can see: a person, an outside system, or the record of a draft. */
-export async function addThing(repositoryRoot: string, input: AddInput): Promise<string> {
+export function addThing(repositoryRoot: string, input: AddInput & { thing: DeclaredThing | 'relation' | 'flow' }): Promise<string>
+export function addThing(repositoryRoot: string, input: AddInput): Promise<string | StructuralResult>
+export async function addThing(repositoryRoot: string, input: AddInput): Promise<string | StructuralResult> {
   if (input.thing === 'flow') return addFlow(repositoryRoot, requireText(input.name, 'name'), input)
   if (input.thing === 'relation') {
     return addRelation(repositoryRoot, {
