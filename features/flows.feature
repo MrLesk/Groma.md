@@ -19,3 +19,17 @@ Feature: Read an authored architecture flow
     Then each step resolves exactly one existing directed relationship
     And missing or ambiguous relationships are rejected
     And the flow creates no C4 element or map route
+
+  Scenario: Return to a component while keeping the whole Web flow visible
+    Given an architect is reading a component in the Web details pane
+    When the architect opens one of its authored flows
+    Then the flow reader offers a return to that component
+    When the architect focuses a step
+    Then every connection and endpoint in the flow stays highlighted
+    And only the focused connection pulses continuously
+    And the reader clearly marks the focused action
+    And reduced motion keeps a static focus mark
+    When the architect inspects an endpoint and returns to the flow
+    Then the same step and original component return action remain available
+    When the architect returns to the original component
+    Then its details appear with the flow still highlighted

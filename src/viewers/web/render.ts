@@ -1,7 +1,7 @@
 import type { ProjectProfile } from '../../project-profile.ts'
 import type { AnnotatedElement, AnnotatedRelationship, WorkItem } from '../../types.ts'
 import { elementWorkGroups, touchedElements } from '../../work/pins.ts'
-import { elementOnPath, flowRouteIds } from '../flows.ts'
+import { elementOnPath } from '../flows.ts'
 import type { FlowRef } from '../flows.ts'
 import { initialTree, semanticTreeRows, toggleExpansion } from '../tui/tree.ts'
 import type { TreeRow } from '../tui/tree.ts'
@@ -14,8 +14,8 @@ import { bindThemeControl, readSavedTheme } from './chrome/theme-control.ts'
 import { paintWorldStats, primarySystem } from './chrome/stats.ts'
 import { createWebDataSource } from './data.ts'
 import { createFlowList } from './flow/list.ts'
-import { toggleFlowActivation } from './flow/state.ts'
-import { paintBackToFlow, paintFlowDetails } from './flow/reader.ts'
+import { flowHighlight, toggleFlowActivation, type WebFlowRef } from './flow/state.ts'
+import { paintFlowReturn, paintFlowDetails } from './flow/reader.ts'
 import { fitHighlights, fitCamera, pan, wheelAction, zoomAbout, zoomLimits, zoomReadout } from './iso/camera.ts'
 import type { Camera } from './iso/camera.ts'
 import { createMap } from './iso/map.ts'
@@ -85,7 +85,7 @@ const themeControl = bindThemeControl(document.getElementById('theme') as HTMLDe
 let hudVisible = opened.hudVisible
 shell.setHud(hudVisible)
 let selection = opened.selection
-let activeFlow = opened.flow
+let activeFlow: WebFlowRef | undefined = opened.flow
 const initial = primarySystem(world)
 if (boot.revision === null && selection.kind === 'none' && initial !== undefined) {
   selection = selectArchitecture(noSelection, initial.representationId, false)
@@ -187,12 +187,12 @@ function syncUrl(): void {
 
 function paintMapState(task: WorkItem | undefined, activeTaskItems: WorkItem[]): void {
   const selectedIds = selectedArchitecture(selection)
-  const litIds = flowRouteIds(activeFlow, world)
+  const { routes: litIds, focusedRoute } = flowHighlight(activeFlow, world)
   map.select(selectedIds)
   map.mark(new Set(activeFlow === undefined ? activeTaskItems.flatMap(item => touchedElements(item, world)) : []))
   pins.activate(activeTaskIds, task?.id)
   island.activate(activeTaskIds, task?.id)
-  map.setLitRoutes(litIds, id => elementOnPath(id, litIds, world))
+  map.setLitRoutes(litIds, id => elementOnPath(id, litIds, world), focusedRoute)
 }
 
 function paintViewState(commitUrl = true): void {
@@ -207,7 +207,7 @@ function paintViewState(commitUrl = true): void {
     title: 'Actors', selectedIds: selectedArchitecture(selection), onSelectActor: select,
   })
   paintWorldStats(statsHost, world)
-  paintBackToFlow(detailsHost, activeFlow !== undefined && selection.kind !== 'flow' ? backToFlow : undefined)
+  paintFlowReturn(detailsHost, activeFlow, selection.kind === 'flow', world, select, backToFlow)
   const flow = world.flows.find(item => item.id === selectedId)
   if (selection.kind === 'flow' && flow !== undefined && activeFlow !== undefined) {
     paintFlowDetails(detailsHost, flow, activeFlow, world, selectFlowStep, select)
@@ -223,7 +223,7 @@ function paintViewState(commitUrl = true): void {
     paintDetails(detailsHost, inspectDetails(selected, world), {
       world,
       onSelect: select,
-      onToggleFlow: toggleFlow,
+      onToggleFlow: flow => toggleFlow(flow, selected.representationId),
       activeFlow,
       tab: detailsTab,
       onTab: tab => {
@@ -327,12 +327,12 @@ function backToFlow(): void {
 }
 
 function selectFlowStep(step: number | undefined): void {
-  if (activeFlow !== undefined) activeFlow = { id: activeFlow.id, step }
+  if (activeFlow !== undefined) activeFlow = { ...activeFlow, step }
   paintViewState()
 }
 
-function toggleFlow(flow: FlowRef): void {
-  activeFlow = toggleFlowActivation(activeFlow, flow)
+function toggleFlow(flow: FlowRef, returnTo?: string): void {
+  activeFlow = toggleFlowActivation(activeFlow, flow, returnTo)
   source.clear()
   activeTaskIds = []
   selection = activeFlow === undefined ? noSelection : { kind: 'flow', id: activeFlow.id }
@@ -456,7 +456,7 @@ function applyWorld(payload: WebPayload, reset = false): void {
     activeTaskIds = activeTaskIds.filter(id => workItem(id) !== undefined)
     const record = world.flows.find(flow => flow.id === activeFlow?.id)
     if (record === undefined) activeFlow = undefined
-    else if (activeFlow?.step !== undefined && record.steps[activeFlow.step] === undefined) activeFlow = { id: record.id }
+    else if (activeFlow?.step !== undefined && record.steps[activeFlow.step] === undefined) activeFlow = { ...activeFlow, step: undefined }
     selection = retainSelection(selection, id => known(id))
   }
   debug.paint(() => map.paint(scene))

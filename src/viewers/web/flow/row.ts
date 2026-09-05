@@ -19,11 +19,14 @@ export const flowRowCss = `
   .flow-row.active .flow-check { border-color: var(--highlight); background: color-mix(in srgb, var(--highlight) 85%, transparent); color: var(--on-colour); }
   .flow-row.active .flow-check::after { content: ''; width: 3px; height: 6px; border-right: 1px solid currentColor; border-bottom: 1px solid currentColor; transform: translateY(-1px) rotate(45deg); }
   .flow-row .name { overflow: hidden; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
-  .flow-step { padding: 8px 0; }
+  .flow-step { padding: 8px 10px; margin: 6px 0; border-left: 2px solid transparent; border-radius: 0 6px 6px 0; }
   .flow-step > button { text-align: left; }
-  .flow-step.active { color: var(--highlight); }
+  .flow-step.active { border-color: var(--highlight); background: var(--hover); }
+  .flow-step.active > button, .flow-step.active::marker { color: var(--highlight); font-weight: 650; }
   .flow-ends { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 5px; }
-  .flow-controls { display: flex; gap: 12px; margin: 12px 0; }
+  .flow-controls { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+  .flow-controls button:disabled { opacity: 0.4; cursor: default; }
+  .flow-back { align-self: flex-start; margin-bottom: 12px; max-width: 100%; }
 `
 
 export function flowRow(row: FlowRowData, active: FlowRef | undefined, onToggle: (flow: FlowRef) => void): HTMLButtonElement {
