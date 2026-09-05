@@ -220,6 +220,9 @@ const style = `
   #tree { flex: 1; overflow: auto; padding: 14px 0; }
   #tree .group { padding: 10px 14px 4px; }
   #tree .group:first-child { padding-top: 4px; }
+  #tree .group.external { border-top: 1px solid var(--hairline); margin-top: 10px; padding-top: 14px; }
+  /* Align flow names with depth-one tree names while keeping hover backgrounds full-width. */
+  #flows .actor-flows .flow-row { padding-left: 51px; }
   #legend { border-top: 1px solid var(--ink); padding: 12px 16px; display: grid; gap: 4px; }
   #legend div { display: flex; gap: 16px; }
   #legend span { display: inline-flex; align-items: center; gap: 6px; }
