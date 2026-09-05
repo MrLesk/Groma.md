@@ -28,14 +28,6 @@ export async function startWebViewer(
     error = cause instanceof Error ? cause.message : String(cause)
   }
 
-  if (initial.initialized) {
-    try {
-      await openMap(options.scan === true)
-    } catch (cause) {
-      failed(cause)
-    }
-  }
-
   function setupResponse(status = error === undefined ? 200 : 500): Response {
     return new Response(renderSetupPage({
       projectName,
@@ -75,6 +67,14 @@ export async function startWebViewer(
       return setupResponse()
     },
   })
+
+  if (initial.initialized) {
+    try {
+      await openMap(options.scan === true)
+    } catch (cause) {
+      failed(cause)
+    }
+  }
 
   return {
     url: `http://localhost:${server.port}`,
