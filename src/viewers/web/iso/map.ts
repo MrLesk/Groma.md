@@ -80,16 +80,25 @@ function onSurface(points: readonly Point[]): Point {
   return { x: west.x + FOOT_INSET, y: west.y }
 }
 
-/** One fixed grid and one SVG camera, with a temporary HTML motion layer only while the camera moves. */
+/** Separate SVG paint surfaces keep animated routes from repainting the ground and buildings in Safari. */
+function paintSurface(name: string, layers: SVGGElement[]) {
+  const surface = document.createElement('div')
+  surface.className = `paint-surface ${name}`
+  const scene = svg('svg', { width: '100%', height: '100%', overflow: 'visible' }, 'scene')
+  const world = svg('g', {}, 'world')
+  world.append(...layers)
+  scene.append(world)
+  surface.append(scene)
+  return { surface, scene, world }
+}
+
+/** One fixed grid and one shared camera across ground, routes and foreground paint surfaces. */
 export function createMap(host: HTMLElement): IsoMap {
   const root = document.createElement('div')
   root.className = 'map-surface'
   root.setAttribute('role', 'img')
   root.setAttribute('aria-label', 'Architecture map')
   root.tabIndex = 0
-  const scene = svg('svg', { width: '100%', height: '100%', overflow: 'visible' }, 'scene')
-  scene.innerHTML = `<defs>${mapDefs()}</defs>`
-  const definitions = scene.querySelector('defs')!
   const grid = gridPattern()
   const fieldSurface = svg('svg', { width: '100%', height: '100%', 'aria-hidden': 'true' }, 'field-surface')
   const fieldDefinitions = svg('defs')
@@ -106,11 +115,14 @@ export function createMap(host: HTMLElement): IsoMap {
     items: svg('g', {}, 'items'),
     layerLabels: svg('g', {}, 'layer-labels'),
   }
-  /** Owns the complete settled camera; the surrounding HTML layer holds only the active motion delta. */
-  const world = svg('g', {}, 'world')
-  world.append(...Object.values(layers))
-  scene.append(world)
-  camera.append(scene)
+  const ground = paintSurface('ground-surface', [layers.sheet, layers.islands, layers.slabs])
+  const routeSurface = paintSurface('route-surface', [layers.routes])
+  const foreground = paintSurface('foreground-surface', [layers.items, layers.layerLabels])
+  const definitions = svg('defs')
+  definitions.innerHTML = mapDefs()
+  foreground.scene.prepend(definitions)
+  const paintSurfaces = [ground, routeSurface, foreground]
+  camera.append(...paintSurfaces.map(({ surface }) => surface))
   root.append(fieldSurface, camera)
   host.replaceChildren(root)
 
@@ -132,7 +144,9 @@ export function createMap(host: HTMLElement): IsoMap {
   }
 
   const commitCamera = (current: Camera, zoomRatio: number, showGrid: boolean): void => {
-    world.setAttribute('transform', `translate(${current.x} ${current.y}) scale(${current.k})`)
+    for (const { world } of paintSurfaces) {
+      world.setAttribute('transform', `translate(${current.x} ${current.y}) scale(${current.k})`)
+    }
     committed = current
     const weight = weightAt(zoomRatio)
     camera.style.setProperty('--weight', String(weight))
@@ -266,7 +280,7 @@ export function createMap(host: HTMLElement): IsoMap {
       return target.closest<HTMLElement>('[data-id]')?.dataset.id
     },
     isSheet(target) {
-      return target === root || target === camera || target === scene || target === field
+      return target === root || target === camera || target === field
     },
     isProjectEdit(target) {
       return target instanceof Element && target.closest('[data-project-edit]') !== null

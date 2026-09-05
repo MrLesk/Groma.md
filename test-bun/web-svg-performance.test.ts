@@ -40,9 +40,10 @@ function assertFastComposition(source: string): void {
     calls.some(call => call.parent === 'root' && call.arguments.replaceAll(/\s/g, '') === 'fieldSurface,camera'),
     'Append the field surface and camera together as map-surface siblings',
   )
-  assert.ok(calls.some(call => call.parent === 'camera' && call.arguments.trim() === 'scene'))
+  assert.ok(calls.some(call => call.parent === 'camera' && /paintSurfaces\.map/.test(call.arguments)))
+  assert.ok(calls.some(call => call.parent === 'surface' && call.arguments.trim() === 'scene'))
   assert.ok(calls.some(call => call.parent === 'scene' && call.arguments.trim() === 'world'))
-  assert.ok(calls.some(call => call.parent === 'world' && /Object\.values\(layers\)/.test(call.arguments)))
+  assert.ok(calls.some(call => call.parent === 'world' && call.arguments.trim() === '...layers'))
 }
 
 test.concurrent('the patterned grid stays outside the moving SVG camera', async () => {
