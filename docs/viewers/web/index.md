@@ -76,7 +76,10 @@ The isometric grid fills the screen. Inset 35%-paper frosted chrome floats
 above it as one technical instrument. The header shows the groma.md lockup,
 the observed system's name with live flow and element counts, one compact
 revision menu, one compact Fit, `-`, zoom-readout and `+` group, Help, and an icon-labelled theme
-dropdown. Help opens the short map-control guide. The dropdown lists Auto,
+dropdown. Help opens the short map-control guide. The information icon opens
+Credits with a link to the Groma repository, followed by every directly declared
+third-party runtime library and development tool, including its version, license,
+and project link. The dropdown lists Auto,
 Light, Dark and Blueprint. Auto is the default for a browser profile with no
 saved choice and follows that browser's light or dark colour preference. A
 choice is saved for later visits. Blueprint uses a deep navy field, pale cyan drafting lines, and
