@@ -95,9 +95,9 @@ export async function startTerminalViewer(
       readTask: id => workSource.readItem(id),
       readStructure: elementId => readCodeStructure(repositoryRoot, map, map.revision?.id ?? null, elementId),
       readSource: (elementId, file) => readSource(repositoryRoot, map, map.revision?.id ?? null, elementId, file),
-      readDiff: async (taskId, file) => {
+      readTaskDiff: async taskId => {
         const item = work.items.find(candidate => candidate.id === taskId)
-        return item === undefined ? undefined : (await readTaskDiff(repositoryRoot, item, work)).files.find(candidate => candidate.file === file)
+        return item === undefined ? undefined : readTaskDiff(repositoryRoot, item, work)
       },
       readRevision,
     })

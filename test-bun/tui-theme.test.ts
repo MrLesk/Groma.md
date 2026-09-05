@@ -9,8 +9,8 @@ import { mountTerminalViewer } from '../src/viewers/tui/terminal-viewer.ts'
 import { navigationWorld } from './helpers.ts'
 
 test.concurrent('every viewer colour is a terminal intent except the brand green', () => {
-  const theme = viewerTheme()
-  for (const [name, colour] of Object.entries(theme)) {
+  const { syntax, ...theme } = viewerTheme()
+  for (const [name, colour] of Object.entries({ ...theme, ...syntax })) {
     if (name === 'selected') {
       assert.equal(colour.intent, 'rgb')
       assert.deepEqual(colour.toInts().slice(0, 3), RGBA.fromHex(ACCENT).toInts().slice(0, 3))

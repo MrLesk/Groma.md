@@ -71,31 +71,33 @@ function linkedWorld(): TerminalViewModel {
 }
 
 /** The glyph painted on the middle cell of the route's first run. */
-function routeGlyph(model: TerminalViewModel, projection: TerminalProjection): string {
+function routeGlyph(model: TerminalViewModel, projection: TerminalProjection, actionId?: string): string {
   const buffer = OptimizedBuffer.create(projection.viewport.width, projection.viewport.height, 'unicode')
-  paintMap(buffer, projection, model, viewerTheme(), { lit: {}, step: undefined, animationPhase: 0 })
+  paintMap(buffer, projection, model, viewerTheme(), { lit: { id: actionId }, step: undefined, animationPhase: 0 })
   const at = reader(buffer)
   buffer.destroy()
   const [from, to] = projection.relationships[0]!.cellRoute
   return at(Math.floor((from!.x + to!.x) / 2), Math.floor((from!.y + to!.y) / 2))
 }
 
-test.concurrent('routes touching the selection light while the others stay thin', () => {
+test.concurrent('map selection leaves routes quiet; explicit flow selection lights them', () => {
   const model = linkedWorld()
   const viewport = { x: 0, y: 0, width: 60, height: 20 }
-  assert.ok(HEAVY.has(routeGlyph(model, projectWorld(model, { viewport, level: 'components', currentId: 'observed:a' }))))
+  const selected = projectWorld(model, { viewport, level: 'components', currentId: 'observed:a' })
+  assert.ok(THIN.has(routeGlyph(model, selected)))
+  assert.ok(HEAVY.has(routeGlyph(model, selected, 'a-reads-b')))
   assert.ok(THIN.has(routeGlyph(model, projectWorld(model, { viewport, level: 'components', currentId: 'observed:c' }))))
 })
 
-test.concurrent('a picked relationship lights its own route and Enter follows it to the other end', () => {
+test.concurrent('browsing leaves a relationship inactive, Enter lights it and Enter again follows it', () => {
   const model = linkedWorld()
   let state: ViewerState = { ...initialState(model), level: 'components', currentId: 'observed:a', focus: 'details' }
   state = reduceViewer(model, state, 'down')
   assert.equal(state.actionCursor, 'a-reads-b')
-  const lit = litAction(model, state)
-  assert.deepEqual(litLegs(model, lit).map(leg => leg.id), ['a-reads-b'])
+  assert.equal(litAction(model, state).id, undefined)
   state = reduceViewer(model, state, 'enter')
   assert.equal(state.activeActionId, 'a-reads-b')
+  assert.deepEqual(litLegs(model, litAction(model, state)).map(leg => leg.id), ['a-reads-b'])
   state = reduceViewer(model, state, 'enter')
   assert.equal(state.currentId, 'observed:b')
 })

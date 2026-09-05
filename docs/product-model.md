@@ -23,15 +23,18 @@ or the Advanced commands row. Enter runs an action or opens the selected screen.
 The Advanced commands screen contains a read-only table with one concise
 description beside each command: `<name>` is required, `[option]` is optional,
 and `…` means more options. Up and Down select a command, the table keeps it
-visible, and its explanation appears below the table. J and K scroll that
-explanation one line; Page Up and Page Down move it one page. The repository
+visible, and its explanation appears below the table. Tab switches between list
+and reading focus. In reading focus, Up and Down scroll the explanation. J and K
+scroll it one line in either focus; Page Up and Page Down move it one page. The repository
 context, Back row, plugin readiness, and footer remain fixed. Commands stay
 read-only. Enter returns from the selected Back row; Backspace always returns
 with Advanced commands still selected.
 Instructions uses the same logo and repository context,
 selects Overview by default, and shows each shipped guide below its guide table.
-Up and Down choose a guide. J and K scroll its content one line; Page Up and
-Page Down move one page. Backspace or the Back row returns to the launcher.
+Up and Down choose a guide in list focus. Tab switches to reading focus, where
+arrows scroll content, and back to the guide list. J/K and page keys scroll in
+either focus. The footer names the active focus. Backspace or the Back row
+returns to the launcher, whose arrows continue to select actions.
 Bare `groma instructions` opens this screen on a TTY. Named guides,
 non-interactive use, and `--plain` remain plain text. This catalog is for
 people. `groma agent-instructions [guide]` is a separate, always-plain catalog

@@ -155,7 +155,7 @@ function siblingRows(model: TerminalViewModel, container: AnnotatedElement): Ann
   return rows.map(row => row.element)
 }
 
-/** The selected container, fitted to the map, with stacked zones and sibling slabs peeking at both sides. */
+/** The active container owns the map; neighbouring slabs are three-column named strips. */
 export function containerLayout(
   model: TerminalViewModel,
   container: AnnotatedElement,
@@ -174,12 +174,12 @@ export function containerLayout(
   const neighbours = (['left', 'right'] as const).flatMap(side => {
     const element = neighbourContainer(model, container, side)
     if (element === undefined) return []
-    return [slab(element, {
-      x: side === 'left' ? -(width + 2) : width + 2,
+    return [{ ...slab(element, {
+      x: side === 'left' ? -5 : width + 2,
       y: 0,
-      width,
+      width: 3,
       height,
-    })]
+    }), preview: 'vertical' as const }]
   })
   return [slab(container, { x: 0, y: 0, width, height }), ...items, ...neighbours]
 }

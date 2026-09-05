@@ -1,6 +1,6 @@
 import { TextAttributes } from '@opentui/core'
 
-import { actionCaption, outgoingActions, travelledBy } from '../../action-path.ts'
+import { actionCaption, outgoingActions } from '../../action-path.ts'
 import { kindLabel } from '../../atoms/kind.ts'
 import type { ProjectProfile } from '../../../project-profile.ts'
 import { parentOfElements, promotedPeer } from '../../relationship-text.ts'
@@ -8,7 +8,10 @@ import type { ViewerTheme } from '../atoms/theme.ts'
 import type { TerminalViewModel } from '../model.ts'
 import { flowEndpointLabel, type ProjectedFlowStep } from '../flow.ts'
 import { KEYS_BOX } from '../keys.ts'
-import { selectionRelationships, type DetailsTab } from '../navigation.ts'
+import { selectionFlows, selectionRelationships, type DetailsTab } from '../navigation.ts'
+import { workRowId, workRows, workRowSelection, type WorkListSettings } from '../work/model.ts'
+import { workListLines } from './hierarchy.ts'
+import { taskFileRows } from './code.ts'
 import type {
   AnnotatedElement,
   AnnotatedRelationship,
@@ -16,13 +19,12 @@ import type {
   WorkItem,
   WorkItemDetails,
 } from '../../../types.ts'
-import { elementWorkGroups, type WorkStage } from '../../../work/pins.ts'
 import type { TaskFileDiff } from '../../source/diff-lines.ts'
 import type { CodeDeclaration, CodeFile } from '../../source/structure.ts'
 import { accent, bold, chunk, dim, kindMark, plain, styleRow, wrap, type Line, type PaneLines } from './text.ts'
 
-export const DETAILS_TABS: readonly DetailsTab[] = ['what', 'how']
-export const DETAILS_TAB_NAMES: Record<DetailsTab, string> = { what: 'What it does', how: 'How it\'s built' }
+export const DETAILS_TABS: readonly DetailsTab[] = ['what', 'how', 'tasks']
+export const DETAILS_TAB_NAMES: Record<DetailsTab, string> = { what: 'What', how: 'How', tasks: 'Tasks' }
 
 type Elements = ReadonlyMap<string, AnnotatedElement>
 
@@ -73,19 +75,10 @@ function codeRows(theme: ViewerTheme, element: AnnotatedElement, width: number, 
   return { lines, cursor }
 }
 
-function howLines(theme: ViewerTheme, element: AnnotatedElement, world: TerminalViewModel, width: number, activeActionId: string | undefined, actionCursor: string | undefined, structure: readonly CodeFile[] | undefined): PaneLines {
+function howLines(theme: ViewerTheme, element: AnnotatedElement, width: number, actionCursor: string | undefined, structure: readonly CodeFile[] | undefined): PaneLines {
   const code = codeRows(theme, element, width, structure, actionCursor)
-  const lines: Line[] = [...technologyRows(theme, element, width)]
-  let cursor = code.cursor === undefined ? undefined : lines.length + code.cursor
-  lines.push(...code.lines)
-  const travelled = travelledBy(element.representationId, world)
-  if (travelled.length > 0) lines.push([], heading(theme, 'Travelled by', width))
-  for (const walk of travelled) {
-    const atCursor = walk.id === actionCursor
-    if (atCursor) cursor = lines.length
-    lines.push(styleRow(theme, [dim(theme, '→ '), plain(theme, walk.description)], width, walk.id === activeActionId, atCursor))
-  }
-  return { lines, cursor }
+  const technology = technologyRows(theme, element, width)
+  return { lines: [...technology, ...code.lines], cursor: code.cursor === undefined ? undefined : technology.length + code.cursor }
 }
 
 interface RelationshipRow {
@@ -134,40 +127,40 @@ function childRows(theme: ViewerTheme, element: AnnotatedElement, byId: Elements
   })]
 }
 
-const STAGE_LABEL: Record<WorkStage, string> = { todo: 'To do', progress: 'In progress', done: 'Done' }
+/** Component task groups browse and open records without owning map filters. */
+function componentTaskLines(theme: ViewerTheme, element: AnnotatedElement, world: TerminalViewModel, width: number, actionCursor: string | undefined, settings?: WorkListSettings): PaneLines {
+  const rows = workRows(world, settings, element.representationId)
+  const row = rows.find(row => workRowId(row) === actionCursor)
+  return workListLines(theme, width, rows, row === undefined ? { state: 'cleared' } : workRowSelection(row), undefined, true, false)
+}
 
-/** The tasks touching the element under To do, In progress and Done, each with its acceptance progress. */
-function workRows(theme: ViewerTheme, element: AnnotatedElement, world: TerminalViewModel, width: number, actionCursor: string | undefined): PaneLines {
-  const lines: Line[] = []
-  let cursor: number | undefined
-  if (world.work === undefined) return { lines }
-  for (const group of elementWorkGroups(world.work, element.representationId, world)) {
-    lines.push([], heading(theme, `${STAGE_LABEL[group.stage]} · ${group.items.length}`, width))
-    for (const item of group.items) {
-      const atCursor = item.id === actionCursor
-      if (atCursor) cursor = lines.length
-      const progress = item.acceptanceCriteriaCount > 0 ? ` ${item.acceptanceCriteriaCompleted}/${item.acceptanceCriteriaCount}` : ''
-      lines.push(styleRow(theme, [bold(theme, item.id), dim(theme, progress)], width, false, atCursor))
-      lines.push(...wrap(item.title, width - 2).map(row => [dim(theme, `  ${row}`)]))
-    }
-  }
-  return { lines, cursor }
+function flowChoiceLines(theme: ViewerTheme, title: string, width: number, active: boolean, atCursor: boolean): Line[] {
+  return wrap(title, width - 2).map((line, index) => styleRow(theme,
+    [plain(theme, `${index === 0 ? (active ? '☑ ' : '☐ ') : '  '}${line}`)], width, active, atCursor))
 }
 
 function whatLines(theme: ViewerTheme, element: AnnotatedElement, world: TerminalViewModel, byId: Elements, width: number, activeActionId: string | undefined, actionCursor: string | undefined): PaneLines {
   const lines: Line[] = element.overview ? [[], ...wrap(element.overview, width).map(row => [plain(theme, row)])] : []
   let cursor: number | undefined
   const rows = relationshipRows(element, world, byId)
-  if (rows.length > 0) lines.push([], heading(theme, 'Relationships', width))
+  const actor = element.kind === 'actor'
+  if (rows.length > 0) lines.push([], heading(theme, actor ? 'Flows' : 'Relationships', width))
   for (const row of rows) {
     const atCursor = row.relationship.id === actionCursor
     if (atCursor) cursor = lines.length
-    lines.push(...relationshipLines(theme, row, byId, width, row.relationship.id === activeActionId, atCursor))
+    const active = row.relationship.id === activeActionId
+    lines.push(...(actor
+      ? flowChoiceLines(theme, row.relationship.description, width, active, atCursor)
+      : relationshipLines(theme, row, byId, width, active, atCursor)))
+  }
+  const flows = selectionFlows(world, element.representationId)
+  if (flows.length > 0) lines.push([], heading(theme, 'Flows through', width))
+  for (const flow of flows) {
+    const atCursor = flow.id === actionCursor
+    if (atCursor) cursor = lines.length
+    lines.push(...flowChoiceLines(theme, flow.description, width, flow.id === activeActionId, atCursor))
   }
   lines.push(...childRows(theme, element, byId, width))
-  const work = workRows(theme, element, world, width, actionCursor)
-  if (work.cursor !== undefined) cursor = lines.length + work.cursor
-  lines.push(...work.lines)
   return { lines, cursor }
 }
 
@@ -181,6 +174,7 @@ export function detailsLines(
   activeActionId: string | undefined,
   actionCursor: string | undefined,
   structure: readonly CodeFile[] | undefined,
+  workList?: WorkListSettings,
 ): PaneLines {
   const byId: Elements = new Map(world.elements.map(item => [item.representationId, item]))
   const head: Line = [
@@ -189,8 +183,10 @@ export function detailsLines(
     dim(theme, ' · '),
     chunk(element.origin, theme[element.origin], TextAttributes.BOLD),
   ]
-  const body = tab === 'how'
-    ? howLines(theme, element, world, width, activeActionId, actionCursor, structure)
+  const body = tab === 'tasks'
+    ? componentTaskLines(theme, element, world, width, actionCursor, workList)
+    : tab === 'how'
+    ? howLines(theme, element, width, actionCursor, structure)
     : whatLines(theme, element, world, byId, width, activeActionId, actionCursor)
   return {
     lines: [head, ...body.lines],
@@ -204,8 +200,17 @@ export function flowLines(
   step: ProjectedFlowStep | undefined,
   total: number,
   width: number,
+  world?: TerminalViewModel,
+  flow?: AnnotatedRelationship,
 ): Line[] {
-  if (step === undefined) return [[accent(theme, `${total} ${total === 1 ? 'leg' : 'legs'}`)]]
+  if (step === undefined) {
+    const titles = new Map(world?.elements.map(element => [element.representationId, element.title]))
+    const meaning = flow === undefined ? [] : [
+      ...wrap(flow.description, width).map(row => [bold(theme, row)]), [],
+      ...wrap(`${titles.get(flow.source) ?? flow.source} → ${titles.get(flow.target) ?? flow.target}`, width).map(row => [plain(theme, row)]), [],
+    ]
+    return [...meaning, [accent(theme, `${total} ${total === 1 ? 'leg' : 'legs'}`)]]
+  }
   return [
     [accent(theme, `Leg ${step.index + 1}/${step.total}`)],
     ...wrap(`${flowEndpointLabel(step.source)} → ${flowEndpointLabel(step.target)}`, width).map(row => [plain(theme, row)]),
@@ -214,22 +219,32 @@ export function flowLines(
   ]
 }
 
-/** One Backlog task: status and assignees, title, progress, files and references. */
+/** A task summary starts with its title before execution facts. */
 export function taskLines(theme: ViewerTheme, item: WorkItem, width: number): Line[] {
-  const lines: Line[] = [[accent(theme, [item.status, ...item.assignees].join(' · '))], []]
-  lines.push(...wrap(item.title, width).map(row => [bold(theme, row)]))
+  const lines: Line[] = wrap(item.title, width).map(row => [bold(theme, row)])
   if (item.acceptanceCriteriaCount > 0) {
     lines.push([], heading(theme, `Acceptance criteria · ${item.acceptanceCriteriaCompleted} of ${item.acceptanceCriteriaCount}`, width))
   }
-  if (item.modifiedFiles.length > 0) {
-    lines.push([], heading(theme, 'Modified files', width))
-    for (const file of item.modifiedFiles) lines.push(...wrap(file, width).map(row => [plain(theme, row)]))
+  return [...lines, ...taskExecutionLines(theme, item, width).lines]
+}
+
+function taskExecutionLines(theme: ViewerTheme, item: WorkItem, width: number, details?: WorkItemDetails, files?: TaskFileDiff[]): PaneLines {
+  const lines: Line[] = [[], heading(theme, 'Execution', width), [accent(theme, [item.status, ...item.assignees].join(' · '))]]
+  lines.push(...prose(theme, 'Plan', details?.implementationPlan ?? '', width))
+  const ids: (string | undefined)[] = lines.map(() => undefined)
+  for (const [title, values] of [['Modified files', item.modifiedFiles], ['References', item.references]] as const) {
+    if (values.length === 0) continue
+    lines.push([], heading(theme, title, width))
+    ids.push(undefined, undefined)
+    for (const value of values) {
+      const rows = title === 'Modified files'
+        ? taskFileRows(theme, value, files?.find(file => file.file === value), width)
+        : wrap(value, width).map(row => [plain(theme, row)])
+      lines.push(...rows)
+      ids.push(...rows.map(() => value))
+    }
   }
-  if (item.references.length > 0) {
-    lines.push([], heading(theme, 'References', width))
-    for (const reference of item.references) lines.push(...wrap(reference, width).map(row => [plain(theme, row)]))
-  }
-  return lines
+  return { lines, ids }
 }
 
 /** The project profile, read-only: its description, then the overview. */
@@ -260,46 +275,28 @@ function prose(theme: ViewerTheme, title: string, value: string, width: number):
   return [[], heading(theme, title, width), ...value.split('\n').flatMap(paragraph => paragraph === '' ? [[]] : wrap(paragraph, width).map(row => [plain(theme, row)]))]
 }
 
-/** The full task record: the summary, then its description, criteria, Definition of Done, plan, notes and comments. */
-export function taskRecordLines(theme: ViewerTheme, item: WorkItem, details: WorkItemDetails | undefined, width: number): Line[] {
-  const lines = taskLines(theme, item, width)
-  if (details === undefined) return lines
-  return [
+/** Task definition precedes execution, files, notes and comments in both opening paths. */
+function taskRecordContent(theme: ViewerTheme, item: WorkItem, details: WorkItemDetails | undefined, width: number, files?: TaskFileDiff[]): PaneLines {
+  const lines: Line[] = wrap(item.title, width).map(row => [bold(theme, row)])
+  if (details === undefined) return { lines }
+  const definition = [
     ...lines,
     ...prose(theme, 'Description', details.description, width),
     ...checklist(theme, 'Acceptance criteria', details.acceptanceCriteria, width),
     ...checklist(theme, 'Definition of Done', details.definitionOfDone, width),
-    ...prose(theme, 'Plan', details.implementationPlan, width),
-    ...prose(theme, 'Notes', details.implementationNotes, width),
-    ...details.comments.flatMap(comment => prose(theme, comment.author, comment.body, width)),
   ]
-}
-
-/** A source file read-only: numbered lines, the opened line in the accent. */
-export function sourceLines(theme: ViewerTheme, view: { file: string; line: number; text?: string }, width: number): Line[] {
-  if (view.text === undefined) return [[dim(theme, view.file)]]
-  const rows = view.text.split('\n')
-  const gutter = String(rows.length).length
-  return rows.map((row, index) => {
-    const number = String(index + 1).padStart(gutter)
-    const opened = index + 1 === view.line
-    return [(opened ? accent : dim)(theme, `${number} `), (opened ? accent : plain)(theme, row.slice(0, Math.max(0, width - gutter - 1)))]
-  })
-}
-
-/** A task's file as a unified diff: its hunks, added lines marked +, removed lines marked - and dim. */
-export function diffLines(theme: ViewerTheme, view: { file: string; diff?: TaskFileDiff }, width: number): Line[] {
-  const diff = view.diff
-  if (diff === undefined) return [[dim(theme, view.file)]]
-  const lines: Line[] = [[plain(theme, diff.file), dim(theme, ` · ${diff.status} · +${diff.additions} -${diff.deletions}`)]]
-  for (const hunk of diff.hunks) {
-    lines.push([], [dim(theme, hunk.header)])
-    for (const line of hunk.lines) {
-      const text = line.text.slice(0, Math.max(0, width - 2))
-      if (line.kind === 'added') lines.push([accent(theme, '+ '), plain(theme, text)])
-      else if (line.kind === 'removed') lines.push([dim(theme, '- '), dim(theme, text)])
-      else lines.push([dim(theme, '  '), dim(theme, text)])
-    }
+  const execution = taskExecutionLines(theme, item, width, details, files)
+  return {
+    lines: [...definition, ...execution.lines,
+      ...prose(theme, 'Notes', details.implementationNotes, width),
+      ...details.comments.flatMap(comment => prose(theme, comment.author, comment.body, width))],
+    ids: [...definition.map(() => undefined), ...execution.ids!],
   }
-  return lines
+}
+
+/** The visible reading cursor moves through prose and links without skipping either. */
+export function taskRecordView(theme: ViewerTheme, item: WorkItem, details: WorkItemDetails | undefined, width: number, row: number | undefined, files?: TaskFileDiff[]): PaneLines {
+  const content = taskRecordContent(theme, item, details, width, files)
+  return { ...content, cursor: row, lines: content.lines.map((line, index) => index === row
+    ? styleRow(theme, line, width, false, true) : line) }
 }

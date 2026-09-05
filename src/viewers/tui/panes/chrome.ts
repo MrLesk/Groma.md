@@ -4,27 +4,19 @@ import type { SearchState } from '../navigation-search.ts'
 import { accent, bold, dim, type Line } from './text.ts'
 
 const paneHints: Record<ViewerFocus, string> = {
-  architecture: '←↑↓→ select   enter open   backspace back   tab tree   w work',
-  hierarchy: '↑↓ move   ←→ fold   enter select   tab map   w work',
-  details: '↑↓ scroll   t tab   backspace back   esc map   w work',
+  architecture: '[↑↓←→] Select  [Enter] Open',
+  hierarchy: '[↑↓] Select  [←→] Fold  [Enter] Open  [Esc] Map',
+  details: '[↑↓] Select/scroll  [Enter] Follow  [Tab] Tabs  [Esc] Map',
 }
 
 export function footerHint(
   focus: ViewerFocus,
   actionTitle: string | undefined,
-  picking: boolean,
+  opensContainer = true,
 ): string {
-  if (picking) {
-    return actionTitle === undefined
-      ? '↑↓ action   enter pick   t tab   esc map'
-      : `${actionTitle}   ↑↓ action   enter pick   x clear   esc map`
-  }
-  if (actionTitle !== undefined) {
-    if (focus === 'architecture') return `${actionTitle}   s next   x clear   enter open`
-    if (focus === 'hierarchy') return `${actionTitle}   s next   x clear   enter select`
-    return `${actionTitle}   s next   x clear   esc map`
-  }
-  return paneHints[focus]
+  const base = paneHints[focus].replace('[Enter] Open', opensContainer ? '[Enter] Open' : '[Enter] Details')
+  const flow = actionTitle === undefined ? '' : '  [s] Step  [x] Clear'
+  return `${base}${flow}  [t] Hierarchy  [d] Details  [/] Search  [?] Help`
 }
 
 export function searchLine(search: SearchState): string {
@@ -32,7 +24,7 @@ export function searchLine(search: SearchState): string {
   const position = match === undefined
     ? search.query.trim().length === 0 ? '' : 'no matches'
     : `${search.index + 1} of ${search.matches.length} · ${match.title}`
-  return `/ ${search.query}▏  ${position}   ↑↓ next   enter keep   esc back`
+  return `/ ${search.query}▏  ${position}   [↑↓] Next  [Enter] Keep  [Esc] Back  [?] Help`
 }
 
 /** Wordmark and stats on the left, the exit hint on the right edge. */

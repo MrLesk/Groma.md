@@ -83,7 +83,7 @@ test.concurrent('manual toggles cannot hide a selection path', () => {
 
 test.concurrent('tree focus moves the cursor and enter drives selection and level', () => {
   const world = navigationWorld()
-  let state = reduceViewer(world, initialState(world), 'tab')
+  let state = reduceViewer(world, initialState(world), 'toggle-hierarchy')
   assert.equal(state.focus, 'hierarchy')
   assert.equal(state.tree.cursor, 'observed:cleft')
 
@@ -108,26 +108,27 @@ test.concurrent('tree focus moves the cursor and enter drives selection and leve
   assert.equal(state.focus, 'hierarchy')
 
   const backFromLeaf = reduceViewer(world, state, 'right')
-  assert.equal(backFromLeaf.focus, 'architecture')
+  assert.equal(backFromLeaf.focus, 'hierarchy')
   assert.equal(backFromLeaf.currentId, state.currentId)
   assert.equal(backFromLeaf.tree.cursor, state.tree.cursor)
 
   state = reduceViewer(world, state, 'left')
   assert.equal(state.tree.cursor, 'observed:cleft')
   const backFromExpanded = reduceViewer(world, state, 'right')
-  assert.equal(backFromExpanded.focus, 'architecture')
+  assert.equal(backFromExpanded.focus, 'hierarchy')
+  assert.equal(reduceViewer(world, backFromExpanded, 'dismiss').focus, 'architecture')
   state = reduceViewer(world, state, 'left')
   assert.ok(state.tree.collapsed.has('observed:cleft'))
   assert.equal(state.currentId, 'observed:pleft')
 
   state = reduceViewer(world, state, 'dismiss')
   assert.equal(state.focus, 'architecture')
-  assert.equal(state.level, 'context')
-  assert.equal(state.currentId, 'observed:cleft')
+  assert.equal(state.level, 'components')
+  assert.equal(state.currentId, 'observed:pleft')
   state = reduceViewer(world, state, 'down')
-  assert.equal(state.level, 'context')
+  assert.equal(state.level, 'components')
   assert.equal(state.tree.cursor, state.currentId)
-  assert.equal(state.tree.collapsed.has('observed:cleft'), true)
+  assert.equal(state.tree.collapsed.has('observed:cleft'), false)
 })
 
 test.concurrent('tree scrolling keeps the cursor inside the visible window', () => {

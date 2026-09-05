@@ -15,12 +15,12 @@ ArchitectureWorld → sheetScene (blueprint sheet) → TUI plugin
                                              └──→ Web plugin
 ```
 
-The sheet lays out the whole architecture once. The TUI projects it from above
-at one fixed readable scale. Its root scope shows actors, internal-system
-boundaries, container slabs, collapsed groups, and external systems. Entering a
-container shows that boundary, its groups, and its component buildings. Hidden
-relationship endpoints promote to the nearest visible boundary without moving
-the sheet.
+The sheet supplies architectural meaning, placement order, and source-file floors.
+The TUI fits a terminal layout at one fixed readable scale: root islands contain
+container rows and miniature component blocks; an open container contains groups
+and component cards. Hidden relationship endpoints promote to visible rows or
+boundaries. Available width may change wrapping; selection does not change world
+geometry. The TUI routes connections around its own card rectangles.
 
 The web map paints the whole world at once as one isometric blueprint
 sheet: flat islands for actors, external systems and each internal system,
@@ -28,10 +28,10 @@ low container slabs, buildings (components whose height and shape follow
 the observed code, round buildings for actors, pills for external
 systems), and one lattice route per authored relationship.
 
-A viewer never reads architecture Markdown, walks `groma/` directories, or
-lays the world out. Core composes the blueprint sheet before either viewer
-receives it; the sheet owns every footprint, floor, shape, zone, and route on
-whole cells. A live host starts the same watch as `groma scan --watch`
+A viewer never reads architecture Markdown or walks `groma/` directories.
+Core composes the blueprint sheet before either viewer receives it. The web uses
+its whole-cell geometry; the TUI derives the fitted layout described above.
+A live host starts the same watch as `groma scan --watch`
 in-process and reloads the architecture and sheet after each fold. It also
 reloads them when architecture Markdown changes. `groma view` and `groma web` run one scan before opening.
 A live host asks the embedded Backlog work-source plugin for active tasks and
@@ -40,8 +40,8 @@ changes: the TUI marks In Progress work on referenced elements, while the web
 stands each task's pins on the element it touched last. A work refresh projects
 onto the cached map instead of composing another sheet. A failed Backlog read
 leaves the map available. A missing global Backlog.md CLI supplies empty work.
-Selection and details never lay anything out again.
-The first view fits the whole map. Routes stay on the map. One authored
+Selection never changes world geometry. The web starts fitted to the whole map;
+the TUI starts on a readable root island. Routes stay on the map. One authored
 relationship is one route; on the TUI, relationships that promote to the
 same pair of items at a level share one route. Parents
 are connected because a child is; viewers do not need a second row.

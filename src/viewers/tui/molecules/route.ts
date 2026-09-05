@@ -139,7 +139,7 @@ export function drawPorts(buffer: OptimizedBuffer, route: ProjectedMapRoute, vie
   }
 }
 
-/** The first word (two in a container map) on the longest horizontal run of a lit route, never over a shape. */
+/** A short label on a horizontal run or beside a vertical run, clear of card and row text. */
 export function drawRouteLabel(
   buffer: OptimizedBuffer,
   route: ProjectedMapRoute,
@@ -147,17 +147,30 @@ export function drawRouteLabel(
   theme: ViewerTheme,
   items: readonly ProjectedMapItem[],
 ): void {
-  if (route.cellRoute.length < 2) return
-  const longest = route.cellRoute.slice(1).map((to, index) => ({
-    from: route.cellRoute[index]!,
-    to,
-    width: route.cellRoute[index]!.y === to.y ? Math.abs(to.x - route.cellRoute[index]!.x) : 0,
-  })).sort((left, right) => right.width - left.width)[0]
-  if (!longest || longest.width < 5) return
   const label = route.description.split(' ', level === 'components' ? 2 : 1).join(' ')
-  const width = Math.min(label.length + 2, longest.width - 1)
-  if (width < 3) return
-  const span = { x: Math.round((longest.from.x + longest.to.x - width) / 2), y: longest.from.y, width, height: 1 }
-  if (items.some(item => visibleIn(span, item.cellBounds))) return
-  text(buffer, ` ${label.slice(0, width - 2)} `, span.x, span.y, width, theme.selected, theme.background, TextAttributes.BOLD)
+  const width = Math.min(label.length + 2, 22)
+  const segments = route.cellRoute.slice(1).map((to, index) => ({ from: route.cellRoute[index]!, to }))
+    .sort((a, b) => Math.abs(b.to.x - b.from.x) - Math.abs(a.to.x - a.from.x))
+  for (const { from, to } of segments) {
+    const y = Math.round((from.y + to.y) / 2)
+    const x = Math.round((from.x + to.x) / 2)
+    const cards = items.filter(item => item.key === route.source || item.key === route.target)
+    const above = Math.min(...cards.map(item => item.cellBounds.y)) - 1
+    const below = Math.max(...cards.map(item => item.cellBounds.y + item.cellBounds.height))
+    const candidates = [
+      { x: x - Math.floor(width / 2), y, width, height: 1 },
+      { x: x - width, y, width, height: 1 },
+      { x: x + 1, y, width, height: 1 },
+      ...(cards.length === 0 ? [] : [
+        { x: x - Math.floor(width / 2), y: above, width, height: 1 },
+        { x: x - Math.floor(width / 2), y: below, width, height: 1 },
+      ]),
+    ]
+    const ends = [route.cellRoute[0]!, route.cellRoute.at(-1)!].map(point => ({ ...point, width: 1, height: 1 }))
+    const blocked = [...ends, ...items.filter(item => item.shape === 'card' || item.shape === 'row').map(item => item.cellBounds)]
+    const span = candidates.find(candidate => !blocked.some(bounds => visibleIn(candidate, bounds)))
+    if (span === undefined) continue
+    text(buffer, ` ${label.slice(0, width - 2)} `, span.x, span.y, width, theme.selected, theme.background, TextAttributes.BOLD)
+    return
+  }
 }

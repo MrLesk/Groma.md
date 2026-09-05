@@ -13,7 +13,7 @@ import { box, containersFixtureRoot, terminalModel, worldOf } from './helpers.ts
 
 const VIEWPORT = { x: 0, y: 0, width: 60, height: 29 }
 
-test.concurrent('the container map fits and centres the selected slab with a neighbour peeking', async () => {
+test.concurrent('the container map fits its slab, keeps selection visible, and keeps its neighbour adjacent', async () => {
   const model = await terminalModel(containersFixtureRoot)
   const projection = projectWorld(model, {
     viewport: VIEWPORT,
@@ -22,13 +22,15 @@ test.concurrent('the container map fits and centres the selected slab with a nei
   })
   const slab = projection.items.find(item => item.representationId === 'web')!.cellBounds
   assert.equal(slab.width, VIEWPORT.width - 2 * MAP_PADDING)
-  assert.equal(slab.x, MAP_PADDING)
   const zone = projection.items.find(item => item.kind === 'group')!.cellBounds
   const card = projection.items.find(item => item.representationId === 'page')!.cellBounds
+  assert.ok(encloses(VIEWPORT, card))
   assert.ok(encloses(slab, zone) && encloses(zone, card))
   const neighbour = projection.items.find(item => item.representationId === 'api')!.cellBounds
   assert.ok(neighbour.x >= slab.x + slab.width || neighbour.x + neighbour.width <= slab.x)
-  assert.ok(neighbour.x < VIEWPORT.width && neighbour.x + neighbour.width > 0)
+  assert.ok(neighbour.width <= 3)
+  assert.ok(projection.worldBounds.width <= VIEWPORT.width)
+  assert.ok(encloses(VIEWPORT, { ...slab, y: VIEWPORT.y, height: 1 }))
 })
 
 test.concurrent('past the last building the arrows cross to the neighbouring container', async () => {

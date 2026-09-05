@@ -3,7 +3,7 @@ import type { CliRenderer, KeyEvent } from '@opentui/core'
 import { isEmptyWorld } from '../../empty-world.ts'
 import { createArchitectureSearch } from '../../search.ts'
 import { litLegs, projectFlowStep } from './flow.ts'
-import { panesForWidth } from './layout.ts'
+import { panesForWidth, terminalLayout } from './layout.ts'
 import {
   clickTreeRow,
   defaultSelection,
@@ -26,7 +26,7 @@ import type { TerminalCamera } from './projection-camera.ts'
 import type { TerminalViewModel } from './model.ts'
 import { reconcileWorkFocus, selectedWorkId, workView } from './work/model.ts'
 import type { TerminalLevel, WorkItemDetails } from '../../types.ts'
-import type { TaskFileDiff } from '../source/diff-lines.ts'
+import type { TaskDiffPayload } from '../source/diff.ts'
 import type { CodeFile } from '../source/structure.ts'
 import { clickHistoryRevision } from './navigation-history.ts'
 
@@ -45,8 +45,8 @@ interface ViewerOptions {
   readStructure?: (elementId: string) => Promise<CodeFile[] | undefined>
   /** A component's source file, read when a declaration opens it. */
   readSource?: (elementId: string, file: string) => Promise<{ source: string } | undefined>
-  /** One modified file of a task as a diff, read when the record opens it. */
-  readDiff?: (taskId: string, file: string) => Promise<TaskFileDiff | undefined>
+  /** One task's file facts and diffs, shared by its record and file reader. */
+  readTaskDiff?: (taskId: string) => Promise<TaskDiffPayload | undefined>
   /** The live working tree or one compatible historical model, read when revision state changes. */
   readRevision?: (revisionId?: string) => Promise<TerminalViewModel | undefined>
 }
@@ -63,13 +63,26 @@ export interface TerminalViewer {
   }): void
 }
 
-/** The projection drawn `dx` columns to the right, for the frames of a pan. */
-function shifted(projection: TerminalProjection, dx: number): TerminalProjection {
-  if (dx === 0) return projection
+/** The projection drawn behind its final camera position for the frames of a pan. */
+function shifted(projection: TerminalProjection, offset: TerminalCamera): TerminalProjection {
+  if (offset.x === 0 && offset.y === 0) return projection
   return {
     ...projection,
-    items: projection.items.map(item => ({ ...item, cellBounds: { ...item.cellBounds, x: item.cellBounds.x + dx } })),
-    relationships: projection.relationships.map(route => ({ ...route, cellRoute: route.cellRoute.map(point => ({ ...point, x: point.x + dx })) })),
+    items: projection.items.map(item => ({
+      ...item,
+      cellBounds: {
+        ...item.cellBounds,
+        x: item.cellBounds.x + offset.x,
+        y: item.cellBounds.y + offset.y,
+      },
+    })),
+    relationships: projection.relationships.map(route => ({
+      ...route,
+      cellRoute: route.cellRoute.map(point => ({
+        x: point.x + offset.x,
+        y: point.y + offset.y,
+      })),
+    })),
   }
 }
 
@@ -83,6 +96,7 @@ export function mountTerminalViewer(
   let state: ViewerState = {
     ...initialState(response),
     panes: panesForWidth(renderer.width),
+    terminalWidth: renderer.width,
     ...(options.level === undefined ? {} : { level: options.level }),
     ...(options.currentId === undefined ? {} : { currentId: options.currentId }),
   }
@@ -98,7 +112,7 @@ export function mountTerminalViewer(
   // Map clicks resolve against the projection last painted.
   let lastProjection: TerminalProjection | undefined
   // A selection change at the same level slides the map from the camera it had to the one it gets.
-  let slide: { distance: number; left: number } | undefined
+  let slide: { distance: TerminalCamera; left: number } | undefined
   let slideTimer: ReturnType<typeof setTimeout> | undefined
   let loadingRevision: string | null | false = false
   const screen = mountScreen(renderer, theme, {
@@ -150,8 +164,13 @@ export function mountTerminalViewer(
     }, FLOW_ANIMATION_MS)
   }
 
-  function repaint(panFrom?: number): void {
+  function repaint(panFrom?: TerminalCamera): void {
     if (closed || screen.map.isDestroyed) return
+    state = { ...state, terminalWidth: renderer.width }
+    if (!terminalLayout(state).map && lastProjection !== undefined) {
+      screen.apply(screenView(theme, viewModel, state, lastProjection, litAction(viewModel, state), undefined))
+      return
+    }
     const mapWidth = screen.mapViewport().width
     if (state.mapWidth !== mapWidth) state = { ...state, mapWidth }
     const projection = project()
@@ -162,10 +181,11 @@ export function mountTerminalViewer(
       state = { ...state, currentId: projection.currentId ?? undefined }
     }
     const step = projectFlowStep(viewModel, projection, lit.id, lit.actorId, state.actionStep)
-    paintMap(screen.map.frameBuffer, shifted(projection, slideShift(projection.camera.x, panFrom)), viewModel, theme, {
+    paintMap(screen.map.frameBuffer, shifted(projection, slideShift(projection.camera, panFrom)), viewModel, theme, {
       lit,
       step,
       workFocus: state.work,
+      workList: state.workList,
       animationPhase,
     })
     lastProjection = projection
@@ -174,10 +194,20 @@ export function mountTerminalViewer(
     slideOn()
   }
 
-  /** The columns the map still lags behind its new camera; a fresh pan starts from the camera it left. */
-  function slideShift(cameraX: number, panFrom: number | undefined): number {
-    if (panFrom !== undefined && panFrom !== cameraX) slide = { distance: cameraX - panFrom, left: PAN_FRAMES }
-    return slide === undefined ? 0 : Math.round(slide.distance * slide.left / PAN_FRAMES)
+  /** The cells the map still lags behind its new camera; a fresh pan starts from the camera it left. */
+  function slideShift(next: TerminalCamera, panFrom: TerminalCamera | undefined): TerminalCamera {
+    if (panFrom !== undefined && (panFrom.x !== next.x || panFrom.y !== next.y)) {
+      slide = {
+        distance: { x: next.x - panFrom.x, y: next.y - panFrom.y },
+        left: PAN_FRAMES,
+      }
+    }
+    return slide === undefined
+      ? { x: 0, y: 0 }
+      : {
+        x: Math.round(slide.distance.x * slide.left / PAN_FRAMES),
+        y: Math.round(slide.distance.y * slide.left / PAN_FRAMES),
+      }
   }
 
   function slideOn(): void {
@@ -273,7 +303,7 @@ export function mountTerminalViewer(
   function transition(next: ViewerState): void {
     const change = changeOf(next)
     if (change.enteringWork) workReturnCamera = snapshot()
-    const panFrom = change.slides ? camera?.x : undefined
+    const panFrom = change.slides ? snapshot() : undefined
     state = next
     loadPending()
     if (change.restores) {
@@ -301,10 +331,14 @@ export function mountTerminalViewer(
   /** Whatever the details pane opened and still lacks: a revision, record, structure, source file, or diff. */
   function loadPending(): void {
     loadPendingRevision()
-    const { taskRecord, sourceView, diffView, currentId } = state
-    if (taskRecord !== undefined && taskRecord.details === undefined) {
-      void options.readTask?.(taskRecord.id).then(details => {
-        if (!closed && state.taskRecord?.id === taskRecord.id) take({ taskRecord: { id: taskRecord.id, details } })
+    const { taskRecord, sourceView, currentId } = state
+    if (taskRecord !== undefined && taskRecord.diff === undefined) {
+      state = { ...state, taskRecord: { ...taskRecord, diff: null } }
+      void Promise.all([
+        taskRecord.details ?? options.readTask?.(taskRecord.id),
+        options.readTaskDiff?.(taskRecord.id),
+      ]).then(([details, diff]) => {
+        if (!closed && state.taskRecord?.id === taskRecord.id) take({ taskRecord: { ...state.taskRecord, details, diff: diff ?? null } })
       })
     }
     const component = viewModel.elements.find(element => element.representationId === currentId && element.kind === 'component')
@@ -317,11 +351,6 @@ export function mountTerminalViewer(
     if (sourceView !== undefined && sourceView.text === undefined && currentId !== undefined) {
       void options.readSource?.(currentId, sourceView.file).then(payload => {
         if (!closed && state.sourceView?.file === sourceView.file) take({ sourceView: { ...sourceView, text: payload?.source ?? '' } })
-      })
-    }
-    if (diffView !== undefined && diffView.diff === undefined) {
-      void options.readDiff?.(diffView.taskId, diffView.file).then(diff => {
-        if (!closed && state.diffView?.file === diffView.file && diff !== undefined) take({ diffView: { ...diffView, diff } })
       })
     }
   }
@@ -370,6 +399,8 @@ export function mountTerminalViewer(
 
   function onKeypress(key: KeyEvent): void {
     if (key.eventType === 'release') return
+    // Groma owns pane navigation; focused toolkit scrollbars must not scroll again.
+    key.preventDefault()
     if (key.ctrl && key.name === 'c') {
       destroy()
       return

@@ -12,7 +12,7 @@ const ISLAND_GAP = 2
 
 /** The widest an island or container may be: the map minus the padding on both sides. */
 export function fittedWidth(mapWidth: number): number {
-  return mapWidth - 2 * MAP_PADDING
+  return Math.max(20, mapWidth - 2 * MAP_PADDING)
 }
 
 interface RootRow {

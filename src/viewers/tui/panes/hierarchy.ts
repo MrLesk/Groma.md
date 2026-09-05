@@ -6,13 +6,15 @@ import type { TreeRow } from '../tree.ts'
 import type { WorkRow, WorkSelection } from '../work/model.ts'
 import { accent, bold, dim, kindMark, plain, styleRow, type Line, type PaneLines } from './text.ts'
 import type { WorkItem } from '../../../types.ts'
+import { taskRows } from '../work/rows.ts'
 import type { GromaRevision } from '../../../history/revisions.ts'
 
 const legendKinds = [['actor', 'system'], ['container', 'component']] as const
 
 /** The first visible row, chosen so the cursor row stays inside the window. */
-export function scrollOffset(cursorIndex: number, rowCount: number, height: number): number {
-  return Math.max(0, Math.min(cursorIndex - Math.floor(height / 2), rowCount - height))
+export function scrollOffset(cursorIndex: number, rowCount: number, height: number, previous = 0): number {
+  const visible = Math.max(cursorIndex - height + 1, Math.min(previous, cursorIndex))
+  return Math.max(0, Math.min(visible, rowCount - height))
 }
 
 /** The selection mark in the first column. */
@@ -56,11 +58,14 @@ export function hierarchyLines(
     push(undefined, [dim(theme, ' Flows')], false)
     for (const command of commands) {
       const lit = command.id === activeActionId
-      push(command.id, [marker(theme, lit), plain(theme, `→ ${command.title}`)], lit)
+      push(command.id, [plain(theme, `${lit ? '☑' : '☐'} ${command.title}`)], lit)
     }
     push(undefined, [dim(theme, '─'.repeat(width))], false)
   }
-  for (const row of rows) push(row.id, treeRow(theme, row, row.id === selectionId), false)
+  for (const row of rows) {
+    const selected = row.id === selectionId
+    push(row.id, treeRow(theme, row, selected), selected)
+  }
   return { lines, cursor, ids }
 }
 
@@ -94,23 +99,27 @@ export function revisionLines(
   return { lines, ids, cursor: cursorRow }
 }
 
-/** Work focus: every configured status with its tasks, two rows per task; a status that is a toggle carries its shown mark. */
+function statusMark(status: string, shown: readonly string[] | undefined): string {
+  if (shown === undefined) return ''
+  return shown.includes(status) ? '✓ ' : '○ '
+}
+
+/** Status groups and task rows; only the hierarchy supplies visibility controls. */
 export function workListLines(
   theme: ViewerTheme,
   width: number,
   rows: readonly WorkRow[],
   selection: WorkSelection,
-  shown: readonly string[],
+  shown: readonly string[] | undefined,
   focused: boolean,
+  title = true,
 ): PaneLines {
-  const lines: Line[] = [[accent(theme, ' Tasks (Work focus)')], []]
+  const lines: Line[] = title ? [[accent(theme, ' Backlog')], []] : []
   let cursor: number | undefined
   const task = (item: WorkItem): void => {
     const selected = selection.state === 'selected' && item.id === selection.taskId
     if (selected) cursor = lines.length
-    const head: Line = [marker(theme, selected), plain(theme, `  ${[item.id, ...item.assignees].join('  ')}`)]
-    lines.push(styleRow(theme, head, width, selected, selected && focused))
-    lines.push(styleRow(theme, [plain(theme, ' '), dim(theme, `  ${item.title}`)], width, false, selected && focused))
+    lines.push(...taskRows(theme, item, width, selected, selected && focused))
   }
   for (const row of rows) {
     if (row.kind === 'task') {
@@ -119,8 +128,8 @@ export function workListLines(
     }
     const atCursor = selection.state === 'status' && selection.status === row.status
     if (atCursor) cursor = lines.length
-    const mark = row.toggle ? (shown.includes(row.status) ? '✓ ' : '○ ') : ''
-    lines.push(styleRow(theme, [plain(theme, ' ▾ '), bold(theme, `${mark}${row.status} (${row.count})`)], width, false, atCursor && focused))
+    const mark = row.toggle ? statusMark(row.status, shown) : ''
+    lines.push(styleRow(theme, [plain(theme, row.expanded ? ' ▾ ' : ' ▸ '), bold(theme, `${mark}${row.status} (${row.count})`)], width, false, atCursor && focused))
   }
   return { lines, cursor }
 }

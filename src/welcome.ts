@@ -39,12 +39,14 @@ interface AdvancedState {
   selectedIndex: number
   tableScroll: number
   descriptionScroll: number
+  reading: boolean
 }
 
 interface InstructionsState {
   kind: 'instructions'
   selectedIndex: number
   scroll: number
+  reading: boolean
 }
 
 type WelcomeState = LauncherState | AdvancedState | InstructionsState
@@ -59,11 +61,12 @@ function advancedState(): AdvancedState {
     selectedIndex: 1,
     tableScroll: 0,
     descriptionScroll: 0,
+    reading: false,
   }
 }
 
 function instructionsState(): InstructionsState {
-  return { kind: 'instructions', selectedIndex: 1, scroll: 0 }
+  return { kind: 'instructions', selectedIndex: 1, scroll: 0, reading: false }
 }
 
 function initialState(screen: WelcomeScreen): WelcomeState {
@@ -72,7 +75,8 @@ function initialState(screen: WelcomeScreen): WelcomeState {
 
 type ReadingDirection = 'up' | 'down' | 'pageup' | 'pagedown'
 
-function readingDirection(key: KeyEvent): ReadingDirection | undefined {
+function readingDirection(key: KeyEvent, reading: boolean): ReadingDirection | undefined {
+  if (reading && (key.name === 'up' || key.name === 'down')) return key.name
   if (key.name === 'pageup' || key.name === 'pagedown') return key.name
   if (key.name === 'k') return 'up'
   if (key.name === 'j') return 'down'
@@ -149,6 +153,7 @@ export function mountWelcome(
         state.tableScroll,
         state.descriptionScroll,
         arrowVisible,
+        state.reading,
       )
       state.tableScroll = advancedPaint.tableScroll
       state.descriptionScroll = advancedPaint.scroll
@@ -161,6 +166,7 @@ export function mountWelcome(
         Math.max(0, state.selectedIndex - 1),
         state.scroll,
         arrowVisible,
+        state.reading,
       )
       state.scroll = instructionsPaint.scroll
     }
@@ -295,9 +301,10 @@ export function mountWelcome(
       showLauncher(advancedIndex)
       return
     }
-    const reading = readingDirection(key)
-    if (key.name === 'up' || key.name === 'down') moveAdvanced(key.name)
-    else if (reading !== undefined) scrollAdvanced(reading)
+    if (state.kind !== 'advanced') return
+    const reading = readingDirection(key, state.reading)
+    if (reading !== undefined) scrollAdvanced(reading)
+    else if (key.name === 'up' || key.name === 'down') moveAdvanced(key.name)
   }
 
   function handleInstructionsKey(key: KeyEvent): void {
@@ -305,9 +312,10 @@ export function mountWelcome(
       showLauncher(instructionsIndex)
       return
     }
-    const reading = readingDirection(key)
-    if (key.name === 'up' || key.name === 'down') moveInstruction(key.name)
-    else if (reading !== undefined) scrollInstructions(reading)
+    if (state.kind !== 'instructions') return
+    const reading = readingDirection(key, state.reading)
+    if (reading !== undefined) scrollInstructions(reading)
+    else if (key.name === 'up' || key.name === 'down') moveInstruction(key.name)
     else if (key.name === 'return' && state.kind === 'instructions' && state.selectedIndex === 0) {
       showLauncher(instructionsIndex)
     }
@@ -315,6 +323,11 @@ export function mountWelcome(
 
   function onKeypress(key: KeyEvent): void {
     if (key.eventType === 'release') return
+    if (key.name === 'tab' && state.kind !== 'launcher') {
+      state.reading = !state.reading
+      repaint()
+      return
+    }
     if (
       (key.ctrl && key.name === 'c')
       || key.name === 'escape'

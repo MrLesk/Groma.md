@@ -1,44 +1,17 @@
-type TokenKind = 'comment' | 'function' | 'keyword' | 'number' | 'string' | 'type'
+import { codeTokens } from '../../source/highlight.ts'
 
-const keywords = new Set([
-  'as', 'async', 'await', 'break', 'case', 'catch', 'class', 'const', 'continue', 'default',
-  'do', 'else', 'enum', 'export', 'extends', 'false', 'finally', 'for', 'foreach', 'from',
-  'function', 'get', 'if', 'implements', 'import', 'in', 'interface', 'internal', 'is', 'let',
-  'namespace', 'new', 'null', 'of', 'override', 'private', 'protected', 'public', 'readonly',
-  'return', 'set', 'static', 'switch', 'this', 'throw', 'true', 'try', 'type', 'typeof',
-  'undefined', 'using', 'var', 'virtual', 'void', 'while', 'yield',
-])
-
-const tokenPattern = /\/\/.*|\/\*.*?\*\/|'(?:\\.|[^'\\])*'|"(?:\\.|[^"\\])*"|`(?:\\.|[^`\\])*`|\b\d+(?:\.\d+)?\b|\b[A-Za-z_$][\w$]*\b/g
-
-function tokenKind(token: string, rest: string): TokenKind | undefined {
-  if (token.startsWith('//') || token.startsWith('/*')) return 'comment'
-  if (/^['"`]/.test(token)) return 'string'
-  if (/^\d/.test(token)) return 'number'
-  if (keywords.has(token)) return 'keyword'
-  if (/^[A-Z]/.test(token)) return 'type'
-  return /^\s*\(/.test(rest) ? 'function' : undefined
-}
-
-/** Builds the shared lightweight syntax treatment used by source and diff rows. */
+/** Browser markup for the shared source and diff syntax tokens. */
 export function highlightedLine(source: string): DocumentFragment {
   const line = document.createDocumentFragment()
-  let offset = 0
-  tokenPattern.lastIndex = 0
-  for (let match = tokenPattern.exec(source); match !== null; match = tokenPattern.exec(source)) {
-    line.append(source.slice(offset, match.index))
-    const token = match[0]
-    const kind = tokenKind(token, source.slice(tokenPattern.lastIndex))
-    if (kind === undefined) line.append(token)
+  for (const token of codeTokens(source)) {
+    if (token.kind === undefined) line.append(token.text)
     else {
       const span = document.createElement('span')
-      span.className = `syntax-${kind}`
-      span.textContent = token
+      span.className = `syntax-${token.kind}`
+      span.textContent = token.text
       line.append(span)
     }
-    offset = tokenPattern.lastIndex
   }
-  line.append(source.slice(offset))
   return line
 }
 

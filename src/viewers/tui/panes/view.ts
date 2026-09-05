@@ -2,30 +2,27 @@ import { actionCaption, actionLegs, worldCommands } from '../../action-path.ts'
 import type { ViewerTheme } from '../atoms/theme.ts'
 import { flowEndpointLabel, type ProjectedFlowStep } from '../flow.ts'
 import type { TerminalViewModel } from '../model.ts'
-import { kindGlyph } from '../../atoms/kind.ts'
-import { detailsCommands, type LitAction, type ViewerState } from '../navigation.ts'
-import { ancestorOfKind } from '../navigation-spatial.ts'
+import { detailsTabs, type LitAction, type ViewerState } from '../navigation.ts'
+import { detailsContentWidth, terminalLayout } from '../layout.ts'
+import { ancestorOfKind, canEnter } from '../navigation-spatial.ts'
 import type { TerminalProjection } from '../projection.ts'
 import { semanticTreeRows } from '../tree.ts'
-import { mappedStatuses, selectedWorkItem, shownStatuses, workGroups, workRows, type WorkFocus } from '../work/model.ts'
+import { selectedWorkItem, shownStatuses, workGroups, workRows } from '../work/model.ts'
 import { footerHint, searchLine } from './chrome.ts'
-import { DETAILS_TABS, detailsLines, diffLines, flowLines, keysLines, profileLines, sourceLines, taskLines, taskRecordLines } from './details.ts'
+import { DETAILS_TABS, detailsLines, flowLines, keysLines, profileLines, taskLines, taskRecordView } from './details.ts'
+import { diffLines, sourceLines } from './code.ts'
 import { hierarchyLines, legendLines, revisionLines, workListLines } from './hierarchy.ts'
-import { DETAILS_CONTENT_WIDTH, HIERARCHY_CONTENT_WIDTH, type DetailsView, type ScreenView } from './screen.ts'
+import { HIERARCHY_CONTENT_WIDTH, type DetailsView, type ScreenView } from './screen.ts'
 import { plain, type Line, type PaneLines } from './text.ts'
 import type { AnnotatedElement } from '../../../types.ts'
 
-/** The count per status; a status that is a toggle carries its shown mark. */
-function recapLine(theme: ViewerTheme, world: TerminalViewModel, focus: WorkFocus | undefined): Line | undefined {
+/** A compact entry to Backlog, centered below the architecture canvas. */
+function recapLine(theme: ViewerTheme, world: TerminalViewModel, width: number): Line | undefined {
   const groups = workGroups(world.work)
   if (groups.length === 0) return undefined
-  const toggles = new Set(mappedStatuses(world))
-  const shown = new Set(shownStatuses(world, focus))
-  const counts = groups.map(group => {
-    const mark = toggles.has(group.status) ? (shown.has(group.status) ? '✓ ' : '○ ') : ''
-    return `${mark}${group.items.length} ${group.status}`
-  }).join(' · ')
-  return [plain(theme, ` Backlog · ${counts} · w ${focus === undefined ? 'task details' : 'close'} `)]
+  const counts = groups.map(group => `${group.items.length} ${group.status}`).join(' · ')
+  const summary = ` [w] Backlog · ${counts} `
+  return [plain(theme, summary.length + 2 <= width ? summary : ` [w] Backlog · ${world.work!.items.length} tasks `)]
 }
 
 function actionTitle(world: TerminalViewModel, lit: LitAction, step: ProjectedFlowStep | undefined): string | undefined {
@@ -55,24 +52,27 @@ function rootStats(world: TerminalViewModel, flows: number, workOpen: boolean): 
 
 /** The keys box or the project profile, shown over whatever the pane held. */
 function modeView(theme: ViewerTheme, world: TerminalViewModel, state: ViewerState): DetailsView | undefined {
+  const width = detailsContentWidth(state)
+  if (state.keys) {
+    return { title: 'Keys', titleColor: theme.foreground, lines: { lines: keysLines(theme, width) }, scroll: state.detailsScroll }
+  }
   if (state.sourceView !== undefined) {
-    return { title: `${state.sourceView.file}:${state.sourceView.line}`, titleColor: theme.foreground, lines: { lines: sourceLines(theme, state.sourceView, DETAILS_CONTENT_WIDTH) }, scroll: state.detailsScroll }
+    return { title: `${state.sourceView.file}:${state.sourceView.line}`, titleColor: theme.foreground, lines: { lines: sourceLines(theme, state.sourceView, width) }, scroll: state.detailsScroll }
   }
   if (state.diffView !== undefined) {
-    return { title: state.diffView.file, titleColor: theme.foreground, lines: { lines: diffLines(theme, state.diffView, DETAILS_CONTENT_WIDTH) }, scroll: state.detailsScroll }
+    const file = state.diffView.file
+    const diff = state.taskRecord?.diff?.files.find(candidate => candidate.file === file)
+    return { title: file, titleColor: theme.foreground, lines: { lines: diffLines(theme, { file, diff }, width) }, scroll: state.detailsScroll }
   }
   const record = state.taskRecord === undefined ? undefined : world.work?.items.find(item => item.id === state.taskRecord?.id)
   if (record !== undefined) {
-    return { title: record.id, titleColor: theme.selected, lines: { lines: taskRecordLines(theme, record, state.taskRecord?.details, DETAILS_CONTENT_WIDTH) }, scroll: state.detailsScroll }
-  }
-  if (state.keys) {
-    return { title: 'Keys', titleColor: theme.foreground, lines: { lines: keysLines(theme, DETAILS_CONTENT_WIDTH) }, scroll: state.detailsScroll }
+    return { title: record.id, titleColor: theme.selected, lines: taskRecordView(theme, record, state.taskRecord?.details, width, state.taskRecord?.row, state.taskRecord?.diff?.files), scroll: 0 }
   }
   if (state.profile && world.project !== undefined) {
     return {
       title: world.project.title,
       titleColor: theme.foreground,
-      lines: { lines: profileLines(theme, world.project, DETAILS_CONTENT_WIDTH) },
+      lines: { lines: profileLines(theme, world.project, width) },
       scroll: state.detailsScroll,
     }
   }
@@ -88,7 +88,8 @@ function detailsView(
   step: ProjectedFlowStep | undefined,
   commands: ReturnType<typeof worldCommands>,
 ): DetailsView | undefined {
-  if (!state.panes.details) return undefined
+  if (!terminalLayout(state).details) return undefined
+  const width = detailsContentWidth(state)
   const mode = modeView(theme, world, state)
   if (mode !== undefined) return mode
   if (state.work !== undefined) {
@@ -96,7 +97,7 @@ function detailsView(
     return {
       title: item?.id ?? 'Task',
       titleColor: item === undefined ? theme.foreground : theme.selected,
-      lines: { lines: item === undefined ? [] : taskLines(theme, item, DETAILS_CONTENT_WIDTH) },
+      lines: { lines: item === undefined ? [] : taskLines(theme, item, width) },
       scroll: state.detailsScroll,
     }
   }
@@ -105,7 +106,7 @@ function detailsView(
     return {
       title: focusedFlow.description,
       titleColor: theme.selected,
-      lines: { lines: flowLines(theme, focusedFlow.id === lit.id ? step : undefined, actionLegs(focusedFlow.id, world).length, DETAILS_CONTENT_WIDTH) },
+      lines: { lines: flowLines(theme, focusedFlow.id === lit.id ? step : undefined, actionLegs(focusedFlow.id, world).length, width, world, focusedFlow) },
       scroll: 0,
     }
   }
@@ -113,8 +114,9 @@ function detailsView(
   return {
     title: selected.title,
     titleColor: state.focus === 'details' ? theme.selected : theme[selected.origin],
-    tab: DETAILS_TABS.indexOf(state.detailsTab),
-    lines: detailsLines(theme, selected, world, DETAILS_CONTENT_WIDTH, state.detailsTab, state.activeActionId, state.actionCursor, state.codeStructure?.elementId === selected.representationId ? state.codeStructure.files : undefined),
+    tab: selected.kind === 'actor' ? undefined : DETAILS_TABS.indexOf(state.detailsTab),
+    tabCount: detailsTabs(world, selected.representationId).length,
+    lines: selectedDetails(theme, world, state, selected),
     scroll: state.detailsScroll,
   }
 }
@@ -127,22 +129,28 @@ function footerLine(
   lit: LitAction,
   step: ProjectedFlowStep | undefined,
 ): string {
-  if (state.history !== undefined) return '↑↓ revision   enter open   h close   esc close'
+  if (state.history !== undefined) return '[↑↓] Revision  [Enter] Open  [h] Close  [Esc] Close  [?] Help'
   if (state.work !== undefined) {
     return state.focus === 'details'
-      ? '↑↓ scroll   ← tasks   w close work   ] details'
-      : '↑↓ task   enter details   w close work   ] details'
+      ? '[↑↓] Read  [Enter] Open  [t] Hierarchy  [Esc] Back  [?] Help'
+      : '[↑↓] Select  [Enter] Open/fold  [Space] Show/hide  [d] Details  [Esc] Map  [?] Help'
   }
   if (state.search !== undefined) return searchLine(state.search)
-  const picking = state.focus === 'details' && detailsCommands(world, state).length > 0
-  const hint = footerHint(state.focus, actionTitle(world, lit, step), picking)
-  const named = !state.panes.details && selected !== undefined
-    ? `${kindGlyph(selected.kind)} ${selected.title}   ${hint}`
-    : hint
-  if (state.sourceView !== undefined || state.diffView !== undefined || state.taskRecord !== undefined) return `esc back   ↑↓ scroll   ${named}`
-  if (state.keys) return `? close   esc close   ${named}`
-  if (state.profile) return `p back   esc back   ${named}`
-  return world.revision === undefined ? named : `esc Current   h history   ${named}`
+  const hint = footerHint(state.focus, actionTitle(world, lit, step), selected !== undefined && canEnter(selected))
+  if (state.sourceView !== undefined || state.diffView !== undefined || state.taskRecord !== undefined) return '[↑↓] Read  [Enter] Open  [t] Hierarchy  [Esc] Back  [?] Help'
+  if (state.keys) return '[?] Close  [↑↓] Scroll  [Esc] Close'
+  if (state.profile) return '[p] Back  [↑↓] Scroll  [Esc] Back  [?] Help'
+  if (state.focus === 'hierarchy' && worldCommands(world).some(command => command.id === state.tree.cursor)) {
+    return '[↑↓] Browse  [Space/Enter] Toggle flow  [x] Clear  [s] Step  [Esc] Map  [?] Help'
+  }
+  return focusedDetailsHint(state, selected) ?? hint
+}
+
+function focusedDetailsHint(state: ViewerState, selected: AnnotatedElement | undefined): string | undefined {
+  if (state.focus !== 'details') return undefined
+  if (state.detailsTab === 'tasks') return '[↑↓] Select  [Enter] Open/fold  [Tab] Tabs  [t] Hierarchy  [Esc] Map  [?] Help'
+  if (selected?.kind === 'actor') return '[↑↓] Browse  [Space/Enter] Toggle flow  [t] Hierarchy  [Esc] Map  [?] Help'
+  return undefined
 }
 
 /** The flows and tree, or the task list in Work focus; absent while the pane is folded. */
@@ -153,7 +161,7 @@ function hierarchyView(
   commands: ReturnType<typeof worldCommands>,
   selectionId: string | undefined,
 ): PaneLines | undefined {
-  if (!state.panes.hierarchy) return undefined
+  if (!terminalLayout(state).hierarchy) return undefined
   if (state.history !== undefined) {
     return revisionLines(
       theme,
@@ -165,7 +173,7 @@ function hierarchyView(
     )
   }
   if (state.work !== undefined) {
-    return workListLines(theme, HIERARCHY_CONTENT_WIDTH, workRows(world), state.work.selection, shownStatuses(world, state.work), state.focus === 'hierarchy')
+    return workListLines(theme, HIERARCHY_CONTENT_WIDTH, workRows(world, state.work), state.work.selection, shownStatuses(world, state.work), state.focus === 'hierarchy')
   }
   return hierarchyLines(
     theme,
@@ -194,14 +202,20 @@ export function screenView(
   const workOpen = state.work !== undefined
   const historyOpen = state.history !== undefined
   return {
+    layout: terminalLayout(state),
     stats: world.revision === undefined
-      ? scopeStats(world, state, selected) ?? rootStats(world, commands.length, workOpen)
+      ? scopeStats(world, { ...state, level: projection.level }, selected) ?? rootStats(world, commands.length, workOpen)
       : `${world.revision.shortId} · ${world.revision.subject}`,
     focus: state.focus,
     footer: footerLine(world, state, selected, lit, step),
     hierarchy: hierarchyView(theme, world, state, commands, selectionId),
     legend: workOpen || historyOpen ? undefined : legendLines(theme, HIERARCHY_CONTENT_WIDTH),
     details: detailsView(theme, world, state, selected, lit, step, commands),
-    recap: recapLine(theme, world, state.work),
+    recap: recapLine(theme, world, terminalLayout(state).mapWidth),
   }
+}
+
+function selectedDetails(theme: ViewerTheme, world: TerminalViewModel, state: ViewerState, selected: AnnotatedElement): PaneLines {
+  const structure = state.codeStructure?.elementId === selected.representationId ? state.codeStructure.files : undefined
+  return detailsLines(theme, selected, world, detailsContentWidth(state), state.detailsTab, state.activeActionId, state.actionCursor, structure, state.workList)
 }

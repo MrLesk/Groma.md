@@ -176,3 +176,55 @@ test.concurrent('control-c closes the welcome and releases its input handler', a
     inputListeners,
   )
 })
+
+test.concurrent('instructions Tab gives arrows the same reading scroll as j/k and returns arrows to guide selection', async () => {
+  const setup = await createTestRenderer({ width: 100, height: 30 })
+  const selected = mountWelcome(setup.renderer, welcomeFixture(), 'instructions')
+  const frame = async () => { await setup.renderOnce(); return setup.captureCharFrame() }
+  try {
+    setup.mockInput.pressKey('TAB')
+    const top = await frame()
+    setup.mockInput.pressArrow('down')
+    const down = await frame()
+    assert.notEqual(down, top)
+    setup.mockInput.pressKey('k')
+    assert.equal(await frame(), top)
+    setup.mockInput.pressKey('j')
+    assert.equal(await frame(), down)
+    setup.mockInput.pressArrow('up')
+    assert.equal(await frame(), top)
+    setup.mockInput.pressKey('TAB')
+    const list = await frame()
+    setup.mockInput.pressArrow('down')
+    assert.notEqual((await frame()).split('\n').slice(0, 20).join('\n'), list.split('\n').slice(0, 20).join('\n'))
+  } finally {
+    setup.mockInput.pressCtrlC()
+    await selected
+  }
+})
+
+test.concurrent('advanced commands retain selection while arrows and j/k scroll in reading focus', async () => {
+  const setup = await createTestRenderer({ width: 100, height: 30 })
+  const selected = mountWelcome(setup.renderer, welcomeFixture())
+  const frame = async () => { await setup.renderOnce(); return setup.captureCharFrame() }
+  try {
+    for (let index = 0; index < 4; index++) setup.mockInput.pressArrow('down')
+    setup.mockInput.pressEnter()
+    for (let index = 0; index < 10; index++) setup.mockInput.pressArrow('down')
+    setup.mockInput.pressKey('TAB')
+    const top = await frame()
+    setup.mockInput.pressArrow('down')
+    const down = await frame()
+    assert.notEqual(down, top)
+    assert.equal(down.split('\n').slice(0, 24).join('\n'), top.split('\n').slice(0, 24).join('\n'))
+    setup.mockInput.pressKey('k')
+    assert.equal(await frame(), top)
+    setup.mockInput.pressKey('j')
+    assert.equal(await frame(), down)
+    setup.mockInput.pressArrow('up')
+    assert.equal(await frame(), top)
+  } finally {
+    setup.mockInput.pressCtrlC()
+    await selected
+  }
+})

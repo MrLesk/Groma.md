@@ -1,4 +1,4 @@
-import { actionLegs } from '../action-path.ts'
+import { actionLegs, worldCommands } from '../action-path.ts'
 import type { AnnotatedRelationship } from '../../types.ts'
 import type { LitAction } from './navigation.ts'
 import { ancestorIds, parentOfElements } from '../relationship-text.ts'
@@ -35,12 +35,13 @@ function visibleEndpoint(
   return visibleEndpointFor(id, visible, byId, boundary)
 }
 
-/** An actor's pick lights its whole walk; any other picked relationship lights itself alone. */
+/** Actor commands include launcher commands whose source is a component. Other relationships light one leg. */
 export function litLegs(world: TerminalViewModel, lit: LitAction): AnnotatedRelationship[] {
   const picked = world.relationships.find(relationship => relationship.id === lit.id)
   if (picked === undefined) return []
   const source = world.elements.find(element => element.representationId === picked.source)
-  return source?.kind === 'actor' ? actionLegs(picked.id, world, lit.actorId) : [picked]
+  return source?.kind === 'actor' || worldCommands(world).some(command => command.id === picked.id)
+    ? actionLegs(picked.id, world, lit.actorId) : [picked]
 }
 
 /** Exact authored endpoints paired with the cards that represent them in the current scope. */
