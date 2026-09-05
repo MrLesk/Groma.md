@@ -47,7 +47,7 @@ test.concurrent('membership omits outgoing connections not authored in the scena
   const journal = model.elements.find(element => element.id === 'journal')!
   expect(inspectDetails(journal, model).flows).toEqual([])
   const entry = model.elements.find(element => element.id === 'entry')!
-  expect(inspectDetails(entry, model).relationships.some(relationship => relationship.peerId === 'journal')).toBe(true)
+  expect(inspectDetails(entry, model).relationships.some(relationship => relationship.target.representationId === 'journal')).toBe(true)
   expect(inspectDetails(entry, model).flows.map(row => row.flow.id)).toEqual([flow.id])
 })
 

@@ -17,6 +17,7 @@ import { flowRowCss } from './flow/row.ts'
 import { mapCss } from './iso/style.ts'
 import { editableCss } from './organisms/editable.ts'
 import { removeCss } from './organisms/remove.ts'
+import { relationshipCardCss } from './organisms/relationship-card.ts'
 import { tipCss } from './organisms/tip.ts'
 import type { WebBootPayload } from './payload.ts'
 import { isEmptyWorld } from '../../empty-world.ts'
@@ -358,25 +359,6 @@ const style = `
   .row .kind-component::before { width: 4px; height: 4px; }
   .row .twist.toggle:hover { color: var(--highlight-text); }
   .row .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .relationship-row {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) 10px;
-    grid-template-rows: auto auto;
-    align-items: center;
-    gap: 2px 8px;
-    width: 100%;
-    padding: 8px 0;
-    border: 0;
-    border-bottom: 1px solid var(--hairline);
-    background: transparent;
-    color: inherit;
-    font: inherit;
-    text-align: left;
-  }
-  .relationship-row:hover { background: var(--hover); }
-  .relationship-peer { grid-column: 1; grid-row: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .relationship-detail { grid-column: 1 / -1; grid-row: 2; padding-left: 17px; color: var(--muted); font-size: 9px; }
-  .relationship-destination { grid-column: 2; grid-row: 1; font-size: 16px; text-align: right; }
   .link { border: 0; background: transparent; padding: 0; text-align: left; }
   .link:hover { text-decoration: underline; text-underline-offset: 2px; }
   .mark { flex: none; }
@@ -387,7 +369,7 @@ const style = `
 ${chromeCss}${anchoredPopoverCss}${creditsCss}${motionCss}${revisionCss}${searchCss}${highlightCss}${sourceCss}${taskDiffCss}${backlogMarkCss}${workBadgeCss}${workDetailsCss}${flowRowCss}${mapCss}${pinsCss}${workCss}${tipCss}${projectEditorCss}
 ${emptyStateCss}
 ${addDialogCss}${editorCss}
-${removeCss}${editableCss}${mapDebugCss}`
+${relationshipCardCss}${removeCss}${editableCss}${mapDebugCss}`
 
 function legend(): string {
   return legendKinds.map(line => {

@@ -23,19 +23,11 @@ import {
   paintSelectionControls,
 } from './writes.ts'
 import { paintRemoveControl } from './remove.ts'
+import { relationshipCard, type RelationshipCardData } from './relationship-card.ts'
 import {
   parentOfElements,
   promotedPeer,
 } from '../../relationship-text.ts'
-
-export interface InspectedRelationship {
-  outgoing: boolean
-  peerId: string
-  peerTitle: string
-  peerKind: C4Kind | null
-  peerExternal: boolean
-  description: string
-}
 
 export interface InspectedChild {
   id: string
@@ -51,7 +43,7 @@ export interface Inspected {
   kindLabel: string
   origin: Origin
   overview: string
-  relationships: InspectedRelationship[]
+  relationships: RelationshipCardData[]
   flows: FlowRowData[]
   children: InspectedChild[]
   technology: string[]
@@ -121,18 +113,15 @@ export function inspectDetails(
 ): Inspected {
   const byId = new Map(world.elements.map(item => [item.representationId, item]))
   const parentOf = parentOfElements(world.elements)
-  const relationships: InspectedRelationship[] = []
+  const relationships: RelationshipCardData[] = []
   for (const relationship of world.relationships) {
     const ends = promotedPeer(relationship, element.representationId, parentOf)
     if (ends == null) continue
-    const peerId = ends.peerId
-    const peer = byId.get(peerId)
+    const peer = byId.get(ends.peerId)!
     relationships.push({
-      outgoing: ends.outgoing,
-      peerId,
-      peerTitle: peer?.title ?? peerId,
-      peerKind: peer?.kind ?? null,
-      peerExternal: peer?.external ?? false,
+      id: relationship.id,
+      source: ends.outgoing ? element : peer,
+      target: ends.outgoing ? peer : element,
       description: relationship.description,
     })
   }
@@ -245,33 +234,7 @@ export function paintDetails(host: HTMLElement, inspected: Inspected, options: D
       list.className = 'relationships'
       for (const relationship of inspected.relationships) {
         const item = document.createElement('li')
-        const link = document.createElement('button')
-        link.type = 'button'
-        link.className = 'relationship-row'
-        const peerKind = relationship.peerKind === null
-          ? 'element'
-          : kindLabel(relationship.peerKind, relationship.peerExternal).toLowerCase()
-        link.setAttribute(
-          'aria-label',
-          `Select ${peerKind} ${relationship.peerTitle}: ${relationship.description}`,
-        )
-        link.title = `Select ${relationship.peerTitle}: ${relationship.description}`
-        const peer = marked(
-          relationship.peerKind,
-          relationship.peerExternal,
-          relationship.peerTitle,
-        )
-        peer.classList.add('relationship-peer')
-        const detail = document.createElement('span')
-        detail.className = 'relationship-detail'
-        detail.textContent = `${relationship.outgoing ? '→' : '←'} ${relationship.description}`
-        const destination = document.createElement('span')
-        destination.className = 'relationship-destination'
-        destination.setAttribute('aria-hidden', 'true')
-        destination.textContent = '›'
-        link.append(peer, detail, destination)
-        link.addEventListener('click', event => onSelect(relationship.peerId, event.shiftKey))
-        item.append(link)
+        item.append(relationshipCard(relationship, onSelect, inspected.id))
         list.append(item)
       }
       body.append(list)
@@ -353,24 +316,18 @@ export function paintRelationship(
   title.replaceChildren()
   const body = host.querySelector('.body')!
   body.replaceChildren()
-  title.textContent = relationship.description
+  title.textContent = 'Relationship'
   if (writes.onEdit !== undefined && writes.onRead !== undefined) body.prepend(editButton(host, relationship.id, [
     { name: 'description', label: 'Description', value: relationship.description, required: true },
     { name: 'technology', label: 'Technology', value: relationship.technology, required: true },
   ], writes.onEdit, writes.onRead))
   host.querySelector('.meta')!.textContent = `Relationship · ${relationship.origin === 'draft' ? 'draft' : 'current'}`
   host.querySelector('.tabs')!.replaceChildren()
-  for (const [label, id] of [['Source', relationship.source], ['Destination', relationship.target]] as const) {
-    const end = byId.get(id)!
-    const link = document.createElement('button')
-    link.type = 'button'
-    link.className = 'link'
-    link.setAttribute('aria-label', `${label}: ${end.title}`)
-    link.append(marked(end.kind, end.external, end.title))
-    link.addEventListener('click', event => onSelect(id, event.shiftKey))
-    body.append(heading(`${label} · ${kindLabel(end.kind, end.external)}`), link)
-  }
-  if (relationship.technology !== '') body.append(heading('Technology'), paragraph('description', relationship.technology))
+  body.append(relationshipCard({
+    ...relationship,
+    source: byId.get(relationship.source)!,
+    target: byId.get(relationship.target)!,
+  }, onSelect))
   if (relationship.origin === 'draft' && writes.onAccept !== undefined) paintAcceptControl(body, writes.onAccept)
   if (relationship.origin === 'draft' && writes.onRemove !== undefined) paintRemoveControl(body, relationship.description, writes.onRemove)
 }

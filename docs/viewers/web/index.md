@@ -56,8 +56,15 @@ field. Relationship fields are description and technology. A matched draft
 element exposes Accept; a draft relationship exposes its own explicit Accept.
 Both use `groma accept`, with the relationship addressed by its two endpoints.
 
-Relationship details label the clickable Source and Destination, including
-their kinds, and show Technology separately. A current relationship is labeled
+Element relationship lists and relationship details use the same horizontal
+Source → Destination row. Clickable endpoint names and kinds flank the
+relationship description and arrow. Element lists mark the selected endpoint
+with THIS; the badge follows direction and can appear on either side. Clicking
+the center action in an element list opens the relationship details. Lists
+preserve map-level peer promotion; relationship details show exact authored
+endpoints. Compact text and dividers separate rows without enclosing borders
+or side padding. Rows omit technology, which remains available in Edit.
+A current relationship is labeled
 Current; this means an authored current collaboration, not scanner ownership.
 Only draft relationships offer Remove. Core refuses removal of current
 relationships through every entry point, and a flow reference also blocks

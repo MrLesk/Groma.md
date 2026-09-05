@@ -117,3 +117,59 @@ The first comparison found no actionable fidelity difference. No visual fixes or
 None.
 
 final result: passed
+
+---
+
+# TASK-266 Design QA
+
+## Evidence
+
+- Source: `/Users/alex/.codex/generated_images/01a0720f-0723-7a12-9d7c-c1ec990b5af0/exec-94a76b8c-2e44-4822-a7df-2d7bf0ab02b9.png` (1668 × 943).
+- Implementation: `/tmp/groma266-component.png`, `/tmp/groma266-component-crop.png`, `/tmp/groma266-relationship-crop.png`, `/tmp/groma266-dark-900.png`.
+- Combined source and implementation comparison: `/tmp/groma266-comparison.png`.
+- Viewports: 1440 × 1000 and 900 × 800 CSS pixels; details widths 420 and 360 pixels.
+- Captures contain the painted browser region at half size within the requested canvas. The combined comparison crops that region and scales it to CSS size. Detail captures are 420 × 914 and 420 × 450 pixels before normalization.
+- State: Architecture writer component and its relationship to Git in light mode; incoming Git relationships in dark mode.
+- Full-view and focused card comparison were examined together. Live component overview, tabs and additional relationships remain driven by architecture data; the card is the approved design scope.
+
+## Findings
+
+No actionable P0/P1/P2 differences remain.
+
+- Typography: existing monospace family, bold wrapping endpoint names, small uppercase roles, readable action and muted kind/technology preserve the reference hierarchy.
+- Layout: both views use one bordered card, horizontal source/arrow/destination grid, divided action and technology rows. THIS sits beside the current endpoint name. The list chevron belongs to its clickable action row. Cards fit both supported pane widths without horizontal overflow.
+- Colors: existing paper, ink, muted, hairline and hover tokens support light and dark themes.
+- Assets: no raster assets are required. The semantic direction arrow and chevron follow existing Groma text controls. The mockup's decorative document icon is omitted under the project's minimum sufficient product rule.
+- Content: exact authored action and technology are retained. Component lists preserve peer promotion and relationship details show exact endpoints.
+
+## Interaction evidence
+
+Source and destination names select the expected elements. The list action opens the exact relationship without THIS. The component list shows THIS on source and destination for outgoing and incoming relationships. Edit opens description and technology fields, and Cancel returns to the same relationship. Existing draft/current acceptance and removal tests pass. Browser error logs were empty.
+
+## Comparison history
+
+The first normalized comparison found no actionable P0/P1/P2 difference. No visual correction was required.
+
+## Implementation checklist
+
+- Shared card in both views: verified.
+- Directed selection and THIS: verified.
+- Light/dark and supported widths: verified.
+- Repository checks: passed.
+
+final result: passed
+
+## TASK-266 approved row revision
+
+The approved annotated screenshot `/var/folders/fd/cgvn5zh52tb_sbt7hp_vtbmm0000gn/T/codex-clipboard-450ba4c4-23e0-4b59-8885-af85fa3dde08.png` (390 × 255) moves the description into the arrow and removes technology. The user's final instruction further requests smaller type and dividers instead of cards and lateral padding.
+
+- Final implementation captures: `/tmp/groma266-divider-light.png` (1440 × 1000), `/tmp/groma266-divider-dark.png` (900 × 800).
+- Combined focused comparison: `/tmp/groma266-divider-comparison.png`. The source, light standalone relationship and dark incoming list appear together. Browser capture normalization remains as described above. The annotation supplies placement intent; its red markup is not product content.
+- Typography: endpoint names are 12px, actions and kinds 10px, role captions 9px. Full names wrap without ellipsis; the center remains readable.
+- Layout: three columns use the full reading width, with no enclosing border or inner padding. Only adjacent list rows have dividers. The description sits directly above the center arrow; no duplicate action row remains.
+- Tokens and assets: existing light/dark tokens and semantic text arrow remain unchanged; technology is hidden in reading but remains editable.
+- Content and behavior: the same endpoint/THIS rules and center-action navigation remain intact. At 900px, each row is 310px wide and all three columns have equal scroll/client widths, confirming no clipped text. Standalone details have no THIS badge.
+- Comparison history: these are user-requested revisions to the approved design, not fixes to an unapproved design. The final combined comparison found no actionable P0/P1/P2 issues.
+- Reviews: cold simplicity and final full-context complexity reviews passed without material recommendations.
+
+final result: passed
