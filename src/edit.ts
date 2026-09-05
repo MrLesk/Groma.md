@@ -18,6 +18,8 @@ import { isGroupAddress, requireText } from './naming.ts'
 import { loadProjectProfile, saveProjectProfile } from './project-profile.ts'
 import { editGroup } from './group.ts'
 import { editRelation } from './relation.ts'
+import { editFlow } from './flow-authoring.ts'
+import { requireGromaMapping } from './okf-profile.ts'
 import type { ArchitectureElement, ArchitectureRecords } from './types.ts'
 
 export interface EditArchitectureInput {
@@ -33,6 +35,7 @@ export interface EditArchitectureInput {
   ungroup?: boolean
   parent?: string
   combine?: string[]
+  steps?: string
 }
 
 function optionalText(value: string | undefined): string | undefined {
@@ -134,6 +137,8 @@ export async function editArchitecture(
   if (addressed !== undefined) return addressed
   if (input.id === 'project') return editProject(repositoryRoot, input)
   const records = await loadArchitecture(repositoryRoot)
+  const flow = records.flows.find(document => requireGromaMapping(document.frontmatter, document.sourceFilename).id === input.id)
+  if (flow !== undefined) return editFlow(repositoryRoot, records, flow, input)
   const model = buildArchitectureModel(records.documents)
   const element = model.elements.find(candidate => candidate.id === input.id)
 

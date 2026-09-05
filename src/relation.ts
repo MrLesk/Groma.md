@@ -2,6 +2,7 @@ import path from 'node:path'
 
 import { buildArchitectureModel } from './architecture-model.ts'
 import { loadArchitecture } from './architecture-reader.ts'
+import { resolveFlows } from './flow-model.ts'
 import {
   readDocument,
   withoutRelationship,
@@ -95,6 +96,10 @@ export async function editRelation(repositoryRoot: string, input: RelationInput)
 }
 
 export async function removeRelation(repositoryRoot: string, input: RelationEnds): Promise<string> {
+  const records = await loadArchitecture(repositoryRoot)
+  const flows = resolveFlows(records.flows, buildArchitectureModel(records.documents))
+    .filter(flow => flow.steps.some(step => step.source === input.source && step.target === input.target))
+  if (flows.length > 0) throw new Error(`cannot remove relationship: used by flows ${flows.map(flow => flow.id).join(', ')}`)
   const ends = await loadEnds(repositoryRoot, input)
   return writeRow(repositoryRoot, ends, { drop: requireRow(ends) })
 }

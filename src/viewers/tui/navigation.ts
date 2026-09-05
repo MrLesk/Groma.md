@@ -1,7 +1,8 @@
 import type { TaskDiffPayload } from '../source/diff.ts'
-import { outgoingActions, travelledBy } from '../action-path.ts'
+import { flowsThrough } from '../flows.ts'
+import { outgoingActions } from '../relationship-text.ts'
 import { parentOfElements, promotedPeer } from '../relationship-text.ts'
-import { litLegs } from './flow.ts'
+import { reduceFlowReading } from './flow-navigation.ts'
 import type { PaneVisibility } from './layout.ts'
 import {
   canEnter,
@@ -30,6 +31,7 @@ import { firstRootRow } from './projection-root.ts'
 import type {
   AnnotatedElement,
   AnnotatedRelationship,
+  ArchitectureFlow,
   TerminalLevel,
   WorkItemDetails,
 } from '../../types.ts'
@@ -76,13 +78,11 @@ export interface ViewerState {
   sourceView?: SourceViewState
   /** A task's modified file open as a unified diff in the details pane; the diff arrives from the reader. */
   diffView?: DiffViewState
-  /** One actor command. Survives leaving the actor until x or another pick. */
+  /** The focused authored flow or single relationship. */
   activeActionId?: string
-  /** The actor the command was picked from; scopes the walk's approach to them. */
-  activeActionActorId?: string
-  /** Map selection restored when the checked flow is cleared. */
-  beforeFlow?: Pick<ViewerState, 'level' | 'currentId'>
-  /** The traced leg of the active command's walk; absent while the whole walk shows. */
+  /** The flow reader owns details until an endpoint is inspected. */
+  flowReading?: boolean
+  /** Zero-based authored step; absent while the complete flow is shown. */
   actionStep?: number
   /** The relationship, task, file or reference under the details cursor. */
   actionCursor?: string
@@ -142,30 +142,27 @@ export function detailsTabs(world: TerminalViewModel, currentId: string | undefi
 export function detailsCommands(
   world: TerminalViewModel,
   state: Pick<ViewerState, 'currentId' | 'detailsTab' | 'profile' | 'keys'>,
-): AnnotatedRelationship[] {
+): (AnnotatedRelationship | ArchitectureFlow)[] {
   if (state.profile || state.keys || state.detailsTab !== 'what') return []
   if (state.currentId === undefined) return []
   return [...selectionRelationships(world, state.currentId), ...selectionFlows(world, state.currentId)]
 }
 
-/** Actor commands crossing a software element appear as flow checkboxes. */
-export function selectionFlows(world: TerminalViewModel, elementId: string): AnnotatedRelationship[] {
-  return world.elements.some(element => element.representationId === elementId && element.kind === 'actor')
-    ? [] : travelledBy(elementId, world)
+/** Authored flows containing this element or an endpoint inside it. */
+export function selectionFlows(world: TerminalViewModel, elementId: string): ArchitectureFlow[] {
+  return flowsThrough(elementId, world)
 }
 
 /** The selection's relationships in the details pane's order: its own outgoing ones, then everything pointing at it or its promoted parent. */
 export function selectionRelationships(world: TerminalViewModel, elementId: string): AnnotatedRelationship[] {
   const parentOf = parentOfElements(world.elements)
   const incoming = world.relationships.filter(relationship => promotedPeer(relationship, elementId, parentOf)?.outgoing === false)
-  const flows = new Set(selectionFlows(world, elementId).map(flow => flow.id))
-  return [...outgoingActions(elementId, world), ...incoming].filter(relationship => !flows.has(relationship.id))
+  return [...outgoingActions(elementId, world), ...incoming]
 }
 
-/** A lit walk: its command and, for an actor's own pick, the picker. */
+/** One focused flow or relationship. */
 export interface LitAction {
   id?: string
-  actorId?: string
 }
 
 /** The one selected flow or relationship, temporarily quiet while Work owns the map. */
@@ -174,7 +171,7 @@ export function litAction(
   state: ViewerState,
 ): LitAction {
   if (state.work !== undefined) return {}
-  return { id: state.activeActionId, actorId: state.activeActionActorId }
+  return { id: state.activeActionId }
 }
 
 function resolve(
@@ -200,6 +197,7 @@ export function syncTree(world: TerminalViewModel, state: ViewerState): ViewerSt
   return {
     ...state,
     tree: { ...state.tree, cursor: state.currentId, collapsed },
+    flowReading: false,
     detailsScroll: 0,
     detailsTab: detailsTabs(world, state.currentId).includes(state.detailsTab) ? state.detailsTab : 'what',
   }
@@ -242,7 +240,7 @@ function reduceShortcuts(world: TerminalViewModel, current: ViewerState, action:
     }
   }
   if (action === 'tab') {
-    if (current.focus !== 'details' || current.taskRecord || current.sourceView || current.diffView || current.profile || current.keys) return current
+    if (current.flowReading || current.focus !== 'details' || current.taskRecord || current.sourceView || current.diffView || current.profile || current.keys) return current
     const tabs = detailsTabs(world, current.currentId)
     if (tabs.length < 2) return current
     return { ...current, detailsTab: tabs[(tabs.indexOf(current.detailsTab) + 1) % tabs.length]!, detailsScroll: 0, actionCursor: undefined }
@@ -250,8 +248,8 @@ function reduceShortcuts(world: TerminalViewModel, current: ViewerState, action:
   if (action === 'toggle-profile') {
     return reducePaneKeys(world, current, action)
   }
-  if (action === 'dismiss') return dismissDetailsMode(current)
-  return reduceFlowKeys(world, current, action)
+  if (action === 'dismiss') return dismissDetailsMode(current) ?? reduceFlowReading(world, current, action)
+  return reduceFlowKeys(world, current, action) ?? reduceFlowReading(world, current, action)
 }
 
 function dismissDetailsMode(current: ViewerState): ViewerState | undefined {
@@ -268,20 +266,20 @@ function reduceFlowKeys(world: TerminalViewModel, current: ViewerState, action: 
     return clearFlow(current)
   }
   if (action !== 'step-action') return undefined
-  const legs = litLegs(world, litAction(world, current))
-  return legs.length === 0 ? current : { ...current, actionStep: ((current.actionStep ?? -1) + 1) % legs.length }
+  const flow = world.flows.find(flow => flow.id === current.activeActionId)
+  return flow === undefined ? current : { ...current, actionStep: ((current.actionStep ?? -1) + 1) % flow.steps.length, flowReading: true, focus: 'details' }
 }
 
 function clearFlow(current: ViewerState): ViewerState {
-  return { ...current, ...current.beforeFlow, beforeFlow: undefined, activeActionId: undefined, activeActionActorId: undefined, actionStep: undefined, detailsScroll: 0 }
+  return { ...current, activeActionId: undefined, flowReading: false, actionStep: undefined, detailsScroll: 0 }
 }
 
-/** A single checked flow temporarily opens the root, preserving the original map selection. */
-export function toggleFlow(current: ViewerState, id: string, actorId?: string): ViewerState {
+/** Opening a flow changes its reader and route emphasis, never map scope or geometry. */
+export function toggleFlow(current: ViewerState, id: string): ViewerState {
   if (current.activeActionId === id) return clearFlow(current)
   return {
-    ...current, beforeFlow: current.beforeFlow ?? { level: current.level, currentId: current.currentId },
-    level: 'context', activeActionId: id, activeActionActorId: actorId, actionStep: undefined,
+    ...current, activeActionId: id, actionStep: undefined, flowReading: true, focus: 'details',
+    profile: false, keys: false, sourceView: undefined, taskRecord: undefined, work: undefined,
     panes: { ...current.panes, details: true }, detailsScroll: 0,
   }
 }
@@ -296,10 +294,10 @@ function reduceSelectionDetails(world: TerminalViewModel, current: ViewerState, 
   if (action !== 'enter' && action !== 'toggle-selection') return current
   const picked = commands.find(item => item.id === current.actionCursor)
   if (picked === undefined) return current
-  const actorFlow = current.detailsTab === 'what' && world.elements.some(element => element.representationId === current.currentId && element.kind === 'actor')
-  const flow = actorFlow || selectionFlows(world, current.currentId!).some(flow => flow.id === picked.id)
-  if (!flow && action === 'enter' && picked.id === current.activeActionId) return followRelationship(world, current, picked)
-  return toggleFlow(current, picked.id, actorFlow ? current.currentId : undefined)
+  if ('steps' in picked) return toggleFlow(current, picked.id)
+  if (world.flows.some(flow => flow.id === current.activeActionId)) return followRelationship(world, current, picked)
+  if (action === 'enter' && picked.id === current.activeActionId) return followRelationship(world, current, picked)
+  return { ...current, activeActionId: current.activeActionId === picked.id ? undefined : picked.id, actionStep: undefined }
 }
 
 /** The one terminal reducer: history owns its modal rules, then the normal map handles everything else. */

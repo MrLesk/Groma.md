@@ -196,7 +196,8 @@ export const mapCss = `
     #map .routes { animation: none; }
     #map .route.lit .line { stroke-dasharray: none; }
   }
-  #map .camera[data-tracing] .route:not(.lit):not(.selected) { opacity: 0.18; }
+  #map .camera[data-tracing] .route-base,
+  #map .camera[data-tracing] .route:not(.lit) { display: none; }
   #map .camera[data-tracing] .building:not(.onpath):not(.selected),
   #map .camera[data-tracing] .slab:not(.onpath):not(.selected) { opacity: 0.3; }
   #map .building:not(.selected):hover, #map .slab:not(.selected):not(.context):hover,

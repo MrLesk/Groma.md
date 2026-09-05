@@ -10,7 +10,12 @@ groma:
     - scanner: typescript
       file: src/viewers/tui/flow.ts
       dependencies: 6
-      dependents: 6
+      dependents: 4
+    - scanner: typescript
+      file: src/viewers/tui/flow-navigation.ts
+      symbol: reduceFlowReading
+      dependencies: 4
+      dependents: 1
 ---
 
-Projects actor command paths into the visible terminal scope and provides their explanatory labels.
+Projects an authored flow step onto its exact endpoints and their visible ancestors. It separates reading ordered actions from inspecting an endpoint, preserving the selected scenario and step when the architect returns.

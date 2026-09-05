@@ -8,6 +8,7 @@ import { sheetScene } from '../src/sheet/scene.ts'
 import type { TerminalViewModel } from '../src/viewers/tui/model.ts'
 import type {
   ArchitectureWorld,
+  ArchitectureFlow,
   Bounds,
   C4Kind,
   WorldElement,
@@ -136,6 +137,7 @@ export function navigationWorld(): ArchitectureWorld & TerminalViewModel {
     children: ['observed:pfar'],
   })
   const world: ArchitectureWorld = {
+    flows: [],
     bounds: { x: 0, y: 0, width: 180, height: 70 },
     relationships: [],
     groups: [],
@@ -173,12 +175,14 @@ export function navigationWorld(): ArchitectureWorld & TerminalViewModel {
 export function worldOf(
   elements: WorldElement[],
   relationships: WorldRelationship[] = [],
+  flows: ArchitectureFlow[] = [],
 ): ArchitectureWorld & TerminalViewModel {
   const world: ArchitectureWorld = {
     bounds: { x: 0, y: 0, width: 1, height: 1 },
     elements,
     groups: [],
     relationships,
+    flows,
   }
   return { ...world, drafts: [], sheet: sheetScene(world) }
 }

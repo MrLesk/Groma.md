@@ -8,8 +8,8 @@ import type {
 } from '../../../types.ts'
 import type { ElementWorkGroup } from '../../../work/pins.ts'
 import { removalBlocker } from '../../../removable.ts'
-import { pickableActions, travelledBy } from '../../action-path.ts'
-import type { FlowRef } from '../../action-path.ts'
+import { flowsThrough } from '../../flows.ts'
+import type { FlowRef } from '../../flows.ts'
 import { kindGlyph, kindLabel } from '../../atoms/kind.ts'
 import { flowRow, type FlowRowData } from '../flow/row.ts'
 import type { CodeFile } from '../../source/structure.ts'
@@ -55,8 +55,7 @@ export interface Inspected {
   origin: Origin
   overview: string
   relationships: InspectedRelationship[]
-  commands: FlowRowData[]
-  flowsThrough: FlowRowData[]
+  flows: FlowRowData[]
   children: InspectedChild[]
   technology: string[]
   files: CodeReference[]
@@ -93,8 +92,7 @@ export function detailsTabAfterWork(
 type Section =
   | 'overview'
   | 'relationships'
-  | 'commands'
-  | 'flowsThrough'
+  | 'flows'
   | 'children'
   | 'technology'
   | 'code'
@@ -103,7 +101,7 @@ type Section =
 /** The pane's split: meaning on one tab, build evidence on the other. */
 export function tabSections(tab: Exclude<DetailsTab, 'tasks'>): Section[] {
   return tab === 'what'
-    ? ['overview', 'relationships', 'commands', 'flowsThrough', 'children']
+    ? ['overview', 'relationships', 'flows', 'children']
     : ['technology', 'code', 'files']
 }
 
@@ -128,12 +126,10 @@ export function inspectDetails(
 ): Inspected {
   const byId = new Map(world.elements.map(item => [item.representationId, item]))
   const parentOf = parentOfElements(world.elements)
-  const commandRelationships = pickableActions(element.representationId, world)
-  const commandIds = new Set(commandRelationships.map(relationship => relationship.id))
   const relationships: InspectedRelationship[] = []
   for (const relationship of world.relationships) {
     const ends = promotedPeer(relationship, element.representationId, parentOf)
-    if (ends == null || commandIds.has(relationship.id)) continue
+    if (ends == null) continue
     const peerId = ends.peerId
     const peer = byId.get(peerId)
     relationships.push({
@@ -162,16 +158,9 @@ export function inspectDetails(
     origin: element.origin,
     overview: element.overview,
     relationships,
-    commands: commandRelationships.map(command => ({
-      flow: { commandId: command.id, actorId: element.representationId },
-      title: command.description,
+    flows: flowsThrough(element.representationId, world).map(flow => ({
+      flow: { id: flow.id }, title: flow.title,
     })),
-    flowsThrough: element.kind === 'actor'
-      ? []
-      : travelledBy(element.representationId, world).map(action => ({
-        flow: { commandId: action.id },
-        title: action.description,
-      })),
     children,
     technology: (element.technology ?? '')
       .split(',')
@@ -206,8 +195,7 @@ function marked(
 export interface DetailsOptions extends PaneWrites {
   onSelect: (id: string, additive: boolean) => void,
   onToggleFlow: (flow: FlowRef) => void,
-  activeFlows: readonly FlowRef[]
-  actorTitle: (actorId: string) => string | undefined,
+  activeFlow: FlowRef | undefined
   tab: DetailsTab
   onTab: (tab: DetailsTab) => void,
   code: readonly CodeFile[]
@@ -234,7 +222,7 @@ function paintTabs(tabsHost: HTMLElement, availableTabs: DetailsTab[], shownTab:
 }
 
 export function paintDetails(host: HTMLElement, inspected: Inspected, options: DetailsOptions): void {
-  const { onSelect, onToggleFlow, activeFlows, actorTitle, tab, onTab, code, onSource, workGroups, onTask, onRemove, onAccept, drafts, parents, onEdit, relate, selection } = options
+  const { onSelect, onToggleFlow, activeFlow, tab, onTab, code, onSource, workGroups, onTask, onRemove, onAccept, drafts, parents, onEdit, relate, selection } = options
   const title = host.querySelector('h1')!
   const meta = host.querySelector('.meta')!
   const tabsHost = host.querySelector<HTMLElement>('.tabs')!
@@ -295,25 +283,12 @@ export function paintDetails(host: HTMLElement, inspected: Inspected, options: D
       body.append(list)
     },
 
-    commands: () => {
-      if (inspected.commands.length === 0) return
-      body.append(heading('Commands'))
+    flows: () => {
+      if (inspected.flows.length === 0) return
+      body.append(heading('Flows'))
       const list = document.createElement('div')
       list.className = 'flow-list'
-      for (const command of inspected.commands) {
-        list.append(flowRow(command, activeFlows, actorTitle, onToggleFlow))
-      }
-      body.append(list)
-    },
-
-    flowsThrough: () => {
-      if (inspected.flowsThrough.length === 0) return
-      body.append(heading('Flows through'))
-      const list = document.createElement('div')
-      list.className = 'flow-list'
-      for (const flow of inspected.flowsThrough) {
-        list.append(flowRow(flow, activeFlows, actorTitle, onToggleFlow))
-      }
+      for (const flow of inspected.flows) list.append(flowRow(flow, activeFlow, onToggleFlow))
       body.append(list)
     },
 

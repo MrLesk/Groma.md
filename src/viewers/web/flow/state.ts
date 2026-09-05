@@ -1,22 +1,6 @@
-import type { FlowRef } from '../../action-path.ts'
+import type { FlowRef } from '../../flows.ts'
 
-export function sameFlow(left: FlowRef | undefined, right: FlowRef): boolean {
-  return left?.commandId === right.commandId && left.actorId === right.actorId
-}
-
-function activateFlow(active: readonly FlowRef[], clicked: FlowRef): FlowRef[] {
-  const existing = active.findIndex(flow => flow.commandId === clicked.commandId)
-  if (existing < 0) return [...active, clicked]
-  return active.map((flow, index) => index === existing ? clicked : flow)
-}
-
-/** Toggles a map path without assigning ownership of the details pane. */
-export function toggleFlowActivation(
-  active: readonly FlowRef[],
-  clicked: FlowRef,
-): FlowRef[] {
-  const current = active.find(flow => flow.commandId === clicked.commandId)
-  return sameFlow(current, clicked)
-    ? active.filter(flow => flow.commandId !== clicked.commandId)
-    : activateFlow(active, clicked)
+/** Opening another scenario replaces the focused flow. Opening it again clears it. */
+export function toggleFlowActivation(active: FlowRef | undefined, clicked: FlowRef): FlowRef | undefined {
+  return active?.id === clicked.id ? undefined : clicked
 }

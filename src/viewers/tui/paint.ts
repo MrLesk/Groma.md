@@ -1,6 +1,6 @@
 import type { OptimizedBuffer } from '@opentui/core'
 
-import { elementOnPath } from '../action-path.ts'
+import { elementOnPath } from '../flows.ts'
 import { isEmptyWorld } from '../../empty-world.ts'
 import type { ViewerTheme } from './atoms/theme.ts'
 import type { ProjectedFlowStep } from './flow.ts'
@@ -34,13 +34,15 @@ export function paintMap(
     return
   }
   const legs = litLegs(world, options.lit)
-  const pathIds = new Set(legs.map(leg => leg.id))
+  const pathIds = new Set(options.step === undefined ? legs.map(leg => leg.id) : [options.step.id])
   const selectionId = projection.currentId ?? undefined
   drawWorld(buffer, projection, theme, {
     pathIds,
     onPath: elementId => elementId === selectionId || elementOnPath(elementId, pathIds, world),
     step: options.step,
-    work: projectWork(world, projection, options.workFocus, options.workList),
+    work: world.flows.some(flow => flow.id === options.lit.id)
+      ? { corners: [], touched: new Set() }
+      : projectWork(world, projection, options.workFocus, options.workList),
     animationPhase: options.animationPhase,
   })
 }

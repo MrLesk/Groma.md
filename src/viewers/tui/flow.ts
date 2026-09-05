@@ -1,4 +1,4 @@
-import { actionLegs, worldCommands } from '../action-path.ts'
+import { flowLegs } from '../flows.ts'
 import type { AnnotatedRelationship } from '../../types.ts'
 import type { LitAction } from './navigation.ts'
 import { ancestorIds, parentOfElements } from '../relationship-text.ts'
@@ -35,13 +35,11 @@ function visibleEndpoint(
   return visibleEndpointFor(id, visible, byId, boundary)
 }
 
-/** Actor commands include launcher commands whose source is a component. Other relationships light one leg. */
+/** A flow contains only its authored legs; a relationship selection contains one route. */
 export function litLegs(world: TerminalViewModel, lit: LitAction): AnnotatedRelationship[] {
-  const picked = world.relationships.find(relationship => relationship.id === lit.id)
-  if (picked === undefined) return []
-  const source = world.elements.find(element => element.representationId === picked.source)
-  return source?.kind === 'actor' || worldCommands(world).some(command => command.id === picked.id)
-    ? actionLegs(picked.id, world, lit.actorId) : [picked]
+  if (world.flows.some(flow => flow.id === lit.id)) return flowLegs(lit.id, world)
+  const relationship = world.relationships.find(item => item.id === lit.id)
+  return relationship === undefined ? [] : [relationship]
 }
 
 /** Exact authored endpoints paired with the cards that represent them in the current scope. */
@@ -49,11 +47,10 @@ export function projectFlowStep(
   world: TerminalViewModel,
   projection: TerminalProjection,
   actionId: string | undefined,
-  actorId: string | undefined,
   step: number | undefined,
 ): ProjectedFlowStep | undefined {
   if (step === undefined) return undefined
-  const legs = litLegs(world, { id: actionId, actorId })
+  const legs = flowLegs(actionId, world)
   const leg = legs[step]
   if (!leg) return undefined
   const byId = new Map(world.elements.map(element => [element.representationId, element]))

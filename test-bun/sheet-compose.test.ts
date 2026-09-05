@@ -25,6 +25,7 @@ function flowWorld(): ArchitectureWorld {
     uses('relationship:9', 'core-leaf', 'git'),
   ]
   return {
+    flows: [],
     bounds: unit,
     groups: [],
     relationships,

@@ -1,34 +1,24 @@
-import type { AnnotatedRelationship } from '../../../types.ts'
-import type { FlowRef } from '../../action-path.ts'
+import type { ArchitectureFlow } from '../../../types.ts'
+import type { FlowRef } from '../../flows.ts'
 import { sectionHeading } from '../organisms/sidebar-section.ts'
 import { flowRow } from './row.ts'
 
-/** The list starts open and keeps its state across repaints. */
 let unfolded = true
 
-/** Every command row toggles whether its path is active on the map. */
 export function paintFlows(
   host: HTMLElement,
-  commands: readonly AnnotatedRelationship[],
-  active: readonly FlowRef[],
-  actorTitle: (actorId: string) => string | undefined,
+  flows: readonly ArchitectureFlow[],
+  active: FlowRef | undefined,
   onToggle: (flow: FlowRef) => void,
 ): void {
   host.replaceChildren()
-  if (commands.length === 0) return
+  if (flows.length === 0) return
   const heading = sectionHeading('Flows', unfolded, () => {
     unfolded = !unfolded
-    paintFlows(host, commands, active, actorTitle, onToggle)
+    paintFlows(host, flows, active, onToggle)
   })
   const list = document.createElement('div')
   list.hidden = !unfolded
-  for (const command of commands) {
-    list.append(flowRow(
-      { flow: { commandId: command.id }, title: command.description },
-      active,
-      actorTitle,
-      onToggle,
-    ))
-  }
+  for (const flow of flows) list.append(flowRow({ flow: { id: flow.id }, title: flow.title }, active, onToggle))
   host.append(heading, list)
 }

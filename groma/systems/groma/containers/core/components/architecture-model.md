@@ -10,11 +10,11 @@ groma:
     - scanner: typescript
       file: src/architecture-model.ts
       dependencies: 6
-      dependents: 9
+      dependents: 11
     - scanner: typescript
       file: src/types.ts
       dependencies: 0
-      dependents: 84
+      dependents: 92
     - scanner: typescript
       file: src/element-order.ts
       symbol: compareSemanticElements
@@ -27,7 +27,7 @@ groma:
     - scanner: typescript
       file: src/architecture-markdown.ts
       dependencies: 1
-      dependents: 1
+      dependents: 2
     - scanner: typescript
       file: src/code-reference.ts
       symbol: codeReferencesOf
@@ -36,11 +36,12 @@ groma:
     - scanner: typescript
       file: src/okf-profile.ts
       dependencies: 1
-      dependents: 7
+      dependents: 10
+    - scanner: typescript
+      file: src/flow-model.ts
+      symbol: resolveFlows
+      dependencies: 4
+      dependents: 3
 ---
 
-Turns C4 concepts into a validated semantic graph. It maps standard type,
-title, and optional description directly; derives overview from leading body
-prose; and reads stable identity, containment, groups, technology, and Code
-ownership from the nested Groma metadata. It resolves strict directed
-relationship tables into graph edges.
+Turns C4 concepts into a validated semantic graph. It resolves identity, containment, Code ownership and directed relationships from the OKF profile. Groma Flow records contribute ordered scenario steps that resolve existing relationships without creating elements or routes.

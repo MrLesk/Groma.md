@@ -49,6 +49,7 @@ export interface ArchitectureDocument {
 
 /** Every Markdown record under the Groma directory, read in one pass. */
 export interface ArchitectureRecords {
+  flows: ArchitectureDocument[]
   /** C4 element documents, ghosts (status draft) included. */
   documents: ArchitectureDocument[]
   /** Draft records under drafts/. */
@@ -140,8 +141,26 @@ export interface AnnotatedRelationship {
 
 /** Semantic architecture needed by a view before any renderer adds geometry. */
 export interface ArchitectureGraph {
+  flows: ArchitectureFlow[]
   elements: AnnotatedElement[]
   relationships: AnnotatedRelationship[]
+}
+
+/** A named scenario; steps reference existing relationships in their authored order. */
+export interface ArchitectureFlow {
+  id: string
+  title: string
+  description?: string
+  overview: string
+  sourceFilename: string
+  steps: FlowStep[]
+}
+
+export interface FlowStep {
+  relationshipId: string
+  source: string
+  target: string
+  action: string
 }
 
 export interface AnnotatedArchitectureModel extends ArchitectureGraph {
@@ -166,6 +185,7 @@ export interface WorldGroup {
 }
 
 export interface ArchitectureWorld {
+  flows: ArchitectureFlow[]
   bounds: Bounds
   elements: WorldElement[]
   groups: WorldGroup[]

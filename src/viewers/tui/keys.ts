@@ -41,13 +41,13 @@ export interface KeysRow {
 }
 
 export const KEYS_BOX: readonly KeysRow[] = [
-  { label: '↑ ↓ ← →', meaning: 'Move the selection or the pane cursor', names: ['up', 'down', 'left', 'right'] },
+  { label: '↑ ↓ ← →', meaning: 'Navigate; in a flow, ↑↓ step and ← inspects From', names: ['up', 'down', 'left', 'right'] },
   { label: 'j / k', meaning: 'Down / Up through the same selection or reading cursor', names: ['j', 'k'] },
-  { label: 'Enter', meaning: 'Open a container; pick a flow or a relationship', names: ['return'] },
+  { label: 'Enter', meaning: 'Open; in a flow, inspect its To endpoint', names: ['return'] },
   { label: 'Space', meaning: 'Toggle a flow or task status on the map', names: ['space'] },
   { label: 'Backspace', meaning: 'Back to the root map', names: ['backspace'] },
   { label: 'Tab', meaning: 'Switch the focused details tab', names: ['tab'] },
-  { label: 'Esc', meaning: 'Leave the focused mode', names: ['escape'] },
+  { label: 'Esc', meaning: 'Back to flow, preceding details, or the map', names: ['escape'] },
   { label: '/', meaning: 'Search the architecture', names: ['/'] },
   { label: 'h', meaning: 'Browse Groma revisions', names: ['h'] },
   { label: 'w', meaning: 'Work focus', names: ['w'] },

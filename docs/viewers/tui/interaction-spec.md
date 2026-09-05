@@ -16,9 +16,8 @@ inside the focused pane. `Tab` changes the available details tabs. `Escape`
 returns to the map with the same architecture selection and scope; inside a
 source file or diff it first returns to the preceding details or task record.
 
-Actor details and the hierarchy call command paths **Flows** and use the same
-single-flow checkbox behavior. Connections between software elements remain
-**Relationships**.
+Element details and the hierarchy list authored **Flows** and open the same
+single-flow reader. Standing collaborations remain **Relationships**.
 
 In task status groups, Enter expands or collapses and Space changes map
 visibility only in the hierarchy. The component Tasks tab can browse, fold and
@@ -45,10 +44,9 @@ Use the real project at 120x36 and 200x60, then shrink an open view to 80x30:
 4. Move between map, hierarchy and details using explicit keys. Architecture
    selection remains green; pane focus and bracketed footer actions remain clear.
 5. From inside a container, browse flow rows without changing scope. Space or
-   Enter checks one flow, opens root, and lights its path and endpoints. Details
-   show its full meaning. Step it, replace it with another flow, then uncheck or
-   clear it and confirm the prior container selection returns.
-   Trace the path, arrowhead and short label without crossing unrelated cards.
+   Enter opens a flow's purpose and ordered steps. Step it, inspect both endpoint
+   directions, and return with Escape. The same step remains selected; unrelated
+   connections stay hidden. Clear it and confirm that map geometry stayed fixed.
 6. Open Work and a component Tasks tab. Both group tasks by status and show titles and
    pie progress beside exact checklist counts, open the same record, and highlight the task's architecture. Open a
    modified-file diff and an architecture reference. Closing Work restores the
@@ -82,5 +80,5 @@ Compare actual screenshots and interactions with these examples. Use `tui-test`
 for repeatable checks and a native terminal for font, theme and motion confirmation
 when available. Passing tests alone is not visual acceptance.
 
-Component flow participation appears under What as Flows through checkboxes.
+Explicit flow membership appears under What in the Flows list.
 How contains technology and code, with declaration navigation in visible order.

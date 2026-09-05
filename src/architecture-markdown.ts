@@ -11,13 +11,13 @@ import type {
 type InvalidMarkdown = (code: string, sourceFilename: string, message: string) => never
 const relationshipColumns = ['Target', 'Description', 'Technology']
 
-function nodeText(node: MarkdownNode | undefined): string {
+export function nodeText(node: MarkdownNode | undefined): string {
   if (typeof node === 'string') return node
   if (!Array.isArray(node)) return ''
   return (node.slice(2) as MarkdownNode[]).map(nodeText).join('')
 }
 
-function collectNodes(
+export function collectNodes(
   node: MarkdownNode | MarkdownNode[] | undefined,
   tag: string,
   collected: MarkdownElement[] = [],
@@ -53,7 +53,7 @@ export function elementOverview(
   return overview
 }
 
-function tableHeaderNames(table: MarkdownElement): string[] {
+export function tableHeaderNames(table: MarkdownElement): string[] {
   const headerRow = collectNodes(table, 'tr')[0]
   const cells = headerRow?.slice(2).filter(child => {
     return Array.isArray(child) && child[0] === 'th'
@@ -109,7 +109,7 @@ function relationshipRows(
   return rows
 }
 
-function relationshipTargetFilename(sourceFilename: string, href: unknown): string | null {
+export function relationshipTargetFilename(sourceFilename: string, href: unknown): string | null {
   if (typeof href !== 'string') return null
   let decodedHref: string
   try {

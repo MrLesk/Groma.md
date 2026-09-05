@@ -14,7 +14,7 @@ import {
 } from './helpers.ts'
 
 function groupedWorld() {
-  return worldOf([
+  const model = worldOf([
     box('person', 'actor', { x: 0, y: 0, width: 1, height: 1 }),
     box('product', 'system', { x: 0, y: 0, width: 1, height: 1 }, {
       children: ['observed:service'],
@@ -36,6 +36,10 @@ function groupedWorld() {
     uses('person-uses-product', 'person', 'product'),
     uses('write-uses-vendor', 'write', 'vendor'),
   ])
+  model.flows = [{ id: 'write-request', title: 'Write request', overview: 'Write to the vendor.', sourceFilename: '', steps: [
+    { relationshipId: 'write-uses-vendor', source: 'observed:write', target: 'observed:vendor', action: 'Write' },
+  ] }]
+  return model
 }
 
 test.concurrent('root projection shows islands listing rows, without cards or groups', () => {
@@ -152,8 +156,7 @@ test.concurrent('flow steps keep exact endpoints while marking their visible anc
   const step = projectFlowStep(
     model,
     projection,
-    'write-uses-vendor',
-    undefined,
+    'write-request',
     0,
   )
 
@@ -168,7 +171,7 @@ test.concurrent('flow steps keep exact endpoints while marking their visible anc
     viewport: mapViewportOf({ width: 120, height: 36 }),
     level: 'components',
     currentId: 'observed:write',
-  }), 'write-uses-vendor', undefined, 0)
+  }), 'write-request', 0)
   assert.equal(local?.target.visibleKey, 'observed:service')
   assert.equal(flowEndpointLabel(local!.target), 'vendor')
 })

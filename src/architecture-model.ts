@@ -314,6 +314,9 @@ export function freeId(records: ArchitectureRecords, model: ArchitectureModel, n
   const id = kebabCase(name)
   if (id === '') throw new Error('name must contain a letter or a digit')
   if (model.elements.some(element => element.id === id)) throw new Error(`id "${id}" already exists`)
+  if (records.flows.some(document => requireGromaMapping(document.frontmatter, document.sourceFilename).id === id)) {
+    throw new Error(`id "${id}" already names a flow`)
+  }
   if (records.drafts.some(document => draftRecordOf(document).id === id)) {
     throw new Error(`id "${id}" already names a draft`)
   }

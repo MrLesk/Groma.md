@@ -42,6 +42,7 @@ function world(): ArchitectureWorld {
   return {
     bounds: { x: 0, y: 0, width: 100, height: 40 },
     groups: [],
+    flows: [],
     elements: [
       element('groma', 'system', null, ['core', 'web'], {
         overview: 'this repo',
@@ -117,100 +118,11 @@ test.concurrent('live work closes Tasks when the selected component has no linke
   expect(detailsTabAfterWork('tasks', true)).toBe('tasks')
 })
 
-test.concurrent('actor commands are scoped flows and stay separate from peer relationships', () => {
-  const fixture: ArchitectureWorld = {
-    bounds: { x: 0, y: 0, width: 40, height: 20 },
-    groups: [],
-    elements: [
-      element('buyer', 'actor', null, []),
-      element('api', 'container', null, []),
-      element('web', 'container', null, []),
-      element('jobs', 'container', null, []),
-    ],
-    relationships: [
-      {
-        id: 'buyer-api',
-        source: 'buyer',
-        target: 'api',
-        description: 'sends',
-        technology: '',
-        origin: 'observed',
-        route: [],
-        label: null,
-      },
-      {
-        id: 'buyer-web',
-        source: 'buyer',
-        target: 'web',
-        description: 'reads',
-        technology: '',
-        origin: 'observed',
-        route: [],
-        label: null,
-      },
-      {
-        id: 'api-web',
-        source: 'api',
-        target: 'web',
-        description: 'starts',
-        technology: '',
-        origin: 'observed',
-        route: [],
-        label: null,
-      },
-      {
-        id: 'api-jobs',
-        source: 'api',
-        target: 'jobs',
-        description: 'runs jobs',
-        technology: '',
-        origin: 'observed',
-        route: [],
-        label: null,
-      },
-    ],
-  }
-  const buyer = inspectDetails(fixture.elements[0]!, fixture)
-  expect(buyer.commands).toEqual([
-    { flow: { commandId: 'api-web', actorId: 'buyer' }, title: 'starts' },
-    { flow: { commandId: 'api-jobs', actorId: 'buyer' }, title: 'runs jobs' },
-  ])
-  expect(buyer.relationships.map(({ peerId, description }) => ({ peerId, description }))).toEqual([
-    { peerId: 'api', description: 'sends' },
-    { peerId: 'web', description: 'reads' },
-  ])
-  expect(buyer.flowsThrough).toEqual([])
-
-  const api = inspectDetails(fixture.elements[1]!, fixture)
-  expect(api.commands).toEqual([])
-  expect(api.relationships.map(({ peerId, outgoing, description }) => ({
-    peerId,
-    outgoing,
-    description,
-  }))).toEqual([
-    { peerId: 'buyer', outgoing: false, description: 'sends' },
-    { peerId: 'web', outgoing: true, description: 'starts' },
-    { peerId: 'jobs', outgoing: true, description: 'runs jobs' },
-  ])
-
-  // An element is travelled by exactly the commands whose walk touches it.
-  const jobs = inspectDetails(fixture.elements[3]!, fixture)
-  expect(jobs.flowsThrough).toEqual([{
-    flow: { commandId: 'api-jobs' },
-    title: 'runs jobs',
-  }])
-  const web = inspectDetails(fixture.elements[2]!, fixture)
-  expect(web.flowsThrough).toEqual([{
-    flow: { commandId: 'api-web' },
-    title: 'starts',
-  }])
-  expect(api.flowsThrough.map(flow => flow.flow.commandId)).toEqual(['api-web', 'api-jobs'])
-})
-
 test.concurrent('the details pane offers Remove only where the verb would succeed', () => {
   const fixture: ArchitectureWorld = {
     bounds: { x: 0, y: 0, width: 40, height: 20 },
     groups: [],
+    flows: [],
     elements: [
       element('ann', 'actor', null, []),
       element('vault', 'system', null, [], { external: true }),

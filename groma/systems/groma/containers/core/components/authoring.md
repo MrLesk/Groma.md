@@ -9,11 +9,11 @@ groma:
     - scanner: typescript
       file: src/authoring.ts
       symbol: writes
-      dependencies: 5
+      dependencies: 6
       dependents: 8
     - scanner: typescript
       file: src/add.ts
-      dependencies: 8
+      dependencies: 9
       dependents: 1
     - scanner: typescript
       file: src/remove.ts
@@ -23,6 +23,10 @@ groma:
       file: src/removable.ts
       dependencies: 1
       dependents: 2
+    - scanner: typescript
+      file: src/flow-authoring.ts
+      dependencies: 8
+      dependents: 2
 ---
 
-Provides the shared add, draft, edit, remove and accept operations used by the command line and live web server. It adds people, external systems and draft records, validates removals, and delegates drafting, meaning edits and structural curation to their owning operations.
+Provides the shared add, draft, edit, remove and accept operations used by the command line and live web server. It authors actors, external systems, draft records and explicit flows, validates removals, and delegates element drafting, meaning edits and structural curation to their owning operations.
