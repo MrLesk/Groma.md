@@ -31,7 +31,7 @@ source code ──scan──▶ groma|.groma/*.md ──view──▶ maps
 
 - Do not edit files under the selected Groma directory by hand.
 - The architecture id is the kebab-case id in Markdown. Source code is evidence.
-- A scan never accepts a ghost.
+- A scan never accepts a ghost or a draft relationship.
 - Every id is unique: one file per part, for its whole life.
 
 ${instructionDirectory}`
@@ -45,15 +45,17 @@ Say what must be true, not how to build it. Do not specify frameworks, file layo
 - New part: groma draft <kind> <name> [--parent <id>] --overview <markdown> [--description <text>] [--technology <text>] [--draft <draft-id>]
   Kinds are system, container, and component. The id is the kebab-case of the name and stays that id when accepted. --draft names the draft record the ghost belongs to.
 - Part an existing draft touches: groma edit <id> --draft <draft-id>
-  Same box, still solid; the tag says the draft changes it.
+  Same box, still solid; the tag says the draft changes it. An empty --draft value clears the tag.
 - Rename a part or a draft record, id unchanged: groma edit <id> --title <text>
 - Technology of an element: groma edit <id> --technology <text>. Pass an empty value to remove it.
-- Current long overview: groma edit <id> --overview <markdown>
+- Current long overview: groma edit <id> --overview <markdown>. Pass an empty value to clear it.
 - Optional concise description: groma edit <id> --description <text>. Pass an empty value to remove it.
 - Group sibling components: groma add group <name> <ids...>. A group is addressed as <container-id>/<group-kebab>: groma edit group <address> --title <text> renames it, groma remove group <address> [ids...] takes the named members out or dissolves it. One component: groma edit <id> --group <name> or --ungroup.
 - Move an empty scanned component: groma edit <id> --parent <container-id>
 - Combine empty scan records into one responsibility: groma edit <target-id> --combine <source-id...>
-- Collaboration: groma add relation <source-id> <target-id> --description <prose> --technology <text>. One relationship per ordered pair.
+- Current collaboration: groma add relation <source-id> <target-id> --description <prose> --technology <text>. One relationship per ordered pair.
+- Planned collaboration: groma draft relation <source-id> <target-id> --description <prose> --technology <text>. Its dashed identity is independent of both endpoints.
+- Accept a planned collaboration: groma accept relation <source-id> <target-id>. Scans never accept relationships.
 - Reword it: groma edit relation <source-id> <target-id> [--description <prose>] [--technology <text>]
 - Remove it: groma remove relation <source-id> <target-id>
 - Draft outcome prose: groma edit <draft-id> --overview <markdown>

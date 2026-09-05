@@ -43,6 +43,10 @@ facts. Semantic curation belongs to the agent and human using Groma.
      once; the group is then addressed as `<container-id>/<group-kebab>` by
      `groma edit group <address> --title <text>` and `groma remove group
      <address> [ids...]`.
+   - `groma draft relation <source> <target> --description <prose>
+     --technology <text>` plans a link, even between existing components.
+     `groma accept relation <source> <target>` explicitly makes it current;
+     scans never accept it. Editing preserves the relationship lifecycle.
    - `groma add relation <source> <target> --description <prose> --technology
      <text>` writes the one collaboration per ordered pair; `groma edit relation
      <source> <target>` rewords it; `groma remove relation <source> <target>`

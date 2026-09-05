@@ -167,7 +167,8 @@ These level-two sections are supported:
 
 - `## Requirements` states constraints the result must satisfy.
 - `## Technology` explains implementation technology in prose.
-- `## Relationships` contains the canonical outgoing relationship table.
+- `## Relationships` contains current outgoing relationships.
+- `## Draft relationships` contains planned outgoing relationships.
 
 Other named sections remain authored Markdown. Groma preserves them when it
 edits overview or owned metadata.
@@ -183,7 +184,15 @@ edits overview or owned metadata.
 Each row declares one direction: the current concept is the source. The link
 must resolve to another C4 concept in the tree. `groma add relation`,
 `groma edit relation` and `groma remove relation` add, reword or remove a
-relationship row.
+relationship row. Each ordered pair has one row.
+
+Planned links use the same three columns under `## Draft relationships`.
+Their lifecycle is independent of both endpoint statuses, including when both
+components already exist. `groma draft relation <source> <target>
+--description <prose> --technology <text>` creates one. Edits keep it draft;
+`groma accept relation <source> <target>` explicitly moves it to the current
+Relationships table. A scan never accepts it. Both sections resolve links and
+compose routes in the same way. The CLI marks planned links as `[draft]`.
 
 A software-to-software relationship is authored on the lowest concepts that
 exist. Once two components participate, write the row there, not again on

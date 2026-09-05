@@ -59,10 +59,10 @@ function headerTokens(element: AnnotatedElement): string[] {
 function outgoingEdges(
   element: AnnotatedElement,
   relationships: readonly AnnotatedRelationship[],
-): Array<{ description: string; targetId: string }> {
+): Array<{ description: string; targetId: string; draft: boolean }> {
   return relationships.flatMap(relationship => {
     if (relationship.source !== element.id) return []
-    return [{ description: relationship.description, targetId: relationship.target }]
+    return [{ description: relationship.description, targetId: relationship.target, draft: relationship.origin === 'draft' }]
   })
 }
 
@@ -102,7 +102,7 @@ function emitElement(
   lines.push(`${indent}${headerTokens(element).join('  ')}`)
   if (element.overview !== '') lines.push(`${bodyIndent}${element.overview}`)
   for (const edge of outgoingEdges(element, relationships)) {
-    lines.push(`${bodyIndent}->  ${edge.description}  ${edge.targetId}`)
+    lines.push(`${bodyIndent}->${edge.draft ? ' [draft]' : ''}  ${edge.description}  ${edge.targetId}`)
   }
   for (const child of children.get(element.id) ?? []) {
     emitElement(lines, child, depth + 1, children, relationships)
@@ -186,7 +186,7 @@ function formatElementRecord(
   const edges = outgoingEdges(element, model.relationships)
   if (edges.length > 0) {
     sections.push(
-      edges.map(edge => `->  ${edge.description}  ${edge.targetId}`).join('\n'),
+      edges.map(edge => `->${edge.draft ? ' [draft]' : ''}  ${edge.description}  ${edge.targetId}`).join('\n'),
     )
   }
   return sections.join('\n\n')

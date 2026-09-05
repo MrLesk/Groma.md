@@ -82,10 +82,3 @@ test.concurrent('arrowheads stay in map geometry while pins keep fixed screen ge
   assert.match(pins, /node\.style\.translate = `\$\{anchor\.x \* camera\.k\}px \$\{anchor\.y \* camera\.k\}px`/)
   assert.doesNotMatch(pins, /node\.style\.(?:left|top) = `\$\{anchor\.[xy] \* camera\.k\}/)
 })
-
-test.concurrent('active flows highlight component floors without repainting the SVG on every display frame', () => {
-  assert.match(mapCss, /#map \.building\.lit \.face/)
-  assert.match(mapCss, /#map \.routes \{ animation: map-flow 0\.8s steps\(10, end\) infinite/)
-  assert.match(mapCss, /#map \.route\.lit \.line \{[^}]*stroke-dasharray: 6 4;[^}]*\}/)
-  assert.doesNotMatch(mapCss, /#map \.route\.lit \.line \{[^}]*animation:/)
-})

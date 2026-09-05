@@ -74,7 +74,7 @@ export function annotateArchitecture(
         target: relationship.targetId,
         description: relationship.description,
         technology: relationship.technology,
-        origin: originOf(source.status),
+        origin: originOf(relationship.status),
         ...(source.draft === undefined ? {} : { draft: source.draft }),
       }
     }),

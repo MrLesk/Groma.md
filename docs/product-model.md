@@ -269,8 +269,11 @@ A and B. Layout keeps one route per authored relationship.
 
 Runtime origin follows the standard top-level lifecycle `status` of the
 document: `observed` for `stable`, `draft` for `draft`. Observed elements draw
-solid, drafts draw dashed. A relationship takes the origin of the document that
-declares it.
+solid, drafts draw dashed. A relationship has its own lifecycle: a row under Relationships is current,
+and a row under Draft relationships is planned, independently of its endpoints.
+Scans never accept planned links. Explicit acceptance moves the row into the
+current table. Draft dashes stay fixed during selection and flow highlighting;
+flow traversal uses a separate directional marker.
 
 Git is history. Walking commits shows one file per element changing in place
 as drafts are accepted.

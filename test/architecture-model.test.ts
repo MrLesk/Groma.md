@@ -62,6 +62,7 @@ test('builds a serializable C4 graph with Code references from the one tree', as
   assert.deepEqual(
     model.relationships.find(relationship => relationship.sourceId === 'shop'),
     {
+      status: 'stable',
       sourceId: 'shop',
       targetId: 'git',
       description: 'Versions architecture',
@@ -156,6 +157,7 @@ test('resolves a relationship link to the target document stable id', () => {
   const model = buildArchitectureModel([target, source])
 
   assert.deepEqual(model.relationships, [{
+    status: 'stable',
     sourceId: 'architect',
     targetId: 'stable-platform-id',
     description: 'Uses the platform',

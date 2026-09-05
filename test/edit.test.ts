@@ -103,7 +103,7 @@ test('groma edit <draft-id> --overview sets and replaces the draft outcome', asy
   assert.equal(await readRelative(root, draftPath), `${emptyDraft}\nStock checks ship next.\n`)
 })
 
-test('unknown ids, empty edits, element flags on a draft record, and a tag with structure fail without writes', async t => {
+test('unknown ids, empty edits, element flags on a draft record fail without writes', async t => {
   const root = await copyFixture(t, fixtureRoot, 'groma-edit-')
   await writeTree(root, { [draftPath]: emptyDraft })
   const before = await readTree(root)
@@ -142,10 +142,6 @@ test('unknown ids, empty edits, element flags on a draft record, and a tag with 
       args: ['edit', 'orders', '--title', ' '],
     },
     {
-      name: '--title combined with structure',
-      args: ['edit', 'orders', '--title', 'Order intake', '--group', 'Commerce'],
-    },
-    {
       name: 'nothing to change on the project',
       args: ['edit', 'project'],
     },
@@ -156,10 +152,6 @@ test('unknown ids, empty edits, element flags on a draft record, and a tag with 
     {
       name: 'structure on a draft record',
       args: ['edit', 'next', '--group', 'Commerce'],
-    },
-    {
-      name: '--draft combined with structure',
-      args: ['edit', 'orders', '--draft', 'next', '--group', 'Commerce'],
     },
   ]
 

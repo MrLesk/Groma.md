@@ -1,94 +1,110 @@
 export const editableCss = `
-  #details .editable { display: grid; gap: 4px; margin: 0 0 10px; }
-  #details h1 .editable { margin: 0; }
-  #details .editable-text {
-    margin: 0 -4px; border: 0; border-radius: 4px; padding: 0 4px;
-    text-align: left; color: inherit; background: transparent; font: inherit; line-height: inherit; cursor: text;
+  #details .edit-entry, #details .edit-form button { border: 1px solid var(--hairline); border-radius: 6px;
+    padding: 6px 12px; background: transparent; color: var(--ink); font: inherit; cursor: pointer; }
+  #details .edit-entry { margin-bottom: 12px; }
+  #details .edit-entry:hover, #details .edit-form button:hover { background: var(--hover); }
+  #details .edit-form button:disabled { opacity: 0.5; cursor: default; }
+  #details .edit-form { display: grid; gap: 14px; }
+  #details .edit-form label { display: grid; gap: 5px; font-size: 12px; }
+  #details .edit-form input, #details .edit-form textarea, #details .edit-form select {
+    box-sizing: border-box; width: 100%; border: 1px solid var(--hairline); border-radius: 4px; padding: 7px;
+    color: var(--ink); background: color-mix(in srgb, var(--paper) 35%, transparent); font: inherit;
   }
-  #details .editable-text:hover, #details .editable-text:focus-visible { background: var(--hover); outline: 0; }
-  #details .editable-text:empty::before { content: attr(data-label); color: var(--muted); }
-  #details .editable input, #details .editable textarea, #details .editable select {
-    width: 100%; border: 1px solid var(--hairline); border-radius: 4px; padding: 4px 6px;
-    color: var(--ink); background: color-mix(in srgb, var(--paper) 72%, transparent); font: inherit; line-height: inherit; resize: none;
-  }
-  #details .editable textarea { min-height: 120px; }
-  #details .editable input:focus, #details .editable textarea:focus, #details .editable select:focus { outline: 2px solid var(--highlight); outline-offset: -1px; }
-  #details .editable .error { margin: 0; color: var(--highlight-text); font-size: 11px; }
-  #details .editable .error:empty { display: none; }
+  #details .edit-form textarea { min-height: 140px; resize: vertical; }
+  #details .edit-form :is(input, textarea, select):focus { outline: 2px solid var(--highlight); }
+  #details .edit-form .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
+  #details .edit-form .error { margin: 0; color: var(--highlight-text); }
+  #details .edit-form .error:empty { display: none; }
 `
-
-export interface EditableField {
-  className: string
-  /** Shown in place of an empty value and as the input's accessible name. */
-  label: string
-  value: string
-  multiline?: boolean
-  save: (value: string) => Promise<void>
-}
 
 export function message(cause: unknown): string {
   return cause instanceof Error ? cause.message : String(cause)
 }
 
-/** Text that becomes its own input on click: Enter (with Cmd or Ctrl in a multiline field) or leaving saves, Escape cancels, a refusal shows under the field. */
-export function paintEditable(host: Element, field: EditableField): void {
-  const box = document.createElement('div')
-  box.className = `editable ${field.className}`
-  const text = document.createElement('button')
-  text.type = 'button'
-  text.className = 'editable-text'
-  text.textContent = field.value
-  text.dataset.label = field.label
-  text.setAttribute('aria-label', `Edit ${field.label.toLowerCase()}`)
-  const error = document.createElement('p')
-  error.className = 'error'
-  error.setAttribute('role', 'status')
-  box.append(text, error)
-  host.append(box)
+export interface EditField {
+  name: string
+  label: string
+  value: string
+  multiline?: boolean
+  required?: boolean
+  options?: readonly { id: string; title: string }[]
+}
 
-  text.addEventListener('click', () => {
-    const input: HTMLInputElement | HTMLTextAreaElement = field.multiline
-      ? document.createElement('textarea')
-      : document.createElement('input')
-    input.value = field.value
-    input.setAttribute('aria-label', field.label)
-    let settled = false
-    const cancel = (): void => {
-      settled = true
-      input.replaceWith(text)
-      text.focus()
-    }
-    const submit = async (): Promise<void> => {
-      if (settled) return
-      if (input.value === field.value) {
-        cancel()
-        return
-      }
-      settled = true
-      input.disabled = true
-      error.textContent = ''
-      try {
-        await field.save(input.value)
-      } catch (cause) {
-        error.textContent = message(cause)
-        settled = false
-        input.disabled = false
-        input.focus()
-      }
-    }
-    input.addEventListener('keydown', event => {
-      const key = event as KeyboardEvent
-      if (key.key === 'Escape') {
-        key.preventDefault()
-        cancel()
-      } else if (key.key === 'Enter' && (!field.multiline || key.metaKey || key.ctrlKey)) {
-        key.preventDefault()
-        void submit()
-      }
+/** A repaint of the same selection keeps its unsaved form. Another selection replaces it. */
+export function isEditing(host: HTMLElement, key: string): boolean {
+  return host.querySelector<HTMLFormElement>('.edit-form')?.dataset.editKey === key
+}
+
+/** One explicit edit session. Only Save calls the shared writer; Cancel and Escape leave saved data alone. */
+export function editButton(
+  host: HTMLElement,
+  key: string,
+  fields: EditField[],
+  save: (changes: Record<string, string>) => Promise<void>,
+  read: () => void,
+): HTMLButtonElement {
+  const button = document.createElement('button')
+  button.type = 'button'
+  button.textContent = 'Edit'
+  button.className = 'edit-entry'
+  button.addEventListener('click', () => {
+    const form = document.createElement('form')
+    form.className = 'edit-form'
+    form.dataset.editKey = key
+    for (const field of fields) form.append(editField(field))
+    const error = document.createElement('p')
+    error.className = 'error'
+    error.setAttribute('role', 'status')
+    const actions = document.createElement('div')
+    actions.className = 'actions'
+    const cancel = document.createElement('button')
+    cancel.type = 'button'
+    cancel.textContent = 'Cancel'
+    const submit = document.createElement('button')
+    submit.type = 'submit'
+    submit.textContent = 'Save'
+    const close = (): void => { form.remove(); read() }
+    cancel.addEventListener('click', close)
+    form.addEventListener('keydown', event => {
+      if (event.key !== 'Escape') return
+      event.preventDefault()
+      event.stopPropagation()
+      if (!submit.disabled) close()
     })
-    input.addEventListener('blur', () => void submit())
-    text.replaceWith(input)
-    input.focus()
-    if (!field.multiline) input.select()
+    form.addEventListener('submit', async event => {
+      event.preventDefault()
+      const values = new FormData(form)
+      const changes = Object.fromEntries(fields.flatMap(field => {
+        const value = String(values.get(field.name) ?? '')
+        return value === field.value ? [] : [[field.name, value]]
+      }))
+      if (Object.keys(changes).length === 0) { close(); return }
+      submit.disabled = cancel.disabled = true
+      error.textContent = ''
+      try { await save(changes); close() }
+      catch (cause) { error.textContent = message(cause) }
+      finally { submit.disabled = cancel.disabled = false }
+    })
+    actions.append(cancel, submit)
+    form.append(error, actions)
+    host.querySelector('.tabs')!.replaceChildren()
+    host.querySelector('.body')!.replaceChildren(form)
+    form.querySelector<HTMLElement>('input, textarea, select')?.focus()
   })
+  return button
+}
+
+function editField(field: EditField): HTMLLabelElement {
+  const label = document.createElement('label')
+  label.textContent = field.label
+  const input = field.options !== undefined ? document.createElement('select')
+    : field.multiline ? document.createElement('textarea') : document.createElement('input')
+  if (input instanceof HTMLSelectElement) {
+    for (const option of field.options ?? []) input.add(new Option(option.title, option.id))
+  }
+  input.name = field.name
+  input.value = field.value
+  input.required = field.required === true
+  label.append(input)
+  return label
 }

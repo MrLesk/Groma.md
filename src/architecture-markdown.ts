@@ -4,6 +4,7 @@ import type {
   ArchitectureDocument,
   ArchitectureElement,
   ArchitectureRelationship,
+  ElementStatus,
   MarkdownElement,
   MarkdownNode,
 } from './types.ts'
@@ -95,15 +96,17 @@ function rowsFromTable(
 function relationshipRows(
   document: ArchitectureDocument,
   invalid: InvalidMarkdown,
-): MarkdownElement[] {
-  const rows: MarkdownElement[] = []
-  let inRelationshipsSection = false
+): { row: MarkdownElement; status: ElementStatus }[] {
+  const rows: { row: MarkdownElement; status: ElementStatus }[] = []
+  let section: ElementStatus | undefined
   for (const node of document.nodes) {
     if (!Array.isArray(node)) continue
     if (node[0] === 'h2') {
-      inRelationshipsSection = node[1]?.id === 'relationships'
+      section = node[1]?.id === 'relationships' ? 'stable'
+        : node[1]?.id === 'draft-relationships' ? 'draft' : undefined
     } else if (node[0] === 'table') {
-      rows.push(...rowsFromTable(node, inRelationshipsSection, document.sourceFilename, invalid))
+      rows.push(...rowsFromTable(node, section !== undefined, document.sourceFilename, invalid)
+        .map(row => ({ row, status: section! })))
     }
   }
   return rows
@@ -130,7 +133,7 @@ function relationshipOf(
   row: MarkdownElement,
   elementsBySourceFilename: ReadonlyMap<string, ArchitectureElement>,
   invalid: InvalidMarkdown,
-): ArchitectureRelationship {
+): Omit<ArchitectureRelationship, 'status'> {
   const cells = (row.slice(2) as MarkdownNode[]).filter((child): child is MarkdownElement => {
     return Array.isArray(child) && child[0] === 'td'
   })
@@ -190,8 +193,8 @@ export function extractRelationships(
   invalid: InvalidMarkdown,
 ): ArchitectureRelationship[] {
   const relationships = documents.flatMap(document => {
-    return relationshipRows(document, invalid).map(row => {
-      return relationshipOf(document, row, elementsBySourceFilename, invalid)
+    return relationshipRows(document, invalid).map(({ row, status }) => {
+      return { ...relationshipOf(document, row, elementsBySourceFilename, invalid), status }
     })
   })
   return relationships.sort((left, right) => {

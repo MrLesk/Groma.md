@@ -1,9 +1,36 @@
-import { parseFrontmatter } from 'comark'
+import { parse, parseFrontmatter } from 'comark'
 import { renderFrontmatter } from 'comark/render'
 
 import { GromaFileSystem } from './groma-filesystem.ts'
+import { buildArchitectureModel } from './architecture-model.ts'
+import { requireText } from './naming.ts'
 import { DRAFT_TYPE, c4Type, requireGromaMapping } from './okf-profile.ts'
-import type { C4Kind, CodeReference, ElementStatus } from './types.ts'
+import type { ArchitectureDocument, C4Kind, CodeReference, ElementStatus } from './types.ts'
+
+/** Save must pass the same semantic validation as the next read before changing the file. */
+export async function validateElementSource(documents: ArchitectureDocument[], sourceFilename: string, source: string): Promise<void> {
+  const tree = await parse(source)
+  const document = { sourceFilename, body: parseFrontmatter(source).content, nodes: tree.nodes, frontmatter: tree.frontmatter } as ArchitectureDocument
+  buildArchitectureModel([...documents.filter(item => item.sourceFilename !== sourceFilename), document])
+}
+
+export interface MeaningChanges {
+  title?: string
+  overview?: string
+  description?: string
+  technology?: string
+  draft?: string
+}
+
+/** Normal edits and structural edits apply authored meaning in the same way. */
+export function withMeaning(source: string, input: MeaningChanges): string {
+  if (input.title !== undefined) source = withTitle(source, requireText(input.title, '--title'))
+  if (input.overview !== undefined) source = replaceLeadProse(source, input.overview)
+  source = withDescription(source, input.description)
+  if (input.technology !== undefined) source = withGromaField(source, 'technology', input.technology || undefined)
+  if (input.draft !== undefined) source = withGromaField(source, 'draft', input.draft || undefined)
+  return source
+}
 
 function normalizeNewlines(source: string): string {
   return source.replaceAll('\r\n', '\n')
@@ -150,14 +177,16 @@ export function withRelationship(
     targetHref: string
     description: string
     technology: string
+    status?: ElementStatus
   },
 ): string {
   source = normalizeNewlines(source)
   const row = `| [${relationship.targetName}](${relationship.targetHref}) | ${relationship.description} | ${relationship.technology} |`
   const lines = source.trimEnd().split('\n')
-  const heading = lines.indexOf('## Relationships')
+  const section = relationship.status === 'draft' ? '## Draft relationships' : '## Relationships'
+  const heading = lines.indexOf(section)
   if (heading === -1) {
-    return `${source.trimEnd()}\n\n## Relationships\n\n| Target | Description | Technology |\n| --- | --- | --- |\n${row}\n`
+    return `${source.trimEnd()}\n\n${section}\n\n| Target | Description | Technology |\n| --- | --- | --- |\n${row}\n`
   }
 
   const header = lines.indexOf('| Target | Description | Technology |', heading)
@@ -173,7 +202,7 @@ export function withRelationship(
 /** Removes the row with this target link, description and technology; the link text may have aged since the target was renamed. */
 export function withoutRelationship(
   source: string,
-  row: { targetHref: string; description: string; technology: string },
+  row: { targetHref: string; description: string; technology: string; status?: ElementStatus },
 ): string {
   source = normalizeNewlines(source)
   const lines = source.trimEnd().split('\n')
@@ -182,7 +211,7 @@ export function withoutRelationship(
   if (rowIndex === -1) throw new Error('relationship row is missing')
   lines.splice(rowIndex, 1)
 
-  const heading = lines.lastIndexOf('## Relationships', rowIndex)
+  const heading = lines.lastIndexOf(row.status === 'draft' ? '## Draft relationships' : '## Relationships', rowIndex)
   const header = lines.indexOf('| Target | Description | Technology |', heading)
   const hasRows = lines[header + 2]?.startsWith('|') === true
   if (heading !== -1 && header !== -1 && !hasRows) {

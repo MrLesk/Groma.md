@@ -17,8 +17,8 @@ groma:
       dependents: 3
     - scanner: typescript
       file: src/relation.ts
-      dependencies: 5
-      dependents: 3
+      dependencies: 6
+      dependents: 4
     - scanner: typescript
       file: src/move.ts
       symbol: moveBlocker
@@ -26,7 +26,7 @@ groma:
       dependents: 2
 ---
 
-Curates architecture through validated edits: group or ungroup sibling components, move empty scan evidence, combine empty records and add, edit or remove a directed relationship. It preserves existing authored meaning and refuses structural replacements that would discard it.
+Curates architecture through shared validated operations: group sibling components, move empty scan evidence, combine empty records, and create, edit, remove or explicitly accept directed relationships. Planned relationships keep their own draft lifecycle independently of endpoint status. Changes validate before writing and preserve authored meaning; structural replacements that would discard meaning are refused.
 
 ## Relationships
 

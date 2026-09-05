@@ -9,7 +9,7 @@ import { kindGlyph, kindLabel } from '../atoms/kind.ts'
 import { cssBlock, palettes, themeLabel, themeModes, type WebThemeMode } from './atoms/theme.ts'
 import { addDialogCss } from './chrome/add.ts'
 import { creditsControl, creditsCss } from './chrome/credits.ts'
-import { relateCss } from './chrome/relate.ts'
+import { editorCss } from './editing/gestures.ts'
 import { emptyStateCss } from './chrome/empty.ts'
 import { mapDebugCss } from './chrome/map-debug.ts'
 import { motionCss } from './chrome/motion.ts'
@@ -216,7 +216,7 @@ const style = `
   #legend div { display: flex; gap: 16px; }
   #legend span { display: inline-flex; align-items: center; gap: 6px; }
   #legend .mark { color: var(--ink); letter-spacing: 0; }
-  #map { position: fixed; inset: 0; z-index: 0; overflow: hidden; }
+  #map { position: fixed; inset: 0; z-index: 0; overflow: clip; }
   [data-theme="blueprint"] #header,
   [data-theme="blueprint"] #hierarchy,
   [data-theme="blueprint"] #details {
@@ -357,7 +357,7 @@ const style = `
   }
 ${chromeCss}${anchoredPopoverCss}${creditsCss}${motionCss}${revisionCss}${searchCss}${highlightCss}${sourceCss}${taskDiffCss}${backlogMarkCss}${workBadgeCss}${workDetailsCss}${flowRowCss}${mapCss}${pinsCss}${workCss}${tipCss}${projectEditorCss}
 ${emptyStateCss}
-${addDialogCss}${relateCss}
+${addDialogCss}${editorCss}
 ${removeCss}${editableCss}${mapDebugCss}`
 
 function legend(): string {

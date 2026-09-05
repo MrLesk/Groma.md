@@ -44,33 +44,40 @@ succeed: a person or external nothing relates to, or a ghost that contains
 nothing and that nothing relates to. One click asks, the second removes, and a
 refusal shows the server's sentence.
 
-On the current revision of a live map the details pane edits in place: the
-title, description, overview and technology are text that becomes its own
-field on click. Enter saves a line, Cmd or Ctrl with Enter saves the overview,
-leaving the field saves too, and Escape cancels. A Draft select tags the
-element with one of the draft records. Each field posts the input `groma edit`
-takes, and a refusal appears under the field it belongs to. A past revision
-shows plain text.
+On a live current map, Edit switches the selected element or relationship
+from reading to one form. Save at the bottom submits changed fields through
+`groma edit`; Cancel or Escape discards unsaved values. Core validates the
+complete change before writing. A refused save keeps the form and saved
+architecture. Live work updates keep an open form's unsaved values. Changing
+selection leaves that editing session. Source evidence remains read-only.
 
-A ghost whose scan has found code ends with Accept. It posts the same input as
-`groma accept`; the accepted element becomes stable in place. An empty
-component with no relationships shows a Parent select listing containers by
-title. Choosing one posts the same `groma edit --parent` input as the CLI and
-moves the component without changing its ID.
+Element fields are title, description, overview, technology, draft record,
+and parent where the component can move. Empty optional values clear the
+field. Relationship fields are description and technology. A matched draft
+element exposes Accept; a draft relationship exposes its own explicit Accept.
+Both use `groma accept`, with the relationship addressed by its two endpoints.
 
-Relate to, at the end of an element's pane, arms the map: the next element
-click is the target and one dialog asks how the source uses it and through
-what, posting the input `groma add relation` takes; clicking the source again
-or pressing Escape disarms. A selected route shows its description as the
-title and its technology below, both editable in place, and ends with a Remove
-control; they post the inputs `groma edit relation` and `groma remove relation`
-take.
+The map toolbar offers System, Container, Component, Group, and Connect.
+Drag a creation control onto the map: a system needs no parent, a container
+drop chooses a system, and a component drop chooses a container. Dropping on
+a descendant resolves its owning parent. The form collects name and overview
+and posts `groma draft`. Groma chooses the new element's final position.
 
-Shift-click selects several components; their pane then starts with Group as
-(a name for the selection) and Combine into (the survivor picked among them),
-posting the inputs `groma add group` and `groma edit --combine` take. Pressing
-a zone on the map opens the group's dialog with Rename and Dissolve; on a
-published or past map the press selects the zone's container as before.
+Choose Group and draw a rectangle around complete component bodies. The
+form names those members and submits `groma add group`; core requires sibling
+components and computes the group boundary. Choose Connect and drag from one
+component to another. Its form collects description and technology and posts
+`groma draft relation`. Cancel creates nothing. No gesture coordinates or
+manual route points are stored. Escape cancels an active gesture.
+
+Shift-click selection still offers Group as and Combine into through the
+shared operations. Pressing a group zone opens Rename and Dissolve. Historical
+and published maps keep reading and navigation but expose no write controls.
+
+Draft elements and links retain fixed dashed strokes during selection and
+flow highlighting. Flow traversal uses a separate moving directional marker;
+reduced-motion mode holds that marker still. Flow emphasis never replaces
+lifecycle dashes. Current relationship strokes stay solid.
 
 The isometric grid fills the screen. Inset 35%-paper frosted chrome floats
 above it as one technical instrument. The header groups the groma.md lockup,
