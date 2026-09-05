@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@codex'
 created_date: '2026-09-02 21:04'
-updated_date: '2026-09-03 19:30'
+updated_date: '2026-09-05 15:23'
 labels:
   - tui
   - core
@@ -22,7 +22,6 @@ references:
   - web-server
   - web-viewer-details
   - read-read
-  - navigation-details
 modified_files:
   - src/viewers/source/read.ts
   - src/viewers/source/structure.ts

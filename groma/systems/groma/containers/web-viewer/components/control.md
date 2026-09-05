@@ -9,7 +9,7 @@ groma:
   code:
     - scanner: typescript
       file: src/viewers/web/search/control.ts
-      dependencies: 3
+      dependencies: 4
       dependents: 1
     - scanner: typescript
       file: src/viewers/web/search/model.ts

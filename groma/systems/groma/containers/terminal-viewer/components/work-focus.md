@@ -8,21 +8,21 @@ groma:
   code:
     - scanner: typescript
       file: src/viewers/tui/work/model.ts
-      dependencies: 4
-      dependents: 8
+      dependencies: 6
+      dependents: 9
     - scanner: typescript
       file: src/viewers/tui/work/navigation.ts
       symbol: reduceWorkFocus
-      dependencies: 3
+      dependencies: 4
       dependents: 1
     - scanner: typescript
-      file: src/viewers/tui/work/paint.ts
-      symbol: drawWorkMarker
-      dependencies: 4
+      file: src/viewers/tui/work/rows.ts
+      symbol: taskRows
+      dependencies: 3
       dependents: 1
 ---
 
-Keeps compact task markers visible and lets the architect inspect one task and frame its touched architecture without replacing the saved architecture view.
+Owns terminal task selection, grouped lists, folding, status visibility and checklist progress. Opening a task preserves the architecture view and frames its mapped elements; closing it restores that view.
 
 ## Relationships
 

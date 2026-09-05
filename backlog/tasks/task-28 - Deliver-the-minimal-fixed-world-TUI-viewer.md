@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@codex'
 created_date: '2026-08-09 19:07'
-updated_date: '2026-09-03 21:51'
+updated_date: '2026-09-05 15:23'
 labels: []
 dependencies: []
 references:
@@ -17,14 +17,11 @@ references:
   - navigation
   - screen
   - terminal-painting
-  - work-marker
-  - row
   - core
   - world-layout
   - architecture-model
   - projection-sheet
   - projection-root
-  - projection-container
   - terminal-viewer-projection-root
   - terminal-viewer-projection-container
 modified_files:

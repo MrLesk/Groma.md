@@ -5,13 +5,13 @@ status: Done
 assignee:
   - '@codex'
 created_date: '2026-08-26 06:05'
-updated_date: '2026-08-26 06:23'
+updated_date: '2026-09-05 15:23'
 labels: []
 dependencies: []
 references:
   - scan-reconciler
   - web-viewer
-  - naming
+  - typescript-scanner
 modified_files:
   - >-
     groma/observed/systems/groma/containers/cli/components/components/blueprint.md

@@ -10,7 +10,7 @@ groma:
     - scanner: typescript
       file: src/viewers/web/iso/camera.ts
       dependencies: 2
-      dependents: 4
+      dependents: 5
     - scanner: typescript
       file: src/viewers/web/iso/pointer.ts
       dependencies: 1

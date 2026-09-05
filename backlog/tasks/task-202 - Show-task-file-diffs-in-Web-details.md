@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@codex'
 created_date: '2026-08-27 21:13'
-updated_date: '2026-08-28 06:26'
+updated_date: '2026-09-05 15:23'
 labels: []
 dependencies: []
 references:
@@ -18,7 +18,7 @@ references:
   - web-viewer-details
   - task-diff
   - button
-  - highlight
+  - read-read
 modified_files:
   - package.json
   - bun.lock

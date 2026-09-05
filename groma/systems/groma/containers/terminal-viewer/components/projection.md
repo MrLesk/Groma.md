@@ -8,7 +8,7 @@ groma:
   code:
     - scanner: typescript
       file: src/viewers/tui/projection.ts
-      dependencies: 7
+      dependencies: 6
       dependents: 15
     - scanner: typescript
       file: src/viewers/tui/projection-camera.ts
@@ -16,25 +16,21 @@ groma:
       dependents: 4
     - scanner: typescript
       file: src/viewers/tui/projection-routes.ts
-      symbol: attachRoute
+      symbol: routeBetween
       dependencies: 1
       dependents: 1
     - scanner: typescript
-      file: src/viewers/tui/projection-sheet.ts
-      dependencies: 3
-      dependents: 3
-    - scanner: typescript
       file: src/viewers/tui/projection-root.ts
       symbol: rootLayout
-      dependencies: 3
-      dependents: 1
+      dependencies: 5
+      dependents: 6
     - scanner: typescript
       file: src/viewers/tui/projection-container.ts
-      dependencies: 4
+      dependencies: 5
       dependents: 2
 ---
 
-Projects the shared sheet into fixed-scale terminal cells and moves only the camera needed to keep the selected item visible.
+Builds the fixed-scale terminal map from the shared sheet: root islands with container rows, and container views with grouped component buildings and neighbouring previews. It routes visible connections, keeps world geometry stable across selection, centers a root that fits, and bounds camera movement around the displayed map.
 
 ## Relationships
 

@@ -5,7 +5,7 @@ status: Done
 assignee:
   - codex
 created_date: '2026-09-05 14:46'
-updated_date: '2026-09-05 14:54'
+updated_date: '2026-09-05 15:23'
 labels: []
 dependencies: []
 references:
@@ -13,7 +13,6 @@ references:
   - popover
   - control
   - revision-history
-  - theme-control
 modified_files:
   - src/viewers/web/atoms/popover.ts
   - src/viewers/web/atoms/chrome.ts

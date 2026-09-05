@@ -1,6 +1,6 @@
 ---
 type: C4 Component
-title: Source inspection
+title: Source and diff reads
 status: stable
 groma:
   id: read-read
@@ -17,11 +17,15 @@ groma:
     - scanner: typescript
       file: src/viewers/source/diff.ts
       dependencies: 3
-      dependents: 7
+      dependents: 9
     - scanner: typescript
       file: src/viewers/source/diff-lines.ts
       dependencies: 0
-      dependents: 5
+      dependents: 4
+    - scanner: typescript
+      file: src/viewers/source/highlight.ts
+      dependencies: 0
+      dependents: 3
 ---
 
-Reads component source, declarations, and task file diffs for every viewer.
+Reads exact component source, declarations and task file changes for both viewers. It supplies one diff payload for file summaries and opened diffs, and shared syntax tokens that each viewer paints in its own theme.

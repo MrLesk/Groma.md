@@ -14,11 +14,20 @@ groma:
     - scanner: typescript
       file: src/viewers/relationship-text.ts
       dependencies: 0
-      dependents: 4
+      dependents: 5
     - scanner: typescript
       file: src/viewers/atoms/kind.ts
       dependencies: 1
-      dependents: 9
+      dependents: 11
+    - scanner: typescript
+      file: src/empty-world.ts
+      symbol: isEmptyWorld
+      dependencies: 1
+      dependents: 6
+    - scanner: typescript
+      file: src/brand.ts
+      dependencies: 0
+      dependents: 2
 ---
 
-Owns shared viewer meaning for element kinds, relationship captions, and actor command paths so browser and terminal views explain the same graph.
+Defines the shared visual language and navigation meaning used by the terminal and browser: kind labels, relationship captions, actor command paths, brand accents and the next steps for an empty architecture.

@@ -10,7 +10,7 @@ groma:
     - scanner: typescript
       file: src/edit.ts
       symbol: editArchitecture
-      dependencies: 6
+      dependencies: 9
       dependents: 1
 ---
 

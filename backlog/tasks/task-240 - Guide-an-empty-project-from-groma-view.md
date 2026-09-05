@@ -5,16 +5,16 @@ status: Done
 assignee:
   - '@codex'
 created_date: '2026-09-02 20:59'
-updated_date: '2026-09-03 21:10'
+updated_date: '2026-09-05 15:23'
 labels:
   - cli
   - tui
 dependencies: []
 references:
-  - empty-world
   - terminal-painting
   - screen
   - plain-text-view
+  - viewer-semantics
 modified_files:
   - src/empty-world.ts
   - src/viewers/tui/organisms/empty.ts

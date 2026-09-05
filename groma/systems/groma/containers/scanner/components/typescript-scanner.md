@@ -24,6 +24,10 @@ groma:
       symbol: scanTypeScriptSource
       dependencies: 3
       dependents: 1
+    - scanner: typescript
+      file: plugins/scanners/typescript/src/naming.ts
+      dependencies: 0
+      dependents: 2
 ---
 
 Exports the embedded TypeScript scanner module and reports supported source files and named symbols separately, using imports and entry points only as evidence for placement and dependency counts.

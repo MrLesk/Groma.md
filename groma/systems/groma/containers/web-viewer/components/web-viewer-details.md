@@ -9,7 +9,7 @@ groma:
   code:
     - scanner: typescript
       file: src/viewers/web/organisms/details.ts
-      dependencies: 9
+      dependencies: 14
       dependents: 3
 ---
 

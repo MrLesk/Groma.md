@@ -9,11 +9,15 @@ groma:
   code:
     - scanner: typescript
       file: src/viewers/tui/panes/details.ts
-      dependencies: 14
+      dependencies: 16
+      dependents: 3
+    - scanner: typescript
+      file: src/viewers/tui/panes/code.ts
+      dependencies: 4
       dependents: 2
 ---
 
-Draws the selected architecture element, relationship, command flow, or task in the terminal details pane.
+Renders the selected architecture, flow and task in What, How and Tasks. It presents task definitions, file change summaries, numbered source and unified diffs, and supplies exact reading-row links for opening files and references.
 
 ## Relationships
 

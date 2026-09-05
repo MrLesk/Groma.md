@@ -9,15 +9,24 @@ groma:
   code:
     - scanner: typescript
       file: src/curate.ts
-      dependencies: 4
+      dependencies: 5
       dependents: 1
     - scanner: typescript
-      file: src/relate.ts
-      dependencies: 3
-      dependents: 1
+      file: src/group.ts
+      dependencies: 5
+      dependents: 3
+    - scanner: typescript
+      file: src/relation.ts
+      dependencies: 5
+      dependents: 3
+    - scanner: typescript
+      file: src/move.ts
+      symbol: moveBlocker
+      dependencies: 1
+      dependents: 2
 ---
 
-Curates atomic scan evidence through validated whole operations: group or ungroup a component, move empty evidence, combine empty records, and author one observed relationship.
+Curates architecture through validated edits: group or ungroup sibling components, move empty scan evidence, combine empty records and add, edit or remove a directed relationship. It preserves existing authored meaning and refuses structural replacements that would discard it.
 
 ## Relationships
 

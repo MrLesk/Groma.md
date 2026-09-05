@@ -11,6 +11,10 @@ groma:
       file: src/work/pins.ts
       dependencies: 1
       dependents: 10
+    - scanner: typescript
+      file: src/work/status-filter.ts
+      dependencies: 0
+      dependents: 2
 ---
 
-Maps Backlog tasks to their exact architecture references or newest owned source file so every viewer receives the same task anchors.
+Maps tasks to exact architecture references or their newest owned source file. It supplies shared task anchors and status-filter rules, preserving a viewer's visibility choices when task snapshots change.
