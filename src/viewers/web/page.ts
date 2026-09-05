@@ -259,8 +259,8 @@ const style = `
   #details .relationships li { margin: 0; }
   #details .criterion-check { color: var(--accent-text); }
   #details .tabs { margin: 0 0 8px; border: 1px solid var(--hairline); border-radius: var(--control-radius); overflow: hidden; }
-  #details .tabs button { flex: 1; border: 0; border-radius: 0; }
-  #details .tabs button + button { margin-left: 0; border-left: 1px solid var(--hairline); }
+  #details .tabs.controls button { flex: 1; border: 0; border-radius: 0; }
+  #details .tabs.controls button + button { margin-left: 0; border-left: 1px solid var(--hairline); }
   .chips { display: flex; flex-wrap: wrap; gap: 6px; }
   #details .chip { border: 1px solid var(--hairline); padding: 2px 8px; margin: 0; }
   .controls { display: flex; }
