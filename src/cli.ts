@@ -26,6 +26,17 @@ function interactiveTerminal(): boolean {
   return process.stdin.isTTY === true && process.stdout.isTTY === true
 }
 
+async function startWebOnNextPort(port: number, scan: boolean) {
+  const { startWebViewer } = await import('./viewers/web/server.ts')
+  while (true) {
+    try {
+      return await startWebViewer(process.cwd(), { port: ++port, scan })
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'EADDRINUSE') throw error
+    }
+  }
+}
+
 async function openWeb(port?: number, scan = true): Promise<void> {
   try {
     const { startWebViewer } = await import('./viewers/web/server.ts')
@@ -37,11 +48,11 @@ async function openWeb(port?: number, scan = true): Promise<void> {
       const message = `Port ${port ?? 4747} is in use.`
       if (!interactiveTerminal()) throw new Error(`${message} Run groma web --port 0 to use an available port.`)
       const accepted = await confirm({
-        message: `${message} Use another available port? (y/n)`,
+        message: `${message} Use the next available port? (y/n)`,
         initialValue: false,
       })
       if (accepted !== true) return
-      viewer = await startWebViewer(process.cwd(), { port: 0, scan })
+      viewer = await startWebOnNextPort(port ?? 4747, scan)
     }
     const { url } = viewer
     console.log(`groma web at ${url}`)
