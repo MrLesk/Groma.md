@@ -58,8 +58,8 @@ async function openWeb(port?: number, scan = true): Promise<void> {
     try {
       viewer = await startWebViewer(process.cwd(), { port, scan })
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== 'EADDRINUSE') throw error
-      const message = `Port ${port ?? 4747} is in use.`
+      if (port === 0 || (error as NodeJS.ErrnoException).code !== 'EADDRINUSE') throw error
+      const message = error instanceof Error ? error.message : String(error)
       if (!interactiveTerminal()) throw new Error(`${message} Run groma web --port 0 to use an available port.`)
       const accepted = await confirm({
         message: `${message} Use the next available port? (y/n)`,
