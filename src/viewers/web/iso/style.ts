@@ -92,7 +92,10 @@ export const mapCss = `
   }
   #map .field-surface, #map .camera { position: absolute; inset: 0; width: 100%; height: 100%; }
   #map .field-surface { pointer-events: none; }
-  #map .scene { display: block; width: 100%; height: 100%; overflow: visible; }
+  #map .paint-surface { position: absolute; inset: 0; pointer-events: none; }
+  #map .scene { display: block; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
+  #map .world { pointer-events: auto; }
+  #map .camera[data-tracing] .route-surface { will-change: transform; }
   #map > .map-surface [data-id] { cursor: pointer; }
   #map > .map-surface:active, #map > .map-surface:active [data-id] { cursor: grabbing; }
   #map .camera { transform-origin: 0 0; }
