@@ -10,7 +10,7 @@ groma:
     - scanner: typescript
       file: src/work/pins.ts
       dependencies: 1
-      dependents: 10
+      dependents: 11
     - scanner: typescript
       file: src/work/status-filter.ts
       dependencies: 0
