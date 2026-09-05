@@ -7,6 +7,8 @@ export function removalBlocker(graph: ArchitectureGraph, id: string): string | u
   if (element.origin === 'observed' && element.kind !== 'actor' && !element.external) {
     return `${id} is found by the scanner; remove its code or combine it instead`
   }
+  const flows = graph.flows.filter(flow => flow.steps.some(step => step.source === id || step.target === id))
+  if (flows.length > 0) return `cannot remove ${id}: used by flows ${flows.map(flow => flow.id).join(', ')}`
   if (element.children.length > 0) {
     return `cannot remove ${id}: it contains ${element.children.join(', ')}`
   }

@@ -2,11 +2,12 @@ export type Selection =
   | { kind: 'none' }
   | { kind: 'architecture'; ids: readonly string[] }
   | { kind: 'task'; id: string }
+  | { kind: 'flow'; id: string }
 
 export const noSelection: Selection = { kind: 'none' }
 
 export function primarySelection(selection: Selection): string | undefined {
-  if (selection.kind === 'task') return selection.id
+  if (selection.kind === 'task' || selection.kind === 'flow') return selection.id
   return selection.kind === 'architecture' ? selection.ids.at(-1) : undefined
 }
 
@@ -34,7 +35,7 @@ export function selectTask(id: string): Selection {
 /** Drops targets that disappeared from a live payload without changing the order of those that remain. */
 export function retainSelection(selection: Selection, known: (id: string) => boolean): Selection {
   if (selection.kind === 'none') return selection
-  if (selection.kind === 'task') return known(selection.id) ? selection : noSelection
+  if (selection.kind === 'task' || selection.kind === 'flow') return known(selection.id) ? selection : noSelection
   const ids = selection.ids.filter(known)
   return ids.length === 0 ? noSelection : { kind: 'architecture', ids }
 }

@@ -1,4 +1,3 @@
-import { worldCommands } from '../action-path.ts'
 import type { TerminalViewModel } from './model.ts'
 import { syncTree, toggleFlow, type ViewerAction, type ViewerState } from './navigation.ts'
 import { levelFor } from './navigation-spatial.ts'
@@ -31,20 +30,20 @@ function openRow(world: TerminalViewModel, current: ViewerState, row: TreeRow): 
   })
 }
 
-/** Browsing a flow changes only the cursor; an explicit toggle opens its root overview. */
+/** Browsing a flow changes only the cursor; an explicit toggle opens its flow reader. */
 export function reduceTree(world: TerminalViewModel, current: ViewerState, action: ViewerAction): ViewerState {
-  const commands = worldCommands(world)
+  const flows = world.flows
   const rows = semanticTreeRows(world, current.currentId === undefined ? [] : [current.currentId], current.tree)
-  const ids = [...commands.map(command => command.id), ...rows.map(row => row.id)]
+  const ids = [...flows.map(flow => flow.id), ...rows.map(row => row.id)]
   if (ids.length === 0) return current
   const index = Math.max(0, ids.indexOf(current.tree.cursor ?? ''))
   if (action === 'up' || action === 'down') {
     const next = ids[Math.max(0, Math.min(ids.length - 1, index + (action === 'down' ? 1 : -1)))]!
     return { ...current, tree: { ...current.tree, cursor: next } }
   }
-  if (index < commands.length) return action === 'enter' || action === 'toggle-selection'
+  if (index < flows.length) return action === 'enter' || action === 'toggle-selection'
     ? toggleFlow(current, ids[index]!) : current
-  const cursor = rows[index - commands.length]!
+  const cursor = rows[index - flows.length]!
   if (action === 'left') return foldRow(world, current, cursor)
   if (action === 'right') return { ...current, tree: expandRow(current.tree, cursor.id) }
   if (action === 'enter') return openRow(world, current, cursor)

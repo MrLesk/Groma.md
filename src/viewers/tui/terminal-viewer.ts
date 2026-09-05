@@ -180,7 +180,7 @@ export function mountTerminalViewer(
     if (state.work === undefined) {
       state = { ...state, currentId: projection.currentId ?? undefined }
     }
-    const step = projectFlowStep(viewModel, projection, lit.id, lit.actorId, state.actionStep)
+    const step = projectFlowStep(viewModel, projection, lit.id, state.actionStep)
     paintMap(screen.map.frameBuffer, shifted(projection, slideShift(projection.camera, panFrom)), viewModel, theme, {
       lit,
       step,

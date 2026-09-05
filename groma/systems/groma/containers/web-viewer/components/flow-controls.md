@@ -14,18 +14,23 @@ groma:
       dependents: 1
     - scanner: typescript
       file: src/viewers/web/flow/row.ts
-      dependencies: 2
+      dependencies: 1
       dependents: 3
     - scanner: typescript
       file: src/viewers/web/flow/state.ts
+      symbol: toggleFlowActivation
       dependencies: 1
-      dependents: 2
+      dependents: 1
+    - scanner: typescript
+      file: src/viewers/web/flow/reader.ts
+      dependencies: 3
+      dependents: 1
 ---
 
-Shows actor command paths in the hierarchy and details panes and keeps flow activation independent from selection.
+Lists authored architecture scenarios and reads their purpose and ordered steps. It keeps one focused flow and step, highlights only their explicit connections, and preserves that context while endpoints are inspected.
 
 ## Relationships
 
 | Target | Description | Technology |
 | --- | --- | --- |
-| [Viewer semantics](../../view-host/components/viewer-semantics.md) | Uses the shared actor command paths | In-process data |
+| [Viewer semantics](../../view-host/components/viewer-semantics.md) | Reads explicit flow membership and ordered relationship steps | In-process data |

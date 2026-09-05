@@ -10,6 +10,7 @@ import {
 import { addGroup } from './group.ts'
 import { requireText } from './naming.ts'
 import { addRelation } from './relation.ts'
+import { addFlow } from './flow-authoring.ts'
 
 export interface AddInput {
   thing: string
@@ -22,6 +23,7 @@ export interface AddInput {
   overview?: string
   description?: string
   technology?: string
+  steps?: string
 }
 
 type DeclaredThing = 'actor' | 'external' | 'draft'
@@ -59,6 +61,7 @@ function renderThing(thing: DeclaredThing, id: string, input: AddInput, overview
 
 /** Writes what no scan can see: a person, an outside system, or the record of a draft. */
 export async function addThing(repositoryRoot: string, input: AddInput): Promise<string> {
+  if (input.thing === 'flow') return addFlow(repositoryRoot, requireText(input.name, 'name'), input)
   if (input.thing === 'relation') {
     return addRelation(repositoryRoot, {
       source: input.name,

@@ -13,8 +13,6 @@ import {
 import { reduceSearch } from '../src/viewers/tui/navigation-search.ts'
 import { selectedWorkId } from '../src/viewers/tui/work/model.ts'
 import { nearestInDirection } from '../src/viewers/tui/navigation-spatial.ts'
-import { worldCommands } from '../src/viewers/action-path.ts'
-import { litLegs } from '../src/viewers/tui/flow.ts'
 import { taskRecordView } from '../src/viewers/tui/panes/details.ts'
 import { detailsContentWidth } from '../src/viewers/tui/layout.ts'
 import { viewerTheme } from '../src/viewers/tui/atoms/theme.ts'
@@ -231,30 +229,6 @@ test.concurrent('search follows matches live and cancel restores the prior view'
   assert.equal(cancelled.currentId, before.currentId)
 })
 
-test.concurrent('flow selection, step, and clear share one navigation state', () => {
-  const model = actionWorld()
-  let state: ViewerState = {
-    ...initialState(model),
-    currentId: 'observed:buyer',
-    focus: 'details',
-  }
-
-  state = reduceViewer(model, state, 'down')
-  assert.equal(state.activeActionId, undefined)
-  state = reduceViewer(model, state, 'enter')
-  assert.ok(state.activeActionId)
-  assert.equal(litAction(model, state).actorId, 'observed:buyer')
-  const committed = state.activeActionId
-
-  state = reduceViewer(model, state, 'dismiss')
-  assert.equal(litAction(model, state).id, committed)
-  state = reduceViewer(model, state, 'step-action')
-  assert.equal(state.actionStep, 0)
-  state = reduceViewer(model, state, 'clear-action')
-  assert.equal(state.activeActionId, undefined)
-  assert.equal(state.actionStep, undefined)
-})
-
 test.concurrent('a one-row rectangle overlap selects the nearer card outside the centre cone', () => {
   const a = { x: 0, y: 0, width: 10, height: 8 }
   const b = { x: 11, y: 7, width: 10, height: 12 }
@@ -262,39 +236,6 @@ test.concurrent('a one-row rectangle overlap selects the nearer card outside the
   const anchors = new Map([['a', a], ['b', b], ['c', c]])
   assert.equal(nearestInDirection(anchors, 'a', a, 'right'), 'b')
   assert.equal(nearestInDirection(anchors, 'b', b, 'left'), 'a')
-})
-
-test.concurrent('flow browsing preserves container scope, toggling opens root and clearing restores selection', () => {
-  const model = actionWorld()
-  const flow = worldCommands(model).at(-1)!
-  const before = { ...initialState(model), level: 'components' as const, currentId: 'observed:api' }
-  let state = { ...before, focus: 'hierarchy' as const, tree: { ...before.tree, cursor: flow.id } }
-  state = reduceViewer(model, state, 'up') as typeof state
-  assert.equal(state.activeActionId, undefined)
-  assert.equal(state.level, 'components')
-  state = reduceViewer(model, state, 'toggle-selection') as typeof state
-  assert.ok(state.activeActionId)
-  assert.equal(state.level, 'context')
-  assert.equal(state.currentId, before.currentId)
-  const cleared = reduceViewer(model, state, 'clear-action')
-  assert.equal(litAction(model, cleared).id, undefined)
-  assert.equal(cleared.currentId, before.currentId)
-  assert.equal(cleared.level, before.level)
-  const unchecked = reduceViewer(model, state, 'enter')
-  assert.equal(unchecked.activeActionId, undefined)
-  assert.equal(unchecked.level, before.level)
-})
-
-test.concurrent('a launcher flow lights its approach and downstream legs across container boundaries', () => {
-  const model = actionWorld()
-  assert.deepEqual(litLegs(model, { id: 'api-web' }).map(leg => leg.id), ['buyer-api', 'api-web'])
-  const state = { ...initialState(model), focus: 'hierarchy' as const, tree: { ...initialState(model).tree, cursor: 'api-web' } }
-  const active = reduceViewer(model, state, 'enter')
-  const browsed = reduceViewer(model, active, 'down')
-  assert.equal(browsed.activeActionId, active.activeActionId)
-  const replaced = reduceViewer(model, browsed, 'toggle-selection')
-  assert.notEqual(replaced.activeActionId, active.activeActionId)
-  assert.deepEqual(replaced.beforeFlow, active.beforeFlow)
 })
 
 test.concurrent('Work focus keeps architecture and flow state while tasks own the side panes', () => {
@@ -386,23 +327,6 @@ test.concurrent('component Tasks and global Work open the same record, diff and 
   assert.equal(component.level, 'components')
 })
 
-test.concurrent('actor details toggle the same flow as the hierarchy without following it or changing tabs', () => {
-  const model = actionWorld()
-  let state: ViewerState = { ...initialState(model), currentId: 'observed:buyer', focus: 'details' }
-  state = reduceViewer(model, state, 'down')
-  const flow = state.actionCursor
-  assert.ok(worldCommands(model).some(command => command.id === flow))
-  state = reduceViewer(model, state, 'enter')
-  assert.equal(state.activeActionId, flow)
-  assert.equal(state.currentId, 'observed:buyer')
-  state = reduceViewer(model, state, 'tab')
-  assert.equal(state.detailsTab, 'what')
-  assert.equal(state.focus, 'details')
-  state = reduceViewer(model, state, 'enter')
-  assert.equal(state.activeActionId, undefined)
-  assert.equal(state.currentId, 'observed:buyer')
-})
-
 test.concurrent('folding the Backlog hierarchy leaves map arrows usable', () => {
   const model = actionWorld()
   const before = initialState(model)
@@ -416,7 +340,7 @@ test.concurrent('folding the Backlog hierarchy leaves map arrows usable', () => 
   assert.equal(state.focus, 'architecture')
 })
 
-test.concurrent('How navigates declarations while What toggles component flow participation', () => {
+test.concurrent('How navigates declarations while What follows a selected relationship', () => {
   const base = navigationWorld()
   const model = { ...base, relationships: [uses('read', 'ann', 'pleft')] }
   let state: ViewerState = {
@@ -441,8 +365,7 @@ test.concurrent('How navigates declarations while What toggles component flow pa
   assert.equal(state.activeActionId, undefined)
   state = reduceViewer(model, state, 'enter')
   assert.equal(state.activeActionId, 'read')
-  assert.equal(state.activeActionActorId, undefined)
   state = reduceViewer(model, state, 'enter')
-  assert.equal(state.activeActionId, undefined)
-  assert.equal(state.currentId, 'observed:pleft')
+  assert.equal(state.activeActionId, 'read')
+  assert.equal(state.currentId, 'observed:ann')
 })

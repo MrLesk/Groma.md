@@ -22,7 +22,7 @@ async function copyPackage(t: TestContext): Promise<string> {
 test('loads the one tree only after recognizing the marked OKF package', async () => {
   const records = await loadArchitecture(fixtureRoot)
 
-  assert.deepEqual(Object.keys(records), ['documents', 'drafts'])
+  assert.deepEqual(Object.keys(records), ['documents', 'drafts', 'flows'])
   assert.equal(records.documents.length, 6)
   assert.deepEqual(
     records.drafts.map(document => document.sourceFilename),

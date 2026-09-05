@@ -1,3 +1,21 @@
+import type { AnnotatedRelationship, ArchitectureGraph } from '../types.ts'
+
+export function actionCaption(
+  relationship: { source: string; target: string; description: string },
+  outgoing: boolean,
+  nameOf: (id: string) => string | undefined,
+): { title: string; detail: string } {
+  return outgoing
+    ? { title: relationship.description, detail: nameOf(relationship.target) ?? relationship.target }
+    : { title: nameOf(relationship.source) ?? relationship.source, detail: relationship.description }
+}
+
+export function outgoingActions(elementId: string | undefined, world: ArchitectureGraph): AnnotatedRelationship[] {
+  if (elementId === undefined) return []
+  const parentOf = parentOfElements(world.elements)
+  return world.relationships.filter(relationship => promotedPeer(relationship, elementId, parentOf)?.outgoing === true)
+}
+
 export type ParentOf = (id: string) => string | null
 
 export function parentOfElements(

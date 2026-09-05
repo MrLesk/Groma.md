@@ -1,12 +1,11 @@
 import { TextAttributes } from '@opentui/core'
 
-import { actionCaption, outgoingActions } from '../../action-path.ts'
+import { actionCaption, outgoingActions } from '../../relationship-text.ts'
 import { kindLabel } from '../../atoms/kind.ts'
 import type { ProjectProfile } from '../../../project-profile.ts'
 import { parentOfElements, promotedPeer } from '../../relationship-text.ts'
 import type { ViewerTheme } from '../atoms/theme.ts'
 import type { TerminalViewModel } from '../model.ts'
-import { flowEndpointLabel, type ProjectedFlowStep } from '../flow.ts'
 import { KEYS_BOX } from '../keys.ts'
 import { selectionFlows, selectionRelationships, type DetailsTab } from '../navigation.ts'
 import { workRowId, workRows, workRowSelection, type WorkListSettings } from '../work/model.ts'
@@ -14,6 +13,7 @@ import { workListLines } from './hierarchy.ts'
 import { taskFileRows } from './code.ts'
 import type {
   AnnotatedElement,
+  ArchitectureFlow,
   AnnotatedRelationship,
   WorkChecklistItem,
   WorkItem,
@@ -143,22 +143,19 @@ function whatLines(theme: ViewerTheme, element: AnnotatedElement, world: Termina
   const lines: Line[] = element.overview ? [[], ...wrap(element.overview, width).map(row => [plain(theme, row)])] : []
   let cursor: number | undefined
   const rows = relationshipRows(element, world, byId)
-  const actor = element.kind === 'actor'
-  if (rows.length > 0) lines.push([], heading(theme, actor ? 'Flows' : 'Relationships', width))
+  if (rows.length > 0) lines.push([], heading(theme, 'Relationships', width))
   for (const row of rows) {
     const atCursor = row.relationship.id === actionCursor
     if (atCursor) cursor = lines.length
     const active = row.relationship.id === activeActionId
-    lines.push(...(actor
-      ? flowChoiceLines(theme, row.relationship.description, width, active, atCursor)
-      : relationshipLines(theme, row, byId, width, active, atCursor)))
+    lines.push(...relationshipLines(theme, row, byId, width, active, atCursor))
   }
   const flows = selectionFlows(world, element.representationId)
-  if (flows.length > 0) lines.push([], heading(theme, 'Flows through', width))
+  if (flows.length > 0) lines.push([], heading(theme, 'Flows', width))
   for (const flow of flows) {
     const atCursor = flow.id === actionCursor
     if (atCursor) cursor = lines.length
-    lines.push(...flowChoiceLines(theme, flow.description, width, flow.id === activeActionId, atCursor))
+    lines.push(...flowChoiceLines(theme, flow.title, width, flow.id === activeActionId, atCursor))
   }
   lines.push(...childRows(theme, element, byId, width))
   return { lines, cursor }
@@ -194,29 +191,21 @@ export function detailsLines(
   }
 }
 
-/** A flow row under hierarchy focus: its legs, or the traced leg. */
-export function flowLines(
-  theme: ViewerTheme,
-  step: ProjectedFlowStep | undefined,
-  total: number,
-  width: number,
-  world?: TerminalViewModel,
-  flow?: AnnotatedRelationship,
-): Line[] {
-  if (step === undefined) {
-    const titles = new Map(world?.elements.map(element => [element.representationId, element.title]))
-    const meaning = flow === undefined ? [] : [
-      ...wrap(flow.description, width).map(row => [bold(theme, row)]), [],
-      ...wrap(`${titles.get(flow.source) ?? flow.source} → ${titles.get(flow.target) ?? flow.target}`, width).map(row => [plain(theme, row)]), [],
-    ]
-    return [...meaning, [accent(theme, `${total} ${total === 1 ? 'leg' : 'legs'}`)]]
-  }
-  return [
-    [accent(theme, `Leg ${step.index + 1}/${step.total}`)],
-    ...wrap(`${flowEndpointLabel(step.source)} → ${flowEndpointLabel(step.target)}`, width).map(row => [plain(theme, row)]),
-    [],
-    ...wrap(step.description, width).map(row => [plain(theme, row)]),
-  ]
+/** The complete authored scenario, with the selected step as the reading cursor. */
+export function flowLines(theme: ViewerTheme, world: TerminalViewModel, flow: ArchitectureFlow, selectedStep: number | undefined, width: number): PaneLines {
+  const lines: Line[] = [...wrap(flow.title, width).map(row => [bold(theme, row)]), []]
+  if (flow.description) lines.push(...wrap(flow.description, width).map(row => [bold(theme, row)]), [])
+  lines.push(...wrap(flow.overview, width).map(row => [plain(theme, row)]), [])
+  const titles = new Map(world.elements.map(element => [element.id, element.title]))
+  let cursor: number | undefined
+  flow.steps.forEach((step, index) => {
+    const active = selectedStep === index
+    if (active) cursor = lines.length
+    lines.push(...wrap(`${index + 1}. ${step.action}`, width).map(row => [active ? accent(theme, row) : plain(theme, row)]))
+    const ends = `${titles.get(step.source) ?? step.source} → ${titles.get(step.target) ?? step.target}`
+    lines.push(...wrap(ends, width - 2).map(row => [dim(theme, `  ${row}`)]), [])
+  })
+  return { lines, cursor }
 }
 
 /** A task summary starts with its title before execution facts. */

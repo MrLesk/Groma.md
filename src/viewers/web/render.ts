@@ -1,8 +1,8 @@
 import type { ProjectProfile } from '../../project-profile.ts'
 import type { AnnotatedElement, AnnotatedRelationship, WorkItem } from '../../types.ts'
 import { elementWorkGroups, touchedElements } from '../../work/pins.ts'
-import { elementOnPath, flowRouteIds, worldCommands } from '../action-path.ts'
-import type { FlowRef } from '../action-path.ts'
+import { elementOnPath, flowRouteIds } from '../flows.ts'
+import type { FlowRef } from '../flows.ts'
 import { initialTree, semanticTreeRows, toggleExpansion } from '../tui/tree.ts'
 import type { TreeRow } from '../tui/tree.ts'
 import { createAddControl } from './chrome/add.ts'
@@ -15,6 +15,7 @@ import { paintWorldStats, primarySystem } from './chrome/stats.ts'
 import { createWebDataSource } from './data.ts'
 import { paintFlows } from './flow/list.ts'
 import { toggleFlowActivation } from './flow/state.ts'
+import { paintBackToFlow, paintFlowDetails } from './flow/reader.ts'
 import { fitHighlights, fitCamera, pan, wheelAction, zoomAbout, zoomLimits, zoomReadout } from './iso/camera.ts'
 import type { Camera } from './iso/camera.ts'
 import { createMap } from './iso/map.ts'
@@ -22,7 +23,7 @@ import { bindMapPointer } from './iso/pointer.ts'
 import { projectScene } from './iso/project.ts'
 import { sceneAtSeparation } from './layers/separation.ts'
 import { createLayerAnimator, createLayerMotion } from './layers/orbit.ts'
-import { clearDetails, detailsTabAfterSelection, detailsTabAfterWork, type DetailsTab, inspectDetails, paintDetails, paintRelationship } from './organisms/details.ts'
+import { detailsTabAfterSelection, detailsTabAfterWork, type DetailsTab, inspectDetails, paintDetails, paintRelationship } from './organisms/details.ts'
 import { paintHierarchy } from './organisms/hierarchy.ts'
 import { createPins } from './work/pins.ts'
 import { createTip } from './organisms/tip.ts'
@@ -83,7 +84,7 @@ const themeControl = bindThemeControl(document.getElementById('theme') as HTMLDe
 let hudVisible = opened.hudVisible
 shell.setHud(hudVisible)
 let selection = opened.selection
-let activeFlows: FlowRef[] = [...opened.flows]
+let activeFlow = opened.flow
 const initial = primarySystem(world)
 if (boot.revision === null && selection.kind === 'none' && initial !== undefined) {
   selection = selectArchitecture(noSelection, initial.representationId, false)
@@ -124,7 +125,6 @@ function viewport(): MapFrame {
     hudVisible,
   )
 }
-
 function fitScene(frame: MapFrame): Camera {
   return pan(fitCamera(scene.bounds, frame), frame.x, frame.y)
 }
@@ -134,18 +134,16 @@ let camera: Camera = fitted
 /** Once an interaction positions the camera, live refits stop until the viewer presses 0. */
 let touched = false
 function worldElement(id: string | undefined): AnnotatedElement | undefined { return id === undefined ? undefined : world.elements.find(element => element.representationId === id) }
-
 function worldRelationship(id: string | undefined): AnnotatedRelationship | undefined { return id === undefined ? undefined : world.relationships.find(item => item.id === id) }
-
 function workItem(id: string | undefined): WorkItem | undefined { return id === undefined ? undefined : work.items.find(item => item.id === id) }
 
 /** True for an element, relationship or task id the current payload has. */
 function known(id: string | undefined): boolean {
   return worldElement(id) !== undefined || worldRelationship(id) !== undefined || workItem(id) !== undefined
+    || world.flows.some(flow => flow.id === id)
 }
 
 let cameraFrame: number | undefined
-
 function applyCamera(): void {
   if (cameraFrame !== undefined) cancelAnimationFrame(cameraFrame)
   cameraFrame = undefined
@@ -153,7 +151,6 @@ function applyCamera(): void {
   pins.place(camera)
   if (scaleChanged) zoomHost.textContent = zoomReadout(camera, fitted) || '100%'
 }
-
 function scheduleCamera(): void {
   if (cameraFrame !== undefined) return
   cameraFrame = requestAnimationFrame(() => {
@@ -184,7 +181,7 @@ function syncUrl(): void {
     ...(revisionControl.selected === undefined ? {} : { revision: revisionControl.selected }),
     ...(source.file === undefined ? {} : { file: source.file }),
     ...(source.line === undefined ? {} : { line: source.line }),
-    selection, flows: activeFlows,
+    selection, flow: activeFlow,
     tab: detailsTab,
     theme: themeControl.mode,
     hudVisible,
@@ -194,9 +191,9 @@ function syncUrl(): void {
 
 function paintMapState(task: WorkItem | undefined, activeTaskItems: WorkItem[]): void {
   const selectedIds = selectedArchitecture(selection)
-  const litIds = flowRouteIds(activeFlows, world)
+  const litIds = flowRouteIds(activeFlow, world)
   map.select(selectedIds)
-  map.mark(new Set(activeTaskItems.flatMap(item => touchedElements(item, world))))
+  map.mark(new Set(activeFlow === undefined ? activeTaskItems.flatMap(item => touchedElements(item, world)) : []))
   pins.activate(activeTaskIds, task?.id)
   island.activate(activeTaskIds, task?.id)
   map.setLitRoutes(litIds, id => elementOnPath(id, litIds, world))
@@ -210,10 +207,14 @@ function paintViewState(commitUrl = true): void {
   const activeTaskItems = activeTaskIds.map(id => workItem(id)).filter((item): item is WorkItem => item !== undefined)
   paintMapState(task, activeTaskItems)
   paintTree()
-  const commands = worldCommands(world)
-  const actorTitle = (actorId: string): string | undefined => worldElement(actorId)?.title
-  paintFlows(flowsHost, commands, activeFlows, actorTitle, toggleFlow)
-  paintWorldStats(statsHost, world, commands.length)
+  paintFlows(flowsHost, world.flows, activeFlow, toggleFlow)
+  paintWorldStats(statsHost, world, world.flows.length)
+  paintBackToFlow(detailsHost, activeFlow !== undefined && selection.kind !== 'flow' ? backToFlow : undefined)
+  const flow = world.flows.find(item => item.id === selectedId)
+  if (selection.kind === 'flow' && flow !== undefined && activeFlow !== undefined) {
+    paintFlowDetails(detailsHost, flow, activeFlow, world, selectFlowStep, select)
+    return
+  }
   const selected = worldElement(selectedId)
   const relationship = worldRelationship(selectedId)
   if (source.paint(selected)) return
@@ -224,8 +225,7 @@ function paintViewState(commitUrl = true): void {
     paintDetails(detailsHost, inspectDetails(selected, world), {
       onSelect: select,
       onToggleFlow: toggleFlow,
-      activeFlows,
-      actorTitle,
+      activeFlow,
       tab: detailsTab,
       onTab: tab => {
         detailsTab = tab
@@ -283,6 +283,7 @@ function focusActiveTasks(): void {
 
 /** Every task entry point shares details, highlighting and camera focus. */
 function applyTaskSelection(next: ReturnType<typeof toggleWorkSelection>): void {
+  activeFlow = undefined
   activeTaskIds = next.active
   source.clear()
   selection = next.selected === undefined ? noSelection : selectTask(next.selected)
@@ -299,7 +300,7 @@ function deselect(): void {
   source.clear()
   selection = noSelection
   activeTaskIds = []
-  activeFlows = []
+  activeFlow = undefined
   paintViewState()
 }
 
@@ -320,8 +321,23 @@ const searchControl = createSearchSession({
   },
 })
 
+function backToFlow(): void {
+  if (activeFlow === undefined) return
+  source.clear()
+  selection = { kind: 'flow', id: activeFlow.id }
+  paintViewState()
+}
+
+function selectFlowStep(step: number | undefined): void {
+  if (activeFlow !== undefined) activeFlow = { id: activeFlow.id, step }
+  paintViewState()
+}
+
 function toggleFlow(flow: FlowRef): void {
-  activeFlows = toggleFlowActivation(activeFlows, flow)
+  activeFlow = toggleFlowActivation(activeFlow, flow)
+  source.clear()
+  activeTaskIds = []
+  selection = activeFlow === undefined ? noSelection : { kind: 'flow', id: activeFlow.id }
   paintViewState()
 }
 
@@ -433,7 +449,7 @@ function applyWorld(payload: WebPayload, reset = false): void {
     source.clear()
     tree = initialTree()
     activeTaskIds = []
-    activeFlows = []
+    activeFlow = undefined
     selection = noSelection
     detailsTab = 'what'
     camera = fitted
@@ -441,10 +457,9 @@ function applyWorld(payload: WebPayload, reset = false): void {
   } else {
     if (!touched) camera = fitted
     activeTaskIds = activeTaskIds.filter(id => workItem(id) !== undefined)
-    activeFlows = activeFlows.filter(flow => {
-      return worldRelationship(flow.commandId) !== undefined
-        && (flow.actorId === undefined || worldElement(flow.actorId)?.kind === 'actor')
-    })
+    const record = world.flows.find(flow => flow.id === activeFlow?.id)
+    if (record === undefined) activeFlow = undefined
+    else if (activeFlow?.step !== undefined && record.steps[activeFlow.step] === undefined) activeFlow = { id: record.id }
     selection = retainSelection(selection, id => known(id))
   }
   debug.paint(() => map.paint(scene))
@@ -470,16 +485,7 @@ function applyWork(payload: WebWorkPayload): void {
   selection = retainSelection(selection, id => known(id))
   pins.paint(payload.pins)
   island.paint(payload.pins, work)
-  syncUrl()
-  shell.paint(selection)
-  const task = selection.kind === 'task' ? workItem(selection.id) : undefined
-  const active = activeTaskIds.map(id => workItem(id)).filter((item): item is WorkItem => item !== undefined)
-  map.mark(new Set(active.flatMap(item => touchedElements(item, world))))
-  pins.activate(activeTaskIds, task?.id)
-  island.activate(activeTaskIds, task?.id)
-  if (selection.kind === 'task') {
-    if (!taskDiff.paint(task)) clearDetails(detailsHost)
-  } else if (selection.kind === 'architecture') paintViewState()
+  paintViewState()
   searchControl.updateTasks(work.items)
 }
 

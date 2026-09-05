@@ -47,6 +47,13 @@ facts. Semantic curation belongs to the agent and human using Groma.
      <text>` writes the one collaboration per ordered pair; `groma edit relation
      <source> <target>` rewords it; `groma remove relation <source> <target>`
      removes it.
+   - `groma add flow <title> --overview <prose> --steps <markdown-table>`
+     describes one scenario through existing relationships. Store From, To,
+     and Action columns; link each endpoint to its C4 Markdown document.
+     Choose the exact ordered steps the human needs to understand. Do not
+     include every connection a component can reach. `groma edit <flow-id>`
+     edits its meaning or steps, and `groma remove <flow-id>` removes it.
+     See the [Flow profile](../component-markdown.md#flows).
    These operations validate the complete change before writing. Do not edit
    Groma-owned architecture Markdown with generic file tools.
 8. Run `groma scan` twice, then open the map again and review it with the human.

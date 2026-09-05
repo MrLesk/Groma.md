@@ -59,7 +59,7 @@ export function drawWorld(
 
   for (const item of surfaces) fillSurface(buffer, item, projection.viewport, theme)
   const occupied: Occupied = new Map()
-  for (const route of routes.filter(route => !lit(route))) {
+  for (const route of routes.filter(route => !tracing && !lit(route))) {
     drawRoute(buffer, route, projection.viewport, theme, { lit: false, ends: ends(route), occupied })
   }
   for (const route of litRoutes) {

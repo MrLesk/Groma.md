@@ -27,6 +27,11 @@ export async function removeThing(repositoryRoot: string, { id, relation, member
   const records = await loadArchitecture(repositoryRoot)
   const graph = annotateArchitecture(records)
   const model = buildArchitectureModel(records.documents)
+  const flow = graph.flows.find(candidate => candidate.id === id)
+  if (flow !== undefined) {
+    await removeDocument(repositoryRoot, flow.sourceFilename)
+    return id
+  }
   const element = model.elements.find(candidate => candidate.id === id)
   if (element !== undefined) {
     const blocker = removalBlocker(graph, id)

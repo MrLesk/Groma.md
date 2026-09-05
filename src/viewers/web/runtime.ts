@@ -27,11 +27,7 @@ export async function loadMapRoot(
     })(),
     loadProjectProfile(repositoryRoot),
   ])
-  const world = {
-    elements: architecture.world.elements,
-    relationships: architecture.world.relationships,
-    drafts: architecture.world.drafts,
-  }
+  const world = architecture.world
   const sheet = measuredSheetScene(world)
   return {
     project: project ?? null,

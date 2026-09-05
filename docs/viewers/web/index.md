@@ -124,16 +124,11 @@ resumes live architecture and work updates.
 The hierarchy pane's boxed double-chevron retracts it to a narrow rail and
 returns it without changing tree, selection, or camera state. Its quiet branch lines keep nested
 rows legible. It starts with the flows list open under its
-Flows heading. The list holds every
-actor command in the world, deduped across the actors who share it.
-Clicking a command toggles its highlighted map path without changing the
-selection or details pane. Several paths can stay active together. Every flow
-row uses the same checkbox, active state, Global or actor scope, and toggle
-behavior in the hierarchy and details pane; it has no separate flow glyph.
-Structure rows use kind marks and neutral
-selection instead; their arrows only expand containment. One command
-has at most one active flow; picking it from an actor changes that flow's scope
-in place. Below it the Structure
+Flows heading. Each row is one named, authored scenario. Clicking it opens its
+purpose and ordered steps in details and focuses its explicit map connections.
+Only one flow is focused at a time; clicking it again clears it. The same
+control appears in an element's Flows list. Structure rows use kind marks and
+neutral selection; their arrows only expand containment. Below it the Structure
 section starts open and groups the merged containment tree under Actors,
 Systems, and External systems labels, omitting an empty group. Containers
 sit under their system and components under their container, in
@@ -146,20 +141,16 @@ tree and the map share one selection. The bottom of the pane is the kind legend.
 Authored sibling groups are invisible to the tree.
 
 The wider details pane appears only while an element, relationship,
-or task owns the selection. It keeps its width while that owner
+flow, or task owns the selection. It keeps its width while that owner
 changes and disappears when selection is cleared. Its X clears the selection,
 closes the pane, and returns focus to the map without moving the camera. An element
 shows under two tabs. Selecting another architecture item returns the pane to What
 it does; a direct `tab=how` link still opens How it's built. What
-it does holds the meaning: description, peer relationships, actor Commands,
-Flows through, and children. A relationship row always names and selects its
-peer; its arrow shows authored direction and never activates a flow. Commands
-are the actor-scoped flows the selected actor can start. Flows through are the
-general flows whose path crosses the selected software element. Both use the
-same flow control as the hierarchy list. They toggle the map path in place and
-keep the actor or component in the details pane. If details are closed, a flow
-toggle keeps them closed. Actors do not repeat Commands as relationships
-or build information.
+it does holds the meaning: description, peer relationships, Flows, and children.
+A relationship row names and selects its peer; its arrow shows authored
+direction. The Flows list contains only scenarios with an explicit endpoint
+on or inside the selected element. Each opens the same flow reader as the
+hierarchy. Actors keep their real relationships and their authored flows.
 How it's built holds the evidence: the technology the element's Markdown
 declares (`groma.technology: SVG, Bun serve` renders as one chip per
 comma-separated part), named TypeScript structure under Code, and exact
@@ -169,20 +160,15 @@ callables; named classes group their public, protected, and private methods.
 The Code reference symbol is marked as the entry point, while nested callbacks
 stay out. A declaration opens read-only source at its visibly marked line; a
 file opens at the top. Elements without build evidence do not show the tab. Children and
-relationship peers select that element. To inspect a highlighted path, select
-one of its items or connections on the map. When the
-selection is an actor who uses a launcher, software they use that
-starts other software they also use, the actor's outgoing rows
-are that launcher's commands, plus whatever they use that no launcher
-reaches. Click a command to light its path on
-the map: the rest dims and each lit route runs in the accent green
-with a moving dash from source to target. A command picked
-from an actor's details walks in from that actor alone, even when
-other actors share the launcher; picking the same command from the
-sidebar flows list or a Travelled-by row includes every sharer's
-approach. Several active flows share the map as the union of their routes.
-Selecting architecture or a Backlog task keeps those routes lit. Escape or a
-click on empty sheet clears them with the other active selections.
+relationship peers select that element.
+
+The flow reader shows its overview and every ordered action. Select an action,
+Previous, or Next to emphasize that step's exact relationship and endpoints;
+All steps restores the whole authored path. Unrelated routes are hidden and
+task emphasis is quiet while reading a flow. Existing footprints and routes
+stay fixed. Endpoints link to the normal component inspector and source view;
+Back to flow restores the same scenario and step. Selecting a task leaves flow
+focus. Escape or a click on empty sheet clears the active selections.
 
 ## What it shows
 
@@ -451,9 +437,10 @@ names the world snapshot. Each selected element's kind names it (`actor=<id>`,
 parameters keep their order; `task=<id>` names a selected task instead.
 `tab=how|tasks` names the details tab, then `file=<path>` opens a selected
 component's source and `line=<number>` marks a declaration in that file.
-Repeated `flow=<source>/<target>` entries preserve active flow order; an
-actor-scoped flow uses `flow=<actor>/<source>/<target>`. Active flows do not
-create a selection or own details. `theme=light|dark|blueprint` names an
+`flow=<id>` names one authored scenario and `step=<number>` selects its
+one-based step. With no architecture selection, the flow owns details. An
+architecture selection alongside it opens endpoint inspection while retaining
+the flow and step. `theme=light|dark|blueprint` names an
 explicit theme, and `hud=off` hides the page chrome. Auto stays out of the URL;
 reading accepts any parameter order and ignores unknown values.
 A watched TypeScript change folds and rebuilds the map without a

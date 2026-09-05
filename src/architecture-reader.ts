@@ -3,6 +3,7 @@ import path from 'node:path'
 import { parse, parseFrontmatter } from 'comark'
 
 import {
+  FLOW_TYPE,
   c4Kind,
   requireBundleIndex,
   requireConceptType,
@@ -155,6 +156,7 @@ export async function loadArchitecture(
   await requireGromaPackage(filesystem, onFilesystemAccess)
   const documents: ArchitectureDocument[] = []
   const drafts: ArchitectureDocument[] = []
+  const flows: ArchitectureDocument[] = []
 
   for (const filename of await listMarkdownFiles(filesystem, '', onFilesystemAccess)) {
     if (rootDocuments.has(filename) || isReservedDocument(filename)) continue
@@ -164,8 +166,9 @@ export async function loadArchitecture(
       continue
     }
     const type = requireConceptType(document.frontmatter, document.sourceFilename)
+    if (type === FLOW_TYPE) flows.push(document)
     if (c4Kind(type) !== undefined) documents.push(document)
   }
 
-  return deepFreeze({ documents, drafts })
+  return deepFreeze({ documents, drafts, flows })
 }

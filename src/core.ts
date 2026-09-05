@@ -3,6 +3,7 @@ import path from 'node:path'
 
 import { buildArchitectureModel, draftRecordOf } from './architecture-model.ts'
 import { loadArchitecture } from './architecture-reader.ts'
+import { resolveFlows } from './flow-model.ts'
 import { moveBlocker } from './move.ts'
 import type {
   AnnotatedArchitectureModel,
@@ -62,6 +63,7 @@ export function annotateArchitecture(
   }))
 
   return {
+    flows: resolveFlows(records.flows, model),
     drafts: records.drafts.map(document => draftRecordOf(document).id).sort(),
     elements: withDirectChildren(elements),
     relationships: model.relationships.map((relationship, index) => {

@@ -314,11 +314,12 @@ function addedIds(thing: string, ids: string[]): Pick<AddInput, 'relation' | 'me
 
 program
   .command('add')
-  .description('Declare a person, an external system, a draft, a relation, or a group')
-  .argument('<thing>', 'actor, external, draft, relation, or group')
+  .description('Declare an actor, external system, draft, flow, relation, or group')
+  .argument('<thing>', 'actor, external, draft, flow, relation, or group')
   .argument('<name>', 'name, or the source id of a relation')
   .argument('[ids...]', 'target id of a relation, or the member ids of a group')
   .option('--overview <markdown>', 'long overview, or the outcome of a draft')
+  .option('--steps <markdown>', 'flow Steps table: From | To | Action, with Markdown endpoint links')
   .option('--description <text>', 'concise OKF description, or how the source uses the target')
   .option('--technology <text>', 'technology of an external, or the interaction mechanism of a relation')
   .action(async (thing: string, name: string, ids: string[], options) => {
@@ -328,6 +329,7 @@ program
         name,
         ...addedIds(thing, ids),
         overview: options.overview,
+        steps: options.steps,
         description: options.description,
         technology: options.technology,
       })
@@ -342,7 +344,7 @@ program
 program
   .command('remove')
   .description('Remove a person, an external, a ghost, a draft nothing belongs to, a relation, or a group')
-  .argument('<id>', 'element id, draft id, relation, or group')
+  .argument('<id>', 'element id, draft id, flow id, relation, or group')
   .argument('[ids...]', 'with relation: the source id and the target id; with group: the address and the members leaving')
   .action(async (id: string, ids: string[]) => {
     try {
@@ -358,10 +360,11 @@ program
 program
   .command('edit')
   .description('Update authored meaning')
-  .argument('<id>', 'element id, draft id, project, relation, or group')
+  .argument('<id>', 'element id, draft id, flow id, project, relation, or group')
   .argument('[ids...]', 'with relation: the source id and the target id; with group: the address')
   .option('--title <text>', 'new title; the id stays, or the new name of a group')
   .option('--overview <markdown>', 'long overview, or the outcome of a draft')
+  .option('--steps <markdown>', 'flow Steps table: From | To | Action, with Markdown endpoint links')
   .option('--description <text>', 'concise OKF description (empty removes it), or how a relation works')
   .option('--technology <text>', 'technology of an element (empty removes it) or of a relation')
   .option('--draft <draft-id>', 'tag this element with the draft that touches it')
@@ -377,6 +380,7 @@ program
         relation,
         title: options.title,
         overview: options.overview,
+        steps: options.steps,
         description: options.description,
         technology: options.technology,
         draft: options.draft,

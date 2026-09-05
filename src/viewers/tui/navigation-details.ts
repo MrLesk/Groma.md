@@ -99,7 +99,7 @@ function moveDetailsCursor(current: ViewerState, stops: readonly string[], step:
   const next = index < 0
     ? (step > 0 ? 0 : stops.length - 1)
     : Math.max(0, Math.min(stops.length - 1, index + step))
-  return { ...current, actionCursor: stops[next], actionStep: undefined, detailsScroll: 0 }
+  return { ...current, actionCursor: stops[next], detailsScroll: 0 }
 }
 
 function openDetailsCursor(

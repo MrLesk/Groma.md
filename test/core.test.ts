@@ -81,7 +81,7 @@ test('move eligibility uses the complete Markdown body', () => {
     ['p', {}, 'Keep this requirement.'],
   ]
 
-  const model = annotateArchitecture({ documents: [system, container, empty, sectioned], drafts: [] })
+  const model = annotateArchitecture({ documents: [system, container, empty, sectioned], drafts: [], flows: [] })
 
   assert.equal(model.elements.find(element => element.id === 'empty')?.movable, true)
   assert.equal(model.elements.find(element => element.id === 'sectioned')?.movable, false)

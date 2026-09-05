@@ -72,11 +72,11 @@ taller roots retain scrolling to reveal the selected row.
 
 ## Details and flows
 
-The details pane describes the current architecture selection.
-While a flow row has hierarchy focus, it instead shows that flow and its current
-leg. While details has focus, Tab cycles through What and How, plus Tasks for a
-component. Actors show their meaning and Flows without a build tab. What describes its
-responsibility, relationships and Flows through checkboxes; How shows technology and source; Tasks groups related
+The details pane describes the current architecture selection or the open
+flow. A focused hierarchy flow row previews its purpose and ordered steps.
+While normal element details has focus, Tab cycles through What and How, plus
+Tasks for a component. What describes responsibility, relationships and authored
+Flows; How shows technology and source; Tasks groups related
 work by status. In the
 How tab the Code section lists each file with its line count and the declarations
 under it in authored order; Enter on a declaration opens the source read-only at
@@ -87,16 +87,18 @@ readable map also fit.
 When the terminal cannot fit a readable map beside it, the reader temporarily
 takes that space. Closing the reader restores the normal pane layout.
 
-The hierarchy lists actor flows above the architecture tree. Up and Down browse
-their meaning without changing the map. Space or Enter checks one flow, opens
-the root overview, and lights its path and visible endpoints. Checking another
-flow replaces the active one. Unrelated architecture becomes quieter without moving.
-Unchecking the flow or pressing `x` restores the prior map scope and selection.
-The architecture selection keeps its own marker. `s` advances to a leg, whose route
-and visible destination carry the stronger treatment. When an exact endpoint is
-hidden at root, the destination marker names it on its visible container and the
-footer shows both names. `x` clears the flow. Actor details use the same Flows
-name and checkbox behavior; software connections remain Relationships.
+The hierarchy lists authored flows above the architecture tree. Up and Down
+browse their meaning without changing the map. Space or Enter opens one flow's
+purpose and ordered steps. Opening another replaces it. The map shows only
+its authored routes, with unrelated architecture quieter and task emphasis
+suppressed. Opening or stepping a flow does not change map scope or geometry.
+
+In the flow reader, Up and Down select steps; Up before the first step returns
+to the complete path. `s` advances to the next step from anywhere. Enter
+inspects the selected step's To endpoint; Left inspects its From endpoint.
+Escape from endpoint inspection returns to the same flow and step. Normal
+source inspection still works. `x` clears flow focus. A hidden endpoint is
+named on its visible ancestor; selecting a step does not expand its connections.
 
 ## Work focus
 
@@ -174,7 +176,7 @@ Enter first highlights it and then follows it.
 ## Keys
 
 - Arrow keys move selection or the focused side-pane cursor. They never move map focus into a side pane.
-- Enter opens a container or task, toggles a flow, or folds a task status group.
+- Enter opens a container, task or flow, inspects a flow endpoint, or folds a task status group.
 - Space toggles a flow, or a task status's map visibility in the hierarchy only. Left/Right also fold task groups.
 - Backspace returns from a container map to root.
 - Tab changes the focused details pane's tabs. Escape returns focus to the map; a source file or diff first returns to its preceding view.

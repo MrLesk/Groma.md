@@ -46,7 +46,7 @@ never a concept, and the scanner never gives an element one of those names.
 
 ## One tree and draft identity
 
-Every concept lives in one tree under `<groma-root>`. Its lifecycle is the
+Every C4 concept lives in one tree under `<groma-root>`. Its lifecycle is the
 standard top-level `status`: `draft` for a concept that does not exist yet,
 `stable` for everything else. A document never moves when its status changes.
 
@@ -194,6 +194,54 @@ stay on those concepts.
 `Description` states the intent. `Technology` states the mechanism for an
 observed relationship, or a required constraint for a drafted one. Both cells
 are required and non-empty.
+
+## Flows
+
+A relationship describes a collaboration that exists in the architecture.
+A flow explains one named scenario using an explicit, ordered subset of those
+relationships. It is an OKF concept with type `Groma Flow`, stored at
+`<groma-root>/flows/<id>.md`. It is not a C4 element and has no parent,
+Code references, footprint, or routes of its own.
+
+```markdown
+---
+type: Groma Flow
+title: Place an order
+description: Record a customer's order.
+groma:
+  id: place-order
+---
+
+The customer submits an order. Ordering checks the payment before recording it.
+
+## Steps
+
+| From | To | Action |
+| --- | --- | --- |
+| [Customer](../actors/customer.md) | [Ordering][ordering] | Submit the order |
+| [Ordering][ordering] | [Payments][payments] | Authorize this payment |
+
+[ordering]: ../systems/shop/containers/api/components/ordering.md
+[payments]: ../systems/shop/containers/api/components/payments.md
+```
+
+`title`, a unique stable `groma.id`, overview prose, and the Steps table are
+required. `description` is optional. From and To accept normal inline or
+reference-style Markdown links to C4 documents. Each row must resolve exactly
+one existing directed relationship in the loaded revision. Missing endpoints,
+missing relationships, and ambiguous endpoint pairs are errors.
+
+Table order is execution order. A relationship may occur more than once.
+Action explains what happens in this scenario; the relationship remains the
+owner of the general collaboration and technology. Core never follows other
+outgoing connections to extend a flow.
+
+`groma add flow <title> --overview <prose> --steps <markdown-table>` authors a
+record. The table may include Markdown link definitions. `groma edit <flow-id>`
+accepts `--title`, `--description`, `--overview`, and `--steps`;
+`groma remove <flow-id>` removes it. A referenced relationship or endpoint
+cannot be removed while a flow still uses it. Live, historical, and static
+viewers all read these same records.
 
 ## Component example
 

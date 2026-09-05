@@ -1,4 +1,4 @@
-import { actionCaption, actionLegs, worldCommands } from '../../action-path.ts'
+import { actionCaption } from '../../relationship-text.ts'
 import type { ViewerTheme } from '../atoms/theme.ts'
 import { flowEndpointLabel, type ProjectedFlowStep } from '../flow.ts'
 import type { TerminalViewModel } from '../model.ts'
@@ -27,9 +27,9 @@ function recapLine(theme: ViewerTheme, world: TerminalViewModel, width: number):
 
 function actionTitle(world: TerminalViewModel, lit: LitAction, step: ProjectedFlowStep | undefined): string | undefined {
   const litCommand = world.relationships.find(item => item.id === lit.id)
-  if (litCommand === undefined) return undefined
+  if (litCommand === undefined && step === undefined) return world.flows.find(flow => flow.id === lit.id)?.title
   const titles = new Map(world.elements.map(item => [item.representationId, item.title]))
-  if (step === undefined) return actionCaption(litCommand, true, id => titles.get(id) ?? id).title
+  if (step === undefined) return actionCaption(litCommand!, true, id => titles.get(id) ?? id).title
   return `leg ${step.index + 1}/${step.total} · ${flowEndpointLabel(step.source)}`
     + ` → ${flowEndpointLabel(step.target)} · ${step.description}`
 }
@@ -85,8 +85,6 @@ function detailsView(
   state: ViewerState,
   selected: AnnotatedElement | undefined,
   lit: LitAction,
-  step: ProjectedFlowStep | undefined,
-  commands: ReturnType<typeof worldCommands>,
 ): DetailsView | undefined {
   if (!terminalLayout(state).details) return undefined
   const width = detailsContentWidth(state)
@@ -101,12 +99,13 @@ function detailsView(
       scroll: state.detailsScroll,
     }
   }
-  const focusedFlow = state.focus === 'hierarchy' ? commands.find(command => command.id === state.tree.cursor) : undefined
+  const focusedFlow = world.flows.find(flow => flow.id === (state.flowReading ? state.activeActionId
+    : state.focus === 'hierarchy' ? state.tree.cursor : undefined))
   if (focusedFlow !== undefined) {
     return {
-      title: focusedFlow.description,
+      title: 'Flow',
       titleColor: theme.selected,
-      lines: { lines: flowLines(theme, focusedFlow.id === lit.id ? step : undefined, actionLegs(focusedFlow.id, world).length, width, world, focusedFlow) },
+      lines: flowLines(theme, world, focusedFlow, focusedFlow.id === lit.id ? state.actionStep : undefined, width),
       scroll: 0,
     }
   }
@@ -140,10 +139,18 @@ function footerLine(
   if (state.sourceView !== undefined || state.diffView !== undefined || state.taskRecord !== undefined) return '[↑↓] Read  [Enter] Open  [t] Hierarchy  [Esc] Back  [?] Help'
   if (state.keys) return '[?] Close  [↑↓] Scroll  [Esc] Close'
   if (state.profile) return '[p] Back  [↑↓] Scroll  [Esc] Back  [?] Help'
-  if (state.focus === 'hierarchy' && worldCommands(world).some(command => command.id === state.tree.cursor)) {
+  const flow = flowHint(world, state)
+  if (flow !== undefined) return flow
+  return focusedDetailsHint(state, selected) ?? hint
+}
+
+function flowHint(world: TerminalViewModel, state: ViewerState): string | undefined {
+  if (state.flowReading && state.focus === 'details') return '[↑↓] Step  [Enter] Inspect To  [←] Inspect From  [x] Clear  [Esc] Map'
+  if (!state.flowReading && world.flows.some(flow => flow.id === state.activeActionId)) return '[Esc] Back to flow  [s] Step  [x] Clear'
+  if (state.focus === 'hierarchy' && world.flows.some(command => command.id === state.tree.cursor)) {
     return '[↑↓] Browse  [Space/Enter] Toggle flow  [x] Clear  [s] Step  [Esc] Map  [?] Help'
   }
-  return focusedDetailsHint(state, selected) ?? hint
+  return undefined
 }
 
 function focusedDetailsHint(state: ViewerState, selected: AnnotatedElement | undefined): string | undefined {
@@ -158,7 +165,6 @@ function hierarchyView(
   theme: ViewerTheme,
   world: TerminalViewModel,
   state: ViewerState,
-  commands: ReturnType<typeof worldCommands>,
   selectionId: string | undefined,
 ): PaneLines | undefined {
   if (!terminalLayout(state).hierarchy) return undefined
@@ -178,7 +184,7 @@ function hierarchyView(
   return hierarchyLines(
     theme,
     HIERARCHY_CONTENT_WIDTH,
-    commands.map(command => ({ id: command.id, title: command.description })),
+    world.flows.map(flow => ({ id: flow.id, title: flow.title })),
     semanticTreeRows(world, selectionId === undefined ? [] : [selectionId], state.tree),
     selectionId,
     state.tree.cursor ?? selectionId,
@@ -196,7 +202,6 @@ export function screenView(
   lit: LitAction,
   step: ProjectedFlowStep | undefined,
 ): ScreenView {
-  const commands = worldCommands(world)
   const selectionId = projection.currentId ?? undefined
   const selected = world.elements.find(element => element.representationId === selectionId)
   const workOpen = state.work !== undefined
@@ -204,13 +209,13 @@ export function screenView(
   return {
     layout: terminalLayout(state),
     stats: world.revision === undefined
-      ? scopeStats(world, { ...state, level: projection.level }, selected) ?? rootStats(world, commands.length, workOpen)
+      ? scopeStats(world, { ...state, level: projection.level }, selected) ?? rootStats(world, world.flows.length, workOpen)
       : `${world.revision.shortId} · ${world.revision.subject}`,
     focus: state.focus,
     footer: footerLine(world, state, selected, lit, step),
-    hierarchy: hierarchyView(theme, world, state, commands, selectionId),
+    hierarchy: hierarchyView(theme, world, state, selectionId),
     legend: workOpen || historyOpen ? undefined : legendLines(theme, HIERARCHY_CONTENT_WIDTH),
-    details: detailsView(theme, world, state, selected, lit, step, commands),
+    details: detailsView(theme, world, state, selected, lit),
     recap: recapLine(theme, world, terminalLayout(state).mapWidth),
   }
 }
