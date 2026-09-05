@@ -61,7 +61,7 @@ export interface IsoMap {
   paint(scene: LayeredScene): void
   /** Unions the existing selected-element and selected-route treatments across an ordered selection. */
   select(ids: readonly string[]): void
-  /** Outlines the elements the active tasks touch and accents the routes leaving them, dotted when the target is untouched; an empty set clears both. */
+  /** Outlines the elements the active tasks touch and uniformly accents the routes leaving them; an empty set clears both. */
   mark(ids: ReadonlySet<string>): void
   /** Lights route ids and direct endpoints; contextual ancestors stay neutral while everything off the path dims. */
   setLitRoutes(litRouteIds: ReadonlySet<string>, onPath: (id: string) => boolean): void
@@ -252,9 +252,7 @@ export function createMap(host: HTMLElement): IsoMap {
     mark(ids) {
       for (const [itemId, node] of items) node.classList.toggle('touched', ids.has(itemId))
       for (const route of routes.values()) {
-        const leaving = ids.has(route.source)
-        route.group.classList.toggle('touched', leaving)
-        route.group.classList.toggle('half', leaving && !ids.has(route.target))
+        route.group.classList.toggle('touched', ids.has(route.source))
       }
     },
     setLitRoutes(litRouteIds, onPath) {

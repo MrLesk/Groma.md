@@ -80,8 +80,9 @@ function tokens(level: Level): string {
  * The map's own stylesheet. Every level group sets its tokens from the
  * scale, with the system island half a tint step lighter on that scale. One
  * rule turns them into strokes (times the state's emphasis and the camera's
- * zoom weight) and fills; no literal width or tint lives here. Line style means origin; only a route leaving a touched element for an untouched one adds accent dots: observed solid, draft
- * dashed; patterns mean kind, and component facade windows mean file type. Selection
+ * zoom weight) and fills; no literal width or tint lives here. Neutral routes show
+ * origin; task highlights are solid and selected flows use moving dashes. Patterns
+ * mean kind, and component facade windows mean file type. Selection
  * and context change strokes, never fills.
  */
 export const mapCss = `
@@ -167,7 +168,7 @@ export const mapCss = `
   #map .ghost .face, #map .ghost .ground { fill: none; pointer-events: all; }
   #map .ghost .pattern, #map .ghost .chip { display: none; }
   #map .ghost.draft .face, #map .ghost.draft .ground,
-  #map .route-base.ghost.draft, #map .route.ghost.draft .line { stroke-dasharray: 4 3; }
+  #map .route-base.ghost.draft, #map .route.ghost.draft:not(.touched):not(.lit) .line { stroke-dasharray: 4 3; }
   #map .text { fill: var(--ink); pointer-events: none; }
   #map :is(.island, .slab, .zone) > .label .text { font-weight: 600; }
   #map .route-base, #map .route .line { fill: none; stroke-linecap: round; opacity: 0.9; }
@@ -180,15 +181,13 @@ export const mapCss = `
   #map .route:hover .arrow { fill: var(--map-line); opacity: 1; }
   #map .route.endpoint .line, #map .route.selected .line, #map .route.touched .line { stroke: var(--highlight); opacity: 1; }
   #map .route.endpoint .arrow, #map .route.selected .arrow, #map .route.touched .arrow { fill: var(--highlight); opacity: 1; }
-  #map .route.touched.half:not(.draft) .line { stroke-dasharray: 1 4; }
+  #map .route.touched .line { stroke-dasharray: none; }
   #map .route.lit { --emphasis: ${emphasis(2)}; }
-  #map .route.lit .line { stroke: var(--highlight); opacity: 1; }
+  #map .route.lit .line { stroke: var(--highlight); opacity: 1; stroke-dasharray: 8 5; animation: map-flow 900ms linear infinite; }
   #map .route.lit .arrow { fill: var(--highlight); opacity: 1; }
-  #map .flow-marker { display: none; fill: var(--highlight); pointer-events: none; }
-  #map .route.lit .flow-marker { display: block; animation: map-flow 2.4s linear infinite; }
-  @keyframes map-flow { from { offset-distance: 0%; } to { offset-distance: 100%; } }
+  @keyframes map-flow { from { stroke-dashoffset: 0; } to { stroke-dashoffset: -13; } }
   @media (prefers-reduced-motion: reduce) {
-    #map .route.lit .flow-marker { animation: none; offset-distance: 50%; }
+    #map .route.lit .line { animation: none; }
   }
   #map .camera[data-tracing] .route-base,
   #map .camera[data-tracing] .route:not(.lit) { display: none; }

@@ -276,8 +276,10 @@ document: `observed` for `stable`, `draft` for `draft`. Observed elements draw
 solid, drafts draw dashed. A relationship has its own lifecycle: a row under Relationships is current,
 and a row under Draft relationships is planned, independently of its endpoints.
 Scans never accept planned links. Explicit acceptance moves the row into the
-current table. Draft dashes stay fixed during selection and flow highlighting;
-flow traversal uses a separate directional marker.
+current table. In the Web map, neutral draft relationships have fixed dashes.
+Task highlighting uses solid lines and flow highlighting uses moving dashes
+with fixed destination arrowheads, regardless of origin. Clearing the highlight
+restores the relationship origin style. Reduced motion keeps flow dashes static.
 
 Git is history. Walking commits shows one file per element changing in place
 as drafts are accepted.
