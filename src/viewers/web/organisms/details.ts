@@ -339,7 +339,7 @@ export function paintDetails(host: HTMLElement, inspected: Inspected, options: D
 }
 
 
-/** The pane for a selected relationship: its description as the title, its technology, then both ends as links; editable and removable on a live map. */
+/** Direction and meaning of a selected relationship, with removal offered only for drafts. */
 export function paintRelationship(
   host: HTMLElement,
   relationship: AnnotatedRelationship,
@@ -354,28 +354,25 @@ export function paintRelationship(
   const body = host.querySelector('.body')!
   body.replaceChildren()
   title.textContent = relationship.description
-  if (relationship.technology !== '') body.append(paragraph('description', relationship.technology))
   if (writes.onEdit !== undefined && writes.onRead !== undefined) body.prepend(editButton(host, relationship.id, [
     { name: 'description', label: 'Description', value: relationship.description, required: true },
     { name: 'technology', label: 'Technology', value: relationship.technology, required: true },
   ], writes.onEdit, writes.onRead))
-  host.querySelector('.meta')!.textContent = `Relationship · ${relationship.origin}`
+  host.querySelector('.meta')!.textContent = `Relationship · ${relationship.origin === 'draft' ? 'draft' : 'current'}`
   host.querySelector('.tabs')!.replaceChildren()
-  const list = document.createElement('ul')
-  for (const [prefix, id] of [['', relationship.source], ['→ ', relationship.target]] as const) {
+  for (const [label, id] of [['Source', relationship.source], ['Destination', relationship.target]] as const) {
     const end = byId.get(id)!
-    const item = document.createElement('li')
     const link = document.createElement('button')
     link.type = 'button'
     link.className = 'link'
-    link.append(prefix, marked(end.kind, end.external, end.title))
+    link.setAttribute('aria-label', `${label}: ${end.title}`)
+    link.append(marked(end.kind, end.external, end.title))
     link.addEventListener('click', event => onSelect(id, event.shiftKey))
-    item.append(link)
-    list.append(item)
+    body.append(heading(`${label} · ${kindLabel(end.kind, end.external)}`), link)
   }
-  body.append(list)
+  if (relationship.technology !== '') body.append(heading('Technology'), paragraph('description', relationship.technology))
   if (relationship.origin === 'draft' && writes.onAccept !== undefined) paintAcceptControl(body, writes.onAccept)
-  if (writes.onRemove !== undefined) paintRemoveControl(body, relationship.description, writes.onRemove)
+  if (relationship.origin === 'draft' && writes.onRemove !== undefined) paintRemoveControl(body, relationship.description, writes.onRemove)
 }
 
 /** Empties the pane while nothing is selected. */

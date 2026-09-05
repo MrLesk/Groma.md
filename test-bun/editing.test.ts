@@ -32,8 +32,10 @@ test.concurrent('draft relationships survive edits and scans and require explici
     const accepted = Bun.spawn(['bun', path.join(repositoryRoot, 'src/cli.ts'), 'accept', 'relation', 'stock', 'orders'], { cwd: root, stderr: 'pipe' })
     assert.equal(await accepted.exited, 0, await new Response(accepted.stderr).text())
     assert.equal((await read()).origin, 'observed')
-    await writes.remove(root, { id: 'stock', relation: 'orders' })
-    assert.equal(await read(), undefined)
+    const source = path.join(root, 'groma/systems/shop/containers/api/components/stock.md')
+    const before = await readFile(source, 'utf8')
+    await assert.rejects(writes.remove(root, { id: 'stock', relation: 'orders' }), /only draft relationships can be removed/)
+    assert.equal(await readFile(source, 'utf8'), before)
   } finally { await rm(root, { recursive: true, force: true }) }
 })
 

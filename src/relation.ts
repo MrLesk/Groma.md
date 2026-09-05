@@ -115,5 +115,7 @@ export async function removeRelation(repositoryRoot: string, input: RelationEnds
     .filter(flow => flow.steps.some(step => step.source === input.source && step.target === input.target))
   if (flows.length > 0) throw new Error(`cannot remove relationship: used by flows ${flows.map(flow => flow.id).join(', ')}`)
   const ends = await loadEnds(repositoryRoot, input)
-  return writeRow(repositoryRoot, ends, { drop: requireRow(ends) })
+  const current = requireRow(ends)
+  if (current.status !== 'draft') throw new Error('only draft relationships can be removed')
+  return writeRow(repositoryRoot, ends, { drop: current })
 }

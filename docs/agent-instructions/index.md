@@ -50,7 +50,8 @@ facts. Semantic curation belongs to the agent and human using Groma.
    - `groma add relation <source> <target> --description <prose> --technology
      <text>` writes the one collaboration per ordered pair; `groma edit relation
      <source> <target>` rewords it; `groma remove relation <source> <target>`
-     removes it.
+     removes it only while it is draft and no flow references it. Current
+     relationships cannot be removed, including after explicit acceptance.
    - `groma add flow <title> --overview <prose> --steps <markdown-table>`
      describes one scenario through existing relationships. Store From, To,
      and Action columns; link each endpoint to its C4 Markdown document.

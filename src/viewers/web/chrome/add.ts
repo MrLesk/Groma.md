@@ -1,8 +1,9 @@
 import type { AddInput } from '../../../authoring.ts'
 
 export const addDialogCss = `
+  /* Hidden while creation controls are unfinished. */
   #add {
-    display: grid; flex: none; place-items: center; width: 28px; height: 28px; margin-right: 6px;
+    display: none; flex: none; place-items: center; width: 28px; height: 28px; margin-right: 6px;
     border: 1px solid var(--hairline); border-radius: var(--control-radius);
     background: color-mix(in srgb, var(--paper) 35%, transparent); color: var(--muted); font-size: 16px; line-height: 1;
   }

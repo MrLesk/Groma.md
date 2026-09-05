@@ -30,12 +30,17 @@ test('groma add relation writes one relationship per ordered pair on the source 
   assert.notEqual(duplicate.code, 0)
   assert.match(duplicate.stderr, /groma edit relation stock orders/)
   assert.deepEqual(await readTree(root), before)
+
+  const removed = await groma(root, ['remove', 'relation', 'stock', 'orders'])
+  assert.notEqual(removed.code, 0)
+  assert.match(removed.stderr, /only draft relationships can be removed/)
+  assert.deepEqual(await readTree(root), before)
 })
 
-test('groma edit relation rewords the row and groma remove relation deletes it, even after the target was renamed', async t => {
+test('groma edit relation rewords a draft and groma remove relation deletes it, even after the target was renamed', async t => {
   const root = await copyFixture(t, fixtureRoot, 'groma-relation-')
   const original = await readFile(path.join(root, stockPath), 'utf8')
-  assert.equal((await groma(root, informs)).code, 0)
+  assert.equal((await groma(root, ['draft', ...informs.slice(1)])).code, 0)
   const reworded = await groma(root, ['edit', 'relation', 'stock', 'orders', '--description', 'Warns order placement'])
   assert.equal(reworded.code, 0, reworded.stderr)
   const row = await relationOf(root, 'stock', 'orders')

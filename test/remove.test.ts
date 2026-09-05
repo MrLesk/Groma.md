@@ -36,7 +36,7 @@ test('a ghost leaves once nothing relates to it, and a draft record once no ghos
     'draft', 'component', 'Stock check', '--parent', 'api', '--draft', 'next', '--overview', 'Checks stock levels.',
   ])).code, 0)
   assert.equal((await groma(root, [
-    'add', 'relation', 'orders', 'stock-check', '--description', 'Asks before placing', '--technology', 'Function call',
+    'draft', 'relation', 'orders', 'stock-check', '--description', 'Asks before placing', '--technology', 'Function call',
   ])).code, 0)
   const related = await groma(root, ['remove', 'stock-check'])
   assert.notEqual(related.code, 0)
