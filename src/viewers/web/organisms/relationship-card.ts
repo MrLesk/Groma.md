@@ -41,7 +41,10 @@ export function relationshipCard(data: RelationshipCardData, onSelect: Select, c
   card.className = 'relationship-card'
   const action = document.createElement(currentId === undefined ? 'div' : 'button')
   action.className = 'relationship-action'
-  action.textContent = data.description
+  const label = document.createElement('span')
+  label.className = 'relationship-label'
+  label.textContent = data.description
+  action.append(label)
   if (action instanceof HTMLButtonElement) {
     action.type = 'button'
     action.setAttribute('aria-label', `Open relationship: ${data.description}`)
@@ -66,7 +69,8 @@ export const relationshipCardCss = `
   .relationship-name:hover { text-decoration: underline; text-underline-offset: 3px; }
   .relationship-this { display: inline-block; vertical-align: middle; border: 1px solid var(--muted); border-radius: 2px; padding: 1px 4px; font-size: 9px; line-height: 1.3; font-weight: 400; }
   .relationship-kind { color: var(--muted); font-size: 10px; margin-top: 5px; }
-  .relationship-arrow { display: block; font-size: 28px; line-height: 1; margin-top: 4px; }
-  .relationship-action { flex: 1; min-width: 0; border: 0; padding: 0; background: transparent; color: var(--ink); font: inherit; font-size: 10px; line-height: 1.5; text-align: center; overflow-wrap: anywhere; }
+  .relationship-arrow { display: block; font-size: 28px; line-height: 14px; margin-top: 2px; }
+  .relationship-action { flex: 1; min-width: 0; border: 0; padding: 0 12px; background: transparent; color: var(--ink); font: inherit; font-size: 10px; line-height: 1.5; text-align: center; overflow-wrap: anywhere; }
+  .relationship-label { display: block; max-width: 24ch; margin: 0 auto; }
   button.relationship-action:hover { color: var(--highlight-text); }
 `
