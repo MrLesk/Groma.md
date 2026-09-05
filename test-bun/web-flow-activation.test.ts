@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test'
 import path from 'node:path'
 import { loadAnnotatedArchitecture } from '../src/core.ts'
-import { flowHighlight, flowSelection, retainFlows, toggleFlowActivation } from '../src/viewers/web/flow/state.ts'
+import { flowFocus, flowHighlight, flowSelection, retainFlows, toggleFlowActivation } from '../src/viewers/web/flow/state.ts'
 
 test.concurrent('flows toggle independently and the last checked flow owns the reader', () => {
   const original = [{ id: 'first', step: 2 }]
@@ -38,6 +38,7 @@ test.concurrent('step focus retains the complete Web path and omits unrelated co
     const focused = flowHighlight([{ id: flow.id, step }], world)
     expect(focused.routes).toEqual(whole.routes)
     expect(focused.focusedRoute).toBe(flow.steps[step]!.relationshipId)
+    expect(flowFocus([{ id: flow.id, step }], world)).toEqual([flow.steps[step]!.relationshipId])
   }
   expect(flowHighlight([], world)).toEqual({ routes: new Set(), focusedRoute: undefined })
   expect(world).toEqual(original)
@@ -52,6 +53,8 @@ test.concurrent('checked flows combine explicit paths and survive world updates 
   const combined = flowHighlight(active, world)
   expect(combined.routes).toEqual(new Set([...first.steps.map(step => step.relationshipId), other.id]))
   expect(combined.focusedRoute).toBe(other.id)
+  expect(flowFocus(active, world)).toEqual([other.id])
+  expect(new Set(flowFocus([{ id: first.id, step: 1 }, { id: 'other' }], world))).toEqual(combined.routes)
   const retained = retainFlows([...active, { id: 'removed' }], world)
   expect(retained).toEqual(active)
   const shortened = { ...world, flows: [{ ...first, steps: first.steps.slice(0, 1) }] }

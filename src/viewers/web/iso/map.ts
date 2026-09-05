@@ -198,7 +198,8 @@ export function createMap(host: HTMLElement): IsoMap {
       composed = current
       composedZoomRatio = zoomRatio
       latestCamera = { current, zoomRatio, showGrid }
-      if (committed === undefined || camera.style.willChange !== 'transform') {
+      if (committed !== undefined) camera.style.willChange = 'transform'
+      if (committed === undefined) {
         clearCameraTimer()
         commitCamera(current, zoomRatio, showGrid)
       } else {
@@ -264,6 +265,7 @@ export function createMap(host: HTMLElement): IsoMap {
     setLitRoutes(litRouteIds, onPath, focusedRouteId) {
       const tracing = litRouteIds.size > 0
       const litEndpointIds = new Set<string>()
+      const focused = focusedRouteId === undefined ? undefined : routes.get(focusedRouteId)
       camera.toggleAttribute('data-tracing', tracing)
       for (const [routeId, route] of routes) {
         const lit = litRouteIds.has(routeId)
@@ -273,6 +275,7 @@ export function createMap(host: HTMLElement): IsoMap {
       }
       for (const [itemId, node] of items) {
         node.classList.toggle('lit', litEndpointIds.has(itemId))
+        node.classList.toggle('focused', litEndpointIds.has(itemId) && (itemId === focused?.source || itemId === focused?.target))
         node.classList.toggle('onpath', tracing && onPath(itemId))
       }
     },

@@ -223,9 +223,11 @@ relationship peers select that element.
 The flow reader shows its overview and every ordered action. Opening a flow from
 element details adds Back to that element above the reader. Select an action,
 Previous, or Next to focus a step: the whole authored path and its endpoints stay
-highlighted while that step's exact relationship pulses continuously. The focused
-action has a marked row; Clear focus removes the extra emphasis. Reduced motion
-keeps a stronger static route stroke. Unrelated routes are hidden and
+highlighted while the camera smoothly fits that step's exact relationship and
+endpoints. That relationship and its endpoint components pulse continuously.
+The focused action has a marked row; Clear focus removes the extra emphasis and
+smoothly fits all checked flows again. Reduced motion keeps static emphasis.
+Unrelated routes are hidden and
 task emphasis is quiet while reading a flow. Existing footprints and routes
 stay fixed. Endpoints link to the normal component inspector and source view;
 Back to flow restores the same scenario, step, and original return target, and
@@ -384,7 +386,11 @@ cmd or ctrl with the wheel zooms about the cursor; the `-` and `+`
 buttons and keys zoom about the center, and `0` refits, between half
 the fitted view and a cell 192 screen pixels wide. Dragging pans too;
 scrolling or pinching over a pin moves the map, and over the Live
-work island it scrolls the chip strip. `F1` toggles the HUD for a map-only
+work island it scrolls the chip strip. Selection, flow steps, search navigation,
+Fit, and zoom buttons move and zoom together in a quick 220 ms transition.
+A new action starts from the displayed camera position. Dragging, scrolling,
+and pinching follow the gesture directly and stop an unfinished transition.
+Reduced motion applies the destination without animation. `F1` toggles the HUD for a map-only
 view. `F2` lifts the blueprint into aligned System, Container, and Component
 layers and briefly turns the view to show that it can orbit. In layer mode,
 drag to orbit horizontally with limited vertical tilt, or Shift-drag to pan;

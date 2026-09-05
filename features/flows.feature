@@ -43,9 +43,13 @@ Feature: Read an authored architecture flow
     Then the flow reader offers a return to that component
     When the architect focuses a step
     Then every connection and endpoint in the flow stays highlighted
-    And only the focused connection pulses continuously
+    And the camera smoothly fits the focused connection and both endpoint bodies
+    And the focused connection and both endpoint components pulse continuously
     And the reader clearly marks the focused action
     And reduced motion keeps a static focus mark
+    When the architect clears step focus
+    Then the camera smoothly fits all checked flows again
+    When the architect focuses a step
     When the architect inspects an endpoint and returns to the flow
     Then the same step and original component return action remain available
     When the architect returns to the original component
