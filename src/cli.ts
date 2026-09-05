@@ -298,11 +298,12 @@ program
   .argument('<kind>', 'system, container, component, or relation')
   .argument('<name>', 'element name')
   .argument('[target]', 'target id when drafting a relation')
-  .option('--overview <markdown>', 'long architecture overview')
-  .option('--description <text>', 'concise OKF description')
+  .option('--overview <markdown>', 'full explanation in Markdown')
+  .option('--description <text>', 'optional short summary')
   .option('--parent <id>', 'parent element id')
   .option('--technology <text>', 'implementation technology')
   .option('--draft <draft-id>', 'the draft record this ghost belongs to')
+  .addHelpText('after', '\nCuration examples: groma agent-instructions curation')
   .action(async (kind: string, name: string, target: string | undefined, options) => {
     try {
       const id = await writes.draft(process.cwd(), {
@@ -359,10 +360,11 @@ program
   .argument('<thing>', 'actor, external, draft, flow, relation, or group')
   .argument('<name>', 'name, or the source id of a relation')
   .argument('[ids...]', 'target id of a relation, or the member ids of a group')
-  .option('--overview <markdown>', 'long overview, or the outcome of a draft')
+  .option('--overview <markdown>', 'full Markdown explanation, or the outcome of a draft')
   .option('--steps <markdown>', 'flow Steps table: From | To | Action, with Markdown endpoint links')
-  .option('--description <text>', 'concise OKF description, or how the source uses the target')
+  .option('--description <text>', 'optional short summary, or how the source uses the target')
   .option('--technology <text>', 'technology of an external, or the interaction mechanism of a relation')
+  .addHelpText('after', '\nCuration examples: groma agent-instructions curation')
   .action(async (thing: string, name: string, ids: string[], options) => {
     try {
       const id = await writes.add(process.cwd(), {
@@ -402,15 +404,16 @@ program
   .argument('<id>', 'element id, draft id, flow id, project, relation, or group')
   .argument('[ids...]', 'with relation: the source id and the target id; with group: the address')
   .option('--title <text>', 'new title; the id stays, or the new name of a group')
-  .option('--overview <markdown>', 'long overview, or the outcome of a draft')
+  .option('--overview <markdown>', 'full Markdown explanation, or the outcome of a draft')
   .option('--steps <markdown>', 'flow Steps table: From | To | Action, with Markdown endpoint links')
-  .option('--description <text>', 'concise OKF description (empty removes it), or how a relation works')
+  .option('--description <text>', 'optional short summary (empty removes it), or how a relation works')
   .option('--technology <text>', 'technology of an element (empty removes it) or of a relation')
   .option('--draft <draft-id>', 'tag this element with the draft that touches it')
   .option('--group <name>', 'assign this component to a sibling group')
   .option('--ungroup', 'remove this component from its group')
   .option('--parent <id>', 'move an empty scanned component to this container')
-  .option('--combine <ids...>', 'combine empty scan elements into this element')
+  .option('--combine <ids...>', 'combine empty siblings; container children move to the survivor')
+  .addHelpText('after', '\nCuration examples: groma agent-instructions curation')
   .action(async (id: string, ids: string[], options) => {
     try {
       const { id: target, relation } = addressed(id, ids)

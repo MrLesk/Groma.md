@@ -72,14 +72,20 @@ a full scan and architecture curation cycle.
 
 1. Confirm the repository root and the system the human wants to understand.
 2. Run `groma scan`.
-3. Open `groma web` or `groma view`, and inspect the generated components and
-   their Code references.
+3. Read `groma view --plain` for the current inventory, then `groma view <id>`
+   for a complete record and its Code references. `groma view <source-file>`
+   resolves the same record by its exact repository-relative source path.
+   Open the map with `groma web` or `groma view` to inspect the placement.
 4. Read enough source to identify responsibilities, collaborations, and
    reasons to change. Directories, imports, and projects are useful evidence,
    but they are not the final architecture.
-5. First combine files that implement one responsibility into skyscrapers.
-6. Then group the resulting independently meaningful sibling components by
-   domain. A skyscraper may also be a member of a group.
+5. Settle container boundaries first. Read their source files and identify the
+   applications and data stores they represent. Then combine files that
+   implement one responsibility into skyscrapers. Complete moves and combines
+   before adding meaning to records that must move or disappear.
+6. Write the responsibilities and relationships, then group independently
+   meaningful sibling components by domain. A skyscraper may also be a member
+   of a group.
 7. Apply the curation through Groma:
    - `groma add actor <name> --overview <markdown>` and `groma add external
      <name> --overview <markdown>` declare the people and outside systems the
@@ -117,10 +123,115 @@ a full scan and architecture curation cycle.
      Choose the exact ordered steps the human needs to understand. Do not
      include every connection a component can reach. `groma edit <flow-id>`
      edits its meaning or steps, and `groma remove <flow-id>` removes it.
-     See the [Flow profile](../component-markdown.md#flows).
+     The complete command example below explains endpoint paths and actor
+     grouping. Run `groma agent-instructions curation` to read it from the CLI.
    These operations validate the complete change before writing. Do not edit
    Groma-owned architecture Markdown with generic file tools.
 8. Run `groma scan` twice, then open the map again and review it with the human.
+
+## Container combines
+
+Suppose a scan placed parts of one local command-line application in two
+sibling containers, `runtime` and `commands`. After reading their source,
+you confirm that they run as one application. Keep `runtime` and absorb
+`commands`:
+
+```sh
+groma view runtime
+groma view commands
+# Read every listed source file and each child record before combining.
+groma edit runtime --combine commands
+groma view runtime
+```
+
+The `runtime` ID survives. Each component under `commands` keeps its own ID
+and Code references, but its parent becomes `runtime` and its architecture
+file moves under that container. The `commands` record is removed. A
+component combine instead collects the absorbed components' Code references
+on the surviving component. Both operations report the paths and IDs needed
+for the Backlog update above.
+
+Combined records must have the same kind and parent. Absorbed records cannot
+have body content, relationships, a group, or technology. Children moved by a
+container combine cannot have body content or relationships either. Incoming
+relationships also prevent removal or movement. The survivor may already have
+authored meaning. An individual component move likewise requires an empty
+body and no relationships touching that component.
+
+Read first, settle these boundaries, then write the affected responsibilities
+and collaborations. If a mistaken combine needs a split or individual-file
+reassignment, stop and report the exact current and intended owners: the CLI
+does not currently provide that correction. Do not clear authored meaning or
+edit architecture files directly to bypass the restriction.
+
+## Description and overview
+
+`--description` is an optional short summary, stored in the standard
+`description` field of Open Knowledge Format (OKF). `--overview` is the fuller
+explanation in the Markdown body. Ordinary Markdown and OKF readers can read
+both; Groma uses them as the concept's summary and responsibility text.
+Avoid repeating the same paragraph in both:
+
+```sh
+groma edit entry --description 'Request coordinator' \
+  --overview 'Receives requests, validates their input, and dispatches work to the worker.'
+```
+
+For a relationship, `--description` instead states what the source does with
+the target; `--technology` states how they interact.
+
+## Flow command example
+
+This example assumes these existing elements: actor `requester`, and
+components `entry` and `worker` under container `api` in system `service`.
+The directed relationships `requester -> entry` and `entry -> worker` must
+already exist. Inspect their records with `groma view <id>` first; a flow
+uses those collaborations and does not create them.
+
+```sh
+groma add flow 'Submit a request' \
+  --overview 'The requester submits work; entry delegates it to the worker.' \
+  --steps '| From | To | Action |
+| --- | --- | --- |
+| [Requester](../actors/requester.md) | [Entry](../systems/service/containers/api/components/entry.md) | Submit work |
+| [Entry](../systems/service/containers/api/components/entry.md) | [Worker](../systems/service/containers/api/components/worker.md) | Process the request |'
+groma view submit-a-request
+```
+
+Groma writes `<groma-root>/flows/submit-a-request.md`. All endpoint links
+resolve relative to that flow document, not the shell's working directory.
+Here `<groma-root>` is the project's selected `groma/` or `.groma/` directory;
+the same `../actors/` and `../systems/` links work in either location.
+Table order is execution order, and each row must match an existing directed
+relationship. Choose only the steps that explain this scenario.
+
+The browser groups a flow under the actor that starts its first step. This
+flow therefore appears under Requester. In that actor's details, its flows
+appear directly without repeating the actor heading. A flow is supporting
+scenario knowledge over C4 relationships, not another C4 element or container.
+
+## Scanner coverage
+
+The embedded TypeScript scanner reads `.ts` and `.tsx` files selected through
+Git's tracked and unignored untracked file inventory. Its default exclusions
+are `test/**`, `test-bun/**`, declaration files (`*.d.ts`), and `*.test.ts`,
+`*.test.tsx`, `*.spec.ts`, and `*.spec.tsx`. Test fixtures in other directories
+and TypeScript build scripts can still be included. Inspect what was found
+and describe development responsibilities separately when needed.
+
+Markdown, HTML, CSS, JavaScript/CommonJS launchers, and shell scripts are not
+covered by this scanner. `groma scanner list` lists scanner modules; the CLI
+has no include/exclude editing helper. Do not assume an unsupported file has
+been inspected or create a stable software component for it by hand. Report
+the coverage gap. The optional C# scanner reads C# project evidence through
+Roslyn and excludes generated `bin` and `obj` files.
+
+Scanned files, symbols and placement are evidence. Agents annotate that
+evidence with C4 responsibilities and collaborations; they do not change the
+scan path. Hand-proposed systems, containers and components are drafts until
+matched by a scan and explicitly accepted. Scans create stable records for
+existing software. Actors and external systems are stable declarations of
+things the source scanner cannot discover.
 
 ## Skyscrapers
 
