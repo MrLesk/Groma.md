@@ -51,7 +51,8 @@ export const revisionCss = `
     padding: 8px 10px;
     border: 1px solid color-mix(in srgb, var(--ink) 16%, transparent);
     border-radius: 8px;
-    background: color-mix(in srgb, var(--paper) 96%, var(--ink));
+    background: color-mix(in srgb, var(--paper) 78%, transparent);
+    backdrop-filter: blur(18px);
     box-shadow: 0 10px 28px color-mix(in srgb, var(--ink) 18%, transparent);
     color: var(--ink);
     font: 11px/1.45 'SF Mono', ui-monospace, Menlo, monospace;

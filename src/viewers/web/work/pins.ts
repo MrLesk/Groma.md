@@ -23,9 +23,9 @@ export const pinsCss = `
     75% { transform: translateY(0); filter: grayscale(0); }
     100% { transform: translateY(0); filter: grayscale(1); }
   }
-  .pin .foot { position: absolute; left: -2.5px; top: -2.5px; width: 5px; height: 5px; border-radius: 50%; background: var(--pin); }
+  .pin .foot { position: absolute; left: -2.5px; top: -2.5px; width: 5px; height: 5px; border-radius: 50%; background: color-mix(in srgb, var(--pin) 85%, transparent); }
   .pin .stem {
-    position: absolute; left: -0.5px; bottom: 0; width: 1px; height: var(--stem); background: var(--pin);
+    position: absolute; left: -0.5px; bottom: 0; width: 1px; height: var(--stem); background: color-mix(in srgb, var(--pin) 85%, transparent);
     transform-origin: bottom center; transform: rotate(var(--lean)); transition: transform 0.3s, height 0.3s;
   }
   .pin .head {
@@ -34,7 +34,7 @@ export const pinsCss = `
   }
   .pin.work-done .head:hover .card { transform: rotateY(0); }
   .pin .task {
-    margin-top: 2px; padding: 1px 6px; border-radius: 3px; background: var(--pin); color: var(--on-colour);
+    margin-top: 2px; padding: 1px 6px; border-radius: 3px; background: color-mix(in srgb, var(--pin) 85%, transparent); color: var(--on-colour);
     font-size: 9px; letter-spacing: 0.08em; white-space: nowrap;
   }
   .pin.active .badge { border-radius: 50%; box-shadow: 0 0 0 3px var(--highlight); }

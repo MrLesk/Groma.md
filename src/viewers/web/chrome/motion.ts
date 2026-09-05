@@ -3,7 +3,7 @@ export const motionCss = `
     position: fixed;
     inset: 0;
     z-index: 100;
-    background: var(--paper);
+    background: color-mix(in srgb, var(--paper) 85%, transparent);
     opacity: 0;
     pointer-events: none;
   }
@@ -26,7 +26,7 @@ export function animateControl(control: HTMLElement, kind: 'fit' | 'zoom'): void
   )
 }
 
-/** Fades through the current paper colour and applies the new theme while hidden. */
+/** Softens theme changes with a translucent wash of the current paper colour. */
 export function createThemeTransition(host: HTMLElement): (apply: () => void) => void {
   const fade = document.createElement('div')
   fade.id = 'theme-fade'

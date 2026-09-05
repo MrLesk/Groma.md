@@ -58,7 +58,6 @@ export const searchCss = `
     opacity: 1;
     transform: translateY(0) scale(1);
     transform-origin: top center;
-    background: var(--paper);
   }
   #web-search .search-menu[hidden] {
     display: none;

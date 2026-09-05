@@ -17,10 +17,10 @@ export const chromeCss = `
   .chrome-button:hover { color: var(--ink); background: var(--hover); }
   * {
     scrollbar-width: thin;
-    scrollbar-color: color-mix(in srgb, var(--ink) 38%, var(--paper)) transparent;
+    scrollbar-color: color-mix(in srgb, var(--ink) 38%, transparent) transparent;
   }
   *::-webkit-scrollbar { width: 4px; height: 4px; }
   *::-webkit-scrollbar-track, *::-webkit-scrollbar-corner { background: transparent; }
-  *::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--ink) 38%, var(--paper)); border-radius: 2px; }
-  *::-webkit-scrollbar-thumb:hover { background: color-mix(in srgb, var(--ink) 58%, var(--paper)); }
+  *::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--ink) 38%, transparent); border-radius: 2px; }
+  *::-webkit-scrollbar-thumb:hover { background: color-mix(in srgb, var(--ink) 58%, transparent); }
 `
