@@ -6,6 +6,7 @@ import { flowRow, type FlowRowData } from './row.ts'
 
 interface FlowListOptions {
   title: string
+  contextId?: string
   visibleFlows?: readonly FlowRowData[]
   selectedIds?: readonly string[]
   onSelectActor?: (id: string, additive: boolean) => void
@@ -34,7 +35,9 @@ export function createFlowList() {
     const { title, visibleFlows } = options
     const visibleIds = visibleFlows && new Set(visibleFlows.map(row => row.flow.id))
     const flows = world.flows.filter(flow => visibleIds === undefined || visibleIds.has(flow.id))
+    const contextActor = world.elements.find(element => element.kind === 'actor' && element.id === options.contextId)
     const actors = world.elements.filter(element => element.kind === 'actor'
+      && element.id !== contextActor?.id
       && (visibleIds === undefined || flows.some(flow => flow.steps[0]?.source === element.id)))
     if (flows.length === 0 && actors.length === 0) {
       host.replaceChildren()
@@ -74,7 +77,8 @@ export function createFlowList() {
       list.append(heading, children)
     }
     for (const [index, flow] of ungrouped.entries()) {
-      const row = flowRow({ flow: { id: flow.id }, title: flow.title }, active, onToggle)
+      const title = contextActor?.id === flow.steps[0]!.source ? groupedTitle(flow.title, contextActor.title) : flow.title
+      const row = flowRow({ flow: { id: flow.id }, title }, active, onToggle)
       row.classList.add('row')
       row.prepend(...sidebarBranches([index < ungrouped.length - 1]))
       list.append(row)

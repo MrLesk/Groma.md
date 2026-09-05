@@ -167,7 +167,9 @@ omit a matching actor-name prefix; the authored title remains in the reader.
 Disclosure chevrons rotate between folded states, including across tree
 repaints, and respect reduced-motion preferences. The details panel uses the
 same grouped flow tree, limited to flows through the selected element; each
-panel keeps its own folding state.
+panel keeps its own folding state. In actor details, that actor's flows appear
+directly under “Flows from this actor” with concise labels, without repeating the
+actor as a group row.
 Each group contains the
 scenarios whose first step starts with that actor. Flows that start with a
 software element appear directly in the list. Each row is one named, authored
