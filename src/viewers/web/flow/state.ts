@@ -37,3 +37,9 @@ export function flowHighlight(active: readonly FlowRef[], world: ArchitectureGra
     focusedRoute: focused?.step === undefined ? undefined : flow?.steps[focused.step]?.relationshipId,
   }
 }
+
+/** A step frames its exact collaboration; clearing focus restores every checked flow. */
+export function flowFocus(active: readonly FlowRef[], world: ArchitectureGraph): string[] {
+  const { routes, focusedRoute } = flowHighlight(active, world)
+  return focusedRoute === undefined ? [...routes] : [focusedRoute]
+}
