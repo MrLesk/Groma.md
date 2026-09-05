@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@codex'
 created_date: '2026-09-05 17:46'
-updated_date: '2026-09-05 18:10'
+updated_date: '2026-09-05 18:27'
 labels: []
 dependencies: []
 references:
@@ -20,6 +20,8 @@ modified_files:
   - src/viewers/web/organisms/sidebar-row.ts
   - groma/systems/groma/containers/web-viewer/components/web-shell.md
   - groma/systems/groma/containers/web-viewer/components/sidebar-row.md
+  - src/viewers/web/organisms/sidebar-section.ts
+  - src/viewers/web/flow/row.ts
 type: enhancement
 ordinal: 303000
 ---
@@ -40,6 +42,8 @@ Make the Web sidebar hierarchy visually clear using the existing design language
 - [x] #6 Grouped flow rows omit their redundant actor prefix while keeping the authored flow title available elsewhere.
 - [x] #7 The same compact disclosure, icon, and nesting spacing applies throughout the sidebar structure tree and actor flow groups.
 - [x] #8 Container and system counts remain visible when expanded; actor groups show their flow count using the same row component and count styling.
+- [x] #9 Disclosure arrows have a 24 px click target and clear visual separation from their icons; child leaf rows do not show an empty disclosure slot.
+- [x] #10 Flows uses the same web-drawn branch lines as Structure for actor groups and their child flows, with CSS disclosure chevrons rather than Unicode arrows.
 <!-- AC:END -->
 
 ## Definition of Done
@@ -53,7 +57,7 @@ Make the Web sidebar hierarchy visually clear using the existing design language
 ## Implementation Plan
 
 <!-- SECTION:PLAN:BEGIN -->
-1. Use one shared sidebar row for actor and software glyphs, disclosure controls, labels and persistent counts. 2. Apply a 16 px nesting step with compact shared icon columns throughout the sidebar, placing actors beneath Flows and child flows one level deeper. 3. Remove matching actor-name prefixes only in grouped flow labels. 4. Verify both groups and the expanded software tree in light and dark themes, preserve selection and folding, run bun run check, and complete the final complexity review.
+1. Keep a shared sidebar row with persistent counts and 24 px disclosure targets. 2. Share the CSS branch builder between Structure and every Flows row, continuing ancestor lines only when a sibling follows and stopping final branches at the last child. 3. Draw chevrons, entity marks and flow checkmarks in CSS; keep the compact child-leaf spacing and align flow labels with software leaves. 4. Verify light/dark layouts, both actor groups, branch endings, flow selection, folding and click-target edges; run bun run check and the final complexity review.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
@@ -82,10 +86,20 @@ Uniform revision implemented: sidebarRow now owns disclosure, glyph, name and co
 The final full-context review passed with no blocking findings or material recommendations. The scanner discovered the new sidebar-row helper as an empty component; combined its Code reference into the existing Web shell shared-controls responsibility through Groma so the helper does not add a separate architecture box.
 
 Both post-curation scans created zero components and kept sidebar-row.ts owned by Web shell. Final validation: 104 Node tests and 301 Bun tests passed; seven existing lint warnings remain outside this change.
+
+Alex reported that the 6 px disclosure column made arrows hard to click and too close to icons. The third screenshot identified the empty disclosure slot before child leaf icons. Reopened the task for a shared CSS correction: a larger hit target separate from the glyph and no empty disclosure slot on child leaves.
+
+Shared arrow correction verified in the live browser: 14 px disclosure glyphs sit in 12 px columns with a 6 px box-to-icon gap and a 24 by 24 px hit area. Clicking x=22 beside the Groma glyph and x=60 beside the CLI glyph expanded them while Groma remained selected. Child leaf disclosure slots measure zero width; the final branch-to-icon gap before Agent instructions is now 9 px rather than 19 px. Leaf and grouped-flow labels align at x=79. Actor counts, software counts, collapsed startup, and both themes remain correct. Implementer specification and quality reviews passed; only shared CSS and its documentation changed.
+
+Alex requested branch lines throughout Flows as well as Structure and web-drawn graphics instead of Unicode. Extend the existing CSS branch implementation to actor groups and flow rows, and replace text disclosure arrows with CSS chevrons.
+
+Latest revision shares sidebarBranches between hierarchy and flows. Each branch column records whether a following sibling exists, so ancestor lines stop correctly beneath the last actor or software branch. Lines extend across row padding and are continuous; child leaves keep the reduced empty gap. Section and row chevrons, entity marks and flow checkmarks now use CSS borders and shapes. Browser verification covered both actor groups expanded, last-child line termination, absent outer continuation beneath the last actor, software containers/components, dark-theme lines, retained counts, collapse/reopen, and flow selection with an empty text checkmark element rendered by CSS. Edge clicks on CSS chevrons still fold without changing the active flow. Focused lint/type checks and implementer specification/quality reviews passed.
+
+Final full-context complexity review passed with no blocking findings or material simplifications. The full repository check passed after one retry of the existing live Markdown watcher timeout: 104 Node tests and 301 Bun tests. No implementation changes were made for that retry.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
-The Web sidebar uses one shared entity-row component with compact arrow/icon columns, a consistent 16 px nesting step, and counts visible while expanded or collapsed. Actor groups show their flow counts and omit redundant actor prefixes from grouped flow labels. External systems retain the matching divider and normal selection contrast. Verified light/dark browser layouts, counts, independent folding and flow selection; bun run check passed all 405 tests. The final complexity review passed, and two scans preserved the helper under the existing Web shell responsibility.
+The sidebar shares entity rows and continuous CSS branch lines across software structure, actors, and flows. Lines stop at the last child; child leaves have no empty disclosure slot. CSS chevrons retain 24 px click targets and clear icon spacing. Entity marks and flow checkmarks are CSS shapes. Counts remain visible when expanded, grouped flow labels omit redundant actor prefixes, and external systems retain normal contrast and their divider. Verified light/dark layouts, both actor groups, branch endings, selection, folding, and click-target edges. All 405 tests and the final complexity review passed.
 <!-- SECTION:FINAL_SUMMARY:END -->

@@ -131,9 +131,13 @@ The hierarchy pane's boxed double-chevron retracts it to a narrow rail and
 returns it without changing tree, selection, or camera state. Its quiet branch lines keep nested
 rows legible. Under Flows, each actor has an accordion that starts collapsed
 and retains its open state across viewer repaints. Actor rows use the shared
-actor glyph and sit one level below Flows, with their flow rows one level
+actor mark and sit one level below Flows, with their flow rows one level
 deeper. The sidebar uses a shared 16 px nesting step and compact arrow/icon
-spacing throughout the actor groups and software tree. Both use the same row
+spacing throughout the actor groups and software tree. Disclosure arrows have
+24 px click targets; child leaf branches lead directly to their icons without
+an empty arrow slot. Both sections share continuous CSS branch lines, ending
+at the last child. Chevrons, entity marks and flow checkmarks are drawn in CSS.
+Both sections use the same row
 component; actor flow counts and software child counts remain visible when
 expanded. Grouped flow labels
 omit a matching actor-name prefix; the authored title remains in the reader.
