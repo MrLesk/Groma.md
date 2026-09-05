@@ -26,7 +26,19 @@ export interface CurateInput extends MeaningChanges {
   combine?: string[]
 }
 
+/** Facts from a completed structural write; paths are repository-relative. */
+export interface StructuralResult {
+  id: string
+  created: string[]
+  /** Existing documents rewritten by the operation, even when their bytes stay identical. */
+  changed: string[]
+  removed: string[]
+  affectedIds: string[]
+  replacements: Array<{ absorbedId: string; survivingId: string }>
+}
+
 interface Rewrite {
+  id: string
   sourceFilename: string
   destinationFilename: string
   source: string
@@ -42,7 +54,7 @@ interface CurationContext {
 interface CurationChange {
   targetSource: string
   rewrites: Rewrite[]
-  removals: string[]
+  removals: ArchitectureElement[]
 }
 
 function requiresEmptyMeaning(source: string, id: string): void {
@@ -104,13 +116,18 @@ async function applyRewrites(
   repositoryRoot: string,
   rewrites: Rewrite[],
   removals: string[],
-): Promise<void> {
+): Promise<Pick<StructuralResult, 'created' | 'changed' | 'removed'>> {
+  const sources = new Set([...rewrites.map(rewrite => rewrite.sourceFilename), ...removals])
+  const created: string[] = []
+  const changed: string[] = []
+  const removed: string[] = []
   for (const rewrite of rewrites) {
     await writeDocument(
       repositoryRoot,
       rewrite.destinationFilename,
       rewrite.source,
     )
+    ;(sources.has(rewrite.destinationFilename) ? changed : created).push(rewrite.destinationFilename)
   }
   const destinations = new Set(rewrites.map(rewrite => rewrite.destinationFilename))
   for (const sourceFilename of new Set([
@@ -121,8 +138,10 @@ async function applyRewrites(
   ])) {
     if (!destinations.has(sourceFilename)) {
       await removeDocument(repositoryRoot, sourceFilename)
+      removed.push(sourceFilename)
     }
   }
+  return { created, changed, removed }
 }
 
 function requireElement(
@@ -239,6 +258,7 @@ async function combineElements(
   const rewrites: Rewrite[] = []
   for (const child of movedChildren) {
     rewrites.push({
+      id: child.id,
       sourceFilename: child.sourceFilename,
       destinationFilename: architectureElementPath({
         root: context.filesystem.sourceFilename(),
@@ -259,7 +279,7 @@ async function combineElements(
       combinedCode([target, ...sources]),
     ),
     rewrites,
-    removals: sources.map(source => source.sourceFilename),
+    removals: sources,
   }
 }
 
@@ -268,7 +288,7 @@ export async function curateElement(
   repositoryRoot: string,
   model: ArchitectureModel,
   input: CurateInput,
-): Promise<string> {
+): Promise<StructuralResult> {
   validateCurationInput(input)
   const byId = new Map(model.elements.map(element => [element.id, element]))
   const filesystem = GromaFileSystem.open(repositoryRoot)
@@ -281,11 +301,17 @@ export async function curateElement(
   const targetSource = withMeaning(combined.targetSource, input)
   const rewrites = [...combined.rewrites]
   rewrites.unshift({
+    id: target.id,
     sourceFilename: target.sourceFilename,
     destinationFilename: moved.destination,
     source: targetSource,
   })
   validateDestinations(filesystem, rewrites)
-  await applyRewrites(repositoryRoot, rewrites, combined.removals)
-  return target.id
+  const paths = await applyRewrites(repositoryRoot, rewrites, combined.removals.map(element => element.sourceFilename))
+  return {
+    id: target.id,
+    ...paths,
+    affectedIds: [...rewrites.map(rewrite => rewrite.id), ...combined.removals.map(element => element.id)],
+    replacements: combined.removals.map(element => ({ absorbedId: element.id, survivingId: target.id })),
+  }
 }

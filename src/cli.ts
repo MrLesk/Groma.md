@@ -7,6 +7,7 @@ import { Command } from 'commander'
 import { confirm } from '@clack/prompts'
 
 import { writes } from './authoring.ts'
+import type { StructuralResult } from './curate.ts'
 import { isGroupAddress } from './naming.ts'
 import type { AddInput, RemoveInput } from './authoring.ts'
 import { agentInstructionGuide } from './agent-instructions.ts'
@@ -21,6 +22,19 @@ import {
 import type { WelcomeActionId, WelcomeScreen } from './welcome.ts'
 
 const program = new Command()
+
+function printWriteResult(result: string | StructuralResult): void {
+  console.log('ok')
+  console.log(typeof result === 'string' ? result : result.id)
+  if (typeof result === 'string') return
+  for (const kind of ['created', 'changed', 'removed'] as const) {
+    for (const filename of result[kind]) console.log(`${kind}: ${filename}`)
+  }
+  for (const id of result.affectedIds) console.log(`affected: ${id}`)
+  for (const replacement of result.replacements) {
+    console.log(`replaced: ${replacement.absorbedId} -> ${replacement.survivingId}`)
+  }
+}
 
 function interactiveTerminal(): boolean {
   return process.stdin.isTTY === true && process.stdout.isTTY === true
@@ -301,8 +315,7 @@ program
         technology: options.technology,
         draft: options.draft,
       })
-      console.log('ok')
-      console.log(id)
+      printWriteResult(id)
     } catch (error) {
       console.error(error instanceof Error ? error.message : String(error))
       process.exitCode = 1
@@ -361,8 +374,7 @@ program
         description: options.description,
         technology: options.technology,
       })
-      console.log('ok')
-      console.log(id)
+      printWriteResult(id)
     } catch (error) {
       console.error(error instanceof Error ? error.message : String(error))
       process.exitCode = 1
@@ -377,8 +389,7 @@ program
   .action(async (id: string, ids: string[]) => {
     try {
       const removed = await writes.remove(process.cwd(), addressed(id, ids))
-      console.log('ok')
-      console.log(removed)
+      printWriteResult(removed)
     } catch (error) {
       console.error(error instanceof Error ? error.message : String(error))
       process.exitCode = 1
@@ -417,8 +428,7 @@ program
         parent: options.parent,
         combine: options.combine,
       })
-      console.log('ok')
-      console.log(edited)
+      printWriteResult(edited)
     } catch (error) {
       console.error(error instanceof Error ? error.message : String(error))
       process.exitCode = 1

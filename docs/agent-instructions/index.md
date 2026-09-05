@@ -38,6 +38,36 @@ Do not wait until testing or task completion to record these links.
 Task metadata stays in Backlog. Groma uses file ownership and element IDs
 to connect it to the map.
 
+Structural commands (combine, move, group, ungroup, and group add, rename or
+removal) report their completed writes after `ok` and the target ID or group
+address. Each `created:`, `changed:`, or `removed:` line names a
+repository-relative architecture path. Each `affected:` line names an element
+whose document was written or removed. A `replaced: <absorbed-id> ->
+<surviving-id>` line means a combine removed that element into the survivor.
+Moves report both paths and keep the same ID. Groups report member IDs;
+a group address is not an element ID.
+
+Immediately after a multi-file structural command, before any further change,
+record all its created, changed and removed paths in one Backlog update.
+Preserve the complete existing modified-file list and append paths not already
+recorded. Add the affected IDs that survive. For each replacement, remove the
+absorbed ID from the task's references and add its surviving ID:
+
+```bash
+backlog task edit <task-id> \
+  --modified-file <previous-path> \
+  --modified-file <created-or-changed-path> \
+  --modified-file <removed-path> \
+  --add-ref <surviving-id> \
+  --remove-ref <absorbed-id>
+```
+
+Repeat `--modified-file`, `--add-ref`, and `--remove-ref` as needed. Read the
+task first if its current file list is not known. Groma returns the operation
+facts; the agent updates Backlog through its CLI. These results are not saved
+as ID aliases or operation history. Routine code work needs task links, not
+a full scan and architecture curation cycle.
+
 ## Workflow
 
 1. Confirm the repository root and the system the human wants to understand.

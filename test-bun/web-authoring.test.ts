@@ -154,7 +154,14 @@ groma:
 
     const moved = await post(server.url, 'edit', { id: 'movable', parent: 'web' })
     assert.equal(moved.status, 200)
-    assert.deepEqual(await moved.json(), { id: 'movable' })
+    assert.deepEqual(await moved.json(), {
+      id: 'movable',
+      created: ['groma/systems/shop/containers/web/components/movable.md'],
+      changed: [],
+      removed: ['groma/systems/shop/containers/api/components/movable.md'],
+      affectedIds: ['movable'],
+      replacements: [],
+    })
     const payload = await (await fetch(`${server.url}/world.json`)).json() as {
       world: { elements: { id: string; origin: string; parent: string | null }[] }
     }
@@ -210,7 +217,14 @@ test.concurrent('the web groups sibling components through add, edit and remove'
   try {
     const added = await post(server.url, 'add', { thing: 'group', name: 'Checkout', members: ['orders', 'stock'] })
     assert.equal(added.status, 200)
-    assert.deepEqual(await added.json(), { id: 'api/checkout' })
+    assert.deepEqual(await added.json(), {
+      id: 'api/checkout',
+      created: [],
+      changed: ['groma/systems/shop/containers/api/components/orders.md', 'groma/systems/shop/containers/api/components/stock.md'],
+      removed: [],
+      affectedIds: ['orders', 'stock'],
+      replacements: [],
+    })
     assert.equal((await post(server.url, 'edit', { id: 'api/checkout', title: 'Order flow' })).status, 200)
     assert.deepEqual(await groups(), { orders: 'Order flow', stock: 'Order flow' })
     assert.equal((await post(server.url, 'remove', { id: 'api/order-flow', members: ['stock'] })).status, 200)
