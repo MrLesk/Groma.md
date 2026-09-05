@@ -7,14 +7,14 @@ import { createDialog } from './create.ts'
 import { creationParent, enclosed, gestureBounds, type CreationKind } from './intent.ts'
 
 export const editorCss = `
-  #map-tools { position: absolute; left: 50%; bottom: 22px; transform: translateX(-50%); z-index: 4;
-    display: flex; gap: 5px; padding: 6px; border: 1px solid var(--hairline); border-radius: 10px;
+  #map-tools { position: absolute; left: calc(var(--hierarchy-inset) + 24px); top: 74px; z-index: 4;
+    display: flex; flex-direction: column; gap: 5px; padding: 6px; border: 1px solid var(--hairline); border-radius: 10px;
     background: var(--chrome-surface); backdrop-filter: blur(18px); }
   #map-tools[hidden] { display: none; }
-  #map-tools button { padding: 7px 10px; color: var(--ink); background: transparent; border: 0; border-radius: 5px; cursor: pointer; touch-action: none; }
+  #map-tools button { padding: 7px 10px; text-align: left; color: var(--ink); background: transparent; border: 0; border-radius: 5px; cursor: pointer; touch-action: none; }
   #map-tools button[aria-pressed=true] { background: var(--hover); outline: 1px solid var(--highlight); }
   #map-tools [data-create] { cursor: grab; }
-  #editor-error { position: absolute; left: 50%; bottom: 74px; transform: translateX(-50%); z-index: 4; color: var(--highlight-text); }
+  #editor-error { max-width: 180px; margin: 4px 10px; color: var(--highlight-text); }
   #editor-error:empty { display: none; }
   .gesture-preview { position: fixed; inset: 0; width: 100vw; height: 100vh; z-index: 10; pointer-events: none; }
   .gesture-preview rect, .gesture-preview line { fill: color-mix(in srgb, var(--highlight) 8%, transparent); stroke: var(--highlight); stroke-width: 2; stroke-dasharray: 5 4; }
@@ -32,10 +32,11 @@ export function createMapEditor(host: HTMLElement, map: IsoMap, data: WebDataSou
   toolbar.id = 'map-tools'
   toolbar.setAttribute('role', 'toolbar')
   toolbar.setAttribute('aria-label', 'Architecture editing')
+  toolbar.setAttribute('aria-orientation', 'vertical')
   const error = document.createElement('p')
   error.id = 'editor-error'
   error.setAttribute('role', 'status')
-  host.append(toolbar, error)
+  host.append(toolbar)
   const preview = svg('svg', {}, 'gesture-preview')
   const create = createDialog(data)
   const relate = data.draft === undefined ? undefined : createRelateDialog(data.draft)
@@ -90,6 +91,7 @@ export function createMapEditor(host: HTMLElement, map: IsoMap, data: WebDataSou
     button.addEventListener('click', () => choose(tool === mode ? undefined : mode))
     toolbar.append(button)
   }
+  toolbar.append(error)
   map.svg.addEventListener('pointerdown', event => {
     if (!enabled() || tool === undefined || event.button !== 0) return
     const base = { pointerId: event.pointerId, start: pointOf(event), end: pointOf(event) }
