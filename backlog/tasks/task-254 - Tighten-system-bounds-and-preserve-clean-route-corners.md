@@ -1,11 +1,11 @@
 ---
 id: TASK-254
 title: Tighten system bounds and preserve clean route corners
-status: In Progress
+status: Done
 assignee:
   - '@codex'
 created_date: '2026-09-05 16:45'
-updated_date: '2026-09-05 16:54'
+updated_date: '2026-09-05 17:37'
 labels: []
 dependencies: []
 references:
@@ -36,7 +36,7 @@ When an architect opens the web map, system islands fit their final container pl
 ## Definition of Done
 <!-- DOD:BEGIN -->
 - [x] #1 Acceptance criteria have objective verification evidence.
-- [ ] #2 Relevant checks pass and changes remain task-scoped.
+- [x] #2 Relevant checks pass and changes remain task-scoped.
 - [x] #3 Public contracts or documentation are updated when behavior changes.
 - [x] #4 Implementation Plan reflects the final approach; correction history and verification are recorded in Implementation Notes.
 <!-- DOD:END -->
@@ -59,4 +59,12 @@ Full-context complexity review found no blockers or material architecture change
 Final targeted placement rerun passes after the contextual review cleanup. A second full bun run check still stops at TypeScript errors from the in-progress flow contract transition (for example missing ArchitectureGraph.flows and old ViewState.flows references). No full-check success is claimed. Task remains In Progress with DoD 2 unchecked; commit and push are deferred until repository verification can complete. No other task files were edited.
 
 Alex explicitly authorized committing and pushing the task changes despite the documented unrelated full-check failures. Commit scope is the four recorded implementation/test files and this task record. Full repository verification remains pending; this authorization does not claim that the full check passed.
+
+Completion verification: bun run check passed on the current shared tree outside the sandbox, including lint, TypeScript, Node tests and all 301 Bun tests. The sandbox run hit EMFILE in the file-watcher test; the unrestricted rerun passed. The earlier flow API errors are resolved. Current static export also passed, and the routing investigation found no reproducible failure. Implementation commit 89c9ae6 was already pushed.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Tightened system islands around final container placement and removed unnecessary short route-corner steps while preserving constrained routing. Verified with focused geometry regressions, before/after browser previews, current static export, full-context review and a passing bun run check.
+<!-- SECTION:FINAL_SUMMARY:END -->
