@@ -173,3 +173,11 @@ The approved annotated screenshot `/var/folders/fd/cgvn5zh52tb_sbt7hp_vtbmm0000g
 - Reviews: cold simplicity and final full-context complexity reviews passed without material recommendations.
 
 final result: passed
+
+## TASK-266 endpoint centering refinement
+
+Source: `/var/folders/fd/cgvn5zh52tb_sbt7hp_vtbmm0000gn/T/codex-clipboard-6b4836d3-7089-4423-844e-7890dd4bcae6.png`. The user requests the middle block centered between content-sized endpoints. Final capture: `/tmp/groma266-flex-dark.png`; combined source/implementation evidence: `/tmp/groma266-flex-comparison.png`. This comparison checks geometry; source light and implementation dark use the already-verified theme tokens.
+
+Flex layout gives the remaining width to the action after sizing the endpoints to their content. At the 900px viewport, both Git list rows measured action center and endpoint-gap center at exactly 680.90625px. Seven component rows with different endpoint widths also had matching action/gap centers and no overflow. The center action still opens relationship details, and source navigation returns to the component. Typography, dividers, THIS and editing remain unchanged. No P0/P1/P2 findings remain. The final isolated repository check passed 104 Node and 301 Bun tests.
+
+final result: passed

@@ -5,7 +5,7 @@ status: Done
 assignee:
   - codex
 created_date: '2026-09-05 18:28'
-updated_date: '2026-09-05 18:39'
+updated_date: '2026-09-05 18:42'
 labels: []
 dependencies: []
 references:
@@ -55,6 +55,8 @@ When an architect selects a component or relationship in Web details, Groma show
 
 <!-- SECTION:PLAN:BEGIN -->
 1. Preserve promoted relationship semantics and expose both directed endpoints. 2. Render one shared horizontal row with compact endpoint names and kinds, description above the center arrow, and THIS only on the selected element. Use dividers between rows without enclosing borders or lateral padding; technology remains editable but is omitted from reading. 3. Verify fixture business rules and browser behavior, document the final result, run repository checks and required reviews.
+
+4. Size endpoint columns to content with flex layout and center the action in the remaining space, as requested in the latest screenshot.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
@@ -71,10 +73,16 @@ User further simplified the design: smaller fonts, no enclosing card or lateral 
 Final user revision verified: smaller text, no card border/lateral padding, dividers only between rows. Narrow 900px browser rows and each of their three children had identical client/scroll widths. Source, destination and center navigation remain operational; both THIS directions verified. Full-context complexity review passed with no material recommendations. Shared checkout repository check hit unfinished TASK-267 startup changes, so final task checks use a temporary committed baseline with only TASK-266 code applied.
 
 Final verification passed on the isolated committed baseline with TASK-266 changes only: bun run check, 104 Node tests and 301 Bun tests, zero failures, seven existing complexity warnings. Final specification and quality reviews passed against the revised criteria; design-qa.md records the final source and captures. No blocking review findings remain.
+
+User requested content-sized endpoints so the middle label/arrow is centered in the actual gap between Source and Destination. Reopened for this focused CSS refinement.
+
+Flex refinement verified: action center equals the exact midpoint between endpoint boxes for both external-system rows and all seven component rows; no overflow. Browser navigation remains correct. Final isolated bun run check passed 104 Node and 301 Bun tests. Focused specification and quality checks found no regressions from the CSS-only refinement.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
 Shared compact directed relationship rows across element lists and relationship details. Names and kinds flank the action and arrow; THIS marks the current endpoint. Removed enclosing cards, side padding and displayed technology, while keeping endpoint navigation and editing. Verified browser behavior in light/dark at 420px and 360px panes, zero row overflow, required reviews, and bun run check with 104 Node plus 301 Bun tests passing.
+
+Endpoint columns size to content; flex centers the action precisely in their remaining gap. Browser measurements confirm alignment and no overflow across external-system and component rows.
 <!-- SECTION:FINAL_SUMMARY:END -->

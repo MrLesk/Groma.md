@@ -59,13 +59,14 @@ export function relationshipCard(data: RelationshipCardData, onSelect: Select, c
 export const relationshipCardCss = `
   #details ul.relationships { display: grid; gap: 14px; padding: 0; list-style: none; }
   #details ul.relationships > li + li { border-top: 1px solid var(--hairline); padding-top: 14px; }
-  .relationship-card { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr) minmax(0, 1fr); align-items: center; gap: 10px; }
+  .relationship-card { display: flex; align-items: center; gap: 10px; }
+  .relationship-end { flex: 0 1 auto; min-width: 0; max-width: 30%; }
   .relationship-caption { color: var(--muted); font-size: 9px; text-transform: uppercase; letter-spacing: .04em; margin-bottom: 8px; }
   .relationship-name { border: 0; padding: 0; background: transparent; color: var(--ink); font: inherit; font-size: 12px; font-weight: 600; line-height: 1.4; text-align: left; overflow-wrap: anywhere; }
   .relationship-name:hover { text-decoration: underline; text-underline-offset: 3px; }
   .relationship-this { display: inline-block; vertical-align: middle; border: 1px solid var(--muted); border-radius: 2px; padding: 1px 4px; font-size: 9px; line-height: 1.3; font-weight: 400; }
   .relationship-kind { color: var(--muted); font-size: 10px; margin-top: 5px; }
   .relationship-arrow { display: block; font-size: 28px; line-height: 1; margin-top: 4px; }
-  .relationship-action { min-width: 0; border: 0; padding: 0; background: transparent; color: var(--ink); font: inherit; font-size: 10px; line-height: 1.5; text-align: center; overflow-wrap: anywhere; }
+  .relationship-action { flex: 1; min-width: 0; border: 0; padding: 0; background: transparent; color: var(--ink); font: inherit; font-size: 10px; line-height: 1.5; text-align: center; overflow-wrap: anywhere; }
   button.relationship-action:hover { color: var(--highlight-text); }
 `
