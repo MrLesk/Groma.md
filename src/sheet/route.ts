@@ -130,7 +130,7 @@ function connectorEnd(
   return new Avoid.ConnEnd(new Avoid.Point(point.x, point.y))
 }
 
-function matchingPort(
+function buildingWallPort(
   point: Point,
   adjacent: Point,
   connection: BuildingConnection,
@@ -138,11 +138,13 @@ function matchingPort(
   const side = Math.abs(adjacent.x - point.x) > PORT_EPSILON
     ? adjacent.x > point.x ? 'east' : 'west'
     : adjacent.y > point.y ? 'south' : 'north'
-  const distance = (port: RoutePort) => Math.abs(port.wall.x - point.x) + Math.abs(port.wall.y - point.y)
-  const port = connection.ports.filter(port => port.side === side)
-    .sort((a, b) => distance(a) - distance(b))[0]!
+  const port = connection.ports.find(port => port.side === side)!
+  // Libavoid may shift the endpoint along its wall; preserve that position.
   return {
     ...port,
+    wall: side === 'east' || side === 'west'
+      ? { x: port.wall.x, y: point.y }
+      : { x: point.x, y: port.wall.y },
     guard: { ...point },
   }
 }
@@ -156,7 +158,7 @@ function selectedPort(
   fixed: ReadonlyMap<string, Partial<PortPair>>,
 ): RoutePort {
   const connection = connections.get(request[role])
-  return connection ? matchingPort(point, adjacent, connection) : fixedPort(fixed, request, role)
+  return connection ? buildingWallPort(point, adjacent, connection) : fixedPort(fixed, request, role)
 }
 
 interface RouteEndRun {

@@ -156,7 +156,10 @@ function portShare(endpoint: Endpoint, side: PortSide, index: number, count: num
   if (count === 1) return 0.5
   const rect = rectOf(endpoint.rect)
   const length = side === 'north' || side === 'south' ? rect.width : rect.height
-  const gap = Math.max(length / (count + 1), Math.min(LANE_GAP, length / (count - 1)))
+  const spreadCount = Math.min(count, PORT_CAPACITY)
+  const spreadGap = Math.max(length / (spreadCount + 1), Math.min(LANE_GAP, length / (spreadCount - 1)))
+  // Extra ports subdivide the existing usable span instead of reaching the corners.
+  const gap = spreadGap * (spreadCount - 1) / (count - 1)
   return (length / 2 - gap * (count - 1) / 2 + gap * index) / length
 }
 
