@@ -57,7 +57,6 @@
       "version": "0.1.0",
       "dependencies": {
         "@groma/work-source": "workspace:*",
-        "comark": "0.6.2",
       },
     },
   },

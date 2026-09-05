@@ -22,3 +22,4 @@ supplies empty work without blocking architecture rendering.
 | Target | Description | Technology |
 | --- | --- | --- |
 | [Work source contract](work-source-contract.md) | Implements work reads, detail reads, readiness and watch lifecycle | `@groma/work-source` |
+| [Backlog.md](../../../../../externals/backlog-md.md) | Reads task summaries, selected task details, and workflow settings without writing tasks | Backlog CLI: task list --json, task view <id> --json, config get |

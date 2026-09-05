@@ -1,12 +1,11 @@
 import { spawn } from 'node:child_process'
 import { accessSync, constants, existsSync, watch } from 'node:fs'
-import { readFile, readdir } from 'node:fs/promises'
 import path from 'node:path'
-
-import { parseMarkdown } from 'comark'
 
 import {
   EMPTY_WORK_SOURCE,
+  type WorkItem,
+  type WorkItemDetails,
   type WorkSource,
   type WorkSourcePlugin,
 } from '@groma/work-source'
@@ -45,7 +44,6 @@ function runBacklog(
 ): Promise<string> {
   return new Promise((resolve, reject) => {
     const shim = process.platform === 'win32' && command.toLowerCase().endsWith('.cmd')
-    // Only the fixed config queries below reach the command interpreter.
     const args = shim
       ? ['/d', '/s', '/c', `""${command}" ${arguments_.join(' ')}"`]
       : arguments_
@@ -72,41 +70,15 @@ function runBacklog(
 
 const taskDirectory = (repositoryRoot: string): string => path.join(repositoryRoot, 'backlog', 'tasks')
 
-const textList = (value: unknown): string[] => Array.isArray(value)
-  ? value.filter((entry): entry is string => typeof entry === 'string')
-  : typeof value === 'string' && value !== '' ? [value] : []
+type BacklogTaskSummary = Omit<WorkItem, 'updatedAt'> & { updatedAt: string | null }
 
-function section(source: string, name: string): string {
-  const match = source.match(new RegExp(`<!-- SECTION:${name}:BEGIN -->\\s*([\\s\\S]*?)\\s*<!-- SECTION:${name}:END -->`))
-  return match?.[1]?.trim() ?? ''
-}
-
-function checklist(source: string, marker: 'AC' | 'DOD') {
-  const match = source.match(new RegExp(`<!-- ${marker}:BEGIN -->\\s*([\\s\\S]*?)\\s*<!-- ${marker}:END -->`))
-  return (match?.[1] ?? '').split(/\r?\n/).flatMap(line => {
-    const item = line.match(/^- \[([ xX])] (?:#\d+ )?(.*)$/)
-    return item ? [{ text: item[2]!, checked: item[1]!.toLowerCase() === 'x' }] : []
-  })
-}
-
-function comments(source: string) {
-  const body = source.match(/<!-- COMMENTS:BEGIN -->\s*([\s\S]*?)\s*<!-- COMMENTS:END -->/)?.[1] ?? ''
-  const pattern = /(?:^|\r?\n)(?:author: (.*)\r?\n)?created: (.*)\r?\n---\r?\n([\s\S]*?)\r?\n---(?=\r?\n|$)/g
-  return [...body.matchAll(pattern)].map(match => ({
-    author: match[1] ?? '', createdAt: match[2]!, body: match[3]!.trim(),
-  }))
-}
-
-async function taskFiles(repositoryRoot: string): Promise<string[]> {
-  const directory = taskDirectory(repositoryRoot)
-  const names = await readdir(directory)
-  return names.filter(name => name.endsWith('.md')).map(name => path.join(directory, name))
-}
-
-async function readTask(filename: string) {
-  const source = await readFile(filename, 'utf8')
-  const document = await parseMarkdown(source)
-  return { source, frontmatter: document.frontmatter }
+type BacklogTaskDetails = Omit<WorkItemDetails,
+  'description' | 'implementationPlan' | 'implementationNotes' | 'comments'
+> & {
+  description: string | null
+  implementationPlan: string | null
+  implementationNotes: string | null
+  comments: { body: string; createdAt: string | null; author: string | null }[]
 }
 
 export function createBacklogSource(
@@ -115,42 +87,41 @@ export function createBacklogSource(
 ): WorkSource {
   return {
     async read() {
-      const files = await taskFiles(repositoryRoot)
-      const [statusesText, defaultStatusText] = await Promise.all([
+      const [tasksText, statusesText, defaultStatusText] = await Promise.all([
+        run(['task', 'list', '--json'], repositoryRoot),
         run(['config', 'get', 'statuses'], repositoryRoot),
         run(['config', 'get', 'defaultStatus'], repositoryRoot),
       ])
-      const items = await Promise.all(files.map(async filename => {
-        const { source, frontmatter } = await readTask(filename)
-        const criteria = checklist(source, 'AC')
-        return {
-          id: String(frontmatter.id ?? ''),
-          title: String(frontmatter.title ?? ''),
-          status: String(frontmatter.status ?? ''),
-          assignees: textList(frontmatter.assignee),
-          references: textList(frontmatter.references),
-          modifiedFiles: textList(frontmatter.modified_files),
-          acceptanceCriteriaCompleted: criteria.filter(item => item.checked).length,
-          acceptanceCriteriaCount: criteria.length,
-          updatedAt: String(frontmatter.updated_date ?? ''),
-        }
+      const { tasks } = JSON.parse(tasksText) as { tasks: BacklogTaskSummary[] }
+      const items = tasks.map(task => ({
+        id: task.id,
+        title: task.title,
+        status: task.status,
+        assignees: task.assignees,
+        references: task.references,
+        modifiedFiles: task.modifiedFiles,
+        acceptanceCriteriaCompleted: task.acceptanceCriteriaCompleted,
+        acceptanceCriteriaCount: task.acceptanceCriteriaCount,
+        updatedAt: task.updatedAt ?? '',
       }))
       const statuses = statusesText.split(',').map(status => status.trim()).filter(Boolean)
       return { statuses, defaultStatus: defaultStatusText.trim(), items }
     },
     async readItem(id) {
-      const filename = (await taskFiles(repositoryRoot)).find(candidate =>
-        path.basename(candidate).toLowerCase().startsWith(`${id.toLowerCase()} - `))
-      if (!filename) throw new Error(`Backlog task not found: ${id}`)
-      const task = await readTask(filename)
+      const output = await run(['task', 'view', id, '--json'], repositoryRoot)
+      const { task } = JSON.parse(output) as { task: BacklogTaskDetails }
       return {
-        id,
-        description: section(task.source, 'DESCRIPTION'),
-        acceptanceCriteria: checklist(task.source, 'AC'),
-        definitionOfDone: checklist(task.source, 'DOD'),
-        implementationPlan: section(task.source, 'PLAN'),
-        implementationNotes: section(task.source, 'NOTES'),
-        comments: comments(task.source),
+        id: task.id,
+        description: task.description ?? '',
+        acceptanceCriteria: task.acceptanceCriteria.map(({ text, checked }) => ({ text, checked })),
+        definitionOfDone: task.definitionOfDone.map(({ text, checked }) => ({ text, checked })),
+        implementationPlan: task.implementationPlan ?? '',
+        implementationNotes: task.implementationNotes ?? '',
+        comments: task.comments.map(comment => ({
+          body: comment.body,
+          createdAt: comment.createdAt ?? '',
+          author: comment.author ?? '',
+        })),
       }
     },
     watch(onChange) {
