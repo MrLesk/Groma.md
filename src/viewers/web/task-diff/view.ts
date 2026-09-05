@@ -290,6 +290,7 @@ export const taskDiffCss = `
   #details .task-comment { line-height: 1.65; margin-bottom: 12px; white-space: pre-wrap; }
   #details.task-diff-open .task-diff-source { border-bottom: 1px solid var(--hairline); margin: 0; padding: 12px 22px; }
   #details .task-diff-code { min-width: max-content; padding-bottom: 24px; }
+  #details .task-diff-code .task-diff-status { padding: 0 22px; }
   #details .task-diff-hunk { background: color-mix(in srgb, var(--syntax-type) 9%, transparent); color: var(--syntax-type); font-size: 10px; padding: 7px 22px; }
   #details .task-diff-line { display: grid; grid-template-columns: 4.5ch 4.5ch 2ch auto; line-height: 1.72; padding-right: 22px; }
   #details .task-diff-line:hover { filter: brightness(1.04); }
