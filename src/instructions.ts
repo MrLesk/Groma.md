@@ -1,6 +1,6 @@
 const instructionDirectory = `## More instructions
 
-Run groma instructions for human guides and groma agent-instructions for agent operating rules.`
+Run groma instructions for human guides. Run groma agent-instructions curation for agent operating rules, container-combine and flow examples, and scanner coverage.`
 
 export const overview = `# Overview
 
