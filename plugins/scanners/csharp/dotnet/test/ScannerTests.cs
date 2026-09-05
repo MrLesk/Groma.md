@@ -100,9 +100,12 @@ public sealed class ScannerTests
             startInfo.ArgumentList.Add(SolutionPath);
             using Process process = Process.Start(startInfo)
                 ?? throw new InvalidOperationException("Could not start dotnet restore.");
+            Task<string> output = process.StandardOutput.ReadToEndAsync();
+            Task<string> error = process.StandardError.ReadToEndAsync();
             process.WaitForExit();
+            Task.WaitAll(output, error);
             if (process.ExitCode != 0)
-                throw new InvalidOperationException(process.StandardError.ReadToEnd());
+                throw new InvalidOperationException(error.Result);
         }
 
         private static string ProjectFile(string extra = "") => $$"""

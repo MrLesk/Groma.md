@@ -97,84 +97,108 @@ test.concurrent('the welcome model reports a missing Backlog command', async () 
 
 test.concurrent('the welcome starts on web and returns the entered action', async () => {
   const setup = await createTestRenderer({ width: 100, height: 30 })
-  const selected = mountWelcome(setup.renderer, welcomeFixture())
+  try {
+    const selected = mountWelcome(setup.renderer, welcomeFixture())
 
-  setup.mockInput.pressEnter()
+    setup.mockInput.pressEnter()
 
-  assert.equal(await selected, 'web')
-  assert.equal(setup.renderer.isDestroyed, true)
+    assert.equal(await selected, 'web')
+    assert.equal(setup.renderer.isDestroyed, true)
+  } finally {
+    if (!setup.renderer.isDestroyed) setup.renderer.destroy()
+  }
 })
 
 test.concurrent('a production handoff suspends the welcome until its action owns the process', async () => {
   const setup = await createTestRenderer({ width: 100, height: 30 })
-  const selected = mountWelcome(
-    setup.renderer,
-    welcomeFixture(),
-    'launcher',
-    'suspend',
-  )
+  try {
+    const selected = mountWelcome(
+      setup.renderer,
+      welcomeFixture(),
+      'launcher',
+      'suspend',
+    )
 
-  setup.mockInput.pressEnter()
+    setup.mockInput.pressEnter()
 
-  assert.equal(await selected, 'web')
-  assert.equal(setup.renderer.isDestroyed, false)
-  setup.renderer.destroy()
+    assert.equal(await selected, 'web')
+    assert.equal(setup.renderer.isDestroyed, false)
+    setup.renderer.destroy()
+  } finally {
+    if (!setup.renderer.isDestroyed) setup.renderer.destroy()
+  }
 })
 
 test.concurrent('arrows choose one action before enter', async () => {
   const setup = await createTestRenderer({ width: 100, height: 30 })
-  const selected = mountWelcome(setup.renderer, welcomeFixture())
+  try {
+    const selected = mountWelcome(setup.renderer, welcomeFixture())
 
-  setup.mockInput.pressArrow('down')
-  setup.mockInput.pressArrow('down')
-  setup.mockInput.pressArrow('up')
-  setup.mockInput.pressEnter()
+    setup.mockInput.pressArrow('down')
+    setup.mockInput.pressArrow('down')
+    setup.mockInput.pressArrow('up')
+    setup.mockInput.pressEnter()
 
-  assert.equal(await selected, 'view')
+    assert.equal(await selected, 'view')
+  } finally {
+    if (!setup.renderer.isDestroyed) setup.renderer.destroy()
+  }
 })
 
 test.concurrent('the Back action returns to the launcher', async () => {
   const setup = await createTestRenderer({ width: 110, height: 35 })
-  const selected = mountWelcome(setup.renderer, welcomeFixture())
+  try {
+    const selected = mountWelcome(setup.renderer, welcomeFixture())
 
-  for (let index = 0; index < 3; index++) setup.mockInput.pressArrow('down')
-  setup.mockInput.pressEnter()
-  setup.mockInput.pressArrow('up')
-  setup.mockInput.pressEnter()
-  setup.mockInput.pressArrow('up')
-  setup.mockInput.pressEnter()
+    for (let index = 0; index < 3; index++) setup.mockInput.pressArrow('down')
+    setup.mockInput.pressEnter()
+    setup.mockInput.pressArrow('up')
+    setup.mockInput.pressEnter()
+    setup.mockInput.pressArrow('up')
+    setup.mockInput.pressEnter()
 
-  assert.equal(await selected, 'scan')
+    assert.equal(await selected, 'scan')
+  } finally {
+    if (!setup.renderer.isDestroyed) setup.renderer.destroy()
+  }
 })
 
 test.concurrent('escape and q close without choosing an action', async () => {
   for (const key of ['ESCAPE', 'q'] as const) {
     const setup = await createTestRenderer({ width: 100, height: 30 })
-    const selected = mountWelcome(setup.renderer, welcomeFixture())
+    try {
+      const selected = mountWelcome(setup.renderer, welcomeFixture())
 
-    setup.mockInput.pressKey(key)
+      setup.mockInput.pressKey(key)
 
-    assert.equal(await selected, undefined)
-    assert.equal(setup.renderer.isDestroyed, true)
+      assert.equal(await selected, undefined)
+      assert.equal(setup.renderer.isDestroyed, true)
+    } finally {
+      if (!setup.renderer.isDestroyed) setup.renderer.destroy()
+    }
   }
 })
 
 test.concurrent('control-c closes the welcome and releases its input handler', async () => {
   const setup = await createTestRenderer({ width: 100, height: 30 })
-  const inputListeners = setup.renderer.keyInput.listenerCount('keypress')
-  const selected = mountWelcome(setup.renderer, welcomeFixture())
+  try {
+    const inputListeners = setup.renderer.keyInput.listenerCount('keypress')
+    const selected = mountWelcome(setup.renderer, welcomeFixture())
 
-  assert.equal(
-    setup.renderer.keyInput.listenerCount('keypress'),
-    inputListeners + 1,
-  )
-  setup.mockInput.pressCtrlC()
+    assert.equal(
+      setup.renderer.keyInput.listenerCount('keypress'),
+      inputListeners + 1,
+    )
+    setup.mockInput.pressCtrlC()
 
-  assert.equal(await selected, undefined)
-  assert.equal(
-    setup.renderer.keyInput.listenerCount('keypress'),
-    inputListeners,
-  )
+    assert.equal(await selected, undefined)
+    assert.equal(
+      setup.renderer.keyInput.listenerCount('keypress'),
+      inputListeners,
+    )
+  } finally {
+    if (!setup.renderer.isDestroyed) setup.renderer.destroy()
+  }
 })
 
 test.concurrent('instructions Tab gives arrows the same reading scroll as j/k and returns arrows to guide selection', async () => {

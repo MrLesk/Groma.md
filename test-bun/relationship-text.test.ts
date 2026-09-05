@@ -6,43 +6,45 @@ import {
   showsRelationshipText,
 } from '../src/viewers/relationship-text.ts'
 
-const parentOf = parentOfElements([
-  { representationId: 'world-layout', parent: 'core' },
-  { representationId: 'scene', parent: 'web-viewer' },
-  { representationId: 'core', parent: 'groma' },
-  { representationId: 'web-viewer', parent: 'groma' },
-  { representationId: 'groma', parent: null },
-  { representationId: 'git', parent: null },
+const hierarchy = () => parentOfElements([
+  { representationId: 'compute', parent: 'core' },
+  { representationId: 'scene', parent: 'frontend' },
+  { representationId: 'core', parent: 'service' },
+  { representationId: 'frontend', parent: 'service' },
+  { representationId: 'service', parent: null },
+  { representationId: 'external', parent: null },
 ])
 
-const mapToLayout = { source: 'scene', target: 'world-layout' }
-const gromaToGit = { source: 'groma', target: 'git' }
+const mapToLayout = { source: 'scene', target: 'compute' }
+const serviceToGit = { source: 'service', target: 'external' }
 
 test.concurrent('relationship text is only for exclusive endpoints', () => {
+  const parentOf = hierarchy()
   expect(showsRelationshipText(mapToLayout, null, parentOf)).toBe(false)
-  expect(showsRelationshipText(mapToLayout, 'world-layout', parentOf)).toBe(true)
+  expect(showsRelationshipText(mapToLayout, 'compute', parentOf)).toBe(true)
   expect(showsRelationshipText(mapToLayout, 'scene', parentOf)).toBe(true)
   expect(showsRelationshipText(mapToLayout, 'core', parentOf)).toBe(true)
-  expect(showsRelationshipText(mapToLayout, 'web-viewer', parentOf)).toBe(true)
-  expect(showsRelationshipText(mapToLayout, 'groma', parentOf)).toBe(false)
+  expect(showsRelationshipText(mapToLayout, 'frontend', parentOf)).toBe(true)
+  expect(showsRelationshipText(mapToLayout, 'service', parentOf)).toBe(false)
 })
 
 test.concurrent('promoted peers sit at the selection depth', () => {
-  expect(promotedPeer(mapToLayout, 'world-layout', parentOf)).toEqual({
+  const parentOf = hierarchy()
+  expect(promotedPeer(mapToLayout, 'compute', parentOf)).toEqual({
     outgoing: false,
     peerId: 'scene',
   })
   expect(promotedPeer(mapToLayout, 'core', parentOf)).toEqual({
     outgoing: false,
-    peerId: 'web-viewer',
+    peerId: 'frontend',
   })
-  expect(promotedPeer(mapToLayout, 'web-viewer', parentOf)).toEqual({
+  expect(promotedPeer(mapToLayout, 'frontend', parentOf)).toEqual({
     outgoing: true,
     peerId: 'core',
   })
-  expect(promotedPeer(mapToLayout, 'groma', parentOf)).toBe(null)
-  expect(promotedPeer(gromaToGit, 'groma', parentOf)).toEqual({
+  expect(promotedPeer(mapToLayout, 'service', parentOf)).toBe(null)
+  expect(promotedPeer(serviceToGit, 'service', parentOf)).toEqual({
     outgoing: true,
-    peerId: 'git',
+    peerId: 'external',
   })
 })

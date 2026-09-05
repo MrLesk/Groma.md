@@ -24,7 +24,7 @@ async function replaceInFile(file: string, search: string, replacement: string):
   await writeFile(file, source.replace(search, replacement))
 }
 
-test('a marked OKF profile validates every C4 kind, counts drafts, and ignores an ordinary OKF concept', async () => {
+test('a marked OKF profile validates every C4 kind, counts drafts, and ignores an ordinary OKF concept', { concurrency: true }, async () => {
   const result = await validateRepository(fixtureRoot)
   const kinds = new Set(result.elements.map(element => element.kind))
 
@@ -34,7 +34,7 @@ test('a marked OKF profile validates every C4 kind, counts drafts, and ignores a
   assert.equal(result.draftCount, 1)
 })
 
-test('a generic OKF package is rejected before architecture validation', async t => {
+test('a generic OKF package is rejected before architecture validation', { concurrency: true }, async t => {
   const repositoryRoot = await copyPackage(t)
   await replaceInFile(
     path.join(repositoryRoot, 'groma', 'project.md'),
@@ -42,10 +42,10 @@ test('a generic OKF package is rejected before architecture validation', async t
     'type: Project',
   )
 
-  await assert.rejects(validateRepository(repositoryRoot))
+  await assert.rejects(validateRepository(repositoryRoot), /type must be "Groma Project"/)
 })
 
-test('the root index contains only the pinned OKF declaration', async t => {
+test('the root index contains only the pinned OKF declaration', { concurrency: true }, async t => {
   const repositoryRoot = await copyPackage(t)
   await replaceInFile(
     path.join(repositoryRoot, 'groma', 'index.md'),
@@ -53,10 +53,10 @@ test('the root index contains only the pinned OKF declaration', async t => {
     'okf_version: "0.2"\ngroma: architecture',
   )
 
-  await assert.rejects(validateRepository(repositoryRoot))
+  await assert.rejects(validateRepository(repositoryRoot), /root index frontmatter must contain only okf_version/)
 })
 
-test('canonical C4 containment remains strict', async t => {
+test('canonical C4 containment remains strict', { concurrency: true }, async t => {
   const repositoryRoot = await copyPackage(t)
   await replaceInFile(
     path.join(repositoryRoot, 'groma', 'systems', 'shop', 'containers', 'api', 'container.md'),
@@ -64,10 +64,10 @@ test('canonical C4 containment remains strict', async t => {
     'parent: missing-system',
   )
 
-  await assert.rejects(validateRepository(repositoryRoot))
+  await assert.rejects(validateRepository(repositoryRoot), /unknown parent id "missing-system"/)
 })
 
-test('canonical relationship targets must resolve even when generic links do not', async t => {
+test('canonical relationship targets must resolve even when generic links do not', { concurrency: true }, async t => {
   const repositoryRoot = await copyPackage(t)
   await replaceInFile(
     path.join(repositoryRoot, ...shopPath),
@@ -75,10 +75,10 @@ test('canonical relationship targets must resolve even when generic links do not
     '../../externals/missing.md',
   )
 
-  await assert.rejects(validateRepository(repositoryRoot))
+  await assert.rejects(validateRepository(repositoryRoot), /relationship target.*missing.md.*does not resolve/)
 })
 
-test('a Groma relationship table keeps its canonical columns', async t => {
+test('a Groma relationship table keeps its canonical columns', { concurrency: true }, async t => {
   const repositoryRoot = await copyPackage(t)
   await replaceInFile(
     path.join(repositoryRoot, ...shopPath),
@@ -86,5 +86,5 @@ test('a Groma relationship table keeps its canonical columns', async t => {
     '| Target | Detail | Technology |',
   )
 
-  await assert.rejects(validateRepository(repositoryRoot))
+  await assert.rejects(validateRepository(repositoryRoot), /Target.*Description.*Technology/)
 })

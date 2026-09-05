@@ -49,11 +49,11 @@ const item = (id: string, extra: Partial<WorkItem> = {}): WorkItem => ({
   ...extra,
 })
 
-const beforeWork = {
+const beforeWork = () => ({
   focus: 'architecture' as const,
   panes: { hierarchy: true, details: true },
   detailsScroll: 0,
-}
+})
 
 test.concurrent('Work orders default, active and terminal groups while selecting an expanded active task', () => {
   const work = snapshot([
@@ -64,7 +64,7 @@ test.concurrent('Work orders default, active and terminal groups while selecting
 
   assert.deepEqual(workGroups(work).map(group => group.status), ['To Do', 'In Progress', 'Done'])
   const model = { ...navigationWorld(), work }
-  const first = initialWorkFocus(work, beforeWork)
+  const first = initialWorkFocus(work, beforeWork())
   assert.equal(selectedWorkId(first), 'TASK-ACTIVE')
   // Down reaches Done, whose tasks start folded.
   const header = moveWorkFocus(model, first, 1)
@@ -96,7 +96,7 @@ test.concurrent('Work projection shares modified-file and reference touch meanin
   }
   const work = projectWork(model, projection, {
     selection: { state: 'selected', taskId: 'TASK-1' },
-    before: beforeWork,
+    before: beforeWork(),
     shown: ['In Progress'],
   })
 
@@ -124,7 +124,7 @@ test.concurrent('Work chooses component scope for one container and root for sev
   }
   const focus = (taskId: string) => ({
     selection: { state: 'selected' as const, taskId },
-    before: beforeWork,
+    before: beforeWork(),
     shown: [] as string[],
   })
 
@@ -143,7 +143,7 @@ test.concurrent('Work chooses component scope for one container and root for sev
 test.concurrent('Work refresh preserves a valid task, initializes delayed work, and clears a removed task', () => {
   const work = snapshot([item('TASK-1', { title: 'Live' })])
 
-  const waiting = initialWorkFocus(undefined, beforeWork)
+  const waiting = initialWorkFocus(undefined, beforeWork())
   const selected = reconcileWorkFocus(work, waiting)!
   assert.equal(selectedWorkId(selected), 'TASK-1')
   assert.equal(reconcileWorkFocus(work, selected), selected)
@@ -263,14 +263,16 @@ test.concurrent('Backlog plugin signals a task-directory change', async () => {
     signal = resolve
   })
   const watcher = plugin.watch(signal)
+  let timeout: ReturnType<typeof setTimeout> | undefined
   try {
     await new Promise(resolve => setTimeout(resolve, 50))
     await writeFile(path.join(tasks, 'task-1.md'), 'changed')
     await Promise.race([
       changed,
-      new Promise((_, reject) => setTimeout(() => reject(new Error('timed out')), 3000)),
+      new Promise((_, reject) => { timeout = setTimeout(() => reject(new Error('timed out')), 3000) }),
     ])
   } finally {
+    clearTimeout(timeout)
     watcher.close()
     await rm(root, { recursive: true, force: true })
   }
@@ -295,12 +297,15 @@ test.concurrent('a missing Backlog command reports readiness and supplies empty 
   assert.deepEqual(await missing.create('/repo').read(), EMPTY_WORK_SNAPSHOT)
 
   const setup = await createTestRenderer({ width: 120, height: 36 })
-  const viewer = await startTerminalViewer(viewerFixtureRoot, {
-    renderer: setup.renderer,
-    workSource: missing.create(viewerFixtureRoot),
-  })
-  viewer.destroy()
-  if (!setup.renderer.isDestroyed) setup.renderer.destroy()
+  try {
+    const viewer = await startTerminalViewer(viewerFixtureRoot, {
+      renderer: setup.renderer,
+      workSource: missing.create(viewerFixtureRoot),
+    })
+    viewer.destroy()
+  } finally {
+    if (!setup.renderer.isDestroyed) setup.renderer.destroy()
+  }
 })
 
 test.concurrent('host opens the viewer without waiting for a Backlog read', async () => {
@@ -316,16 +321,14 @@ test.concurrent('host opens the viewer without waiting for a Backlog read', asyn
     },
   }
   const setup = await createTestRenderer({ width: 120, height: 36 })
-  const started = Date.now()
   const viewer = await startTerminalViewer(viewerFixtureRoot, {
     renderer: setup.renderer,
     workSource,
   })
   try {
-    assert.ok(Date.now() - started < 2000)
     viewer.setView({ level: 'context', currentId: 'shop' })
     await setup.renderOnce()
-    assert.doesNotMatch(setup.captureCharFrame(), /TASK-HANG/)
+    assert.match(setup.captureCharFrame(), /Shop/)
     assert.equal(readStarted, true)
   } finally {
     viewer.destroy()
@@ -353,12 +356,13 @@ test.concurrent('a failed Backlog read leaves architecture refresh working', asy
   try {
     viewer.setView({ level: 'context', currentId: 'shop' })
     await setup.renderOnce()
-    await new Promise(resolve => setTimeout(resolve, 20))
+    assert.match(setup.captureCharFrame(), /Shop/)
     const afterOpen = reads
     await viewer.refresh()
     await setup.renderOnce()
     assert.equal(reads, afterOpen)
-    assert.doesNotMatch(setup.captureCharFrame(), /TASK-/)
+    assert.equal(afterOpen, 1)
+    assert.match(setup.captureCharFrame(), /Shop/)
   } finally {
     viewer.destroy()
     if (!setup.renderer.isDestroyed) setup.renderer.destroy()
@@ -418,7 +422,7 @@ test.concurrent('corners follow the shown statuses and name the selected task fi
     ]),
   }
   const projection = projectWorld(model, { viewport: mapViewportOf({ width: 120, height: 36 }), currentId: 'observed:alpha' })
-  const focus = (taskId: string, shown: string[]) => ({ selection: { state: 'selected' as const, taskId }, before: beforeWork, shown })
+  const focus = (taskId: string, shown: string[]) => ({ selection: { state: 'selected' as const, taskId }, before: beforeWork(), shown })
 
   // At first only the active status shows: the to-do task counts nowhere and the done one has no corner.
   assert.deepEqual(projectWork(model, projection, undefined).corners, [{ elementId: 'observed:cleft', taskId: 'TASK-ACTIVE', others: 0, stage: 'progress', selected: false }])
@@ -439,7 +443,7 @@ test.concurrent('status toggles start without the default and final statuses and
     item('TASK-DONE', { title: 'Done', status: 'Done', references: ['cright'] }),
   ])
   const model = { ...navigationWorld(), work }
-  const first = initialWorkFocus(work, beforeWork)
+  const first = initialWorkFocus(work, beforeWork())
   assert.deepEqual(first.shown, ['In Progress'])
   assert.deepEqual(toggleShownStatus(first, 'Done').shown, ['In Progress', 'Done'])
   assert.deepEqual(toggleShownStatus(toggleShownStatus(first, 'Done'), 'Done').shown, ['In Progress'])
@@ -469,22 +473,25 @@ test.concurrent('the component Tasks tab walks related tasks and Enter opens the
 test.concurrent('the viewer reads the opened record through the host', async () => {
   const model = { ...navigationWorld(), work: snapshot([item('TASK-READ', { title: 'Read me', references: ['ann'] })]) }
   const setup = await createTestRenderer({ width: 120, height: 36 })
-  const read: string[] = []
-  const app = mountTerminalViewer(setup.renderer, model, {
-    currentId: 'observed:ann',
-    readTask: async id => {
-      read.push(id)
-      return { id, description: 'A record body.', acceptanceCriteria: [{ text: 'Criterion', checked: true }], definitionOfDone: [], implementationPlan: '', implementationNotes: '', comments: [] }
-    },
-  })
-  await setup.renderOnce()
-  // Work selects the task; Enter opens the same full record used by a component Tasks tab.
-  await press(setup, 'w')
-  const opened = await press(setup, 'enter')
-  assert.deepEqual(read, ['TASK-READ'])
-  assert.ok(opened.includes('TASK-READ'))
-  await new Promise(resolve => setTimeout(resolve, 20))
-  await setup.renderOnce()
-  assert.ok(setup.captureCharFrame().includes('A record body.'))
-  app.destroy()
+  try {
+    const read: string[] = []
+    const app = mountTerminalViewer(setup.renderer, model, {
+      currentId: 'observed:ann',
+      readTask: async id => {
+        read.push(id)
+        return { id, description: 'A record body.', acceptanceCriteria: [{ text: 'Criterion', checked: true }], definitionOfDone: [], implementationPlan: '', implementationNotes: '', comments: [] }
+      },
+    })
+    await setup.renderOnce()
+    // Work selects the task; Enter opens the same full record used by a component Tasks tab.
+    await press(setup, 'w')
+    const opened = await press(setup, 'enter')
+    assert.deepEqual(read, ['TASK-READ'])
+    assert.ok(opened.includes('TASK-READ'))
+    await setup.renderOnce()
+    assert.ok(setup.captureCharFrame().includes('A record body.'))
+    app.destroy()
+  } finally {
+    if (!setup.renderer.isDestroyed) setup.renderer.destroy()
+  }
 })

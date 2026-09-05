@@ -24,6 +24,7 @@ const projectRoot = path.resolve(import.meta.dir, '..')
 
 async function runCli(repositoryRoot: string, ...args: string[]): Promise<{
   code: number
+  stdout: string
 }> {
   const child = Bun.spawn([
     process.execPath,
@@ -32,9 +33,10 @@ async function runCli(repositoryRoot: string, ...args: string[]): Promise<{
   ], {
     cwd: repositoryRoot,
     stderr: 'ignore',
-    stdout: 'ignore',
+    stdout: 'pipe',
   })
-  return { code: await child.exited }
+  const [code, stdout] = await Promise.all([child.exited, new Response(child.stdout).text()])
+  return { code, stdout }
 }
 
 async function writeTree(root: string, files: Record<string, string>): Promise<void> {
@@ -122,7 +124,7 @@ test.concurrent('local scanner configuration drives inventory, loading, and remo
     await writeScannerPackage(path.join(root, 'plugins/python'), 'python')
     await writeScannerPackage(path.join(root, 'node_modules/rogue'), 'rogue', rogueMarker)
 
-    await expect(addScanner(root, './plugins/invalid', { cacheRoot })).rejects.toThrow()
+    await expect(addScanner(root, './plugins/invalid', { cacheRoot })).rejects.toThrow('groma')
     expect(await exists(path.join(root, '.groma/scanners.json'))).toBe(false)
     const added = await addScanner(root, './plugins/python', { cacheRoot })
     expect(added).toEqual({ id: 'python', source: './plugins/python', status: 'found' })
@@ -163,7 +165,7 @@ test.concurrent('a missing scanner blocks every configured module before import'
       source: './plugins/second',
       status: 'missing',
     })
-    await expect(loadScannerRegistry(root, { cacheRoot })).rejects.toThrow()
+    await expect(loadScannerRegistry(root, { cacheRoot })).rejects.toThrow('missing')
     expect(await exists(loaded)).toBe(false)
     expect(await installScanners(root, { cacheRoot })).toBe(0)
   } finally {
@@ -222,11 +224,11 @@ test.concurrent('npm scanners install explicitly into shared cache and restore f
     await expect(addScanner(root, 'groma-test-scanner@latest', {
       cacheRoot,
       registry: npm.registry,
-    })).rejects.toThrow()
+    })).rejects.toThrow('exact package@version')
     await expect(addScanner(root, 'missing-scanner@1.0.0', {
       cacheRoot,
       registry: npm.registry,
-    })).rejects.toThrow()
+    })).rejects.toThrow('could not install missing-scanner@1.0.0')
     expect(await exists(path.join(root, 'groma/scanners.json'))).toBe(false)
 
     const added = await addScanner(root, 'groma-test-scanner@1.0.0', {
@@ -238,7 +240,7 @@ test.concurrent('npm scanners install explicitly into shared cache and restore f
 
     await rm(cacheRoot, { recursive: true, force: true })
     expect((await scannerInventory(root, { cacheRoot }))[1]?.status).toBe('missing')
-    await expect(loadScannerRegistry(root, { cacheRoot })).rejects.toThrow()
+    await expect(loadScannerRegistry(root, { cacheRoot })).rejects.toThrow('missing')
 
     expect(await installScanners(root, {
       cacheRoot,
@@ -266,11 +268,13 @@ test.concurrent('scanner commands manage one local module and scan reports a mis
     expect(added.code).toBe(0)
     const listed = await runCli(root, 'scanner', 'list')
     expect(listed.code).toBe(0)
+    expect(listed.stdout).toContain('python')
     expect((await scannerInventory(root)).find(item => item.id === 'python')?.status).toBe('found')
 
     await rm(path.join(local, 'index.js'))
     const missing = await runCli(root, 'scanner', 'list')
     expect(missing.code).toBe(0)
+    expect(missing.stdout).toContain('missing')
     expect((await scannerInventory(root)).find(item => item.id === 'python')?.status).toBe('missing')
     const scan = await runCli(root, 'scan')
     expect(scan.code).toBe(1)
@@ -279,6 +283,7 @@ test.concurrent('scanner commands manage one local module and scan reports a mis
     expect(removed.code).toBe(0)
     const after = await runCli(root, 'scanner', 'list')
     expect(after.code).toBe(0)
+    expect(after.stdout).not.toContain('python')
     expect((await scannerInventory(root)).some(item => item.id === 'python')).toBe(false)
   } finally {
     await rm(root, { recursive: true, force: true })

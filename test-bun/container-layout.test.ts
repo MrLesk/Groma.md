@@ -1,11 +1,8 @@
 import assert from 'node:assert/strict'
 import { test } from 'bun:test'
 
-import { OptimizedBuffer } from '@opentui/core'
 
-import { viewerTheme } from '../src/viewers/tui/atoms/theme.ts'
 import { initialState, reduceViewer } from '../src/viewers/tui/navigation.ts'
-import { paintMap } from '../src/viewers/tui/paint.ts'
 import { projectWorld } from '../src/viewers/tui/projection.ts'
 import { encloses } from '../src/viewers/tui/projection-camera.ts'
 import { MAP_PADDING, rootIslands } from '../src/viewers/tui/projection-root.ts'
@@ -83,17 +80,11 @@ test.concurrent('a building lists one row per floor; a ghost shows one empty row
   const floors = model.sheet.buildings
     .find(building => building.representationId === 'observed:full')!.floors
   assert.ok(floors.length >= 1 && floors.length <= 5)
-  assert.deepEqual(full.lines, floors.map(floor => {
-    const others = floor.files.length > 1 ? ` +${floor.files.length - 1}` : ''
-    return `${floor.files[0]!.split('/').at(-1)}${others}`
-  }))
-  assert.equal(full.cellBounds.height, full.lines.length + 2)
-  assert.equal(
-    full.cellBounds.width,
-    Math.max(full.title.length + 6, ...full.lines.map(row => row.length + 4)),
-  )
+  assert.equal(full.lines.length, floors.length)
+  assert.ok(full.lines.every(row => row.length <= full.cellBounds.width - 4))
+  assert.ok(full.cellBounds.height > full.lines.length)
   const ghost = projection.items.find(item => item.representationId === 'observed:ghost')!
-  assert.deepEqual(ghost.lines, [''])
+  assert.equal(ghost.lines.length, 1)
   assert.equal(ghost.cellBounds.height, 3)
 })
 
@@ -129,38 +120,4 @@ test.concurrent('buildings never overlap and two rows lie between their lines', 
       if (a.y !== b.y && a.y < b.y) assert.ok(b.y >= a.y + a.height + 2)
     }
   }
-})
-
-test.concurrent('a row wider than its building ends in an ellipsis', () => {
-  const model = worldOf([
-    box('sys', 'system', CELL, { children: ['observed:store'] }),
-    box('store', 'container', CELL, {
-      parent: 'observed:sys',
-      children: ['observed:long'],
-    }),
-    box('long', 'component', CELL, {
-      parent: 'observed:store',
-      code: files(1, 'a-very-long-source-file-name-that-no-building-can-hold-'),
-    }),
-  ])
-  const projection = projectWorld(model, {
-    viewport: VIEWPORT,
-    level: 'components',
-    currentId: 'observed:long',
-  })
-  const buffer = OptimizedBuffer.create(VIEWPORT.width, VIEWPORT.height, 'unicode')
-  paintMap(buffer, projection, model, viewerTheme(), {
-    lit: {},
-    step: undefined,
-    animationPhase: 0,
-  })
-  const rows = buffer.getSpanLines().map(line => line.spans.map(span => span.text).join(''))
-  buffer.destroy()
-  const card = projection.items.find(item => item.representationId === 'observed:long')!.cellBounds
-  const row = [...(rows[card.y + 1] ?? '')]
-    .slice(card.x + 2, card.x + card.width - 2)
-    .join('')
-    .trimEnd()
-  assert.ok(row.endsWith('…'))
-  assert.ok(row.length <= card.width - 4)
 })

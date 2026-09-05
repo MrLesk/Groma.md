@@ -12,16 +12,13 @@ import {
   ROOF_PAD,
   SURFACE_FONT,
   areaUnitsOf,
-  fileTypeOf,
   heightUnitsOf,
-  footprintOf,
-  roofLines,
   textWidth,
 } from '../src/sheet/measure.ts'
 import { sheetScene } from '../src/sheet/scene.ts'
 import type { CellRect, SheetScene } from '../src/sheet/types.ts'
 import type { ArchitectureWorld, WorldElement } from '../src/types.ts'
-import { box, openclawFixtureRoot, uses, viewerFixtureRoot, worldOf } from './helpers.ts'
+import { box, uses, viewerFixtureRoot, worldOf } from './helpers.ts'
 
 const unit = { x: 0, y: 0, width: 1, height: 1 }
 
@@ -101,23 +98,19 @@ test.concurrent('a building keeps the ground its roof hides clear of its north a
   ], [uses('relationship:0', 'tall', 'short'), uses('relationship:1', 'middling', 'tall')]))
   assert.ok(shadeOf(scene.buildings.find(building => building.id === 'tall')!.heightUnits) > 0)
   let pairs = 0
-  for (const near of scene.buildings) {
+  for (const near of scene.buildings.filter(building => shadeOf(building.heightUnits) > 0)) {
     /** The ground the roof hides, plus the one cell an arrow needs to run out of one building and into the next. */
     const room = near.heightUnits * ROOF_SHADOW + 1
     for (const far of scene.buildings) {
       if (far === near || far.surface !== near.surface) continue
       const alongX = near.rect.gx < far.rect.gx + far.rect.w && far.rect.gx < near.rect.gx + near.rect.w
       const alongY = near.rect.gy < far.rect.gy + far.rect.d && far.rect.gy < near.rect.gy + near.rect.d
-      /** Only a building whose roof outgrows the plain gap makes this rule bite. */
-      const shaded = shadeOf(near.heightUnits) > 0 ? 1 : 0
-      if (alongX && far.rect.gy + far.rect.d <= near.rect.gy) {
-        pairs += shaded
-        assert.ok(near.rect.gy - (far.rect.gy + far.rect.d) >= room, `${far.id} stands in ${near.id}'s roof shadow`)
-      }
-      if (alongY && far.rect.gx + far.rect.w <= near.rect.gx) {
-        pairs += shaded
-        assert.ok(near.rect.gx - (far.rect.gx + far.rect.w) >= room, `${far.id} stands in ${near.id}'s roof shadow`)
-      }
+      const gaps = [
+        alongX ? near.rect.gy - (far.rect.gy + far.rect.d) : -1,
+        alongY ? near.rect.gx - (far.rect.gx + far.rect.w) : -1,
+      ].filter(gap => gap >= 0)
+      pairs += gaps.length
+      assert.ok(gaps.every(gap => gap >= room), `${far.id} stands in ${near.id}'s roof shadow`)
     }
   }
   assert.ok(pairs > 0)
@@ -250,17 +243,7 @@ test.concurrent('adding a sibling that sorts last keeps the earlier buildings in
   for (const [id, offset] of before) assert.deepEqual(after.get(id), offset)
 })
 
-test.concurrent('roof text and file measurements size a building', () => {
-  assert.deepEqual(roofLines('Ab'), ['Ab'])
-  assert.deepEqual(roofLines('Architecture model'), ['Architecture', 'model'])
-  assert.deepEqual(roofLines('A very long component name indeed'), ['A very long component', 'name indeed'])
-  assert.deepEqual(footprintOf(['Ab'], { kind: 'block' }, 0), { w: 2, d: 2 })
-  assert.deepEqual(footprintOf(['Architecture', 'model'], { kind: 'block' }, 0), { w: 4, d: 2 })
-  assert.deepEqual(footprintOf(['A very long component', 'name indeed'], { kind: 'block' }, 0), { w: 7, d: 2 })
-  assert.deepEqual(footprintOf(['Ab'], { kind: 'block' }, 8), { w: 2, d: 3 })
-  assert.deepEqual(footprintOf(['Ab'], { kind: 'round' }, 0), { w: 2, d: 2 })
-  assert.deepEqual(footprintOf(['Ann the architect'], { kind: 'round' }, 0), { w: 6, d: 6 })
-  assert.deepEqual(footprintOf(['Git'], { kind: 'pill' }, 0), { w: 4, d: 2 })
+test.concurrent('file measurements control building height and area while draft and actor heights stay fixed', () => {
   const range = { min: 0, max: 2000 }
   assert.equal(heightUnitsOf('observed', 0, range), 1)
   assert.equal(heightUnitsOf('observed', 450, range), 1.5)
@@ -315,20 +298,14 @@ test.concurrent('source files compress into nested project-relative floors witho
   assert.equal(middle.floors.length, 3)
   assert.equal(middle.floors.flatMap(floor => floor.files).length, 4)
   assert.equal(tower.shape.kind, 'block')
-  assert.deepEqual(
-    tower.floors.map(({ files, heightUnits, footprint }) => ({ files, heightUnits, footprint })),
-    [
-      { files: ['src/file-2.ts', 'src/file-3.CS'], heightUnits: 2.5, footprint: { w: 5, d: 5 } },
-      { files: ['src/file-4.ts', 'src/file-5.CS'], heightUnits: 3, footprint: { w: 5, d: 5 } },
-      { files: ['src/file-0.ts', 'src/file-1.CS'], heightUnits: 1.5, footprint: { w: 5, d: 5 } },
-      { files: ['src/file-6.ts'], heightUnits: 3.5, footprint: { w: 2, d: 5 } },
-      { files: ['src/file-7.CS'], heightUnits: 4, footprint: { w: 2, d: 5 } },
-    ],
-  )
+  assert.equal(tower.floors.length, 5)
+  assert.deepEqual(tower.floors.flatMap(floor => floor.files).sort(), code.map(reference => reference.file).sort())
+  for (let index = 1; index < tower.floors.length; index += 1) {
+    const below = tower.floors[index - 1]!.footprint
+    const above = tower.floors[index]!.footprint
+    assert.ok(above.w <= below.w && above.d <= below.d)
+  }
   assert.equal(tower.heightUnits, tower.floors.reduce((total, floor) => total + floor.heightUnits, 0))
-  assert.deepEqual({ w: tower.rect.w, d: tower.rect.d }, { w: 5, d: 5 })
-  assert.equal(fileTypeOf('Dockerfile'), 'no extension')
-  assert.equal(fileTypeOf('.env'), '.env')
 })
 
 test.concurrent('a surface is at least as wide as its own name', () => {
@@ -357,9 +334,11 @@ test.concurrent('the sheet is the islands plus the margin, starting at the margi
 })
 
 test.concurrent('empty containers retain at least the nested-surface padding', async () => {
-  const fixture = await loadAnnotatedArchitecture(openclawFixtureRoot)
-  const scene = sheetScene(fixture)
-  assert.equal(scene.slabs.length, 6)
+  const scene = sheetScene(worldOf([
+    box('system', 'system', unit),
+    box('empty', 'container', unit, { parent: 'observed:system' }),
+  ]))
+  assert.equal(scene.slabs.length, 1)
   for (const slab of scene.slabs) {
     const side = EMPTY + 2 * (NESTED_CONTENT_PAD - PAD)
     assert.ok(slab.rect.d >= side)

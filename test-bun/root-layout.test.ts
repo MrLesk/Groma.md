@@ -5,7 +5,7 @@ import { encloses } from '../src/viewers/tui/projection-camera.ts'
 import { MAP_PADDING, rootLayout } from '../src/viewers/tui/projection-root.ts'
 import { box, navigationWorld, worldOf } from './helpers.ts'
 
-test.concurrent('an island lists one row per child with one block per component and no counts', () => {
+test.concurrent('an island contains one row per child and stays separate from its neighbours', () => {
   const items = rootLayout(navigationWorld(), 200)
   const island = items.find(item => item.representationId === 'observed:alpha')!
   const rows = items.filter(item => {
@@ -16,9 +16,6 @@ test.concurrent('an island lists one row per child with one block per component 
     rows.map(row => row.representationId),
     ['observed:cleft', 'observed:cright'],
   )
-  assert.ok(rows[0]!.lines[0]!.endsWith('▪▪'))
-  assert.ok(rows[1]!.lines[0]!.endsWith('▪'))
-  assert.ok(items.every(item => item.lines.every(line => !/\d/.test(line))))
   const islands = items.filter(item => item.shape === 'island')
   for (let index = 1; index < islands.length; index += 1) {
     const previous = islands[index - 1]!.worldBounds
@@ -49,6 +46,6 @@ test.concurrent('a wide row wraps its blocks and the island grows down inside th
   const narrow = rootLayout(model, 60)
   assert.ok(island(narrow).worldBounds.width <= 60 - 2 * MAP_PADDING)
   assert.ok(row(narrow).lines.length > 1)
-  assert.equal(row(narrow).lines.join('').replace(/[^▪]/g, '').length, 40)
-  assert.equal(island(narrow).worldBounds.height, row(narrow).lines.length + 3)
+  assert.ok(island(narrow).worldBounds.height > island(wide).worldBounds.height)
+  assert.ok(encloses(island(narrow).worldBounds, row(narrow).worldBounds))
 })

@@ -44,16 +44,20 @@ test.concurrent('details changes pane width and the selection stays centred in e
 test.concurrent('details always follows the current selection', async () => {
   const model = await terminalModel(viewerFixtureRoot)
   const setup = await createTestRenderer({ width: 120, height: 36 })
-  const app = mountTerminalViewer(setup.renderer, model)
-  app.setView({ level: 'components', currentId: 'orders' })
-  await setup.renderOnce()
+  try {
+    const app = mountTerminalViewer(setup.renderer, model)
+    app.setView({ level: 'components', currentId: 'orders' })
+    await setup.renderOnce()
 
-  const layout = paneLayout(120, 36)
-  const details = setup.captureCharFrame().split('\n')
-    .map(line => [...line].slice(layout.details.x).join(''))
-    .join('\n')
-  assert.match(details, /Orders/)
-  app.destroy()
+    const layout = paneLayout(120, 36)
+    const details = setup.captureCharFrame().split('\n')
+      .map(line => [...line].slice(layout.details.x).join(''))
+      .join('\n')
+    assert.match(details, /Orders/)
+    app.destroy()
+  } finally {
+    if (!setup.renderer.isDestroyed) setup.renderer.destroy()
+  }
 })
 
 test.concurrent('leaving Work focus restores the saved map camera', async () => {
@@ -77,15 +81,19 @@ test.concurrent('leaving Work focus restores the saved map camera', async () => 
     },
   }
   const setup = await createTestRenderer({ width: 120, height: 36 })
-  const app = mountTerminalViewer(setup.renderer, model, { currentId: 'observed:alpha' })
-  await setup.renderOnce()
-  const before = mapRegion(setup.captureCharFrame(), 120)
+  try {
+    const app = mountTerminalViewer(setup.renderer, model, { currentId: 'observed:alpha' })
+    await setup.renderOnce()
+    const before = mapRegion(setup.captureCharFrame(), 120)
 
-  const focused = mapRegion(await press(setup, 'w'), 120)
-  assert.notEqual(focused, before)
-  const restored = mapRegion(await press(setup, 'w'), 120)
-  assert.equal(restored, before)
-  app.destroy()
+    const focused = mapRegion(await press(setup, 'w'), 120)
+    assert.notEqual(focused, before)
+    const restored = mapRegion(await press(setup, 'w'), 120)
+    assert.equal(restored, before)
+    app.destroy()
+  } finally {
+    if (!setup.renderer.isDestroyed) setup.renderer.destroy()
+  }
 })
 
 test.concurrent('panes start folded by the width table', () => {
@@ -170,57 +178,69 @@ function detailsTitle(frame: string, width: number): string {
 test.concurrent('a folded hierarchy gives its columns to the map and keeps the selected island centred', async () => {
   const model = await terminalModel(viewerFixtureRoot)
   const setup = await createTestRenderer({ width: 120, height: 36 })
-  const app = mountTerminalViewer(setup.renderer, model)
-  await setup.renderOnce()
-  const selectedId = initialState(model).currentId!
-  const selected = model.elements.find(element => element.representationId === selectedId)!
-  const layout = paneLayout(120, 36)
-  const folded = paneLayout(120, 36, { hierarchy: false, details: true })
-  const centre = (viewport: Bounds) => {
-    const row = projectWorld(model, { viewport: { ...viewport, x: 0, y: 0 }, currentId: selectedId }).items
-      .find(item => item.representationId === selectedId)!
-    return row.cellBounds.x + row.cellBounds.width / 2
+  try {
+    const app = mountTerminalViewer(setup.renderer, model)
+    await setup.renderOnce()
+    const selectedId = initialState(model).currentId!
+    const selected = model.elements.find(element => element.representationId === selectedId)!
+    const layout = paneLayout(120, 36)
+    const folded = paneLayout(120, 36, { hierarchy: false, details: true })
+    const centre = (viewport: Bounds) => {
+      const row = projectWorld(model, { viewport: { ...viewport, x: 0, y: 0 }, currentId: selectedId }).items
+        .find(item => item.representationId === selectedId)!
+      return row.cellBounds.x + row.cellBounds.width / 2
+    }
+    assert.ok(Math.abs(centre(layout.mapViewport) - layout.mapViewport.width / 2) <= 1)
+    assert.ok(Math.abs(centre(folded.mapViewport) - folded.mapViewport.width / 2) <= 1)
+    const frame = await press(setup, 't', 't')
+    const titled = frame.split('\n').slice(layout.map.y).map(row => [...row].slice(0, layout.details.x).join('')).find(row => row.includes(selected.title))
+    assert.ok(titled !== undefined)
+    assert.ok(detailsTitle(frame, 120).includes(model.elements.find(element => element.representationId === selectedId)!.title))
+    app.destroy()
+  } finally {
+    if (!setup.renderer.isDestroyed) setup.renderer.destroy()
   }
-  assert.ok(Math.abs(centre(layout.mapViewport) - layout.mapViewport.width / 2) <= 1)
-  assert.ok(Math.abs(centre(folded.mapViewport) - folded.mapViewport.width / 2) <= 1)
-  const frame = await press(setup, 't', 't')
-  const titled = frame.split('\n').slice(layout.map.y).map(row => [...row].slice(0, layout.details.x).join('')).find(row => row.includes(selected.title))
-  assert.ok(titled !== undefined)
-  assert.ok(detailsTitle(frame, 120).includes(model.elements.find(element => element.representationId === selectedId)!.title))
-  app.destroy()
 })
 
 test.concurrent('p shows the project profile until Escape', async () => {
   const model = await terminalModel(viewerFixtureRoot)
   assert.ok(model.project)
   const setup = await createTestRenderer({ width: 120, height: 36 })
-  const app = mountTerminalViewer(setup.renderer, model)
-  await setup.renderOnce()
-  const selection = detailsTitle(setup.captureCharFrame(), 120)
-  const profile = detailsTitle(await press(setup, 'p'), 120)
-  assert.ok(profile.includes(model.project.title))
-  assert.notEqual(profile, selection)
-  assert.equal(detailsTitle(await press(setup, 'escape'), 120), selection)
-  app.destroy()
+  try {
+    const app = mountTerminalViewer(setup.renderer, model)
+    await setup.renderOnce()
+    const selection = detailsTitle(setup.captureCharFrame(), 120)
+    const profile = detailsTitle(await press(setup, 'p'), 120)
+    assert.ok(profile.includes(model.project.title))
+    assert.notEqual(profile, selection)
+    assert.equal(detailsTitle(await press(setup, 'escape'), 120), selection)
+    app.destroy()
+  } finally {
+    if (!setup.renderer.isDestroyed) setup.renderer.destroy()
+  }
 })
 
 test.concurrent('a click on a hierarchy row selects it', async () => {
   const model = await terminalModel(viewerFixtureRoot)
   const actor = model.elements.find(element => element.kind === 'actor')!
   const setup = await createTestRenderer({ width: 120, height: 36 })
-  const app = mountTerminalViewer(setup.renderer, model)
-  await setup.renderOnce()
-  const layout = paneLayout(120, 36)
-  const y = setup.captureCharFrame().split('\n')
-    .findIndex(row => [...row].slice(0, layout.hierarchy.width).join('').includes(actor.title))
-  assert.ok(y > 0)
-  const before = detailsTitle(setup.captureCharFrame(), 120)
-  await setup.mockMouse.click(4, y)
-  await setup.renderOnce()
-  const after = detailsTitle(setup.captureCharFrame(), 120)
-  assert.notEqual(after, before)
-  assert.ok(after.includes(actor.title))
-  app.destroy()
+  try {
+    const app = mountTerminalViewer(setup.renderer, model)
+    await setup.renderOnce()
+    const layout = paneLayout(120, 36)
+    const y = setup.captureCharFrame().split('\n')
+      .findIndex(row => [...row].slice(0, layout.hierarchy.width).join('').includes(actor.title))
+    assert.ok(y > 0)
+    const before = detailsTitle(setup.captureCharFrame(), 120)
+    await setup.mockMouse.click(4, y)
+    await setup.renderOnce()
+    const after = detailsTitle(setup.captureCharFrame(), 120)
+    assert.notEqual(after, before)
+    assert.ok(after.includes(actor.title))
+    app.destroy()
+  } finally {
+    if (!setup.renderer.isDestroyed) setup.renderer.destroy()
+  }
 })
 
 test.concurrent('a click on a root row selects it', async () => {
@@ -228,19 +248,23 @@ test.concurrent('a click on a root row selects it', async () => {
   const initialId = initialState(model).currentId
   const container = model.elements.find(element => element.kind === 'container' && element.representationId !== initialId)!
   const setup = await createTestRenderer({ width: 120, height: 36 })
-  const app = mountTerminalViewer(setup.renderer, model)
-  await setup.renderOnce()
-  const layout = paneLayout(120, 36)
-  // The title sits inside the row's cells, so clicking it selects the row.
-  const rows = setup.captureCharFrame().split('\n')
-  const y = rows.findIndex((row, index) => index > layout.map.y && row.slice(layout.map.x, layout.details.x).includes(container.title))
-  assert.ok(y > 0)
-  const x = rows[y]!.indexOf(container.title, layout.map.x)
-  const before = detailsTitle(setup.captureCharFrame(), 120)
-  await setup.mockMouse.click(x, y)
-  await setup.renderOnce()
-  const after = detailsTitle(setup.captureCharFrame(), 120)
-  assert.notEqual(after, before)
-  assert.ok(after.includes(container.title))
-  app.destroy()
+  try {
+    const app = mountTerminalViewer(setup.renderer, model)
+    await setup.renderOnce()
+    const layout = paneLayout(120, 36)
+    // The title sits inside the row's cells, so clicking it selects the row.
+    const rows = setup.captureCharFrame().split('\n')
+    const y = rows.findIndex((row, index) => index > layout.map.y && row.slice(layout.map.x, layout.details.x).includes(container.title))
+    assert.ok(y > 0)
+    const x = rows[y]!.indexOf(container.title, layout.map.x)
+    const before = detailsTitle(setup.captureCharFrame(), 120)
+    await setup.mockMouse.click(x, y)
+    await setup.renderOnce()
+    const after = detailsTitle(setup.captureCharFrame(), 120)
+    assert.notEqual(after, before)
+    assert.ok(after.includes(container.title))
+    app.destroy()
+  } finally {
+    if (!setup.renderer.isDestroyed) setup.renderer.destroy()
+  }
 })

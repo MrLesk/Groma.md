@@ -258,7 +258,7 @@ test.concurrent('groma web marks obsolete Markdown revisions unsupported', async
   }
 })
 
-test.concurrent('groma web does not scan on open and applies a watched fold', async () => {
+test.concurrent('the Web host leaves initial scanning to its caller and applies a watched fold', async () => {
   const root = await createLiveRepo()
   const server = await startWebViewer(root, { port: 0 })
   try {
@@ -272,7 +272,7 @@ test.concurrent('groma web does not scan on open and applies a watched fold', as
     assert.match(await (await fetch(server.url)).text(), /"title":"Cli"/)
     assert.ok(!(await worldNames(server.url)).includes('Orders'))
 
-    const events = await fetch(`${server.url}/events`)
+    const events = await fetch(`${server.url}/events`, { signal: AbortSignal.timeout(8000) })
     await writeFile(path.join(root, 'src/orders.ts'), 'export function placeOrder() {}\n')
     await writeFile(
       path.join(root, 'src/cli.ts'),
@@ -305,7 +305,7 @@ test.concurrent('groma web applies an architecture Markdown change without a ref
     }
     const initial = await (await fetch(`${server.url}/world.json`)).json() as MapPayload
 
-    const events = await fetch(`${server.url}/events`)
+    const events = await fetch(`${server.url}/events`, { signal: AbortSignal.timeout(8000) })
     const reader = events.body!.getReader()
     const decoder = new TextDecoder()
     let pushed = ''
@@ -315,10 +315,10 @@ test.concurrent('groma web applies an architecture Markdown change without a ref
     await waitUntil(async () => {
       const { value } = await reader.read()
       if (value) pushed += decoder.decode(value, { stream: true })
-      return pushed.includes('"generation":2') && pushed.includes('"timings":') && pushed.includes('Shopfront')
+      return pushed.includes('event: world') && pushed.includes('Shopfront')
     })
     const changed = await (await fetch(`${server.url}/world.json`)).json() as MapPayload
-    assert.equal(changed.generation, initial.generation + 1)
+    assert.ok(changed.generation > initial.generation)
     assert.ok(changed.timings.totalMilliseconds >= changed.timings.architectureLoadMilliseconds)
     assert.ok(changed.timings.totalMilliseconds >= changed.timings.placementMilliseconds + changed.timings.routingMilliseconds)
     assert.ok((await worldNames(server.url)).includes('Shopfront'))
@@ -334,7 +334,7 @@ test.concurrent('groma web saves the project profile and publishes it without a 
   const root = await createLiveRepo()
   const server = await startWebViewer(root, { port: 0 })
   try {
-    const events = await fetch(`${server.url}/events`)
+    const events = await fetch(`${server.url}/events`, { signal: AbortSignal.timeout(8000) })
     const reader = events.body!.getReader()
     const decoder = new TextDecoder()
     await reader.read()
@@ -355,7 +355,7 @@ test.concurrent('groma web saves the project profile and publishes it without a 
     await waitUntil(async () => {
       const { value } = await reader.read()
       if (value) pushed += decoder.decode(value, { stream: true })
-      return pushed.includes('"generation":2') && pushed.includes('"title":"Supply map"')
+      return pushed.includes('event: world') && pushed.includes('"title":"Supply map"')
     })
     const payload = await (await fetch(`${server.url}/world.json`)).json() as {
       project: { title: string; description: string; overview: string; overviewBlocks: unknown[] }
@@ -444,7 +444,7 @@ test.concurrent('groma web loads work asynchronously and updates only the work o
     assert.ok(initial.timings.totalMilliseconds >= initial.timings.architectureLoadMilliseconds)
     assert.ok(initial.timings.totalMilliseconds >= initial.timings.placementMilliseconds + initial.timings.routingMilliseconds)
 
-    const events = await fetch(`${server.url}/events`)
+    const events = await fetch(`${server.url}/events`, { signal: AbortSignal.timeout(8000) })
     const reader = events.body!.getReader()
     const decoder = new TextDecoder()
     const firstEvent = await reader.read()

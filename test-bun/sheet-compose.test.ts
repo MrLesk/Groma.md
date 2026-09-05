@@ -16,8 +16,8 @@ function flowWorld(): ArchitectureWorld {
     uses('relationship:0', 'architect', 'entry-a-leaf'),
     uses('relationship:1', 'architect', 'entry-b-leaf'),
     uses('relationship:2', 'entry-a-leaf', 'core-leaf'),
-    uses('relationship:3', 'entry-a-leaf', 'core-leaf'),
-    uses('relationship:4', 'entry-a-leaf', 'core-leaf'),
+    uses('relationship:3', 'entry-a-second', 'core-leaf'),
+    uses('relationship:4', 'entry-a-third', 'core-leaf'),
     uses('relationship:5', 'entry-b-leaf', 'core-leaf'),
     uses('relationship:6', 'entry-a-leaf', 'mid-a-leaf'),
     uses('relationship:7', 'mid-a-leaf', 'mid-b-leaf'),
@@ -31,12 +31,13 @@ function flowWorld(): ArchitectureWorld {
     relationships,
     elements: [
       box('architect', 'actor', unit),
-      box('groma', 'system', unit),
-      ...containerIds.map(id => box(id, 'container', unit, { parent: 'observed:groma' })),
+      box('service', 'system', unit),
+      ...containerIds.map(id => box(id, 'container', unit, { parent: 'observed:service' })),
       ...containerIds.map(id => box(`${id}-leaf`, 'component', unit, {
         parent: `observed:${id}`,
         ...(id === 'mid-a' ? { group: 'Work' } : {}),
       })),
+      ...['entry-a-second', 'entry-a-third'].map(id => box(id, 'component', unit, { parent: 'observed:entry-a' })),
       box('git', 'system', unit, { external: true }),
     ],
   }
@@ -45,7 +46,7 @@ function flowWorld(): ArchitectureWorld {
 test.concurrent('leaf relationships derive weighted entry, mediator, and core roles', () => {
   const world = flowWorld()
   const placement = placeWorld(world)
-  const flow = containerFlow(placement, 'observed:groma', world.relationships)
+  const flow = containerFlow(placement, 'observed:service', world.relationships)
 
   assert.ok(flow)
   assert.deepEqual(flow.entries, ['observed:entry-a', 'observed:entry-b'])

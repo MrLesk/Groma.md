@@ -7,7 +7,7 @@ import { copyFixture, groma, projectRoot, readRelative, readTree, writeTree } fr
 const fixtureRoot = path.join(projectRoot, 'test', 'fixtures', 'edit')
 const ordersPath = 'groma/systems/shop/containers/api/components/orders.md'
 
-test('groma edit assigns and clears a component group without changing its meaning', async t => {
+test('groma edit assigns and clears a component group without changing its meaning', { concurrency: true }, async t => {
   const root = await copyFixture(t, fixtureRoot, 'groma-curate-')
   const grouped = await groma(root, ['edit', 'orders', '--group', 'Commerce'])
 
@@ -22,7 +22,7 @@ test('groma edit assigns and clears a component group without changing its meani
   assert.doesNotMatch(await readRelative(root, ordersPath), /^ {2}group:/m)
 })
 
-test('groma edit moves an empty scanned component to another container', async t => {
+test('groma edit moves an empty scanned component to another container', { concurrency: true }, async t => {
   const root = await copyFixture(t, fixtureRoot, 'groma-curate-')
   const helper = `---
 type: C4 Component
@@ -54,14 +54,14 @@ Runs background jobs.
   const moved = await groma(root, ['edit', 'helper', '--parent', 'worker'])
 
   assert.equal(moved.code, 0, moved.stderr)
-  await assert.rejects(readRelative(root, 'groma/systems/shop/containers/api/components/helper.md'))
+  await assert.rejects(readRelative(root, 'groma/systems/shop/containers/api/components/helper.md'), { code: 'ENOENT' })
   assert.equal(
     await readRelative(root, 'groma/systems/shop/containers/worker/components/helper.md'),
     helper.replace('parent: api', 'parent: worker'),
   )
 })
 
-test('groma edit combines empty scanned components into one authored responsibility', async t => {
+test('groma edit combines empty scanned components into one authored responsibility', { concurrency: true }, async t => {
   const root = await copyFixture(t, fixtureRoot, 'groma-curate-')
   await writeTree(root, {
     'groma/systems/shop/containers/api/components/read.md': `---
@@ -107,10 +107,10 @@ groma:
   assert.match(source, /file: src\/read\.ts/)
   assert.match(source, /file: src\/write\.ts/)
   assert.match(source, /Reads and writes order data\./)
-  await assert.rejects(readRelative(root, 'groma/systems/shop/containers/api/components/write.md'))
+  await assert.rejects(readRelative(root, 'groma/systems/shop/containers/api/components/write.md'), { code: 'ENOENT' })
 })
 
-test('groma edit combines an empty scanned container and reparents its empty children', async t => {
+test('groma edit combines an empty scanned container and reparents its empty children', { concurrency: true }, async t => {
   const root = await copyFixture(t, fixtureRoot, 'groma-curate-')
   await writeTree(root, {
     'groma/systems/shop/containers/worker/container.md': `---
@@ -139,15 +139,15 @@ groma:
   const combined = await groma(root, ['edit', 'api', '--combine', 'worker'])
 
   assert.equal(combined.code, 0, combined.stderr)
-  await assert.rejects(readRelative(root, 'groma/systems/shop/containers/worker/container.md'))
-  await assert.rejects(readRelative(root, 'groma/systems/shop/containers/worker/components/helper.md'))
+  await assert.rejects(readRelative(root, 'groma/systems/shop/containers/worker/container.md'), { code: 'ENOENT' })
+  await assert.rejects(readRelative(root, 'groma/systems/shop/containers/worker/components/helper.md'), { code: 'ENOENT' })
   assert.match(
     await readRelative(root, 'groma/systems/shop/containers/api/components/helper.md'),
     /parent: api/,
   )
 })
 
-test('structural edits reject authored or related elements before writing', async t => {
+test('structural edits reject authored or related elements before writing', { concurrency: true }, async t => {
   const root = await copyFixture(t, fixtureRoot, 'groma-curate-')
   await writeTree(root, {
     'groma/systems/shop/containers/api/components/grouped.md': `---

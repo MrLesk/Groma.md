@@ -7,7 +7,7 @@ import { copyFixture, groma, projectRoot, readRelative, readTree } from './cli-h
 
 const fixtureRoot = path.join(projectRoot, 'test', 'fixtures', 'plain-view')
 
-test('groma add writes a stable person and a stable external at their folders', async t => {
+test('groma add writes a stable person and a stable external at their folders', { concurrency: true }, async t => {
   const root = await copyFixture(t, fixtureRoot, 'groma-add-')
   const actor = await groma(root, ['add', 'actor', 'Support agent', '--overview', 'Answers tickets.'])
   const external = await groma(root, [
@@ -48,7 +48,7 @@ Charges cards.
   assert.equal(stripe?.technology, 'REST')
 })
 
-test('groma add draft writes the draft record with its outcome', async t => {
+test('groma add draft writes the draft record with its outcome', { concurrency: true }, async t => {
   const root = await copyFixture(t, fixtureRoot, 'groma-add-')
   const result = await groma(root, ['add', 'draft', 'Checkout v2', '--overview', 'Customers pay with a saved card.'])
 
@@ -65,7 +65,7 @@ Customers pay with a saved card.
   assert.deepEqual((await loadAnnotatedArchitecture(root)).drafts, ['checkout-v2', 'next'])
 })
 
-test('groma add refuses scanned kinds with the sentence that names groma draft, and writes nothing', async t => {
+test('groma add refuses scanned kinds with the sentence that names groma draft, and writes nothing', { concurrency: true }, async t => {
   const root = await copyFixture(t, fixtureRoot, 'groma-add-')
   const before = await readTree(root)
   for (const kind of ['system', 'container', 'component']) {
@@ -76,7 +76,7 @@ test('groma add refuses scanned kinds with the sentence that names groma draft, 
   assert.deepEqual(await readTree(root), before)
 })
 
-test('unknown things, taken or reserved ids, missing overview and technology on a person fail without writes', async t => {
+test('unknown things, taken or reserved ids, missing overview and technology on a person fail without writes', { concurrency: true }, async t => {
   const root = await copyFixture(t, fixtureRoot, 'groma-add-')
   const before = await readTree(root)
   const cases: Array<{ name: string, args: string[] }> = [

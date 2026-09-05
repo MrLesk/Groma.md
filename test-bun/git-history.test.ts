@@ -101,7 +101,7 @@ test.concurrent('a Git revision loads a complete isolated repository snapshot', 
 
     assert.equal(snapshot.architecture, projectSource('Historical', 'Historical map.'))
     assert.equal(snapshot.source, 'old source\n')
-    await assert.rejects(access(snapshot.root))
+    await assert.rejects(access(snapshot.root), { code: 'ENOENT' })
     assert.equal(
       await readFile(path.join(root, 'groma', 'project.md'), 'utf8'),
       projectSource('Current', 'Current map.'),

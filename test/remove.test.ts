@@ -17,7 +17,7 @@ async function exists(root: string, relative: string): Promise<boolean> {
   }
 }
 
-test('groma remove deletes a person and an external nothing relates to', async t => {
+test('groma remove deletes a person and an external nothing relates to', { concurrency: true }, async t => {
   const root = await copyFixture(t, fixtureRoot, 'groma-remove-')
   const buyer = await groma(root, ['remove', 'buyer'])
   const git = await groma(root, ['remove', 'git'])
@@ -30,7 +30,7 @@ test('groma remove deletes a person and an external nothing relates to', async t
   assert.ok(!ids.includes('buyer') && !ids.includes('git'))
 })
 
-test('a ghost leaves once nothing relates to it, and a draft record once no ghost belongs to it', async t => {
+test('a ghost leaves once nothing relates to it, and a draft record once no ghost belongs to it', { concurrency: true }, async t => {
   const root = await copyFixture(t, fixtureRoot, 'groma-remove-')
   assert.equal((await groma(root, [
     'draft', 'component', 'Stock check', '--parent', 'api', '--draft', 'next', '--overview', 'Checks stock levels.',
@@ -59,7 +59,7 @@ test('a ghost leaves once nothing relates to it, and a draft record once no ghos
   assert.deepEqual((await loadAnnotatedArchitecture(root)).drafts, [])
 })
 
-test('the scanner keeps stable software, and a ghost keeps what it contains', async t => {
+test('the scanner keeps stable software, and a ghost keeps what it contains', { concurrency: true }, async t => {
   const root = await copyFixture(t, fixtureRoot, 'groma-remove-')
   assert.equal((await groma(root, ['draft', 'container', 'Warehouse', '--parent', 'shop', '--overview', 'Stores goods.'])).code, 0)
   assert.equal((await groma(root, ['draft', 'component', 'Bins', '--parent', 'warehouse', '--overview', 'Counts bins.'])).code, 0)

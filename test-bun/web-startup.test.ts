@@ -146,13 +146,16 @@ test.concurrent('browser setup completes missing records in an existing folder a
 
 test.concurrent('a new empty project opens successfully and gains components through the live scan', async () => {
   const root = await repository()
+  await mkdir(path.join(root, 'src'))
+  await cp(path.join(fixtures, 'startup-source', 'package.json'), path.join(root, 'package.json'))
   const server = await startWebViewer(root, { port: 0, scan: true, workSource: EMPTY_WORK_SOURCE })
   try {
     assert.equal((await initialize(server.url, 'groma')).status, 303)
     assert.equal(gromaInitialization(root).initialized, true)
     assert.equal(hasComponents((await payload(server.url)).world), false)
 
-    await cp(path.join(fixtures, 'startup-source'), root, { recursive: true })
+    const source = await readFile(path.join(fixtures, 'startup-source', 'src', 'main.ts'), 'utf8')
+    await writeFile(path.join(root, 'src', 'main.ts'), source)
     const deadline = Date.now() + 5000
     let current = await payload(server.url)
     while (!hasComponents(current.world) && Date.now() < deadline) {
@@ -174,7 +177,7 @@ test.concurrent('invalid setup input does not initialize or scan the repository'
     const result = await initialize(server.url, 'groma', '')
     assert.equal(result.status, 400)
     assert.equal(gromaInitialization(root).initialized, false)
-    await assert.rejects(readFile(path.join(root, 'AGENTS.md')))
+    await assert.rejects(readFile(path.join(root, 'AGENTS.md')), { code: 'ENOENT' })
   } finally {
     await server.close()
     await rm(root, { recursive: true, force: true })

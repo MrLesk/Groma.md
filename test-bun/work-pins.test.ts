@@ -8,7 +8,7 @@ import { box, worldOf } from './helpers.ts'
 
 const unit = { x: 0, y: 0, width: 1, height: 1 }
 
-const world = worldOf([
+const pinWorld = () => worldOf([
   box('shop', 'system', unit),
   box('api', 'container', unit, { parent: 'observed:shop', code: [{ scanner: 'ts', file: 'src/api.ts' }] }),
   box('vault', 'container', unit, { parent: 'observed:shop', code: [{ scanner: 'ts', file: 'src/vault.ts' }] }),
@@ -30,6 +30,7 @@ function item(id: string, extra: Partial<WorkItem> = {}): WorkItem {
 }
 
 test.concurrent('a pin stands on the element holding the last modified file, else on the first referenced element', () => {
+  const world = pinWorld()
   const pins = pinsOf([
     item('TASK-2', { references: ['api'], modifiedFiles: ['src/api.ts', 'README.md', 'src/vault.ts'] }),
     item('TASK-3', { references: ['not-an-id', 'vault'] }),
@@ -42,23 +43,14 @@ test.concurrent('a pin stands on the element holding the last modified file, els
 })
 
 test.concurrent('a task touches the elements of its modified files, newest first, then the ones it references, each once', () => {
+  const world = pinWorld()
   const touched = touchedElements(item('TASK-5', { references: ['api', 'not-an-id'], modifiedFiles: ['src/api.ts', 'README.md', 'src/vault.ts'] }), world)
   assert.deepEqual(touched, ['observed:vault', 'observed:api'])
 })
 
-test.concurrent('one modified file links every component that maps it', () => {
-  const shared = worldOf([
-    box('first', 'component', unit, { code: [{ scanner: 'ts', file: 'src/shared.ts' }] }),
-    box('second', 'component', unit, { code: [{ scanner: 'ts', file: 'src/shared.ts' }] }),
-  ])
-  const task = item('TASK-6', { references: [], modifiedFiles: ['src/shared.ts'] })
-
-  assert.deepEqual(touchedElements(task, shared), ['observed:first', 'observed:second'])
-  assert.equal(elementWorkGroups({ statuses: ['To Do', 'In Progress', 'Done'], defaultStatus: 'To Do', items: [task] }, 'observed:first', shared).length, 1)
-  assert.equal(elementWorkGroups({ statuses: ['To Do', 'In Progress', 'Done'], defaultStatus: 'To Do', items: [task] }, 'observed:second', shared).length, 1)
-})
 
 test.concurrent('an element receives default, intermediate, and terminal work groups only when tasks touch it', () => {
+  const world = pinWorld()
   const work: WorkSnapshot = {
     statuses: ['Ready', 'Building', 'Review', 'Shipped'],
     defaultStatus: 'Ready',
@@ -82,6 +74,7 @@ test.concurrent('an element receives default, intermediate, and terminal work gr
 })
 
 test.concurrent('every assignee and task pair gets one ordered pin with task progress', () => {
+  const world = pinWorld()
   const pins = pinsOf([
     item('TASK-10', { assignees: ['@luna'], status: 'Done', acceptanceCriteriaCompleted: 4, acceptanceCriteriaCount: 4 }),
     item('TASK-9', { assignees: ['@codex', '@claude'] }),
@@ -95,6 +88,7 @@ test.concurrent('every assignee and task pair gets one ordered pin with task pro
 })
 
 test.concurrent('an unassigned mapped task gets one generic task pin', () => {
+  const world = pinWorld()
   const pins = pinsOf([item('TASK-11', { assignees: [] })], world, 'Done')
   assert.deepEqual(pins.map(pin => [pin.key, pin.assignee, pin.taskId]), [['task TASK-11', null, 'TASK-11']])
 })

@@ -46,7 +46,7 @@ groma:
 ---
 `
 
-test('groma edit element --overview replaces only the owning lead prose', async t => {
+test('groma edit element --overview replaces only the owning lead prose', { concurrency: true }, async t => {
   const root = await copyFixture(t, fixtureRoot, 'groma-edit-')
   const result = await groma(root, [
     'edit',
@@ -59,7 +59,7 @@ test('groma edit element --overview replaces only the owning lead prose', async 
   assert.equal(await readRelative(root, ordersPath), editedOrders)
 })
 
-test('groma edit element --draft tags a stable element with the draft that touches it', async t => {
+test('groma edit element --draft tags a stable element with the draft that touches it', { concurrency: true }, async t => {
   const root = await copyFixture(t, fixtureRoot, 'groma-edit-')
   await writeTree(root, { [draftPath]: emptyDraft })
   const original = await readRelative(root, ordersPath)
@@ -82,7 +82,7 @@ test('groma edit element --draft tags a stable element with the draft that touch
   assert.notEqual(source, original)
 })
 
-test('groma edit <draft-id> --overview sets and replaces the draft outcome', async t => {
+test('groma edit <draft-id> --overview sets and replaces the draft outcome', { concurrency: true }, async t => {
   const root = await copyFixture(t, fixtureRoot, 'groma-edit-')
   await writeTree(root, { [draftPath]: emptyDraft })
   const created = await groma(root, [
@@ -103,7 +103,7 @@ test('groma edit <draft-id> --overview sets and replaces the draft outcome', asy
   assert.equal(await readRelative(root, draftPath), `${emptyDraft}\nStock checks ship next.\n`)
 })
 
-test('unknown ids, empty edits, element flags on a draft record fail without writes', async t => {
+test('unknown ids, empty edits, element flags on a draft record fail without writes', { concurrency: true }, async t => {
   const root = await copyFixture(t, fixtureRoot, 'groma-edit-')
   await writeTree(root, { [draftPath]: emptyDraft })
   const before = await readTree(root)
@@ -162,7 +162,7 @@ test('unknown ids, empty edits, element flags on a draft record fail without wri
   }
 })
 
-test('groma edit --title and --technology change an element and a draft record in place', async t => {
+test('groma edit --title and --technology change an element and a draft record in place', { concurrency: true }, async t => {
   const root = await copyFixture(t, fixtureRoot, 'groma-edit-')
   await writeTree(root, { [draftPath]: emptyDraft })
   const element = await groma(root, ['edit', 'orders', '--title', 'Order intake', '--technology', 'Bun'])
@@ -182,7 +182,7 @@ test('groma edit --title and --technology change an element and a draft record i
   assert.doesNotMatch(await readRelative(root, ordersPath), /technology/)
 })
 
-test('groma edit project merges title, description and overview into the project record', async t => {
+test('groma edit project merges title, description and overview into the project record', { concurrency: true }, async t => {
   const root = await copyFixture(t, fixtureRoot, 'groma-edit-')
   const titled = await groma(root, ['edit', 'project', '--title', 'Supply map'])
   assert.equal(titled.code, 0, titled.stderr)

@@ -46,7 +46,7 @@ const approvedArgs = [
   'Checks stock before placing an order.',
 ]
 
-test('a drafted container or component is a ghost at its future path under the given parent', async t => {
+test('a drafted container or component is a ghost at its future path under the given parent', { concurrency: true }, async t => {
   const root = await copyFixture(t, fixtureRoot, 'groma-draft-')
   const component = await groma(root, approvedArgs)
   const container = await groma(root, [
@@ -78,7 +78,7 @@ test('a drafted container or component is a ghost at its future path under the g
   )
 })
 
-test('--draft files the ghost under an existing draft record and refuses an unknown one', async t => {
+test('--draft files the ghost under an existing draft record and refuses an unknown one', { concurrency: true }, async t => {
   const root = await copyFixture(t, fixtureRoot, 'groma-draft-')
   await writeTree(root, { 'groma/drafts/next.md': nextDraft })
   const filed = await groma(root, [...approvedArgs, '--draft', 'next'])
@@ -105,7 +105,7 @@ test('--draft files the ghost under an existing draft record and refuses an unkn
   assert.deepEqual(await readTree(root), before)
 })
 
-test('a system needs no parent, containers and components need one, and people are never drafted', async t => {
+test('a system needs no parent, containers and components need one, and people are never drafted', { concurrency: true }, async t => {
   const root = await copyFixture(t, fixtureRoot, 'groma-draft-')
   const before = await readTree(root)
   const cases: Array<{ name: string, args: string[] }> = [
@@ -142,7 +142,7 @@ test('a system needs no parent, containers and components need one, and people a
   assert.match(await readRelative(root, 'groma/systems/warehouse/system.md'), /^status: draft$/m)
 })
 
-test('duplicate or taken id, unknown parent, missing overview, wrong parent kind, reserved name and an occupied path fail without writes', async t => {
+test('duplicate or taken id, unknown parent, missing overview, wrong parent kind, reserved name and an occupied path fail without writes', { concurrency: true }, async t => {
   const root = await copyFixture(t, fixtureRoot, 'groma-draft-')
   await writeTree(root, {
     [stockPath]: approvedStock.replace('status: draft', 'status: stable'),

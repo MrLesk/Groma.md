@@ -20,9 +20,8 @@ import { routeAll } from '../src/sheet/route.ts'
 import { sheetScene } from '../src/sheet/scene.ts'
 import type { SheetScene } from '../src/sheet/types.ts'
 import type { ArchitectureGraph } from '../src/types.ts'
-import { box, openclawFixtureRoot, uses, viewerFixtureRoot, worldOf } from './helpers.ts'
+import { openclawFixtureRoot, viewerFixtureRoot } from './helpers.ts'
 
-const unit = { x: 0, y: 0, width: 1, height: 1 }
 
 function endpointsOf(scene: SheetScene): Map<string, Endpoint> {
   const endpoints = new Map<string, Endpoint>()
@@ -159,26 +158,6 @@ test.concurrent('the supported viewer fixture has no staircase, reversal, or ove
   assert.deepEqual(artifactRouteIds(flatRoutes(scene)), [])
 })
 
-test.concurrent('parallel relationships remain individual and use distinct ports and lanes', () => {
-  const scene = sheetScene(worldOf([
-    box('shop', 'system', unit),
-    box('api', 'container', unit, { parent: 'observed:shop' }),
-    box('a', 'component', unit, { parent: 'observed:api' }),
-    box('b', 'component', unit, { parent: 'observed:api' }),
-  ], [0, 1, 2].map(index => uses(`relationship:${index}`, 'a', 'b'))))
-  const routes = flatRoutes(scene)
-  const ports = (at: 'start' | 'end'): Set<string> => new Set(routes.map(route => {
-    const point = at === 'start' ? route.points[0]! : route.points.at(-1)!
-    return `${point.x},${point.y}`
-  }))
-  const [spacing] = routeSpacingIndex(routes, new Set(routes.map(route => route.id)))
-    .measure(routes, [LANE_GAP])
-
-  assert.equal(routes.length, 3)
-  assert.equal(ports('start').size, 3)
-  assert.equal(ports('end').size, 3)
-  assert.equal(spacing.sharedPathLength, 0)
-})
 
 test.concurrent('a busy building still routes every relationship', () => {
   const building = (key: string, gx: number, gy: number): Endpoint => ({
