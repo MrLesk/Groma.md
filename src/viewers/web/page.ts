@@ -355,7 +355,7 @@ const style = `
   .row .kind-actor::before { border-radius: 50%; }
   .row .kind-container::before { height: 4px; border: 1px solid currentColor; background: transparent; transform: skewX(-25deg); }
   .row .kind-component::before { width: 4px; height: 4px; }
-  .row .twist.toggle:hover { color: var(--highlight-text); }
+  .row .twist.toggle:hover, .tree-section .twist:hover { color: var(--accent-text); cursor: pointer; }
   .row .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .link { border: 0; background: transparent; padding: 0; text-align: left; }
   .link:hover { text-decoration: underline; text-underline-offset: 2px; }

@@ -149,11 +149,14 @@ resumes live architecture and work updates.
 
 The hierarchy pane's boxed double-chevron retracts it to a narrow rail and
 returns it without changing tree, selection, or camera state. Its quiet branch lines keep nested
-rows legible. Under Flows, each actor has an accordion that starts collapsed
-and retains its open state across viewer repaints. Actor rows use the shared
-actor mark and sit one level below Flows, with their flow rows one level
+rows legible. Under Actors, each actor has an accordion that starts collapsed
+and retains its open state across viewer repaints. Clicking an actor selects it
+on the map and opens its details; its arrow only expands or collapses its flows.
+Actor rows use the shared
+actor mark and sit one level below Actors, with their flow rows one level
 deeper. The sidebar uses a shared 16 px nesting step and compact arrow/icon
-spacing throughout the actor groups and software tree. Disclosure arrows have
+spacing throughout the actor groups and software tree. Section and row chevrons
+use the Groma accent color and pointer cursor on hover in both panels. Row arrows have
 24 px click targets; child leaf branches lead directly to their icons without
 an empty arrow slot. Both sections share continuous CSS branch lines, ending
 at the last child. Chevrons, entity marks and flow checkmarks are drawn in CSS.
@@ -173,8 +176,8 @@ purpose and ordered steps in details and focuses its explicit map connections.
 Only one flow is focused at a time; clicking it again clears it. The same
 control appears in an element's Flows list. Structure rows use kind marks and
 neutral selection; their arrows only expand containment. Below it the Structure
-section starts open and groups the software containment tree under Systems
-and External systems labels, omitting an empty group. A full-width section
+section starts open and lists internal systems directly, with an External systems
+label before external entries. A full-width section
 divider separates the external systems from the internal structure. Actors appear in the
 flow accordions and remain on the map. Containers
 sit under their system and components under their container, in

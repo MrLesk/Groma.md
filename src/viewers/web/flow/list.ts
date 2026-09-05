@@ -4,6 +4,13 @@ import { replaceTreeChildren, sidebarBranches, sidebarRow } from '../organisms/s
 import { sectionHeading } from '../organisms/sidebar-section.ts'
 import { flowRow, type FlowRowData } from './row.ts'
 
+interface FlowListOptions {
+  title: string
+  visibleFlows?: readonly FlowRowData[]
+  selectedIds?: readonly string[]
+  onSelectActor?: (id: string, additive: boolean) => void
+}
+
 function groupedTitle(title: string, actorTitle: string): string {
   const separator = title.indexOf(': ')
   if (separator < 0) return title
@@ -21,10 +28,10 @@ export function createFlowList() {
     world: ArchitectureGraph,
     active: FlowRef | undefined,
     onToggle: (flow: FlowRef) => void,
-    visibleFlows?: readonly FlowRowData[],
-    title = 'Flows',
+    options: FlowListOptions,
   ): void {
     host.classList.add('flow-tree')
+    const { title, visibleFlows } = options
     const visibleIds = visibleFlows && new Set(visibleFlows.map(row => row.flow.id))
     const flows = world.flows.filter(flow => visibleIds === undefined || visibleIds.has(flow.id))
     const actors = world.elements.filter(element => element.kind === 'actor'
@@ -35,7 +42,7 @@ export function createFlowList() {
     }
     const heading = sectionHeading(title, unfolded, () => {
       unfolded = !unfolded
-      paintFlows(host, world, active, onToggle, visibleFlows, title)
+      paintFlows(host, world, active, onToggle, options)
     })
     const list = document.createElement('div')
     list.hidden = !unfolded
@@ -48,12 +55,14 @@ export function createFlowList() {
       const toggle = () => {
         if (expanded) expandedActors.delete(actor.id)
         else expandedActors.add(actor.id)
-        paintFlows(host, world, active, onToggle, visibleFlows, title)
+        paintFlows(host, world, active, onToggle, options)
       }
       const heading = sidebarRow(actor.title, 'actor', { expanded, count: actorFlows.length, toggle })
       heading.dataset.id = actor.id
+      heading.classList.toggle('selected', options.selectedIds?.includes(actor.id) === true)
       heading.prepend(...sidebarBranches([followingActor]))
-      heading.addEventListener('click', toggle)
+      const selectActor = options.onSelectActor
+      heading.addEventListener('click', selectActor === undefined ? toggle : event => selectActor(actor.id, event.shiftKey))
       const children = document.createElement('div')
       children.hidden = !expanded
       for (const [flowIndex, flow] of actorFlows.entries()) {
