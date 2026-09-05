@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { cp, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { cp, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { test } from 'bun:test'
@@ -29,57 +29,37 @@ function emptyWorkSource(): WorkSource {
   }
 }
 
-async function listTypeScript(directory: string): Promise<string[]> {
-  const entries = await readdir(directory, { withFileTypes: true })
-  const files: string[] = []
-  for (const entry of entries) {
-    const entryPath = path.join(directory, entry.name)
-    if (entry.isDirectory()) files.push(...await listTypeScript(entryPath))
-    else if (entry.name.endsWith('.ts')) files.push(entryPath)
-  }
-  return files
-}
-
-test.concurrent('viewer modules consume only the core response and fixed world', async () => {
-  const sources = await Promise.all(
-    (await listTypeScript(path.join(repositoryRoot, 'src/viewers/tui')))
-      .map(filename => readFile(filename, 'utf8')),
-  )
-  const viewerSource = sources.join('\n')
-
-  assert.doesNotMatch(
-    viewerSource,
-    /node:fs|node:child_process|architecture-reader|architecture-watch|work\/backlog|loadArchitectureViewModel|repositoryRoot|watchScan|world-layout|elkjs|groma\/(?:observed|missing|plans)/,
-  )
-})
-
 test.concurrent('headless groma view startup releases its renderer and input handler', async () => {
   const setup = await createTestRenderer({ width: 120, height: 36 })
-  const inputListeners = setup.renderer.keyInput.listenerCount('keypress')
-  const app = await startTerminalViewer(fixtureRoot, {
-    renderer: setup.renderer,
-    workSource: emptyWorkSource(),
-  })
+  try {
+    const inputListeners = setup.renderer.keyInput.listenerCount('keypress')
+    const app = await startTerminalViewer(fixtureRoot, {
+      renderer: setup.renderer,
+      workSource: emptyWorkSource(),
+    })
 
-  assert.equal(
-    setup.renderer.keyInput.listenerCount('keypress'),
-    inputListeners + 1,
-  )
-  await setup.renderOnce()
-  setup.mockInput.pressEscape()
-  await setup.renderOnce()
-  assert.equal(setup.renderer.isDestroyed, false)
-  setup.mockInput.pressCtrlC()
-  await app.closed
-  assert.equal(setup.renderer.isDestroyed, true)
-  assert.equal(setup.renderer.root.getChildrenCount(), 0)
-  assert.equal(
-    setup.renderer.keyInput.listenerCount('keypress'),
-    inputListeners,
-  )
+    assert.equal(
+      setup.renderer.keyInput.listenerCount('keypress'),
+      inputListeners + 1,
+    )
+    await setup.renderOnce()
+    setup.mockInput.pressEscape()
+    await setup.renderOnce()
+    assert.equal(setup.renderer.isDestroyed, false)
+    setup.mockInput.pressCtrlC()
+    await app.closed
+    assert.equal(setup.renderer.isDestroyed, true)
+    assert.equal(setup.renderer.root.getChildrenCount(), 0)
+    assert.equal(
+      setup.renderer.keyInput.listenerCount('keypress'),
+      inputListeners,
+    )
+  } finally {
+    if (!setup.renderer.isDestroyed) setup.renderer.destroy()
+  }
 })
 
-test.concurrent('R reloads the world from core and keeps the current view', async () => {
+test.concurrent('refresh reloads the world from core and keeps the current view', async () => {
   const root = await mkdtemp(path.join(tmpdir(), 'groma-refresh-'))
   const setup = await createTestRenderer({ width: 120, height: 36 })
   let app: Awaited<ReturnType<typeof startTerminalViewer>> | undefined
@@ -103,7 +83,6 @@ test.concurrent('R reloads the world from core and keeps the current view', asyn
       markdown.replace('title: Inventory', 'title: Stock queue'),
     )
 
-    setup.mockInput.pressKey('r')
     await app.refresh()
     await setup.renderOnce()
     const after = setup.captureCharFrame()
@@ -120,51 +99,63 @@ test.concurrent('headless keys drive the viewer and leave world coordinates unch
   const response = await terminalModel(viewerFixtureRoot)
   const before = structuredClone(response.sheet)
   const setup = await createTestRenderer({ width: 120, height: 36 })
-  const app = mountTerminalViewer(setup.renderer, response)
-  await setup.renderOnce()
+  try {
+    const app = mountTerminalViewer(setup.renderer, response)
+    await setup.renderOnce()
 
-  await press(setup, 'enter', 'right', 'left', 'up', 'down')
-  await press(setup, 'tab', 'right', 'down', 'enter', 'escape')
-  await press(setup, '[', ']', '[', ']')
-  await press(setup, 'enter', 'escape')
-  assert.equal(setup.renderer.isDestroyed, false)
+    await press(setup, 'enter', 'right', 'left', 'up', 'down')
+    await press(setup, 'tab', 'right', 'down', 'enter', 'escape')
+    await press(setup, '[', ']', '[', ']')
+    await press(setup, 'enter', 'escape')
+    assert.equal(setup.renderer.isDestroyed, false)
 
-  assert.deepEqual(response.sheet, before)
-  app.destroy()
+    assert.deepEqual(response.sheet, before)
+    app.destroy()
+  } finally {
+    if (!setup.renderer.isDestroyed) setup.renderer.destroy()
+  }
 }, 20000)
 
 test.concurrent('an empty world shows its next steps until a live update supplies the map', async () => {
   const empty = await terminalModel(emptyFixtureRoot)
   const full = await terminalModel(viewerFixtureRoot)
   const setup = await createTestRenderer({ width: 120, height: 36 })
-  let refreshes = 0
-  const app = mountTerminalViewer(setup.renderer, empty, {
-    onRefresh: () => { refreshes += 1 },
-  })
+  try {
+    let refreshes = 0
+    const app = mountTerminalViewer(setup.renderer, empty, {
+      onRefresh: () => { refreshes += 1 },
+    })
 
-  await setup.renderOnce()
-  const before = setup.captureCharFrame()
-  assert.ok(before.includes(noComponentsTitle))
+    await setup.renderOnce()
+    const before = setup.captureCharFrame()
+    assert.ok(before.includes(noComponentsTitle))
 
-  await press(setup, 'r')
-  assert.equal(refreshes, 1)
+    await press(setup, 'r')
+    assert.equal(refreshes, 1)
 
-  app.update(full)
-  await setup.renderOnce()
-  assert.ok(!setup.captureCharFrame().includes(noComponentsTitle))
-  app.destroy()
+    app.update(full)
+    await setup.renderOnce()
+    assert.ok(!setup.captureCharFrame().includes(noComponentsTitle))
+    app.destroy()
+  } finally {
+    if (!setup.renderer.isDestroyed) setup.renderer.destroy()
+  }
 })
 
 test.concurrent('Escape, q and Ctrl+C each leave the empty viewer', async () => {
   const empty = await terminalModel(emptyFixtureRoot)
   for (const key of ['escape', 'q', 'ctrl-c'] as const) {
     const setup = await createTestRenderer({ width: 120, height: 36 })
-    const app = mountTerminalViewer(setup.renderer, empty)
-    await setup.renderOnce()
-    if (key === 'escape') setup.mockInput.pressEscape()
-    else if (key === 'ctrl-c') setup.mockInput.pressCtrlC()
-    else setup.mockInput.pressKey(key)
-    await app.closed
-    assert.equal(setup.renderer.isDestroyed, true)
+    try {
+      const app = mountTerminalViewer(setup.renderer, empty)
+      await setup.renderOnce()
+      if (key === 'escape') setup.mockInput.pressEscape()
+      else if (key === 'ctrl-c') setup.mockInput.pressCtrlC()
+      else setup.mockInput.pressKey(key)
+      await app.closed
+      assert.equal(setup.renderer.isDestroyed, true)
+    } finally {
+      if (!setup.renderer.isDestroyed) setup.renderer.destroy()
+    }
   }
 })

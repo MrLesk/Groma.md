@@ -299,7 +299,7 @@ for (const {
     message: /group must be a non-empty string when present/,
   },
 ]) {
-  test(name, () => {
+  test(name, { concurrency: true }, () => {
     assert.throws(
       () => buildArchitectureModel(documents),
       error => {

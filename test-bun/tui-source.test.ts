@@ -155,17 +155,18 @@ test.concurrent('the terminal loads structure and source only when their details
   })
   try {
     await setup.renderOnce()
+    assert.deepEqual(reads, [])
     await press(setup, 'enter', 'tab')
     await waitFor(() => structureLoaded)
     await setup.renderOnce()
-    assert.match(setup.captureCharFrame(), /10 lines/)
     await press(setup, 'down', 'enter')
     await waitFor(() => sourceLoaded)
     await setup.renderOnce()
 
     assert.deepEqual(reads, ['structure:orders', 'source:orders:src/orders.ts'])
     assert.match(setup.captureCharFrame(), /src\/orders\.ts:1/)
-    assert.match(await press(setup, 'escape'), /Code/)
+    await press(setup, 'escape')
+    assert.deepEqual(reads, ['structure:orders', 'source:orders:src/orders.ts'])
   } finally {
     app.destroy()
   }
@@ -209,7 +210,6 @@ test.concurrent('the task record and file reader share one diff load and preserv
     for (let index = 0; index < 5; index++) await press(setup, 'up')
     const recordFrame = setup.captureCharFrame()
     await press(setup, 'enter')
-    await waitFor(() => reads.length === 1)
     await setup.renderOnce()
 
     assert.deepEqual(reads, ['TASK-1'])

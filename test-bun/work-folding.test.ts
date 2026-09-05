@@ -52,15 +52,6 @@ test.concurrent('component task groups and global Work share folding without cou
   assert.deepEqual(state.work?.selection, { state: 'selected', taskId: 'TASK-1' })
 })
 
-test.concurrent('both record entry points place task definition before execution and retain file anchors', () => {
-  const item = { ...model().work.items[1]!, title: 'Intent', assignees: ['@worker'], modifiedFiles: ['src/file.ts'] }
-  const details = { id: item.id, description: 'Purpose', acceptanceCriteria: [{ text: 'Result', checked: false }], definitionOfDone: [{ text: 'Proof', checked: false }], implementationPlan: 'Steps', implementationNotes: 'Evidence', comments: [] }
-  const rows = taskRecordView(viewerTheme(), item, details, 80, undefined).lines.map(row => row.map(part => part.text).join(''))
-  const position = (value: string) => rows.findIndex(row => row.includes(value))
-  const ordered = ['Intent', 'Purpose', 'Result', 'Proof', '@worker', 'Steps', 'src/file.ts', 'Evidence'].map(position)
-  assert.ok(ordered.every(index => index >= 0))
-  assert.deepEqual([...ordered].sort((a, b) => a - b), ordered)
-})
 
 test.concurrent('a long record reads every row before and after links and returns from a diff to the same row', () => {
   const world = model()

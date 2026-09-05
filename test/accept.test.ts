@@ -95,7 +95,7 @@ groma:
 Tracks stock for the shop.
 `
 
-test('acceptGhost flips a matched ghost to stable in its own file and keeps the draft tag', async t => {
+test('acceptGhost flips a matched ghost to stable in its own file and keeps the draft tag', { concurrency: true }, async t => {
   const root = await createWorld(t, { [inventoryPath]: matchedInventoryDocument })
 
   assert.equal(await acceptGhost(root, 'inventory'), 'accepted')
@@ -105,20 +105,20 @@ test('acceptGhost flips a matched ghost to stable in its own file and keeps the 
   assert.match(accepted, /^ {2}draft: next$/m)
 })
 
-test('acceptGhost fails when the ghost has no scan match', async t => {
+test('acceptGhost fails when the ghost has no scan match', { concurrency: true }, async t => {
   const root = await createWorld(t, { [inventoryPath]: inventoryDocument })
 
   assert.equal(await acceptGhost(root, 'inventory'), 'unmatched')
   assert.equal(await readRelative(root, inventoryPath), inventoryDocument)
 })
 
-test('acceptGhost fails when the id is not a ghost', async t => {
+test('acceptGhost fails when the id is not a ghost', { concurrency: true }, async t => {
   const root = await createWorld(t, {})
   assert.equal(await acceptGhost(root, 'api'), 'not-draft')
   assert.equal(await acceptGhost(root, 'unknown'), 'not-draft')
 })
 
-test('a scan match leaves the ghost a draft until accept', async t => {
+test('a scan match leaves the ghost a draft until accept', { concurrency: true }, async t => {
   const root = await createWorld(t, { [inventoryPath]: inventoryDocument })
 
   const summary = await reconcileScanObservations(root, [createScanObservation({
@@ -180,7 +180,7 @@ Runs the shop from a terminal.
 
 const scannerPath = 'groma/systems/shop/containers/cli/components/scanner.md'
 
-test('groma accept applies a ghost after it scans a name match', async t => {
+test('groma accept applies a ghost after it scans a name match', { concurrency: true }, async t => {
   const root = await createScanRepo(t, {
     [scannerPath]: `---
 type: C4 Component
@@ -204,7 +204,7 @@ Reads the shop source.
   assert.match(accepted, /file: src\/scanner\.ts/)
 })
 
-test('groma accept fails when a scan does not match the ghost', async t => {
+test('groma accept fails when a scan does not match the ghost', { concurrency: true }, async t => {
   const widgetPath = 'groma/systems/shop/containers/api/components/widget.md'
   const widget = `---
 type: C4 Component

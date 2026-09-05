@@ -25,7 +25,7 @@ async function exists(filename: string): Promise<boolean> {
   }
 }
 
-test('plain view treats a Groma folder without project records as uninitialized', async t => {
+test('plain view treats a Groma folder without project records as uninitialized', { concurrency: true }, async t => {
   const root = await emptyRepository(t)
   await mkdir(path.join(root, '.groma'))
   const result = await groma(root, ['view', '--plain'])
@@ -36,7 +36,7 @@ test('plain view treats a Groma folder without project records as uninitialized'
   assert.equal(await exists(path.join(root, '.groma', 'project.md')), false)
 })
 
-test('groma view and a record print without a Groma directory name groma init and fail the same way', async t => {
+test('groma view and a record print without a Groma directory name groma init and fail the same way', { concurrency: true }, async t => {
   const root = await emptyRepository(t)
   for (const args of [['view', '--plain'], ['view', 'shop']]) {
     const result = await groma(root, args)
@@ -46,7 +46,7 @@ test('groma view and a record print without a Groma directory name groma init an
   assert.equal(await exists(path.join(root, 'groma')), false)
 })
 
-test('ensureInitialized passes straight through when the Groma directory exists', async t => {
+test('ensureInitialized passes straight through when the Groma directory exists', { concurrency: true }, async t => {
   const root = await emptyRepository(t)
   await initializeGroma(root, { projectName: 'Shop', directory: 'groma' })
   const { events, ui } = initUi()
@@ -59,7 +59,7 @@ test('ensureInitialized passes straight through when the Groma directory exists'
   assert.deepEqual(events, [])
 })
 
-test('declining the offer prints one line naming groma init and writes nothing', async t => {
+test('declining the offer prints one line naming groma init and writes nothing', { concurrency: true }, async t => {
   const root = await emptyRepository(t)
   const output: string[] = []
   const { events, ui } = initUi({ init: false })
@@ -75,7 +75,7 @@ test('declining the offer prints one line naming groma init and writes nothing',
   assert.equal(await exists(path.join(root, 'groma')), false)
 })
 
-test('accepting the offer runs the wizard and leaves the scan and the viewer to the caller', async t => {
+test('accepting the offer runs the wizard and leaves the scan and the viewer to the caller', { concurrency: true }, async t => {
   const root = await emptyRepository(t)
   const { events, ui } = initUi({ init: true, projectName: 'Fresh shop', directory: 'groma' })
   const outcome = await ensureInitialized(
@@ -88,7 +88,7 @@ test('accepting the offer runs the wizard and leaves the scan and the viewer to 
   assert.equal(await exists(path.join(root, 'groma', 'project.md')), true)
 })
 
-test('the terminal setup completes missing records in the existing storage location', async t => {
+test('the terminal setup completes missing records in the existing storage location', { concurrency: true }, async t => {
   const root = await emptyRepository(t)
   await mkdir(path.join(root, '.groma'))
   const { events, ui } = initUi({ init: true, projectName: 'Fresh project' })
@@ -104,7 +104,7 @@ test('the terminal setup completes missing records in the existing storage locat
   assert.equal(await exists(path.join(root, 'groma')), false)
 })
 
-test('cancelling the offer or the wizard leaves the repository untouched', async t => {
+test('cancelling the offer or the wizard leaves the repository untouched', { concurrency: true }, async t => {
   const root = await emptyRepository(t)
   const cancelledOffer = await ensureInitialized(
     { repositoryRoot: root, interactive: true, opensViewer: true },

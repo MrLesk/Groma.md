@@ -167,7 +167,7 @@ test('an existing Groma directory is reused without asking for its location', {
         throw new Error('directory prompt must not run')
       },
     })
-    await assert.rejects(initializeGroma(root, { directory: 'groma' }))
+    await assert.rejects(initializeGroma(root, { directory: 'groma' }), /Groma already uses/)
     const updatedProject = await readFile(path.join(root, '.groma/project.md'), 'utf8')
     const unchanged = await initializeGroma(root, {
       projectName: 'Updated hidden project',
@@ -194,7 +194,7 @@ test('competing Groma directories fail before initialization writes', {
     await assert.rejects(initializeGroma(root, {
       projectName: 'Ambiguous project',
       directory: 'groma',
-    }))
+    }), /Both groma\/ and \.groma\/ exist/)
     assert.equal(await missing(path.join(root, 'AGENTS.md')), true)
     assert.deepEqual(await readdir(path.join(root, 'groma')), [])
     assert.deepEqual(await readdir(path.join(root, '.groma')), [])
@@ -205,11 +205,11 @@ test('non-interactive initialization requires both explicit values before writin
   concurrency: true,
 }, async () => {
   await temporaryRepository(async root => {
-    await assert.rejects(initializeGroma(root, { projectName: 'Missing directory' }))
+    await assert.rejects(initializeGroma(root, { projectName: 'Missing directory' }), /--directory is required/)
     assert.deepEqual(await readdir(root), [])
   })
   await temporaryRepository(async root => {
-    await assert.rejects(initializeGroma(root, { directory: 'groma' }))
+    await assert.rejects(initializeGroma(root, { directory: 'groma' }), /project name is required/)
     assert.deepEqual(await readdir(root), [])
   })
 })

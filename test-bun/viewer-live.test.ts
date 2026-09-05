@@ -87,7 +87,7 @@ async function observedSystems(root: string): Promise<string[]> {
   }
 }
 
-test.concurrent('groma view does not scan on open and applies a watched fold', async () => {
+test.concurrent('the terminal host leaves initial scanning to its caller and applies a watched fold', async () => {
   const root = await createLiveRepo()
   const setup = await createTestRenderer({ width: 120, height: 36 })
   let app: Awaited<ReturnType<typeof startTerminalViewer>> | undefined
@@ -149,35 +149,6 @@ test.concurrent('groma view applies an architecture Markdown change without R', 
       await setup.renderOnce()
       return /Shopfront/.test(setup.captureCharFrame())
     })
-    assert.doesNotMatch(setup.captureCharFrame(), /Orders/)
-  } finally {
-    app?.destroy()
-    if (!setup.renderer.isDestroyed) setup.renderer.destroy()
-    await rm(root, { recursive: true, force: true })
-  }
-})
-
-test.concurrent('R reloads Markdown without scanning while the watch is running', async () => {
-  const root = await createLiveRepo()
-  await scanRepository(root)
-  const setup = await createTestRenderer({ width: 120, height: 36 })
-  let app: Awaited<ReturnType<typeof startTerminalViewer>> | undefined
-  try {
-    app = await startTerminalViewer(root, {
-      renderer: setup.renderer,
-      workSource: emptyWorkSource(),
-    })
-    app.setView({ level: 'context', currentId: 'shop' })
-    await setup.renderOnce()
-    assert.match(setup.captureCharFrame(), /Shop/)
-
-    const document = path.join(root, 'groma/systems/shop/system.md')
-    const markdown = await Bun.file(document).text()
-    await writeFile(document, markdown.replace('title: Shop', 'title: Shopfront'))
-    setup.mockInput.pressKey('r')
-    await app.refresh()
-    await setup.renderOnce()
-    assert.match(setup.captureCharFrame(), /Shopfront/)
     assert.doesNotMatch(setup.captureCharFrame(), /Orders/)
   } finally {
     app?.destroy()

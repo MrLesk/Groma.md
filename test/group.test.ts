@@ -12,7 +12,7 @@ async function groupsOf(root: string): Promise<Record<string, string | undefined
   return Object.fromEntries(world.elements.filter(element => element.kind === 'component').map(element => [element.id, element.group]))
 }
 
-test('groma add group names sibling components, edit group renames every member, remove group takes members out or dissolves it', async t => {
+test('groma add group names sibling components, edit group renames every member, remove group takes members out or dissolves it', { concurrency: true }, async t => {
   const root = await copyFixture(t, fixtureRoot, 'groma-group-')
   const added = await groma(root, ['add', 'group', 'Checkout', 'orders', 'stock'])
   assert.equal(added.code, 0, added.stderr)
@@ -31,7 +31,7 @@ test('groma add group names sibling components, edit group renames every member,
   assert.deepEqual(await groupsOf(root), { orders: undefined, stock: undefined })
 })
 
-test('group verbs refuse other kinds, mixed containers, unknown addresses and strangers without writes', async t => {
+test('group verbs refuse other kinds, mixed containers, unknown addresses and strangers without writes', { concurrency: true }, async t => {
   const root = await copyFixture(t, fixtureRoot, 'groma-group-')
   assert.equal((await groma(root, ['draft', 'component', 'Cart', '--parent', 'web', '--overview', 'Holds items.'])).code, 0)
   assert.equal((await groma(root, ['add', 'group', 'Checkout', 'orders'])).code, 0)

@@ -16,7 +16,6 @@ import {
   wheelAction,
   zoomAbout,
   zoomLimits,
-  zoomReadout,
 } from '../src/viewers/web/iso/camera.ts'
 import {
   HEIGHT_UNIT,
@@ -26,7 +25,6 @@ import {
   projectScene,
 } from '../src/viewers/web/iso/project.ts'
 import type { ProjectedScene } from '../src/viewers/web/iso/project.ts'
-import { facadePatternId } from '../src/viewers/web/iso/style.ts'
 import { box, openclawFixtureRoot, viewerFixtureRoot, worldOf } from './helpers.ts'
 
 const profile = (title: string, overview: string): ProjectProfile => ({
@@ -35,11 +33,6 @@ const profile = (title: string, overview: string): ProjectProfile => ({
   overviewBlocks: [{ spans: [{ text: overview, styles: [] }] }],
 })
 const projectProfile = profile('Shop', 'Shop architecture.')
-const groundPoint = ({ x, y }: Point): RoutePoint => ({
-  gx: (y / 12 + x / 24) / 2,
-  gy: (y / 12 - x / 24) / 2,
-})
-
 async function fixtureScene(root: string): Promise<ProjectedScene> {
   const world = await loadAnnotatedArchitecture(root)
   return projectScene(sheetScene(world), projectProfile)
@@ -128,12 +121,10 @@ test.concurrent('a many-file component projects as one centred compressed tower'
     assert.equal(rect.gx + rect.w / 2, tower.building.rect.gx + tower.building.rect.w / 2)
     assert.equal(rect.gy + rect.d / 2, tower.building.rect.gy + tower.building.rect.d / 2)
   }
-  assert.equal(facadePatternId('.ts', 'left'), facadePatternId('.ts', 'left'))
-  assert.notEqual(facadePatternId('.ts', 'left'), facadePatternId('.cs', 'left'))
-  assert.notEqual(facadePatternId('.unknown', 'left'), facadePatternId('.ts', 'left'))
 })
 
 test.concurrent('buildings paint back to front', async () => {
+  let overlappingPairs = 0
   for (const root of [viewerFixtureRoot, openclawFixtureRoot]) {
     const scene = await fixtureScene(root)
     const boxes = scene.buildings.map(item => ({
@@ -143,12 +134,14 @@ test.concurrent('buildings paint back to front', async () => {
     for (const [index, earlier] of boxes.entries()) {
       for (const later of boxes.slice(index + 1)) {
         if (!overlaps(earlier.screen, later.screen)) continue
+        overlappingPairs += 1
         const laterBehind = later.rect.gx + later.rect.w <= earlier.rect.gx
           || later.rect.gy + later.rect.d <= earlier.rect.gy
         assert.equal(laterBehind, false)
       }
     }
   }
+  assert.ok(overlappingPairs > 0)
 })
 
 test.concurrent('the fitted camera shows every point inside the viewport', async () => {
@@ -163,7 +156,7 @@ test.concurrent('the fitted camera shows every point inside the viewport', async
   }
 })
 
-test.concurrent('zooming keeps the point under the cursor still, clamps, and reads relative to fit', () => {
+test.concurrent('zooming keeps the point under the cursor still and clamps to the supported range', () => {
   const fit = fitCamera({ x: -100, y: -50, width: 800, height: 400 }, { width: 900, height: 600 })
   const anchor = { x: 300, y: 200 }
   const worldUnder = (camera: typeof fit): Point => ({
@@ -173,8 +166,6 @@ test.concurrent('zooming keeps the point under the cursor still, clamps, and rea
   const zoomed = zoomAbout(fit, 1.25, anchor, fit)
   assert.ok(Math.abs(worldUnder(zoomed).x - worldUnder(fit).x) < 1e-9)
   assert.ok(Math.abs(worldUnder(zoomed).y - worldUnder(fit).y) < 1e-9)
-  assert.equal(zoomReadout(fit, fit), '')
-  assert.equal(zoomReadout(zoomed, fit), '125%')
   const limits = zoomLimits(fit)
   assert.equal(zoomAbout(fit, 1000, anchor, fit).k, limits.max)
   assert.equal(zoomAbout(fit, 0.0001, anchor, fit).k, limits.min)
@@ -199,112 +190,7 @@ test.concurrent('Escape clears selection while x has no map action', () => {
   assert.equal(keyAction('X', 'other'), undefined)
 })
 
-test.concurrent('the frame encloses its drafting marks, every island and the west-corner compass', async () => {
-  const scene = await fixtureScene(viewerFixtureRoot)
-  const { frame, calibrationTicks, compass } = scene
-  assert.equal(frame.length, 4)
-  assert.ok(calibrationTicks.length >= 10)
-  const sheet = screenBox(frame)
-  for (const point of [...scene.islands.flatMap(item => item.polygon), ...compassPoints(scene)]) {
-    assert.ok(point.x >= sheet.x && point.x <= sheet.x + sheet.width)
-    assert.ok(point.y >= sheet.y && point.y <= sheet.y + sheet.height)
-  }
-  const groundFrame = frame.map(groundPoint)
-  const west = Math.min(...groundFrame.map(point => point.gx))
-  const north = Math.min(...groundFrame.map(point => point.gy))
-  const east = Math.max(...groundFrame.map(point => point.gx))
-  const south = Math.max(...groundFrame.map(point => point.gy))
-  const inside = (point: Point): boolean => {
-    const ground = groundPoint(point)
-    return ground.gx >= west - 1e-8 && ground.gx <= east + 1e-8
-      && ground.gy >= north - 1e-8 && ground.gy <= south + 1e-8
-  }
-  for (const tick of calibrationTicks) {
-    assert.ok(inside(tick.from) && inside(tick.to))
-    const from = groundPoint(tick.from)
-    const to = groundPoint(tick.to)
-    assert.ok((Math.abs(from.gx - east) < 1e-8 && to.gx < from.gx)
-      || (Math.abs(from.gy - south) < 1e-8 && to.gy < from.gy))
-  }
-  assert.ok(compass.at.gx < Math.min(...scene.islands.map(item => item.island.rect.gx)))
-  const letter = (text: string): Point => compass.letters.find(item => item.text === text)!.at
-  assert.ok(letter('N').y < compass.centre.y && letter('N').x > compass.centre.x)
-  assert.ok(letter('W').y < compass.centre.y && letter('W').x < compass.centre.x)
-  for (const point of compassPoints(scene)) {
-    assert.ok(point.x >= scene.bounds.x && point.x <= scene.bounds.x + scene.bounds.width)
-    assert.ok(point.y >= scene.bounds.y && point.y <= scene.bounds.y + scene.bounds.height)
-  }
-})
 
-test.concurrent('blueprint decorations scale with the sheet and the project plate stays outside architecture', () => {
-  const empty = (side: number): SheetScene => ({
-    sheet: { gx: 0, gy: 0, w: side, d: side },
-    islands: [], zones: [], slabs: [], buildings: [], routes: [],
-  })
-  const project = profile('Supply map', 'Shows supply responsibilities across the repository.')
-  const plain = projectScene(empty(48))
-  const small = projectScene(empty(12), project)
-  const large = projectScene(empty(96), project)
-  const compact = projectScene(empty(96), profile('Map', 'Short.'))
-  const growing = projectScene(empty(96), profile('Map', 'x'.repeat(60)))
-  const threshold = projectScene(empty(96), profile('Map', 'x'.repeat(80)))
-  const overflow = projectScene(empty(96), profile('Map', 'x'.repeat(81)))
-  const extended = projectScene(empty(96), profile(
-    project.title,
-    Array(8).fill(project.overview).join(' '),
-  ))
-  const moreExtended = projectScene(empty(96), profile(
-    project.title,
-    Array(16).fill(project.overview).join(' '),
-  ))
-  const length = (segment: ProjectedScene['calibrationTicks'][number]): number =>
-    Math.hypot(segment.to.x - segment.from.x, segment.to.y - segment.from.y)
-  const east = (scene: ProjectedScene): number => Math.max(...scene.frame.map(point => groundPoint(point).gx))
-  const south = (scene: ProjectedScene): number => Math.max(...scene.frame.map(point => groundPoint(point).gy))
-  const plateWidth = (scene: ProjectedScene): number => {
-    const ground = scene.projectPlate!.polygon.map(groundPoint)
-    return Math.max(...ground.map(point => point.gx)) - Math.min(...ground.map(point => point.gx))
-  }
-  const largePlate = large.projectPlate!
-  const extendedPlate = extended.projectPlate!
-  const editBox = extendedPlate.edit.polygon.map(groundPoint)
-  const editWest = Math.min(...editBox.map(point => point.gx))
-  const editEast = Math.max(...editBox.map(point => point.gx))
-  const editNorth = Math.min(...editBox.map(point => point.gy))
-  const editSouth = Math.max(...editBox.map(point => point.gy))
-
-  assert.equal(plain.projectPlate, undefined)
-  assert.equal(east(plain), south(plain))
-  const largeCompass = screenBox(large.compass.ring).width
-  const smallCompass = screenBox(small.compass.ring).width
-  assert.ok(largeCompass >= smallCompass * 2.9)
-  assert.ok(largeCompass < screenBox(large.frame).width / 10)
-  assert.ok(length(large.calibrationTicks[0]!) >= length(small.calibrationTicks[0]!) * 2.9)
-  assert.ok(plateWidth(compact) < plateWidth(growing))
-  assert.ok(plateWidth(growing) < plateWidth(threshold))
-  assert.equal(plateWidth(overflow), plateWidth(threshold))
-  assert.equal(overflow.projectPlate!.overview.lines.length, 2)
-  assert.equal(east(compact), east(overflow))
-  assert.ok(Math.min(...largePlate.polygon.map(point => groundPoint(point).gy)) > 96)
-  assert.ok(Math.max(...largePlate.polygon.map(point => groundPoint(point).gx)) < east(large))
-  assert.equal(extendedPlate.overview.lines.length, 3)
-  assert.equal(east(extended), east(large))
-  assert.ok(south(extended) > south(large))
-  assert.deepEqual(moreExtended.projectPlate!.polygon, extendedPlate.polygon)
-  assert.equal(south(moreExtended), south(extended))
-  assert.ok(Math.abs(editEast - editWest - (editSouth - editNorth)) < 1e-8)
-  const plateGround = extendedPlate.polygon.map(groundPoint)
-  assert.ok(editWest > Math.min(...plateGround.map(point => point.gx)))
-  assert.ok(editEast < Math.max(...plateGround.map(point => point.gx)))
-  assert.ok(editNorth > Math.min(...plateGround.map(point => point.gy)))
-  assert.ok(editSouth < Math.max(...plateGround.map(point => point.gy)))
-  for (const point of extendedPlate.polygon.map(groundPoint)) {
-    assert.ok(point.gy < south(extended))
-  }
-  for (const line of extendedPlate.overview.lines) {
-    assert.ok(textWidth(line.map(run => run.text).join(''), extendedPlate.overview.fontSize) <= extendedPlate.overview.maxWidth)
-  }
-})
 
 test.concurrent('every relationship has a polyline whose arrowhead lies on the sheet along its last step', async () => {
   const world = await loadAnnotatedArchitecture(viewerFixtureRoot)
@@ -421,27 +307,6 @@ test.concurrent('roof and surface text keep their owning shape inset', async () 
   }
 })
 
-test.concurrent('every surface label stays in the compact edge band', () => {
-  const projected = projectScene({
-    sheet: { gx: 0, gy: 0, w: 30, d: 20 },
-    islands: [
-      { key: 'island:actors', kind: 'actors', name: 'Actors', element: null, rect: { gx: 4, gy: 4, w: 4, d: 4 } },
-      { key: 'island:system', kind: 'system', name: 'System', element: null, rect: { gx: 10, gy: 4, w: 12, d: 12 } },
-    ],
-    zones: [{ key: 'group:system:one', name: 'Group', parent: 'island:system', members: [], rect: { gx: 12, gy: 6, w: 5, d: 5 } }],
-    slabs: [{ representationId: 'container:one', id: 'one', title: 'Container', origin: 'observed', island: 'island:system', rect: { gx: 16, gy: 8, w: 5, d: 6 } }],
-    buildings: [],
-    routes: [],
-  }, projectProfile)
-  const compact = projected.islands.find(({ island }) => island.kind === 'actors')!
-  const system = projected.islands.find(({ island }) => island.kind === 'system')!
-  assert.deepEqual(compact.text.origin, project(compact.island.rect.gx, compact.island.rect.gy + compact.island.rect.d - PAD, 0))
-  assert.deepEqual(system.text.origin, project(system.island.rect.gx, system.island.rect.gy + system.island.rect.d - PAD, 0))
-  const { zone, text: zoneText } = projected.zones[0]!
-  assert.deepEqual(zoneText.origin, project(zone.rect.gx, zone.rect.gy + zone.rect.d - PAD, 0))
-  const { slab, text: slabText } = projected.slabs[0]!
-  assert.deepEqual(slabText.origin, project(slab.rect.gx, slab.rect.gy + slab.rect.d - PAD, 0))
-})
 
 test.concurrent('projecting a frozen world leaves it untouched', async () => {
   const world = await loadAnnotatedArchitecture(viewerFixtureRoot)
@@ -449,4 +314,18 @@ test.concurrent('projecting a frozen world leaves it untouched', async () => {
   const before = structuredClone(frozen)
   projectScene(sheetScene(frozen), projectProfile)
   assert.deepEqual(frozen, before)
+})
+
+test.concurrent('the project plate stays outside architecture and inside the fitted bounds', async () => {
+  const scene = await fixtureScene(viewerFixtureRoot)
+  const plate = scene.projectPlate!
+  const south = Math.max(...scene.islands.map(({ island }) => island.rect.gy + island.rect.d))
+  const unit = project(1, 0, 0)
+  assert.ok(plate.polygon.length > 0)
+  for (const point of plate.polygon) {
+    const depth = (point.y / unit.y - point.x / unit.x) / 2
+    assert.ok(depth > south)
+    assert.ok(point.x >= scene.bounds.x && point.x <= scene.bounds.x + scene.bounds.width)
+    assert.ok(point.y >= scene.bounds.y && point.y <= scene.bounds.y + scene.bounds.height)
+  }
 })

@@ -3,14 +3,12 @@ import { mkdtemp, readdir, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
-import type { TestContext } from 'node:test'
 
 import { watchScan } from '../src/scanner.ts'
 import { run, writeTree } from './cli-helpers.ts'
 
-async function createWatchRepo(t: TestContext): Promise<string> {
+async function createWatchRepo(): Promise<string> {
   const root = await mkdtemp(path.join(os.tmpdir(), 'groma-scan-watch-'))
-  t.after(() => rm(root, { recursive: true, force: true }))
   await writeTree(root, {
     'package.json': JSON.stringify({ name: 'shop', bin: { shop: 'src/cli.ts' } }),
     '.gitignore': 'node_modules/\n',
@@ -53,15 +51,18 @@ async function observedSystems(root: string): Promise<string[]> {
   }
 }
 
-test('watchScan folds a settled TypeScript change and ignores plugin test files', async t => {
-  const root = await createWatchRepo(t)
+test('watchScan folds a settled TypeScript change and ignores plugin test files', { concurrency: true }, async t => {
+  const root = await createWatchRepo()
   const folds: number[] = []
   const session = await watchScan(root, {
     onFold: () => {
       folds.push(Date.now())
     },
   })
-  t.after(() => session.close())
+  t.after(async () => {
+    await session.close()
+    await rm(root, { recursive: true, force: true })
+  })
 
   await new Promise(resolve => setTimeout(resolve, 400))
   assert.deepEqual(folds, [])
@@ -73,8 +74,8 @@ test('watchScan folds a settled TypeScript change and ignores plugin test files'
   assert.deepEqual(await observedSystems(root), [])
 
   await writeFile(path.join(root, 'src/orders.ts'), 'export function placeOrder() {}\n')
-  await waitUntil(async () => (await observedSystems(root)).includes('shop'))
-  assert.ok(folds.length >= 1)
+  await waitUntil(() => folds.length >= 1)
+  assert.ok((await observedSystems(root)).includes('shop'))
 
   const afterFirst = folds.length
   await writeFile(path.join(root, 'src/stock.ts'), 'export function stock() {}\n')

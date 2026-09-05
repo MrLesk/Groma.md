@@ -34,7 +34,7 @@ Describes the scanned shop used by CLI tests.
   return root
 }
 
-test('groma scan reconciles source evidence and exits', async t => {
+test('groma scan reconciles source evidence and exits', { concurrency: true }, async t => {
   const root = await createScanRepo(t)
   const result = await groma(root, ['scan'])
 

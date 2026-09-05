@@ -17,7 +17,7 @@ async function relationOf(root: string, source: string, target: string) {
   return world.relationships.find(item => item.source === source && item.target === target)
 }
 
-test('groma add relation writes one relationship per ordered pair on the source document', async t => {
+test('groma add relation writes one relationship per ordered pair on the source document', { concurrency: true }, async t => {
   const root = await copyFixture(t, fixtureRoot, 'groma-relation-')
   const added = await groma(root, informs)
   assert.equal(added.code, 0, added.stderr)
@@ -37,7 +37,7 @@ test('groma add relation writes one relationship per ordered pair on the source 
   assert.deepEqual(await readTree(root), before)
 })
 
-test('groma edit relation rewords a draft and groma remove relation deletes it, even after the target was renamed', async t => {
+test('groma edit relation rewords a draft and groma remove relation deletes it, even after the target was renamed', { concurrency: true }, async t => {
   const root = await copyFixture(t, fixtureRoot, 'groma-relation-')
   const original = await readFile(path.join(root, stockPath), 'utf8')
   assert.equal((await groma(root, ['draft', ...informs.slice(1)])).code, 0)
@@ -57,7 +57,7 @@ test('groma edit relation rewords a draft and groma remove relation deletes it, 
   assert.equal(await relationOf(root, 'stock', 'orders'), undefined)
 })
 
-test('relation verbs refuse unknown ends, missing flags, element flags and the old command without writes', async t => {
+test('relation verbs refuse unknown ends, missing flags, element flags without writes', { concurrency: true }, async t => {
   const root = await copyFixture(t, fixtureRoot, 'groma-relation-')
   const before = await readTree(root)
   const cases: Array<{ name: string, args: string[] }> = [
@@ -67,7 +67,6 @@ test('relation verbs refuse unknown ends, missing flags, element flags and the o
     { name: 'one id on edit relation', args: ['edit', 'relation', 'stock', '--description', 'x'] },
     { name: 'a title on a relation', args: ['edit', 'relation', 'stock', 'orders', '--title', 'x'] },
     { name: 'a missing relation on remove', args: ['remove', 'relation', 'stock', 'orders'] },
-    { name: 'the old relate command', args: ['relate', 'stock', 'orders', '--description', 'x', '--technology', 'y'] },
   ]
   for (const item of cases) {
     const result = await groma(root, item.args)

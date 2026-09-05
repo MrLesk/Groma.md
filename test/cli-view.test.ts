@@ -18,6 +18,7 @@ function run(args: string[], cwd: string, options: { ttyStdout?: boolean } = {})
   return new Promise<{
     code: number | null
     stderr: string
+    stdout: string
   }>((resolve, reject) => {
     const commandArgs = options.ttyStdout
       ? [
@@ -31,8 +32,11 @@ function run(args: string[], cwd: string, options: { ttyStdout?: boolean } = {})
       : [cli, ...args]
     const child = spawn('bun', commandArgs, {
       cwd,
-      stdio: ['ignore', 'ignore', 'pipe'],
+      stdio: ['ignore', 'pipe', 'pipe'],
     })
+    let stdout = ''
+    child.stdout.setEncoding('utf8')
+    child.stdout.on('data', chunk => { stdout += chunk })
     let stderr = ''
     const timeout = options.ttyStdout
       ? setTimeout(() => {
@@ -50,41 +54,47 @@ function run(args: string[], cwd: string, options: { ttyStdout?: boolean } = {})
     })
     child.on('close', code => {
       if (timeout !== undefined) clearTimeout(timeout)
-      resolve({ code, stderr })
+      resolve({ code, stderr, stdout })
     })
   })
 }
 
-test('groma view exits without a TUI when output is not interactive', async () => {
+test('groma view exits without a TUI when output is not interactive', { concurrency: true }, async () => {
   for (const args of [['view'], ['view', '--plain']]) {
     const result = await run(args, fixtureRoot)
     assert.equal(result.code, 0, result.stderr)
+    assert.match(result.stdout, /^buyer\s+actor/m)
   }
 })
 
-test('groma view --plain exits when output is interactive', async () => {
+test('groma view --plain exits when output is interactive', { concurrency: true }, async () => {
   const result = await run(['view', '--plain'], fixtureRoot, { ttyStdout: true })
 
   assert.equal(result.code, 0, result.stderr)
+  assert.match(result.stdout, /^buyer\s+actor/m)
 })
 
-test('groma view resolves element, draft, and source-file targets', async () => {
+test('groma view resolves element, draft, and source-file targets', { concurrency: true }, async () => {
   for (const target of ['stock', 'orders', 'next', 'src/orders.ts']) {
     const result = await run(['view', target], fixtureRoot)
     const plain = await run(['view', target, '--plain'], fixtureRoot)
 
     assert.equal(result.code, 0, result.stderr)
     assert.equal(plain.code, 0, plain.stderr)
+    const selectedId = target === 'src/orders.ts' ? 'orders' : target
+    assert.equal(result.stdout.split('\n')[0], selectedId)
+    assert.equal(plain.stdout, result.stdout)
   }
 })
 
-test('groma view rejects an unknown target', async () => {
+test('groma view rejects an unknown target', { concurrency: true }, async () => {
   const result = await run(['view', 'no-such'], fixtureRoot)
 
   assert.equal(result.code, 1)
+  assert.match(result.stderr, /unknown target: no-such/)
 })
 
-test('groma view fails when several elements share a code file', async (t: TestContext) => {
+test('groma view fails when several elements share a code file', { concurrency: true }, async (t: TestContext) => {
   const parent = await mkdtemp(path.join(os.tmpdir(), 'groma-view-'))
   t.after(() => rm(parent, { recursive: true, force: true }))
   const root = path.join(parent, 'repo')
@@ -110,4 +120,5 @@ test('groma view fails when several elements share a code file', async (t: TestC
   const result = await run(['view', 'src/orders.ts'], root)
 
   assert.equal(result.code, 1)
+  assert.match(result.stderr, /several elements share src\/orders\.ts/)
 })

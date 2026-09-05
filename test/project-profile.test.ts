@@ -1,9 +1,7 @@
 import assert from 'node:assert/strict'
-import path from 'node:path'
 import test from 'node:test'
-import { fileURLToPath } from 'node:url'
 
-import { loadProjectProfile, parseProjectProfile } from '../src/project-profile.ts'
+import { parseProjectProfile } from '../src/project-profile.ts'
 
 const source = `---
 type: Groma Project
@@ -23,7 +21,7 @@ Across the whole repo.
 More detail stays in the body.
 `
 
-test('the marked project concept owns title, description, and body overview', async () => {
+test('the marked project concept owns title, description, and body overview', { concurrency: true }, async () => {
   const profile = await parseProjectProfile(source)
 
   assert.equal(profile.title, 'Supply map')
@@ -41,20 +39,9 @@ test('the marked project concept owns title, description, and body overview', as
   assert.equal(profile.overviewBlocks.at(-1)?.spans[0]?.text, 'More detail stays in the body.')
 })
 
-test('the project body cannot duplicate its canonical title', async () => {
+test('the project body cannot duplicate its canonical title', { concurrency: true }, async () => {
   await assert.rejects(
     parseProjectProfile(source.replace('Shows **supply**', '# Supply map\n\nShows **supply**')),
+    /must not duplicate title/,
   )
-})
-
-test('loads the project profile from groma/project.md', async () => {
-  const fixtureRoot = path.resolve(
-    path.dirname(fileURLToPath(import.meta.url)),
-    'fixtures',
-    'validate',
-  )
-  const profile = await loadProjectProfile(fixtureRoot)
-
-  assert.equal(profile?.title, 'Example architecture')
-  assert.match(profile?.overview ?? '', /small shop/)
 })

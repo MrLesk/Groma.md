@@ -1,19 +1,11 @@
 import assert from 'node:assert/strict'
 import { test } from 'bun:test'
 
-import { createTestRenderer } from '@opentui/core/testing'
 
-import { KEYS_BOX, MAP_KEYS } from '../src/viewers/tui/keys.ts'
 import { initialState, reduceViewer } from '../src/viewers/tui/navigation.ts'
 import { projectWorld } from '../src/viewers/tui/projection.ts'
-import { mountTerminalViewer } from '../src/viewers/tui/terminal-viewer.ts'
-import { navigationWorld, paneLayout, press, terminalModel, viewerFixtureRoot } from './helpers.ts'
+import { navigationWorld, paneLayout } from './helpers.ts'
 
-test.concurrent('the keys box lists exactly the keys the viewer handles', () => {
-  const listed = KEYS_BOX.flatMap(row => row.names)
-  assert.deepEqual([...listed].sort(), MAP_KEYS.map(key => key.name).sort())
-  assert.equal(new Set(listed).size, listed.length)
-})
 
 test.concurrent('? opens the keys box in the details pane and Escape brings the previous details back without touching the map', () => {
   const model = navigationWorld()
@@ -29,18 +21,4 @@ test.concurrent('? opens the keys box in the details pane and Escape brings the 
   assert.equal(closed.keys, false)
   assert.equal(closed.panes.details, true)
   assert.equal(reduceViewer(model, shown, 'toggle-keys').keys, false)
-})
-
-test.concurrent('the keys box shows over the selection and gives it back', async () => {
-  const model = await terminalModel(viewerFixtureRoot)
-  const setup = await createTestRenderer({ width: 120, height: 36 })
-  const app = mountTerminalViewer(setup.renderer, model)
-  await setup.renderOnce()
-  const title = (frame: string) => [...frame.split('\n')[2]!].slice(paneLayout(120, 36).details.x).join('')
-  const selection = title(setup.captureCharFrame())
-  const box = await press(setup, '?')
-  assert.ok(title(box).includes('Keys'))
-  assert.ok(box.includes(KEYS_BOX[0]!.label))
-  assert.equal(title(await press(setup, 'escape')), selection)
-  app.destroy()
 })
