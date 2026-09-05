@@ -12,7 +12,7 @@ export interface ViewState {
   file?: string
   line?: number
   selection: Selection
-  flow?: FlowRef
+  flows: FlowRef[]
   tab: DetailsTab
   theme: WebThemeMode
   hudVisible: boolean
@@ -56,12 +56,16 @@ function architectureSelection(
   return ids
 }
 
-function activeFlow(params: URLSearchParams, world: ArchitectureGraph): FlowRef | undefined {
-  const flow = world.flows.find(item => item.id === params.get('flow'))
-  if (flow === undefined) return undefined
+function activeFlows(params: URLSearchParams, world: ArchitectureGraph): FlowRef[] {
+  const flows: FlowRef[] = [...new Set(params.getAll('flow'))]
+    .filter(id => world.flows.some(item => item.id === id)).map(id => ({ id }))
+  const active = flows.at(-1)
+  const flow = world.flows.find(item => item.id === active?.id)
+  if (flow === undefined || active === undefined) return flows
   const requested = Number(params.get('step'))
   const step = Number.isInteger(requested) && requested >= 1 && requested <= flow.steps.length ? requested - 1 : undefined
-  return { id: flow.id, ...(step === undefined ? {} : { step }) }
+  if (step !== undefined) active.step = step
+  return flows
 }
 
 function sourceState(
@@ -93,7 +97,7 @@ function appendSourceState(
 /**
  * Reads the ordered architecture selection (repeated `<kind>=<id>` and
  * `relationship=<source id>/<target id>` entries) or `task=<id>`,
- * one authored flow (`flow=<id>`) and its optional one-based `step=<number>`,
+ * checked flows (repeated `flow=<id>`) and the last flow's one-based `step=<number>`,
  * `tab=how|tasks`, `theme=light|dark|blueprint` and `hud=off`. Ids are the authored ids; anything the world
  * or the work does not know is ignored, a kind naming an element of another kind included.
  */
@@ -110,7 +114,8 @@ export function readView(
   const byId = new Map(world.elements.map(element => [element.id, element]))
   const architecture = architectureSelection(params, byId, world)
   const task = work.find(item => item.id === params.get('task'))
-  const flow = activeFlow(params, world)
+  const flows = activeFlows(params, world)
+  const flow = flows.at(-1)
   const selection: Selection = architecture.length > 0
     ? { kind: 'architecture', ids: architecture }
     : task !== undefined ? selectTask(task.id)
@@ -123,7 +128,7 @@ export function readView(
     ...(revision === undefined ? {} : { revision }),
     ...source,
     selection,
-    ...(flow === undefined ? {} : { flow }),
+    flows,
     tab: source.file !== undefined || params.get('tab') === 'how'
       ? 'how'
       : params.get('tab') === 'tasks' ? 'tasks' : 'what',
@@ -183,7 +188,9 @@ export function writeView(state: ViewState, world: ArchitectureGraph, work: read
   appendSelection(pairs, state, elements, world, work)
   if (state.selection.kind === 'architecture' && state.tab !== 'what') pairs.push(['tab', state.tab])
   appendSourceState(pairs, state, selected)
-  appendFlow(pairs, state.flow, world)
+  for (const flow of state.flows) {
+    appendFlow(pairs, flow === state.flows.at(-1) ? flow : { id: flow.id }, world)
+  }
   if (state.theme !== 'auto') pairs.push(['theme', state.theme])
   if (!state.hudVisible) pairs.push(['hud', 'off'])
   return pairs.length === 0 ? '' : `?${pairs.map(([key, value]) => `${key}=${value}`).join('&')}`

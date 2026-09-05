@@ -40,13 +40,13 @@ export function mapFrame(
   map: Rect,
   header: Rect,
   hierarchy: Rect,
-  details: Rect,
+  details: { left: number; hidden: boolean },
   hudVisible: boolean,
 ): MapFrame {
   if (!hudVisible) return { x: 0, y: 0, width: map.width, height: map.height }
   const x = hierarchy.right - map.left + 12
   const y = header.bottom - map.top + 12
-  const right = details.left - map.left - 12
+  const right = details.hidden ? map.width : details.left - map.left - 12
   return {
     x,
     y,

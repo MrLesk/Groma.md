@@ -7,7 +7,7 @@ import { mapFrame } from '../src/viewers/web/chrome/shell.ts'
 const map = { left: 10, top: 20, right: 1010, bottom: 720, width: 1000, height: 700 }
 const header = { left: 10, top: 20, right: 1010, bottom: 82, width: 1000, height: 62 }
 const hierarchy = { left: 10, top: 94, right: 290, bottom: 720, width: 280, height: 626 }
-const details = { left: 710, top: 94, right: 1010, bottom: 720, width: 300, height: 626 }
+const details = { left: 710, hidden: false }
 
 test.concurrent('the HUD reserves a safe camera frame between its panes', () => {
   assert.deepEqual(mapFrame(map, header, hierarchy, details, true), {
@@ -25,4 +25,12 @@ test.concurrent('map-only mode gives the camera the complete viewport', () => {
     width: 1000,
     height: 700,
   })
+})
+
+test.concurrent('opening details immediately reserves its final layout width', () => {
+  const closed = mapFrame(map, header, hierarchy, { ...details, hidden: true }, true)
+  const opened = mapFrame(map, header, hierarchy, details, true)
+  assert.equal(closed.x, opened.x)
+  assert.equal(closed.width, map.width - closed.x)
+  assert.equal(opened.x + opened.width, details.left - map.left - 12)
 })

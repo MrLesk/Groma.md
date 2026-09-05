@@ -14,9 +14,9 @@ import { bindThemeControl, readSavedTheme } from './chrome/theme-control.ts'
 import { paintWorldStats, primarySystem } from './chrome/stats.ts'
 import { createWebDataSource } from './data.ts'
 import { createFlowList } from './flow/list.ts'
-import { flowHighlight, toggleFlowActivation, type WebFlowRef } from './flow/state.ts'
+import { flowHighlight, flowSelection, retainFlows, toggleFlowActivation, type WebFlowRef } from './flow/state.ts'
 import { paintFlowReturn, paintFlowDetails } from './flow/reader.ts'
-import { fitHighlights, fitCamera, pan, wheelAction, zoomAbout, zoomLimits, zoomReadout } from './iso/camera.ts'
+import { fitArchitecture, fitHighlights, fitCamera, pan, wheelAction, zoomAbout, zoomLimits, zoomReadout } from './iso/camera.ts'
 import type { Camera } from './iso/camera.ts'
 import { createMap } from './iso/map.ts'
 import { bindMapPointer } from './iso/pointer.ts'
@@ -85,7 +85,7 @@ const themeControl = bindThemeControl(document.getElementById('theme') as HTMLDe
 let hudVisible = opened.hudVisible
 shell.setHud(hudVisible)
 let selection = opened.selection
-let activeFlow: WebFlowRef | undefined = opened.flow
+let activeFlows: WebFlowRef[] = opened.flows
 const initial = primarySystem(world)
 if (boot.revision === null && selection.kind === 'none' && initial !== undefined) {
   selection = selectArchitecture(noSelection, initial.representationId, false)
@@ -117,7 +117,7 @@ function viewport(): MapFrame {
     host.getBoundingClientRect(),
     headerHost.getBoundingClientRect(),
     hierarchyHost.getBoundingClientRect(),
-    detailsHost.getBoundingClientRect(),
+    { left: detailsHost.offsetLeft, hidden: detailsHost.inert },
     hudVisible,
   )
 }
@@ -177,7 +177,7 @@ function syncUrl(): void {
     ...(revisionControl.selected === undefined ? {} : { revision: revisionControl.selected }),
     ...(source.file === undefined ? {} : { file: source.file }),
     ...(source.line === undefined ? {} : { line: source.line }),
-    selection, flow: activeFlow,
+    selection, flows: activeFlows,
     tab: detailsTab,
     theme: themeControl.mode,
     hudVisible,
@@ -187,15 +187,16 @@ function syncUrl(): void {
 
 function paintMapState(task: WorkItem | undefined, activeTaskItems: WorkItem[]): void {
   const selectedIds = selectedArchitecture(selection)
-  const { routes: litIds, focusedRoute } = flowHighlight(activeFlow, world)
+  const { routes: litIds, focusedRoute } = flowHighlight(activeFlows, world)
   map.select(selectedIds)
-  map.mark(new Set(activeFlow === undefined ? activeTaskItems.flatMap(item => touchedElements(item, world)) : []))
+  map.mark(new Set(activeFlows.length === 0 ? activeTaskItems.flatMap(item => touchedElements(item, world)) : []))
   pins.activate(activeTaskIds, task?.id)
   island.activate(activeTaskIds, task?.id)
   map.setLitRoutes(litIds, id => elementOnPath(id, litIds, world), focusedRoute)
 }
 
 function paintViewState(commitUrl = true): void {
+  const activeFlow = activeFlows.at(-1)
   if (commitUrl) syncUrl()
   shell.paint(selection)
   const selectedId = primarySelection(selection)
@@ -203,11 +204,11 @@ function paintViewState(commitUrl = true): void {
   const activeTaskItems = activeTaskIds.map(id => workItem(id)).filter((item): item is WorkItem => item !== undefined)
   paintMapState(task, activeTaskItems)
   paintTree()
-  paintFlows(flowsHost, world, activeFlow, toggleFlow, {
+  paintFlows(flowsHost, world, activeFlows, toggleFlow, {
     title: 'Actors', selectedIds: selectedArchitecture(selection), onSelectActor: select,
   })
   paintWorldStats(statsHost, world)
-  paintFlowReturn(detailsHost, activeFlow, selection.kind === 'flow', world, select, backToFlow)
+  paintFlowReturn(detailsHost, activeFlow, selection.kind === 'flow', world, select, showFlows)
   const flow = world.flows.find(item => item.id === selectedId)
   if (selection.kind === 'flow' && flow !== undefined && activeFlow !== undefined) {
     paintFlowDetails(detailsHost, flow, activeFlow, world, selectFlowStep, select)
@@ -224,7 +225,7 @@ function paintViewState(commitUrl = true): void {
       world,
       onSelect: select,
       onToggleFlow: flow => toggleFlow(flow, selected.representationId),
-      activeFlow,
+      activeFlows,
       tab: detailsTab,
       onTab: tab => {
         detailsTab = tab
@@ -261,14 +262,14 @@ function select(id: string, additive = false): void {
   detailsTab = detailsTabAfterSelection(detailsTab, primarySelection(selection), primarySelection(next))
   selection = next
   paintViewState()
+  focusArchitecture(selectedArchitecture(selection))
 }
 
-function applyFocus(next: Camera | undefined, frame: MapFrame): boolean {
-  if (next === undefined) return false
+function applyFocus(next: Camera | undefined, frame: MapFrame): void {
+  if (next === undefined) return
   camera = pan(next, frame.x, frame.y)
   touched = true
   applyCamera()
-  return true
 }
 function focusActiveTasks(): void {
   const elementIds = activeTaskIds.flatMap(id => {
@@ -278,10 +279,14 @@ function focusActiveTasks(): void {
   const frame = viewport()
   applyFocus(fitHighlights(scene, elementIds, frame, zoomLimits(fitted).max), frame)
 }
+function focusArchitecture(ids: readonly string[]): void {
+  const frame = viewport()
+  applyFocus(fitArchitecture(scene, world, ids, frame, zoomLimits(fitted).max), frame)
+}
 
 /** Every task entry point shares details, highlighting and camera focus. */
 function applyTaskSelection(next: ReturnType<typeof toggleWorkSelection>): void {
-  activeFlow = undefined
+  activeFlows = []
   activeTaskIds = next.active
   source.clear()
   selection = next.selected === undefined ? noSelection : selectTask(next.selected)
@@ -298,7 +303,7 @@ function deselect(): void {
   source.clear()
   selection = noSelection
   activeTaskIds = []
-  activeFlow = undefined
+  activeFlows = []
   paintViewState()
 }
 
@@ -316,27 +321,26 @@ const searchControl = createSearchSession({
     ({ selection, camera, touched, detailsTab } = next)
     applyCamera()
     paintViewState(commitUrl)
+    if (commitUrl) focusArchitecture(selectedArchitecture(selection))
   },
 })
 
-function backToFlow(): void {
-  if (activeFlow === undefined) return
+function showFlows(): void {
   source.clear()
-  selection = { kind: 'flow', id: activeFlow.id }
+  selection = flowSelection(activeFlows)
   paintViewState()
+  focusArchitecture([...flowHighlight(activeFlows, world).routes])
 }
 
 function selectFlowStep(step: number | undefined): void {
-  if (activeFlow !== undefined) activeFlow = { ...activeFlow, step }
+  activeFlows = activeFlows.map((flow, index) => index === activeFlows.length - 1 ? { ...flow, step } : flow)
   paintViewState()
 }
 
 function toggleFlow(flow: FlowRef, returnTo?: string): void {
-  activeFlow = toggleFlowActivation(activeFlow, flow, returnTo)
-  source.clear()
+  activeFlows = toggleFlowActivation(activeFlows, flow, returnTo)
   activeTaskIds = []
-  selection = activeFlow === undefined ? noSelection : { kind: 'flow', id: activeFlow.id }
-  paintViewState()
+  showFlows()
 }
 
 /** The pane takes the wheel wherever the cursor is, pins included; the Live work island keeps it for its chip strip. */
@@ -446,7 +450,7 @@ function applyWorld(payload: WebPayload, reset = false): void {
     source.clear()
     tree = initialTree()
     activeTaskIds = []
-    activeFlow = undefined
+    activeFlows = []
     selection = noSelection
     detailsTab = 'what'
     camera = fitted
@@ -454,21 +458,12 @@ function applyWorld(payload: WebPayload, reset = false): void {
   } else {
     if (!touched) camera = fitted
     activeTaskIds = activeTaskIds.filter(id => workItem(id) !== undefined)
-    const record = world.flows.find(flow => flow.id === activeFlow?.id)
-    if (record === undefined) activeFlow = undefined
-    else if (activeFlow?.step !== undefined && record.steps[activeFlow.step] === undefined) activeFlow = { ...activeFlow, step: undefined }
+    activeFlows = retainFlows(activeFlows, world)
+    if (selection.kind === 'flow') selection = flowSelection(activeFlows)
     selection = retainSelection(selection, id => known(id))
   }
-  debug.paint(() => map.paint(scene))
-  revisionControl.paintProjectEdit(map.svg)
-  authoring.refresh()
-  pins.paint(currentPins)
-  island.paint(payload.pins, work)
-  emptyState.paint(world, project, revisionControl.selected !== undefined)
-  applyCamera()
   taskDiff.invalidate()
-  paintViewState()
-  source.restore()
+  paintWorld()
   searchControl.update(world.elements, work.items)
 }
 /** Repaints only the optional Backlog layer; map projection, painting and camera state stay unchanged. */
@@ -486,13 +481,18 @@ function applyWork(payload: WebWorkPayload): void {
   paintViewState()
   searchControl.updateTasks(work.items)
 }
-debug.paint(() => map.paint(scene))
-revisionControl.paintProjectEdit(map.svg)
-authoring.refresh()
-pins.paint(currentPins)
-island.paint(boot.pins, work)
-emptyState.paint(world, project, revisionControl.selected !== undefined)
-applyCamera()
-paintViewState()
-source.restore()
+function paintWorld(): void {
+  debug.paint(() => map.paint(scene))
+  revisionControl.paintProjectEdit(map.svg)
+  authoring.refresh()
+  pins.paint(currentPins)
+  island.paint(currentPins, work)
+  emptyState.paint(world, project, revisionControl.selected !== undefined)
+  applyCamera()
+  paintViewState()
+  source.restore()
+}
+paintWorld()
 if (selection.kind === 'task') focusActiveTasks()
+else if (opened.selection.kind === 'architecture') focusArchitecture(selectedArchitecture(selection))
+else if (selection.kind === 'flow') focusArchitecture([...flowHighlight(activeFlows, world).routes])

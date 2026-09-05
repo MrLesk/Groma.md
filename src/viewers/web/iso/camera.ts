@@ -1,4 +1,7 @@
-import type { Bounds, Point } from '../../../types.ts'
+import type { ArchitectureGraph, Bounds, Point } from '../../../types.ts'
+import { ancestorIds, parentOfElements } from '../../relationship-text.ts'
+import type { LayeredScene } from '../layers/separation.ts'
+import { boundsOf } from './project.ts'
 import type { ProjectedScene } from './project.ts'
 
 /** Screen = world · k + (x, y); the same camera transform owns pan and zoom. */
@@ -64,14 +67,32 @@ function fitPoints(
   maxZoom: number,
 ): Camera | undefined {
   if (points.length === 0) return undefined
-  const xs = points.map(point => point.x)
-  const ys = points.map(point => point.y)
-  return fittedCamera({
-    x: Math.min(...xs),
-    y: Math.min(...ys),
-    width: Math.max(...xs) - Math.min(...xs),
-    height: Math.max(...ys) - Math.min(...ys),
-  }, viewport, maxZoom, CONTEXT_MARGIN)
+  const margin = Math.min(CONTEXT_MARGIN, viewport.width / 4, viewport.height / 4)
+  return fittedCamera(boundsOf(points), viewport, maxZoom, margin)
+}
+
+/** Fits selected elements with their contents, or explicit routes with their endpoints. */
+export function fitArchitecture(
+  scene: LayeredScene,
+  world: ArchitectureGraph,
+  ids: readonly string[],
+  viewport: Viewport,
+  maxZoom: number,
+): Camera | undefined {
+  const wanted = new Set(ids)
+  const routes = scene.routes.filter(item => wanted.has(item.route.id))
+  for (const { route } of routes) {
+    wanted.add(route.source)
+    wanted.add(route.target)
+  }
+  const parentOf = parentOfElements(world.elements)
+  const bodies = new Set(world.elements
+    .filter(element => ancestorIds(element.representationId, parentOf).some(id => wanted.has(id)))
+    .map(element => element.representationId))
+  return fitPoints([
+    ...bodyPoints(scene, bodies),
+    ...routes.flatMap(item => [...item.points, ...item.lifts.flatMap(lift => [lift.from, lift.to])]),
+  ], viewport, maxZoom)
 }
 
 /** Fits identified bodies and the highlighted routes leaving them; missing ids do not affect the camera. */

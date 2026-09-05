@@ -181,7 +181,7 @@ export interface DetailsOptions extends PaneWrites {
   world: ArchitectureGraph
   onSelect: (id: string, additive: boolean) => void,
   onToggleFlow: (flow: FlowRef) => void,
-  activeFlow: FlowRef | undefined
+  activeFlows: readonly FlowRef[]
   tab: DetailsTab
   onTab: (tab: DetailsTab) => void,
   code: readonly CodeFile[]
@@ -210,7 +210,7 @@ function paintTabs(tabsHost: HTMLElement, availableTabs: DetailsTab[], shownTab:
 }
 
 export function paintDetails(host: HTMLElement, inspected: Inspected, options: DetailsOptions): void {
-  const { onSelect, onToggleFlow, activeFlow, tab, onTab, code, onSource, workGroups, onTask, onRemove, onAccept, onEdit, onRead, selection } = options
+  const { onSelect, onToggleFlow, activeFlows, tab, onTab, code, onSource, workGroups, onTask, onRemove, onAccept, onEdit, onRead, selection } = options
   if (onEdit !== undefined && isEditing(host, inspected.id)) return
   const title = host.querySelector('h1')!
   const meta = host.querySelector('.meta')!
@@ -247,7 +247,7 @@ export function paintDetails(host: HTMLElement, inspected: Inspected, options: D
     flows: () => {
       if (inspected.flows.length === 0) return
       const list = document.createElement('div')
-      paintDetailFlows(list, options.world, activeFlow, onToggleFlow, {
+      paintDetailFlows(list, options.world, activeFlows, onToggleFlow, {
         title: inspected.kindLabel === 'Actor' ? 'Flows from this actor' : `Flows through this ${inspected.kindLabel.toLowerCase()}`,
         visibleFlows: inspected.flows,
         contextId: inspected.id,
