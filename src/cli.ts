@@ -88,7 +88,7 @@ async function openTerminalView(target: string | undefined, plain: boolean): Pro
       process.exitCode = 1
       return
     }
-    console.log(result.text)
+    process.stdout.write(result.text)
   } else if (plain || !process.stdout.isTTY) {
     const { renderPlainWorld } = await import('./plain-world.ts')
     console.log(await renderPlainWorld(process.cwd()))
@@ -252,8 +252,8 @@ program
 program
   .command('view')
   .description('Scan this repo and open the terminal map')
-  .argument('[target]', 'element id, draft id, or repository-relative source file')
-  .option('--plain', 'print the merged world as plain text')
+  .argument('[target]', 'element or flow id for complete Markdown, draft id, or exact source file')
+  .option('--plain', 'print a compact world overview with groups and a flow index')
   .action(async (target: string | undefined, options) => {
     try {
       await openTerminalView(target, Boolean(program.opts().plain || options.plain))
