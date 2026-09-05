@@ -3,7 +3,7 @@ import type { EditArchitectureInput } from '../../../authoring.ts'
 import { message } from './editable.ts'
 
 /** What the edit verb changes from the pane; the id is the selected element's. */
-export type MeaningEdit = Pick<EditArchitectureInput, 'title' | 'description' | 'overview' | 'technology' | 'draft' | 'parent'>
+export type MeaningEdit = Pick<EditArchitectureInput, 'title' | 'description' | 'overview' | 'technology' | 'parent'>
 
 export interface ParentOption {
   id: string
@@ -22,7 +22,6 @@ export interface PaneWrites {
   onRemove?: () => Promise<void>
   onAccept?: () => Promise<void>
   onEdit?: (input: MeaningEdit) => Promise<void>
-  drafts?: readonly string[]
   parents?: readonly ParentOption[]
   /** Present while several components are selected on a live map. */
   selection?: SelectionWrites

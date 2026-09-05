@@ -51,24 +51,14 @@ complete change before writing. A refused save keeps the form and saved
 architecture. Live work updates keep an open form's unsaved values. Changing
 selection leaves that editing session. Source evidence remains read-only.
 
-Element fields are title, description, overview, technology, draft record,
-and parent where the component can move. Empty optional values clear the
+Element fields are title, description, overview, technology, and parent
+where the component can move. Empty optional values clear the
 field. Relationship fields are description and technology. A matched draft
 element exposes Accept; a draft relationship exposes its own explicit Accept.
 Both use `groma accept`, with the relationship addressed by its two endpoints.
 
-The map toolbar offers System, Container, Component, Group, and Connect.
-Drag a creation control onto the map: a system needs no parent, a container
-drop chooses a system, and a component drop chooses a container. Dropping on
-a descendant resolves its owning parent. The form collects name and overview
-and posts `groma draft`. Groma chooses the new element's final position.
-
-Choose Group and draw a rectangle around complete component bodies. The
-form names those members and submits `groma add group`; core requires sibling
-components and computes the group boundary. Choose Connect and drag from one
-component to another. Its form collects description and technology and posts
-`groma draft relation`. Cancel creates nothing. No gesture coordinates or
-manual route points are stored. Escape cancels an active gesture.
+The map gesture toolbar is hidden while its interactions are unfinished.
+Draft software and relationship creation remain available through the CLI.
 
 Shift-click selection still offers Group as and Combine into through the
 shared operations. Pressing a group zone opens Rename and Dissolve. Historical
@@ -134,7 +124,9 @@ resumes live architecture and work updates.
 The hierarchy pane's boxed double-chevron retracts it to a narrow rail and
 returns it without changing tree, selection, or camera state. Its quiet branch lines keep nested
 rows legible. Under Flows, each actor has an accordion that starts collapsed
-and retains its open state across viewer repaints. Each group contains the
+and retains its open state across viewer repaints. Actor rows use the shared
+actor glyph and sit one indentation level below Flows, with their flow rows
+one level deeper. Each group contains the
 scenarios whose first step starts with that actor. Flows that start with a
 software element appear directly in the list. Each row is one named, authored
 scenario. Clicking it opens its
@@ -143,7 +135,8 @@ Only one flow is focused at a time; clicking it again clears it. The same
 control appears in an element's Flows list. Structure rows use kind marks and
 neutral selection; their arrows only expand containment. Below it the Structure
 section starts open and groups the software containment tree under Systems
-and External systems labels, omitting an empty group. Actors appear in the
+and External systems labels, omitting an empty group. A full-width section
+divider separates the external systems from the internal structure. Actors appear in the
 flow accordions and remain on the map. Containers
 sit under their system and components under their container, in
 hierarchy order; the map places them by flow instead.
