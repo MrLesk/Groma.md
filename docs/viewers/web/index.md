@@ -83,16 +83,19 @@ The isometric grid fills the screen. Inset 35%-paper frosted chrome floats
 above it as one technical instrument. The header groups the groma.md lockup,
 system name, quiet flow and element counts, and revision menu on the left.
 A permanent Search field sits between that context and the view controls:
-Fit, `-`, zoom readout, `+`, Theme, Help, and Credits. Controls share one
+Fit, `-`, zoom readout, `+`, Theme, Help, and Info. Controls share one
 height, and opening search leaves them in place. Header popups float with
 a clear gap below the bar. At narrower widths the
 counts and the Fit and Theme text give way to the controls.
-Popup triggers share a pointer cursor. Clicking outside dismisses Help, Credits,
+Popup triggers share a pointer cursor. Clicking outside dismisses Help, Info,
 Theme, Revision, and Search through the same popup behavior. Search cancellation
 restores its saved view; the revision tooltip remains part of its popup.
-Help opens a grouped shortcut guide for Map, Search, View, and layer gestures.
-Actions and key labels align in rows on the shared popup surface. The information icon opens
-Credits with a link to the Groma repository, followed by every directly declared
+Help explains the map shapes, drafts, relationships, and how source-file counts,
+lines of code, and dependencies determine building sizes relative to the project.
+It also explains Markdown curation and keeps the grouped Map, Search, View, and
+layer shortcuts. Actions and key labels align in rows on the shared scrollable
+popup surface. The information icon opens About Groma with the Groma logo,
+a brief product description and repository link, followed by every directly declared
 third-party runtime library and development tool, including its version, license,
 and project link. The dropdown lists Auto,
 Light, Dark and Blueprint. Auto is the default for a browser profile with no
