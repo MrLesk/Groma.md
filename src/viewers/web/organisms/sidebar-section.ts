@@ -10,7 +10,10 @@ export function sectionHeading(
   heading.type = 'button'
   heading.className = 'section tree-section'
   heading.dataset.id = `section:${name}`
-  heading.append(disclosureChevron(), document.createTextNode(name))
+  const twist = document.createElement('span')
+  twist.className = 'twist'
+  twist.append(disclosureChevron())
+  heading.append(twist, document.createTextNode(name))
   heading.setAttribute('aria-expanded', String(expanded))
   heading.addEventListener('click', onToggle)
   return heading
