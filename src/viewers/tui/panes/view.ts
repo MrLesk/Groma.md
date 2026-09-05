@@ -1,4 +1,5 @@
 import { actionCaption } from '../../relationship-text.ts'
+import { hasComponents, isEmptyWorld, noComponentsTitle } from '../../../empty-world.ts'
 import type { ViewerTheme } from '../atoms/theme.ts'
 import { flowEndpointLabel, type ProjectedFlowStep } from '../flow.ts'
 import type { TerminalViewModel } from '../model.ts'
@@ -18,6 +19,9 @@ import type { AnnotatedElement } from '../../../types.ts'
 
 /** A compact entry to Backlog, centered below the architecture canvas. */
 function recapLine(theme: ViewerTheme, world: TerminalViewModel, width: number): Line | undefined {
+  if (world.revision === undefined && !isEmptyWorld(world) && !hasComponents(world)) {
+    return [plain(theme, ` ${noComponentsTitle} · Create code or draft a system `)]
+  }
   const groups = workGroups(world.work)
   if (groups.length === 0) return undefined
   const counts = groups.map(group => `${group.items.length} ${group.status}`).join(' · ')

@@ -4,10 +4,11 @@ import { loadArchitecture } from './architecture-reader.ts'
 import { createClackInitUi } from './init-command-ui.ts'
 import {
   initializeGroma,
+  gromaInitialization,
   type GromaInitPrompts,
 } from './initialize.ts'
 import { formatScanSummary, scanRepository } from './scanner.ts'
-import { GromaFileSystem, NOT_INITIALIZED, type GromaDirectory } from './groma-filesystem.ts'
+import { NOT_INITIALIZED, type GromaDirectory } from './groma-filesystem.ts'
 import { c4Kind } from './okf-profile.ts'
 
 export type InitViewer = 'web' | 'view'
@@ -227,14 +228,14 @@ export async function runInitCommand(
 export type FirstRunOutcome = 'ready' | 'declined' | 'missing' | 'cancelled'
 
 /**
- * The door a viewer passes on its way in. Nothing to do when the Groma directory exists;
+ * The terminal viewer's setup entry. Nothing to do when the project records exist;
  * one sentence and a failure without a TTY; on a TTY, the offer to run the init wizard.
  */
 export async function ensureInitialized(
   input: InitCommandInput,
   overrides: Partial<InitCommandDependencies> = {},
 ): Promise<FirstRunOutcome> {
-  if (GromaFileSystem.find(input.repositoryRoot) !== undefined) return 'ready'
+  if (gromaInitialization(input.repositoryRoot).initialized) return 'ready'
   const dependencies = { ...defaultDependencies, ...overrides }
   if (!input.interactive) {
     dependencies.error(NOT_INITIALIZED)

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { access, mkdtemp, rm } from 'node:fs/promises'
+import { access, mkdir, mkdtemp, rm } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
@@ -25,14 +25,15 @@ async function exists(filename: string): Promise<boolean> {
   }
 }
 
-test('groma web without a Groma directory and without a TTY names groma init in one line and fails', async t => {
+test('plain view treats a Groma folder without project records as uninitialized', async t => {
   const root = await emptyRepository(t)
-  const result = await groma(root, ['web', '--port', '0'])
+  await mkdir(path.join(root, '.groma'))
+  const result = await groma(root, ['view', '--plain'])
 
   assert.equal(result.code, 1)
   assert.match(result.stderr.trim(), /^[^\n]*groma init[^\n]*$/)
   assert.doesNotMatch(result.stderr, /\n\s+at /)
-  assert.equal(await exists(path.join(root, 'groma')), false)
+  assert.equal(await exists(path.join(root, '.groma', 'project.md')), false)
 })
 
 test('groma view and a record print without a Groma directory name groma init and fail the same way', async t => {
@@ -85,6 +86,22 @@ test('accepting the offer runs the wizard and leaves the scan and the viewer to 
   assert.equal(outcome, 'ready')
   assert.deepEqual(events, ['ask:init', 'ask:name:', 'ask:directory'])
   assert.equal(await exists(path.join(root, 'groma', 'project.md')), true)
+})
+
+test('the terminal setup completes missing records in the existing storage location', async t => {
+  const root = await emptyRepository(t)
+  await mkdir(path.join(root, '.groma'))
+  const { events, ui } = initUi({ init: true, projectName: 'Fresh project' })
+  const outcome = await ensureInitialized(
+    { repositoryRoot: root, interactive: true, opensViewer: true },
+    initDependencies(ui),
+  )
+
+  assert.equal(outcome, 'ready')
+  assert.deepEqual(events, ['ask:init', 'ask:name:'])
+  assert.equal(await exists(path.join(root, '.groma', 'index.md')), true)
+  assert.equal(await exists(path.join(root, '.groma', 'project.md')), true)
+  assert.equal(await exists(path.join(root, 'groma')), false)
 })
 
 test('cancelling the offer or the wizard leaves the repository untouched', async t => {

@@ -68,6 +68,7 @@ export async function watchScan(
   let pending = false
   let closed = false
   let active = Promise.resolve()
+  const watchers = new Map<string, FSWatcher>()
 
   function launch(): void {
     active = run()
@@ -102,26 +103,34 @@ export async function watchScan(
   function onSourceEvent(prefix: string, filename: string | null): void {
     if (closed) return
     const relative = sourceRelative(prefix, filename)
-    if (relative === undefined || !registry.matchesFile(relative)) return
+    if (relative === undefined || skippedRoots.has(relative)) return
     void stat(path.join(root, relative)).then(info => {
-      if (!closed && info.mtimeMs >= startedAt) schedule()
+      if (closed) return
+      if (prefix === '' && info.isDirectory() && !watchers.has(relative)) {
+        watchDirectory(path.join(root, relative), relative)
+        schedule()
+      } else if (registry.matchesFile(relative) && info.mtimeMs >= startedAt) {
+        schedule()
+      }
     }, () => {
-      if (!closed) schedule()
+      if (!closed && registry.matchesFile(relative)) schedule()
     })
   }
 
-  const watchers: FSWatcher[] = sourceWatchRoots(root).map(item => {
-    return watch(item.directory, { recursive: item.prefix !== '' }, (_event, filename) => {
-      onSourceEvent(item.prefix, filename)
-    })
-  })
+  function watchDirectory(directory: string, prefix: string): void {
+    watchers.set(prefix, watch(directory, { recursive: prefix !== '' }, (_event, filename) => {
+      onSourceEvent(prefix, filename)
+    }))
+  }
+
+  for (const item of sourceWatchRoots(root)) watchDirectory(item.directory, item.prefix)
 
   return {
     async close() {
       if (closed) return
       closed = true
       clearTimeout(timer)
-      for (const watcher of watchers) watcher.close()
+      for (const watcher of watchers.values()) watcher.close()
       await active
     },
   }

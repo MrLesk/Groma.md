@@ -112,7 +112,7 @@ async function worldNames(url: string): Promise<string[]> {
   return payload.world.elements.map(element => element.title)
 }
 
-test.concurrent('groma web rejects a package whose project concept has no overview', async () => {
+test.concurrent('groma web reports an invalid project without opening its map', async () => {
   const root = await createLiveRepo()
   await writeFile(path.join(root, 'groma', 'project.md'), `---
 type: Groma Project
@@ -121,9 +121,11 @@ groma:
   profile: architecture
 ---
 `)
+  const server = await startWebViewer(root, { port: 0 })
   try {
-    await assert.rejects(startWebViewer(root, { port: 0 }))
+    assert.equal((await fetch(server.url)).status, 500)
   } finally {
+    await server.close()
     await removeTree(root)
   }
 })

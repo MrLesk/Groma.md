@@ -1,8 +1,13 @@
 # Web viewer
 
 The web plugin shows Groma's world in a browser. `groma web` starts it.
-It runs one scan before opening. The live process then starts the same watch as
-`groma scan --watch`.
+If the Groma directory, index, or project record is missing, the local server
+shows browser setup for the project name and architecture folder. An existing
+folder keeps its location. Initialize & scan uses the shared initialization
+operation, scans automatically, and opens the map at the same address.
+An initialized project runs one scan before opening. The live process then
+starts the same watch as `groma scan --watch`. Startup errors appear in the
+browser with the reported issue and the command to run after fixing it.
 
 This page is the browser surface. The shared viewer rules live in
 [Viewers](../index.md).
@@ -30,12 +35,12 @@ without a reload. No inbound connection to Groma is opened.
 
 ## Layout
 
-While the world has no elements the page shows an invitation over the
-grid instead of empty ground: the project name, one line saying the map is
-empty, the two ways forward (build something and scan, or draft the first
-system), and a Draft form that posts the same input as `groma draft system`.
-The first element replaces it without a reload. A published snapshot shows
-the invitation without the form.
+When no components exist, the page invites the developer to create supported
+code or draft a system. An empty world shows the project name and a Draft form
+that posts the same input as `groma draft system`. A world with existing
+architecture keeps its map and navigation beneath a compact, dismissible
+notice. The first component removes the notice without a reload. Historical
+views hide it; a published snapshot offers no form.
 
 The hierarchy Add button is hidden while creation controls are unfinished.
 The element details pane ends with a Remove control only where `groma remove` would

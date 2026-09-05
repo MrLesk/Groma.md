@@ -47,8 +47,8 @@ or `CLAUDE.md` that already exists. If neither exists, it creates only
 `AGENTS.md`. Files that resolve to the same target through a symlink are written
 once, the symlink and surrounding instructions remain unchanged, and repeated
 runs keep one block. No other command performs this reconciliation on its
-own; `groma web` reaches it only by offering `groma init` first in a
-repository without Groma.
+own; the Web setup form and terminal wizard use this same initialization
+operation before opening a map.
 
 1. Open a viewer: see the world. `groma web` scans the repository and starts
    the browser map. On a TTY, `groma view` scans and starts the terminal map.
@@ -61,14 +61,18 @@ repository without Groma.
    element, a draft, or the element whose `groma.code` names that
    repository-relative file. When several elements share the file, the
    command fails.
-   In a repository without a Groma directory, `groma web` on a TTY asks
-   whether to run `groma init` first; yes runs the wizard for identity and
-   storage, then `groma web` scans and opens the map, no prints one line
-   naming `groma init` and exits cleanly. Without a TTY it prints one
-   sentence naming `groma init` and fails, never with a stack trace. While
-   the world has no elements, the browser map shows an invitation to scan or
-   draft instead of empty ground; the [browser map](viewers/web/index.md)
-   describes it.
+   If the Groma directory, index, or project record is missing, `groma web`
+   serves browser setup for the project name and architecture folder. Submitting
+   setup initializes the project, scans automatically, and opens the map at the
+   same address. Interactive `groma view` offers the terminal initialization
+   wizard before scanning. Plain inspection instead fails with one sentence
+   naming `groma init`, without a stack trace.
+   A successful scan with no components gives creation guidance in both viewers.
+   Existing drafted architecture remains available. Adding supported source
+   updates the live map, including when its source directory is new.
+   A startup failure reports the actual issue; it is not treated as an empty
+   project. The [browser map](viewers/web/index.md) describes its setup and
+   creation controls.
 2. Publish a snapshot with `groma export <directory>`. The generated static
    site contains the current project profile, architecture map and flows,
    mapped Backlog work with task details and diffs, and architecture-owned
