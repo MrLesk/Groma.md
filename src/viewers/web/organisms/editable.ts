@@ -1,7 +1,8 @@
 export const editableCss = `
   #details .edit-entry, #details .edit-form button { border: 1px solid var(--hairline); border-radius: 6px;
     padding: 6px 12px; background: transparent; color: var(--ink); font: inherit; cursor: pointer; }
-  #details .edit-entry { margin-bottom: 12px; }
+  #details .edit-entry { position: absolute; top: 12px; right: 52px; height: 32px; }
+  #details:has(.edit-entry) .meta { padding-right: 100px; }
   #details .edit-entry:hover, #details .edit-form button:hover { background: var(--hover); }
   #details .edit-form button:disabled { opacity: 0.5; cursor: default; }
   #details .edit-form { display: grid; gap: 14px; }
