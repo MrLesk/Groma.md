@@ -1,4 +1,4 @@
-import type { AcceptInput, AddInput, DraftElementInput, EditArchitectureInput, RemoveInput } from '../../authoring.ts'
+import type { AcceptInput, AddInput, DraftInput, EditArchitectureInput, RemoveInput } from '../../authoring.ts'
 import type { WorkItemDetails } from '../../types.ts'
 import { PUBLISHED_EVENT, PUBLISHED_VERSION_EVENT } from './payload.ts'
 import type { WebBootPayload, WebPayload, WebWorkPayload } from './payload.ts'
@@ -13,7 +13,7 @@ export interface WebDataSource {
   readTask(id: string): Promise<WorkItemDetails>
   readTaskDiff(id: string): Promise<TaskDiffPayload>
   /** The writers, absent in the published delivery, which has none. */
-  draft?(input: DraftElementInput): Promise<void>
+  draft?(input: DraftInput): Promise<void>
   add?(input: AddInput): Promise<void>
   remove?(input: RemoveInput): Promise<void>
   edit?(input: EditArchitectureInput): Promise<void>

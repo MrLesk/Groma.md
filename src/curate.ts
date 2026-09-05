@@ -5,23 +5,21 @@ import { GromaFileSystem } from './groma-filesystem.ts'
 import {
   readDocument,
   removeDocument,
-  replaceLeadProse,
-  withDescription,
   withGromaCode,
   withGromaField,
+  withMeaning,
   writeDocument,
 } from './markdown-emitter.ts'
 import { moveBlocker } from './move.ts'
+import type { MeaningChanges } from './markdown-emitter.ts'
 import type {
   ArchitectureElement,
   ArchitectureModel,
   CodeReference,
 } from './types.ts'
 
-export interface CurateInput {
+export interface CurateInput extends MeaningChanges {
   id: string
-  overview?: string
-  description?: string
   group?: string
   ungroup?: boolean
   parent?: string
@@ -280,10 +278,7 @@ export async function curateElement(
   const grouped = groupedSource(target, originalSource, input)
   const moved = movedTarget(context, target, grouped, input.parent)
   const combined = await combineElements(context, target, moved.source, input.combine)
-  let targetSource = input.overview === undefined
-    ? combined.targetSource
-    : replaceLeadProse(combined.targetSource, input.overview)
-  targetSource = withDescription(targetSource, input.description)
+  const targetSource = withMeaning(combined.targetSource, input)
   const rewrites = [...combined.rewrites]
   rewrites.unshift({
     sourceFilename: target.sourceFilename,

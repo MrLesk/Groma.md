@@ -95,6 +95,7 @@ export interface ArchitectureElement {
 }
 
 export interface ArchitectureRelationship {
+  status: ElementStatus
   sourceId: string
   targetId: string
   description: string

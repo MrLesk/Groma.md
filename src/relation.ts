@@ -8,9 +8,10 @@ import {
   withoutRelationship,
   withRelationship,
   writeDocument,
+  validateElementSource,
 } from './markdown-emitter.ts'
 import { requireText } from './naming.ts'
-import type { ArchitectureElement, ArchitectureRelationship } from './types.ts'
+import type { ArchitectureDocument, ArchitectureElement, ArchitectureRelationship, ElementStatus } from './types.ts'
 
 /** The two ends of a relationship: the source owns the row, the target is what it uses. */
 export interface RelationEnds {
@@ -24,6 +25,7 @@ export interface RelationInput extends RelationEnds {
 }
 
 interface Ends {
+  documents: ArchitectureDocument[]
   source: ArchitectureElement
   target: ArchitectureElement
   /** The row the source already holds for this target; one at most once Groma wrote it. */
@@ -33,16 +35,18 @@ interface Ends {
 interface Sentence {
   description: string
   technology: string
+  status: ElementStatus
 }
 
 async function loadEnds(repositoryRoot: string, ends: RelationEnds): Promise<Ends> {
-  const model = buildArchitectureModel((await loadArchitecture(repositoryRoot)).documents)
+  const { documents } = await loadArchitecture(repositoryRoot)
+  const model = buildArchitectureModel(documents)
   const source = model.elements.find(element => element.id === ends.source)
   if (source === undefined) throw new Error(`unknown source "${ends.source}"`)
   const target = model.elements.find(element => element.id === ends.target)
   if (target === undefined) throw new Error(`unknown target "${ends.target}"`)
   const row = model.relationships.find(item => item.sourceId === source.id && item.targetId === target.id)
-  return { source, target, row }
+  return { documents, source, target, row }
 }
 
 function requireRow(ends: Ends): ArchitectureRelationship {
@@ -59,15 +63,16 @@ async function writeRow(
   const targetHref = path.posix.relative(path.posix.dirname(ends.source.sourceFilename), ends.target.sourceFilename)
   let document = await readDocument(repositoryRoot, ends.source.sourceFilename)
   if (change.drop !== undefined) {
-    document = withoutRelationship(document, { targetHref, description: change.drop.description, technology: change.drop.technology })
+    document = withoutRelationship(document, { targetHref, ...change.drop })
   }
   if (change.add !== undefined) document = withRelationship(document, { targetName: ends.target.title, targetHref, ...change.add })
+  await validateElementSource(ends.documents, ends.source.sourceFilename, document)
   await writeDocument(repositoryRoot, ends.source.sourceFilename, document)
   return ends.source.id
 }
 
 /** Writes the one relationship from the source to the target on the source document. */
-export async function addRelation(repositoryRoot: string, input: RelationInput): Promise<string> {
+export async function addRelation(repositoryRoot: string, input: RelationInput, status: ElementStatus = 'stable'): Promise<string> {
   const description = requireText(input.description, '--description')
   const technology = requireText(input.technology, '--technology')
   const ends = await loadEnds(repositoryRoot, input)
@@ -76,7 +81,7 @@ export async function addRelation(repositoryRoot: string, input: RelationInput):
       `${ends.source.id} already relates to ${ends.target.id}; to reword it, run: groma edit relation ${ends.source.id} ${ends.target.id}`,
     )
   }
-  return writeRow(repositoryRoot, ends, { add: { description, technology } })
+  return writeRow(repositoryRoot, ends, { add: { description, technology, status } })
 }
 
 /** Rewords the relationship; a flag left out keeps its current text. */
@@ -89,10 +94,19 @@ export async function editRelation(repositoryRoot: string, input: RelationInput)
   return writeRow(repositoryRoot, ends, {
     drop: current,
     add: {
+      status: current.status,
       description: input.description === undefined ? current.description : requireText(input.description, '--description'),
       technology: input.technology === undefined ? current.technology : requireText(input.technology, '--technology'),
     },
   })
+}
+
+/** Acceptance records the author's decision; scans never accept a planned interaction. */
+export async function acceptRelation(repositoryRoot: string, input: RelationEnds): Promise<string> {
+  const ends = await loadEnds(repositoryRoot, input)
+  const current = requireRow(ends)
+  if (current.status !== 'draft') throw new Error('not a draft relationship')
+  return writeRow(repositoryRoot, ends, { drop: current, add: { ...current, status: 'stable' } })
 }
 
 export async function removeRelation(repositoryRoot: string, input: RelationEnds): Promise<string> {

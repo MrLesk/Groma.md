@@ -9,11 +9,12 @@ import { curateElement } from './curate.ts'
 import {
   readDocument,
   replaceLeadProse,
-  withDescription,
-  withGromaField,
+  withMeaning,
   withTitle,
   writeDocument,
+  validateElementSource,
 } from './markdown-emitter.ts'
+import type { MeaningChanges } from './markdown-emitter.ts'
 import { isGroupAddress, requireText } from './naming.ts'
 import { loadProjectProfile, saveProjectProfile } from './project-profile.ts'
 import { editGroup } from './group.ts'
@@ -22,15 +23,10 @@ import { editFlow } from './flow-authoring.ts'
 import { requireGromaMapping } from './okf-profile.ts'
 import type { ArchitectureElement, ArchitectureRecords } from './types.ts'
 
-export interface EditArchitectureInput {
+export interface EditArchitectureInput extends MeaningChanges {
   id: string
   /** The target id of the relationship from id to edit instead of the element itself. */
   relation?: string
-  title?: string
-  overview?: string
-  description?: string
-  technology?: string
-  draft?: string
   group?: string
   ungroup?: boolean
   parent?: string
@@ -55,7 +51,7 @@ async function editProject(repositoryRoot: string, input: EditArchitectureInput)
   if (isStructural(input) || input.draft !== undefined || input.technology !== undefined) {
     throw new Error('only --title, --description and --overview are valid on the project')
   }
-  const overview = optionalText(input.overview)
+  const overview = input.overview
   if (input.title === undefined && input.description === undefined && overview === undefined) {
     throw new Error('--title, --description or --overview is required')
   }
@@ -78,7 +74,7 @@ async function editDraftRecord(
   if (input.description !== undefined || input.technology !== undefined || input.draft !== undefined || isStructural(input)) {
     throw new Error('only --title and --overview are valid on a draft record')
   }
-  const overview = optionalText(input.overview)
+  const overview = input.overview
   if (input.title === undefined && overview === undefined) throw new Error('--title or --overview is required')
   let source = await readDocument(repositoryRoot, record.sourceFilename)
   if (input.title !== undefined) source = withTitle(source, requireText(input.title, '--title'))
@@ -87,26 +83,16 @@ async function editDraftRecord(
   return record.id
 }
 
-async function editElementMeaning(
+async function elementMeaning(
   repositoryRoot: string,
   records: ArchitectureRecords,
   element: ArchitectureElement,
   input: EditArchitectureInput,
 ): Promise<string> {
-  const overview = optionalText(input.overview)
-  const draft = optionalText(input.draft)
-  if ([input.title, overview, input.description, input.technology, draft].every(change => change === undefined)) {
-    throw new Error('--title, --overview, --description, --technology or --draft is required')
-  }
-  if (draft !== undefined) requireDraftRecord(records, draft)
-  let source = await readDocument(repositoryRoot, element.sourceFilename)
-  if (input.title !== undefined) source = withTitle(source, requireText(input.title, '--title'))
-  if (overview !== undefined) source = replaceLeadProse(source, overview)
-  source = withDescription(source, input.description)
-  if (input.technology !== undefined) source = withGromaField(source, 'technology', optionalText(input.technology))
-  if (draft !== undefined) source = withGromaField(source, 'draft', draft)
-  await writeDocument(repositoryRoot, element.sourceFilename, source)
-  return element.id
+  if (input.draft) requireDraftRecord(records, input.draft)
+  const source = withMeaning(await readDocument(repositoryRoot, element.sourceFilename), input)
+  await validateElementSource(records.documents, element.sourceFilename, source)
+  return source
 }
 
 /** A group address or a relation target names something other than an element; the flags of elements are refused there. */
@@ -148,13 +134,17 @@ export async function editArchitecture(
     return editDraftRecord(repositoryRoot, record, input)
   }
 
+  const hasMeaning = [input.title, input.overview, input.description, input.technology, input.draft].some(value => value !== undefined)
+  if (!hasMeaning && !isStructural(input)) throw new Error('--title, --overview, --description, --technology or --draft is required')
+  const source = hasMeaning ? await elementMeaning(repositoryRoot, records, element, input) : undefined
+
   if (isStructural(input)) {
-    if (input.draft !== undefined || input.title !== undefined || input.technology !== undefined) {
-      throw new Error('only --overview and --description can be combined with structural edits')
-    }
     return curateElement(repositoryRoot, model, {
       id: input.id,
-      overview: optionalText(input.overview),
+      title: input.title,
+      technology: input.technology,
+      draft: input.draft,
+      overview: input.overview,
       description: input.description,
       group: input.group,
       ungroup: input.ungroup,
@@ -163,5 +153,6 @@ export async function editArchitecture(
     })
   }
 
-  return editElementMeaning(repositoryRoot, records, element, input)
+  await writeDocument(repositoryRoot, element.sourceFilename, source!)
+  return element.id
 }

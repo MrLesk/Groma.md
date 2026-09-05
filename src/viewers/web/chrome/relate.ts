@@ -1,8 +1,4 @@
-import type { AddInput } from '../../../authoring.ts'
-
-export const relateCss = `
-  body.relating svg, body.relating svg * { cursor: crosshair; }
-`
+import type { DraftInput } from '../../../authoring.ts'
 
 export interface RelateDialogEnds {
   source: string
@@ -12,7 +8,7 @@ export interface RelateDialogEnds {
 }
 
 /** The sentence of a new relation: how the source uses the target, and through what. */
-export function createRelateDialog(add: (input: AddInput) => Promise<void>) {
+export function createRelateDialog(add: (input: DraftInput) => Promise<void>) {
   const dialog = document.createElement('dialog')
   dialog.id = 'relate-dialog'
   dialog.className = 'verb-dialog'
@@ -20,7 +16,7 @@ export function createRelateDialog(add: (input: AddInput) => Promise<void>) {
     + '<label>Description<input name="description" required></label>'
     + '<label>Technology<input name="technology" required></label>'
     + '<p class="error" role="status"></p>'
-    + '<div class="actions"><button type="button" data-cancel>Cancel</button><button type="submit">Add</button></div></form>'
+    + '<div class="actions"><button type="button" data-cancel>Cancel</button><button type="submit">Save draft</button></div></form>'
   document.body.append(dialog)
 
   const form = dialog.querySelector('form')!
@@ -39,7 +35,7 @@ export function createRelateDialog(add: (input: AddInput) => Promise<void>) {
     error.textContent = ''
     try {
       await add({
-        thing: 'relation',
+        kind: 'relation',
         name: ends.source,
         relation: ends.target,
         description: description.value,
@@ -54,9 +50,10 @@ export function createRelateDialog(add: (input: AddInput) => Promise<void>) {
   })
 
   return {
+    close: () => dialog.close(),
     open(next: RelateDialogEnds): void {
       ends = next
-      heading.textContent = `Relate ${next.sourceTitle} to ${next.targetTitle}`
+      heading.textContent = `Draft relationship: ${next.sourceTitle} to ${next.targetTitle}`
       form.reset()
       error.textContent = ''
       dialog.showModal()

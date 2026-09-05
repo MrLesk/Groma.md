@@ -28,10 +28,14 @@ export function paintRoutes(layer: SVGGElement, scene: LayeredScene): Map<string
       transform: `${planeMatrix('ground', arrow.at, scene.view)} rotate(${arrow.turn})`,
     }, 'arrow')
     pose.append(head)
+    const marker = svg('path', { d: 'M5 0L-3 3L-3 -3Z' }, 'flow-marker')
+    marker.style.offsetPath = `path('M${points.map(point => `${point.x},${point.y}`).join('L')}')`
+    marker.style.offsetRotate = 'auto'
     group.append(
       svg('polyline', { points: pointsAttribute(points) }, 'line'),
       svg('path', { d: liftPath }, 'line lift'),
       pose,
+      marker,
       svg('polyline', { points: pointsAttribute(points) }, 'hit'),
       title,
     )

@@ -1,87 +1,60 @@
 import { createGroupDialog } from './chrome/group.ts'
-import { createRelateDialog } from './chrome/relate.ts'
+import type { AnnotatedArchitectureModel } from '../../types.ts'
+import { createMapEditor } from './editing/gestures.ts'
 import type { WebDataSource } from './data.ts'
-import type { ZoneAddress } from './iso/map.ts'
-import type { MeaningEdit, PaneWrites, ParentOption, RelationWrites, SelectionWrites } from './organisms/writes.ts'
+import type { IsoMap, ZoneAddress } from './iso/map.ts'
+import type { MeaningEdit, PaneWrites, RelationWrites, SelectionWrites } from './organisms/writes.ts'
 
 export interface AuthoringDependencies {
   /** True on the current revision of a live map, the only place writes are offered. */
   live: () => boolean
-  drafts: () => readonly string[]
-  parents: () => readonly ParentOption[]
-  titleOf: (id: string) => string
+  world: () => AnnotatedArchitectureModel
   repaint: () => void
 }
 
-/** The write hooks the panes get, and the armed relation: Relate to waits for the next element click to be the target. */
-export function createAuthoring(data: WebDataSource, deps: AuthoringDependencies) {
+/** Shared write operations for details and group actions. */
+export function createAuthoring(host: HTMLElement, map: IsoMap, data: WebDataSource, deps: AuthoringDependencies) {
+  const gestures = createMapEditor(host, map, data, () => deps.world().elements, deps.live)
   const { accept, add, edit, remove } = data
-  const dialog = add === undefined ? undefined : createRelateDialog(add)
+  const titleOf = (id: string): string => deps.world().elements.find(element => element.id === id)?.title ?? id
   const groupDialog = edit === undefined || remove === undefined ? undefined : createGroupDialog(edit, remove)
-  let armed: string | undefined
-
-  function disarm(): void {
-    armed = undefined
-    document.body.classList.remove('relating')
-  }
-
   /** Group as and Combine into, while several components are selected. */
   function selectionWrites(ids: readonly string[]): SelectionWrites | undefined {
     if (ids.length < 2 || add === undefined || edit === undefined) return undefined
     return {
-      members: ids.map(id => ({ id, title: deps.titleOf(id) })),
+      members: ids.map(id => ({ id, title: titleOf(id) })),
       onGroup: name => add({ thing: 'group', name, members: [...ids] }),
       onCombine: survivor => edit({ id: survivor, combine: ids.filter(id => id !== survivor) }),
     }
   }
 
   function paneWrites(selectedId: string, selectedIds: readonly string[]): PaneWrites {
-    if (armed !== undefined && armed !== selectedId) disarm()
     if (!deps.live()) return {}
     const selection = selectionWrites(selectedIds)
     return {
+      onRead: deps.repaint,
       ...(selection === undefined ? {} : { selection }),
       ...(remove === undefined ? {} : { onRemove: () => remove({ id: selectedId }) }),
       ...(accept === undefined ? {} : { onAccept: () => accept({ id: selectedId }) }),
       ...(edit === undefined ? {} : {
         onEdit: (input: MeaningEdit) => edit({ id: selectedId, ...input }),
-        drafts: deps.drafts(),
-        parents: deps.parents(),
+        drafts: deps.world().drafts,
+        parents: deps.world().elements.filter(element => element.kind === 'container')
+          .map(element => ({ id: element.id, title: element.title }))
+          .sort((left, right) => left.title.localeCompare(right.title) || left.id.localeCompare(right.id)),
       }),
-      ...(dialog === undefined ? {} : {
-        relate: {
-          armed: armed === selectedId,
-          toggle: () => {
-            if (armed === selectedId) disarm()
-            else {
-              armed = selectedId
-              document.body.classList.add('relating')
-            }
-            deps.repaint()
-          },
-        },
-      }),
+
     }
   }
 
   function relationWrites(source: string, target: string): RelationWrites {
     if (!deps.live()) return {}
     return {
+      onRead: deps.repaint,
+      ...(accept === undefined ? {} : { onAccept: () => accept({ id: source, relation: target }) }),
       ...(edit === undefined ? {} : { onEdit: (input: { description?: string; technology?: string }) => edit({ id: source, relation: target, ...input }) }),
       ...(remove === undefined ? {} : { onRemove: () => remove({ id: source, relation: target }) }),
     }
-  }
-
-  /** True when the click was the target of an armed relation, so the dialog opens instead of a selection. */
-  function takeTarget(id: string): boolean {
-    if (armed === undefined || dialog === undefined) return false
-    const source = armed
-    disarm()
-    deps.repaint()
-    if (id !== source) {
-      dialog.open({ source, target: id, sourceTitle: deps.titleOf(source), targetTitle: deps.titleOf(id) })
-    }
-    return true
   }
 
   /** A pressed zone opens the group dialog on the current revision of a live map; elsewhere the press selects as before. */
@@ -91,5 +64,5 @@ export function createAuthoring(data: WebDataSource, deps: AuthoringDependencies
     return true
   }
 
-  return { paneWrites, relationWrites, takeTarget, disarm, editGroup }
+  return { paneWrites, relationWrites, editGroup, ...gestures }
 }

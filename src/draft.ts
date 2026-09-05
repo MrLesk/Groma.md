@@ -7,7 +7,7 @@ import {
 import { architectureElementPath } from './architecture-path.ts'
 import { loadArchitecture } from './architecture-reader.ts'
 import { GromaFileSystem } from './groma-filesystem.ts'
-import { renderArchitectureDocument, writeDocument } from './markdown-emitter.ts'
+import { renderArchitectureDocument, validateElementSource, writeDocument } from './markdown-emitter.ts'
 import { requireText } from './naming.ts'
 import type { ArchitectureElement, C4Kind } from './types.ts'
 
@@ -83,10 +83,7 @@ export async function draftElement(
     throw new Error(`architecture document already exists at ${destination}`)
   }
 
-  await writeDocument(
-    repositoryRoot,
-    destination,
-    renderArchitectureDocument({
+  const document = renderArchitectureDocument({
       id,
       kind,
       parent: parent?.id,
@@ -96,7 +93,8 @@ export async function draftElement(
       description: input.description,
       overview: input.overview,
       status: 'draft',
-    }),
-  )
+  })
+  await validateElementSource(records.documents, destination, document)
+  await writeDocument(repositoryRoot, destination, document)
   return id
 }

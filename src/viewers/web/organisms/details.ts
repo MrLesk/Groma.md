@@ -16,14 +16,10 @@ import type { CodeFile } from '../../source/structure.ts'
 import { paintElementWork } from '../work/component-tasks.ts'
 import { codeList, fileList } from './code-lists.ts'
 import { heading, paragraph } from '../atoms/text.ts'
-import { paintEditable } from './editable.ts'
+import { editButton, isEditing, type EditField } from './editable.ts'
 import type { PaneWrites, RelationWrites } from './writes.ts'
 import {
   paintAcceptControl,
-  paintDraftSelect,
-  paintMeaning,
-  paintParentSelect,
-  paintRelateControl,
   paintSelectionControls,
 } from './writes.ts'
 import { paintRemoveControl } from './remove.ts'
@@ -49,6 +45,7 @@ export interface InspectedChild {
 }
 
 export interface Inspected {
+  id: string
   title: string
   description: string
   kindLabel: string
@@ -152,6 +149,7 @@ export function inspectDetails(
     })
   }
   return {
+    id: element.id,
     title: element.title,
     description: element.description ?? '',
     kindLabel: kindLabel(element.kind, element.external),
@@ -222,14 +220,14 @@ function paintTabs(tabsHost: HTMLElement, availableTabs: DetailsTab[], shownTab:
 }
 
 export function paintDetails(host: HTMLElement, inspected: Inspected, options: DetailsOptions): void {
-  const { onSelect, onToggleFlow, activeFlow, tab, onTab, code, onSource, workGroups, onTask, onRemove, onAccept, drafts, parents, onEdit, relate, selection } = options
+  const { onSelect, onToggleFlow, activeFlow, tab, onTab, code, onSource, workGroups, onTask, onRemove, onAccept, onEdit, onRead, selection } = options
+  if (onEdit !== undefined && isEditing(host, inspected.id)) return
   const title = host.querySelector('h1')!
   const meta = host.querySelector('.meta')!
   const tabsHost = host.querySelector<HTMLElement>('.tabs')!
   const body = host.querySelector('.body')!
   title.replaceChildren()
-  if (onEdit === undefined) title.textContent = inspected.title
-  else paintEditable(title, { className: 'title', label: 'Title', value: inspected.title, save: value => onEdit({ title: value }) })
+  title.textContent = inspected.title
   meta.textContent = `${inspected.kindLabel} · ${inspected.origin}`
 
   const availableTabs = detailsTabs(inspected, workGroups)
@@ -239,9 +237,8 @@ export function paintDetails(host: HTMLElement, inspected: Inspected, options: D
   body.replaceChildren()
   const sections: Record<Section, () => void> = {
     overview: () => {
-      paintMeaning(body, inspected, onEdit)
-      if (onEdit !== undefined) paintDraftSelect(body, inspected, drafts ?? [], onEdit)
-      if (inspected.movable && onEdit !== undefined) paintParentSelect(body, inspected.parent, parents ?? [], onEdit)
+      if (inspected.description !== '') body.append(paragraph('description', inspected.description))
+      if (inspected.overview !== '') body.append(paragraph('overview', inspected.overview))
     },
 
     relationships: () => {
@@ -338,7 +335,7 @@ export function paintDetails(host: HTMLElement, inspected: Inspected, options: D
   if (shownTab === 'tasks') paintElementWork(body, workGroups, onTask)
   else for (const key of tabSections(shownTab)) sections[key]()
   if (shownTab === 'what' && inspected.matchedGhost && onAccept !== undefined) paintAcceptControl(body, onAccept)
-  if (shownTab === 'what' && relate !== undefined) paintRelateControl(body, relate)
+  if (onEdit !== undefined && onRead !== undefined) body.prepend(editButton(host, inspected.id, elementFields(inspected, options), onEdit, onRead))
   if (shownTab === 'what' && inspected.removable && onRemove !== undefined) {
     paintRemoveControl(body, inspected.title, onRemove)
   }
@@ -353,19 +350,18 @@ export function paintRelationship(
   onSelect: (id: string, additive: boolean) => void,
   writes: RelationWrites,
 ): void {
+  if (writes.onEdit !== undefined && isEditing(host, relationship.id)) return
   const byId = new Map(world.elements.map(item => [item.representationId, item]))
   const title = host.querySelector('h1')!
   title.replaceChildren()
   const body = host.querySelector('.body')!
   body.replaceChildren()
-  if (writes.onEdit === undefined) {
-    title.textContent = relationship.description
-    if (relationship.technology !== '') body.append(paragraph('description', relationship.technology))
-  } else {
-    const onEdit = writes.onEdit
-    paintEditable(title, { className: 'title', label: 'Description', value: relationship.description, save: description => onEdit({ description }) })
-    paintEditable(body, { className: 'technology', label: 'Technology', value: relationship.technology, save: technology => onEdit({ technology }) })
-  }
+  title.textContent = relationship.description
+  if (relationship.technology !== '') body.append(paragraph('description', relationship.technology))
+  if (writes.onEdit !== undefined && writes.onRead !== undefined) body.prepend(editButton(host, relationship.id, [
+    { name: 'description', label: 'Description', value: relationship.description, required: true },
+    { name: 'technology', label: 'Technology', value: relationship.technology, required: true },
+  ], writes.onEdit, writes.onRead))
   host.querySelector('.meta')!.textContent = `Relationship · ${relationship.origin}`
   host.querySelector('.tabs')!.replaceChildren()
   const list = document.createElement('ul')
@@ -381,10 +377,28 @@ export function paintRelationship(
     list.append(item)
   }
   body.append(list)
+  if (relationship.origin === 'draft' && writes.onAccept !== undefined) paintAcceptControl(body, writes.onAccept)
   if (writes.onRemove !== undefined) paintRemoveControl(body, relationship.description, writes.onRemove)
 }
 
 /** Empties the pane while nothing is selected. */
 export function clearDetails(host: HTMLElement): void {
   for (const part of ['h1', '.meta', '.tabs', '.body']) host.querySelector(part)!.replaceChildren()
+}
+
+function elementFields(inspected: Inspected, options: PaneWrites): EditField[] {
+  const fields: EditField[] = [
+    { name: 'title', label: 'Title', value: inspected.title, required: true },
+    { name: 'description', label: 'Description', value: inspected.description },
+    { name: 'overview', label: 'Overview', value: inspected.overview, multiline: true },
+    { name: 'technology', label: 'Technology', value: inspected.technology.join(', ') },
+  ]
+  if ((options.drafts?.length ?? 0) > 0) fields.push({
+    name: 'draft', label: 'Draft', value: inspected.draft ?? '',
+    options: [{ id: '', title: 'None' }, ...options.drafts!.map(id => ({ id, title: id }))],
+  })
+  if (inspected.movable) fields.push({
+    name: 'parent', label: 'Parent', value: inspected.parent ?? '', options: options.parents ?? [],
+  })
+  return fields
 }

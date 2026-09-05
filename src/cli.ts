@@ -254,19 +254,21 @@ registerScannerCommands(program)
 
 program
   .command('draft')
-  .description('Draft a system, container, or component as a ghost')
-  .argument('<kind>', 'system, container, or component')
+  .description('Draft software or a directed relationship')
+  .argument('<kind>', 'system, container, component, or relation')
   .argument('<name>', 'element name')
-  .requiredOption('--overview <markdown>', 'long architecture overview')
+  .argument('[target]', 'target id when drafting a relation')
+  .option('--overview <markdown>', 'long architecture overview')
   .option('--description <text>', 'concise OKF description')
   .option('--parent <id>', 'parent element id')
   .option('--technology <text>', 'implementation technology')
   .option('--draft <draft-id>', 'the draft record this ghost belongs to')
-  .action(async (kind: string, name: string, options) => {
+  .action(async (kind: string, name: string, target: string | undefined, options) => {
     try {
       const id = await writes.draft(process.cwd(), {
         kind,
         name,
+        ...(kind === 'relation' ? { relation: target ?? '' } : {}),
         overview: options.overview,
         description: options.description,
         parent: options.parent,
@@ -399,12 +401,13 @@ program
 
 program
   .command('accept')
-  .description('Accept a ghost once a scan has matched it')
-  .argument('<id>', 'draft element id')
-  .action(async (id: string) => {
+  .description('Accept a matched draft element or explicitly accept a draft relationship')
+  .argument('<id>', 'draft element id, or relation')
+  .argument('[ids...]', 'source and target ids when accepting a relation')
+  .action(async (id: string, ids: string[]) => {
     try {
       try {
-        await writes.accept(process.cwd(), { id })
+        await writes.accept(process.cwd(), addressed(id, ids))
       } catch (error) {
         if (!(error instanceof Error) || error.message !== 'no scan match') throw error
         await scanRepository(process.cwd())

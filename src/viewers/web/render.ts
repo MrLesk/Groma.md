@@ -96,14 +96,9 @@ const revisionControl = createRevisionControl({
   control: revisionSelect, body: document.body, boot, data,
   applyRevision: payload => applyWorld(payload, true), applyWorld, applyWork,
 })
-const authoring = createAuthoring(data, {
+const authoring = createAuthoring(host, map, data, {
   live: () => revisionControl.selected === undefined,
-  drafts: () => world.drafts,
-  parents: () => world.elements
-    .filter(element => element.kind === 'container')
-    .map(element => ({ id: element.id, title: element.title }))
-    .sort((left, right) => left.title.localeCompare(right.title) || left.id.localeCompare(right.id)),
-  titleOf: id => worldElement(id)?.title ?? id,
+  world: () => world,
   repaint: () => paintViewState(),
 })
 const source = createSourceControl({
@@ -257,7 +252,6 @@ function toggleRow(row: TreeRow): void {
 
 function select(id: string, additive = false): void {
   if (worldElement(id) === undefined && worldRelationship(id) === undefined) return
-  if (!additive && authoring.takeTarget(id)) return
   source.clear()
   const next = selectArchitecture(selection, id, additive)
   detailsTab = detailsTabAfterSelection(detailsTab, primarySelection(selection), primarySelection(next))
@@ -296,7 +290,7 @@ function toggleTask(id: string): void {
 }
 
 function deselect(): void {
-  authoring.disarm()
+  authoring.cancel()
   source.clear()
   selection = noSelection
   activeTaskIds = []
@@ -445,7 +439,7 @@ function applyWorld(payload: WebPayload, reset = false): void {
   scene = projectedLayerScene()
   fitted = fitScene(viewport())
   if (reset) {
-    authoring.disarm()
+    authoring.cancel()
     source.clear()
     tree = initialTree()
     activeTaskIds = []
@@ -464,6 +458,7 @@ function applyWorld(payload: WebPayload, reset = false): void {
   }
   debug.paint(() => map.paint(scene))
   revisionControl.paintProjectEdit(map.svg)
+  authoring.refresh()
   pins.paint(currentPins)
   island.paint(payload.pins, work)
   emptyState.paint(world, project, revisionControl.selected !== undefined)
@@ -488,9 +483,9 @@ function applyWork(payload: WebWorkPayload): void {
   paintViewState()
   searchControl.updateTasks(work.items)
 }
-
 debug.paint(() => map.paint(scene))
 revisionControl.paintProjectEdit(map.svg)
+authoring.refresh()
 pins.paint(currentPins)
 island.paint(boot.pins, work)
 emptyState.paint(world, project, revisionControl.selected !== undefined)

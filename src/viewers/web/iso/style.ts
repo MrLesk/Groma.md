@@ -164,7 +164,7 @@ export const mapCss = `
   #map .camera[data-facades-hidden] .building .pattern { display: none; }
   #map > .map-surface .chip { fill: var(--paper); }
   #map .ghost { opacity: 0.8; }
-  #map .ghost .face, #map .ghost .ground { fill: none; }
+  #map .ghost .face, #map .ghost .ground { fill: none; pointer-events: all; }
   #map .ghost .pattern, #map .ghost .chip { display: none; }
   #map .ghost.draft .face, #map .ghost.draft .ground,
   #map .route-base.ghost.draft, #map .route.ghost.draft .line { stroke-dasharray: 4 3; }
@@ -180,21 +180,15 @@ export const mapCss = `
   #map .route:hover .arrow { fill: var(--map-line); opacity: 1; }
   #map .route.endpoint .line, #map .route.selected .line, #map .route.touched .line { stroke: var(--highlight); opacity: 1; }
   #map .route.endpoint .arrow, #map .route.selected .arrow, #map .route.touched .arrow { fill: var(--highlight); opacity: 1; }
-  #map .route.touched.half .line { stroke-dasharray: 1 4; }
+  #map .route.touched.half:not(.draft) .line { stroke-dasharray: 1 4; }
   #map .route.lit { --emphasis: ${emphasis(2)}; }
-  /* One inherited offset moves every lit dash; neutral routes reset it so their origin patterns stay still. */
-  #map .routes { animation: map-flow 0.8s steps(10, end) infinite; animation-play-state: paused; }
-  #map .camera[data-tracing] .routes { animation-play-state: running; }
-  #map .route:not(.lit), #map .route-base { stroke-dashoffset: 0; }
-  #map .route.lit .line {
-    stroke: var(--highlight); opacity: 1;
-    stroke-dasharray: 6 4;
-  }
+  #map .route.lit .line { stroke: var(--highlight); opacity: 1; }
   #map .route.lit .arrow { fill: var(--highlight); opacity: 1; }
-  @keyframes map-flow { to { stroke-dashoffset: -10; } }
+  #map .flow-marker { display: none; fill: var(--highlight); pointer-events: none; }
+  #map .route.lit .flow-marker { display: block; animation: map-flow 2.4s linear infinite; }
+  @keyframes map-flow { from { offset-distance: 0%; } to { offset-distance: 100%; } }
   @media (prefers-reduced-motion: reduce) {
-    #map .routes { animation: none; }
-    #map .route.lit .line { stroke-dasharray: none; }
+    #map .route.lit .flow-marker { animation: none; offset-distance: 50%; }
   }
   #map .camera[data-tracing] .route-base,
   #map .camera[data-tracing] .route:not(.lit) { display: none; }
