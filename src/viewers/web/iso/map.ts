@@ -20,8 +20,8 @@ import { svg } from './svg.ts'
 
 /** A graph-paper tile: minor lines every cell, one major line each way. */
 const TILE_SIZE = GRID_TILE_CELLS * PLANE
-/** Idle time before the temporary motion delta commits into the SVG camera. */
-const ZOOM_SETTLE_MS = 80
+/** Keep short trackpad pauses inside one motion layer; repeated SVG commits stall Safari. */
+const CAMERA_SETTLE_MS = 250
 
 /**
  * The endless grid: one tile repeated over the whole pane, moved and scaled
@@ -160,7 +160,7 @@ export function createMap(host: HTMLElement): IsoMap {
       const latest = latestCamera
       if (latest === undefined) camera.style.removeProperty('will-change')
       else commitCamera(latest.current, latest.zoomRatio, latest.showGrid)
-    }, ZOOM_SETTLE_MS)
+    }, CAMERA_SETTLE_MS)
   }
 
   const startCameraMotion = (): void => {
