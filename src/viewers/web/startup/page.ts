@@ -71,6 +71,9 @@ const style = `
 const script = `
   const theme = localStorage.getItem('groma.theme');
   if (['light', 'dark', 'blueprint'].includes(theme)) document.documentElement.dataset.theme = theme;
+  if (document.querySelector('main[aria-busy="true"]')) {
+    fetch('/ready').then(() => location.reload());
+  }
   document.querySelector('form')?.addEventListener('submit', () => {
     document.querySelector('main').setAttribute('aria-busy', 'true');
     document.querySelector('h1').textContent = 'Preparing your architecture';
@@ -95,15 +98,21 @@ function directoryField(directory: GromaDirectory | undefined): string {
 
 /** Setup uses the map's brand and palette without loading or inventing an architecture world. */
 export function renderSetupPage(input: SetupPage): string {
+  const loading = input.initialized && input.error === undefined
   const error = input.error === undefined ? '' : `<p class="error" role="alert">${escaped(input.error)}</p>`
-  const content = input.initialized
-    ? `<h1>Could not open architecture</h1>${error}<p class="next">Fix the reported issue, then run groma web again.</p>`
-    : `<h1>Initialize Groma</h1>${error}<form method="post" action="/initialize">`
+  let content = `<h1>Preparing your architecture</h1>`
+  if (input.error !== undefined && input.initialized) {
+    content = `<h1>Could not open architecture</h1>${error}<p class="next">Fix the reported issue, then run groma web again.</p>`
+  } else if (!input.initialized) {
+    content = `<h1>Initialize Groma</h1>${error}<form method="post" action="/initialize">`
       + `<label class="name">Project name<input type="text" name="projectName" value="${escaped(input.projectName)}" required autofocus></label>`
       + directoryField(input.directory)
       + '<button type="submit">Initialize &amp; scan</button></form>'
+  }
   return '<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">'
-    + `<title>Groma setup</title><style>${style}</style></head><body><main><header>${lockup}`
-    + '<nav class="steps" aria-label="Setup progress"><span aria-current="step">1 Setup</span><span data-step="scan">2 Scan</span><span>3 Map</span></nav></header>'
+    + `<title>Groma setup</title><style>${style}</style></head><body><main${loading ? ' aria-busy="true"' : ''}><header>${lockup}`
+    + '<nav class="steps" aria-label="Setup progress">'
+    + `<span${loading ? '' : ' aria-current="step"'}>1 Setup</span>`
+    + `<span data-step="scan"${loading ? ' aria-current="step"' : ''}>2 Scan</span><span>3 Map</span></nav></header>`
     + `${content}</main><script>${script}</script></body></html>`
 }

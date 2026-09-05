@@ -18,10 +18,15 @@ export async function startWebViewer(
   let projectName = (await loadProjectProfile(repositoryRoot))?.title ?? path.basename(repositoryRoot)
   let map: MapSession | undefined
   let error: string | undefined
+  let preparing = Promise.resolve()
 
-  async function openMap(scan: boolean): Promise<void> {
-    if (scan) await scanRepository(repositoryRoot)
-    map = await createWebMapSession(repositoryRoot, options)
+  function openMap(scan: boolean): Promise<void> {
+    error = undefined
+    preparing = (async () => {
+      if (scan) await scanRepository(repositoryRoot)
+      map = await createWebMapSession(repositoryRoot, options)
+    })().catch(failed)
+    return preparing
   }
 
   function failed(cause: unknown): void {
@@ -48,6 +53,7 @@ export async function startWebViewer(
         directory: String(input.get('directory') ?? ''),
       })
       await openMap(true)
+      if (error !== undefined) return setupResponse(400)
       return new Response(null, { status: 303, headers: { Location: '/' } })
     } catch (cause) {
       failed(cause)
@@ -59,7 +65,11 @@ export async function startWebViewer(
     port: options.port ?? 4747,
     // The map's live event stream must stay open between changes.
     idleTimeout: 0,
-    fetch(request) {
+    async fetch(request) {
+      if (request.method === 'GET' && new URL(request.url).pathname === '/ready') {
+        await preparing
+        return new Response(null, { status: error === undefined ? 204 : 500 })
+      }
       if (map !== undefined) return map.fetch(request)
       if (request.method === 'POST' && new URL(request.url).pathname === '/initialize') {
         return initialize(request)
@@ -68,13 +78,7 @@ export async function startWebViewer(
     },
   })
 
-  if (initial.initialized) {
-    try {
-      await openMap(options.scan === true)
-    } catch (cause) {
-      failed(cause)
-    }
-  }
+  if (initial.initialized) await openMap(options.scan === true)
 
   return {
     url: `http://localhost:${server.port}`,

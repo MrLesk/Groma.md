@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict'
-import { cp, mkdir, mkdtemp, readFile, rm } from 'node:fs/promises'
+import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
+import { pathToFileURL } from 'node:url'
 import { test } from 'bun:test'
 import { EMPTY_WORK_SOURCE } from '@groma/work-source'
 
@@ -32,6 +33,90 @@ function initialize(url: string, directory: string, projectName = 'First project
 async function payload(url: string): Promise<WebPayload> {
   return (await fetch(`${url}/world.json`)).json() as Promise<WebPayload>
 }
+
+/** A separate scanner module per repository keeps startup paused without global mocks or timers. */
+async function pausedStartup() {
+  const root = await repository()
+  await cp(path.join(fixtures, 'empty-project'), root, { recursive: true })
+  const plugin = path.join(root, 'paused-scanner')
+  await mkdir(plugin)
+  await writeFile(path.join(plugin, 'package.json'), JSON.stringify({
+    name: 'paused-scanner', version: '1.0.0', type: 'module',
+    groma: { scanner: { id: 'paused', entry: './index.js' } },
+  }))
+  await writeFile(path.join(plugin, 'index.js'), `
+const start = Promise.withResolvers();
+const finish = Promise.withResolvers();
+export const started = start.promise;
+export const complete = finish.resolve;
+export default {
+  id: 'paused', matchesFile: () => false,
+  async scan() {
+    start.resolve();
+    const error = await finish.promise;
+    if (error) throw new Error(error);
+  },
+};
+`)
+  await writeFile(path.join(root, 'groma/scanners.json'), JSON.stringify({
+    scanners: [{ id: 'paused', source: './paused-scanner' }],
+  }))
+  const scanner = await import(pathToFileURL(path.join(plugin, 'index.js')).href) as {
+    started: Promise<void>; complete(error?: string): void;
+  }
+  const reservation = Bun.serve({ port: 0, fetch: () => new Response() })
+  const port = reservation.port
+  await reservation.stop(true)
+  const startup = startWebViewer(root, { port, scan: true, workSource: EMPTY_WORK_SOURCE })
+  await scanner.started
+  return {
+    url: `http://localhost:${port}`, complete: scanner.complete,
+    async close() {
+      scanner.complete()
+      await (await startup).close()
+      await rm(root, { recursive: true, force: true })
+    },
+  }
+}
+
+test.concurrent('an early browser request waits on startup before opening the ready map', async () => {
+  const pending = await pausedStartup()
+  try {
+    const response = await fetch(pending.url)
+    assert.equal(response.status, 200)
+    const html = await response.text()
+    assert.match(html, /<main aria-busy="true"/)
+    assert.doesNotMatch(html, /role="alert"|<form/)
+    let ready = false
+    const readiness = fetch(`${pending.url}/ready`).then(response => {
+      ready = true
+      return response
+    })
+    await fetch(pending.url)
+    assert.equal(ready, false)
+    pending.complete()
+    assert.equal((await readiness).status, 204)
+    assert.equal((await payload(pending.url)).world.elements.length, 0)
+  } finally {
+    await pending.close()
+  }
+})
+
+test.concurrent('a loading browser reaches the actual failure when startup rejects', async () => {
+  const pending = await pausedStartup()
+  try {
+    const readiness = fetch(`${pending.url}/ready`)
+    pending.complete('Paused scanner failed')
+    assert.equal((await readiness).status, 500)
+    const response = await fetch(pending.url)
+    assert.equal(response.status, 500)
+    const html = await response.text()
+    assert.match(html, /Paused scanner failed/)
+    assert.doesNotMatch(html, /<main aria-busy="true"/)
+  } finally {
+    await pending.close()
+  }
+})
 
 test.concurrent('browser setup completes missing records in an existing folder and scans before entering the map', async () => {
   const root = await repository()

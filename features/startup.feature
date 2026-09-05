@@ -1,4 +1,11 @@
 Feature: Open Groma in a new project
+  Scenario: Open an initialized project while its map is preparing
+    Given a repository already has Groma project records
+    When a developer opens the Web viewer before startup finishes
+    Then Groma shows that the architecture is loading
+    And opens the map automatically when preparation completes
+    But a failed startup shows its reported error instead
+
   Scenario: Initialize before viewing architecture
     Given a repository has no Groma project records
     When a developer opens the Web or terminal viewer
