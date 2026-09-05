@@ -217,7 +217,7 @@ const style = `
   #flows { padding: 14px 0 10px; border-bottom: 1px solid var(--hairline); }
   #flows:empty { display: none; }
   #hierarchy .section { margin: 0 0 6px; padding: 0 14px; width: 100%; border: 0; background: transparent; text-align: left; }
-  .tree-section { display: flex; align-items: center; gap: 10px; width: 100%; border: 0; background: transparent; text-align: left; }
+  .tree-section { display: flex; align-items: center; gap: 4px; width: 100%; padding: 0 14px; border: 0; background: transparent; text-align: left; }
   #tree { flex: 1; overflow: auto; padding: 14px 0; }
   #tree .group { padding: 10px 14px 4px; }
   #tree .group:first-child { padding-top: 4px; }
@@ -334,11 +334,12 @@ const style = `
   .row:hover { background: var(--hover); }
   .row.selected { background: var(--hover); box-shadow: inset 2px 0 color-mix(in srgb, var(--ink) 35%, transparent); }
   .row .branch { align-self: stretch; width: calc(var(--tree-step) - 4px); flex: none; position: relative; }
-  .row .branch::before { content: ''; position: absolute; top: -5px; bottom: -5px; left: 0; border-left: 1px solid var(--hairline); }
+  /* Branches share the center of the 12 px disclosure column at every depth. */
+  .row .branch::before { content: ''; position: absolute; top: -5px; bottom: -5px; left: 6px; border-left: 1px solid var(--hairline); }
   .row .branch.blank::before { display: none; }
   .row .branch.end::before { bottom: 50%; }
-  .row .branch.current::after { content: ''; position: absolute; top: 50%; left: 0; width: calc(var(--tree-step) - 9px); border-top: 1px solid var(--hairline); }
-  .row .twist { display: grid; place-items: center; position: relative; width: 12px; height: 18px; margin-right: 2px; flex: none; color: var(--muted); }
+  .row .branch.current::after { content: ''; position: absolute; top: 50%; left: 6px; width: calc(var(--tree-step) - 9px); border-top: 1px solid var(--hairline); }
+  .row .twist, .tree-section .twist { display: grid; place-items: center; position: relative; width: 12px; height: 18px; margin-right: 2px; flex: none; color: var(--muted); }
   .row .twist.toggle::before { content: ''; position: absolute; width: 24px; height: 24px; left: 50%; top: 50%; transform: translate(-50%, -50%); }
   .row .chevron, .tree-section .chevron { display: block; flex: none; width: 5px; height: 5px; border-right: 1px solid currentColor; border-bottom: 1px solid currentColor; transform: rotate(-45deg); }
   .row[aria-expanded="true"] .chevron, .tree-section[aria-expanded="true"] .chevron { transform: rotate(45deg); }
