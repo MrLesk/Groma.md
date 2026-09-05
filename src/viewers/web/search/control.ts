@@ -1,13 +1,16 @@
-import { createArchitectureSearch } from '../../../search.ts'
+import type { WorkItem } from '@groma/work-source'
+
 import type { AnnotatedElement } from '../../../types.ts'
+import { createWebSearch, type WebSearchResult } from './model.ts'
 import { paintSearchResults } from './view.ts'
 
 interface SearchControlOptions {
   root: HTMLElement
   elements: readonly AnnotatedElement[]
+  tasks: readonly WorkItem[]
   onOpen: () => void
-  onPreview: (elementId: string | undefined) => void
-  onAccept: (elementId: string) => void
+  onPreview: (result: WebSearchResult | undefined) => void
+  onAccept: (result: WebSearchResult) => void
   onCancel: () => void
 }
 
@@ -23,8 +26,8 @@ function editable(target: EventTarget | null): boolean {
     && target.closest('input, textarea, select, [contenteditable="true"]') !== null
 }
 
-/** The Web-only entry keys; ranking and results remain owned by core search. */
-export function opensArchitectureSearch(
+/** Entry keys shared by architecture and optional task search. */
+export function opensWebSearch(
   event: ShortcutEvent,
   hasEditableTarget: boolean,
   applePlatform: boolean,
@@ -45,7 +48,6 @@ export function opensArchitectureSearch(
 
 export function createSearchControl(options: SearchControlOptions) {
   const { root, onOpen, onPreview, onAccept, onCancel } = options
-  const trigger = root.querySelector<HTMLButtonElement>('.search-trigger')!
   const input = root.querySelector<HTMLInputElement>('input')!
   const clear = root.querySelector<HTMLButtonElement>('.search-clear')!
   const menu = root.querySelector<HTMLElement>('.search-menu')!
@@ -55,26 +57,26 @@ export function createSearchControl(options: SearchControlOptions) {
   const applePlatform = /Mac|iPhone|iPad/.test(navigator.platform)
   shortcut.textContent = applePlatform ? '⌘K' : 'Ctrl K'
 
-  let search = createArchitectureSearch(options.elements)
+  let search = createWebSearch(options.elements, options.tasks)
   let results = search.find('')
   let activeIndex = 0
   let opened = false
-  let closing = false
 
   function paint(): void {
     const hasQuery = input.value.trim().length > 0
     root.toggleAttribute('data-has-query', hasQuery)
     menu.hidden = !hasQuery
+    const active = results[activeIndex]
+    if (active === undefined) input.removeAttribute('aria-activedescendant')
+    else input.setAttribute('aria-activedescendant', `web-search-result-${activeIndex}`)
+    input.setAttribute('aria-expanded', String(hasQuery))
     if (!hasQuery) return
     paintSearchResults(resultsHost, results, activeIndex)
     count.textContent = results.length === 1 ? '1 result' : `${results.length} results`
-    const active = results[activeIndex]
-    if (active === undefined) input.removeAttribute('aria-activedescendant')
-    else input.setAttribute('aria-activedescendant', `architecture-search-result-${activeIndex}`)
   }
 
   function preview(): void {
-    onPreview(results[activeIndex]?.element.representationId)
+    onPreview(results[activeIndex])
   }
 
   function query(): void {
@@ -86,14 +88,12 @@ export function createSearchControl(options: SearchControlOptions) {
   }
 
   function open(): void {
-    if (closing) return
     if (opened) {
       input.focus()
       return
     }
     opened = true
     root.setAttribute('data-open', '')
-    trigger.setAttribute('aria-expanded', 'true')
     onOpen()
     input.focus()
   }
@@ -102,23 +102,13 @@ export function createSearchControl(options: SearchControlOptions) {
     if (!opened) return
     const result = results[activeIndex]
     opened = false
-    closing = true
-    root.setAttribute('data-closing', '')
-    trigger.setAttribute('aria-expanded', 'false')
-    if (accepted && result !== undefined) onAccept(result.element.representationId)
+    if (accepted && result !== undefined) onAccept(result)
     else onCancel()
-    const finish = () => {
-      closing = false
-      root.removeAttribute('data-open')
-      root.removeAttribute('data-closing')
-      root.removeAttribute('data-has-query')
-      input.value = ''
-      results = []
-      menu.hidden = true
-      input.removeAttribute('aria-activedescendant')
-    }
-    if (matchMedia('(prefers-reduced-motion: reduce)').matches) finish()
-    else input.closest('.search-field')!.addEventListener('animationend', finish, { once: true })
+    root.removeAttribute('data-open')
+    input.value = ''
+    results = []
+    paint()
+    input.blur()
   }
 
   function move(step: number): void {
@@ -129,14 +119,11 @@ export function createSearchControl(options: SearchControlOptions) {
     preview()
   }
 
-  trigger.addEventListener('click', open)
+  input.addEventListener('focus', open)
   input.addEventListener('input', query)
   clear.addEventListener('click', () => {
     input.value = ''
-    results = []
-    activeIndex = 0
-    paint()
-    preview()
+    query()
     input.focus()
   })
   resultsHost.addEventListener('click', event => {
@@ -162,7 +149,7 @@ export function createSearchControl(options: SearchControlOptions) {
 
   document.addEventListener('keydown', event => {
     if (!opened) {
-      if (!opensArchitectureSearch(event, editable(event.target), applePlatform)) return
+      if (!opensWebSearch(event, editable(event.target), applePlatform)) return
       event.preventDefault()
       event.stopImmediatePropagation()
       open()
@@ -174,8 +161,12 @@ export function createSearchControl(options: SearchControlOptions) {
   }, true)
 
   return {
-    update(elements: readonly AnnotatedElement[]) {
-      search = createArchitectureSearch(elements)
+    update(elements: readonly AnnotatedElement[], tasks: readonly WorkItem[]) {
+      search = createWebSearch(elements, tasks)
+      if (opened && input.value.trim().length > 0) query()
+    },
+    updateTasks(tasks: readonly WorkItem[]) {
+      search.updateTasks(tasks)
       if (opened && input.value.trim().length > 0) query()
     },
   }

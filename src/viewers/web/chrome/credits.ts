@@ -63,7 +63,7 @@ const thirdPartyCredits = {
 }
 
 export const creditsCss = `
-  #credits { position: relative; transform: translateY(-1px); --popover-width: 520px; }
+  #credits { position: relative; --popover-width: 520px; }
   #credits > summary { width: 32px; padding: 0; list-style: none; }
   #credits > summary::-webkit-details-marker { display: none; }
   #credits .credits-menu { right: 0; padding: 0; }

@@ -1,3 +1,5 @@
+import type { WorkItem } from '@groma/work-source'
+
 import type { AnnotatedElement, Point } from '../../../types.ts'
 import type { MapFrame } from '../chrome/shell.ts'
 import { pan, type Camera } from '../iso/camera.ts'
@@ -15,9 +17,12 @@ interface SearchViewState {
 interface SearchSessionOptions {
   root: HTMLElement
   elements: readonly AnnotatedElement[]
+  tasks: readonly WorkItem[]
   snapshot(): SearchViewState
   apply(state: SearchViewState, commitUrl: boolean): void
-  previewMap(elementId: string | undefined, camera?: Camera): void
+  previewMap(elementIds: readonly string[] | undefined, camera?: Camera): void
+  taskElements(task: WorkItem): string[]
+  openTask(id: string): void
   clearSource(): void
   anchorOf(id: string): Point | undefined
   viewport(): MapFrame
@@ -46,22 +51,34 @@ export function createSearchSession(options: SearchSessionOptions) {
   return createSearchControl({
     root: options.root,
     elements: options.elements,
+    tasks: options.tasks,
     onOpen() {
       returnState = options.snapshot()
     },
-    onPreview(id) {
-      if (id === undefined) {
+    onPreview(result) {
+      if (result === undefined) {
         options.previewMap(undefined)
         return
       }
+      const ids = result.kind === 'architecture'
+        ? [result.element.representationId]
+        : options.taskElements(result.task)
       const current = options.snapshot()
-      const camera = reveal(current.camera, options.anchorOf(id), options.viewport())
-      options.previewMap(id, camera)
+      const point = ids.length === 0 ? undefined : options.anchorOf(ids[0]!)
+      const camera = reveal(current.camera, point, options.viewport())
+      options.previewMap(ids, camera)
     },
-    onAccept(id) {
+    onAccept(result) {
       const current = options.snapshot()
+      const previous = returnState
       returnState = undefined
       options.clearSource()
+      if (result.kind === 'task') {
+        if (previous !== undefined) options.apply(previous, false)
+        options.openTask(result.task.id)
+        return
+      }
+      const id = result.element.representationId
       options.apply({
         ...current,
         selection: selectArchitecture(noSelection, id, false),

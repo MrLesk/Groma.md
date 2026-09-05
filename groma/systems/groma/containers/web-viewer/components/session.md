@@ -14,4 +14,4 @@ groma:
       dependents: 1
 ---
 
-Keeps search preview temporary by saving the current selection, details tab, and camera; reveals ranked elements without committing them and restores the saved view on cancel.
+Saves selection, details tab and camera when search opens. Previews architecture or a task’s mapped elements without committing selection; cancel restores the saved view, while task acceptance uses the shared task-opening action.
