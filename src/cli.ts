@@ -4,6 +4,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { Command } from 'commander'
+import { confirm } from '@clack/prompts'
 
 import { writes } from './authoring.ts'
 import { isGroupAddress } from './naming.ts'
@@ -28,7 +29,21 @@ function interactiveTerminal(): boolean {
 async function openWeb(port?: number, scan = true): Promise<void> {
   try {
     const { startWebViewer } = await import('./viewers/web/server.ts')
-    const { url } = await startWebViewer(process.cwd(), { port, scan })
+    let viewer: Awaited<ReturnType<typeof startWebViewer>>
+    try {
+      viewer = await startWebViewer(process.cwd(), { port, scan })
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'EADDRINUSE') throw error
+      const message = `Port ${port ?? 4747} is in use.`
+      if (!interactiveTerminal()) throw new Error(`${message} Run groma web --port 0 to use an available port.`)
+      const accepted = await confirm({
+        message: `${message} Use another available port? (y/n)`,
+        initialValue: false,
+      })
+      if (accepted !== true) return
+      viewer = await startWebViewer(process.cwd(), { port: 0, scan })
+    }
+    const { url } = viewer
     console.log(`groma web at ${url}`)
   } catch (error) {
     console.error(error instanceof Error ? error.message : String(error))
