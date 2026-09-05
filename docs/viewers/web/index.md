@@ -83,8 +83,8 @@ restores its saved view; the revision tooltip remains part of its popup.
 Help explains the map shapes, drafts, relationships, and how source-file counts,
 lines of code, and dependencies determine building sizes relative to the project.
 It also explains Markdown curation and keeps the grouped Map, Search, View, and
-layer shortcuts. Actions and key labels align in rows on the shared scrollable
-popup surface. The information icon opens About Groma with the Groma logo,
+layer shortcuts. A compact two-column popup places the guide beside the shortcuts
+so all Help content fits without scrolling at 1280×720. The information icon opens About Groma with the Groma logo,
 a brief product description and repository link, followed by every directly declared
 third-party runtime library and development tool, including its version, license,
 and project link. The dropdown lists Auto,
