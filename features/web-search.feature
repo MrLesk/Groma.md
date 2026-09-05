@@ -11,6 +11,14 @@ Feature: Find architecture and optional work from the Web header
     And its mapped architecture is highlighted when available
     And choosing the same task again keeps it open
 
+  Scenario: Typing keeps the map still
+    Given an architect is searching the Web view
+    When the architect types or changes the query
+    Then the result list has no selected row
+    And the map camera does not move
+    When the architect presses Down
+    Then the first result is selected and previewed
+
   Scenario: Cancel a temporary search preview
     Given an architect has an architecture selection or task open
     When the architect previews search results and cancels search
