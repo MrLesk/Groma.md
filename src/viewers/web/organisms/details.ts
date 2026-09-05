@@ -248,7 +248,9 @@ export function paintDetails(host: HTMLElement, inspected: Inspected, options: D
       if (inspected.flows.length === 0) return
       const list = document.createElement('div')
       paintDetailFlows(list, options.world, activeFlow, onToggleFlow, {
-        title: `Flows through this ${inspected.kindLabel.toLowerCase()}`, visibleFlows: inspected.flows,
+        title: inspected.kindLabel === 'Actor' ? 'Flows from this actor' : `Flows through this ${inspected.kindLabel.toLowerCase()}`,
+        visibleFlows: inspected.flows,
+        contextId: inspected.id,
       })
       body.append(list)
     },
