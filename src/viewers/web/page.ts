@@ -66,6 +66,7 @@ const style = `
     --chrome-surface: color-mix(in srgb, var(--paper) 35%, transparent);
     --chrome-motion: 260ms;
     --chrome-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+    --tree-step: 16px;
     --hierarchy-column: clamp(280px, 27vw, 360px);
     --details-column: clamp(360px, 32vw, 420px);
     --hierarchy-inset: var(--hierarchy-column);
@@ -195,7 +196,6 @@ const style = `
   }
   #hierarchy, #details { position: absolute; top: 74px; bottom: 12px; min-width: 0; min-height: 0; z-index: 5; }
   #hierarchy {
-    --tree-step: 16px;
     left: 12px;
     width: var(--hierarchy-column);
     display: flex;
@@ -217,13 +217,12 @@ const style = `
   #flows { padding: 14px 0 10px; border-bottom: 1px solid var(--hairline); }
   #flows:empty { display: none; }
   #hierarchy .section { margin: 0 0 6px; padding: 0 14px; width: 100%; border: 0; background: transparent; text-align: left; }
-  #hierarchy .section::before { content: ''; display: inline-block; width: 5px; height: 5px; margin-right: 10px; border-right: 1px solid currentColor; border-bottom: 1px solid currentColor; transform: rotate(-45deg); }
-  #hierarchy .section[aria-expanded="true"]::before { transform: translateY(-2px) rotate(45deg); }
+  .tree-section { display: flex; align-items: center; gap: 10px; width: 100%; border: 0; background: transparent; text-align: left; }
   #tree { flex: 1; overflow: auto; padding: 14px 0; }
   #tree .group { padding: 10px 14px 4px; }
   #tree .group:first-child { padding-top: 4px; }
   #tree .group.external { border-top: 1px solid var(--hairline); margin-top: 10px; padding-top: 14px; }
-  #flows .flow-row { gap: 4px; }
+  .flow-tree .flow-row { gap: 4px; }
   #legend { border-top: 1px solid var(--ink); padding: 12px 16px; display: grid; gap: 4px; }
   #legend div { display: flex; gap: 16px; }
   #legend span { display: inline-flex; align-items: center; gap: 6px; }
@@ -341,8 +340,8 @@ const style = `
   .row .branch.current::after { content: ''; position: absolute; top: 50%; left: 0; width: calc(var(--tree-step) - 9px); border-top: 1px solid var(--hairline); }
   .row .twist { display: grid; place-items: center; position: relative; width: 12px; height: 18px; margin-right: 2px; flex: none; color: var(--muted); }
   .row .twist.toggle::before { content: ''; position: absolute; width: 24px; height: 24px; left: 50%; top: 50%; transform: translate(-50%, -50%); }
-  .row .twist.toggle::after { content: ''; width: 5px; height: 5px; border-right: 1px solid currentColor; border-bottom: 1px solid currentColor; transform: rotate(-45deg); }
-  .row[aria-expanded="true"] .twist::after { transform: translateY(-2px) rotate(45deg); }
+  .row .chevron, .tree-section .chevron { display: block; flex: none; width: 5px; height: 5px; border-right: 1px solid currentColor; border-bottom: 1px solid currentColor; transform: rotate(-45deg); }
+  .row[aria-expanded="true"] .chevron, .tree-section[aria-expanded="true"] .chevron { transform: rotate(45deg); }
   /* Continue the final branch to leaf icons instead of reserving an empty arrow slot. */
   .row:not([aria-expanded]):has(.branch) .twist { display: none; }
   .row:not([aria-expanded]) .branch.current { width: calc(var(--tree-step) + 4px); }

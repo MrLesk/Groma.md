@@ -13,6 +13,15 @@ function reducedMotion(): boolean {
   return matchMedia('(prefers-reduced-motion: reduce)').matches
 }
 
+/** Rotates a repainted disclosure from its previous state into its current one. */
+export function animateDisclosure(chevron: HTMLElement, expanded: boolean): void {
+  if (reducedMotion()) return
+  chevron.animate([
+    { transform: `rotate(${expanded ? -45 : 45}deg)` },
+    { transform: `rotate(${expanded ? 45 : -45}deg)` },
+  ], { duration: 180, easing: 'ease-out' })
+}
+
 /** Gives an existing map control brief feedback without moving its button. */
 export function animateControl(control: HTMLElement, kind: 'fit' | 'zoom'): void {
   if (reducedMotion()) return

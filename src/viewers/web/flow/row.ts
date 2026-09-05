@@ -19,8 +19,6 @@ export const flowRowCss = `
   .flow-row.active .flow-check { border-color: var(--highlight); background: color-mix(in srgb, var(--highlight) 85%, transparent); color: var(--on-colour); }
   .flow-row.active .flow-check::after { content: ''; width: 3px; height: 6px; border-right: 1px solid currentColor; border-bottom: 1px solid currentColor; transform: translateY(-1px) rotate(45deg); }
   .flow-row .name { overflow: hidden; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
-  #details .flow-list .flow-row { padding: 7px 0; }
-  #details .flow-list .flow-row + .flow-row { border-top: 1px solid var(--hairline); }
   .flow-step { padding: 8px 0; }
   .flow-step > button { text-align: left; }
   .flow-step.active { color: var(--highlight); }

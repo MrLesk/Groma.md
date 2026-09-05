@@ -1,5 +1,5 @@
 import type { TreeRow } from '../../tui/tree.ts'
-import { sidebarBranches, sidebarRow } from './sidebar-row.ts'
+import { replaceTreeChildren, sidebarBranches, sidebarRow } from './sidebar-row.ts'
 import { sectionHeading } from './sidebar-section.ts'
 
 /** The structure starts open and keeps its state across repaints. */
@@ -65,5 +65,5 @@ export function paintHierarchy(
     paintHierarchy(host, rows, selectedIds, onSelect, onToggle)
   })
   list.hidden = !unfolded
-  host.replaceChildren(heading, list)
+  replaceTreeChildren(host, heading, list)
 }
