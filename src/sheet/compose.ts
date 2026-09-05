@@ -1,5 +1,6 @@
 import type { AnnotatedRelationship } from '../types.ts'
 import type { Placement } from './place.ts'
+import { MARGIN, translate, unionRects } from './grid.ts'
 import type { CellRect } from './types.ts'
 
 const ROUTE_SPACE_SCALE = 1.18
@@ -24,10 +25,6 @@ export interface ContainerFlow {
 
 function centre(rect: CellRect): { x: number; y: number } {
   return { x: rect.gx + rect.w / 2, y: rect.gy + rect.d / 2 }
-}
-
-function translated(rect: CellRect, dx: number, dy: number): CellRect {
-  return { ...rect, gx: rect.gx + dx, gy: rect.gy + dy }
 }
 
 function islandMembership(placement: Placement): {
@@ -55,15 +52,15 @@ function moveIsland(
   membership: ReturnType<typeof islandMembership>,
 ): void {
   const island = placement.islands.find(candidate => candidate.key === islandKey)!
-  island.rect = translated(island.rect, dx, dy)
-  for (const slab of placement.slabs) if (slab.island === islandKey) slab.rect = translated(slab.rect, dx, dy)
+  island.rect = translate(island.rect, dx, dy)
+  for (const slab of placement.slabs) if (slab.island === islandKey) slab.rect = translate(slab.rect, dx, dy)
   for (const building of placement.buildings) {
     if (membership.buildingIsland.get(building.representationId) === islandKey) {
-      building.rect = translated(building.rect, dx, dy)
+      building.rect = translate(building.rect, dx, dy)
     }
   }
   for (const zone of placement.zones) {
-    if (membership.zoneIsland.get(zone.key) === islandKey) zone.rect = translated(zone.rect, dx, dy)
+    if (membership.zoneIsland.get(zone.key) === islandKey) zone.rect = translate(zone.rect, dx, dy)
   }
 }
 
@@ -217,19 +214,17 @@ function applyPositions(
   placement: Placement,
   units: ReadonlyMap<string, Placement['slabs'][number]>,
   positions: ReadonlyMap<string, CellRect>,
-  ids: readonly string[],
 ): void {
-  for (const id of ids) {
+  for (const [id, target] of positions) {
     const slab = units.get(id)!
-    const target = positions.get(id)!
     const dx = target.gx - slab.rect.gx
     const dy = target.gy - slab.rect.gy
     slab.rect = target
     for (const building of placement.buildings) {
-      if (building.surface === id) building.rect = translated(building.rect, dx, dy)
+      if (building.surface === id) building.rect = translate(building.rect, dx, dy)
     }
     for (const zone of placement.zones) {
-      if (zone.parent === id) zone.rect = translated(zone.rect, dx, dy)
+      if (zone.parent === id) zone.rect = translate(zone.rect, dx, dy)
     }
   }
 }
@@ -242,6 +237,7 @@ function composeSystem(
   const flow = containerFlow(placement, systemIsland, relationships)
   if (!flow || flow.mediators.length === 0) return 0
   const island = placement.islands.find(candidate => candidate.key === systemIsland)!
+  const originalWidth = island.rect.w
   const units = new Map(placement.slabs
     .filter(slab => slab.island === systemIsland)
     .map(slab => [slab.representationId, slab]))
@@ -256,7 +252,6 @@ function composeSystem(
   const occupiedWidth = entryRight + mediatorWidth + core.rect.w
   const availableRight = island.rect.gx + island.rect.w - SURFACE_INSET
   const extraWidth = Math.max(0, occupiedWidth + 2 * MIN_COLUMN_GAP - availableRight)
-  island.rect.w += extraWidth
   const freeWidth = availableRight + extraWidth - occupiedWidth
   const columnGap = freeWidth / 2
   const mediatorX = entryRight + columnGap
@@ -293,8 +288,14 @@ function composeSystem(
     ),
   })
 
-  applyPositions(placement, units, positions, [...flow.mediators, flow.core])
-  return extraWidth
+  const occupied = unionRects([...positions.values()])!
+  const dx = island.rect.gx + SURFACE_INSET - occupied.gx
+  const dy = island.rect.gy + SURFACE_INSET - occupied.gy
+  for (const [id, rect] of positions) positions.set(id, translate(rect, dx, dy))
+  island.rect.w = occupied.w + 2 * SURFACE_INSET
+  island.rect.d = occupied.d + 2 * SURFACE_INSET
+  applyPositions(placement, units, positions)
+  return island.rect.w - originalWidth
 }
 
 /** Opens route space, then composes each internal system from its weighted container flow. */
@@ -311,10 +312,10 @@ export function composePlacement(
       shiftX += composeSystem(placement, island.key, relationships)
     }
   }
-  placement.sheet.w += shiftX
-  placement.sheet.d = Math.max(
-    placement.sheet.d,
-    ...placement.islands.map(island => island.rect.gy + island.rect.d + 4),
-  )
+  const occupied = unionRects(placement.islands.map(island => island.rect))
+  if (occupied) {
+    placement.sheet.w = occupied.gx + occupied.w + MARGIN
+    placement.sheet.d = occupied.gy + occupied.d + MARGIN
+  }
   return placement
 }

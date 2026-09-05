@@ -10,7 +10,7 @@ import {
   type Endpoint,
   type Point,
 } from '../src/sheet/route-geometry.ts'
-import { routeSpacingIndex } from '../src/sheet/route-spacing.ts'
+import { orthogonal, routeSpacingIndex } from '../src/sheet/route-spacing.ts'
 import { refineRoutes } from '../src/sheet/route-lanes.ts'
 import { routeAll } from '../src/sheet/route.ts'
 
@@ -69,4 +69,24 @@ test.concurrent('a shared highway may separate across its existing route conflic
   const [spacing] = routeSpacingIndex(refined, new Set(refined.map(route => route.id))).measure(refined, [LANE_GAP])
 
   assert.equal(spacing.sharedPathLength, 0)
+})
+
+test.concurrent('separating free interior bends keeps two clean corners and fixed endpoints', () => {
+  const routes = [
+    { id: 'a', source: 'source-a', target: 'target-a', points: [{ x: 0, y: 0 }, { x: 100, y: 0 }, { x: 100, y: 300 }, { x: 200, y: 300 }] },
+    { id: 'b', source: 'source-b', target: 'target-b', points: [{ x: 0, y: 60 }, { x: 100, y: 60 }, { x: 100, y: 240 }, { x: 200, y: 240 }] },
+  ].map(route => ({ ...route, description: 'Uses', origin: 'observed' as const }))
+  const original = structuredClone(routes)
+  const refined = refineRoutes(new Map(), routes)
+  const [spacing] = routeSpacingIndex(refined, new Set(refined.map(route => route.id))).measure(refined, [LANE_GAP])
+
+  for (const [index, route] of refined.entries()) {
+    assert.equal(route.points.length, 4)
+    assert.ok(orthogonal(route.points))
+    assert.deepEqual(route.points[0], routes[index]!.points[0])
+    assert.deepEqual(route.points.at(-1), routes[index]!.points.at(-1))
+  }
+  assert.equal(spacing.sharedPathLength, 0)
+  assert.equal(spacing.crowdedBodyLength, 0)
+  assert.deepEqual(routes, original)
 })

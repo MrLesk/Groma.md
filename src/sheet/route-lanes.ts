@@ -61,7 +61,7 @@ function routeSegments(routes: readonly FlatRoute[]): RouteSegment[] {
   }
   return result
 }
-function segmentTransition(index: number, finalSegmentIndex: number): RouteSegment['transition'] | 'both' {
+function segmentTransition(index: number, finalSegmentIndex: number): RouteSegment['transition'] {
   const source = index === 1 && index < finalSegmentIndex
   const target = index === finalSegmentIndex || (index === finalSegmentIndex - 1 && index > 0)
   return source && target ? 'both' : source ? 'source' : target ? 'target' : null
@@ -311,6 +311,7 @@ function applyLanes(
   routes: readonly FlatRoute[],
   group: readonly RouteSegment[],
   targets: ReadonlyMap<string, number>,
+  preserveCorners: boolean,
 ): FlatRoute[] {
   const byRoute = Map.groupBy(group, segment => segment.routeId)
   return routes.map(route => {
@@ -323,7 +324,12 @@ function applyLanes(
     const bothTransition = sharedSource === sharedTarget ? 'both' : sharedSource ? 'source' : 'target'
     const points = route.points.map(point => ({ ...point }))
     for (const segment of [...entries].sort((a, b) => b.index - a.index)) {
-      shiftSegment(points, segment, targets.get(`${segment.routeId}\0${segment.index}`)!, bothTransition)
+      const index = segment.index
+      const movable = preserveCorners && index > 0 && index + 2 < route.points.length
+        && !collinear(route.points[index - 1]!, route.points[index]!, route.points[index + 1]!)
+        && !collinear(route.points[index]!, route.points[index + 1]!, route.points[index + 2]!)
+      shiftSegment(points, movable ? { ...segment, transition: null } : segment,
+        targets.get(`${segment.routeId}\0${segment.index}`)!, bothTransition)
     }
     return { ...route, points: compactRoute(points) }
   })
@@ -417,8 +423,8 @@ function bestCandidate(
   const createsRouteCrossing = newRouteCrossingFor(routes, changedRouteIds)
   const [before, minimumBefore] = spacing.measure(currentChanged, gaps)
   const blockedRouteIds = new Set<string>()
-  const evaluate = (target: ReadonlyMap<string, number>) => {
-    const candidate = applyLanes(routes, group, target)
+  const evaluate = (target: ReadonlyMap<string, number>, preserveCorners: boolean) => {
+    const candidate = applyLanes(routes, group, target, preserveCorners)
     const changed = candidate.filter(route => changedRouteIds.has(route.id))
     const previousClearance = new Set(crossesClearance(currentChanged))
     const buildingCrossings = crosses(changed)
@@ -438,8 +444,10 @@ function bestCandidate(
     )) return null
     return improves(before, diagnostics) ? { routes: candidate, diagnostics } : null
   }
+  // Move free corners first; retain guarded transitions where the corridor cannot admit that move.
+  const evaluateLanes = (target: ReadonlyMap<string, number>) => evaluate(target, true) ?? evaluate(target, false)
   const target = constrainedTargets(endpoints, routes, group, desiredGap)
-  const candidate = target ? evaluate(target) : null
+  const candidate = target ? evaluateLanes(target) : null
   if (candidate) return candidate.routes
   const fixedSets = blockedRouteIds.size > 0
     ? [blockedRouteIds]
@@ -449,7 +457,7 @@ function bestCandidate(
   let best: { routes: FlatRoute[]; diagnostics: RouteSpacing } | null = null
   for (const fixedRouteIds of fixedSets) {
     const pinnedTarget = constrainedTargets(endpoints, routes, group, desiredGap, fixedRouteIds)
-    const pinned = pinnedTarget ? evaluate(pinnedTarget) : null
+    const pinned = pinnedTarget ? evaluateLanes(pinnedTarget) : null
     if (pinned && (!best || improves(best.diagnostics, pinned.diagnostics))) best = pinned
   }
   return best?.routes ?? null
