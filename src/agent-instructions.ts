@@ -8,6 +8,8 @@ const managedAgentInstructions = `<!-- groma:start -->
 ## Groma
 
 This project uses Groma. Run \`groma agent-instructions\` before planning or changing code. Do not edit Groma-owned architecture files directly.
+
+When the \`backlog\` CLI is available and you work on a Backlog task, you must record each changed file in its \`modified_files\` and add affected Groma element IDs to its \`references\`, immediately after each change.
 <!-- groma:end -->`
 
 export const agentInstructionGuides = [
