@@ -9,11 +9,14 @@ An initialized project runs one scan before opening. The live process then
 starts the same watch as `groma scan --watch`. Startup errors appear in the
 browser with the reported issue and the command to run after fixing it.
 
-If the requested port is busy, an interactive terminal asks whether to use
+If startup reports an occupied concrete port, an interactive terminal shows
+the runtime error and asks whether to use
 the next available port. Press y to try ports one by one above the requested
 port (4748, 4749, and onward for the default 4747), or n to stop. Groma prints
 the new address after startup. Without an interactive terminal, it exits with
-an instruction to run `groma web --port 0` for an available port.
+the runtime error and an instruction to run `groma web --port 0` for an
+available port. If port 0 fails, Groma shows the runtime error and exits
+without suggesting the same command or offering another port.
 
 This page is the browser surface. The shared viewer rules live in
 [Viewers](../index.md).
