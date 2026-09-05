@@ -1,5 +1,15 @@
 import type { C4Kind } from '../../../types.ts'
-import { kindGlyph } from '../../atoms/kind.ts'
+
+/** Each column records whether another sibling follows at that depth. */
+export function sidebarBranches(followingSiblings: readonly boolean[]): HTMLSpanElement[] {
+  return followingSiblings.map((follows, index) => {
+    const branch = document.createElement('span')
+    const current = index === followingSiblings.length - 1
+    branch.className = `branch${current ? ' current' : ''}${follows ? '' : current ? ' end' : ' blank'}`
+    branch.setAttribute('aria-hidden', 'true')
+    return branch
+  })
+}
 
 /** Shared entity columns for actor groups and the software tree. */
 export function sidebarRow(
@@ -15,7 +25,6 @@ export function sidebarRow(
   const twist = document.createElement('span')
   twist.className = 'twist'
   twist.setAttribute('aria-hidden', 'true')
-  twist.textContent = fold ? fold.expanded ? '▾' : '▸' : ''
   if (fold) {
     twist.classList.add('toggle')
     twist.addEventListener('click', event => {
@@ -25,9 +34,8 @@ export function sidebarRow(
   }
 
   const mark = document.createElement('span')
-  mark.className = 'mark'
+  mark.className = `mark kind-${kind}`
   mark.setAttribute('aria-hidden', 'true')
-  mark.textContent = kindGlyph(kind)
 
   const name = document.createElement('span')
   name.className = 'name'

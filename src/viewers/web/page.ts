@@ -218,13 +218,13 @@ const style = `
   #flows { padding: 14px 0 10px; border-bottom: 1px solid var(--hairline); }
   #flows:empty { display: none; }
   #hierarchy .section { margin: 0 0 6px; padding: 0 14px; width: 100%; border: 0; background: transparent; text-align: left; }
+  #hierarchy .section::before { content: ''; display: inline-block; width: 5px; height: 5px; margin-right: 10px; border-right: 1px solid currentColor; border-bottom: 1px solid currentColor; transform: rotate(-45deg); }
+  #hierarchy .section[aria-expanded="true"]::before { transform: translateY(-2px) rotate(45deg); }
   #tree { flex: 1; overflow: auto; padding: 14px 0; }
   #tree .group { padding: 10px 14px 4px; }
   #tree .group:first-child { padding-top: 4px; }
   #tree .group.external { border-top: 1px solid var(--hairline); margin-top: 10px; padding-top: 14px; }
-  #flows .actor-row { padding-left: calc(14px + var(--tree-step)); }
-  /* Flow checks sit below actor names; labels advance by the same tree step. */
-  #flows .actor-flows .flow-row { padding-left: calc(20px + 2 * var(--tree-step)); gap: 4px; }
+  #flows .flow-row { gap: 4px; }
   #legend { border-top: 1px solid var(--ink); padding: 12px 16px; display: grid; gap: 4px; }
   #legend div { display: flex; gap: 16px; }
   #legend span { display: inline-flex; align-items: center; gap: 6px; }
@@ -335,12 +335,27 @@ const style = `
   }
   .row:hover { background: var(--hover); }
   .row.selected { background: var(--hover); box-shadow: inset 2px 0 color-mix(in srgb, var(--ink) 35%, transparent); }
-  .row .branch { align-self: stretch; width: calc(var(--tree-step) - 4px); flex: none; border-left: 1px solid color-mix(in srgb, var(--ink) 18%, transparent); position: relative; }
-  .row .branch.current::after { content: ''; position: absolute; top: 50%; left: 0; width: calc(var(--tree-step) - 9px); border-top: 1px solid color-mix(in srgb, var(--ink) 18%, transparent); }
-  .row .branch.current.end { height: 50%; align-self: flex-start; }
-  .row .branch.current.end::after { top: 100%; }
-  .row .twist { width: 6px; flex: none; color: var(--muted); }
-  .row .mark { width: 8px; text-align: center; }
+  .row .branch { align-self: stretch; width: calc(var(--tree-step) - 4px); flex: none; position: relative; }
+  .row .branch::before { content: ''; position: absolute; top: -5px; bottom: -5px; left: 0; border-left: 1px solid var(--hairline); }
+  .row .branch.blank::before { display: none; }
+  .row .branch.end::before { bottom: 50%; }
+  .row .branch.current::after { content: ''; position: absolute; top: 50%; left: 0; width: calc(var(--tree-step) - 9px); border-top: 1px solid var(--hairline); }
+  .row .twist { display: grid; place-items: center; position: relative; width: 12px; height: 18px; margin-right: 2px; flex: none; color: var(--muted); }
+  .row .twist.toggle::before { content: ''; position: absolute; width: 24px; height: 24px; left: 50%; top: 50%; transform: translate(-50%, -50%); }
+  .row .twist.toggle::after { content: ''; width: 5px; height: 5px; border-right: 1px solid currentColor; border-bottom: 1px solid currentColor; transform: rotate(-45deg); }
+  .row[aria-expanded="true"] .twist::after { transform: translateY(-2px) rotate(45deg); }
+  /* Continue the final branch to leaf icons instead of reserving an empty arrow slot. */
+  .row:not([aria-expanded]):has(.branch) .twist { display: none; }
+  .row:not([aria-expanded]) .branch.current { width: calc(var(--tree-step) + 4px); }
+  .row:not([aria-expanded]) .branch.current::after { width: calc(var(--tree-step) - 1px); }
+  /* A flow checkbox is 4 px wider than an entity mark; keep their labels aligned. */
+  .row.flow-row .branch.current { width: var(--tree-step); }
+  .row.flow-row .branch.current::after { width: calc(var(--tree-step) - 5px); }
+  .row .mark { display: grid; place-items: center; width: 8px; height: 12px; }
+  .row .mark::before { content: ''; width: 7px; height: 7px; background: currentColor; }
+  .row .kind-actor::before { border-radius: 50%; }
+  .row .kind-container::before { height: 4px; border: 1px solid currentColor; background: transparent; transform: skewX(-25deg); }
+  .row .kind-component::before { width: 4px; height: 4px; }
   .row .twist.toggle:hover { color: var(--highlight-text); }
   .row .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .relationship-row {

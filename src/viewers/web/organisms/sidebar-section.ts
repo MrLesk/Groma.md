@@ -7,7 +7,7 @@ export function sectionHeading(
   const heading = document.createElement('button')
   heading.type = 'button'
   heading.className = 'section'
-  heading.textContent = `${expanded ? '▾' : '▸'} ${name}`
+  heading.textContent = name
   heading.setAttribute('aria-expanded', String(expanded))
   heading.addEventListener('click', onToggle)
   return heading

@@ -1,6 +1,6 @@
 import type { ArchitectureGraph } from '../../../types.ts'
 import type { FlowRef } from '../../flows.ts'
-import { sidebarRow } from '../organisms/sidebar-row.ts'
+import { sidebarBranches, sidebarRow } from '../organisms/sidebar-row.ts'
 import { sectionHeading } from '../organisms/sidebar-section.ts'
 import { flowRow } from './row.ts'
 
@@ -30,7 +30,10 @@ export function paintFlows(
   })
   const list = document.createElement('div')
   list.hidden = !unfolded
-  for (const actor of actors) {
+  const actorIds = new Set(actors.map(actor => actor.id))
+  const ungrouped = world.flows.filter(flow => !actorIds.has(flow.steps[0]!.source))
+  for (const [actorIndex, actor] of actors.entries()) {
+    const followingActor = actorIndex < actors.length - 1 || ungrouped.length > 0
     const expanded = expandedActors.has(actor.id)
     const actorFlows = world.flows.filter(flow => flow.steps[0]?.source === actor.id)
     const toggle = () => {
@@ -39,19 +42,23 @@ export function paintFlows(
       paintFlows(host, world, active, onToggle)
     }
     const heading = sidebarRow(actor.title, 'actor', { expanded, count: actorFlows.length, toggle })
-    heading.classList.add('actor-row')
+    heading.prepend(...sidebarBranches([followingActor]))
     heading.addEventListener('click', toggle)
     const flows = document.createElement('div')
-    flows.className = 'actor-flows'
     flows.hidden = !expanded
-    for (const flow of actorFlows) {
-      flows.append(flowRow({ flow: { id: flow.id }, title: groupedTitle(flow.title, actor.title) }, active, onToggle))
+    for (const [flowIndex, flow] of actorFlows.entries()) {
+      const row = flowRow({ flow: { id: flow.id }, title: groupedTitle(flow.title, actor.title) }, active, onToggle)
+      row.classList.add('row')
+      row.prepend(...sidebarBranches([followingActor, flowIndex < actorFlows.length - 1]))
+      flows.append(row)
     }
     list.append(heading, flows)
   }
-  const actorIds = new Set(actors.map(actor => actor.id))
-  for (const flow of world.flows.filter(flow => !actorIds.has(flow.steps[0]!.source))) {
-    list.append(flowRow({ flow: { id: flow.id }, title: flow.title }, active, onToggle))
+  for (const [index, flow] of ungrouped.entries()) {
+    const row = flowRow({ flow: { id: flow.id }, title: flow.title }, active, onToggle)
+    row.classList.add('row')
+    row.prepend(...sidebarBranches([index < ungrouped.length - 1]))
+    list.append(row)
   }
   host.append(heading, list)
 }

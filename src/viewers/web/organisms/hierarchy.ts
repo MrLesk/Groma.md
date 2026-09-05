@@ -1,5 +1,5 @@
 import type { TreeRow } from '../../tui/tree.ts'
-import { sidebarRow } from './sidebar-row.ts'
+import { sidebarBranches, sidebarRow } from './sidebar-row.ts'
 import { sectionHeading } from './sidebar-section.ts'
 
 /** The structure starts open and keeps its state across repaints. */
@@ -9,8 +9,7 @@ function rootGroupName(row: TreeRow): string {
   return row.external ? 'External systems' : 'Systems'
 }
 
-function hasLaterSibling(rows: readonly TreeRow[], index: number): boolean {
-  const depth = rows[index]!.depth
+function hasLaterSibling(rows: readonly TreeRow[], index: number, depth: number): boolean {
   for (const row of rows.slice(index + 1)) {
     if (row.depth < depth) return false
     if (row.depth === depth) return true
@@ -23,7 +22,7 @@ function hierarchyRow(
   selectedIds: ReadonlySet<string>,
   onSelect: (id: string, additive: boolean) => void,
   onToggle: (row: TreeRow) => void,
-  hasSibling: boolean,
+  followingSiblings: readonly boolean[],
 ): HTMLButtonElement {
   const button = sidebarRow(row.title, row.kind, row.hasChildren
     ? { expanded: row.expanded, count: row.count, toggle: () => onToggle(row) }
@@ -32,17 +31,7 @@ function hierarchyRow(
   if (selectedIds.has(row.id)) button.classList.add('selected')
   if (row.origin !== 'observed') button.classList.add('ghost')
 
-  const branches = Array.from({ length: row.depth }, () => {
-    const branch = document.createElement('span')
-    branch.className = 'branch'
-    branch.setAttribute('aria-hidden', 'true')
-    return branch
-  })
-  const currentBranch = branches.at(-1)
-  currentBranch?.classList.add('current')
-  if (currentBranch !== undefined && !hasSibling) currentBranch.classList.add('end')
-
-  button.prepend(...branches)
+  button.prepend(...sidebarBranches(followingSiblings))
   button.addEventListener('click', event => onSelect(row.id, event.shiftKey))
   return button
 }
@@ -67,7 +56,8 @@ export function paintHierarchy(
         group = nextGroup
       }
     }
-    const button = hierarchyRow(row, selectedIds, onSelect, onToggle, hasLaterSibling(rows, index))
+    const siblings = Array.from({ length: row.depth }, (_, depth) => hasLaterSibling(rows, index, depth + 1))
+    const button = hierarchyRow(row, selectedIds, onSelect, onToggle, siblings)
     list.append(button)
   }
   const heading = sectionHeading('Structure', unfolded, () => {
