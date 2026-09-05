@@ -13,7 +13,7 @@ import { bindChromeActions, createWebShell, mapFrame, type MapFrame } from './ch
 import { bindThemeControl, readSavedTheme } from './chrome/theme-control.ts'
 import { paintWorldStats, primarySystem } from './chrome/stats.ts'
 import { createWebDataSource } from './data.ts'
-import { paintFlows } from './flow/list.ts'
+import { createFlowList } from './flow/list.ts'
 import { toggleFlowActivation } from './flow/state.ts'
 import { paintBackToFlow, paintFlowDetails } from './flow/reader.ts'
 import { fitHighlights, fitCamera, pan, wheelAction, zoomAbout, zoomLimits, zoomReadout } from './iso/camera.ts'
@@ -62,6 +62,7 @@ const headerHost = document.getElementById('header')!
 const hierarchyHost = document.getElementById('hierarchy')!
 const treeHost = document.getElementById('tree')!
 const flowsHost = document.getElementById('flows')!
+const paintFlows = createFlowList()
 const statsHost = document.getElementById('stats')!
 const revisionSelect = document.getElementById('revision') as HTMLDetailsElement
 const searchRoot = document.getElementById('web-search')!
@@ -218,6 +219,7 @@ function paintViewState(commitUrl = true): void {
     paintRelationship(detailsHost, relationship, world, select, authoring.relationWrites(relationship.source, relationship.target))
   } else if (selected !== undefined) {
     paintDetails(detailsHost, inspectDetails(selected, world), {
+      world,
       onSelect: select,
       onToggleFlow: toggleFlow,
       activeFlow,

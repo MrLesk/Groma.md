@@ -11,7 +11,8 @@ import { removalBlocker } from '../../../removable.ts'
 import { flowsThrough } from '../../flows.ts'
 import type { FlowRef } from '../../flows.ts'
 import { kindGlyph, kindLabel } from '../../atoms/kind.ts'
-import { flowRow, type FlowRowData } from '../flow/row.ts'
+import type { FlowRowData } from '../flow/row.ts'
+import { createFlowList } from '../flow/list.ts'
 import type { CodeFile } from '../../source/structure.ts'
 import { paintElementWork } from '../work/component-tasks.ts'
 import { codeList, fileList } from './code-lists.ts'
@@ -177,6 +178,7 @@ function marked(
 }
 
 export interface DetailsOptions extends PaneWrites {
+  world: ArchitectureGraph
   onSelect: (id: string, additive: boolean) => void,
   onToggleFlow: (flow: FlowRef) => void,
   activeFlow: FlowRef | undefined
@@ -187,6 +189,8 @@ export interface DetailsOptions extends PaneWrites {
   workGroups: readonly ElementWorkGroup[]
   onTask: (id: string) => void
 }
+
+const paintDetailFlows = createFlowList()
 
 function paintTabs(tabsHost: HTMLElement, availableTabs: DetailsTab[], shownTab: DetailsTab, onTab: (tab: DetailsTab) => void): void {
   tabsHost.replaceChildren()
@@ -242,10 +246,8 @@ export function paintDetails(host: HTMLElement, inspected: Inspected, options: D
 
     flows: () => {
       if (inspected.flows.length === 0) return
-      body.append(heading('Flows'))
       const list = document.createElement('div')
-      list.className = 'flow-list'
-      for (const flow of inspected.flows) list.append(flowRow(flow, activeFlow, onToggleFlow))
+      paintDetailFlows(list, options.world, activeFlow, onToggleFlow, inspected.flows)
       body.append(list)
     },
 
