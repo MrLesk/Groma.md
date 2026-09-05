@@ -1,24 +1,18 @@
 import type { ArchitectureGraph } from '../../../types.ts'
-import { kindGlyph } from '../../atoms/kind.ts'
 import type { FlowRef } from '../../flows.ts'
+import { sidebarRow } from '../organisms/sidebar-row.ts'
 import { sectionHeading } from '../organisms/sidebar-section.ts'
 import { flowRow } from './row.ts'
 
 let unfolded = true
 const expandedActors = new Set<string>()
 
-function actorHeading(title: string, expanded: boolean, onToggle: () => void): HTMLButtonElement {
-  const heading = sectionHeading(title, expanded, onToggle)
-  heading.className = 'row actor-row'
-  heading.replaceChildren()
-  for (const [className, text] of [['twist', expanded ? '▾' : '▸'], ['mark', kindGlyph('actor')], ['name', title]]) {
-    const part = document.createElement('span')
-    part.className = className!
-    part.textContent = text!
-    if (className !== 'name') part.setAttribute('aria-hidden', 'true')
-    heading.append(part)
-  }
-  return heading
+function groupedTitle(title: string, actorTitle: string): string {
+  const separator = title.indexOf(': ')
+  if (separator < 0) return title
+  const prefix = title.slice(0, separator).toLowerCase()
+  const actor = actorTitle.toLowerCase()
+  return actor === prefix || actor.endsWith(` ${prefix}`) ? title.slice(separator + 2) : title
 }
 
 export function paintFlows(
@@ -38,16 +32,20 @@ export function paintFlows(
   list.hidden = !unfolded
   for (const actor of actors) {
     const expanded = expandedActors.has(actor.id)
-    const heading = actorHeading(actor.title, expanded, () => {
+    const actorFlows = world.flows.filter(flow => flow.steps[0]?.source === actor.id)
+    const toggle = () => {
       if (expanded) expandedActors.delete(actor.id)
       else expandedActors.add(actor.id)
       paintFlows(host, world, active, onToggle)
-    })
+    }
+    const heading = sidebarRow(actor.title, 'actor', { expanded, count: actorFlows.length, toggle })
+    heading.classList.add('actor-row')
+    heading.addEventListener('click', toggle)
     const flows = document.createElement('div')
     flows.className = 'actor-flows'
     flows.hidden = !expanded
-    for (const flow of world.flows.filter(flow => flow.steps[0]?.source === actor.id)) {
-      flows.append(flowRow({ flow: { id: flow.id }, title: flow.title }, active, onToggle))
+    for (const flow of actorFlows) {
+      flows.append(flowRow({ flow: { id: flow.id }, title: groupedTitle(flow.title, actor.title) }, active, onToggle))
     }
     list.append(heading, flows)
   }
