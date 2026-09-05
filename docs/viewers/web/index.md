@@ -77,7 +77,8 @@ above it as one technical instrument. The header groups the groma.md lockup,
 system name, quiet flow and element counts, and revision menu on the left.
 A permanent Search field sits between that context and the view controls:
 Fit, `-`, zoom readout, `+`, Theme, Help, and Credits. Controls share one
-height, and opening search leaves them in place. At narrower widths the
+height, and opening search leaves them in place. Header popups float with
+a clear gap below the bar. At narrower widths the
 counts and the Fit and Theme text give way to the controls.
 Help opens the short map-control guide. The information icon opens
 Credits with a link to the Groma repository, followed by every directly declared
@@ -96,7 +97,9 @@ Search opens on focus, `/`, or Cmd/Ctrl+K. It ranks architecture matches
 together with task IDs and titles supplied by the optional work-source plugin.
 Task rows show their ID and status; every supplied status and unmapped task
 is searchable. Without a work plugin, the same field searches architecture.
-Up and Down preview results on the map in a five-row scrolling window.
+Typing updates the list without selecting a result or moving the camera.
+Up and Down select and preview results in a five-row scrolling window.
+Enter opens the first result if no row has been selected.
 Enter or a result click opens the existing architecture or task details;
 opening an active task keeps it active. Escape or a click outside search
 restores the selection and camera from before the search.

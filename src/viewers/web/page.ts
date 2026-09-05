@@ -165,7 +165,6 @@ const style = `
   #help .help-panel {
     position: absolute;
     z-index: 20;
-    top: calc(100% + 8px);
     right: 0;
     width: 260px;
     padding: 14px 16px;
@@ -173,6 +172,9 @@ const style = `
     line-height: 1.8;
   }
   #help .help-panel p { margin: 0; }
+  #header .anchored-popover, #help .help-panel {
+    top: calc(100% + 22px);
+  }
   @media (max-width: 1280px) {
     #stats .world-counts { display: none; }
   }

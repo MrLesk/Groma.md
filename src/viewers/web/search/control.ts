@@ -59,7 +59,7 @@ export function createSearchControl(options: SearchControlOptions) {
 
   let search = createWebSearch(options.elements, options.tasks)
   let results = search.find('')
-  let activeIndex = 0
+  let activeIndex = -1
   let opened = false
 
   function paint(): void {
@@ -81,7 +81,7 @@ export function createSearchControl(options: SearchControlOptions) {
 
   function query(): void {
     results = search.find(input.value)
-    activeIndex = 0
+    activeIndex = -1
     paint()
     resultsHost.scrollTop = 0
     preview()
@@ -100,7 +100,7 @@ export function createSearchControl(options: SearchControlOptions) {
 
   function close(accepted: boolean): void {
     if (!opened) return
-    const result = results[activeIndex]
+    const result = results[Math.max(0, activeIndex)]
     opened = false
     if (accepted && result !== undefined) onAccept(result)
     else onCancel()
@@ -113,7 +113,9 @@ export function createSearchControl(options: SearchControlOptions) {
 
   function move(step: number): void {
     if (results.length === 0) return
-    activeIndex = (activeIndex + step + results.length) % results.length
+    activeIndex = activeIndex < 0
+      ? (step > 0 ? 0 : results.length - 1)
+      : (activeIndex + step + results.length) % results.length
     paint()
     resultsHost.querySelector(`[data-search-result="${activeIndex}"]`)?.scrollIntoView({ block: 'nearest' })
     preview()
@@ -141,7 +143,7 @@ export function createSearchControl(options: SearchControlOptions) {
   function handleOpenedKey(key: string): boolean {
     if (key === 'ArrowDown') move(1)
     else if (key === 'ArrowUp') move(-1)
-    else if (key === 'Enter' && results[activeIndex] !== undefined) close(true)
+    else if (key === 'Enter' && results.length > 0) close(true)
     else if (key === 'Escape') close(false)
     else return false
     return true

@@ -17,4 +17,4 @@ groma:
       dependents: 2
 ---
 
-Owns the permanent Web search entry, shortcuts, query and cursor. Ranks core architecture matches together with task IDs and titles supplied by the optional work-source plugin; accepts or cancels through the search session.
+Owns the permanent Web search entry, shortcuts, query and cursor. Ranks core architecture matches together with task IDs and titles supplied by the optional work-source plugin. Query changes leave results unselected and the camera still; arrow navigation previews a result, and Enter or a click accepts through the search session.
