@@ -58,7 +58,7 @@ export interface IsoMap {
   /** Outlines the elements the active tasks touch and uniformly accents the routes leaving them; an empty set clears both. */
   mark(ids: ReadonlySet<string>): void
   /** Lights route ids and direct endpoints; contextual ancestors stay neutral while everything off the path dims. */
-  setLitRoutes(litRouteIds: ReadonlySet<string>, onPath: (id: string) => boolean): void
+  setLitRoutes(litRouteIds: ReadonlySet<string>, onPath: (id: string) => boolean, focusedRouteId?: string): void
   hitId(target: EventTarget | null): string | undefined
   /** True when a click hit nothing but the sheet. */
   isSheet(target: EventTarget | null): boolean
@@ -261,13 +261,14 @@ export function createMap(host: HTMLElement): IsoMap {
         route.group.classList.toggle('touched', ids.has(route.source))
       }
     },
-    setLitRoutes(litRouteIds, onPath) {
+    setLitRoutes(litRouteIds, onPath, focusedRouteId) {
       const tracing = litRouteIds.size > 0
       const litEndpointIds = new Set<string>()
       camera.toggleAttribute('data-tracing', tracing)
       for (const [routeId, route] of routes) {
         const lit = litRouteIds.has(routeId)
         route.group.classList.toggle('lit', lit)
+        route.group.classList.toggle('focused', lit && routeId === focusedRouteId)
         if (lit) litEndpointIds.add(route.source).add(route.target)
       }
       for (const [itemId, node] of items) {

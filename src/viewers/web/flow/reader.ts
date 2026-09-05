@@ -1,12 +1,20 @@
 import type { ArchitectureFlow, ArchitectureGraph } from '../../../types.ts'
 import { paragraph } from '../atoms/text.ts'
+import { chromeButton } from '../atoms/button.ts'
 import type { FlowRef } from '../../flows.ts'
+import type { WebFlowRef } from './state.ts'
 
 function button(label: string, action: () => void): HTMLButtonElement {
   const control = document.createElement('button')
   control.type = 'button'
   control.className = 'link'
   control.textContent = label
+  control.addEventListener('click', action)
+  return control
+}
+
+function stepControl(label: string, action: () => void): HTMLButtonElement {
+  const control = chromeButton(label)
   control.addEventListener('click', action)
   return control
 }
@@ -28,11 +36,13 @@ export function paintFlowDetails(
   for (const prose of flow.overview.split('\n\n')) body.append(paragraph('overview', prose))
   const controls = document.createElement('div')
   controls.className = 'flow-controls'
-  const previous = button('Previous', () => onStep(Math.max(0, (active.step ?? 1) - 1)))
+  const previous = stepControl('Previous', () => onStep(Math.max(0, (active.step ?? 1) - 1)))
   previous.disabled = active.step === undefined || active.step === 0
-  const next = button('Next', () => onStep((active.step ?? -1) + 1))
+  const next = stepControl('Next', () => onStep((active.step ?? -1) + 1))
   next.disabled = active.step === flow.steps.length - 1
-  controls.append(button('All steps', () => onStep(undefined)), previous, next)
+  const clear = stepControl('Clear focus', () => onStep(undefined))
+  clear.disabled = active.step === undefined
+  controls.append(previous, next, clear)
   body.append(controls)
   const names = new Map(world.elements.map(element => [element.id, element.title]))
   const list = document.createElement('ol')
@@ -52,10 +62,17 @@ export function paintFlowDetails(
   body.append(list)
 }
 
-export function paintBackToFlow(host: HTMLElement, onBack?: () => void): void {
-  host.querySelector('.back-to-flow')?.remove()
-  if (onBack === undefined) return
-  const back = button('Back to flow', onBack)
-  back.classList.add('back-to-flow')
+/** The reader returns to its origin; endpoint inspection returns to the same flow. */
+export function paintFlowReturn(
+  host: HTMLElement, active: WebFlowRef | undefined, readingFlow: boolean,
+  world: ArchitectureGraph, onSelect: (id: string) => void, onBack: () => void,
+): void {
+  host.querySelector('.flow-back')?.remove()
+  if (active === undefined) return
+  const origin = world.elements.find(element => element.representationId === active.returnTo)
+  if (readingFlow && origin === undefined) return
+  const back = chromeButton(readingFlow ? `Back to ${origin!.title}` : 'Back to flow', { glyph: '←' })
+  back.addEventListener('click', readingFlow ? () => onSelect(origin!.representationId) : onBack)
+  back.classList.add('flow-back')
   host.prepend(back)
 }

@@ -211,12 +211,16 @@ stay out. A declaration opens read-only source at its visibly marked line; a
 file opens at the top. Elements without build evidence do not show the tab. Children and
 relationship peers select that element.
 
-The flow reader shows its overview and every ordered action. Select an action,
-Previous, or Next to emphasize that step's exact relationship and endpoints;
-All steps restores the whole authored path. Unrelated routes are hidden and
+The flow reader shows its overview and every ordered action. Opening a flow from
+element details adds Back to that element above the reader. Select an action,
+Previous, or Next to focus a step: the whole authored path and its endpoints stay
+highlighted while that step's exact relationship pulses continuously. The focused
+action has a marked row; Clear focus removes the extra emphasis. Reduced motion
+keeps a stronger static route stroke. Unrelated routes are hidden and
 task emphasis is quiet while reading a flow. Existing footprints and routes
 stay fixed. Endpoints link to the normal component inspector and source view;
-Back to flow restores the same scenario and step. Selecting a task leaves flow
+Back to flow restores the same scenario, step, and original return target.
+Returning to the original element keeps the flow highlighted. Selecting a task leaves flow
 focus. Escape or a click on empty sheet clears the active selections.
 
 ## What it shows
