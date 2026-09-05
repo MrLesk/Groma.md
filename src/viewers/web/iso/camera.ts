@@ -18,6 +18,8 @@ export interface Viewport {
 
 /** Closest zoom: one cell is 192 px wide, names read easily. */
 const ZOOM_MAX = 4
+/** Automatic focus stops at the map's normal label size. Larger selections still zoom out to fit. */
+const FOCUS_ZOOM_MAX = 1
 /** Screen pixels kept free around the fitted sheet. */
 const FIT_MARGIN = 24
 /** Screen pixels around focused elements, leaving their highlighted context readable. */
@@ -77,7 +79,6 @@ export function fitArchitecture(
   world: ArchitectureGraph,
   ids: readonly string[],
   viewport: Viewport,
-  maxZoom: number,
 ): Camera | undefined {
   const wanted = new Set(ids)
   const routes = scene.routes.filter(item => wanted.has(item.route.id))
@@ -92,7 +93,7 @@ export function fitArchitecture(
   return fitPoints([
     ...bodyPoints(scene, bodies),
     ...routes.flatMap(item => [...item.points, ...item.lifts.flatMap(lift => [lift.from, lift.to])]),
-  ], viewport, maxZoom)
+  ], viewport, FOCUS_ZOOM_MAX)
 }
 
 /** Fits identified bodies and the highlighted routes leaving them; missing ids do not affect the camera. */

@@ -281,7 +281,7 @@ function focusActiveTasks(): void {
 }
 function focusArchitecture(ids: readonly string[]): void {
   const frame = viewport()
-  applyFocus(fitArchitecture(scene, world, ids, frame, zoomLimits(fitted).max), frame)
+  applyFocus(fitArchitecture(scene, world, ids, frame), frame)
 }
 
 /** Every task entry point shares details, highlighting and camera focus. */
