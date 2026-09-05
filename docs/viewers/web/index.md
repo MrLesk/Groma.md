@@ -87,10 +87,12 @@ Shift-click selection still offers Group as and Combine into through the
 shared operations. Pressing a group zone opens Rename and Dissolve. Historical
 and published maps keep reading and navigation but expose no write controls.
 
-Draft elements and links retain fixed dashed strokes during selection and
-flow highlighting. Flow traversal uses a separate moving directional marker;
-reduced-motion mode holds that marker still. Flow emphasis never replaces
-lifecycle dashes. Current relationship strokes stay solid.
+Neutral current relationships are solid and neutral draft relationships have
+fixed dashes. Task-highlighted relationships are uniformly solid. Selected
+flows use dashes moving from source to destination with a fixed arrowhead,
+regardless of relationship origin. Reduced-motion mode keeps those dashes
+static. Clearing task or flow highlighting restores the origin treatment.
+Draft element outlines remain dashed.
 
 The isometric grid fills the screen. Inset 35%-paper frosted chrome floats
 above it as one technical instrument. The header groups the groma.md lockup,
@@ -441,7 +443,7 @@ and its chips add an accent pill outline, while only its pins add an accent
 ring around their badge. The selected task whose details are shown also bolds
 its chip text; the map outlines every element the task touches, those whose code holds one of its modified
 files and those it references, and draws the routes leaving them in
-the accent, dotted when the target is untouched. Several tasks can be
+the same solid accent, whether or not the target is touched. Several tasks can be
 active at once, their touched elements counted together. Clicking another
 active task selects it without removing any highlight. Only clicking the
 selected task again deactivates it, handing selection to the most recently
