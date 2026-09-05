@@ -181,3 +181,11 @@ Source: `/var/folders/fd/cgvn5zh52tb_sbt7hp_vtbmm0000gn/T/codex-clipboard-6b4836
 Flex layout gives the remaining width to the action after sizing the endpoints to their content. At the 900px viewport, both Git list rows measured action center and endpoint-gap center at exactly 680.90625px. Seven component rows with different endpoint widths also had matching action/gap centers and no overflow. The center action still opens relationship details, and source navigation returns to the component. Typography, dividers, THIS and editing remain unchanged. No P0/P1/P2 findings remain. The final isolated repository check passed 104 Node and 301 Bun tests.
 
 final result: passed
+
+## TASK-266 label and arrow spacing
+
+The user requested extra space beside the middle label, two-line wrapping for the example, and text directly above the arrow. Source: `/var/folders/fd/cgvn5zh52tb_sbt7hp_vtbmm0000gn/T/codex-clipboard-6569ce6f-18aa-4d45-a3ff-5daf127e52ec.png`. Final light capture: `/tmp/groma266-spacing-light.png`; combined comparison: `/tmp/groma266-spacing-comparison.png` at the 1440 × 1000 viewport using the documented capture normalization.
+
+The action has 12px horizontal padding and its label is capped at 24ch. Both Git examples measure 30px high at a 15px line height: exactly two lines. The arrow begins 2px below the label. Its action center remains equal to the endpoint-gap center. All seven component rows fit the 900px viewport without overflow, and action/endpoint navigation still works. The combined comparison has no actionable P0/P1/P2 findings. The focused change preserves the previously reviewed ownership and behavior. Final isolated repository checks pass 104 Node and 301 Bun tests.
+
+final result: passed

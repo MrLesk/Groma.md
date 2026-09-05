@@ -5,7 +5,7 @@ status: Done
 assignee:
   - codex
 created_date: '2026-09-05 18:28'
-updated_date: '2026-09-05 18:42'
+updated_date: '2026-09-05 18:48'
 labels: []
 dependencies: []
 references:
@@ -57,6 +57,8 @@ When an architect selects a component or relationship in Web details, Groma show
 1. Preserve promoted relationship semantics and expose both directed endpoints. 2. Render one shared horizontal row with compact endpoint names and kinds, description above the center arrow, and THIS only on the selected element. Use dividers between rows without enclosing borders or lateral padding; technology remains editable but is omitted from reading. 3. Verify fixture business rules and browser behavior, document the final result, run repository checks and required reviews.
 
 4. Size endpoint columns to content with flex layout and center the action in the remaining space, as requested in the latest screenshot.
+
+5. Add horizontal breathing room around the centered action, constrain its label to 24 characters of width, and tighten the gap to the arrow.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
@@ -77,6 +79,10 @@ Final verification passed on the isolated committed baseline with TASK-266 chang
 User requested content-sized endpoints so the middle label/arrow is centered in the actual gap between Source and Destination. Reopened for this focused CSS refinement.
 
 Flex refinement verified: action center equals the exact midpoint between endpoint boxes for both external-system rows and all seven component rows; no overflow. Browser navigation remains correct. Final isolated bun run check passed 104 Node and 301 Bun tests. Focused specification and quality checks found no regressions from the CSS-only refinement.
+
+User requested a little more side padding, a two-line Writes architecture for versioning label in the supplied example, and text immediately above its arrow.
+
+Spacing refinement verified in browser: 12px action side padding, max-width 24ch label; supplied phrase wraps to exactly two lines (30px at 15px line height), arrow gap is 2px, action remains centered between endpoints. All seven component rows fit 900px without overflow; endpoint and action navigation passed. Focused specification/quality inspection found no regressions or new behavior. Isolated bun run check passed 104 Node and 301 Bun tests.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
@@ -85,4 +91,6 @@ Flex refinement verified: action center equals the exact midpoint between endpoi
 Shared compact directed relationship rows across element lists and relationship details. Names and kinds flank the action and arrow; THIS marks the current endpoint. Removed enclosing cards, side padding and displayed technology, while keeping endpoint navigation and editing. Verified browser behavior in light/dark at 420px and 360px panes, zero row overflow, required reviews, and bun run check with 104 Node plus 301 Bun tests passing.
 
 Endpoint columns size to content; flex centers the action precisely in their remaining gap. Browser measurements confirm alignment and no overflow across external-system and component rows.
+
+Added breathing room beside the center label, two-line wrapping for the approved example, and a 2px label-to-arrow gap.
 <!-- SECTION:FINAL_SUMMARY:END -->
