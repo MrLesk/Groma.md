@@ -7,8 +7,9 @@ import { createDialog } from './create.ts'
 import { creationParent, enclosed, gestureBounds, type CreationKind } from './intent.ts'
 
 export const editorCss = `
+  /* Hidden while the map editing interaction is unfinished. */
   #map-tools { position: absolute; left: calc(var(--hierarchy-inset) + 24px); top: 74px; z-index: 4;
-    display: flex; flex-direction: column; gap: 5px; padding: 6px; border: 1px solid var(--hairline); border-radius: 10px;
+    display: none; flex-direction: column; gap: 5px; padding: 6px; border: 1px solid var(--hairline); border-radius: 10px;
     background: var(--chrome-surface); backdrop-filter: blur(18px); }
   #map-tools[hidden] { display: none; }
   #map-tools button { padding: 7px 10px; text-align: left; color: var(--ink); background: transparent; border: 0; border-radius: 5px; cursor: pointer; touch-action: none; }

@@ -58,8 +58,6 @@ export interface Inspected {
   files: CodeReference[]
   /** True when groma remove would succeed on it right now. */
   removable: boolean
-  /** The draft record this element belongs to or that touches it. */
-  draft?: string
   /** A draft with scan evidence can be accepted. */
   matchedGhost: boolean
   /** An empty, unrelated component can move to another container. */
@@ -169,7 +167,6 @@ export function inspectDetails(
     matchedGhost: isMatchedGhost(element),
     movable: element.movable === true,
     parent: element.parent,
-    ...(element.draft === undefined ? {} : { draft: element.draft }),
   }
 }
 
@@ -393,10 +390,6 @@ function elementFields(inspected: Inspected, options: PaneWrites): EditField[] {
     { name: 'overview', label: 'Overview', value: inspected.overview, multiline: true },
     { name: 'technology', label: 'Technology', value: inspected.technology.join(', ') },
   ]
-  if ((options.drafts?.length ?? 0) > 0) fields.push({
-    name: 'draft', label: 'Draft', value: inspected.draft ?? '',
-    options: [{ id: '', title: 'None' }, ...options.drafts!.map(id => ({ id, title: id }))],
-  })
   if (inspected.movable) fields.push({
     name: 'parent', label: 'Parent', value: inspected.parent ?? '', options: options.parents ?? [],
   })
