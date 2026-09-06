@@ -1,10 +1,10 @@
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 
+import { compiledAsset } from '../../compiled-asset.ts'
 import { loadAnnotatedArchitecture } from '../../core.ts'
 import { loadProjectProfile } from '../../project-profile.ts'
 import { measuredSheetScene } from '../../sheet/scene.ts'
-import { compiledAsset } from './compiled-asset.ts'
 import type { WebMapPayload } from './payload.ts'
 
 /** Builds the same browser runtime used by live and published delivery. */

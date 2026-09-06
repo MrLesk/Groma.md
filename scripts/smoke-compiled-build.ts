@@ -141,4 +141,9 @@ const help = await run(['--help'])
 assert.equal(help.code, 0, help.stderr)
 assert.match(help.stdout, /Usage:.*groma/s)
 
+// The guide is an embedded asset directory, resolved through the compiled root.
+const guide = await run(['agent-instructions'])
+assert.equal(guide.code, 0, guide.stderr)
+assert.notEqual(guide.stdout.trim(), '')
+
 await smokeWeb()

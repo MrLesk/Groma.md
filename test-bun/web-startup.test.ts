@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { access, cp, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { access, cp, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
@@ -191,7 +191,9 @@ test.concurrent('a new empty project opens successfully and gains components thr
       await Bun.sleep(50)
       current = await payload(server.url)
     }
-    assert.equal(hasComponents(current.world), true)
+    // On failure, tell apart a missed source event (no fold) from a fold whose world was never published.
+    const folded = await readdir(path.join(root, 'groma'), { recursive: true })
+    assert.equal(hasComponents(current.world), true, `generation ${current.generation}; groma/ holds ${folded.join(', ')}`)
     assert.ok(current.generation > 1)
   } finally {
     await server.close()

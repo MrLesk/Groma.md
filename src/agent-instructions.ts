@@ -1,6 +1,8 @@
 import { readFile, realpath, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 
+import { compiledAsset } from './compiled-asset.ts'
+
 const instructionFiles = ['AGENTS.md', 'CLAUDE.md'] as const
 const managedBlockPattern = /<!-- groma:start -->[\s\S]*?<!-- groma:end -->/g
 
@@ -15,9 +17,8 @@ When the \`backlog\` CLI is available and you work on a Backlog task, immediatel
 export const agentInstructionGuides = [
   {
     id: 'curation',
-    source: import.meta.dir?.includes('$bunfs') === true
-      ? path.join(import.meta.dir!, 'docs/agent-instructions/index.md')
-      : new URL('../docs/agent-instructions/index.md', import.meta.url),
+    source: compiledAsset('docs', 'agent-instructions', 'index.md')
+      ?? new URL('../docs/agent-instructions/index.md', import.meta.url),
   },
 ] as const
 

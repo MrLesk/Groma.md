@@ -4,8 +4,8 @@ import path from 'node:path'
 
 import packageJson from '../../../../package.json' with { type: 'json' }
 
+import { compiledAsset } from '../../../compiled-asset.ts'
 import { escaped } from '../atoms/escape.ts'
-import { compiledAsset } from '../compiled-asset.ts'
 
 interface DependencyManifest {
   homepage?: string

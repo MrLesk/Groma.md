@@ -6,9 +6,10 @@ import { version } from 'typescript'
 
 const executable = process.platform === 'win32' ? 'tsc.exe' : 'tsc'
 
-/** Bun's embedded file root inside a compiled executable, or undefined when running from source. */
-function packedRoot(): string | undefined {
-  return ['/$bunfs/root', 'B:\\~BUN\\root'].find(root => existsSync(root))
+/** The build embeds the worker under `groma-typescript-worker` at the standalone executable's root. */
+function embeddedWorker(): string | undefined {
+  if (globalThis.Bun?.isStandaloneExecutable !== true) return undefined
+  return path.join(import.meta.dir, 'groma-typescript-worker')
 }
 
 /** Fills `directory` through a staged rename so a half-written worker is never picked up. */
@@ -35,11 +36,11 @@ let resolved: Promise<string | undefined> | undefined
  */
 export function typescriptWorkerPath(): Promise<string | undefined> {
   resolved ??= (async () => {
-    const root = packedRoot()
-    if (root === undefined) return undefined
+    const embedded = embeddedWorker()
+    if (embedded === undefined) return undefined
     const directory = path.join(os.tmpdir(), `groma-typescript-worker-${version}`)
     const tsc = path.join(directory, executable)
-    if (!existsSync(tsc)) await unpack(path.join(root, 'groma-typescript-worker'), directory)
+    if (!existsSync(tsc)) await unpack(embedded, directory)
     return tsc
   })()
   return resolved
