@@ -65,8 +65,8 @@ test.concurrent('drafting from an empty world preserves draft architecture until
     assert.deepEqual(world.world.elements.map(element => [element.id, element.origin]), [['shop', 'draft']])
     assert.equal(isEmptyWorld(world.world), false)
     assert.equal(hasComponents(world.world), false)
-    const history = await (await fetch(`${server.url}/world.json`)).json() as { revisions: { id: string }[] }
-    const historical = await (await fetch(`${server.url}/world.json?revision=${history.revisions[0]!.id}`)).json() as { world: ArchitectureWorld }
+    const history = await (await fetch(`${server.url}/revisions.json`)).json() as { id: string }[]
+    const historical = await (await fetch(`${server.url}/world.json?revision=${history[0]!.id}`)).json() as { world: ArchitectureWorld }
     assert.equal(isEmptyWorld(historical.world), true)
   } finally {
     await server.close()

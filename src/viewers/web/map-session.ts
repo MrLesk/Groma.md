@@ -65,7 +65,8 @@ export async function createWebMapSession(
 ): Promise<{ fetch: (request: Request) => Promise<Response>; close: () => Promise<void> }> {
   const renderer = await bundleRenderer()
   const workSource = options.workSource ?? backlogPlugin.create(repositoryRoot)
-  const revisions = await listGromaRevisions(repositoryRoot)
+  let revisions: WebRevision[] = []
+  let revisionRead: Promise<WebRevision[]> | undefined
   let map: WebMapPayload = {
     generation: 1,
     ...(await loadMap(repositoryRoot, revisions, null)),
@@ -75,6 +76,7 @@ export async function createWebMapSession(
     work: EMPTY_WORK_SNAPSHOT,
   }
   let closed = false
+  let currentPage: Blob | undefined
   const clients = new Set<ReadableStreamDefaultController<Uint8Array>>()
   const encoder = new TextEncoder()
 
@@ -89,9 +91,20 @@ export async function createWebMapSession(
     return { ...map, ...workPayload() }
   }
 
+  /** History is read once when requested; opening the current map does not need snapshots. */
+  function readRevisions(): Promise<WebRevision[]> {
+    revisionRead ??= listGromaRevisions(repositoryRoot).then(next => {
+      revisions = next
+      map = { ...map, revisions }
+      currentPage = undefined
+      return revisions
+    })
+    return revisionRead
+  }
+
   async function payloadAt(revisionId: string | null): Promise<WebPayload | Response> {
     if (revisionId === null) return payload()
-    const revision = revisions.find(candidate => candidate.id === revisionId)
+    const revision = (await readRevisions()).find(candidate => candidate.id === revisionId)
     if (revision === undefined) return new Response('Unknown Groma revision', { status: 404 })
     if (!revision.compatible) return new Response('Unsupported Groma revision', { status: 422 })
     return {
@@ -138,6 +151,7 @@ export async function createWebMapSession(
       generation: map.generation + 1,
       ...next,
     }
+    currentPage = undefined
     broadcast(worldEvent())
   }
 
@@ -150,6 +164,7 @@ export async function createWebMapSession(
         workGeneration: workState.workGeneration + 1,
         work,
       }
+      currentPage = undefined
       broadcast(workEvent())
     })
   }
@@ -242,7 +257,12 @@ export async function createWebMapSession(
   }
 
   async function pageResponse(url: URL): Promise<Response> {
-    const selected = await payloadAt(url.searchParams.get('revision'))
+    const revision = url.searchParams.get('revision')
+    if (revision === null) {
+      currentPage ??= new Blob([renderPage({ ...payload(), delivery: { kind: 'live' } })], { type: 'text/html; charset=utf-8' })
+      return new Response(currentPage, { headers: { 'Cache-Control': 'no-store' } })
+    }
+    const selected = await payloadAt(revision)
     if (selected instanceof Response) return selected
     return new Response(renderPage({ ...selected, delivery: { kind: 'live' } }), {
       headers: {
@@ -254,6 +274,7 @@ export async function createWebMapSession(
 
   const routes = new Map<string, Route>([
     ['/render.js', rendererResponse],
+    ['/revisions.json', async () => Response.json(await readRevisions())],
     ['/world.json', worldResponse],
     ['/code.json', selectedSourceResponse],
     ['/source.json', selectedSourceResponse],
@@ -298,6 +319,7 @@ export async function createWebMapSession(
         sourceWatch.close(),
         architectureWatch.close(),
         workChain,
+        revisionRead,
       ])
     },
   }

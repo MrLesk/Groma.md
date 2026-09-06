@@ -71,11 +71,9 @@ test.concurrent('Web history rejects a pre-OKF Groma revision', async () => {
       port: 0,
       workSource: emptyWorkSource(),
     })
-    const current = await (await fetch(`${server.url}/world.json`)).json() as {
-      revisions: { id: string; compatible: boolean }[]
-    }
-    const obsolete = current.revisions.find(revision => !revision.compatible)
-    const supported = current.revisions.find(revision => revision.compatible)
+    const revisions = await (await fetch(`${server.url}/revisions.json`)).json() as { id: string; compatible: boolean }[]
+    const obsolete = revisions.find(revision => !revision.compatible)
+    const supported = revisions.find(revision => revision.compatible)
     expect(obsolete).toBeDefined()
     expect(supported).toBeDefined()
     const response = await fetch(`${server.url}/world.json?revision=${obsolete!.id}`)

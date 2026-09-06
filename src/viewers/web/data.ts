@@ -1,13 +1,14 @@
 import type { AcceptInput, AddInput, DraftInput, EditArchitectureInput, RemoveInput } from '../../authoring.ts'
 import type { WorkItemDetails } from '../../types.ts'
 import { PUBLISHED_EVENT, PUBLISHED_VERSION_EVENT } from './payload.ts'
-import type { WebBootPayload, WebPayload, WebWorkPayload } from './payload.ts'
+import type { WebBootPayload, WebPayload, WebRevision, WebWorkPayload } from './payload.ts'
 import type { SourcePayload } from '../source/read.ts'
 import type { CodeFile } from '../source/structure.ts'
 import type { TaskDiffPayload } from '../source/diff.ts'
 
 export interface WebDataSource {
   readWorld(revision?: string): Promise<WebPayload>
+  readRevisions(): Promise<WebRevision[]>
   readCode(element: string, revision?: string): Promise<readonly CodeFile[]>
   readSource(element: string, file: string, revision?: string): Promise<SourcePayload>
   readTask(id: string): Promise<WorkItemDetails>
@@ -49,6 +50,9 @@ function selected(path: string, values: Record<string, string | undefined>): str
 
 function liveDataSource(): WebDataSource {
   return {
+    readRevisions() {
+      return responseJson('/revisions.json')
+    },
     readWorld(revision) {
       return responseJson(revision === undefined ? '/world.json' : `/world.json?revision=${revision}`)
     },
@@ -91,6 +95,9 @@ function publishedDataSource(boot: WebBootPayload): WebDataSource {
   }
 
   return {
+    async readRevisions() {
+      return snapshot.revisions
+    },
     async readWorld() {
       return snapshot
     },

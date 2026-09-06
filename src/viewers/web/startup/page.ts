@@ -65,6 +65,15 @@ const style = `
   :focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
   .error { margin: 0 0 24px; overflow-wrap: anywhere; white-space: pre-wrap; color: var(--diff-removed); }
   .next { margin: 24px 0 0; color: var(--muted); }
+  .spinner {
+    display: none; width: 24px; height: 24px; margin: 0 auto 20px;
+    border: 2px solid var(--hairline); border-top-color: var(--accent); border-radius: 50%;
+    animation: spin 700ms linear infinite;
+  }
+  main[aria-busy="true"] .spinner { display: block; }
+  main[aria-busy="true"] h1 { text-align: center; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) { .spinner { animation: none; } }
   @media (max-width: 420px) { main { padding: 24px; } header { flex-wrap: wrap; } }
 `
 
@@ -114,5 +123,5 @@ export function renderSetupPage(input: SetupPage): string {
     + '<nav class="steps" aria-label="Setup progress">'
     + `<span${loading ? '' : ' aria-current="step"'}>1 Setup</span>`
     + `<span data-step="scan"${loading ? ' aria-current="step"' : ''}>2 Scan</span><span>3 Map</span></nav></header>`
-    + `${content}</main><script>${script}</script></body></html>`
+    + `<span class="spinner" aria-hidden="true"></span>${content}</main><script>${script}</script></body></html>`
 }

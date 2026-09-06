@@ -55,15 +55,22 @@ function globToRegExp(glob: string): RegExp {
   return new RegExp(`^${pattern}$`)
 }
 
-function matchesGlob(relative: string, glob: string): boolean {
+function globMatcher(glob: string): (relative: string) => boolean {
   const normalized = glob.replace(/^\.\//, '')
   if (normalized.endsWith('/')) {
-    return relative === normalized.slice(0, -1) || relative.startsWith(normalized)
+    return relative => relative === normalized.slice(0, -1) || relative.startsWith(normalized)
   }
   if (!normalized.includes('*') && !normalized.includes('?')) {
-    return relative === normalized || relative.startsWith(`${normalized}/`)
+    return relative => relative === normalized || relative.startsWith(`${normalized}/`)
   }
-  return globToRegExp(normalized).test(relative)
+  const pattern = globToRegExp(normalized)
+  return relative => pattern.test(relative)
+}
+
+function fileMatcher(config: TypeScriptScannerConfig): (file: string) => boolean {
+  const included = config.globs.map(globMatcher)
+  const excluded = config.ignore.map(globMatcher)
+  return file => included.some(matches => matches(file)) && !excluded.some(matches => matches(file))
 }
 
 function gitListFiles(repositoryRoot: string): Promise<string[]> {
@@ -96,17 +103,17 @@ export function isTypeScriptScanFile(
   config: TypeScriptScannerConfig = defaultTypeScriptScannerConfig,
 ): boolean {
   const file = relative.split(path.sep).join('/')
-  return config.globs.some(glob => matchesGlob(file, glob))
-    && !config.ignore.some(glob => matchesGlob(file, glob))
+  return fileMatcher(config)(file)
 }
 
 export async function listTypeScriptFiles(
   repositoryRoot: string,
   config: TypeScriptScannerConfig = defaultTypeScriptScannerConfig,
 ): Promise<string[]> {
+  const matches = fileMatcher(config)
   return (await gitListFiles(repositoryRoot))
     .map(file => file.split(path.sep).join('/'))
+    .filter(matches)
     .filter(file => existsSync(path.join(repositoryRoot, file)))
-    .filter(file => isTypeScriptScanFile(file, config))
     .sort()
 }

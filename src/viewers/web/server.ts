@@ -12,7 +12,7 @@ type MapSession = Awaited<ReturnType<typeof createWebMapSession>>
 /** One local server owns setup and the ready map; the map starts only after initialization. */
 export async function startWebViewer(
   repositoryRoot: string,
-  options: { port?: number; workSource?: WorkSource; scan?: boolean } = {},
+  options: { port?: number; workSource?: WorkSource; scan?: boolean; onListening?: (url: string) => void } = {},
 ): Promise<{ url: string; close: () => Promise<void> }> {
   const initial = gromaInitialization(repositoryRoot)
   let projectName = (await loadProjectProfile(repositoryRoot))?.title ?? path.basename(repositoryRoot)
@@ -78,10 +78,12 @@ export async function startWebViewer(
     },
   })
 
+  const url = `http://localhost:${server.port}`
+  options.onListening?.(url)
   if (initial.initialized) await openMap(options.scan === true)
 
   return {
-    url: `http://localhost:${server.port}`,
+    url,
     async close() {
       await server.stop(true)
       await map?.close()

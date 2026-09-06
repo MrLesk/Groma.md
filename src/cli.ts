@@ -40,11 +40,11 @@ function interactiveTerminal(): boolean {
   return process.stdin.isTTY === true && process.stdout.isTTY === true
 }
 
-async function startWebOnNextPort(port: number, scan: boolean) {
+async function startWebOnNextPort(port: number, scan: boolean, onListening: (url: string) => void) {
   const { startWebViewer } = await import('./viewers/web/server.ts')
   while (true) {
     try {
-      return await startWebViewer(process.cwd(), { port: ++port, scan })
+      return await startWebViewer(process.cwd(), { port: ++port, scan, onListening })
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'EADDRINUSE') throw error
     }
@@ -54,9 +54,9 @@ async function startWebOnNextPort(port: number, scan: boolean) {
 async function openWeb(port?: number, scan = true): Promise<void> {
   try {
     const { startWebViewer } = await import('./viewers/web/server.ts')
-    let viewer: Awaited<ReturnType<typeof startWebViewer>>
+    const onListening = (url: string) => console.log(`groma web at ${url}`)
     try {
-      viewer = await startWebViewer(process.cwd(), { port, scan })
+      await startWebViewer(process.cwd(), { port, scan, onListening })
     } catch (error) {
       if (port === 0 || (error as NodeJS.ErrnoException).code !== 'EADDRINUSE') throw error
       const message = error instanceof Error ? error.message : String(error)
@@ -66,10 +66,8 @@ async function openWeb(port?: number, scan = true): Promise<void> {
         initialValue: false,
       })
       if (accepted !== true) return
-      viewer = await startWebOnNextPort(port ?? 4747, scan)
+      await startWebOnNextPort(port ?? 4747, scan, onListening)
     }
-    const { url } = viewer
-    console.log(`groma web at ${url}`)
   } catch (error) {
     console.error(error instanceof Error ? error.message : String(error))
     process.exitCode = 1
@@ -297,7 +295,7 @@ program
   .description('Draft software or a directed relationship')
   .argument('<kind>', 'system, container, component, or relation')
   .argument('<name>', 'element name')
-  .argument('[target]', 'target id when drafting a relation')
+  .argument('[target]', 'target file or concept ID when drafting a relation')
   .option('--overview <markdown>', 'full explanation in Markdown')
   .option('--description <text>', 'optional short summary')
   .option('--parent <id>', 'parent element id')
@@ -328,7 +326,7 @@ function addressed(id: string, ids: string[]): RemoveInput {
   if (id === 'relation') {
     const [source, target] = ids
     if (source === undefined || target === undefined || ids.length > 2) {
-      throw new Error('relation takes a source id and a target id')
+      throw new Error('relation takes a source endpoint and a target endpoint')
     }
     return { id: source, relation: target }
   }
@@ -346,7 +344,7 @@ function addressed(id: string, ids: string[]): RemoveInput {
 /** `add relation <a> <b>` and `add group <name> <ids...>` carry ids after the name; nothing else does. */
 function addedIds(thing: string, ids: string[]): Pick<AddInput, 'relation' | 'members'> {
   if (thing === 'relation') {
-    if (ids.length !== 1) throw new Error('add relation takes a source id and a target id')
+    if (ids.length !== 1) throw new Error('add relation takes a source endpoint and a target endpoint')
     return { relation: ids[0] }
   }
   if (thing === 'group') return { members: ids }
@@ -358,8 +356,8 @@ program
   .command('add')
   .description('Declare an actor, external system, draft, flow, relation, or group')
   .argument('<thing>', 'actor, external, draft, flow, relation, or group')
-  .argument('<name>', 'name, or the source id of a relation')
-  .argument('[ids...]', 'target id of a relation, or the member ids of a group')
+  .argument('<name>', 'name, or the source file or concept ID of a relation')
+  .argument('[ids...]', 'target file or concept ID of a relation, or the member IDs of a group')
   .option('--overview <markdown>', 'full Markdown explanation, or the outcome of a draft')
   .option('--steps <markdown>', 'flow Steps table: From | To | Action, with Markdown endpoint links')
   .option('--description <text>', 'optional short summary, or how the source uses the target')
@@ -387,7 +385,7 @@ program
   .command('remove')
   .description('Remove a person, an external, a ghost, a draft nothing belongs to, a relation, or a group')
   .argument('<id>', 'element id, draft id, flow id, relation, or group')
-  .argument('[ids...]', 'with relation: the source id and the target id; with group: the address and the members leaving')
+  .argument('[ids...]', 'with relation: the source and target endpoints; with group: the address and the members leaving')
   .action(async (id: string, ids: string[]) => {
     try {
       const removed = await writes.remove(process.cwd(), addressed(id, ids))
@@ -402,7 +400,7 @@ program
   .command('edit')
   .description('Update authored meaning')
   .argument('<id>', 'element id, draft id, flow id, project, relation, or group')
-  .argument('[ids...]', 'with relation: the source id and the target id; with group: the address')
+  .argument('[ids...]', 'with relation: the source and target endpoints; with group: the address')
   .option('--title <text>', 'new title; the id stays, or the new name of a group')
   .option('--overview <markdown>', 'full Markdown explanation, or the outcome of a draft')
   .option('--steps <markdown>', 'flow Steps table: From | To | Action, with Markdown endpoint links')
@@ -442,7 +440,7 @@ program
   .command('accept')
   .description('Accept a matched draft element or explicitly accept a draft relationship')
   .argument('<id>', 'draft element id, or relation')
-  .argument('[ids...]', 'source and target ids when accepting a relation')
+  .argument('[ids...]', 'source and target files or concept IDs when accepting a relation')
   .action(async (id: string, ids: string[]) => {
     try {
       try {

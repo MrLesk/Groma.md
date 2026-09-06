@@ -1,6 +1,7 @@
 import type { WebDataSource } from '../data.ts'
 import { bindPopover } from '../atoms/popover.ts'
 import type { WebBootPayload, WebPayload, WebWorkPayload } from '../payload.ts'
+import { revisionOptions } from './view.ts'
 
 interface RevisionControlOptions {
   control: HTMLDetailsElement
@@ -68,6 +69,7 @@ export function createRevisionControl(options: RevisionControlOptions) {
   const { element: tooltip, hide: hideTooltip } = revisionTooltip(control)
   let selected: string | undefined
   let loading = false
+  let historyLoaded = boot.delivery.kind === 'published' || boot.revisions.length > 0
   let appliedWorld = boot.generation
   let appliedWork = boot.workGeneration
 
@@ -81,6 +83,21 @@ export function createRevisionControl(options: RevisionControlOptions) {
     }
     body.toggleAttribute('data-revision', selected !== undefined)
   }
+
+  control.addEventListener('toggle', async () => {
+    if (!control.open || historyLoaded || loading) return
+    loading = true
+    control.setAttribute('aria-busy', 'true')
+    try {
+      const revisions = await data.readRevisions()
+      control.querySelector('.revision-menu')!.insertAdjacentHTML('beforeend', revisionOptions(revisions, selected))
+      localizeDates(control)
+      historyLoaded = true
+    } finally {
+      loading = false
+      control.removeAttribute('aria-busy')
+    }
+  })
 
   control.addEventListener('click', async event => {
     const option = event.target instanceof Element

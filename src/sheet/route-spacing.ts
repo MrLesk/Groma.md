@@ -1,21 +1,13 @@
-import { LANE_GAP, ROUTE_UNIT, type FlatRoute, type Point } from './route-geometry.ts'
+import { LANE_GAP, type FlatRoute, type Point } from './route-geometry.ts'
 
 const EPSILON = 0.001
-const FAN_TRANSITION = ROUTE_UNIT * 1.5
 
 interface Segment {
   routeId: string
-  source: string
-  target: string
   axis: 'horizontal' | 'vertical'
   coordinate: number
   start: number
   end: number
-}
-
-export interface RouteSpacing {
-  sharedPathLength: number
-  crowdedBodyLength: number
 }
 
 function segmentOf(route: FlatRoute, index: number): Segment | null {
@@ -29,8 +21,6 @@ function segmentOf(route: FlatRoute, index: number): Segment | null {
   const along = horizontal ? [from.x, to.x] : [from.y, to.y]
   return {
     routeId: route.id,
-    source: route.source,
-    target: route.target,
     axis: horizontal ? 'horizontal' : 'vertical',
     coordinate: horizontal ? from.y : from.x,
     start: Math.min(...along),
@@ -49,43 +39,28 @@ function segments(routes: readonly FlatRoute[]): Segment[] {
   return result
 }
 
-function overlap(a: Segment, b: Segment): number {
-  return Math.max(0, Math.min(a.end, b.end) - Math.max(a.start, b.start))
+function sharedLength(a: Segment, b: Segment): number {
+  if (a.routeId === b.routeId || a.axis !== b.axis || Math.abs(a.coordinate - b.coordinate) >= EPSILON) return 0
+  const length = Math.min(a.end, b.end) - Math.max(a.start, b.start)
+  return length < EPSILON ? 0 : length
 }
 
-/** Reuses unchanged segments while the lane refiner compares local candidates. */
-export function routeSpacingIndex(
+/** Reuses unchanged segments while a local route change is checked for shared paths. */
+export function sharedPathMeasure(
   routes: readonly FlatRoute[],
   touchingRouteIds: ReadonlySet<string>,
-): { measure: (changedRoutes: readonly FlatRoute[], desiredGaps: readonly number[]) => RouteSpacing[] } {
+): (changedRoutes: readonly FlatRoute[]) => number {
   const unchanged = segments(routes.filter(route => !touchingRouteIds.has(route.id)))
-  return {
-    measure(changedRoutes, desiredGaps) {
-      const changed = segments(changedRoutes)
-      const scores = desiredGaps.map(() => ({ sharedPathLength: 0, crowdedBodyLength: 0 }))
-      const measure = (a: Segment, b: Segment) => {
-        if (a.routeId === b.routeId || a.axis !== b.axis) return
-        const sharedSpan = overlap(a, b)
-        if (sharedSpan < EPSILON) return
-        const gap = Math.abs(a.coordinate - b.coordinate)
-        const sharesEndpoint = a.source === b.source || a.source === b.target
-          || a.target === b.source || a.target === b.target
-        const bodySpan = sharesEndpoint ? sharedSpan - FAN_TRANSITION : sharedSpan
-        desiredGaps.forEach((desiredGap, index) => {
-          if (gap < EPSILON) scores[index]!.sharedPathLength += sharedSpan
-          if (bodySpan >= desiredGap - EPSILON && gap < desiredGap - EPSILON) {
-            scores[index]!.crowdedBodyLength += bodySpan * (desiredGap - gap) / desiredGap
-          }
-        })
+  return changedRoutes => {
+    const changed = segments(changedRoutes)
+    let length = 0
+    for (const a of changed) for (const b of unchanged) length += sharedLength(a, b)
+    for (let left = 0; left < changed.length; left += 1) {
+      for (let right = left + 1; right < changed.length; right += 1) {
+        length += sharedLength(changed[left]!, changed[right]!)
       }
-      for (const a of changed) for (const b of unchanged) measure(a, b)
-      for (let left = 0; left < changed.length; left += 1) {
-        for (let right = left + 1; right < changed.length; right += 1) {
-          measure(changed[left]!, changed[right]!)
-        }
-      }
-      return scores
-    },
+    }
+    return length
   }
 }
 

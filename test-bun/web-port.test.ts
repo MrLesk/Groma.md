@@ -27,7 +27,9 @@ async function failedStartup(options: { port?: number; interactive?: boolean; ac
         if (attempts.length <= 2) {
           throw Object.assign(new Error(${JSON.stringify(startupError)}), { code: 'EADDRINUSE' })
         }
-        return { url: 'http://localhost:' + options.port }
+        const url = 'http://localhost:' + options.port
+        options.onListening?.(url)
+        return { url }
       },
     }))
     const clack = await import(${JSON.stringify(import.meta.resolve('@clack/prompts'))})

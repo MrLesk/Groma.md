@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 
 import { test } from 'bun:test'
 
-import { buildingPorts, ROUTE_UNIT, type Endpoint } from '../src/sheet/route-geometry.ts'
+import { assignFixedPorts, ROUTE_UNIT, type Endpoint } from '../src/sheet/route-geometry.ts'
 import { routeAll } from '../src/sheet/route.ts'
 import type { Building, SheetScene } from '../src/sheet/types.ts'
 import { projectScene } from '../src/viewers/web/iso/project.ts'
@@ -25,6 +25,21 @@ function endpoint(building: Building): Endpoint {
   return { key: building.id, kind: 'building', rect: building.rect, roof: building.heightUnits }
 }
 
+function portsFor(building: Endpoint, count: number) {
+  const destinations: Endpoint[] = [
+    { key: 'north', kind: 'building', rect: { gx: 4, gy: -20, w: 4, d: 4 } },
+    { key: 'east', kind: 'building', rect: { gx: 30, gy: 4, w: 4, d: 4 } },
+    { key: 'south', kind: 'building', rect: { gx: 4, gy: 30, w: 4, d: 4 } },
+    { key: 'west', kind: 'building', rect: { gx: -20, gy: 4, w: 4, d: 4 } },
+  ]
+  const requests = destinations.flatMap(target => Array.from({ length: count }, (_, index) => ({
+    id: `${target.key}:${index}`, source: building.key, target: target.key,
+    description: 'Uses', origin: 'observed' as const,
+  })))
+  const endpoints = new Map([building, ...destinations].map(value => [value.key, value]))
+  return [...assignFixedPorts(endpoints, requests).values()].map(pair => pair.source!)
+}
+
 function distanceToEdge(point: Point, from: Point, to: Point): number {
   const dx = to.x - from.x
   const dy = to.y - from.y
@@ -35,8 +50,8 @@ function distanceToEdge(point: Point, from: Point, to: Point): number {
 
 test.concurrent('additional building ports subdivide the usable edge span without moving toward corners', () => {
   const building = endpoint(tower())
-  const initial = buildingPorts(building)
-  const busy = buildingPorts(building, 12)
+  const initial = portsFor(building, 3)
+  const busy = portsFor(building, 12)
   for (const side of ['north', 'east', 'south', 'west'] as const) {
     const axis = side === 'north' || side === 'south' ? 'x' : 'y'
     const coordinates = (ports: typeof initial) => ports.filter(port => port.side === side).map(port => port.wall[axis])
@@ -50,7 +65,7 @@ test.concurrent('additional building ports subdivide the usable edge span withou
 
 test.concurrent('busy stepped-tower ports meet visible faces with distinct tips clear of their corners', () => {
   const building = tower()
-  const ports = buildingPorts(endpoint(building), 12)
+  const ports = portsFor(endpoint(building), 12)
   const cell = (point: Point) => ({ gx: point.x / ROUTE_UNIT, gy: point.y / ROUTE_UNIT })
   const scene: SheetScene = {
     sheet: { gx: 0, gy: 0, w: 12, d: 12 }, islands: [], zones: [], slabs: [], buildings: [building],
@@ -73,7 +88,7 @@ test.concurrent('busy stepped-tower ports meet visible faces with distinct tips 
   assert.deepEqual(scene, original)
 })
 
-test.concurrent('nudged parallel connections approach their walls directly without a final sideways snap', () => {
+test.concurrent('parallel connections approach their walls directly without a final sideways snap', () => {
   const endpoints = new Map<string, Endpoint>([
     ['source', { key: 'source', kind: 'building', rect: { gx: 0, gy: 0, w: 3, d: 2 }, roof: 2 }],
     ['target', { key: 'target', kind: 'building', rect: { gx: 8, gy: 0.75, w: 3, d: 2 }, roof: 3.5 }],

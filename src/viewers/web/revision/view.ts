@@ -75,14 +75,16 @@ function revisionOption(revision: WebPayload['revisions'][number], selected: boo
   return `<button class="anchored-option revision-option" type="button" data-revision="${revision.id}"${body} aria-current="${selected}"${unsupported}><span class="revision-subject">${escaped(revision.subject)}</span><span class="revision-meta">${tag}<code>${revision.shortId}</code><time datetime="${revision.date}">${revision.date}</time>${status}</span></button>`
 }
 
+export function revisionOptions(revisions: WebPayload['revisions'], selected?: string): string {
+  return revisions.map(revision => revisionOption(revision, revision.id === selected)).join('')
+}
+
 export function revisionControl(
   payload: WebPayload,
   icons: { history: string, loader: string },
 ): string {
   const liveLabel = 'Current revision'
-  const options = payload.revisions
-    .map(revision => revisionOption(revision, revision.id === payload.revision?.id))
-    .join('')
+  const options = revisionOptions(payload.revisions, payload.revision?.id)
   const current = payload.revision?.shortId ?? liveLabel
   return `<details id="revision"><summary class="chrome-button" aria-label="Groma revision">${icons.history}${icons.loader}<span class="revision-current">${current}</span><span class="revision-loading">Loading<span class="revision-dots" aria-hidden="true"><span>.</span><span>.</span><span>.</span></span></span><span class="chevron"></span></summary><div class="anchored-popover revision-menu"><button class="anchored-option revision-option current" type="button" data-revision="" aria-current="${String(payload.revision === null)}"><span class="revision-subject">${liveLabel}</span></button>${options}</div></details>`
 }
