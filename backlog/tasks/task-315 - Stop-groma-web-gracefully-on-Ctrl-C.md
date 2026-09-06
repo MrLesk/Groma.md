@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@cursor-agent'
 created_date: '2026-09-06 20:53'
-updated_date: '2026-09-06 20:56'
+updated_date: '2026-09-06 21:01'
 labels: []
 dependencies: []
 modified_files:
@@ -51,6 +51,8 @@ A developer running `groma web` in a terminal presses Ctrl-C (or the process rec
 
 <!-- SECTION:NOTES:BEGIN -->
 Verification: `test-bun/web-shutdown.test.ts` spawns `src/cli.ts web` on a fixture repository, waits for `/ready`, sends SIGINT or SIGTERM, and asserts exit 0 plus a rebindable port; both cases fail against the previous `cli.ts` (process killed by the signal, non-zero exit) and pass with the change. `groma scan --watch` still stays alive without its blocking promise: the watcher keeps the event loop running, and SIGINT ends it. Compiled `dist/groma web` exits 36 ms after SIGINT. `bun run check`: 342 pass.
+
+Correction: CI on main failed on windows-latest because `subprocess.kill(signal)` on Windows terminates the child (exit 130/143) instead of delivering a catchable signal, so the handler never runs under test. The shutdown test is skipped on win32 with the reason recorded in the file; a console Ctrl-C on Windows still reaches the handler.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary

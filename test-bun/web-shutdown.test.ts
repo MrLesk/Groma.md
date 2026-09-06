@@ -36,8 +36,11 @@ async function waitForReady(url: string, child: Bun.Subprocess): Promise<void> {
   throw new Error(`groma web exited ${child.exitCode} before it was ready`)
 }
 
+/** Windows has no POSIX signals: `kill()` terminates the child outright, so only a console Ctrl-C reaches the handler there. */
+const signalTest = process.platform === 'win32' ? test.skip : test.concurrent
+
 for (const signal of ['SIGINT', 'SIGTERM'] as const) {
-  test.concurrent(`${signal} closes groma web, exits 0, and releases the port`, async () => {
+  signalTest(`${signal} closes groma web, exits 0, and releases the port`, async () => {
     const root = await repository()
     const port = await freePort()
     const child = Bun.spawn([
