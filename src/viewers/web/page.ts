@@ -12,6 +12,7 @@ import { editorCss } from './editing/gestures.ts'
 import { emptyState, emptyStateCss } from './chrome/empty.ts'
 import { mapDebugCss } from './chrome/map-debug.ts'
 import { motionCss } from './chrome/motion.ts'
+import { detailsPanelCss } from './chrome/shell.ts'
 import { flowRowCss } from './flow/row.ts'
 import { mapCss } from './iso/style.ts'
 import { editableCss } from './organisms/editable.ts'
@@ -49,6 +50,8 @@ const historyIcon = icon('<path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5
 const searchIcon = icon('<circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/>')
 const revisionLoader = icon('<path d="M21 12a9 9 0 1 1-9-9"/>', 'revision-loader')
 const closeIcon = icon('<path d="M18 6 6 18M6 6l12 12"/>')
+const expandIcon = icon('<path d="M10 12H3m4-4-4 4 4 4M14 12h7m-4-4 4 4-4 4"/>', 'expand-arrows')
+const collapseIcon = icon('<path d="M3 12h7m-4-4 4 4-4 4M21 12h-7m4-4-4 4 4 4"/>', 'collapse-arrows')
 const hierarchyIcon = icon('<path d="m11 17-5-5 5-5M18 17l-5-5 5-5"/>', 'hierarchy-chevron')
 const infoIcon = icon('<circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7h.01"/>')
 
@@ -194,7 +197,7 @@ const style = `
     .header-context { gap: 10px; }
     #theme summary .label, #fit > span { display: none; }
   }
-  #hierarchy, #details { position: absolute; top: 74px; bottom: 12px; min-width: 0; min-height: 0; z-index: 5; }
+  #hierarchy { position: absolute; top: 74px; bottom: 12px; min-width: 0; min-height: 0; z-index: 5; }
   #hierarchy {
     left: 12px;
     width: var(--hierarchy-column);
@@ -235,34 +238,6 @@ const style = `
     background: var(--chrome-surface);
     box-shadow: 0 0 20px color-mix(in srgb, var(--map-line) 7%, transparent), inset 0 0 18px color-mix(in srgb, var(--map-line) 3%, transparent);
   }
-  #details {
-    right: 12px;
-    width: var(--details-column);
-    overflow: auto;
-    padding: 22px 24px;
-    opacity: 1;
-    transform: translateX(0);
-    visibility: visible;
-    transition: opacity var(--chrome-motion) var(--chrome-ease), transform var(--chrome-motion) var(--chrome-ease), width var(--chrome-motion) var(--chrome-ease), visibility 0s linear 0s;
-  }
-  body.details-hidden #details {
-    opacity: 0;
-    transform: translateX(calc(100% + 12px));
-    visibility: hidden;
-    pointer-events: none;
-    transition: opacity var(--chrome-motion) var(--chrome-ease), transform var(--chrome-motion) var(--chrome-ease), visibility 0s linear var(--chrome-motion);
-  }
-  #details-close {
-    position: absolute;
-    top: 12px;
-    right: 12px;
-    display: grid;
-    place-items: center;
-    border: 1px solid var(--hairline);
-    border-radius: var(--control-radius);
-    background: color-mix(in srgb, var(--paper) 35%, transparent);
-  }
-  #details-close:hover { background: var(--hover); }
   #details .meta { margin: 0 0 6px; }
   #details h1 { font-size: 21px; font-weight: 600; line-height: 1.3; margin: 0 0 16px; overflow-wrap: anywhere; }
   #details .description { margin: 0 0 10px; color: var(--muted); }
@@ -286,7 +261,7 @@ const style = `
   #details ul { margin: 0; padding: 0; list-style: none; }
   #details li { margin: 0 0 6px; }
   #details .relationships li { margin: 0; }
-  #details .criterion-check { color: var(--accent-text); }
+  #details .criterion-check { color: var(--accent-text); display: inline-block; font-size: 16px; font-weight: 800; line-height: 1; vertical-align: -1px; }
   #details .tabs { margin: 0 0 8px; border: 1px solid var(--hairline); border-radius: var(--control-radius); overflow: hidden; }
   #details .tabs.controls button { flex: 1; border: 0; border-radius: 0; }
   #details .tabs.controls button + button { margin-left: 0; border-left: 1px solid var(--hairline); }
@@ -367,7 +342,7 @@ const style = `
 ${chromeCss}${anchoredPopoverCss}${creditsCss}${motionCss}${revisionCss}${searchCss}${highlightCss}${sourceCss}${taskDiffCss}${backlogMarkCss}${workBadgeCss}${workDetailsCss}${flowRowCss}${mapCss}${pinsCss}${workCss}${tipCss}${projectEditorCss}
 ${emptyStateCss}
 ${addDialogCss}${editorCss}
-${relationshipCardCss}${removeCss}${editableCss}${mapDebugCss}`
+${relationshipCardCss}${removeCss}${editableCss}${mapDebugCss}${detailsPanelCss}`
 
 function legend(): string {
   return legendKinds.map(line => {
@@ -438,7 +413,7 @@ export function renderPage(payload: WebBootPayload): string {
     + `<nav id="hierarchy" aria-label="Hierarchy"><div id="hierarchy-title"><span class="pane-label">Hierarchy</span>${payload.delivery.kind === 'live' ? '<button id="add" type="button" aria-label="Add">+</button>' : ''}<button id="hierarchy-toggle" type="button" aria-controls="hierarchy-content">${hierarchyIcon}</button></div><div id="hierarchy-content"><div id="flows"></div><div id="tree"></div><div id="legend">${legend()}</div></div></nav>`
     + '<div id="map"></div>'
     + emptyState(payload)
-    + `<aside id="details" aria-label="Details"><button id="details-close" aria-label="Close details">${closeIcon}</button><p class="meta"></p><h1></h1><nav class="controls tabs"></nav><div class="body"></div></aside>`
+    + `<div id="details-dock"><aside id="details" aria-label="Details"><div class="details-controls"><button id="details-expand" aria-label="Expand details" title="Expand details" aria-expanded="false">${expandIcon}${collapseIcon}</button><button id="details-close" aria-label="Close details">${closeIcon}</button></div><p class="meta"></p><h1></h1><nav class="controls tabs"></nav><div class="body"></div></aside></div>`
     + `<script type="application/json" id="world">${json}</script>`
     + '<script src="./render.js"></script>'
     + '</body></html>'

@@ -201,7 +201,17 @@ Authored sibling groups are invisible to the tree.
 The wider details pane appears only while an element, relationship,
 flow, or task owns the selection. It keeps its width while that owner
 changes and disappears when selection is cleared. Its X clears the selection,
-closes the pane, and returns focus to the map without moving the camera. An element
+closes the pane, and returns focus to the map without moving the camera.
+The horizontal opposing-arrow button beside X expands or collapses this same
+panel for every kind of content, including source and file diffs. Arrows point
+outward to expand and inward to collapse. Expansion covers the map without moving
+its camera: narrow screens use the available content width, desktops keep the
+hierarchy, and large desktops retain useful map space. Long prose keeps a bounded
+reading width; code and diffs use the full panel. Source and diffs expand by
+default until the reader explicitly chooses a width. That choice then stays with
+the panel across selection changes and file inspection. Acceptance criteria use
+strong read-only checkmarks, distinct from flow checkboxes.
+An element
 shows under two tabs. Selecting another architecture item returns the pane to What
 it does; a direct `tab=how` link still opens How it's built. What
 it does holds the meaning: description, peer relationships, Flows, and children.

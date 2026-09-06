@@ -13,7 +13,6 @@ export function paintSource(
   error: string | undefined,
   onBack: () => void,
 ): void {
-  document.body.classList.add('source-details')
   host.classList.add('file-open')
   host.classList.add('source-open')
   host.querySelector('h1')!.textContent = file
@@ -68,7 +67,6 @@ export function paintSource(
 }
 
 export function leaveSource(host: HTMLElement): void {
-  document.body.classList.remove('source-details')
   host.classList.remove('file-open')
   host.classList.remove('source-open')
   host.querySelector('.tabs')!.classList.remove('file-toolbar', 'source-toolbar')
@@ -76,7 +74,6 @@ export function leaveSource(host: HTMLElement): void {
 }
 
 export const sourceCss = `
-  body.source-details { --details-column: 640px; }
   #details .source-file + .ghost, #details .code-entry > .ghost { display: block; line-height: 1.55; margin-top: 2px; }
   #details .file-groups > li + li { border-top: 1px solid color-mix(in srgb, var(--hairline) 60%, transparent); margin-top: 12px; padding-top: 12px; }
   #details .code-file-name { color: var(--muted); font-size: 10px; margin-bottom: 7px; overflow-wrap: anywhere; }
