@@ -1,11 +1,10 @@
-import { existsSync } from 'node:fs'
-import { readFile } from 'node:fs/promises'
 import path from 'node:path'
 import { API, ModuleKind, ModuleResolutionKind } from 'typescript/unstable/async'
 import type { ScanSymbol, ScanOperation, ScanInvocation } from '@groma/scanner'
 
 import { usedImportSpecifiers } from './source-usage.ts'
 import { sourceOperations } from './source-operations.ts'
+import { typescriptWorkerPath } from './worker.ts'
 
 export interface SourceAnalysis {
   file: string
@@ -30,36 +29,10 @@ function exportSymbols(file: string, source: string): ScanSymbol[] {
   })
 }
 
-function compiledRuntime(): boolean {
-  return existsSync('/$bunfs/root') || existsSync('B:\\~BUN\\root')
-}
-
-function nativeTsc(repositoryRoot: string): string | undefined {
-  const exe = process.platform === 'win32' ? 'tsc.exe' : 'tsc'
-  const candidate = path.join(
-    repositoryRoot,
-    'node_modules',
-    '@typescript',
-    `typescript-${process.platform}-${process.arch}`,
-    'lib',
-    exe,
-  )
-  return existsSync(candidate) ? candidate : undefined
-}
-
-async function analyzeWithoutWorker(repositoryRoot: string, paths: string[]): Promise<SourceEvidence> {
-  const files = await Promise.all(paths.map(async file => {
-    const source = await readFile(path.join(repositoryRoot, file), 'utf8')
-    return { file, specifiers: [] as string[], symbols: exportSymbols(file, source) }
-  }))
-  return { files, operations: [], invocations: [] }
-}
-
-async function analyzeWithApi(
-  repositoryRoot: string,
-  paths: string[],
-  tsserverPath: string | undefined,
-): Promise<SourceEvidence> {
+/** One program keeps operation identity and callback wiring shared across the owned source set. */
+export async function analyzeSourceFiles(repositoryRoot: string, paths: string[]): Promise<SourceEvidence> {
+  if (paths.length === 0) return { files: [], operations: [], invocations: [] }
+  const tsserverPath = await typescriptWorkerPath()
   const api = new API({
     cwd: repositoryRoot,
     ...(tsserverPath === undefined ? {} : { tsserverPath }),
@@ -86,12 +59,4 @@ async function analyzeWithApi(
   } finally {
     await api.close()
   }
-}
-
-/** One program keeps operation identity and callback wiring shared across the owned source set. */
-export async function analyzeSourceFiles(repositoryRoot: string, paths: string[]): Promise<SourceEvidence> {
-  if (paths.length === 0) return { files: [], operations: [], invocations: [] }
-  const tsc = nativeTsc(repositoryRoot)
-  if (tsc === undefined && compiledRuntime()) return analyzeWithoutWorker(repositoryRoot, paths)
-  return analyzeWithApi(repositoryRoot, paths, tsc)
 }

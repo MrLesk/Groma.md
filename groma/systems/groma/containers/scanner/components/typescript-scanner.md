@@ -26,6 +26,9 @@ groma:
     - scanner: typescript
       file: plugins/scanners/typescript/src/source-operations.ts
       symbol: sourceOperations
+    - scanner: typescript
+      file: plugins/scanners/typescript/src/worker.ts
+      symbol: typescriptWorkerPath
 ---
 
 Exports the embedded TypeScript scanner module and reports supported source files and named symbols separately, using imports and entry points only as evidence for placement and dependency counts.
