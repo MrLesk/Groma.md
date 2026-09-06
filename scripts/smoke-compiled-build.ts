@@ -1,9 +1,13 @@
 import { spawn, type ChildProcess } from 'node:child_process'
 import assert from 'node:assert/strict'
+import { existsSync } from 'node:fs'
 import { cp, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+
+import { scanTypeScriptSource } from '../plugins/scanners/typescript/src/scan.ts'
+import { inferRelationships } from '../src/relationship-inference.ts'
 
 const [binaryArgument, expectedVersion] = process.argv.slice(2)
 if (binaryArgument === undefined || expectedVersion === undefined) {
@@ -67,17 +71,29 @@ async function readyMap(url: string): Promise<void> {
   throw new Error(last)
 }
 
-/** The embedded TypeScript worker must derive the callback relationship the checker sees in `operation-wiring`. */
-async function assertDerivedRelationship(url: string): Promise<void> {
+type Connection = { source: string; target: string }
+
+const connectionPairs = (connections: Connection[]) =>
+  connections.map(connection => `${connection.source} -> ${connection.target}`).sort()
+
+/** What source Groma derives from the fixture: the checker-resolved callback wiring in `operation-wiring`. */
+async function sourceConnections(root: string): Promise<string[]> {
+  const observation = await scanTypeScriptSource(root)
+  assert.ok(observation, 'source scan produced no observation')
+  const owners = new Map(observation.files.map(file => [file.file, file.file]))
+  const pairs = connectionPairs(inferRelationships([observation], owners))
+  assert.ok(pairs.length > 0, 'source scan derived no connections')
+  return pairs
+}
+
+/** The compiled binary's embedded TypeScript worker must derive exactly what the source scanner derived. */
+async function assertCompiledMatchesSource(url: string, expected: string[]): Promise<void> {
   const world = await fetch(`${url}/world.json`)
   const body = await world.text()
   assert.equal(world.status, 200, body)
-  const payload = JSON.parse(body) as { world: { relationships: { connections?: { source: string; target: string }[] }[] } }
+  const payload = JSON.parse(body) as { world: { relationships: { connections?: Connection[] }[] } }
   const connections = payload.world.relationships.flatMap(relationship => relationship.connections ?? [])
-  assert.ok(
-    connections.some(connection => connection.source === 'src/worker.ts' && connection.target === 'src/provider.ts'),
-    `expected the worker → provider connection in ${JSON.stringify(connections)}`,
-  )
+  assert.deepEqual(connectionPairs(connections), expected)
 }
 
 /** A project without `node_modules/@typescript`, so the binary must bring its own TypeScript worker. */
@@ -89,8 +105,10 @@ async function smokeWeb(): Promise<void> {
     await mkdir(path.join(root, 'src'))
     await cp(fixture('operation-wiring'), path.join(root, 'src'), { recursive: true })
     await writeFile(path.join(root, 'package.json'), JSON.stringify({ name: 'fixture', bin: 'src/caller.ts' }))
+    assert.equal(existsSync(path.join(root, 'node_modules')), false)
     const git = spawn('git', ['init', '--quiet'], { cwd: root, stdio: 'ignore' })
     assert.equal(await waitForClose(git), 0)
+    const expected = await sourceConnections(root)
     const port = await availablePort()
     child = spawn(binary, ['web', '--port', String(port)], {
       cwd: root,
@@ -104,7 +122,7 @@ async function smokeWeb(): Promise<void> {
     })
     await Promise.race([
       readyMap(`http://127.0.0.1:${port}`).then(async () => {
-        await assertDerivedRelationship(`http://127.0.0.1:${port}`)
+        await assertCompiledMatchesSource(`http://127.0.0.1:${port}`, expected)
         ready = true
       }),
       closed,
