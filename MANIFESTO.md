@@ -5,6 +5,19 @@ while people and agents change a system. These principles guide product and
 contribution decisions. Detailed product documentation starts at the
 [documentation index](docs/index.md).
 
+## Principles that hold across projects and languages
+
+Judge product, design, architecture, and implementation decisions with this question:
+
+> If Groma ran against millions of projects across hundreds of programming languages, would this still be the right decision?
+
+Choose principles whose reasoning holds across different projects,
+technologies, and ways of working. Make assumptions explicit, and avoid
+turning the needs of one example into universal product rules.
+
+This direction guides today's choices. Build the smallest useful result for
+the current approved example; add capabilities when supported use requires them.
+
 ## Recognition first, continuity next
 
 The first scan should produce an architecture a person can recognize well
