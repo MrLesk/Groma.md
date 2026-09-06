@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs'
-import { fileURLToPath } from 'node:url'
-import path from 'node:path'
+
+import lockup from './atoms/lockup.svg' with { type: 'text' }
+import backlogMarkFile from './work/backlog-mark.png' with { type: 'file' }
 
 import type { C4Kind } from '../../types.ts'
 import { chromeCss } from './atoms/chrome.ts'
@@ -33,20 +34,7 @@ import { workDetailsCss } from './work/component-tasks.ts'
 import { workCss } from './work/island.ts'
 import { pinsCss } from './work/pins.ts'
 
-const webAsset = (sourceRelative: string, bundledRelative: string): string => {
-  const filename = import.meta.dir?.includes('$bunfs') === true
-    ? path.join(import.meta.dir!, path.basename(bundledRelative))
-    : fileURLToPath(new URL(sourceRelative, import.meta.url))
-  return filename
-}
-
-const lockup = readFileSync(
-  webAsset('./atoms/lockup.svg', 'src/viewers/web/atoms/lockup.svg'),
-  'utf8',
-)
-const backlogMark = readFileSync(
-  webAsset('./work/backlog-mark.png', 'src/viewers/web/work/backlog-mark.png'),
-).toString('base64')
+const backlogMark = readFileSync(backlogMarkFile).toString('base64')
 
 const icon = (body: string, className = ''): string => `<svg class="control-icon${className === '' ? '' : ` ${className}`}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${body}</svg>`
 const fitIcon = icon('<path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3"/>')

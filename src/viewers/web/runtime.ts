@@ -1,12 +1,16 @@
+import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 
 import { loadAnnotatedArchitecture } from '../../core.ts'
 import { loadProjectProfile } from '../../project-profile.ts'
 import { measuredSheetScene } from '../../sheet/scene.ts'
+import { compiledAsset } from './compiled-asset.ts'
 import type { WebMapPayload } from './payload.ts'
 
 /** Builds the same browser runtime used by live and published delivery. */
 export async function bundleRenderer(): Promise<string> {
+  const compiledRenderer = compiledAsset('groma-web-render', 'index.js')
+  if (compiledRenderer !== undefined) return readFileSync(compiledRenderer, 'utf8')
   const build = await Bun.build({
     entrypoints: [fileURLToPath(new URL('./render.ts', import.meta.url))],
     target: 'browser',

@@ -1,4 +1,4 @@
-import { copyFile, mkdir, mkdtemp, rm } from 'node:fs/promises'
+import { copyFile, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 
@@ -18,8 +18,7 @@ function packageAssetName(name: string): string {
   return `groma-package-${encodeURIComponent(name)}`
 }
 
-async function prepareCreditAssets(): Promise<{ root: string; assets: string[] }> {
-  const root = await mkdtemp(path.join(os.tmpdir(), 'groma-credit-assets-'))
+async function prepareCreditAssets(root: string): Promise<string[]> {
   const assets: string[] = []
   for (const [name] of dependencyAssets) {
     const directory = path.join(root, packageAssetName(name))
@@ -35,18 +34,27 @@ async function prepareCreditAssets(): Promise<{ root: string; assets: string[] }
     }
     assets.push(directory)
   }
-  return { root, assets }
+  return assets
 }
 
-const creditAssets = await prepareCreditAssets()
+async function prepareRendererAsset(root: string): Promise<string> {
+  const build = await Bun.build({
+    entrypoints: [path.resolve('src/viewers/web/render.ts')],
+    target: 'browser',
+  })
+  const directory = path.join(root, 'groma-web-render')
+  await mkdir(directory)
+  await writeFile(path.join(directory, 'index.js'), await build.outputs[0]!.text())
+  return directory
+}
+
+const packedRoot = await mkdtemp(path.join(os.tmpdir(), 'groma-compile-assets-'))
 const compile: Bun.CompileBuildOptions = {
   outfile,
   assets: [
-    ...creditAssets.assets,
+    ...await prepareCreditAssets(packedRoot),
+    await prepareRendererAsset(packedRoot),
     'docs',
-    'package.json',
-    'src/viewers/web/atoms/lockup.svg',
-    'src/viewers/web/work/backlog-mark.png',
   ],
   autoloadDotenv: false,
   autoloadBunfig: false,
@@ -78,5 +86,5 @@ try {
     sourcemap: 'linked',
   })
 } finally {
-  await rm(creditAssets.root, { recursive: true, force: true })
+  await rm(packedRoot, { recursive: true, force: true })
 }

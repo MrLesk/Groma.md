@@ -2,12 +2,10 @@ import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 
-import { escaped } from '../atoms/escape.ts'
+import packageJson from '../../../../package.json' with { type: 'json' }
 
-interface ProjectManifest {
-  dependencies: Record<string, string>
-  devDependencies: Record<string, string>
-}
+import { escaped } from '../atoms/escape.ts'
+import { compiledAsset } from '../compiled-asset.ts'
 
 interface DependencyManifest {
   homepage?: string
@@ -22,25 +20,24 @@ interface Credit {
   url: string
 }
 
-const bundled = import.meta.dir?.includes('$bunfs') === true
-const projectRoot = bundled
-  ? import.meta.dir!
-  : fileURLToPath(new URL('../../../../', import.meta.url))
-const projectManifest = readJson<ProjectManifest>(path.join(projectRoot, 'package.json'))
+const projectRoot = fileURLToPath(new URL('../../../../', import.meta.url))
 
 function packageAssetName(name: string): string {
   return `groma-package-${encodeURIComponent(name)}`
 }
 
 function readJson<T>(filename: string): T {
-  return JSON.parse(readFileSync(filename, 'utf8')) as T
+  try {
+    return JSON.parse(readFileSync(filename, 'utf8')) as T
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error)
+    throw new Error(`credit file ${filename}: ${detail}`)
+  }
 }
 
 function packageFile(name: string, file: string): string {
-  const packageRoot = bundled
-    ? path.join(projectRoot, packageAssetName(name))
-    : path.join(projectRoot, 'node_modules', name)
-  return path.join(packageRoot, file)
+  return compiledAsset(packageAssetName(name), file)
+    ?? path.join(projectRoot, 'node_modules', name, file)
 }
 
 function licenseOf(name: string, manifest: DependencyManifest): string {
@@ -70,8 +67,8 @@ function creditsFrom(dependencies: Record<string, string>): Credit[] {
 }
 
 const thirdPartyCredits = {
-  runtime: creditsFrom(projectManifest.dependencies),
-  development: creditsFrom(projectManifest.devDependencies),
+  runtime: creditsFrom(packageJson.dependencies ?? {}),
+  development: creditsFrom(packageJson.devDependencies ?? {}),
 }
 
 export const creditsCss = `

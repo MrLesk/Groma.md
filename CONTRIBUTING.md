@@ -61,7 +61,7 @@ bun run build
 ```
 
 Windows produces `dist/groma.exe`. Pass an output path after `bun run build` to choose a different location.
-The CLI and welcome screen statically import the version from `package.json`; the executable needs no manifest at runtime.
+The CLI, welcome screen, and web credits statically import `package.json` as JSON. Web lockup and mark files use Bun file and text imports. The compiled executable embeds the browser renderer and dependency credit files, so it does not read those from the source checkout or run a bundler at runtime. Compiled TypeScript scanning uses the project's native `tsc` when `@typescript/typescript-<os>-<cpu>` is installed; otherwise it reads source text without spawning TypeScript's worker, which cannot run from the embedded filesystem.
 
 Release CI sets `package.json.version` directly from the release tag, without its leading `v`, in the disposable build
 checkout before running `bun run build`. A build for tag `v0.2.0` therefore already reports `0.2.0`.
