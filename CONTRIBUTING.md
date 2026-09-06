@@ -31,6 +31,11 @@ Biome applies its recommended lint rules and reports cognitive complexity above 
 cleanup work; do not add new ones. Biome formatting and import assist are disabled, so keep the surrounding file style
 when making changes.
 
+`bun install` applies the checked-in Parcel Watcher patch. It makes native binding imports explicit so Bun can embed
+them in a single-file bytecode executable; development and compiled builds use the same package loader. When updating
+Parcel, review the patch against its platform packages and run `bun test test-bun/parcel-bytecode.test.ts`. This test
+receives native file events in both source mode and a compiled executable with no accompanying source or dependencies.
+
 ## Before starting a feature
 
 Describe every new supported product flow as a Gherkin scenario before implementation. The scenario is the semantic

@@ -1,0 +1,28 @@
+diff --git a/index.js b/index.js
+index 78ee744d74900c39a839cafa46b295258fc86307..8e23a349d939a1c827f9e0a002fdcddc4fc6b7ba 100644
+--- a/index.js
++++ b/index.js
+@@ -13,7 +13,22 @@ if (process.platform === 'linux') {
+ 
+ let binding;
+ try {
+-  binding = require(name);
++  // Literal paths let Bun embed native bindings; development uses the same loader.
++  switch (name) {
++    case "@parcel/watcher-darwin-x64": binding = require("@parcel/watcher-darwin-x64/watcher.node"); break;
++    case "@parcel/watcher-darwin-arm64": binding = require("@parcel/watcher-darwin-arm64/watcher.node"); break;
++    case "@parcel/watcher-win32-x64": binding = require("@parcel/watcher-win32-x64/watcher.node"); break;
++    case "@parcel/watcher-win32-arm64": binding = require("@parcel/watcher-win32-arm64/watcher.node"); break;
++    case "@parcel/watcher-linux-x64-glibc": binding = require("@parcel/watcher-linux-x64-glibc/watcher.node"); break;
++    case "@parcel/watcher-linux-x64-musl": binding = require("@parcel/watcher-linux-x64-musl/watcher.node"); break;
++    case "@parcel/watcher-linux-arm64-glibc": binding = require("@parcel/watcher-linux-arm64-glibc/watcher.node"); break;
++    case "@parcel/watcher-linux-arm64-musl": binding = require("@parcel/watcher-linux-arm64-musl/watcher.node"); break;
++    case "@parcel/watcher-linux-arm-glibc": binding = require("@parcel/watcher-linux-arm-glibc/watcher.node"); break;
++    case "@parcel/watcher-linux-arm-musl": binding = require("@parcel/watcher-linux-arm-musl/watcher.node"); break;
++    case "@parcel/watcher-android-arm64": binding = require("@parcel/watcher-android-arm64/watcher.node"); break;
++    case "@parcel/watcher-freebsd-x64": binding = require("@parcel/watcher-freebsd-x64/watcher.node"); break;
++    default: binding = require(name);
++  }
+ } catch (err) {
+   handleError(err);
+   try {
