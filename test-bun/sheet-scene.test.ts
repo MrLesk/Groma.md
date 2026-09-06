@@ -9,7 +9,7 @@ import {
   ISLAND_FONT,
   ISLAND_SPACING,
   PLANE,
-  ROOF_PAD,
+  SURFACE_PAD,
   CONTAINER_FONT,
   GROUP_FONT,
   labelBand,
@@ -320,11 +320,11 @@ test.concurrent('a surface is at least as wide as its own name', () => {
     box('api', 'container', unit, { parent: 'observed:shop', title: 'An application programming interface' }),
   ]))
   const external = scene.islands.find(island => island.kind === 'external')!
-  assert.ok(external.rect.w * PLANE >= textWidth('EXTERNAL SYSTEMS', ISLAND_FONT, ISLAND_SPACING) + 2 * ROOF_PAD)
+  assert.ok(external.rect.w * PLANE >= textWidth('EXTERNAL SYSTEMS', ISLAND_FONT, ISLAND_SPACING) + 2 * SURFACE_PAD)
   const shop = scene.islands.find(island => island.kind === 'system')!
-  assert.ok(shop.rect.w * PLANE >= textWidth(shop.name.toUpperCase(), ISLAND_FONT, ISLAND_SPACING) + 2 * ROOF_PAD)
+  assert.ok(shop.rect.w * PLANE >= textWidth(shop.name.toUpperCase(), ISLAND_FONT, ISLAND_SPACING) + 2 * SURFACE_PAD)
   const api = scene.slabs[0]!
-  assert.ok(api.rect.w * PLANE >= textWidth(api.title, CONTAINER_FONT) + 2 * ROOF_PAD)
+  assert.ok(api.rect.w * PLANE >= textWidth(api.title, CONTAINER_FONT) + 2 * SURFACE_PAD)
 })
 
 test.concurrent('the sheet is the islands plus the margin, starting at the margin', () => {
