@@ -198,7 +198,7 @@ export function createClackInitUi(): InitCommandUi {
       accent,
     )),
     confirmInit: async () => selected(await confirmPrompt(
-      'Groma is not initialized here. Initialize now?',
+      'Groma is not initialized here. Initialize now? (y/n)',
       accent,
     )),
     confirmScan: async () => selected(await confirmPrompt(
