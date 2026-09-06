@@ -8,7 +8,7 @@
 
 <p align="center">
   <strong>Your architecture, alive.</strong><br>
-  A live C4 map of your repository, stored as Markdown in Git.
+  A live C4 map of your repository, stored as OKF Markdown in Git.
 </p>
 
 <p align="center">
