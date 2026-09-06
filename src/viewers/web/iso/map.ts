@@ -161,12 +161,14 @@ export function createMap(host: HTMLElement): IsoMap {
     for (const line of grid.lines) line.style.strokeWidth = String(1 / current.k)
     camera.style.removeProperty('transform')
     camera.style.removeProperty('will-change')
+    host.removeAttribute('data-camera-moving')
   }
 
   const scheduleCameraCommit = (): void => {
     clearCameraTimer()
     cameraTimer = setTimeout(() => {
       cameraTimer = undefined
+      host.removeAttribute('data-camera-moving')
       const latest = latestCamera
       if (latest === undefined) camera.style.removeProperty('will-change')
       else if (latest.current.k !== committed?.k || latest.zoomRatio !== committedZoomRatio) {
@@ -176,6 +178,8 @@ export function createMap(host: HTMLElement): IsoMap {
   }
 
   const startCameraMotion = (): void => {
+    // Hover changes beneath a stationary pointer repaint Safari's cached SVG during inertia.
+    host.toggleAttribute('data-camera-moving', true)
     camera.style.willChange = 'transform'
     scheduleCameraCommit()
   }

@@ -410,6 +410,8 @@ A new action starts from the displayed camera position. Dragging, scrolling,
 and pinching follow the gesture directly and stop an unfinished transition.
 Animated navigation and direct gestures prepare the same cached camera layer before movement.
 The map restores crisp SVG rendering after movement settles.
+Hover highlights pause during camera movement, including trackpad inertia, and return after it settles.
+Selection highlights and clicking remain available throughout.
 Reduced motion applies the destination without animation. `F1` toggles the HUD for a map-only
 view. `F2` lifts the blueprint into aligned System, Container, and Component
 layers and briefly turns the view to show that it can orbit. In layer mode,
