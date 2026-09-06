@@ -15,7 +15,9 @@ When the \`backlog\` CLI is available and you work on a Backlog task, immediatel
 export const agentInstructionGuides = [
   {
     id: 'curation',
-    source: new URL('../docs/agent-instructions/index.md', import.meta.url),
+    source: import.meta.dir?.includes('$bunfs') === true
+      ? path.join(import.meta.dir!, 'docs/agent-instructions/index.md')
+      : new URL('../docs/agent-instructions/index.md', import.meta.url),
   },
 ] as const
 

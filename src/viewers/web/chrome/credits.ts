@@ -1,4 +1,6 @@
 import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
+import path from 'node:path'
 
 import { escaped } from '../atoms/escape.ts'
 
@@ -20,20 +22,30 @@ interface Credit {
   url: string
 }
 
-const projectManifestUrl = new URL('../../../../package.json', import.meta.url)
-const projectManifest = readJson<ProjectManifest>(projectManifestUrl)
+const bundled = import.meta.dir?.includes('$bunfs') === true
+const projectRoot = bundled
+  ? import.meta.dir!
+  : fileURLToPath(new URL('../../../../', import.meta.url))
+const projectManifest = readJson<ProjectManifest>(path.join(projectRoot, 'package.json'))
 
-function readJson<T>(url: URL): T {
-  return JSON.parse(readFileSync(url, 'utf8')) as T
+function packageAssetName(name: string): string {
+  return `groma-package-${encodeURIComponent(name)}`
 }
 
-function packageUrl(name: string, file: string): URL {
-  return new URL(`../../../../node_modules/${name}/${file}`, import.meta.url)
+function readJson<T>(filename: string): T {
+  return JSON.parse(readFileSync(filename, 'utf8')) as T
+}
+
+function packageFile(name: string, file: string): string {
+  const packageRoot = bundled
+    ? path.join(projectRoot, packageAssetName(name))
+    : path.join(projectRoot, 'node_modules', name)
+  return path.join(packageRoot, file)
 }
 
 function licenseOf(name: string, manifest: DependencyManifest): string {
   if (manifest.license !== undefined) return manifest.license
-  return readFileSync(packageUrl(name, 'LICENSE'), 'utf8').split(/\r?\n/, 1)[0]!
+  return readFileSync(packageFile(name, 'LICENSE'), 'utf8').split(/\r?\n/, 1)[0]!
 }
 
 function repositoryUrl(repository: DependencyManifest['repository']): string {
@@ -47,7 +59,7 @@ function creditsFrom(dependencies: Record<string, string>): Credit[] {
   return Object.entries(dependencies)
     .filter(([, version]) => !version.startsWith('workspace:'))
     .map(([name, version]) => {
-      const manifest = readJson<DependencyManifest>(packageUrl(name, 'package.json'))
+      const manifest = readJson<DependencyManifest>(packageFile(name, 'package.json'))
       return {
         name,
         version,

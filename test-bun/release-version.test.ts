@@ -25,7 +25,7 @@ test.concurrent('a release binary keeps the prepared manifest version without it
     const isolated = path.join(root, 'isolated')
     await mkdir(checkout)
     await mkdir(isolated)
-    for (const file of ['package.json', 'src', 'scripts/build.ts']) {
+    for (const file of ['package.json', 'src', 'scripts/build.ts', 'docs']) {
       await cp(path.join(repositoryRoot, file), path.join(checkout, file), { recursive: true })
     }
     await symlink(path.join(repositoryRoot, 'node_modules'), path.join(checkout, 'node_modules'), 'junction')

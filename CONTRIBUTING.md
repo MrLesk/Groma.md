@@ -66,11 +66,13 @@ The CLI and welcome screen statically import the version from `package.json`; th
 Release CI sets `package.json.version` directly from the release tag, without its leading `v`, in the disposable build
 checkout before running `bun run build`. A build for tag `v0.2.0` therefore already reports `0.2.0`.
 
-All binary builds and npm package manifests must use that prepared version. Synchronize `package.json` on `main` only
-after publication and installation checks succeed. The release-version regression compiles the actual CLI with a new
-version and tests it after deleting its build checkout. These commands prepare versioned binaries; npm publication
-automation and the remaining standalone asset packaging are separate work. The root `groma.md` workspace stays private;
-npm releases need a separate publishable manifest for the compiled binaries.
+The build accepts `GROMA_BUILD_TARGET` and `GROMA_BUILD_OUTFILE` for cross-target release jobs. It embeds the shipped
+instruction guide, web assets, package metadata, and dependency credit metadata into each executable, so the binary
+does not need the source checkout at runtime. All binary builds and npm package manifests must use the prepared version.
+The tagged release workflow publishes platform packages before the `groma.md` wrapper, verifies installation on the
+supported runner platforms, and commits the released version to `main` only after those checks succeed. The root
+`groma.md` manifest is public; the workflow stages its Node wrapper around the compiled binaries so
+the workspace-only development dependencies are not part of the published package.
 
 ## Before starting a feature
 
