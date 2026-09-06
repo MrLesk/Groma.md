@@ -20,9 +20,6 @@ groma:
     - scanner: typescript
       file: src/viewers/web/startup/page.ts
       symbol: renderSetupPage
-    - scanner: typescript
-      file: src/viewers/web/compiled-asset.ts
-      symbol: compiledAsset
 ---
 
 Owns the local browser startup flow and ready map session. Missing initialization records open a setup form that uses the shared project initialization operation and runs the first scan. Startup failures show the reported issue in the browser. Once ready, it serves the page and browser bundle from cached project, architecture, sheet and task snapshots. It dispatches architecture writes through the shared authoring operations, handles project edits and on-demand source, diff and revision reads, and publishes live updates.
