@@ -63,13 +63,16 @@ bun run build
 Windows produces `dist/groma.exe`. Pass an output path after `bun run build` to choose a different location.
 The CLI, welcome screen, and web credits statically import `package.json` as JSON. Web lockup and mark files use Bun file and text imports. The compiled executable embeds the browser renderer, dependency credit files, and the agent guide under `docs/` as asset directories, so it does not read those from the source checkout or run a bundler at runtime. Code locates an embedded asset through `compiledAsset` in `src/compiled-asset.ts`: `Bun.isStandaloneExecutable` tells a compiled binary from source mode, and embedded directories live under `import.meta.dir`, which is the embedded root on every platform (`/$bunfs/root` on POSIX, `B:\~BUN\root` on Windows). Do not detect compiled mode by inspecting paths. The build also embeds the build target's native TypeScript worker (`tsc` and its `lib.d.ts` from `@typescript/typescript-<os>-<cpu>`); because a process cannot be spawned from the embedded filesystem, the compiled scanner unpacks it once per TypeScript version into the OS temp directory and reuses it from there, so compiled and source scans produce the same TypeScript evidence.
 
-Release CI sets `package.json.version` directly from the release tag, without its leading `v`, in the disposable build
-checkout before running `bun run build`. A build for tag `v0.2.0` therefore already reports `0.2.0`.
+A release starts on the GitHub releases page: publish a release with a new `v*.*.*` tag on `main` and the release
+notes. Publishing creates the tag and starts the release workflow; do not push tags by hand. Release CI sets
+`package.json.version` directly from that tag, without its leading `v`, in the disposable build checkout before running
+`bun run build`. A build for tag `v0.2.0` therefore already reports `0.2.0`. The workflow attaches the binaries and
+`SHA256SUMS` to the release it was started from.
 
 The build accepts `GROMA_BUILD_TARGET` and `GROMA_BUILD_OUTFILE` for cross-target release jobs. It embeds the shipped
 instruction guide, web assets, package metadata, and dependency credit metadata into each executable, so the binary
 does not need the source checkout at runtime. All binary builds and npm package manifests must use the prepared version.
-The tagged release workflow publishes platform packages before the `groma.md` wrapper, verifies installation on the
+The release workflow publishes platform packages before the `groma.md` wrapper, verifies installation on the
 supported runner platforms, and commits the released version to `main` only after those checks succeed. macOS ships
 `groma.md-darwin-arm64` only. The npm wrapper reports Intel Macs as an unsupported architecture. The root
 `groma.md` manifest is public; the workflow stages its Node wrapper around the compiled binaries so
