@@ -69,6 +69,7 @@ const statsHost = document.getElementById('stats')!
 const revisionSelect = document.getElementById('revision') as HTMLDetailsElement
 const searchRoot = document.getElementById('web-search')!
 const detailsHost = document.getElementById('details')!
+const detailsDock = document.getElementById('details-dock')!
 const zoomHost = document.getElementById('zoom')!
 const hierarchyContent = document.getElementById('hierarchy-content')!
 const hierarchyToggle = document.getElementById('hierarchy-toggle') as HTMLButtonElement
@@ -119,7 +120,7 @@ function viewport(): MapFrame {
     host.getBoundingClientRect(),
     headerHost.getBoundingClientRect(),
     hierarchyHost.getBoundingClientRect(),
-    { left: detailsHost.offsetLeft, hidden: detailsHost.inert },
+    { left: detailsDock.offsetLeft, hidden: detailsHost.inert },
     hudVisible,
   )
 }
@@ -187,10 +188,7 @@ function paintMapState(task: WorkItem | undefined, activeTaskItems: WorkItem[]):
 }
 
 function paintViewState(commitUrl = true): void {
-  const activeFlow = activeFlows.at(-1)
   if (commitUrl) syncUrl()
-  shell.paint(selection)
-  const selectedId = primarySelection(selection)
   const task = selection.kind === 'task' ? workItem(selection.id) : undefined
   const activeTaskItems = activeTaskIds.map(id => workItem(id)).filter((item): item is WorkItem => item !== undefined)
   paintMapState(task, activeTaskItems)
@@ -199,16 +197,23 @@ function paintViewState(commitUrl = true): void {
     title: 'Actors', selectedIds: selectedArchitecture(selection), onSelectActor: select,
   })
   paintWorldStats(statsHost, world)
+  paintDetailsState(task)
+  shell.paint(selection)
+}
+
+function paintDetailsState(task: WorkItem | undefined): void {
+  const activeFlow = activeFlows.at(-1)
+  const selectedId = primarySelection(selection)
   paintFlowReturn(detailsHost, activeFlow, selection.kind === 'flow', world, select, showFlows)
+  const selected = worldElement(selectedId)
+  const relationship = worldRelationship(selectedId)
+  if (source.paint(selected)) return
+  if (taskDiff.paint(task)) return
   const flow = world.flows.find(item => item.id === selectedId)
   if (selection.kind === 'flow' && flow !== undefined && activeFlow !== undefined) {
     paintFlowDetails(detailsHost, flow, activeFlow, world, selectFlowStep, select)
     return
   }
-  const selected = worldElement(selectedId)
-  const relationship = worldRelationship(selectedId)
-  if (source.paint(selected)) return
-  if (taskDiff.paint(task)) return
   if (relationship !== undefined) {
     paintRelationship(detailsHost, relationship, world, select, authoring.relationWrites)
   } else if (selected !== undefined) {

@@ -74,5 +74,5 @@ export function paintFlowReturn(
   const back = chromeButton(readingFlow ? `Back to ${origin!.title}` : 'Back to flow', { glyph: '←' })
   back.addEventListener('click', readingFlow ? () => onSelect(origin!.representationId) : onBack)
   back.classList.add('flow-back')
-  host.prepend(back)
+  host.querySelector('.meta')!.before(back)
 }

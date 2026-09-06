@@ -227,7 +227,6 @@ export function paintTaskFile(
   file: TaskFileDiff,
   onBack: () => void,
 ): void {
-  document.body.classList.add('task-diff-details')
   host.classList.add('file-open', 'task-diff-open')
   host.querySelector('h1')!.textContent = file.file
   const toolbar = host.querySelector<HTMLElement>('.tabs')!
@@ -263,14 +262,12 @@ export function paintTaskFile(
 }
 
 export function leaveTaskDiff(host: HTMLElement): void {
-  document.body.classList.remove('task-diff-details')
   host.classList.remove('file-open', 'task-diff-open')
   host.querySelector('.tabs')!.classList.remove('file-toolbar', 'task-diff-toolbar')
   host.querySelector('.tabs')!.classList.add('controls')
 }
 
 export const taskDiffCss = `
-  body.task-diff-details { --details-column: 640px; }
   #details .task-file-row { align-items: center; background: transparent; border: 0; border-bottom: 1px solid var(--hairline); color: inherit; display: grid; font: inherit; gap: 10px; grid-template-columns: 20px minmax(0, 1fr) auto; padding: 9px 0; text-align: left; width: 100%; }
   #details .task-file-row:hover { background: var(--hover); }
   #details .task-file-row:disabled { background: transparent; color: var(--muted); }

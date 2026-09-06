@@ -17,7 +17,6 @@ export function highlightedLine(source: string): DocumentFragment {
 
 export const highlightCss = `
   #details.file-open { display: flex; flex-direction: column; overflow: hidden; padding: 22px 0 0; }
-  #details.file-open #details-close { display: none; }
   #details.file-open > .meta,
   #details.file-open > h1,
   #details.file-open > .tabs { margin-left: 22px; margin-right: 22px; }
