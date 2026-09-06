@@ -17,7 +17,7 @@ not need a pull request.
 
 ## Set up the repository
 
-Groma requires Bun 1.4.1 or newer and Node.js 20.19 or newer.
+Groma requires Bun 1.4.1 or newer and Node.js 20.19 or newer. Published macOS binaries are Apple Silicon only; Intel Macs are not a supported architecture.
 
 ```sh
 bun install
@@ -70,7 +70,8 @@ The build accepts `GROMA_BUILD_TARGET` and `GROMA_BUILD_OUTFILE` for cross-targe
 instruction guide, web assets, package metadata, and dependency credit metadata into each executable, so the binary
 does not need the source checkout at runtime. All binary builds and npm package manifests must use the prepared version.
 The tagged release workflow publishes platform packages before the `groma.md` wrapper, verifies installation on the
-supported runner platforms, and commits the released version to `main` only after those checks succeed. The root
+supported runner platforms, and commits the released version to `main` only after those checks succeed. macOS ships
+`groma.md-darwin-arm64` only. The npm wrapper reports Intel Macs as an unsupported architecture. The root
 `groma.md` manifest is public; the workflow stages its Node wrapper around the compiled binaries so
 the workspace-only development dependencies are not part of the published package.
 
