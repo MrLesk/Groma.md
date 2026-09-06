@@ -20,7 +20,7 @@ import { svg } from './svg.ts'
 
 /** A graph-paper tile: minor lines every cell, one major line each way. */
 const TILE_SIZE = GRID_TILE_CELLS * PLANE
-/** Keep short trackpad pauses inside one motion layer; repeated SVG commits stall Safari. */
+/** Let zoom settle before committing its sharp SVG scale. Panning keeps the cached layer. */
 const CAMERA_SETTLE_MS = 250
 
 /**
@@ -134,6 +134,7 @@ export function createMap(host: HTMLElement): IsoMap {
   let composed: Camera | undefined
   let composedZoomRatio: number | undefined
   let committed: Camera | undefined
+  let committedZoomRatio: number | undefined
   let cameraTimer: ReturnType<typeof setTimeout> | undefined
   let latestCamera: { current: Camera; zoomRatio: number; showGrid: boolean } | undefined
   let gridView: ProjectionView = DEFAULT_PROJECTION
@@ -150,6 +151,7 @@ export function createMap(host: HTMLElement): IsoMap {
       world.setAttribute('transform', `translate(${current.x} ${current.y}) scale(${current.k})`)
     }
     committed = current
+    committedZoomRatio = zoomRatio
     const weight = weightAt(zoomRatio)
     camera.style.setProperty('--weight', String(weight))
     camera.style.setProperty('--camera-scale', String(current.k))
@@ -167,7 +169,9 @@ export function createMap(host: HTMLElement): IsoMap {
       cameraTimer = undefined
       const latest = latestCamera
       if (latest === undefined) camera.style.removeProperty('will-change')
-      else commitCamera(latest.current, latest.zoomRatio, latest.showGrid)
+      else if (latest.current.k !== committed?.k || latest.zoomRatio !== committedZoomRatio) {
+        commitCamera(latest.current, latest.zoomRatio, latest.showGrid)
+      }
     }, CAMERA_SETTLE_MS)
   }
 
