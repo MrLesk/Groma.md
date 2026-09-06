@@ -12,10 +12,3 @@ groma:
 ---
 
 Search scheduler of Search.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [search-metrics](search-metrics.md) | Calls metrics | HTTP |
-| [search-config](search-config.md) | Reads config | HTTP |

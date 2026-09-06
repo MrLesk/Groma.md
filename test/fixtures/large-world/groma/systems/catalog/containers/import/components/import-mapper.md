@@ -13,10 +13,3 @@ groma:
 ---
 
 Import mapper of Import.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [import-reader](import-reader.md) | Calls reader | HTTP |
-| [import-writer](import-writer.md) | Reads writer | HTTP |

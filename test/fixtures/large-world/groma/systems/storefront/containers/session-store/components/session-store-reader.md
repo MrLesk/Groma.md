@@ -16,10 +16,3 @@ groma:
 ---
 
 Session Store reader of Session Store.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [session-store-writer](session-store-writer.md) | Calls writer | HTTP |
-| [session-store-queue](session-store-queue.md) | Reads queue | HTTP |

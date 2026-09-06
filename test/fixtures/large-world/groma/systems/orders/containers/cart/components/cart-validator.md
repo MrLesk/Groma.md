@@ -25,10 +25,3 @@ groma:
 ---
 
 Cart validator of Cart.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [cart-mapper](cart-mapper.md) | Calls mapper | HTTP |
-| [cart-reader](cart-reader.md) | Reads reader | HTTP |

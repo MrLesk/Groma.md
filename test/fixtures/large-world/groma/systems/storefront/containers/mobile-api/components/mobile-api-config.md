@@ -18,10 +18,3 @@ groma:
 ---
 
 Mobile Api config of Mobile Api.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [mobile-api-logger](mobile-api-logger.md) | Calls logger | HTTP |
-| [mobile-api-client](mobile-api-client.md) | Reads client | HTTP |

@@ -1,6 +1,5 @@
 import type {
   AnnotatedElement,
-  AnnotatedRelationship,
   ArchitectureGraph,
   C4Kind,
   CodeReference,
@@ -18,7 +17,7 @@ import { paintElementWork } from '../work/component-tasks.ts'
 import { codeList, fileList } from './code-lists.ts'
 import { heading, paragraph } from '../atoms/text.ts'
 import { editButton, isEditing, type EditField } from './editable.ts'
-import type { PaneWrites, RelationWrites } from './writes.ts'
+import type { PaneWrites } from './writes.ts'
 import {
   paintAcceptControl,
   paintSelectionControls,
@@ -307,36 +306,6 @@ export function paintDetails(host: HTMLElement, inspected: Inspected, options: D
   }
 }
 
-
-/** Direction and meaning of a selected relationship, with removal offered only for drafts. */
-export function paintRelationship(
-  host: HTMLElement,
-  relationship: AnnotatedRelationship,
-  world: ArchitectureGraph,
-  onSelect: (id: string, additive: boolean) => void,
-  writes: RelationWrites,
-): void {
-  if (writes.onEdit !== undefined && isEditing(host, relationship.id)) return
-  const byId = new Map(world.elements.map(item => [item.representationId, item]))
-  const title = host.querySelector('h1')!
-  title.replaceChildren()
-  const body = host.querySelector('.body')!
-  body.replaceChildren()
-  title.textContent = 'Relationship'
-  if (writes.onEdit !== undefined && writes.onRead !== undefined) body.prepend(editButton(host, relationship.id, [
-    { name: 'description', label: 'Description', value: relationship.description, required: true },
-    { name: 'technology', label: 'Technology', value: relationship.technology, required: true },
-  ], writes.onEdit, writes.onRead))
-  host.querySelector('.meta')!.textContent = `Relationship · ${relationship.origin === 'draft' ? 'draft' : 'current'}`
-  host.querySelector('.tabs')!.replaceChildren()
-  body.append(relationshipCard({
-    ...relationship,
-    source: byId.get(relationship.source)!,
-    target: byId.get(relationship.target)!,
-  }, onSelect))
-  if (relationship.origin === 'draft' && writes.onAccept !== undefined) paintAcceptControl(body, writes.onAccept)
-  if (relationship.origin === 'draft' && writes.onRemove !== undefined) paintRemoveControl(body, relationship.description, writes.onRemove)
-}
 
 /** Empties the pane while nothing is selected. */
 export function clearDetails(host: HTMLElement): void {

@@ -18,10 +18,3 @@ groma:
 ---
 
 Accounts config of Accounts.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [accounts-logger](accounts-logger.md) | Calls logger | HTTP |
-| [accounts-client](accounts-client.md) | Reads client | HTTP |

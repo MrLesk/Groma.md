@@ -13,11 +13,3 @@ groma:
 ---
 
 Mobile Api gateway of Mobile Api.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [mobile-api-router](mobile-api-router.md) | Calls router | HTTP |
-| [mobile-api-session](mobile-api-session.md) | Reads session | HTTP |
-| [search-gateway](../../../../storefront/containers/search/components/search-gateway.md) | Forwards requests | HTTP |

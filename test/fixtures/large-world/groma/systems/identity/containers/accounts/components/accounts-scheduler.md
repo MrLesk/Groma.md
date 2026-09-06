@@ -12,10 +12,3 @@ groma:
 ---
 
 Accounts scheduler of Accounts.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [accounts-metrics](accounts-metrics.md) | Calls metrics | HTTP |
-| [accounts-config](accounts-config.md) | Reads config | HTTP |

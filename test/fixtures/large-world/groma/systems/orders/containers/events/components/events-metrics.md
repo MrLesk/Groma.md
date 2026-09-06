@@ -15,10 +15,3 @@ groma:
 ---
 
 Events metrics of Events.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [events-config](events-config.md) | Calls config | HTTP |
-| [events-logger](events-logger.md) | Reads logger | HTTP |

@@ -18,10 +18,3 @@ groma:
 ---
 
 Auth config of Auth.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [auth-logger](auth-logger.md) | Calls logger | HTTP |
-| [auth-client](auth-client.md) | Reads client | HTTP |

@@ -13,10 +13,3 @@ groma:
 ---
 
 Accounts mapper of Accounts.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [accounts-reader](accounts-reader.md) | Calls reader | HTTP |
-| [accounts-writer](accounts-writer.md) | Reads writer | HTTP |

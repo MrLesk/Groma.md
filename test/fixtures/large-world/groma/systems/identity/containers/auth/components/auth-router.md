@@ -16,10 +16,3 @@ groma:
 ---
 
 Auth router of Auth.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [auth-session](auth-session.md) | Calls session | HTTP |
-| [auth-cache](auth-cache.md) | Reads cache | HTTP |

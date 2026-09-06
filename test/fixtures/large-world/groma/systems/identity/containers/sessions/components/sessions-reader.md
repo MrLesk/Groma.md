@@ -16,10 +16,3 @@ groma:
 ---
 
 Sessions reader of Sessions.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [sessions-writer](sessions-writer.md) | Calls writer | HTTP |
-| [sessions-queue](sessions-queue.md) | Reads queue | HTTP |

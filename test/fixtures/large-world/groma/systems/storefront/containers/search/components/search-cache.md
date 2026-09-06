@@ -22,10 +22,3 @@ groma:
 ---
 
 Search cache of Search.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [search-validator](search-validator.md) | Calls validator | HTTP |
-| [search-mapper](search-mapper.md) | Reads mapper | HTTP |

@@ -22,10 +22,3 @@ groma:
 ---
 
 Catalog Api cache of Catalog Api.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [catalog-api-validator](catalog-api-validator.md) | Calls validator | HTTP |
-| [catalog-api-mapper](catalog-api-mapper.md) | Reads mapper | HTTP |

@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url'
 import { validateRepository } from '../scripts/validate-architecture.ts'
 
 const fixtureRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), 'fixtures', 'validate')
-const shopPath = ['groma', 'systems', 'shop', 'system.md']
+const relationshipsPath = ['groma', 'relationships.md']
 
 async function copyPackage(t: TestContext): Promise<string> {
   const temporaryRoot = await mkdtemp(path.join(os.tmpdir(), 'groma-validation-'))
@@ -70,20 +70,20 @@ test('canonical C4 containment remains strict', { concurrency: true }, async t =
 test('canonical relationship targets must resolve even when generic links do not', { concurrency: true }, async t => {
   const repositoryRoot = await copyPackage(t)
   await replaceInFile(
-    path.join(repositoryRoot, ...shopPath),
-    '../../externals/git.md',
-    '../../externals/missing.md',
+    path.join(repositoryRoot, ...relationshipsPath),
+    'externals/git.md',
+    'externals/missing.md',
   )
 
-  await assert.rejects(validateRepository(repositoryRoot), /relationship target.*missing.md.*does not resolve/)
+  await assert.rejects(validateRepository(repositoryRoot), /endpoint.*missing.md.*has no file owner or concept/)
 })
 
 test('a Groma relationship table keeps its canonical columns', { concurrency: true }, async t => {
   const repositoryRoot = await copyPackage(t)
   await replaceInFile(
-    path.join(repositoryRoot, ...shopPath),
-    '| Target | Description | Technology |',
-    '| Target | Detail | Technology |',
+    path.join(repositoryRoot, ...relationshipsPath),
+    '| Source | Target | Description | Technology |',
+    '| Source | Target | Detail | Technology |',
   )
 
   await assert.rejects(validateRepository(repositoryRoot), /Target.*Description.*Technology/)

@@ -22,10 +22,3 @@ groma:
 ---
 
 Web App queue of Web App.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [web-app-worker](web-app-worker.md) | Calls worker | HTTP |
-| [web-app-scheduler](web-app-scheduler.md) | Reads scheduler | HTTP |

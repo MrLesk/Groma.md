@@ -64,3 +64,26 @@ test.concurrent('root routes promote hidden endpoints to their rows and skip row
   const row = projection.items.find(item => item.representationId === 'observed:left')!.worldBounds
   assert.ok(route.worldRoute[0]!.y >= row.y && route.worldRoute[0]!.y < row.y + row.height)
 })
+
+test.concurrent('repeated route promotion preserves the shared sheet and relationship identities', () => {
+  const cell = { x: 0, y: 0, width: 1, height: 1 }
+  const model = worldOf([
+    box('system', 'system', cell, { children: ['observed:left'] }),
+    box('left', 'container', cell, { parent: 'observed:system', children: ['observed:a', 'observed:c'] }),
+    box('far', 'system', cell, { children: ['observed:right'] }),
+    box('right', 'container', cell, { parent: 'observed:far', children: ['observed:b'] }),
+    box('a', 'component', cell, { parent: 'observed:left' }),
+    box('b', 'component', cell, { parent: 'observed:right' }),
+    box('c', 'component', cell, { parent: 'observed:left' }),
+  ], [uses('ab', 'a', 'b'), uses('cb', 'c', 'b')])
+  model.sheet.routes.find(route => route.id === 'ab')!.relationshipIds = ['ab', 'ba']
+  const original = structuredClone(model.sheet)
+  const options = { viewport: mapViewportOf({ width: 120, height: 36 }) }
+
+  const first = projectWorld(model, options)
+  const second = projectWorld(model, options)
+
+  assert.deepEqual(model.sheet, original)
+  assert.deepEqual(second.relationships, first.relationships)
+  assert.deepEqual(first.relationships.flatMap(route => route.ids).sort(), ['ab', 'ba', 'cb'])
+})

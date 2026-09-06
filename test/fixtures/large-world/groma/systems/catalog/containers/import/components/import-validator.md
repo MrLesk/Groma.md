@@ -25,10 +25,3 @@ groma:
 ---
 
 Import validator of Import.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [import-mapper](import-mapper.md) | Calls mapper | HTTP |
-| [import-reader](import-reader.md) | Reads reader | HTTP |

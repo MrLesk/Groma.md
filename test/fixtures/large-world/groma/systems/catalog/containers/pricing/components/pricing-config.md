@@ -18,10 +18,3 @@ groma:
 ---
 
 Pricing config of Pricing.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [pricing-logger](pricing-logger.md) | Calls logger | HTTP |
-| [pricing-client](pricing-client.md) | Reads client | HTTP |

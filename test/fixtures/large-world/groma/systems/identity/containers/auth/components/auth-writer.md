@@ -19,10 +19,3 @@ groma:
 ---
 
 Auth writer of Auth.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [auth-queue](auth-queue.md) | Calls queue | HTTP |
-| [auth-worker](auth-worker.md) | Reads worker | HTTP |

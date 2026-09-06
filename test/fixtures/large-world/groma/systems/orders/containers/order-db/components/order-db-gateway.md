@@ -13,11 +13,3 @@ groma:
 ---
 
 Order Db gateway of Order Db.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [order-db-router](order-db-router.md) | Calls router | HTTP |
-| [order-db-session](order-db-session.md) | Reads session | HTTP |
-| [events-gateway](../../../../orders/containers/events/components/events-gateway.md) | Forwards requests | HTTP |

@@ -25,10 +25,3 @@ groma:
 ---
 
 Accounts validator of Accounts.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [accounts-mapper](accounts-mapper.md) | Calls mapper | HTTP |
-| [accounts-reader](accounts-reader.md) | Reads reader | HTTP |

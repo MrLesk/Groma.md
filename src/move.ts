@@ -8,7 +8,8 @@ export function moveBlocker(
 ): string | undefined {
   if (element.kind !== 'component') return '--parent can currently move only components'
   const relationship = relationships.find(entry => {
-    return entry.sourceId === element.id || entry.targetId === element.id
+    return entry.connections.some(connection => connection.authored
+      && (connection.source === element.id || connection.target === element.id))
   })
   if (relationship !== undefined) {
     return `cannot structurally replace "${relationship.sourceId}" or "${relationship.targetId}" `

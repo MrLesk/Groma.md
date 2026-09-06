@@ -16,10 +16,3 @@ groma:
 ---
 
 Audit reader of Audit.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [audit-writer](audit-writer.md) | Calls writer | HTTP |
-| [audit-queue](audit-queue.md) | Reads queue | HTTP |

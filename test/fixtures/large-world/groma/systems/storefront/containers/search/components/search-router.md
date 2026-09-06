@@ -16,10 +16,3 @@ groma:
 ---
 
 Search router of Search.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [search-session](search-session.md) | Calls session | HTTP |
-| [search-cache](search-cache.md) | Reads cache | HTTP |

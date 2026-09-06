@@ -4,7 +4,7 @@ import { loadArchitecture } from './architecture-reader.ts'
 import { emptyWorldLines, isEmptyWorld } from './empty-world.ts'
 import { loadProjectProfile } from './project-profile.ts'
 import { readDocument } from './markdown-emitter.ts'
-import { requireGromaMapping } from './okf-profile.ts'
+import { RELATIONSHIPS_TYPE, requireGromaMapping } from './okf-profile.ts'
 import type {
   AnnotatedArchitectureModel,
   AnnotatedElement,
@@ -197,6 +197,7 @@ export async function renderPlainRecord(
   const records = await loadArchitecture(repositoryRoot)
   const model = annotateArchitecture(records)
   const documents = [...records.documents, ...records.flows]
+    .filter(document => document.frontmatter.type !== RELATIONSHIPS_TYPE)
   const documentById = new Map(documents.map(document => [
     requireGromaMapping(document.frontmatter, document.sourceFilename).id,
     document,

@@ -21,9 +21,3 @@ groma:
 ---
 
 Order Service logger of Order Service.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [order-service-client](order-service-client.md) | Calls client | HTTP |

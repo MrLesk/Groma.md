@@ -29,6 +29,10 @@ public sealed class ScannerTests
             "App/UsesCore.cs", "Core/Shared.First.cs", "source-dependency"));
         Assert.Contains(first.Relationships, relationship => relationship == new ScanRelationship(
             "App/UsesCore.cs", "Core/Shared.Second.cs", "source-dependency"));
+        Assert.DoesNotContain(first.Relationships, relationship =>
+            relationship.Source == "App/Unused.cs" && relationship.Kind == "source-dependency");
+        Assert.DoesNotContain(first.Relationships, relationship =>
+            relationship.Source == "Core/Shared.First.cs" && relationship.Kind == "source-dependency");
     }
 
     [Fact]
@@ -79,6 +83,9 @@ public sealed class ScannerTests
             File.WriteAllText(
                 Path.Combine(fixture.Directory, "App", "UsesCore.cs"),
                 "using Fixture; namespace App; public class UsesCore { public Shared Value { get; } = new(); }");
+            File.WriteAllText(
+                Path.Combine(fixture.Directory, "App", "Unused.cs"),
+                "using Fixture; using Alias = Fixture.Shared; namespace App; public class Unused<Shared> { public Shared Value { get; set; } = default!; }");
             File.WriteAllText(fixture.SolutionPath, SolutionFile());
             fixture.Restore();
             return fixture;

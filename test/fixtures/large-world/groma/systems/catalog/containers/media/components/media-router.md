@@ -16,10 +16,3 @@ groma:
 ---
 
 Media router of Media.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [media-session](media-session.md) | Calls session | HTTP |
-| [media-cache](media-cache.md) | Reads cache | HTTP |

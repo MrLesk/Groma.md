@@ -21,9 +21,3 @@ groma:
 ---
 
 Directory logger of Directory.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [directory-client](directory-client.md) | Calls client | HTTP |

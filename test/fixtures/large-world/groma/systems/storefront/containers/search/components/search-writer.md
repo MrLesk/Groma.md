@@ -19,10 +19,3 @@ groma:
 ---
 
 Search writer of Search.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [search-queue](search-queue.md) | Calls queue | HTTP |
-| [search-worker](search-worker.md) | Reads worker | HTTP |

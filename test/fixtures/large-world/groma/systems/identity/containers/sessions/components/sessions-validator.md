@@ -25,10 +25,3 @@ groma:
 ---
 
 Sessions validator of Sessions.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [sessions-mapper](sessions-mapper.md) | Calls mapper | HTTP |
-| [sessions-reader](sessions-reader.md) | Reads reader | HTTP |

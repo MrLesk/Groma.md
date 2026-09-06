@@ -16,10 +16,3 @@ groma:
 ---
 
 Web App reader of Web App.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [web-app-writer](web-app-writer.md) | Calls writer | HTTP |
-| [web-app-queue](web-app-queue.md) | Reads queue | HTTP |

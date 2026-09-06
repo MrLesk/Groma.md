@@ -24,9 +24,3 @@ groma:
 ---
 
 Session Store client of Session Store.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [payments](../../../../../externals/payments.md) | Charges cards | HTTP |

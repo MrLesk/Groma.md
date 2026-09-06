@@ -22,10 +22,3 @@ groma:
 ---
 
 Search queue of Search.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [search-worker](search-worker.md) | Calls worker | HTTP |
-| [search-scheduler](search-scheduler.md) | Reads scheduler | HTTP |

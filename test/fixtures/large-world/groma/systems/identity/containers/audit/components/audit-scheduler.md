@@ -12,10 +12,3 @@ groma:
 ---
 
 Audit scheduler of Audit.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [audit-metrics](audit-metrics.md) | Calls metrics | HTTP |
-| [audit-config](audit-config.md) | Reads config | HTTP |

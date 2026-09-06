@@ -19,10 +19,3 @@ groma:
 ---
 
 Mobile Api session of Mobile Api.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [mobile-api-cache](mobile-api-cache.md) | Calls cache | HTTP |
-| [mobile-api-validator](mobile-api-validator.md) | Reads validator | HTTP |

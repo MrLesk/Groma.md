@@ -5,6 +5,7 @@ export const GROMA_PROJECT_TYPE = 'Groma Project'
 export const GROMA_PROFILE = 'architecture'
 export const DRAFT_TYPE = 'Draft'
 export const FLOW_TYPE = 'Groma Flow'
+export const RELATIONSHIPS_TYPE = 'Groma Relationships'
 
 const typeByKind: Record<C4Kind, string> = {
   actor: 'C4 Actor',

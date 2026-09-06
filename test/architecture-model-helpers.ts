@@ -8,7 +8,7 @@ import type {
   MarkdownElement,
   MarkdownNode,
 } from '../src/types.ts'
-import { c4Type } from '../src/okf-profile.ts'
+import { c4Type, RELATIONSHIPS_TYPE } from '../src/okf-profile.ts'
 
 export const repositoryRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -16,6 +16,7 @@ export const repositoryRoot = path.resolve(
 )
 
 interface RelationshipFixture {
+  sourceHref: string
   href: string
   label?: string
   description: string
@@ -37,7 +38,6 @@ interface ElementDocumentFixture {
   code?: unknown
   /** Extra groma fields, for documents that claim something the profile does not know. */
   extraGroma?: Record<string, unknown>
-  relationships?: RelationshipFixture[]
 }
 
 export function elementDocument({
@@ -53,7 +53,6 @@ export function elementDocument({
   technology,
   code,
   extraGroma = {},
-  relationships = [],
 }: ElementDocumentFixture): ArchitectureDocument {
   const groma: Record<string, unknown> = { id, ...extraGroma }
   const frontmatter: ArchitectureFrontmatter = {
@@ -77,6 +76,11 @@ export function elementDocument({
     ['p', {}, `${id} responsibility`],
   ]
 
+  return { sourceFilename, body: `${id} responsibility`, frontmatter, nodes }
+}
+
+export function relationshipDocument(relationships: RelationshipFixture[]): ArchitectureDocument {
+  const nodes: MarkdownNode[] = []
   if (relationships.length > 0) {
     nodes.push(
       ['h2', { id: 'relationships' }, 'Relationships'],
@@ -89,6 +93,7 @@ export function elementDocument({
           [
             'tr',
             {},
+            ['th', {}, 'Source'],
             ['th', {}, 'Target'],
             ['th', {}, 'Description'],
             ['th', {}, 'Technology'],
@@ -100,6 +105,7 @@ export function elementDocument({
           ...relationships.map((relationship): MarkdownElement => [
             'tr',
             {},
+            ['td', {}, ['a', { href: relationship.sourceHref }, 'Source']],
             ['td', {}, ['a', { href: relationship.href }, relationship.label ?? 'Target']],
             ['td', {}, relationship.description],
             ['td', {}, relationship.technology],
@@ -109,5 +115,5 @@ export function elementDocument({
     )
   }
 
-  return { sourceFilename, body: `${id} responsibility`, frontmatter, nodes }
+  return { sourceFilename: 'groma/relationships.md', body: '', frontmatter: { type: RELATIONSHIPS_TYPE, title: 'Relationships' }, nodes }
 }

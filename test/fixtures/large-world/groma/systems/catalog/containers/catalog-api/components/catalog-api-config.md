@@ -18,10 +18,3 @@ groma:
 ---
 
 Catalog Api config of Catalog Api.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [catalog-api-logger](catalog-api-logger.md) | Calls logger | HTTP |
-| [catalog-api-client](catalog-api-client.md) | Reads client | HTTP |

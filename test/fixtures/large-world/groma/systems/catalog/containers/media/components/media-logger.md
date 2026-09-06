@@ -21,9 +21,3 @@ groma:
 ---
 
 Media logger of Media.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [media-client](media-client.md) | Calls client | HTTP |

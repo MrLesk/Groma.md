@@ -18,10 +18,3 @@ groma:
 ---
 
 Checkout config of Checkout.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [checkout-logger](checkout-logger.md) | Calls logger | HTTP |
-| [checkout-client](checkout-client.md) | Reads client | HTTP |

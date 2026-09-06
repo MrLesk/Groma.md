@@ -25,10 +25,3 @@ groma:
 ---
 
 Sessions worker of Sessions.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [sessions-scheduler](sessions-scheduler.md) | Calls scheduler | HTTP |
-| [sessions-metrics](sessions-metrics.md) | Reads metrics | HTTP |

@@ -25,10 +25,3 @@ groma:
 ---
 
 Checkout worker of Checkout.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [checkout-scheduler](checkout-scheduler.md) | Calls scheduler | HTTP |
-| [checkout-metrics](checkout-metrics.md) | Reads metrics | HTTP |

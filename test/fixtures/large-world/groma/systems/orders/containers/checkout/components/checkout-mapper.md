@@ -13,10 +13,3 @@ groma:
 ---
 
 Checkout mapper of Checkout.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [checkout-reader](checkout-reader.md) | Calls reader | HTTP |
-| [checkout-writer](checkout-writer.md) | Reads writer | HTTP |

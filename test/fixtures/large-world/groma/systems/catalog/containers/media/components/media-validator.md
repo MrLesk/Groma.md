@@ -25,10 +25,3 @@ groma:
 ---
 
 Media validator of Media.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [media-mapper](media-mapper.md) | Calls mapper | HTTP |
-| [media-reader](media-reader.md) | Reads reader | HTTP |

@@ -251,14 +251,14 @@ export function createMap(host: HTMLElement): IsoMap {
         node.classList.toggle('selected', selectedItems.has(itemId))
         node.classList.toggle('context', contexts.has(itemId))
       }
-      for (const [routeId, node] of routes) {
-        node.group.classList.toggle('selected', selectedRoutes.has(routeId))
+      for (const node of new Set(routes.values())) {
+        node.group.classList.toggle('selected', node.ids.some(id => selectedRoutes.has(id)))
         node.group.classList.toggle('endpoint', directItems.has(node.source) || directItems.has(node.target))
       }
     },
     mark(ids) {
       for (const [itemId, node] of items) node.classList.toggle('touched', ids.has(itemId))
-      for (const route of routes.values()) {
+      for (const route of new Set(routes.values())) {
         route.group.classList.toggle('touched', ids.has(route.source))
       }
     },
@@ -267,10 +267,10 @@ export function createMap(host: HTMLElement): IsoMap {
       const litEndpointIds = new Set<string>()
       const focused = focusedRouteId === undefined ? undefined : routes.get(focusedRouteId)
       camera.toggleAttribute('data-tracing', tracing)
-      for (const [routeId, route] of routes) {
-        const lit = litRouteIds.has(routeId)
+      for (const route of new Set(routes.values())) {
+        const lit = route.ids.some(id => litRouteIds.has(id))
         route.group.classList.toggle('lit', lit)
-        route.group.classList.toggle('focused', lit && routeId === focusedRouteId)
+        route.group.classList.toggle('focused', lit && focusedRouteId !== undefined && route.ids.includes(focusedRouteId))
         if (lit) litEndpointIds.add(route.source).add(route.target)
       }
       for (const [itemId, node] of items) {

@@ -18,10 +18,3 @@ groma:
 ---
 
 Cdn Edge config of Cdn Edge.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [cdn-edge-logger](cdn-edge-logger.md) | Calls logger | HTTP |
-| [cdn-edge-client](cdn-edge-client.md) | Reads client | HTTP |

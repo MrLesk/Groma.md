@@ -6,12 +6,9 @@ groma:
   id: inventory
   parent: api
   draft: inventory
+  code:
+    - scanner: typescript
+      file: src/inventory.ts
 ---
 
 Reserves stock for an order.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [Orders](orders.md) | Reports reserved stock | Function call |

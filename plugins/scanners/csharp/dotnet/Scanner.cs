@@ -73,7 +73,11 @@ public sealed class RoslynScanner
                 SyntaxNode root = await tree.GetRootAsync(cancellationToken);
                 foreach (NameSyntax name in root.DescendantNodes().OfType<NameSyntax>())
                 {
+                    if (name.Ancestors().Any(ancestor => ancestor is UsingDirectiveSyntax))
+                        continue;
                     ISymbol? referenced = semanticModel.GetSymbolInfo(name, cancellationToken).Symbol;
+                    if (referenced is INamespaceSymbol)
+                        continue;
                     foreach (Location location in referenced?.Locations ?? [])
                     {
                         string? targetPath = location.SourceTree?.FilePath;

@@ -25,10 +25,3 @@ groma:
 ---
 
 Web App validator of Web App.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [web-app-mapper](web-app-mapper.md) | Calls mapper | HTTP |
-| [web-app-reader](web-app-reader.md) | Reads reader | HTTP |

@@ -30,12 +30,6 @@ groma:
 ---
 
 Places and tracks customer orders.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [Stock](stock.md) | talks to | Function call |
 `
 
 const emptyDraft = `---
@@ -70,7 +64,7 @@ test('groma edit element --draft tags a stable element with the draft that touch
   assert.match(source, /^ {2}draft: next$/m)
   assert.match(source, /^status: stable$/m)
   assert.match(source, /Owns the order lifecycle\./)
-  assert.match(source, /\[Stock\]\(stock\.md\)/)
+  assert.equal(await readRelative(root, 'groma/relationships.md'), await readRelative(fixtureRoot, 'groma/relationships.md'))
   const orders = (await loadAnnotatedArchitecture(root)).elements.find(element => element.id === 'orders')
   assert.equal(orders?.origin, 'observed')
   assert.equal(orders?.draft, 'next')

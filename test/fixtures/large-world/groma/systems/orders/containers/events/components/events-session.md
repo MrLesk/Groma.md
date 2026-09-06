@@ -19,10 +19,3 @@ groma:
 ---
 
 Events session of Events.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [events-cache](events-cache.md) | Calls cache | HTTP |
-| [events-validator](events-validator.md) | Reads validator | HTTP |

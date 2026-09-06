@@ -16,10 +16,3 @@ groma:
 ---
 
 Product Db router of Product Db.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [product-db-session](product-db-session.md) | Calls session | HTTP |
-| [product-db-cache](product-db-cache.md) | Reads cache | HTTP |

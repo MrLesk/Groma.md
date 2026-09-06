@@ -22,10 +22,3 @@ groma:
 ---
 
 Product Db cache of Product Db.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [product-db-validator](product-db-validator.md) | Calls validator | HTTP |
-| [product-db-mapper](product-db-mapper.md) | Reads mapper | HTTP |

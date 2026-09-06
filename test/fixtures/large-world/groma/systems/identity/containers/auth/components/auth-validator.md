@@ -25,10 +25,3 @@ groma:
 ---
 
 Auth validator of Auth.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [auth-mapper](auth-mapper.md) | Calls mapper | HTTP |
-| [auth-reader](auth-reader.md) | Reads reader | HTTP |

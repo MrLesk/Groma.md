@@ -25,10 +25,3 @@ groma:
 ---
 
 Product Db validator of Product Db.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [product-db-mapper](product-db-mapper.md) | Calls mapper | HTTP |
-| [product-db-reader](product-db-reader.md) | Reads reader | HTTP |

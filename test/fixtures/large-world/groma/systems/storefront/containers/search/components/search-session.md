@@ -19,10 +19,3 @@ groma:
 ---
 
 Search session of Search.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [search-cache](search-cache.md) | Calls cache | HTTP |
-| [search-validator](search-validator.md) | Reads validator | HTTP |

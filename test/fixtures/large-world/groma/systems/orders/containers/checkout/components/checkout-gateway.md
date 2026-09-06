@@ -13,11 +13,3 @@ groma:
 ---
 
 Checkout gateway of Checkout.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [checkout-router](checkout-router.md) | Calls router | HTTP |
-| [checkout-session](checkout-session.md) | Reads session | HTTP |
-| [cart-gateway](../../../../orders/containers/cart/components/cart-gateway.md) | Forwards requests | HTTP |

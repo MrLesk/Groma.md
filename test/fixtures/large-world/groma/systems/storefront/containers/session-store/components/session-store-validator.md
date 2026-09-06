@@ -25,10 +25,3 @@ groma:
 ---
 
 Session Store validator of Session Store.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [session-store-mapper](session-store-mapper.md) | Calls mapper | HTTP |
-| [session-store-reader](session-store-reader.md) | Reads reader | HTTP |

@@ -22,10 +22,3 @@ groma:
 ---
 
 Product Db queue of Product Db.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [product-db-worker](product-db-worker.md) | Calls worker | HTTP |
-| [product-db-scheduler](product-db-scheduler.md) | Reads scheduler | HTTP |

@@ -13,11 +13,3 @@ groma:
 ---
 
 Order Service gateway of Order Service.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [order-service-router](order-service-router.md) | Calls router | HTTP |
-| [order-service-session](order-service-session.md) | Reads session | HTTP |
-| [order-db-gateway](../../../../orders/containers/order-db/components/order-db-gateway.md) | Forwards requests | HTTP |

@@ -22,10 +22,3 @@ groma:
 ---
 
 Order Db cache of Order Db.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [order-db-validator](order-db-validator.md) | Calls validator | HTTP |
-| [order-db-mapper](order-db-mapper.md) | Reads mapper | HTTP |

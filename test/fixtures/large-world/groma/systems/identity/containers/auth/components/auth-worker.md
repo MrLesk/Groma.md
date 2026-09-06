@@ -25,10 +25,3 @@ groma:
 ---
 
 Auth worker of Auth.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [auth-scheduler](auth-scheduler.md) | Calls scheduler | HTTP |
-| [auth-metrics](auth-metrics.md) | Reads metrics | HTTP |

@@ -18,10 +18,3 @@ groma:
 ---
 
 Order Service config of Order Service.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [order-service-logger](order-service-logger.md) | Calls logger | HTTP |
-| [order-service-client](order-service-client.md) | Reads client | HTTP |

@@ -12,10 +12,3 @@ groma:
 ---
 
 Web App scheduler of Web App.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [web-app-metrics](web-app-metrics.md) | Calls metrics | HTTP |
-| [web-app-config](web-app-config.md) | Reads config | HTTP |

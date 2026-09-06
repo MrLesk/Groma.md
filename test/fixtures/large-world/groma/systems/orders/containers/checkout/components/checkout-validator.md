@@ -25,10 +25,3 @@ groma:
 ---
 
 Checkout validator of Checkout.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [checkout-mapper](checkout-mapper.md) | Calls mapper | HTTP |
-| [checkout-reader](checkout-reader.md) | Reads reader | HTTP |

@@ -25,10 +25,3 @@ groma:
 ---
 
 Product Db worker of Product Db.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [product-db-scheduler](product-db-scheduler.md) | Calls scheduler | HTTP |
-| [product-db-metrics](product-db-metrics.md) | Reads metrics | HTTP |

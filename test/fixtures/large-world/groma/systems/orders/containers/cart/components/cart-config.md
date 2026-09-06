@@ -18,10 +18,3 @@ groma:
 ---
 
 Cart config of Cart.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [cart-logger](cart-logger.md) | Calls logger | HTTP |
-| [cart-client](cart-client.md) | Reads client | HTTP |

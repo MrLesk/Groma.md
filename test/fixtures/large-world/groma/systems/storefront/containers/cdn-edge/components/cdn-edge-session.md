@@ -19,10 +19,3 @@ groma:
 ---
 
 Cdn Edge session of Cdn Edge.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [cdn-edge-cache](cdn-edge-cache.md) | Calls cache | HTTP |
-| [cdn-edge-validator](cdn-edge-validator.md) | Reads validator | HTTP |

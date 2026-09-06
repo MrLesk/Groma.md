@@ -5,12 +5,9 @@ status: stable
 groma:
   id: worker
   parent: api
+  code:
+    - scanner: typescript
+      file: src/worker.ts
 ---
 
 Completes a unit of work.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [Entry](entry.md) | Reports progress | Callback |

@@ -22,10 +22,3 @@ groma:
 ---
 
 Session Store cache of Session Store.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [session-store-validator](session-store-validator.md) | Calls validator | HTTP |
-| [session-store-mapper](session-store-mapper.md) | Reads mapper | HTTP |

@@ -21,9 +21,3 @@ groma:
 ---
 
 Accounts logger of Accounts.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [accounts-client](accounts-client.md) | Calls client | HTTP |

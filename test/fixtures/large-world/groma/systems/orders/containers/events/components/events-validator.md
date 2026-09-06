@@ -25,10 +25,3 @@ groma:
 ---
 
 Events validator of Events.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [events-mapper](events-mapper.md) | Calls mapper | HTTP |
-| [events-reader](events-reader.md) | Reads reader | HTTP |

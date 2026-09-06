@@ -7,6 +7,9 @@ groma:
   parent: api
   group: Fulfilment
   draft: next
+  code:
+    - scanner: typescript
+      file: src/stock.ts
 ---
 
 Placeholder so the observed orders edge can resolve.

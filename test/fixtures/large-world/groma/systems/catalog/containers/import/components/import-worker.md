@@ -25,10 +25,3 @@ groma:
 ---
 
 Import worker of Import.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [import-scheduler](import-scheduler.md) | Calls scheduler | HTTP |
-| [import-metrics](import-metrics.md) | Reads metrics | HTTP |

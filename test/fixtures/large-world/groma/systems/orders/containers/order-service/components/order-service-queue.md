@@ -22,10 +22,3 @@ groma:
 ---
 
 Order Service queue of Order Service.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [order-service-worker](order-service-worker.md) | Calls worker | HTTP |
-| [order-service-scheduler](order-service-scheduler.md) | Reads scheduler | HTTP |

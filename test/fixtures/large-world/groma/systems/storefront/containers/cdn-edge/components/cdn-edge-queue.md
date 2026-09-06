@@ -22,10 +22,3 @@ groma:
 ---
 
 Cdn Edge queue of Cdn Edge.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [cdn-edge-worker](cdn-edge-worker.md) | Calls worker | HTTP |
-| [cdn-edge-scheduler](cdn-edge-scheduler.md) | Reads scheduler | HTTP |

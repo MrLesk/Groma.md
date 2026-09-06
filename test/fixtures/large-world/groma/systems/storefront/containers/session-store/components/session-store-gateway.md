@@ -13,11 +13,3 @@ groma:
 ---
 
 Session Store gateway of Session Store.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [session-store-router](session-store-router.md) | Calls router | HTTP |
-| [session-store-session](session-store-session.md) | Reads session | HTTP |
-| [checkout-gateway](../../../../orders/containers/checkout/components/checkout-gateway.md) | Forwards requests | HTTP |

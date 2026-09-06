@@ -21,9 +21,3 @@ groma:
 ---
 
 Auth logger of Auth.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [auth-client](auth-client.md) | Calls client | HTTP |

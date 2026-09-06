@@ -18,10 +18,3 @@ groma:
 ---
 
 Media config of Media.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [media-logger](media-logger.md) | Calls logger | HTTP |
-| [media-client](media-client.md) | Reads client | HTTP |

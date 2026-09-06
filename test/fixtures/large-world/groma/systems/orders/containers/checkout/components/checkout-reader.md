@@ -16,10 +16,3 @@ groma:
 ---
 
 Checkout reader of Checkout.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [checkout-writer](checkout-writer.md) | Calls writer | HTTP |
-| [checkout-queue](checkout-queue.md) | Reads queue | HTTP |

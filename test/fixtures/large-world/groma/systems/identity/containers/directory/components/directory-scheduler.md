@@ -12,10 +12,3 @@ groma:
 ---
 
 Directory scheduler of Directory.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [directory-metrics](directory-metrics.md) | Calls metrics | HTTP |
-| [directory-config](directory-config.md) | Reads config | HTTP |

@@ -125,7 +125,13 @@ export function createMapEditor(host: HTMLElement, map: IsoMap, data: WebDataSou
   function connect(current: Gesture & { tool: 'connect'; source: string }): void {
       const target = element(hit(current.end))
       if (target?.kind !== 'component' || target.id === current.source) throw new Error('End on another component')
-      relate?.open({ source: current.source, target: target.id, sourceTitle: element(current.source)!.title, targetTitle: target.title })
+      const source = element(current.source)!
+      if (source.code.length === 0 || target.code.length === 0) throw new Error('Both components need source files')
+      relate?.open({
+        sourceTitle: source.title, targetTitle: target.title,
+        sourceFiles: [...new Set(source.code.map(reference => reference.file))].sort(),
+        targetFiles: [...new Set(target.code.map(reference => reference.file))].sort(),
+      })
   }
 
   function finish(current: Gesture): void {

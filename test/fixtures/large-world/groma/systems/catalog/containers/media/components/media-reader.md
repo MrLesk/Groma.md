@@ -16,10 +16,3 @@ groma:
 ---
 
 Media reader of Media.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [media-writer](media-writer.md) | Calls writer | HTTP |
-| [media-queue](media-queue.md) | Reads queue | HTTP |

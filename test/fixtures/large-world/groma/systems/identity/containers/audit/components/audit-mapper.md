@@ -13,10 +13,3 @@ groma:
 ---
 
 Audit mapper of Audit.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [audit-reader](audit-reader.md) | Calls reader | HTTP |
-| [audit-writer](audit-writer.md) | Reads writer | HTTP |

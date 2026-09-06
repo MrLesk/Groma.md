@@ -19,10 +19,3 @@ groma:
 ---
 
 Directory writer of Directory.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [directory-queue](directory-queue.md) | Calls queue | HTTP |
-| [directory-worker](directory-worker.md) | Reads worker | HTTP |

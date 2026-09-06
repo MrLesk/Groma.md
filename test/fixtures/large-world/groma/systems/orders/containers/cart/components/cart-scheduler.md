@@ -12,10 +12,3 @@ groma:
 ---
 
 Cart scheduler of Cart.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [cart-metrics](cart-metrics.md) | Calls metrics | HTTP |
-| [cart-config](cart-config.md) | Reads config | HTTP |

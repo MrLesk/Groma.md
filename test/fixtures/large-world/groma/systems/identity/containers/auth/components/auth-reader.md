@@ -16,10 +16,3 @@ groma:
 ---
 
 Auth reader of Auth.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [auth-writer](auth-writer.md) | Calls writer | HTTP |
-| [auth-queue](auth-queue.md) | Reads queue | HTTP |

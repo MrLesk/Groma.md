@@ -16,10 +16,3 @@ groma:
 ---
 
 Pricing reader of Pricing.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [pricing-writer](pricing-writer.md) | Calls writer | HTTP |
-| [pricing-queue](pricing-queue.md) | Reads queue | HTTP |

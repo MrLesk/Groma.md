@@ -22,10 +22,3 @@ groma:
 ---
 
 Cart queue of Cart.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [cart-worker](cart-worker.md) | Calls worker | HTTP |
-| [cart-scheduler](cart-scheduler.md) | Reads scheduler | HTTP |

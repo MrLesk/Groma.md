@@ -22,10 +22,3 @@ groma:
 ---
 
 Media cache of Media.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [media-validator](media-validator.md) | Calls validator | HTTP |
-| [media-mapper](media-mapper.md) | Reads mapper | HTTP |

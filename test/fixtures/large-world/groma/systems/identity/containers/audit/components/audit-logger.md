@@ -21,9 +21,3 @@ groma:
 ---
 
 Audit logger of Audit.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [audit-client](audit-client.md) | Calls client | HTTP |

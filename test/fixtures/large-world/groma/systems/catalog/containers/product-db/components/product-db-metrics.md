@@ -15,10 +15,3 @@ groma:
 ---
 
 Product Db metrics of Product Db.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [product-db-config](product-db-config.md) | Calls config | HTTP |
-| [product-db-logger](product-db-logger.md) | Reads logger | HTTP |

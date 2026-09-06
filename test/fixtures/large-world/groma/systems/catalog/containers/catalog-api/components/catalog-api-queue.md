@@ -22,10 +22,3 @@ groma:
 ---
 
 Catalog Api queue of Catalog Api.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [catalog-api-worker](catalog-api-worker.md) | Calls worker | HTTP |
-| [catalog-api-scheduler](catalog-api-scheduler.md) | Reads scheduler | HTTP |

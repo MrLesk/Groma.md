@@ -38,7 +38,7 @@ function validatedElements(
   repositoryRoot: string,
   records: ArchitectureRecords,
 ): ValidatedElement[] {
-  return records.documents.map(document => {
+  return records.documents.filter(document => c4Kind(document.frontmatter.type) !== undefined).map(document => {
     const groma = requireGromaMapping(document.frontmatter, document.sourceFilename)
     return {
       file: path.join(repositoryRoot, document.sourceFilename),

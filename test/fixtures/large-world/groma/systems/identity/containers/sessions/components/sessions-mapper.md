@@ -13,10 +13,3 @@ groma:
 ---
 
 Sessions mapper of Sessions.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [sessions-reader](sessions-reader.md) | Calls reader | HTTP |
-| [sessions-writer](sessions-writer.md) | Reads writer | HTTP |

@@ -7,7 +7,7 @@ import type { TestContext } from 'node:test'
 import { fileURLToPath } from 'node:url'
 
 import { ArchitectureReadError, loadArchitecture } from '../src/architecture-reader.ts'
-import { GromaProfileError } from '../src/okf-profile.ts'
+import { GromaProfileError, RELATIONSHIPS_TYPE } from '../src/okf-profile.ts'
 
 const fixtureRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), 'fixtures', 'validate')
 
@@ -22,7 +22,7 @@ test('loads the one tree only after recognizing the marked OKF package', { concu
   const records = await loadArchitecture(fixtureRoot)
 
   assert.ok(records.documents.length > 0)
-  assert.ok(records.documents.every(document => String(document.frontmatter.type).startsWith('C4 ')))
+  assert.ok(records.documents.every(document => String(document.frontmatter.type).startsWith('C4 ') || document.frontmatter.type === RELATIONSHIPS_TYPE))
   assert.ok(records.drafts.length > 0)
   assert.ok(records.drafts.every(document => document.frontmatter.type === 'Draft'))
   assert.ok(Object.isFrozen(records))

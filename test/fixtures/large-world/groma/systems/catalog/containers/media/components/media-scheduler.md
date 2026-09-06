@@ -12,10 +12,3 @@ groma:
 ---
 
 Media scheduler of Media.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [media-metrics](media-metrics.md) | Calls metrics | HTTP |
-| [media-config](media-config.md) | Reads config | HTTP |

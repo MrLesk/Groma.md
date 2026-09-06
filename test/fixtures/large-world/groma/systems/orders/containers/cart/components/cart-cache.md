@@ -22,10 +22,3 @@ groma:
 ---
 
 Cart cache of Cart.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [cart-validator](cart-validator.md) | Calls validator | HTTP |
-| [cart-mapper](cart-mapper.md) | Reads mapper | HTTP |

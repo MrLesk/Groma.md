@@ -22,10 +22,3 @@ groma:
 ---
 
 Directory cache of Directory.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [directory-validator](directory-validator.md) | Calls validator | HTTP |
-| [directory-mapper](directory-mapper.md) | Reads mapper | HTTP |

@@ -12,10 +12,3 @@ groma:
 ---
 
 Import scheduler of Import.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [import-metrics](import-metrics.md) | Calls metrics | HTTP |
-| [import-config](import-config.md) | Reads config | HTTP |

@@ -19,10 +19,3 @@ groma:
 ---
 
 Cart session of Cart.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [cart-cache](cart-cache.md) | Calls cache | HTTP |
-| [cart-validator](cart-validator.md) | Reads validator | HTTP |

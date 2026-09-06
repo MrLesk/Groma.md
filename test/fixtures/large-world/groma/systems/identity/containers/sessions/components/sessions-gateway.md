@@ -13,11 +13,3 @@ groma:
 ---
 
 Sessions gateway of Sessions.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [sessions-router](sessions-router.md) | Calls router | HTTP |
-| [sessions-session](sessions-session.md) | Reads session | HTTP |
-| [audit-gateway](../../../../identity/containers/audit/components/audit-gateway.md) | Forwards requests | HTTP |

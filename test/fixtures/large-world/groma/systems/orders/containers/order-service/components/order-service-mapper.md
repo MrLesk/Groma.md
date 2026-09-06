@@ -13,10 +13,3 @@ groma:
 ---
 
 Order Service mapper of Order Service.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [order-service-reader](order-service-reader.md) | Calls reader | HTTP |
-| [order-service-writer](order-service-writer.md) | Reads writer | HTTP |

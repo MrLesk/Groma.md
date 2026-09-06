@@ -25,10 +25,3 @@ groma:
 ---
 
 Directory validator of Directory.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [directory-mapper](directory-mapper.md) | Calls mapper | HTTP |
-| [directory-reader](directory-reader.md) | Reads reader | HTTP |

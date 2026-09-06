@@ -16,10 +16,3 @@ groma:
 ---
 
 Order Service router of Order Service.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [order-service-session](order-service-session.md) | Calls session | HTTP |
-| [order-service-cache](order-service-cache.md) | Reads cache | HTTP |

@@ -4,6 +4,7 @@ import { pointsAttribute, svg } from './svg.ts'
 
 export interface RouteNode {
   group: SVGGElement
+  ids: string[]
   source: string
   target: string
 }
@@ -35,7 +36,9 @@ export function paintRoutes(layer: SVGGElement, scene: LayeredScene): Map<string
       svg('polyline', { points: pointsAttribute(points) }, 'hit'),
       title,
     )
-    nodes.set(route.id, { group, source: route.source, target: route.target })
+    const ids = route.relationshipIds ?? [route.id]
+    const node = { group, ids, source: route.source, target: route.target }
+    for (const id of ids) nodes.set(id, node)
     interactiveRoutes.push(group)
   }
   for (const [origin, lines] of basePathsByOrigin) {

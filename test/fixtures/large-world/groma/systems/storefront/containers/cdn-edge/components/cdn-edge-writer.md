@@ -19,10 +19,3 @@ groma:
 ---
 
 Cdn Edge writer of Cdn Edge.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [cdn-edge-queue](cdn-edge-queue.md) | Calls queue | HTTP |
-| [cdn-edge-worker](cdn-edge-worker.md) | Reads worker | HTTP |

@@ -16,25 +16,25 @@ async function fixture(): Promise<string> {
   return root
 }
 
-const relation = { kind: 'relation' as const, name: 'stock', relation: 'orders', description: 'Checks availability', technology: 'Call' }
+const relation = { kind: 'relation' as const, name: 'src/stock.ts', relation: 'src/orders.ts', description: 'Checks availability', technology: 'Call' }
 
 test.concurrent('draft relationships survive edits and scans and require explicit acceptance', async () => {
   const root = await fixture()
   try {
-    const drafted = Bun.spawn(['bun', path.join(repositoryRoot, 'src/cli.ts'), 'draft', 'relation', 'stock', 'orders', '--description', relation.description, '--technology', relation.technology], { cwd: root, stderr: 'pipe' })
+    const drafted = Bun.spawn(['bun', path.join(repositoryRoot, 'src/cli.ts'), 'draft', 'relation', 'src/stock.ts', 'src/orders.ts', '--description', relation.description, '--technology', relation.technology], { cwd: root, stderr: 'pipe' })
     assert.equal(await drafted.exited, 0, await new Response(drafted.stderr).text())
     const read = async () => (await loadAnnotatedArchitecture(root)).relationships.find(row => row.source === 'stock' && row.target === 'orders')!
     assert.equal((await read()).origin, 'draft')
-    await writes.edit(root, { id: 'stock', relation: 'orders', description: 'Reserves availability' })
+    await writes.edit(root, { id: 'src/stock.ts', relation: 'src/orders.ts', description: 'Reserves availability' })
     assert.equal((await read()).origin, 'draft')
     await scanRepository(root)
     assert.equal((await read()).origin, 'draft')
-    const accepted = Bun.spawn(['bun', path.join(repositoryRoot, 'src/cli.ts'), 'accept', 'relation', 'stock', 'orders'], { cwd: root, stderr: 'pipe' })
+    const accepted = Bun.spawn(['bun', path.join(repositoryRoot, 'src/cli.ts'), 'accept', 'relation', 'src/stock.ts', 'src/orders.ts'], { cwd: root, stderr: 'pipe' })
     assert.equal(await accepted.exited, 0, await new Response(accepted.stderr).text())
     assert.equal((await read()).origin, 'observed')
-    const source = path.join(root, 'groma/systems/shop/containers/api/components/stock.md')
+    const source = path.join(root, 'groma/relationships.md')
     const before = await readFile(source, 'utf8')
-    await assert.rejects(writes.remove(root, { id: 'stock', relation: 'orders' }), /only draft relationships can be removed/)
+    await assert.rejects(writes.remove(root, { id: 'src/stock.ts', relation: 'src/orders.ts' }), /only draft relationships can be removed/)
     assert.equal(await readFile(source, 'utf8'), before)
   } finally { await rm(root, { recursive: true, force: true }) }
 })

@@ -19,10 +19,3 @@ groma:
 ---
 
 Cart writer of Cart.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [cart-queue](cart-queue.md) | Calls queue | HTTP |
-| [cart-worker](cart-worker.md) | Reads worker | HTTP |

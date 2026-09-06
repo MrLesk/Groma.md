@@ -13,10 +13,3 @@ groma:
 ---
 
 Catalog Api mapper of Catalog Api.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [catalog-api-reader](catalog-api-reader.md) | Calls reader | HTTP |
-| [catalog-api-writer](catalog-api-writer.md) | Reads writer | HTTP |

@@ -22,10 +22,3 @@ groma:
 ---
 
 Web App cache of Web App.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [web-app-validator](web-app-validator.md) | Calls validator | HTTP |
-| [web-app-mapper](web-app-mapper.md) | Reads mapper | HTTP |

@@ -19,10 +19,3 @@ groma:
 ---
 
 Pricing session of Pricing.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [pricing-cache](pricing-cache.md) | Calls cache | HTTP |
-| [pricing-validator](pricing-validator.md) | Reads validator | HTTP |

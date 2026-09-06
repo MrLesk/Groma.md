@@ -22,10 +22,3 @@ groma:
 ---
 
 Order Service cache of Order Service.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [order-service-validator](order-service-validator.md) | Calls validator | HTTP |
-| [order-service-mapper](order-service-mapper.md) | Reads mapper | HTTP |

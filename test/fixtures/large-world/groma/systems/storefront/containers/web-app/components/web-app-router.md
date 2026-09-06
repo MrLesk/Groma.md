@@ -16,10 +16,3 @@ groma:
 ---
 
 Web App router of Web App.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [web-app-session](web-app-session.md) | Calls session | HTTP |
-| [web-app-cache](web-app-cache.md) | Reads cache | HTTP |

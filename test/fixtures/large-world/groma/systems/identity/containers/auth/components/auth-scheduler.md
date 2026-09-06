@@ -12,10 +12,3 @@ groma:
 ---
 
 Auth scheduler of Auth.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [auth-metrics](auth-metrics.md) | Calls metrics | HTTP |
-| [auth-config](auth-config.md) | Reads config | HTTP |

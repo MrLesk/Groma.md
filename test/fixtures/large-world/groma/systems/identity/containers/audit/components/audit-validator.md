@@ -25,10 +25,3 @@ groma:
 ---
 
 Audit validator of Audit.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [audit-mapper](audit-mapper.md) | Calls mapper | HTTP |
-| [audit-reader](audit-reader.md) | Reads reader | HTTP |

@@ -18,10 +18,3 @@ groma:
 ---
 
 Session Store config of Session Store.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [session-store-logger](session-store-logger.md) | Calls logger | HTTP |
-| [session-store-client](session-store-client.md) | Reads client | HTTP |

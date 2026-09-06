@@ -21,9 +21,3 @@ groma:
 ---
 
 Import logger of Import.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [import-client](import-client.md) | Calls client | HTTP |

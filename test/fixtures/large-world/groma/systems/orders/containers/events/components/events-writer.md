@@ -19,10 +19,3 @@ groma:
 ---
 
 Events writer of Events.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [events-queue](events-queue.md) | Calls queue | HTTP |
-| [events-worker](events-worker.md) | Reads worker | HTTP |

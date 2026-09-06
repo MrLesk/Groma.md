@@ -25,10 +25,3 @@ groma:
 ---
 
 Pricing validator of Pricing.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [pricing-mapper](pricing-mapper.md) | Calls mapper | HTTP |
-| [pricing-reader](pricing-reader.md) | Reads reader | HTTP |

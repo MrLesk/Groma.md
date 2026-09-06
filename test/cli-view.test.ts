@@ -164,5 +164,5 @@ test('groma view fails when several elements share a code file', { concurrency: 
   const result = await run(['view', 'src/orders.ts'], root)
 
   assert.equal(result.code, 1)
-  assert.match(result.stderr, /several elements share src\/orders\.ts/)
+  assert.match(result.stderr, /source file "src\/orders\.ts" has more than one owner/)
 })

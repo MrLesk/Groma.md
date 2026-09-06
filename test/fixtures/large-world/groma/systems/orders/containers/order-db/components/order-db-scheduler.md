@@ -12,10 +12,3 @@ groma:
 ---
 
 Order Db scheduler of Order Db.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [order-db-metrics](order-db-metrics.md) | Calls metrics | HTTP |
-| [order-db-config](order-db-config.md) | Reads config | HTTP |

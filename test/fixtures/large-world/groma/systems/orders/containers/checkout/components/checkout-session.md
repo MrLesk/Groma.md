@@ -19,10 +19,3 @@ groma:
 ---
 
 Checkout session of Checkout.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [checkout-cache](checkout-cache.md) | Calls cache | HTTP |
-| [checkout-validator](checkout-validator.md) | Reads validator | HTTP |

@@ -15,10 +15,3 @@ groma:
 ---
 
 Order Service metrics of Order Service.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [order-service-config](order-service-config.md) | Calls config | HTTP |
-| [order-service-logger](order-service-logger.md) | Reads logger | HTTP |

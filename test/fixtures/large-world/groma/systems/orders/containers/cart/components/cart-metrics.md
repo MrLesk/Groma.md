@@ -15,10 +15,3 @@ groma:
 ---
 
 Cart metrics of Cart.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [cart-config](cart-config.md) | Calls config | HTTP |
-| [cart-logger](cart-logger.md) | Reads logger | HTTP |

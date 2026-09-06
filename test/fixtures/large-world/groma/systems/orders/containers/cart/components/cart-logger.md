@@ -21,9 +21,3 @@ groma:
 ---
 
 Cart logger of Cart.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [cart-client](cart-client.md) | Calls client | HTTP |

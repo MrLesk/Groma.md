@@ -200,14 +200,14 @@ function projectRelationships(
     const pair = `${ends.source.key}\0${ends.target.key}`
     const existing = pairs.get(pair)
     if (existing) {
-      existing.ids.push(route.id)
+      existing.ids.push(...route.relationshipIds ?? [route.id])
       continue
     }
     const obstacles = items.filter(item => (item.shape === 'card' || item.shape === 'row') && item.key !== ends.source.key && item.key !== ends.target.key)
     const worldRoute = routeBetween(ends.source.worldBounds, ends.target.worldBounds, obstacles.map(item => item.worldBounds))
     if (worldRoute.length < 2) continue
     pairs.set(pair, {
-      ids: [route.id],
+      ids: [...(route.relationshipIds ?? [route.id])],
       source: ends.source.key,
       target: ends.target.key,
       description: relationship.description,

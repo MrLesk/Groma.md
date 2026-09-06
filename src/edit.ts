@@ -98,7 +98,7 @@ async function elementMeaning(
 
 /** A group address or a relation target names something other than an element; the flags of elements are refused there. */
 function editAddressed(repositoryRoot: string, input: EditArchitectureInput): Promise<string | StructuralResult> | undefined {
-  if (isGroupAddress(input.id)) {
+  if (input.relation === undefined && isGroupAddress(input.id)) {
     if (input.relation !== undefined || input.overview !== undefined || input.description !== undefined
       || input.technology !== undefined || input.draft !== undefined || isStructural(input)) {
       throw new Error('only --title is valid on a group')

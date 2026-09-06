@@ -85,11 +85,11 @@ test.concurrent('a refused write reports the violated ownership rule and changes
       kind: 'component', name: 'Stock check', parent: 'api', overview: 'Checks stock levels.',
     })).status, 200)
     assert.equal((await post(server.url, 'add', {
-      thing: 'relation', name: 'orders', relation: 'stock-check', description: 'Asks before placing', technology: 'Function call',
+      thing: 'relation', name: 'buyer', relation: 'stock-check', description: 'Asks before placing', technology: 'Function call',
     })).status, 200)
     const related = await post(server.url, 'remove', { id: 'stock-check' })
     assert.equal(related.status, 400)
-    assert.equal(await related.text(), 'cannot remove stock-check: orders relate to it')
+    assert.equal(await related.text(), 'cannot remove stock-check: buyer relate to it')
   } finally {
     await server.close()
     await rm(root, { recursive: true, force: true })
@@ -177,7 +177,7 @@ test.concurrent('the web authors and edits current relationships but refuses the
   const root = await createRepo()
   const server = await startWebViewer(root, { port: 0 })
   try {
-    const ends = { name: 'stock', relation: 'orders' }
+    const ends = { name: 'src/stock.ts', relation: 'src/orders.ts' }
     const added = await post(server.url, 'add', {
       thing: 'relation', ...ends, description: 'Informs order placement', technology: 'In-process data',
     })
@@ -187,9 +187,9 @@ test.concurrent('the web authors and edits current relationships but refuses the
     ))
     const twice = await post(server.url, 'add', { thing: 'relation', ...ends, description: 'Again', technology: 'Queue' })
     assert.equal(twice.status, 400)
-    assert.match(await twice.text(), /groma edit relation stock orders/)
+    assert.match(await twice.text(), /groma edit relation/)
 
-    assert.equal((await post(server.url, 'edit', { id: 'stock', relation: 'orders', technology: 'Queue' })).status, 200)
+    assert.equal((await post(server.url, 'edit', { id: 'src/stock.ts', relation: 'src/orders.ts', technology: 'Queue' })).status, 200)
     const payload = await (await fetch(`${server.url}/world.json`)).json() as {
       world: { relationships: { source: string; target: string; description: string; technology: string }[] }
     }
@@ -197,10 +197,10 @@ test.concurrent('the web authors and edits current relationships but refuses the
     assert.equal(row?.description, 'Informs order placement')
     assert.equal(row?.technology, 'Queue')
 
-    const refused = await post(server.url, 'remove', { id: 'stock', relation: 'orders' })
+    const refused = await post(server.url, 'remove', { id: 'src/stock.ts', relation: 'src/orders.ts' })
     assert.equal(refused.status, 400)
     assert.match(await refused.text(), /only draft relationships can be removed/)
-    assert.match((await view('stock', root)).stdout, /Informs order placement/)
+    assert.match(await readFile(path.join(root, 'groma/relationships.md'), 'utf8'), /Informs order placement/)
   } finally {
     await server.close()
     await rm(root, { recursive: true, force: true })

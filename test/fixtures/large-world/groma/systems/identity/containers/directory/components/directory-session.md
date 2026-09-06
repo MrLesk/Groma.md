@@ -19,10 +19,3 @@ groma:
 ---
 
 Directory session of Directory.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [directory-cache](directory-cache.md) | Calls cache | HTTP |
-| [directory-validator](directory-validator.md) | Reads validator | HTTP |

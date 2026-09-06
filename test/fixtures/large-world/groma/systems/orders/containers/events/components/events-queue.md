@@ -22,10 +22,3 @@ groma:
 ---
 
 Events queue of Events.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [events-worker](events-worker.md) | Calls worker | HTTP |
-| [events-scheduler](events-scheduler.md) | Reads scheduler | HTTP |

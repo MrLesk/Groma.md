@@ -16,10 +16,3 @@ groma:
 ---
 
 Accounts reader of Accounts.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [accounts-writer](accounts-writer.md) | Calls writer | HTTP |
-| [accounts-queue](accounts-queue.md) | Reads queue | HTTP |

@@ -6,6 +6,7 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
-    "@groma/scanner": "workspace:*"
+    "@groma/scanner": "workspace:*",
+    "typescript": "7.1.0-dev.20260905.1"
   }
 }
