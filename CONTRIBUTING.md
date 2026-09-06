@@ -38,6 +38,19 @@ them in a single-file bytecode executable; development and compiled builds use t
 Parcel, review the patch against its platform packages and run `bun test test-bun/parcel-bytecode.test.ts`. This test
 receives native file events in both source mode and a compiled executable with no accompanying source or dependencies.
 
+## Repository structure
+
+The repository uses Bun workspaces. The directory names describe responsibility:
+
+- `packages/` contains shared contracts and reusable support code. For example, `@groma/scanner` defines the scanner
+  contract and observation format, while `@groma/work-source` defines the work-source contract.
+- `plugins/` contains packages that implement those contracts for a specific integration. Language scanners live under
+  `plugins/scanners/`, and work-source adapters live under `plugins/work-sources/`.
+- A plugin is a package with an extension role; it is not a different package format. Plugin packages depend on shared
+  package contracts. Some are embedded in the main application, while others can be configured and loaded separately.
+- Not every conceptual plugin is under `plugins/`. The TUI and web viewers are shipped with the main application under
+  `src/viewers/`; their plugin boundary describes their role, not their directory.
+
 ## Build and release versions
 
 Build a single-file executable with Bun 1.4.1 bytecode:
