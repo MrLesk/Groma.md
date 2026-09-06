@@ -1,16 +1,10 @@
-import { readFileSync } from 'node:fs'
-import path from 'node:path'
+import lockup from '../atoms/lockup.svg' with { type: 'text' }
 
 import type { GromaInitResult } from '../../../initialize.ts'
 import { escaped } from '../atoms/escape.ts'
 import { cssBlock, palettes } from '../atoms/theme.ts'
 
 type GromaDirectory = GromaInitResult['directory']
-
-const lockupPath = import.meta.dir?.includes('$bunfs') === true
-  ? path.join(import.meta.dir!, 'lockup.svg')
-  : new URL('../atoms/lockup.svg', import.meta.url)
-const lockup = readFileSync(lockupPath, 'utf8')
 
 interface SetupPage {
   projectName: string
