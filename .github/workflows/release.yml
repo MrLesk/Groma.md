@@ -1,0 +1,382 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*.*.*']
+
+permissions:
+  contents: write
+  id-token: write
+
+env:
+  BUN_VERSION: 1.4.1
+  NODE_VERSION: 22
+
+jobs:
+  validate:
+    name: validate-release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+      - name: Set version from tag
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          version="${RELEASE_TAG#v}"
+          node - "$version" <<'NODE'
+          const fs = require('node:fs')
+          const [version] = process.argv.slice(2)
+          const filename = 'package.json'
+          const manifest = JSON.parse(fs.readFileSync(filename, 'utf8'))
+          manifest.version = version
+          fs.writeFileSync(filename, `${JSON.stringify(manifest, null, 2)}\n`)
+          NODE
+      - name: Install all Bun target dependencies
+        run: bun install --frozen-lockfile --os="*" --cpu="*"
+      - name: Run repository checks
+        run: bun run check
+
+  build:
+    name: build-${{ matrix.target }}
+    needs: validate
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            target: bun-linux-x64-baseline
+            binary: groma
+            package: groma.md-linux-x64
+            npm_os: linux
+            npm_cpu: x64
+          - runner: ubuntu-24.04-arm
+            target: bun-linux-arm64
+            binary: groma
+            package: groma.md-linux-arm64
+            npm_os: linux
+            npm_cpu: arm64
+          - runner: macos-15-intel
+            target: bun-darwin-x64
+            binary: groma
+            package: groma.md-darwin-x64
+            npm_os: darwin
+            npm_cpu: x64
+          - runner: macos-15
+            target: bun-darwin-arm64
+            binary: groma
+            package: groma.md-darwin-arm64
+            npm_os: darwin
+            npm_cpu: arm64
+          - runner: windows-latest
+            target: bun-windows-x64-baseline
+            binary: groma.exe
+            package: groma.md-windows-x64
+            npm_os: win32
+            npm_cpu: x64
+          - runner: windows-11-arm
+            target: bun-windows-arm64
+            binary: groma.exe
+            package: groma.md-windows-arm64
+            npm_os: win32
+            npm_cpu: arm64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+      - name: Set version from tag
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          version="${RELEASE_TAG#v}"
+          node - "$version" <<'NODE'
+          const fs = require('node:fs')
+          const [version] = process.argv.slice(2)
+          const filename = 'package.json'
+          const manifest = JSON.parse(fs.readFileSync(filename, 'utf8'))
+          manifest.version = version
+          fs.writeFileSync(filename, `${JSON.stringify(manifest, null, 2)}\n`)
+          NODE
+        shell: bash
+      - name: Install all Bun target dependencies
+        run: bun install --frozen-lockfile --os="*" --cpu="*"
+        shell: bash
+      - name: Build standalone binary
+        env:
+          GROMA_BUILD_TARGET: ${{ matrix.target }}
+          GROMA_BUILD_OUTFILE: dist/${{ matrix.binary }}
+        run: bun scripts/build.ts
+        shell: bash
+      - name: Make Unix binary executable
+        if: matrix.npm_os != 'win32'
+        run: chmod +x "dist/${{ matrix.binary }}"
+        shell: bash
+      - name: Smoke-test binary in the checkout
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          version="${RELEASE_TAG#v}"
+          bun scripts/smoke-compiled-build.ts "dist/${{ matrix.binary }}" "$version"
+        shell: bash
+      - name: Smoke-test binary outside the checkout
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          version="${RELEASE_TAG#v}"
+          isolated="$RUNNER_TEMP/groma-isolated-${{ matrix.target }}"
+          mkdir -p "$isolated"
+          cp "dist/${{ matrix.binary }}" "$isolated/${{ matrix.binary }}"
+          if [[ "${{ matrix.npm_os }}" != "win32" ]]; then
+            chmod +x "$isolated/${{ matrix.binary }}"
+          fi
+          bun scripts/smoke-compiled-build.ts "$isolated/${{ matrix.binary }}" "$version"
+          "$isolated/${{ matrix.binary }}" agent-instructions >/dev/null
+        shell: bash
+      - uses: actions/upload-artifact@v4
+        with:
+          name: groma-${{ matrix.target }}
+          path: dist/${{ matrix.binary }}
+          if-no-files-found: error
+
+  github-release:
+    name: github-release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: release-artifacts
+      - name: Assemble release binaries and checksums
+        run: |
+          mkdir -p release
+          for artifact in release-artifacts/groma-*/; do
+            target="${artifact#release-artifacts/groma-}"
+            target="${target%/}"
+            binary="$(find "$artifact" -maxdepth 1 -type f | head -1)"
+            if [[ "$binary" == *.exe ]]; then
+              name="groma-${target}.exe"
+            else
+              name="groma-${target}"
+            fi
+            cp "$binary" "release/$name"
+          done
+          (cd release && sha256sum groma-* > SHA256SUMS)
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release create "$GITHUB_REF_NAME" release/* --generate-notes
+
+  publish-platform:
+    name: publish-${{ matrix.package }}
+    needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: bun-linux-x64-baseline
+            binary: groma
+            package: groma.md-linux-x64
+            npm_os: linux
+            npm_cpu: x64
+          - target: bun-linux-arm64
+            binary: groma
+            package: groma.md-linux-arm64
+            npm_os: linux
+            npm_cpu: arm64
+          - target: bun-darwin-x64
+            binary: groma
+            package: groma.md-darwin-x64
+            npm_os: darwin
+            npm_cpu: x64
+          - target: bun-darwin-arm64
+            binary: groma
+            package: groma.md-darwin-arm64
+            npm_os: darwin
+            npm_cpu: arm64
+          - target: bun-windows-x64-baseline
+            binary: groma.exe
+            package: groma.md-windows-x64
+            npm_os: win32
+            npm_cpu: x64
+          - target: bun-windows-arm64
+            binary: groma.exe
+            package: groma.md-windows-arm64
+            npm_os: win32
+            npm_cpu: arm64
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: groma-${{ matrix.target }}
+          path: artifact
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          registry-url: https://registry.npmjs.org
+      - name: Prepare platform package
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          version="${RELEASE_TAG#v}"
+          mkdir -p package
+          cp "artifact/${{ matrix.binary }}" "package/${{ matrix.binary }}"
+          cp LICENSE package/
+          if [[ "${{ matrix.npm_os }}" != "win32" ]]; then
+            chmod +x "package/${{ matrix.binary }}"
+          fi
+          node - "$version" "${{ matrix.package }}" "${{ matrix.npm_os }}" "${{ matrix.npm_cpu }}" "${{ matrix.binary }}" <<'NODE'
+          const fs = require('node:fs')
+          const [version, name, os, cpu, binary] = process.argv.slice(2)
+          const manifest = {
+            name,
+            version,
+            description: 'Groma standalone architecture CLI',
+            license: 'MIT',
+            repository: { type: 'git', url: 'https://github.com/MrLesk/Groma.md.git' },
+            os: [os],
+            cpu: [cpu],
+            files: [binary, 'package.json', 'LICENSE'],
+          }
+          fs.writeFileSync('package/package.json', `${JSON.stringify(manifest, null, 2)}\n`)
+          NODE
+        shell: bash
+      - name: Use npm 11 for trusted publishing
+        run: npm install --global npm@11
+      - name: Dry-run platform publication
+        working-directory: package
+        run: npm publish --access public --dry-run
+      - name: Publish platform package
+        working-directory: package
+        run: npm publish --access public
+        env:
+          NPM_CONFIG_PROVENANCE: true
+
+  publish-wrapper:
+    name: publish-groma.md
+    needs: publish-platform
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          registry-url: https://registry.npmjs.org
+      - name: Prepare npm wrapper package
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          version="${RELEASE_TAG#v}"
+          mkdir -p package
+          cp scripts/npm/cli.cjs package/cli.cjs
+          cp README.md LICENSE package/
+          node - "$version" <<'NODE'
+          const fs = require('node:fs')
+          const root = JSON.parse(fs.readFileSync('package.json', 'utf8'))
+          const [version] = process.argv.slice(2)
+          const platformPackages = [
+            'groma.md-linux-x64',
+            'groma.md-linux-arm64',
+            'groma.md-darwin-x64',
+            'groma.md-darwin-arm64',
+            'groma.md-windows-x64',
+            'groma.md-windows-arm64',
+          ]
+          const manifest = {
+            name: root.name,
+            version,
+            description: root.description,
+            license: root.license,
+            author: root.author,
+            homepage: root.homepage,
+            repository: root.repository,
+            bugs: root.bugs,
+            keywords: root.keywords,
+            engines: { node: '>=20.19.0' },
+            bin: { groma: 'cli.cjs' },
+            files: ['cli.cjs', 'package.json', 'README.md', 'LICENSE'],
+            optionalDependencies: Object.fromEntries(platformPackages.map(name => [name, version])),
+          }
+          fs.writeFileSync('package/package.json', `${JSON.stringify(manifest, null, 2)}\n`)
+          NODE
+        shell: bash
+      - name: Use npm 11 for trusted publishing
+        run: npm install --global npm@11
+      - name: Dry-run wrapper publication
+        working-directory: package
+        run: npm publish --access public --dry-run
+      - name: Publish groma.md
+        working-directory: package
+        run: npm publish --access public
+        env:
+          NPM_CONFIG_PROVENANCE: true
+
+  install-sanity:
+    name: install-sanity-${{ matrix.os }}
+    needs: publish-wrapper
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          registry-url: https://registry.npmjs.org
+      - name: Install and run the published package
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          version="${RELEASE_TAG#v}"
+          for attempt in $(seq 1 30); do
+            directory="$(mktemp -d "$RUNNER_TEMP/groma-install.XXXXXX")"
+            cd "$directory"
+            npm init -y >/dev/null 2>&1
+            if npm install "groma.md@$version" --prefer-online --no-audit --no-fund \
+              && test "$(npx --no-install groma --version)" = "$version" \
+              && npx --no-install groma --help >/dev/null; then
+              echo "groma.md@$version install succeeded on attempt $attempt/30"
+              exit 0
+            fi
+            echo "attempt $attempt/30 failed; waiting for npm package propagation"
+            if [[ "$attempt" -lt 30 ]]; then sleep 10; fi
+          done
+          echo "groma.md@$version was not installable after 30 attempts"
+          exit 1
+        shell: bash
+
+  sync-version:
+    name: sync-version-to-main
+    needs: [github-release, install-sanity]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Set released version in main checkout
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          version="${RELEASE_TAG#v}"
+          node - "$version" <<'NODE'
+          const fs = require('node:fs')
+          const [version] = process.argv.slice(2)
+          const filename = 'package.json'
+          const manifest = JSON.parse(fs.readFileSync(filename, 'utf8'))
+          manifest.version = version
+          fs.writeFileSync(filename, `${JSON.stringify(manifest, null, 2)}\n`)
+          NODE
+        shell: bash
+      - name: Commit released version to main
+        uses: stefanzweifel/git-auto-commit-action@v7
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: 'chore: sync groma.md version to ${{ github.ref_name }}'
+          branch: main
+          file_pattern: package.json
