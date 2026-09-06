@@ -68,8 +68,13 @@ export async function loadScannerRegistry(
       return scanners.some(scanner => scanner.matchesFile(relativePath))
     },
     async collectObservations(root) {
-      const observations = await Promise.all(scanners.map(scanner => scanner.scan(root)))
-      return observations.filter(observation => observation !== undefined)
+      // Every scanner finishes before a failure surfaces, so none keeps a child process in the repository.
+      const results = await Promise.allSettled(scanners.map(scanner => scanner.scan(root)))
+      const failed = results.find((result): result is PromiseRejectedResult => result.status === 'rejected')
+      if (failed !== undefined) throw failed.reason
+      return results
+        .map(result => (result as PromiseFulfilledResult<ScanObservation | undefined>).value)
+        .filter(observation => observation !== undefined)
     },
   }
 }

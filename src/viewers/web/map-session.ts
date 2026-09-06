@@ -177,6 +177,7 @@ export async function createWebMapSession(
 
   const sourceWatch = await watchScan(repositoryRoot, {
     onFold: publishWorld,
+    onError: error => console.error(error instanceof Error ? error.message : String(error)),
   })
   const architectureWatch = await watchArchitecture(repositoryRoot, {
     onChange: publishWorld,

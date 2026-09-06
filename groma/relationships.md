@@ -118,7 +118,7 @@ title: Architecture relationships
 | [src/scanner.ts](../src/scanner.ts) | [src/cli.ts](../src/cli.ts) | Invokes supplied onError callback; Invokes supplied onFold callback | typescript |
 | [src/scanner.ts](../src/scanner.ts) | [src/view-host.ts](../src/view-host.ts) | Invokes supplied onFold callback | typescript |
 | [src/scanner.ts](../src/scanner.ts) | [src/viewers/web/export.ts](../src/viewers/web/export.ts) | Invokes supplied onFold callback | typescript |
-| [src/scanner.ts](../src/scanner.ts) | [src/viewers/web/map-session.ts](../src/viewers/web/map-session.ts) | Invokes supplied onFold callback | typescript |
+| [src/scanner.ts](../src/scanner.ts) | [src/viewers/web/map-session.ts](../src/viewers/web/map-session.ts) | Invokes supplied onError callback; Invokes supplied onFold callback | typescript |
 | [src/viewers/tui/panes/screen.ts](../src/viewers/tui/panes/screen.ts) | [src/viewers/tui/terminal-viewer.ts](../src/viewers/tui/terminal-viewer.ts) | Invokes supplied onHierarchyRow callback; Invokes supplied onMapCell callback | typescript |
 | [src/viewers/tui/terminal-viewer.ts](../src/viewers/tui/terminal-viewer.ts) | [src/view-host.ts](../src/view-host.ts) | Invokes supplied onRefresh callback; Invokes supplied readSource callback; Invokes supplied readStructure callback; Invokes supplied readTask callback; Invokes supplied readTaskDiff callback | typescript |
 | [src/viewers/web/authoring.ts](../src/viewers/web/authoring.ts) | [src/viewers/web/render.ts](../src/viewers/web/render.ts) | Invokes supplied live callback; Invokes supplied world callback | typescript |

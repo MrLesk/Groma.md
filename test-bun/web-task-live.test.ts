@@ -140,7 +140,7 @@ test.concurrent('groma web opens without a global Backlog command', async () => 
     assert.equal(response.status, 200)
     assert.deepEqual(payload.work.items, [])
   } finally {
-    server.close()
+    await server.close()
     await rm(path.dirname(root), { recursive: true, force: true })
   }
 })
