@@ -27,9 +27,13 @@ Groma is **free, MIT-licensed, and local**. Its built-in scanner and viewers wor
 
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset=".github/assets/web-dark.gif">
-    <source media="(prefers-color-scheme: light)" srcset=".github/assets/web-light.gif">
-    <img src=".github/assets/web-light.png" alt="Groma's browser architecture map zoomed into the Web shell component" width="100%">
+    <source media="(prefers-color-scheme: dark)" type="image/avif" srcset=".github/assets/web-dark.avif">
+    <source media="(prefers-color-scheme: dark)" type="image/webp" srcset=".github/assets/web-dark.webp">
+    <source media="(prefers-color-scheme: dark)" type="image/gif" srcset=".github/assets/web-dark.gif">
+    <source media="(prefers-color-scheme: light)" type="image/avif" srcset=".github/assets/web-light.avif">
+    <source media="(prefers-color-scheme: light)" type="image/webp" srcset=".github/assets/web-light.webp">
+    <source media="(prefers-color-scheme: light)" type="image/gif" srcset=".github/assets/web-light.gif">
+    <img src=".github/assets/web-light.gif" alt="Groma's browser architecture map zoomed into the Web shell component" width="100%">
   </picture>
 </p>
 
