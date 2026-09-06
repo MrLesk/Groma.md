@@ -4,6 +4,8 @@ Feature: Read in the shared Web details panel
     Given an architect is reading an element, relationship, flow or task
     When they expand the details panel
     Then the same content has more reading space
+    And the panel grows smoothly while the content keeps its final line breaks
+    And the Edit, Expand and Close controls stay in place
     And the selection, hierarchy and map camera stay unchanged
     And the hierarchy remains available when there is enough screen space
     When they collapse the panel
@@ -23,3 +25,10 @@ Feature: Read in the shared Web details panel
     Then the shared panel expands for code reading
     When they return to the preceding details
     Then the panel returns to its compact width
+
+  Scenario: Fit the panel to the reading surface
+    Given an architect expands normal details on a desktop
+    Then the panel fits a 640px content column with normal padding
+    When they inspect a source file or task diff
+    Then the shared panel uses its wider code reading width
+    And either reader fits the available width on a narrow screen
