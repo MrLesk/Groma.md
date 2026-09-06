@@ -10,8 +10,6 @@ groma:
     - scanner: typescript
       file: src/viewers/web/search/session.ts
       symbol: createSearchSession
-      dependencies: 6
-      dependents: 1
 ---
 
 Saves selection, details tab and camera when search opens. Previews architecture or a task’s mapped elements without committing selection; cancel restores the saved view, while task acceptance uses the shared task-opening action.

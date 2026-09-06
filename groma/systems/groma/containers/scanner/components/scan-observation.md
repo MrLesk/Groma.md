@@ -9,8 +9,6 @@ groma:
   code:
     - scanner: typescript
       file: packages/scanner/src/index.ts
-      dependencies: 0
-      dependents: 0
 ---
 
 Publishes the scanner-module interface and validates complete language-neutral observations for source files, scopes, placements, source dependencies, and diagnostics.

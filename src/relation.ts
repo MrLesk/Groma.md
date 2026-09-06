@@ -3,6 +3,7 @@ import path from 'node:path'
 import { buildArchitectureModel } from './architecture-model.ts'
 import { loadArchitecture } from './architecture-reader.ts'
 import { resolveFlows } from './flow-model.ts'
+import { GromaFileSystem } from './groma-filesystem.ts'
 import {
   readDocument,
   withoutRelationship,
@@ -11,9 +12,12 @@ import {
   validateElementSource,
 } from './markdown-emitter.ts'
 import { requireText } from './naming.ts'
-import type { ArchitectureDocument, ArchitectureElement, ArchitectureRelationship, ElementStatus } from './types.ts'
+import { RELATIONSHIPS_TYPE } from './okf-profile.ts'
+import { storedConnections } from './relationship-markdown.ts'
+import { fileOwners } from './source-relationships.ts'
+import type { ArchitectureDocument, ArchitectureElement, RelationshipConnection, ElementStatus } from './types.ts'
 
-/** The two ends of a relationship: the source owns the row, the target is what it uses. */
+/** Code interactions use repository-relative files; actor/external declarations may use concept IDs. */
 export interface RelationEnds {
   source: string
   target: string
@@ -26,65 +30,78 @@ export interface RelationInput extends RelationEnds {
 
 interface Ends {
   documents: ArchitectureDocument[]
+  records: Awaited<ReturnType<typeof loadArchitecture>>
+  model: ReturnType<typeof buildArchitectureModel>
+  input: RelationEnds
   source: ArchitectureElement
   target: ArchitectureElement
-  /** The row the source already holds for this target; one at most once Groma wrote it. */
-  row: ArchitectureRelationship | undefined
+  row: RelationshipConnection | undefined
 }
 
-interface Sentence {
-  description: string
-  technology: string
-  status: ElementStatus
-}
+type Sentence = Pick<RelationshipConnection, 'description' | 'technology' | 'status'>
 
-async function loadEnds(repositoryRoot: string, ends: RelationEnds): Promise<Ends> {
-  const { documents } = await loadArchitecture(repositoryRoot)
+async function loadEnds(repositoryRoot: string, input: RelationEnds): Promise<Ends> {
+  const records = await loadArchitecture(repositoryRoot)
+  const { documents } = records
   const model = buildArchitectureModel(documents)
-  const source = model.elements.find(element => element.id === ends.source)
-  if (source === undefined) throw new Error(`unknown source "${ends.source}"`)
-  const target = model.elements.find(element => element.id === ends.target)
-  if (target === undefined) throw new Error(`unknown target "${ends.target}"`)
-  const row = model.relationships.find(item => item.sourceId === source.id && item.targetId === target.id)
-  return { documents, source, target, row }
+  const owners = fileOwners(model.elements)
+  const source = owners.get(input.source) ?? model.elements.find(element => element.id === input.source)
+  if (!source) throw new Error(`unknown source "${input.source}"`)
+  const target = owners.get(input.target) ?? model.elements.find(element => element.id === input.target)
+  if (!target) throw new Error(`unknown target "${input.target}"`)
+  const declaredConcept = [source, target].some(element => element.kind === 'actor' || element.external)
+  if (!declaredConcept && (!owners.has(input.source) || !owners.has(input.target))) {
+    throw new Error('code relationships require source-file endpoints')
+  }
+  const connections = storedConnections(documents, model.elements, (_code, filename, message) => {
+    throw new Error(`${filename}: ${message}`)
+  })
+  const row = [...connections].sort((left, right) => Number(right.authored) - Number(left.authored))
+    .find(item => item.source === input.source && item.target === input.target)
+  return { documents, records, model, input, source, target, row }
 }
 
-function requireRow(ends: Ends): ArchitectureRelationship {
-  if (ends.row === undefined) throw new Error(`${ends.source.id} does not relate to ${ends.target.id}`)
+function requireRow(ends: Ends): RelationshipConnection {
+  if (!ends.row) throw new Error(`${ends.input.source} does not relate to ${ends.input.target}`)
   return ends.row
 }
 
-/** Rewrites the source document: the dropped row leaves and the added one joins the Relationships table. */
+function endpointLink(value: string, element: ArchitectureElement, filename: string): { name: string; href: string } {
+  const isFile = element.code.some(reference => reference.file === value)
+  return {
+    name: isFile ? value : element.title,
+    href: path.posix.relative(path.posix.dirname(filename), isFile ? value : element.sourceFilename),
+  }
+}
+
 async function writeRow(
   repositoryRoot: string,
   ends: Ends,
-  change: { drop?: ArchitectureRelationship; add?: Sentence },
+  change: { drop?: RelationshipConnection; add?: Sentence },
 ): Promise<string> {
-  const targetHref = path.posix.relative(path.posix.dirname(ends.source.sourceFilename), ends.target.sourceFilename)
-  let document = await readDocument(repositoryRoot, ends.source.sourceFilename)
-  if (change.drop !== undefined) {
-    document = withoutRelationship(document, { targetHref, ...change.drop })
-  }
-  if (change.add !== undefined) document = withRelationship(document, { targetName: ends.target.title, targetHref, ...change.add })
-  await validateElementSource(ends.documents, ends.source.sourceFilename, document)
-  await writeDocument(repositoryRoot, ends.source.sourceFilename, document)
+  const filename = GromaFileSystem.open(repositoryRoot).sourceFilename('relationships.md')
+  const source = endpointLink(ends.input.source, ends.source, filename)
+  const target = endpointLink(ends.input.target, ends.target, filename)
+  let document = ends.documents.some(record => record.sourceFilename === filename)
+    ? await readDocument(repositoryRoot, filename)
+    : `---\ntype: ${RELATIONSHIPS_TYPE}\ntitle: Architecture relationships\n---\n`
+  const links = { sourceName: source.name, sourceHref: source.href, targetName: target.name, targetHref: target.href }
+  if (change.drop) document = withoutRelationship(document, { ...links, ...change.drop })
+  if (change.add) document = withRelationship(document, { ...links, ...change.add })
+  await validateElementSource(ends.documents, filename, document)
+  await writeDocument(repositoryRoot, filename, document)
   return ends.source.id
 }
 
-/** Writes the one relationship from the source to the target on the source document. */
+/** Authored text takes ownership of the current interaction for these exact endpoints. */
 export async function addRelation(repositoryRoot: string, input: RelationInput, status: ElementStatus = 'stable'): Promise<string> {
   const description = requireText(input.description, '--description')
   const technology = requireText(input.technology, '--technology')
   const ends = await loadEnds(repositoryRoot, input)
-  if (ends.row !== undefined) {
-    throw new Error(
-      `${ends.source.id} already relates to ${ends.target.id}; to reword it, run: groma edit relation ${ends.source.id} ${ends.target.id}`,
-    )
-  }
-  return writeRow(repositoryRoot, ends, { add: { description, technology, status } })
+  if (ends.row?.authored) throw new Error(`${input.source} already relates to ${input.target}; use groma edit relation`)
+  return writeRow(repositoryRoot, ends, { drop: status === 'stable' ? ends.row : undefined, add: { description, technology, status } })
 }
 
-/** Rewords the relationship; a flag left out keeps its current text. */
 export async function editRelation(repositoryRoot: string, input: RelationInput): Promise<string> {
   if (input.description === undefined && input.technology === undefined) {
     throw new Error('--description or --technology is required')
@@ -101,21 +118,19 @@ export async function editRelation(repositoryRoot: string, input: RelationInput)
   })
 }
 
-/** Acceptance records the author's decision; scans never accept a planned interaction. */
 export async function acceptRelation(repositoryRoot: string, input: RelationEnds): Promise<string> {
   const ends = await loadEnds(repositoryRoot, input)
   const current = requireRow(ends)
-  if (current.status !== 'draft') throw new Error('not a draft relationship')
+  if (!current.authored || current.status !== 'draft') throw new Error('not a draft relationship')
   return writeRow(repositoryRoot, ends, { drop: current, add: { ...current, status: 'stable' } })
 }
 
 export async function removeRelation(repositoryRoot: string, input: RelationEnds): Promise<string> {
-  const records = await loadArchitecture(repositoryRoot)
-  const flows = resolveFlows(records.flows, buildArchitectureModel(records.documents))
-    .filter(flow => flow.steps.some(step => step.source === input.source && step.target === input.target))
-  if (flows.length > 0) throw new Error(`cannot remove relationship: used by flows ${flows.map(flow => flow.id).join(', ')}`)
   const ends = await loadEnds(repositoryRoot, input)
   const current = requireRow(ends)
-  if (current.status !== 'draft') throw new Error('only draft relationships can be removed')
+  const flows = resolveFlows(ends.records.flows, ends.model)
+    .filter(flow => flow.steps.some(step => step.source === ends.source.id && step.target === ends.target.id))
+  if (flows.length) throw new Error(`cannot remove relationship: used by flows ${flows.map(flow => flow.id).join(', ')}`)
+  if (!current.authored || current.status !== 'draft') throw new Error('only draft relationships can be removed')
   return writeRow(repositoryRoot, ends, { drop: current })
 }

@@ -43,6 +43,22 @@ export interface ScanDiagnostic {
   message: string
 }
 
+export interface ScanOperation {
+  id: string
+  file: string
+  name: string
+}
+
+export interface ScanInvocation {
+  source: string
+  targets: string[]
+  unresolved: boolean
+  /** A concrete argument binding distinguishes supplied callbacks from direct calls. */
+  binding?: { file: string; line: number }
+  line: number
+  member?: string
+}
+
 export interface ScanObservation {
   schemaVersion: 1
   scanner: ScannerIdentity
@@ -52,6 +68,9 @@ export interface ScanObservation {
   files: ScanFile[]
   placements: ScanPlacement[]
   relationships: ScanRelationship[]
+  /** Omitted when a scanner does not extract operation evidence. Never persisted as a graph. */
+  operations?: ScanOperation[]
+  invocations?: ScanInvocation[]
   diagnostics: ScanDiagnostic[]
 }
 
@@ -139,6 +158,7 @@ export function createScanObservation(input: ObservationInput): ScanObservation 
     files,
     placements,
     relationships,
+    ...operationEvidence(input, filePaths),
     diagnostics: [...new Map(input.diagnostics.map(diagnostic => [
       compare(diagnostic.severity, diagnostic.code, diagnostic.message),
       diagnostic,
@@ -184,6 +204,7 @@ export function parseScanObservation(source: string): ScanObservation {
       name: string(root.name, 'root.name'),
       file: string(root.file, 'root.file'),
     },
+    ...parseOperations(value),
     scopes: array(value.scopes, 'scopes').map((entry, index) => {
       const scope = object(entry, `scopes[${index}]`)
       return {
@@ -229,4 +250,52 @@ export function parseScanObservation(source: string): ScanObservation {
       }
     }),
   })
+}
+
+function parseOperations(value: Record<string, unknown>): Pick<ScanObservation, 'operations' | 'invocations'> {
+  if (value.operations === undefined) {
+    if (value.invocations !== undefined) throw new Error('invocations require operation declarations')
+    return {}
+  }
+  const operations = array(value.operations, 'operations').map(entry => {
+    const operation = object(entry, 'operation')
+    return { id: string(operation.id, 'operation.id'), file: string(operation.file, 'operation.file'), name: string(operation.name, 'operation.name') }
+  })
+  const invocations = array(value.invocations, 'invocations').map(entry => {
+    const invocation = object(entry, 'invocation')
+    if (typeof invocation.unresolved !== 'boolean') throw new Error('invocation.unresolved must be a boolean')
+    if (!Number.isInteger(invocation.line) || Number(invocation.line) < 1) throw new Error('invocation.line must be a positive integer')
+    const binding = invocation.binding === undefined ? undefined : object(invocation.binding, 'invocation.binding')
+    if (binding && (!Number.isInteger(binding.line) || Number(binding.line) < 1)) throw new Error('binding.line must be a positive integer')
+    return {
+      source: string(invocation.source, 'invocation.source'),
+      targets: array(invocation.targets, 'invocation.targets').map(target => string(target, 'invocation.target')),
+      unresolved: invocation.unresolved,
+      line: Number(invocation.line),
+      ...(invocation.member === undefined ? {} : { member: string(invocation.member, 'invocation.member') }),
+      ...(binding === undefined ? {} : { binding: { file: string(binding.file, 'binding.file'), line: Number(binding.line) } }),
+    }
+  })
+  return { operations, invocations }
+}
+
+function operationEvidence(input: ObservationInput, files: Set<string>): Pick<ScanObservation, 'operations' | 'invocations'> {
+  if (input.operations === undefined && input.invocations !== undefined) throw new Error('invocations require operation declarations')
+  if (input.operations === undefined) return {}
+  const operations = uniqueBy(input.operations, operation => operation.id, 'operation id')
+  const ids = new Set(operations.map(operation => operation.id))
+  for (const operation of operations) {
+    if (!files.has(operation.file)) throw new Error(`operation references unknown file: ${operation.file}`)
+  }
+  const invocations = input.invocations ?? []
+  for (const invocation of invocations) validateInvocation(invocation, ids, files)
+  return { operations, invocations }
+}
+
+function validateInvocation(invocation: ScanInvocation, ids: Set<string>, files: Set<string>): void {
+  if (!invocation.targets.length && !invocation.unresolved) throw new Error('an empty target set must be unresolved')
+  if (!ids.has(invocation.source) || invocation.targets.some(target => !ids.has(target))) {
+    throw new Error('invocation references unknown operation')
+  }
+  if (invocation.binding && !files.has(invocation.binding.file)) throw new Error('invocation binding references unknown file')
 }

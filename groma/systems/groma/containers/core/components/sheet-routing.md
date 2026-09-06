@@ -10,20 +10,17 @@ groma:
     - scanner: typescript
       file: src/sheet/route.ts
       symbol: routeAll
-      dependencies: 4
-      dependents: 1
     - scanner: typescript
       file: src/sheet/route-geometry.ts
-      dependencies: 3
-      dependents: 3
-    - scanner: typescript
-      file: src/sheet/route-lanes.ts
-      dependencies: 2
-      dependents: 1
     - scanner: typescript
       file: src/sheet/route-spacing.ts
-      dependencies: 1
-      dependents: 2
+    - scanner: typescript
+      file: src/sheet/route-grid.ts
+    - scanner: typescript
+      file: src/sheet/route-search.ts
+      symbol: RouteSearch
+    - scanner: typescript
+      file: src/sheet/route-finish.ts
 ---
 
-Routes every authored relationship on one ground plane with deterministic ports, obstacle clearance, and separated orthogonal lanes.
+Routes every visible relationship on one ground plane with deterministic ports, obstacle clearance, and distinct orthogonal paths.

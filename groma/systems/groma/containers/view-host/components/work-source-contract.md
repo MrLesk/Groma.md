@@ -9,8 +9,6 @@ groma:
   code:
     - scanner: typescript
       file: packages/work-source/src/index.ts
-      dependencies: 0
-      dependents: 0
 ---
 
 Defines the public work snapshot, selected-item detail, watch lifecycle,

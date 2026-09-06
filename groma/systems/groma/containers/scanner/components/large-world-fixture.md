@@ -9,6 +9,4 @@ groma:
     - scanner: typescript
       file: scripts/large-world-fixture.ts
       symbol: writeLargeWorld
-      dependencies: 0
-      dependents: 0
 ---

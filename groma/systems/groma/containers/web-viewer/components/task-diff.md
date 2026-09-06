@@ -9,21 +9,8 @@ groma:
   code:
     - scanner: typescript
       file: src/viewers/web/task-diff/control.ts
-      dependencies: 3
-      dependents: 1
     - scanner: typescript
       file: src/viewers/web/task-diff/view.ts
-      dependencies: 6
-      dependents: 2
 ---
 
 Controls browser task-file selection and presents unified diffs inside Details.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [Revision history](revision-history.md) | Reads exact task commits and file versions | Git |
-| [Source viewer](source-viewer.md) | Reuses source highlighting and drill-down | DOM and CSS |
-| [Web server](web-server.md) | Loads task diffs only after selection | JSON |
-| [Source inspection](../../view-host/components/read-read.md) | Reads the selected task file diff | TypeScript |

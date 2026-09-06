@@ -15,20 +15,6 @@ function requiredString(
   return value as string
 }
 
-function optionalCount(
-  record: Record<string, unknown>,
-  field: 'dependencies' | 'dependents',
-  index: number,
-  invalid: InvalidReference,
-): number | undefined {
-  const value = record[field]
-  if (value === undefined) return undefined
-  if (!Number.isInteger(value) || Number(value) < 0) {
-    invalid(`code[${index}] ${field} must be a non-negative integer`)
-  }
-  return Number(value)
-}
-
 function referenceOf(
   value: unknown,
   index: number,
@@ -39,7 +25,7 @@ function referenceOf(
   }
   const record = value as Record<string, unknown>
   const unknownFields = Object.keys(record).filter(field => {
-    return !['scanner', 'file', 'symbol', 'dependencies', 'dependents'].includes(field)
+    return !['scanner', 'file', 'symbol'].includes(field)
   })
   if (unknownFields.length > 0) {
     invalid(`code[${index}] has unsupported field(s): ${unknownFields.join(', ')}`)
@@ -47,14 +33,10 @@ function referenceOf(
   if (record.symbol !== undefined && typeof record.symbol !== 'string') {
     invalid(`code[${index}] symbol must be a string`)
   }
-  const dependencies = optionalCount(record, 'dependencies', index, invalid)
-  const dependents = optionalCount(record, 'dependents', index, invalid)
   return {
     scanner: requiredString(record, 'scanner', index, invalid),
     file: requiredString(record, 'file', index, invalid),
     ...(typeof record.symbol === 'string' ? { symbol: record.symbol } : {}),
-    ...(dependencies === undefined ? {} : { dependencies }),
-    ...(dependents === undefined ? {} : { dependents }),
   }
 }
 

@@ -1,8 +1,10 @@
-import { elementOverview, extractRelationships } from './architecture-markdown.ts'
+import { elementOverview } from './architecture-markdown.ts'
 import { isExternalPath, isReservedDocument } from './architecture-path.ts'
 import { codeReferencesOf } from './code-reference.ts'
 import { kebabCase } from './naming.ts'
-import { DRAFT_TYPE, c4Kind, requireGromaMapping } from './okf-profile.ts'
+import { DRAFT_TYPE, RELATIONSHIPS_TYPE, c4Kind, requireGromaMapping } from './okf-profile.ts'
+import { storedConnections } from './relationship-markdown.ts'
+import { sourceRelationships } from './source-relationships.ts'
 import type {
   ArchitectureDocument,
   ArchitectureElement,
@@ -239,9 +241,9 @@ export function buildArchitectureModel(
     .sort((left, right) => compareStrings(left.sourceFilename, right.sourceFilename))
   const elements: ArchitectureElement[] = []
   const elementsById = new Map<string, ArchitectureElement>()
-  const elementsBySourceFilename = new Map<string, ArchitectureElement>()
 
   for (const document of documents) {
+    if (document.frontmatter.type === RELATIONSHIPS_TYPE) continue
     const element = documentToElement(document)
     validateElementLocation(element)
     const first = elementsById.get(element.id)
@@ -256,7 +258,6 @@ export function buildArchitectureModel(
 
     elements.push(element)
     elementsById.set(element.id, element)
-    elementsBySourceFilename.set(element.sourceFilename, element)
   }
 
   validateContainment(elements, elementsById)
@@ -264,13 +265,13 @@ export function buildArchitectureModel(
 
   return deepFreeze({
     elements,
-    relationships: extractRelationships(
+    relationships: sourceRelationships(elements, storedConnections(
       documents,
-      elementsBySourceFilename,
+      elements,
       (code, filename, message) => {
         throw new ArchitectureModelError(code, filename, message)
       },
-    ),
+    )),
   })
 }
 

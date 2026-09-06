@@ -118,13 +118,14 @@ operation before opening a map.
      it. In the web map a multi-selection of components offers Group as and
      Combine into (the person picks the survivor), and a pressed zone opens
      Rename and Dissolve.
-   - A collaboration is authored with `groma add relation <source-id>
-     <target-id> --description <prose> --technology <text>`, one per ordered
-     pair on the source document; `groma edit relation <source-id> <target-id>`
-     rewords it and `groma remove relation <source-id> <target-id>` removes it.
-     In the web map, Relate to on a selected element takes the target from the
-     next map click and asks for the sentence; a selected route edits its
-     description and technology in place and ends with Remove.
+   - An interaction is authored with `groma add relation <source-file>
+     <target-file> --description <prose> --technology <text>`. Exact source
+     files identify code endpoints; actor and external-system declarations
+     may use concept IDs. `groma/relationships.md` holds one authored row per
+     ordered endpoint pair. `groma edit relation` rewords it; `groma draft
+     relation` creates a planned row, and `groma accept relation` accepts it.
+     Only draft rows may be removed. The web editor chooses the participating
+     files and lets a reader inspect each claim represented by a map connection.
    - **People and outside systems** are declared, never scanned: `groma add
      actor <name> --overview <markdown>` and `groma add external <name>
      [--technology <text>] --overview <markdown>` write them stable at once.
@@ -210,6 +211,14 @@ Core applies the batch like this:
    for unknown files. It never changes existing ownership.
 3. An unknown file becomes a singleton component. A matching ghost receives
    Code and remains a draft.
+4. Source-dependency targets are saved on each Code reference. Core resolves
+   them through current file ownership to produce directed component
+   connections. Several file dependencies between the same components produce
+   one connection; dependencies within a component stay internal. A raw scan
+   needs no authored relationships and supplies no business descriptions.
+   TypeScript uses AST binding resolution; unused and shadowed imports do not
+   create dependencies. Used types and explicit module initialization remain.
+   Singleton placement is source inventory, not proof of a C4 responsibility.
 
 A scan never turns a ghost into stable architecture.
 
@@ -253,10 +262,12 @@ Core also counts the lines of each element's `groma.code` files; an unreadable
 file counts 0. In the web map, every source file belongs to one visible floor
 group. Component file counts map project-relative from one to five floors, so
 the component with the fewest files has one floor and the component with the
-most has five. Each group takes the maximum member LOC, dependent, and
-dependency measurement. Groups are ordered largest-first and lower footprints
+most has five. Each group takes the maximum member LOC and incoming/outgoing stored
+interaction counts. Groups are ordered largest-first and lower footprints
 expand where needed so no upper floor overhangs them. `heightUnits` range from
-one to four, width shows dependents, and depth shows dependencies. Floors stay
+one to four, width reflects incoming file interactions, and depth reflects
+outgoing file interactions. These counts are computed when loading the model;
+raw source-dependency graphs are not persisted. Floors stay
 centred on one tower axis, and facade patterns come from normalized file
 extensions. The
 terminal details pane keeps the aggregate count as `N files · ~M lines`.
@@ -265,16 +276,23 @@ A reserved index is not an element. Other typed OKF concepts may coexist in a
 marked package, but only the four exact C4 types enter Groma's architecture
 world. A generic OKF package without the Groma project marker is rejected.
 
-Parents resolve by `id` across the tree. A relationship target is the element
-whose document the row's link reaches; a link that does not reach an element
-document is an error.
+Parents resolve by `id` across the tree. Each source file has one component
+owner in the current Groma profile. Authored code interactions link files;
+core projects them through their current owners and preserves them across
+rescans and regrouping. Actors and external systems remain explicit concepts.
 
-A software-to-software relationship is authored on the lowest elements that
-exist: components, once they exist. Parents are connected because a child
-is. Do not also write that collaboration on a parent. An actor-to-system
-relationship, and a parent row with no lower pin yet, stay as written.
-Viewers treat an authored A → B as also connecting exclusive ancestors of
-A and B. Layout keeps one route per authored relationship.
+Core selects automatically derived interactions from temporary operation and
+wiring evidence. The first rule covers concretely supplied named callbacks.
+Derived and authored rows are stored as ordinary linked Markdown. Current
+authored text takes precedence for a matching file pair; a scan never verifies
+its meaning or accepts a draft. Parents preserve each statement without
+inventing runtime communication. The map bundles claims by directed owner pair
+and keeps the underlying file connections available in details.
+
+For two-way derived component interactions, the larger number of distinct
+file pairs determines the visible direction. Ties retain both directions;
+authored interactions retain their declared direction. Both derived
+directions remain in the stored interactions, even when they share one visible route.
 
 Runtime origin follows the standard top-level lifecycle `status` of the
 document: `observed` for `stable`, `draft` for `draft`. Observed elements draw

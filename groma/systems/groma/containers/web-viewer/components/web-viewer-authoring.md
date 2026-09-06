@@ -8,46 +8,23 @@ groma:
   code:
     - scanner: typescript
       file: src/viewers/web/authoring.ts
-      dependencies: 6
-      dependents: 1
     - scanner: typescript
       file: src/viewers/web/chrome/add.ts
-      dependencies: 1
-      dependents: 2
-    - scanner: typescript
-      file: src/viewers/web/chrome/group.ts
-      symbol: createGroupDialog
-      dependencies: 2
-      dependents: 1
     - scanner: typescript
       file: src/viewers/web/chrome/relate.ts
-      dependencies: 1
-      dependents: 1
     - scanner: typescript
       file: src/viewers/web/organisms/writes.ts
-      dependencies: 3
-      dependents: 2
     - scanner: typescript
       file: src/viewers/web/organisms/editable.ts
-      dependencies: 0
-      dependents: 3
     - scanner: typescript
       file: src/viewers/web/organisms/remove.ts
-      dependencies: 0
-      dependents: 2
     - scanner: typescript
       file: src/viewers/web/editing/intent.ts
-      dependencies: 1
-      dependents: 2
     - scanner: typescript
       file: src/viewers/web/editing/create.ts
       symbol: createDialog
-      dependencies: 2
-      dependents: 1
     - scanner: typescript
       file: src/viewers/web/editing/gestures.ts
-      dependencies: 7
-      dependents: 2
   group: Web runtime
 ---
 
