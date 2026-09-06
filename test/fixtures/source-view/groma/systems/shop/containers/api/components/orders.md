@@ -10,8 +10,6 @@ groma:
     - scanner: typescript
       file: src/orders.ts
       symbol: placeOrder
-      dependencies: 0
-      dependents: 0
 ---
 
 Records an order and its lines.

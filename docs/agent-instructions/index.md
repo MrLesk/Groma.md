@@ -9,6 +9,22 @@ The scanner deliberately reports atomic files, symbols, projects, imports,
 and inferred placement. It cannot decide the architectural meaning of those
 facts. Semantic curation belongs to the agent and human using Groma.
 
+Scanners return temporary source and operation evidence. Core applies the
+[shared inference rule](../relationship-inference.md#current-inference-rule)
+and writes selected interactions under `Derived relationships` in
+`relationships.md`. It does not persist raw dependency graphs or put every
+used import on the map. The first rule covers concretely supplied named
+callbacks; ordinary calls and unresolved wiring need further interpretation.
+Each file has one owner in the current profile, and many possible users.
+
+Authored code interactions name exact source files in `relationships.md`,
+including interactions such as HTTP with no import between the files.
+Actor and external-system declarations may use concept IDs. Current authored
+text takes precedence for the same file pair; editing a derived row takes
+its authorship. Scans neither verify that text nor accept drafts. When a human
+asks to inspect a fresh scan, stop before curation: do not add descriptions,
+actors, flows, groups, or authored relationship rows.
+
 ## Backlog task links
 
 When the `backlog` CLI is available and you work on a Backlog task, you must
@@ -113,10 +129,15 @@ a full scan and architecture curation cycle.
      `groma accept relation <source> <target>` explicitly makes it current;
      scans never accept it. Editing preserves the relationship lifecycle.
    - `groma add relation <source> <target> --description <prose> --technology
-     <text>` writes the one collaboration per ordered pair; `groma edit relation
+     <text>` writes one authored interaction per ordered endpoint pair; `groma edit relation
      <source> <target>` rewords it; `groma remove relation <source> <target>`
      removes it only while it is draft and no flow references it. Current
      relationships cannot be removed, including after explicit acceptance.
+     For code-to-code interactions, `<source>` and `<target>` are exact source
+     file paths, never component, container, or system IDs. Both files need
+     owners. Scans refresh evidence without rewriting or verifying authored
+     intent. Parents summarize the same claim; an aggregate path does not
+     establish a runtime workflow.
    - `groma add flow <title> --overview <prose> --steps <markdown-table>`
      describes one scenario through existing relationships. Store From, To,
      and Action columns; link each endpoint to its C4 Markdown document.
@@ -152,11 +173,12 @@ on the surviving component. Both operations report the paths and IDs needed
 for the Backlog update above.
 
 Combined records must have the same kind and parent. Absorbed records cannot
-have body content, relationships, a group, or technology. Children moved by a
-container combine cannot have body content or relationships either. Incoming
-relationships also prevent removal or movement. The survivor may already have
+have body content, concept-addressed relationships, a group, or technology.
+Children moved by a container combine cannot have body content or
+concept-addressed relationships either. File connections follow their current
+owners and do not block these operations. The survivor may already have
 authored meaning. An individual component move likewise requires an empty
-body and no relationships touching that component.
+body and no concept-addressed relationships touching that component.
 
 Read first, settle these boundaries, then write the affected responsibilities
 and collaborations. If a mistaken combine needs a split or individual-file

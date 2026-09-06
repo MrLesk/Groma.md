@@ -122,8 +122,8 @@ test.concurrent('the shared contract validates and orders complete evidence', ()
 test.concurrent('TypeScript emits one file fact and separate inferred placement', async () => {
   const root = await temporaryTree({
     'package.json': JSON.stringify({ name: 'shop', bin: 'src/cli.ts' }),
-    'src/cli.ts': "import { scan } from './scanner.ts'\nexport function run() {}\n",
-    'src/scanner.ts': "import { parse } from './parse.ts'\nexport function scan() {}\n",
+    'src/cli.ts': "import { scan } from './scanner.ts'\nexport function run() { scan() }\n",
+    'src/scanner.ts': "import { parse } from './parse.ts'\nexport function scan() { parse() }\n",
     'src/parse.ts': 'export function parse() {}\n',
     'src/unused.ts': 'export function unused() {}\n',
     'src/ignored.test.ts': 'export function ignored() {}\n',
@@ -217,11 +217,8 @@ Curated responsibility.
     expect(summary).toEqual({ created: 3, refreshed: 1, matched: 0 })
     expect(curated.match(/file: src\/profile/g)).toHaveLength(2)
     expect(curated).toContain('symbol: readProfile')
-    expect(curated).toContain('dependencies: 1')
-    expect(curated).toContain('dependents: 2')
     expect(curated).toContain('symbol: parseProfileMarkdown')
-    expect(curated).toContain('dependencies: 0')
-    expect(curated).toContain('dependents: 1')
+    expect(curated).not.toMatch(/dependencyFiles:|dependencies:|dependents:/)
     expect(curated).toContain('Curated responsibility.')
     expect(added).toContain('file: src/new-helper.ts')
     expect(qualified).toContain('file: src/other/new-helper.ts')

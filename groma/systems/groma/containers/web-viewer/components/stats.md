@@ -9,8 +9,6 @@ groma:
   code:
     - scanner: typescript
       file: src/viewers/web/chrome/stats.ts
-      dependencies: 2
-      dependents: 1
 ---
 
 Selects the primary system and formats the small map summary shown in the Web chrome.

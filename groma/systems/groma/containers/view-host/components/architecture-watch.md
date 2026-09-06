@@ -10,8 +10,6 @@ groma:
     - scanner: typescript
       file: src/architecture-watch.ts
       symbol: watchArchitecture
-      dependencies: 1
-      dependents: 3
 ---
 
 Watches the Groma directory for architecture Markdown changes and settles them so a live host republishes without scanning.

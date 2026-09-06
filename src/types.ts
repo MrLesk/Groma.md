@@ -18,9 +18,9 @@ export interface CodeReference {
   scanner: string
   file: string
   symbol?: string
-  /** Distinct scanned source files this file depends on. */
+  /** Runtime layout measurement; never stored in architecture Markdown. */
   dependencies?: number
-  /** Distinct scanned source files that depend on this file. */
+  /** Runtime layout measurement; never stored in architecture Markdown. */
   dependents?: number
   /** Runtime source measurement; authored architecture never supplies it. */
   lines?: number
@@ -50,7 +50,7 @@ export interface ArchitectureDocument {
 /** Every Markdown record under the Groma directory, read in one pass. */
 export interface ArchitectureRecords {
   flows: ArchitectureDocument[]
-  /** C4 element documents, ghosts (status draft) included. */
+  /** C4 elements and the optional supporting relationships record. */
   documents: ArchitectureDocument[]
   /** Draft records under drafts/. */
   drafts: ArchitectureDocument[]
@@ -94,7 +94,19 @@ export interface ArchitectureElement {
   sourceFilename: string
 }
 
+/** One exact file interaction, or a declared actor/external-system connection. */
+export interface RelationshipConnection {
+  source: string
+  target: string
+  description: string
+  technology: string
+  status: ElementStatus
+  authored: boolean
+}
+
 export interface ArchitectureRelationship {
+  /** File and concept connections represented by this map relationship. */
+  connections: RelationshipConnection[]
   status: ElementStatus
   sourceId: string
   targetId: string
@@ -131,6 +143,7 @@ export interface AnnotatedElement {
 }
 
 export interface AnnotatedRelationship {
+  connections?: RelationshipConnection[]
   id: string
   source: string
   target: string

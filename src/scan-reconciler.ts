@@ -1,5 +1,6 @@
 import { existsSync } from 'node:fs'
 import path from 'node:path'
+import { isDeepStrictEqual } from 'node:util'
 
 import { isReservedDocument } from './architecture-path.ts'
 import { loadArchitecture } from './architecture-reader.ts'
@@ -12,6 +13,7 @@ import {
 } from './markdown-emitter.ts'
 import { displayName, kebabCase } from './naming.ts'
 import { c4Kind, requireGromaMapping } from './okf-profile.ts'
+import { refreshDerivedRelationships } from './relationship-inference.ts'
 import type { ScanFile, ScanObservation, ScanScope } from '@groma/scanner'
 import type {
   ArchitectureDocument,
@@ -35,31 +37,8 @@ export function readCode(value: unknown): CodeReference[] {
       scanner: reference.scanner,
       file: reference.file,
       ...(Object.hasOwn(reference, 'symbol') ? { symbol: reference.symbol } : {}),
-      ...(Object.hasOwn(reference, 'dependencies') ? { dependencies: reference.dependencies } : {}),
-      ...(Object.hasOwn(reference, 'dependents') ? { dependents: reference.dependents } : {}),
     }
   })
-}
-
-interface SourceCounts {
-  dependencies: number
-  dependents: number
-}
-
-function sourceCounts(observation: ScanObservation): Map<string, SourceCounts> {
-  const counts = new Map(observation.files.map(file => [
-    file.file,
-    { dependencies: 0, dependents: 0 },
-  ]))
-  for (const relationship of observation.relationships) {
-    if (relationship.kind !== 'source-dependency') continue
-    const source = counts.get(relationship.source)
-    const target = counts.get(relationship.target)
-    if (source === undefined || target === undefined) continue
-    source.dependencies += 1
-    target.dependents += 1
-  }
-  return counts
 }
 
 function codeFileKey(scanner: string, file: string): string {
@@ -81,10 +60,11 @@ interface World {
 }
 
 function worldRecord(document: ArchitectureDocument): WorldRecord | undefined {
+  const kind = c4Kind(document.frontmatter.type)
+  if (kind === undefined) return undefined
   const groma = requireGromaMapping(document.frontmatter, document.sourceFilename)
   const { id, parent } = groma
-  const kind = c4Kind(document.frontmatter.type)
-  if (typeof id !== 'string' || kind === undefined) return undefined
+  if (typeof id !== 'string') return undefined
   if (parent !== undefined && parent !== null && typeof parent !== 'string') return undefined
   return {
     id,
@@ -147,6 +127,11 @@ async function createRecord(
   const name = isReservedDocument(`${kebabCase(input.name)}.md`)
     ? displayName(id)
     : input.name
+  // Reserve identity before yielding so independent file writes keep scan order.
+  world.byId.set(id, record)
+  for (const reference of record.code) {
+    world.byCodeFile.set(codeFileKey(reference.scanner, reference.file), record)
+  }
   await writeDocument(
     repositoryRoot,
     record.sourceFilename,
@@ -160,17 +145,12 @@ async function createRecord(
       code: record.code,
     }),
   )
-  world.byId.set(id, record)
-  for (const reference of record.code) {
-    world.byCodeFile.set(codeFileKey(reference.scanner, reference.file), record)
-  }
   return record
 }
 
 function refreshedReference(
   reference: CodeReference,
   evidence: ScanFile,
-  counts: SourceCounts,
 ): CodeReference {
   const exact = evidence.symbols.find(symbol => {
     return symbol.id === reference.symbol || symbol.name === reference.symbol
@@ -180,7 +160,6 @@ function refreshedReference(
     scanner: reference.scanner,
     file: reference.file,
     ...(symbol === undefined ? {} : { symbol: symbol.name }),
-    ...counts,
   }
 }
 
@@ -190,15 +169,11 @@ async function refreshCuratedCode(
   observations: ScanObservation[],
   summary: ScanSummary,
 ): Promise<void> {
-  const evidence = new Map<string, { file: ScanFile; counts: SourceCounts }>()
+  const evidence = new Map<string, ScanFile>()
   const activeScanners = new Set(observations.map(observation => observation.scanner.language))
   for (const observation of observations) {
-    const counts = sourceCounts(observation)
     for (const file of observation.files) {
-      evidence.set(codeFileKey(observation.scanner.language, file.file), {
-        file,
-        counts: counts.get(file.file)!,
-      })
+      evidence.set(codeFileKey(observation.scanner.language, file.file), file)
     }
   }
 
@@ -209,7 +184,7 @@ async function refreshCuratedCode(
       const found = evidence.get(codeFileKey(reference.scanner, reference.file))
       if (found !== undefined) {
         touched = true
-        return [refreshedReference(reference, found.file, found.counts)]
+        return [refreshedReference(reference, found)]
       }
       const missing = activeScanners.has(reference.scanner)
         && !existsSync(path.join(repositoryRoot, reference.file))
@@ -217,8 +192,9 @@ async function refreshCuratedCode(
       return missing ? [] : [reference]
     })
     if (!touched) continue
+    const changed = !isDeepStrictEqual(record.code, code)
     record.code = code
-    await upsertCode(repositoryRoot, record.sourceFilename, record.code)
+    if (changed) await upsertCode(repositoryRoot, record.sourceFilename, record.code)
     if (record.status === 'draft') summary.matched += 1
     else summary.refreshed += 1
   }
@@ -273,8 +249,8 @@ async function attachReference(
   reference: CodeReference,
 ): Promise<void> {
   record.code = [...record.code, reference]
-  await upsertCode(repositoryRoot, record.sourceFilename, record.code)
   world.byCodeFile.set(codeFileKey(reference.scanner, reference.file), record)
+  await upsertCode(repositoryRoot, record.sourceFilename, record.code)
 }
 
 async function observationSystem(
@@ -327,14 +303,12 @@ async function observationContainers(
 function scanReference(
   observation: ScanObservation,
   file: ScanFile,
-  counts: Map<string, SourceCounts>,
 ): CodeReference {
   const symbol = file.symbols.length === 1 ? file.symbols[0]?.name : undefined
   return {
     scanner: observation.scanner.language,
     file: file.file,
     ...(symbol === undefined ? {} : { symbol }),
-    ...counts.get(file.file)!,
   }
 }
 
@@ -345,33 +319,38 @@ async function reconcileFiles(
   containers: Map<string, WorldRecord>,
   summary: ScanSummary,
 ): Promise<void> {
-  const counts = sourceCounts(observation)
   const placementByFile = new Map(observation.placements.map(placement => [
     placement.file,
     placement.scope,
   ]))
+  const pending: Promise<unknown>[] = []
   for (const file of observation.files) {
     const key = codeFileKey(observation.scanner.language, file.file)
     if (world.byCodeFile.has(key)) continue
     const scope = placementByFile.get(file.file)
     const parent = scope === undefined ? undefined : containers.get(scope)
     if (parent === undefined) continue
-    const reference = scanReference(observation, file, counts)
+    const reference = scanReference(observation, file)
     const name = fileDisplayName(file.file)
     const named = existingChild(world, 'component', name, parent)
     if (named?.status === 'draft' && named.code.length === 0) {
-      await attachReference(repositoryRoot, world, named, reference)
+      pending.push(attachReference(repositoryRoot, world, named, reference))
       summary.matched += 1
-      continue
+    } else {
+      pending.push(createRecord(repositoryRoot, world, {
+        kind: 'component',
+        name,
+        parent,
+        code: [reference],
+      }))
+      summary.created += 1
     }
-    await createRecord(repositoryRoot, world, {
-      kind: 'component',
-      name,
-      parent,
-      code: [reference],
-    })
-    summary.created += 1
+    if (pending.length === 16) {
+      await Promise.all(pending)
+      pending.length = 0
+    }
   }
+  await Promise.all(pending)
 }
 
 async function reconcileObservation(
@@ -412,5 +391,7 @@ export async function reconcileScanObservations(
   for (const observation of observations) {
     await reconcileObservation(repositoryRoot, world, observation, summary)
   }
+  const owners = new Map([...world.byId.values()].flatMap(record => record.code.map(reference => [reference.file, record.id] as const)))
+  await refreshDerivedRelationships(repositoryRoot, observations, owners)
   return summary
 }

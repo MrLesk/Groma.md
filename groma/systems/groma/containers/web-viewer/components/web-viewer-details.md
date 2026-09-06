@@ -9,14 +9,9 @@ groma:
   code:
     - scanner: typescript
       file: src/viewers/web/organisms/details.ts
-      dependencies: 14
-      dependents: 3
+    - scanner: typescript
+      file: src/viewers/web/organisms/relationship-details.ts
+      symbol: paintRelationship
 ---
 
 Inspects the current architecture or task selection and paints its meaning, relationships, command flows, and build evidence.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [Component tasks](component-tasks.md) | Delegates linked component task rows to the Work painter | DOM |

@@ -10,8 +10,6 @@ groma:
     - scanner: typescript
       file: src/viewers/web/atoms/popover.ts
       symbol: anchoredPopoverCss
-      dependencies: 0
-      dependents: 5
 ---
 
 Owns the shared anchored popup surface, option states and outside-pointer dismissal for Web header controls. Native details popups use the default close action; Search supplies cancellation, and Revision includes its tooltip as an owned surface.

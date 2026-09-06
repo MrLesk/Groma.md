@@ -9,8 +9,6 @@ groma:
   code:
     - scanner: typescript
       file: src/agent-instructions.ts
-      dependencies: 0
-      dependents: 2
 ---
 
 Owns the separate, always-plain catalog of agent operating rules and the explicit repository registration that installs its managed nudge in root agent-instruction files.

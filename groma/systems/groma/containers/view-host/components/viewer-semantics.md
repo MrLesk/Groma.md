@@ -9,25 +9,15 @@ groma:
   code:
     - scanner: typescript
       file: src/viewers/relationship-text.ts
-      dependencies: 1
-      dependents: 6
     - scanner: typescript
       file: src/viewers/atoms/kind.ts
-      dependencies: 1
-      dependents: 11
     - scanner: typescript
       file: src/empty-world.ts
       symbol: isEmptyWorld
-      dependencies: 1
-      dependents: 6
     - scanner: typescript
       file: src/brand.ts
-      dependencies: 0
-      dependents: 2
     - scanner: typescript
       file: src/viewers/flows.ts
-      dependencies: 2
-      dependents: 10
 ---
 
 Defines the shared visual language and navigation meaning used by the terminal and browser: kind labels, relationship captions, explicit authored flow membership, brand accents and the next steps for an empty architecture.

@@ -9,17 +9,6 @@ groma:
   code:
     - scanner: typescript
       file: src/cli.ts
-      dependencies: 12
-      dependents: 0
 ---
 
 Routes every named Groma command and the bare-terminal launcher to one owning operation. It starts viewers, runs scans, authors architecture, and prints command results without deciding architecture meaning.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [Init command](init-command.md) | Runs the interactive setup or non-interactive initialization flow | groma init |
-| [Scan lifecycle](../../scanner/components/scan-lifecycle.md) | Runs a complete scan | groma scan |
-| [Export](../../web-viewer/components/export.md) | Publishes the current Web view as static files | CLI |
-| [Observed curation](observed-curation.md) | Curates scan evidence and collaborations | groma edit and groma add relation |

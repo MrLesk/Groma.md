@@ -1,6 +1,7 @@
 import { existsSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import path from 'node:path'
+import { version as typescriptVersion } from 'typescript'
 
 import {
   createScanObservation,
@@ -216,8 +217,8 @@ export async function scanTypeScriptSource(
   return createScanObservation({
     scanner: {
       language: 'typescript',
-      engine: 'groma-source',
-      engineVersion: '1',
+      engine: 'typescript',
+      engineVersion: typescriptVersion,
     },
     root: {
       kind: 'package',
@@ -228,6 +229,8 @@ export async function scanTypeScriptSource(
     files: graph.files.map(node => ({ file: node.file, symbols: node.symbols })),
     placements: [...placements].map(([file, scope]) => ({ file, scope: scopeId(scope) })),
     relationships: [...relationships.values()],
+    operations: graph.operations,
+    invocations: graph.invocations,
     diagnostics: [],
   })
 }

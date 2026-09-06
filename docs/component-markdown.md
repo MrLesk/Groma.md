@@ -3,8 +3,8 @@
 Groma stores its architecture as an application profile inside an Open
 Knowledge Format (OKF) v0.2 bundle. The bundle remains ordinary Markdown:
 standard OKF fields describe each concept, the nested `groma` mapping carries
-Groma-only architecture metadata, and the body explains the concept and its
-outgoing relationships.
+Groma-only architecture metadata, and the body explains the concept. A supporting Markdown record holds authored
+relationships.
 
 Groma supports this explicit architecture profile. It does not load an
 unmarked, generic OKF bundle as a Groma project.
@@ -149,13 +149,17 @@ application source.
 | `scanner` | yes | Scanner that found the reference. |
 | `file` | yes | Exact repository-relative source file. |
 | `symbol` | no | Relevant symbol or entry point; omitted when the complete file is useful. |
-| `dependencies` | no | Count of source files this file depends on. |
-| `dependents` | no | Count of source files that depend on this file. |
 
 Multiple scanners may contribute references to one element. Code references
 appear in details; they are not C4 concepts or another viewer level. Later
 scans may refresh supported symbols but preserve curated file membership,
 unowned metadata, and authored Markdown.
+
+Raw imports, call graphs, provider alternatives, and inference inputs stay in
+memory during scanning. They are not Code-reference metadata. Core saves only
+selected interactions in the relationship document. Reloads and exports use
+those statements without running the scanner. Runtime footprint counts come
+from distinct stored file interactions and are not written into Code references.
 
 ## Markdown body
 
@@ -167,49 +171,104 @@ These level-two sections are supported:
 
 - `## Requirements` states constraints the result must satisfy.
 - `## Technology` explains implementation technology in prose.
-- `## Relationships` contains current outgoing relationships.
-- `## Draft relationships` contains planned outgoing relationships.
 
 Other named sections remain authored Markdown. Groma preserves them when it
 edits overview or owned metadata.
 
-```markdown
 ## Relationships
 
-| Target | Description | Technology |
-| --- | --- | --- |
-| [Readable target name](relative/path/to/target.md) | What this concept does with the target | How the interaction works |
+Authored and automatically derived relationships live in `<groma-root>/relationships.md`, a supporting
+OKF concept with type `Groma Relationships`. It is not a C4 element, a parent,
+or another map level. Its ordinary Markdown links identify the exact endpoints:
+
+```markdown
+---
+type: Groma Relationships
+title: Architecture relationships
+---
+
+## Relationships
+
+| Source | Target | Description | Technology |
+| --- | --- | --- | --- |
+| [Checkout client](../src/checkout-client.ts) | [Payment endpoint](../src/payment-endpoint.ts) | Requests payment authorization | HTTPS |
+| [Customer](actors/customer.md) | [Shop](systems/shop/system.md) | Places an order | Browser |
 ```
 
-Each row declares one direction: the current concept is the source. The link
-must resolve to another C4 concept in the tree. `groma add relation`,
-`groma edit relation` and `groma remove relation` add, reword or remove a
-relationship row. Removal is allowed only for draft relationships; current
-relationships are protected. Each ordered pair has one row.
+Code-to-code declarations require exact repository-relative source files with
+known component owners. They never use internal component, container, or
+system IDs as endpoints. This includes interactions without imports, such as
+an HTTP client and its endpoint. An actor or external-system declaration may
+use C4 concept links. Each ordered endpoint pair has one authored row.
+`Description` states the interaction; `Technology` states its mechanism or a
+required constraint. Both cells are required and non-empty.
 
-Planned links use the same three columns under `## Draft relationships`.
-Their lifecycle is independent of both endpoint statuses, including when both
-components already exist. `groma draft relation <source> <target>
---description <prose> --technology <text>` creates one. Edits keep it draft;
-`groma accept relation <source> <target>` explicitly moves it to the current
-Relationships table. A scan never accepts it. Both sections resolve links and
-compose routes in the same way. The CLI marks planned links as `[draft]`.
+`groma add relation <source-file> <target-file> --description <text>
+--technology <text>` declares a current interaction. `groma edit relation`
+changes its text. The web editor selects the participating source files;
+relationship details distinguish derived interactions from authored rows. Editing
+a derived interaction creates authored text for that exact endpoint pair.
+An actor or external-system declaration accepts its concept IDs instead.
 
-A software-to-software relationship is authored on the lowest concepts that
-exist. Once two components participate, write the row there, not again on
-their containers or systems. Parents render as connected because the child
-row exists. Actor-to-system relationships and parent rows with no lower pin
-stay on those concepts.
+Planned interactions use the same columns under `## Draft relationships`.
+`groma draft relation <source-file> <target-file> --description <text>
+--technology <text>` creates a planned row. Edits keep its status. `groma accept
+relation <source-file> <target-file>` explicitly accepts it; only draft rows
+may be removed. This lifecycle is independent of the endpoint statuses.
+Finding a source dependency does not accept a draft interaction.
 
-`Description` states the intent. `Technology` states the mechanism for an
-observed relationship, or a required constraint for a drafted one. Both cells
-are required and non-empty.
+Core writes selected current interactions under `## Derived relationships`,
+using the same four columns. A complete scan replaces that section and preserves
+all authored sections. A failed scanner does not start reconciliation. Raw
+source dependencies never become rows merely because their endpoints resolve.
+The current [inference rule](relationship-inference.md#current-inference-rule)
+covers concretely supplied named callbacks; other interactions may be authored.
+
+A current authored row takes precedence over a derived row for the same exact
+file pair. Editing a derived row takes authorship of its text. Subsequent scans
+may record the underlying derived interaction again, but the map uses the
+current authored statement. A draft row stays separate and is never accepted
+by a scan. This is authorship precedence, not a claim that the scanner verified
+the authored description.
+
+### Ownership and map projection
+
+In Groma's current profile, each source file has one component owner. This is
+an application constraint, not a universal OKF or C4 rule. Many other files
+may use it. A scan preserves curated membership and never follows dependencies
+to claim ownership. Source ownership does not establish runtime placement.
+
+Core projects file connections through their current owners. Several file
+pairs become one directed component connection while retaining their exact
+endpoints and individual claims. Connections inside one component add no map self-link. Regrouping preserves
+the stored rows; the next scan omits derived interactions whose providers
+now have the same owner. Moving or
+combining empty components changes this projection without rewriting file
+interactions.
+
+At container and system levels, an interaction keeps its original statement.
+A callback across assigned containers is still a source-code callback; it does
+not establish a network request or inter-process boundary. Core does not invent
+transitive edges or turn aggregated paths into executable workflows.
+
+For two-way derived interactions between components, the map points toward
+the direction with more distinct supporting file pairs. Equal counts keep
+both directions visible. Details retain both directions and their counts.
+Authored interactions keep their declared direction. This display rule does
+not change the underlying interaction claims.
+
+An ordinary Markdown reader can follow the file and concept links and read
+each authored interaction. Groma interprets ownership, authorship, and
+the relationship sections to project the map. Source inventory and inferred
+placement are not proof of cohesive C4 responsibilities; curated ownership
+provides those boundaries.
 
 ## Flows
 
-A relationship describes a collaboration that exists in the architecture.
-A flow explains one named scenario using an explicit, ordered subset of those
-relationships. It is an OKF concept with type `Groma Flow`, stored at
+A relationship may carry a derived or authored interaction. A flow supplies
+the scenario meaning and order; the existence of an interaction alone does
+not establish execution order. A flow uses an
+explicit, ordered subset of the directed relationships. It is an OKF concept with type `Groma Flow`, stored at
 `<groma-root>/flows/<id>.md`. It is not a C4 element and has no parent,
 Code references, footprint, or routes of its own.
 
@@ -276,11 +335,6 @@ Owns the lifecycle of an order from placement through completion.
 
 TypeScript, NestJS, and PostgreSQL.
 
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [Payments](../payments.md) | Requests payment authorization | Internal API |
 ```
 
 The live [Groma system](../groma/systems/groma/system.md) and

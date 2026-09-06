@@ -9,7 +9,7 @@ missing or fails, reconciliation does not start.
 source → complete scanner observations → core reconciliation → Markdown
 ```
 
-An observation contains atomic files and symbols, project scopes, inferred placements, source relationships, and diagnostics. It contains no C4 components or architecture IDs. TypeScript uses imports and directories for placement. C# uses Roslyn projects.
+An observation contains atomic files and symbols, project scopes, inferred placements, temporary source relationships, optional operation evidence, and diagnostics. It contains no C4 components or architecture IDs. TypeScript uses imports and directories for placement. C# uses Roslyn projects.
 
 Core keeps curated file membership authoritative. Files already assigned to one component stay together. Only an unknown file becomes a new singleton component under its inferred scope. A drafted name match receives Code but stays a draft until `groma accept`.
 
@@ -34,3 +34,12 @@ management syntax remain under Advanced commands.
 - [TypeScript](typescript/index.md)
 - [C#/.NET](dotnet-csharp/index.md)
 - [Shared contract](creating-a-plugin.md)
+
+## Relationship inference design
+
+The [inference design](../relationship-inference.md) records the accepted
+direction for deriving architecture relationships from temporary scanner facts.
+[Scanner evidence](evidence.md) defines the language-neutral semantics and
+verified examples. Core writes selected derived interactions in Markdown; it
+does not persist the raw analysis graph. The [plugin guide](creating-a-plugin.md)
+defines the executable contract.

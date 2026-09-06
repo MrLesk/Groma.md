@@ -300,8 +300,6 @@ test.concurrent('scan refreshes and creates only owned stable profile fields', a
           scanner: 'typescript',
           file: 'src/helper.ts',
           symbol: 'help',
-          dependencies: 0,
-          dependents: 0,
         }],
       },
     })

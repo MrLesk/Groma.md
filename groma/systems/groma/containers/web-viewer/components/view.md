@@ -9,8 +9,6 @@ groma:
   code:
     - scanner: typescript
       file: src/viewers/web/search/view.ts
-      dependencies: 2
-      dependents: 2
 ---
 
 Renders the permanent Web search field and ranked architecture/task result popover. Owns the five-row scrolling window, result labels, keyboard hints and reduced-motion behavior.

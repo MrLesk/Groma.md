@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises'
 import path from 'node:path'
 
-import type { ScanSymbol } from '@groma/scanner'
+import type { ScanSymbol, ScanOperation, ScanInvocation } from '@groma/scanner'
 
 import {
   defaultTypeScriptScannerConfig,
@@ -9,6 +9,7 @@ import {
   type TypeScriptScannerConfig,
 } from './files.ts'
 import { displayName, kebabCase } from './naming.ts'
+import { analyzeSourceFiles } from './source-analysis.ts'
 
 export interface ImportGraphNode {
   file: string
@@ -19,24 +20,8 @@ export interface ImportGraphNode {
 
 export interface ImportGraph {
   files: ImportGraphNode[]
-}
-
-const importPattern = /(?:from\s+|import\s*\(\s*|import\s+)['"]([^'"]+)['"]/g
-const exportPattern = /^export\s+(?:default\s+)?(?:declare\s+)?(?:async\s+)?(function|class|interface|type|enum|const|let|var)\s+(\w+)/gm
-
-function importSpecifiers(source: string): string[] {
-  return [...source.matchAll(importPattern)]
-    .map(match => match[1])
-    .filter((specifier): specifier is string => specifier !== undefined)
-}
-
-function exportSymbols(file: string, source: string): ScanSymbol[] {
-  return [...source.matchAll(exportPattern)].flatMap(match => {
-    const kind = match[1]
-    const name = match[2]
-    if (kind === undefined || name === undefined) return []
-    return [{ id: `${file}#${name}`, name, kind }]
-  })
+  operations: ScanOperation[]
+  invocations: ScanInvocation[]
 }
 
 function resolveSpecifier(
@@ -50,6 +35,8 @@ function resolveSpecifier(
     ? [joined]
     : [
       joined,
+      joined.replace(/\.jsx?$/, '.ts'),
+      joined.replace(/\.jsx?$/, '.tsx'),
       `${joined}.ts`,
       `${joined}.tsx`,
       `${joined}.js`,
@@ -91,24 +78,20 @@ export async function buildImportGraph(
 ): Promise<ImportGraph> {
   const paths = await listTypeScriptFiles(repositoryRoot, config)
   const files = new Set(paths)
-  const nodes = new Map<string, ImportGraphNode>()
-
-  for (const file of paths) {
-    const source = await readFile(path.join(repositoryRoot, ...file.split('/')), 'utf8')
-    nodes.set(file, {
-      file,
-      imports: [...new Set(importSpecifiers(source).flatMap(specifier => {
-        const resolved = resolveSpecifier(file, specifier, files)
-        return resolved === undefined ? [] : [resolved]
-      }))].sort(),
-      importedBy: [],
-      symbols: exportSymbols(file, source),
-    })
-  }
+  const { files: analyses, operations, invocations } = await analyzeSourceFiles(repositoryRoot, paths)
+  const nodes = new Map<string, ImportGraphNode>(analyses.map(({ file, specifiers, symbols }) => [file, {
+    file,
+    imports: [...new Set(specifiers.flatMap(specifier => {
+      const resolved = resolveSpecifier(file, specifier, files)
+      return resolved === undefined ? [] : [resolved]
+    }))].sort(),
+    importedBy: [],
+    symbols,
+  }]))
 
   for (const node of nodes.values()) {
     for (const imported of node.imports) nodes.get(imported)?.importedBy.push(node.file)
   }
   for (const node of nodes.values()) node.importedBy.sort()
-  return { files: [...nodes.values()] }
+  return { files: [...nodes.values()], operations, invocations }
 }

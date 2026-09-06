@@ -9,6 +9,7 @@ import type {
   AnnotatedArchitectureModel,
   AnnotatedElement,
   ArchitectureRecords,
+  ArchitectureRelationship,
   ElementStatus,
   FilesystemAccessHandler,
   Origin,
@@ -38,12 +39,34 @@ function withDirectChildren(elements: AnnotatedElement[]): AnnotatedElement[] {
   }))
 }
 
+/** File footprint counts come from durable interactions, not a persisted analysis graph. */
+function connectionCounts(relationships: readonly ArchitectureRelationship[]): Map<string, { dependencies: number; dependents: number }> {
+  const outgoing = new Map<string, Set<string>>()
+  const incoming = new Map<string, Set<string>>()
+  for (const relationship of relationships) {
+    for (const connection of relationship.connections) {
+      const targets = outgoing.get(connection.source) ?? new Set<string>()
+      targets.add(connection.target)
+      outgoing.set(connection.source, targets)
+      const sources = incoming.get(connection.target) ?? new Set<string>()
+      sources.add(connection.source)
+      incoming.set(connection.target, sources)
+    }
+  }
+  return new Map([...new Set([...outgoing.keys(), ...incoming.keys()])].map(file => [file, {
+    dependencies: outgoing.get(file)?.size ?? 0, dependents: incoming.get(file)?.size ?? 0,
+  }]))
+}
+
 export function annotateArchitecture(
   records: ArchitectureRecords,
 ): AnnotatedArchitectureModel {
   const model = buildArchitectureModel(records.documents)
+  const counts = connectionCounts(model.relationships)
   const byId = new Map(model.elements.map(element => [element.id, element]))
   const documents = new Map(records.documents.map(document => [document.sourceFilename, document]))
+  const authored = model.relationships.filter(relationship =>
+    relationship.connections.some(connection => connection.authored))
   const elements = model.elements.map<AnnotatedElement>(element => ({
     representationId: element.id,
     id: element.id,
@@ -56,8 +79,8 @@ export function annotateArchitecture(
     external: element.external,
     ...(element.group === undefined ? {} : { group: element.group }),
     ...(element.technology === undefined ? {} : { technology: element.technology }),
-    code: element.code,
-    movable: moveBlocker(element, model.relationships, documents.get(element.sourceFilename)!.body) === undefined,
+    code: element.code.map(reference => ({ ...reference, ...(counts.get(reference.file) ?? { dependencies: 0, dependents: 0 }) })),
+    movable: moveBlocker(element, authored, documents.get(element.sourceFilename)!.body) === undefined,
     origin: originOf(element.status),
     ...(element.draft === undefined ? {} : { draft: element.draft }),
   }))
@@ -72,6 +95,7 @@ export function annotateArchitecture(
         id: `relationship:${index}`,
         source: relationship.sourceId,
         target: relationship.targetId,
+        connections: relationship.connections,
         description: relationship.description,
         technology: relationship.technology,
         origin: originOf(relationship.status),

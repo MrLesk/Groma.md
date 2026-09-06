@@ -5,6 +5,13 @@ A scanner is an ECMAScript module that implements `ScannerPlugin` from
 `ScanObservation`. It does not read architecture Markdown, write files, assign
 architecture IDs, or combine source files into components.
 
+This page describes the executable plugin contract. The
+[evidence semantics](evidence.md) define operations, canonical targets,
+concrete callback bindings, and unresolved alternatives. Architecture interpretation
+belongs to [core's shared policy](../relationship-inference.md), not to each
+language plugin. Plugins that do not extract operations omit both optional
+operation fields; they still supply source inventory and placement.
+
 ```ts
 import type { ScannerPlugin } from '@groma/scanner'
 
@@ -51,10 +58,20 @@ One successful call returns exactly one complete observation:
 - `scopes`: project or import-based placement anchors;
 - `files`: one entry per source file, with declarations from that file only;
 - `placements`: inferred file-to-scope evidence;
-- `relationships`: source-level imports or project references;
+- `relationships`: temporary source-level imports or project references;
+- `operations` and `invocations`: optional temporary operation and wiring evidence;
 - `diagnostics`: deterministic scanner messages.
 
-All paths are repository-relative. Scope and relationship endpoints must exist in the same observation. Duplicate primary keys and incomplete JSON are rejected before core reconciliation.
+An operation has an opaque observation-local `id`, exact `file`, and `name`.
+An invocation has its caller operation `source`, canonical operation `targets`,
+one-based call `line`, and an explicit `unresolved` boolean. A named member call
+also supplies `member`. When a concrete argument supplies the invoked value,
+`binding: { file, line }` identifies that call site. Keep separate bindings
+separate; alternatives within one binding share one target set. Empty targets
+must be unresolved. `unresolved: false` is scoped to the supported extraction,
+not a promise that the whole language or runtime is modeled.
+
+All paths are repository-relative. Scope, operation, and relationship endpoints must exist in the same observation. Duplicate primary keys and incomplete JSON are rejected before core reconciliation.
 
 Language-specific project rules stay inside the scanner. The scanner registry
 loads every enabled module through the same contract, and core applies the rules
