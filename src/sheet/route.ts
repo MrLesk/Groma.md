@@ -1,398 +1,59 @@
-import { AvoidLib } from 'libavoid-js'
-
 import {
-  LANE_GAP,
-  ROUTE_CLEARANCE,
-  ROUTE_UNIT,
-  assignFixedPorts,
-  attachWalls,
-  buildingPorts,
-  crossingRouteIdsFor,
-  routesCross,
-  routingAnchor,
-  visibleObstacle,
-  type Endpoint,
-  type FlatRoute,
-  type Point,
-  type PortPair,
-  type RoutePort,
-  type RouteRequest,
+  ROUTE_UNIT, assignFixedPorts, attachWalls, crossingRouteIdsFor,
+  type Endpoint, type FlatRoute, type PortPair, type RouteRequest,
 } from './route-geometry.ts'
-import { refineRoutes } from './route-lanes.ts'
-import { routeSpacingIndex } from './route-spacing.ts'
+import { alignFacingRoutes, compactPath, orderBuildingFans, shortenDirect, shortenEnds } from './route-finish.ts'
+import { routeGrid } from './route-grid.ts'
+import { RouteSearch } from './route-search.ts'
+import { sharedPathMeasure } from './route-spacing.ts'
 import type { Route } from './types.ts'
 
 export type { Endpoint, RouteRequest } from './route-geometry.ts'
 
-function enumNumber(value: unknown): number {
-  if (typeof value === 'number') return value
-  if (typeof value === 'object' && value !== null && 'value' in value) {
-    return Number((value as { value: unknown }).value)
-  }
-  throw new Error('Libavoid enum value is unavailable')
-}
-
-await AvoidLib.load()
-const Avoid = AvoidLib.getInstance()
-type AvoidRouter = InstanceType<typeof Avoid.Router>
-type AvoidShape = InstanceType<typeof Avoid.ShapeRef>
-type AvoidPin = InstanceType<typeof Avoid.ShapeConnectionPin>
-type AvoidEnd = InstanceType<typeof Avoid.ConnEnd>
-type AvoidDirection = NonNullable<ConstructorParameters<typeof Avoid.ShapeConnectionPin>[2]>
-
-interface RoutedPolyline {
-  size(): number
-  ps: { get(index: number): { x: number; y: number } }
-}
-
-interface BuildingConnection {
-  ports: RoutePort[]
-  shape: AvoidShape
-  pins: AvoidPin[]
-}
-
-const BUILDING_PORT_CLASS = 1
-const PORT_EPSILON = 0.01
-const STRAIGHT_RUN = LANE_GAP
-// libavoid-js does not expose this C++ enum at runtime.
-const CONNECTION_DIRECTION: Record<RoutePort['side'], number> = {
-  north: 1,
-  south: 2,
-  west: 4,
-  east: 8,
-}
-
-function buildingConnections(
-  router: AvoidRouter,
-  endpoints: ReadonlyMap<string, Endpoint>,
-  requests: readonly RouteRequest[],
-): Map<string, BuildingConnection> {
-  const connections = new Map<string, BuildingConnection>()
-  const degrees = new Map<string, number>()
+function routeOrder(requests: readonly RouteRequest[]): number[] {
+  const degree = new Map<string, number>()
   for (const request of requests) {
-    degrees.set(request.source, (degrees.get(request.source) ?? 0) + 1)
-    degrees.set(request.target, (degrees.get(request.target) ?? 0) + 1)
+    degree.set(request.source, (degree.get(request.source) ?? 0) + 1)
+    degree.set(request.target, (degree.get(request.target) ?? 0) + 1)
   }
-  for (const endpoint of endpoints.values()) {
-    if (endpoint.kind !== 'building') continue
-    const points = visibleObstacle(endpoint, STRAIGHT_RUN)
-    const polygon = new Avoid.Polygon(points.length)
-    for (const [index, point] of points.entries()) {
-      polygon.setPoint(index, new Avoid.Point(point.x, point.y))
-    }
-    const shape = new Avoid.ShapeRef(router, polygon)
-    const minX = Math.min(...points.map(point => point.x))
-    const minY = Math.min(...points.map(point => point.y))
-    const ports = buildingPorts(endpoint, degrees.get(endpoint.key))
-    const pins = ports.map(port => {
-      const outward = {
-        x: port.wall.x + (port.side === 'east' ? STRAIGHT_RUN : port.side === 'west' ? -STRAIGHT_RUN : 0),
-        y: port.wall.y + (port.side === 'south' ? STRAIGHT_RUN : port.side === 'north' ? -STRAIGHT_RUN : 0),
-      }
-      const pin = new Avoid.ShapeConnectionPin(
-        shape,
-        BUILDING_PORT_CLASS,
-        outward.x - minX,
-        outward.y - minY,
-        false,
-        STRAIGHT_RUN,
-        CONNECTION_DIRECTION[port.side] as AvoidDirection,
-      )
-      pin.setExclusive(true)
-      return pin
-    })
-    connections.set(endpoint.key, { ports, shape, pins })
-  }
-  return connections
+  const load = (index: number) => Math.max(degree.get(requests[index]!.source)!, degree.get(requests[index]!.target)!)
+  // Busy endpoints route first while the greatest number of tracks is still free.
+  return requests.map((_, index) => index).sort((a, b) => load(b) - load(a) || a - b)
 }
 
-function fixedPort(
-  fixed: ReadonlyMap<string, Partial<PortPair>>,
-  request: RouteRequest,
-  role: keyof PortPair,
-): RoutePort {
-  const port = fixed.get(request.id)?.[role]
-  if (!port) throw new Error(`No ${role} port for ${request.id}`)
-  return port
-}
-
-function connectorEnd(
-  request: RouteRequest,
-  role: keyof PortPair,
-  connections: ReadonlyMap<string, BuildingConnection>,
-  fixed: ReadonlyMap<string, Partial<PortPair>>,
-  endpoints: ReadonlyMap<string, Endpoint>,
-): AvoidEnd {
-  const endpointId = request[role]
-  const connection = connections.get(endpointId)
-  if (connection) return new Avoid.ConnEnd(connection.shape, BUILDING_PORT_CLASS)
-  const point = routingAnchor(fixedPort(fixed, request, role), endpointId, endpoints)
-  return new Avoid.ConnEnd(new Avoid.Point(point.x, point.y))
-}
-
-function buildingWallPort(
-  point: Point,
-  adjacent: Point,
-  connection: BuildingConnection,
-): RoutePort {
-  const side = Math.abs(adjacent.x - point.x) > PORT_EPSILON
-    ? adjacent.x > point.x ? 'east' : 'west'
-    : adjacent.y > point.y ? 'south' : 'north'
-  const port = connection.ports.find(port => port.side === side)!
-  // Libavoid may shift the endpoint along its wall; preserve that position.
-  return {
-    ...port,
-    wall: side === 'east' || side === 'west'
-      ? { x: port.wall.x, y: point.y }
-      : { x: point.x, y: port.wall.y },
-    guard: { ...point },
-  }
-}
-
-function selectedPort(
-  point: Point,
-  adjacent: Point,
-  request: RouteRequest,
-  role: keyof PortPair,
-  connections: ReadonlyMap<string, BuildingConnection>,
-  fixed: ReadonlyMap<string, Partial<PortPair>>,
-): RoutePort {
-  const connection = connections.get(request[role])
-  return connection ? buildingWallPort(point, adjacent, connection) : fixedPort(fixed, request, role)
-}
-
-interface RouteEndRun {
-  route: FlatRoute
-  indices: number[]
-  bend: number
-  slotAxis: 'x' | 'y'
-  slot: number
-  run: number
-  turn: number
-}
-
-function routeEndRun(route: FlatRoute, fromStart: boolean): RouteEndRun | undefined {
-  const indices = Array.from({ length: route.points.length }, (_, index) =>
-    fromStart ? index : route.points.length - 1 - index)
-  const end = route.points[indices[0]!]!
-  const next = route.points[indices[1]!]!
-  const slotAxis = Math.abs(next.y - end.y) > PORT_EPSILON ? 'x' : 'y'
-  const runAxis = slotAxis === 'x' ? 'y' : 'x'
-  const bend = indices.findIndex(index => Math.abs(route.points[index]![slotAxis] - end[slotAxis]) > PORT_EPSILON) - 1
-  if (bend < 1 || bend + 1 >= indices.length) return undefined
-  const bendPoint = route.points[indices[bend]!]!
-  const turnedPoint = route.points[indices[bend + 1]!]!
-  return {
-    route,
-    indices,
-    bend,
-    slotAxis,
-    slot: end[slotAxis],
-    run: Math.abs(bendPoint[runAxis] - end[runAxis]),
-    turn: Math.sign(turnedPoint[slotAxis] - bendPoint[slotAxis]),
-  }
-}
-
-function endDirection(end: RouteEndRun): number {
-  const first = end.route.points[end.indices[0]!]!
-  const next = end.route.points[end.indices[1]!]!
-  const runAxis = end.slotAxis === 'x' ? 'y' : 'x'
-  return Math.sign(next[runAxis] - first[runAxis])
-}
-
-function wallSpan(endpoint: Endpoint, end: RouteEndRun): [number, number] {
-  const polygon = visibleObstacle(endpoint)
-  const direction = endDirection(end)
-  const edge = end.slotAxis === 'x'
-    ? direction < 0 ? [polygon[0]!, polygon[1]!] : [polygon[3]!, polygon[4]!]
-    : direction < 0 ? [polygon[5]!, polygon[0]!] : [polygon[2]!, polygon[3]!]
-  const values = edge.map(point => point[end.slotAxis])
-  return [Math.min(...values), Math.max(...values)]
-}
-
-function facingRoutePoints(
-  endpoints: ReadonlyMap<string, Endpoint>,
-  route: FlatRoute,
-): Point[] | undefined {
-  if (route.points.length !== 4) return undefined
-  const source = routeEndRun(route, true)
-  const target = routeEndRun(route, false)
-  const sourceEndpoint = endpoints.get(route.source)
-  const targetEndpoint = endpoints.get(route.target)
-  if (!source || !target || sourceEndpoint?.kind !== 'building' || targetEndpoint?.kind !== 'building'
-    || source.slotAxis !== target.slotAxis || endDirection(source) !== -endDirection(target)) return undefined
-  const runAxis = source.slotAxis === 'x' ? 'y' : 'x'
-  const start = route.points[0]!
-  const finish = route.points.at(-1)!
-  if (Math.sign(finish[runAxis] - start[runAxis]) !== endDirection(source)) return undefined
-  const sourceSpan = wallSpan(sourceEndpoint, source)
-  const targetSpan = wallSpan(targetEndpoint, target)
-  const lower = Math.max(sourceSpan[0] + ROUTE_CLEARANCE, targetSpan[0] + ROUTE_CLEARANCE)
-  const upper = Math.min(sourceSpan[1] - ROUTE_CLEARANCE, targetSpan[1] - ROUTE_CLEARANCE)
-  if (lower > upper + PORT_EPSILON) return undefined
-  const coordinate = Math.min(upper, Math.max(lower, source.slot))
-  return [
-    { ...start, [source.slotAxis]: coordinate },
-    { ...finish, [source.slotAxis]: coordinate },
-  ]
-}
-
-function fanKey(endpointId: string, end: RouteEndRun): string {
-  return `${endpointId}\0${end.slotAxis}\0${endDirection(end)}`
-}
-
-function buildingFans(
-  endpoints: ReadonlyMap<string, Endpoint>,
-  routes: FlatRoute[],
-): Map<string, RouteEndRun[]> {
-  const groups = new Map<string, RouteEndRun[]>()
-  for (const route of routes) {
-    for (const [endpointId, fromStart] of [[route.source, true], [route.target, false]] as const) {
-      if (endpoints.get(endpointId)?.kind !== 'building') continue
-      const end = routeEndRun(route, fromStart)
-      if (!end || end.turn === 0) continue
-      const key = fanKey(endpointId, end)
-      const group = groups.get(key) ?? []
-      group.push(end)
-      groups.set(key, group)
-    }
-  }
-  return groups
-}
-
-function orderFan(group: RouteEndRun[]): void {
-  if (group.length < 2) return
-  const slots = group.map(end => end.slot).sort((a, b) => a - b)
-  group.sort((a, b) => {
-    if (a.turn !== b.turn) return a.turn - b.turn
-    const distance = a.turn < 0 ? a.run - b.run : b.run - a.run
-    return Math.abs(distance) > PORT_EPSILON ? distance : a.slot - b.slot
-  })
-  for (const [position, end] of group.entries()) {
-    for (let offset = 0; offset <= end.bend; offset += 1) {
-      end.route.points[end.indices[offset]!]![end.slotAxis] = slots[position]!
-    }
-  }
-}
-
-function fanCrossings(group: readonly RouteEndRun[]): number {
-  let crossings = 0
-  for (let left = 0; left < group.length; left += 1) {
-    for (let right = left + 1; right < group.length; right += 1) {
-      if (routesCross(group[left]!.route, group[right]!.route)) crossings += 1
-    }
-  }
-  return crossings
-}
-
-function safeRoutes(endpoints: ReadonlyMap<string, Endpoint>, routes: readonly FlatRoute[]): boolean {
-  if (crossingRouteIdsFor(endpoints)(routes).length > 0) return false
-  const routeIds = new Set(routes.map(route => route.id))
-  const [spacing] = routeSpacingIndex(routes, routeIds).measure(routes, [ROUTE_UNIT * 0.75])
-  return spacing.sharedPathLength <= PORT_EPSILON
-}
-
-function routeCrossings(route: FlatRoute, routes: readonly FlatRoute[]): number {
-  return routes.filter(other => other.id !== route.id && routesCross(route, other)).length
-}
-
-function alignFacingRoutes(
-  endpoints: ReadonlyMap<string, Endpoint>,
-  routes: FlatRoute[],
-): void {
-  for (const route of routes) {
-    const points = facingRoutePoints(endpoints, route)
-    if (!points) continue
-    const candidate = { ...route, points }
-    const changed = routes.map(other => other.id === route.id ? candidate : other)
-    if (routeCrossings(candidate, changed) <= routeCrossings(route, routes) && safeRoutes(endpoints, changed)) {
-      route.points = points
-    }
-  }
-}
-
-function improveFan(
-  endpoints: ReadonlyMap<string, Endpoint>,
-  routes: FlatRoute[],
-  group: RouteEndRun[],
-): void {
-  const before = fanCrossings(group)
-  if (before === 0) return
-  const originals = new Map(group.map(end => [end.route, end.route.points.map(point => ({ ...point }))]))
-  orderFan(group)
-  if (fanCrossings(group) < before && safeRoutes(endpoints, routes)) return
-  for (const [route, points] of originals) route.points = points
-}
-
-/** Orders equivalent pins so nested routes fan out instead of crossing beside their shared building. */
-function orderBuildingFans(
-  endpoints: ReadonlyMap<string, Endpoint>,
-  routes: FlatRoute[],
-): void {
-  for (const group of buildingFans(endpoints, routes).values()) improveFan(endpoints, routes, group)
-}
-
-/** Routes every authored relationship once around the complete visible building silhouettes. */
-export function routeAll(
-  endpoints: ReadonlyMap<string, Endpoint>,
-  requests: readonly RouteRequest[],
-): Route[] {
-  const router = new Avoid.Router(enumNumber(Avoid.RouterFlag.OrthogonalRouting))
-  const parameter = (name: keyof typeof Avoid.RoutingParameter, value: number) => {
-    router.setRoutingParameter(enumNumber(Avoid.RoutingParameter[name]), value)
-  }
-  parameter('segmentPenalty', 10)
-  parameter('crossingPenalty', 700)
-  parameter('fixedSharedPathPenalty', 300)
-  parameter('portDirectionPenalty', 100)
-  parameter('shapeBufferDistance', 0)
-  parameter('idealNudgingDistance', ROUTE_UNIT * 0.75)
-  parameter('reverseDirectionPenalty', 2_000)
-  for (const name of [
-    'penaliseOrthogonalSharedPathsAtConnEnds',
-    'nudgeOrthogonalTouchingColinearSegments',
-    'performUnifyingNudgingPreprocessingStep',
-    'nudgeSharedPathsWithCommonEndPoint',
-  ] as const) router.setRoutingOption(enumNumber(Avoid.RoutingOption[name]), true)
-
-  const connections = buildingConnections(router, endpoints, requests)
+function portsFor(endpoints: ReadonlyMap<string, Endpoint>, requests: readonly RouteRequest[]): PortPair[] {
   const fixed = assignFixedPorts(endpoints, requests)
-  const connectors = requests.map(request => {
-    const connector = new Avoid.ConnRef(
-      router,
-      connectorEnd(request, 'source', connections, fixed, endpoints),
-      connectorEnd(request, 'target', connections, fixed, endpoints),
-    )
-    connector.setRoutingType(enumNumber(Avoid.ConnType.ConnType_Orthogonal))
-    connector.setHateCrossings(true)
-    return { request, connector }
+  return requests.map(request => {
+    const pair = fixed.get(request.id)
+    if (!pair?.source || !pair.target) throw new Error(`No fixed ports for ${request.id}`)
+    return { source: pair.source, target: pair.target }
   })
-  router.processTransaction()
+}
 
-  const raw: FlatRoute[] = connectors.map(({ request, connector }) => {
-    const polyline = connector.displayRoute() as unknown as RoutedPolyline
-    const points = Array.from({ length: polyline.size() }, (_, index) => {
-      const point = polyline.ps.get(index)
-      return { x: point.x, y: point.y }
-    })
-    if (points.length < 2) throw new Error(`Libavoid could not route ${request.id}`)
-    const pair = {
-      source: selectedPort(points[0]!, points[1]!, request, 'source', connections, fixed),
-      target: selectedPort(points.at(-1)!, points.at(-2)!, request, 'target', connections, fixed),
-    }
-    return { ...request, points: attachWalls(points, pair) }
-  })
-  const routes = refineRoutes(endpoints, raw)
+/** Routes every visible relationship once, keeping buildings clear and paths distinct. */
+export function routeAll(endpoints: ReadonlyMap<string, Endpoint>, requests: readonly RouteRequest[]): Route[] {
+  if (requests.length === 0) return []
+  const ports = portsFor(endpoints, requests)
+  const search = new RouteSearch(routeGrid(endpoints, requests, ports))
+  const routes: FlatRoute[] = []
+  for (const index of routeOrder(requests)) {
+    const request = requests[index]!
+    const pair = ports[index]!
+    const axis = pair.source.side === 'east' || pair.source.side === 'west' ? 0 : 1
+    const points = search.route(index, axis, request.id)
+    routes[index] = { ...request, points: compactPath(attachWalls(points, pair)) }
+  }
   orderBuildingFans(endpoints, routes)
   alignFacingRoutes(endpoints, routes)
-  const crossing = crossingRouteIdsFor(endpoints)(routes)
-  const routeIds = new Set(routes.map(route => route.id))
-  const [spacing] = routeSpacingIndex(routes, routeIds).measure(routes, [ROUTE_UNIT * 0.75])
-  if (crossing.length > 0 || spacing.sharedPathLength > 0.001) {
-    throw new Error(`Shared sheet routing safety: crossings=${crossing.join(',')}; shared=${spacing.sharedPathLength}`)
+  shortenDirect(endpoints, routes)
+  shortenEnds(endpoints, routes)
+  // Shortcuts can change the order of ends along a shared wall.
+  orderBuildingFans(endpoints, routes)
+  const crossings = crossingRouteIdsFor(endpoints)(routes)
+  const shared = sharedPathMeasure(routes, new Set(routes.map(route => route.id)))(routes)
+  if (crossings.length > 0 || shared > 0.001) {
+    throw new Error(`Shared sheet routing safety: crossings=${crossings.join(',')}; shared=${shared}`)
   }
-  // Keep Libavoid's shape and pin wrappers alive until every route has been extracted.
-  void connections
   return routes.map(route => ({
     ...route,
     points: route.points.map(point => ({ gx: point.x / ROUTE_UNIT, gy: point.y / ROUTE_UNIT })),

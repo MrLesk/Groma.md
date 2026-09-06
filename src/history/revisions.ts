@@ -119,18 +119,24 @@ export async function listGitRevisions(repositoryRoot: string): Promise<GitRevis
 
 /** Current-branch Groma revisions, including commits the current reader cannot open. */
 export async function listGromaRevisions(repositoryRoot: string): Promise<GromaRevision[]> {
-  return Promise.all((await listGitRevisions(repositoryRoot)).map(async revision => ({
-    ...revision,
-    compatible: await withGitGromaRevision(repositoryRoot, revision.id, async snapshotRoot => {
-      try {
-        if (await loadProjectProfile(snapshotRoot) === undefined) return false
-        annotateArchitecture(await loadArchitecture(snapshotRoot))
-        return true
-      } catch {
-        return false
-      }
-    }),
-  })))
+  const revisions = await listGitRevisions(repositoryRoot)
+  const result: GromaRevision[] = []
+  // Bound simultaneous archive extraction and Markdown parsing during startup.
+  for (let index = 0; index < revisions.length; index += 4) {
+    result.push(...await Promise.all(revisions.slice(index, index + 4).map(async revision => ({
+      ...revision,
+      compatible: await withGitGromaRevision(repositoryRoot, revision.id, async snapshotRoot => {
+        try {
+          if (await loadProjectProfile(snapshotRoot) === undefined) return false
+          annotateArchitecture(await loadArchitecture(snapshotRoot))
+          return true
+        } catch {
+          return false
+        }
+      }),
+    }))))
+  }
+  return result
 }
 
 function extractArchive(

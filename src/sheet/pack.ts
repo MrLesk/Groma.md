@@ -1,5 +1,6 @@
-import { FOLD_ASPECT, GAP, SPOT_BEND, SPOT_DETOUR } from './forces.ts'
-import { EMPTY, PAD, overlaps, unionRects } from './grid.ts'
+import { FOLD_ASPECT, GAP } from './forces.ts'
+import { EMPTY, PAD, unionRects } from './grid.ts'
+import { PackingPaths } from './pack-paths.ts'
 import type { CellRect } from './types.ts'
 
 export interface ShelfItem {
@@ -56,63 +57,6 @@ interface Partner {
 
 const centre = (rect: CellRect): { x: number; y: number } => ({ x: rect.gx + rect.w / 2, y: rect.gy + rect.d / 2 })
 const longer = (rect: CellRect): number => Math.max(rect.w, rect.d)
-const overlapX = (a: CellRect, b: CellRect): boolean => a.gx < b.gx + b.w && b.gx < a.gx + a.w
-const overlapY = (a: CellRect, b: CellRect): boolean => a.gy < b.gy + b.d && b.gy < a.gy + a.d
-
-/** True when the two keep GAP between them on at least one axis. */
-function apart(a: CellRect, b: CellRect): boolean {
-  return a.gx + a.w + GAP <= b.gx || b.gx + b.w + GAP <= a.gx || a.gy + a.d + GAP <= b.gy || b.gy + b.d + GAP <= a.gy
-}
-
-/** A one-cell-wide strip along a horizontal or vertical run. */
-const across = (x0: number, x1: number, y: number): CellRect => ({ gx: Math.min(x0, x1), gy: y - 0.5, w: Math.abs(x1 - x0), d: 1 })
-const along = (x: number, y0: number, y1: number): CellRect => ({ gx: x - 0.5, gy: Math.min(y0, y1), w: 1, d: Math.abs(y1 - y0) })
-
-/**
- * True when every run an arrow could take between two siblings crosses
- * another sibling: side by side it is a Z with one jog, tried near either
- * end and in the middle; diagonal it is an L either way round.
- */
-function blocked(a: CellRect, b: CellRect, others: readonly CellRect[]): boolean {
-  const hit = (...strips: CellRect[]): boolean => strips.some(strip => strip.w > 0 && strip.d > 0 && others.some(other => overlaps(other, strip)))
-  const ca = centre(a)
-  const cb = centre(b)
-  if (overlapY(a, b)) {
-    const [west, east] = a.gx <= b.gx ? [a, b] : [b, a]
-    const x0 = west.gx + west.w
-    const x1 = east.gx
-    const cw = centre(west)
-    const ce = centre(east)
-    return [x0 + 0.5, (x0 + x1) / 2, x1 - 0.5].every(x => hit(across(x0, x, cw.y), along(x, cw.y, ce.y), across(x, x1, ce.y)))
-  }
-  if (overlapX(a, b)) {
-    const [north, south] = a.gy <= b.gy ? [a, b] : [b, a]
-    const y0 = north.gy + north.d
-    const y1 = south.gy
-    const cn = centre(north)
-    const cs = centre(south)
-    return [y0 + 0.5, (y0 + y1) / 2, y1 - 0.5].every(y => hit(along(cn.x, y0, y), across(cn.x, cs.x, y), along(cs.x, y, y1)))
-  }
-  const ax = ca.x < cb.x ? a.gx + a.w : a.gx
-  const bx = ca.x < cb.x ? b.gx : b.gx + b.w
-  const ay = ca.y < cb.y ? a.gy + a.d : a.gy
-  const by = ca.y < cb.y ? b.gy : b.gy + b.d
-  return hit(across(ax, cb.x, ca.y), along(cb.x, ca.y, by)) && hit(along(ca.x, ay, cb.y), across(ca.x, bx, cb.y))
-}
-
-/**
- * What the arrow between two siblings costs: its Manhattan length, BEND per
- * bend (none when their centres line up, one when they sit diagonally, two
- * when they overlap on one axis without lining up) and DETOUR when every
- * run between them crosses another sibling.
- */
-function arrowCost(a: CellRect, b: CellRect, others: readonly CellRect[]): number {
-  const dx = Math.abs(centre(a).x - centre(b).x)
-  const dy = Math.abs(centre(a).y - centre(b).y)
-  const bends = dx <= 0.5 || dy <= 0.5 ? 0 : overlapX(a, b) || overlapY(a, b) ? 2 : 1
-  return dx + dy + SPOT_BEND * bends + (blocked(a, b, others) ? SPOT_DETOUR : 0)
-}
-
 /** The spots a child may take: beside each placed partner, centred on it, then beside everything placed so far, centred on the partners' weighted centre. */
 function spots(item: ShelfItem, partners: readonly Partner[], all: CellRect): { gx: number; gy: number }[] {
   const beside = (rect: CellRect, on: { x: number; y: number }) => [
@@ -131,6 +75,59 @@ function spots(item: ShelfItem, partners: readonly Partner[], all: CellRect): { 
 
 const weightOf = (item: Partnered): number => [...item.partners.values()].reduce((sum, count) => sum + count, 0)
 
+interface PackingState {
+  rects: Map<string, CellRect>
+  paths: PackingPaths
+  westEdge: number
+}
+
+function eastOfAll(rects: ReadonlyMap<string, CellRect>): { gx: number; gy: number } {
+  const all = unionRects([...rects.values()])
+  return all === null ? { gx: PAD, gy: PAD } : { gx: all.gx + all.w + GAP, gy: all.gy }
+}
+
+function chooseSpot(item: Partnered, state: PackingState): { gx: number; gy: number } {
+  const partners: Partner[] = [...item.partners]
+    .filter(([key]) => state.rects.has(key))
+    .map(([key, count]) => ({ rect: state.rects.get(key)!, count }))
+  let best = eastOfAll(state.rects)
+  if (partners.length === 0) return best
+  const all = unionRects([...state.rects.values()])!
+  let bestCost = Infinity
+  for (const spot of spots(item, partners, all)) {
+    const rect = { gx: Math.max(spot.gx, state.westEdge), gy: spot.gy, w: item.w, d: item.d }
+    if (!state.paths.apart(rect)) continue
+    const growth = longer(unionRects([all, rect])!) - longer(all)
+    const cost = partners.reduce((sum, partner) => sum + partner.count * state.paths.arrowCost(rect, partner.rect), growth)
+      + state.paths.placementCost(rect)
+    if (cost < bestCost) {
+      best = { gx: rect.gx, gy: rect.gy }
+      bestCost = cost
+    }
+  }
+  return best
+}
+
+function placeConnected(connected: Partnered[], state: PackingState): void {
+  while (connected.length > 0) {
+    const index = connected.findIndex(item => [...item.partners.keys()].some(key => state.rects.has(key)))
+    const [item] = connected.splice(Math.max(0, index), 1) as [Partnered]
+    const rect = { ...chooseSpot(item, state), w: item.w, d: item.d }
+    state.rects.set(item.key, rect)
+    state.paths.add(item.key, rect, state.rects)
+  }
+}
+
+function placeLoose(loose: readonly Partnered[], rects: Map<string, CellRect>): void {
+  if (loose.length === 0) return
+  const block = shelf(loose)
+  const start = eastOfAll(rects)
+  for (const item of loose) {
+    const { gx, gy } = block.at.get(item.key)!
+    rects.set(item.key, { gx: start.gx + gx - PAD, gy: start.gy + gy - PAD, w: item.w, d: item.d })
+  }
+}
+
 /**
  * Growth placement. The entries (what the outside feeds) stand in a west
  * column, folded into a square-ish block when that column is over
@@ -144,9 +141,9 @@ const weightOf = (item: Partnered): number => [...item.partners.values()].reduce
  */
 export function grow(items: readonly Partnered[]): Shelf {
   const entries = items.filter(item => item.entry)
-  const connected = items
-    .filter(item => !item.entry && item.partners.size > 0)
-    .sort((a, b) => weightOf(b) - weightOf(a))
+  const weights = new Map(items.map(item => [item.key, weightOf(item)]))
+  const connected = items.filter(item => !item.entry && item.partners.size > 0)
+    .sort((a, b) => weights.get(b.key)! - weights.get(a.key)!)
   const loose = items.filter(item => !item.entry && item.partners.size === 0)
   if (entries.length + connected.length === 0) return shelf(items)
   const column = shelf(entries, 1)
@@ -154,61 +151,10 @@ export function grow(items: readonly Partnered[]): Shelf {
   const rects = new Map<string, CellRect>(
     entries.map(item => [item.key, { ...west.at.get(item.key)!, w: item.w, d: item.d }]),
   )
-  /**
-   * The outside feeds the entries from the west. A spot that would cross
-   * that edge is not dropped: it slides east to the edge, level with its
-   * partner, and competes on cost there; dropping it instead leaves wide
-   * children nowhere beside a small partner and they fall into a strip.
-   */
-  const westEdge = entries.length > 0 ? PAD : -Infinity
-  const eastOfAll = (): { gx: number; gy: number } => {
-    const all = unionRects([...rects.values()])
-    return all === null ? { gx: PAD, gy: PAD } : { gx: all.gx + all.w + GAP, gy: all.gy }
-  }
-  while (connected.length > 0) {
-    const index = connected.findIndex(item => [...item.partners.keys()].some(key => rects.has(key)))
-    const [item] = connected.splice(Math.max(0, index), 1) as [Partnered]
-    const placed = [...rects.values()]
-    const partners: Partner[] = [...item.partners]
-      .filter(([key]) => rects.has(key))
-      .map(([key, count]) => ({ rect: rects.get(key)!, count }))
-    /** The arrows among the placed siblings, each pair once. */
-    const arrows = items
-      .filter(other => rects.has(other.key))
-      .flatMap(other => [...other.partners]
-        .filter(([key]) => rects.has(key) && other.key < key)
-        .map(([key, count]) => ({ a: rects.get(other.key)!, b: rects.get(key)!, count })))
-    let best = eastOfAll()
-    let bestCost = Infinity
-    if (partners.length > 0) {
-      const all = unionRects(placed)!
-      for (const spot of spots(item, partners, all)) {
-        const rect = { gx: Math.max(spot.gx, westEdge), gy: spot.gy, w: item.w, d: item.d }
-        if (!placed.every(other => apart(rect, other))) continue
-        /** A spot costs the arrows it makes, the placed arrows it newly stands in the way of, and the cells it adds to the surface's longer side, so chains wrap instead of stretching. */
-        const cost = partners.reduce(
-          (sum, partner) => sum + partner.count * arrowCost(rect, partner.rect, placed.filter(other => other !== partner.rect)),
-          longer(unionRects([...placed, rect])!) - longer(all),
-        ) + arrows.reduce((sum, arrow) => {
-          const others = placed.filter(other => other !== arrow.a && other !== arrow.b)
-          return sum + (!blocked(arrow.a, arrow.b, others) && blocked(arrow.a, arrow.b, [...others, rect]) ? SPOT_DETOUR * arrow.count : 0)
-        }, 0)
-        if (cost < bestCost) {
-          best = { gx: rect.gx, gy: rect.gy }
-          bestCost = cost
-        }
-      }
-    }
-    rects.set(item.key, { ...best, w: item.w, d: item.d })
-  }
-  if (loose.length > 0) {
-    const block = shelf(loose)
-    const start = eastOfAll()
-    for (const item of loose) {
-      const { gx, gy } = block.at.get(item.key)!
-      rects.set(item.key, { gx: start.gx + gx - PAD, gy: start.gy + gy - PAD, w: item.w, d: item.d })
-    }
-  }
+  // Keep entries on the west boundary; other candidates slide east to it before scoring.
+  const state = { rects, paths: new PackingPaths(items, rects), westEdge: entries.length > 0 ? PAD : -Infinity }
+  placeConnected(connected, state)
+  placeLoose(loose, rects)
   const all = unionRects([...rects.values()])!
   const at = new Map([...rects].map(([key, rect]) => [key, { gx: rect.gx - all.gx + PAD, gy: rect.gy - all.gy + PAD }]))
   return { w: all.w + 2 * PAD, d: all.d + 2 * PAD, at }

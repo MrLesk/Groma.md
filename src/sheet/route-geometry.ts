@@ -34,7 +34,7 @@ export interface Endpoint {
   centrePorts?: boolean
 }
 
-export type RouteRequest = Pick<AnnotatedRelationship, 'id' | 'source' | 'target' | 'description' | 'origin'>
+export type RouteRequest = Pick<AnnotatedRelationship, 'id' | 'source' | 'target' | 'description' | 'origin'> & { relationshipIds?: string[] }
 export type FlatRoute = Omit<Route, 'points'> & { points: Point[] }
 
 interface EndpointCandidate {
@@ -110,14 +110,6 @@ function portAt(endpoint: Endpoint, side: PortSide, share: number): RoutePort {
   return { side, wall, guard }
 }
 
-/** Equivalent building ports from which Libavoid may choose the straightest route. */
-export function buildingPorts(endpoint: Endpoint, capacity = PORT_CAPACITY): RoutePort[] {
-  const portCount = Math.max(PORT_CAPACITY, capacity)
-  return (['north', 'east', 'south', 'west'] as const).flatMap(side =>
-    Array.from({ length: portCount }, (_, index) =>
-      portAt(endpoint, side, portShare(endpoint, side, index, portCount))))
-}
-
 function inside(point: Point, polygon: readonly Point[]): boolean {
   let contained = false
   for (let index = 0, previous = polygon.length - 1; index < polygon.length; previous = index++) {
@@ -129,22 +121,65 @@ function inside(point: Point, polygon: readonly Point[]): boolean {
   return contained
 }
 
+interface PortObstacle {
+  key: string
+  polygon: Point[]
+  x0: number
+  x1: number
+  y0: number
+  y1: number
+}
+
+/** Buckets narrow port checks; the original polygon test still decides clearance. */
+class PortObstacles {
+  private cells = new Map<string, PortObstacle[]>()
+  private cellSize = ROUTE_UNIT * 8
+
+  constructor(buildings: readonly Endpoint[]) {
+    for (const building of buildings) this.add(building)
+  }
+
+  private add(building: Endpoint): void {
+    const polygon = visibleObstacle(building, ROUTE_CLEARANCE)
+    const obstacle: PortObstacle = {
+      key: building.key,
+      polygon,
+      x0: Math.min(...polygon.map(point => point.x)),
+      x1: Math.max(...polygon.map(point => point.x)),
+      y0: Math.min(...polygon.map(point => point.y)),
+      y1: Math.max(...polygon.map(point => point.y)),
+    }
+    for (let x = Math.floor(obstacle.x0 / this.cellSize); x <= Math.floor(obstacle.x1 / this.cellSize); x += 1) {
+      for (let y = Math.floor(obstacle.y0 / this.cellSize); y <= Math.floor(obstacle.y1 / this.cellSize); y += 1) {
+        const key = `${x},${y}`
+        const bucket = this.cells.get(key) ?? []
+        bucket.push(obstacle)
+        this.cells.set(key, bucket)
+      }
+    }
+  }
+
+  clear(point: Point, endpoint: Endpoint, other: Endpoint): boolean {
+    const key = `${Math.floor(point.x / this.cellSize)},${Math.floor(point.y / this.cellSize)}`
+    for (const obstacle of this.cells.get(key) ?? []) {
+      if (obstacle.key === endpoint.key || obstacle.key === other.key) continue
+      if (point.x < obstacle.x0 || point.x > obstacle.x1 || point.y < obstacle.y0 || point.y > obstacle.y1) continue
+      if (inside(point, obstacle.polygon)) return false
+    }
+    return true
+  }
+}
+
 function portClear(
   endpoint: Endpoint,
   other: Endpoint,
-  buildings: readonly Endpoint[],
+  buildings: PortObstacles,
   side: PortSide,
   share: number,
 ): boolean {
   const port = portAt(endpoint, side, share)
-  return buildings.every(building => {
-    if (building.key === endpoint.key || building.key === other.key) return true
-    const obstacle = visibleObstacle(building, ROUTE_CLEARANCE)
-    return [
-      port.guard,
-      { x: (port.wall.x + port.guard.x) / 2, y: (port.wall.y + port.guard.y) / 2 },
-    ].every(point => !inside(point, obstacle))
-  })
+  const middle = { x: (port.wall.x + port.guard.x) / 2, y: (port.wall.y + port.guard.y) / 2 }
+  return buildings.clear(port.guard, endpoint, other) && buildings.clear(middle, endpoint, other)
 }
 
 function laneCoordinate(candidate: EndpointCandidate): number {
@@ -180,7 +215,7 @@ function candidateGroups(
 function routeCandidates(
   endpoints: ReadonlyMap<string, Endpoint>,
   requests: readonly RouteRequest[],
-  buildings: readonly Endpoint[],
+  buildings: PortObstacles,
 ): EndpointCandidate[] {
   const candidates: EndpointCandidate[] = []
   for (const request of requests) {
@@ -188,7 +223,6 @@ function routeCandidates(
     const target = endpoints.get(request.target)
     if (!source || !target) throw new Error(`Relationship ${request.id} names an element the sheet did not place`)
     for (const [endpoint, other, role] of [[source, target, 'source'], [target, source, 'target']] as const) {
-      if (endpoint.kind === 'building') continue
       const sides = sidesTowards(endpoint, other)
       const sideIndex = sides.findIndex(side => portClear(endpoint, other, buildings, side, 0.5))
       if (sideIndex < 0) throw new Error(`No clear port side for ${request.id} at ${endpoint.key}`)
@@ -205,7 +239,7 @@ function moveToQuieterSide(
   side: PortSide,
   loads: Map<PortSide, number>,
   capacity: number,
-  buildings: readonly Endpoint[],
+  buildings: PortObstacles,
 ): void {
   const selected = candidate.sides
     .map((candidateSide, index) => ({ side: candidateSide, index }))
@@ -219,7 +253,9 @@ function moveToQuieterSide(
   loads.set(selected.side, (loads.get(selected.side) ?? 0) + 1)
 }
 
-function balanceEndpointSides(group: EndpointCandidate[], buildings: readonly Endpoint[]): void {
+function balanceEndpointSides(group: EndpointCandidate[], buildings: PortObstacles): void {
+  // Parallel connections share the facing wall and use separate positions along it.
+  if (group[0]!.endpoint.kind === 'building' && group.every(candidate => candidate.other.key === group[0]!.other.key)) return
   const capacity = portCapacity(group[0]!)
   const bySide = Map.groupBy(group, candidate => candidate.side)
   const loads = new Map([...bySide].map(([side, sideGroup]) => [side, sideGroup.length]))
@@ -230,7 +266,7 @@ function balanceEndpointSides(group: EndpointCandidate[], buildings: readonly En
   }
 }
 
-function balanceSideLoads(candidates: readonly EndpointCandidate[], buildings: readonly Endpoint[]): void {
+function balanceSideLoads(candidates: readonly EndpointCandidate[], buildings: PortObstacles): void {
   const groups = candidateGroups(candidates, candidate => `${candidate.endpoint.key}\0${candidate.role}`)
   for (const group of groups.values()) balanceEndpointSides(group, buildings)
 }
@@ -241,7 +277,7 @@ function byEndpointSide(candidates: readonly EndpointCandidate[]): Map<string, E
 
 function blockedCandidate(
   groups: ReadonlyMap<string, EndpointCandidate[]>,
-  buildings: readonly Endpoint[],
+  buildings: PortObstacles,
 ): EndpointCandidate | undefined {
   for (const group of groups.values()) {
     group.sort((a, b) => laneCoordinate(a) - laneCoordinate(b) || a.request.id.localeCompare(b.request.id))
@@ -260,7 +296,7 @@ function blockedCandidate(
 function moveBlockedCandidate(
   candidate: EndpointCandidate,
   groups: ReadonlyMap<string, EndpointCandidate[]>,
-  buildings: readonly Endpoint[],
+  buildings: PortObstacles,
 ): void {
   const choices = candidate.sides
     .map((side, index) => ({ side, index }))
@@ -275,7 +311,7 @@ function moveBlockedCandidate(
 
 function distributeClearPorts(
   candidates: readonly EndpointCandidate[],
-  buildings: readonly Endpoint[],
+  buildings: PortObstacles,
 ): Map<string, EndpointCandidate[]> {
   let groups = byEndpointSide(candidates)
   for (let attempt = 0; attempt < candidates.length * 4; attempt += 1) {
@@ -304,68 +340,34 @@ function pairsFrom(groups: ReadonlyMap<string, EndpointCandidate[]>): Map<string
   return pairs
 }
 
-/** Assigns fixed ports only to endpoints that have no Libavoid building shape. */
+/** Distributes distinct wall ports across each endpoint before routing. */
 export function assignFixedPorts(
   endpoints: ReadonlyMap<string, Endpoint>,
   requests: readonly RouteRequest[],
 ): Map<string, Partial<PortPair>> {
-  const buildings = [...endpoints.values()].filter(endpoint => endpoint.kind === 'building')
+  const buildings = new PortObstacles([...endpoints.values()].filter(endpoint => endpoint.kind === 'building'))
   const candidates = routeCandidates(endpoints, requests, buildings)
   balanceSideLoads(candidates, buildings)
   return pairsFrom(distributeClearPorts(candidates, buildings))
 }
 
-export function routingAnchor(
-  port: RoutePort,
-  endpointId: string,
-  endpoints: ReadonlyMap<string, Endpoint>,
-): Point {
-  const outer = {
-    x: port.guard.x + port.guard.x - port.wall.x,
-    y: port.guard.y + port.guard.y - port.wall.y,
-  }
-  return [...endpoints.values()].some(endpoint =>
-    endpoint.kind === 'building'
-    && endpoint.key !== endpointId
-    && inside(outer, visibleObstacle(endpoint, ROUTE_CLEARANCE)))
-    ? { ...port.guard }
-    : outer
-}
-
-function same(a: Point | undefined, b: Point): boolean {
-  return a !== undefined && Math.abs(a.x - b.x) < EPSILON && Math.abs(a.y - b.y) < EPSILON
-}
-
-function snapGuardRun(points: Point[], port: RoutePort, fromStart: boolean): void {
+/** Restore exact wall alignment after grid coordinates were rounded for indexing. */
+function alignGuardRun(points: Point[], port: RoutePort, fromStart: boolean): void {
   const coordinate = port.side === 'east' || port.side === 'west' ? 'y' : 'x'
-  const end = fromStart ? points[0] : points.at(-1)
-  if (!end || Math.abs(end[coordinate] - port.guard[coordinate]) >= 0.1) return
-  const nudged = end[coordinate]
+  const rounded = (fromStart ? points[0]! : points.at(-1)!)[coordinate]
   for (let offset = 0; offset < points.length; offset += 1) {
     const index = fromStart ? offset : points.length - 1 - offset
     const point = points[index]!
-    if (Math.abs(point[coordinate] - nudged) >= EPSILON) break
+    if (Math.abs(point[coordinate] - rounded) >= EPSILON) break
     point[coordinate] = port.guard[coordinate]
   }
 }
 
 export function attachWalls(points: readonly Point[], ports: PortPair): Point[] {
   const body = points.map(point => ({ ...point }))
-  snapGuardRun(body, ports.source, true)
-  snapGuardRun(body, ports.target, false)
-  const horizontal = (side: PortSide) => side === 'east' || side === 'west'
-  const sourceBend = horizontal(ports.source.side)
-    ? { x: body[0]!.x, y: ports.source.guard.y }
-    : { x: ports.source.guard.x, y: body[0]!.y }
-  const targetBend = horizontal(ports.target.side)
-    ? { x: body.at(-1)!.x, y: ports.target.guard.y }
-    : { x: ports.target.guard.x, y: body.at(-1)!.y }
-  const route = [
-    { ...ports.source.wall }, { ...ports.source.guard }, sourceBend,
-    ...body,
-    targetBend, { ...ports.target.guard }, { ...ports.target.wall },
-  ]
-  return route.filter((point, index) => index === 0 || !same(route[index - 1], point))
+  alignGuardRun(body, ports.source, true)
+  alignGuardRun(body, ports.target, false)
+  return [{ ...ports.source.wall }, ...body, { ...ports.target.wall }]
 }
 
 interface RouteObstacle {
@@ -425,17 +427,6 @@ function segmentsCross(a0: Point, a1: Point, b0: Point, b1: Point): boolean {
     && between(horizontal0.y, vertical0.y, vertical1.y)
 }
 
-function segmentsSharePath(a0: Point, a1: Point, b0: Point, b1: Point): boolean {
-  const aHorizontal = Math.abs(a0.y - a1.y) < EPSILON
-  const bHorizontal = Math.abs(b0.y - b1.y) < EPSILON
-  if (aHorizontal !== bHorizontal) return false
-  const coordinate = aHorizontal ? 'y' : 'x'
-  const along = aHorizontal ? 'x' : 'y'
-  return Math.abs(a0[coordinate] - b0[coordinate]) < EPSILON
-    && Math.min(Math.max(a0[along], a1[along]), Math.max(b0[along], b1[along]))
-      - Math.max(Math.min(a0[along], a1[along]), Math.min(b0[along], b1[along])) > EPSILON
-}
-
 export function routesCross(a: FlatRoute, b: FlatRoute): boolean {
   for (let left = 1; left < a.points.length; left += 1) {
     for (let right = 1; right < b.points.length; right += 1) {
@@ -443,37 +434,6 @@ export function routesCross(a: FlatRoute, b: FlatRoute): boolean {
     }
   }
   return false
-}
-
-function routesSharePath(a: FlatRoute, b: FlatRoute): boolean {
-  return a.points.slice(1).some((a1, left) => b.points.slice(1).some((b1, right) =>
-    segmentsSharePath(a.points[left]!, a1, b.points[right]!, b1)))
-}
-
-function crossingPairs(routes: readonly FlatRoute[], touching: ReadonlySet<string>): Set<string> {
-  const result = new Set<string>()
-  for (let left = 0; left < routes.length; left += 1) {
-    for (let right = left + 1; right < routes.length; right += 1) {
-      const a = routes[left]!
-      const b = routes[right]!
-      if ((touching.has(a.id) || touching.has(b.id)) && routesCross(a, b)) result.add(`${a.id}\0${b.id}`)
-    }
-  }
-  return result
-}
-
-/** Checks whether selected routes cross a route they did not previously cross or overlap. */
-export function newRouteCrossingFor(
-  routes: readonly FlatRoute[],
-  touching: ReadonlySet<string>,
-): (candidate: readonly FlatRoute[]) => boolean {
-  const before = crossingPairs(routes, touching)
-  for (let left = 0; left < routes.length; left += 1) for (let right = left + 1; right < routes.length; right += 1) {
-    const a = routes[left]!
-    const b = routes[right]!
-    if ((touching.has(a.id) || touching.has(b.id)) && routesSharePath(a, b)) before.add(`${a.id}\0${b.id}`)
-  }
-  return candidate => [...crossingPairs(candidate, touching)].some(pair => !before.has(pair))
 }
 
 /** Returns a checker for routes whose open body enters a foreign building silhouette. */

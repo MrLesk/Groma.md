@@ -146,12 +146,12 @@ Current architecture.
   try {
     const current = await (await fetch(`${server.url}/world.json`)).json() as {
       project: { title: string }
-      revisions: { id: string; subject: string }[]
     }
     assert.equal(current.project.title, 'Current shop')
-    assert.equal(current.revisions[0]!.subject, 'Initial architecture')
+    const revisions = await (await fetch(`${server.url}/revisions.json`)).json() as { id: string; subject: string }[]
+    assert.equal(revisions[0]!.subject, 'Initial architecture')
 
-    const revision = current.revisions[0]!.id
+    const revision = revisions[0]!.id
     const historical = await (await fetch(`${server.url}/world.json?revision=${revision}`)).json() as {
       project: { title: string }
       revision: { id: string }
@@ -211,10 +211,8 @@ test.concurrent('groma web reads component code on demand from the selected revi
   try {
     const page = await (await fetch(server.url)).text()
     assert.doesNotMatch(page, /currentHidden/)
-    const world = await (await fetch(`${server.url}/world.json`)).json() as {
-      revisions: { id: string; subject: string }[]
-    }
-    const revision = world.revisions.find(candidate => candidate.subject === 'Versioned source component')!
+    const revisions = await (await fetch(`${server.url}/revisions.json`)).json() as { id: string; subject: string }[]
+    const revision = revisions.find(candidate => candidate.subject === 'Versioned source component')!
     const selected = new URLSearchParams({ element: 'details', file: 'src/details.ts' })
     const current = await (await fetch(`${server.url}/source.json?${selected}`)).json() as { source: string }
     assert.equal(current.source, currentSource)
@@ -242,11 +240,9 @@ test.concurrent('groma web marks obsolete Markdown revisions unsupported', async
 
   const server = await startWebViewer(root, { port: 0 })
   try {
-    const payload = await (await fetch(`${server.url}/world.json`)).json() as {
-      revisions: { id: string; subject: string; compatible: boolean }[]
-    }
-    const current = payload.revisions.find(revision => revision.subject === 'Current actor contract')
-    const obsolete = payload.revisions.find(revision => revision.subject === 'Old person contract')
+    const revisions = await (await fetch(`${server.url}/revisions.json`)).json() as { id: string; subject: string; compatible: boolean }[]
+    const current = revisions.find(revision => revision.subject === 'Current actor contract')
+    const obsolete = revisions.find(revision => revision.subject === 'Old person contract')
     assert.equal(current?.compatible, true)
     assert.equal(obsolete?.compatible, false)
     const response = await fetch(`${server.url}/world.json?revision=${obsolete!.id}`)
@@ -322,6 +318,7 @@ test.concurrent('groma web applies an architecture Markdown change without a ref
     assert.ok(changed.timings.totalMilliseconds >= changed.timings.architectureLoadMilliseconds)
     assert.ok(changed.timings.totalMilliseconds >= changed.timings.placementMilliseconds + changed.timings.routingMilliseconds)
     assert.ok((await worldNames(server.url)).includes('Shopfront'))
+    assert.match(await (await fetch(server.url)).text(), /"title":"Shopfront"/)
     assert.ok(!(await worldNames(server.url)).includes('Orders'))
     await reader.cancel()
   } finally {

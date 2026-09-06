@@ -4,6 +4,7 @@ import { parseMarkdown, parseFrontmatter } from 'comark'
 
 import {
   FLOW_TYPE,
+  RELATIONSHIPS_TYPE,
   c4Kind,
   requireBundleIndex,
   requireConceptType,
@@ -158,16 +159,20 @@ export async function loadArchitecture(
   const drafts: ArchitectureDocument[] = []
   const flows: ArchitectureDocument[] = []
 
-  for (const filename of await listMarkdownFiles(filesystem, '', onFilesystemAccess)) {
-    if (rootDocuments.has(filename) || isReservedDocument(filename)) continue
-    const document = await parseDocument(filesystem, filename, onFilesystemAccess)
+  const filenames = (await listMarkdownFiles(filesystem, '', onFilesystemAccess))
+    .filter(filename => !rootDocuments.has(filename) && !isReservedDocument(filename))
+  const parsed = await Promise.all(filenames.map(async filename => [
+    filename,
+    await parseDocument(filesystem, filename, onFilesystemAccess),
+  ] as const))
+  for (const [filename, document] of parsed) {
     if (filename.startsWith('drafts/')) {
       drafts.push(document)
       continue
     }
     const type = requireConceptType(document.frontmatter, document.sourceFilename)
     if (type === FLOW_TYPE) flows.push(document)
-    if (c4Kind(type) !== undefined) documents.push(document)
+    if (c4Kind(type) !== undefined || type === RELATIONSHIPS_TYPE) documents.push(document)
   }
 
   return deepFreeze({ documents, drafts, flows })

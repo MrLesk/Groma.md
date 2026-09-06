@@ -18,7 +18,6 @@
         "commander": "15.0.0",
         "diff": "9.0.0",
         "fuse.js": "7.5.0",
-        "libavoid-js": "0.5.0-beta.5",
         "typescript": "7.1.0-dev.20260905.1",
         "web-worker": "1.5.0",
         "webcola": "3.4.0",
@@ -50,6 +49,7 @@
       "version": "0.1.0",
       "dependencies": {
         "@groma/scanner": "workspace:*",
+        "typescript": "7.1.0-dev.20260905.1",
       },
     },
     "plugins/work-sources/backlog": {
@@ -274,8 +274,6 @@
     "is-glob": ["is-glob@4.0.3", "", { "dependencies": { "is-extglob": "^2.1.1" } }, "sha512-xelSayHH36ZgE7ZWhli7pW34hNbNl8Ojv5KVmkJD4hBdD3th8Tfk9vYasLM+mXWOZhFkgZfxhLSnrwRr4elSSg=="],
 
     "js-yaml": ["js-yaml@5.2.2", "", { "dependencies": { "argparse": "^2.0.1" }, "bin": "bin/js-yaml.mjs" }, "sha512-dayzUzKkJ1MkuUtZglSebU43utNXH0OWQByK9rKOOuYIO8M5TV1y+n8ALMdG0rdzBnfNkOmZEqrURepb0ejqBw=="],
-
-    "libavoid-js": ["libavoid-js@0.5.0-beta.5", "", {}, "sha512-jHkn6A10815TgFhZ1paUD/NDnQkg4C66qJc2Juj1NpmO/+QXnJ4UjIdKQarkXLmI/QgXhEO3RWDxMi3i+uHPwA=="],
 
     "linkify-it": ["linkify-it@5.0.2", "", { "dependencies": { "uc.micro": "^2.0.0" } }, "sha512-ONTm2jCMAVZjgQa/Fy1kScXsuOoF5NPTsoFBdE1KVIZ2vAh/r9+Bqo+0jINCBYnavTPQZz38QzFTme79ENoN3Q=="],
 
