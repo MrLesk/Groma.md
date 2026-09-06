@@ -21,9 +21,3 @@ groma:
 ---
 
 Events logger of Events.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [events-client](events-client.md) | Calls client | HTTP |

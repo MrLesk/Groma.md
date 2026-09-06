@@ -15,10 +15,3 @@ groma:
 ---
 
 Import metrics of Import.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [import-config](import-config.md) | Calls config | HTTP |
-| [import-logger](import-logger.md) | Reads logger | HTTP |

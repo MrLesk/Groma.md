@@ -21,9 +21,3 @@ groma:
 ---
 
 Session Store logger of Session Store.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [session-store-client](session-store-client.md) | Calls client | HTTP |

@@ -22,10 +22,3 @@ groma:
 ---
 
 Sessions queue of Sessions.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [sessions-worker](sessions-worker.md) | Calls worker | HTTP |
-| [sessions-scheduler](sessions-scheduler.md) | Reads scheduler | HTTP |

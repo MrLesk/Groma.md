@@ -22,10 +22,3 @@ groma:
 ---
 
 Pricing queue of Pricing.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [pricing-worker](pricing-worker.md) | Calls worker | HTTP |
-| [pricing-scheduler](pricing-scheduler.md) | Reads scheduler | HTTP |

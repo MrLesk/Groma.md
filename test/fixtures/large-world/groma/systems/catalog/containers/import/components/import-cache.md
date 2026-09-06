@@ -22,10 +22,3 @@ groma:
 ---
 
 Import cache of Import.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [import-validator](import-validator.md) | Calls validator | HTTP |
-| [import-mapper](import-mapper.md) | Reads mapper | HTTP |

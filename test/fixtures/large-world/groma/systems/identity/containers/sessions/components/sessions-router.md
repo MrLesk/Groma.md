@@ -16,10 +16,3 @@ groma:
 ---
 
 Sessions router of Sessions.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [sessions-session](sessions-session.md) | Calls session | HTTP |
-| [sessions-cache](sessions-cache.md) | Reads cache | HTTP |

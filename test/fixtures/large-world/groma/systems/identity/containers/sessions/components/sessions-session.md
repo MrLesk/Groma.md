@@ -19,10 +19,3 @@ groma:
 ---
 
 Sessions session of Sessions.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [sessions-cache](sessions-cache.md) | Calls cache | HTTP |
-| [sessions-validator](sessions-validator.md) | Reads validator | HTTP |

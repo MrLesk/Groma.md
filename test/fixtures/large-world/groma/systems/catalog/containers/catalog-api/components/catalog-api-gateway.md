@@ -13,11 +13,3 @@ groma:
 ---
 
 Catalog Api gateway of Catalog Api.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [catalog-api-router](catalog-api-router.md) | Calls router | HTTP |
-| [catalog-api-session](catalog-api-session.md) | Reads session | HTTP |
-| [pricing-gateway](../../../../catalog/containers/pricing/components/pricing-gateway.md) | Forwards requests | HTTP |

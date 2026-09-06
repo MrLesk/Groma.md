@@ -25,10 +25,3 @@ groma:
 ---
 
 Order Service validator of Order Service.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [order-service-mapper](order-service-mapper.md) | Calls mapper | HTTP |
-| [order-service-reader](order-service-reader.md) | Reads reader | HTTP |

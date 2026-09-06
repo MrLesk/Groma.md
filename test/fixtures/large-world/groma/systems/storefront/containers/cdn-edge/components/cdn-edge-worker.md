@@ -25,10 +25,3 @@ groma:
 ---
 
 Cdn Edge worker of Cdn Edge.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [cdn-edge-scheduler](cdn-edge-scheduler.md) | Calls scheduler | HTTP |
-| [cdn-edge-metrics](cdn-edge-metrics.md) | Reads metrics | HTTP |

@@ -13,10 +13,3 @@ groma:
 ---
 
 Order Db mapper of Order Db.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [order-db-reader](order-db-reader.md) | Calls reader | HTTP |
-| [order-db-writer](order-db-writer.md) | Reads writer | HTTP |

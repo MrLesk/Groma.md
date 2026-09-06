@@ -7,9 +7,3 @@ groma:
 ---
 
 Lets customers place orders.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [Git](../../externals/git.md) | Versions architecture | Git |

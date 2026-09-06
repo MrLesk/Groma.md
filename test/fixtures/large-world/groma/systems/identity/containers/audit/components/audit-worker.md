@@ -25,10 +25,3 @@ groma:
 ---
 
 Audit worker of Audit.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [audit-scheduler](audit-scheduler.md) | Calls scheduler | HTTP |
-| [audit-metrics](audit-metrics.md) | Reads metrics | HTTP |

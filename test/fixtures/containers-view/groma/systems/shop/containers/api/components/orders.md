@@ -5,6 +5,9 @@ status: stable
 groma:
   id: orders
   parent: api
+  code:
+    - scanner: typescript
+      file: src/orders.ts
 ---
 
 Records an order.

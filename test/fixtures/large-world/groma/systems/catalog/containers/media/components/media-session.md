@@ -19,10 +19,3 @@ groma:
 ---
 
 Media session of Media.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [media-cache](media-cache.md) | Calls cache | HTTP |
-| [media-validator](media-validator.md) | Reads validator | HTTP |

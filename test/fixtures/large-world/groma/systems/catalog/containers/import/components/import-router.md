@@ -16,10 +16,3 @@ groma:
 ---
 
 Import router of Import.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [import-session](import-session.md) | Calls session | HTTP |
-| [import-cache](import-cache.md) | Reads cache | HTTP |

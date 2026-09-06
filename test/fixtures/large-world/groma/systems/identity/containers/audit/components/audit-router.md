@@ -16,10 +16,3 @@ groma:
 ---
 
 Audit router of Audit.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [audit-session](audit-session.md) | Calls session | HTTP |
-| [audit-cache](audit-cache.md) | Reads cache | HTTP |

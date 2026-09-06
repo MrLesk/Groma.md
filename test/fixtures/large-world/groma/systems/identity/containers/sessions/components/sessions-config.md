@@ -18,10 +18,3 @@ groma:
 ---
 
 Sessions config of Sessions.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [sessions-logger](sessions-logger.md) | Calls logger | HTTP |
-| [sessions-client](sessions-client.md) | Reads client | HTTP |

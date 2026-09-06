@@ -13,10 +13,3 @@ groma:
 ---
 
 Auth mapper of Auth.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [auth-reader](auth-reader.md) | Calls reader | HTTP |
-| [auth-writer](auth-writer.md) | Reads writer | HTTP |

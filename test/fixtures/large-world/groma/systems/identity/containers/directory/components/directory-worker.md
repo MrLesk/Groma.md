@@ -25,10 +25,3 @@ groma:
 ---
 
 Directory worker of Directory.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [directory-scheduler](directory-scheduler.md) | Calls scheduler | HTTP |
-| [directory-metrics](directory-metrics.md) | Reads metrics | HTTP |

@@ -13,11 +13,3 @@ groma:
 ---
 
 Media gateway of Media.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [media-router](media-router.md) | Calls router | HTTP |
-| [media-session](media-session.md) | Reads session | HTTP |
-| [accounts-gateway](../../../../identity/containers/accounts/components/accounts-gateway.md) | Forwards requests | HTTP |

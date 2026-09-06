@@ -21,9 +21,3 @@ groma:
 ---
 
 Order Db logger of Order Db.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [order-db-client](order-db-client.md) | Calls client | HTTP |

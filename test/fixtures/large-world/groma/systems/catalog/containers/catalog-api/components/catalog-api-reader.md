@@ -16,10 +16,3 @@ groma:
 ---
 
 Catalog Api reader of Catalog Api.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [catalog-api-writer](catalog-api-writer.md) | Calls writer | HTTP |
-| [catalog-api-queue](catalog-api-queue.md) | Reads queue | HTTP |

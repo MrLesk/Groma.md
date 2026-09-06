@@ -16,10 +16,3 @@ groma:
 ---
 
 Accounts router of Accounts.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [accounts-session](accounts-session.md) | Calls session | HTTP |
-| [accounts-cache](accounts-cache.md) | Reads cache | HTTP |

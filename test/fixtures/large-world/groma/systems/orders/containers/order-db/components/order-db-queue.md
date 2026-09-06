@@ -22,10 +22,3 @@ groma:
 ---
 
 Order Db queue of Order Db.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [order-db-worker](order-db-worker.md) | Calls worker | HTTP |
-| [order-db-scheduler](order-db-scheduler.md) | Reads scheduler | HTTP |

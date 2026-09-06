@@ -22,10 +22,3 @@ groma:
 ---
 
 Accounts cache of Accounts.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [accounts-validator](accounts-validator.md) | Calls validator | HTTP |
-| [accounts-mapper](accounts-mapper.md) | Reads mapper | HTTP |

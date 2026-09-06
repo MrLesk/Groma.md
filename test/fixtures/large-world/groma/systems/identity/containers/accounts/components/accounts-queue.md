@@ -22,10 +22,3 @@ groma:
 ---
 
 Accounts queue of Accounts.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [accounts-worker](accounts-worker.md) | Calls worker | HTTP |
-| [accounts-scheduler](accounts-scheduler.md) | Reads scheduler | HTTP |

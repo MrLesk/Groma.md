@@ -16,10 +16,3 @@ groma:
 ---
 
 Import reader of Import.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [import-writer](import-writer.md) | Calls writer | HTTP |
-| [import-queue](import-queue.md) | Reads queue | HTTP |

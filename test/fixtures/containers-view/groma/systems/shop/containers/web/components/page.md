@@ -6,12 +6,9 @@ groma:
   id: page
   parent: web
   group: Pages
+  code:
+    - scanner: typescript
+      file: src/page.ts
 ---
 
 Renders the order.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [Orders](../../api/components/orders.md) | Reads the order | In-process data |

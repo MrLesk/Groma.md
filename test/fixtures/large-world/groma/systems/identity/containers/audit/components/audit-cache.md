@@ -22,10 +22,3 @@ groma:
 ---
 
 Audit cache of Audit.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [audit-validator](audit-validator.md) | Calls validator | HTTP |
-| [audit-mapper](audit-mapper.md) | Reads mapper | HTTP |

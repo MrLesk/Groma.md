@@ -12,10 +12,3 @@ groma:
 ---
 
 Mobile Api scheduler of Mobile Api.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [mobile-api-metrics](mobile-api-metrics.md) | Calls metrics | HTTP |
-| [mobile-api-config](mobile-api-config.md) | Reads config | HTTP |

@@ -16,10 +16,3 @@ groma:
 ---
 
 Events router of Events.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [events-session](events-session.md) | Calls session | HTTP |
-| [events-cache](events-cache.md) | Reads cache | HTTP |

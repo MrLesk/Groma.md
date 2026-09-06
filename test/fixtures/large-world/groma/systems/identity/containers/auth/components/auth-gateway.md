@@ -13,11 +13,3 @@ groma:
 ---
 
 Auth gateway of Auth.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [auth-router](auth-router.md) | Calls router | HTTP |
-| [auth-session](auth-session.md) | Reads session | HTTP |
-| [directory-gateway](../../../../identity/containers/directory/components/directory-gateway.md) | Forwards requests | HTTP |

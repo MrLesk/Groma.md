@@ -15,10 +15,3 @@ groma:
 ---
 
 Web App metrics of Web App.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [web-app-config](web-app-config.md) | Calls config | HTTP |
-| [web-app-logger](web-app-logger.md) | Reads logger | HTTP |

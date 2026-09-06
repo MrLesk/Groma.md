@@ -1,4 +1,5 @@
 import type { ArchitectureGraph } from '../types.ts'
+import { mapRelationships } from './relationships.ts'
 import { placeWorld } from './place.ts'
 import { routeAll, type Endpoint } from './route.ts'
 import type { SheetScene } from './types.ts'
@@ -17,8 +18,7 @@ export interface MeasuredSheetScene {
  * Composes the merged world into one shared sheet: flat islands for
  * actors, external systems and each internal system, container slabs level
  * with the system islands, buildings on the slabs and islands, group zones,
- * and one
- * orthogonal ground route per authored relationship. Pure: the same world gives the same
+ * and orthogonal ground routes for the visible connections. Pure: the same world gives the same
  * sheet and the world is never touched.
  */
 export function measuredSheetScene(world: ArchitectureGraph): MeasuredSheetScene {
@@ -47,7 +47,7 @@ export function measuredSheetScene(world: ArchitectureGraph): MeasuredSheetScene
       centrePorts: building.shape.kind === 'round',
     })
   }
-  const routes = routeAll(endpoints, world.relationships)
+  const routes = routeAll(endpoints, mapRelationships(world))
   const routed = performance.now()
   return {
     scene: { ...placement, routes },

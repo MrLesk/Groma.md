@@ -19,10 +19,3 @@ groma:
 ---
 
 Catalog Api session of Catalog Api.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [catalog-api-cache](catalog-api-cache.md) | Calls cache | HTTP |
-| [catalog-api-validator](catalog-api-validator.md) | Reads validator | HTTP |

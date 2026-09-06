@@ -18,10 +18,3 @@ groma:
 ---
 
 Web App config of Web App.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [web-app-logger](web-app-logger.md) | Calls logger | HTTP |
-| [web-app-client](web-app-client.md) | Reads client | HTTP |

@@ -21,9 +21,3 @@ groma:
 ---
 
 Checkout logger of Checkout.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [checkout-client](checkout-client.md) | Calls client | HTTP |

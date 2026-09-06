@@ -22,10 +22,3 @@ groma:
 ---
 
 Audit queue of Audit.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [audit-worker](audit-worker.md) | Calls worker | HTTP |
-| [audit-scheduler](audit-scheduler.md) | Reads scheduler | HTTP |

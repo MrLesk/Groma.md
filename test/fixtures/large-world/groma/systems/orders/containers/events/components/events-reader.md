@@ -16,10 +16,3 @@ groma:
 ---
 
 Events reader of Events.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [events-writer](events-writer.md) | Calls writer | HTTP |
-| [events-queue](events-queue.md) | Reads queue | HTTP |

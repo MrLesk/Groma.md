@@ -25,10 +25,3 @@ groma:
 ---
 
 Cdn Edge validator of Cdn Edge.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [cdn-edge-mapper](cdn-edge-mapper.md) | Calls mapper | HTTP |
-| [cdn-edge-reader](cdn-edge-reader.md) | Reads reader | HTTP |

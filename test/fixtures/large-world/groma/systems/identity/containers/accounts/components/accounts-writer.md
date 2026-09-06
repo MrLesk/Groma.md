@@ -19,10 +19,3 @@ groma:
 ---
 
 Accounts writer of Accounts.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [accounts-queue](accounts-queue.md) | Calls queue | HTTP |
-| [accounts-worker](accounts-worker.md) | Reads worker | HTTP |

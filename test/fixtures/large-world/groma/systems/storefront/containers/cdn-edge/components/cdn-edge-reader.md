@@ -16,10 +16,3 @@ groma:
 ---
 
 Cdn Edge reader of Cdn Edge.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [cdn-edge-writer](cdn-edge-writer.md) | Calls writer | HTTP |
-| [cdn-edge-queue](cdn-edge-queue.md) | Reads queue | HTTP |

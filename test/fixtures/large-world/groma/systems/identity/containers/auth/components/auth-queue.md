@@ -22,10 +22,3 @@ groma:
 ---
 
 Auth queue of Auth.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [auth-worker](auth-worker.md) | Calls worker | HTTP |
-| [auth-scheduler](auth-scheduler.md) | Reads scheduler | HTTP |

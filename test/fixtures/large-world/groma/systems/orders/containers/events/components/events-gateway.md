@@ -13,11 +13,3 @@ groma:
 ---
 
 Events gateway of Events.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [events-router](events-router.md) | Calls router | HTTP |
-| [events-session](events-session.md) | Reads session | HTTP |
-| [catalog-api-gateway](../../../../catalog/containers/catalog-api/components/catalog-api-gateway.md) | Forwards requests | HTTP |

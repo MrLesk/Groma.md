@@ -5,7 +5,7 @@ import {
   ArchitectureModelError,
   buildArchitectureModel,
 } from '../src/architecture-model.ts'
-import { elementDocument } from './architecture-model-helpers.ts'
+import { elementDocument, relationshipDocument } from './architecture-model-helpers.ts'
 
 for (const {
   name,
@@ -259,16 +259,17 @@ for (const {
         id: 'architect',
         kind: 'actor',
         sourceFilename: 'groma/actors/architect.md',
-        relationships: [{
-          href: '../systems/missing/system.md',
+      }),
+      relationshipDocument([{
+          sourceHref: 'actors/architect.md',
+          href: 'systems/missing/system.md',
           description: 'Uses missing software',
           technology: 'Browser',
-        }],
-      }),
+        }]),
     ],
     code: 'UNKNOWN_RELATIONSHIP_TARGET',
-    sourceFilename: 'groma/actors/architect.md',
-    message: /relationship target.*systems\/missing\/system\.md.*does not resolve/,
+    sourceFilename: 'groma/relationships.md',
+    message: /endpoint.*systems\/missing\/system\.md.*has no file owner or concept/,
   },
   {
     name: 'reports a group that is not a string',

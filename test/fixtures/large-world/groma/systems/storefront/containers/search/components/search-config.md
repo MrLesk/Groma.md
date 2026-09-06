@@ -18,10 +18,3 @@ groma:
 ---
 
 Search config of Search.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [search-logger](search-logger.md) | Calls logger | HTTP |
-| [search-client](search-client.md) | Reads client | HTTP |

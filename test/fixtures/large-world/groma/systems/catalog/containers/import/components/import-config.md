@@ -18,10 +18,3 @@ groma:
 ---
 
 Import config of Import.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [import-logger](import-logger.md) | Calls logger | HTTP |
-| [import-client](import-client.md) | Reads client | HTTP |

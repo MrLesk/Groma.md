@@ -13,10 +13,3 @@ groma:
 ---
 
 Product Db mapper of Product Db.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [product-db-reader](product-db-reader.md) | Calls reader | HTTP |
-| [product-db-writer](product-db-writer.md) | Reads writer | HTTP |

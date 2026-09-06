@@ -25,10 +25,3 @@ groma:
 ---
 
 Media worker of Media.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [media-scheduler](media-scheduler.md) | Calls scheduler | HTTP |
-| [media-metrics](media-metrics.md) | Reads metrics | HTTP |

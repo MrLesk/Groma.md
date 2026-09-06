@@ -22,10 +22,3 @@ groma:
 ---
 
 Import queue of Import.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [import-worker](import-worker.md) | Calls worker | HTTP |
-| [import-scheduler](import-scheduler.md) | Reads scheduler | HTTP |

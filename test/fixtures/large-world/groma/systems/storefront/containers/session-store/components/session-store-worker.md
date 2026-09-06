@@ -25,10 +25,3 @@ groma:
 ---
 
 Session Store worker of Session Store.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [session-store-scheduler](session-store-scheduler.md) | Calls scheduler | HTTP |
-| [session-store-metrics](session-store-metrics.md) | Reads metrics | HTTP |

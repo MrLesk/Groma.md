@@ -19,10 +19,3 @@ groma:
 ---
 
 Auth session of Auth.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [auth-cache](auth-cache.md) | Calls cache | HTTP |
-| [auth-validator](auth-validator.md) | Reads validator | HTTP |

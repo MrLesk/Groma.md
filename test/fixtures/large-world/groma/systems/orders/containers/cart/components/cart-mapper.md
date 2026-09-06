@@ -13,10 +13,3 @@ groma:
 ---
 
 Cart mapper of Cart.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [cart-reader](cart-reader.md) | Calls reader | HTTP |
-| [cart-writer](cart-writer.md) | Reads writer | HTTP |

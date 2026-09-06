@@ -24,7 +24,8 @@ import { bindMapPointer } from './iso/pointer.ts'
 import { projectScene } from './iso/project.ts'
 import { sceneAtSeparation } from './layers/separation.ts'
 import { createLayerAnimator, createLayerMotion } from './layers/orbit.ts'
-import { detailsTabAfterSelection, detailsTabAfterWork, type DetailsTab, inspectDetails, paintDetails, paintRelationship } from './organisms/details.ts'
+import { paintRelationship } from './organisms/relationship-details.ts'
+import { detailsTabAfterSelection, detailsTabAfterWork, type DetailsTab, inspectDetails, paintDetails } from './organisms/details.ts'
 import { paintHierarchy } from './organisms/hierarchy.ts'
 import { createPins } from './work/pins.ts'
 import { createTip } from './organisms/tip.ts'
@@ -209,7 +210,7 @@ function paintViewState(commitUrl = true): void {
   if (source.paint(selected)) return
   if (taskDiff.paint(task)) return
   if (relationship !== undefined) {
-    paintRelationship(detailsHost, relationship, world, select, authoring.relationWrites(relationship.source, relationship.target))
+    paintRelationship(detailsHost, relationship, world, select, authoring.relationWrites)
   } else if (selected !== undefined) {
     paintDetails(detailsHost, inspectDetails(selected, world), {
       world,

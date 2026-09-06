@@ -22,10 +22,3 @@ groma:
 ---
 
 Checkout queue of Checkout.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [checkout-worker](checkout-worker.md) | Calls worker | HTTP |
-| [checkout-scheduler](checkout-scheduler.md) | Reads scheduler | HTTP |

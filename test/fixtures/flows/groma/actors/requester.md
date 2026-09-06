@@ -7,9 +7,3 @@ groma:
 ---
 
 Starts a request.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [Entry](../systems/service/containers/api/components/entry.md) | Submits work | HTTP |

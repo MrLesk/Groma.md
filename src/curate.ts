@@ -68,7 +68,8 @@ function requireUnrelated(
   ids: Set<string>,
 ): void {
   const relationship = relationships.find(entry => {
-    return ids.has(entry.sourceId) || ids.has(entry.targetId)
+    return entry.connections.some(connection => connection.authored
+      && (ids.has(connection.source) || ids.has(connection.target)))
   })
   if (relationship !== undefined) {
     throw new Error(

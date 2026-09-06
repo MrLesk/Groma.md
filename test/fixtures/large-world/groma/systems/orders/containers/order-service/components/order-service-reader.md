@@ -16,10 +16,3 @@ groma:
 ---
 
 Order Service reader of Order Service.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [order-service-writer](order-service-writer.md) | Calls writer | HTTP |
-| [order-service-queue](order-service-queue.md) | Reads queue | HTTP |

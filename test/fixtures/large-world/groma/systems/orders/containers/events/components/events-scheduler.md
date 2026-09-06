@@ -12,10 +12,3 @@ groma:
 ---
 
 Events scheduler of Events.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [events-metrics](events-metrics.md) | Calls metrics | HTTP |
-| [events-config](events-config.md) | Reads config | HTTP |

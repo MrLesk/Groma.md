@@ -13,10 +13,3 @@ groma:
 ---
 
 Events mapper of Events.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [events-reader](events-reader.md) | Calls reader | HTTP |
-| [events-writer](events-writer.md) | Reads writer | HTTP |

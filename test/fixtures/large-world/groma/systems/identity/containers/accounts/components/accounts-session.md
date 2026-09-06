@@ -19,10 +19,3 @@ groma:
 ---
 
 Accounts session of Accounts.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [accounts-cache](accounts-cache.md) | Calls cache | HTTP |
-| [accounts-validator](accounts-validator.md) | Reads validator | HTTP |

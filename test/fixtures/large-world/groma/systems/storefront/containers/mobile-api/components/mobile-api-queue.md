@@ -22,10 +22,3 @@ groma:
 ---
 
 Mobile Api queue of Mobile Api.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [mobile-api-worker](mobile-api-worker.md) | Calls worker | HTTP |
-| [mobile-api-scheduler](mobile-api-scheduler.md) | Reads scheduler | HTTP |

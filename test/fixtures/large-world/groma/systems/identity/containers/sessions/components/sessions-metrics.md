@@ -15,10 +15,3 @@ groma:
 ---
 
 Sessions metrics of Sessions.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [sessions-config](sessions-config.md) | Calls config | HTTP |
-| [sessions-logger](sessions-logger.md) | Reads logger | HTTP |

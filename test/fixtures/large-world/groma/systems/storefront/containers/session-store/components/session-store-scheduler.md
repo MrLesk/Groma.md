@@ -12,10 +12,3 @@ groma:
 ---
 
 Session Store scheduler of Session Store.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [session-store-metrics](session-store-metrics.md) | Calls metrics | HTTP |
-| [session-store-config](session-store-config.md) | Reads config | HTTP |

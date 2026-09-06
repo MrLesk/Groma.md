@@ -16,10 +16,3 @@ groma:
 ---
 
 Cart router of Cart.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [cart-session](cart-session.md) | Calls session | HTTP |
-| [cart-cache](cart-cache.md) | Reads cache | HTTP |

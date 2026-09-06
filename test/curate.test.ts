@@ -15,7 +15,7 @@ test('groma edit assigns and clears a component group without changing its meani
   const groupedSource = await readRelative(root, ordersPath)
   assert.match(groupedSource, /^ {2}group: Commerce$/m)
   assert.match(groupedSource, /Owns the order lifecycle\./)
-  assert.match(groupedSource, /\[Stock\]\(stock\.md\)/)
+  assert.equal(await readRelative(root, 'groma/relationships.md'), await readRelative(fixtureRoot, 'groma/relationships.md'))
 
   const ungrouped = await groma(root, ['edit', 'orders', '--ungroup'])
   assert.equal(ungrouped.code, 0, ungrouped.stderr)

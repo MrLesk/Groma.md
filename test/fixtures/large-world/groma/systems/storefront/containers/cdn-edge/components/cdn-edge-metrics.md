@@ -15,10 +15,3 @@ groma:
 ---
 
 Cdn Edge metrics of Cdn Edge.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [cdn-edge-config](cdn-edge-config.md) | Calls config | HTTP |
-| [cdn-edge-logger](cdn-edge-logger.md) | Reads logger | HTTP |

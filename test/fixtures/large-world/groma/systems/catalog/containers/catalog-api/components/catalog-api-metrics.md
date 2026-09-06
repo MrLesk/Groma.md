@@ -15,10 +15,3 @@ groma:
 ---
 
 Catalog Api metrics of Catalog Api.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [catalog-api-config](catalog-api-config.md) | Calls config | HTTP |
-| [catalog-api-logger](catalog-api-logger.md) | Reads logger | HTTP |

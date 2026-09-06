@@ -16,10 +16,3 @@ groma:
 ---
 
 Search reader of Search.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [search-writer](search-writer.md) | Calls writer | HTTP |
-| [search-queue](search-queue.md) | Reads queue | HTTP |

@@ -13,11 +13,3 @@ groma:
 ---
 
 Cdn Edge gateway of Cdn Edge.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [cdn-edge-router](cdn-edge-router.md) | Calls router | HTTP |
-| [cdn-edge-session](cdn-edge-session.md) | Reads session | HTTP |
-| [session-store-gateway](../../../../storefront/containers/session-store/components/session-store-gateway.md) | Forwards requests | HTTP |

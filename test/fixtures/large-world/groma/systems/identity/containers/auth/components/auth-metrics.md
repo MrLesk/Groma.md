@@ -15,10 +15,3 @@ groma:
 ---
 
 Auth metrics of Auth.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [auth-config](auth-config.md) | Calls config | HTTP |
-| [auth-logger](auth-logger.md) | Reads logger | HTTP |

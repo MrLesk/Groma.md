@@ -25,10 +25,3 @@ groma:
 ---
 
 Accounts worker of Accounts.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [accounts-scheduler](accounts-scheduler.md) | Calls scheduler | HTTP |
-| [accounts-metrics](accounts-metrics.md) | Reads metrics | HTTP |

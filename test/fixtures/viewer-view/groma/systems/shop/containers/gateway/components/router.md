@@ -5,12 +5,9 @@ status: stable
 groma:
   id: router
   parent: gateway
+  code:
+    - scanner: typescript
+      file: src/router.ts
 ---
 
 Sends each request to its handler.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [Orders](../../api/components/orders.md) | Forwards order requests | In-process call |

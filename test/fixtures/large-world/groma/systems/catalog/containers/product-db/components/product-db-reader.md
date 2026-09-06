@@ -16,10 +16,3 @@ groma:
 ---
 
 Product Db reader of Product Db.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [product-db-writer](product-db-writer.md) | Calls writer | HTTP |
-| [product-db-queue](product-db-queue.md) | Reads queue | HTTP |

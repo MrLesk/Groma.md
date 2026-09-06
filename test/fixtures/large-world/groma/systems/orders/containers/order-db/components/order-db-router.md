@@ -16,10 +16,3 @@ groma:
 ---
 
 Order Db router of Order Db.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [order-db-session](order-db-session.md) | Calls session | HTTP |
-| [order-db-cache](order-db-cache.md) | Reads cache | HTTP |

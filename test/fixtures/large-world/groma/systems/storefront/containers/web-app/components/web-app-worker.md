@@ -25,10 +25,3 @@ groma:
 ---
 
 Web App worker of Web App.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [web-app-scheduler](web-app-scheduler.md) | Calls scheduler | HTTP |
-| [web-app-metrics](web-app-metrics.md) | Reads metrics | HTTP |

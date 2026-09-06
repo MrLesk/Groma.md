@@ -22,10 +22,3 @@ groma:
 ---
 
 Auth cache of Auth.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [auth-validator](auth-validator.md) | Calls validator | HTTP |
-| [auth-mapper](auth-mapper.md) | Reads mapper | HTTP |

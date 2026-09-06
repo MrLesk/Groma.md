@@ -21,9 +21,3 @@ groma:
 ---
 
 Search logger of Search.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [search-client](search-client.md) | Calls client | HTTP |

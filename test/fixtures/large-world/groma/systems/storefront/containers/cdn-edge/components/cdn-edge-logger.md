@@ -21,9 +21,3 @@ groma:
 ---
 
 Cdn Edge logger of Cdn Edge.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [cdn-edge-client](cdn-edge-client.md) | Calls client | HTTP |

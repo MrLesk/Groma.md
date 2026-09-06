@@ -81,7 +81,7 @@ export function fitArchitecture(
   viewport: Viewport,
 ): Camera | undefined {
   const wanted = new Set(ids)
-  const routes = scene.routes.filter(item => wanted.has(item.route.id))
+  const routes = scene.routes.filter(item => (item.route.relationshipIds ?? [item.route.id]).some(id => wanted.has(id)))
   for (const { route } of routes) {
     wanted.add(route.source)
     wanted.add(route.target)

@@ -19,10 +19,3 @@ groma:
 ---
 
 Mobile Api writer of Mobile Api.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [mobile-api-queue](mobile-api-queue.md) | Calls queue | HTTP |
-| [mobile-api-worker](mobile-api-worker.md) | Reads worker | HTTP |

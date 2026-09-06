@@ -22,10 +22,3 @@ groma:
 ---
 
 Pricing cache of Pricing.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [pricing-validator](pricing-validator.md) | Calls validator | HTTP |
-| [pricing-mapper](pricing-mapper.md) | Reads mapper | HTTP |

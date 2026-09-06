@@ -12,10 +12,3 @@ groma:
 ---
 
 Product Db scheduler of Product Db.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [product-db-metrics](product-db-metrics.md) | Calls metrics | HTTP |
-| [product-db-config](product-db-config.md) | Reads config | HTTP |

@@ -19,10 +19,3 @@ groma:
 ---
 
 Audit writer of Audit.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [audit-queue](audit-queue.md) | Calls queue | HTTP |
-| [audit-worker](audit-worker.md) | Reads worker | HTTP |

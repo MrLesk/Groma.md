@@ -67,14 +67,14 @@ test.concurrent('a flow rejects a missing directed relationship', async () => {
   expect(() => annotateArchitecture({ ...records, flows: [changed] })).toThrow('requester → worker must resolve exactly one directed relationship')
 })
 
-test.concurrent('a flow rejects an ambiguous endpoint pair', async () => {
+test.concurrent('duplicate file declarations fail before flow resolution', async () => {
   const records = await loadArchitecture(fixture)
-  const document = records.documents.find(document => document.sourceFilename.endsWith('/entry.md'))!
-  const row = '| [Worker](worker.md) | Also dispatches | Function call |'
+  const document = records.documents.find(document => document.sourceFilename.endsWith('/relationships.md'))!
+  const row = '| [Entry](../src/entry.ts) | [Worker](../src/worker.ts) | Also dispatches | Function call |'
   const body = `${document.body.trimEnd()}\n${row}\n`
   const changed = { ...document, body, nodes: (await parseMarkdown(body)).nodes as MarkdownNode[] }
   expect(() => annotateArchitecture({ ...records, documents: records.documents.map(item => item === document ? changed : item) }))
-    .toThrow('entry → worker must resolve exactly one directed relationship')
+    .toThrow('each ordered endpoint pair has one authored row')
 })
 
 test.concurrent('flow authoring edits steps and blocks removal of referenced endpoints or connections', async () => {
@@ -88,7 +88,7 @@ test.concurrent('flow authoring edits steps and blocks removal of referenced end
     const edited = (await loadAnnotatedArchitecture(root)).flows.find(flow => flow.id === id)!
     expect(edited.steps[0]!.action).toBe('Submit')
     await expect(writes.remove(root, { id: 'requester' })).rejects.toThrow('used by flows')
-    await expect(writes.remove(root, { id: 'entry', relation: 'worker' })).rejects.toThrow('used by flows')
+    await expect(writes.remove(root, { id: 'src/entry.ts', relation: 'src/worker.ts' })).rejects.toThrow('used by flows')
     await writes.remove(root, { id })
     expect((await loadAnnotatedArchitecture(root)).flows).toHaveLength(1)
   } finally {

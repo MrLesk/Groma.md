@@ -16,10 +16,3 @@ groma:
 ---
 
 Order Db reader of Order Db.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [order-db-writer](order-db-writer.md) | Calls writer | HTTP |
-| [order-db-queue](order-db-queue.md) | Reads queue | HTTP |

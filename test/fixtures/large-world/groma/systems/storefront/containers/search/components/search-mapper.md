@@ -13,10 +13,3 @@ groma:
 ---
 
 Search mapper of Search.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [search-reader](search-reader.md) | Calls reader | HTTP |
-| [search-writer](search-writer.md) | Reads writer | HTTP |

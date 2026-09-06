@@ -25,10 +25,3 @@ groma:
 ---
 
 Mobile Api validator of Mobile Api.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [mobile-api-mapper](mobile-api-mapper.md) | Calls mapper | HTTP |
-| [mobile-api-reader](mobile-api-reader.md) | Reads reader | HTTP |

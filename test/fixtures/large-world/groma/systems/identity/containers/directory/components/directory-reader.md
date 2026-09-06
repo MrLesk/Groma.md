@@ -16,10 +16,3 @@ groma:
 ---
 
 Directory reader of Directory.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [directory-writer](directory-writer.md) | Calls writer | HTTP |
-| [directory-queue](directory-queue.md) | Reads queue | HTTP |

@@ -12,9 +12,3 @@ groma:
 ---
 
 Owns the order lifecycle.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [Stock](stock.md) | talks to | Function call |

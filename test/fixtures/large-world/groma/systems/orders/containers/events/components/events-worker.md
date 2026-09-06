@@ -25,10 +25,3 @@ groma:
 ---
 
 Events worker of Events.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [events-scheduler](events-scheduler.md) | Calls scheduler | HTTP |
-| [events-metrics](events-metrics.md) | Reads metrics | HTTP |

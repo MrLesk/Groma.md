@@ -15,10 +15,3 @@ groma:
 ---
 
 Pricing metrics of Pricing.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [pricing-config](pricing-config.md) | Calls config | HTTP |
-| [pricing-logger](pricing-logger.md) | Reads logger | HTTP |

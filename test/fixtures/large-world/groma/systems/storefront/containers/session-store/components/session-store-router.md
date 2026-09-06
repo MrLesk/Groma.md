@@ -16,10 +16,3 @@ groma:
 ---
 
 Session Store router of Session Store.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [session-store-session](session-store-session.md) | Calls session | HTTP |
-| [session-store-cache](session-store-cache.md) | Reads cache | HTTP |

@@ -15,10 +15,3 @@ groma:
 ---
 
 Search metrics of Search.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [search-config](search-config.md) | Calls config | HTTP |
-| [search-logger](search-logger.md) | Reads logger | HTTP |

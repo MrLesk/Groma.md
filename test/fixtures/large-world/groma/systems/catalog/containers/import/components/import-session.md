@@ -19,10 +19,3 @@ groma:
 ---
 
 Import session of Import.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [import-cache](import-cache.md) | Calls cache | HTTP |
-| [import-validator](import-validator.md) | Reads validator | HTTP |

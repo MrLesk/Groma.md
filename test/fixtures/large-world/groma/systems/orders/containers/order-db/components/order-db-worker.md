@@ -25,10 +25,3 @@ groma:
 ---
 
 Order Db worker of Order Db.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [order-db-scheduler](order-db-scheduler.md) | Calls scheduler | HTTP |
-| [order-db-metrics](order-db-metrics.md) | Reads metrics | HTTP |

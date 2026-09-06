@@ -27,12 +27,6 @@ Keep one order identifier through submission and fulfilment.
 
 The routes call the order lifecycle implementation.
 
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [Stock](stock.md) | talks to | Function call |
-
 ## Notes
 
 Review [the source](../../../../../../src/orders.ts) before changing the lifecycle.

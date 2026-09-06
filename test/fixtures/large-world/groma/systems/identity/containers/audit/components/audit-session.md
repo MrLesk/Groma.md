@@ -19,10 +19,3 @@ groma:
 ---
 
 Audit session of Audit.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [audit-cache](audit-cache.md) | Calls cache | HTTP |
-| [audit-validator](audit-validator.md) | Reads validator | HTTP |

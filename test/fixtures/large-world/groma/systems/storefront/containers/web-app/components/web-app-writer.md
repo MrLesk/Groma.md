@@ -19,10 +19,3 @@ groma:
 ---
 
 Web App writer of Web App.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [web-app-queue](web-app-queue.md) | Calls queue | HTTP |
-| [web-app-worker](web-app-worker.md) | Reads worker | HTTP |

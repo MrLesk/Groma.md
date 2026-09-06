@@ -25,10 +25,3 @@ groma:
 ---
 
 Order Db validator of Order Db.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [order-db-mapper](order-db-mapper.md) | Calls mapper | HTTP |
-| [order-db-reader](order-db-reader.md) | Reads reader | HTTP |

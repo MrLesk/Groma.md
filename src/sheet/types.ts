@@ -78,8 +78,10 @@ export interface RoutePoint {
   gy: number
 }
 
-/** One authored relationship routed as an orthogonal ground path. */
+/** A visible connection routed as an orthogonal ground path. */
 export type Route = Pick<AnnotatedRelationship, 'id' | 'source' | 'target' | 'description' | 'origin'> & {
+  /** Semantic relationships bundled into this visible route; omitted for a single relationship. */
+  relationshipIds?: string[]
   points: RoutePoint[]
 }
 

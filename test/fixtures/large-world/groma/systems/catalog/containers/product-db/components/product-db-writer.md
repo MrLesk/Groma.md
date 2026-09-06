@@ -19,10 +19,3 @@ groma:
 ---
 
 Product Db writer of Product Db.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [product-db-queue](product-db-queue.md) | Calls queue | HTTP |
-| [product-db-worker](product-db-worker.md) | Reads worker | HTTP |

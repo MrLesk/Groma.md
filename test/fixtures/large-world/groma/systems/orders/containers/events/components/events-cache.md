@@ -22,10 +22,3 @@ groma:
 ---
 
 Events cache of Events.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [events-validator](events-validator.md) | Calls validator | HTTP |
-| [events-mapper](events-mapper.md) | Reads mapper | HTTP |

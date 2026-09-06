@@ -22,10 +22,3 @@ groma:
 ---
 
 Session Store queue of Session Store.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [session-store-worker](session-store-worker.md) | Calls worker | HTTP |
-| [session-store-scheduler](session-store-scheduler.md) | Reads scheduler | HTTP |

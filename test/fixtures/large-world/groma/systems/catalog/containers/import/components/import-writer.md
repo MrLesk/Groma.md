@@ -19,10 +19,3 @@ groma:
 ---
 
 Import writer of Import.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [import-queue](import-queue.md) | Calls queue | HTTP |
-| [import-worker](import-worker.md) | Reads worker | HTTP |

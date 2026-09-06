@@ -22,10 +22,3 @@ groma:
 ---
 
 Directory queue of Directory.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [directory-worker](directory-worker.md) | Calls worker | HTTP |
-| [directory-scheduler](directory-scheduler.md) | Reads scheduler | HTTP |

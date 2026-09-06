@@ -15,10 +15,3 @@ groma:
 ---
 
 Session Store metrics of Session Store.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [session-store-config](session-store-config.md) | Calls config | HTTP |
-| [session-store-logger](session-store-logger.md) | Reads logger | HTTP |

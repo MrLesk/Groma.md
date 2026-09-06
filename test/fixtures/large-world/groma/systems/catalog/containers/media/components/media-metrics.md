@@ -15,10 +15,3 @@ groma:
 ---
 
 Media metrics of Media.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [media-config](media-config.md) | Calls config | HTTP |
-| [media-logger](media-logger.md) | Reads logger | HTTP |

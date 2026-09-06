@@ -22,10 +22,3 @@ groma:
 ---
 
 Cdn Edge cache of Cdn Edge.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [cdn-edge-validator](cdn-edge-validator.md) | Calls validator | HTTP |
-| [cdn-edge-mapper](cdn-edge-mapper.md) | Reads mapper | HTTP |

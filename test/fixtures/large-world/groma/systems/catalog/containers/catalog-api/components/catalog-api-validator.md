@@ -25,10 +25,3 @@ groma:
 ---
 
 Catalog Api validator of Catalog Api.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [catalog-api-mapper](catalog-api-mapper.md) | Calls mapper | HTTP |
-| [catalog-api-reader](catalog-api-reader.md) | Reads reader | HTTP |

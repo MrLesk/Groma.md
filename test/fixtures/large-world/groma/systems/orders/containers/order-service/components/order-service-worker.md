@@ -25,10 +25,3 @@ groma:
 ---
 
 Order Service worker of Order Service.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [order-service-scheduler](order-service-scheduler.md) | Calls scheduler | HTTP |
-| [order-service-metrics](order-service-metrics.md) | Reads metrics | HTTP |

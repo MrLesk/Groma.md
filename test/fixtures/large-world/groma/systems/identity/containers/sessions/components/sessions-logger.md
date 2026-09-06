@@ -21,9 +21,3 @@ groma:
 ---
 
 Sessions logger of Sessions.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [sessions-client](sessions-client.md) | Calls client | HTTP |

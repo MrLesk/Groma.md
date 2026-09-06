@@ -25,10 +25,3 @@ groma:
 ---
 
 Search validator of Search.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [search-mapper](search-mapper.md) | Calls mapper | HTTP |
-| [search-reader](search-reader.md) | Reads reader | HTTP |

@@ -22,10 +22,3 @@ groma:
 ---
 
 Media queue of Media.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [media-worker](media-worker.md) | Calls worker | HTTP |
-| [media-scheduler](media-scheduler.md) | Reads scheduler | HTTP |

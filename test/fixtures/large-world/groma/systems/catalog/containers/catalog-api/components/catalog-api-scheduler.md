@@ -12,10 +12,3 @@ groma:
 ---
 
 Catalog Api scheduler of Catalog Api.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [catalog-api-metrics](catalog-api-metrics.md) | Calls metrics | HTTP |
-| [catalog-api-config](catalog-api-config.md) | Reads config | HTTP |

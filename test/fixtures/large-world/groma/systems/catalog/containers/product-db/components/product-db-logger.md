@@ -21,9 +21,3 @@ groma:
 ---
 
 Product Db logger of Product Db.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [product-db-client](product-db-client.md) | Calls client | HTTP |

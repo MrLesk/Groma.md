@@ -19,10 +19,3 @@ groma:
 ---
 
 Pricing writer of Pricing.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [pricing-queue](pricing-queue.md) | Calls queue | HTTP |
-| [pricing-worker](pricing-worker.md) | Reads worker | HTTP |

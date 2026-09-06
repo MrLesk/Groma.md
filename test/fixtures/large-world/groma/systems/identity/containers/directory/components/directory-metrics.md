@@ -15,10 +15,3 @@ groma:
 ---
 
 Directory metrics of Directory.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [directory-config](directory-config.md) | Calls config | HTTP |
-| [directory-logger](directory-logger.md) | Reads logger | HTTP |

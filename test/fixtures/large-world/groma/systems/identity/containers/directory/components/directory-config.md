@@ -18,10 +18,3 @@ groma:
 ---
 
 Directory config of Directory.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [directory-logger](directory-logger.md) | Calls logger | HTTP |
-| [directory-client](directory-client.md) | Reads client | HTTP |

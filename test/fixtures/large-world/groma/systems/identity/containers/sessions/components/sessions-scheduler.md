@@ -12,10 +12,3 @@ groma:
 ---
 
 Sessions scheduler of Sessions.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [sessions-metrics](sessions-metrics.md) | Calls metrics | HTTP |
-| [sessions-config](sessions-config.md) | Reads config | HTTP |

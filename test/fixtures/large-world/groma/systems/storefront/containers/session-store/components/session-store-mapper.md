@@ -13,10 +13,3 @@ groma:
 ---
 
 Session Store mapper of Session Store.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [session-store-reader](session-store-reader.md) | Calls reader | HTTP |
-| [session-store-writer](session-store-writer.md) | Reads writer | HTTP |

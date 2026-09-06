@@ -18,10 +18,3 @@ groma:
 ---
 
 Audit config of Audit.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [audit-logger](audit-logger.md) | Calls logger | HTTP |
-| [audit-client](audit-client.md) | Reads client | HTTP |

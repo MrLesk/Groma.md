@@ -19,10 +19,3 @@ groma:
 ---
 
 Web App session of Web App.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [web-app-cache](web-app-cache.md) | Calls cache | HTTP |
-| [web-app-validator](web-app-validator.md) | Reads validator | HTTP |

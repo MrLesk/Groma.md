@@ -16,10 +16,3 @@ groma:
 ---
 
 Pricing router of Pricing.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [pricing-session](pricing-session.md) | Calls session | HTTP |
-| [pricing-cache](pricing-cache.md) | Reads cache | HTTP |

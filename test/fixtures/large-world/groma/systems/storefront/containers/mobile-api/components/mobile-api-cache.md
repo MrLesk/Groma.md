@@ -22,10 +22,3 @@ groma:
 ---
 
 Mobile Api cache of Mobile Api.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [mobile-api-validator](mobile-api-validator.md) | Calls validator | HTTP |
-| [mobile-api-mapper](mobile-api-mapper.md) | Reads mapper | HTTP |

@@ -25,10 +25,3 @@ groma:
 ---
 
 Pricing worker of Pricing.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [pricing-scheduler](pricing-scheduler.md) | Calls scheduler | HTTP |
-| [pricing-metrics](pricing-metrics.md) | Reads metrics | HTTP |

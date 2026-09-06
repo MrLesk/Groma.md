@@ -15,10 +15,3 @@ groma:
 ---
 
 Audit metrics of Audit.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [audit-config](audit-config.md) | Calls config | HTTP |
-| [audit-logger](audit-logger.md) | Reads logger | HTTP |

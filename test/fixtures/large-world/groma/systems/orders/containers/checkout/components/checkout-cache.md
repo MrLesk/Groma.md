@@ -22,10 +22,3 @@ groma:
 ---
 
 Checkout cache of Checkout.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [checkout-validator](checkout-validator.md) | Calls validator | HTTP |
-| [checkout-mapper](checkout-mapper.md) | Reads mapper | HTTP |

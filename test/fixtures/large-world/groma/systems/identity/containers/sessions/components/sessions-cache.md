@@ -22,10 +22,3 @@ groma:
 ---
 
 Sessions cache of Sessions.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [sessions-validator](sessions-validator.md) | Calls validator | HTTP |
-| [sessions-mapper](sessions-mapper.md) | Reads mapper | HTTP |

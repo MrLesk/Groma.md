@@ -15,10 +15,3 @@ groma:
 ---
 
 Accounts metrics of Accounts.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [accounts-config](accounts-config.md) | Calls config | HTTP |
-| [accounts-logger](accounts-logger.md) | Reads logger | HTTP |

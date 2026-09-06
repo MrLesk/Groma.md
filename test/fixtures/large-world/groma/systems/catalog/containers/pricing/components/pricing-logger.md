@@ -21,9 +21,3 @@ groma:
 ---
 
 Pricing logger of Pricing.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [pricing-client](pricing-client.md) | Calls client | HTTP |

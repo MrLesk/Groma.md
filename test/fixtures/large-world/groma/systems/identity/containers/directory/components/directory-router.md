@@ -16,10 +16,3 @@ groma:
 ---
 
 Directory router of Directory.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [directory-session](directory-session.md) | Calls session | HTTP |
-| [directory-cache](directory-cache.md) | Reads cache | HTTP |

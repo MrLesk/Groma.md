@@ -16,10 +16,3 @@ groma:
 ---
 
 Cart reader of Cart.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [cart-writer](cart-writer.md) | Calls writer | HTTP |
-| [cart-queue](cart-queue.md) | Reads queue | HTTP |

@@ -18,10 +18,3 @@ groma:
 ---
 
 Events config of Events.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [events-logger](events-logger.md) | Calls logger | HTTP |
-| [events-client](events-client.md) | Reads client | HTTP |

@@ -21,9 +21,3 @@ groma:
 ---
 
 Web App logger of Web App.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [web-app-client](web-app-client.md) | Calls client | HTTP |

@@ -12,10 +12,3 @@ groma:
 ---
 
 Checkout scheduler of Checkout.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [checkout-metrics](checkout-metrics.md) | Calls metrics | HTTP |
-| [checkout-config](checkout-config.md) | Reads config | HTTP |

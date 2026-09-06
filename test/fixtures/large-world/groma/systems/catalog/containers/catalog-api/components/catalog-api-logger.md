@@ -21,9 +21,3 @@ groma:
 ---
 
 Catalog Api logger of Catalog Api.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [catalog-api-client](catalog-api-client.md) | Calls client | HTTP |

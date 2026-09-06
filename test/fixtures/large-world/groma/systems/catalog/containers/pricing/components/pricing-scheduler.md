@@ -12,10 +12,3 @@ groma:
 ---
 
 Pricing scheduler of Pricing.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [pricing-metrics](pricing-metrics.md) | Calls metrics | HTTP |
-| [pricing-config](pricing-config.md) | Reads config | HTTP |
