@@ -102,10 +102,14 @@ function pumpSse(body: ReadableStream<Uint8Array> | null) {
   const reader = body?.getReader()
   const running = (async () => {
     if (reader === undefined) return
-    for (;;) {
-      const { done, value } = await reader.read()
-      if (done) break
-      if (value) pushed += decoder.decode(value, { stream: true })
+    try {
+      for (;;) {
+        const { done, value } = await reader.read()
+        if (done) break
+        if (value) pushed += decoder.decode(value, { stream: true })
+      }
+    } catch {
+      // already closed
     }
   })()
   return {
@@ -321,18 +325,22 @@ test.concurrent('groma web applies an architecture Markdown change without a ref
     const initial = await (await fetch(`${server.url}/world.json`)).json() as MapPayload
 
     const stream = pumpSse((await fetch(`${server.url}/events`)).body)
-    const document = path.join(root, 'groma/systems/shop/system.md')
-    const markdown = await Bun.file(document).text()
-    await writeFile(document, markdown.replace('title: Shop', 'title: Shopfront'))
-    await waitUntil(() => stream.text().includes('event: world') && stream.text().includes('Shopfront'))
-    const changed = await (await fetch(`${server.url}/world.json`)).json() as MapPayload
-    assert.ok(changed.generation > initial.generation)
-    assert.ok(changed.timings.totalMilliseconds >= changed.timings.architectureLoadMilliseconds)
-    assert.ok(changed.timings.totalMilliseconds >= changed.timings.placementMilliseconds + changed.timings.routingMilliseconds)
-    assert.ok((await worldNames(server.url)).includes('Shopfront'))
-    assert.match(await (await fetch(server.url)).text(), /"title":"Shopfront"/)
-    assert.ok(!(await worldNames(server.url)).includes('Orders'))
-    await stream.stop()
+    try {
+      await waitUntil(() => /^event: world/m.test(stream.text()))
+      const document = path.join(root, 'groma/systems/shop/system.md')
+      const markdown = await Bun.file(document).text()
+      await writeFile(document, markdown.replace('title: Shop', 'title: Shopfront'))
+      await waitUntil(() => stream.text().includes('Shopfront'))
+      const changed = await (await fetch(`${server.url}/world.json`)).json() as MapPayload
+      assert.ok(changed.generation > initial.generation)
+      assert.ok(changed.timings.totalMilliseconds >= changed.timings.architectureLoadMilliseconds)
+      assert.ok(changed.timings.totalMilliseconds >= changed.timings.placementMilliseconds + changed.timings.routingMilliseconds)
+      assert.ok((await worldNames(server.url)).includes('Shopfront'))
+      assert.match(await (await fetch(server.url)).text(), /"title":"Shopfront"/)
+      assert.ok(!(await worldNames(server.url)).includes('Orders'))
+    } finally {
+      await stream.stop()
+    }
   } finally {
     await server.close()
     await removeTree(root)
@@ -344,7 +352,8 @@ test.concurrent('groma web saves the project profile and publishes it without a 
   const server = await startWebViewer(root, { port: 0 })
   try {
     const stream = pumpSse((await fetch(`${server.url}/events`)).body)
-    const response = await fetch(`${server.url}/edit`, {
+    try {
+      const response = await fetch(`${server.url}/edit`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -377,7 +386,9 @@ description: A concise supply architecture summary.
 Shows supply responsibilities.
 `,
     )
-    await stream.stop()
+    } finally {
+      await stream.stop()
+    }
   } finally {
     await server.close()
     await removeTree(root)
@@ -445,6 +456,7 @@ test.concurrent('groma web loads work asynchronously and updates only the work o
     assert.ok(initial.timings.totalMilliseconds >= initial.timings.placementMilliseconds + initial.timings.routingMilliseconds)
 
     const stream = pumpSse((await fetch(`${server.url}/events`)).body)
+    try {
     await waitUntil(() => /^event: world/m.test(stream.text()))
 
     resolveFirst(snapshot())
@@ -478,7 +490,9 @@ test.concurrent('groma web loads work asynchronously and updates only the work o
     assert.deepEqual(changedPayload.sheet, initial.sheet)
     assert.match(await (await fetch(server.url)).text(), /"workGeneration":2.*"status":"Done"/)
     assert.equal(reads, 2)
-    await stream.stop()
+    } finally {
+      await stream.stop()
+    }
   } finally {
     await server.close()
     await removeTree(root)

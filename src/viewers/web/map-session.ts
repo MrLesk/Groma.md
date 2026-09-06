@@ -144,15 +144,21 @@ export async function createWebMapSession(
     }
   }
 
-  async function publishWorld(): Promise<void> {
-    const next = await loadMap(repositoryRoot, revisions, null)
-    if (closed) return
-    map = {
-      generation: map.generation + 1,
-      ...next,
-    }
-    currentPage = undefined
-    broadcast(worldEvent())
+  let worldChain = Promise.resolve()
+  function publishWorld(): Promise<void> {
+    const run = worldChain.then(async () => {
+      if (closed) return
+      const next = await loadMap(repositoryRoot, revisions, null)
+      if (closed) return
+      map = {
+        generation: map.generation + 1,
+        ...next,
+      }
+      currentPage = undefined
+      broadcast(worldEvent())
+    })
+    worldChain = run.catch(() => {})
+    return run
   }
 
   let workChain = Promise.resolve()
@@ -318,6 +324,7 @@ export async function createWebMapSession(
         workWatch.close(),
         sourceWatch.close(),
         architectureWatch.close(),
+        worldChain,
         workChain,
         revisionRead,
       ])
