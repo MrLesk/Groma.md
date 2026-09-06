@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url'
 
 import { Command } from 'commander'
 import { confirm } from '@clack/prompts'
+import packageJson from '../package.json' with { type: 'json' }
 
 import { writes } from './authoring.ts'
 import type { StructuralResult } from './curate.ts'
@@ -222,6 +223,7 @@ async function runInteractiveWelcome(screen: WelcomeScreen = 'launcher'): Promis
 
 program
   .name('groma')
+  .version(packageJson.version)
   .description("This repo's architecture in Git")
   .option('--plain', 'print as plain text')
   .action(async () => {

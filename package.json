@@ -1,5 +1,5 @@
 {
-  "name": "groma",
+  "name": "groma.md",
   "version": "0.1.0",
   "description": "Your architecture as Markdown in Git, and one C4 map you can walk. Scanned from source, curated by people and agents.",
   "license": "MIT",
@@ -44,6 +44,7 @@
   },
   "scripts": {
     "cli": "bun src/cli.ts",
+    "build": "bun scripts/build.ts",
     "typecheck": "tsc --version && tsc --noEmit",
     "test": "bun run test:node && bun run test:viewer",
     "test:csharp": "dotnet test plugins/scanners/csharp/dotnet/test/Groma.CSharpScanner.Tests.csproj",

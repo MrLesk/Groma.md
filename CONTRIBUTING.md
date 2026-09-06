@@ -10,8 +10,10 @@ is the source of truth for what Groma represents and shows. It follows Groma's s
 the [component Markdown contract](docs/component-markdown.md) defines its reserved files, metadata, body, and
 relationships.
 
-Keep each contribution focused on one approved outcome and one supported example. Use Backlog.md for tracked product or
-code work; small documentation corrections can be made directly.
+Keep each contribution focused on one approved outcome and one supported example. Every pull request must be linked to
+one Backlog.md task, including documentation-only pull requests. Create or identify the task before opening the PR and
+include its ID in the PR title or description. Small documentation corrections may still be made directly when they do
+not need a pull request.
 
 ## Set up the repository
 
@@ -36,6 +38,27 @@ them in a single-file bytecode executable; development and compiled builds use t
 Parcel, review the patch against its platform packages and run `bun test test-bun/parcel-bytecode.test.ts`. This test
 receives native file events in both source mode and a compiled executable with no accompanying source or dependencies.
 
+## Build and release versions
+
+Build a single-file executable with Bun 1.4.1 bytecode:
+
+```sh
+bun run build
+./dist/groma --version
+```
+
+Windows produces `dist/groma.exe`. Pass an output path after `bun run build` to choose a different location.
+The CLI and welcome screen statically import the version from `package.json`; the executable needs no manifest at runtime.
+
+Release CI sets `package.json.version` directly from the release tag, without its leading `v`, in the disposable build
+checkout before running `bun run build`. A build for tag `v0.2.0` therefore already reports `0.2.0`.
+
+All binary builds and npm package manifests must use that prepared version. Synchronize `package.json` on `main` only
+after publication and installation checks succeed. The release-version regression compiles the actual CLI with a new
+version and tests it after deleting its build checkout. These commands prepare versioned binaries; npm publication
+automation and the remaining standalone asset packaging are separate work. The root `groma.md` workspace stays private;
+npm releases need a separate publishable manifest for the compiled binaries.
+
 ## Before starting a feature
 
 Describe every new supported product flow as a Gherkin scenario before implementation. The scenario is the semantic
@@ -43,6 +66,27 @@ authority: it names the user action and observable outcome without specifying te
 details. Do not create Gherkin scenarios solely to test UI rendering.
 
 Confirm that the actor, entry point, observable result, and approved example are clear before changing code.
+
+## Open a pull request
+
+Before requesting review:
+
+- Link exactly one Backlog task and keep the PR focused on that task. Split unrelated work into separate tasks and PRs.
+- Describe the actor, entry point, and observable result. For a new supported product flow, add its Gherkin scenario
+  before implementation.
+- Keep Backlog traceability current while working: record each changed repository file and, when architecture is
+  affected, each exact element `id` on the task as soon as it changes. Use the `backlog` CLI; do not edit task
+  Markdown directly.
+- Update canonical architecture or product documentation when the represented contract changes. Use Groma commands for
+  Groma-owned architecture files instead of editing those files with generic tools.
+- Do not add unrequested compatibility behavior, fallbacks, recovery paths, speculative abstractions, or unrelated
+  cleanup.
+- Test business logic and invariants rather than decorative UI details, exact labels, colors, borders, or architecture
+  prose. Keep architecture fixtures under `test/fixtures/`.
+- Run `bun run check` after code changes. For terminal changes, run the approved scenario in a PTY when the task
+  requires it. Documentation-only PRs may skip the code test suite.
+- Review the final diff for unrelated files and state the checks you ran, any checks you could not run, and any known
+  limitations in the PR description.
 
 ## Make the change
 
