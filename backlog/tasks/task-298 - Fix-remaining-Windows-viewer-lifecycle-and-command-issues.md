@@ -1,5 +1,5 @@
 ---
-id: TASK-284
+id: TASK-298
 title: Fix remaining Windows viewer lifecycle and command issues
 status: Done
 assignee:
