@@ -1,11 +1,11 @@
 ---
 id: TASK-156
 title: Make web startup and page loads fast and memory-bounded
-status: In Progress
+status: Done
 assignee:
   - '@codex'
 created_date: '2026-08-23 19:07'
-updated_date: '2026-09-06 13:03'
+updated_date: '2026-09-06 14:27'
 labels: []
 dependencies:
   - TASK-157
@@ -81,7 +81,7 @@ A developer can open the complete Groma web map in under one second. The complet
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Complete scans preserve every supported source file and relationship; record first-scan and refresh timings for Groma, Backlog.md, and OpenClaw.
+- [x] #1 Complete scans preserve every supported source file and relationship; record first-scan and refresh timings for Groma, Backlog.md, and OpenClaw.
 - [x] #2 The complete Groma web map is visibly ready in under 1000 ms, including startup scan, model loading, placement, routing, and browser rendering. Verify the raw Backlog.md map and record its full startup timing.
 - [x] #3 First and repeated root requests finish under one second without reloading architecture or work; twenty root requests increase RSS by no more than 20 MiB.
 - [x] #4 Watched updates, route safety, deterministic output, architecture ownership and Markdown meaning remain correct; focused tests and bun run check pass.
@@ -92,17 +92,15 @@ A developer can open the complete Groma web map in under one second. The complet
 ## Definition of Done
 <!-- DOD:BEGIN -->
 - [ ] #1 Acceptance criteria have objective verification evidence.
-- [ ] #2 Relevant checks pass and changes remain task-scoped.
+- [x] #2 Relevant checks pass and changes remain task-scoped.
 - [x] #3 Public contracts or documentation are updated when behavior changes.
-- [ ] #4 Implementation Plan reflects the final approach; correction history and verification are recorded in Implementation Notes.
+- [x] #4 Implementation Plan reflects the final approach; correction history and verification are recorded in Implementation Notes.
 <!-- DOD:END -->
 
 ## Implementation Plan
 
 <!-- SECTION:PLAN:BEGIN -->
-1. Measure the current Groma startup phases and remove repeated or unnecessarily sequential startup work. 2. Expose the existing preparing state immediately with a loading spinner and preserve readiness, errors, and shutdown behavior. 3. Replace the Cartesian routing representation after a bounded prototype proves complete routes, clearance, separate paths, and supported port behavior; incorporate the parallel Pro investigation when available. 4. Measure complete Groma readiness below 1000 ms and OpenClaw readiness within 5000 ms, including browser drawing, plus peak, settled, and repeated-recalculation memory. 5. Run focused checks, required reviews, the full repository check, and browser verification before finalization.
-
-For the Groma startup slice, load and validate the revision list on the first history-menu request and cache it for the session; historical URL requests still validate before loading. Reuse the existing revision loading indicator. Notify the CLI when the HTTP listener opens so its URL is available before preparation finishes, while retaining the existing ready-map promise and shutdown lifecycle. Add the requested spinner to the existing preparing page.
+Optimize complete scans without changing their observations, preserve route and placement behavior, cache ready page responses, defer revision-history loading until requested, and show the preparing spinner while startup finishes. Verify full browser readiness, root-request time and memory, watched updates, and repository checks. Close the delivered startup work at Alex’s request; the additional Cartesian-workspace reduction in criterion 6 was not delivered.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
@@ -179,4 +177,12 @@ User-requested committed baseline: created detached worktree /private/tmp/groma-
 While completing TASK-295, the full check exposed stale startup tests from this task: history is now requested through /revisions.json and successful CLI startup reports through onListening. Updated web-first-run, okf-profile-view, web-live and web-port tests to use those existing interfaces, preserving their assertions. All 20 affected tests pass with local server and file-watch access. These changes do not alter the current product behavior; TASK-156 remains open for its outstanding end-to-end performance objective.
 
 Final isolated delivery passes all 428 tests. CLI launch through complete browser paint: Groma 591.57 ms, Backlog 723.29 ms, OpenClaw 4591.89 ms. All 3200 OpenClaw elements and 220 current-rule relationships render. Twenty warm Groma root requests take 0.42–0.92 ms with zero sampled RSS growth (426928 KiB before and after). User-requested loading spinner and heading are centered and visually verified using the actual setup renderer. OpenClaw peak process-tree RSS is 3.50 GiB and settled parent RSS 3.05 GiB. The Cartesian grid remains; AC6 and broader memory-reduction work stay open. These results use the callback-only relationship set accepted by Alex, not a dense full call graph.
+
+Alex requested marking TASK-156 Done on 2026-09-06 after accepting the current map. Closing the delivered startup and page-load work with the recorded final browser timings and 428 passing tests. Criterion 1 is checked from the recorded complete scan and observation-equality measurements. Criterion 6 remains unchecked: the Cartesian router is still used; the last measured OpenClaw peak process-tree RSS was 3.50 GiB and settled parent RSS was 3.05 GiB. No claim is made that routing-workspace reduction or repeated-recomputation memory verification was completed. The acceptance-evidence Definition of Done item remains unchecked for that reason.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Closed at Alex’s request. Complete CLI launch through browser paint measured 592 ms for Groma, 723 ms for Backlog.md, and 4592 ms for OpenClaw; all 428 tests passed. Warm root requests took 0.42–0.92 ms with zero sampled RSS growth. The loading spinner was visually verified. The separate Cartesian-routing memory criterion remains unverified and unchecked; measured OpenClaw peak and settled RSS were 3.50 and 3.05 GiB.
+<!-- SECTION:FINAL_SUMMARY:END -->
