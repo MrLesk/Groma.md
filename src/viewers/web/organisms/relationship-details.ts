@@ -1,14 +1,9 @@
-import type { AnnotatedRelationship, ArchitectureGraph, RelationshipConnection } from '../../../types.ts'
+import type { AnnotatedRelationship, ArchitectureGraph } from '../../../types.ts'
 import { heading, paragraph } from '../atoms/text.ts'
 import { editButton, isEditing } from './editable.ts'
 import { relationshipCard } from './relationship-card.ts'
 import { paintRemoveControl } from './remove.ts'
 import { paintAcceptControl, type RelationWrites } from './writes.ts'
-
-function connectionLabel(connection: RelationshipConnection): string {
-  const claim = connection.authored ? `Authored · ${connection.status === 'draft' ? 'draft' : 'current'}` : 'Derived interaction'
-  return `${connection.source} → ${connection.target} · ${claim}`
-}
 
 /** A map connection bundles claims; authoring always addresses an exact endpoint pair. */
 export function paintRelationship(
@@ -34,31 +29,21 @@ export function paintRelationship(
     if (count) body.append(paragraph('relationship-count', `${byId.get(row.source)!.title} → ${byId.get(row.target)!.title}: ${count} derived file interactions`))
   }
   body.append(relationshipCard({ ...relationship, source: byId.get(relationship.source)!, target: byId.get(relationship.target)! }, onSelect))
-  if (connections.length === 0) return
-  const select = document.createElement('select')
-  select.setAttribute('aria-label', 'Connection')
-  select.replaceChildren(...connections.map((connection, index) => new Option(connectionLabel(connection), String(index))))
-  body.append(select)
+  const connection = connections[0]
+  if (!connection) return
   const details = document.createElement('div')
   body.append(details)
-  function showConnection(): void {
-    details.replaceChildren()
-    host.querySelector('.edit-entry')?.remove()
-    const connection = connections[Number(select.value)]!
-    const writes = writesFor(connection.source, connection.target)
-    details.append(heading(connection.authored ? 'Authored interaction' : 'Derived interaction'))
-    details.append(paragraph('description', connection.description), paragraph('technology', connection.technology))
-    const editable = connection.authored || !connections.some(row => row.authored
-      && row.source === connection.source && row.target === connection.target)
-    if (editable && writes.onEdit && writes.onRead) details.append(editButton(host, relationship.id, [
-      { name: 'description', label: 'Description', value: connection.description, required: true },
-      { name: 'technology', label: 'Technology', value: connection.technology, required: true },
-    ], writes.onEdit, writes.onRead))
-    if (connection.authored && connection.status === 'draft') {
-      if (writes.onAccept) paintAcceptControl(details, writes.onAccept)
-      if (writes.onRemove) paintRemoveControl(details, connection.description, writes.onRemove)
-    }
-  }
-  select.addEventListener('change', showConnection)
-  showConnection()
+  host.querySelector('.edit-entry')?.remove()
+  const writes = writesFor(connection.source, connection.target)
+  details.append(heading(connection.authored ? 'Authored interaction' : 'Derived interaction'))
+  details.append(paragraph('description', connection.description), paragraph('technology', connection.technology))
+  const editable = connection.authored || !connections.some(row => row.authored
+    && row.source === connection.source && row.target === connection.target)
+  if (editable && writes.onEdit && writes.onRead) details.append(editButton(host, relationship.id, [
+    { name: 'description', label: 'Description', value: connection.description, required: true },
+    { name: 'technology', label: 'Technology', value: connection.technology, required: true },
+  ], writes.onEdit, writes.onRead))
+  if (!connection.authored || connection.status !== 'draft') return
+  if (writes.onAccept) paintAcceptControl(details, writes.onAccept)
+  if (writes.onRemove) paintRemoveControl(details, connection.description, writes.onRemove)
 }
