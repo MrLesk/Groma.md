@@ -363,6 +363,82 @@ test('Backlog.md installer follows Groma provenance and optional failure does no
   })
 })
 
+test('shared repository setup initializes Git first and then available Backlog.md', {
+  concurrency: true,
+}, async () => {
+  await temporaryRepository(async root => {
+    const { ui } = initUi({
+      projectName: 'Shared setup project',
+      scan: false,
+    })
+    const steps: string[] = []
+    const outcome = await runInitCommand({
+      repositoryRoot: root,
+      interactive: true,
+    }, {
+      openViewer: async () => undefined,
+    }, initDependencies(ui, {
+      gitInitialized: async () => {
+        steps.push('check-git')
+        return false
+      },
+      initializeGit: async repositoryRoot => {
+        steps.push('init-git')
+        assert.equal(await missing(path.join(repositoryRoot, 'groma')), true)
+        await mkdir(path.join(repositoryRoot, '.git'))
+        return true
+      },
+      backlogAvailable: () => true,
+      backlogInitialized: async () => {
+        steps.push('check-backlog')
+        return false
+      },
+      initializeBacklog: async repositoryRoot => {
+        steps.push('init-backlog')
+        await mkdir(path.join(repositoryRoot, 'backlog'))
+        await writeFile(path.join(repositoryRoot, 'backlog', 'config.yml'), 'project_name: Shared setup project\n')
+        return true
+      },
+    }))
+
+    assert.equal(outcome, 'completed')
+    assert.deepEqual(steps, ['check-git', 'init-git', 'check-backlog', 'init-backlog'])
+    assert.equal((await loadProjectProfile(root))?.title, 'Shared setup project')
+    assert.equal(await missing(path.join(root, 'backlog', 'config.yml')), false)
+  })
+})
+
+test('an existing Backlog.md project is preserved during shared setup', {
+  concurrency: true,
+}, async () => {
+  await temporaryRepository(async root => {
+    await mkdir(path.join(root, 'backlog'))
+    await writeFile(path.join(root, 'backlog', 'config.yml'), 'project_name: Existing Backlog project\n')
+    const { ui, events } = initUi({
+      projectName: 'Existing Backlog project',
+      scan: false,
+    })
+    let initializations = 0
+    const outcome = await runInitCommand({
+      repositoryRoot: root,
+      interactive: true,
+    }, {
+      openViewer: async () => undefined,
+    }, initDependencies(ui, {
+      backlogAvailable: () => true,
+      initializeBacklog: async () => {
+        initializations += 1
+        return true
+      },
+    }))
+
+    assert.equal(outcome, 'completed')
+    assert.equal(initializations, 0)
+    assert.equal(events.includes('ask:backlog'), false)
+    assert.equal(await readFile(path.join(root, 'backlog', 'config.yml'), 'utf8'), 'project_name: Existing Backlog project\n')
+  })
+})
+
 test('declining Backlog.md installation continues without running an installer', {
   concurrency: true,
 }, async () => {
@@ -388,5 +464,31 @@ test('declining Backlog.md installation continues without running an installer',
 
     assert.equal(outcome, 'completed')
     assert.equal(installs, 0)
+  })
+})
+
+test('non-interactive init initializes available Backlog.md without offering installation', {
+  concurrency: true,
+}, async () => {
+  await temporaryRepository(async root => {
+    const { ui, events } = initUi()
+    let initializations = 0
+    const outcome = await runInitCommand({
+      repositoryRoot: root,
+      interactive: false,
+      projectName: 'CLI project',
+      directory: 'groma',
+    }, { openViewer: async () => undefined }, initDependencies(ui, {
+      initializeBacklog: async (_repositoryRoot, projectName) => {
+        initializations += 1
+        assert.equal(projectName, 'CLI project')
+        return true
+      },
+    }))
+
+    assert.equal(outcome, 'completed')
+    assert.equal(initializations, 1)
+    assert.equal(events.includes('ask:backlog'), false)
+    assert.equal((await loadProjectProfile(root))?.title, 'CLI project')
   })
 })

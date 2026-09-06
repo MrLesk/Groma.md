@@ -1,7 +1,11 @@
 import path from 'node:path'
 import type { WorkSource } from '@groma/work-source'
 
-import { initializeGroma, gromaInitialization } from '../../initialize.ts'
+import {
+  initializeRepository,
+  type RepositoryInitDependencies,
+} from '../../init-command.ts'
+import { gromaInitialization } from '../../initialize.ts'
 import { loadProjectProfile } from '../../project-profile.ts'
 import { scanRepository } from '../../scanner.ts'
 import { createWebMapSession } from './map-session.ts'
@@ -12,7 +16,13 @@ type MapSession = Awaited<ReturnType<typeof createWebMapSession>>
 /** One local server owns setup and the ready map; the map starts only after initialization. */
 export async function startWebViewer(
   repositoryRoot: string,
-  options: { port?: number; workSource?: WorkSource; scan?: boolean; onListening?: (url: string) => void } = {},
+  options: {
+    port?: number
+    workSource?: WorkSource
+    scan?: boolean
+    onListening?: (url: string) => void
+    initDependencies?: Partial<RepositoryInitDependencies>
+  } = {},
 ): Promise<{ url: string; close: () => Promise<void> }> {
   const initial = gromaInitialization(repositoryRoot)
   let projectName = (await loadProjectProfile(repositoryRoot))?.title ?? path.basename(repositoryRoot)
@@ -48,10 +58,10 @@ export async function startWebViewer(
     try {
       const input = await request.formData()
       projectName = String(input.get('projectName') ?? '')
-      await initializeGroma(repositoryRoot, {
+      await initializeRepository(repositoryRoot, {
         projectName,
         directory: String(input.get('directory') ?? ''),
-      })
+      }, options.initDependencies)
       await openMap(true)
       if (error !== undefined) return setupResponse(400)
       return new Response(null, { status: 303, headers: { Location: '/' } })

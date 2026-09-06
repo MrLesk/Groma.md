@@ -1,9 +1,12 @@
-import { realpath } from 'node:fs/promises'
+import { realpath, stat } from 'node:fs/promises'
+import { join } from 'node:path'
 
 import { loadArchitecture } from './architecture-reader.ts'
 import { createClackInitUi } from './init-command-ui.ts'
 import {
   initializeGroma,
+  type GromaInitInput,
+  type GromaInitResult,
   gromaInitialization,
   type GromaInitPrompts,
 } from './initialize.ts'
@@ -39,8 +42,15 @@ export interface InitCommandUi {
   viewer(): Promise<InitViewer | 'finish' | undefined>
 }
 
-export interface InitCommandDependencies {
+export interface RepositoryInitDependencies {
   backlogAvailable(): boolean
+  backlogInitialized(repositoryRoot: string): Promise<boolean>
+  gitInitialized(repositoryRoot: string): Promise<boolean>
+  initializeBacklog(repositoryRoot: string, projectName: string): Promise<boolean>
+  initializeGit(repositoryRoot: string): Promise<boolean>
+}
+
+export interface InitCommandDependencies extends RepositoryInitDependencies {
   error(message: string): void
   executablePath(): Promise<string>
   install(installer: PackageInstaller): Promise<boolean>
@@ -51,6 +61,10 @@ export interface InitCommandDependencies {
 
 export interface InitCommandActions {
   openViewer(viewer: InitViewer): Promise<void>
+}
+
+export interface RepositoryInitResult extends GromaInitResult {
+  backlog: 'initialized' | 'unchanged' | 'unavailable' | 'failed'
 }
 
 class InitializationCancelled extends Error {}
@@ -90,10 +104,91 @@ async function installBacklog(installer: PackageInstaller): Promise<boolean> {
   }
 }
 
+async function fileExists(filename: string): Promise<boolean> {
+  try {
+    return (await stat(filename)).isFile()
+  } catch {
+    return false
+  }
+}
+
+async function pathExists(filename: string): Promise<boolean> {
+  try {
+    await stat(filename)
+    return true
+  } catch {
+    return false
+  }
+}
+
+async function backlogInitialized(repositoryRoot: string): Promise<boolean> {
+  const markers = [
+    join(repositoryRoot, 'backlog', 'config.yml'),
+    join(repositoryRoot, '.backlog', 'config.yml'),
+    join(repositoryRoot, 'backlog.config.yml'),
+    join(repositoryRoot, 'backlog.json'),
+  ]
+  return (await Promise.all(markers.map(fileExists))).some(Boolean)
+}
+
+function backlogInitCommand(projectName: string): string[] {
+  return [
+    'backlog',
+    'init',
+    projectName,
+    '--defaults',
+    '--integration-mode',
+    'cli',
+    '--auto-open-browser',
+    'false',
+    '--agent-instructions',
+    'agents',
+  ]
+}
+
+async function initializeBacklog(
+  repositoryRoot: string,
+  projectName: string,
+): Promise<boolean> {
+  try {
+    const child = Bun.spawn(backlogInitCommand(projectName), {
+      cwd: repositoryRoot,
+      stdin: 'ignore',
+      stdout: 'ignore',
+      stderr: 'ignore',
+    })
+    return await child.exited === 0
+  } catch {
+    return false
+  }
+}
+
+async function gitInitialized(repositoryRoot: string): Promise<boolean> {
+  return pathExists(join(repositoryRoot, '.git'))
+}
+
+async function initializeGit(repositoryRoot: string): Promise<boolean> {
+  try {
+    const child = Bun.spawn(['git', 'init', '--quiet'], {
+      cwd: repositoryRoot,
+      stdin: 'ignore',
+      stdout: 'ignore',
+      stderr: 'ignore',
+    })
+    return await child.exited === 0
+  } catch {
+    return false
+  }
+}
+
 const defaultDependencies: InitCommandDependencies = {
   backlogAvailable: () => Bun.which('backlog') !== null,
+  backlogInitialized,
   error: message => console.error(message),
   executablePath: currentExecutablePath,
+  gitInitialized,
+  initializeBacklog,
+  initializeGit,
   install: installBacklog,
   output: message => console.log(message),
   scan: scanRepository,
@@ -111,6 +206,45 @@ function interactivePrompts(ui: InitCommandUi): GromaInitPrompts {
   }
 }
 
+async function ensureGit(
+  repositoryRoot: string,
+  dependencies: RepositoryInitDependencies,
+): Promise<void> {
+  if (await dependencies.gitInitialized(repositoryRoot)) return
+  if (await dependencies.initializeGit(repositoryRoot)) return
+  throw new Error('Could not initialize Git. Groma setup cannot continue.')
+}
+
+async function initializeAvailableBacklog(
+  repositoryRoot: string,
+  projectName: string,
+  dependencies: RepositoryInitDependencies,
+): Promise<RepositoryInitResult['backlog']> {
+  if (!dependencies.backlogAvailable()) return 'unavailable'
+  if (await dependencies.backlogInitialized(repositoryRoot)) return 'unchanged'
+  return await dependencies.initializeBacklog(repositoryRoot, projectName)
+    ? 'initialized'
+    : 'failed'
+}
+
+/** Shared repository setup used by the terminal wizard and browser setup form. */
+export async function initializeRepository(
+  repositoryRoot: string,
+  input: GromaInitInput,
+  overrides: Partial<RepositoryInitDependencies> = {},
+  prompts?: GromaInitPrompts,
+): Promise<RepositoryInitResult> {
+  const dependencies = { ...defaultDependencies, ...overrides }
+  await ensureGit(repositoryRoot, dependencies)
+  const groma = await initializeGroma(repositoryRoot, input, prompts)
+  const backlog = await initializeAvailableBacklog(
+    repositoryRoot,
+    groma.projectName,
+    dependencies,
+  )
+  return { ...groma, backlog }
+}
+
 function settingsSummary(projectName: string, directory: GromaDirectory): string {
   return `Project: ${projectName}\nGroma folder: ${directory}/`
 }
@@ -123,9 +257,18 @@ function commandReminder(ui: InitCommandUi): void {
 }
 
 async function offerBacklog(
+  repositoryRoot: string,
+  projectName: string,
+  status: RepositoryInitResult['backlog'],
   dependencies: InitCommandDependencies,
 ): Promise<void> {
-  if (dependencies.backlogAvailable()) return
+  if (status === 'initialized' || status === 'unchanged') return
+  if (status === 'failed') {
+    dependencies.ui.error(
+      'Could not initialize Backlog.md. Groma setup will continue.',
+    )
+    return
+  }
   const wanted = await dependencies.ui.confirmBacklogInstall()
   if (wanted === undefined) cancelled()
   if (!wanted) return
@@ -140,6 +283,12 @@ async function offerBacklog(
   if (!installed) {
     dependencies.ui.error(
       `Could not run ${command.join(' ')}. Groma setup will continue.`,
+    )
+    return
+  }
+  if (!await dependencies.initializeBacklog(repositoryRoot, projectName)) {
+    dependencies.ui.error(
+      'Could not initialize Backlog.md. Groma setup will continue.',
     )
   }
 }
@@ -198,9 +347,10 @@ export async function runInitCommand(
   const ui = dependencies.ui
   try {
     if (input.interactive) await ui.intro()
-    const result = await initializeGroma(
+    const result = await initializeRepository(
       input.repositoryRoot,
       { projectName: input.projectName, directory: input.directory },
+      overrides,
       input.interactive ? interactivePrompts(ui) : undefined,
     )
     const completed = completionMessage(result.status, result.projectName)
@@ -211,7 +361,7 @@ export async function runInitCommand(
     }
 
     ui.note(settingsSummary(result.projectName, result.directory), 'Groma settings')
-    await offerBacklog(dependencies)
+    await offerBacklog(input.repositoryRoot, result.projectName, result.backlog, dependencies)
     if (result.status !== 'initialized' && await hasObservedComponents(input.repositoryRoot)) {
       ui.outro(completed)
       return 'completed'
