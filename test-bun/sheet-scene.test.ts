@@ -10,7 +10,10 @@ import {
   ISLAND_SPACING,
   PLANE,
   ROOF_PAD,
-  SURFACE_FONT,
+  CONTAINER_FONT,
+  GROUP_FONT,
+  labelBand,
+  textPadding,
   areaUnitsOf,
   heightUnitsOf,
   textWidth,
@@ -116,7 +119,7 @@ test.concurrent('a building keeps the ground its roof hides clear of its north a
   assert.ok(pairs > 0)
 })
 
-test.concurrent('system islands and slabs give their children two cells on every edge', () => {
+test.concurrent('system islands and slabs reserve content padding before their title bands', () => {
   assert.ok(NESTED_CONTENT_PAD > PAD)
   const scene = sheetScene(shopWorld())
   const rectOf = new Map<string, CellRect>([
@@ -134,7 +137,8 @@ test.concurrent('system islands and slabs give their children two cells on every
     assert.equal(contains(parent, child), true)
     assert.ok(child.gx >= parent.gx + padding && child.gy >= parent.gy + padding)
     assert.ok(child.gx + child.w <= parent.gx + parent.w - padding)
-    assert.ok(child.gy + child.d <= parent.gy + parent.d - padding)
+    const font = scene.slabs.some(slab => slab.representationId === parentKey) ? CONTAINER_FONT : ISLAND_FONT
+    assert.ok(child.gy + child.d <= parent.gy + parent.d - padding - labelBand(font))
   }
   for (const building of scene.buildings) inside(building.rect, building.surface)
   for (const slab of scene.slabs) inside(slab.rect, slab.island)
@@ -162,7 +166,7 @@ test.concurrent('islands stay west-to-east: actors first and externals last', ()
   }
 })
 
-test.concurrent('actors and external islands are squares with their buildings centred', () => {
+test.concurrent('actors and external islands centre their buildings above their title band', () => {
   const scene = sheetScene(worldOf([
     box('ann', 'actor', unit),
     box('bob', 'actor', unit),
@@ -176,7 +180,7 @@ test.concurrent('actors and external islands are squares with their buildings ce
     const west = Math.min(...rects.map(rect => rect.gx)) - island.rect.gx
     const east = island.rect.gx + island.rect.w - Math.max(...rects.map(rect => rect.gx + rect.w))
     const north = Math.min(...rects.map(rect => rect.gy)) - island.rect.gy
-    const south = island.rect.gy + island.rect.d - Math.max(...rects.map(rect => rect.gy + rect.d))
+    const south = island.rect.gy + island.rect.d - labelBand(ISLAND_FONT) - Math.max(...rects.map(rect => rect.gy + rect.d))
     assert.equal(west, east)
     assert.ok(Math.abs(north - south) <= 1)
     assert.ok(west >= PAD && north >= PAD && south >= PAD)
@@ -203,7 +207,7 @@ test.concurrent('a group becomes a zone around its members on the parent surface
       assert.ok(building.rect.gx >= zone.rect.gx + NESTED_CONTENT_PAD)
       assert.ok(building.rect.gy >= zone.rect.gy + NESTED_CONTENT_PAD)
       assert.ok(building.rect.gx + building.rect.w <= zone.rect.gx + zone.rect.w - NESTED_CONTENT_PAD)
-      assert.ok(building.rect.gy + building.rect.d <= zone.rect.gy + zone.rect.d - NESTED_CONTENT_PAD)
+      assert.ok(building.rect.gy + building.rect.d <= zone.rect.gy + zone.rect.d - NESTED_CONTENT_PAD - labelBand(GROUP_FONT))
     } else {
       assert.equal(apart(zone.rect, building.rect, GAP), true)
     }
@@ -264,7 +268,8 @@ test.concurrent('file measurements control building height and area while draft 
   assert.ok(ann.rect.w === ann.rect.d && ann.rect.w > 2 && ann.lines.length === 2)
   const bank = scene.buildings.find(building => building.id === 'bank')!
   assert.equal(bank.shape.kind, 'pill')
-  assert.ok(bank.rect.d === 2 && bank.lines.length === 1)
+  assert.ok(bank.rect.d * PLANE >= ISLAND_FONT + 2 * textPadding(ISLAND_FONT))
+  assert.equal(bank.lines.length, 1)
 })
 
 test.concurrent('source files compress into nested project-relative floors without losing a file', () => {
@@ -319,7 +324,7 @@ test.concurrent('a surface is at least as wide as its own name', () => {
   const shop = scene.islands.find(island => island.kind === 'system')!
   assert.ok(shop.rect.w * PLANE >= textWidth(shop.name.toUpperCase(), ISLAND_FONT, ISLAND_SPACING) + 2 * ROOF_PAD)
   const api = scene.slabs[0]!
-  assert.ok(api.rect.w * PLANE >= textWidth(api.title, SURFACE_FONT) + 2 * ROOF_PAD)
+  assert.ok(api.rect.w * PLANE >= textWidth(api.title, CONTAINER_FONT) + 2 * ROOF_PAD)
 })
 
 test.concurrent('the sheet is the islands plus the margin, starting at the margin', () => {

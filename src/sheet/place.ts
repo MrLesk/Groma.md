@@ -6,7 +6,10 @@ import { MARGIN, PAD, shadeOf, translate, unionRects } from './grid.ts'
 import {
   ISLAND_FONT,
   ISLAND_SPACING,
-  SURFACE_FONT,
+  CONTAINER_FONT,
+  GROUP_FONT,
+  buildingFont,
+  labelBand,
   type FileMeasureRanges,
   fileMeasureRanges,
   footprintOf,
@@ -66,8 +69,9 @@ function buildingNode(element: AnnotatedElement, ranges: FileMeasureRanges, degr
   const shape: Shape = element.kind === 'actor'
     ? { kind: 'round' }
     : element.external ? { kind: 'pill' } : { kind: 'block' }
-  const lines = shape.kind === 'pill' ? [element.title] : roofLines(element.title)
-  const base = footprintOf(lines, shape, degree)
+  const size = buildingFont(element)
+  const lines = shape.kind === 'pill' ? [element.title] : roofLines(element.title, size)
+  const base = footprintOf(lines, shape, degree, size)
   const floors = element.kind === 'component'
     ? floorsOf(element.origin, element.code, ranges, base)
     : []
@@ -82,8 +86,8 @@ function buildingNode(element: AnnotatedElement, ranges: FileMeasureRanges, degr
 /** The cells a surface's own name needs in its front band. */
 function nameWidth(paint: Node['paint']): number {
   if (paint.kind === 'island') return nameCells(paint.name.toUpperCase(), ISLAND_FONT, ISLAND_SPACING)
-  if (paint.kind === 'zone') return nameCells(paint.name, SURFACE_FONT)
-  if (paint.kind === 'slab') return nameCells(paint.element.title, SURFACE_FONT)
+  if (paint.kind === 'zone') return nameCells(paint.name, GROUP_FONT)
+  if (paint.kind === 'slab') return nameCells(paint.element.title, CONTAINER_FONT)
   return 0
 }
 
@@ -152,10 +156,11 @@ function packed(
   /** Systems, slabs and zones share the roomier nested-surface inset; the centred actors and external islands stay compact. */
   const padding = paint.kind === 'island' && paint.islandKind !== 'system' ? PAD : NESTED_CONTENT_PAD
   const extra = padding - PAD
+  const font = paint.kind === 'island' ? ISLAND_FONT : paint.kind === 'slab' ? CONTAINER_FONT : GROUP_FONT
   return {
     key,
     w: Math.max(placed.w, nameWidth(paint)) + 2 * extra,
-    d: placed.d + 2 * extra,
+    d: placed.d + 2 * extra + labelBand(font),
     children: children.map(child => {
       const at = placed.at.get(child.key)!
       return { node: child, gx: at.gx + behind(child) + extra, gy: at.gy + behind(child) + extra }
@@ -165,7 +170,7 @@ function packed(
 }
 
 /**
- * Actors and external islands are squares with their buildings centred, so a
+ * Actors and external islands are squares with their buildings centred above the name band, so a
  * lone building does not sit in the corner of a strip cut for the island's
  * name. The side grows by one cell when the west and east margins would differ.
  */
@@ -176,7 +181,7 @@ function squared(node: Node): Node {
   }
   const side = Math.max(node.w, node.d) + (Math.max(node.w, node.d) - content.w) % 2
   const dx = Math.floor((side - content.w) / 2) - PAD
-  const dy = Math.floor((side - content.d) / 2) - PAD
+  const dy = Math.floor((side - labelBand(ISLAND_FONT) - content.d) / 2) - PAD
   return {
     ...node,
     w: side,

@@ -253,13 +253,14 @@ footprint is a whole number of cells and every route travels a
 quarter-cell lattice. A proportional drafting band surrounds that fixed
 semantic sheet without moving its cells. The grid itself runs to the edge of
 the map pane at any zoom. One strong outer frame defines the band;
-its small compass scales with the sheet and keeps north on the grid's up-right
+its compass scales with the sheet and keeps north on the grid's up-right
 axis, so the actors island is due west. A title plate in the band shows the
 project title and up to three lines of the Markdown body overview from
 the selected Groma directory's `project.md`. It fits its width to lines up to 80 characters; longer
 content remains in the editor instead of growing the plate. A compact boxed
 pencil sits inside its lower corner. Small
 unlabeled calibration ticks line its two front edges.
+The compass has a clear inset for its ring and direction letters inside the frame.
 The compass, title metadata, and pencil lie on the same isometric ground plane,
 and every blueprint decoration uses the map's neutral grayscale palette.
 
@@ -268,13 +269,13 @@ on the sheet, in one row along the grid from west to east so flows
 read that way: the actors island, then the systems, then the external
 systems; on screen the row runs from the upper left down to the right.
 The actors and external islands are squares with their buildings
-stacked in one column and centred, each a little bigger than what
+stacked in one column and centred above their name band, each a little bigger than what
 stands on it. Inside every system island, slab and zone,
 relationships decide where the children stand. These three nested
-surfaces keep a two-cell band between their children and every edge;
-the centred actors and external islands keep their compact band. The
-surface names stay in the one-cell edge band; the larger inset belongs
-only to nested contents. The
+surfaces keep two cells of padding around their contents, plus a front strip
+measured for their title. Actors and external islands keep one cell around
+their contents above the title strip. Surface names sit close to the outer edge;
+the extra clearance is above them, toward the contents. The
 plain system surface sits half a tint step lighter on the same grey
 scale, so the broadest internal boundary stays in the background.
 The children something outside the surface feeds stand first, in a
@@ -348,7 +349,11 @@ zone, and building names always show.
 Names lie on the surfaces they belong to, skewed with the sheet: a
 building's name on its roof, wrapped onto two lines when it is long,
 and an island's, slab's, or zone's name in the free band along its
-front edge. Footprints are sized so every name fits.
+front edge. Text size follows the visible hierarchy: project title at 52 plane
+pixels, systems at 38, containers at 29, groups at 22, and components at 16.
+Roofs, title strips, and the project plate grow to fit their text. Surface names
+stay close to the outer edge, with extra clearance toward the contents above.
+Groups remain visual groupings within their existing parent.
 
 Routes follow the lattice: one route per authored relationship,
 between the authored endpoints, preferring to leave from the middle of

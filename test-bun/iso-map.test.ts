@@ -3,8 +3,8 @@ import assert from 'node:assert/strict'
 import { test } from 'bun:test'
 
 import { loadAnnotatedArchitecture } from '../src/core.ts'
-import { PAD, ROOF_SHADOW, centredRect } from '../src/sheet/grid.ts'
-import { PLANE, ROOF_PAD, curved, roofBlock, textWidth } from '../src/sheet/measure.ts'
+import { ROOF_SHADOW, centredRect } from '../src/sheet/grid.ts'
+import { CONTAINER_FONT, GROUP_FONT, ISLAND_FONT, PLANE, ROOF_PAD, buildingFont, curved, labelBand, labelHeight, roofBlock, textPadding, textWidth } from '../src/sheet/measure.ts'
 import { sheetScene } from '../src/sheet/scene.ts'
 import type { Building, RoutePoint, SheetScene } from '../src/sheet/types.ts'
 import type { Bounds, Point } from '../src/types.ts'
@@ -279,22 +279,27 @@ test.concurrent('a route meets the visible upper face of a stepped tower', () =>
   assert.notDeepEqual(route.arrow.at, project(6, 2, 0))
 })
 
-test.concurrent('roof and surface text keep their owning shape inset', async () => {
+test.concurrent('roof text keeps its owning shape inset', async () => {
   const scene = await fixtureScene(viewerFixtureRoot)
-  const rounded = scene.buildings.filter(({ building }) => curved(building.shape))
-  assert.ok(scene.buildings.length > rounded.length && rounded.length > 0)
   for (const { building, text, floors } of scene.buildings) {
     const top = building.floors.at(-1)
     const roof = top === undefined ? building.rect : centredRect(building.rect, top.footprint)
     const roofWidth = roof.w * PLANE
-    for (const line of text.lines) assert.ok(textWidth(line) + 2 * ROOF_PAD <= roofWidth)
+    const size = buildingFont(building)
+    for (const line of text.lines) assert.ok(textWidth(line, size) + 2 * textPadding(size) <= roofWidth)
     if (curved(building.shape)) continue
     const roofNorth = floors.at(-1)!.find(face => face.side === 'top')!.points[0]!
     assert.deepEqual(text.origin, roofNorth)
   }
+})
+
+test.concurrent('curved roof titles stay centered in their owning shape', async () => {
+  const scene = await fixtureScene(viewerFixtureRoot)
+  const rounded = scene.buildings.filter(({ building }) => curved(building.shape))
+  assert.ok(scene.buildings.length > rounded.length && rounded.length > 0)
   for (const { building, text, floors } of rounded) {
     const { rect, lines } = building
-    const block = roofBlock(lines)
+    const block = roofBlock(lines, buildingFont(building))
     assert.deepEqual(text.origin, project(rect.gx + (rect.w - block.w / PLANE) / 2, rect.gy + (rect.d - block.d / PLANE) / 2, building.heightUnits))
     assert.equal(floors.length, 1)
     const [band, top] = floors[0]!
@@ -302,8 +307,19 @@ test.concurrent('roof and surface text keep their owning shape inset', async () 
     const box = screenBox(boxFaces(rect, 0, building.heightUnits).find(face => face.side === 'top')!.points)
     for (const point of top!.points) assert.ok(point.x >= box.x - 0.01 && point.x <= box.x + box.width + 0.01 && point.y >= box.y - 0.01 && point.y <= box.y + box.height + 0.01)
   }
-  for (const { island, text } of scene.islands) {
-    assert.deepEqual(text.origin, project(island.rect.gx, island.rect.gy + island.rect.d - PAD, 0))
+})
+
+test.concurrent('surface text fits its reserved front band', async () => {
+  const scene = await fixtureScene(viewerFixtureRoot)
+  const surfaces = [
+    ...scene.islands.map(({ island, text }) => ({ rect: island.rect, text, size: ISLAND_FONT })),
+    ...scene.slabs.map(({ slab, text }) => ({ rect: slab.rect, text, size: CONTAINER_FONT })),
+    ...scene.zones.map(({ zone, text }) => ({ rect: zone.rect, text, size: GROUP_FONT })),
+  ]
+  for (const { rect, text, size } of surfaces) {
+    assert.deepEqual(text.origin, project(rect.gx, rect.gy + rect.d - labelHeight(size) / PLANE, 0))
+    assert.ok(labelHeight(size) <= labelBand(size) * PLANE)
+    for (const line of text.lines) assert.ok(textWidth(line, size) + 2 * ROOF_PAD <= rect.w * PLANE)
   }
 })
 
@@ -327,5 +343,31 @@ test.concurrent('the project plate stays outside architecture and inside the fit
     assert.ok(depth > south)
     assert.ok(point.x >= scene.bounds.x && point.x <= scene.bounds.x + scene.bounds.width)
     assert.ok(point.y >= scene.bounds.y && point.y <= scene.bounds.y + scene.bounds.height)
+  }
+})
+
+
+test.concurrent('the compass and its direction letters fit the frame without touching architecture', async () => {
+  const scene = await fixtureScene(viewerFixtureRoot)
+  const unit = project(1, 0, 0)
+  const cells = (point: Point): Point => ({
+    x: (point.x / unit.x + point.y / unit.y) / 2,
+    y: (point.y / unit.y - point.x / unit.x) / 2,
+  })
+  const halfLetter = scene.compass.fontSize / PLANE / 2
+  const points = [...scene.compass.ring, ...scene.compass.star].map(cells)
+  for (const letter of scene.compass.letters) {
+    const at = cells(letter.at)
+    points.push({ x: at.x - halfLetter, y: at.y - halfLetter }, { x: at.x + halfLetter, y: at.y + halfLetter })
+  }
+  const compass = screenBox(points)
+  const frame = screenBox(scene.frame.map(cells))
+  assert.ok(compass.x > frame.x && compass.y > frame.y)
+  assert.ok(compass.x + compass.width < frame.x + frame.width)
+  assert.ok(compass.y + compass.height < frame.y + frame.height)
+  for (const { island } of scene.islands) {
+    const rect = island.rect
+    assert.ok(compass.x + compass.width < rect.gx || rect.gx + rect.w < compass.x
+      || compass.y + compass.height < rect.gy || rect.gy + rect.d < compass.y)
   }
 })

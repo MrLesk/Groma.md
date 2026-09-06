@@ -4,14 +4,17 @@ import type { BuildingFloor, Shape } from './types.ts'
 /** Plane pixels per cell: the roof text is laid out in these units and projected with the roof. */
 export const PLANE = 24
 export const ROOF_FONT = 11
+export const COMPONENT_FONT = 16
 /** Advance of one monospace glyph as a fraction of the font size. */
 const ROOF_ADVANCE = 0.62
 export const ROOF_PAD = 6
 export const ROOF_LINE_HEIGHT = 13
-/** Surface names: islands in spaced capitals, slabs and zones at roof size. */
-export const ISLAND_FONT = 12
+/** Map heading sizes in plane pixels. */
+export const PROJECT_FONT = 52
+export const ISLAND_FONT = 38
 export const ISLAND_SPACING = 0.14
-export const SURFACE_FONT = 11
+export const CONTAINER_FONT = 29
+export const GROUP_FONT = 22
 
 /** A roof line wider than this wraps, when the name has a space to wrap at. */
 const MAX_LINE_CELLS = 4
@@ -41,14 +44,39 @@ export function textWidth(text: string, size = ROOF_FONT, spacing = 0): number {
   return text.length * size * (ROOF_ADVANCE + spacing)
 }
 
+/** Components, external systems and actors use their own title sizes on the roof. */
+export function buildingFont(element: Pick<AnnotatedElement, 'kind' | 'external'>): number {
+  if (element.external) return ISLAND_FONT
+  return element.kind === 'component' ? COMPONENT_FONT : ROOF_FONT
+}
+
+/** Roof insets and line spacing grow with the title size. */
+export function textPadding(size: number): number {
+  return Math.ceil(size * ROOF_PAD / ROOF_FONT)
+}
+
+export function textLineHeight(size: number): number {
+  return Math.ceil(size * ROOF_LINE_HEIGHT / ROOF_FONT)
+}
+
+/** Plane-pixel depth of a surface label, with a compact inset against the outer edge. */
+export function labelHeight(size: number): number {
+  return 2 * ROOF_PAD + size * 1.1
+}
+
+/** Whole cells reserved for a surface title; content padding sits above this strip. */
+export function labelBand(size: number): number {
+  return Math.ceil(labelHeight(size) / PLANE)
+}
+
 /** Cells a surface needs along +gx so its own name fits in its front band. */
 export function nameCells(name: string, size: number, spacing = 0): number {
   return Math.ceil((textWidth(name, size, spacing) + 2 * ROOF_PAD) / PLANE)
 }
 
 /** The name as roof lines: one line, or two split at the space nearest the middle when one line would exceed four cells. */
-export function roofLines(name: string): string[] {
-  if (textWidth(name) + 2 * ROOF_PAD <= MAX_LINE_CELLS * PLANE) return [name]
+export function roofLines(name: string, size = ROOF_FONT): string[] {
+  if (textWidth(name, size) + 2 * textPadding(size) <= MAX_LINE_CELLS * PLANE) return [name]
   const middle = name.length / 2
   let split = -1
   for (let index = 0; index < name.length; index += 1) {
@@ -194,10 +222,10 @@ export function areaUnitsOf(
 export const curved = (shape: Shape): boolean => shape.kind === 'round' || shape.kind === 'pill'
 
 /** The name's block on a roof in plane pixels: the longest line with ROOF_PAD around it, one ROOF_LINE_HEIGHT per line. */
-export function roofBlock(lines: readonly string[]): { w: number; d: number } {
+export function roofBlock(lines: readonly string[], size = ROOF_FONT): { w: number; d: number } {
   return {
-    w: Math.max(...lines.map(line => textWidth(line))) + 2 * ROOF_PAD,
-    d: 2 * ROOF_PAD + lines.length * ROOF_LINE_HEIGHT,
+    w: Math.max(...lines.map(line => textWidth(line, size))) + 2 * textPadding(size),
+    d: 2 * textPadding(size) + lines.length * textLineHeight(size),
   }
 }
 
@@ -206,15 +234,16 @@ export function footprintOf(
   lines: readonly string[],
   shape: Shape,
   degree: number,
+  size = ROOF_FONT,
 ): { w: number; d: number } {
-  const block = roofBlock(lines)
+  const block = roofBlock(lines, size)
   if (shape.kind === 'round') {
     const side = Math.max(MIN_SIDE, Math.ceil(Math.hypot(block.w, block.d) / PLANE))
     return { w: side, d: side }
   }
   if (shape.kind === 'pill') {
     /** A semicircle of radius d / 2 at each end adds d to the straight middle. */
-    const d = MIN_SIDE
+    const d = Math.max(MIN_SIDE, Math.ceil(block.d / PLANE))
     return { w: Math.ceil(block.w / PLANE) + d, d }
   }
   const w = Math.ceil(block.w / PLANE)

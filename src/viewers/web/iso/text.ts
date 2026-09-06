@@ -1,4 +1,4 @@
-import { ROOF_LINE_HEIGHT, ROOF_PAD, textWidth } from '../../../sheet/measure.ts'
+import { ROOF_PAD, textLineHeight, textPadding, textWidth } from '../../../sheet/measure.ts'
 import type { ProjectionView, SurfaceText } from './project.ts'
 import { planeMatrix } from './project.ts'
 import { svg } from './svg.ts'
@@ -24,19 +24,21 @@ export function surfaceText(
   spacing = 0,
 ): SVGGElement {
   const group = svg('g', { transform: planeMatrix('ground', text.origin, view) }, className)
+  const padding = chip ? ROOF_PAD : textPadding(size)
+  const lineHeight = textLineHeight(size)
   if (chip) {
     const width = Math.max(...text.lines.map(line => textWidth(line, size, spacing)))
     group.append(svg('rect', {
-      x: ROOF_PAD - CHIP_PAD,
-      y: ROOF_PAD - CHIP_PAD,
+      x: padding - CHIP_PAD,
+      y: padding - CHIP_PAD,
       width: width + 2 * CHIP_PAD,
-      height: size * 1.1 + (text.lines.length - 1) * ROOF_LINE_HEIGHT + 2 * CHIP_PAD,
+      height: size * 1.1 + (text.lines.length - 1) * lineHeight + 2 * CHIP_PAD,
     }, 'chip'))
   }
   text.lines.forEach((line, index) => {
     const node = svg('text', {
-      x: ROOF_PAD,
-      y: ROOF_PAD + size * 0.9 + index * ROOF_LINE_HEIGHT,
+      x: padding,
+      y: padding + size * 0.9 + index * lineHeight,
       'font-size': size,
       'letter-spacing': `${spacing}em`,
     }, 'text')

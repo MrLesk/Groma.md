@@ -1,4 +1,4 @@
-import { ROOF_FONT } from '../../../sheet/measure.ts'
+import { buildingFont } from '../../../sheet/measure.ts'
 import type { BuildingFloor } from '../../../sheet/types.ts'
 import type { Plane, ProjectedBuilding, ProjectedScene, ProjectionView } from './project.ts'
 import { facadePattern, facadePatternId } from './style.ts'
@@ -64,7 +64,7 @@ function paintBuilding(
   for (const [index, faces] of floors.entries()) {
     paintFloor(layer, group, projected, faces, building.floors[index], view)
   }
-  group.append(surfaceText(text, ROOF_FONT, 'label', view))
+  group.append(surfaceText(text, buildingFont(building), 'label', view))
   return group
 }
 

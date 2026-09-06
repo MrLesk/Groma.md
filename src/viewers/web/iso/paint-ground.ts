@@ -1,4 +1,4 @@
-import { ISLAND_FONT, ISLAND_SPACING, SURFACE_FONT, textWidth } from '../../../sheet/measure.ts'
+import { CONTAINER_FONT, GROUP_FONT, ISLAND_FONT, ISLAND_SPACING, textWidth } from '../../../sheet/measure.ts'
 import type { Compass, PlateText, ProjectPlate, RichPlateText, Segment } from './blueprint.ts'
 import type { ProjectedScene, ProjectedZone, ProjectionView } from './project.ts'
 import { planeMatrix } from './project.ts'
@@ -121,7 +121,7 @@ function zoneGroup(zone: ProjectedZone, view: ProjectionView): SVGGElement {
   const group = svg('g', {}, 'zone')
   group.append(
     svg('polygon', { points: pointsAttribute(zone.polygon) }, 'ground'),
-    surfaceText(zone.text, SURFACE_FONT, 'label', view, true),
+    surfaceText(zone.text, GROUP_FONT, 'label', view, true),
   )
   return group
 }
@@ -156,7 +156,7 @@ export function paintSlabs(layer: SVGGElement, scene: ProjectedScene): Map<strin
     for (const face of faces) group.append(svg('polygon', { points: pointsAttribute(face.points) }, `face ${face.side}`))
     const top = faces.find(face => face.side === 'top')!
     group.append(svg('polygon', { points: pointsAttribute(top.points) }, 'pattern'))
-    group.append(surfaceText(text, SURFACE_FONT, 'label', scene.view, true))
+    group.append(surfaceText(text, CONTAINER_FONT, 'label', scene.view, true))
     for (const zone of scene.zones) {
       if (zone.zone.parent === slab.representationId) group.append(zoneGroup(zone, scene.view))
     }
