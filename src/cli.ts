@@ -41,6 +41,17 @@ function interactiveTerminal(): boolean {
   return process.stdin.isTTY === true && process.stdout.isTTY === true
 }
 
+/** Ends a long-running command on Ctrl-C or SIGTERM once it has released what it holds. */
+function stopOnSignal(close: () => Promise<void>): void {
+  const stop = () => {
+    process.off('SIGINT', stop)
+    process.off('SIGTERM', stop)
+    void close().then(() => process.exit())
+  }
+  process.once('SIGINT', stop)
+  process.once('SIGTERM', stop)
+}
+
 async function startWebOnNextPort(port: number, scan: boolean, onListening: (url: string) => void) {
   const { startWebViewer } = await import('./viewers/web/server.ts')
   while (true) {
@@ -56,8 +67,9 @@ async function openWeb(port?: number, scan = true): Promise<void> {
   try {
     const { startWebViewer } = await import('./viewers/web/server.ts')
     const onListening = (url: string) => console.log(`groma web at ${url}`)
+    let viewer: { close: () => Promise<void> }
     try {
-      await startWebViewer(process.cwd(), { port, scan, onListening })
+      viewer = await startWebViewer(process.cwd(), { port, scan, onListening })
     } catch (error) {
       if (port === 0 || (error as NodeJS.ErrnoException).code !== 'EADDRINUSE') throw error
       const message = error instanceof Error ? error.message : String(error)
@@ -67,8 +79,9 @@ async function openWeb(port?: number, scan = true): Promise<void> {
         initialValue: false,
       })
       if (accepted !== true) return
-      await startWebOnNextPort(port ?? 4747, scan, onListening)
+      viewer = await startWebOnNextPort(port ?? 4747, scan, onListening)
     }
+    stopOnSignal(() => viewer.close())
   } catch (error) {
     console.error(error instanceof Error ? error.message : String(error))
     process.exitCode = 1
@@ -156,13 +169,7 @@ async function exportWeb(directory: string, watch: boolean): Promise<void> {
     await exported.close()
     return
   }
-  const stop = () => {
-    process.off('SIGINT', stop)
-    process.off('SIGTERM', stop)
-    void exported.close().then(() => process.exit())
-  }
-  process.once('SIGINT', stop)
-  process.once('SIGTERM', stop)
+  stopOnSignal(() => exported.close())
   await exported.closed
 }
 
@@ -183,15 +190,7 @@ async function runScan(watchEnabled: boolean): Promise<void> {
       console.error(error instanceof Error ? error.message : String(error))
     },
   })
-  await new Promise<void>(() => {
-    const stop = () => {
-      process.off('SIGINT', stop)
-      process.off('SIGTERM', stop)
-      void session.close().then(() => process.exit())
-    }
-    process.once('SIGINT', stop)
-    process.once('SIGTERM', stop)
-  })
+  stopOnSignal(() => session.close())
 }
 
 function unhandledWelcomeAction(action: never): never {
