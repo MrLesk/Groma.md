@@ -41,8 +41,9 @@ export async function watchArchitecture(
     }, SETTLE_MS)
   }
 
-  const watcher = await filesystem.watch(filename => {
-    if (!closed && filename.endsWith('.md')) schedule()
+  // First scans create directories; those events are not .md paths.
+  const watcher = await filesystem.watch(() => {
+    if (!closed) schedule()
   })
 
   return {

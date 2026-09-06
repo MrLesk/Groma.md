@@ -96,6 +96,27 @@ async function waitUntil(
   throw new Error('timed out')
 }
 
+function pumpSse(body: ReadableStream<Uint8Array> | null) {
+  const decoder = new TextDecoder()
+  let pushed = ''
+  const reader = body?.getReader()
+  const running = (async () => {
+    if (reader === undefined) return
+    for (;;) {
+      const { done, value } = await reader.read()
+      if (done) break
+      if (value) pushed += decoder.decode(value, { stream: true })
+    }
+  })()
+  return {
+    text: () => pushed,
+    async stop() {
+      await reader?.cancel().catch(() => {})
+      await running.catch(() => {})
+    },
+  }
+}
+
 async function observedSystems(root: string): Promise<string[]> {
   const directory = path.join(root, 'groma/systems')
   try {
@@ -268,7 +289,6 @@ test.concurrent('the Web host leaves initial scanning to its caller and applies 
     assert.match(await (await fetch(server.url)).text(), /"title":"Cli"/)
     assert.ok(!(await worldNames(server.url)).includes('Orders'))
 
-    const events = await fetch(`${server.url}/events`, { signal: AbortSignal.timeout(8000) })
     await writeFile(path.join(root, 'src/orders.ts'), 'export function placeOrder() {}\n')
     await writeFile(
       path.join(root, 'src/cli.ts'),
@@ -276,7 +296,6 @@ test.concurrent('the Web host leaves initial scanning to its caller and applies 
     )
     await waitUntil(async () => (await worldNames(server.url)).includes('Orders'))
     assert.ok((await worldNames(server.url)).includes('Cli'))
-    await events.body?.cancel()
   } finally {
     await server.close()
     await removeTree(root)
@@ -301,18 +320,11 @@ test.concurrent('groma web applies an architecture Markdown change without a ref
     }
     const initial = await (await fetch(`${server.url}/world.json`)).json() as MapPayload
 
-    const events = await fetch(`${server.url}/events`, { signal: AbortSignal.timeout(8000) })
-    const reader = events.body!.getReader()
-    const decoder = new TextDecoder()
-    let pushed = ''
+    const stream = pumpSse((await fetch(`${server.url}/events`)).body)
     const document = path.join(root, 'groma/systems/shop/system.md')
     const markdown = await Bun.file(document).text()
     await writeFile(document, markdown.replace('title: Shop', 'title: Shopfront'))
-    await waitUntil(async () => {
-      const { value } = await reader.read()
-      if (value) pushed += decoder.decode(value, { stream: true })
-      return pushed.includes('event: world') && pushed.includes('Shopfront')
-    })
+    await waitUntil(() => stream.text().includes('event: world') && stream.text().includes('Shopfront'))
     const changed = await (await fetch(`${server.url}/world.json`)).json() as MapPayload
     assert.ok(changed.generation > initial.generation)
     assert.ok(changed.timings.totalMilliseconds >= changed.timings.architectureLoadMilliseconds)
@@ -320,7 +332,7 @@ test.concurrent('groma web applies an architecture Markdown change without a ref
     assert.ok((await worldNames(server.url)).includes('Shopfront'))
     assert.match(await (await fetch(server.url)).text(), /"title":"Shopfront"/)
     assert.ok(!(await worldNames(server.url)).includes('Orders'))
-    await reader.cancel()
+    await stream.stop()
   } finally {
     await server.close()
     await removeTree(root)
@@ -331,11 +343,7 @@ test.concurrent('groma web saves the project profile and publishes it without a 
   const root = await createLiveRepo()
   const server = await startWebViewer(root, { port: 0 })
   try {
-    const events = await fetch(`${server.url}/events`, { signal: AbortSignal.timeout(8000) })
-    const reader = events.body!.getReader()
-    const decoder = new TextDecoder()
-    await reader.read()
-
+    const stream = pumpSse((await fetch(`${server.url}/events`)).body)
     const response = await fetch(`${server.url}/edit`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -348,12 +356,7 @@ test.concurrent('groma web saves the project profile and publishes it without a 
     })
     assert.equal(response.status, 200)
 
-    let pushed = ''
-    await waitUntil(async () => {
-      const { value } = await reader.read()
-      if (value) pushed += decoder.decode(value, { stream: true })
-      return pushed.includes('event: world') && pushed.includes('"title":"Supply map"')
-    })
+    await waitUntil(() => stream.text().includes('event: world') && stream.text().includes('"title":"Supply map"'))
     const payload = await (await fetch(`${server.url}/world.json`)).json() as {
       project: { title: string; description: string; overview: string; overviewBlocks: unknown[] }
     }
@@ -374,7 +377,7 @@ description: A concise supply architecture summary.
 Shows supply responsibilities.
 `,
     )
-    await reader.cancel()
+    await stream.stop()
   } finally {
     await server.close()
     await removeTree(root)
@@ -441,19 +444,11 @@ test.concurrent('groma web loads work asynchronously and updates only the work o
     assert.ok(initial.timings.totalMilliseconds >= initial.timings.architectureLoadMilliseconds)
     assert.ok(initial.timings.totalMilliseconds >= initial.timings.placementMilliseconds + initial.timings.routingMilliseconds)
 
-    const events = await fetch(`${server.url}/events`, { signal: AbortSignal.timeout(8000) })
-    const reader = events.body!.getReader()
-    const decoder = new TextDecoder()
-    const firstEvent = await reader.read()
-    assert.match(decoder.decode(firstEvent.value), /^event: world/m)
+    const stream = pumpSse((await fetch(`${server.url}/events`)).body)
+    await waitUntil(() => /^event: world/m.test(stream.text()))
 
     resolveFirst(snapshot())
-    let pushed = ''
-    await waitUntil(async () => {
-      const { value } = await reader.read()
-      if (value) pushed += decoder.decode(value, { stream: true })
-      return pushed.includes('event: work') && pushed.includes('"workGeneration":1')
-    })
+    await waitUntil(() => stream.text().includes('event: work') && stream.text().includes('"workGeneration":1'))
     const loaded = await (await fetch(`${server.url}/world.json`)).json() as LivePayload
     assert.equal(loaded.generation, initial.generation)
     assert.deepEqual(loaded.world, initial.world)
@@ -467,19 +462,15 @@ test.concurrent('groma web loads work asynchronously and updates only the work o
     await fetch(server.url)
     assert.equal(reads, 1)
 
-    pushed = ''
+    const afterLoad = stream.text()
     items = [{
       ...items[0]!,
       status: 'Done',
       acceptanceCriteriaCompleted: 2,
     }]
     changed()
-    await waitUntil(async () => {
-      const { value } = await reader.read()
-      if (value) pushed += decoder.decode(value, { stream: true })
-      return pushed.includes('"workGeneration":2') && pushed.includes('"status":"Done"')
-    })
-    assert.doesNotMatch(pushed, /event: world/)
+    await waitUntil(() => stream.text().includes('"workGeneration":2') && stream.text().includes('"status":"Done"'))
+    assert.doesNotMatch(stream.text().slice(afterLoad.length), /event: world/)
     assert.equal(reads, 2)
     const changedPayload = await (await fetch(`${server.url}/world.json`)).json() as LivePayload
     assert.equal(changedPayload.generation, initial.generation)
@@ -487,7 +478,7 @@ test.concurrent('groma web loads work asynchronously and updates only the work o
     assert.deepEqual(changedPayload.sheet, initial.sheet)
     assert.match(await (await fetch(server.url)).text(), /"workGeneration":2.*"status":"Done"/)
     assert.equal(reads, 2)
-    await reader.cancel()
+    await stream.stop()
   } finally {
     await server.close()
     await removeTree(root)
