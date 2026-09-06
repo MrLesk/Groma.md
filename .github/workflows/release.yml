@@ -136,7 +136,7 @@ jobs:
           path: dist/${{ matrix.binary }}
           if-no-files-found: error
 
-  github-  release-assets:
+  release-assets:
     name: release-assets
     needs: build
     runs-on: ubuntu-latest
