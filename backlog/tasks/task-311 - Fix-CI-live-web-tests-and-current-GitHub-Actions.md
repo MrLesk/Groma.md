@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@alex'
 created_date: '2026-09-06 18:12'
-updated_date: '2026-09-06 18:42'
+updated_date: '2026-09-06 18:51'
 labels:
   - ci
 dependencies: []
@@ -15,6 +15,7 @@ references:
   - test-bun/web-live.test.ts
   - src/architecture-watch.ts
   - architecture-watch
+  - web-server
 modified_files:
   - .github/workflows/ci.yml
   - .github/workflows/release.yml
@@ -22,6 +23,7 @@ modified_files:
   - test-bun/web-live.test.ts
   - groma/systems/groma/containers/view-host/components/architecture-watch.md
   - backlog/tasks/task-311 - Fix-CI-live-web-tests-and-current-GitHub-Actions.md
+  - src/viewers/web/map-session.ts
 ordinal: 349000
 ---
 
@@ -55,6 +57,8 @@ GitHub Actions CI failed on Ubuntu and Windows in the Bun viewer suite. The Ubun
 5. After cold simplicity review: drop unused /events in the first-scan test, share the pumpSse one-liner, and comment why watch is not .md-only.
 
 6. Update the Architecture watch overview through groma edit so it is not Markdown-only.
+
+7. Serialize live web world publishes so an in-flight incomplete reload cannot overwrite a later scan, and wait for the first SSE world event before asserting a Markdown change.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
@@ -69,10 +73,12 @@ Targeted re-review: all three findings applied, no regressions. Spec/quality: AC
 Post-review validation: bun test --timeout 20000 test-bun/web-live.test.ts — 8 pass. bun run check — 109 Node + 340 Bun, 0 fail.
 
 Updated Architecture watch overview through groma edit: watches the Groma directory for architecture changes, including new folders from a first scan. Verified with groma view architecture-watch.
+
+CI after first push: Ubuntu passed; macOS failed empty-project live scan (stale overlapping publishWorld); Windows timed out Markdown SSE (write before first world event, unhandled socket close). Serialized web world publishes like the TUI host; Markdown test waits for the first SSE world event and always stops the pump. bun test web-live+web-startup 15 pass. bun run check 109 Node + 340 Bun, 0 fail.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
-CI and release workflows now use checkout@v7, setup-node@v7, upload-artifact@v7, and download-artifact@v8. Live architecture reloads on any groma-folder watch event so a first scan is published. Live-web tests pump SSE in the background instead of aborting the stream. Architecture watch overview now names directory events, not Markdown-only. Verified with bun test --timeout 20000 test-bun/web-live.test.ts (8 pass), bun run check (109 Node + 340 Bun, 0 fail), and groma view architecture-watch.
+CI and release workflows use checkout@v7, setup-node@v7, upload-artifact@v7, and download-artifact@v8. Live architecture reloads on any groma-folder event; web world publishes are serialized so an incomplete reload cannot overwrite a later scan. Live-web tests pump SSE without aborting it. Architecture watch overview names directory events. Verified locally with bun run check (109 Node + 340 Bun).
 <!-- SECTION:FINAL_SUMMARY:END -->
