@@ -64,17 +64,19 @@ function portGroups(ports: readonly PortPair[], requests: readonly RouteRequest[
   return [...groups.values()]
 }
 
-/** Each port adds a turning track outside its wall, including busy shared walls. */
-function fanAxes(groups: readonly RoutePort[][]): { x: number[]; y: number[] } {
-  const axes = { x: [] as number[], y: [] as number[] }
+/** Add turning tracks and keep each port clear through the nearest track outside its wall. */
+function portFans(groups: readonly RoutePort[][]): { x: number[]; y: number[]; exits: Map<RoutePort, Point> } {
+  const fans = { x: [] as number[], y: [] as number[], exits: new Map<RoutePort, Point>() }
   for (const group of groups) {
     for (const [index, port] of group.entries()) {
       const axis = port.side === 'east' || port.side === 'west' ? 'x' : 'y'
       const sign = port.side === 'east' || port.side === 'south' ? 1 : -1
-      axes[axis].push(port.guard[axis] + sign * LANE_GAP * (index + 1) / (group.length + 1))
+      const gap = sign * LANE_GAP / (group.length + 1)
+      fans[axis].push(port.guard[axis] + gap * (index + 1))
+      fans.exits.set(port, { ...port.guard, [axis]: port.guard[axis] + gap })
     }
   }
-  return axes
+  return fans
 }
 
 function blockBuildings(grid: RouteGrid, boxes: readonly ObstacleBox[]): void {
@@ -88,14 +90,14 @@ function blockBuildings(grid: RouteGrid, boxes: readonly ObstacleBox[]): void {
   }
 }
 
-function reservePorts(grid: RouteGrid): void {
-  for (const [index, pair] of grid.ends.entries()) {
-    for (const node of pair) {
-      if (grid.reserved[node] && grid.reserved[node] !== index + 1) throw new Error('Routes share a fixed port')
-      grid.reserved[node] = index + 1
-      grid.blocked[node] = 0
-    }
+/** Keep the whole exit clear so an earlier path cannot trap a later port against its wall. */
+function reserveExit(grid: RouteGrid, start: number, finish: number, owner: number): void {
+  const step = Math.sign(finish - start) * (Math.floor(start / grid.xs.length) === Math.floor(finish / grid.xs.length) ? 1 : grid.xs.length)
+  for (let node = start; node !== finish + step; node += step) {
+    if (grid.reserved[node] && grid.reserved[node] !== owner) throw new Error('Routes share a fixed port exit')
+    grid.reserved[node] = owner
   }
+  grid.blocked[start] = 0
 }
 
 /** A shared coordinate grid keeps all paths orthogonal and reserves used edges. */
@@ -105,7 +107,7 @@ export function routeGrid(
   ports: readonly PortPair[],
 ): RouteGrid {
   const boxes = obstacleBoxes(endpoints)
-  const fans = fanAxes(portGroups(ports, requests))
+  const fans = portFans(portGroups(ports, requests))
   const xs = ordered(boxes.flatMap(box => [box.x0 - LANE_GAP, box.x0, (box.x0 + box.x1) / 2, box.x1, box.x1 + LANE_GAP])
     .concat(ports.flatMap(pair => [pair.source.guard.x, pair.target.guard.x]), fans.x))
   const ys = ordered(boxes.flatMap(box => [box.y0 - LANE_GAP, box.y0, (box.y0 + box.y1) / 2, box.y1, box.y1 + LANE_GAP])
@@ -121,6 +123,9 @@ export function routeGrid(
   }
   // Boundaries are blocked too: only a route's own port may open its wall.
   blockBuildings(grid, boxes)
-  reservePorts(grid)
+  for (const [index, pair] of ports.entries()) {
+    reserveExit(grid, grid.ends[index]![0], node(fans.exits.get(pair.source)!), index + 1)
+    reserveExit(grid, grid.ends[index]![1], node(fans.exits.get(pair.target)!), index + 1)
+  }
   return grid
 }

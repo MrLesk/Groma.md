@@ -183,6 +183,27 @@ test.concurrent('a busy building still routes every relationship', () => {
   assert.equal(routes.length, requests.length)
 })
 
+test.concurrent('an earlier route cannot trap another port in a narrow shared-wall exit', () => {
+  const endpoints = new Map<string, Endpoint>([
+    ['source', { key: 'source', kind: 'building', rect: { gx: 0, gy: 3.5, w: 4, d: 2 } }],
+    ['obstacle', { key: 'obstacle', kind: 'building', rect: { gx: 0, gy: 0, w: 4, d: 2 } }],
+    ['target', { key: 'target', kind: 'building', rect: { gx: 4, gy: -4, w: 4, d: 2 } }],
+  ])
+  // Both ports leave through the narrow gap, where the first path used to take the second exit.
+  const requests = [0, 1].map(index => ({
+    id: `route:${index}`, source: 'source', target: 'target', description: '', origin: 'observed' as const,
+  }))
+
+  const routes = routeAll(endpoints, requests)
+  const flat = routes.map(route => ({
+    ...route, points: route.points.map(point => ({ x: point.gx * ROUTE_UNIT, y: point.gy * ROUTE_UNIT })),
+  }))
+
+  assert.equal(routes.length, 2)
+  assert.deepEqual(crossingRouteIdsFor(endpoints)(flat), [])
+  assert.equal(sharedPathMeasure(flat, new Set(routes.map(route => route.id)))(flat), 0)
+})
+
 test.concurrent('connected elements choose ports independently of their owner surfaces', () => {
   const routeTo = (targetY: number) => routeAll(new Map<string, Endpoint>([
     ['west-owner', { key: 'west-owner', kind: 'slab', rect: { gx: 0, gy: 4, w: 8, d: 8 } }],
