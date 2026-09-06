@@ -1,20 +1,16 @@
-import { createRequire } from 'node:module'
 import { homedir } from 'node:os'
 import path from 'node:path'
 
 import type { WorkSourcePlugin } from '@groma/work-source'
 import { backlogPlugin } from '@groma/work-source-backlog'
+import packageJson from '../../package.json' with { type: 'json' }
 
 import { humanInstructionGuides } from '../instructions.ts'
 import { scannerInventory } from '../scanner/modules/inventory.ts'
 import type { ScannerReadiness } from '../scanner/modules/inventory.ts'
 
-const { version } = createRequire(import.meta.url)('../../package.json') as {
-  version: string
-}
-
 export const documentationUrl = 'https://groma.md'
-export const welcomeVersion = version
+export const welcomeVersion = packageJson.version
 
 export const welcomeActions = [
   {
