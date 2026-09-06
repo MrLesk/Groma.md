@@ -148,6 +148,40 @@ test.concurrent('local scanner configuration drives inventory, loading, and remo
   }
 })
 
+test.concurrent('a failed scan rejects only after every scanner has finished', async () => {
+  const root = await fixtureRoot('groma-scan-failure-')
+  const cacheRoot = path.join(root, '.cache')
+  const finished = path.join(root, 'slow-finished')
+  try {
+    await writeTree(path.join(root, 'plugins/failing'), {
+      'package.json': packageManifest('fixture-failing', '1.0.0', 'failing'),
+      'index.js': `export default {
+  id: 'failing', matchesFile() { return false },
+  async scan() { throw new Error('failing scanner broke') },
+}`,
+    })
+    await writeTree(path.join(root, 'plugins/slow'), {
+      'package.json': packageManifest('fixture-slow', '1.0.0', 'slow'),
+      'index.js': `export default {
+  id: 'slow', matchesFile() { return false },
+  async scan() {
+    await Bun.sleep(200)
+    await Bun.write(${JSON.stringify(finished)}, 'done')
+    return undefined
+  },
+}`,
+    })
+    await addScanner(root, './plugins/failing', { cacheRoot })
+    await addScanner(root, './plugins/slow', { cacheRoot })
+    const registry = await loadScannerRegistry(root, { cacheRoot })
+
+    await expect(registry.collectObservations(root)).rejects.toThrow('failing scanner broke')
+    expect(await exists(finished)).toBe(true)
+  } finally {
+    await rm(root, { recursive: true, force: true })
+  }
+})
+
 test.concurrent('a missing scanner blocks every configured module before import', async () => {
   const root = await fixtureRoot('groma-missing-scanner-')
   const cacheRoot = path.join(root, '.cache')

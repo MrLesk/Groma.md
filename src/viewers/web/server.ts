@@ -96,6 +96,8 @@ export async function startWebViewer(
     url,
     async close() {
       await server.stop(true)
+      // A map still being prepared would otherwise finish after this close and leave its watchers running.
+      await preparing
       await map?.close()
     },
   }
