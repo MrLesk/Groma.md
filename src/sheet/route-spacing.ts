@@ -1,9 +1,13 @@
-import { LANE_GAP, type FlatRoute, type Point } from './route-geometry.ts'
+import {
+  LANE_GAP, ROUTE_CLEARANCE, ROUTE_SPACING, crossingRouteIdsFor, visibleObstacle,
+  type Endpoint, type FlatRoute, type Point,
+} from './route-geometry.ts'
 
 const EPSILON = 0.001
 
 interface Segment {
   routeId: string
+  index: number
   axis: 'horizontal' | 'vertical'
   coordinate: number
   start: number
@@ -21,6 +25,7 @@ function segmentOf(route: FlatRoute, index: number): Segment | null {
   const along = horizontal ? [from.x, to.x] : [from.y, to.y]
   return {
     routeId: route.id,
+    index,
     axis: horizontal ? 'horizontal' : 'vertical',
     coordinate: horizontal ? from.y : from.x,
     start: Math.min(...along),
@@ -40,12 +45,13 @@ function segments(routes: readonly FlatRoute[]): Segment[] {
 }
 
 function sharedLength(a: Segment, b: Segment): number {
-  if (a.routeId === b.routeId || a.axis !== b.axis || Math.abs(a.coordinate - b.coordinate) >= EPSILON) return 0
+  if (a.routeId === b.routeId || a.axis !== b.axis
+    || Math.abs(a.coordinate - b.coordinate) >= ROUTE_SPACING - EPSILON) return 0
   const length = Math.min(a.end, b.end) - Math.max(a.start, b.start)
   return length < EPSILON ? 0 : length
 }
 
-/** Reuses unchanged segments while a local route change is checked for shared paths. */
+/** Measures shared or visually overlapping parallel runs, reusing unchanged segments. */
 export function sharedPathMeasure(
   routes: readonly FlatRoute[],
   touchingRouteIds: ReadonlySet<string>,
@@ -61,6 +67,80 @@ export function sharedPathMeasure(
       }
     }
     return length
+  }
+}
+
+function onUsableWall(endpoint: Endpoint, point: Point): boolean {
+  const polygon = visibleObstacle(endpoint)
+  return [[0, 1], [2, 3], [3, 4], [5, 0]].some(([start, end]) => {
+    const from = polygon[start!]!
+    const to = polygon[end!]!
+    const axis = from.x === to.x ? 'y' : 'x'
+    const normal = axis === 'x' ? 'y' : 'x'
+    const lower = Math.min(from[axis], to[axis])
+    const upper = Math.max(from[axis], to[axis])
+    const inset = (upper - lower) / 4
+    return Math.abs(point[normal] - from[normal]) < EPSILON
+      && point[axis] >= lower + inset - EPSILON && point[axis] <= upper - inset + EPSILON
+  })
+}
+
+/** Nearest free tracks can sit on either side of the overlapping parallel runs. */
+function alternativeTracks(run: Segment, others: readonly Segment[]): number[] {
+  const coordinates = others.filter(other => other.axis === run.axis
+    && Math.min(other.end, run.end) > Math.max(other.start, run.start) + EPSILON)
+    .flatMap(other => [other.coordinate - ROUTE_SPACING, other.coordinate + ROUTE_SPACING])
+  return [...new Set(coordinates)].sort((a, b) => Math.abs(a - run.coordinate) - Math.abs(b - run.coordinate))
+}
+
+function shiftedRun(route: FlatRoute, run: Segment, coordinate: number): FlatRoute {
+  const axis = run.axis === 'horizontal' ? 'y' : 'x'
+  const points = route.points.map(point => ({ ...point }))
+  points[run.index - 1]![axis] = coordinate
+  points[run.index]![axis] = coordinate
+  return { ...route, points }
+}
+
+function clearPorts(endpoints: ReadonlyMap<string, Endpoint>, route: FlatRoute): boolean {
+  return onUsableWall(endpoints.get(route.source)!, route.points[0]!)
+    && onUsableWall(endpoints.get(route.target)!, route.points.at(-1)!)
+}
+
+function separateRoute(
+  endpoints: ReadonlyMap<string, Endpoint>,
+  routes: readonly FlatRoute[],
+  route: FlatRoute,
+  crosses: (routes: readonly FlatRoute[]) => string[],
+): boolean {
+  const overlap = sharedPathMeasure(routes, new Set([route.id]))
+  let remaining = overlap([route])
+  if (remaining < EPSILON) return false
+  const others = segments(routes.filter(other => other !== route))
+  const crowded = segments([route]).filter(run => others.some(other => sharedLength(run, other) > EPSILON))
+  let replacement: Point[] | undefined
+  for (const run of crowded) {
+    for (const coordinate of alternativeTracks(run, others)) {
+      const candidate = shiftedRun(route, run, coordinate)
+      if (!clearPorts(endpoints, candidate)) continue
+      const next = overlap([candidate])
+      if (next >= remaining - EPSILON || crosses([candidate]).length > 0) continue
+      replacement = candidate.points
+      remaining = next
+    }
+  }
+  if (replacement === undefined) return false
+  route.points = replacement
+  return true
+}
+
+/** Spread close parallel runs after routing, preserving wall attachment and building clearance. */
+export function separateRoutes(endpoints: ReadonlyMap<string, Endpoint>, routes: FlatRoute[]): void {
+  const crosses = crossingRouteIdsFor(endpoints, ROUTE_CLEARANCE)
+  let improved = true
+  // Every accepted move strictly reduces the total length of overlapping strokes.
+  while (improved) {
+    improved = false
+    for (const route of routes) if (separateRoute(endpoints, routes, route, crosses)) improved = true
   }
 }
 

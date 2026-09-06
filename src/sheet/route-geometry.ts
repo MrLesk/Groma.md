@@ -5,6 +5,8 @@ import type { CellRect, Route } from './types.ts'
 export const ROUTE_UNIT = 24
 export const ROUTE_CLEARANCE = ROUTE_UNIT / 2
 export const LANE_GAP = ROUTE_UNIT * 0.75
+/** Parallel lines need room for their visible strokes, even when their grid axes differ. */
+export const ROUTE_SPACING = ROUTE_UNIT / 8
 
 export interface Point {
   x: number
@@ -187,15 +189,10 @@ function laneCoordinate(candidate: EndpointCandidate): number {
   return candidate.side === 'north' || candidate.side === 'south' ? other.x : other.y
 }
 
-function portShare(endpoint: Endpoint, side: PortSide, index: number, count: number): number {
+function portShare(index: number, count: number): number {
   if (count === 1) return 0.5
-  const rect = rectOf(endpoint.rect)
-  const length = side === 'north' || side === 'south' ? rect.width : rect.height
-  const spreadCount = Math.min(count, PORT_CAPACITY)
-  const spreadGap = Math.max(length / (spreadCount + 1), Math.min(LANE_GAP, length / (spreadCount - 1)))
-  // Extra ports subdivide the existing usable span instead of reaching the corners.
-  const gap = spreadGap * (spreadCount - 1) / (count - 1)
-  return (length / 2 - gap * (count - 1) / 2 + gap * index) / length
+  // Keep all ports in the middle half of the wall, including crowded sides.
+  return 0.25 + 0.5 * index / (count - 1)
 }
 
 function portCapacity(candidate: EndpointCandidate): number {
@@ -286,7 +283,7 @@ function blockedCandidate(
       candidate.other,
       buildings,
       candidate.side,
-      portShare(candidate.endpoint, candidate.side, index, group.length),
+      portShare(index, group.length),
     ))
     if (blocked) return blocked
   }
@@ -332,7 +329,7 @@ function pairsFrom(groups: ReadonlyMap<string, EndpointCandidate[]>): Map<string
       pair[candidate.role] = portAt(
         candidate.endpoint,
         candidate.side,
-        portShare(candidate.endpoint, candidate.side, index, group.length),
+        portShare(index, group.length),
       )
       pairs.set(candidate.request.id, pair)
     }

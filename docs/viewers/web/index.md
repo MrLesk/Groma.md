@@ -353,8 +353,9 @@ building's back sides are hidden under its roof, so there a route
 starts or ends on the
 ground just behind the building where the roof's shadow ends: on screen
 the line emerges from, or its arrowhead touches, the back of the
-roof, with no visible step. Parallel routes spread out
-around the middle; when two middles do not line up, the line stays
+roof, with no visible step. Endpoints stay in the middle half of each usable
+wall, including after shortcuts. Parallel runs keep enough distance for their
+visible strokes to remain distinct. When two middles do not line up, the line stays
 straight and the longer side gives way. Each route ends in an
 arrowhead lying on the sheet that keeps its screen size at every
 zoom. A route's description is its tooltip. Every selected box draws
@@ -386,10 +387,12 @@ cmd or ctrl with the wheel zooms about the cursor; the `-` and `+`
 buttons and keys zoom about the center, and `0` refits, between half
 the fitted view and a cell 192 screen pixels wide. Dragging pans too;
 scrolling or pinching over a pin moves the map, and over the Live
-work island it scrolls the chip strip. Selection, flow steps, search navigation,
+work island it scrolls the chip strip. Panel selection, flow steps, search navigation,
 Fit, and zoom buttons move and zoom together in a quick 220 ms transition.
 A new action starts from the displayed camera position. Dragging, scrolling,
 and pinching follow the gesture directly and stop an unfinished transition.
+Animated navigation and direct gestures prepare the same cached camera layer before movement.
+The map restores crisp SVG rendering after movement settles.
 Reduced motion applies the destination without animation. `F1` toggles the HUD for a map-only
 view. `F2` lifts the blueprint into aligned System, Container, and Component
 layers and briefly turns the view to show that it can orbit. In layer mode,
@@ -402,19 +405,20 @@ projection, and SVG-paint timings for the current map generation; and the
 world, sheet, building, surface, route, and route-point counts. Opening the
 panel only reveals the collected snapshot and never rebuilds the map. Resizing the pane refits the
 map until you move the camera; after that it keeps the same point in
-the centre. Click a building, a slab, a system island, or a tree
-row to select it and center the camera on its complete body. Automatic focus
+the centre. Clicking a building, slab, system island, relationship, or task pin
+on the map selects it without moving the camera and stops any unfinished transition.
+Selecting an item in the hierarchy, Details, search, or another control outside
+the map centers the camera on its complete body. Automatic focus
 stops at normal readable label size; larger selections zoom out until they fit.
 Manual zoom can go closer. Systems and containers include their contained architecture. The fit uses
 the displayed nested or separated geometry and the clear area between the side
 panes. Architecture selection from details or an accepted search result uses the
-same fit. Click a route to select and fit its relationship and endpoints, which
-draws the route and both of its ends in the accent and shows the
+same fit. Selecting a relationship draws the route and both of its ends in the accent and shows the
 relationship in the details pane with its ends as links. Hold Shift while
 clicking an architecture item or relationship to add or remove it from the
 selection. The map combines their normal selection treatments, the hierarchy
 marks every selected element, and the last item selected owns the details pane.
-The camera fits the combined architecture selection.
+Selections made outside the map fit the combined architecture selection.
 Removing that item returns details to the previous item. Selecting a different
 architecture item or task starts its details at the heading. Returning from a
 task file diff with Back restores the task's previous reading position. Click empty
@@ -478,12 +482,12 @@ the same solid accent, whether or not the target is touched. Several tasks can b
 active at once, their touched elements counted together. Clicking another
 active task selects it without removing any highlight. Only clicking the
 selected task again deactivates it, handing selection to the most recently
-activated remaining task or to nothing. Whenever the active set changes, the
-camera centres the combined projected bodies touched by every active task and the
+activated remaining task or to nothing. Selecting a task outside the map
+centres the camera on the combined projected bodies touched by every active task and the
 highlighted routes leaving them at the closest allowed zoom, with a wider context
-margin around that complete highlight. Switching between active tasks without changing the active set
-keeps that shared fit; removing a task refits to the remaining active work, while
-clearing the final task leaves the camera in place. Selecting
+margin around that complete highlight. Clicking a task pin keeps the camera
+in place, including when it adds or removes active work. Removing a task outside
+the map refits to the remaining active work; clearing the final task leaves the camera in place. Selecting
 an element keeps the tasks active. Opening a task loads that task's full
 Backlog record on demand. The details pane shows the task's id,
 status and assignees over its title, then its description, acceptance criteria,

@@ -79,7 +79,7 @@ const emptyState = createEmptyState(document.getElementById('empty')!, data.draf
 if (data.add !== undefined) createAddControl(document.getElementById('add')!, data.add)
 const shell = createWebShell(document.body, hierarchyContent, hierarchyToggle, detailsHost, map.svg)
 const tip = createTip(host)
-const pins = createPins(host, id => map.anchorOf(id), id => toggleTask(id), tip)
+const pins = createPins(host, id => map.anchorOf(id), id => toggleTask(id, false), tip)
 const island = createWorkIsland(host, id => toggleTask(id), pins.show, tip)
 let tree = initialTree()
 const opened = readView(location.search, world, work.items, boot.revisions, readSavedTheme(localStorage))
@@ -128,7 +128,7 @@ function fitScene(frame: MapFrame): Camera {
 }
 
 let fitted: Camera = fitScene(viewport())
-const camera = createCameraAnimator(fitted, applyCamera)
+const camera = createCameraAnimator(fitted, applyCamera, map.prepareCamera)
 /** Once an interaction positions the camera, live refits stop until the viewer presses 0. */
 let touched = false
 function worldElement(id: string | undefined): AnnotatedElement | undefined { return id === undefined ? undefined : world.elements.find(element => element.representationId === id) }
@@ -246,14 +246,16 @@ function toggleRow(row: TreeRow): void {
   paintTree()
 }
 
-function select(id: string, additive = false): void {
+function select(id: string, additive = false, focus = true): void {
   if (worldElement(id) === undefined && worldRelationship(id) === undefined) return
   source.clear()
   const next = selectArchitecture(selection, id, additive)
   detailsTab = detailsTabAfterSelection(detailsTab, primarySelection(selection), primarySelection(next))
   selection = next
+  touched = true
+  if (!focus) camera.move(camera.current, false)
   paintViewState()
-  focusArchitecture(selectedArchitecture(selection))
+  if (focus) focusArchitecture(selectedArchitecture(selection))
 }
 
 function applyFocus(next: Camera | undefined, frame: MapFrame): void {
@@ -274,18 +276,20 @@ function focusArchitecture(ids: readonly string[]): void {
   applyFocus(fitArchitecture(scene, world, ids, frame), frame)
 }
 
-/** Every task entry point shares details, highlighting and camera focus. */
-function applyTaskSelection(next: ReturnType<typeof toggleWorkSelection>): void {
+/** Task pins preserve the camera; panel and search selections bring active work into view. */
+function applyTaskSelection(next: ReturnType<typeof toggleWorkSelection>, focus = true): void {
   activeFlows = []
   activeTaskIds = next.active
   source.clear()
   selection = next.selected === undefined ? noSelection : selectTask(next.selected)
+  touched = true
+  if (!focus) camera.move(camera.current, false)
   paintViewState()
-  focusActiveTasks()
+  if (focus) focusActiveTasks()
 }
 
-function toggleTask(id: string): void {
-  applyTaskSelection(toggleWorkSelection(activeTaskIds, selection.kind === 'task' ? selection.id : undefined, id))
+function toggleTask(id: string, focus = true): void {
+  applyTaskSelection(toggleWorkSelection(activeTaskIds, selection.kind === 'task' ? selection.id : undefined, id), focus)
 }
 
 function deselect(): void {
@@ -357,7 +361,7 @@ bindMapPointer(map, {
     touched = true
     layerAnimator.orbit(dx, dy)
   },
-  select,
+  select: (id, additive) => select(id, additive, false),
   deselect,
   editProject() {
     if (revisionControl.selected === undefined && project !== undefined) projectEditor?.open(project)

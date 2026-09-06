@@ -47,7 +47,13 @@ function wallSpan(endpoint: Endpoint, end: RouteEndRun): [number, number] {
     ? direction < 0 ? [polygon[0]!, polygon[1]!] : [polygon[3]!, polygon[4]!]
     : direction < 0 ? [polygon[5]!, polygon[0]!] : [polygon[2]!, polygon[3]!]
   const values = edge.map(point => point[end.slotAxis])
-  return [Math.min(...values), Math.max(...values)]
+  return usableSpan(Math.min(...values), Math.max(...values))
+}
+
+/** Keep shortcuts in the same middle wall span as the original port assignment. */
+function usableSpan(lower: number, upper: number): [number, number] {
+  const inset = (upper - lower) / 4
+  return [lower + inset, upper - inset]
 }
 
 function facingRoutePoints(
@@ -67,8 +73,8 @@ function facingRoutePoints(
   if (Math.sign(finish[runAxis] - start[runAxis]) !== endDirection(source)) return undefined
   const sourceSpan = wallSpan(sourceEndpoint, source)
   const targetSpan = wallSpan(targetEndpoint, target)
-  const lower = Math.max(sourceSpan[0] + ROUTE_CLEARANCE, targetSpan[0] + ROUTE_CLEARANCE)
-  const upper = Math.min(sourceSpan[1] - ROUTE_CLEARANCE, targetSpan[1] - ROUTE_CLEARANCE)
+  const lower = Math.max(sourceSpan[0], targetSpan[0])
+  const upper = Math.min(sourceSpan[1], targetSpan[1])
   if (lower > upper + PORT_EPSILON) return undefined
   const coordinate = Math.min(upper, Math.max(lower, source.slot))
   return [
@@ -218,11 +224,11 @@ function walls(endpoint: Endpoint | undefined): Wall[] {
     [polygon[3]!, polygon[4]!, 'x', 'y', 1],
     [polygon[5]!, polygon[0]!, 'y', 'x', -1],
   ] as const).map(([from, to, along, run, sign]) => {
+    const [lower, upper] = usableSpan(Math.min(from[along], to[along]), Math.max(from[along], to[along]))
     return {
       along, run, sign,
       position: from[run],
-      lower: Math.min(from[along], to[along]) + ROUTE_CLEARANCE,
-      upper: Math.max(from[along], to[along]) - ROUTE_CLEARANCE,
+      lower, upper,
     }
   }).filter(wall => wall.lower <= wall.upper)
 }

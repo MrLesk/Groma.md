@@ -14,6 +14,7 @@ import {
 } from '../src/sheet/route-geometry.ts'
 import { artifactRouteIds, orthogonal, sharedPathMeasure } from '../src/sheet/route-spacing.ts'
 import { routeAll } from '../src/sheet/route.ts'
+import { orderBuildingFans } from '../src/sheet/route-finish.ts'
 import { sheetScene } from '../src/sheet/scene.ts'
 import type { SheetScene } from '../src/sheet/types.ts'
 import type { ArchitectureGraph } from '../src/types.ts'
@@ -301,18 +302,22 @@ test.concurrent('mixed turns do not block a non-crossing shared-side pin order',
     ['later-north', { key: 'later-north', kind: 'building', rect: { gx: 15, gy: 7, w: 3, d: 3 }, roof: 1 }],
     ['south', { key: 'south', kind: 'building', rect: { gx: 15, gy: 30, w: 2, d: 4 }, roof: 1 }],
   ])
-  const targets = ['early-north', 'south', 'later-north']
-  const routed = routeAll(endpoints, targets.map((target, index) => ({
+  // Exercise fan ordering before shortcuts may select another central wall.
+  const paths = [
+    { target: 'early-north', points: [[4, 15], [12, 15], [12, 1], [14.5, 1]] },
+    { target: 'south', points: [[4, 14], [10, 14], [10, 31], [14.5, 31]] },
+    { target: 'later-north', points: [[4, 13], [14, 13], [14, 8], [14.5, 8]] },
+  ]
+  const routes: FlatRoute[] = paths.map(({ target, points }, index) => ({
     id: `relationship:${index}`,
     source: 'source',
     target,
     description: 'uses',
     origin: 'observed',
-  })))
-  const routes: FlatRoute[] = routed.map(route => ({
-    ...route,
-    points: route.points.map(point => ({ x: point.gx, y: point.gy })),
+    points: points.map(([x, y]) => ({ x: x! * ROUTE_UNIT, y: y! * ROUTE_UNIT })),
   }))
+  assert.equal(routes.some((route, index) => routes.slice(index + 1).some(other => routesCross(route, other))), true)
+  orderBuildingFans(endpoints, routes)
   const byTarget = new Map(routes.map(route => [route.target, route]))
   const early = byTarget.get('early-north')!
   const later = byTarget.get('later-north')!
