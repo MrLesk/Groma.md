@@ -8,6 +8,8 @@ export const COMPONENT_FONT = 16
 /** Advance of one monospace glyph as a fraction of the font size. */
 const ROOF_ADVANCE = 0.62
 export const ROOF_PAD = 6
+/** Layout inset for surface labels; painting adjusts the visible gap with the border zoom weight. */
+export const SURFACE_PAD = 10
 export const ROOF_LINE_HEIGHT = 13
 /** Map heading sizes in plane pixels. */
 export const PROJECT_FONT = 52
@@ -61,7 +63,7 @@ export function textLineHeight(size: number): number {
 
 /** Plane-pixel depth of a surface label, with a compact inset against the outer edge. */
 export function labelHeight(size: number): number {
-  return 2 * ROOF_PAD + size * 1.1
+  return 2 * SURFACE_PAD + size * 1.1
 }
 
 /** Whole cells reserved for a surface title; content padding sits above this strip. */
@@ -71,7 +73,7 @@ export function labelBand(size: number): number {
 
 /** Cells a surface needs along +gx so its own name fits in its front band. */
 export function nameCells(name: string, size: number, spacing = 0): number {
-  return Math.ceil((textWidth(name, size, spacing) + 2 * ROOF_PAD) / PLANE)
+  return Math.ceil((textWidth(name, size, spacing) + 2 * SURFACE_PAD) / PLANE)
 }
 
 /** The name as roof lines: one line, or two split at the space nearest the middle when one line would exceed four cells. */

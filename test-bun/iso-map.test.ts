@@ -4,7 +4,7 @@ import { test } from 'bun:test'
 
 import { loadAnnotatedArchitecture } from '../src/core.ts'
 import { ROOF_SHADOW, centredRect } from '../src/sheet/grid.ts'
-import { CONTAINER_FONT, GROUP_FONT, ISLAND_FONT, PLANE, ROOF_PAD, buildingFont, curved, labelBand, labelHeight, roofBlock, textPadding, textWidth } from '../src/sheet/measure.ts'
+import { CONTAINER_FONT, GROUP_FONT, ISLAND_FONT, PLANE, SURFACE_PAD, buildingFont, curved, labelBand, labelHeight, roofBlock, textPadding, textWidth } from '../src/sheet/measure.ts'
 import { sheetScene } from '../src/sheet/scene.ts'
 import type { Building, RoutePoint, SheetScene } from '../src/sheet/types.ts'
 import type { Bounds, Point } from '../src/types.ts'
@@ -319,7 +319,7 @@ test.concurrent('surface text fits its reserved front band', async () => {
   for (const { rect, text, size } of surfaces) {
     assert.deepEqual(text.origin, project(rect.gx, rect.gy + rect.d - labelHeight(size) / PLANE, 0))
     assert.ok(labelHeight(size) <= labelBand(size) * PLANE)
-    for (const line of text.lines) assert.ok(textWidth(line, size) + 2 * ROOF_PAD <= rect.w * PLANE)
+    for (const line of text.lines) assert.ok(textWidth(line, size) + 2 * SURFACE_PAD <= rect.w * PLANE)
   }
 })
 
