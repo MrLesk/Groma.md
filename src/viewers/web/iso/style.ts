@@ -143,9 +143,9 @@ export const mapCss = `
   #map .project-edit .pencil .lead { fill: var(--ink); }
   #map .project-edit .pencil .facet, #map .project-edit .pencil .eraser, #map .project-edit .pencil .ferrule,
   #map .project-edit .pencil .tip, #map .project-edit .pencil .lead { stroke: none; }
-  #map .project-edit:hover .edit-frame, #map .project-edit:focus .edit-frame { fill: var(--ink); fill-opacity: 0.05; }
-  #map .project-edit:hover .pencil path, #map .project-edit:focus .pencil path,
-  #map .project-edit:hover .pencil .body, #map .project-edit:focus .pencil .body { stroke: var(--ink); }
+  #map:where(:not([data-camera-moving])) .project-edit:hover .edit-frame, #map .project-edit:focus .edit-frame { fill: var(--ink); fill-opacity: 0.05; }
+  #map:where(:not([data-camera-moving])) .project-edit:hover .pencil path, #map .project-edit:focus .pencil path,
+  #map:where(:not([data-camera-moving])) .project-edit:hover .pencil .body, #map .project-edit:focus .pencil .body { stroke: var(--ink); }
   #map .grid { fill: none; stroke: var(--map-grid); }
   #map .grid.major { stroke: var(--map-grid-major); }
   #map > .map-surface[data-minor-grid-hidden] .grid:not(.major) { display: none; }
@@ -179,9 +179,9 @@ export const mapCss = `
   #map .route .line { opacity: 0; }
   #map .route .arrow { fill: var(--map-line); opacity: 0.9; }
   #map .route .hit { fill: none; stroke: transparent; stroke-width: 12; }
-  #map .route:hover, #map .route.endpoint, #map .route.touched { --emphasis: ${emphasis(1)}; }
-  #map .route:hover .line { stroke: var(--map-line); opacity: 1; }
-  #map .route:hover .arrow { fill: var(--map-line); opacity: 1; }
+  #map:where(:not([data-camera-moving])) .route:hover, #map .route.endpoint, #map .route.touched { --emphasis: ${emphasis(1)}; }
+  #map:where(:not([data-camera-moving])) .route:hover .line { stroke: var(--map-line); opacity: 1; }
+  #map:where(:not([data-camera-moving])) .route:hover .arrow { fill: var(--map-line); opacity: 1; }
   #map .route.endpoint .line, #map .route.selected .line, #map .route.touched .line { stroke: var(--highlight); opacity: 1; }
   #map .route.endpoint .arrow, #map .route.selected .arrow, #map .route.touched .arrow { fill: var(--highlight); opacity: 1; }
   #map .route.touched .line { stroke-dasharray: none; }
@@ -199,10 +199,10 @@ export const mapCss = `
   #map .camera[data-tracing] .route:not(.lit) { display: none; }
   #map .camera[data-tracing] .building:not(.onpath):not(.selected),
   #map .camera[data-tracing] .slab:not(.onpath):not(.selected) { opacity: 0.3; }
-  #map .building:not(.selected):hover, #map .slab:not(.selected):not(.context):hover,
-  #map .island.system:not(.selected):not(.context):hover, #map .context { --emphasis: ${emphasis(0.5)}; }
-  #map .building:not(.selected):hover .face, #map .slab:not(.selected):not(.context):hover .face,
-  #map .island.system:not(.selected):not(.context):hover > .ground { stroke: var(--map-line); }
+  #map:where(:not([data-camera-moving])) .building:not(.selected):hover, #map:where(:not([data-camera-moving])) .slab:not(.selected):not(.context):hover,
+  #map:where(:not([data-camera-moving])) .island.system:not(.selected):not(.context):hover, #map .context { --emphasis: ${emphasis(0.5)}; }
+  #map:where(:not([data-camera-moving])) .building:not(.selected):hover .face, #map:where(:not([data-camera-moving])) .slab:not(.selected):not(.context):hover .face,
+  #map:where(:not([data-camera-moving])) .island.system:not(.selected):not(.context):hover > .ground { stroke: var(--map-line); }
   #map .selected, #map .touched,
   #map .building.lit, #map .slab.lit, #map .island.lit { --emphasis: ${emphasis(1)}; }
   #map .context .face, #map .island.context > .ground, #map .selected .face, #map .island.selected > .ground,
