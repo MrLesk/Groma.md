@@ -12,4 +12,4 @@ groma:
       symbol: watchArchitecture
 ---
 
-Watches the Groma directory for architecture Markdown changes and settles them so a live host republishes without scanning.
+Watches the Groma directory for architecture changes, including new folders from a first scan, and settles them so a live host republishes without scanning.
