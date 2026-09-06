@@ -53,7 +53,7 @@ export function inferRelationships(
 
 /** Replace only the core-owned section; keep authored sections and other Markdown intact. */
 function withoutDerivedSection(source: string): string {
-  const lines = source.split('\n')
+  const lines = source.replaceAll('\r\n', '\n').split('\n')
   const start = lines.indexOf('## Derived relationships')
   if (start < 0) return source
   let end = start + 1

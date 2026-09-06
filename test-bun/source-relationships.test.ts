@@ -109,6 +109,23 @@ forward5({ deliver: unknown })
   } finally { await rm(root, { recursive: true, force: true }) }
 })
 
+test.concurrent('scan replaces a CRLF derived section instead of appending duplicate rows', async () => {
+  const root = await repository()
+  try {
+    await scanRepository(root)
+    const filename = path.join(root, 'groma/relationships.md')
+    const first = await readFile(filename, 'utf8')
+    await writeFile(filename, first.replaceAll('\n', '\r\n'))
+    await scanRepository(root)
+    const after = await loadAnnotatedArchitecture(root)
+    expect(after.relationships).toHaveLength(1)
+    expect(after.relationships[0]!.connections).toEqual([expect.objectContaining({ ...ends, authored: false })])
+    const derivedRows = (await readFile(filename, 'utf8')).replaceAll('\r\n', '\n')
+      .split('## Derived relationships')[1]?.split('\n').filter(line => line.startsWith('| ['))
+    expect(derivedRows).toHaveLength(1)
+  } finally { await rm(root, { recursive: true, force: true }) }
+})
+
 test.concurrent('scan stores selected interactions without analysis graphs and reload projects current owners', async () => {
   const root = await repository()
   try {
