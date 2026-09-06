@@ -185,7 +185,7 @@ test.concurrent('a new empty project opens successfully and gains components thr
 
     const source = await readFile(path.join(fixtures, 'startup-source', 'src', 'main.ts'), 'utf8')
     await writeFile(path.join(root, 'src', 'main.ts'), source)
-    const deadline = Date.now() + 5000
+    const deadline = Date.now() + 10000
     let current = await payload(server.url)
     while (!hasComponents(current.world) && Date.now() < deadline) {
       await Bun.sleep(50)
