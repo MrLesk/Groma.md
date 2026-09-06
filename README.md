@@ -108,6 +108,16 @@ groma edit ordering --overview "Owns the lifecycle of an order from placement th
 
 Every command validates the whole change before writing. Scans that run afterwards keep your curation. Scanners are plugins. TypeScript is built in. The C# scanner in this repository is enabled with `groma scanner add` and needs a .NET 10 SDK. The [scanner contract](docs/scanners/creating-a-plugin.md) is small enough to add your own language.
 
+### Built on OKF and C4
+
+Groma uses [Open Knowledge Format (OKF) 0.2](https://github.com/GoogleCloudPlatform/open-knowledge-format/blob/main/SPEC.md)
+to keep architectural knowledge readable and portable, and [C4](https://c4model.com) to organize architecture into clear
+levels and boundaries. Groma's [application profile](docs/component-markdown.md) connects the two: standard Markdown
+carries the knowledge, while Groma defines how to interpret it as architecture.
+
+Not every knowledge document is an architecture element. A document can explain the architecture without becoming
+another box or containment level on the map.
+
 ## Two viewers, one world
 
 The browser map is one isometric blueprint drawn as SVG. Systems are islands, containers are slabs, components are buildings whose size follows the code behind them, and every authored relationship is one route. Click anything for what it does and how it is built, down to the exact file and symbol. Light, dark, and blueprint themes. Every view has a URL.

@@ -33,6 +33,45 @@ Whenever you are writing documentation or code, think from the pov of someone th
 and needs to understand what you wrote without extra context. Is the code clearly legible, are the docs explaining only
 what is relevant without mentioning transitions between approaches that happen during this conversation?
 
+## OKF and C4 are design foundations
+
+When proposing or changing architecture concepts, relationships, flows, or stored knowledge, reason explicitly about
+both OKF 0.2 and C4 before choosing the model.
+
+- OKF defines how knowledge remains readable, linked, and portable. Prefer standard metadata, ordinary Markdown, and
+  Markdown links. Keep Groma-specific metadata under `groma`; do not duplicate information already expressed by standard
+  fields or the document body.
+- C4 defines architecture levels and boundaries. Decide whether a concept is an actor, system, container, component,
+  relationship, or supporting knowledge about the architecture. A new OKF concept does not automatically become a C4
+  element, containment level, or box on the map.
+- Groma's application profile defines the additional meaning and constraints needed by its supported behavior.
+  Distinguish those rules from requirements imposed by OKF or C4.
+
+For a relevant proposal, briefly explain:
+
+1. Where the concept belongs in OKF and C4.
+2. What an ordinary Markdown or OKF reader can understand without Groma.
+3. What Groma must interpret, and which existing concept owns that meaning.
+
+Read [the architecture Markdown contract](docs/component-markdown.md) and the relevant product documentation.
+Consult the authoritative [OKF specification](https://github.com/GoogleCloudPlatform/open-knowledge-format/blob/main/SPEC.md)
+or [C4 model](https://c4model.com) when the decision depends on rules those documents do not establish. Do not invent a
+standard requirement or add optional metadata merely because the standard supports it.
+
+## Test decisions across projects and languages
+
+When making product, design, architecture, or implementation decisions, ask:
+
+> If Groma ran against millions of projects across hundreds of programming languages, would this still be the right decision?
+
+Use this question to identify assumptions tied to the current project, technology, workflow, or example. Prefer choices
+whose reasoning remains sound across different contexts. Explain any dependence on the current context and why the
+requested result requires it.
+
+This is a test of the decision, not permission to expand the task. Implement and verify the smallest approved result for
+the current supported example. Do not add infrastructure, abstractions, or capabilities solely for that
+future scale. See the [manifesto principle](MANIFESTO.md#principles-that-hold-across-projects-and-languages).
+
 ## IMPORTANT: Experimental prototype
 
 Groma is an early experimental prototype used only by its developers. It has no external users and no released data,
