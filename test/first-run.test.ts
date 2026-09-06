@@ -46,6 +46,19 @@ test('groma view and a record print without a Groma directory name groma init an
   assert.equal(await exists(path.join(root, 'groma')), false)
 })
 
+test('bare groma and groma --plain without a Groma directory name groma init and fail without a stack', {
+  concurrency: true,
+}, async t => {
+  const root = await emptyRepository(t)
+  for (const args of [[], ['--plain']]) {
+    const result = await groma(root, args)
+    assert.equal(result.code, 1, args.join(' ') || 'groma')
+    assert.match(result.stderr.trim(), /^[^\n]*groma init[^\n]*$/)
+    assert.doesNotMatch(result.stderr, /\n\s+at /)
+  }
+  assert.equal(await exists(path.join(root, 'groma')), false)
+})
+
 test('ensureInitialized passes straight through when the Groma directory exists', { concurrency: true }, async t => {
   const root = await emptyRepository(t)
   await initializeGroma(root, { projectName: 'Shop', directory: 'groma' })

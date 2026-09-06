@@ -83,16 +83,16 @@ async function openTerminalMap(scan = true): Promise<void> {
   await viewer.closed
 }
 
-async function openTerminalView(target: string | undefined, plain: boolean): Promise<void> {
+async function continueWhenReady(interactive: boolean): Promise<boolean> {
   const door = await ensureInitialized({
-    repositoryRoot: process.cwd(),
-    interactive: interactiveTerminal() && target === undefined && !plain,
-    opensViewer: true,
+    repositoryRoot: process.cwd(), interactive, opensViewer: true,
   })
-  if (door !== 'ready') {
-    if (door !== 'declined') process.exitCode = 1
-    return
-  }
+  if (door !== 'ready' && door !== 'declined') process.exitCode = 1
+  return door === 'ready'
+}
+
+async function openTerminalView(target: string | undefined, plain: boolean): Promise<void> {
+  if (!await continueWhenReady(interactiveTerminal() && target === undefined && !plain)) return
   if (target) {
     const { renderPlainRecord } = await import('./plain-world.ts')
     const result = await renderPlainRecord(process.cwd(), target)
@@ -208,6 +208,7 @@ async function runWelcomeAction(action: WelcomeActionId): Promise<void> {
 }
 
 async function runInteractiveWelcome(screen: WelcomeScreen = 'launcher'): Promise<void> {
+  if (!await continueWhenReady(true)) return
   const lifecycle = setInterval(() => {}, 1000)
   try {
     const session = await startWelcome(process.cwd(), screen)
@@ -231,6 +232,7 @@ program
       && process.stdout.isTTY === true
       && !program.opts().plain
     if (!interactive) {
+      if (!await continueWhenReady(false)) return
       console.log(await renderPlainWelcome(process.cwd()))
       return
     }

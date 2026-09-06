@@ -70,8 +70,10 @@ operation before opening a map.
    serves browser setup for the project name and architecture folder. Submitting
    setup initializes the project, scans automatically, and opens the map at the
    same address. Interactive `groma view` offers the terminal initialization
-   wizard before scanning. Plain inspection instead fails with one sentence
-   naming `groma init`, without a stack trace.
+   wizard before scanning. Bare `groma` and interactive `groma instructions`
+   use that same Clack offer before opening Welcome. Plain inspection, non-interactive
+   `groma`, and `groma --plain` instead fail with one sentence naming
+   `groma init`, without a stack trace.
    A successful scan with no components gives creation guidance in both viewers.
    Existing drafted architecture remains available. Adding supported source
    updates the live map, including when its source directory is new.
