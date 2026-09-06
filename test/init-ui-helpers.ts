@@ -72,6 +72,9 @@ export function initDependencies(
   return {
     backlogAvailable: () => true,
     executablePath: async () => '/usr/local/lib/node_modules/groma/src/cli.ts',
+    gitInitialized: async () => true,
+    initializeBacklog: async () => true,
+    initializeGit: async () => true,
     install: async () => true,
     output: () => undefined,
     scan: async () => ({ created: 0, refreshed: 0, matched: 0 }),

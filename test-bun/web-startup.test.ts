@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { access, cp, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
@@ -138,6 +138,35 @@ test.concurrent('browser setup completes missing records in an existing folder a
     assert.equal(components.length, 1)
     assert.equal(components[0]?.code?.[0]?.file, 'src/main.ts')
     assert.equal(components[0]?.origin, 'observed')
+  } finally {
+    await server.close()
+    await rm(root, { recursive: true, force: true })
+  }
+})
+
+test.concurrent('browser setup reuses shared initialization and creates Git first', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'groma-web-git-init-'))
+  let backlogInitializations = 0
+  const server = await startWebViewer(root, {
+    port: 0,
+    scan: true,
+    workSource: EMPTY_WORK_SOURCE,
+    initDependencies: {
+      backlogAvailable: () => true,
+      backlogInitialized: async () => false,
+      initializeBacklog: async () => {
+        backlogInitializations += 1
+        return true
+      },
+    },
+  })
+  try {
+    const result = await initialize(server.url, 'groma', 'Web Git project')
+    assert.equal(result.status, 303, await result.text())
+    await access(path.join(root, '.git'))
+    assert.equal(gromaInitialization(root).initialized, true)
+    assert.equal((await loadProjectProfile(root))?.title, 'Web Git project')
+    assert.equal(backlogInitializations, 1)
   } finally {
     await server.close()
     await rm(root, { recursive: true, force: true })
