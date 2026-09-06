@@ -20,8 +20,9 @@
 
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset=".github/assets/web-blueprint.png">
-    <img src=".github/assets/web-core.png" alt="The Groma browser map: an isometric blueprint of this repository with the Core container selected" width="100%">
+    <source media="(prefers-color-scheme: dark)" srcset=".github/assets/web-dark.gif">
+    <source media="(prefers-color-scheme: light)" srcset=".github/assets/web-light.gif">
+    <img src=".github/assets/web-light.png" alt="Groma's browser architecture map zoomed into the Web shell component" width="100%">
   </picture>
 </p>
 
