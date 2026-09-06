@@ -61,7 +61,7 @@ bun run build
 ```
 
 Windows produces `dist/groma.exe`. Pass an output path after `bun run build` to choose a different location.
-The CLI, welcome screen, and web credits statically import `package.json` as JSON. Web lockup and mark files use Bun file and text imports. The compiled executable embeds the browser renderer and dependency credit files, so it does not read those from the source checkout or run a bundler at runtime. Compiled TypeScript scanning uses the project's native `tsc` when `@typescript/typescript-<os>-<cpu>` is installed; otherwise it reads source text without spawning TypeScript's worker, which cannot run from the embedded filesystem.
+The CLI, welcome screen, and web credits statically import `package.json` as JSON. Web lockup and mark files use Bun file and text imports. The compiled executable embeds the browser renderer and dependency credit files, so it does not read those from the source checkout or run a bundler at runtime. The build also embeds the build target's native TypeScript worker (`tsc` and its `lib.d.ts` from `@typescript/typescript-<os>-<cpu>`); because a process cannot be spawned from the embedded filesystem, the compiled scanner unpacks it once per TypeScript version into the OS temp directory and reuses it from there, so compiled and source scans produce the same TypeScript evidence.
 
 Release CI sets `package.json.version` directly from the release tag, without its leading `v`, in the disposable build
 checkout before running `bun run build`. A build for tag `v0.2.0` therefore already reports `0.2.0`.

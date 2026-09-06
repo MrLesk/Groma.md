@@ -11,7 +11,7 @@ if (binaryArgument === undefined || expectedVersion === undefined) {
 }
 
 const binary = path.resolve(binaryArgument)
-const emptyProject = fileURLToPath(new URL('../test/fixtures/empty-project', import.meta.url))
+const fixture = (name: string) => fileURLToPath(new URL(`../test/fixtures/${name}`, import.meta.url))
 
 function run(args: string[]): Promise<{ code: number; stdout: string; stderr: string }> {
   return new Promise((resolve, reject) => {
@@ -67,13 +67,28 @@ async function readyMap(url: string): Promise<void> {
   throw new Error(last)
 }
 
+/** The embedded TypeScript worker must derive the callback relationship the checker sees in `operation-wiring`. */
+async function assertDerivedRelationship(url: string): Promise<void> {
+  const world = await fetch(`${url}/world.json`)
+  const body = await world.text()
+  assert.equal(world.status, 200, body)
+  const payload = JSON.parse(body) as { world: { relationships: { connections?: { source: string; target: string }[] }[] } }
+  const connections = payload.world.relationships.flatMap(relationship => relationship.connections ?? [])
+  assert.ok(
+    connections.some(connection => connection.source === 'src/worker.ts' && connection.target === 'src/provider.ts'),
+    `expected the worker → provider connection in ${JSON.stringify(connections)}`,
+  )
+}
+
+/** A project without `node_modules/@typescript`, so the binary must bring its own TypeScript worker. */
 async function smokeWeb(): Promise<void> {
   const root = await mkdtemp(path.join(tmpdir(), 'groma-smoke-web-'))
   let child: ChildProcess | undefined
   try {
-    await cp(emptyProject, root, { recursive: true })
+    await cp(fixture('empty-project'), root, { recursive: true })
     await mkdir(path.join(root, 'src'))
-    await writeFile(path.join(root, 'src/main.ts'), 'export function hello() {}\n')
+    await cp(fixture('operation-wiring'), path.join(root, 'src'), { recursive: true })
+    await writeFile(path.join(root, 'package.json'), JSON.stringify({ name: 'fixture', bin: 'src/caller.ts' }))
     const git = spawn('git', ['init', '--quiet'], { cwd: root, stdio: 'ignore' })
     assert.equal(await waitForClose(git), 0)
     const port = await availablePort()
@@ -89,8 +104,7 @@ async function smokeWeb(): Promise<void> {
     })
     await Promise.race([
       readyMap(`http://127.0.0.1:${port}`).then(async () => {
-        const world = await fetch(`http://127.0.0.1:${port}/world.json`)
-        assert.equal(world.status, 200, await world.text())
+        await assertDerivedRelationship(`http://127.0.0.1:${port}`)
         ready = true
       }),
       closed,

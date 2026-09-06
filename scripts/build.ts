@@ -37,6 +37,24 @@ async function prepareCreditAssets(root: string): Promise<string[]> {
   return assets
 }
 
+/** `<os>-<cpu>` of the compile target as TypeScript names it, e.g. `bun-windows-x64-baseline` → `win32-x64`. */
+function typescriptPlatform(): string {
+  if (target === undefined) return `${process.platform}-${process.arch}`
+  return target.replace(/^bun-/, '').replace(/-baseline$/, '').replace(/^windows-/, 'win32-')
+}
+
+/** The native TypeScript worker starts only with `lib.d.ts` beside it; scanner programs use `noLib`, so nothing else ships. */
+async function prepareTypeScriptWorkerAsset(root: string): Promise<string> {
+  const platform = typescriptPlatform()
+  const lib = path.join('node_modules', '@typescript', `typescript-${platform}`, 'lib')
+  const executable = platform.startsWith('win32-') ? 'tsc.exe' : 'tsc'
+  const directory = path.join(root, 'groma-typescript-worker')
+  await mkdir(directory)
+  await copyFile(path.join(lib, executable), path.join(directory, executable))
+  await copyFile(path.join(lib, 'lib.d.ts'), path.join(directory, 'lib.d.ts'))
+  return directory
+}
+
 async function prepareRendererAsset(root: string): Promise<string> {
   const build = await Bun.build({
     entrypoints: [path.resolve('src/viewers/web/render.ts')],
@@ -54,6 +72,7 @@ const compile: Bun.CompileBuildOptions = {
   assets: [
     ...await prepareCreditAssets(packedRoot),
     await prepareRendererAsset(packedRoot),
+    await prepareTypeScriptWorkerAsset(packedRoot),
     'docs',
   ],
   autoloadDotenv: false,
