@@ -127,8 +127,10 @@ export const detailsPanelCss = `
   /* The dock reserves the normal map frame; its reader expands over that frame. */
   #details-dock { position: absolute; top: 74px; bottom: 12px; right: 12px; width: var(--details-column); z-index: 6; pointer-events: none; }
   #details {
-    position: absolute; inset: 0 0 0 auto; width: 100%; min-height: 0;
-    overflow: auto; padding: 22px 24px; pointer-events: auto;
+    --details-width: var(--details-column);
+    --details-file-width: calc(100vw - var(--hierarchy-inset) - 36px);
+    position: absolute; inset: 0 0 0 auto; width: var(--details-width); min-height: 0;
+    overflow: hidden auto; scrollbar-gutter: stable; padding: 22px 24px; pointer-events: auto;
     opacity: 1; transform: translateX(0); visibility: visible;
     transition: opacity var(--chrome-motion) var(--chrome-ease), transform var(--chrome-motion) var(--chrome-ease), width var(--chrome-motion) var(--chrome-ease), visibility 0s linear 0s;
   }
@@ -136,8 +138,13 @@ export const detailsPanelCss = `
     opacity: 0; transform: translateX(calc(100% + 12px)); visibility: hidden; pointer-events: none;
     transition: opacity var(--chrome-motion) var(--chrome-ease), transform var(--chrome-motion) var(--chrome-ease), visibility 0s linear var(--chrome-motion);
   }
-  body.details-expanded #details { width: calc(100vw - var(--hierarchy-inset) - 36px); }
-  body.details-expanded #details:not(.file-open) > :is(.meta, h1, .tabs, .body, .flow-back) { max-width: 640px; margin-left: auto; margin-right: auto; }
+  body.details-expanded #details { --details-width: min(calc(640px + 48px + 2px), calc(100vw - 24px)); }
+  body.details-expanded #details.file-open { --details-width: var(--details-file-width); }
+  /* Layout uses the final width while the frame animates, so text never rewraps mid-motion. */
+  #details > :is(.meta, h1, .tabs, .body) { width: calc(var(--details-width) - 50px); }
+  #details > .flow-back { max-width: calc(var(--details-width) - 50px); }
+  #details.file-open > :is(h1, .tabs) { width: calc(var(--details-width) - 46px); }
+  #details.file-open > .body { width: calc(var(--details-width) - 2px); }
   #details > .meta { padding-right: 76px; min-height: 32px; }
   #details > .details-controls { position: sticky; top: 0; height: 0; flex-shrink: 0; order: -2; z-index: 2; }
   #details.file-open > .details-controls { margin: 0 24px; }
@@ -151,15 +158,15 @@ export const detailsPanelCss = `
   #details-expand:hover, #details-close:hover { background: var(--hover); }
   #details-expand .collapse-arrows, #details-expand[aria-expanded="true"] .expand-arrows { display: none; }
   #details-expand[aria-expanded="true"] .collapse-arrows { display: block; }
-  #details.file-open > .file-toolbar { margin-right: 96px; }
+  #details.file-open > .file-toolbar { width: calc(var(--details-width) - 136px); margin-right: 112px; }
   #details.file-open .file-context { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   @media (min-width: 1800px) {
-    body.details-expanded #details { width: 960px; }
+    #details { --details-file-width: 960px; }
   }
   @media (max-width: 1024px) {
     #details-dock { position: fixed; width: min(var(--details-column), calc(100vw - 24px)); }
+    #details { --details-width: min(var(--details-column), calc(100vw - 24px)); --details-file-width: calc(100vw - 24px); }
     body.details-expanded { min-width: 0; }
-    body.details-expanded #details { width: calc(100vw - 24px); }
   }
   @media (max-width: 600px) {
     body.details-expanded #header { grid-template-columns: auto minmax(0, 1fr) auto; gap: 8px; padding: 0 8px; }

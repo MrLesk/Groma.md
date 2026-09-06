@@ -204,10 +204,12 @@ changes and disappears when selection is cleared. Its X clears the selection,
 closes the pane, and returns focus to the map without moving the camera.
 The horizontal opposing-arrow button beside X expands or collapses this same
 panel for every kind of content, including source and file diffs. Arrows point
-outward to expand and inward to collapse. Expansion covers the map without moving
-its camera: narrow screens use the available content width, desktops keep the
-hierarchy, and large desktops retain useful map space. Long prose keeps a bounded
-reading width; code and diffs use the full panel. Source and diffs expand by
+outward to expand and inward to collapse. Expanded normal details fit a 640px
+content column with ordinary padding. Source and diffs use a wider panel that
+keeps the hierarchy on desktops and leaves map space on large screens. Both
+readers fit the available width on narrow screens without moving the map camera.
+The panel width animates while its content uses the final layout width, keeping
+line breaks and control positions steady throughout the motion. Source and diffs expand by
 default until the reader explicitly chooses a width. That choice then stays with
 the panel across selection changes and file inspection. Acceptance criteria use
 strong read-only checkmarks, distinct from flow checkboxes.
