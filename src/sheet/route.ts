@@ -5,7 +5,7 @@ import {
 import { alignFacingRoutes, compactPath, orderBuildingFans, shortenDirect, shortenEnds } from './route-finish.ts'
 import { routeGrid } from './route-grid.ts'
 import { RouteSearch } from './route-search.ts'
-import { sharedPathMeasure } from './route-spacing.ts'
+import { separateRoutes, sharedPathMeasure } from './route-spacing.ts'
 import type { Route } from './types.ts'
 
 export type { Endpoint, RouteRequest } from './route-geometry.ts'
@@ -49,6 +49,7 @@ export function routeAll(endpoints: ReadonlyMap<string, Endpoint>, requests: rea
   shortenEnds(endpoints, routes)
   // Shortcuts can change the order of ends along a shared wall.
   orderBuildingFans(endpoints, routes)
+  separateRoutes(endpoints, routes)
   const crossings = crossingRouteIdsFor(endpoints)(routes)
   const shared = sharedPathMeasure(routes, new Set(routes.map(route => route.id)))(routes)
   if (crossings.length > 0 || shared > 0.001) {
@@ -56,6 +57,6 @@ export function routeAll(endpoints: ReadonlyMap<string, Endpoint>, requests: rea
   }
   return routes.map(route => ({
     ...route,
-    points: route.points.map(point => ({ gx: point.x / ROUTE_UNIT, gy: point.y / ROUTE_UNIT })),
+    points: compactPath(route.points).map(point => ({ gx: point.x / ROUTE_UNIT, gy: point.y / ROUTE_UNIT })),
   }))
 }

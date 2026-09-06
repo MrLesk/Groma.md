@@ -49,6 +49,8 @@ function gridPattern(): { pattern: SVGPatternElement; lines: SVGPathElement[] } 
 
 export interface IsoMap {
   svg: HTMLElement
+  /** Prepare the cached camera layer before the first movement frame. */
+  prepareCamera(): void
   /** Applies the camera and reports whether its compositor scale changed. */
   move(camera: Camera, zoomRatio: number): boolean
   /** Rebuilds every layer after an architecture or project-profile change. */
@@ -184,6 +186,7 @@ export function createMap(host: HTMLElement): IsoMap {
 
   return {
     svg: root,
+    prepareCamera: startCameraMotion,
     move(current, zoomRatio) {
       const showGrid = gridVisible(current.k)
       if (showGrid) {

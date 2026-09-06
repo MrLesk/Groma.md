@@ -108,3 +108,37 @@ test.concurrent('parallel connections approach their walls directly without a fi
     assert.ok(end.gx > previous.gx)
   }
 })
+
+test.concurrent('shortcuts leave and enter a stepped roof away from its visible corners', () => {
+  const source: Building = {
+    ...tower(), id: 'source', representationId: 'source',
+    rect: { gx: 10, gy: 20, w: 4, d: 3 }, heightUnits: 3.5,
+    floors: [
+      { files: ['base.ts'], facadeFileType: '.ts', heightUnits: 2, footprint: { w: 4, d: 3 } },
+      { files: ['top.ts'], facadeFileType: '.ts', heightUnits: 1.5, footprint: { w: 3, d: 2 } },
+    ],
+  }
+  const target: Building = {
+    ...tower(), id: 'target', representationId: 'target',
+    rect: { gx: 3, gy: 4, w: 5, d: 2 }, heightUnits: 3,
+    floors: [{ files: ['target.ts'], facadeFileType: '.ts', heightUnits: 3, footprint: { w: 5, d: 2 } }],
+  }
+  const buildings = [source, target]
+  const endpoints = new Map(buildings.map(building => [building.id, endpoint(building)]))
+  for (const [from, to] of [[source, target], [target, source]]) {
+    const routes = routeAll(endpoints, [{
+      id: 'interaction', source: from!.id, target: to!.id, description: '', origin: 'observed',
+    }])
+    const scene = projectScene({
+      sheet: { gx: 0, gy: 0, w: 20, d: 30 }, islands: [], zones: [], slabs: [], buildings, routes,
+    })
+    const route = scene.routes[0]!
+    for (const [id, tip] of [[from!.id, route.points[0]!], [to!.id, route.points.at(-1)!]] as const) {
+      const faces = scene.buildings.find(item => item.building.id === id)!.floors.flat()
+      assert.ok(faces.every(face => face.points.every(corner =>
+        Math.hypot(corner.x - tip.x, corner.y - tip.y) >= 4)), `${id} port meets a visible corner`)
+      assert.ok(faces.some(face => face.points.some((a, i) =>
+        distanceToEdge(tip, a, face.points[(i + 1) % face.points.length]!) < 1e-8)))
+    }
+  }
+})
