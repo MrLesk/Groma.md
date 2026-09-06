@@ -58,12 +58,6 @@ jobs:
             package: groma.md-linux-arm64
             npm_os: linux
             npm_cpu: arm64
-          - runner: macos-15-intel
-            target: bun-darwin-x64
-            binary: groma
-            package: groma.md-darwin-x64
-            npm_os: darwin
-            npm_cpu: x64
           - runner: macos-15
             target: bun-darwin-arm64
             binary: groma
@@ -187,11 +181,6 @@ jobs:
             package: groma.md-linux-arm64
             npm_os: linux
             npm_cpu: arm64
-          - target: bun-darwin-x64
-            binary: groma
-            package: groma.md-darwin-x64
-            npm_os: darwin
-            npm_cpu: x64
           - target: bun-darwin-arm64
             binary: groma
             package: groma.md-darwin-arm64
@@ -281,7 +270,6 @@ jobs:
           const platformPackages = [
             'groma.md-linux-x64',
             'groma.md-linux-arm64',
-            'groma.md-darwin-x64',
             'groma.md-darwin-arm64',
             'groma.md-windows-x64',
             'groma.md-windows-arm64',
