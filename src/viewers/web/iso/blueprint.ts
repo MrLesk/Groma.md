@@ -1,13 +1,13 @@
 import type { MarkdownBlock, MarkdownSpan, MarkdownStyle } from '../../../project-markdown.ts'
 import type { ProjectProfile } from '../../../project-profile.ts'
-import { PLANE, textWidth } from '../../../sheet/measure.ts'
+import { PLANE, PROJECT_FONT, textPadding, textWidth } from '../../../sheet/measure.ts'
 import type { CellRect } from '../../../sheet/types.ts'
 import type { Point } from '../../../types.ts'
 
 const MAX_SCALE = 3
 const FRAME_MARGIN = 2.5
-const COMPASS_RADIUS = 0.55
-const COMPASS_LETTER = 0.22
+const COMPASS_RADIUS = 1.1
+const COMPASS_LETTER = 0.44
 const PROJECT_META = 'GROMA  /  ARCHITECTURE MAP'
 const MAX_PLATE_LINE_CHARACTERS = 80
 const MAX_PLATE_OVERVIEW_LINES = 3
@@ -97,7 +97,7 @@ function calibrationTicks(frame: CellRect, scale: number, project: Projector): S
 }
 
 function compassOf(frame: CellRect, scale: number, project: Projector): Compass {
-  const inset = FRAME_MARGIN * scale / 2
+  const inset = (COMPASS_RADIUS + COMPASS_LETTER + 0.4) * scale
   const at = { gx: frame.gx + inset, gy: frame.gy + frame.d - inset }
   const on = (dx: number, dy: number): Point => project(at.gx + dx, at.gy + dy, 0)
   const radius = COMPASS_RADIUS * scale
@@ -116,7 +116,7 @@ function compassOf(frame: CellRect, scale: number, project: Projector): Compass 
       { text: 'N', at: on(0, -tip) }, { text: 'E', at: on(tip, 0) },
       { text: 'S', at: on(0, tip) }, { text: 'W', at: on(-tip, 0) },
     ],
-    fontSize: 6 * scale,
+    fontSize: 12 * scale,
   }
 }
 
@@ -189,12 +189,12 @@ function projectPlate(
   const editSize = 0.82 * scale
   const editInset = 0.16 * scale
   const editReservationWidth = editSize + editInset * 2
-  const titleSize = 11 * scale
-  const titleLineHeight = 12.5 * scale
+  const titleSize = PROJECT_FONT
+  const titleLineHeight = PROJECT_FONT * 1.2
   const overviewSize = 6 * scale
   const overviewLineHeight = 7.5 * scale
   const metaSize = 4.5 * scale
-  const contentInset = 0.25 * scale
+  const contentInset = Math.max(0.25 * scale, textPadding(titleSize) / PLANE)
   const pencilGutter = 0.5 * scale
   const horizontalPadding = contentInset + pencilGutter
   const limitedWidth = (text: string, size: number): number =>
@@ -213,7 +213,7 @@ function projectPlate(
   const titleLines = wrapPlain(profile.title, contentWidth, titleSize)
   const overviewLines = wrapMarkdown(profile.overviewBlocks, contentWidth, overviewSize)
     .slice(0, MAX_PLATE_OVERVIEW_LINES)
-  const titleTop = 0.18 * scale
+  const titleTop = contentInset
   const overviewTop = titleTop + titleLines.length * titleLineHeight / PLANE + 0.18 * scale
   const metaTop = overviewTop + overviewLines.length * overviewLineHeight / PLANE + 0.2 * scale
   const depth = Math.max(metaTop + 0.45 * scale, editSize + editInset * 2)

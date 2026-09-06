@@ -1,5 +1,5 @@
-import { PAD, ROOF_SHADOW, centredRect } from '../../../sheet/grid.ts'
-import { PLANE, curved, roofBlock } from '../../../sheet/measure.ts'
+import { ROOF_SHADOW, centredRect } from '../../../sheet/grid.ts'
+import { CONTAINER_FONT, GROUP_FONT, ISLAND_FONT, PLANE, buildingFont, curved, labelHeight, roofBlock } from '../../../sheet/measure.ts'
 import type {
   Building,
   CellRect,
@@ -352,7 +352,7 @@ function roofText(building: Building, view: ProjectionView): SurfaceText {
   const top = building.floors.at(-1)
   const roof = top === undefined ? building.rect : centredRect(building.rect, top.footprint)
   if (!curved(shape)) return { origin: project(roof.gx, roof.gy, heightUnits, view), lines }
-  const block = roofBlock(lines)
+  const block = roofBlock(lines, buildingFont(building))
   return {
     origin: project(
       roof.gx + (roof.w - block.w / PLANE) / 2,
@@ -365,8 +365,8 @@ function roofText(building: Building, view: ProjectionView): SurfaceText {
 }
 
 /** A surface's own name lies in its front band along the west corner, in front of every child. */
-function bandText(rect: CellRect, z: number, lines: string[], view: ProjectionView): SurfaceText {
-  return { origin: project(rect.gx, rect.gy + rect.d - PAD, z, view), lines }
+function bandText(rect: CellRect, z: number, lines: string[], size: number, view: ProjectionView): SurfaceText {
+  return { origin: project(rect.gx, rect.gy + rect.d - labelHeight(size) / PLANE, z, view), lines }
 }
 
 export function boundsOf(points: readonly Point[]): Bounds {
@@ -393,17 +393,17 @@ export function projectScene(
   const islands = scene.islands.map(island => ({
     island,
     polygon: corners(island.rect, 0, view),
-    text: bandText(island.rect, 0, [island.name.toUpperCase()], view),
+    text: bandText(island.rect, 0, [island.name.toUpperCase()], ISLAND_FONT, view),
   }))
   const zones = scene.zones.map(zone => ({
     zone,
     polygon: corners(zone.rect, 0, view),
-    text: bandText(zone.rect, 0, [zone.name], view),
+    text: bandText(zone.rect, 0, [zone.name], GROUP_FONT, view),
   }))
   const slabs = paintOrder(scene.slabs, view).map(slab => ({
     slab,
     faces: boxFaces(slab.rect, -SLAB_HANG / HEIGHT_UNIT, 0, view),
-    text: bandText(slab.rect, 0, [slab.title], view),
+    text: bandText(slab.rect, 0, [slab.title], CONTAINER_FONT, view),
   }))
   const buildings = paintOrder(scene.buildings, view).map(building => ({
     building,

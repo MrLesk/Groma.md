@@ -76,8 +76,8 @@ test.concurrent('exploded projection separates the three levels without changing
     ...exploded.layerPlanes.flatMap(plane => [...plane.polygon, plane.label.at]),
   ]
   for (const point of visible) {
-    assert.ok(point.x >= exploded.bounds.x && point.x <= exploded.bounds.x + exploded.bounds.width)
-    assert.ok(point.y >= exploded.bounds.y && point.y <= exploded.bounds.y + exploded.bounds.height)
+    assert.ok(point.x >= exploded.bounds.x && point.x - exploded.bounds.x <= exploded.bounds.width)
+    assert.ok(point.y >= exploded.bounds.y && point.y - exploded.bounds.y <= exploded.bounds.height)
   }
   assert.deepEqual(source, snapshot)
 })

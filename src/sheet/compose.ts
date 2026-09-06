@@ -1,6 +1,7 @@
 import type { AnnotatedRelationship } from '../types.ts'
 import type { Placement } from './place.ts'
 import { MARGIN, translate, unionRects } from './grid.ts'
+import { ISLAND_FONT, ISLAND_SPACING, labelBand, nameCells } from './measure.ts'
 import type { CellRect } from './types.ts'
 
 const ROUTE_SPACE_SCALE = 1.18
@@ -246,7 +247,7 @@ function composeSystem(
   const mediators = flow.mediators.map(id => units.get(id)!)
   const core = units.get(flow.core)!
   const innerTop = island.rect.gy + SURFACE_INSET
-  const innerBottom = island.rect.gy + island.rect.d - SURFACE_INSET
+  const innerBottom = island.rect.gy + island.rect.d - SURFACE_INSET - labelBand(ISLAND_FONT)
   const entryRight = Math.max(...entries.map(unit => unit.rect.gx + unit.rect.w))
   const mediatorWidth = Math.max(...mediators.map(unit => unit.rect.w))
   const occupiedWidth = entryRight + mediatorWidth + core.rect.w
@@ -292,8 +293,8 @@ function composeSystem(
   const dx = island.rect.gx + SURFACE_INSET - occupied.gx
   const dy = island.rect.gy + SURFACE_INSET - occupied.gy
   for (const [id, rect] of positions) positions.set(id, translate(rect, dx, dy))
-  island.rect.w = occupied.w + 2 * SURFACE_INSET
-  island.rect.d = occupied.d + 2 * SURFACE_INSET
+  island.rect.w = Math.max(occupied.w + 2 * SURFACE_INSET, nameCells(island.name.toUpperCase(), ISLAND_FONT, ISLAND_SPACING))
+  island.rect.d = occupied.d + 2 * SURFACE_INSET + labelBand(ISLAND_FONT)
   applyPositions(placement, units, positions)
   return island.rect.w - originalWidth
 }
