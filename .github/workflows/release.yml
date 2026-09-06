@@ -1,8 +1,9 @@
 name: Release
 
+# Publishing a GitHub release creates its tag and starts this workflow; the tag names the version.
 on:
-  push:
-    tags: ['v*.*.*']
+  release:
+    types: [published]
 
 permissions:
   contents: write
@@ -135,8 +136,8 @@ jobs:
           path: dist/${{ matrix.binary }}
           if-no-files-found: error
 
-  github-release:
-    name: github-release
+  github-  release-assets:
+    name: release-assets
     needs: build
     runs-on: ubuntu-latest
     steps:
@@ -158,11 +159,11 @@ jobs:
             cp "$binary" "release/$name"
           done
           (cd release && sha256sum groma-* > SHA256SUMS)
-      - name: Create GitHub Release
+      - name: Attach binaries to the release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
-        run: gh release create "$GITHUB_REF_NAME" release/* --generate-notes
+        run: gh release upload "$GITHUB_REF_NAME" release/* --clobber
 
   publish-platform:
     name: publish-${{ matrix.package }}
@@ -340,7 +341,7 @@ jobs:
 
   sync-version:
     name: sync-version-to-main
-    needs: [github-release, install-sanity]
+    needs: [release-assets, install-sanity]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
