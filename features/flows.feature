@@ -54,3 +54,11 @@ Feature: Read an authored architecture flow
     Then the same step and original component return action remain available
     When the architect returns to the original component
     Then its details appear with the flow still highlighted
+
+  Scenario: Open source from a Web flow endpoint with one Back
+    Given an architect is inspecting a flow endpoint
+    When the architect opens an owned source file
+    Then the details pane offers Back to the component
+    And it does not offer Back to flow
+    When the architect returns from the file
+    Then Back to flow restores the same flow and step

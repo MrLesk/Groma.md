@@ -2,7 +2,7 @@ import type { ArchitectureFlow, ArchitectureGraph } from '../../../types.ts'
 import { paragraph } from '../atoms/text.ts'
 import { chromeButton } from '../atoms/button.ts'
 import type { FlowRef } from '../../flows.ts'
-import type { WebFlowRef } from './state.ts'
+import { flowReturn, type WebFlowRef } from './state.ts'
 
 function button(label: string, action: () => void): HTMLButtonElement {
   const control = document.createElement('button')
@@ -66,13 +66,15 @@ export function paintFlowDetails(
 export function paintFlowReturn(
   host: HTMLElement, active: WebFlowRef | undefined, readingFlow: boolean,
   world: ArchitectureGraph, onSelect: (id: string) => void, onBack: () => void,
+  fileOpen: boolean,
 ): void {
   host.querySelector('.flow-back')?.remove()
-  if (active === undefined) return
-  const origin = world.elements.find(element => element.representationId === active.returnTo)
-  if (readingFlow && origin === undefined) return
-  const back = chromeButton(readingFlow ? `Back to ${origin!.title}` : 'Back to flow', { glyph: '←' })
-  back.addEventListener('click', readingFlow ? () => onSelect(origin!.representationId) : onBack)
+  const target = flowReturn(active, readingFlow, fileOpen)
+  if (target === undefined) return
+  const origin = world.elements.find(element => element.representationId === active!.returnTo)
+  if (target === 'origin' && origin === undefined) return
+  const back = chromeButton(target === 'origin' ? `Back to ${origin!.title}` : 'Back to flow', { glyph: '←' })
+  back.addEventListener('click', target === 'origin' ? () => onSelect(origin!.representationId) : onBack)
   back.classList.add('flow-back')
   host.querySelector('.meta')!.before(back)
 }

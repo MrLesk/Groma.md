@@ -12,6 +12,19 @@ export function flowSelection(active: readonly FlowRef[]): Selection {
   return flow === undefined ? { kind: 'none' } : { kind: 'flow', id: flow.id }
 }
 
+export type FlowReturn = 'origin' | 'flow'
+
+/** A file reader owns the pane's Back; flow return waits until that file is closed. */
+export function flowReturn(
+  active: WebFlowRef | undefined,
+  readingFlow: boolean,
+  fileOpen: boolean,
+): FlowReturn | undefined {
+  if (fileOpen || active === undefined) return undefined
+  if (readingFlow) return active.returnTo === undefined ? undefined : 'origin'
+  return 'flow'
+}
+
 /** Checked scenarios stay active in order; the last one owns the reader. */
 export function toggleFlowActivation(active: readonly WebFlowRef[], clicked: FlowRef, returnTo?: string): WebFlowRef[] {
   return active.some(flow => flow.id === clicked.id)

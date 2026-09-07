@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test'
 import path from 'node:path'
 import { loadAnnotatedArchitecture } from '../src/core.ts'
-import { flowFocus, flowHighlight, flowSelection, retainFlows, toggleFlowActivation } from '../src/viewers/web/flow/state.ts'
+import { flowFocus, flowHighlight, flowReturn, flowSelection, retainFlows, toggleFlowActivation } from '../src/viewers/web/flow/state.ts'
 
 test.concurrent('flows toggle independently and the last checked flow owns the reader', () => {
   const original = [{ id: 'first', step: 2 }]
@@ -23,6 +23,16 @@ test.concurrent('a flow opened from details keeps its origin only for that visit
   expect(another.at(-1)?.returnTo).toBeUndefined()
   expect(another[0]?.returnTo).toBe('component')
   expect(toggleFlowActivation(opened, { id: 'first' }, 'component')).toEqual([])
+})
+
+test.concurrent('a file reader occupies the details Back slot during a flow visit', () => {
+  const active = { id: 'first', returnTo: 'component', step: 1 }
+  expect(flowReturn(active, false, true)).toBeUndefined()
+  expect(flowReturn(active, false, false)).toBe('flow')
+  expect(flowReturn(active, true, false)).toBe('origin')
+  expect(flowReturn(active, true, true)).toBeUndefined()
+  expect(flowReturn({ id: 'first' }, true, false)).toBeUndefined()
+  expect(flowReturn(undefined, false, false)).toBeUndefined()
 })
 
 test.concurrent('step focus retains the complete Web path and omits unrelated collaborations', async () => {
