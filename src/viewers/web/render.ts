@@ -204,11 +204,14 @@ function paintViewState(commitUrl = true): void {
 function paintDetailsState(task: WorkItem | undefined): void {
   const activeFlow = activeFlows.at(-1)
   const selectedId = primarySelection(selection)
-  paintFlowReturn(detailsHost, activeFlow, selection.kind === 'flow', world, select, showFlows)
   const selected = worldElement(selectedId)
   const relationship = worldRelationship(selectedId)
-  if (source.paint(selected)) return
-  if (taskDiff.paint(task)) return
+  const paintedReader = source.paint(selected) || taskDiff.paint(task)
+  paintFlowReturn(
+    detailsHost, activeFlow, selection.kind === 'flow', world, select, showFlows,
+    source.file !== undefined,
+  )
+  if (paintedReader) return
   const flow = world.flows.find(item => item.id === selectedId)
   if (selection.kind === 'flow' && flow !== undefined && activeFlow !== undefined) {
     paintFlowDetails(detailsHost, flow, activeFlow, world, selectFlowStep, select)

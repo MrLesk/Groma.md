@@ -244,8 +244,10 @@ The focused action has a marked row; Clear focus removes the extra emphasis and
 smoothly fits all checked flows again. Reduced motion keeps static emphasis.
 Unrelated routes are hidden and
 task emphasis is quiet while reading a flow. Existing footprints and routes
-stay fixed. Endpoints link to the normal component inspector and source view;
-Back to flow restores the same scenario, step, and original return target, and
+stay fixed. Endpoints link to the normal component inspector. Opening source from
+that inspector uses Back to the component and does not also offer Back to flow.
+Leaving the file restores Back to flow, which returns the same scenario, step,
+and original return target, and
 fits all checked flows again. Returning to the original element centers and
 fits that element while keeping the flows highlighted. Selecting a task leaves flow
 focus. Escape or a click on empty sheet clears the active selections.
