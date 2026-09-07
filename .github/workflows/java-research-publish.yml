@@ -1,0 +1,48 @@
+name: Finalize Java review branch
+on:
+  push:
+    branches: [research/java-scanner-prototype]
+    paths: [.github/workflows/java-research-publish.yml]
+permissions:
+  contents: write
+jobs:
+  finalize:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+      - name: Apply verified metadata patch and remove transfer files
+        run: |
+          set -euo pipefail
+          git apply --check .github/java-research-finalize.patch
+          git apply .github/java-research-finalize.patch
+          git rm .github/java-research-finalize.patch .github/workflows/java-research-publish.yml
+          git diff --check
+          git add .github/workflows/ci.yml CONTRIBUTING.md bun.lock docs/scanners/index.md
+          git -c user.name='Alex Gavrilescu' -c user.email='leskcorp@gmail.com' commit -m 'TASK-324 - Finalize Java scanner review metadata'
+          git push origin HEAD:refs/heads/research/java-scanner-prototype
+          git ls-files -s > "$RUNNER_TEMP/java-final-tree.txt"
+          git rev-parse HEAD > "$RUNNER_TEMP/java-final-commit.txt"
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.1
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Check exact pushed sources
+        run: |
+          set -euo pipefail
+          bun install --frozen-lockfile
+          bun run check 2>&1 | tee "$RUNNER_TEMP/java-final-check.log"
+          bun run build 2>&1 | tee "$RUNNER_TEMP/java-final-build.log"
+          bun plugins/scanners/java/build.ts --runtime
+          bun scripts/smoke-java-scanner.ts dist/groma plugins/scanners/java/dist/package 2>&1 | tee "$RUNNER_TEMP/java-final-smoke.log"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: java-review-verification
+          path: ${{ runner.temp }}/java-final-*
+          retention-days: 7
