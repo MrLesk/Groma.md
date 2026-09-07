@@ -1,0 +1,41 @@
+name: Rust scanner prototype
+on:
+  push:
+    branches: [research/rust-scanner-prototype]
+    paths: ['plugins/scanners/rust/**', 'test/fixtures/rust-scanner/**', 'bun.lock', '.github/workflows/rust-scanner.yml']
+  pull_request:
+    paths: ['plugins/scanners/rust/**', 'test/fixtures/rust-scanner/**', 'bun.lock', '.github/workflows/rust-scanner.yml']
+permissions:
+  contents: read
+jobs:
+  rust-scanner:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      RUSTUP_TOOLCHAIN: 1.90.0
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.1
+      - run: rustup toolchain install 1.90.0 --profile minimal --component rustfmt --component clippy
+      - run: bun install --frozen-lockfile
+      - run: cargo fmt --manifest-path plugins/scanners/rust/native/Cargo.toml --check
+      - run: cargo clippy --locked --manifest-path plugins/scanners/rust/native/Cargo.toml -- -D warnings
+      - run: bun plugins/scanners/rust/build.ts
+      - run: bun test --timeout 30000 plugins/scanners/rust/test/
+      - run: bun run check
+      - run: bun run build && bun plugins/scanners/rust/smoke-compiled.ts
+      - name: Reproduce pinned external-source measurement
+        run: |
+          git clone --depth 1 --branch 14.1.1 https://github.com/BurntSushi/ripgrep.git /tmp/ripgrep
+          test "$(git -C /tmp/ripgrep rev-parse HEAD)" = 4649aa9700619f94cf9c66876e9549d83420e16c
+          bun plugins/scanners/rust/benchmark.ts /tmp/ripgrep > /tmp/rust-scanner-benchmark.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: groma-rust-scanner-linux-x64-prototype
+          path: |
+            plugins/scanners/rust/dist/
+            /tmp/rust-scanner-benchmark.json
