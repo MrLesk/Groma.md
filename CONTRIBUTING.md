@@ -17,7 +17,7 @@ not need a pull request.
 
 ## Set up the repository
 
-Groma requires Bun 1.4.1 or newer and Node.js 20.19 or newer. Published macOS binaries are Apple Silicon only; Intel Macs are not a supported architecture.
+Developing Groma requires Bun 1.4.1 or newer, Node.js 20.19 or newer, and a JDK 21 installation for the Java scanner conformance tests. The globally installed Groma tool does not require a user JDK unless the optional Java scanner is configured without its bundled runtime. Published macOS binaries are Apple Silicon only; Intel Macs are not a supported architecture.
 
 ```sh
 bun install
@@ -37,6 +37,15 @@ when making changes.
 them in a single-file bytecode executable; development and compiled builds use the same package loader. When updating
 Parcel, review the patch against its platform packages and run `bun test test-bun/parcel-bytecode.test.ts`. This test
 receives native file events in both source mode and a compiled executable with no accompanying source or dependencies.
+
+## Java scanner prototype
+
+Read [Java scanner usage](docs/scanners/java/index.md) and the linked research/support boundary.
+`bun plugins/scanners/java/build.ts --runtime` stages a self-contained package for the current platform;
+`bun test test-bun/java-scanner.test.ts` checks the language fixtures. After building `dist/groma`,
+`bun scripts/smoke-java-scanner.ts dist/groma plugins/scanners/java/dist/package` tests the packaged scanner
+with no external Java/Node/Bun on PATH (Linux/macOS). CI provisions JDK 21; it does not publish packages.
+Do not add annotation processors, Maven/Gradle execution or network downloads to scan/watch as a convenience fallback.
 
 ## Repository structure
 

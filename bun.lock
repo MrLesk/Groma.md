@@ -44,6 +44,13 @@
         "@groma/scanner": "workspace:*",
       },
     },
+    "plugins/scanners/java": {
+      "name": "@groma/scanner-java",
+      "version": "0.1.0-prototype.1",
+      "dependencies": {
+        "@groma/scanner": "workspace:*",
+      },
+    },
     "plugins/scanners/typescript": {
       "name": "@groma/scanner-typescript",
       "version": "0.1.0",
@@ -143,6 +150,8 @@
     "@groma/scanner": ["@groma/scanner@workspace:packages/scanner"],
 
     "@groma/scanner-csharp": ["@groma/scanner-csharp@workspace:plugins/scanners/csharp"],
+
+    "@groma/scanner-java": ["@groma/scanner-java@workspace:plugins/scanners/java"],
 
     "@groma/scanner-typescript": ["@groma/scanner-typescript@workspace:plugins/scanners/typescript"],
 
