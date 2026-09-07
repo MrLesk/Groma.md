@@ -8,6 +8,8 @@ permissions:
 jobs:
   workspace:
     runs-on: ubuntu-22.04
+    env:
+      DOTNET_INSTALL_DIR: /tmp/groma-dotnet
     steps:
       - uses: actions/checkout@v7
         with:
@@ -42,7 +44,7 @@ jobs:
           git clone --depth 1 --branch 12.0.0 https://github.com/FluentValidation/FluentValidation.git /tmp/csharp-research/FluentValidation
           git -C /tmp/csharp-research/FluentValidation rev-parse HEAD | tee /tmp/csharp-research/evidence/fluentvalidation-commit.txt
           dotnet restore /tmp/csharp-research/FluentValidation/src/FluentValidation/FluentValidation.csproj
-      - name: Package offline workspace
+      - name: Package source and tools
         if: always()
         shell: bash
         run: |
@@ -51,15 +53,27 @@ jobs:
           cp "$(command -v bun)" /tmp/csharp-research/tools/bun
           cp -L "$HOME/.bun/bin/backlog" /tmp/csharp-research/tools/backlog
           tar --exclude=.git --exclude='.github/assets/*.gif' --exclude='.github/assets/*.webp' --exclude='.github/assets/*.avif' -cf - . | tar -xf - -C /tmp/csharp-research/repo
-          tar -C "$(dirname "$(readlink -f "$(command -v dotnet)")")" -czf /tmp/dotnet-sdk.tar.gz .
-          tar -C "$HOME/.nuget" -czf /tmp/nuget-cache.tar.gz packages
-          tar -C /tmp/csharp-research -czf /tmp/csharp-workspace.tar.gz .
+          tar -C /tmp/csharp-research -cf - . | gzip -1 > /tmp/csharp-workspace.tar.gz
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: csharp-prototype-workspace
+          name: csharp-source-workspace
+          path: /tmp/csharp-workspace.tar.gz
+          compression-level: 0
+          retention-days: 3
+      - name: Package selected SDK and package cache
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          du -sh /tmp/groma-dotnet "$HOME/.nuget"
+          tar -C /tmp/groma-dotnet -cf - . | gzip -1 > /tmp/dotnet-sdk.tar.gz
+          tar -C "$HOME/.nuget" -cf - packages | gzip -1 > /tmp/nuget-cache.tar.gz
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: csharp-dotnet-workspace
           path: |
-            /tmp/csharp-workspace.tar.gz
             /tmp/dotnet-sdk.tar.gz
             /tmp/nuget-cache.tar.gz
           compression-level: 0
