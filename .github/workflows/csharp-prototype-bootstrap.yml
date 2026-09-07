@@ -1,0 +1,66 @@
+name: CSharp prototype bootstrap
+on:
+  push:
+    branches: [research/csharp-scanner-prototype]
+    paths: [.github/workflows/csharp-prototype-bootstrap.yml]
+permissions:
+  contents: read
+jobs:
+  workspace:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.1
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - name: Prepare toolchain and read repository workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/csharp-research/evidence
+          bun install --frozen-lockfile
+          bun add --global backlog.md@1.51.0
+          export PATH="$HOME/.bun/bin:$PATH"
+          backlog instructions overview | tee /tmp/csharp-research/evidence/backlog-overview.txt
+          backlog instructions task-creation | tee /tmp/csharp-research/evidence/backlog-creation.txt
+          backlog instructions task-execution | tee /tmp/csharp-research/evidence/backlog-execution.txt
+          backlog task create --help | tee /tmp/csharp-research/evidence/backlog-create-help.txt
+          backlog task edit --help | tee /tmp/csharp-research/evidence/backlog-edit-help.txt
+          backlog search 'C#' --plain | tee /tmp/csharp-research/evidence/backlog-search.txt
+          bun src/cli.ts agent-instructions | tee /tmp/csharp-research/evidence/groma-instructions.txt
+          dotnet --info | tee /tmp/csharp-research/evidence/dotnet-info.txt
+          dotnet restore plugins/scanners/csharp/dotnet/test/Groma.CSharpScanner.Tests.csproj --locked-mode
+      - name: Collect public benchmark checkout
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone --depth 1 --branch 12.0.0 https://github.com/FluentValidation/FluentValidation.git /tmp/csharp-research/FluentValidation
+          git -C /tmp/csharp-research/FluentValidation rev-parse HEAD | tee /tmp/csharp-research/evidence/fluentvalidation-commit.txt
+          dotnet restore /tmp/csharp-research/FluentValidation/src/FluentValidation/FluentValidation.csproj
+      - name: Package offline workspace
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/csharp-research/tools /tmp/csharp-research/repo
+          cp "$(command -v bun)" /tmp/csharp-research/tools/bun
+          cp -L "$HOME/.bun/bin/backlog" /tmp/csharp-research/tools/backlog
+          tar --exclude=.git --exclude='.github/assets/*.gif' --exclude='.github/assets/*.webp' --exclude='.github/assets/*.avif' -cf - . | tar -xf - -C /tmp/csharp-research/repo
+          tar -C "$(dirname "$(readlink -f "$(command -v dotnet)")")" -czf /tmp/dotnet-sdk.tar.gz .
+          tar -C "$HOME/.nuget" -czf /tmp/nuget-cache.tar.gz packages
+          tar -C /tmp/csharp-research -czf /tmp/csharp-workspace.tar.gz .
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: csharp-prototype-workspace
+          path: |
+            /tmp/csharp-workspace.tar.gz
+            /tmp/dotnet-sdk.tar.gz
+            /tmp/nuget-cache.tar.gz
+          compression-level: 0
+          retention-days: 3
