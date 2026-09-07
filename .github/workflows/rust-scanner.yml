@@ -33,9 +33,11 @@ jobs:
           git clone --depth 1 --branch 14.1.1 https://github.com/BurntSushi/ripgrep.git /tmp/ripgrep
           test "$(git -C /tmp/ripgrep rev-parse HEAD)" = 4649aa9700619f94cf9c66876e9549d83420e16c
           bun plugins/scanners/rust/benchmark.ts /tmp/ripgrep > /tmp/rust-scanner-benchmark.json
+      - name: Preserve executable permissions in review package
+        run: tar -C plugins/scanners/rust/dist -czf /tmp/groma-rust-scanner-linux-x64-prototype.tar.gz .
       - uses: actions/upload-artifact@v4
         with:
           name: groma-rust-scanner-linux-x64-prototype
           path: |
-            plugins/scanners/rust/dist/
+            /tmp/groma-rust-scanner-linux-x64-prototype.tar.gz
             /tmp/rust-scanner-benchmark.json
