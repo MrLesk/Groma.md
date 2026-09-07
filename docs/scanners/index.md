@@ -33,6 +33,7 @@ management syntax remain under Advanced commands.
 
 - [TypeScript](typescript/index.md)
 - [C#/.NET](dotnet-csharp/index.md)
+- [Rust prototype](rust/index.md)
 - [Shared contract](creating-a-plugin.md)
 
 ## Relationship inference design

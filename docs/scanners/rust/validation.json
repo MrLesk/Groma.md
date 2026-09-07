@@ -1,0 +1,101 @@
+{
+  "date": "2026-09-07",
+  "baseline": "0e1252c92a90ef87b30d4fb5cfa56e768d436fea",
+  "platform": "Linux x64; native ABI of Ubuntu 24.04 build toolchain",
+  "toolchain": {
+    "bun": "1.4.1",
+    "rust": "1.90.0",
+    "syn": "2.0.106"
+  },
+  "checks": {
+    "focusedTests": 36,
+    "focusedAssertions": 85,
+    "nodeTests": 110,
+    "existingBunTests": 355,
+    "cargoFmt": "pass",
+    "clippyWarningsDenied": "pass",
+    "finalBunRunCheck": "pass",
+    "existingBiomeWarnings": 6,
+    "compiledGromaSmoke": "pass; only Git and Groma on consumer PATH; fresh HOME and caches",
+    "initialCheck": "All assertions passed but an unhandled native watcher teardown error occurred. Untouched baseline and final changed run passed; cause unproven.",
+    "independentAgentReviews": "not performed"
+  },
+  "ripgrep": {
+    "tag": "14.1.1",
+    "commit": "4649aa9700619f94cf9c66876e9549d83420e16c",
+    "engine": {
+      "language": "rust",
+      "engine": "syn-syntax",
+      "engineVersion": "2.0.106/groma-0.1.0"
+    },
+    "profile": "release; three fresh processes; filesystem caches not flushed",
+    "nativeSha256": "2452a632b6c368a2df3b6dd132947c42b967fba744a2592b9d9cebb4ff1cb825",
+    "outputSha256": "52ed2dcdc61d76bacd9654311e5978e53e9019f0574e44b1e72467f85b7f3dac",
+    "nativeBytes": 2845288,
+    "sourceBytes": 1476919,
+    "scopes": 10,
+    "files": 78,
+    "operations": 2078,
+    "invocations": 5722,
+    "resolvedInvocationSets": 81,
+    "unresolvedInvocationSets": 5641,
+    "callbackBindings": 0,
+    "sourceRelationships": 187,
+    "diagnostics": 8,
+    "runs": [
+      {
+        "seconds": 0.17,
+        "peakRssKiB": 32316
+      },
+      {
+        "seconds": 0.16,
+        "peakRssKiB": 32376
+      },
+      {
+        "seconds": 0.15,
+        "peakRssKiB": 32444
+      }
+    ]
+  },
+  "synthetic": {
+    "shape": "1000 modules of 10 simple free functions; explicitly qualified calls to next module",
+    "engine": {
+      "language": "rust",
+      "engine": "syn-syntax",
+      "engineVersion": "2.0.106/groma-0.1.0"
+    },
+    "profile": "release; three fresh processes; filesystem caches not flushed",
+    "nativeSha256": "2452a632b6c368a2df3b6dd132947c42b967fba744a2592b9d9cebb4ff1cb825",
+    "outputSha256": "2ab174252166562250071ce274ca418bacfa4b351843ce9ebe45d64761277a49",
+    "nativeBytes": 2845288,
+    "sourceBytes": 369999,
+    "scopes": 1,
+    "files": 1001,
+    "operations": 10000,
+    "invocations": 10000,
+    "resolvedInvocationSets": 10000,
+    "unresolvedInvocationSets": 0,
+    "callbackBindings": 0,
+    "sourceRelationships": 2000,
+    "diagnostics": 1,
+    "runs": [
+      {
+        "seconds": 0.19,
+        "peakRssKiB": 40344
+      },
+      {
+        "seconds": 0.17,
+        "peakRssKiB": 40280
+      },
+      {
+        "seconds": 0.17,
+        "peakRssKiB": 40400
+      }
+    ]
+  },
+  "limitations": [
+    "Native-only timings, not end-to-end Groma; filesystem caches not flushed.",
+    "Resolution share is not precision, recall, or whole-program runtime coverage.",
+    "Only Linux x64 tested; no npm release, rust-analyzer integration, general framework semantics, or automatic cross-language communication joining."
+  ]
+}

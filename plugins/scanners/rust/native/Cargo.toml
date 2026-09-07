@@ -1,0 +1,23 @@
+[package]
+name = "groma-rust-scanner"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.90"
+license = "MIT"
+description = "Conservative, build-free Rust source evidence for Groma"
+publish = false
+
+[workspace]
+
+[dependencies]
+syn = { version = "=2.0.106", features = ["full", "visit", "extra-traits"] }
+proc-macro2 = { version = "=1.0.101", features = ["span-locations"] }
+quote = "=1.0.40"
+serde = { version = "=1.0.219", features = ["derive"] }
+serde_json = "=1.0.143"
+toml = "=0.9.5"
+glob = "=0.3.3"
+
+[profile.release]
+strip = true
+lto = "thin"
