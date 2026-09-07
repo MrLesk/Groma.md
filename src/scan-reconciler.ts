@@ -2,6 +2,7 @@ import { existsSync } from 'node:fs'
 import path from 'node:path'
 import { isDeepStrictEqual } from 'node:util'
 
+import { detectDuplicatedLogic, rememberArchitectureFindings } from './architecture-findings.ts'
 import { isReservedDocument } from './architecture-path.ts'
 import { loadArchitecture } from './architecture-reader.ts'
 import { architectureElementPath } from './architecture-path.ts'
@@ -393,5 +394,8 @@ export async function reconcileScanObservations(
   }
   const owners = new Map([...world.byId.values()].flatMap(record => record.code.map(reference => [reference.file, record.id] as const)))
   await refreshDerivedRelationships(repositoryRoot, observations, owners)
+  const findings = detectDuplicatedLogic(observations, owners)
+  rememberArchitectureFindings(repositoryRoot, findings)
+  if (findings.length > 0) summary.findings = findings.length
   return summary
 }

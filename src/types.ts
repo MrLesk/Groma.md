@@ -67,6 +67,8 @@ export interface ScanSummary {
   created: number
   refreshed: number
   matched: number
+  /** Architecture findings from the current scan; omitted when there are none. */
+  findings?: number
 }
 
 export type {
@@ -158,6 +160,26 @@ export interface ArchitectureGraph {
   flows: ArchitectureFlow[]
   elements: AnnotatedElement[]
   relationships: AnnotatedRelationship[]
+  /** Review questions from the current scan; omitted when the process has not scanned. */
+  findings?: readonly ArchitectureFinding[]
+}
+
+export interface ArchitectureFindingInstance {
+  file: string
+  startLine: number
+  endLine: number
+  name: string
+  owner?: string
+}
+
+/** A possible duplicated or similar implementation. Not a collaboration and not a required change. */
+export interface ArchitectureFinding {
+  id: string
+  kind: 'duplicated-logic'
+  title: string
+  match: 'exact' | 'similar'
+  instances: ArchitectureFindingInstance[]
+  differences: string[]
 }
 
 /** A named scenario; steps reference existing relationships in their authored order. */

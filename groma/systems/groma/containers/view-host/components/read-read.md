@@ -18,4 +18,4 @@ groma:
       file: src/viewers/source/highlight.ts
 ---
 
-Reads exact component source, declarations and task file changes for both viewers. It supplies one diff payload for file summaries and opened diffs, and shared syntax tokens that each viewer paints in its own theme.
+Reads exact component source, declarations and task file changes for both viewers. A selected component can also open a peer-owned file. It supplies one diff payload for file summaries and opened diffs, and shared syntax tokens that each viewer paints in its own theme.

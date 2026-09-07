@@ -1,11 +1,13 @@
 import type {
   AnnotatedElement,
+  ArchitectureFinding,
   ArchitectureGraph,
   C4Kind,
   CodeReference,
   Origin,
 } from '../../../types.ts'
 import type { ElementWorkGroup } from '../../../work/pins.ts'
+import { findingsForOwner } from '../../../architecture-findings.ts'
 import { removalBlocker } from '../../../removable.ts'
 import { flowsThrough } from '../../flows.ts'
 import type { FlowRef } from '../../flows.ts'
@@ -14,7 +16,7 @@ import type { FlowRowData } from '../flow/row.ts'
 import { createFlowList } from '../flow/list.ts'
 import type { CodeFile } from '../../source/structure.ts'
 import { paintElementWork } from '../work/component-tasks.ts'
-import { codeList, fileList } from './code-lists.ts'
+import { codeList } from './code-lists.ts'
 import { heading, paragraph } from '../atoms/text.ts'
 import { editButton, isEditing, type EditField } from './editable.ts'
 import type { PaneWrites } from './writes.ts'
@@ -48,6 +50,7 @@ export interface Inspected {
   children: InspectedChild[]
   technology: string[]
   files: CodeReference[]
+  findings: ArchitectureFinding[]
   /** True when groma remove would succeed on it right now. */
   removable: boolean
   /** A draft with scan evidence can be accepted. */
@@ -83,13 +86,12 @@ type Section =
   | 'children'
   | 'technology'
   | 'code'
-  | 'files'
 
 /** The pane's split: meaning on one tab, build evidence on the other. */
 export function tabSections(tab: Exclude<DetailsTab, 'tasks'>): Section[] {
   return tab === 'what'
     ? ['overview', 'relationships', 'flows', 'children']
-    : ['technology', 'code', 'files']
+    : ['technology', 'code']
 }
 
 export function detailsTabs(
@@ -152,6 +154,7 @@ export function inspectDetails(
       .map(part => part.trim())
       .filter(part => part.length > 0),
     files: element.code,
+    findings: findingsForOwner(world.findings ?? [], element.id),
     removable: removalBlocker(world, element.id) === undefined,
     matchedGhost: isMatchedGhost(element),
     movable: element.movable === true,
@@ -286,13 +289,8 @@ export function paintDetails(host: HTMLElement, inspected: Inspected, options: D
     },
 
     code: () => {
-      if (code.length === 0) return
-      body.append(heading('Code'), codeList(code, onSource))
-    },
-
-    files: () => {
-      if (inspected.files.length === 0) return
-      body.append(heading('Files'), fileList(inspected.files, onSource))
+      if (inspected.files.length === 0 && code.length === 0) return
+      body.append(heading('Code'), codeList(inspected.files, code, inspected.findings, inspected.id, onSource))
     },
 
   }
@@ -305,7 +303,6 @@ export function paintDetails(host: HTMLElement, inspected: Inspected, options: D
     paintRemoveControl(body, inspected.title, onRemove)
   }
 }
-
 
 /** Empties the pane while nothing is selected. */
 export function clearDetails(host: HTMLElement): void {

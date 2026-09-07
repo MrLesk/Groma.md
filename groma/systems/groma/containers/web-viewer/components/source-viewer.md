@@ -14,6 +14,7 @@ groma:
       file: src/viewers/web/source/highlight.ts
     - scanner: typescript
       file: src/viewers/web/organisms/code-lists.ts
+      symbol: codeList
 ---
 
-Controls browser source inspection and renders owned file lists, declarations and highlighted code inside Details. Opening code keeps the architecture selection and uses the shared source readers and syntax tokens.
+Controls browser source inspection and renders owned files with nested declarations and highlighted code inside Details. Opening code keeps the architecture selection and uses the shared source readers and syntax tokens. A warning on a method nests its other copies under that method with the same tree as declarations under a file. Back from a file returns How it's built to the same reading position.

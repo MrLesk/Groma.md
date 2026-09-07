@@ -10,6 +10,8 @@ import {
 import { SymbolFlags, type Checker, type Symbol as CompilerSymbol } from 'typescript/unstable/async'
 import type { ScanInvocation, ScanOperation } from '@groma/scanner'
 
+import { tokenizeOperation } from './source-tokens.ts'
+
 interface Values {
   nodes: Node[]
   unresolved: boolean
@@ -225,9 +227,27 @@ export async function sourceOperations(root: string, sources: SourceFile[], chec
   function operation(node: Node): string {
     const { file } = location(root, node)
     const id = `${file}#${node.parent ? node.getStart() : 'module'}`
-    operations.set(id, { id, file, name: operationName(node) })
+    if (!operations.has(id)) {
+      const source = node.getSourceFile()
+      const start = source.getLineAndCharacterOfPosition(node.getStart())
+      const end = source.getLineAndCharacterOfPosition(node.end)
+      operations.set(id, {
+        id,
+        file,
+        name: operationName(node),
+        startLine: start.line + 1,
+        endLine: end.line + 1,
+        tokens: tokenizeOperation(node),
+      })
+    }
     return id
   }
+  function visit(node: Node | undefined): void {
+    if (!node) return
+    if (executable(node)) operation(node)
+    node.forEachChild(child => visit(child))
+  }
+  for (const source of sources) visit(source)
   const invocations: ScanInvocation[] = []
   for (let offset = 0; offset < resolver.calls.length; offset += 256) {
     invocations.push(...(await Promise.all(resolver.calls.slice(offset, offset + 256).map(async call => {

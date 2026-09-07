@@ -5,6 +5,7 @@ import {
   detailsTabAfterSelection,
   detailsTabAfterWork,
   inspectDetails,
+  tabSections,
 } from '../src/viewers/web/organisms/details.ts'
 import type {
   ArchitectureWorld,
@@ -112,6 +113,11 @@ test.concurrent('the Tasks tab exists only while the selected component has link
   expect(detailsTabs(inspected, [{ items: [] }])).toEqual(['what'])
   expect(detailsTabs(inspected, [{ items: [{}] }])).toEqual(['what', 'tasks'])
   expect(detailsTabs({ ...inspected, technology: ['Bun'] }, [])).toEqual(['what', 'how'])
+})
+
+test.concurrent('How shows Code without a separate Files or Findings section', () => {
+  expect(tabSections('what')).toEqual(['overview', 'relationships', 'flows', 'children'])
+  expect(tabSections('how')).toEqual(['technology', 'code'])
 })
 
 test.concurrent('the build tab resets only when the primary selection changes', () => {

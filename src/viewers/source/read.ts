@@ -8,7 +8,7 @@ export interface SourcePayload {
   source: string
 }
 
-/** Reads only a selected component's exact Code file from the same repository revision as its architecture. */
+/** Reads a selected component's Code file, or a peer-owned file opened from that component. */
 export async function readSource(
   repositoryRoot: string,
   world: ArchitectureGraph,
@@ -20,7 +20,9 @@ export async function readSource(
     candidate.kind === 'component'
     && candidate.representationId === elementId
   ))
-  const reference = element?.code.find(candidate => candidate.file === file)
+  if (element === undefined) return undefined
+  const reference = element.code.find(candidate => candidate.file === file)
+    ?? world.elements.flatMap(candidate => candidate.code).find(candidate => candidate.file === file)
   if (reference === undefined) return undefined
 
   const load = async (root: string): Promise<SourcePayload> => {

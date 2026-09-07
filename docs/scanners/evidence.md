@@ -53,6 +53,7 @@ For the first example, the necessary facts are:
 | --- | --- |
 | Operation identity | Identifies a declaration within the observation, independent of aliases used by callers |
 | Source location | Exact repository-relative file and the location needed to identify the declaration or use |
+| Normalized body tokens | Optional binding-normalized token sequence of the operation body, with source range |
 | Invocation | A call or construction made by an operation, with its source location |
 | Provider alternatives | Canonical operations that the supported analysis identifies as possible targets |
 | Unresolved information | Whether additional or unknown targets remain possible within the reported analysis scope |
@@ -62,6 +63,8 @@ parsed for architecture meaning. The executable fields are specified in the
 [plugin guide](creating-a-plugin.md). Core
 must not infer semantics by parsing a compiler's symbol name. Evidence IDs are
 not architecture IDs, and the analysis records do not become durable concepts.
+Core may compare body tokens as [architecture findings](../architecture-findings.md).
+That comparison is not a relationship and not a required refactor.
 
 The following facts require later examples before joining the shared exchange:
 

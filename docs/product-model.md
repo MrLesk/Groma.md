@@ -89,7 +89,9 @@ operation before opening a map.
    architecture Markdown, or Backlog changes; an open page adopts each
    replacement without reloading. Hosting and access control belong to the
    chosen static host, outside Groma.
-3. `groma scan`: scan this repo. Core folds the findings into Markdown.
+3. `groma scan`: scan this repo. Core folds structural scan evidence into Markdown
+   and reports architecture findings in the command summary. Findings are review
+   questions about similar implementations; they are not relationship rows.
    The command prints `ok` and a short summary. It does not print the
    architecture. The scanner alone creates systems, containers, and
    components; nothing writes them by hand.

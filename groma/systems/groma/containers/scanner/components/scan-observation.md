@@ -11,4 +11,4 @@ groma:
       file: packages/scanner/src/index.ts
 ---
 
-Publishes the scanner-module interface and validates complete language-neutral observations for source files, scopes, placements, source dependencies, and diagnostics.
+Publishes the scanner-module interface and validates complete language-neutral observations for source files, scopes, placements, source dependencies, optional operations with tokens, and diagnostics.

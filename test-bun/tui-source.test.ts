@@ -66,6 +66,14 @@ test.concurrent('shared readers return the selected component structure and sour
   const source = await readSource(sourceFixtureRoot, model, null, 'orders', 'src/orders.ts')
   assert.match(source?.source ?? '', /export function placeOrder/)
   assert.equal(await readSource(sourceFixtureRoot, model, null, 'missing', 'src/orders.ts'), undefined)
+  const peer = model.elements.find(element => element.kind === 'component')
+  assert.ok(peer)
+  const world = {
+    ...model,
+    elements: [...model.elements, { ...peer, id: 'peer', representationId: 'peer', code: [] }],
+  }
+  const copy = await readSource(sourceFixtureRoot, world, null, 'peer', 'src/orders.ts')
+  assert.match(copy?.source ?? '', /export function placeOrder/)
 })
 
 test.concurrent('details declarations open source at their exact line and Escape returns', () => {

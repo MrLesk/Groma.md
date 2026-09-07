@@ -87,7 +87,8 @@ Flows; How shows technology and source; Tasks groups related
 work by status. In the
 How tab the Code section lists each file with its line count and the declarations
 under it in authored order; Enter on a declaration opens the source read-only at
-that line. A task record's modified files open their unified diff. Escape returns.
+that line. A method with possible copies lists the other operations beneath it,
+each with its name and file:line; similar copies note that they are not identical. A task record's modified files open their unified diff. Escape returns.
 Task records, source and diffs share a reading layout with up to 80 text columns.
 An open task keeps that width across focus changes when the hierarchy and a
 readable map also fit.

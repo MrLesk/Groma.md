@@ -60,9 +60,15 @@ One successful call returns exactly one complete observation:
 - `placements`: inferred file-to-scope evidence;
 - `relationships`: temporary source-level imports or project references;
 - `operations` and `invocations`: optional temporary operation and wiring evidence;
+  operations may include source ranges and binding-normalized body tokens;
 - `diagnostics`: deterministic scanner messages.
 
 An operation has an opaque observation-local `id`, exact `file`, and `name`.
+It may also supply `startLine`, `endLine`, and `tokens`: a binding-normalized
+sequence of the operation body. Local names become slots; operators, literals,
+property names, and unresolved identifiers stay visible. Core compares those
+tokens to report architecture findings; the scanner does not decide that
+duplication is a problem. Plugins that do not tokenize omit these fields.
 An invocation has its caller operation `source`, canonical operation `targets`,
 one-based call `line`, and an explicit `unresolved` boolean. A named member call
 also supplies `member`. When a concrete argument supplies the invoked value,
