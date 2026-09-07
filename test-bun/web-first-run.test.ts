@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { test } from 'bun:test'
 
-import { hasComponents, isEmptyWorld } from '../src/empty-world.ts'
+import { emptyWorldLines, hasComponents, isEmptyWorld, noComponentsTitle } from '../src/empty-world.ts'
 import type { ArchitectureWorld } from '../src/types.ts'
 import { startWebViewer } from '../src/viewers/web/server.ts'
 import { repositoryRoot } from './helpers.ts'
@@ -46,6 +46,22 @@ async function draft(url: string, input: Record<string, string>): Promise<Respon
     body: JSON.stringify(input),
   })
 }
+
+test.concurrent('an empty live page shows the invitation without a system draft form', async () => {
+  const root = await createEmptyRepo()
+  const server = await startWebViewer(root, { port: 0 })
+  try {
+    const page = await (await fetch(server.url)).text()
+    const empty = page.match(/<section id="empty"[\s\S]*?<\/section>/)?.[0]
+    assert.ok(empty)
+    assert.ok(empty.includes(noComponentsTitle))
+    assert.doesNotMatch(empty, /<form/)
+    assert.doesNotMatch(emptyWorldLines('Shop').join('\n'), /groma draft/)
+  } finally {
+    await server.close()
+    await rm(root, { recursive: true, force: true })
+  }
+})
 
 test.concurrent('drafting from an empty world preserves draft architecture until components exist', async () => {
   const root = await createEmptyRepo()

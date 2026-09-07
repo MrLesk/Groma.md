@@ -1,9 +1,15 @@
 import { TextAttributes } from '@opentui/core'
 import type { OptimizedBuffer } from '@opentui/core'
 
-import { emptyWorldLines } from '../../../empty-world.ts'
+import { emptyWorldLines, noComponentsTitle, typescriptSupportNote } from '../../../empty-world.ts'
 import type { ViewerTheme } from '../atoms/theme.ts'
 import { text } from '../atoms/text.ts'
+
+function emptyLineColor(line: string, projectTitle: string, theme: ViewerTheme) {
+  if (line === noComponentsTitle) return theme.selected
+  if (line === projectTitle || line === typescriptSupportNote) return theme.quiet
+  return theme.foreground
+}
 
 /** Centres the one empty-project invitation in the map pane. */
 export function drawEmptyWorld(
@@ -21,9 +27,9 @@ export function drawEmptyWorld(
       left,
       top + index,
       buffer.width,
-      index === 0 ? theme.selected : theme.foreground,
+      emptyLineColor(line, projectTitle, theme),
       theme.background,
-      index === 0 ? TextAttributes.BOLD : 0,
+      line === noComponentsTitle ? TextAttributes.BOLD : 0,
     )
   }
 }
