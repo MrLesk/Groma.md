@@ -28,6 +28,10 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: ${{ env.BUN_VERSION }}
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
       - name: Install dependencies
         run: bun install --frozen-lockfile
         shell: bash
@@ -45,4 +49,12 @@ jobs:
           fi
           version="$(node -p "JSON.parse(require('fs').readFileSync('package.json', 'utf8')).version")"
           bun scripts/smoke-compiled-build.ts "$binary" "$version"
+        shell: bash
+      - name: Build self-contained Java scanner package
+        if: runner.os != 'Windows'
+        run: bun plugins/scanners/java/build.ts --runtime
+        shell: bash
+      - name: Smoke-test Java without external language runtimes
+        if: runner.os != 'Windows'
+        run: bun scripts/smoke-java-scanner.ts dist/groma plugins/scanners/java/dist/package
         shell: bash

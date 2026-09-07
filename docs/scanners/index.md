@@ -33,6 +33,7 @@ management syntax remain under Advanced commands.
 
 - [TypeScript](typescript/index.md)
 - [C#/.NET](dotnet-csharp/index.md)
+- [Java prototype](java/index.md) — explicit source set, compiler evidence, self-contained package experiment
 - [Shared contract](creating-a-plugin.md)
 
 ## Relationship inference design
