@@ -44,12 +44,11 @@ without a reload. No inbound connection to Groma is opened.
 
 ## Layout
 
-When no components exist, the page invites the developer to create supported
-code or draft a system. An empty world shows the project name and a Draft form
-that posts the same input as `groma draft system`. A world with existing
-architecture keeps its map and navigation beneath a compact, dismissible
-notice. The first component removes the notice without a reload. Historical
-views hide it; a published snapshot offers no form.
+When no components exist, the page invites the developer to write TypeScript.
+An empty world shows the project name, that no component was found, and that
+Groma.md only supports TypeScript projects. A world with existing architecture
+keeps its map and navigation beneath a compact, dismissible notice. The first
+component removes the notice without a reload. Historical views hide it.
 
 The hierarchy Add button is hidden while creation controls are unfinished.
 The element details pane ends with a Remove control only where `groma remove` would

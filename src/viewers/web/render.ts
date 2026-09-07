@@ -76,7 +76,7 @@ const hierarchyToggle = document.getElementById('hierarchy-toggle') as HTMLButto
 const map = createMap(host)
 const edit = data.edit
 const projectEditor = edit === undefined ? undefined : createProjectEditor(input => edit({ id: 'project', ...input }))
-const emptyState = createEmptyState(document.getElementById('empty')!, data.draft)
+const emptyState = createEmptyState(document.getElementById('empty')!)
 if (data.add !== undefined) createAddControl(document.getElementById('add')!, data.add)
 const shell = createWebShell(document.body, hierarchyContent, hierarchyToggle, detailsHost, map.svg)
 const tip = createTip(host)
