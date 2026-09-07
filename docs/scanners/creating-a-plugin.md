@@ -46,6 +46,14 @@ The manifest ID must match the default export. The entry must be a file inside
 the package. Scanner packages are TypeScript or JavaScript modules and must not
 depend on installation scripts.
 
+A plugin may also export `setup(repositoryRoot, args)`. It runs only through
+`groma scanner setup <id> -- [plugin arguments]`, after that scanner has been
+explicitly enabled. Setup owns its language-specific dependency checks and
+explicit installation choices; Groma does not interpret those options. Module
+installation, inventory, scan and watch never invoke setup. Inventory continues
+to inspect manifests without executing plugin code. Packages must still ship
+usable entries without npm installation scripts.
+
 `id` identifies the scanner inside Groma. `matchesFile` receives a
 repository-relative path and lets the shared watch lifecycle decide whether to
 rescan. `scan` receives the repository root and returns one complete
