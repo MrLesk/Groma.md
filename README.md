@@ -25,7 +25,7 @@
     <source media="(prefers-color-scheme: light)" type="image/avif" srcset=".github/assets/web-light.avif">
     <source media="(prefers-color-scheme: light)" type="image/webp" srcset=".github/assets/web-light.webp">
     <source media="(prefers-color-scheme: light)" type="image/gif" srcset=".github/assets/web-light.gif">
-    <img src=".github/assets/web-light.gif" alt="Groma's browser architecture map zoomed into the Web shell component" width="100%">
+    <img src=".github/assets/web-light.gif" alt="Groma's browser map stepping through the flow in which a human architect reviews the architecture in the browser" width="100%">
   </picture>
 </p>
 
