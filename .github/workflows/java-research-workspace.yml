@@ -1,0 +1,60 @@
+name: Java research workspace
+on:
+  push:
+    branches: [research/java-scanner-prototype]
+    paths: [.github/workflows/java-research-workspace.yml]
+permissions:
+  contents: write
+jobs:
+  workspace:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: research/java-scanner-prototype
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.1
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Prepare tools and read project workflow
+        run: |
+          set -euo pipefail
+          bun install --frozen-lockfile
+          npm install --prefix "$RUNNER_TEMP/java-tools" backlog.md@1.51.0
+          export PATH="$RUNNER_TEMP/java-tools/node_modules/.bin:$PATH"
+          backlog instructions overview
+          backlog instructions task-creation
+          backlog instructions task-execution
+          backlog task create --help
+          backlog task edit --help
+          backlog task list --plain
+          bun src/cli.ts agent-instructions
+      - name: Create scoped task through Backlog
+        run: |
+          set -euo pipefail
+          export PATH="$RUNNER_TEMP/java-tools/node_modules/.bin:$PATH"
+          backlog task create 'Prototype a Java scanner with compiler-backed evidence' -d 'Research the Groma scanner contract and Java project support; implement an opt-in Java prototype with compiler-backed source evidence, documented installation and support limits, tests, and a real-repository experiment. Review on research/java-scanner-prototype; do not change the C# scanner.' --ac 'Document scanner contract, Java relationship semantics, project scope, installation and production gates with primary references.' --ac 'Provide a Java compiler-backed scanner prototype through the existing Groma plugin contract without inferring runtime dispatch from declarations.' --ac 'Verify focused fixtures and a pinned public Java repository; report exact commands, results, and unsupported cases.' --ac 'Run the repository check and compiled delivery smoke test, documenting any failures honestly.' --plain
+          backlog task list --plain
+      - name: Collect reproducible local workspace
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/java-export/tools" "$RUNNER_TEMP/java-export/samples"
+          cp "$(command -v bun)" "$RUNNER_TEMP/java-export/tools/bun"
+          cp -a "$RUNNER_TEMP/java-tools" "$RUNNER_TEMP/java-export/tools/backlog"
+          git rev-parse HEAD > "$RUNNER_TEMP/java-export/BASE_COMMIT"
+          git clone --depth 1 https://github.com/apache/commons-lang.git "$RUNNER_TEMP/java-export/samples/commons-lang"
+          git clone --depth 1 https://github.com/spring-projects/spring-petclinic.git "$RUNNER_TEMP/java-export/samples/spring-petclinic"
+          git -C "$RUNNER_TEMP/java-export/samples/commons-lang" rev-parse HEAD
+          git -C "$RUNNER_TEMP/java-export/samples/spring-petclinic" rev-parse HEAD
+          tar --exclude=.git -czf "$RUNNER_TEMP/java-export/repository.tar.gz" .
+          tar --exclude=.git -czf "$RUNNER_TEMP/java-workspace.tar.gz" -C "$RUNNER_TEMP/java-export" .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: java-research-workspace
+          path: ${{ runner.temp }}/java-workspace.tar.gz
+          retention-days: 2
