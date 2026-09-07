@@ -1,6 +1,6 @@
 {
   "name": "groma.md",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Your architecture as Markdown in Git, and one C4 map you can walk. Scanned from source, curated by people and agents.",
   "license": "MIT",
   "author": "Alex Gavrilescu",
