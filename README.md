@@ -48,7 +48,7 @@ groma web     # browser map on http://localhost:4747
 groma view    # terminal map
 ```
 
-Backlog.md provides the tasks shown on the map. macOS requires Apple Silicon.
+Backlog.md provides the tasks shown on the map; Groma works without it. macOS requires Apple Silicon.
 
 ## Use it with your agent
 
@@ -60,6 +60,12 @@ Agents use the same CLI as people. `groma init` registers Groma in your `AGENTS.
 Read the current Groma architecture with `groma agent-instructions` and `groma view --plain`. Compare it with the source code, then annotate the architecture so it reflects the code: combine records that share a responsibility, add missing overviews and relationships, and keep Backlog.md task links current. Use Groma's CLI for architecture changes, then summarize what you changed.
 ```
 
+Any file resolves to the architecture that owns it, so an agent can start from the code it just changed:
+
+```sh
+groma view src/orders.ts    # the architecture record that owns this file
+```
+
 Later scans keep what your agent wrote. [Curation guide](docs/agent-instructions/index.md)
 
 ## What you get
@@ -69,9 +75,9 @@ Later scans keep what your agent wrote. [Curation guide](docs/agent-instructions
 - **Live updates.** Saving code refreshes source evidence and detected relationships; new files become new components.
 - **Relationships and flows.** Describe how components interact, then chain relationships into named flows readers can step through. [Relationships and flows](docs/component-markdown.md)
 - **Drafts.** Sketch systems, containers, and components before they exist. They appear dashed beside the real ones until a scan matches their code and you accept them. [Draft lifecycle](docs/product-model.md#drafts)
-- **Tasks in context.** Backlog.md tasks are pinned where they last touched the architecture, with acceptance criteria and diffs one click away. [Task links](docs/agent-instructions/index.md#backlog-task-links)
-- **History.** Open the architecture as it was at an earlier commit.
-- **Static export.** `groma export ./site` publishes a read-only map that needs no server. [Static publication](docs/viewers/web/index.md#static-publication)
+- **See work across the architecture.** Backlog.md tasks pin where people and agents are working; select one to highlight the components it touches and inspect its changes without leaving the map. [Task links](docs/agent-instructions/index.md#backlog-task-links)
+- **Explore past architecture with its code.** Open an earlier revision and inspect the source from that same commit, down to functions and methods.
+- **Publish an interactive site.** `groma export ./site` writes a standalone map with flows, tasks, diffs, and source; `--watch` regenerates it as the repository changes. [Static publication](docs/viewers/web/index.md#static-publication)
 
 <p align="center">
   <picture>
@@ -94,7 +100,7 @@ The architecture lives in a `groma/` folder as an [Open Knowledge Format 0.2](ht
 | Java | ⏳ Coming soon |
 | Your favorite language or framework | [Submit an issue with your request](https://github.com/MrLesk/Groma.md/issues) |
 
-More languages arrive as [scanner plugins](docs/scanners/creating-a-plugin.md). See [TypeScript support](docs/scanners/typescript/index.md) for what the scanner reads and [which relationships it detects](docs/relationship-inference.md#current-inference-rule).
+More languages arrive as [scanner plugins](docs/scanners/creating-a-plugin.md); add your own with `groma scanner add`. See [TypeScript support](docs/scanners/typescript/index.md) for what the scanner reads and [which relationships it detects](docs/relationship-inference.md#current-inference-rule).
 
 ## Experimental
 
