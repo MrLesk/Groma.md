@@ -13,7 +13,9 @@ Scanners return temporary source and operation evidence. Core applies the
 [shared inference rule](../relationship-inference.md#current-inference-rule)
 and writes selected interactions under `Derived relationships` in
 `relationships.md`. It does not persist raw dependency graphs or put every
-used import on the map. The first rule covers concretely supplied named
+used import on the map. Similar named operations may appear as architecture
+findings after a scan. Those findings are review questions; they are not
+relationship rows and do not merge components. The first relationship rule covers concretely supplied named
 callbacks; ordinary calls and unresolved wiring need further interpretation.
 Each file has one owner in the current profile, and many possible users.
 

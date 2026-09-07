@@ -15,7 +15,7 @@ import { agentInstructionGuide } from './agent-instructions.ts'
 import { ensureInitialized, runInitCommand } from './init-command.ts'
 import { humanInstructionGuide } from './instructions.ts'
 import { registerScannerCommands } from './scanner/cli.ts'
-import { formatScanSummary, scanRepository, watchScan } from './scanner.ts'
+import { formatScanReport, scanRepository, watchScan } from './scanner.ts'
 import {
   renderPlainWelcome,
   startWelcome,
@@ -174,17 +174,19 @@ async function exportWeb(directory: string, watch: boolean): Promise<void> {
 }
 
 async function scanOnce(): Promise<void> {
-  const summary = await scanRepository(process.cwd())
+  const root = process.cwd()
+  const summary = await scanRepository(root)
   console.log('ok')
-  console.log(formatScanSummary(summary))
+  console.log(formatScanReport(root, summary))
 }
 
 async function runScan(watchEnabled: boolean): Promise<void> {
   if (!watchEnabled) return scanOnce()
-  const session = await watchScan(process.cwd(), {
+  const root = process.cwd()
+  const session = await watchScan(root, {
     onFold: summary => {
       console.log('ok')
-      console.log(formatScanSummary(summary))
+      console.log(formatScanReport(root, summary))
     },
     onError: error => {
       console.error(error instanceof Error ? error.message : String(error))

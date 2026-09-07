@@ -56,6 +56,8 @@ export function createSourceControl(options: SourceControlOptions): SourceContro
   let structureRevision: string | undefined
   let codeFiles: readonly CodeFile[] = []
   let structureRequest = 0
+  let openedBy: string | undefined
+  let detailsScrollTop = 0
 
   function closeSource(): void {
     request += 1
@@ -67,6 +69,7 @@ export function createSourceControl(options: SourceControlOptions): SourceContro
 
   function clear(): void {
     closeSource()
+    openedBy = undefined
     structureRequest += 1
     structureElement = undefined
     structureRevision = undefined
@@ -75,15 +78,25 @@ export function createSourceControl(options: SourceControlOptions): SourceContro
 
   function back(): void {
     closeSource()
+    const elementId = options.element()?.representationId
     options.repaint()
+    const restore = (): void => {
+      if (file === undefined && options.element()?.representationId === elementId) {
+        options.host.scrollTop = detailsScrollTop
+      }
+    }
+    restore()
+    // The wider source pane can clamp How it's built scroll until its width settles.
+    void Promise.all(options.host.getAnimations().map(animation => animation.finished)).then(restore, () => {})
   }
 
   async function load(nextFile: string, nextLine?: number): Promise<void> {
     const element = options.element()
-    if (!ownsFile(element, nextFile)) return
+    if (element?.kind !== 'component') return
     const elementId = element.representationId
     const revision = options.revision()
     const activeRequest = ++request
+    openedBy = elementId
     file = nextFile
     line = nextLine
     payload = undefined
@@ -136,6 +149,7 @@ export function createSourceControl(options: SourceControlOptions): SourceContro
       return codeFiles
     },
     open(nextFile, nextLine) {
+      if (file === undefined) detailsScrollTop = options.host.scrollTop
       void load(nextFile, nextLine)
     },
     paint(element) {
@@ -143,7 +157,7 @@ export function createSourceControl(options: SourceControlOptions): SourceContro
         leaveSource(options.host)
         return false
       }
-      if (!ownsFile(element, file)) {
+      if (element === undefined || (element.representationId !== openedBy && !ownsFile(element, file))) {
         clear()
         leaveSource(options.host)
         return false

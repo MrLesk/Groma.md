@@ -47,6 +47,11 @@ export interface ScanOperation {
   id: string
   file: string
   name: string
+  /** Inclusive 1-based lines; required when tokens are present. */
+  startLine?: number
+  endLine?: number
+  /** Binding-normalized tokens for this operation body. Fingerprinting belongs to core. */
+  tokens?: string[]
 }
 
 export interface ScanInvocation {
@@ -259,7 +264,12 @@ function parseOperations(value: Record<string, unknown>): Pick<ScanObservation, 
   }
   const operations = array(value.operations, 'operations').map(entry => {
     const operation = object(entry, 'operation')
-    return { id: string(operation.id, 'operation.id'), file: string(operation.file, 'operation.file'), name: string(operation.name, 'operation.name') }
+    return {
+      id: string(operation.id, 'operation.id'),
+      file: string(operation.file, 'operation.file'),
+      name: string(operation.name, 'operation.name'),
+      ...operationTokens(operation),
+    }
   })
   const invocations = array(value.invocations, 'invocations').map(entry => {
     const invocation = object(entry, 'invocation')
@@ -286,10 +296,45 @@ function operationEvidence(input: ObservationInput, files: Set<string>): Pick<Sc
   const ids = new Set(operations.map(operation => operation.id))
   for (const operation of operations) {
     if (!files.has(operation.file)) throw new Error(`operation references unknown file: ${operation.file}`)
+    validateOperationTokens(operation)
   }
   const invocations = input.invocations ?? []
   for (const invocation of invocations) validateInvocation(invocation, ids, files)
   return { operations, invocations }
+}
+
+function operationTokens(operation: Record<string, unknown>): Pick<ScanOperation, 'startLine' | 'endLine' | 'tokens'> {
+  if (operation.tokens === undefined) {
+    if (operation.startLine !== undefined || operation.endLine !== undefined) {
+      throw new Error('operation range requires tokens')
+    }
+    return {}
+  }
+  if (operation.startLine === undefined || operation.endLine === undefined) {
+    throw new Error('operation tokens require a source range')
+  }
+  if (!Number.isInteger(operation.startLine) || Number(operation.startLine) < 1) {
+    throw new Error('operation.startLine must be a positive integer')
+  }
+  if (!Number.isInteger(operation.endLine) || Number(operation.endLine) < 1) {
+    throw new Error('operation.endLine must be a positive integer')
+  }
+  const startLine = Number(operation.startLine)
+  const endLine = Number(operation.endLine)
+  if (endLine < startLine) throw new Error('operation.endLine must be at or after startLine')
+  return {
+    startLine,
+    endLine,
+    tokens: array(operation.tokens, 'operation.tokens').map(token => string(token, 'operation.token')),
+  }
+}
+
+function validateOperationTokens(operation: ScanOperation): void {
+  operationTokens({
+    tokens: operation.tokens,
+    startLine: operation.startLine,
+    endLine: operation.endLine,
+  })
 }
 
 function validateInvocation(invocation: ScanInvocation, ids: Set<string>, files: Set<string>): void {

@@ -14,4 +14,4 @@ groma:
       symbol: paintRelationship
 ---
 
-Inspects the current architecture or task selection and paints its meaning, relationships, command flows, and build evidence.
+Inspects the current architecture or task selection and paints its meaning, relationships, command flows, and build evidence. How it's built shows technology and Code; a warning nests copies under matching operations.

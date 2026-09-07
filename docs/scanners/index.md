@@ -39,6 +39,8 @@ management syntax remain under Advanced commands.
 
 The [inference design](../relationship-inference.md) records the accepted
 direction for deriving architecture relationships from temporary scanner facts.
+[Architecture findings](../architecture-findings.md) record duplicated and
+similar operations as review questions, not map collaborations.
 [Scanner evidence](evidence.md) defines the language-neutral semantics and
 verified examples. Core writes selected derived interactions in Markdown; it
 does not persist the raw analysis graph. The [plugin guide](creating-a-plugin.md)

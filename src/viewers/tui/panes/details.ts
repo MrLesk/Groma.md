@@ -1,5 +1,6 @@
 import { TextAttributes } from '@opentui/core'
 
+import { copiesOf, type OperationCopies } from '../../../architecture-findings.ts'
 import { actionCaption, outgoingActions } from '../../relationship-text.ts'
 import { kindLabel } from '../../atoms/kind.ts'
 import type { ProjectProfile } from '../../../project-profile.ts'
@@ -13,6 +14,7 @@ import { workListLines } from './hierarchy.ts'
 import { taskFileRows } from './code.ts'
 import type {
   AnnotatedElement,
+  ArchitectureFinding,
   ArchitectureFlow,
   AnnotatedRelationship,
   WorkChecklistItem,
@@ -39,24 +41,57 @@ function technologyRows(theme: ViewerTheme, element: AnnotatedElement, width: nu
 }
 
 /** A function with its parentheses, a class, or a member: its line and what it is. */
-function declarationRows(theme: ViewerTheme, file: string, declaration: CodeDeclaration, width: number, actionCursor: string | undefined, indent = ''): PaneLines {
+function declarationRows(
+  theme: ViewerTheme,
+  file: string,
+  declaration: CodeDeclaration,
+  width: number,
+  actionCursor: string | undefined,
+  findings: readonly ArchitectureFinding[],
+  indent = '',
+): PaneLines {
   const facts = [declaration.entry ? 'entry' : undefined, declaration.scope, declaration.kind === 'class' ? 'class' : undefined, `line ${declaration.line}`].filter(fact => fact !== undefined).join(' · ')
   const name = declaration.kind === 'function' ? `${declaration.name}()` : declaration.name
   const key = `${file}:${declaration.line}`
   const lines: Line[] = [styleRow(theme, [plain(theme, `${indent}${name}`), dim(theme, ` · ${facts}`)], width, false, key === actionCursor)]
   let cursor = key === actionCursor ? 0 : undefined
+  lines.push(...copyLines(theme, copiesOf(findings, file, declaration.name, declaration.line), width, `${indent}  `))
   if (declaration.kind === 'class') {
     for (const member of declaration.members) {
       const memberKey = `${file}:${member.line}`
       if (memberKey === actionCursor) cursor = lines.length
       lines.push(styleRow(theme, [plain(theme, `${indent}  ${member.name}()`), dim(theme, ` · ${member.scope} · line ${member.line}`)], width, false, memberKey === actionCursor))
+      lines.push(...copyLines(theme, copiesOf(findings, file, member.name, member.line), width, `${indent}    `))
     }
   }
   return { lines, cursor }
 }
 
+function copyLines(
+  theme: ViewerTheme,
+  copies: OperationCopies | undefined,
+  width: number,
+  indent: string,
+): Line[] {
+  if (copies === undefined) return []
+  const lines: Line[] = []
+  for (const copy of copies.copies) {
+    lines.push(...wrap(`${copy.name}()`, Math.max(1, width - indent.length)).map(row => [plain(theme, `${indent}${row}`)]))
+    lines.push(...wrap(`${copy.file}:${copy.startLine}`, Math.max(1, width - indent.length)).map(row => [dim(theme, `${indent}${row}`)]))
+  }
+  if (copies.similar) lines.push([dim(theme, `${indent}not identical`)])
+  return lines
+}
+
 /** Each file with its line count, then its declarations in authored order once the structure is read. */
-function codeRows(theme: ViewerTheme, element: AnnotatedElement, width: number, structure: readonly CodeFile[] | undefined, actionCursor: string | undefined): PaneLines {
+function codeRows(
+  theme: ViewerTheme,
+  element: AnnotatedElement,
+  width: number,
+  structure: readonly CodeFile[] | undefined,
+  actionCursor: string | undefined,
+  findings: readonly ArchitectureFinding[],
+): PaneLines {
   if (element.code.length === 0) return { lines: [] }
   const lines: Line[] = [[], heading(theme, 'Code', width)]
   let cursor: number | undefined
@@ -67,7 +102,7 @@ function codeRows(theme: ViewerTheme, element: AnnotatedElement, width: number, 
     const count = reference.lines === undefined ? '' : ` · ${reference.lines} lines`
     lines.push([plain(theme, reference.file), dim(theme, count)])
     for (const declaration of structure?.find(file => file.file === reference.file)?.declarations ?? []) {
-      const rows = declarationRows(theme, reference.file, declaration, width, actionCursor, '  ')
+      const rows = declarationRows(theme, reference.file, declaration, width, actionCursor, findings, '  ')
       if (rows.cursor !== undefined) cursor = lines.length + rows.cursor
       lines.push(...rows.lines)
     }
@@ -75,8 +110,8 @@ function codeRows(theme: ViewerTheme, element: AnnotatedElement, width: number, 
   return { lines, cursor }
 }
 
-function howLines(theme: ViewerTheme, element: AnnotatedElement, width: number, actionCursor: string | undefined, structure: readonly CodeFile[] | undefined): PaneLines {
-  const code = codeRows(theme, element, width, structure, actionCursor)
+function howLines(theme: ViewerTheme, element: AnnotatedElement, world: TerminalViewModel, width: number, actionCursor: string | undefined, structure: readonly CodeFile[] | undefined): PaneLines {
+  const code = codeRows(theme, element, width, structure, actionCursor, world.findings ?? [])
   const technology = technologyRows(theme, element, width)
   return { lines: [...technology, ...code.lines], cursor: code.cursor === undefined ? undefined : technology.length + code.cursor }
 }
@@ -183,7 +218,7 @@ export function detailsLines(
   const body = tab === 'tasks'
     ? componentTaskLines(theme, element, world, width, actionCursor, workList)
     : tab === 'how'
-    ? howLines(theme, element, width, actionCursor, structure)
+    ? howLines(theme, element, world, width, actionCursor, structure)
     : whatLines(theme, element, world, byId, width, activeActionId, actionCursor)
   return {
     lines: [head, ...body.lines],

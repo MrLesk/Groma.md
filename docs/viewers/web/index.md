@@ -222,13 +222,17 @@ on or inside the selected element. Each opens the same flow reader as the
 hierarchy. Actors keep their real relationships and their authored flows.
 How it's built holds the evidence: the technology the element's Markdown
 declares (`groma.technology: SVG, Bun serve` renders as one chip per
-comma-separated part), named TypeScript structure under Code, and exact
-authored source references with file measurements under Files. Code follows
-the authored file order. It includes exported and module-private top-level
+comma-separated part), and named TypeScript structure under Code. Code follows
+the authored file order. Each file is the full path; its measurements sit on
+hover. Declarations nest under that file. It includes exported and module-private top-level
 callables; named classes group their public, protected, and private methods.
 The Code reference symbol is marked as the entry point, while nested callbacks
 stay out. A declaration opens read-only source at its visibly marked line; a
-file opens at the top. Elements without build evidence do not show the tab. Children and
+file opens at the top. Back from a file returns How it's built to the same
+reading position. A method with possible copies shows a warning labeled possible duplicates;
+the warning expands the other copies nested under that method, each with
+the operation name and its file:line. Similar copies note that they are not
+identical. Elements without build evidence do not show the tab. Children and
 relationship peers select that element.
 
 The flow reader shows its overview and every ordered action. Opening a flow from
@@ -439,7 +443,8 @@ marks every selected element, and the last item selected owns the details pane.
 Selections made outside the map fit the combined architecture selection.
 Removing that item returns details to the previous item. Selecting a different
 architecture item or task starts its details at the heading. Returning from a
-task file diff with Back restores the task's previous reading position. Click empty
+task file diff or from component source with Back restores the previous reading
+position. Click empty
 sheet or press Escape to clear the selection, active flows, and active tasks;
 the details pane closes. Click the boxed isometric pencil in the title plate to
 open the upright project-profile editor beside it. Its bounded Write view keeps

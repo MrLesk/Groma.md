@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises'
 import path from 'node:path'
 
+import { architectureFindingsFor } from './architecture-findings.ts'
 import { buildArchitectureModel, draftRecordOf } from './architecture-model.ts'
 import { loadArchitecture } from './architecture-reader.ts'
 import { resolveFlows } from './flow-model.ts'
@@ -136,5 +137,6 @@ export async function loadAnnotatedArchitecture(
 ): Promise<AnnotatedArchitectureModel> {
   const model = annotateArchitecture(await loadArchitecture(repositoryRoot, options))
   await attachCodeLines(repositoryRoot, model.elements)
-  return model
+  const findings = architectureFindingsFor(repositoryRoot)
+  return findings.length === 0 ? model : { ...model, findings }
 }

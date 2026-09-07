@@ -13,4 +13,4 @@ groma:
       file: src/viewers/tui/panes/code.ts
 ---
 
-Renders the selected architecture, flow and task in What, How and Tasks. It presents task definitions, file change summaries, numbered source and unified diffs, and supplies exact reading-row links for opening files and references.
+Renders the selected architecture, flow and task in What, How and Tasks. How lists each copy under its operation as a name and file:line. It presents task definitions, file change summaries, numbered source and unified diffs, and supplies exact reading-row links for opening files and references.
