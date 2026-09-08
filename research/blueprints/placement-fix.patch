@@ -1,0 +1,47 @@
+--- a/research/blueprints/app.ts
++++ b/research/blueprints/app.ts
+@@ -30,6 +30,7 @@
+ let selected: string | undefined
+ let previousMode: Mode = 'catalogue'
+ let error = ''
++let viewGeneration = 0
+ let theme = ['light', 'dark', 'blueprint'].includes(params.get('theme') ?? '') ? params.get('theme')! : 'light'
+ 
+ $('#app').innerHTML = `<header class="topbar chrome">
+@@ -56,6 +57,7 @@
+   return mode === 'preview' ? placement?.draft : mode === 'draft' ? draft : undefined
+ }
+ function render(): void {
++  viewGeneration += 1
+   $('#toast').hidden = true
+   document.documentElement.dataset.theme = theme
+   $('#theme').setAttribute('data-mode', theme)
+@@ -103,8 +105,9 @@
+ }
+ async function copy(value: Blueprint): Promise<void> {
+   if (!navigator.clipboard) throw new Error('Clipboard access is unavailable. Open Blueprint text to copy manually.')
++  const generation = viewGeneration
+   await navigator.clipboard.writeText(encodeBlueprint(value))
+-  announce('Blueprint copied. Open another fixture or tab and paste to place it.')
++  if (generation === viewGeneration) announce('Blueprint copied. Open another fixture or tab and paste to place it.')
+ }
+ function textDialog(markdown: boolean): void {
+   const value = mode === 'draft' ? copyDraftIntent(draft!) : blueprint
+--- a/research/blueprints/capture.py
++++ b/research/blueprints/capture.py
+@@ -158,6 +158,7 @@
+     check('Narrow layout keeps primary actions visible', bool(footer and footer['y'] + footer['height'] <= 932))
+     capture(target, '09-mobile-draft.png')
+     action(target, 'copy-draft')
++    target.locator('#toast').wait_for(state='visible')
+     check('Narrow copy feedback does not cover the action buttons', target.locator('.panel-footer button').evaluate_all("""buttons => buttons.every(button => {
+         const r = button.getBoundingClientRect();
+         const hit = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2);
+--- a/research/blueprints/FINDINGS.md
++++ b/research/blueprints/FINDINGS.md
+@@ -96,3 +96,5 @@
+ ## Visual-review correction
+ 
+ The first captured narrow layout showed persistent save feedback covering the footer actions, despite a passing viewport-bounds assertion. The redundant save message was removed. Copy feedback now occupies an ordinary inspector row rather than overlaying the controls, and a repaint dismisses the old feedback. Browser validation now hit-tests the action buttons while that message is present. This checks the observable ability to act rather than decorative placement.
++
++The follow-up browser run also exposed delayed clipboard feedback arriving after a repaint. Copy completion now checks the view generation before announcing. The mobile check explicitly waits for feedback to appear before hit-testing, so a hidden message cannot produce a vacuous pass.
