@@ -55,8 +55,9 @@ function selectCurrent(id: string): void {
   mode = 'current'
   render()
 }
+function workMode(): Mode { return mode === 'current' ? previousMode : mode }
 function currentDraft(): Draft | undefined {
-  const context = mode === 'current' ? previousMode : mode
+  const context = workMode()
   return context === 'preview' ? placement?.draft : context === 'draft' ? draft : undefined
 }
 function render(): void {
@@ -66,9 +67,10 @@ function render(): void {
   $('#theme').setAttribute('data-mode', theme)
   $<HTMLSelectElement>('#theme').value = theme
   const visible = currentDraft()
+  const context = workMode()
   $('#hierarchy').innerHTML = hierarchy(project, visible)
   $('#draft-list').innerHTML = project.drafts.map(item => `<button class="draft-row" data-draft="${e(item.id)}"><span class="draft-glyph"></span><span>${e(item.title)}<small>${e(item.id)}</small></span></button>`).join('') || '<div class="empty-drafts">No drafts yet</div>'
-  $('#context').innerHTML = mode === 'preview' ? '<span class="draft-glyph"></span> Preview · nothing saved' : mode === 'draft' ? `<span class="draft-glyph"></span> Draft: ${e(draft!.title)}` : 'Current architecture'
+  $('#context').innerHTML = context === 'preview' ? '<span class="draft-glyph"></span> Preview · nothing saved' : context === 'draft' ? `<span class="draft-glyph"></span> Draft: ${e(draft!.title)}` : 'Current architecture'
   const panels = {
     catalogue: () => catalogue(library),
     bindings: () => bindingPanel(project, blueprint, bindings),
@@ -85,7 +87,7 @@ function announce(message: string): void {
   $('#toast').textContent = message; $('#toast').hidden = false
 }
 function pending(): boolean {
-  const context = mode === 'current' ? previousMode : mode
+  const context = workMode()
   return context === 'bindings' || context === 'preview'
 }
 function discard(): boolean { return !pending() || confirm('Discard this unsaved blueprint placement?') }
