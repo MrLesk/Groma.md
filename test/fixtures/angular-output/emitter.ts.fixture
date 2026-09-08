@@ -1,0 +1,12 @@
+import { Component, output } from '@angular/core'
+
+@Component({ selector: 'sample-editor', standalone: true, templateUrl: './emitter.html' })
+export class Editor {
+  saved = output<string>()
+  save() {
+    const completed = (value: string) => {
+      this.saved.emit(value)
+    }
+    completed('ready')
+  }
+}

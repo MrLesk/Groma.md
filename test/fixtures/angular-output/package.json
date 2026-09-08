@@ -1,0 +1,7 @@
+{
+  "name": "output-fixture",
+  "private": true,
+  "dependencies": {
+    "@angular/core": "21.2.17"
+  }
+}
