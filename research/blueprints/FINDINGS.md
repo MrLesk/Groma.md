@@ -92,3 +92,7 @@ The following gates are ordered, not implemented commitments:
 Repository contracts: [architecture Markdown](../../docs/component-markdown.md), [product model](../../docs/product-model.md), [web viewer](../../docs/viewers/web/index.md), and [repository instructions](../../AGENTS.md). These explain current behavior, not the research format.
 
 External design precedents: [Factorio blueprints](https://wiki.factorio.com/Blueprint), [blueprint library](https://wiki.factorio.com/Blueprint_library), [C4 components](https://c4model.com/abstractions/components), [OKF 0.2](https://github.com/GoogleCloudPlatform/open-knowledge-format/blob/main/SPEC.md). Tooling references: [Playwright Python browser installation](https://playwright.dev/python/docs/browsers), [Biome nested project configuration](https://biomejs.dev/guides/big-projects/).
+
+## Visual-review correction
+
+The first captured narrow layout showed persistent save feedback covering the footer actions, despite a passing viewport-bounds assertion. The redundant save message was removed. Copy feedback now occupies an ordinary inspector row rather than overlaying the controls, and a repaint dismisses the old feedback. Browser validation now hit-tests the action buttons while that message is present. This checks the observable ability to act rather than decorative placement.

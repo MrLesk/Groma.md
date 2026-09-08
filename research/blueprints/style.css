@@ -38,8 +38,8 @@ select { background: var(--paper); border: 1px solid var(--hairline); border-rad
 #map .project-edit { display: none; }
 .context { position: fixed; left: 282px; top: 90px; z-index: 2; display: flex; align-items: center; gap: 12px; padding: 10px 14px; font-size: 11px; }
 .context .draft-glyph { width: 12px; height: 12px; margin: 0; }
-.inspector { position: fixed; right: 14px; top: 88px; bottom: 46px; width: 456px; overflow: hidden; z-index: 3; }
-#panel { height: 100%; display: flex; flex-direction: column; }
+.inspector { position: fixed; right: 14px; top: 88px; bottom: 46px; width: 456px; overflow: hidden; z-index: 3; display: flex; flex-direction: column; }
+#panel { min-height: 0; flex: 1; display: flex; flex-direction: column; }
 .panel-head { padding: 22px 24px 18px; border-bottom: 1px solid var(--hairline); }
 .eyebrow { color: var(--muted); text-transform: uppercase; font-size: 9px; letter-spacing: .12em; }
 h1 { font-size: 20px; font-weight: 500; line-height: 1.4; margin: 8px 0 0; letter-spacing: -.04em; overflow-wrap: anywhere; }
@@ -96,7 +96,7 @@ p { margin: 8px 0; }
 .file-row { font-size: 11px; overflow-wrap: anywhere; border-bottom: 1px solid var(--hairline); padding: 7px 0; }
 .study-label { position: fixed; left: 20px; bottom: 13px; color: var(--muted); font-size: 9px; letter-spacing: .1em; display: flex; align-items: center; gap: 9px; }
 .study-dot { height: 5px; width: 5px; border-radius: 50%; background: var(--accent); }
-#toast { position: fixed; bottom: 52px; left: 290px; max-width: calc(100% - 820px); padding: 13px 16px; border: 1px solid var(--hairline); border-radius: 6px; background: var(--paper); color: var(--accent-text); font-size: 11px; z-index: 8; }
+#toast { flex: none; padding: 12px 20px; border-top: 1px solid var(--hairline); background: var(--paper); color: var(--accent-text); font-size: 11px; }
 #error { position: absolute; z-index: 8; top: 0; left: 0; right: 0; background: var(--paper); border: 1px solid #b42318; color: var(--ink); padding: 14px; box-shadow: 0 8px 16px #0001; }
 dialog { width: min(620px, calc(100% - 28px)); border: 1px solid var(--hairline); border-radius: 10px; padding: 26px; color: var(--ink); background: var(--paper); }
 dialog::backdrop { background: #0006; backdrop-filter: blur(3px); }
@@ -110,14 +110,12 @@ textarea { width: 100%; resize: vertical; border: 1px solid var(--hairline); bor
   .sidebar { width: 216px; }
   #map { left: 242px; }
   .context { left: 246px; max-width: 300px; }
-  #toast { left: 246px; max-width: calc(100% - 746px); }
   .revision { display: none; }
 }
 @media (max-width: 1000px) {
   .sidebar { display: none; }
   #map { left: 14px; }
   .context { left: 22px; }
-  #toast { left: 22px; max-width: calc(100% - 506px); }
 }
 @media (max-width: 720px) {
   .topbar { height: 54px; top: 8px; left: 8px; right: 8px; padding: 0 10px; gap: 8px; }
@@ -133,7 +131,6 @@ textarea { width: 100%; resize: vertical; border: 1px solid var(--hairline); bor
   .context { display: none; }
   .mobile-switch { display: block; position: fixed; bottom: 10px; right: 10px; z-index: 7; }
   .study-label { left: 14px; bottom: 22px; font-size: 7px; max-width: 220px; }
-  #toast { left: 14px; right: 14px; bottom: 69px; max-width: none; }
   .mobile-map .inspector { display: none; }
   .mobile-map .context { display: flex; left: 14px; top: 76px; max-width: calc(100% - 28px); }
 }

@@ -40,10 +40,10 @@ $('#app').innerHTML = `<header class="topbar chrome">
   <label class="theme-label"><select id="theme" aria-label="Theme"><option value="light">Light</option><option value="dark">Dark</option><option value="blueprint">Blueprint</option></select></label>
 </header><aside class="sidebar chrome"><div class="sidebar-title">Architecture</div><div id="hierarchy"></div><div class="section-label drafts-label">Drafts</div><div id="draft-list"></div><div class="sidebar-foot"><span class="kind-mark"></span>Current <span class="kind-mark ghost"></span>New part</div></aside>
 <div id="map" aria-label="Fixture architecture"></div><div class="context chrome" id="context"></div>
-<aside id="inspector" class="inspector chrome"><div id="error" role="alert" hidden></div><div id="panel"></div></aside>
+<aside id="inspector" class="inspector chrome"><div id="error" role="alert" hidden></div><div id="panel"></div><div id="toast" role="status" hidden></div></aside>
 <div class="mobile-switch">${button('Map / Details', 'mobile-map', 'secondary')}</div>
 <div class="study-label"><span class="study-dot"></span>BLUEPRINT RESEARCH · FIXTURE DATA ONLY</div>
-<div id="toast" role="status" hidden></div><dialog id="dialog"><div id="dialog-body"></div></dialog>`
+<dialog id="dialog"><div id="dialog-body"></div></dialog>`
 const map = studyMap($('#map'), id => selectCurrent(id))
 function selectCurrent(id: string): void {
   if (!project.elements.some(element => element.id === id)) return
@@ -56,6 +56,7 @@ function currentDraft(): Draft | undefined {
   return mode === 'preview' ? placement?.draft : mode === 'draft' ? draft : undefined
 }
 function render(): void {
+  $('#toast').hidden = true
   document.documentElement.dataset.theme = theme
   $('#theme').setAttribute('data-mode', theme)
   $<HTMLSelectElement>('#theme').value = theme
@@ -128,7 +129,6 @@ const actions: Record<string, () => void | Promise<void>> = {
   create: () => {
     project = commitPlacement(localStorage, storageKey(project.id), project, placement!)
     draft = project.drafts.at(-1)!; placement = undefined; mode = 'draft'; render()
-    announce('Draft saved in this fixture. Current architecture is unchanged.')
   },
   cancel: () => { placement = undefined; mode = 'catalogue'; render() },
   catalogue: () => { if (discard()) { placement = undefined; mode = 'catalogue'; render() } },

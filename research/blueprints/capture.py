@@ -157,6 +157,14 @@ def primary(browser, base):
     footer = target.locator('.panel-footer').bounding_box()
     check('Narrow layout keeps primary actions visible', bool(footer and footer['y'] + footer['height'] <= 932))
     capture(target, '09-mobile-draft.png')
+    action(target, 'copy-draft')
+    check('Narrow copy feedback does not cover the action buttons', target.locator('.panel-footer button').evaluate_all("""buttons => buttons.every(button => {
+        const r = button.getBoundingClientRect();
+        const hit = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2);
+        return r.top >= 0 && r.bottom <= innerHeight && (hit === button || button.contains(hit));
+    })"""))
+    target.locator('#theme').select_option('dark')
+    check('Changing context dismisses obsolete copy feedback', target.locator('#toast').is_hidden())
     check('No external network requests', not NETWORK)
     context.close()
     return text
