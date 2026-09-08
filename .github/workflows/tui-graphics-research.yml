@@ -2,7 +2,7 @@ name: Publish TUI graphics research
 on:
   push:
     branches: [research/tui-graphics-prototype]
-    paths: [research/tui-graphics-delivery.b64]
+    paths: [research/tui-graphics-delivery-4.b64]
 permissions:
   contents: write
 jobs:
@@ -18,7 +18,8 @@ jobs:
         run: |
           python3 - <<'PY'
           import base64, hashlib, lzma, pathlib, subprocess
-          patch = lzma.decompress(base64.b64decode(pathlib.Path('research/tui-graphics-delivery.b64').read_text()))
+          encoded = ''.join(pathlib.Path(f'research/tui-graphics-delivery-{i}.b64').read_text().strip() for i in range(1, 5))
+          patch = lzma.decompress(base64.b64decode(encoded))
           assert hashlib.sha256(patch).hexdigest() == '4aaa15a366d4da771034a9e53085af1944b56ca1feac9ac54150422f581c4c81'
           subprocess.run(['git', 'apply', '--index', '-'], input=patch, check=True)
           PY
@@ -34,7 +35,7 @@ jobs:
       - name: Publish only the research branch and remove temporary delivery files
         run: |
           test "$GITHUB_REF" = 'refs/heads/research/tui-graphics-prototype'
-          git rm .github/workflows/tui-graphics-research.yml research/tui-graphics-delivery.b64
+          git rm .github/workflows/tui-graphics-research.yml research/tui-graphics-delivery-*.b64
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git commit -m 'TASK-324 - Render the terminal map as keyboard-first graphics'
