@@ -30,7 +30,7 @@ function scannerPlugin(value: unknown, expectedId: string): ScannerPlugin {
   return candidate as ScannerPlugin
 }
 
-async function importScanner(entry: string, id: string): Promise<ScannerPlugin> {
+export async function importScanner(entry: string, id: string): Promise<ScannerPlugin> {
   const module: unknown = await import(pathToFileURL(entry).href)
   const exported = module as { default?: unknown }
   return scannerPlugin(exported.default, id)

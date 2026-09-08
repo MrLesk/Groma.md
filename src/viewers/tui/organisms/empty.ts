@@ -1,13 +1,13 @@
 import { TextAttributes } from '@opentui/core'
 import type { OptimizedBuffer } from '@opentui/core'
 
-import { emptyWorldLines, noComponentsTitle, typescriptSupportNote } from '../../../empty-world.ts'
+import { emptyWorldLines, noComponentsTitle, scannerSupportNote } from '../../../empty-world.ts'
 import type { ViewerTheme } from '../atoms/theme.ts'
 import { text } from '../atoms/text.ts'
 
 function emptyLineColor(line: string, projectTitle: string, theme: ViewerTheme) {
   if (line === noComponentsTitle) return theme.selected
-  if (line === projectTitle || line === typescriptSupportNote) return theme.quiet
+  if (line === projectTitle || line === scannerSupportNote) return theme.quiet
   return theme.foreground
 }
 

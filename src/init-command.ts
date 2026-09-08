@@ -13,6 +13,7 @@ import {
 import { formatScanSummary, scanRepository } from './scanner.ts'
 import { NOT_INITIALIZED, type GromaDirectory } from './groma-filesystem.ts'
 import { c4Kind } from './okf-profile.ts'
+import { setupScanners, type ScannerSetupUi } from './scanner/modules/setup.ts'
 
 export type InitViewer = 'web' | 'view'
 export type PackageInstaller = 'brew' | 'bun' | 'npm'
@@ -26,7 +27,7 @@ export interface InitCommandInput {
   opensViewer?: boolean
 }
 
-export interface InitCommandUi {
+export interface InitCommandUi extends ScannerSetupUi {
   cancel(message: string): void
   confirmBacklogInstall(): Promise<boolean | undefined>
   confirmInit(): Promise<boolean | undefined>
@@ -56,6 +57,7 @@ export interface InitCommandDependencies extends RepositoryInitDependencies {
   install(installer: PackageInstaller): Promise<boolean>
   output(message: string): void
   scan(repositoryRoot: string): ReturnType<typeof scanRepository>
+  setupScanners: typeof setupScanners
   ui: InitCommandUi
 }
 
@@ -192,6 +194,7 @@ const defaultDependencies: InitCommandDependencies = {
   install: installBacklog,
   output: message => console.log(message),
   scan: scanRepository,
+  setupScanners,
   ui: clackUi,
 }
 
@@ -357,6 +360,7 @@ export async function runInitCommand(
     if (!input.interactive) {
       dependencies.output(completed)
       dependencies.output(`Groma folder: ${result.directory}/`)
+      await dependencies.setupScanners(input.repositoryRoot, false, ui, dependencies.output)
       return 'completed'
     }
 
@@ -366,6 +370,7 @@ export async function runInitCommand(
       ui.outro(completed)
       return 'completed'
     }
+    if (!await dependencies.setupScanners(input.repositoryRoot, true, ui, dependencies.output)) cancelled()
     await offerFirstScan(input, dependencies, actions, completed)
     return 'completed'
   } catch (error) {

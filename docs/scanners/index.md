@@ -22,8 +22,10 @@ so the first edit can update the open map.
 Optional modules are enabled only through `scanners.json` in the selected
 `groma/` or `.groma/` directory, normally written by `groma scanner add`.
 `groma scanner list` derives built-in, found,
-and missing readiness without executing third-party code. Network installation
-happens only in `scanner add` and `scanner install`.
+and missing package availability without executing third-party code.
+`groma scanner check` runs enabled plugins' project preparation checks.
+Network installation happens only after explicit selection in setup,
+`scanner add`, or `scanner install`.
 
 Bare `groma` shows scanner readiness beside the embedded Backlog work-source
 readiness in one fixed bottom row. The complete scanner inventory and scanner
@@ -32,6 +34,7 @@ management syntax remain under Advanced commands.
 ## Scanners
 
 - [Discover project technologies and official scanner candidates](discovery.md)
+- [Select scanners and check project readiness](setup.md)
 - [TypeScript](typescript/index.md)
 - [C#/.NET](dotnet-csharp/index.md)
 - [Shared contract](creating-a-plugin.md)

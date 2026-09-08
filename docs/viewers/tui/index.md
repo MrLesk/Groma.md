@@ -2,10 +2,10 @@
 
 Run `groma view` to scan the repository and inspect its architecture in a
 terminal. If the Groma directory, index, or project record is missing, an
-interactive terminal offers initialization before scanning. Plain inspection
+interactive terminal offers initialization and scanner selection before scanning. Plain inspection
 instead prints one actionable initialization message and exits.
-A successful scan with no components invites TypeScript work: Groma.md only
-supports TypeScript projects. Existing architecture stays navigable, and watched
+A successful scan with no components points to `groma scanner setup` for a
+coverage review. TypeScript is embedded; other languages use optional packages. Existing architecture stays navigable, and watched
 source changes update the map. Startup failures report the actual issue without
 a stack trace.
 The screen has a header, a hierarchy pane, a map, a details pane, and

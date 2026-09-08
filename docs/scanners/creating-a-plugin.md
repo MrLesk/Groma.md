@@ -51,6 +51,14 @@ repository-relative path and lets the shared watch lifecycle decide whether to
 rescan. `scan` receives the repository root and returns one complete
 observation.
 
+A plugin may also implement `async checkReadiness(repositoryRoot): Promise<void>`.
+Return when the required installed tools and project preparation are available;
+throw an error with concrete user instructions otherwise. Reuse the same
+validation in `scan` so preparation does not depend on running a separate
+command first. The hook must not install development tools or project
+dependencies. Groma presents its failure alongside package availability.
+Plugins without a hook are reported as unchecked and remain scannable.
+
 One successful call returns exactly one complete observation:
 
 - `scanner`: language and engine identity;

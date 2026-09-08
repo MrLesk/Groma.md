@@ -86,6 +86,8 @@ export interface ScanObservation {
 export interface ScannerPlugin {
   id: string
   matchesFile(relativePath: string): boolean
+  /** Check installed tools and project preparation; throw concrete instructions when blocked. */
+  checkReadiness?(repositoryRoot: string): Promise<void>
   scan(repositoryRoot: string): Promise<ScanObservation | undefined>
 }
 

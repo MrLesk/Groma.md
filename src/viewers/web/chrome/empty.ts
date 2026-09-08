@@ -1,4 +1,4 @@
-import { hasComponents, isEmptyWorld, noComponentsHint, noComponentsTitle, typescriptSupportNote } from '../../../empty-world.ts'
+import { hasComponents, isEmptyWorld, noComponentsHint, noComponentsTitle, scannerSupportNote } from '../../../empty-world.ts'
 import type { ProjectProfile } from '../../../project-profile.ts'
 import type { ArchitectureGraph } from '../../../types.ts'
 import { escaped } from '../atoms/escape.ts'
@@ -33,13 +33,13 @@ export const emptyStateCss = `
   #empty.has-architecture .dismiss { display: block; position: absolute; right: 10px; top: 8px; border: 0; padding: 2px 5px; }
 `
 
-/** An empty map invites TypeScript work; existing architecture keeps its map beneath a compact notice. */
+/** An empty map offers scanner setup; existing architecture keeps its map beneath a compact notice. */
 export function emptyState(payload: WebBootPayload): string {
   const hidden = payload.revision === null && !hasComponents(payload.world) ? '' : ' hidden'
   const className = isEmptyWorld(payload.world) ? '' : ' class="has-architecture"'
   return `<section id="empty" aria-label="Empty map"${className}${hidden}><div class="empty-card">`
     + `<p class="project">${escaped(payload.project?.title ?? '')}</p><h1>${noComponentsTitle}</h1>`
-    + `<p class="hint">${noComponentsHint}</p><p class="note">${typescriptSupportNote}</p>`
+    + `<p class="hint">${noComponentsHint}</p><p class="note">${scannerSupportNote}</p>`
     + '<button class="dismiss" type="button" aria-label="Dismiss no-components message">×</button></div></section>'
 }
 

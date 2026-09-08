@@ -3,8 +3,10 @@
 The web plugin shows Groma's world in a browser. `groma web` starts it.
 If the Groma directory, index, or project record is missing, the local server
 shows browser setup for the project name and architecture folder. An existing
-folder keeps its location. Initialize & scan uses the shared initialization
-operation, scans automatically, and opens the map at the same address.
+folder keeps its location. Continue uses the shared initialization operation,
+then shows discovered technologies and scanner selection. Check readiness &
+scan installs the selected additions, checks project preparation, and opens
+the map at the same address after a successful scan.
 An initialized project runs one scan before opening. The live process then
 starts the same watch as `groma scan --watch`. Startup errors appear in the
 browser with the reported issue and the command to run after fixing it.
@@ -44,9 +46,9 @@ without a reload. No inbound connection to Groma is opened.
 
 ## Layout
 
-When no components exist, the page invites the developer to write TypeScript.
-An empty world shows the project name, that no component was found, and that
-Groma.md only supports TypeScript projects. A world with existing architecture
+When no components exist, the page points to `groma scanner setup` for a
+coverage review. An empty world shows the project name and explains that
+TypeScript is embedded while other languages use optional scanner packages. A world with existing architecture
 keeps its map and navigation beneath a compact, dismissible notice. The first
 component removes the notice without a reload. Historical views hide it.
 
