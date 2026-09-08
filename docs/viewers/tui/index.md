@@ -20,10 +20,11 @@ the component count.
 
 ## Graphical map
 
-On a supported terminal, the map uses the web scene's isometric geometry through
-Kitty or Sixel graphics. Keyboard selection, Shift+arrow panning, zoom, fit, and
-an Isometric / 2D switch are available, with optional mouse selection, drag, and
-wheel input. See [Graphical terminal map](graphics.md) for controls, protocol
+On a supported terminal, the map renders the shared sheet as a fixed, axis-aligned
+2D plan through Kitty or Sixel graphics. Horizontal labels and flat footprints
+keep arrow navigation aligned with the screen. Keyboard selection, Shift+arrow
+panning, zoom, and fit are available, with optional mouse selection, drag, and
+wheel input. There is no isometric mode or view toggle. See [Graphical terminal map](graphics.md) for controls, protocol
 selection, and validation limits. `--graphics text` selects the text map below;
 Work focus also uses that map to preserve its task overlays.
 

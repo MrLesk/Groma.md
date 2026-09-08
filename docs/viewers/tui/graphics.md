@@ -4,6 +4,9 @@
 image protocol. Otherwise it uses the readable text map. The hierarchy, details,
 search, history, and source reader remain ordinary terminal text.
 
+The graphical map is always a flat, axis-aligned 2D plan with horizontal labels.
+There is no isometric mode, rotation, or view toggle.
+
 ```sh
 bun src/cli.ts view
 bun src/cli.ts view --graphics text
@@ -16,7 +19,7 @@ bun src/cli.ts view --graphics blocks
 resolution than Kitty or Sixel, and is not the automatic fallback. Sixel needs
 terminal pixel dimensions. Automatic selection inside tmux stays in text mode;
 an explicit protocol requires the terminal and multiplexer to pass it through.
-The map title reports the selected view and output protocol.
+The map title reports 2D and the output protocol.
 
 ## Keyboard first
 
@@ -33,7 +36,6 @@ their existing keys. `Esc` returns from a reading pane to map navigation.
 | `+` or `=` / `-` | Zoom in / out |
 | `0` or `Home` | Fit the whole architecture |
 | `f` | Fit the selected element |
-| `v` | Switch Isometric / 2D |
 | `g` | Switch graphical / text rendering |
 | `/`, `t`, `d`, `?` | Search, hierarchy, details, help |
 | `Ctrl+C` | Exit |
@@ -57,8 +59,9 @@ keyboard or after zooming.
 
 ## Rendering boundary
 
-The terminal reuses the web viewer's pure `projectScene` geometry, painter order,
-label transforms, and facade patterns. It serializes a self-contained SVG and
+The terminal projects the shared sheet through the web viewer's pure
+`projectScene` geometry at a fixed top-down orientation. Only flat top surfaces
+are drawn; labels follow the horizontal screen axis. It serializes a self-contained SVG and
 rasterizes it asynchronously with native `@resvg/resvg-js`, then passes RGBA pixels
 to OpenTUI. It does not launch a browser or a game engine. This implementation
 uses native resvg, not the WASM backend. Fonts come from the host system. A cached
@@ -96,7 +99,7 @@ On Linux with Bun 1.4.1, the repository check, standalone build, and standard
 compiled smoke test pass. `tui-test` 0.1.0-beta.3 exercised the actual `groma view`
 entry point in source mode and in a standalone binary copied away from
 `node_modules`, against a disposable Git checkout of `test/fixtures/viewer-view`.
-Captures cover root, container, 2D, drag, wheel, output switching, and 120x36 /
+Captures cover root, container, drag, wheel, output switching, and 120x36 /
 200x60 sizes. Both sessions exited with code 0 on Ctrl+C. A separate compiled-session check
 asserted changed map cells after mouse selection, wheel zoom, drag, and keyboard
 pan. The tester's `mouse scroll` sent `ESC[<64;1;1M` regardless of the last mouse
@@ -109,3 +112,9 @@ pipeline and native binary packaging, not high-resolution display in a physical
 Kitty, Ghostty, or Sixel terminal. Those terminals, SSH, and tmux passthrough need
 separate visual verification; protocol support must not be read as certification
 of every host combination.
+
+The 2D-only refinement passes the same 476 repository tests and Linux compiled
+build/smoke checks. A copied standalone binary was exercised through `tui-test`:
+Down/Up selected lower/upper components, `v` left the map unchanged, mouse click
+selected a component, wheel and drag changed the camera, Shift+Right preserved
+selection, graphical/text switching returned to 2D, and resize retained 2D.

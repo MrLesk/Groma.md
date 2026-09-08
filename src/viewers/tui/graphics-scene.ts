@@ -1,28 +1,27 @@
 import type { Bounds, Point } from '../../types.ts'
 import { buildingFont, CONTAINER_FONT, GROUP_FONT, ISLAND_FONT, textLineHeight, textPadding } from '../../sheet/measure.ts'
 import { boundsOf, planeMatrix, projectScene } from '../web/iso/project.ts'
-import type { Face, ProjectedScene, SurfaceText } from '../web/iso/project.ts'
-import { facadePattern, facadePatternId, mapDefs } from '../web/iso/style.ts'
+import type { ProjectedScene, SurfaceText } from '../web/iso/project.ts'
+import { mapDefs } from '../web/iso/style.ts'
 import type { TerminalViewModel } from './model.ts'
 import type { ViewerState } from './navigation.ts'
 import { insideGraphics } from './graphics-camera.ts'
 import type { GraphicsCamera, PixelSize } from './graphics-camera.ts'
 
-export type GraphicsView = 'iso' | 'plan'
 export interface GraphicsHit { id: string; polygon: Point[] }
 export interface GraphicsScene { projected: ProjectedScene; hits: GraphicsHit[]; bounds: Map<string, Bounds> }
 
-/** The 2D view flattens full footprints; it never changes the source sheet or its measurements. */
-export function graphicsScene(model: TerminalViewModel, view: GraphicsView): GraphicsScene {
-  const sheet = view === 'iso' ? model.sheet : {
+/** Fixed, axis-aligned plan: full footprints and horizontal labels without changing the source sheet. */
+export function graphicsScene(model: TerminalViewModel): GraphicsScene {
+  const sheet = {
     ...model.sheet,
     buildings: model.sheet.buildings.map(building => ({ ...building, heightUnits: 0, floors: [] })),
   }
-  const projected = projectScene(sheet, model.project, view === 'iso' ? undefined : { yaw: 0, pitch: 90 })
+  const projected = projectScene(sheet, model.project, { yaw: 0, pitch: 90 })
   const hits: GraphicsHit[] = [
     ...projected.islands.flatMap(item => item.island.element === null ? [] : [{ id: item.island.element.representationId, polygon: item.polygon }]),
-    ...projected.slabs.flatMap(item => item.faces.map(face => ({ id: item.slab.representationId, polygon: face.points }))),
-    ...projected.buildings.flatMap(item => item.floors.flatMap(floor => floor.map(face => ({ id: item.building.representationId, polygon: face.points })))),
+    ...projected.slabs.flatMap(item => item.faces.filter(face => face.side === 'top').map(face => ({ id: item.slab.representationId, polygon: face.points }))),
+    ...projected.buildings.flatMap(item => item.floors.flatMap(floor => floor.filter(face => face.side === 'top').map(face => ({ id: item.building.representationId, polygon: face.points })))),
   ]
   const points = new Map<string, Point[]>()
   for (const hit of hits) points.set(hit.id, [...points.get(hit.id) ?? [], ...hit.polygon])
@@ -71,19 +70,10 @@ function textOnSurface(text: SurfaceText, size: number, scene: ProjectedScene): 
   return `<g transform="${planeMatrix('ground', text.origin, scene.view)}" fill="${INK}" font-family="sans-serif">${lines}</g>`
 }
 
-function paintFace(item: ProjectedScene['buildings'][number], index: number, face: Face, selected: boolean): string {
-  const colors = { top: '#425a69', left: '#263a49', right: '#324957' }
-  const solid = polygon(face.points, colors[face.side], selected, item.building.origin === 'draft' ? 'stroke-dasharray="5 4"' : '')
-  if (face.side === 'top') return solid
-  const fileType = item.building.floors[index]?.facadeFileType
-  const kind = item.building.kind === 'actor' ? 'dots' : item.building.external ? 'cross' : 'lines'
-  const pattern = fileType === undefined ? `${kind}-${face.plane}` : facadePatternId(fileType, face.plane!)
-  return `${solid}<polygon points="${pointsOf(face.points)}" fill="url(#${pattern})"/>`
-}
-
 function paintBuilding(item: ProjectedScene['buildings'][number], scene: ProjectedScene, selectedId: string | undefined): string {
   const selected = item.building.representationId === selectedId
-  const faces = item.floors.map((floor, index) => floor.map(face => paintFace(item, index, face, selected)).join('')).join('')
+  const faces = item.floors.flat().filter(face => face.side === 'top').map(face =>
+    polygon(face.points, '#425a69', selected, item.building.origin === 'draft' ? 'stroke-dasharray="5 4"' : '')).join('')
   return `${faces}${textOnSurface(item.text, buildingFont(item.building), scene)}`
 }
 
@@ -103,16 +93,10 @@ function routeArrow(points: readonly Point[], scale: number, color: string): str
 /** Fully resolved SVG: no browser, CSS variables, external resources, or architecture mutation. */
 export function graphicsSvg(scene: GraphicsScene, camera: GraphicsCamera, size: PixelSize, selectedId?: string, pathIds: ReadonlySet<string> = new Set()): string {
   const projected = scene.projected
-  const patterns = new Map<string, string>()
-  for (const item of projected.buildings) {
-    for (const floor of item.building.floors) {
-      for (const plane of ['left', 'right'] as const) patterns.set(facadePatternId(floor.facadeFileType, plane), facadePattern(floor.facadeFileType, plane, projected.view))
-    }
-  }
-  const defs = (mapDefs(projected.view) + [...patterns.values()].join('')).replaceAll('var(--map-hatch)', '#768e9e')
+  const defs = mapDefs(projected.view).replaceAll('var(--map-hatch)', '#768e9e')
   const islands = projected.islands.map(item => polygon(item.polygon, '#1b2833', selectedId !== undefined && item.island.element?.representationId === selectedId)
     + textOnSurface(item.text, ISLAND_FONT, projected)).join('')
-  const slabs = projected.slabs.map(item => item.faces.map(face => polygon(face.points, face.side === 'top' ? '#243542' : '#1b2833', item.slab.representationId === selectedId)).join('')
+  const slabs = projected.slabs.map(item => item.faces.filter(face => face.side === 'top').map(face => polygon(face.points, '#243542', item.slab.representationId === selectedId)).join('')
     + textOnSurface(item.text, CONTAINER_FONT, projected)).join('')
   const zones = projected.zones.map(item => polygon(item.polygon, 'url(#hatch-ground)', false)
     + textOnSurface(item.text, GROUP_FONT, projected)).join('')

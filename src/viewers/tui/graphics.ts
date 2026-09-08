@@ -6,7 +6,7 @@ import type { TerminalViewModel } from './model.ts'
 import type { MapDirection, ViewerState } from './navigation.ts'
 import { nearestInDirection } from './navigation-spatial.ts'
 import { graphicsAnchors, graphicsHit, graphicsScene, graphicsScope, graphicsSvg } from './graphics-scene.ts'
-import type { GraphicsScene, GraphicsView } from './graphics-scene.ts'
+import type { GraphicsScene } from './graphics-scene.ts'
 import { fitGraphics, panGraphics, rasterSize, revealGraphics, toGraphicsWorld, zoomGraphics } from './graphics-camera.ts'
 import type { GraphicsCamera, PixelSize } from './graphics-camera.ts'
 
@@ -43,7 +43,6 @@ export class TerminalGraphics {
   private readonly focus: () => void
   private requested: GraphicsProtocol
   private previous: GraphicsProtocol
-  private view: GraphicsView = 'iso'
   private scene?: GraphicsScene
   private sheet?: TerminalViewModel['sheet']
   private model?: TerminalViewModel
@@ -91,7 +90,7 @@ export class TerminalGraphics {
 
   get caption(): string {
     if (this.failure) return 'Text · graphics error'
-    return this.active ? `${this.view === 'iso' ? 'Iso' : '2D'} · ${this.protocol}` : 'Text'
+    return this.active ? `2D · ${this.protocol}` : 'Text'
   }
 
   get error(): string | undefined { return this.failure }
@@ -103,7 +102,7 @@ export class TerminalGraphics {
     this.paths = paths
     if (!this.active || model.elements.length === 0 || this.map.width < 4 || this.map.height < 3) { this.hide(); return }
     if (!this.scene || this.sheet !== model.sheet) {
-      this.scene = graphicsScene(model, this.view)
+      this.scene = graphicsScene(model)
       this.sheet = model.sheet
       this.camera = undefined
     }
@@ -143,7 +142,7 @@ export class TerminalGraphics {
     const commands: Record<string, () => void> = {
       '+': () => this.zoom(1.25), '=': () => this.zoom(1.25), '-': () => this.zoom(1 / 1.25),
       '0': () => this.fitAll(), home: () => this.fitAll(), f: () => this.fitSelection(),
-      v: () => this.toggleView(), '[': () => this.cycle(-1), ']': () => this.cycle(1),
+      '[': () => this.cycle(-1), ']': () => this.cycle(1),
     }
     const command = commands[key.name]
     command?.()
@@ -153,12 +152,6 @@ export class TerminalGraphics {
   private fitAll(): void {
     this.camera = fitGraphics(this.scene!.projected.bounds, this.size)
     this.queue()
-  }
-
-  private toggleView(): void {
-    this.view = this.view === 'iso' ? 'plan' : 'iso'
-    this.scene = undefined
-    this.changed()
   }
 
   private fitSelection(): void {

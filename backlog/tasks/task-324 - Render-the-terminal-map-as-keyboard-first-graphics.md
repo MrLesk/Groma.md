@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@openai'
 created_date: '2026-09-08 17:12'
-updated_date: '2026-09-08 17:48'
+updated_date: '2026-09-08 21:38'
 labels: []
 dependencies: []
 references:
@@ -47,6 +47,7 @@ The terminal-specific cell layout loses the spatial character of the web map. Pr
 - [x] #3 Mouse selection, drag pan, and wheel zoom share the keyboard selection and camera model.
 - [x] #4 Rendering is bounded, does no raster work while idle, and releases resources on resize, mode change, and exit.
 - [x] #5 Focused tests, repository checks, build, and an interactive terminal validation are recorded with honest platform limitations.
+- [x] #6 The graphical terminal map is exclusively an axis-aligned 2D plan with horizontal labels; no isometric default, view toggle, or rotation is available. Keyboard and optional mouse navigation keep working.
 <!-- AC:END -->
 
 ## Definition of Done
@@ -63,6 +64,8 @@ The terminal-specific cell layout loses the spatial character of the web map. Pr
 1. Reuse the pure web projection and resvg rasterization inside the existing terminal map viewport.
 2. Add a keyboard-first camera and actual-geometry hit testing; retain normal pane navigation and text fallback.
 3. Validate fixtures and the mounted viewer, run the repository check and compiled build, document controls and limitations, then publish only this branch.
+
+4. Keep the graphical TUI in one fixed 2D plan projection, remove isometric state/controls, and verify axis-aligned geometry, arrow selection, mouse input, and the actual terminal entry point.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
@@ -79,10 +82,16 @@ Terminal validation note: tui-test mouse scroll emits SGR coordinates 1,1 rather
 Publication CI reproduced slow first rasterization: the default native font discovery repeated across concurrent rendered viewports. Four mounted tests exceeded their unchanged 3-second first-frame deadline, while the two standalone native raster tests completed in about 4.2 seconds. Investigating explicit host font selection before final publication; no timeout or assertion relaxation.
 
 Corrected the CI first-frame regression by selecting one installed UI font once and passing an explicit fontFiles list with loadSystemFonts disabled. Common Windows/macOS/Linux font candidates are used; unrecognized hosts retain resvg discovery. The same raster helper is exercised by mounted and native raster tests. All original timing deadlines and assertions remain unchanged. Fresh local check: 110 Node + 366 Bun tests, 0 failures; focused graphics tests: 11 pass in 916 ms total. Rebuilt and smoke-tested the standalone executable, copied it away from node_modules, and repeated actual PTY mouse selection/wheel/drag and keyboard pan/exit verification successfully. High-resolution physical terminal host certification remains outside this prototype.
+
+User refinement: isometric projection is inappropriate for arrow-first terminal navigation. Replace the terminal Iso/2D choice with a single fixed top-down 2D plan. Web views, stored OKF/C4 meaning, and shared sheet positions stay unchanged.
+
+2D-only implementation removes the view state/toggle and terminal facade painting. The first focused run exposed an isometric-specific mouse-test assumption: its chosen container had only one component and relied on a neighbor appearing in the viewport. The mouse test now explicitly chooses a fixture scope with two components and retains all selection, wheel, and drag assertions; no timeout changes.
+
+2D-only verification: 11 focused graphics tests pass, including horizontal-label/axis invariants, immutable full footprints, no-op v, mouse selection/drag/wheel, camera/scope, input ownership and lifecycle. bun run check passes 110 Node + 366 Bun tests with zero failures. Linux standalone build and compiled smoke pass. tui-test 0.1.0-beta.3 exercised the copied standalone executable in a disposable fixture: Down selected Pricing below Orders; Up returned to Orders; v preserved the identical frame; mouse selected Pricing; wheel/drag/Shift+Right changed the camera without changing selection; output toggle returned to 2D; resize to 120x36 retained 2D; Ctrl+C ended the process. Inspected the 200x60 colored capture. Physical Kitty/Sixel certification remains unverified. Specification/quality review confirmed only TUI presentation, its tests and documentation changed, with the original shared sheet and web views untouched.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
-Integrated a keyboard-first graphical map into groma view, with optional mouse selection, pan and zoom, Iso/2D, and readable text fallback. Verified shared geometry/camera/lifecycle through 11 focused tests, all 476 repository tests, Linux standalone build/smoke, and actual source/compiled terminal sessions. High-resolution terminal-host visual certification is a documented prototype limit.
+Integrated a keyboard-first graphical map into groma view with optional mouse selection, pan and zoom, and readable text fallback. The terminal is now exclusively an axis-aligned 2D plan with horizontal labels; isometric state, controls and wall/facade painting are removed. Verified 11 focused tests, all 476 repository tests, Linux build/smoke and the actual copied-standalone terminal input/resize/exit flow. Physical high-resolution host visual certification remains a prototype limit.
 <!-- SECTION:FINAL_SUMMARY:END -->

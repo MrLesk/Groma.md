@@ -8,7 +8,7 @@ import { graphicsProtocol } from '../src/viewers/tui/graphics.ts'
 import { fitGraphics, insideGraphics, panGraphics, rasterSize, revealGraphics, toGraphicsWorld, zoomGraphics } from '../src/viewers/tui/graphics-camera.ts'
 import { graphicsAnchors, graphicsHit, graphicsScene, graphicsScope, graphicsSvg } from '../src/viewers/tui/graphics-scene.ts'
 import { mountTerminalViewer } from '../src/viewers/tui/terminal-viewer.ts'
-import { projectScene } from '../src/viewers/web/iso/project.ts'
+import { planeMatrix } from '../src/viewers/web/iso/project.ts'
 import { terminalModel, viewerFixtureRoot } from './helpers.ts'
 
 async function eventually(setup: Awaited<ReturnType<typeof createTestRenderer>>, condition: () => boolean): Promise<void> {
@@ -78,20 +78,31 @@ test.concurrent('hit testing rejects empty corners of a projected diamond', () =
   expect(insideGraphics({ x: 5, y: 0 }, diamond)).toBe(true)
 })
 
-test.concurrent('isometric geometry matches the web and flattening never mutates the sheet', async () => {
+test.concurrent('terminal geometry is an axis-aligned plan with horizontal labels and immutable full footprints', async () => {
   const model = await terminalModel(viewerFixtureRoot)
   const before = JSON.stringify(model.sheet)
-  const iso = graphicsScene(model, 'iso')
-  expect(iso.projected).toEqual(projectScene(model.sheet, model.project))
-  const plan = graphicsScene(model, 'plan')
-  expect(plan.projected.buildings.every(item => item.building.heightUnits === 0 && item.building.floors.length === 0)).toBe(true)
-  const footprints = (scene: ReturnType<typeof graphicsScene>) => Object.fromEntries(scene.projected.buildings.map(item => [item.building.representationId, item.building.rect]))
-  expect(footprints(plan)).toEqual(footprints(iso))
+  const scene = graphicsScene(model)
+  const projected = scene.projected
+  expect(projected.buildings.every(item => item.building.heightUnits === 0 && item.building.floors.length === 0)).toBe(true)
+  expect(Object.fromEntries(projected.buildings.map(item => [item.building.representationId, item.building.rect])))
+    .toEqual(Object.fromEntries(model.sheet.buildings.map(item => [item.representationId, item.rect])))
   expect(JSON.stringify(model.sheet)).toBe(before)
-  const state = initialState(model)
-  const anchors = graphicsAnchors(iso, model, state)
+  // Moving along either ground axis must not move along the other screen axis.
+  for (const item of projected.slabs) {
+    const [a, b, , d] = item.faces.find(face => face.side === 'top')!.points
+    expect(b!.x).toBeGreaterThan(a!.x)
+    expect(b!.y).toBeCloseTo(a!.y, 8)
+    expect(d!.y).toBeGreaterThan(a!.y)
+    expect(d!.x).toBeCloseTo(a!.x, 8)
+  }
+  const matrix = planeMatrix('ground', { x: 0, y: 0 }, projected.view).slice(7, -1).split(' ').map(Number)
+  expect(matrix[0]).toBeGreaterThan(0)
+  expect(matrix[1]).toBe(0)
+  expect(matrix[2]).toBe(0)
+  expect(matrix[3]).toBeGreaterThan(0)
+  const anchors = graphicsAnchors(scene, model, initialState(model))
   expect([...anchors.keys()].every(id => model.elements.find(element => element.representationId === id)?.kind !== 'component')).toBe(true)
-  const raster = await renderAsync(graphicsSvg(iso, fitGraphics(iso.projected.bounds, { width: 800, height: 480 }), { width: 800, height: 480 }))
+  const raster = await renderAsync(graphicsSvg(scene, fitGraphics(projected.bounds, { width: 800, height: 480 }), { width: 800, height: 480 }))
   expect(raster.pixels.byteLength).toBe(800 * 480 * 4)
 })
 
@@ -126,12 +137,14 @@ test.concurrent('mounted viewer zooms from keyboard, stops rasterizing while idl
 test.concurrent('mouse selection and wheel zoom use the displayed map, and dragging does not select', async () => {
   const { model, setup, app, image } = await mounted()
   try {
-    const component = model.elements.find(element => element.kind === 'component')!
+    // The fitted scope needs two selectable components, not a neighbor visible only in another projection.
+    const component = model.elements.find(element => element.kind === 'component' &&
+      model.elements.some(other => other.kind === 'component' && other.parent === element.parent && other !== element))!
     const old = image.image
     app.setView({ level: 'components', currentId: component.representationId })
     await eventually(setup, () => image.image !== old)
     const state = { ...initialState(model), level: 'components' as const, currentId: component.representationId }
-    const scene = graphicsScene(model, 'iso')
+    const scene = graphicsScene(model)
     const size = { width: image.image!.width, height: image.image!.height }
     const camera = fitGraphics(graphicsScope(scene, model, state), size)
     let target: { x: number; y: number; id: string } | undefined
@@ -167,7 +180,7 @@ test.concurrent('search receives graphical shortcut characters and shutdown canc
     setup.mockInput.pressKey('/')
     await setup.renderOnce()
     setup.mockInput.pressKey('g')
-    setup.mockInput.pressKey('v')
+    setup.mockInput.pressKey('f')
     await setup.renderOnce()
     expect(image.visible).toBe(true)
     setup.mockInput.pressEscape()
@@ -180,7 +193,7 @@ test.concurrent('search receives graphical shortcut characters and shutdown canc
 })
 
 
-test.concurrent('keyboard navigation uses displayed geometry; scope, pan, fit and view switch need no mouse', async () => {
+test.concurrent('keyboard navigation uses the fixed 2D geometry; scope, pan and fit need no mouse', async () => {
   const { model, setup, app, image } = await mounted()
   try {
     const container = model.elements.find(canEnter)!
@@ -193,7 +206,7 @@ test.concurrent('keyboard navigation uses displayed geometry; scope, pan, fit an
     setup.mockInput.pressEnter()
     await eventually(setup, () => image.image !== before)
     const component = model.elements.find(element => element.parent === container.representationId && element.kind === 'component')!
-    const scene = graphicsScene(model, 'iso')
+    const scene = graphicsScene(model)
     const anchors = graphicsAnchors(scene, model, { level: 'components' })
     const origin = anchors.get(component.representationId)!
     app.setView({ level: 'components', currentId: component.representationId })
@@ -207,12 +220,17 @@ test.concurrent('keyboard navigation uses displayed geometry; scope, pan, fit an
       break
     }
     for (const input of [() => setup.mockInput.pressArrow('right', { shift: true }),
-      () => setup.mockInput.pressKey('f'), () => setup.mockInput.pressKey('0'), () => setup.mockInput.pressKey('v')]) {
+      () => setup.mockInput.pressKey('f'), () => setup.mockInput.pressKey('0')]) {
       before = image.image
       input()
       await eventually(setup, () => image.image !== before)
     }
+    // The former view-switch key has no map action, including after manual camera changes.
     before = image.image
+    setup.mockInput.pressKey('v')
+    await Bun.sleep(100)
+    await setup.renderOnce()
+    expect(image.image).toBe(before)
     setup.mockInput.pressBackspace()
     await eventually(setup, () => image.image !== before)
     expect(image.visible).toBe(true)
@@ -221,7 +239,7 @@ test.concurrent('keyboard navigation uses displayed geometry; scope, pan, fit an
 
 test.concurrent('zoomed and offscreen routes rasterize without SVG-marker panics', async () => {
   const model = await terminalModel(viewerFixtureRoot)
-  const scene = graphicsScene(model, 'iso')
+  const scene = graphicsScene(model)
   const size = { width: 600, height: 400 }
   const component = model.elements.find(element => element.kind === 'component')!
   const fitted = fitGraphics(scene.bounds.get(component.representationId)!, size)

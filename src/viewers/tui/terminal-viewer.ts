@@ -144,7 +144,7 @@ export function mountTerminalViewer(
   function applyScreen(projection: TerminalProjection, lit: ReturnType<typeof litAction>, step: ReturnType<typeof projectFlowStep>): void {
     const view = screenView(theme, viewModel, state, projection, lit, step)
     screen.apply({ ...view, mapTitle: graphics?.caption,
-      footer: graphics?.active ? `[+/-] Zoom  [0] Fit  [v] Iso/2D  [g] Text  ${view.footer}` : view.footer })
+      footer: graphics?.active ? `[+/-] Zoom  [0] Fit  [g] Text  ${view.footer}` : view.footer })
   }
 
   function snapshot(): TerminalCamera | undefined {

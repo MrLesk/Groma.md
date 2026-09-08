@@ -74,6 +74,10 @@ Look at the root view, details, a container, and a large size such as 200x60.
 
 ## Graphical map
 
+The graphical map is 2D-only: footprints and labels stay aligned with screen
+axes. Arrow selection and Shift+arrow panning use those axes. No key rotates the
+map or enables isometric rendering.
+
 Use a disposable Git checkout of `test/fixtures/viewer-view` so the real `view`
 command can scan and watch without modifying a fixture. Initialize Git and
 commit the copied fixture before launching. Use an absolute CLI or binary path
@@ -87,7 +91,7 @@ tui-test expect text --session groma-pixels 'Shop › Api' --timeout 10000
 # Allow the asynchronous raster to settle as well as the text panes.
 sleep 0.4
 tui-test screenshot --session groma-pixels "$ARTIFACTS/container.svg"
-tui-test key press --session groma-pixels Shift+Right + f v
+tui-test key press --session groma-pixels Shift+Right + f
 tui-test expect text --session groma-pixels 'Map · 2D' --timeout 10000
 tui-test mouse move --session groma-pixels 105 30
 # In tui-test 0.1.0-beta.3, `mouse scroll` sends at column/row 1,1.
