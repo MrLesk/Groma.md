@@ -5,7 +5,7 @@ on:
     paths:
       - '.github/workflows/blueprint-research.yml'
       - 'research/blueprints/**'
-      - 'test-bun/blueprint-research.test.ts'
+      - 'test-bun/blueprint-*.test.ts'
       - 'test/fixtures/blueprint-research/**'
   workflow_dispatch:
 permissions:
@@ -27,17 +27,18 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Apply submitted regression fix
+      - name: Materialize submitted map-view source
         run: |
           set -euo pipefail
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          if test -f research/blueprints/placement-fix.patch; then
-            git apply --check research/blueprints/placement-fix.patch
-            git apply research/blueprints/placement-fix.patch
-            rm research/blueprints/placement-fix.patch
-            git add research/blueprints test-bun/blueprint-research.test.ts
-            git commit -m 'TASK-324 - Prototype portable blueprint placement in the web viewer'
+          if test -f research/blueprints/map-view-source.01; then
+            cat research/blueprints/map-view-source.01 research/blueprints/map-view-source.02 > "$RUNNER_TEMP/map-view-source.tar.xz"
+            echo "12a255e84e83374ded8c897fcc8c66d15c421cf22525b3889f195a8737006f0a  $RUNNER_TEMP/map-view-source.tar.xz" | sha256sum -c -
+            tar -xJf "$RUNNER_TEMP/map-view-source.tar.xz"
+            rm research/blueprints/map-view-source.01 research/blueprints/map-view-source.02
+            git add research/blueprints test-bun/blueprint-map-views.test.ts 'backlog/tasks/task-325 - Switch-blueprint-editor-between-isometric-2D-and-layered-maps.md'
+            git commit -m 'TASK-325 - Switch blueprint editor between isometric, 2D and layered maps'
             git push origin HEAD:research/blueprint-store-prototype
           fi
       - name: Install and read repository workflow
@@ -49,7 +50,7 @@ jobs:
           export PATH="$RUNNER_TEMP/backlog-tools/node_modules/.bin:$PATH"
           backlog instructions overview
           backlog instructions task-execution
-          backlog task view TASK-324 --plain
+          backlog task view TASK-325 --plain
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -59,28 +60,28 @@ jobs:
           python -m playwright install --with-deps chromium firefox webkit
       - name: Test, build and capture
         env:
-          BLUEPRINT_TRACK_TASK: TASK-324
+          BLUEPRINT_TRACK_TASK: TASK-325
         run: python research/blueprints/verify.py
-      - name: Preserve the measured results on the research branch
+      - name: Preserve measured results
         if: always()
         run: |
           set -euo pipefail
-          if test -f research/blueprints/evidence/checks.json; then
-            backlog task edit TASK-324 --append-notes "Recorded checks and browser evidence in research/blueprints/evidence; see checks.json for actual exit codes and tested source commit. Run $GITHUB_RUN_ID. Production contracts remain unchanged."
-            git add research/blueprints/evidence 'backlog/tasks/task-324 - Prototype-portable-blueprint-placement-in-the-web-viewer.md'
+          if python -c "import json,subprocess; assert json.load(open('research/blueprints/evidence/checks.json'))['sourceCommit'] == subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip()"; then
+            backlog task edit TASK-325 --append-notes "Recorded the actual check results and map-view browser captures from GitHub run $GITHUB_RUN_ID. See evidence/checks.json for the tested source and exit codes."
+            git add research/blueprints/evidence 'backlog/tasks/task-325 - Switch-blueprint-editor-between-isometric-2D-and-layered-maps.md'
             if ! git diff --cached --quiet; then
-              git commit -m 'TASK-324 - Prototype portable blueprint placement in the web viewer'
+              git commit -m 'TASK-325 - Switch blueprint editor between isometric, 2D and layered maps'
               git push origin HEAD:research/blueprint-store-prototype
             fi
           fi
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: blueprint-research-results
+          name: blueprint-map-view-results
           path: |
             dist/blueprint-research/index.html
             research/blueprints
             test/fixtures/blueprint-research
-            test-bun/blueprint-research.test.ts
-            backlog/tasks/task-324 - Prototype-portable-blueprint-placement-in-the-web-viewer.md
+            test-bun/blueprint-*.test.ts
+            backlog/tasks/task-325 - Switch-blueprint-editor-between-isometric-2D-and-layered-maps.md
           retention-days: 30
