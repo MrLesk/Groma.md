@@ -1,0 +1,103 @@
+--- a/research/blueprints/app.ts
++++ b/research/blueprints/app.ts
+@@ -40,10 +40,10 @@
+   <label class="theme-label"><select id="theme" aria-label="Theme"><option value="light">Light</option><option value="dark">Dark</option><option value="blueprint">Blueprint</option></select></label>
+ </header><aside class="sidebar chrome"><div class="sidebar-title">Architecture</div><div id="hierarchy"></div><div class="section-label drafts-label">Drafts</div><div id="draft-list"></div><div class="sidebar-foot"><span class="kind-mark"></span>Current <span class="kind-mark ghost"></span>New part</div></aside>
+ <div id="map" aria-label="Fixture architecture"></div><div class="context chrome" id="context"></div>
+-<aside id="inspector" class="inspector chrome"><div id="error" role="alert" hidden></div><div id="panel"></div></aside>
++<aside id="inspector" class="inspector chrome"><div id="error" role="alert" hidden></div><div id="panel"></div><div id="toast" role="status" hidden></div></aside>
+ <div class="mobile-switch">${button('Map / Details', 'mobile-map', 'secondary')}</div>
+ <div class="study-label"><span class="study-dot"></span>BLUEPRINT RESEARCH · FIXTURE DATA ONLY</div>
+-<div id="toast" role="status" hidden></div><dialog id="dialog"><div id="dialog-body"></div></dialog>`
++<dialog id="dialog"><div id="dialog-body"></div></dialog>`
+ const map = studyMap($('#map'), id => selectCurrent(id))
+ function selectCurrent(id: string): void {
+   if (!project.elements.some(element => element.id === id)) return
+@@ -56,6 +56,7 @@
+   return mode === 'preview' ? placement?.draft : mode === 'draft' ? draft : undefined
+ }
+ function render(): void {
++  $('#toast').hidden = true
+   document.documentElement.dataset.theme = theme
+   $('#theme').setAttribute('data-mode', theme)
+   $<HTMLSelectElement>('#theme').value = theme
+@@ -128,7 +129,6 @@
+   create: () => {
+     project = commitPlacement(localStorage, storageKey(project.id), project, placement!)
+     draft = project.drafts.at(-1)!; placement = undefined; mode = 'draft'; render()
+-    announce('Draft saved in this fixture. Current architecture is unchanged.')
+   },
+   cancel: () => { placement = undefined; mode = 'catalogue'; render() },
+   catalogue: () => { if (discard()) { placement = undefined; mode = 'catalogue'; render() } },
+--- a/research/blueprints/style.css
++++ b/research/blueprints/style.css
+@@ -38,8 +38,8 @@
+ #map .project-edit { display: none; }
+ .context { position: fixed; left: 282px; top: 90px; z-index: 2; display: flex; align-items: center; gap: 12px; padding: 10px 14px; font-size: 11px; }
+ .context .draft-glyph { width: 12px; height: 12px; margin: 0; }
+-.inspector { position: fixed; right: 14px; top: 88px; bottom: 46px; width: 456px; overflow: hidden; z-index: 3; }
+-#panel { height: 100%; display: flex; flex-direction: column; }
++.inspector { position: fixed; right: 14px; top: 88px; bottom: 46px; width: 456px; overflow: hidden; z-index: 3; display: flex; flex-direction: column; }
++#panel { min-height: 0; flex: 1; display: flex; flex-direction: column; }
+ .panel-head { padding: 22px 24px 18px; border-bottom: 1px solid var(--hairline); }
+ .eyebrow { color: var(--muted); text-transform: uppercase; font-size: 9px; letter-spacing: .12em; }
+ h1 { font-size: 20px; font-weight: 500; line-height: 1.4; margin: 8px 0 0; letter-spacing: -.04em; overflow-wrap: anywhere; }
+@@ -96,7 +96,7 @@
+ .file-row { font-size: 11px; overflow-wrap: anywhere; border-bottom: 1px solid var(--hairline); padding: 7px 0; }
+ .study-label { position: fixed; left: 20px; bottom: 13px; color: var(--muted); font-size: 9px; letter-spacing: .1em; display: flex; align-items: center; gap: 9px; }
+ .study-dot { height: 5px; width: 5px; border-radius: 50%; background: var(--accent); }
+-#toast { position: fixed; bottom: 52px; left: 290px; max-width: calc(100% - 820px); padding: 13px 16px; border: 1px solid var(--hairline); border-radius: 6px; background: var(--paper); color: var(--accent-text); font-size: 11px; z-index: 8; }
++#toast { flex: none; padding: 12px 20px; border-top: 1px solid var(--hairline); background: var(--paper); color: var(--accent-text); font-size: 11px; }
+ #error { position: absolute; z-index: 8; top: 0; left: 0; right: 0; background: var(--paper); border: 1px solid #b42318; color: var(--ink); padding: 14px; box-shadow: 0 8px 16px #0001; }
+ dialog { width: min(620px, calc(100% - 28px)); border: 1px solid var(--hairline); border-radius: 10px; padding: 26px; color: var(--ink); background: var(--paper); }
+ dialog::backdrop { background: #0006; backdrop-filter: blur(3px); }
+@@ -110,14 +110,12 @@
+   .sidebar { width: 216px; }
+   #map { left: 242px; }
+   .context { left: 246px; max-width: 300px; }
+-  #toast { left: 246px; max-width: calc(100% - 746px); }
+   .revision { display: none; }
+ }
+ @media (max-width: 1000px) {
+   .sidebar { display: none; }
+   #map { left: 14px; }
+   .context { left: 22px; }
+-  #toast { left: 22px; max-width: calc(100% - 506px); }
+ }
+ @media (max-width: 720px) {
+   .topbar { height: 54px; top: 8px; left: 8px; right: 8px; padding: 0 10px; gap: 8px; }
+@@ -133,7 +131,6 @@
+   .context { display: none; }
+   .mobile-switch { display: block; position: fixed; bottom: 10px; right: 10px; z-index: 7; }
+   .study-label { left: 14px; bottom: 22px; font-size: 7px; max-width: 220px; }
+-  #toast { left: 14px; right: 14px; bottom: 69px; max-width: none; }
+   .mobile-map .inspector { display: none; }
+   .mobile-map .context { display: flex; left: 14px; top: 76px; max-width: calc(100% - 28px); }
+ }
+--- a/research/blueprints/capture.py
++++ b/research/blueprints/capture.py
+@@ -157,6 +157,14 @@
+     footer = target.locator('.panel-footer').bounding_box()
+     check('Narrow layout keeps primary actions visible', bool(footer and footer['y'] + footer['height'] <= 932))
+     capture(target, '09-mobile-draft.png')
++    action(target, 'copy-draft')
++    check('Narrow copy feedback does not cover the action buttons', target.locator('.panel-footer button').evaluate_all("""buttons => buttons.every(button => {
++        const r = button.getBoundingClientRect();
++        const hit = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2);
++        return r.top >= 0 && r.bottom <= innerHeight && (hit === button || button.contains(hit));
++    })"""))
++    target.locator('#theme').select_option('dark')
++    check('Changing context dismisses obsolete copy feedback', target.locator('#toast').is_hidden())
+     check('No external network requests', not NETWORK)
+     context.close()
+     return text
+--- a/research/blueprints/FINDINGS.md
++++ b/research/blueprints/FINDINGS.md
+@@ -92,3 +92,7 @@
+ Repository contracts: [architecture Markdown](../../docs/component-markdown.md), [product model](../../docs/product-model.md), [web viewer](../../docs/viewers/web/index.md), and [repository instructions](../../AGENTS.md). These explain current behavior, not the research format.
+ 
+ External design precedents: [Factorio blueprints](https://wiki.factorio.com/Blueprint), [blueprint library](https://wiki.factorio.com/Blueprint_library), [C4 components](https://c4model.com/abstractions/components), [OKF 0.2](https://github.com/GoogleCloudPlatform/open-knowledge-format/blob/main/SPEC.md). Tooling references: [Playwright Python browser installation](https://playwright.dev/python/docs/browsers), [Biome nested project configuration](https://biomejs.dev/guides/big-projects/).
++
++## Visual-review correction
++
++The first captured narrow layout showed persistent save feedback covering the footer actions, despite a passing viewport-bounds assertion. The redundant save message was removed. Copy feedback now occupies an ordinary inspector row rather than overlaying the controls, and a repaint dismisses the old feedback. Browser validation now hit-tests the action buttons while that message is present. This checks the observable ability to act rather than decorative placement.
