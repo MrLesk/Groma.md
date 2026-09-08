@@ -15,6 +15,7 @@ import {
   type SourceFile,
 } from 'typescript/unstable/ast'
 
+import { typescriptWorkerPath } from '../../../plugins/scanners/typescript/src/worker.ts'
 import { withGitRevision } from '../../history/revisions.ts'
 import type { ArchitectureGraph } from '../../types.ts'
 
@@ -188,7 +189,11 @@ async function sourceStructure(
 ): Promise<CodeFile[]> {
   if (references.length === 0) return []
   const filenames = references.map(reference => path.join(repositoryRoot, reference.file))
-  const api = new API({ cwd: repositoryRoot })
+  const tsserverPath = await typescriptWorkerPath()
+  const api = new API({
+    cwd: repositoryRoot,
+    ...(tsserverPath === undefined ? {} : { tsserverPath }),
+  })
   try {
     const snapshot = await api.updateSnapshot({ openFiles: filenames })
     const files: CodeFile[] = []
