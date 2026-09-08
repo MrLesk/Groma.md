@@ -1,0 +1,16 @@
+{
+  "name": "@groma/scanner-java",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "groma": {
+    "scanner": {
+      "id": "java",
+      "entry": "./src/index.ts"
+    }
+  },
+  "dependencies": {
+    "@groma/scanner": "workspace:*"
+  }
+}
