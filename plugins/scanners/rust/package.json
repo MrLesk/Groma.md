@@ -1,0 +1,9 @@
+{
+  "name": "@groma/scanner-rust",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "groma": { "scanner": { "id": "rust", "entry": "./src/index.ts" } },
+  "dependencies": { "@groma/scanner": "workspace:*" }
+}

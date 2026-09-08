@@ -71,6 +71,13 @@
         "@groma/scanner": "workspace:*",
       },
     },
+    "plugins/scanners/rust": {
+      "name": "@groma/scanner-rust",
+      "version": "0.1.0",
+      "dependencies": {
+        "@groma/scanner": "workspace:*",
+      },
+    },
     "plugins/scanners/typescript": {
       "name": "@groma/scanner-typescript",
       "version": "0.1.0",
@@ -214,6 +221,8 @@
     "@groma/scanner-go": ["@groma/scanner-go@workspace:plugins/scanners/go"],
 
     "@groma/scanner-java": ["@groma/scanner-java@workspace:plugins/scanners/java"],
+
+    "@groma/scanner-rust": ["@groma/scanner-rust@workspace:plugins/scanners/rust"],
 
     "@groma/scanner-typescript": ["@groma/scanner-typescript@workspace:plugins/scanners/typescript"],
 
