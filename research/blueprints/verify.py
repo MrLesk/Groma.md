@@ -38,7 +38,7 @@ def run(name: str, args: list[str], cwd: Path = ROOT) -> dict:
 results = [
     run('research-lint', ['../../node_modules/.bin/biome', 'lint', '.'], ROOT / 'research/blueprints'),
     run('research-types', ['bun', 'node_modules/.bin/tsc', '--noEmit', '--project', 'research/blueprints/tsconfig.json']),
-    run('domain-tests', ['bun', 'test', 'test-bun/blueprint-research.test.ts']),
+    run('domain-tests', ['bun', 'test', 'test-bun/blueprint-research.test.ts', 'test-bun/blueprint-map-views.test.ts']),
     run('repository-check', ['bun', 'run', 'check']),
     run('build', ['bun', 'research/blueprints/build.ts']),
 ]

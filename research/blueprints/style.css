@@ -134,3 +134,26 @@ textarea { width: 100%; resize: vertical; border: 1px solid var(--hairline); bor
   .mobile-map .inspector { display: none; }
   .mobile-map .context { display: flex; left: 14px; top: 76px; max-width: calc(100% - 28px); }
 }
+
+/* Presentation controls remain outside the camera and the editor's repaint boundary. */
+#map-controls { position: fixed; left: 50%; transform: translateX(-50%); bottom: 6px; z-index: 7; display: flex; align-items: center; gap: 6px; padding: 5px; }
+.view-options { margin: 0; padding: 0; border: 0; display: flex; gap: 2px; }
+.view-options label { position: relative; cursor: pointer; }
+.view-options input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.view-options span { display: flex; align-items: center; gap: 6px; min-height: 32px; padding: 5px 9px; border-radius: 5px; color: var(--muted); font-size: 11px; }
+.view-options svg { width: 16px; height: 16px; flex: none; }
+.view-options :checked + span { background: var(--hover); color: var(--highlight-text); box-shadow: inset 0 0 0 1px var(--highlight); }
+.view-options :focus-visible + span { outline: 2px solid var(--highlight); outline-offset: 2px; }
+.map-navigation, .orbit-navigation { display: flex; border-left: 1px solid var(--hairline); padding-left: 4px; gap: 1px; }
+#map-controls button { min-width: 30px; min-height: 32px; padding: 4px 6px; border: 0; font-size: 11px; }
+.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+@media (max-width: 1000px) { .study-label { max-width: 210px; } }
+@media (max-width: 720px) {
+  #map-controls { left: 8px; right: 8px; top: 72px; bottom: auto; transform: none; justify-content: center; }
+  #map-controls .view-options span { gap: 4px; padding: 5px 6px; font-size: 10px; }
+  #map-controls .view-options svg { width: 12px; height: 12px; }
+  #map-controls button { min-width: 26px; padding: 4px; }
+  .inspector { top: 128px; }
+  #map { top: 166px; }
+  .mobile-map .context { top: 124px; }
+}

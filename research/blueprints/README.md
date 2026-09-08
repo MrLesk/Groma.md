@@ -37,3 +37,7 @@ python research/blueprints/capture.py
 The capture script starts its own localhost server. Chromium exercises native clipboard copy/paste, missing bindings, preview, creation, repeated paste, cancellation, invalid import, sequentially stale save, reload and narrow layout. Firefox and WebKit exercise explicit text import through persistence. Tests load only `test/fixtures/blueprint-research/`. Results and screenshots are written to `evidence/`. Set `BLUEPRINT_TRACK_TASK=TASK-324` while generating committed evidence to record each file through the Backlog CLI immediately.
 
 See [the supported scenario](scenario.feature), [research findings](FINDINGS.md) and [execution evidence](evidence/). The repository’s MIT license applies. No font files are distributed.
+
+## Map-view follow-up
+
+The same editor now has a compact **Iso / 2D / Layers** selector, Fit and zoom controls. F2 toggles Layers and returns to the previous nested view. Draft state and inspector input are independent of the selected presentation. See [MAP-VIEWS.md](MAP-VIEWS.md) for the reasoning, interaction contract, scope and follow-up captures.

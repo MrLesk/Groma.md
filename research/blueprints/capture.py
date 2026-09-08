@@ -14,6 +14,7 @@ import subprocess
 import threading
 import traceback
 from playwright.sync_api import sync_playwright
+from map_capture import exercise_map_views
 
 ROOT = Path(__file__).resolve().parents[2]
 OUT = ROOT / 'research/blueprints/evidence'
@@ -205,6 +206,7 @@ try:
         browser = playwright.chromium.launch()
         versions['chromium'] = browser.version
         text = primary(browser, base)
+        exercise_map_views(browser, base, 'chromium', check, capture)
         browser.close()
         for name in os.environ.get('BLUEPRINT_BROWSERS', 'firefox,webkit').split(','):
             if name not in ('firefox', 'webkit'):
@@ -212,6 +214,7 @@ try:
             browser = getattr(playwright, name).launch()
             versions[name] = browser.version
             secondary(browser, base, name, text)
+            exercise_map_views(browser, base, name, check, capture)
             browser.close()
         check('No uncaught browser exceptions', not ERRORS, 'all')
 except Exception:

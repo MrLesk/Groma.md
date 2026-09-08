@@ -1,3 +1,4 @@
+import { installMapControls } from './map-controls.ts'
 import seedProjects from '../../test/fixtures/blueprint-research/projects.json'
 import seedBlueprint from '../../test/fixtures/blueprint-research/saved-card.json'
 import { decodeBlueprint, encodeBlueprint, inspectMarkdown, validateBlueprint } from './model.ts'
@@ -40,12 +41,13 @@ $('#app').innerHTML = `<header class="topbar chrome">
   ${button('Paste blueprint', 'paste', 'secondary')}${button('Blueprints', 'catalogue', 'primary')}
   <label class="theme-label"><select id="theme" aria-label="Theme"><option value="light">Light</option><option value="dark">Dark</option><option value="blueprint">Blueprint</option></select></label>
 </header><aside class="sidebar chrome"><div class="sidebar-title">Architecture</div><div id="hierarchy"></div><div class="section-label drafts-label">Drafts</div><div id="draft-list"></div><div class="sidebar-foot"><span class="kind-mark"></span>Current <span class="kind-mark ghost"></span>New part</div></aside>
-<div id="map" aria-label="Fixture architecture"></div><div class="context chrome" id="context"></div>
+<div id="map" aria-label="Fixture architecture"></div><section id="map-controls" class="chrome" aria-label="Map controls"></section><div class="context chrome" id="context"></div>
 <aside id="inspector" class="inspector chrome"><div id="error" role="alert" hidden></div><div id="panel"></div><div id="toast" role="status" hidden></div></aside>
 <div class="mobile-switch">${button('Map / Details', 'mobile-map', 'secondary')}</div>
 <div class="study-label"><span class="study-dot"></span>BLUEPRINT RESEARCH · FIXTURE DATA ONLY</div>
 <dialog id="dialog"><div id="dialog-body"></div></dialog>`
 const map = studyMap($('#map'), id => selectCurrent(id))
+installMapControls($('#map-controls'), map)
 function selectCurrent(id: string): void {
   if (!project.elements.some(element => element.id === id)) return
   if (mode !== 'current') previousMode = mode
@@ -54,7 +56,8 @@ function selectCurrent(id: string): void {
   render()
 }
 function currentDraft(): Draft | undefined {
-  return mode === 'preview' ? placement?.draft : mode === 'draft' ? draft : undefined
+  const context = mode === 'current' ? previousMode : mode
+  return context === 'preview' ? placement?.draft : context === 'draft' ? draft : undefined
 }
 function render(): void {
   viewGeneration += 1
@@ -76,7 +79,7 @@ function render(): void {
   $('#panel').innerHTML = panels[mode]()
   $('#error').hidden = !error
   $('#error').textContent = error
-  map.paint(project, visible)
+  map.paint(project, visible, mode === 'current' ? selected : undefined)
 }
 function announce(message: string): void {
   $('#toast').textContent = message; $('#toast').hidden = false
@@ -178,5 +181,5 @@ document.addEventListener('paste', event => {
 window.addEventListener('beforeunload', event => { if (pending()) { event.preventDefault(); event.returnValue = '' } })
 
 /** Read-only observation for the research browser checks; it cannot apply state. */
-Object.assign(window, { GromaBlueprintResearch: { snapshot: () => structuredClone({ project, mode, bindings, placement, error }) } })
+Object.assign(window, { GromaBlueprintResearch: { snapshot: () => structuredClone({ project, mode, previousMode, selected, bindings, placement, error, map: map.snapshot() }) } })
 render()
