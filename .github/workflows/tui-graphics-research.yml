@@ -2,7 +2,7 @@ name: Publish TUI graphics research
 on:
   push:
     branches: [research/tui-graphics-prototype]
-    paths: [research/tui-graphics-delivery-4.b64]
+    paths: [research/tui-graphics-fonts.b64]
 permissions:
   contents: write
 jobs:
@@ -22,6 +22,9 @@ jobs:
           patch = lzma.decompress(base64.b64decode(encoded))
           assert hashlib.sha256(patch).hexdigest() == '4aaa15a366d4da771034a9e53085af1944b56ca1feac9ac54150422f581c4c81'
           subprocess.run(['git', 'apply', '--index', '-'], input=patch, check=True)
+          followup = lzma.decompress(base64.b64decode(pathlib.Path('research/tui-graphics-fonts.b64').read_text()))
+          assert hashlib.sha256(followup).hexdigest() == '682c5236457e55814bb17436cbbcb76d30501a4a14f86f2b04b7b84c484a6058'
+          subprocess.run(['git', 'apply', '--index', '-'], input=followup, check=True)
           PY
       - name: Verify installation and repository checks
         run: |
@@ -35,7 +38,7 @@ jobs:
       - name: Publish only the research branch and remove temporary delivery files
         run: |
           test "$GITHUB_REF" = 'refs/heads/research/tui-graphics-prototype'
-          git rm .github/workflows/tui-graphics-research.yml research/tui-graphics-delivery-*.b64
+          git rm .github/workflows/tui-graphics-research.yml research/tui-graphics-delivery-*.b64 research/tui-graphics-fonts.b64
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git commit -m 'TASK-324 - Render the terminal map as keyboard-first graphics'
