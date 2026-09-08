@@ -1,6 +1,8 @@
 {
   "browsers": {
-    "chromium": "143.0.7499.4"
+    "chromium": "143.0.7499.4",
+    "firefox": "144.0.2",
+    "webkit": "26.0"
   },
   "results": [
     {
@@ -131,12 +133,62 @@
     {
       "engine": "chromium",
       "name": "Changing context dismisses obsolete copy feedback",
-      "passed": false
+      "passed": true
+    },
+    {
+      "engine": "chromium",
+      "name": "No external network requests",
+      "passed": true
+    },
+    {
+      "engine": "firefox",
+      "name": "Explicit paste, binding and preview preserve current data",
+      "passed": true
+    },
+    {
+      "engine": "firefox",
+      "name": "Created draft persists after reload",
+      "passed": true
+    },
+    {
+      "engine": "firefox",
+      "name": "Current records are unchanged",
+      "passed": true
+    },
+    {
+      "engine": "firefox",
+      "name": "Real renderer displays the saved draft",
+      "passed": true
+    },
+    {
+      "engine": "webkit",
+      "name": "Explicit paste, binding and preview preserve current data",
+      "passed": true
+    },
+    {
+      "engine": "webkit",
+      "name": "Created draft persists after reload",
+      "passed": true
+    },
+    {
+      "engine": "webkit",
+      "name": "Current records are unchanged",
+      "passed": true
+    },
+    {
+      "engine": "webkit",
+      "name": "Real renderer displays the saved draft",
+      "passed": true
+    },
+    {
+      "engine": "all",
+      "name": "No uncaught browser exceptions",
+      "passed": true
     }
   ],
   "pageErrors": [],
   "externalRequests": [],
-  "failure": "Traceback (most recent call last):\n  File \"/home/runner/work/Groma.md/Groma.md/research/blueprints/capture.py\", line 206, in <module>\n    text = primary(browser, base)\n           ^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/runner/work/Groma.md/Groma.md/research/blueprints/capture.py\", line 167, in primary\n    check('Changing context dismisses obsolete copy feedback', target.locator('#toast').is_hidden())\n  File \"/home/runner/work/Groma.md/Groma.md/research/blueprints/capture.py\", line 42, in check\n    raise AssertionError(name)\nAssertionError: Changing context dismisses obsolete copy feedback\n",
+  "failure": null,
   "limits": [
     "Fixture localStorage only; no production Groma writes.",
     "Stale checking is sequential detection, not a cross-tab atomic compare-and-swap.",

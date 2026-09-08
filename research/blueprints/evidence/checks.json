@@ -1,5 +1,5 @@
 {
-  "sourceCommit": "eaf29a396e47c60fb90075fbacdfba24c4719438",
+  "sourceCommit": "b90464649c46e3010e7db5f55aa59ac389ecb100",
   "bun": "1.4.1",
   "node": "v22.23.2",
   "python": "3.12.14",
@@ -67,11 +67,11 @@
         "research/blueprints/capture.py"
       ],
       "directory": ".",
-      "exitCode": 1,
+      "exitCode": 0,
       "log": "browser-tests.log"
     }
   ],
-  "htmlSha256": "d9c1d05bfb54fe1b320f6ef6bfdfc7f7e853f41943d366145f907bd8bfc1c082",
-  "allPassed": false,
+  "htmlSha256": "9a1f3a9c7d5f3c79957a9ae053e2a9bd49e44a721b74816a3db3e76635d7b98d",
+  "allPassed": true,
   "scope": "Isolated fixture prototype using the existing Groma renderer; no production authoring or scanner changes."
 }
