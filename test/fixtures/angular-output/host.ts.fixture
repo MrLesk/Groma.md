@@ -1,0 +1,8 @@
+import { Component } from '@angular/core'
+import { Editor } from './emitter'
+
+@Component({ selector: 'sample-host', standalone: true, imports: [Editor], templateUrl: './host.html' })
+export class Host {
+  received = ''
+  receive(value: string) { this.received = value }
+}
