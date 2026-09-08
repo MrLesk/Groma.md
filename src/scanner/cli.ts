@@ -1,5 +1,7 @@
 import type { Command } from 'commander'
 
+import { setupScanner } from './registry.ts'
+
 import {
   addScanner,
   installScanners,
@@ -57,6 +59,15 @@ export function registerScannerCommands(program: Command): void {
           console.log(scannerLine(item))
         }
       })
+    })
+
+  scanner
+    .command('setup')
+    .description('Explicitly run a configured scanner dependency setup; pass plugin options after --')
+    .argument('<id>', 'configured scanner id')
+    .argument('[args...]', 'scanner-specific setup arguments')
+    .action(async (id: string, args: string[]) => {
+      await runScannerCommand(() => setupScanner(process.cwd(), id, args))
     })
 
   scanner

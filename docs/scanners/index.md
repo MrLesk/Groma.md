@@ -23,7 +23,9 @@ Optional modules are enabled only through `scanners.json` in the selected
 `groma/` or `.groma/` directory, normally written by `groma scanner add`.
 `groma scanner list` derives built-in, found,
 and missing readiness without executing third-party code. Network installation
-happens only in `scanner add` and `scanner install`.
+happens only in `scanner add` and `scanner install`. A configured plugin may
+provide an explicit dependency setup command, `groma scanner setup <id> --
+[plugin arguments]`; scan, watch and inventory never call that command.
 
 Bare `groma` shows scanner readiness beside the embedded Backlog work-source
 readiness in one fixed bottom row. The complete scanner inventory and scanner

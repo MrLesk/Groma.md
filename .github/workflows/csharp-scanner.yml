@@ -1,0 +1,82 @@
+name: CSharp scanner prototype
+on:
+  push:
+    branches: [research/csharp-scanner-prototype]
+    paths:
+      - 'plugins/scanners/csharp/**'
+      - 'packages/scanner/**'
+      - 'src/scanner/**'
+      - 'scripts/*csharp*'
+      - 'test/fixtures/csharp-operations/**'
+      - 'test-bun/*scanner*'
+      - '.github/workflows/csharp-scanner.yml'
+  pull_request:
+    paths:
+      - 'plugins/scanners/csharp/**'
+      - 'packages/scanner/**'
+      - 'src/scanner/**'
+      - 'scripts/*csharp*'
+      - 'test/fixtures/csharp-operations/**'
+      - 'test-bun/*scanner*'
+      - '.github/workflows/csharp-scanner.yml'
+permissions:
+  contents: read
+jobs:
+  scanner:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.1
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            9.0.x
+            10.0.400
+      - name: Install build dependencies
+        shell: bash
+        run: |
+          bun install --frozen-lockfile
+          dotnet restore plugins/scanners/csharp/dotnet/test/Groma.CSharpScanner.Tests.csproj --locked-mode
+      - name: Check source and Roslyn contracts
+        shell: bash
+        run: |
+          bun run check
+          dotnet test plugins/scanners/csharp/dotnet/test/Groma.CSharpScanner.Tests.csproj --no-restore
+      - name: Build and validate a relocated package
+        shell: bash
+        run: |
+          bun run build
+          bun scripts/package-csharp-scanner.ts
+          binary=dist/groma
+          if [[ "${{ runner.os }}" == Windows ]]; then binary=dist/groma.exe; fi
+          bun scripts/validate-csharp-package.ts "$binary" dist/csharp-scanner-package
+      - name: Verify explicit private SDK installation
+        if: runner.os == 'Linux'
+        shell: bash
+        env:
+          GROMA_CSHARP_TEST_INSTALL: '1'
+        run: bun scripts/validate-csharp-package.ts dist/groma dist/csharp-scanner-package
+      - name: Benchmark pinned FluentValidation source
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone --depth 1 --branch 12.0.0 https://github.com/FluentValidation/FluentValidation.git "$RUNNER_TEMP/FluentValidation"
+          test "$(git -C "$RUNNER_TEMP/FluentValidation" rev-parse HEAD)" = 5365d9294812c8a5c5a7f4d7447c9a65b79a025b
+          (cd "$RUNNER_TEMP/FluentValidation" && dotnet --version && dotnet restore src/FluentValidation/FluentValidation.csproj --nologo)
+          /usr/bin/time -v -o dist/csharp-benchmark-resources.txt bun scripts/benchmark-csharp-scanner.ts "$RUNNER_TEMP/FluentValidation" src/FluentValidation/FluentValidation.csproj
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: csharp-prototype-${{ matrix.os }}
+          retention-days: 7
+          path: |
+            dist/csharp-scanner-package
+            dist/csharp-package-validation.json
+            dist/csharp-benchmark*

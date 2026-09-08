@@ -83,6 +83,8 @@ export interface ScannerPlugin {
   id: string
   matchesFile(relativePath: string): boolean
   scan(repositoryRoot: string): Promise<ScanObservation | undefined>
+  /** Explicit dependency setup only; never called by scan, watch, list, or module installation. */
+  setup?(repositoryRoot: string, args: readonly string[]): Promise<void>
 }
 
 type ObservationInput = Omit<ScanObservation, 'schemaVersion' | 'complete'>

@@ -27,6 +27,7 @@ function scannerPlugin(value: unknown, expectedId: string): ScannerPlugin {
   if (typeof candidate.matchesFile !== 'function' || typeof candidate.scan !== 'function') {
     throw new Error(`scanner ${expectedId} must export matchesFile and scan functions`)
   }
+  if (candidate.setup !== undefined && typeof candidate.setup !== 'function') throw new Error(`scanner ${expectedId} setup must be a function`)
   return candidate as ScannerPlugin
 }
 
@@ -51,6 +52,23 @@ function requireFoundModules(
   throw new Error(
     `scanner ${missing.id} is missing at ${missing.source}; restore it or run groma scanner remove ${missing.id}`,
   )
+}
+
+/** Execute only the explicitly selected, configured module. Inventory does not import plugin code. */
+export async function setupScanner(
+  repositoryRoot: string,
+  id: string,
+  args: readonly string[],
+  options: ScannerResolutionOptions = {},
+): Promise<void> {
+  const modules = await configuredScannerModules(repositoryRoot, options)
+  const selected = modules.find(module => module.id === id)
+  if (!selected) throw new Error(`scanner is not configured: ${id}`)
+  const [found] = requireFoundModules(repositoryRoot, [selected])
+  if (!found) throw new Error(`scanner is missing: ${id}`)
+  const scanner = await importScanner(found.entry, found.id)
+  if (!scanner.setup) throw new Error(`scanner ${id} has no dependency setup command`)
+  await scanner.setup(repositoryRoot, args)
 }
 
 export async function loadScannerRegistry(
