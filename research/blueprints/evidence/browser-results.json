@@ -107,6 +107,16 @@
     },
     {
       "engine": "chromium",
+      "name": "Starting a fresh placement reloads the saved fixture",
+      "passed": true
+    },
+    {
+      "engine": "chromium",
+      "name": "Fresh placement preserves the other tab draft",
+      "passed": true
+    },
+    {
+      "engine": "chromium",
       "name": "Narrow layout has no horizontal overflow",
       "passed": true
     },

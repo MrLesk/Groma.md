@@ -1,5 +1,5 @@
 {
-  "sourceCommit": "d6ca0314106d83d299538ae21e52bb4e7facbf51",
+  "sourceCommit": "c5ee7ac2c00e71972ed1fc3087c3e0a86948be95",
   "bun": "1.4.1",
   "node": "v22.23.2",
   "python": "3.12.14",
@@ -71,7 +71,7 @@
       "log": "browser-tests.log"
     }
   ],
-  "htmlSha256": "ea8cde32cebafeb70fa3980957896fc14a3cc29835d6d662a7a0c9e51c55ea6c",
+  "htmlSha256": "67a0447fe716926026a3e77183359d411d07985cdc9cef895cb4727b0a42275b",
   "allPassed": true,
   "scope": "Isolated fixture prototype using the existing Groma renderer; no production authoring or scanner changes."
 }
