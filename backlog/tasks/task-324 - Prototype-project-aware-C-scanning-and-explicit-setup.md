@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@chatgpt'
 created_date: '2026-09-07 22:15'
-updated_date: '2026-09-08 05:35'
+updated_date: '2026-09-08 05:45'
 labels: []
 dependencies: []
 references:
@@ -59,6 +59,7 @@ modified_files:
   - docs/scanners/dotnet-csharp/production-readiness.md
   - docs/scanners/dotnet-csharp/validation.md
   - .github/workflows/csharp-project-research.yml
+  - scripts/validate-csharp-repository.ts
 priority: high
 type: spike
 ordinal: 361000
@@ -93,6 +94,8 @@ Alex requested research and a runnable review-branch prototype for globally inst
 1. Preserve the language-neutral evidence/core-ownership boundary; document the baseline and supported .NET subset. 2. Separate repository root and input selection; enforce complete project/file/compilation coverage and deterministic resource limits. 3. Add conservative Roslyn operation extraction using the existing optional evidence fields. 4. Replace scan-time builds with a prebuilt worker and explicit optional scanner setup; prepare portable artifacts and private SDK installation with verified downloads. 5. Add synthetic counterexamples and run a pinned FluentValidation experiment, full checks and packaged/compiled smoke tests. 6. Record evidence and release blockers, push only the research branch, and keep current architecture selection policy unchanged.
 
 7. Reverify PR #106 and its artifacts; test unmodified pinned ASP.NET eShopOnWeb projects as well as FluentValidation, inspect source witnesses, and record real outcomes and release gaps.
+
+8. Preserve the default eShopOnWeb audit-warning failure, run an explicitly labeled no-audit restore control without changing tracked source, and exercise successful supported input through the compiled CLI with repeatability and mixed-language failure atomicity.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes

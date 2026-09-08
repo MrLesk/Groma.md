@@ -39,6 +39,7 @@ jobs:
           bun install --frozen-lockfile
           dotnet restore plugins/scanners/csharp/dotnet/Groma.CSharpScanner.csproj --locked-mode
           bun scripts/package-csharp-scanner.ts
+          bun run build
           mkdir -p dist/csharp-real-projects
           dotnet --info > dist/csharp-real-projects/dotnet-info.txt
       - name: Clone pinned ASP.NET application
@@ -52,30 +53,38 @@ jobs:
           git -C "$root" checkout --detach FETCH_HEAD
           test "$(git -C "$root" rev-parse HEAD)" = 4da8212117e87d808d4bbc7da6286fd2147ce606
           git -C "$root" archive --format=tar.gz -o "$GITHUB_WORKSPACE/dist/csharp-real-projects/eshop-source.tar.gz" HEAD
-      - name: Measure PublicApi and Web without launching applications
+      - name: Measure default restore and an explicit audit-policy control
         shell: bash
         run: |
           set -euo pipefail
           root="$RUNNER_TEMP/eShopOnWeb"
-          for name in PublicApi Web; do
-            output="$GITHUB_WORKSPACE/dist/csharp-real-projects/$name"
-            mkdir -p "$output"
-            project="src/$name/$name.csproj"
-            set +e
-            (cd "$root" && timeout 240 dotnet restore "$project" --nologo) > "$output/restore.log" 2>&1
-            restored=$?
-            if [ "$restored" = 0 ]; then
-              /usr/bin/time -v -o "$output/resources.txt" bun scripts/benchmark-csharp-scanner.ts "$root" "$project" > "$output/scan.log" 2>&1
-              scanned=$?
-            else
-              scanned=125
-            fi
-            set -e
-            printf '{"restoreExit":%s,"scanExit":%s}\n' "$restored" "$scanned" > "$output/result.json"
-            if [ "$scanned" = 0 ]; then
-              mv dist/csharp-benchmark* "$output/"
-            fi
-            git -C "$root" diff --exit-code
+          for policy in default audit-disabled-control; do
+            for name in PublicApi Web; do
+              output="$GITHUB_WORKSPACE/dist/csharp-real-projects/$policy/$name"
+              mkdir -p "$output"
+              project="src/$name/$name.csproj"
+              restore=(dotnet restore "$project" --nologo --force)
+              if [ "$policy" = audit-disabled-control ]; then restore+=(-p:NuGetAudit=false); fi
+              printf '%q ' "${restore[@]}" > "$output/command.txt"
+              set +e
+              (cd "$root" && timeout 240 "${restore[@]}") > "$output/restore.log" 2>&1
+              restored=$?
+              if [ "$restored" = 0 ]; then
+                /usr/bin/time -v -o "$output/resources.txt" bun scripts/benchmark-csharp-scanner.ts "$root" "$project" > "$output/scan.log" 2>&1
+                scanned=$?
+              else
+                scanned=125
+              fi
+              set -e
+              printf '{"restoreExit":%s,"scanExit":%s}\n' "$restored" "$scanned" > "$output/result.json"
+              if [ "$scanned" = 0 ]; then
+                mv dist/csharp-benchmark* "$output/"
+                if [ "$name" = PublicApi ]; then
+                  bun scripts/validate-csharp-repository.ts "$root" "$project" dist/groma dist/csharp-scanner-package "$output"
+                fi
+              fi
+              git -C "$root" diff --exit-code
+            done
           done
           git -C "$root" status --porcelain > dist/csharp-real-projects/eshop-status.txt
       - uses: actions/upload-artifact@v4
