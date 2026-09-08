@@ -1,0 +1,53 @@
+name: Blueprint research
+on:
+  push:
+    branches: [research/blueprint-store-prototype]
+    paths:
+      - '.github/workflows/blueprint-research.yml'
+      - 'research/blueprints/**'
+      - 'test/fixtures/blueprint-research/**'
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: blueprint-research
+  cancel-in-progress: false
+jobs:
+  research:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: '1.4.1'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Prepare toolchain and read project workflow
+        run: |
+          set -euo pipefail
+          bun install --frozen-lockfile
+          npm install --prefix "$RUNNER_TEMP/backlog-tools" backlog.md@1.51.0
+          export PATH="$RUNNER_TEMP/backlog-tools/node_modules/.bin:$PATH"
+          backlog instructions overview
+          backlog instructions task-creation
+          backlog instructions task-execution
+          backlog task create --help
+          backlog task edit --help
+          backlog task list --plain
+          bun src/cli.ts agent-instructions
+      - name: Package isolated workspace
+        run: |
+          mkdir -p "$RUNNER_TEMP/blueprint-workspace/tools"
+          cp "$(which bun)" "$RUNNER_TEMP/blueprint-workspace/tools/bun"
+          cp -a "$RUNNER_TEMP/backlog-tools" "$RUNNER_TEMP/blueprint-workspace/tools/backlog-tools"
+          tar -czf "$RUNNER_TEMP/blueprint-workspace/repository.tgz" --exclude=.git .
+          git log -1 --format='%H' > "$RUNNER_TEMP/blueprint-workspace/BASE_COMMIT"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: blueprint-research-workspace
+          path: ${{ runner.temp }}/blueprint-workspace
+          retention-days: 3
