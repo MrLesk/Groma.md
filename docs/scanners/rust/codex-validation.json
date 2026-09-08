@@ -1,0 +1,164 @@
+{
+  "date": "2026-09-08",
+  "repository": "openai/codex",
+  "sourceCommit": "d6489472f3c15e87d2d7763a5fde033545c530f8",
+  "scannerCommit": "6d465f8909f00beb163128ae93f8e66a15c1b0e8",
+  "scanner": {
+    "language": "rust",
+    "engine": "syn-syntax",
+    "engineVersion": "2.0.106/groma-0.1.0"
+  },
+  "scannerBinarySha256": "947734b05bc5db01058f0b51e378b5fbbcf1f7ba03079140d1b1492e8ac8c9d6",
+  "sourceInventory": {
+    "trackedFiles": 7488,
+    "trackedRustFiles": 3895,
+    "trackedCargoManifests": 153,
+    "explicitMainWorkspaceMembers": 146,
+    "edition": "2024",
+    "declaredToolchain": "1.95.0",
+    "targetBuilt": false,
+    "targetDependenciesInstalled": false,
+    "trackedSourceUnchanged": true
+  },
+  "fullInput": {
+    "status": "rejected",
+    "environment": "GitHub Actions ubuntu-24.04 x64; original prebuilt CI package",
+    "workflowRun": 34194154000,
+    "cases": [
+      {
+        "input": "repository",
+        "runs": [
+          {
+            "secondsUntilFailure": 1.9,
+            "peakRssKiB": 303352,
+            "exit": 1,
+            "outputBytes": 0,
+            "stderr": "Rust scan failed: multiple packages own source file: codex-rs/exec-server/src/proto/codex.exec_server.relay.v1.rs"
+          },
+          {
+            "secondsUntilFailure": 1.88,
+            "peakRssKiB": 303408,
+            "exit": 1,
+            "outputBytes": 0,
+            "stderr": "Rust scan failed: multiple packages own source file: codex-rs/exec-server/src/proto/codex.exec_server.relay.v1.rs"
+          },
+          {
+            "secondsUntilFailure": 1.9,
+            "peakRssKiB": 303356,
+            "exit": 1,
+            "outputBytes": 0,
+            "stderr": "Rust scan failed: multiple packages own source file: codex-rs/exec-server/src/proto/codex.exec_server.relay.v1.rs"
+          }
+        ]
+      },
+      {
+        "input": "workspace",
+        "runs": [
+          {
+            "secondsUntilFailure": 1.91,
+            "peakRssKiB": 302220,
+            "exit": 1,
+            "outputBytes": 0,
+            "stderr": "Rust scan failed: multiple packages own source file: exec-server/src/proto/codex.exec_server.relay.v1.rs"
+          },
+          {
+            "secondsUntilFailure": 1.9,
+            "peakRssKiB": 302400,
+            "exit": 1,
+            "outputBytes": 0,
+            "stderr": "Rust scan failed: multiple packages own source file: exec-server/src/proto/codex.exec_server.relay.v1.rs"
+          },
+          {
+            "secondsUntilFailure": 1.9,
+            "peakRssKiB": 302364,
+            "exit": 1,
+            "outputBytes": 0,
+            "stderr": "Rust scan failed: multiple packages own source file: exec-server/src/proto/codex.exec_server.relay.v1.rs"
+          }
+        ]
+      }
+    ],
+    "cause": "A generated Rust file is included through #[path] in both codex-exec-server and codex-exec-server-test-support. Scanner refuses different provisional package placements for one physical file."
+  },
+  "reducedWorkspaceControl": {
+    "status": "complete within explicitly reduced syntax scope; NOT a complete Codex scan",
+    "environment": "Linux x64 local container; no caches flushed; three fresh native worker processes",
+    "manifests": [
+      "codex-rs/Groma.research.Cargo.toml"
+    ],
+    "manifestConstruction": "Byte-identical copy of codex-rs/Cargo.toml in the same directory except removal of the single explicit exec-server/tests/support member; original tracked manifests/source untouched. Ancillary Cargo roots are not selected.",
+    "excludedWorkspaceMember": "exec-server/tests/support",
+    "scopes": 145,
+    "files": 2383,
+    "sourceBytes": 32144811,
+    "operations": 25668,
+    "invocations": 175669,
+    "resolvedInvocationSets": 7297,
+    "unresolvedInvocationSets": 168372,
+    "namedCallbackBindings": 0,
+    "sourceRelationships": 14569,
+    "diagnostics": 32,
+    "outputBytes": 42346735,
+    "byteIdentical": true,
+    "runs": [
+      {
+        "seconds": 11.82,
+        "peakRssKiB": 756208,
+        "exit": 0,
+        "stdoutSha256": "77b8236e997ff499f70ec020d4f17205834ec07e0174dcc1de83214938d386b6"
+      },
+      {
+        "seconds": 12.72,
+        "peakRssKiB": 756372,
+        "exit": 0,
+        "stdoutSha256": "77b8236e997ff499f70ec020d4f17205834ec07e0174dcc1de83214938d386b6"
+      },
+      {
+        "seconds": 11.65,
+        "peakRssKiB": 756368,
+        "exit": 0,
+        "stdoutSha256": "77b8236e997ff499f70ec020d4f17205834ec07e0174dcc1de83214938d386b6"
+      }
+    ]
+  },
+  "gromaSourceModeIntegration": {
+    "bun": "1.4.1",
+    "usesUnchangedStagedAdapter": true,
+    "controlScanExit": 0,
+    "firstScanSeconds": 17.17,
+    "repeatScanSeconds": 17.81,
+    "ownedSourceFiles": 3113,
+    "rustFiles": 2383,
+    "typeScriptJavaScriptFiles": 730,
+    "typescriptSchemaFiles": 711,
+    "architectureElements": 3452,
+    "architectureRelationships": 0,
+    "repeatArchitectureUnchanged": true,
+    "fullWorkspaceScanExit": 1,
+    "failedFullScanPreservesAllArchitectureFiles": true,
+    "architectureFilesVerified": 3455,
+    "compiledGromaTestedThisPass": false
+  },
+  "additionalControls": {
+    "directCoreCrate": "Rejected inherited edition as 2015; actual workspace edition is 2024. Selecting a member directly does not load ancestor workspace metadata.",
+    "standaloneArgumentCommentLint": {
+      "files": 3,
+      "operations": 23,
+      "invocations": 172,
+      "resolvedInvocationSets": 0,
+      "byteIdenticalAcrossThreeRuns": true,
+      "seconds": [
+        0.02,
+        0.02,
+        0.03
+      ]
+    }
+  },
+  "limitations": [
+    "Full Codex is rejected; reduced control is not a supported whole-repository workaround.",
+    "Resolved fraction is not precision, recall, or complete runtime coverage.",
+    "The 711 TypeScript schema files are not a frontend or evidence of runtime communication.",
+    "One early second local control attempt was interrupted by the orchestration tool timeout; its empty partial artifacts are retained and not counted among the three completed identical runs.",
+    "No scanner code changes, Cargo build, proc-macro execution, rust-analyzer comparison, new platform certification, browser-rendering or watch-latency test was performed."
+  ]
+}

@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@rust-scanner-research'
 created_date: '2026-09-07 22:05'
-updated_date: '2026-09-07 22:38'
+updated_date: '2026-09-08 06:31'
 labels: []
 dependencies: []
 modified_files:
@@ -51,6 +51,8 @@ modified_files:
   - docs/scanners/rust/research.md
   - docs/scanners/rust/validation.json
   - docs/scanners/index.md
+  - docs/scanners/rust/codex-validation.md
+  - docs/scanners/rust/codex-validation.json
 parent_task_id: TASK-228
 type: spike
 ordinal: 361000
@@ -93,6 +95,8 @@ Implemented a source-only syn/TOML native sidecar, bundled ESM adapter, standalo
 Validation: 36 focused concurrent tests / 85 assertions passed; cargo fmt --check and cargo clippy -- -D warnings passed; final bun run check passed 110 Node and 355 existing Bun tests with six existing Biome warnings. An initial check passed assertions but emitted a watcher teardown error. Untouched baseline and final changed check passed; cause unproven and watcher implementation was not altered. Final compiled-Groma smoke passed with only Git/Groma on consumer PATH and fresh HOME/TypeScript worker caches. Separate independent-agent reviews could not be executed and are not claimed.
 
 Pinned ripgrep 14.1.1 (4649aa9700619f94cf9c66876e9549d83420e16c) cloned and scanned without building target code: 78 files, 10 scopes, 2078 operations, 5722 invocation observations, 81 resolved / 5641 unresolved, zero supported callback bindings. Release native 0.15-0.17 s and 32316-32444 KiB peak RSS in three fresh processes, caches not flushed. Synthetic 1001-file / 10000-call case 0.17-0.19 s. These are native syntax measurements, not end-to-end performance or a precision/recall benchmark. Full report, support boundaries, primary links and validation JSON are under docs/scanners/rust/. Production rust-analyzer integration, OS/ABI matrix, published package, diagnostic visibility and automatic protocol joining remain explicit release gates.
+
+Supplemental Codex validation (8 September 2026), pinned d6489472f3c15e87d2d7763a5fde033545c530f8, with unchanged scanner source 6d465f8 and existing CI package. Full repository and codex-rs workspace each fail in all three CI runs, emitting zero stdout, because exec-server and exec-server/tests/support include the same physical generated relay source via #[path]. A separately declared 145-member control excludes only that member and yields 2383 Rust files, 25668 operations, 175669 invocation sets (7297 resolved; 168372 unresolved), zero named callback bindings, and byte-identical 42.3 MB JSON in three completed local runs (11.65-12.72 seconds; approximately 739 MiB peak RSS). One initial control attempt was interrupted by the experiment harness; its partial artifacts are preserved and not counted. Actual source-mode Groma combines 2383 Rust and 730 TS/JS files (711 generated schemas), creates no relationships, and preserves all 3455 map/config files across a successful repeat and a failing full-workspace scan. All tracked native-test source remains unchanged. Core-only discovery also fails inherited edition handling. No scanner/core code, target build, macro execution, browser/watch tests, semantic-engine comparison or new compiled/platform certification was performed. See docs/scanners/rust/codex-validation.md and codex-validation.json; this is additional validation, not full Codex support.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary

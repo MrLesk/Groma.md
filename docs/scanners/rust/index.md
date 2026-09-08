@@ -7,6 +7,8 @@ scanner registry. No new reconciliation or architecture storage format is added.
 The [research report](research.md) covers the production design, alternatives,
 installation, Rust-specific semantics, mixed-language behavior, and release gates.
 [Validation data](validation.json) records the measurements, versions, and limits.
+[Codex validation](codex-validation.md) records the full-workspace shared-source
+failure, a separately labeled 145-member control, and real mixed-map checks.
 
 ## Review the prototype
 
