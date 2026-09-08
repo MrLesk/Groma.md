@@ -1,0 +1,75 @@
+name: Rust Codex experiment
+on:
+  push:
+    branches: [research/rust-codex-validation]
+    paths: [.github/workflows/rust-codex-experiment.yml]
+permissions:
+  contents: read
+  actions: read
+jobs:
+  experiment:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 6d465f8909f00beb163128ae93f8e66a15c1b0e8
+          path: groma
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: openai/codex
+          ref: d6489472f3c15e87d2d7763a5fde033545c530f8
+          path: codex
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: groma-rust-scanner-linux-x64-prototype
+          run-id: 34168019279
+          github-token: ${{ github.token }}
+          path: previous-package
+      - name: Observe unchanged Codex with unchanged scanner
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/codex-evidence /tmp/rust-scanner
+          tar -xzf previous-package/groma-rust-scanner-linux-x64-prototype.tar.gz -C /tmp/rust-scanner
+          sha256sum /tmp/rust-scanner/bin/groma-rust-scanner > /tmp/codex-evidence/native.sha256
+          git -C codex rev-parse HEAD > /tmp/codex-evidence/codex.commit
+          git -C groma rev-parse HEAD > /tmp/codex-evidence/groma.commit
+          git -C codex status --porcelain=v1 --untracked-files=all > /tmp/codex-evidence/status-before.txt
+          git -C codex ls-files > /tmp/codex-evidence/tracked-files.txt
+          uname -a > /tmp/codex-evidence/platform.txt
+          for input in repository workspace; do
+            root="$GITHUB_WORKSPACE/codex"
+            if [ "$input" = workspace ]; then root="$root/codex-rs"; fi
+            for i in 1 2 3; do
+              set +e
+              /usr/bin/time -v -o "/tmp/codex-evidence/$input-$i.time.txt" /tmp/rust-scanner/bin/groma-rust-scanner "$root" > "/tmp/codex-evidence/$input-$i.json" 2> "/tmp/codex-evidence/$input-$i.stderr.txt"
+              status=$?
+              set -e
+              printf '%s\n' "$status" > "/tmp/codex-evidence/$input-$i.exit.txt"
+              echo "$input run $i: exit=$status stdout_bytes=$(wc -c < "/tmp/codex-evidence/$input-$i.json")"
+              cat "/tmp/codex-evidence/$input-$i.stderr.txt"
+            done
+          done
+          git -C codex status --porcelain=v1 --untracked-files=all > /tmp/codex-evidence/status-after.txt
+          cmp /tmp/codex-evidence/status-before.txt /tmp/codex-evidence/status-after.txt
+          test ! -s /tmp/codex-evidence/status-after.txt
+          git -C codex diff --exit-code
+          git -C codex diff --cached --exit-code
+          tar -C "$GITHUB_WORKSPACE" -czf /tmp/codex-pinned-checkout.tar.gz codex
+          tar -C "$GITHUB_WORKSPACE" --exclude='groma/.github/assets' -czf /tmp/groma-pinned-checkout.tar.gz groma
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rust-codex-evidence
+          path: /tmp/codex-evidence/
+          retention-days: 30
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rust-codex-checkouts
+          path: |
+            /tmp/codex-pinned-checkout.tar.gz
+            /tmp/groma-pinned-checkout.tar.gz
+          retention-days: 3
+          compression-level: 0
