@@ -55,6 +55,7 @@ export function initUi(answers: UiAnswers = {}) {
         ? undefined
         : answers.projectName ?? current ?? 'Test project'
     },
+    selectScanners: async () => [],
     viewer: async () => {
       events.push('ask:viewer')
       return answers.viewer === null
@@ -78,6 +79,7 @@ export function initDependencies(
     install: async () => true,
     output: () => undefined,
     scan: async () => ({ created: 0, refreshed: 0, matched: 0 }),
+    setupScanners: async () => true,
     ui,
     ...overrides,
   }

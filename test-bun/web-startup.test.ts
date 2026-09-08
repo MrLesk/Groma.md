@@ -6,6 +6,7 @@ import { pathToFileURL } from 'node:url'
 import { test } from 'bun:test'
 import { EMPTY_WORK_SOURCE } from '@groma/work-source'
 
+import { loadArchitecture } from '../src/architecture-reader.ts'
 import { hasComponents } from '../src/empty-world.ts'
 import { gromaInitialization } from '../src/initialize.ts'
 import { loadProjectProfile } from '../src/project-profile.ts'
@@ -27,6 +28,13 @@ function initialize(url: string, directory: string, projectName = 'First project
     method: 'POST',
     body: new URLSearchParams({ projectName, directory }),
     redirect: 'manual',
+  })
+}
+
+function scan(url: string): Promise<Response> {
+  return fetch(`${url}/scanners`, {
+    method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams(), redirect: 'manual',
   })
 }
 
@@ -118,7 +126,7 @@ test.concurrent('a loading browser reaches the actual failure when startup rejec
   }
 })
 
-test.concurrent('browser setup completes missing records in an existing folder and scans before entering the map', async () => {
+test.concurrent('browser setup reviews scanners before the first scan and enters the map only after selection', async () => {
   const root = await repository()
   await cp(path.join(fixtures, 'startup-source'), root, { recursive: true })
   await mkdir(path.join(root, '.groma'))
@@ -133,6 +141,9 @@ test.concurrent('browser setup completes missing records in an existing folder a
     assert.equal(gromaInitialization(root).initialized, true)
     assert.equal((await loadProjectProfile(root))?.title, 'First project')
     assert.match(await readFile(path.join(root, 'AGENTS.md'), 'utf8'), /groma agent-instructions/)
+    assert.equal((await loadArchitecture(root)).documents.some(item => item.frontmatter.type === 'C4 Component'), false)
+    assert.match(await (await fetch(server.url)).text(), /action="\/scanners"/)
+    assert.equal((await scan(server.url)).status, 303)
     const world = (await payload(server.url)).world
     const components = world.elements.filter(element => element.kind === 'component')
     assert.equal(components.length, 1)
@@ -167,6 +178,7 @@ test.concurrent('browser setup reuses shared initialization and creates Git firs
     assert.equal(gromaInitialization(root).initialized, true)
     assert.equal((await loadProjectProfile(root))?.title, 'Web Git project')
     assert.equal(backlogInitializations, 1)
+    assert.equal((await scan(server.url)).status, 303)
   } finally {
     await server.close()
     await rm(root, { recursive: true, force: true })
@@ -181,6 +193,7 @@ test.concurrent('a new empty project opens successfully and gains components thr
   try {
     assert.equal((await initialize(server.url, 'groma')).status, 303)
     assert.equal(gromaInitialization(root).initialized, true)
+    assert.equal((await scan(server.url)).status, 303)
     assert.equal(hasComponents((await payload(server.url)).world), false)
 
     const source = await readFile(path.join(fixtures, 'startup-source', 'src', 'main.ts'), 'utf8')

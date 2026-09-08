@@ -225,6 +225,7 @@ test('interactive init scans an empty architecture once and opens the selected v
         viewer,
       })
       let scans = 0
+      let reviewed = false
       const opened: InitViewer[] = []
       const outcome = await runInitCommand({
         repositoryRoot: root,
@@ -234,7 +235,9 @@ test('interactive init scans an empty architecture once and opens the selected v
           opened.push(selectedViewer)
         },
       }, initDependencies(ui, {
+        setupScanners: async () => { reviewed = true; return true },
         scan: async () => {
+          assert.equal(reviewed, true)
           scans += 1
           return { created: 3, refreshed: 0, matched: 0 }
         },

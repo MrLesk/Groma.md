@@ -118,18 +118,33 @@ class Evidence {
   }
 }
 
-export async function scanAngular(root: string): Promise<ScanObservation | undefined> {
+function angularProject(root: string) {
   const manifestPath = path.join(root, 'package.json')
   if (!existsSync(manifestPath)) return undefined
   const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'))
   if (!manifest.dependencies?.['@angular/core'] && !manifest.devDependencies?.['@angular/core']) return undefined
-  const config = readConfiguration(path.join(root, 'tsconfig.json'))
-  failDiagnostics(config.errors)
-  const options = { ...config.options, noEmit: true, strictTemplates: true, _enableTemplateTypeChecker: true }
-  const ng = new NgtscProgram(config.rootNames, options, createCompilerHost({ options }))
-  failDiagnostics(ng.getTsSyntacticDiagnostics())
-  failDiagnostics(ng.getNgOptionDiagnostics())
-  failDiagnostics(ng.getNgSemanticDiagnostics())
+  try {
+    const config = readConfiguration(path.join(root, 'tsconfig.json'))
+    failDiagnostics(config.errors)
+    const options = { ...config.options, noEmit: true, strictTemplates: true, _enableTemplateTypeChecker: true }
+    const ng = new NgtscProgram(config.rootNames, options, createCompilerHost({ options }))
+    failDiagnostics(ng.getTsSyntacticDiagnostics())
+    failDiagnostics(ng.getNgOptionDiagnostics())
+    failDiagnostics(ng.getNgSemanticDiagnostics())
+    return { manifest, ng }
+  } catch (error) {
+    throw new Error(`ANGULAR_PROJECT_PREPARATION: Install the project dependencies with its declared package manager and lockfile, and ensure tsconfig.json is valid. ${error}`)
+  }
+}
+
+export async function checkAngularReadiness(root: string): Promise<void> {
+  if (!angularProject(root)) throw new Error('ANGULAR_PROJECT_REQUIRED: Select a project with @angular/core in its root package.json, or disable the angular scanner.')
+}
+
+export async function scanAngular(root: string): Promise<ScanObservation | undefined> {
+  const project = angularProject(root)
+  if (!project) return undefined
+  const { manifest, ng } = project
   const program: ts.Program = ng.getTsProgram()
   const templateChecker = ng.compiler.getTemplateTypeChecker()
   const evidence = new Evidence(root, templateChecker, program.getTypeChecker())

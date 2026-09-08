@@ -1,5 +1,8 @@
 import lockup from '../atoms/lockup.svg' with { type: 'text' }
 
+import { formatDiscovery, type ScannerDiscovery } from '../../../scanner/modules/discovery.ts'
+import { installableScanners } from '../../../scanner/modules/setup.ts'
+
 import type { GromaInitResult } from '../../../initialize.ts'
 import { escaped } from '../atoms/escape.ts'
 import { cssBlock, palettes } from '../atoms/theme.ts'
@@ -11,6 +14,7 @@ interface SetupPage {
   directory?: GromaDirectory
   initialized: boolean
   error?: string
+  proposal?: ScannerDiscovery
 }
 
 const style = `
@@ -38,6 +42,8 @@ const style = `
   .steps [aria-current] { color: var(--accent-text); }
   h1 { font-size: 24px; line-height: 1.3; margin: 0 0 28px; letter-spacing: -0.04em; }
   form { display: grid; gap: 24px; }
+  .proposal { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; max-height: 45vh; overflow-y: auto; }
+  .scanners { display: grid; gap: 12px; }
   label, legend { font-size: 11px; }
   .name { display: grid; gap: 8px; }
   input[type="text"] {
@@ -88,7 +94,7 @@ const script = `
     document.querySelector('[data-step="scan"]').setAttribute('aria-current', 'step');
     const button = document.querySelector('button');
     button.disabled = true;
-    button.textContent = 'Initializing and scanning…';
+    button.textContent = 'Preparing…';
   });
 `
 
@@ -105,21 +111,28 @@ function directoryField(directory: GromaDirectory | undefined): string {
 
 /** Setup uses the map's brand and palette without loading or inventing an architecture world. */
 export function renderSetupPage(input: SetupPage): string {
-  const loading = input.initialized && input.error === undefined
+  const loading = input.initialized && input.proposal === undefined && input.error === undefined
   const error = input.error === undefined ? '' : `<p class="error" role="alert">${escaped(input.error)}</p>`
   let content = `<h1>Preparing your architecture</h1>`
-  if (input.error !== undefined && input.initialized) {
+  if (input.proposal !== undefined) {
+    const choices = installableScanners(input.proposal).map(item =>
+      `<label><input type="checkbox" name="scanner" value="${escaped(item.id)}" checked> ${escaped(item.installSource!)}</label>`).join('')
+    const selection = choices ? `<fieldset class="scanners"><legend>Install selected packages</legend>${choices}</fieldset>` : ''
+    content = `<h1>Review project scanners</h1>${error}<pre class="proposal">${escaped(formatDiscovery(input.proposal))}</pre>`
+      + `<form method="post" action="/scanners">${selection}`
+      + '<button type="submit">Check readiness &amp; scan</button></form>'
+  } else if (input.error !== undefined && input.initialized) {
     content = `<h1>Could not open architecture</h1>${error}<p class="next">Fix the reported issue, then run groma web again.</p>`
   } else if (!input.initialized) {
     content = `<h1>Initialize Groma</h1>${error}<form method="post" action="/initialize">`
       + `<label class="name">Project name<input type="text" name="projectName" value="${escaped(input.projectName)}" required autofocus></label>`
       + directoryField(input.directory)
-      + '<button type="submit">Initialize &amp; scan</button></form>'
+      + '<button type="submit">Continue</button></form>'
   }
   return '<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">'
     + `<title>Groma setup</title><style>${style}</style></head><body><main${loading ? ' aria-busy="true"' : ''}><header>${lockup}`
     + '<nav class="steps" aria-label="Setup progress">'
-    + `<span${loading ? '' : ' aria-current="step"'}>1 Setup</span>`
-    + `<span data-step="scan"${loading ? ' aria-current="step"' : ''}>2 Scan</span><span>3 Map</span></nav></header>`
+    + `<span${input.initialized ? '' : ' aria-current="step"'}>1 Setup</span>`
+    + `<span data-step="scan"${input.initialized ? ' aria-current="step"' : ''}>2 Scanners &amp; scan</span><span>3 Map</span></nav></header>`
     + `<span class="spinner" aria-hidden="true"></span>${content}</main><script>${script}</script></body></html>`
 }
