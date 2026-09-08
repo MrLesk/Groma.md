@@ -30,6 +30,7 @@ export const MAP_KEYS: readonly MapKey[] = [
   { name: 'p', action: 'toggle-profile' },
   { name: 'r' },
   { name: '?', action: 'toggle-keys' },
+  ...['g', '+', '=', '-', '0', 'home', 'f', '[', ']'].map(name => ({ name })),
   { name: 'c', ctrl: true },
 ]
 
@@ -58,5 +59,11 @@ export const KEYS_BOX: readonly KeysRow[] = [
   { label: 'p', meaning: 'Project profile', names: ['p'] },
   { label: 'r', meaning: 'Refresh', names: ['r'] },
   { label: '?', meaning: 'This keys box', names: ['?'] },
+  { label: 'g', meaning: 'Switch graphical / text map', names: ['g'] },
+  { label: '+ / = / -', meaning: 'Graphical map: zoom in / out', names: ['+', '=', '-'] },
+  { label: '0 / Home', meaning: 'Graphical map: fit the whole architecture', names: ['0', 'home'] },
+  { label: 'f', meaning: 'Graphical map: fit the selected element', names: ['f'] },
+  { label: '[ / ]', meaning: 'Graphical map: previous / next element', names: ['[', ']'] },
+  { label: 'Shift + arrows', meaning: 'Graphical map: pan without changing selection', names: [] },
   { label: 'Ctrl+C', meaning: 'Exit', names: ['c'] },
 ]

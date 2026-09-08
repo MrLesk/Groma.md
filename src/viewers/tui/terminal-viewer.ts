@@ -14,6 +14,8 @@ import {
 } from './navigation.ts'
 import type { ViewerAction, ViewerState } from './navigation.ts'
 import { MAP_KEYS } from './keys.ts'
+import { TerminalGraphics } from './graphics.ts'
+import type { GraphicsProtocol } from './graphics.ts'
 import { reduceSearch } from './navigation-search.ts'
 import type { SearchInput } from './navigation-search.ts'
 import { viewerTheme } from './atoms/theme.ts'
@@ -36,6 +38,7 @@ const PAN_FRAMES = 4
 const PAN_MS = 30
 
 interface ViewerOptions {
+  graphics?: GraphicsProtocol
   level?: TerminalLevel
   currentId?: string
   onRefresh?: () => void | Promise<void>
@@ -115,6 +118,7 @@ export function mountTerminalViewer(
   let slide: { distance: TerminalCamera; left: number } | undefined
   let slideTimer: ReturnType<typeof setTimeout> | undefined
   let loadingRevision: string | null | false = false
+  let graphics: TerminalGraphics | undefined
   const screen = mountScreen(renderer, theme, {
     onMapResize: () => repaint(),
     onHierarchyRow(id) {
@@ -130,6 +134,18 @@ export function mountTerminalViewer(
       }
     },
   })
+
+  graphics = new TerminalGraphics(renderer, screen.map, options.graphics ?? 'auto', {
+    changed: () => repaint(),
+    select: id => transition(selectMapItem(viewModel, state, id)),
+    focus: () => { if (state.focus !== 'architecture') transition({ ...state, focus: 'architecture' }) },
+  })
+
+  function applyScreen(projection: TerminalProjection, lit: ReturnType<typeof litAction>, step: ReturnType<typeof projectFlowStep>): void {
+    const view = screenView(theme, viewModel, state, projection, lit, step)
+    screen.apply({ ...view, mapTitle: graphics?.caption,
+      footer: graphics?.active ? `[+/-] Zoom  [0] Fit  [g] Text  ${view.footer}` : view.footer })
+  }
 
   function snapshot(): TerminalCamera | undefined {
     return camera === undefined ? undefined : { ...camera }
@@ -164,24 +180,32 @@ export function mountTerminalViewer(
     }, FLOW_ANIMATION_MS)
   }
 
+  function updateGraphics(lit: ReturnType<typeof litAction>): void {
+    const legs = litLegs(viewModel, lit)
+    const selected = state.actionStep === undefined ? legs : legs.slice(state.actionStep, state.actionStep + 1)
+    graphics?.update(viewModel, state, new Set(selected.map(leg => leg.id)))
+    syncAnimation(lit.id !== undefined && !graphics?.active)
+  }
+
   function repaint(panFrom?: TerminalCamera): void {
     if (closed || screen.map.isDestroyed) return
     state = { ...state, terminalWidth: renderer.width }
     if (!terminalLayout(state).map && lastProjection !== undefined) {
-      screen.apply(screenView(theme, viewModel, state, lastProjection, litAction(viewModel, state), undefined))
+      applyScreen(lastProjection, litAction(viewModel, state), undefined)
       return
     }
     const mapWidth = screen.mapViewport().width
     if (state.mapWidth !== mapWidth) state = { ...state, mapWidth }
     const projection = project()
     const lit = litAction(viewModel, state)
-    syncAnimation(lit.id !== undefined)
     camera = projection.camera
     if (state.work === undefined) {
       state = { ...state, currentId: projection.currentId ?? undefined }
     }
     const step = projectFlowStep(viewModel, projection, lit.id, state.actionStep)
-    paintMap(screen.map.frameBuffer, shifted(projection, slideShift(projection.camera, panFrom)), viewModel, theme, {
+    updateGraphics(lit)
+    const painted = graphics?.active ? projection : shifted(projection, slideShift(projection.camera, panFrom))
+    paintMap(screen.map.frameBuffer, painted, viewModel, theme, {
       lit,
       step,
       workFocus: state.work,
@@ -189,9 +213,9 @@ export function mountTerminalViewer(
       animationPhase,
     })
     lastProjection = projection
-    screen.apply(screenView(theme, viewModel, state, projection, lit, step))
+    applyScreen(projection, lit, step)
     screen.map.requestRender()
-    slideOn()
+    if (!graphics?.active) slideOn()
   }
 
   /** The cells the map still lags behind its new camera; a fresh pan starts from the camera it left. */
@@ -218,6 +242,8 @@ export function mountTerminalViewer(
   }
 
   function release(): void {
+    graphics?.destroy()
+    clearTimeout(slideTimer)
     syncAnimation(false)
     renderer.keyInput.off('keypress', onKeypress)
     renderer.off('destroy', onRendererDestroy)
@@ -410,6 +436,7 @@ export function mountTerminalViewer(
       onSearchKey(key)
       return
     }
+    if (graphics?.key(key)) return
     if (handleNonSearchKey(key)) return
     const action = actionFor(key)
     if (!action) return

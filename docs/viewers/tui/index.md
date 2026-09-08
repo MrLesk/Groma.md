@@ -18,7 +18,17 @@ to keep forty map columns. An explicitly opened pane receives keys; the other
 pane folds if both do not fit. Inside a container map the header shows the scope path with
 the component count.
 
-## Map scopes
+## Graphical map
+
+On a supported terminal, the map renders the shared sheet as a fixed, axis-aligned
+2D plan through Kitty or Sixel graphics. Horizontal labels and flat footprints
+keep arrow navigation aligned with the screen. Keyboard selection, Shift+arrow
+panning, zoom, and fit are available, with optional mouse selection, drag, and
+wheel input. There is no isometric mode or view toggle. See [Graphical terminal map](graphics.md) for controls, protocol
+selection, and validation limits. `--graphics text` selects the text map below;
+Work focus also uses that map to preserve its task overlays.
+
+## Text map scopes
 
 The root map uses Core's sheet placement order to make a compact terminal
 layout. It shows actor, internal-system, and external-system islands. A system
@@ -39,7 +49,7 @@ and each visible floor names its largest file with +N for the rest. Draft
 buildings and routes use dashed frames. The selected building draws heavy in the
 brand green.
 
-## Camera and selection
+## Text map camera and selection
 
 The map has one readable scale. It has no fit-all state, zoom keys, or zoom
 readout. The active island or container fits the current map width and stays

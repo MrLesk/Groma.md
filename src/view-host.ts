@@ -18,8 +18,10 @@ import { sheetScene } from './sheet/scene.ts'
 import { mountTerminalViewer } from './viewers/tui/terminal-viewer.ts'
 import type { TerminalViewer } from './viewers/tui/terminal-viewer.ts'
 import type { TerminalViewModel } from './viewers/tui/model.ts'
+import type { GraphicsProtocol } from './viewers/tui/graphics.ts'
 
 interface StartViewerOptions {
+  graphics?: GraphicsProtocol
   renderer?: CliRenderer
   workSource?: WorkSource
 }
@@ -91,6 +93,7 @@ export async function startTerminalViewer(
     revisions = await listGromaRevisions(repositoryRoot)
     map = { ...await loadTerminalModel(repositoryRoot), revisions }
     viewer = mountTerminalViewer(renderer, { ...map, work }, {
+      graphics: options.graphics,
       onRefresh: publish,
       readTask: id => workSource.readItem(id),
       readStructure: elementId => readCodeStructure(repositoryRoot, map, map.revision?.id ?? null, elementId),
