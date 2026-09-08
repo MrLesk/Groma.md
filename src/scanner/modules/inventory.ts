@@ -37,7 +37,7 @@ export interface ScannerInstallOptions extends ScannerResolutionOptions {
   registry?: string
 }
 
-const builtIn: ScannerInventoryItem = {
+export const embeddedScanner: ScannerInventoryItem = {
   id: 'typescript',
   source: 'embedded',
   status: 'built-in',
@@ -84,7 +84,7 @@ export async function scannerInventory(
   options: ScannerResolutionOptions = {},
 ): Promise<ScannerInventoryItem[]> {
   const configured = await configuredScannerModules(repositoryRoot, options)
-  return [builtIn, ...configured.map(({ id, source, status }) => ({ id, source, status }))]
+  return [embeddedScanner, ...configured.map(({ id, source, status }) => ({ id, source, status }))]
 }
 
 export async function addScanner(
@@ -101,7 +101,7 @@ export async function addScanner(
     ? await installNpmScanner(source, cacheRoot(options), options.registry)
     : await resolveScannerPackage(source, cacheRoot(options))
   if (resolved === undefined) throw new Error(`scanner package not found: ${source.source}`)
-  if (resolved.id === builtIn.id || configured.some(scanner => scanner.id === resolved.id)) {
+  if (resolved.id === embeddedScanner.id || configured.some(scanner => scanner.id === resolved.id)) {
     throw new Error(`scanner id is already configured: ${resolved.id}`)
   }
   const scanner = { id: resolved.id, source: source.source }

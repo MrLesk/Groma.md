@@ -31,6 +31,7 @@ management syntax remain under Advanced commands.
 
 ## Scanners
 
+- [Discover project technologies and official scanner candidates](discovery.md)
 - [TypeScript](typescript/index.md)
 - [C#/.NET](dotnet-csharp/index.md)
 - [Shared contract](creating-a-plugin.md)
