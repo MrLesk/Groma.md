@@ -1,0 +1,9 @@
+{
+  "name": "@groma/scanner-go",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "groma": { "scanner": { "id": "go", "entry": "./src/index.ts" } },
+  "dependencies": { "@groma/scanner": "workspace:*" }
+}

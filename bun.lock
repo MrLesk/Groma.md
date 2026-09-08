@@ -57,6 +57,13 @@
         "@groma/scanner": "workspace:*",
       },
     },
+    "plugins/scanners/go": {
+      "name": "@groma/scanner-go",
+      "version": "0.1.0",
+      "dependencies": {
+        "@groma/scanner": "workspace:*",
+      },
+    },
     "plugins/scanners/java": {
       "name": "@groma/scanner-java",
       "version": "0.1.0",
@@ -203,6 +210,8 @@
     "@groma/scanner-angular": ["@groma/scanner-angular@workspace:plugins/scanners/angular"],
 
     "@groma/scanner-csharp": ["@groma/scanner-csharp@workspace:plugins/scanners/csharp"],
+
+    "@groma/scanner-go": ["@groma/scanner-go@workspace:plugins/scanners/go"],
 
     "@groma/scanner-java": ["@groma/scanner-java@workspace:plugins/scanners/java"],
 
