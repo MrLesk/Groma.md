@@ -1,0 +1,51 @@
+{
+  "format": 1,
+  "title": "Saved-card checkout",
+  "release": "1",
+  "outcome": "Returning customers can pay with a saved payment method without re-entering card details.",
+  "requirements": [
+    "Payment credentials remain with the payment provider.",
+    "Only the account owner can use a saved payment method.",
+    "An unavailable saved method does not prevent ordinary checkout."
+  ],
+  "roles": [
+    {
+      "key": "checkout",
+      "kind": "component",
+      "title": "Checkout",
+      "purpose": "Coordinates purchase completion."
+    },
+    {
+      "key": "host",
+      "kind": "container",
+      "title": "Commerce API",
+      "purpose": "Contains the new payment-preferences responsibility."
+    },
+    {
+      "key": "provider",
+      "kind": "external",
+      "title": "Payment provider",
+      "purpose": "Owns the saved payment credentials."
+    }
+  ],
+  "parts": [
+    {
+      "key": "preferences",
+      "title": "Payment preferences",
+      "parentRole": "host",
+      "overview": "Keeps account-owned references to provider-managed payment methods."
+    }
+  ],
+  "relationships": [
+    {
+      "source": "checkout",
+      "target": "preferences",
+      "description": "Loads the account owner’s saved payment-method reference"
+    },
+    {
+      "source": "checkout",
+      "target": "provider",
+      "description": "Requests payment using the selected saved reference"
+    }
+  ]
+}

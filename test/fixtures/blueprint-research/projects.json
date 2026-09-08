@@ -1,0 +1,240 @@
+[
+  {
+    "id": "shop",
+    "title": "Shop",
+    "elements": [
+      {
+        "id": "shop",
+        "kind": "system",
+        "title": "Shop",
+        "parent": null,
+        "overview": "An illustrative commerce application.",
+        "status": "stable",
+        "code": [],
+        "external": false
+      },
+      {
+        "id": "shop-api",
+        "kind": "container",
+        "title": "Commerce API",
+        "parent": "shop",
+        "overview": "Owns purchasing responsibilities.",
+        "status": "stable",
+        "code": [],
+        "external": false
+      },
+      {
+        "id": "shop-checkout",
+        "kind": "component",
+        "title": "Checkout",
+        "parent": "shop-api",
+        "overview": "Coordinates payment authorization and order creation.",
+        "code": [
+          {
+            "scanner": "typescript",
+            "file": "src/shop/submit.ts"
+          },
+          {
+            "scanner": "typescript",
+            "file": "src/shop/shop-checkout-policy.ts"
+          },
+          {
+            "scanner": "typescript",
+            "file": "src/shop/shop-checkout-rules.ts"
+          }
+        ],
+        "status": "stable",
+        "external": false,
+        "codeLines": 420
+      },
+      {
+        "id": "shop-orders",
+        "kind": "component",
+        "title": "Orders",
+        "parent": "shop-api",
+        "overview": "Records an accepted purchase.",
+        "code": [
+          {
+            "scanner": "typescript",
+            "file": "src/shop/orders.ts"
+          }
+        ],
+        "status": "stable",
+        "external": false,
+        "codeLines": 110
+      },
+      {
+        "id": "shop-accounts",
+        "kind": "component",
+        "title": "Customer accounts",
+        "parent": "shop-api",
+        "overview": "Maintains account identity.",
+        "code": [
+          {
+            "scanner": "typescript",
+            "file": "src/shop/accounts.ts"
+          },
+          {
+            "scanner": "typescript",
+            "file": "src/shop/shop-accounts-policy.ts"
+          },
+          {
+            "scanner": "typescript",
+            "file": "src/shop/shop-accounts-rules.ts"
+          }
+        ],
+        "status": "stable",
+        "external": false,
+        "codeLines": 760
+      },
+      {
+        "id": "shop-provider",
+        "kind": "system",
+        "title": "Payment provider",
+        "external": true,
+        "parent": null,
+        "overview": "Owns payment credentials outside the application.",
+        "status": "stable",
+        "code": []
+      }
+    ],
+    "relationships": [
+      {
+        "id": "shop-submit",
+        "source": "shop-checkout",
+        "target": "shop-orders",
+        "description": "Creates an order after payment authorization",
+        "technology": "In-process",
+        "origin": "observed"
+      },
+      {
+        "id": "shop-authorize",
+        "source": "shop-checkout",
+        "target": "shop-provider",
+        "description": "Requests payment authorization",
+        "technology": "HTTPS",
+        "origin": "observed"
+      }
+    ],
+    "drafts": []
+  },
+  {
+    "id": "market",
+    "title": "Market",
+    "elements": [
+      {
+        "id": "market",
+        "kind": "system",
+        "title": "Market",
+        "parent": null,
+        "overview": "An illustrative commerce application.",
+        "status": "stable",
+        "code": [],
+        "external": false
+      },
+      {
+        "id": "market-api",
+        "kind": "container",
+        "title": "Purchase API",
+        "parent": "market",
+        "overview": "Owns purchasing responsibilities.",
+        "status": "stable",
+        "code": [],
+        "external": false
+      },
+      {
+        "id": "market-checkout",
+        "kind": "component",
+        "title": "Purchase coordinator",
+        "parent": "market-api",
+        "overview": "Coordinates payment authorization and order creation.",
+        "code": [
+          {
+            "scanner": "typescript",
+            "file": "src/market/submit.ts"
+          },
+          {
+            "scanner": "typescript",
+            "file": "src/market/market-checkout-policy.ts"
+          },
+          {
+            "scanner": "typescript",
+            "file": "src/market/market-checkout-rules.ts"
+          }
+        ],
+        "status": "stable",
+        "external": false,
+        "codeLines": 420
+      },
+      {
+        "id": "market-orders",
+        "kind": "component",
+        "title": "Orders",
+        "parent": "market-api",
+        "overview": "Records an accepted purchase.",
+        "code": [
+          {
+            "scanner": "typescript",
+            "file": "src/market/orders.ts"
+          }
+        ],
+        "status": "stable",
+        "external": false,
+        "codeLines": 110
+      },
+      {
+        "id": "market-accounts",
+        "kind": "component",
+        "title": "Customer accounts",
+        "parent": "market-api",
+        "overview": "Maintains account identity.",
+        "code": [
+          {
+            "scanner": "typescript",
+            "file": "src/market/accounts.ts"
+          },
+          {
+            "scanner": "typescript",
+            "file": "src/market/market-accounts-policy.ts"
+          },
+          {
+            "scanner": "typescript",
+            "file": "src/market/market-accounts-rules.ts"
+          }
+        ],
+        "status": "stable",
+        "external": false,
+        "codeLines": 760
+      },
+      {
+        "id": "market-provider",
+        "kind": "system",
+        "title": "Card gateway",
+        "external": true,
+        "parent": null,
+        "overview": "Owns payment credentials outside the application.",
+        "status": "stable",
+        "code": []
+      }
+    ],
+    "relationships": [
+      {
+        "id": "market-submit",
+        "source": "market-checkout",
+        "target": "market-orders",
+        "description": "Creates an order after payment authorization",
+        "technology": "In-process",
+        "origin": "observed"
+      },
+      {
+        "id": "market-authorize",
+        "source": "market-checkout",
+        "target": "market-provider",
+        "description": "Requests payment authorization",
+        "technology": "HTTPS",
+        "origin": "observed"
+      }
+    ],
+    "drafts": []
+  }
+]
