@@ -78,11 +78,19 @@ than becoming an automatic claim. It does not mean that no interaction exists.
 ## Current inference rule
 
 Core derives a **supplied named callback** interaction when an invocation has
-a concrete argument binding, a named member, at least one canonical target,
+a concrete source binding, a named member, at least one canonical target,
 no unresolved alternative, and one provider owner distinct from its caller's
 owner. The caller is the operation that invokes the callback, not the code
 that supplies it. Each concrete binding is checked separately. Alternatives
 inside one binding must agree on the provider owner.
+
+Core first [combines overlapping observations](scanners/evidence.md#overlapping-observations)
+at the same operation, invocation, and concrete binding location. Certain
+provider sets must agree; disputed claims cannot establish a derived row.
+An unresolved scanner contribution does not veto another scanner's supported
+binding. The binding may be a supplied object argument or the supported
+Angular named output-to-handler template binding. This evidence remains
+temporary and does not alter authored relationship meaning.
 
 The stored statement is `Invokes supplied <member> callback`, with the scanner
 language as its mechanism. This is a source-supported possible interaction,

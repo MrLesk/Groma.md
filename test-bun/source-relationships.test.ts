@@ -44,7 +44,10 @@ test.concurrent('operation resolution follows aliases but preserves executable w
     expect(resolved).toContainEqual(expect.objectContaining({ source: 'src/wrapper.ts', targets: ['src/provider.ts'], unresolved: false }))
     expect(resolved).toContainEqual(expect.objectContaining({
       source: 'src/worker.ts', targets: ['src/provider.ts'], unresolved: false,
-      member: 'deliver', binding: { file: 'src/caller.ts', line: 6 },
+      member: 'deliver', binding: {
+        file: 'src/caller.ts', line: 6,
+        position: (await readFile(path.join(root, 'src/caller.ts'), 'utf8')).indexOf('run('),
+      },
     }))
     expect(resolved.some(call => call.targets.includes('src/api.ts'))).toBeFalse()
     const owners = new Map(observation.files.map(file => [file.file, file.file]))

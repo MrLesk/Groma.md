@@ -14,12 +14,15 @@ const skippedRoots = new Set(['.git', ...gromaDirectories, 'node_modules'])
 
 export function formatScanSummary(summary: ScanSummary): string {
   const counts = `created ${summary.created}, refreshed ${summary.refreshed}, matched ${summary.matched}`
-  return summary.findings ? `${counts}, findings ${summary.findings}` : counts
+  const findings = summary.findings ? `, findings ${summary.findings}` : ''
+  const conflicts = summary.evidenceConflicts?.length ? `, evidence conflicts ${summary.evidenceConflicts.length}` : ''
+  return `${counts}${findings}${conflicts}`
 }
 
 export function formatScanReport(repositoryRoot: string, summary: ScanSummary): string {
   const findings = formatArchitectureFindings(architectureFindingsFor(repositoryRoot))
-  return [formatScanSummary(summary), ...findings].join('\n')
+  const conflicts = summary.evidenceConflicts?.map(conflict => `${conflict.code}: ${conflict.message}`) ?? []
+  return [formatScanSummary(summary), ...conflicts, ...findings].join('\n')
 }
 
 export async function scanRepository(

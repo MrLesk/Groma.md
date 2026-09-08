@@ -64,6 +64,10 @@ One successful call returns exactly one complete observation:
 - `diagnostics`: deterministic scanner messages.
 
 An operation has an opaque observation-local `id`, exact `file`, and `name`.
+For cross-scanner comparison it also supplies `position`, the zero-based
+UTF-16 offset of its declaration start, excluding leading trivia. Invocations
+use the same `position` convention for the call expression. These positions
+refer to the shared source text, not compiler node or symbol IDs.
 It may also supply `startLine`, `endLine`, and `tokens`: a binding-normalized
 sequence of the operation body. Local names become slots; operators, literals,
 property names, and unresolved identifiers stay visible. Core compares those
@@ -72,10 +76,22 @@ duplication is a problem. Plugins that do not tokenize omit these fields.
 An invocation has its caller operation `source`, canonical operation `targets`,
 one-based call `line`, and an explicit `unresolved` boolean. A named member call
 also supplies `member`. When a concrete argument supplies the invoked value,
-`binding: { file, line }` identifies that call site. Keep separate bindings
+`binding: { file, line, position }` identifies that call site. A named Angular
+output-to-handler binding uses the template event attribute's start position.
+Keep separate bindings
 separate; alternatives within one binding share one target set. Empty targets
 must be unresolved. `unresolved: false` is scoped to the supported extraction,
 not a promise that the whole language or runtime is modeled.
+
+Positions are optional for scanners that do not participate in overlapping
+operation analysis. Cross-scanner comparison requires positions for the
+caller, invocation, binding if present, and every target declaration. Core
+compares certain provider sets only within that exact source and binding
+context; differing certain sets are conflicts, while unresolved observations
+do not veto a supported claim. See [overlapping observations](evidence.md#overlapping-observations).
+The embedded TypeScript scanner and Angular scanner identify their respective
+Code contributions as `typescript` and `angular`, even when they inspect the
+same file. Core keeps one owner for that source path.
 
 All paths are repository-relative. Scope, operation, and relationship endpoints must exist in the same observation. Duplicate primary keys and incomplete JSON are rejected before core reconciliation.
 

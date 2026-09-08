@@ -15,7 +15,7 @@ import { tokenizeOperation } from './source-tokens.ts'
 interface Values {
   nodes: Node[]
   unresolved: boolean
-  binding?: { file: string; line: number }
+  binding?: { file: string; line: number; position: number }
 }
 
 const unknown = (): Values[] => [{ nodes: [], unresolved: true }]
@@ -39,11 +39,12 @@ function executable(node: Node): boolean {
     || (isMethodDeclaration(node) && node.body !== undefined)
 }
 
-function location(root: string, node: Node): { file: string; line: number } {
+function location(root: string, node: Node): { file: string; line: number; position: number } {
   const source = node.getSourceFile()
   return {
     file: path.relative(root, source.fileName).split(path.sep).join('/'),
     line: source.getLineAndCharacterOfPosition(node.getStart()).line + 1,
+    position: node.getStart(),
   }
 }
 
@@ -235,6 +236,7 @@ export async function sourceOperations(root: string, sources: SourceFile[], chec
         id,
         file,
         name: operationName(node),
+        position: node.getStart(),
         startLine: start.line + 1,
         endLine: end.line + 1,
         tokens: tokenizeOperation(node),
@@ -259,6 +261,7 @@ export async function sourceOperations(root: string, sources: SourceFile[], chec
           targets: [...new Set(targets.map(operation))],
           unresolved: value.unresolved || targets.length !== value.nodes.length,
           line: location(root, call).line,
+          position: call.getStart(),
           ...(isPropertyAccessExpression(call.expression) ? { member: call.expression.name.text } : {}),
           ...(value.binding ? { binding: value.binding } : {}),
         }

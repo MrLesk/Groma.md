@@ -154,6 +154,11 @@ Multiple scanners may contribute references to one element. Code references
 appear in details; they are not C4 concepts or another viewer level. Later
 scans may refresh supported symbols but preserve curated file membership,
 unowned metadata, and authored Markdown.
+The exact source path has one owner across scanners. Separate scanner
+contributions do not create duplicate owners. Core compares overlapping
+operation claims at source locations; conflicting certain providers remain
+scan diagnostics and cannot establish a derived relationship. Source offsets
+and those conflict details are not stored in Code references.
 
 Raw imports, call graphs, provider alternatives, and inference inputs stay in
 memory during scanning. They are not Code-reference metadata. Core saves only
