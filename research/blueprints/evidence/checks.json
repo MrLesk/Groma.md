@@ -1,5 +1,5 @@
 {
-  "sourceCommit": "b90464649c46e3010e7db5f55aa59ac389ecb100",
+  "sourceCommit": "2e896228d5925bdcf22e3e970deb359f45060f32",
   "bun": "1.4.1",
   "node": "v22.23.2",
   "python": "3.12.14",
@@ -33,7 +33,8 @@
       "command": [
         "bun",
         "test",
-        "test-bun/blueprint-research.test.ts"
+        "test-bun/blueprint-research.test.ts",
+        "test-bun/blueprint-map-views.test.ts"
       ],
       "directory": ".",
       "exitCode": 0,
@@ -71,7 +72,7 @@
       "log": "browser-tests.log"
     }
   ],
-  "htmlSha256": "9a1f3a9c7d5f3c79957a9ae053e2a9bd49e44a721b74816a3db3e76635d7b98d",
+  "htmlSha256": "3e5fa4967a15a5f0a8fa3e9bfc59c240f16c7f6db13d2e867a43c54a4bd44e75",
   "allPassed": true,
   "scope": "Isolated fixture prototype using the existing Groma renderer; no production authoring or scanner changes."
 }

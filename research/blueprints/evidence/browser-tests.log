@@ -141,6 +141,141 @@
       "passed": true
     },
     {
+      "engine": "chromium",
+      "name": "Map views: switching preserves the existing input node and its text",
+      "passed": true
+    },
+    {
+      "engine": "chromium",
+      "name": "Map views: F2 does not hijack text editing",
+      "passed": true
+    },
+    {
+      "engine": "chromium",
+      "name": "Map views: F2 enters the layered view",
+      "passed": true
+    },
+    {
+      "engine": "chromium",
+      "name": "Map views: F2 returns to the previous 2D camera",
+      "passed": true
+    },
+    {
+      "engine": "chromium",
+      "name": "Map views: native radio keyboard navigation selects the next view",
+      "passed": true
+    },
+    {
+      "engine": "chromium",
+      "name": "Map views: binding form stays unchanged in iso",
+      "passed": true
+    },
+    {
+      "engine": "chromium",
+      "name": "Map views: binding form stays unchanged in layers",
+      "passed": true
+    },
+    {
+      "engine": "chromium",
+      "name": "Map views: binding form stays unchanged in 2d",
+      "passed": true
+    },
+    {
+      "engine": "chromium",
+      "name": "Map views: preview participants and unsaved state persist in 2d",
+      "passed": true
+    },
+    {
+      "engine": "chromium",
+      "name": "Map views: preview participants and unsaved state persist in iso",
+      "passed": true
+    },
+    {
+      "engine": "chromium",
+      "name": "Map views: preview participants and unsaved state persist in layers",
+      "passed": true
+    },
+    {
+      "engine": "chromium",
+      "name": "Map views: 2D has no wall faces and retains the draft ghost",
+      "passed": true
+    },
+    {
+      "engine": "chromium",
+      "name": "Map views: 2D drag pans without selecting",
+      "passed": true
+    },
+    {
+      "engine": "chromium",
+      "name": "Map views: each view restores its own zoom and pan",
+      "passed": true
+    },
+    {
+      "engine": "chromium",
+      "name": "Map views: F2 restores a manually navigated 2D view",
+      "passed": true
+    },
+    {
+      "engine": "chromium",
+      "name": "Map views: isometric drag remains available",
+      "passed": true
+    },
+    {
+      "engine": "chromium",
+      "name": "Map views: layer drag orbits without changing the draft",
+      "passed": true
+    },
+    {
+      "engine": "chromium",
+      "name": "Map views: Shift-drag pans Layers without orbiting",
+      "passed": true
+    },
+    {
+      "engine": "chromium",
+      "name": "Map views: a flat footprint selects the existing component without dropping the preview",
+      "passed": true
+    },
+    {
+      "engine": "chromium",
+      "name": "Map views: current selection is preserved in layers",
+      "passed": true
+    },
+    {
+      "engine": "chromium",
+      "name": "Map views: current selection is preserved in iso",
+      "passed": true
+    },
+    {
+      "engine": "chromium",
+      "name": "Map views: current selection is preserved in 2d",
+      "passed": true
+    },
+    {
+      "engine": "chromium",
+      "name": "Map views: view exploration has not saved or mutated the project",
+      "passed": true
+    },
+    {
+      "engine": "chromium",
+      "name": "Map views: creation works after switching and the saved draft is unchanged",
+      "passed": true
+    },
+    {
+      "engine": "chromium",
+      "name": "Map views: narrow Layers controls have no horizontal overflow",
+      "passed": true
+    },
+    {
+      "engine": "chromium",
+      "name": "Map views: all view choices can be tapped on a narrow screen",
+      "passed": true
+    },
+    {
+      "engine": "chromium",
+      "name": "Map views: no browser exceptions",
+      "passed": true
+    },
+    {
       "engine": "firefox",
       "name": "Explicit paste, binding and preview preserve current data",
       "passed": true
@@ -161,6 +296,141 @@
       "passed": true
     },
     {
+      "engine": "firefox",
+      "name": "Map views: switching preserves the existing input node and its text",
+      "passed": true
+    },
+    {
+      "engine": "firefox",
+      "name": "Map views: F2 does not hijack text editing",
+      "passed": true
+    },
+    {
+      "engine": "firefox",
+      "name": "Map views: F2 enters the layered view",
+      "passed": true
+    },
+    {
+      "engine": "firefox",
+      "name": "Map views: F2 returns to the previous 2D camera",
+      "passed": true
+    },
+    {
+      "engine": "firefox",
+      "name": "Map views: native radio keyboard navigation selects the next view",
+      "passed": true
+    },
+    {
+      "engine": "firefox",
+      "name": "Map views: binding form stays unchanged in iso",
+      "passed": true
+    },
+    {
+      "engine": "firefox",
+      "name": "Map views: binding form stays unchanged in layers",
+      "passed": true
+    },
+    {
+      "engine": "firefox",
+      "name": "Map views: binding form stays unchanged in 2d",
+      "passed": true
+    },
+    {
+      "engine": "firefox",
+      "name": "Map views: preview participants and unsaved state persist in 2d",
+      "passed": true
+    },
+    {
+      "engine": "firefox",
+      "name": "Map views: preview participants and unsaved state persist in iso",
+      "passed": true
+    },
+    {
+      "engine": "firefox",
+      "name": "Map views: preview participants and unsaved state persist in layers",
+      "passed": true
+    },
+    {
+      "engine": "firefox",
+      "name": "Map views: 2D has no wall faces and retains the draft ghost",
+      "passed": true
+    },
+    {
+      "engine": "firefox",
+      "name": "Map views: 2D drag pans without selecting",
+      "passed": true
+    },
+    {
+      "engine": "firefox",
+      "name": "Map views: each view restores its own zoom and pan",
+      "passed": true
+    },
+    {
+      "engine": "firefox",
+      "name": "Map views: F2 restores a manually navigated 2D view",
+      "passed": true
+    },
+    {
+      "engine": "firefox",
+      "name": "Map views: isometric drag remains available",
+      "passed": true
+    },
+    {
+      "engine": "firefox",
+      "name": "Map views: layer drag orbits without changing the draft",
+      "passed": true
+    },
+    {
+      "engine": "firefox",
+      "name": "Map views: Shift-drag pans Layers without orbiting",
+      "passed": true
+    },
+    {
+      "engine": "firefox",
+      "name": "Map views: a flat footprint selects the existing component without dropping the preview",
+      "passed": true
+    },
+    {
+      "engine": "firefox",
+      "name": "Map views: current selection is preserved in layers",
+      "passed": true
+    },
+    {
+      "engine": "firefox",
+      "name": "Map views: current selection is preserved in iso",
+      "passed": true
+    },
+    {
+      "engine": "firefox",
+      "name": "Map views: current selection is preserved in 2d",
+      "passed": true
+    },
+    {
+      "engine": "firefox",
+      "name": "Map views: view exploration has not saved or mutated the project",
+      "passed": true
+    },
+    {
+      "engine": "firefox",
+      "name": "Map views: creation works after switching and the saved draft is unchanged",
+      "passed": true
+    },
+    {
+      "engine": "firefox",
+      "name": "Map views: narrow Layers controls have no horizontal overflow",
+      "passed": true
+    },
+    {
+      "engine": "firefox",
+      "name": "Map views: all view choices can be tapped on a narrow screen",
+      "passed": true
+    },
+    {
+      "engine": "firefox",
+      "name": "Map views: no browser exceptions",
+      "passed": true
+    },
+    {
       "engine": "webkit",
       "name": "Explicit paste, binding and preview preserve current data",
       "passed": true
@@ -178,6 +448,141 @@
     {
       "engine": "webkit",
       "name": "Real renderer displays the saved draft",
+      "passed": true
+    },
+    {
+      "engine": "webkit",
+      "name": "Map views: switching preserves the existing input node and its text",
+      "passed": true
+    },
+    {
+      "engine": "webkit",
+      "name": "Map views: F2 does not hijack text editing",
+      "passed": true
+    },
+    {
+      "engine": "webkit",
+      "name": "Map views: F2 enters the layered view",
+      "passed": true
+    },
+    {
+      "engine": "webkit",
+      "name": "Map views: F2 returns to the previous 2D camera",
+      "passed": true
+    },
+    {
+      "engine": "webkit",
+      "name": "Map views: native radio keyboard navigation selects the next view",
+      "passed": true
+    },
+    {
+      "engine": "webkit",
+      "name": "Map views: binding form stays unchanged in iso",
+      "passed": true
+    },
+    {
+      "engine": "webkit",
+      "name": "Map views: binding form stays unchanged in layers",
+      "passed": true
+    },
+    {
+      "engine": "webkit",
+      "name": "Map views: binding form stays unchanged in 2d",
+      "passed": true
+    },
+    {
+      "engine": "webkit",
+      "name": "Map views: preview participants and unsaved state persist in 2d",
+      "passed": true
+    },
+    {
+      "engine": "webkit",
+      "name": "Map views: preview participants and unsaved state persist in iso",
+      "passed": true
+    },
+    {
+      "engine": "webkit",
+      "name": "Map views: preview participants and unsaved state persist in layers",
+      "passed": true
+    },
+    {
+      "engine": "webkit",
+      "name": "Map views: 2D has no wall faces and retains the draft ghost",
+      "passed": true
+    },
+    {
+      "engine": "webkit",
+      "name": "Map views: 2D drag pans without selecting",
+      "passed": true
+    },
+    {
+      "engine": "webkit",
+      "name": "Map views: each view restores its own zoom and pan",
+      "passed": true
+    },
+    {
+      "engine": "webkit",
+      "name": "Map views: F2 restores a manually navigated 2D view",
+      "passed": true
+    },
+    {
+      "engine": "webkit",
+      "name": "Map views: isometric drag remains available",
+      "passed": true
+    },
+    {
+      "engine": "webkit",
+      "name": "Map views: layer drag orbits without changing the draft",
+      "passed": true
+    },
+    {
+      "engine": "webkit",
+      "name": "Map views: Shift-drag pans Layers without orbiting",
+      "passed": true
+    },
+    {
+      "engine": "webkit",
+      "name": "Map views: a flat footprint selects the existing component without dropping the preview",
+      "passed": true
+    },
+    {
+      "engine": "webkit",
+      "name": "Map views: current selection is preserved in layers",
+      "passed": true
+    },
+    {
+      "engine": "webkit",
+      "name": "Map views: current selection is preserved in iso",
+      "passed": true
+    },
+    {
+      "engine": "webkit",
+      "name": "Map views: current selection is preserved in 2d",
+      "passed": true
+    },
+    {
+      "engine": "webkit",
+      "name": "Map views: view exploration has not saved or mutated the project",
+      "passed": true
+    },
+    {
+      "engine": "webkit",
+      "name": "Map views: creation works after switching and the saved draft is unchanged",
+      "passed": true
+    },
+    {
+      "engine": "webkit",
+      "name": "Map views: narrow Layers controls have no horizontal overflow",
+      "passed": true
+    },
+    {
+      "engine": "webkit",
+      "name": "Map views: all view choices can be tapped on a narrow screen",
+      "passed": true
+    },
+    {
+      "engine": "webkit",
+      "name": "Map views: no browser exceptions",
       "passed": true
     },
     {

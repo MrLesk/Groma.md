@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@chatgpt'
 created_date: '2026-09-08 11:46'
-updated_date: '2026-09-08 11:54'
+updated_date: '2026-09-08 12:04'
 labels: []
 dependencies: []
 modified_files:
@@ -22,6 +22,29 @@ modified_files:
   - research/blueprints/MAP-VIEWS.md
   - research/blueprints/README.md
   - .github/workflows/blueprint-research.yml
+  - research/blueprints/evidence/research-lint.log
+  - research/blueprints/evidence/research-types.log
+  - research/blueprints/evidence/domain-tests.log
+  - research/blueprints/evidence/repository-check.log
+  - research/blueprints/evidence/build.log
+  - research/blueprints/evidence/01-library-light.png
+  - research/blueprints/evidence/02-paste-dark.png
+  - research/blueprints/evidence/03-bind-missing.png
+  - research/blueprints/evidence/04-preview-blueprint.png
+  - research/blueprints/evidence/05-created-dark.png
+  - research/blueprints/evidence/06-overlapping-drafts.png
+  - research/blueprints/evidence/07-invalid-paste.png
+  - research/blueprints/evidence/08-stale-preview.png
+  - research/blueprints/evidence/09-mobile-draft.png
+  - research/blueprints/evidence/10-plan-preview-light.png
+  - research/blueprints/evidence/11-iso-preview-light.png
+  - research/blueprints/evidence/12-layers-preview-light.png
+  - research/blueprints/evidence/13-selected-plan-dark.png
+  - research/blueprints/evidence/14-mobile-plan-inspector.png
+  - research/blueprints/evidence/15-mobile-plan-map.png
+  - research/blueprints/evidence/browser-results.json
+  - research/blueprints/evidence/browser-tests.log
+  - research/blueprints/evidence/checks.json
 type: feature
 ordinal: 362000
 ---
@@ -62,4 +85,6 @@ Blueprint placement needs an unobscured top-down editing view without replacing 
 
 <!-- SECTION:NOTES:BEGIN -->
 Local validation: 13 map-view tests pass (70 assertions); research lint/types and full repository check pass (110 Node + 398 Bun tests). Browser navigation to localhost is policy-blocked in this container; real browser tests/captures run through the branch workflow.
+
+Recorded the actual check results and map-view browser captures from GitHub run 34223823317. See evidence/checks.json for the tested source and exit codes.
 <!-- SECTION:NOTES:END -->
