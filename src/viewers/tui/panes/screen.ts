@@ -31,6 +31,7 @@ export interface DetailsView {
 }
 
 export interface ScreenView {
+  mapTitle?: string
   layout: ReturnType<typeof terminalLayout>
   stats: string | undefined
   focus: ViewerFocus
@@ -237,7 +238,7 @@ export function mountScreen(renderer: CliRenderer, theme: ViewerTheme, handlers:
       mapBox.borderColor = view.focus === 'architecture' ? theme.selected : theme.quiet
       detailsBox.borderColor = view.focus === 'details' ? theme.selected : theme.quiet
       hierarchyBox.title = view.focus === 'hierarchy' ? ' Hierarchy · keys ' : ' Hierarchy '
-      mapBox.title = view.focus === 'architecture' ? ' Map · keys ' : ' Map '
+      mapBox.title = ` Map${view.mapTitle ? ` · ${view.mapTitle}` : ''}${view.focus === 'architecture' ? ' · keys' : ''} `
       hierarchyIds = view.hierarchy?.ids
       if (view.hierarchy !== undefined) {
         hierarchy.text.content = styledLines(view.hierarchy.lines)

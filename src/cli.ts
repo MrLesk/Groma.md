@@ -1,12 +1,10 @@
 #!/usr/bin/env bun
-
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-
-import { Command } from 'commander'
+import { Command, Option } from 'commander'
+import type { GraphicsProtocol } from './viewers/tui/graphics.ts'
 import { confirm } from '@clack/prompts'
 import packageJson from '../package.json' with { type: 'json' }
-
 import { writes } from './authoring.ts'
 import type { StructuralResult } from './curate.ts'
 import { isGroupAddress } from './naming.ts'
@@ -88,11 +86,11 @@ async function openWeb(port?: number, scan = true): Promise<void> {
   }
 }
 
-async function openTerminalMap(scan = true): Promise<void> {
+async function openTerminalMap(scan = true, graphics: GraphicsProtocol = 'auto'): Promise<void> {
   const root = process.cwd()
   if (scan) await scanRepository(root)
   const { startTerminalViewer } = await import('./view-host.ts')
-  const viewer = await startTerminalViewer(root)
+  const viewer = await startTerminalViewer(root, { graphics })
   await viewer.closed
 }
 
@@ -104,7 +102,7 @@ async function continueWhenReady(interactive: boolean): Promise<boolean> {
   return door === 'ready'
 }
 
-async function openTerminalView(target: string | undefined, plain: boolean): Promise<void> {
+async function openTerminalView(target: string | undefined, plain: boolean, graphics: GraphicsProtocol = 'auto'): Promise<void> {
   if (!await continueWhenReady(interactiveTerminal() && target === undefined && !plain)) return
   if (target) {
     const { renderPlainRecord } = await import('./plain-world.ts')
@@ -119,7 +117,7 @@ async function openTerminalView(target: string | undefined, plain: boolean): Pro
     const { renderPlainWorld } = await import('./plain-world.ts')
     console.log(await renderPlainWorld(process.cwd()))
   } else {
-    await openTerminalMap()
+    await openTerminalMap(true, graphics)
   }
 }
 
@@ -268,12 +266,13 @@ program
 
 program
   .command('view')
+  .addOption(new Option('--graphics <mode>', 'terminal map graphics backend').choices(['auto', 'text', 'kitty', 'sixel', 'blocks']).default('auto'))
   .description('Scan this repo and open the terminal map')
   .argument('[target]', 'element or flow id for complete Markdown, draft id, or exact source file')
   .option('--plain', 'print a compact world overview with groups and a flow index')
   .action(async (target: string | undefined, options) => {
     try {
-      await openTerminalView(target, Boolean(program.opts().plain || options.plain))
+      await openTerminalView(target, Boolean(program.opts().plain || options.plain), options.graphics)
     } catch (error) {
       console.error(error instanceof Error ? error.message : String(error))
       process.exitCode = 1

@@ -1,202 +1,299 @@
-import { NativeImage } from '@opentui/core'
+import { ImageRenderable, NativeImage, resolveImageRenderProtocol } from '@opentui/core'
+import { rasterizeGraphics } from './graphics-raster.ts'
+import type { CliRenderer, FrameBufferRenderable, KeyEvent, MouseEvent, TerminalCapabilities } from '@opentui/core'
+import type { Point } from '../../types.ts'
+import type { TerminalViewModel } from './model.ts'
+import type { MapDirection, ViewerState } from './navigation.ts'
+import { nearestInDirection } from './navigation-spatial.ts'
+import { graphicsAnchors, graphicsHit, graphicsScene, graphicsScope, graphicsSvg } from './graphics-scene.ts'
+import type { GraphicsScene, GraphicsView } from './graphics-scene.ts'
+import { fitGraphics, panGraphics, rasterSize, revealGraphics, toGraphicsWorld, zoomGraphics } from './graphics-camera.ts'
+import type { GraphicsCamera, PixelSize } from './graphics-camera.ts'
 
-import type { Bounds, Point } from '../../types.ts'
-import type { SheetScene } from '../../sheet/types.ts'
-import { projectScene } from '../web/iso/project.ts'
+export type GraphicsProtocol = 'auto' | 'text' | 'kitty' | 'sixel' | 'blocks'
 
-const PX_PER_CELL_X = 8
-const PX_PER_CELL_Y = 16
-const PAD = 18
-
-type Rgba = readonly [number, number, number, number]
-
-interface HitRegion {
-  id: string
-  polygon: Point[]
+export function graphicsProtocol(requested: GraphicsProtocol, capabilities: TerminalCapabilities | null, hasResolution: boolean): Exclude<GraphicsProtocol, 'auto'> {
+  if (requested === 'text') return 'text'
+  const resolved = resolveImageRenderProtocol(requested, capabilities, hasResolution)
+  return resolved === 'blocks' && requested !== 'blocks' ? 'text' : resolved
 }
 
-export interface GraphicsFrame {
-  image: NativeImage
-  /** Building polygons in terminal-cell coordinates, used only for optional mouse selection. */
-  hits: HitRegion[]
+interface GraphicsRequest {
+  scene: GraphicsScene
+  model: TerminalViewModel
+  state: ViewerState
+  camera: GraphicsCamera
+  size: PixelSize
+  columns: number
+  rows: number
+  svg: string
+  generation: number
 }
 
-const CLEAR: Rgba = [0, 0, 0, 0]
-const GROUND: Rgba = [54, 58, 64, 255]
-const GROUND_EDGE: Rgba = [110, 117, 128, 255]
-const ISLAND: Rgba = [38, 42, 48, 215]
-const ZONE: Rgba = [46, 51, 58, 175]
-const SLAB_TOP: Rgba = [73, 81, 92, 255]
-const SLAB_SIDE: Rgba = [51, 58, 68, 255]
-const BUILDING_TOP: Rgba = [116, 150, 171, 255]
-const BUILDING_LEFT: Rgba = [72, 104, 124, 255]
-const BUILDING_RIGHT: Rgba = [88, 121, 143, 255]
-const EXTERNAL_TOP: Rgba = [147, 132, 161, 255]
-const EXTERNAL_SIDE: Rgba = [97, 83, 111, 255]
-const ROUTE: Rgba = [185, 191, 200, 255]
-const SELECTED: Rgba = [239, 203, 111, 255]
+const directions: Readonly<Record<string, MapDirection>> = { up: 'up', down: 'down', left: 'left', right: 'right', j: 'down', k: 'up' }
+const deltas: Readonly<Record<MapDirection, Point>> = { up: { x: 0, y: -1 }, down: { x: 0, y: 1 }, left: { x: -1, y: 0 }, right: { x: 1, y: 0 } }
 
-function setPixel(pixels: Uint8Array, width: number, height: number, x: number, y: number, color: Rgba): void {
-  const ix = Math.round(x)
-  const iy = Math.round(y)
-  if (ix < 0 || iy < 0 || ix >= width || iy >= height) return
-  const offset = (iy * width + ix) * 4
-  pixels[offset] = color[0]
-  pixels[offset + 1] = color[1]
-  pixels[offset + 2] = color[2]
-  pixels[offset + 3] = color[3]
-}
+/** One image viewport inside the existing TUI. One raster in flight, one replaceable pending frame. */
+export class TerminalGraphics {
+  private readonly renderer: CliRenderer
+  private readonly map: FrameBufferRenderable
+  private readonly image: ImageRenderable
+  private readonly changed: () => void
+  private readonly select: (id: string) => void
+  private readonly focus: () => void
+  private requested: GraphicsProtocol
+  private previous: GraphicsProtocol
+  private view: GraphicsView = 'iso'
+  private scene?: GraphicsScene
+  private sheet?: TerminalViewModel['sheet']
+  private model?: TerminalViewModel
+  private state?: ViewerState
+  private camera?: GraphicsCamera
+  private size: PixelSize = { width: 1, height: 1 }
+  private paths: ReadonlySet<string> = new Set()
+  private presented?: GraphicsRequest
+  private pending?: GraphicsRequest
+  private timer?: ReturnType<typeof setTimeout>
+  private busy = false
+  private closed = false
+  private generation = 0
+  private lastSvg = ''
+  private failure?: string
+  private drag?: { at: Point; moved: boolean }
+  private readonly onCapabilities = (): void => this.changed()
 
-function line(pixels: Uint8Array, width: number, height: number, a: Point, b: Point, color: Rgba, thickness = 1): void {
-  const dx = b.x - a.x
-  const dy = b.y - a.y
-  const steps = Math.max(1, Math.ceil(Math.max(Math.abs(dx), Math.abs(dy))))
-  for (let step = 0; step <= steps; step += 1) {
-    const x = a.x + dx * step / steps
-    const y = a.y + dy * step / steps
-    for (let ox = -Math.floor(thickness / 2); ox <= Math.floor(thickness / 2); ox += 1) {
-      for (let oy = -Math.floor(thickness / 2); oy <= Math.floor(thickness / 2); oy += 1) {
-        setPixel(pixels, width, height, x + ox, y + oy, color)
-      }
+  constructor(renderer: CliRenderer, map: FrameBufferRenderable, protocol: GraphicsProtocol,
+    handlers: { changed(): void; select(id: string): void; focus(): void }) {
+    this.renderer = renderer
+    this.map = map
+    this.requested = protocol
+    this.previous = protocol === 'text' ? 'auto' : protocol
+    this.changed = handlers.changed
+    this.select = handlers.select
+    this.focus = handlers.focus
+    this.image = new ImageRenderable(renderer, {
+      id: 'groma-graphics', position: 'absolute', left: 0, top: 0, width: '100%', height: '100%',
+      fit: 'fill', visible: false, onMouse: event => this.mouse(event),
+    })
+    map.add(this.image)
+    renderer.on('capabilities', this.onCapabilities)
+  }
+
+  get active(): boolean {
+    return !this.closed && !this.failure && this.state?.work === undefined && this.protocol !== 'text'
+  }
+
+  private get protocol(): Exclude<GraphicsProtocol, 'auto'> {
+    const resolution = this.renderer.resolution
+    const hasResolution = resolution !== null && resolution.width > 0 && resolution.height > 0
+    return graphicsProtocol(this.requested, this.renderer.capabilities, hasResolution)
+  }
+
+  get caption(): string {
+    if (this.failure) return 'Text · graphics error'
+    return this.active ? `${this.view === 'iso' ? 'Iso' : '2D'} · ${this.protocol}` : 'Text'
+  }
+
+  get error(): string | undefined { return this.failure }
+
+  update(model: TerminalViewModel, state: ViewerState, paths: ReadonlySet<string>): void {
+    const previousState = this.state
+    this.model = model
+    this.state = state
+    this.paths = paths
+    if (!this.active || model.elements.length === 0 || this.map.width < 4 || this.map.height < 3) { this.hide(); return }
+    if (!this.scene || this.sheet !== model.sheet) {
+      this.scene = graphicsScene(model, this.view)
+      this.sheet = model.sheet
+      this.camera = undefined
     }
-  }
-}
-
-function inside(point: Point, polygon: readonly Point[]): boolean {
-  let hit = false
-  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i, i += 1) {
-    const a = polygon[i]!
-    const b = polygon[j]!
-    const crosses = (a.y > point.y) !== (b.y > point.y)
-      && point.x < (b.x - a.x) * (point.y - a.y) / (b.y - a.y || Number.EPSILON) + a.x
-    if (crosses) hit = !hit
-  }
-  return hit
-}
-
-function polygon(pixels: Uint8Array, width: number, height: number, points: readonly Point[], fill: Rgba, stroke: Rgba = GROUND_EDGE): void {
-  if (points.length < 3) return
-  const minX = Math.max(0, Math.floor(Math.min(...points.map(point => point.x))))
-  const maxX = Math.min(width - 1, Math.ceil(Math.max(...points.map(point => point.x))))
-  const minY = Math.max(0, Math.floor(Math.min(...points.map(point => point.y))))
-  const maxY = Math.min(height - 1, Math.ceil(Math.max(...points.map(point => point.y))))
-  for (let y = minY; y <= maxY; y += 1) {
-    for (let x = minX; x <= maxX; x += 1) {
-      if (inside({ x: x + 0.5, y: y + 0.5 }, points)) setPixel(pixels, width, height, x, y, fill)
+    const resolution = this.renderer.resolution
+    this.size = rasterSize(this.map.width, this.map.height,
+      resolution ? resolution.width / Math.max(1, this.renderer.terminalWidth) : 8,
+      resolution ? resolution.height / Math.max(1, this.renderer.terminalHeight) : 16)
+    if (!this.camera || previousState?.level !== state.level) this.camera = fitGraphics(graphicsScope(this.scene, model, state), this.size)
+    else if (previousState?.currentId !== state.currentId) {
+      const bounds = state.currentId === undefined ? undefined : this.scene.bounds.get(state.currentId)
+      if (bounds) this.camera = revealGraphics(this.camera, bounds, this.size)
     }
+    this.queue()
   }
-  for (let index = 0; index < points.length; index += 1) {
-    line(pixels, width, height, points[index]!, points[(index + 1) % points.length]!, stroke)
-  }
-}
 
-function clear(pixels: Uint8Array): void {
-  for (let offset = 0; offset < pixels.length; offset += 4) {
-    pixels[offset] = CLEAR[0]
-    pixels[offset + 1] = CLEAR[1]
-    pixels[offset + 2] = CLEAR[2]
-    pixels[offset + 3] = CLEAR[3]
-  }
-}
-
-function fit(bounds: Bounds, width: number, height: number): { point(value: Point): Point; scale: number } {
-  const availableWidth = Math.max(1, width - PAD * 2)
-  const availableHeight = Math.max(1, height - PAD * 2)
-  const scale = Math.min(availableWidth / Math.max(1, bounds.width), availableHeight / Math.max(1, bounds.height))
-  const drawnWidth = bounds.width * scale
-  const drawnHeight = bounds.height * scale
-  const ox = (width - drawnWidth) / 2 - bounds.x * scale
-  const oy = (height - drawnHeight) / 2 - bounds.y * scale
-  return {
-    scale,
-    point(value) {
-      return { x: value.x * scale + ox, y: value.y * scale + oy }
-    },
-  }
-}
-
-/**
- * Paint the same composed SheetScene as the web isometric viewer into pixels.
- * This intentionally stays renderer-only: architecture meaning, selection and keyboard navigation remain in the existing TUI.
- */
-export function renderGraphicsFrame(
-  scene: SheetScene,
-  selectedId: string | undefined,
-  viewport: Bounds,
-): GraphicsFrame {
-  const projected = projectScene(scene)
-  const width = Math.max(64, viewport.width * PX_PER_CELL_X)
-  const height = Math.max(64, viewport.height * PX_PER_CELL_Y)
-  const pixels = new Uint8Array(width * height * 4)
-  clear(pixels)
-  const transform = fit(projected.bounds, width, height)
-  const points = (values: readonly Point[]) => values.map(transform.point)
-
-  if (projected.frame.length >= 3) polygon(pixels, width, height, points(projected.frame), GROUND, GROUND_EDGE)
-  for (const item of projected.islands) polygon(pixels, width, height, points(item.polygon), ISLAND)
-  for (const item of projected.zones) polygon(pixels, width, height, points(item.polygon), ZONE)
-
-  for (const item of projected.slabs) {
-    for (const face of item.faces) {
-      polygon(pixels, width, height, points(face.points), face.side === 'top' ? SLAB_TOP : SLAB_SIDE)
+  /** Camera commands are map-local; search and all text-reading modes retain their keys. */
+  key(key: KeyEvent): boolean {
+    const state = this.state
+    if (state?.focus !== 'architecture' || state.search || state.history || state.work || key.ctrl || key.meta) return false
+    if (key.name === 'g') {
+      this.requested = this.requested === 'text' ? this.previous : 'text'
+      this.failure = undefined
+      this.changed()
+      return true
     }
+    if (!this.active || !this.scene || !this.camera || !this.model) return false
+    return this.mapKey(key)
   }
 
-  for (const route of projected.routes) {
-    const routePoints = points(route.points)
-    for (let index = 1; index < routePoints.length; index += 1) {
-      line(pixels, width, height, routePoints[index - 1]!, routePoints[index]!, ROUTE, 2)
+  private mapKey(key: KeyEvent): boolean {
+    const direction = directions[key.name]
+    if (direction) {
+      if (key.shift) this.pan(deltas[direction].x * 48, deltas[direction].y * 48)
+      else this.navigate(direction)
+      return true
     }
+    const commands: Record<string, () => void> = {
+      '+': () => this.zoom(1.25), '=': () => this.zoom(1.25), '-': () => this.zoom(1 / 1.25),
+      '0': () => this.fitAll(), home: () => this.fitAll(), f: () => this.fitSelection(),
+      v: () => this.toggleView(), '[': () => this.cycle(-1), ']': () => this.cycle(1),
+    }
+    const command = commands[key.name]
+    command?.()
+    return command !== undefined
   }
 
-  const hits: HitRegion[] = []
-  for (const item of projected.buildings) {
-    const external = item.building.external
-    for (const floor of item.floors) {
-      for (const face of floor) {
-        const facePoints = points(face.points)
-        const fill = external
-          ? (face.side === 'top' ? EXTERNAL_TOP : EXTERNAL_SIDE)
-          : face.side === 'top' ? BUILDING_TOP : face.side === 'left' ? BUILDING_LEFT : BUILDING_RIGHT
-        polygon(pixels, width, height, facePoints, fill)
-      }
-    }
-    const all = item.floors.flatMap(floor => floor.flatMap(face => points(face.points)))
-    if (all.length > 0) {
-      const bounds = {
-        x: Math.min(...all.map(point => point.x)),
-        y: Math.min(...all.map(point => point.y)),
-        width: Math.max(...all.map(point => point.x)) - Math.min(...all.map(point => point.x)),
-        height: Math.max(...all.map(point => point.y)) - Math.min(...all.map(point => point.y)),
-      }
-      hits.push({
-        id: item.building.representationId,
-        polygon: [
-          { x: bounds.x / PX_PER_CELL_X, y: bounds.y / PX_PER_CELL_Y },
-          { x: (bounds.x + bounds.width) / PX_PER_CELL_X, y: bounds.y / PX_PER_CELL_Y },
-          { x: (bounds.x + bounds.width) / PX_PER_CELL_X, y: (bounds.y + bounds.height) / PX_PER_CELL_Y },
-          { x: bounds.x / PX_PER_CELL_X, y: (bounds.y + bounds.height) / PX_PER_CELL_Y },
-        ],
-      })
-      if (item.building.representationId === selectedId) {
-        const outline = [
-          { x: bounds.x - 4, y: bounds.y - 4 },
-          { x: bounds.x + bounds.width + 4, y: bounds.y - 4 },
-          { x: bounds.x + bounds.width + 4, y: bounds.y + bounds.height + 4 },
-          { x: bounds.x - 4, y: bounds.y + bounds.height + 4 },
-        ]
-        for (let index = 0; index < outline.length; index += 1) {
-          line(pixels, width, height, outline[index]!, outline[(index + 1) % outline.length]!, SELECTED, 2)
-        }
-      }
-    }
+  private fitAll(): void {
+    this.camera = fitGraphics(this.scene!.projected.bounds, this.size)
+    this.queue()
   }
 
-  return { image: NativeImage.fromRgba(pixels, width, height), hits }
-}
+  private toggleView(): void {
+    this.view = this.view === 'iso' ? 'plan' : 'iso'
+    this.scene = undefined
+    this.changed()
+  }
 
-export function graphicsItemAt(frame: GraphicsFrame | undefined, x: number, y: number): string | undefined {
-  if (frame === undefined) return undefined
-  const point = { x, y }
-  return [...frame.hits].reverse().find(hit => inside(point, hit.polygon))?.id
+  private fitSelection(): void {
+    const bounds = this.state?.currentId === undefined ? undefined : this.scene?.bounds.get(this.state.currentId)
+    if (bounds) { this.camera = fitGraphics(bounds, this.size); this.queue() }
+  }
+
+  private navigate(direction: MapDirection): void {
+    const anchors = graphicsAnchors(this.scene!, this.model!, this.state!)
+    const current = this.state!.currentId ?? anchors.keys().next().value
+    const origin = current === undefined ? undefined : anchors.get(current)
+    const next = origin === undefined ? anchors.keys().next().value : nearestInDirection(anchors, current!, origin, direction)
+    if (next !== undefined) this.select(next)
+  }
+
+  private cycle(delta: number): void {
+    const ids = [...graphicsAnchors(this.scene!, this.model!, this.state!).keys()]
+    if (ids.length === 0) return
+    const at = this.state!.currentId === undefined ? -1 : ids.indexOf(this.state!.currentId)
+    this.select(ids[(at + delta + ids.length) % ids.length]!)
+  }
+
+  private pan(dx: number, dy: number): void {
+    this.camera = panGraphics(this.camera!, dx, dy)
+    this.queue()
+  }
+
+  private zoom(factor: number, anchor?: Point): void {
+    this.camera = zoomGraphics(this.camera!, factor, this.size, fitGraphics(this.scene!.projected.bounds, this.size).scale, anchor)
+    this.queue()
+  }
+
+  private pixel(event: MouseEvent): Point {
+    return { x: (event.x - this.map.x + 0.5) * this.size.width / Math.max(1, this.map.width),
+      y: (event.y - this.map.y + 0.5) * this.size.height / Math.max(1, this.map.height) }
+  }
+
+  private mouse(event: MouseEvent): void {
+    event.stopPropagation()
+    event.preventDefault()
+    if (!this.active || !this.presented || this.state?.search || this.state?.history || this.state?.keys || this.state?.profile) return
+    if (event.type === 'scroll') {
+      this.scroll(event)
+      return
+    }
+    if (event.button === 0 || event.type === 'drag-end') this.pointer(event)
+  }
+
+  private scroll(event: MouseEvent): void {
+    const direction = event.scroll?.direction
+    if (direction !== 'up' && direction !== 'down') return
+    this.focus()
+    this.zoom(direction === 'up' ? 1.25 : 1 / 1.25, this.pixel(event))
+  }
+
+  private pointer(event: MouseEvent): void {
+    const point = this.pixel(event)
+    if (event.type === 'down') { this.drag = { at: point, moved: false }; return }
+    if ((event.type === 'drag' || event.type === 'move') && this.drag) {
+      const dx = this.drag.at.x - point.x
+      const dy = this.drag.at.y - point.y
+      if (dx !== 0 || dy !== 0) { this.focus(); this.pan(dx, dy); this.drag = { at: point, moved: true } }
+      return
+    }
+    if (event.type === 'up' || event.type === 'drag-end') this.releasePointer(event)
+  }
+
+  private releasePointer(event: MouseEvent): void {
+    const drag = this.drag
+    this.drag = undefined
+    const frame = this.presented
+    if (!drag || drag.moved || !frame) return
+    const pixel = { x: (event.x - this.map.x + 0.5) * frame.size.width / frame.columns,
+      y: (event.y - this.map.y + 0.5) * frame.size.height / frame.rows }
+    const id = graphicsHit(frame.scene, toGraphicsWorld(pixel, frame.camera, frame.size), frame.model, this.state!)
+    if (id !== undefined && this.model?.elements.some(element => element.representationId === id)) this.select(id)
+    else this.focus()
+  }
+
+  private queue(): void {
+    if (!this.active || !this.scene || !this.camera || !this.model || !this.state) return
+    const svg = graphicsSvg(this.scene, this.camera, this.size, this.state.currentId, this.paths)
+    if (svg === this.lastSvg) return
+    this.lastSvg = svg
+    this.pending = { scene: this.scene, camera: this.camera, size: this.size, model: this.model, state: this.state,
+      columns: this.map.width, rows: this.map.height, svg, generation: ++this.generation }
+    this.schedule()
+  }
+
+  private schedule(): void {
+    if (this.closed || this.busy || this.timer || !this.pending) return
+    this.timer = setTimeout(() => { this.timer = undefined; void this.renderNext() }, 40)
+  }
+
+  private async renderNext(): Promise<void> {
+    const frame = this.pending
+    this.pending = undefined
+    if (!frame || !this.active) return
+    this.busy = true
+    try {
+      const raster = await rasterizeGraphics(frame.svg)
+      if (this.closed || frame.generation !== this.generation) return
+      const image = NativeImage.fromRgba(raster.pixels, raster.width, raster.height)
+      try {
+        this.image.protocol = this.protocol === 'text' ? 'blocks' : this.protocol
+        this.image.source = image
+        await this.image.loadPromise
+        if (this.closed || frame.generation !== this.generation) return
+        this.presented = frame
+        this.image.visible = true
+      } finally { image.dispose() }
+    } catch (error) {
+      if (this.closed || frame.generation !== this.generation) return
+      this.failure = error instanceof Error ? error.message : String(error)
+      this.hide()
+      this.changed()
+    } finally { this.busy = false; this.schedule() }
+  }
+
+  private hide(): void {
+    if (!this.lastSvg && !this.presented && !this.pending) return
+    ++this.generation
+    this.pending = undefined
+    this.presented = undefined
+    this.lastSvg = ''
+    this.drag = undefined
+    clearTimeout(this.timer)
+    this.timer = undefined
+    if (!this.image.isDestroyed) { this.image.visible = false; this.image.source = undefined }
+  }
+
+  destroy(): void {
+    if (this.closed) return
+    this.closed = true
+    this.hide()
+    this.renderer.off('capabilities', this.onCapabilities)
+  }
 }
