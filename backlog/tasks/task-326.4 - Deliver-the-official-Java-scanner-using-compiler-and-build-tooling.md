@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@codex-java'
 created_date: '2026-09-08 21:34'
-updated_date: '2026-09-08 22:29'
+updated_date: '2026-09-08 22:35'
 labels:
   - scanners
 dependencies: []
@@ -44,6 +44,7 @@ modified_files:
   - src/viewers/source/structure.ts
   - test-bun/release-version.test.ts
   - bun.lock
+  - .github/workflows/ci.yml
 parent_task_id: TASK-326
 type: feature
 ordinal: 365000
@@ -87,6 +88,8 @@ Supply the Java portion of the Java/Angular/embedded-TypeScript acceptance journ
 5. Document supported scope/platform qualification gaps and submit coordinator simplicity and acceptance reviews before finalization.
 
 6. Requalify compiled export for the Java/TypeScript acceptance project: reuse the existing TypeScript worker path in the source-structure reader and extend the Java package smoke with a minimal TypeScript export witness.
+
+7. Provision JDK 25 explicitly in the existing three-OS CI check jobs so the approved Java 25 fixture and Java 21 worker compilation use the required compiler.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
@@ -111,4 +114,6 @@ Shared-check regression fixed in the leased release-version fixture-copy setup. 
 The coordinated repository check after the isolated release-fixture correction passed: Node suite passes; Bun 382 pass, 1 Java tooling integration skip, 0 fail, 782 assertions. Log: /tmp/groma-angular-shared-check-after-java-fixture.log. Coordinator browser acceptance and targeted source-reader review have passed. Guided installation TASK-326.3 is now active on these technical prerequisites; shared readiness presentation remains its responsibility.
 
 Coordinator confirms TASK-326.3 shared readiness integration: compiled CLI reports Java ready on the prepared acceptance copy, followed by a successful scan preserving all curated Markdown. The latest coordinated repository check passes: Node 110; Bun 386 passed, 1 tooling integration skip, 0 failed. All implementation, targeted, full-context and map reviews passed. AC3 is verified; AC6 remains unchecked because actual Windows/Linux consumer execution remains release qualification work. Task remains In Progress. Coordinator assigned the two Java-only bun.lock workspace/package entries to this task and authorized committing/pushing the verified implementation. The Java entrypoint will be staged at its pre-installation baseline; TASK-326.3 readiness wiring remains in the working file for its own commit.
+
+CI run 34286237315 on e310872 failed only the Java compiler prerequisites: Linux/Windows selected JDK17 and could not compile --release21; macOS could not analyze --release25. With coordinator lease, .github/workflows/ci.yml now adds actions/setup-java@v6 with distribution temurin and java-version 25 before existing dependency/check steps. Official action README documents this exact configuration and that it sets JAVA_HOME/PATH (https://github.com/actions/setup-java). YAML parsed successfully; removing the added setup step makes the parsed workflow exactly equal to HEAD, proving matrix, fail-fast, checks and assertions are unchanged. Focused Java checks with explicit local JDK25 and actual Maven integration passed: 4 tests, 19 assertions, 0 failures. git diff --check passed. No tests skipped or weakened, no release-workflow changes, no full suite/commit/push performed; coordinator will schedule requalification.
 <!-- SECTION:NOTES:END -->
