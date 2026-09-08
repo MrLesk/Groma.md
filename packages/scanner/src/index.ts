@@ -47,6 +47,8 @@ export interface ScanOperation {
   id: string
   file: string
   name: string
+  /** Zero-based UTF-16 declaration start, excluding leading trivia; shared across compiler instances. */
+  position?: number
   /** Inclusive 1-based lines; required when tokens are present. */
   startLine?: number
   endLine?: number
@@ -59,8 +61,10 @@ export interface ScanInvocation {
   targets: string[]
   unresolved: boolean
   /** A concrete argument binding distinguishes supplied callbacks from direct calls. */
-  binding?: { file: string; line: number }
+  binding?: { file: string; line: number; position?: number }
   line: number
+  /** Zero-based UTF-16 invocation start, excluding leading trivia. */
+  position?: number
   member?: string
 }
 
@@ -268,6 +272,7 @@ function parseOperations(value: Record<string, unknown>): Pick<ScanObservation, 
       id: string(operation.id, 'operation.id'),
       file: string(operation.file, 'operation.file'),
       name: string(operation.name, 'operation.name'),
+      ...sourcePosition(operation.position),
       ...operationTokens(operation),
     }
   })
@@ -282,8 +287,9 @@ function parseOperations(value: Record<string, unknown>): Pick<ScanObservation, 
       targets: array(invocation.targets, 'invocation.targets').map(target => string(target, 'invocation.target')),
       unresolved: invocation.unresolved,
       line: Number(invocation.line),
+      ...sourcePosition(invocation.position),
       ...(invocation.member === undefined ? {} : { member: string(invocation.member, 'invocation.member') }),
-      ...(binding === undefined ? {} : { binding: { file: string(binding.file, 'binding.file'), line: Number(binding.line) } }),
+      ...(binding === undefined ? {} : { binding: { file: string(binding.file, 'binding.file'), line: Number(binding.line), ...sourcePosition(binding.position) } }),
     }
   })
   return { operations, invocations }
@@ -296,6 +302,7 @@ function operationEvidence(input: ObservationInput, files: Set<string>): Pick<Sc
   const ids = new Set(operations.map(operation => operation.id))
   for (const operation of operations) {
     if (!files.has(operation.file)) throw new Error(`operation references unknown file: ${operation.file}`)
+    sourcePosition(operation.position)
     validateOperationTokens(operation)
   }
   const invocations = input.invocations ?? []
@@ -338,9 +345,17 @@ function validateOperationTokens(operation: ScanOperation): void {
 }
 
 function validateInvocation(invocation: ScanInvocation, ids: Set<string>, files: Set<string>): void {
+  sourcePosition(invocation.position)
+  sourcePosition(invocation.binding?.position)
   if (!invocation.targets.length && !invocation.unresolved) throw new Error('an empty target set must be unresolved')
   if (!ids.has(invocation.source) || invocation.targets.some(target => !ids.has(target))) {
     throw new Error('invocation references unknown operation')
   }
   if (invocation.binding && !files.has(invocation.binding.file)) throw new Error('invocation binding references unknown file')
+}
+
+function sourcePosition(position: unknown): { position?: number } {
+  if (position === undefined) return {}
+  if (!Number.isInteger(position) || Number(position) < 0) throw new Error('source position must be a non-negative integer')
+  return { position: Number(position) }
 }

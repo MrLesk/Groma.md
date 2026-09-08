@@ -1,3 +1,5 @@
+import type { ScanDiagnostic } from '@groma/scanner'
+
 export type C4Kind = 'actor' | 'system' | 'container' | 'component'
 export type Origin = 'observed' | 'draft'
 /** The OKF lifecycle word every element document carries. */
@@ -69,6 +71,8 @@ export interface ScanSummary {
   matched: number
   /** Architecture findings from the current scan; omitted when there are none. */
   findings?: number
+  /** Successful observations disagree; disputed claims do not establish derived relationships. */
+  evidenceConflicts?: ScanDiagnostic[]
 }
 
 export type {

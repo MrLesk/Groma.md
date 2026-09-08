@@ -84,7 +84,7 @@ function indexWorld(records: ArchitectureRecords): World {
     if (record === undefined) continue
     world.byId.set(record.id, record)
     for (const reference of record.code) {
-      world.byCodeFile.set(codeFileKey(reference.scanner, reference.file), record)
+      world.byCodeFile.set(reference.file, record)
     }
   }
   return world
@@ -131,7 +131,7 @@ async function createRecord(
   // Reserve identity before yielding so independent file writes keep scan order.
   world.byId.set(id, record)
   for (const reference of record.code) {
-    world.byCodeFile.set(codeFileKey(reference.scanner, reference.file), record)
+    world.byCodeFile.set(reference.file, record)
   }
   await writeDocument(
     repositoryRoot,
@@ -216,7 +216,7 @@ function inferredContainer(
 ): WorldRecord | undefined {
   const containers = observation.placements.flatMap(placement => {
     if (placement.scope !== scope.id) return []
-    const owner = world.byCodeFile.get(codeFileKey(observation.scanner.language, placement.file))
+    const owner = world.byCodeFile.get(placement.file)
     if (owner?.kind === 'container') return [owner]
     const parent = owner?.parent === undefined ? undefined : world.byId.get(owner.parent ?? '')
     return parent?.kind === 'container' ? [parent] : []
@@ -249,8 +249,10 @@ async function attachReference(
   record: WorldRecord,
   reference: CodeReference,
 ): Promise<void> {
-  record.code = [...record.code, reference]
-  world.byCodeFile.set(codeFileKey(reference.scanner, reference.file), record)
+  record.code = [...record.code, reference].sort((left, right) => {
+    return `${left.file}\0${left.scanner}`.localeCompare(`${right.file}\0${right.scanner}`)
+  })
+  world.byCodeFile.set(reference.file, record)
   await upsertCode(repositoryRoot, record.sourceFilename, record.code)
 }
 
@@ -326,8 +328,13 @@ async function reconcileFiles(
   ]))
   const pending: Promise<unknown>[] = []
   for (const file of observation.files) {
-    const key = codeFileKey(observation.scanner.language, file.file)
-    if (world.byCodeFile.has(key)) continue
+    const owner = world.byCodeFile.get(file.file)
+    if (owner !== undefined) {
+      if (!owner.code.some(reference => reference.file === file.file && reference.scanner === observation.scanner.language)) {
+        await attachReference(repositoryRoot, world, owner, scanReference(observation, file))
+      }
+      continue
+    }
     const scope = placementByFile.get(file.file)
     const parent = scope === undefined ? undefined : containers.get(scope)
     if (parent === undefined) continue
@@ -393,7 +400,8 @@ export async function reconcileScanObservations(
     await reconcileObservation(repositoryRoot, world, observation, summary)
   }
   const owners = new Map([...world.byId.values()].flatMap(record => record.code.map(reference => [reference.file, record.id] as const)))
-  await refreshDerivedRelationships(repositoryRoot, observations, owners)
+  const conflicts = await refreshDerivedRelationships(repositoryRoot, observations, owners)
+  if (conflicts.length > 0) summary.evidenceConflicts = conflicts
   const findings = detectDuplicatedLogic(observations, owners)
   rememberArchitectureFindings(repositoryRoot, findings)
   if (findings.length > 0) summary.findings = findings.length

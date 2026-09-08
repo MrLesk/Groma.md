@@ -84,6 +84,49 @@ every analysis. Unsupported evidence must not be represented as proof of
 absence. The first contract should serve the first example, rather than encode
 all possible languages and frameworks in advance.
 
+## Overlapping observations
+
+Two scanners may inspect the same source file with different compiler instances.
+The exact repository-relative file path identifies that source. Core keeps one
+curated owner and retains each scanner's Code contribution on that owner.
+Scanner identity and compiler IDs do not create another owner. Existing
+uncurated placement still follows the scan lifecycle; there is no new ranking
+policy for competing initial scope suggestions. Curated membership is authoritative.
+
+For claims that can be compared across scanners, operations and invocations
+provide `position`: a zero-based UTF-16 source offset, excluding leading trivia.
+An operation is identified by its file and declaration position. A claim is
+identified by that operation, the invocation position, the named member, and
+the concrete binding's file and position. A binding without source positions
+cannot be compared across compilers. Operation IDs remain local links, never
+source identities. Positions are independent of optional body tokens.
+
+For the same claim, certain provider sets must agree after resolving providers
+to their source positions. Different certain sets produce a
+`conflicting-providers` diagnostic and none of those disputed claims establishes
+a derived relationship, even when their targets share one curated owner.
+Equal sets are one observation of the interaction, not extra votes. Different
+concrete binding contexts remain separate. Evidence without the positions
+needed for comparison is interpreted only within its observation.
+
+An unresolved observation does not contradict a certain supported claim from
+another scanner. This includes the narrow Angular example: a named output is
+bound to a handler at a concrete template location, while the embedded
+TypeScript scanner cannot resolve that binding. The existing supplied named
+callback rule can use the Angular contribution. This does not enable ordinary
+service calls or injected class-receiver inference.
+
+Conflicts are successful scan results, reported through
+`ScanSummary.evidenceConflicts` and the scan report. They are distinct from an
+enabled scanner failing to complete: all scanners must succeed before
+reconciliation starts. Repeat scans preserve authored relationships and
+curated file membership in either observer order. Source offsets, provider
+sets, and conflict details stay in memory; they are not new OKF fields or C4
+elements. Ordinary Markdown readers retain the existing Code links and
+authored relationship meaning. The independent
+[composition fixture](../../test/fixtures/scanner-composition/) exercises this
+contract; framework extraction has its own scanner fixture.
+
 ## Completion, precision, and uncertainty
 
 The current observation's `complete: true` means the scanner successfully
