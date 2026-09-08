@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace Groma.CSharpScanner;
 
@@ -9,6 +10,8 @@ public sealed record ScanSymbol(string Id, string Name, string Kind);
 public sealed record ScanFile(string File, IReadOnlyList<ScanSymbol> Symbols);
 public sealed record ScanPlacement(string File, string Scope);
 public sealed record ScanRelationship(string Source, string Target, string Kind);
+public sealed record ScanOperation(string Id, string File, string Name);
+public sealed record ScanInvocation(string Source, IReadOnlyList<string> Targets, bool Unresolved, int Line, string? Member = null);
 public sealed record ScanDiagnostic(string Severity, string Code, string Message);
 
 public sealed record ScanObservation(
@@ -20,12 +23,15 @@ public sealed record ScanObservation(
     IReadOnlyList<ScanFile> Files,
     IReadOnlyList<ScanPlacement> Placements,
     IReadOnlyList<ScanRelationship> Relationships,
-    IReadOnlyList<ScanDiagnostic> Diagnostics)
+    IReadOnlyList<ScanDiagnostic> Diagnostics,
+    IReadOnlyList<ScanOperation>? Operations = null,
+    IReadOnlyList<ScanInvocation>? Invocations = null)
 {
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         WriteIndented = true,
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
     };
 
     public static ScanObservation Create(
@@ -35,7 +41,9 @@ public sealed record ScanObservation(
         IEnumerable<ScanFile> files,
         IEnumerable<ScanPlacement> placements,
         IEnumerable<ScanRelationship> relationships,
-        IEnumerable<ScanDiagnostic> diagnostics)
+        IEnumerable<ScanDiagnostic> diagnostics,
+        IEnumerable<ScanOperation>? operations = null,
+        IEnumerable<ScanInvocation>? invocations = null)
     {
         ScanScope[] orderedScopes = UniqueBy(scopes, scope => scope.Id, "scope id");
         ScanFile[] orderedFiles = UniqueBy(
@@ -79,6 +87,27 @@ public sealed record ScanObservation(
             Require(evidenceIds.Contains(relationship.Target), $"Relationship references unknown target '{relationship.Target}'.");
         }
 
+        ScanOperation[]? orderedOperations = operations is null ? null : UniqueBy(operations, operation => operation.Id, "operation id");
+        ScanInvocation[]? orderedInvocations = orderedOperations is null ? null : (invocations ?? [])
+            .OrderBy(invocation => invocation.Source, StringComparer.Ordinal)
+            .ThenBy(invocation => invocation.Line)
+            .ThenBy(invocation => invocation.Member, StringComparer.Ordinal)
+            .ThenBy(invocation => string.Join(";", invocation.Targets), StringComparer.Ordinal)
+            .ToArray();
+        Require(operations is not null || invocations is null, "Invocations require operation declarations.");
+        if (orderedOperations is not null)
+        {
+            HashSet<string> operationIds = orderedOperations.Select(operation => operation.Id).ToHashSet(StringComparer.Ordinal);
+            foreach (ScanOperation operation in orderedOperations)
+                Require(filePaths.Contains(operation.File), $"Operation references unknown file '{operation.File}'.");
+            foreach (ScanInvocation invocation in orderedInvocations!)
+            {
+                Require(operationIds.Contains(invocation.Source) && invocation.Targets.All(operationIds.Contains), "Invocation references an unknown operation.");
+                Require(invocation.Targets.Count > 0 || invocation.Unresolved, "An empty target set must remain unresolved.");
+                Require(invocation.Line > 0, "Invocation line must be positive.");
+            }
+        }
+
         return new ScanObservation(
             SchemaVersion: 1,
             Scanner: scanner,
@@ -88,6 +117,8 @@ public sealed record ScanObservation(
             Files: orderedFiles,
             Placements: orderedPlacements,
             Relationships: orderedRelationships,
+            Operations: orderedOperations,
+            Invocations: orderedInvocations,
             Diagnostics: diagnostics
                 .Distinct()
                 .OrderBy(diagnostic => diagnostic.Severity, StringComparer.Ordinal)

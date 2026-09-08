@@ -399,7 +399,7 @@ test.concurrent('C# watch evidence includes projects and excludes build output',
   expect(isCSharpScanFile('src/bin/Debug/Generated.cs')).toBeFalse()
 })
 
-test.concurrent('C# adapter uses its plugin package and the shared contract', async () => {
+test.concurrent('C# adapter runs its prepared worker through the shared contract', async () => {
   const expected = createScanObservation({
     scanner: { language: 'csharp', engine: 'test', engineVersion: '1' },
     root: { kind: 'project', name: 'Shop', file: 'Shop.csproj' },
@@ -411,20 +411,19 @@ test.concurrent('C# adapter uses its plugin package and the shared contract', as
   })
   const root = await temporaryTree({
     'Shop.csproj': '<Project />',
+    'worker.dll': '',
     'dotnet-host.mjs': `#!/usr/bin/env node
 const args = process.argv.slice(2).map(value => value.replaceAll('\\\\', '/'))
-if (args[0] === 'build') {
-  if (!args[1]?.endsWith('plugins/scanners/csharp/dotnet/Groma.CSharpScanner.csproj')) process.exit(2)
-  process.exit(0)
-}
-if (!args[0]?.endsWith('plugins/scanners/csharp/dotnet/bin/Debug/net10.0/Groma.CSharpScanner.dll')) process.exit(3)
+if (args[0] === '--version') { console.log('10.0.400'); process.exit(0) }
+if (args[0] === '--list-runtimes') { console.log('Microsoft.NETCore.App 10.0.11 [/sdk]'); process.exit(0) }
+if (!args[0]?.endsWith('/worker.dll') || args[2] !== '--root') process.exit(3)
 process.stdout.write(${JSON.stringify(JSON.stringify(expected))})
 `,
   })
   try {
     const host = path.join(root, 'dotnet-host.mjs')
     await chmod(host, 0o755)
-    expect(await scanCSharpSource(root, host)).toEqual(expected)
+    expect(await scanCSharpSource(root, host, path.join(root, 'worker.dll'))).toEqual(expected)
   } finally {
     await rm(root, { recursive: true, force: true })
   }

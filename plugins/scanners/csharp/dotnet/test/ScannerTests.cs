@@ -11,8 +11,8 @@ public sealed class ScannerTests
         using FixtureSolution fixture = FixtureSolution.Create();
         RoslynScanner scanner = new();
 
-        ScanObservation first = await scanner.ScanAsync(fixture.SolutionPath);
-        ScanObservation second = await scanner.ScanAsync(fixture.SolutionPath);
+        ScanObservation first = await scanner.ScanAsync(new ScanRequest(fixture.SolutionPath, fixture.Directory));
+        ScanObservation second = await scanner.ScanAsync(new ScanRequest(fixture.SolutionPath, fixture.Directory));
 
         Assert.Equal(first.ToCanonicalJson(), second.ToCanonicalJson());
         ScanFile[] partialFiles = first.Files
@@ -42,7 +42,7 @@ public sealed class ScannerTests
         StringWriter error = new();
 
         int exitCode = await ScannerCommand.RunAsync(
-            [Path.Combine(Path.GetTempPath(), Guid.NewGuid() + ".sln")],
+            [Path.Combine(Path.GetTempPath(), Guid.NewGuid() + ".sln"), "--root", Path.GetTempPath()],
             output,
             error);
 
@@ -104,7 +104,7 @@ public sealed class ScannerTests
                 UseShellExecute = false,
             };
             startInfo.ArgumentList.Add("restore");
-            startInfo.ArgumentList.Add(SolutionPath);
+            startInfo.ArgumentList.Add(Path.GetRelativePath(Directory, SolutionPath));
             using Process process = Process.Start(startInfo)
                 ?? throw new InvalidOperationException("Could not start dotnet restore.");
             Task<string> output = process.StandardOutput.ReadToEndAsync();
@@ -112,7 +112,7 @@ public sealed class ScannerTests
             process.WaitForExit();
             Task.WaitAll(output, error);
             if (process.ExitCode != 0)
-                throw new InvalidOperationException(error.Result);
+                throw new InvalidOperationException(output.Result + error.Result);
         }
 
         private static string ProjectFile(string extra = "") => $$"""

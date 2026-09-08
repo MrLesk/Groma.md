@@ -3,192 +3,128 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.MSBuild;
-using System.Text.RegularExpressions;
+using System.Collections.Concurrent;
 
 namespace Groma.CSharpScanner;
 
 public sealed class RoslynScanner
 {
-    private static readonly object MSBuildRegistrationLock = new();
-
-    public async Task<ScanObservation> ScanAsync(string inputPath, CancellationToken cancellationToken = default)
+    public async Task<ScanObservation> ScanAsync(ScanRequest request, CancellationToken cancellationToken = default)
     {
-        string input = Path.GetFullPath(inputPath);
-        if (!File.Exists(input))
-            throw new FileNotFoundException("Scan input does not exist.", input);
-
-        string extension = Path.GetExtension(input);
-        if (extension is not (".sln" or ".csproj"))
-            throw new InvalidDataException("Scan input must be a .sln or .csproj file.");
-
-        RegisterMSBuild();
-        string rootDirectory = Path.GetDirectoryName(input)!;
-        HashSet<string> expectedProjects = FindExpectedProjects(input, rootDirectory);
-        List<WorkspaceDiagnostic> workspaceDiagnostics = [];
+        request = request with { Input = Path.GetFullPath(request.Input), RepositoryRoot = Path.GetFullPath(request.RepositoryRoot) };
+        request.Validate();
+        string[] expected = ProjectInput.ExpectedProjects(request);
+        VisualStudioInstance sdk = ProjectInput.RegisterMSBuild(request.Input);
+        ConcurrentQueue<WorkspaceDiagnostic> workspaceDiagnostics = new();
         using MSBuildWorkspace workspace = MSBuildWorkspace.Create(new Dictionary<string, string>
         {
-            ["NuGetAudit"] = "false",
+            ["Configuration"] = request.Configuration,
         });
         workspace.LoadMetadataForReferencedProjects = false;
-        workspace.RegisterWorkspaceFailedHandler(args => workspaceDiagnostics.Add(args.Diagnostic));
-
-        Solution solution = extension == ".sln"
-            ? await workspace.OpenSolutionAsync(input, cancellationToken: cancellationToken)
-            : (await workspace.OpenProjectAsync(input, cancellationToken: cancellationToken)).Solution;
-
-        Dictionary<string, ScanScope> scopes = new(StringComparer.Ordinal);
-        Dictionary<string, HashSet<ScanSymbol>> symbolsByFile = new(StringComparer.Ordinal);
-        HashSet<ScanPlacement> placements = [];
+        workspace.SkipUnrecognizedProjects = false;
+        workspace.RegisterWorkspaceFailedHandler(args => workspaceDiagnostics.Enqueue(args.Diagnostic));
+        bool isProject = request.Input.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase);
+        Solution solution = isProject
+            ? (await workspace.OpenProjectAsync(request.Input, cancellationToken: cancellationToken)).Solution
+            : await workspace.OpenSolutionAsync(request.Input, cancellationToken: cancellationToken);
+        ThrowIfWorkspaceFailed(workspaceDiagnostics, request.RepositoryRoot);
+        Project[] projects = ProjectInput.ValidateLoaded(solution, request, expected);
+        Dictionary<ProjectId, string> scopes = projects.ToDictionary(project => project.Id,
+            project => $"scope:{SourcePath.Relative(request.RepositoryRoot, project.FilePath!)}");
+        List<ScanFile> files = [];
+        List<ScanPlacement> placements = [];
         HashSet<ScanRelationship> relationships = [];
-        Dictionary<ProjectId, string> scopeByProject = new();
+        List<ScanDiagnostic> diagnostics = [];
+        OperationEvidence evidence = new(request.RepositoryRoot);
 
-        foreach (Project project in solution.Projects.OrderBy(project => project.FilePath, StringComparer.Ordinal))
+        foreach (Project project in projects)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            if (project.FilePath is null || Path.GetExtension(project.FilePath) != ".csproj")
-                continue;
-
-            string projectPath = RelativePath(rootDirectory, project.FilePath);
-            string scopeId = $"scope:{projectPath}";
-            scopes.TryAdd(scopeId, new ScanScope(scopeId, project.Name));
-            scopeByProject[project.Id] = scopeId;
             Compilation compilation = await project.GetCompilationAsync(cancellationToken)
-                ?? throw new InvalidDataException($"Roslyn could not compile scope '{scopeId}'.");
-
+                ?? throw new InvalidDataException($"Roslyn could not compile '{project.Name}'.");
+            CheckCompilation(compilation, project, request.RepositoryRoot, diagnostics, cancellationToken);
             foreach (Document document in project.Documents.OrderBy(document => document.FilePath, StringComparer.Ordinal))
             {
-                if (!IsSourceFile(rootDirectory, document.FilePath))
-                    continue;
-
-                string file = RelativePath(rootDirectory, document.FilePath!);
-                placements.Add(new ScanPlacement(file, scopeId));
-                if (!symbolsByFile.TryGetValue(file, out HashSet<ScanSymbol>? symbols))
-                    symbolsByFile[file] = symbols = [];
-
-                SyntaxTree? tree = await document.GetSyntaxTreeAsync(cancellationToken);
-                if (tree is null)
-                    throw new InvalidDataException($"Roslyn could not parse '{file}'.");
-
-                SemanticModel semanticModel = compilation.GetSemanticModel(tree);
+                if (!SourcePath.IsPhysicalSource(request.RepositoryRoot, document.FilePath)) continue;
+                string file = SourcePath.Relative(request.RepositoryRoot, document.FilePath!);
+                SyntaxTree tree = await document.GetSyntaxTreeAsync(cancellationToken)
+                    ?? throw new InvalidDataException($"Roslyn could not parse '{file}'.");
+                SemanticModel model = compilation.GetSemanticModel(tree);
                 SyntaxNode root = await tree.GetRootAsync(cancellationToken);
-                foreach (NameSyntax name in root.DescendantNodes().OfType<NameSyntax>())
-                {
-                    if (name.Ancestors().Any(ancestor => ancestor is UsingDirectiveSyntax))
-                        continue;
-                    ISymbol? referenced = semanticModel.GetSymbolInfo(name, cancellationToken).Symbol;
-                    if (referenced is INamespaceSymbol)
-                        continue;
-                    foreach (Location location in referenced?.Locations ?? [])
-                    {
-                        string? targetPath = location.SourceTree?.FilePath;
-                        if (!IsSourceFile(rootDirectory, targetPath))
-                            continue;
-                        string target = RelativePath(rootDirectory, targetPath!);
-                        if (target != file)
-                            relationships.Add(new ScanRelationship(file, target, "source-dependency"));
-                    }
-                }
-                foreach (MemberDeclarationSyntax declaration in root.DescendantNodes().OfType<MemberDeclarationSyntax>())
-                {
-                    if (declaration is not BaseTypeDeclarationSyntax and not DelegateDeclarationSyntax)
-                        continue;
-
-                    ISymbol? symbol = semanticModel.GetDeclaredSymbol(declaration, cancellationToken);
-                    if (symbol is not INamedTypeSymbol namedType)
-                        throw new InvalidDataException($"Roslyn could not resolve a type declaration in '{file}'.");
-
-                    symbols.Add(new ScanSymbol(
-                        Id: namedType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
-                        Name: namedType.Name,
-                        Kind: DeclarationKind(declaration)));
-                }
+                files.Add(new ScanFile(file, DeclaredSymbols(root, model, cancellationToken)));
+                placements.Add(new ScanPlacement(file, scopes[project.Id]));
+                ExtractDependencies(root, model, file, request.RepositoryRoot, relationships, cancellationToken);
+                evidence.Extract(root, model, file, cancellationToken);
             }
-        }
-
-        foreach (Project project in solution.Projects)
-        {
-            if (!scopeByProject.TryGetValue(project.Id, out string? sourceScope))
-                continue;
             foreach (ProjectReference reference in project.ProjectReferences)
             {
-                if (scopeByProject.TryGetValue(reference.ProjectId, out string? targetScope))
-                    relationships.Add(new ScanRelationship(sourceScope, targetScope, "project-reference"));
+                if (!scopes.TryGetValue(reference.ProjectId, out string? target))
+                    throw new InvalidDataException("A source project reference was not loaded; no observation will be published.");
+                relationships.Add(new ScanRelationship(scopes[project.Id], target, "project-reference"));
             }
         }
-
-        ThrowIfIncomplete(workspaceDiagnostics, expectedProjects, solution, rootDirectory);
+        ThrowIfWorkspaceFailed(workspaceDiagnostics, request.RepositoryRoot);
+        HashSet<string> included = files.Select(file => file.File).ToHashSet(StringComparer.Ordinal);
+        // Generated implementations and metadata are not physical repository-file endpoints.
+        relationships.RemoveWhere(relationship => relationship.Kind == "source-dependency" && !included.Contains(relationship.Target));
+        diagnostics.AddRange(workspaceDiagnostics.Select(diagnostic => new ScanDiagnostic("warning", "MSBUILD_WORKSPACE", NormalizeMessage(diagnostic.Message, request.RepositoryRoot))));
+        diagnostics.Add(new ScanDiagnostic("info", "CSHARP_CONTEXT", $"MSBuild SDK {sdk.Version}; configuration {request.Configuration}; {projects.Length} projects. One loaded compilation context per physical project."));
+        diagnostics.Add(new ScanDiagnostic("info", "CSHARP_OPERATION_SCOPE", "Explicit calls and constructions in implemented methods, accessors, local functions, lambdas and top-level statements. Implicit language calls, initializers, generated operations, receiver/delegate value flow, DI and protocol wiring are not resolved. Direct calls are evidence, not automatically architecture relationships."));
         return ScanObservation.Create(
-            new ScannerIdentity(
-                Language: "csharp",
-                Engine: "roslyn",
-                EngineVersion: typeof(CSharpCompilation).Assembly.GetName().Version!.ToString()),
-            new ScanRoot(
-                extension == ".sln" ? "solution" : "project",
-                Path.GetFileNameWithoutExtension(input),
-                RelativePath(rootDirectory, input)),
-            scopes.Values,
-            symbolsByFile.Select(pair => new ScanFile(pair.Key, pair.Value.ToArray())),
-            placements,
-            relationships,
-            workspaceDiagnostics.Select(diagnostic => new ScanDiagnostic(
-                diagnostic.Kind == WorkspaceDiagnosticKind.Failure ? "error" : "warning",
-                "MSBUILD_WORKSPACE",
-                NormalizeMessage(diagnostic.Message, rootDirectory))));
+            new ScannerIdentity("csharp", "roslyn", typeof(CSharpCompilation).Assembly.GetName().Version!.ToString()),
+            new ScanRoot(isProject ? "project" : "solution", Path.GetFileNameWithoutExtension(request.Input), SourcePath.Relative(request.RepositoryRoot, request.Input)),
+            projects.Select(project => new ScanScope(scopes[project.Id], project.Name)),
+            files, placements, relationships, diagnostics, evidence.Operations, evidence.Invocations);
     }
 
-    private static void RegisterMSBuild()
+    private static void CheckCompilation(Compilation compilation, Project project, string root, List<ScanDiagnostic> diagnostics, CancellationToken token)
     {
-        lock (MSBuildRegistrationLock)
+        Diagnostic[] errors = compilation.GetDiagnostics(token)
+            .Where(diagnostic => diagnostic.Severity == DiagnosticSeverity.Error)
+            .OrderBy(diagnostic => diagnostic.Location.SourceTree?.FilePath, StringComparer.Ordinal)
+            .ThenBy(diagnostic => diagnostic.Location.SourceSpan.Start)
+            .ThenBy(diagnostic => diagnostic.Id, StringComparer.Ordinal).ToArray();
+        if (errors.Length > 0)
+            throw new InvalidDataException($"Compilation failed for '{SourcePath.Relative(root, project.FilePath!)}' ({errors.Length} errors). Restore the selected project explicitly and fix compilation errors.\n" +
+                string.Join("\n", errors.Take(5).Select(error => NormalizeMessage(error.ToString(), root))));
+        if (project.AnalyzerReferences.Count > 0)
+            diagnostics.Add(new ScanDiagnostic("info", "CSHARP_GENERATED_SCOPE", $"{SourcePath.Relative(root, project.FilePath!)}: compiler generators may contribute semantic input; generated documents are not emitted as primary source files."));
+    }
+
+    private static ScanSymbol[] DeclaredSymbols(SyntaxNode root, SemanticModel model, CancellationToken token) =>
+        root.DescendantNodes().OfType<MemberDeclarationSyntax>()
+            .Where(declaration => declaration is BaseTypeDeclarationSyntax or DelegateDeclarationSyntax)
+            .Select(declaration =>
+            {
+                INamedTypeSymbol symbol = model.GetDeclaredSymbol(declaration, token) as INamedTypeSymbol
+                    ?? throw new InvalidDataException("Roslyn could not resolve a type declaration.");
+                return new ScanSymbol(symbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat), symbol.Name, DeclarationKind(declaration));
+            }).ToArray();
+
+    private static void ExtractDependencies(SyntaxNode root, SemanticModel model, string file, string repositoryRoot, HashSet<ScanRelationship> relationships, CancellationToken token)
+    {
+        foreach (NameSyntax name in root.DescendantNodes().OfType<NameSyntax>())
         {
-            if (!MSBuildLocator.IsRegistered)
-                MSBuildLocator.RegisterDefaults();
+            if (name.Ancestors().Any(ancestor => ancestor is UsingDirectiveSyntax)) continue;
+            ISymbol? referenced = model.GetSymbolInfo(name, token).Symbol;
+            if (referenced is INamespaceSymbol) continue;
+            foreach (Location location in referenced?.Locations ?? [])
+            {
+                string? targetPath = location.SourceTree?.FilePath;
+                // A generated syntax tree can have a virtual path without a physical document.
+                if (targetPath is null || !File.Exists(targetPath) || !SourcePath.IsPhysicalSource(repositoryRoot, targetPath)) continue;
+                string target = SourcePath.Relative(repositoryRoot, targetPath);
+                if (target != file) relationships.Add(new ScanRelationship(file, target, "source-dependency"));
+            }
         }
     }
 
-    private static HashSet<string> FindExpectedProjects(string input, string rootDirectory)
+    private static void ThrowIfWorkspaceFailed(IEnumerable<WorkspaceDiagnostic> diagnostics, string root)
     {
-        if (Path.GetExtension(input) == ".csproj")
-            return [RelativePath(rootDirectory, input)];
-
-        return Regex.Matches(File.ReadAllText(input), "\"([^\"]+\\.csproj)\"", RegexOptions.IgnoreCase)
-            .Select(match => match.Groups[1].Value.Replace('\\', Path.DirectorySeparatorChar))
-            .Select(path => RelativePath(rootDirectory, Path.Combine(rootDirectory, path)))
-            .ToHashSet(StringComparer.Ordinal);
+        WorkspaceDiagnostic? failure = diagnostics.Where(diagnostic => diagnostic.Kind == WorkspaceDiagnosticKind.Failure)
+            .OrderBy(diagnostic => diagnostic.Message, StringComparer.Ordinal).FirstOrDefault();
+        if (failure is not null) throw new InvalidDataException($"MSBuild workspace failed: {NormalizeMessage(failure.Message, root)}");
     }
-
-    private static void ThrowIfIncomplete(
-        IReadOnlyCollection<WorkspaceDiagnostic> diagnostics,
-        IReadOnlySet<string> expectedProjects,
-        Solution solution,
-        string rootDirectory)
-    {
-        WorkspaceDiagnostic? failure = diagnostics.FirstOrDefault(diagnostic => diagnostic.Kind == WorkspaceDiagnosticKind.Failure);
-        if (failure is not null)
-            throw new InvalidDataException($"MSBuild workspace failed: {NormalizeMessage(failure.Message, rootDirectory)}");
-
-        HashSet<string> loadedProjects = solution.Projects
-            .Where(project => project.FilePath is not null && Path.GetExtension(project.FilePath) == ".csproj")
-            .Select(project => RelativePath(rootDirectory, project.FilePath!))
-            .ToHashSet(StringComparer.Ordinal);
-        string[] missing = expectedProjects.Except(loadedProjects, StringComparer.Ordinal).Order(StringComparer.Ordinal).ToArray();
-        if (missing.Length > 0)
-            throw new InvalidDataException($"MSBuild workspace omitted projects: {string.Join(", ", missing)}");
-    }
-
-    private static bool IsSourceFile(string rootDirectory, string? path)
-    {
-        if (path is null || Path.GetExtension(path) != ".cs" || !File.Exists(path))
-            return false;
-        string relative = RelativePath(rootDirectory, path);
-        string[] segments = relative.Split('/');
-        return relative != ".."
-            && !relative.StartsWith("../", StringComparison.Ordinal)
-            && !segments.Contains("obj", StringComparer.OrdinalIgnoreCase)
-            && !segments.Contains("bin", StringComparer.OrdinalIgnoreCase);
-    }
-
-    private static string RelativePath(string rootDirectory, string path) =>
-        Path.GetRelativePath(rootDirectory, Path.GetFullPath(path)).Replace('\\', '/');
 
     private static string DeclarationKind(MemberDeclarationSyntax declaration) => declaration switch
     {
@@ -202,9 +138,9 @@ public sealed class RoslynScanner
         _ => throw new InvalidDataException("Unsupported type declaration."),
     };
 
-    private static string NormalizeMessage(string message, string rootDirectory)
+    private static string NormalizeMessage(string message, string root)
     {
-        string normalized = message.Replace(rootDirectory, ".", StringComparison.Ordinal);
+        string normalized = message.Replace(root, ".", StringComparison.Ordinal);
         string home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
         return string.IsNullOrEmpty(home) ? normalized : normalized.Replace(home, "$HOME", StringComparison.Ordinal);
     }
