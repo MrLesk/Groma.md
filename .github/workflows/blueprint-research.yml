@@ -27,16 +27,16 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Materialize submitted research source
+      - name: Apply submitted regression fix
         run: |
           set -euo pipefail
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          if test -f research/blueprints/delivery.01; then
-            cat research/blueprints/delivery.01 research/blueprints/delivery.02 > "$RUNNER_TEMP/delivery.tar.xz"
-            tar -xJf "$RUNNER_TEMP/delivery.tar.xz"
-            rm research/blueprints/delivery.01 research/blueprints/delivery.02
-            git add research/blueprints test/fixtures/blueprint-research test-bun/blueprint-research.test.ts 'backlog/tasks/task-324 - Prototype-portable-blueprint-placement-in-the-web-viewer.md'
+          if test -f research/blueprints/placement-fix.patch; then
+            git apply --check research/blueprints/placement-fix.patch
+            git apply research/blueprints/placement-fix.patch
+            rm research/blueprints/placement-fix.patch
+            git add research/blueprints test-bun/blueprint-research.test.ts
             git commit -m 'TASK-324 - Prototype portable blueprint placement in the web viewer'
             git push origin HEAD:research/blueprint-store-prototype
           fi

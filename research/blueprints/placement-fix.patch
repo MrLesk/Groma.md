@@ -1,0 +1,78 @@
+--- a/research/blueprints/app.ts
++++ b/research/blueprints/app.ts
+@@ -13,8 +13,7 @@
+ const storageKey = (id: string): string => `groma:blueprint-research:1:${id}`
+ const params = new URLSearchParams(location.search)
+ let projectId = seeds.some(project => project.id === params.get('project')) ? params.get('project')! : 'shop'
+-function loadProject(id: string): Project {
+-  const saved = localStorage.getItem(storageKey(id))
++function loadProject(id: string, saved = localStorage.getItem(storageKey(id))): Project {
+   if (saved === null) return structuredClone(seeds.find(project => project.id === id)!)
+   const project = JSON.parse(saved) as Project
+   if (project.id !== id || !Array.isArray(project.drafts)) throw new Error('Invalid fixture storage. Use a fresh browser profile for this experiment.')
+@@ -87,8 +86,10 @@
+ function begin(value: Blueprint): void {
+   if (!discard()) return
+   blueprint = validateBlueprint(value)
++  baseline = localStorage.getItem(storageKey(project.id))
++  project = loadProject(project.id, baseline)
+   bindings = suggestions(project, blueprint)
+-  placement = undefined; baseline = localStorage.getItem(storageKey(project.id)); error = ''
++  placement = undefined; error = ''
+   mode = 'bindings'; render()
+ }
+ function openDialog(content: string): void {
+--- a/research/blueprints/placement.ts
++++ b/research/blueprints/placement.ts
+@@ -72,7 +72,10 @@
+ export interface Placement { draft: Draft; baseline: string | null }
+ /** One fixture-storage write, then publish the new value. This is not a filesystem transaction. */
+ export function commitPlacement(storage: StoragePort, key: string, project: Project, placement: Placement): Project {
+-  if (storage.getItem(key) !== placement.baseline) throw new Error('This fixture changed in another tab. Cancel and preview again before saving.')
++  const saved = storage.getItem(key)
++  if (saved !== placement.baseline || (saved !== null && JSON.stringify(project) !== saved)) {
++    throw new Error('This fixture changed in another tab. Cancel and preview again before saving.')
++  }
+   const rebuilt = preparePlacement(project, placement.draft.blueprint, placement.draft.bindings)
+   if (JSON.stringify(rebuilt) !== JSON.stringify(placement.draft)) throw new Error('The placement changed. Review it again before saving.')
+   const next: Project = { ...project, drafts: [...project.drafts, structuredClone(rebuilt)] }
+--- a/test-bun/blueprint-research.test.ts
++++ b/test-bun/blueprint-research.test.ts
+@@ -163,6 +163,12 @@
+     expect(() => commitPlacement(storage, 'fixture', p, { draft, baseline: null })).toThrow('another tab')
+     expect(JSON.parse(storage.getItem('fixture')!)).toEqual(next)
+   })
++  test.concurrent('refreshing only a baseline cannot overwrite another draft with stale project data', () => {
++    const { p, storage, draft, next } = imported()
++    const latest = storage.getItem('fixture')
++    expect(() => commitPlacement(storage, 'fixture', p, { draft, baseline: latest })).toThrow('preview again')
++    expect(JSON.parse(storage.getItem('fixture')!)).toEqual(next)
++  })
+   test.concurrent('tampered previews require another review', () => {
+     const p = project(); const draft = preparePlacement(p, blueprint(), binds(p))
+     draft.parts[0]!.title = 'Changed after preview'
+--- a/research/blueprints/capture.py
++++ b/research/blueprints/capture.py
+@@ -146,6 +146,11 @@
+     check('Sequentially stale save is refused and keeps the preview', state(source)['mode'] == 'preview' and 'another tab' in state(source)['error'])
+     check('Stale save does not overwrite the other tab', len(state(other)['project']['drafts']) == 1 and len(json.loads(source.evaluate('localStorage.getItem("groma:blueprint-research:1:shop")'))['drafts']) == 1)
+     capture(source, '08-stale-preview.png')
++    other_saved = state(other)['project']['drafts'][0]
++    action(source, 'bindings'); action(source, 'cancel'); action(source, 'use'); action(source, 'preview'); action(source, 'create')
++    refreshed = state(source)['project']
++    check('Starting a fresh placement reloads the saved fixture', len(refreshed['drafts']) == 2)
++    check('Fresh placement preserves the other tab draft', refreshed['drafts'][0] == other_saved and refreshed['drafts'][1]['id'] != other_saved['id'])
+     action(target, 'back')
+     target.set_viewport_size({'width': 430, 'height': 932})
+     check('Narrow layout has no horizontal overflow', target.evaluate('document.documentElement.scrollWidth <= innerWidth'))
+--- a/research/blueprints/FINDINGS.md
++++ b/research/blueprints/FINDINGS.md
+@@ -37,6 +37,8 @@
+ ### 5. Preview and save are different operations
+ 
+ Preview constructs a new candidate without mutating the input. Cancel leaves no draft. Create validates the bindings again and writes one complete fixture value; storage refusal leaves the in-memory project unchanged. A previously saved change from another tab makes the stale preview fail visibly without deleting its input.
++
++The first implementation could refresh the baseline while keeping stale in-memory project data. A new regression test failed on that version. Placement now reloads one stored snapshot, and commit verifies that its project actually matches the saved snapshot. Browser checks also follow the displayed cancel/re-preview path and verify that the other tab’s draft survives.
+ 
+ This is not a database transaction or a filesystem transaction. The localStorage baseline check detects sequential staleness; it is not a compare-and-swap and does not certify simultaneous-tab writers. Production needs a core-owned validate-and-commit operation against a versioned architecture snapshot. The browser must not simulate that with a chain of `add`/`edit` requests.
+ 
