@@ -1,4 +1,5 @@
 import type { Command } from 'commander'
+import { discoverScanners, formatDiscovery } from './modules/discovery.ts'
 
 import {
   addScanner,
@@ -24,6 +25,17 @@ export function registerScannerCommands(program: Command): void {
   const scanner = program
     .command('scanner')
     .description('Manage scanner modules for this project')
+
+  scanner
+    .command('discover')
+    .description('Find project declarations and compatible official scanner candidates')
+    .option('--json', 'Print the discovery result as JSON')
+    .action(async (options: { json?: boolean }) => {
+      await runScannerCommand(async () => {
+        const result = await discoverScanners(process.cwd())
+        console.log(options.json ? JSON.stringify(result, null, 2) : formatDiscovery(result))
+      })
+    })
 
   scanner
     .command('add')
