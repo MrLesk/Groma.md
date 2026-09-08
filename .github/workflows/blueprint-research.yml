@@ -5,6 +5,7 @@ on:
     paths:
       - '.github/workflows/blueprint-research.yml'
       - 'research/blueprints/**'
+      - 'test-bun/blueprint-research.test.ts'
       - 'test/fixtures/blueprint-research/**'
   workflow_dispatch:
 permissions:
@@ -26,28 +27,60 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Prepare toolchain and read project workflow
+      - name: Materialize submitted research source
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          if test -f research/blueprints/delivery.01; then
+            cat research/blueprints/delivery.01 research/blueprints/delivery.02 > "$RUNNER_TEMP/delivery.tar.xz"
+            tar -xJf "$RUNNER_TEMP/delivery.tar.xz"
+            rm research/blueprints/delivery.01 research/blueprints/delivery.02
+            git add research/blueprints test/fixtures/blueprint-research test-bun/blueprint-research.test.ts 'backlog/tasks/task-324 - Prototype-portable-blueprint-placement-in-the-web-viewer.md'
+            git commit -m 'TASK-324 - Prototype portable blueprint placement in the web viewer'
+            git push origin HEAD:research/blueprint-store-prototype
+          fi
+      - name: Install and read repository workflow
         run: |
           set -euo pipefail
           bun install --frozen-lockfile
           npm install --prefix "$RUNNER_TEMP/backlog-tools" backlog.md@1.51.0
+          echo "$RUNNER_TEMP/backlog-tools/node_modules/.bin" >> "$GITHUB_PATH"
           export PATH="$RUNNER_TEMP/backlog-tools/node_modules/.bin:$PATH"
           backlog instructions overview
-          backlog instructions task-creation
           backlog instructions task-execution
-          backlog task create --help
-          backlog task edit --help
-          backlog task list --plain
-          bun src/cli.ts agent-instructions
-      - name: Package isolated workspace
-        run: |
-          mkdir -p "$RUNNER_TEMP/blueprint-workspace/tools"
-          cp "$(which bun)" "$RUNNER_TEMP/blueprint-workspace/tools/bun"
-          cp -a "$RUNNER_TEMP/backlog-tools" "$RUNNER_TEMP/blueprint-workspace/tools/backlog-tools"
-          tar -czf "$RUNNER_TEMP/blueprint-workspace/repository.tgz" --exclude=.git .
-          git log -1 --format='%H' > "$RUNNER_TEMP/blueprint-workspace/BASE_COMMIT"
-      - uses: actions/upload-artifact@v4
+          backlog task view TASK-324 --plain
+      - uses: actions/setup-python@v5
         with:
-          name: blueprint-research-workspace
-          path: ${{ runner.temp }}/blueprint-workspace
-          retention-days: 3
+          python-version: '3.12'
+      - name: Install browser test tools
+        run: |
+          python -m pip install playwright==1.57.0
+          python -m playwright install --with-deps chromium firefox webkit
+      - name: Test, build and capture
+        env:
+          BLUEPRINT_TRACK_TASK: TASK-324
+        run: python research/blueprints/verify.py
+      - name: Preserve the measured results on the research branch
+        if: always()
+        run: |
+          set -euo pipefail
+          if test -f research/blueprints/evidence/checks.json; then
+            backlog task edit TASK-324 --append-notes "Recorded checks and browser evidence in research/blueprints/evidence; see checks.json for actual exit codes and tested source commit. Run $GITHUB_RUN_ID. Production contracts remain unchanged."
+            git add research/blueprints/evidence 'backlog/tasks/task-324 - Prototype-portable-blueprint-placement-in-the-web-viewer.md'
+            if ! git diff --cached --quiet; then
+              git commit -m 'TASK-324 - Prototype portable blueprint placement in the web viewer'
+              git push origin HEAD:research/blueprint-store-prototype
+            fi
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: blueprint-research-results
+          path: |
+            dist/blueprint-research/index.html
+            research/blueprints
+            test/fixtures/blueprint-research
+            test-bun/blueprint-research.test.ts
+            backlog/tasks/task-324 - Prototype-portable-blueprint-placement-in-the-web-viewer.md
+          retention-days: 30
