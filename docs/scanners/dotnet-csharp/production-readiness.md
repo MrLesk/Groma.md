@@ -316,35 +316,40 @@ Additional controls cover Web SDK implicit framework references, missing SDK
 pins, malformed compilation, multi-target conflicts, linked files, legacy inputs,
 root boundaries, deterministic output and rejected resource-limit truncation.
 
-Local Linux x64 validation at the first implementation checkpoint:
-**17 .NET tests passed**. The earlier complete repository check passed
-**110 Node tests and 365 Bun tests**; six existing complexity warnings remained.
-The focused scanner subset passed 24 Bun tests. These counts are checkpoints,
-not evidence that subsequent edits or all operating systems have been tested.
+The prototype at `fd56e71a17240a566afe9a0a33352a726f085f25` passed
+repository checks, all 17 .NET tests and compiled-package relocation on Linux,
+macOS and Windows. The Linux job also installed the private SDK and scanned
+pinned FluentValidation 12.0.0. Its three complete observations were identical:
+138 physical files, one project scope, 820 operations and 1,352 invocations,
+including 590 resolved and 762 unresolved invocations. Fresh-worker scans took
+6.27, 5.17 and 5.06 seconds on that runner. These are worker measurements, not
+painted-map timings, an architectural precision score or a large-solution SLA.
 
-The source-free relocation script copies the actual compiled Groma binary,
-prepared package and fixture outside the checkout. With .NET 10.0.400, it produced
-6 physical files, 2 project scopes, 19 operations and 24 invocations. The first
-complete CLI scan measured **3.53 seconds** in this container. A repeated scan
-produced identical Markdown; deliberately introducing a compiler error preserved
-the previous architecture exactly. This is one small-fixture measurement,
-not a performance SLA or a large-solution benchmark.
+The FluentValidation experiment retained its original source and SDK pin. It
+used project SDK 9.0.317 while the worker ran on .NET 10, demonstrating why a
+worker runtime and a project SDK must be treated separately. The linked
+`src/CommonAssemblyInfo.cs` remained in the physical inventory. Source witnesses
+confirmed a concrete constructor/method call and an overridable hook retained
+as an unresolved candidate; counts alone would not establish this distinction.
 
-The public benchmark is pinned to FluentValidation 12.0.0, commit
-`5365d9294812c8a5c5a7f4d7447c9a65b79a025b`, using
-`src/FluentValidation/FluentValidation.csproj` with the repository root retained.
-It includes a linked shared file and a source generator. The original source
-and SDK pin must remain unchanged. The workflow restores in that checkout,
-runs three fresh worker scans, requires identical observations, records the
-source manifest hash, exact revision, operation uncertainty, elapsed times and
-OS resource reporting. Successful results and cross-platform status must be
-recorded from actual workflow artifacts, not inferred from the existence of CI.
+A second pinned repository, eShopOnWeb, exercises a multi-project ASP.NET API
+and a Web graph containing a Blazor project. The default restore succeeded,
+but cached NuGet vulnerability warnings surfaced as MSBuild workspace failures,
+so the scanner correctly published no complete observation under its current
+failure policy. This is a real usability/release blocker, not a successful
+application scan or a reason to suppress all workspace failures. An explicitly
+labeled restore-policy control separates source-analysis capability from that
+failure. Disabling package auditing in an experiment is not a security fix or
+a recommended installation default; the original advisory logs are retained.
 
-The added workflow exercises Linux, macOS and Windows and includes a Linux-only
-explicit private-SDK download control. At this document's initial checkpoint,
-those remote outcomes and the public benchmark remain **unverified**. Review
-`validation.md` when results are recorded; no production support claim should be
-made merely because a workflow has been committed.
+The [validation record](validation.md) gives exact repository and scanner
+commits, workflow runs, commands, supported and rejected inputs, repeated-output
+checks, source witnesses and measured limits. Research workflows record each
+project's exit status: a green evidence-collection job is not proof that every
+project scan succeeded. The compiled CLI research control additionally checks
+repeatable Markdown and failure atomicity when a valid TypeScript edit coincides
+with a C# compilation failure. No application, database or web server needs to
+be launched to collect these static-analysis results.
 
 ## Release gates and next implementation order
 
@@ -360,8 +365,9 @@ SDK/runtime doctor output and reliable cancellation. Inventory should distinguis
 “package present” from “this project's dependencies ready” without executing
 untrusted code during a casual list command.
 
-Broader production coverage needs generator diagnostics and inputs, accurate
-watch invalidation, large-solution resource tests, platform-workload fixtures,
+Broader production coverage needs a reviewed workspace-warning policy (including
+cached NuGet audit results), generator diagnostics and inputs, accurate watch
+invalidation, large-solution resource tests, platform-workload fixtures,
 symlink/case/path tests and representative projects across the stated matrix.
 Measure provider precision, unresolved coverage, statement correctness and map
 selection separately; do not use relationship count as a quality score.

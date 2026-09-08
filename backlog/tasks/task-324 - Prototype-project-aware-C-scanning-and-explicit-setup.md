@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@chatgpt'
 created_date: '2026-09-07 22:15'
-updated_date: '2026-09-08 05:45'
+updated_date: '2026-09-08 06:00'
 labels: []
 dependencies: []
 references:
@@ -73,19 +73,19 @@ Alex requested research and a runnable review-branch prototype for globally inst
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Document scanner contract, .NET support boundaries, relationship semantics, installation design, security, scale limits, and production release gates with primary references.
-- [ ] #2 A prepared C# worker scans unambiguous or explicitly selected nested SDK-style inputs without building or restoring during scan; incomplete or unsupported contexts fail before reconciliation.
-- [ ] #3 Roslyn operation evidence canonicalizes supported direct calls and preserves virtual, interface, delegate, and external uncertainty, with deterministic regression fixtures.
-- [ ] #4 Explicit scanner setup and a relocatable prebuilt package demonstrate opt-in dependency preparation for globally installed Groma; no npm publication is implied.
-- [ ] #5 Run focused .NET tests, repository checks, packaged-worker checks, and a pinned public-repository experiment; record actual results and remaining gaps.
+- [x] #1 Document scanner contract, .NET support boundaries, relationship semantics, installation design, security, scale limits, and production release gates with primary references.
+- [x] #2 A prepared C# worker scans unambiguous or explicitly selected nested SDK-style inputs without building or restoring during scan; incomplete or unsupported contexts fail before reconciliation.
+- [x] #3 Roslyn operation evidence canonicalizes supported direct calls and preserves virtual, interface, delegate, and external uncertainty, with deterministic regression fixtures.
+- [x] #4 Explicit scanner setup and a relocatable prebuilt package demonstrate opt-in dependency preparation for globally installed Groma; no npm publication is implied.
+- [x] #5 Run focused .NET tests, repository checks, packaged-worker checks, and a pinned public-repository experiment; record actual results and remaining gaps.
 <!-- AC:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 Acceptance criteria have objective verification evidence.
+- [x] #1 Acceptance criteria have objective verification evidence.
 - [ ] #2 Relevant checks pass and changes remain task-scoped.
-- [ ] #3 Public contracts or documentation are updated when behavior changes.
-- [ ] #4 Implementation Plan reflects the final approach; correction history and verification are recorded in Implementation Notes.
+- [x] #3 Public contracts or documentation are updated when behavior changes.
+- [x] #4 Implementation Plan reflects the final approach; correction history and verification are recorded in Implementation Notes.
 <!-- DOD:END -->
 
 ## Implementation Plan
@@ -104,4 +104,14 @@ Alex requested research and a runnable review-branch prototype for globally inst
 Implemented conservative Roslyn operations, explicit root/input selection, SDK-context validation, complete failure semantics, prebuilt bundle and opt-in scanner setup. Local focused checks: 15 Roslyn tests and 24 Bun tests passed before adding Web SDK and SDK-pin controls. Full bun run check: 110 Node + 365 Bun tests passed; existing six complexity warnings remain. Compiled relocated Linux package: 6 files / 2 scopes / 19 operations / 24 invocations, 3.53s first complete CLI scan, identical repeated Markdown, compilation failure preserved existing map. Public and multi-OS validation remains in progress.
 
 Resumed on 8 September after user requested actual-project validation. Verified branch fd56e71 and PR #106 exist; previous conversational summary incorrectly reported no implementation. Retrieved Linux CI artifacts proving deterministic FluentValidation scanning and private SDK setup. Broaden the experiment to pinned eShopOnWeb without changing core relationship selection.
+
+Verified real-source witnesses and raw artifacts: FluentValidation 5365d929 (138 files, 820 operations, 590/1352 resolved calls, three identical observations); eShopOnWeb 4da82121 PublicApi control (125 files, four projects, 96/1700 resolved, three identical observations). Default restored NuGet audit warnings cause workspace failure; the separately labeled no-audit restore control is not a security fix or default. The Web graph rejects unsupported BlazorAdmin SDK. Compiled PublicApi CLI repeats identical Markdown and a simultaneous TypeScript edit plus C# compiler failure preserves the map. Research run 34191996109 records commands, failures and resources. No tracked application source changed. Cleanup now removes only the newly initialized AGENTS.md after preflighting its absence.
+
+Qualification gates remain open: local bun run check has 110 Node passes, 364 Bun passes and one TUI source wait failure reproduced with unchanged main and identical runtime/dependencies; latest Windows general CI has a separate existing web-startup live-watch timeout. At f69d3ce macOS C# CI passed the repository suite but a fixture restore failed with duplicate /var versus /private/var NuGet generated-props paths (16 Roslyn passes, one failure). Do not claim current all-platform green or production readiness. No assertions, retries or test timeouts were changed. Independent cold simplicity/full-context reviews were not available; implementer review covered supported flow, conservative dispatch, ownership, installation boundaries and research cleanup. PR stays draft and task stays In Progress.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Review-branch prototype and reproducible real-project research are implemented. Worker/package and conservative Roslyn extraction are verified against pinned FluentValidation and eShopOnWeb PublicApi; default audit-policy and unsupported Blazor graph failures are preserved as research results. See docs/scanners/dotnet-csharp/validation.md for source witnesses, metrics, complete-map failure invariants and unresolved qualification/review gates. Nothing merged or published.
+<!-- SECTION:FINAL_SUMMARY:END -->

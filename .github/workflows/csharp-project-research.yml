@@ -2,7 +2,10 @@ name: CSharp real-project research
 on:
   push:
     branches: [research/csharp-scanner-prototype]
-    paths: [.github/workflows/csharp-project-research.yml]
+    paths:
+      - .github/workflows/csharp-project-research.yml
+      - scripts/benchmark-csharp-scanner.ts
+      - scripts/validate-csharp-repository.ts
 permissions:
   contents: read
 jobs:

@@ -15,7 +15,8 @@ const map = path.join(root, 'groma')
 const config = path.join(root, 'groma.csharp.json')
 const broken = path.join(root, path.dirname(project), '__GromaBrokenProbe.cs')
 const frontend = path.join(root, '__groma_frontend_probe.ts')
-const created = [map, config, broken, frontend]
+// init adds repository instructions; require a disposable clone without an existing file.
+const created = [map, config, broken, frontend, path.join(root, 'AGENTS.md')]
 for (const file of created) {
   await assert.rejects(access(file), { code: 'ENOENT' }, `research must not overwrite ${file}`)
 }
@@ -52,10 +53,10 @@ try {
   assert.equal(await markdownHash(), before, 'one scanner failure altered the complete map')
   await writeFile(path.join(output, 'cli-first-scan.log'), first.stdout)
   await writeFile(path.join(output, 'cli-failure.log'), failure)
-  await writeFile(path.join(output, 'cli-validation.json'), JSON.stringify({
+  await writeFile(path.join(output, 'cli-validation.json'), `${JSON.stringify({
     project, firstScanSeconds, repeatedMapEqual: true, mixedLanguageFailurePreservedMap: true,
     markdownSha256: before,
-  }, null, 2) + '\n')
+  }, null, 2)}\n`)
 } finally {
   for (const file of created) await rm(file, { recursive: true, force: true })
 }
