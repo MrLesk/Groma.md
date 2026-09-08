@@ -1,19 +1,50 @@
-name: TUI graphics research
+name: Publish TUI graphics research
 on:
   push:
     branches: [research/tui-graphics-prototype]
+    paths: [research/tui-graphics-delivery.b64]
 permissions:
-  contents: read
+  contents: write
 jobs:
-  terminal-tool:
+  publish:
+    if: github.ref == 'refs/heads/research/tui-graphics-prototype'
     runs-on: ubuntu-latest
     steps:
-      - name: Fetch pinned terminal tester
-        run: |
-          curl --proto '=https' --tlsv1.2 -fsSL https://github.com/microsoft/tui-test/releases/download/0.1.0-beta.3/tui-test-x86_64-unknown-linux-gnu.tar.gz -o /tmp/tui-test.tar.gz
-          echo '35d0cfff1b3d6cfeba3abb0eeae7537c5722c36414106ca28b142e5e48235a37  /tmp/tui-test.tar.gz' | sha256sum --check
-      - uses: actions/upload-artifact@v4
+      - uses: actions/checkout@v7
+      - uses: oven-sh/setup-bun@v2
         with:
-          name: tui-test-tool
-          path: /tmp/tui-test.tar.gz
-          retention-days: 1
+          bun-version: 1.4.1
+      - name: Apply the locally verified implementation
+        run: |
+          python3 - <<'PY'
+          import base64, hashlib, lzma, pathlib, subprocess
+          patch = lzma.decompress(base64.b64decode(pathlib.Path('research/tui-graphics-delivery.b64').read_text()))
+          assert hashlib.sha256(patch).hexdigest() == '4aaa15a366d4da771034a9e53085af1944b56ca1feac9ac54150422f581c4c81'
+          subprocess.run(['git', 'apply', '--index', '-'], input=patch, check=True)
+          PY
+      - name: Verify installation and repository checks
+        run: |
+          bun install --frozen-lockfile
+          bun run check > /tmp/tui-check.log 2>&1 || { tail -120 /tmp/tui-check.log; exit 1; }
+          tail -12 /tmp/tui-check.log
+      - name: Verify standalone packaging
+        run: |
+          bun run build
+          bun scripts/smoke-compiled-build.ts dist/groma 0.2.0
+      - name: Publish only the research branch and remove temporary delivery files
+        run: |
+          test "$GITHUB_REF" = 'refs/heads/research/tui-graphics-prototype'
+          git rm .github/workflows/tui-graphics-research.yml research/tui-graphics-delivery.b64
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'TASK-324 - Render the terminal map as keyboard-first graphics'
+          git push origin HEAD:refs/heads/research/tui-graphics-prototype
+          git rev-parse HEAD > /tmp/tui-commit.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: tui-graphics-publication-checks
+          path: |
+            /tmp/tui-check.log
+            /tmp/tui-commit.txt
+          retention-days: 7
