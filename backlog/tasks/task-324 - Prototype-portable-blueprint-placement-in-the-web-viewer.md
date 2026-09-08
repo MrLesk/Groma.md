@@ -1,11 +1,11 @@
 ---
 id: TASK-324
 title: Prototype portable blueprint placement in the web viewer
-status: In Progress
+status: Done
 assignee:
   - '@chatgpt'
 created_date: '2026-09-08 06:25'
-updated_date: '2026-09-08 07:06'
+updated_date: '2026-09-08 07:08'
 labels: []
 dependencies: []
 modified_files:
@@ -44,6 +44,7 @@ modified_files:
   - research/blueprints/evidence/browser-results.json
   - research/blueprints/evidence/browser-tests.log
   - research/blueprints/evidence/checks.json
+  - research/blueprints/RESULTS.md
 type: spike
 ordinal: 361000
 ---
@@ -56,29 +57,29 @@ People need to inspect reusable architecture intent in their own project before 
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 The runnable browser prototype supports catalogue copy and cross-project paste, explicit valid bindings, preview, cancel, and creation of an independent fixture draft.
-- [ ] #2 Automated domain tests prove import validation, parent binding, no current-evidence mutation, overlapping drafts, distinct identities, and persistence failure without a partial commit.
-- [ ] #3 Browser checks exercise the interaction, keyboard clipboard, invalid input, reload persistence, and desktop/narrow layouts; captured mockups come from those tested states.
-- [ ] #4 Research documents observed limitations, changes to the proposed model, and a gated integration plan; repository checks are run and their actual outcomes recorded.
-- [ ] #5 The research branch includes source, reproducible test/capture commands, evidence, and an explicit separation from production Groma.
+- [x] #1 The runnable browser prototype supports catalogue copy and cross-project paste, explicit valid bindings, preview, cancel, and creation of an independent fixture draft.
+- [x] #2 Automated domain tests prove import validation, parent binding, no current-evidence mutation, overlapping drafts, distinct identities, and persistence failure without a partial commit.
+- [x] #3 Browser checks exercise the interaction, keyboard clipboard, invalid input, reload persistence, and desktop/narrow layouts; captured mockups come from those tested states.
+- [x] #4 Research documents observed limitations, changes to the proposed model, and a gated integration plan; repository checks are run and their actual outcomes recorded.
+- [x] #5 The research branch includes source, reproducible test/capture commands, evidence, and an explicit separation from production Groma.
 <!-- AC:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 Acceptance criteria have objective verification evidence.
-- [ ] #2 Relevant checks pass and changes remain task-scoped.
-- [ ] #3 Public contracts or documentation are updated when behavior changes.
-- [ ] #4 Implementation Plan reflects the final approach; correction history and verification are recorded in Implementation Notes.
+- [x] #1 Acceptance criteria have objective verification evidence.
+- [x] #2 Relevant checks pass and changes remain task-scoped.
+- [x] #3 Public contracts or documentation are updated when behavior changes.
+- [x] #4 Implementation Plan reflects the final approach; correction history and verification are recorded in Implementation Notes.
 <!-- DOD:END -->
 
 ## Implementation Plan
 
 <!-- SECTION:PLAN:BEGIN -->
-1. Keep production behavior unchanged and use the existing Groma map renderer over isolated fixtures.
-2. Define a bounded inert clipboard pattern with typed attachment roles and one explicit host container; preview without mutation and instantiate independent drafts in fixture storage.
-3. Build catalogue, paste, binding, preview and draft-reading screens; keep current meaning and evidence unchanged.
-4. Verify semantic invariants with concurrent unit tests, run browser journeys and capture screenshots, then run bun run check.
-5. Publish the source, reproducible evidence and integration decisions on the research branch; no production schema adoption.
+1. Keep production behavior unchanged; import the existing Groma composer, map renderer, camera and themes over two isolated fixtures.
+2. Validate a bounded inert clipboard pattern with typed participant roles and an explicit host container; keep preview pure and create independent drafts that own their bindings and planned relationships.
+3. Expose catalogue, copy/paste, binding, preview/cancel, draft creation and current-evidence inspection; persist only fixture localStorage.
+4. Run dedicated lint/type/domain checks and bun run check, build the self-contained browser prototype, exercise three browser engines, capture desktop/narrow states and fix evidence-backed defects.
+5. Record the tested revision, actual logs/screens, observed limits and production integration gates on the research branch; leave production contracts unchanged.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
@@ -93,4 +94,12 @@ Recorded checks and browser evidence in research/blueprints/evidence; see checks
 Recorded checks and browser evidence in research/blueprints/evidence; see checks.json for actual exit codes and tested source commit. Run 34197144111. Production contracts remain unchanged.
 
 Recorded checks and browser evidence in research/blueprints/evidence; see checks.json for actual exit codes and tested source commit. Run 34197530648. Production contracts remain unchanged.
+
+Final tested source b90464649c46e3010e7db5f55aa59ac389ecb100 passed all six verification stages in GitHub Actions run 34197530648: 30 domain tests/65 assertions, full repository check with 110 Node + 385 Bun tests (the 30 are included), 36 browser assertions across Chromium/Firefox/WebKit, and nine freshly captured screens. Visual review corrected mobile feedback covering actions; hit-testing now occurs while copy feedback is present. A follow-up failed browser run exposed delayed clipboard feedback after repaint; view-generation gating and an explicit visible-feedback wait corrected it. The final screenshots were inspected, including the mobile footer. Source scope was compared against main baseline: only research code/docs/evidence, fixtures, one test file, workflow and this task are added. No production modules or architecture documents changed. Implementer scope/quality review completed; no independent-agent review or human usability certification is claimed. RESULTS.md records exact tested source, commands, counts and image links.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Delivered an isolated, runnable blueprint placement prototype using Groma's real renderer. Native clipboard transfer between differently named project fixtures produces a reviewed, independent draft without changing current meaning or evidence. Draft-owned bindings support overlap and simplify the earlier membership proposal. Fixed stale retry and mobile/async feedback defects. Verified source b90464649c46e3010e7db5f55aa59ac389ecb100 in run 34197530648: root check, 30 domain tests and 36 browser assertions pass; nine actual captures and reproducible reports are preserved. Production Groma authoring, scanning and the public store remain outside this research implementation.
+<!-- SECTION:FINAL_SUMMARY:END -->
