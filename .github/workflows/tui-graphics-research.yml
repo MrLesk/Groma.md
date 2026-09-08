@@ -1,0 +1,44 @@
+name: TUI graphics research
+on:
+  push:
+    branches: [research/tui-graphics-prototype]
+permissions:
+  contents: read
+concurrency:
+  group: tui-graphics-research
+  cancel-in-progress: true
+jobs:
+  research:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.1
+      - run: bun install --frozen-lockfile
+      - name: Read task workflow
+        run: |
+          bunx --yes backlog.md instructions overview
+          bunx --yes backlog.md instructions task-creation
+          bunx --yes backlog.md instructions task-execution
+          bunx --yes backlog.md instructions task-finalization
+          bunx --yes backlog.md task create --help
+          bunx --yes backlog.md task edit --help
+          bunx --yes backlog.md task list --plain
+      - name: Prepare offline validation workspace
+        run: |
+          mkdir -p /tmp/tui-validation/tools /tmp/tui-validation/workspace
+          cp "$(command -v bun)" /tmp/tui-validation/tools/bun
+          cp -a . /tmp/tui-validation/workspace/
+          rm -rf /tmp/tui-validation/workspace/.git
+          cd /tmp/tui-validation/tools
+          bun init -y
+          bun add @resvg/resvg-js@2.6.2 @resvg/resvg-wasm@2.6.2 backlog.md
+          tar -czf /tmp/tui-validation.tar.gz -C /tmp/tui-validation .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tui-validation-workspace
+          path: /tmp/tui-validation.tar.gz
+          retention-days: 1
