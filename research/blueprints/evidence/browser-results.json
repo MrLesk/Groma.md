@@ -1,0 +1,178 @@
+{
+  "browsers": {
+    "chromium": "143.0.7499.4",
+    "firefox": "144.0.2",
+    "webkit": "26.0"
+  },
+  "results": [
+    {
+      "engine": "chromium",
+      "name": "Copy uses the real browser clipboard",
+      "passed": true
+    },
+    {
+      "engine": "chromium",
+      "name": "Copy does not change the source project",
+      "passed": true
+    },
+    {
+      "engine": "chromium",
+      "name": "Native paste reaches the text field without triggering placement",
+      "passed": true
+    },
+    {
+      "engine": "chromium",
+      "name": "Unknown component binding is not guessed in the receiving project",
+      "passed": true
+    },
+    {
+      "engine": "chromium",
+      "name": "Incomplete placement cannot be previewed",
+      "passed": true
+    },
+    {
+      "engine": "chromium",
+      "name": "Existing role is explicitly bound to receiving architecture",
+      "passed": true
+    },
+    {
+      "engine": "chromium",
+      "name": "Preview leaves every current record unchanged",
+      "passed": true
+    },
+    {
+      "engine": "chromium",
+      "name": "Preview resolves new component parent",
+      "passed": true
+    },
+    {
+      "engine": "chromium",
+      "name": "Preview uses the real Groma map renderer for a ghost",
+      "passed": true
+    },
+    {
+      "engine": "chromium",
+      "name": "Create persists one independent fixture draft",
+      "passed": true
+    },
+    {
+      "engine": "chromium",
+      "name": "Create preserves current source evidence and current relationships",
+      "passed": true
+    },
+    {
+      "engine": "chromium",
+      "name": "Draft survives browser reload",
+      "passed": true
+    },
+    {
+      "engine": "chromium",
+      "name": "Copy original intent excludes receiving-project facts",
+      "passed": true
+    },
+    {
+      "engine": "chromium",
+      "name": "Native paste outside editors starts placement",
+      "passed": true
+    },
+    {
+      "engine": "chromium",
+      "name": "Repeated paste allocates independent identities",
+      "passed": true
+    },
+    {
+      "engine": "chromium",
+      "name": "Overlapping drafts do not reassign current component membership",
+      "passed": true
+    },
+    {
+      "engine": "chromium",
+      "name": "Cancel leaves no draft or source changes",
+      "passed": true
+    },
+    {
+      "engine": "chromium",
+      "name": "Unsupported blueprint preserves project and paste input",
+      "passed": true
+    },
+    {
+      "engine": "chromium",
+      "name": "Sequentially stale save is refused and keeps the preview",
+      "passed": true
+    },
+    {
+      "engine": "chromium",
+      "name": "Stale save does not overwrite the other tab",
+      "passed": true
+    },
+    {
+      "engine": "chromium",
+      "name": "Narrow layout has no horizontal overflow",
+      "passed": true
+    },
+    {
+      "engine": "chromium",
+      "name": "Narrow layout keeps primary actions visible",
+      "passed": true
+    },
+    {
+      "engine": "chromium",
+      "name": "No external network requests",
+      "passed": true
+    },
+    {
+      "engine": "firefox",
+      "name": "Explicit paste, binding and preview preserve current data",
+      "passed": true
+    },
+    {
+      "engine": "firefox",
+      "name": "Created draft persists after reload",
+      "passed": true
+    },
+    {
+      "engine": "firefox",
+      "name": "Current records are unchanged",
+      "passed": true
+    },
+    {
+      "engine": "firefox",
+      "name": "Real renderer displays the saved draft",
+      "passed": true
+    },
+    {
+      "engine": "webkit",
+      "name": "Explicit paste, binding and preview preserve current data",
+      "passed": true
+    },
+    {
+      "engine": "webkit",
+      "name": "Created draft persists after reload",
+      "passed": true
+    },
+    {
+      "engine": "webkit",
+      "name": "Current records are unchanged",
+      "passed": true
+    },
+    {
+      "engine": "webkit",
+      "name": "Real renderer displays the saved draft",
+      "passed": true
+    },
+    {
+      "engine": "all",
+      "name": "No uncaught browser exceptions",
+      "passed": true
+    }
+  ],
+  "pageErrors": [],
+  "externalRequests": [],
+  "failure": null,
+  "limits": [
+    "Fixture localStorage only; no production Groma writes.",
+    "Stale checking is sequential detection, not a cross-tab atomic compare-and-swap.",
+    "WebKit automation is not a certification of Safari on a physical Mac.",
+    "Screenshots are from the actual prototype, not hand-painted mockups."
+  ]
+}

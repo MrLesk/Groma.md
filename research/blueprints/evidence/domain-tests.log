@@ -1,0 +1,39 @@
+bun test v1.4.1 (4661e494f)
+
+::group::test-bun/blueprint-research.test.ts:
+(pass) inert portable blueprint text > Unicode survives clipboard round-trip [2.27ms]
+(pass) inert portable blueprint text > import rejects URLs and unsupported transport versions [0.07ms]
+(pass) inert portable blueprint text > damaged clipboard text fails closed [0.04ms]
+(pass) inert portable blueprint text > future content versions are rejected without migration [0.16ms]
+(pass) inert portable blueprint text > source evidence and executable fields cannot be imported [0.25ms]
+(pass) inert portable blueprint text > unknown nested fields cannot smuggle local evidence [0.16ms]
+(pass) inert portable blueprint text > all local participant keys are unique [0.17ms]
+(pass) inert portable blueprint text > new parts require declared parent roles [0.18ms]
+(pass) inert portable blueprint text > a component cannot be used as the parent role [0.11ms]
+(pass) inert portable blueprint text > relationships cannot refer outside the pattern [0.12ms]
+(pass) inert portable blueprint text > self and duplicate relationships are rejected [0.20ms]
+(pass) inert portable blueprint text > empty outcome and oversized clipboard are rejected [0.17ms]
+(pass) inert portable blueprint text > readable export includes roles and relationships but not receiving-project IDs [1.33ms]
+(pass) semantic placement > a different project does not get a guessed component binding [0.25ms]
+(pass) semantic placement > same-name ambiguity remains unresolved [0.12ms]
+(pass) semantic placement > wrong kinds, missing roles and unknown binding keys fail [0.38ms]
+(pass) semantic placement > draft elements are not candidates for existing roles [0.13ms]
+(pass) semantic placement > distinct roles cannot collapse into one current element [0.26ms]
+(pass) semantic placement > preview does not mutate either source and uses the bound parent [0.24ms]
+(pass) semantic placement > local identities and relationships are fully remapped [0.18ms]
+(pass) semantic placement > existing ID collisions do not overwrite an element [0.10ms]
+(pass) semantic placement > create preserves every current record and evidence byte [0.24ms]
+(pass) semantic placement > repeated paste creates independent drafts that can overlap [0.73ms]
+(pass) semantic placement > saved draft is independent of later changes to a library object [0.16ms]
+(pass) semantic placement > copying retained intent never copies receiving evidence [0.60ms]
+(pass) semantic placement > storage refusal cannot publish a partial draft [0.30ms]
+(pass) semantic placement > a sequentially stale preview cannot overwrite another saved draft [0.36ms]
+(pass) semantic placement > tampered previews require another review [0.34ms]
+(pass) semantic placement > projection includes design intent without mutating current graph or draft [0.42ms]
+
+::endgroup::
+
+ 29 pass
+ 0 fail
+ 63 expect() calls
+Ran 29 tests across 1 file. [23.00ms]

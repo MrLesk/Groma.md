@@ -1,0 +1,77 @@
+{
+  "sourceCommit": "d6ca0314106d83d299538ae21e52bb4e7facbf51",
+  "bun": "1.4.1",
+  "node": "v22.23.2",
+  "python": "3.12.14",
+  "checks": [
+    {
+      "name": "research-lint",
+      "command": [
+        "../../node_modules/.bin/biome",
+        "lint",
+        "."
+      ],
+      "directory": "research/blueprints",
+      "exitCode": 0,
+      "log": "research-lint.log"
+    },
+    {
+      "name": "research-types",
+      "command": [
+        "bun",
+        "node_modules/.bin/tsc",
+        "--noEmit",
+        "--project",
+        "research/blueprints/tsconfig.json"
+      ],
+      "directory": ".",
+      "exitCode": 0,
+      "log": "research-types.log"
+    },
+    {
+      "name": "domain-tests",
+      "command": [
+        "bun",
+        "test",
+        "test-bun/blueprint-research.test.ts"
+      ],
+      "directory": ".",
+      "exitCode": 0,
+      "log": "domain-tests.log"
+    },
+    {
+      "name": "repository-check",
+      "command": [
+        "bun",
+        "run",
+        "check"
+      ],
+      "directory": ".",
+      "exitCode": 0,
+      "log": "repository-check.log"
+    },
+    {
+      "name": "build",
+      "command": [
+        "bun",
+        "research/blueprints/build.ts"
+      ],
+      "directory": ".",
+      "exitCode": 0,
+      "log": "build.log"
+    },
+    {
+      "name": "browser-tests",
+      "command": [
+        "/opt/hostedtoolcache/Python/3.12.14/x64/bin/python",
+        "research/blueprints/capture.py"
+      ],
+      "directory": ".",
+      "exitCode": 0,
+      "log": "browser-tests.log"
+    }
+  ],
+  "htmlSha256": "ea8cde32cebafeb70fa3980957896fc14a3cc29835d6d662a7a0c9e51c55ea6c",
+  "allPassed": true,
+  "scope": "Isolated fixture prototype using the existing Groma renderer; no production authoring or scanner changes."
+}

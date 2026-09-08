@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@chatgpt'
 created_date: '2026-09-08 06:25'
-updated_date: '2026-09-08 06:42'
+updated_date: '2026-09-08 06:51'
 labels: []
 dependencies: []
 modified_files:
@@ -27,6 +27,23 @@ modified_files:
   - research/blueprints/biome.json
   - research/blueprints/FINDINGS.md
   - research/blueprints/verify.py
+  - research/blueprints/evidence/research-lint.log
+  - research/blueprints/evidence/research-types.log
+  - research/blueprints/evidence/domain-tests.log
+  - research/blueprints/evidence/repository-check.log
+  - research/blueprints/evidence/build.log
+  - research/blueprints/evidence/01-library-light.png
+  - research/blueprints/evidence/02-paste-dark.png
+  - research/blueprints/evidence/03-bind-missing.png
+  - research/blueprints/evidence/04-preview-blueprint.png
+  - research/blueprints/evidence/05-created-dark.png
+  - research/blueprints/evidence/06-overlapping-drafts.png
+  - research/blueprints/evidence/07-invalid-paste.png
+  - research/blueprints/evidence/08-stale-preview.png
+  - research/blueprints/evidence/09-mobile-draft.png
+  - research/blueprints/evidence/browser-results.json
+  - research/blueprints/evidence/browser-tests.log
+  - research/blueprints/evidence/checks.json
 type: spike
 ordinal: 361000
 ---
@@ -68,4 +85,6 @@ People need to inspect reusable architecture intent in their own project before 
 
 <!-- SECTION:NOTES:BEGIN -->
 Isolated implementation passes 29 domain tests (63 assertions), dedicated typecheck and dedicated research lint. An earlier complete local bun run check passed; CI will re-run final source. Refined the proposal to explicit host roles and draft-owned bindings, leaving current records unchanged. Local browser URL navigation is policy-blocked; authoritative multi-browser tests and captures run on the research branch in GitHub Actions.
+
+Recorded checks and browser evidence in research/blueprints/evidence; see checks.json for actual exit codes and tested source commit. Run 34196333865. Production contracts remain unchanged.
 <!-- SECTION:NOTES:END -->
