@@ -1,11 +1,11 @@
 ---
 id: TASK-325
 title: 'Switch blueprint editor between isometric, 2D and layered maps'
-status: In Progress
+status: Done
 assignee:
   - '@chatgpt'
 created_date: '2026-09-08 11:46'
-updated_date: '2026-09-08 12:11'
+updated_date: '2026-09-08 12:12'
 labels: []
 dependencies: []
 modified_files:
@@ -57,19 +57,19 @@ Blueprint placement needs an unobscured top-down editing view without replacing 
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 A compact accessible Isometric / 2D / Layers selector switches the same current or drafted architecture without changing its data or losing inspector input.
-- [ ] #2 2D renders flat axis-aligned footprints and readable labels, retaining participants, containment, planned relationships and source evidence.
-- [ ] #3 F2 enters Layers and returns to the prior Isometric or 2D view; repeated switching preserves each view’s navigation context.
-- [ ] #4 Pointer navigation remains usable in Isometric and 2D; Layers supports orbit and Shift-drag panning without accidental selection.
-- [ ] #5 Domain and browser tests exercise switching during placement, preview, creation and current inspection; full repository checks and actual desktop/narrow screenshots are recorded.
+- [x] #1 A compact accessible Isometric / 2D / Layers selector switches the same current or drafted architecture without changing its data or losing inspector input.
+- [x] #2 2D renders flat axis-aligned footprints and readable labels, retaining participants, containment, planned relationships and source evidence.
+- [x] #3 F2 enters Layers and returns to the prior Isometric or 2D view; repeated switching preserves each view’s navigation context.
+- [x] #4 Pointer navigation remains usable in Isometric and 2D; Layers supports orbit and Shift-drag panning without accidental selection.
+- [x] #5 Domain and browser tests exercise switching during placement, preview, creation and current inspection; full repository checks and actual desktop/narrow screenshots are recorded.
 <!-- AC:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 Acceptance criteria have objective verification evidence.
-- [ ] #2 Relevant checks pass and changes remain task-scoped.
-- [ ] #3 Public contracts or documentation are updated when behavior changes.
-- [ ] #4 Implementation Plan reflects the final approach; correction history and verification are recorded in Implementation Notes.
+- [x] #1 Acceptance criteria have objective verification evidence.
+- [x] #2 Relevant checks pass and changes remain task-scoped.
+- [x] #3 Public contracts or documentation are updated when behavior changes.
+- [x] #4 Implementation Plan reflects the final approach; correction history and verification are recorded in Implementation Notes.
 <!-- DOD:END -->
 
 ## Implementation Plan
@@ -89,4 +89,12 @@ Local validation: 13 map-view tests pass (70 assertions); research lint/types an
 Recorded the actual check results and map-view browser captures from GitHub run 34223823317. See evidence/checks.json for the tested source and exit codes.
 
 Recorded the actual check results and map-view browser captures from GitHub run 34224386965. See evidence/checks.json for the tested source and exit codes.
+
+Verified application 2dc60097831a5a1595b52ef459cb19557a13add1 in GitHub Actions run 34224386965: dedicated lint/types passed; 43 domain tests (135 assertions), including 13 map tests; full repository check passed 110 Node + 398 Bun tests; 117 browser assertions passed (81 new mode-flow checks across three engines plus 36 existing blueprint checks). All six new screens inspected. Visual review found an inaccurate Current architecture map label during current-component inspection inside an unsaved preview; shared work-mode resolution now retains the preview label and geometry, and the corrected state was recaptured. The scope comparison against 07e14da contains only research implementation/docs/evidence, one new test, workflow and this task. Production source, architecture Markdown, scanners, fixture definitions and the existing TASK-324 record are unchanged. Implementer scope and quality review completed; no human usability study, physical-device validation or independent-agent review is claimed.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Added compact Iso / 2D / Layers controls to the existing blueprint research editor, using one shared sheet and independent view cameras. F2 returns to the previous nested view; selection, unsaved placement and inspector input survive switches. Isometric/2D pan and Layers orbit remain usable. Verified source 2dc6009 with full repository checks, 43 domain tests and 117 browser assertions; six new actual screens captured and inspected. Production Groma remains unchanged.
+<!-- SECTION:FINAL_SUMMARY:END -->

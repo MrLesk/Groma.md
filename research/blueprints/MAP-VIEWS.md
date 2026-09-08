@@ -32,6 +32,26 @@ A camera choice is neither an OKF knowledge concept nor a C4 containment level. 
 
 The geometry tests verify original-sheet immutability, identity/containment/route retention, flat footprints, source-file union, orthogonal routes, endpoints reaching their participants, and exact preservation of the existing isometric projector input. Browser tests exercise actual controls in Chromium, Firefox and WebKit during binding, preview, selection and creation. They test radio keyboard navigation, camera restoration, pointer pan/orbit, dirty input and narrow hit targets. These are not a claim of full accessibility conformity, physical iPhone testing or general drag-and-drop editing support.
 
+## Verified result
+
+The tested application is commit `2dc60097831a5a1595b52ef459cb19557a13add1`. [GitHub Actions run 34224386965](https://github.com/MrLesk/Groma.md/actions/runs/34224386965) passed every verification stage. Subsequent report/task commits do not change that application.
+
+| Check | Result |
+| --- | --- |
+| Dedicated research lint and TypeScript project | Passed |
+| Combined blueprint and map domain suite | 43 tests passed; 135 assertions; includes 13 new map tests |
+| Full `bun run check` | Passed: 110 Node tests and 398 Bun tests |
+| Browser checks | 117 assertions passed across Chromium, Firefox and WebKit |
+| Captures | 15 actual screens: 9 refreshed blueprint screens and 6 new map-view screens |
+
+The 43 domain tests are included in the 398 Bun tests; these counts are not additive. The new map flow contributes 27 assertions per engine (81 total). It includes preserved input nodes and values, binding/preview/selection state, F2 round trips, per-view cameras, native radio keyboard use, pan/orbit gestures, and narrow controls. The existing 36 blueprint assertions were also rerun. The recorded browsers were Chromium 143.0.7499.4, Firefox 144.0.2 and WebKit 26.0. Headless WebKit is not physical-device Safari certification.
+
+The machine-readable [checks](evidence/checks.json), [browser outcomes](evidence/browser-results.json), [domain log](evidence/domain-tests.log) and [repository log](evidence/repository-check.log) retain the exact source, commands and results. The self-contained HTML SHA-256 is `b0593155b6e2143ca5dc36c6608c19421d251826248c8580f5bf5da45c1fc3b8`.
+
+[2D preview](evidence/10-plan-preview-light.png) · [Isometric preview](evidence/11-iso-preview-light.png) · [Layers preview](evidence/12-layers-preview-light.png) · [Current inspector inside a preview](evidence/13-selected-plan-dark.png) · [Mobile inspector](evidence/14-mobile-plan-inspector.png) · [Mobile map](evidence/15-mobile-plan-map.png)
+
+![2D placement preview](evidence/10-plan-preview-light.png)
+
 ## Reproduce
 
 ```sh
@@ -47,6 +67,10 @@ Open the served page, choose Use blueprint, then Preview. Switch among the three
 ## Captures
 
 The follow-up browser flow captures `10-plan-preview-light.png`, `11-iso-preview-light.png`, `12-layers-preview-light.png`, `13-selected-plan-dark.png`, `14-mobile-plan-inspector.png` and `15-mobile-plan-map.png` under `evidence/`. Captures are created by operating the prototype, not drawing replacement mockups. The original RESULTS.md describes the earlier blueprint-only study at its explicitly named commit; this file describes the map-view follow-up.
+
+## Visual-review correction
+
+The first successful browser run preserved preview geometry during current-component inspection but still labeled the map Current architecture. The map context now uses the same retained work mode as the visible draft; the inspector independently identifies the selected current component. This avoids presenting unsaved planned geometry as current architecture. The follow-up run recaptures that actual state rather than adding a test of exact decorative wording.
 
 ## Design references
 
