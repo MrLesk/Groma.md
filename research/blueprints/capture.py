@@ -146,6 +146,11 @@ def primary(browser, base):
     check('Sequentially stale save is refused and keeps the preview', state(source)['mode'] == 'preview' and 'another tab' in state(source)['error'])
     check('Stale save does not overwrite the other tab', len(state(other)['project']['drafts']) == 1 and len(json.loads(source.evaluate('localStorage.getItem("groma:blueprint-research:1:shop")'))['drafts']) == 1)
     capture(source, '08-stale-preview.png')
+    other_saved = state(other)['project']['drafts'][0]
+    action(source, 'bindings'); action(source, 'cancel'); action(source, 'use'); action(source, 'preview'); action(source, 'create')
+    refreshed = state(source)['project']
+    check('Starting a fresh placement reloads the saved fixture', len(refreshed['drafts']) == 2)
+    check('Fresh placement preserves the other tab draft', refreshed['drafts'][0] == other_saved and refreshed['drafts'][1]['id'] != other_saved['id'])
     action(target, 'back')
     target.set_viewport_size({'width': 430, 'height': 932})
     check('Narrow layout has no horizontal overflow', target.evaluate('document.documentElement.scrollWidth <= innerWidth'))

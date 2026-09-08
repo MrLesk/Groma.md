@@ -163,6 +163,12 @@ describe('semantic placement', () => {
     expect(() => commitPlacement(storage, 'fixture', p, { draft, baseline: null })).toThrow('another tab')
     expect(JSON.parse(storage.getItem('fixture')!)).toEqual(next)
   })
+  test.concurrent('refreshing only a baseline cannot overwrite another draft with stale project data', () => {
+    const { p, storage, draft, next } = imported()
+    const latest = storage.getItem('fixture')
+    expect(() => commitPlacement(storage, 'fixture', p, { draft, baseline: latest })).toThrow('preview again')
+    expect(JSON.parse(storage.getItem('fixture')!)).toEqual(next)
+  })
   test.concurrent('tampered previews require another review', () => {
     const p = project(); const draft = preparePlacement(p, blueprint(), binds(p))
     draft.parts[0]!.title = 'Changed after preview'

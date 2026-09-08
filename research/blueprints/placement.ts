@@ -72,7 +72,10 @@ export interface StoragePort { getItem(key: string): string | null; setItem(key:
 export interface Placement { draft: Draft; baseline: string | null }
 /** One fixture-storage write, then publish the new value. This is not a filesystem transaction. */
 export function commitPlacement(storage: StoragePort, key: string, project: Project, placement: Placement): Project {
-  if (storage.getItem(key) !== placement.baseline) throw new Error('This fixture changed in another tab. Cancel and preview again before saving.')
+  const saved = storage.getItem(key)
+  if (saved !== placement.baseline || (saved !== null && JSON.stringify(project) !== saved)) {
+    throw new Error('This fixture changed in another tab. Cancel and preview again before saving.')
+  }
   const rebuilt = preparePlacement(project, placement.draft.blueprint, placement.draft.bindings)
   if (JSON.stringify(rebuilt) !== JSON.stringify(placement.draft)) throw new Error('The placement changed. Review it again before saving.')
   const next: Project = { ...project, drafts: [...project.drafts, structuredClone(rebuilt)] }

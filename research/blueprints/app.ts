@@ -13,8 +13,7 @@ const $ = <T extends HTMLElement = HTMLElement>(selector: string): T => document
 const storageKey = (id: string): string => `groma:blueprint-research:1:${id}`
 const params = new URLSearchParams(location.search)
 let projectId = seeds.some(project => project.id === params.get('project')) ? params.get('project')! : 'shop'
-function loadProject(id: string): Project {
-  const saved = localStorage.getItem(storageKey(id))
+function loadProject(id: string, saved = localStorage.getItem(storageKey(id))): Project {
   if (saved === null) return structuredClone(seeds.find(project => project.id === id)!)
   const project = JSON.parse(saved) as Project
   if (project.id !== id || !Array.isArray(project.drafts)) throw new Error('Invalid fixture storage. Use a fresh browser profile for this experiment.')
@@ -87,8 +86,10 @@ function discard(): boolean { return !pending() || confirm('Discard this unsaved
 function begin(value: Blueprint): void {
   if (!discard()) return
   blueprint = validateBlueprint(value)
+  baseline = localStorage.getItem(storageKey(project.id))
+  project = loadProject(project.id, baseline)
   bindings = suggestions(project, blueprint)
-  placement = undefined; baseline = localStorage.getItem(storageKey(project.id)); error = ''
+  placement = undefined; error = ''
   mode = 'bindings'; render()
 }
 function openDialog(content: string): void {

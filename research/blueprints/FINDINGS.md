@@ -38,6 +38,8 @@ A placed draft retains the validated original pattern. “Copy original intent�
 
 Preview constructs a new candidate without mutating the input. Cancel leaves no draft. Create validates the bindings again and writes one complete fixture value; storage refusal leaves the in-memory project unchanged. A previously saved change from another tab makes the stale preview fail visibly without deleting its input.
 
+The first implementation could refresh the baseline while keeping stale in-memory project data. A new regression test failed on that version. Placement now reloads one stored snapshot, and commit verifies that its project actually matches the saved snapshot. Browser checks also follow the displayed cancel/re-preview path and verify that the other tab’s draft survives.
+
 This is not a database transaction or a filesystem transaction. The localStorage baseline check detects sequential staleness; it is not a compare-and-swap and does not certify simultaneous-tab writers. Production needs a core-owned validate-and-commit operation against a versioned architecture snapshot. The browser must not simulate that with a chain of `add`/`edit` requests.
 
 ### 6. The store can remain a thin discovery layer
