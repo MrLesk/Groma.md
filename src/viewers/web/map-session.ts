@@ -145,18 +145,20 @@ export async function createWebMapSession(
   }
 
   let worldChain = Promise.resolve()
+  async function reloadWorld(): Promise<void> {
+    if (closed) return
+    const next = await loadMap(repositoryRoot, revisions, null)
+    if (closed) return
+    map = {
+      generation: map.generation + 1,
+      ...next,
+    }
+    currentPage = undefined
+    broadcast(worldEvent())
+  }
+
   function publishWorld(): Promise<void> {
-    const run = worldChain.then(async () => {
-      if (closed) return
-      const next = await loadMap(repositoryRoot, revisions, null)
-      if (closed) return
-      map = {
-        generation: map.generation + 1,
-        ...next,
-      }
-      currentPage = undefined
-      broadcast(worldEvent())
-    })
+    const run = worldChain.then(reloadWorld)
     worldChain = run.catch(() => {})
     return run
   }
@@ -234,9 +236,14 @@ export async function createWebMapSession(
     write: (repositoryRoot: string, input: Input) => Promise<string | StructuralResult>,
   ): Promise<Response> {
     try {
-      const result = await write(repositoryRoot, await request.json() as Input)
-      await publishWorld()
-      return Response.json(typeof result === 'string' ? { id: result } : result)
+      const input = await request.json() as Input
+      const run = worldChain.then(async () => {
+        const result = await write(repositoryRoot, input)
+        await reloadWorld()
+        return Response.json(typeof result === 'string' ? { id: result } : result)
+      })
+      worldChain = run.then(() => {}, () => {})
+      return await run
     } catch (error) {
       return new Response(error instanceof Error ? error.message : String(error), { status: 400 })
     }
