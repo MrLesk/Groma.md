@@ -1,0 +1,57 @@
+name: Go scanner research
+on:
+  push:
+    branches: [research/go-scanner-prototype]
+    paths: [.github/workflows/go-scanner-research.yml]
+permissions:
+  contents: read
+jobs:
+  workspace:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.1
+      - uses: actions/setup-go@v5
+        with:
+          go-version: 1.27.1
+          cache: false
+      - name: Prepare source and development dependencies
+        run: |
+          mkdir -p /tmp/research/{artifacts,tools,repos,module}
+          bun install --frozen-lockfile
+          npm install --prefix /tmp/research/tools/backlog backlog.md@1.51.0
+          /tmp/research/tools/backlog/node_modules/.bin/backlog instructions overview > /tmp/research/artifacts/backlog-overview.txt
+          /tmp/research/tools/backlog/node_modules/.bin/backlog instructions task-creation > /tmp/research/artifacts/backlog-creation.txt
+          /tmp/research/tools/backlog/node_modules/.bin/backlog instructions task-execution > /tmp/research/artifacts/backlog-execution.txt
+          bun src/cli.ts agent-instructions > /tmp/research/artifacts/groma-instructions.txt
+          cp "$(command -v bun)" /tmp/research/tools/bun
+          cp -a "$(go env GOROOT)" /tmp/research/tools/go
+          cd /tmp/research/module
+          go mod init research.local/dependencies
+          go get golang.org/x/tools/go/packages@v0.49.0
+          go mod download
+          cp -a "$(go env GOPATH)/pkg/mod" /tmp/research/tools/gomodcache
+      - name: Clone pinned public evaluation projects
+        run: |
+          git clone --depth 1 --branch v5.2.1 https://github.com/go-chi/chi.git /tmp/research/repos/chi
+          git clone --depth 1 --branch v1.9.1 https://github.com/spf13/cobra.git /tmp/research/repos/cobra
+          git clone --depth 1 --branch v3.2.1 https://github.com/prometheus/prometheus.git /tmp/research/repos/prometheus
+          for project in chi cobra prometheus; do
+            (cd /tmp/research/repos/$project && git rev-parse HEAD) > /tmp/research/artifacts/$project.commit
+          done
+      - name: Export isolated research workspace
+        run: |
+          tar --exclude=.git --exclude=.github/assets -czf /tmp/research/artifacts/groma-source.tar.gz .
+          tar -C /tmp/research -czf /tmp/research/artifacts/development-tools.tar.gz tools module
+          tar -C /tmp/research -czf /tmp/research/artifacts/evaluation-repos.tar.gz repos
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: go-research-workspace
+          path: /tmp/research/artifacts
+          retention-days: 7
