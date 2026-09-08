@@ -1,0 +1,85 @@
+name: CSharp real-project research
+on:
+  push:
+    branches: [research/csharp-scanner-prototype]
+    paths: [.github/workflows/csharp-project-research.yml]
+permissions:
+  contents: read
+jobs:
+  projects:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Preserve exact source for local verification
+        shell: bash
+        run: |
+          git archive --format=tar.gz -o /tmp/groma-csharp-source.tar.gz HEAD
+          git rev-parse HEAD > /tmp/groma-csharp-source.commit
+      - uses: actions/upload-artifact@v4
+        with:
+          name: csharp-review-source
+          path: /tmp/groma-csharp-source.*
+          retention-days: 7
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.1
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            8.0.x
+            9.0.x
+            10.0.400
+      - name: Prepare scanner
+        shell: bash
+        run: |
+          set -euo pipefail
+          bun install --frozen-lockfile
+          bun scripts/package-csharp-scanner.ts
+          mkdir -p dist/csharp-real-projects
+          dotnet --info > dist/csharp-real-projects/dotnet-info.txt
+      - name: Clone pinned ASP.NET application
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/eShopOnWeb"
+          git init "$root"
+          git -C "$root" remote add origin https://github.com/dotnet-architecture/eShopOnWeb.git
+          git -C "$root" fetch --depth 1 origin 4da8212117e87d808d4bbc7da6286fd2147ce606
+          git -C "$root" checkout --detach FETCH_HEAD
+          test "$(git -C "$root" rev-parse HEAD)" = 4da8212117e87d808d4bbc7da6286fd2147ce606
+          git -C "$root" archive --format=tar.gz -o "$GITHUB_WORKSPACE/dist/csharp-real-projects/eshop-source.tar.gz" HEAD
+      - name: Measure PublicApi and Web without launching applications
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/eShopOnWeb"
+          for name in PublicApi Web; do
+            output="$GITHUB_WORKSPACE/dist/csharp-real-projects/$name"
+            mkdir -p "$output"
+            project="src/$name/$name.csproj"
+            set +e
+            (cd "$root" && timeout 240 dotnet restore "$project" --nologo) > "$output/restore.log" 2>&1
+            restored=$?
+            if [ "$restored" = 0 ]; then
+              /usr/bin/time -v -o "$output/resources.txt" bun scripts/benchmark-csharp-scanner.ts "$root" "$project" > "$output/scan.log" 2>&1
+              scanned=$?
+            else
+              scanned=125
+            fi
+            set -e
+            printf '{"restoreExit":%s,"scanExit":%s}\n' "$restored" "$scanned" > "$output/result.json"
+            if [ "$scanned" = 0 ]; then
+              mv dist/csharp-benchmark* "$output/"
+            fi
+            git -C "$root" diff --exit-code
+          done
+          git -C "$root" status --porcelain > dist/csharp-real-projects/eshop-status.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: csharp-real-project-evidence
+          path: dist/csharp-real-projects
+          retention-days: 7
