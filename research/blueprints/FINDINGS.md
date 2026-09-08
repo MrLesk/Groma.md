@@ -96,3 +96,5 @@ External design precedents: [Factorio blueprints](https://wiki.factorio.com/Blue
 ## Visual-review correction
 
 The first captured narrow layout showed persistent save feedback covering the footer actions, despite a passing viewport-bounds assertion. The redundant save message was removed. Copy feedback now occupies an ordinary inspector row rather than overlaying the controls, and a repaint dismisses the old feedback. Browser validation now hit-tests the action buttons while that message is present. This checks the observable ability to act rather than decorative placement.
+
+The follow-up browser run also exposed delayed clipboard feedback arriving after a repaint. Copy completion now checks the view generation before announcing. The mobile check explicitly waits for feedback to appear before hit-testing, so a hidden message cannot produce a vacuous pass.

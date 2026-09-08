@@ -158,6 +158,7 @@ def primary(browser, base):
     check('Narrow layout keeps primary actions visible', bool(footer and footer['y'] + footer['height'] <= 932))
     capture(target, '09-mobile-draft.png')
     action(target, 'copy-draft')
+    target.locator('#toast').wait_for(state='visible')
     check('Narrow copy feedback does not cover the action buttons', target.locator('.panel-footer button').evaluate_all("""buttons => buttons.every(button => {
         const r = button.getBoundingClientRect();
         const hit = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2);

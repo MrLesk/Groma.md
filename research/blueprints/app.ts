@@ -30,6 +30,7 @@ let baseline: string | null = null
 let selected: string | undefined
 let previousMode: Mode = 'catalogue'
 let error = ''
+let viewGeneration = 0
 let theme = ['light', 'dark', 'blueprint'].includes(params.get('theme') ?? '') ? params.get('theme')! : 'light'
 
 $('#app').innerHTML = `<header class="topbar chrome">
@@ -56,6 +57,7 @@ function currentDraft(): Draft | undefined {
   return mode === 'preview' ? placement?.draft : mode === 'draft' ? draft : undefined
 }
 function render(): void {
+  viewGeneration += 1
   $('#toast').hidden = true
   document.documentElement.dataset.theme = theme
   $('#theme').setAttribute('data-mode', theme)
@@ -103,8 +105,9 @@ function pasteDialog(): void {
 }
 async function copy(value: Blueprint): Promise<void> {
   if (!navigator.clipboard) throw new Error('Clipboard access is unavailable. Open Blueprint text to copy manually.')
+  const generation = viewGeneration
   await navigator.clipboard.writeText(encodeBlueprint(value))
-  announce('Blueprint copied. Open another fixture or tab and paste to place it.')
+  if (generation === viewGeneration) announce('Blueprint copied. Open another fixture or tab and paste to place it.')
 }
 function textDialog(markdown: boolean): void {
   const value = mode === 'draft' ? copyDraftIntent(draft!) : blueprint
