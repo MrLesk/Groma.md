@@ -37,6 +37,7 @@ jobs:
         run: |
           set -euo pipefail
           bun install --frozen-lockfile
+          dotnet restore plugins/scanners/csharp/dotnet/Groma.CSharpScanner.csproj --locked-mode
           bun scripts/package-csharp-scanner.ts
           mkdir -p dist/csharp-real-projects
           dotnet --info > dist/csharp-real-projects/dotnet-info.txt
