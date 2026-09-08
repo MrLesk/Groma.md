@@ -82,7 +82,7 @@ src/viewers/web/work/pins.ts:100:5 lint/complexity/noExcessiveCognitiveComplexit
   i Please refactor this function to reduce its complexity score from 19 to the max allowed complexity 15.
   
 
-Checked 343 files in 476ms. No fixes applied.
+Checked 343 files in 466ms. No fixes applied.
 Found 6 warnings.
 $ tsc --version && tsc --noEmit
 Version 7.1.0-dev.20260905.1
@@ -92,661 +92,661 @@ TAP version 13
 # Subtest: acceptGhost flips a matched ghost to stable in its own file and keeps the draft tag
 ok 1 - acceptGhost flips a matched ghost to stable in its own file and keeps the draft tag
   ---
-  duration_ms: 103.360632
+  duration_ms: 121.543409
   type: 'test'
   ...
 # Subtest: acceptGhost fails when the ghost has no scan match
 ok 2 - acceptGhost fails when the ghost has no scan match
   ---
-  duration_ms: 48.966845
+  duration_ms: 51.331996
   type: 'test'
   ...
 # Subtest: acceptGhost fails when the id is not a ghost
 ok 3 - acceptGhost fails when the id is not a ghost
   ---
-  duration_ms: 67.290052
+  duration_ms: 60.423139
   type: 'test'
   ...
 # Subtest: a scan match leaves the ghost a draft until accept
 ok 4 - a scan match leaves the ghost a draft until accept
   ---
-  duration_ms: 72.983386
+  duration_ms: 69.175048
   type: 'test'
   ...
 # Subtest: groma accept applies a ghost after it scans a name match
 ok 5 - groma accept applies a ghost after it scans a name match
   ---
-  duration_ms: 433.297751
+  duration_ms: 436.251228
   type: 'test'
   ...
 # Subtest: groma accept fails when a scan does not match the ghost
 ok 6 - groma accept fails when a scan does not match the ghost
   ---
-  duration_ms: 444.789371
+  duration_ms: 397.870869
   type: 'test'
   ...
 # Subtest: groma add writes a stable person and a stable external at their folders
 ok 7 - groma add writes a stable person and a stable external at their folders
   ---
-  duration_ms: 836.609525
+  duration_ms: 876.238335
   type: 'test'
   ...
 # Subtest: groma add draft writes the draft record with its outcome
 ok 8 - groma add draft writes the draft record with its outcome
   ---
-  duration_ms: 386.169832
+  duration_ms: 363.658431
   type: 'test'
   ...
 # Subtest: groma add refuses scanned kinds with the sentence that names groma draft, and writes nothing
 ok 9 - groma add refuses scanned kinds with the sentence that names groma draft, and writes nothing
   ---
-  duration_ms: 876.055757
+  duration_ms: 826.30201
   type: 'test'
   ...
 # Subtest: unknown things, taken or reserved ids, missing overview and technology on a person fail without writes
 ok 10 - unknown things, taken or reserved ids, missing overview and technology on a person fail without writes
   ---
-  duration_ms: 1989.210174
+  duration_ms: 1963.57251
   type: 'test'
   ...
 # Subtest: reports a component stored under externals
 ok 11 - reports a component stored under externals
   ---
-  duration_ms: 3.069356
+  duration_ms: 2.772356
   type: 'test'
   ...
 # Subtest: reports an actor stored under externals
 ok 12 - reports an actor stored under externals
   ---
-  duration_ms: 0.3242
+  duration_ms: 0.24751
   type: 'test'
   ...
 # Subtest: reports a container inside an external system
 ok 13 - reports a container inside an external system
   ---
-  duration_ms: 7.526555
+  duration_ms: 0.828941
   type: 'test'
   ...
 # Subtest: reports the external flag as an unsupported field
 ok 14 - reports the external flag as an unsupported field
   ---
-  duration_ms: 0.218071
+  duration_ms: 0.163003
   type: 'test'
   ...
 # Subtest: reports a missing lifecycle status
 ok 15 - reports a missing lifecycle status
   ---
-  duration_ms: 0.30315
+  duration_ms: 0.330203
   type: 'test'
   ...
 # Subtest: reports a status outside the OKF lifecycle
 ok 16 - reports a status outside the OKF lifecycle
   ---
-  duration_ms: 0.280438
+  duration_ms: 0.292013
   type: 'test'
   ...
 # Subtest: reports a draft tag that is not a kebab-case id
 ok 17 - reports a draft tag that is not a kebab-case id
   ---
-  duration_ms: 0.223581
+  duration_ms: 0.170366
   type: 'test'
   ...
 # Subtest: reports an actor outside the actors directory
 ok 18 - reports an actor outside the actors directory
   ---
-  duration_ms: 0.2446
+  duration_ms: 0.234706
   type: 'test'
   ...
 # Subtest: reports a duplicate stable id at the second document
 ok 19 - reports a duplicate stable id at the second document
   ---
-  duration_ms: 3.056482
+  duration_ms: 0.886238
   type: 'test'
   ...
 # Subtest: reports an unknown parent id at the contained document
 ok 20 - reports an unknown parent id at the contained document
   ---
-  duration_ms: 2.945823
+  duration_ms: 0.707576
   type: 'test'
   ...
 # Subtest: reports a parent with the wrong C4 kind
 ok 21 - reports a parent with the wrong C4 kind
   ---
-  duration_ms: 0.883242
+  duration_ms: 0.314595
   type: 'test'
   ...
 # Subtest: reports a root C4 element with an explicitly null parent
 ok 22 - reports a root C4 element with an explicitly null parent
   ---
-  duration_ms: 0.152627
+  duration_ms: 0.148166
   type: 'test'
   ...
 # Subtest: reports a root C4 element with an empty parent
 ok 23 - reports a root C4 element with an empty parent
   ---
-  duration_ms: 0.149632
+  duration_ms: 0.141443
   type: 'test'
   ...
 # Subtest: reports a root C4 element that declares a parent
 ok 24 - reports a root C4 element that declares a parent
   ---
-  duration_ms: 0.298863
+  duration_ms: 0.219678
   type: 'test'
   ...
 # Subtest: reports a contained C4 element with an omitted parent
 ok 25 - reports a contained C4 element with an omitted parent
   ---
-  duration_ms: 3.247281
+  duration_ms: 0.195544
   type: 'test'
   ...
 # Subtest: reports a contained C4 element with an explicitly null parent
 ok 26 - reports a contained C4 element with an explicitly null parent
   ---
-  duration_ms: 0.143741
+  duration_ms: 0.140391
   type: 'test'
   ...
 # Subtest: reports an unresolved relationship link at its source document
 ok 27 - reports an unresolved relationship link at its source document
   ---
-  duration_ms: 1.767627
+  duration_ms: 1.929077
   type: 'test'
   ...
 # Subtest: reports a group that is not a string
 ok 28 - reports a group that is not a string
   ---
-  duration_ms: 0.202922
+  duration_ms: 0.187588
   type: 'test'
   ...
 # Subtest: reports a blank group
 ok 29 - reports a blank group
   ---
-  duration_ms: 0.182012
+  duration_ms: 0.134691
   type: 'test'
   ...
 # Subtest: builds a frozen, serializable C4 graph deterministically
 ok 30 - builds a frozen, serializable C4 graph deterministically
   ---
-  duration_ms: 143.25238
+  duration_ms: 129.400359
   type: 'test'
   ...
 # Subtest: keeps the group on the element and omits it otherwise
 ok 31 - keeps the group on the element and omits it otherwise
   ---
-  duration_ms: 0.955909
+  duration_ms: 0.703799
   type: 'test'
   ...
 # Subtest: a stable element may carry the tag of the draft that touches it
 ok 32 - a stable element may carry the tag of the draft that touches it
   ---
-  duration_ms: 0.934708
+  duration_ms: 0.253211
   type: 'test'
   ...
 # Subtest: preserves every leading prose paragraph in overview
 ok 33 - preserves every leading prose paragraph in overview
   ---
-  duration_ms: 0.331484
+  duration_ms: 0.251177
   type: 'test'
   ...
 # Subtest: resolves a relationship link to the target document stable id
 ok 34 - resolves a relationship link to the target document stable id
   ---
-  duration_ms: 0.891127
+  duration_ms: 0.718727
   type: 'test'
   ...
 # Subtest: orders equivalent unchanged trees deterministically
 ok 35 - orders equivalent unchanged trees deterministically
   ---
-  duration_ms: 1.220657
+  duration_ms: 1.227843
   type: 'test'
   ...
 # Subtest: loads the one tree only after recognizing the marked OKF package
 ok 36 - loads the one tree only after recognizing the marked OKF package
   ---
-  duration_ms: 90.025191
+  duration_ms: 108.175971
   type: 'test'
   ...
 # Subtest: tolerates standard metadata and ignores unknown OKF concept types
 ok 37 - tolerates standard metadata and ignores unknown OKF concept types
   ---
-  duration_ms: 35.823395
+  duration_ms: 36.246984
   type: 'test'
   ...
 # Subtest: rejects a generic OKF package instead of opening it as Groma
 ok 38 - rejects a generic OKF package instead of opening it as Groma
   ---
-  duration_ms: 41.581071
+  duration_ms: 56.62578
   type: 'test'
   ...
 # Subtest: identifies a malformed C4 document as a Comark parse failure
 ok 39 - identifies a malformed C4 document as a Comark parse failure
   ---
-  duration_ms: 70.143307
+  duration_ms: 69.024173
   type: 'test'
   ...
 # Subtest: groma scan reconciles source evidence and exits
 ok 40 - groma scan reconciles source evidence and exits
   ---
-  duration_ms: 446.52651
+  duration_ms: 393.532806
   type: 'test'
   ...
 # Subtest: groma view exits without a TUI when output is not interactive
 ok 41 - groma view exits without a TUI when output is not interactive
   ---
-  duration_ms: 614.078873
+  duration_ms: 646.12698
   type: 'test'
   ...
 # Subtest: groma view --plain exits when output is interactive
 ok 42 - groma view --plain exits when output is interactive
   ---
-  duration_ms: 301.057034
+  duration_ms: 276.411119
   type: 'test'
   ...
 # Subtest: element and every owned source file return the complete authored Markdown
 ok 43 - element and every owned source file return the complete authored Markdown
   ---
-  duration_ms: 2435.765051
+  duration_ms: 2351.611202
   type: 'test'
   ...
 # Subtest: draft lookup keeps its completion and membership summary
 ok 44 - draft lookup keeps its completion and membership summary
   ---
-  duration_ms: 276.398214
+  duration_ms: 288.959991
   type: 'test'
   ...
 # Subtest: flow lookup preserves the authored steps and the overview offers its index
 ok 45 - flow lookup preserves the authored steps and the overview offers its index
   ---
-  duration_ms: 572.395831
+  duration_ms: 513.433761
   type: 'test'
   ...
 # Subtest: overview groups remain labels on their sibling elements
 ok 46 - overview groups remain labels on their sibling elements
   ---
-  duration_ms: 286.467326
+  duration_ms: 248.441321
   type: 'test'
   ...
 # Subtest: plain reads leave repository files untouched and do not scan new source
 ok 47 - plain reads leave repository files untouched and do not scan new source
   ---
-  duration_ms: 1296.470824
+  duration_ms: 1258.081169
   type: 'test'
   ...
 # Subtest: groma view rejects an unknown target
 ok 48 - groma view rejects an unknown target
   ---
-  duration_ms: 286.149691
+  duration_ms: 256.079731
   type: 'test'
   ...
 # Subtest: groma view fails when several elements share a code file
 ok 49 - groma view fails when several elements share a code file
   ---
-  duration_ms: 321.593062
+  duration_ms: 322.885462
   type: 'test'
   ...
 # Subtest: reconstructs observed elements, ghosts, and drafts from the OKF profile
 ok 50 - reconstructs observed elements, ghosts, and drafts from the OKF profile
   ---
-  duration_ms: 99.18745
+  duration_ms: 99.544765
   type: 'test'
   ...
 # Subtest: move eligibility uses the complete Markdown body
 ok 51 - move eligibility uses the complete Markdown body
   ---
-  duration_ms: 1.209186
+  duration_ms: 1.340803
   type: 'test'
   ...
 # Subtest: groma edit assigns and clears a component group without changing its meaning
 ok 52 - groma edit assigns and clears a component group without changing its meaning
   ---
-  duration_ms: 638.351532
+  duration_ms: 615.244431
   type: 'test'
   ...
 # Subtest: groma edit moves an empty scanned component to another container
 ok 53 - groma edit moves an empty scanned component to another container
   ---
-  duration_ms: 314.824628
+  duration_ms: 271.854199
   type: 'test'
   ...
 # Subtest: groma edit combines empty scanned components into one authored responsibility
 ok 54 - groma edit combines empty scanned components into one authored responsibility
   ---
-  duration_ms: 332.715106
+  duration_ms: 337.265982
   type: 'test'
   ...
 # Subtest: groma edit combines an empty scanned container and reparents its empty children
 ok 55 - groma edit combines an empty scanned container and reparents its empty children
   ---
-  duration_ms: 337.376232
+  duration_ms: 347.65449
   type: 'test'
   ...
 # Subtest: structural edits reject authored or related elements before writing
 ok 56 - structural edits reject authored or related elements before writing
   ---
-  duration_ms: 1478.253216
+  duration_ms: 1408.462207
   type: 'test'
   ...
 # Subtest: a drafted container or component is a ghost at its future path under the given parent
 ok 57 - a drafted container or component is a ghost at its future path under the given parent
   ---
-  duration_ms: 733.048601
+  duration_ms: 679.300092
   type: 'test'
   ...
 # Subtest: --draft files the ghost under an existing draft record and refuses an unknown one
 ok 58 - --draft files the ghost under an existing draft record and refuses an unknown one
   ---
-  duration_ms: 580.997813
+  duration_ms: 573.11527
   type: 'test'
   ...
 # Subtest: a system needs no parent, containers and components need one, and people are never drafted
 ok 59 - a system needs no parent, containers and components need one, and people are never drafted
   ---
-  duration_ms: 1392.605051
+  duration_ms: 1392.695183
   type: 'test'
   ...
 # Subtest: duplicate or taken id, unknown parent, missing overview, wrong parent kind, reserved name and an occupied path fail without writes
 ok 60 - duplicate or taken id, unknown parent, missing overview, wrong parent kind, reserved name and an occupied path fail without writes
   ---
-  duration_ms: 2582.397814
+  duration_ms: 2552.066226
   type: 'test'
   ...
 # Subtest: groma edit element --overview replaces only the owning lead prose
 ok 61 - groma edit element --overview replaces only the owning lead prose
   ---
-  duration_ms: 336.456211
+  duration_ms: 410.013976
   type: 'test'
   ...
 # Subtest: groma edit element --draft tags a stable element with the draft that touches it
 ok 62 - groma edit element --draft tags a stable element with the draft that touches it
   ---
-  duration_ms: 690.346316
+  duration_ms: 632.159591
   type: 'test'
   ...
 # Subtest: groma edit <draft-id> --overview sets and replaces the draft outcome
 ok 63 - groma edit <draft-id> --overview sets and replaces the draft outcome
   ---
-  duration_ms: 606.085671
+  duration_ms: 599.011263
   type: 'test'
   ...
 # Subtest: unknown ids, empty edits, element flags on a draft record fail without writes
 ok 64 - unknown ids, empty edits, element flags on a draft record fail without writes
   ---
-  duration_ms: 3102.006339
+  duration_ms: 3006.60875
   type: 'test'
   ...
 # Subtest: groma edit --title and --technology change an element and a draft record in place
 ok 65 - groma edit --title and --technology change an element and a draft record in place
   ---
-  duration_ms: 977.994222
+  duration_ms: 856.681061
   type: 'test'
   ...
 # Subtest: groma edit project merges title, description and overview into the project record
 ok 66 - groma edit project merges title, description and overview into the project record
   ---
-  duration_ms: 570.68165
+  duration_ms: 547.591667
   type: 'test'
   ...
 # Subtest: plain view treats a Groma folder without project records as uninitialized
 ok 67 - plain view treats a Groma folder without project records as uninitialized
   ---
-  duration_ms: 328.745183
+  duration_ms: 315.644886
   type: 'test'
   ...
 # Subtest: groma view and a record print without a Groma directory name groma init and fail the same way
 ok 68 - groma view and a record print without a Groma directory name groma init and fail the same way
   ---
-  duration_ms: 491.823012
+  duration_ms: 465.005547
   type: 'test'
   ...
 # Subtest: bare groma and groma --plain without a Groma directory name groma init and fail without a stack
 ok 69 - bare groma and groma --plain without a Groma directory name groma init and fail without a stack
   ---
-  duration_ms: 493.529805
+  duration_ms: 450.95376
   type: 'test'
   ...
 # Subtest: ensureInitialized passes straight through when the Groma directory exists
 ok 70 - ensureInitialized passes straight through when the Groma directory exists
   ---
-  duration_ms: 40.636819
+  duration_ms: 41.97607
   type: 'test'
   ...
 # Subtest: declining the offer prints one line naming groma init and writes nothing
 ok 71 - declining the offer prints one line naming groma init and writes nothing
   ---
-  duration_ms: 2.268641
+  duration_ms: 2.255945
   type: 'test'
   ...
 # Subtest: accepting the offer runs the wizard and leaves the scan and the viewer to the caller
 ok 72 - accepting the offer runs the wizard and leaves the scan and the viewer to the caller
   ---
-  duration_ms: 19.410135
+  duration_ms: 9.907353
   type: 'test'
   ...
 # Subtest: the terminal setup completes missing records in the existing storage location
 ok 73 - the terminal setup completes missing records in the existing storage location
   ---
-  duration_ms: 9.119009
+  duration_ms: 8.63643
   type: 'test'
   ...
 # Subtest: cancelling the offer or the wizard leaves the repository untouched
 ok 74 - cancelling the offer or the wizard leaves the repository untouched
   ---
-  duration_ms: 1.749945
+  duration_ms: 2.409872
   type: 'test'
   ...
 # Subtest: groma add group names sibling components, edit group renames every member, remove group takes members out or dissolves it
 ok 75 - groma add group names sibling components, edit group renames every member, remove group takes members out or dissolves it
   ---
-  duration_ms: 1441.74311
+  duration_ms: 1475.203407
   type: 'test'
   ...
 # Subtest: group verbs refuse other kinds, mixed containers, unknown addresses and strangers without writes
 ok 76 - group verbs refuse other kinds, mixed containers, unknown addresses and strangers without writes
   ---
-  duration_ms: 2900.409737
+  duration_ms: 2747.347937
   type: 'test'
   ...
 # Subtest: interactive initialization asks for identity and storage before creating Groma
 ok 77 - interactive initialization asks for identity and storage before creating Groma
   ---
-  duration_ms: 55.280386
+  duration_ms: 76.493773
   type: 'test'
   ...
 # Subtest: non-interactive initialization creates and uses hidden Groma storage
 ok 78 - non-interactive initialization creates and uses hidden Groma storage
   ---
-  duration_ms: 653.29692
+  duration_ms: 668.818849
   type: 'test'
   ...
 # Subtest: an existing Groma directory is reused without asking for its location
 ok 79 - an existing Groma directory is reused without asking for its location
   ---
-  duration_ms: 30.747891
+  duration_ms: 29.174392
   type: 'test'
   ...
 # Subtest: competing Groma directories fail before initialization writes
 ok 80 - competing Groma directories fail before initialization writes
   ---
-  duration_ms: 3.070421
+  duration_ms: 3.82856
   type: 'test'
   ...
 # Subtest: non-interactive initialization requires both explicit values before writing
 ok 81 - non-interactive initialization requires both explicit values before writing
   ---
-  duration_ms: 3.990954
+  duration_ms: 2.193466
   type: 'test'
   ...
 # Subtest: interactive init scans an empty architecture once and opens the selected viewer
 ok 82 - interactive init scans an empty architecture once and opens the selected viewer
   ---
-  duration_ms: 23.333412
+  duration_ms: 19.559152
   type: 'test'
   ...
 # Subtest: interactive re-init edits the current title and skips onboarding for an established architecture
 ok 83 - interactive re-init edits the current title and skips onboarding for an established architecture
   ---
-  duration_ms: 37.43366
+  duration_ms: 34.189368
   type: 'test'
   ...
 # Subtest: init refreshes the managed agent nudge and preserves surrounding instructions
 ok 84 - init refreshes the managed agent nudge and preserves surrounding instructions
   ---
-  duration_ms: 20.922382
+  duration_ms: 15.454118
   type: 'test'
   ...
 # Subtest: interactive init cancellation writes nothing
 ok 85 - interactive init cancellation writes nothing
   ---
-  duration_ms: 1.643799
+  duration_ms: 1.577473
   type: 'test'
   ...
 # Subtest: Backlog.md installer follows Groma provenance and optional failure does not stop init
 ok 86 - Backlog.md installer follows Groma provenance and optional failure does not stop init
   ---
-  duration_ms: 6.910116
+  duration_ms: 8.307739
   type: 'test'
   ...
 # Subtest: shared repository setup initializes Git first and then available Backlog.md
 ok 87 - shared repository setup initializes Git first and then available Backlog.md
   ---
-  duration_ms: 7.04297
+  duration_ms: 9.131557
   type: 'test'
   ...
 # Subtest: an existing Backlog.md project is preserved during shared setup
 ok 88 - an existing Backlog.md project is preserved during shared setup
   ---
-  duration_ms: 12.098659
+  duration_ms: 7.494447
   type: 'test'
   ...
 # Subtest: declining Backlog.md installation continues without running an installer
 ok 89 - declining Backlog.md installation continues without running an installer
   ---
-  duration_ms: 12.318102
+  duration_ms: 5.873389
   type: 'test'
   ...
 # Subtest: non-interactive init initializes available Backlog.md without offering installation
 ok 90 - non-interactive init initializes available Backlog.md without offering installation
   ---
-  duration_ms: 13.539882
+  duration_ms: 11.350019
   type: 'test'
   ...
 # Subtest: groma init creates only AGENTS.md when no instruction file exists
 ok 91 - groma init creates only AGENTS.md when no instruction file exists
   ---
-  duration_ms: 688.175589
+  duration_ms: 612.737473
   type: 'test'
   ...
 # Subtest: groma init updates only an existing AGENTS.md and remains idempotent
 ok 92 - groma init updates only an existing AGENTS.md and remains idempotent
   ---
-  duration_ms: 915.293889
+  duration_ms: 905.211234
   type: 'test'
   ...
 # Subtest: groma init updates only an existing CLAUDE.md
 ok 93 - groma init updates only an existing CLAUDE.md
   ---
-  duration_ms: 679.152644
+  duration_ms: 580.851199
   type: 'test'
   ...
 # Subtest: groma init updates distinct AGENTS.md and CLAUDE.md files
 ok 94 - groma init updates distinct AGENTS.md and CLAUDE.md files
   ---
-  duration_ms: 674.362255
+  duration_ms: 620.770776
   type: 'test'
   ...
 # Subtest: groma init preserves a CLAUDE.md symlink to AGENTS.md and writes once
 ok 95 - groma init preserves a CLAUDE.md symlink to AGENTS.md and writes once
   ---
-  duration_ms: 845.176844
+  duration_ms: 825.454946
   type: 'test'
   ...
 # Subtest: the marked project concept owns title, description, and body overview
 ok 96 - the marked project concept owns title, description, and body overview
   ---
-  duration_ms: 31.800123
+  duration_ms: 26.882998
   type: 'test'
   ...
 # Subtest: the project body cannot duplicate its canonical title
 ok 97 - the project body cannot duplicate its canonical title
   ---
-  duration_ms: 4.075253
+  duration_ms: 3.779468
   type: 'test'
   ...
 # Subtest: groma add relation writes one relationship per ordered file pair in the relationship record
 ok 98 - groma add relation writes one relationship per ordered file pair in the relationship record
   ---
-  duration_ms: 1027.965553
+  duration_ms: 985.738963
   type: 'test'
   ...
 # Subtest: groma edit relation rewords a draft and groma remove relation deletes it, even after the target was renamed
 ok 99 - groma edit relation rewords a draft and groma remove relation deletes it, even after the target was renamed
   ---
-  duration_ms: 1293.771248
+  duration_ms: 1188.66326
   type: 'test'
   ...
 # Subtest: relation verbs refuse unknown ends, missing flags, element flags without writes
 ok 100 - relation verbs refuse unknown ends, missing flags, element flags without writes
   ---
-  duration_ms: 1771.540515
+  duration_ms: 1474.018603
   type: 'test'
   ...
 # Subtest: groma remove deletes a person and an external nothing relates to
 ok 101 - groma remove deletes a person and an external nothing relates to
   ---
-  duration_ms: 699.473759
+  duration_ms: 686.874403
   type: 'test'
   ...
 # Subtest: a ghost leaves once nothing relates to it, and a draft record once no ghost belongs to it
 ok 102 - a ghost leaves once nothing relates to it, and a draft record once no ghost belongs to it
   ---
-  duration_ms: 2290.816122
+  duration_ms: 1953.204793
   type: 'test'
   ...
 # Subtest: the scanner keeps stable software, and a ghost keeps what it contains
 ok 103 - the scanner keeps stable software, and a ghost keeps what it contains
   ---
-  duration_ms: 1679.078648
+  duration_ms: 1453.669432
   type: 'test'
   ...
 # Subtest: watchScan folds a settled TypeScript change and ignores plugin test files
 ok 104 - watchScan folds a settled TypeScript change and ignores plugin test files
   ---
-  duration_ms: 1560.43046
+  duration_ms: 1423.247754
   type: 'test'
   ...
 # Subtest: a marked OKF profile validates every C4 kind, counts drafts, and ignores an ordinary OKF concept
 ok 105 - a marked OKF profile validates every C4 kind, counts drafts, and ignores an ordinary OKF concept
   ---
-  duration_ms: 92.176292
+  duration_ms: 80.192883
   type: 'test'
   ...
 # Subtest: a generic OKF package is rejected before architecture validation
 ok 106 - a generic OKF package is rejected before architecture validation
   ---
-  duration_ms: 60.419896
+  duration_ms: 42.97477
   type: 'test'
   ...
 # Subtest: the root index contains only the pinned OKF declaration
 ok 107 - the root index contains only the pinned OKF declaration
   ---
-  duration_ms: 56.878226
+  duration_ms: 32.948057
   type: 'test'
   ...
 # Subtest: canonical C4 containment remains strict
 ok 108 - canonical C4 containment remains strict
   ---
-  duration_ms: 58.794586
+  duration_ms: 59.879236
   type: 'test'
   ...
 # Subtest: canonical relationship targets must resolve even when generic links do not
 ok 109 - canonical relationship targets must resolve even when generic links do not
   ---
-  duration_ms: 31.989074
+  duration_ms: 43.865541
   type: 'test'
   ...
 # Subtest: a Groma relationship table keeps its canonical columns
 ok 110 - a Groma relationship table keeps its canonical columns
   ---
-  duration_ms: 36.194164
+  duration_ms: 34.117096
   type: 'test'
   ...
 1..110
@@ -757,41 +757,41 @@ ok 110 - a Groma relationship table keeps its canonical columns
 # cancelled 0
 # skipped 0
 # todo 0
-# duration_ms 20717.89437
+# duration_ms 19684.693575
 $ bun test --timeout 20000 test-bun/
 bun test v1.4.1 (4661e494f)
 
 ::group::test-bun/release-version.test.ts:
-(pass) a release binary keeps the prepared manifest version without its build checkout [1347.33ms]
+(pass) a release binary keeps the prepared manifest version without its build checkout [1228.71ms]
 
 ::endgroup::
 
 ::group::test-bun/container-layout.test.ts:
-(pass) a building lists one row per floor; a ghost shows one empty row [5.02ms]
-(pass) buildings never overlap and two rows lie between their lines [1.64ms]
-(pass) the container map fits its slab, keeps selection visible, and keeps its neighbour adjacent [59.12ms]
-(pass) past the last building the arrows cross to the neighbouring container [60.62ms]
+(pass) a building lists one row per floor; a ghost shows one empty row [4.97ms]
+(pass) buildings never overlap and two rows lie between their lines [1.57ms]
+(pass) the container map fits its slab, keeps selection visible, and keeps its neighbour adjacent [54.79ms]
+(pass) past the last building the arrows cross to the neighbouring container [56.11ms]
 
 ::endgroup::
 
 ::group::test-bun/npm-cli.test.ts:
-(pass) native Apple Silicon Node resolves the Darwin arm64 package [0.04ms]
+(pass) native Apple Silicon Node resolves the Darwin arm64 package [0.05ms]
 (pass) Rosetta Node on Apple Silicon still resolves the Darwin arm64 package [0.01ms]
-(pass) Intel Macs have no Darwin package and an unsupported-architecture error [0.34ms]
+(pass) Intel Macs have no Darwin package and an unsupported-architecture error [0.28ms]
 (pass) Linux and Windows keep per-arch packages [0.02ms]
 (pass) unknown platforms have no package [0.03ms]
-(pass) Apple Silicon detection uses hw.optional.arm64 and ignores stderr [0.10ms]
-(pass) Apple Silicon detection is false off macOS and when sysctl fails [0.04ms]
+(pass) Apple Silicon detection uses hw.optional.arm64 and ignores stderr [0.12ms]
+(pass) Apple Silicon detection is false off macOS and when sysctl fails [0.06ms]
 
 ::endgroup::
 
 ::group::test-bun/web-search.test.ts:
 (pass) web search opens from slash only outside editable controls [0.08ms]
-(pass) web search opens from the platform command shortcut [0.07ms]
-(pass) task matches include unmapped work in every plugin status [2.40ms]
-(pass) web search merges architecture and plugin tasks by match relevance [31.79ms]
-(pass) missing optional work leaves core architecture results unchanged [29.22ms]
-(pass) work updates replace task matches without changing architecture results [30.77ms]
+(pass) web search opens from the platform command shortcut [0.05ms]
+(pass) task matches include unmapped work in every plugin status [2.20ms]
+(pass) missing optional work leaves core architecture results unchanged [31.24ms]
+(pass) work updates replace task matches without changing architecture results [31.13ms]
+(pass) web search merges architecture and plugin tasks by match relevance [34.77ms]
 
 ::endgroup::
 
@@ -805,39 +805,39 @@ bun test v1.4.1 (4661e494f)
 ::endgroup::
 
 ::group::test-bun/scan-refresh.test.ts:
-(pass) scan refresh writes only changed evidence and preserves its summary [25.31ms]
+(pass) scan refresh writes only changed evidence and preserves its summary [23.23ms]
 
 ::endgroup::
 
 ::group::test-bun/routes.test.ts:
-(pass) browsing leaves a relationship inactive, Enter lights it and Enter again follows it [2.79ms]
-(pass) routes keep their cells while the selection stays on its island [1.64ms]
+(pass) browsing leaves a relationship inactive, Enter lights it and Enter again follows it [2.75ms]
+(pass) routes keep their cells while the selection stays on its island [1.49ms]
 
 ::endgroup::
 
 ::group::test-bun/sheet-shared-transition.test.ts:
-(pass) long middle transitions separate routes through a constrained corridor [4.95ms]
+(pass) long middle transitions separate routes through a constrained corridor [4.81ms]
 
 ::endgroup::
 
 ::group::test-bun/web-export.test.ts:
-(pass) groma export completes without a global Backlog command [345.81ms]
-(pass) Backlog export reads only CLI tasks when task storage contains a README [378.29ms]
-(pass) groma export writes the read-only browser map without a server [392.13ms]
-(pass) the export command writes a static site and exits [638.01ms]
-(pass) groma export watch replaces the complete published snapshot [735.60ms]
+(pass) groma export completes without a global Backlog command [260.94ms]
+(pass) groma export writes the read-only browser map without a server [364.33ms]
+(pass) Backlog export reads only CLI tasks when task storage contains a README [388.91ms]
+(pass) the export command writes a static site and exits [579.54ms]
+(pass) groma export watch replaces the complete published snapshot [702.60ms]
 
 ::endgroup::
 
 ::group::test-bun/editing.test.ts:
-(pass) drop intent chooses ancestry and grouping keeps world ownership [84.88ms]
-(pass) invalid relation and details saves leave the source unchanged; clearing fields is explicit [92.37ms]
-(pass) draft relationships survive edits and scans and require explicit acceptance [442.04ms]
+(pass) drop intent chooses ancestry and grouping keeps world ownership [90.74ms]
+(pass) invalid relation and details saves leave the source unchanged; clearing fields is explicit [99.20ms]
+(pass) draft relationships survive edits and scans and require explicit acceptance [430.32ms]
 
 ::endgroup::
 
 ::group::test-bun/web-stats.test.ts:
-(pass) header counts separate internal C4 levels from actors and external systems [0.82ms]
+(pass) header counts separate internal C4 levels from actors and external systems [0.76ms]
 
 ::endgroup::
 
@@ -847,30 +847,30 @@ bun test v1.4.1 (4661e494f)
 ::endgroup::
 
 ::group::test-bun/web-port.test.ts:
-(pass) a busy Web port fails before scanning or starting live subscriptions [81.55ms]
-(pass) interactive concrete-port retry requires consent (accepted: false) [435.91ms]
-(pass) noninteractive failed port default preserves the error and available-port choice [492.88ms]
-(pass) interactive concrete-port retry requires consent (accepted: true) [495.86ms]
-(pass) failed port 0 preserves the runtime error without another choice (interactive: false) [509.13ms]
-(pass) noninteractive failed port 5000 preserves the error and available-port choice [522.57ms]
-(pass) failed port 0 preserves the runtime error without another choice (interactive: true) [531.94ms]
-(pass) noninteractive Web startup on a busy port exits with an available-port command [586.33ms]
+(pass) a busy Web port fails before scanning or starting live subscriptions [133.48ms]
+(pass) interactive concrete-port retry requires consent (accepted: true) [372.77ms]
+(pass) failed port 0 preserves the runtime error without another choice (interactive: false) [431.10ms]
+(pass) noninteractive failed port default preserves the error and available-port choice [459.09ms]
+(pass) interactive concrete-port retry requires consent (accepted: false) [476.95ms]
+(pass) noninteractive failed port 5000 preserves the error and available-port choice [526.08ms]
+(pass) failed port 0 preserves the runtime error without another choice (interactive: true) [535.66ms]
+(pass) noninteractive Web startup on a busy port exits with an available-port command [552.79ms]
 
 ::endgroup::
 
 ::group::test-bun/web-startup.test.ts:
-(pass) a failed automatic scan serves an error instead of an empty architecture [34.97ms]
-(pass) invalid setup input does not initialize or scan the repository [35.12ms]
-(pass) a loading browser reaches the actual failure when startup rejects [38.94ms]
-(pass) browser setup reuses shared initialization and creates Git first [106.41ms]
-(pass) an early browser request waits on startup before opening the ready map [127.85ms]
-(pass) browser setup completes missing records in an existing folder and scans before entering the map [375.86ms]
-(pass) a new empty project opens successfully and gains components through the live scan [579.27ms]
+(pass) invalid setup input does not initialize or scan the repository [16.15ms]
+(pass) a failed automatic scan serves an error instead of an empty architecture [28.81ms]
+(pass) a loading browser reaches the actual failure when startup rejects [36.17ms]
+(pass) browser setup reuses shared initialization and creates Git first [101.93ms]
+(pass) an early browser request waits on startup before opening the ready map [123.98ms]
+(pass) browser setup completes missing records in an existing folder and scans before entering the map [353.80ms]
+(pass) a new empty project opens successfully and gains components through the live scan [527.18ms]
 
 ::endgroup::
 
 ::group::test-bun/web-camera-motion.test.ts:
-(pass) camera navigation interpolates position and zoom together and ends at the exact destination [0.20ms]
+(pass) camera navigation interpolates position and zoom together and ends at the exact destination [0.21ms]
 (pass) new navigation starts from the displayed position instead of the unfinished destination [0.05ms]
 (pass) direct gestures or reduced motion replace and cancel an animated destination [0.05ms]
 
@@ -878,502 +878,502 @@ bun test v1.4.1 (4661e494f)
 
 ::group::test-bun/web-flow-activation.test.ts:
 (pass) flows toggle independently and the last checked flow owns the reader [0.16ms]
-(pass) a flow opened from details keeps its origin only for that visit [0.04ms]
-(pass) a file reader occupies the details Back slot during a flow visit [0.06ms]
-(pass) step focus retains the complete Web path and omits unrelated collaborations [10.69ms]
-(pass) checked flows combine explicit paths and survive world updates without stale steps [11.45ms]
+(pass) a flow opened from details keeps its origin only for that visit [0.05ms]
+(pass) a file reader occupies the details Back slot during a flow visit [0.05ms]
+(pass) step focus retains the complete Web path and omits unrelated collaborations [9.86ms]
+(pass) checked flows combine explicit paths and survive world updates without stale steps [9.83ms]
 
 ::endgroup::
 
 ::group::test-bun/keys.test.ts:
-(pass) ? opens the keys box in the details pane and Escape brings the previous details back without touching the map [1.70ms]
+(pass) ? opens the keys box in the details pane and Escape brings the previous details back without touching the map [1.37ms]
 
 ::endgroup::
 
 ::group::test-bun/work-pins.test.ts:
-(pass) a pin stands on the element holding the last modified file, else on the first referenced element [0.50ms]
-(pass) a task touches the elements of its modified files, newest first, then the ones it references, each once [0.25ms]
-(pass) an element receives default, intermediate, and terminal work groups only when tasks touch it [0.45ms]
-(pass) every assignee and task pair gets one ordered pin with task progress [0.28ms]
+(pass) a pin stands on the element holding the last modified file, else on the first referenced element [0.43ms]
+(pass) a task touches the elements of its modified files, newest first, then the ones it references, each once [0.18ms]
+(pass) an element receives default, intermediate, and terminal work groups only when tasks touch it [0.33ms]
+(pass) every assignee and task pair gets one ordered pin with task progress [0.27ms]
 (pass) an unassigned mapped task gets one generic task pin [0.23ms]
 
 ::endgroup::
 
 ::group::test-bun/backlog-command.test.ts:
-(pass) a Windows Backlog cmd shim reads summaries and details from a path with spaces [0.22ms]
-(pass) Backlog CLI reads do not depend on a local task directory [0.63ms]
+(pass) a Windows Backlog cmd shim reads summaries and details from a path with spaces [0.24ms]
+(pass) Backlog CLI reads do not depend on a local task directory [0.61ms]
 
 ::endgroup::
 
 ::group::test-bun/work.test.ts:
-(pass) Work orders default, active and terminal groups while selecting an expanded active task [1.19ms]
-(pass) Work projection shares modified-file and reference touch meaning with the web [1.11ms]
-(pass) Work chooses component scope for one container and root for several [0.73ms]
+(pass) Work orders default, active and terminal groups while selecting an expanded active task [1.07ms]
+(pass) Work projection shares modified-file and reference touch meaning with the web [1.05ms]
+(pass) Work chooses component scope for one container and root for several [0.72ms]
 (pass) Work refresh preserves a valid task, initializes delayed work, and clears a removed task [0.15ms]
-(pass) Backlog nullable JSON fields keep the string-based work contract [0.34ms]
-(pass) corners follow the shown statuses and name the selected task first [0.89ms]
-(pass) at root a component task stands on its container row and never on the island [0.56ms]
-(pass) status toggles start without the default and final statuses and flip one status without moving the map [1.01ms]
-(pass) the component Tasks tab walks related tasks and Enter opens the record [0.99ms]
-(pass) the viewer reads the opened record through the host [34.73ms]
-(pass) Backlog plugin needs no watcher when the project has no Backlog tasks [53.53ms]
-(pass) Backlog plugin reads CLI summaries once and selected details on demand [56.79ms]
-(pass) Backlog plugin signals a task-directory change [125.12ms]
-(pass) a missing Backlog command reports readiness and supplies empty work [288.59ms]
-(pass) host opens the viewer without waiting for a Backlog read [284.03ms]
-(pass) a failed Backlog read leaves architecture refresh working [315.72ms]
-(pass) host refreshes the viewer from a changed work snapshot [351.07ms]
+(pass) Backlog nullable JSON fields keep the string-based work contract [0.30ms]
+(pass) corners follow the shown statuses and name the selected task first [0.91ms]
+(pass) at root a component task stands on its container row and never on the island [0.58ms]
+(pass) status toggles start without the default and final statuses and flip one status without moving the map [0.78ms]
+(pass) the component Tasks tab walks related tasks and Enter opens the record [0.95ms]
+(pass) the viewer reads the opened record through the host [30.06ms]
+(pass) Backlog plugin needs no watcher when the project has no Backlog tasks [47.96ms]
+(pass) Backlog plugin reads CLI summaries once and selected details on demand [53.44ms]
+(pass) Backlog plugin signals a task-directory change [119.30ms]
+(pass) host opens the viewer without waiting for a Backlog read [266.10ms]
+(pass) a missing Backlog command reports readiness and supplies empty work [284.20ms]
+(pass) a failed Backlog read leaves architecture refresh working [299.51ms]
+(pass) host refreshes the viewer from a changed work snapshot [340.17ms]
 
 ::endgroup::
 
 ::group::test-bun/web-authoring.test.ts:
-(pass) the web edits meaning through the edit verb [1613.32ms]
-(pass) a refused write reports the violated ownership rule and changes nothing [1627.42ms]
-(pass) the web adds and removes through the same verbs as the CLI [1713.57ms]
-(pass) the web accepts a matched ghost and moves an empty component through shared writes [2089.04ms]
-(pass) the web groups sibling components through add, edit and remove [2106.25ms]
-(pass) the web authors and edits current relationships but refuses their removal [2204.98ms]
+(pass) the web adds and removes through the same verbs as the CLI [1600.86ms]
+(pass) the web groups sibling components through add, edit and remove [1854.86ms]
+(pass) the web edits meaning through the edit verb [1969.09ms]
+(pass) a refused write reports the violated ownership rule and changes nothing [1973.03ms]
+(pass) the web accepts a matched ghost and moves an empty component through shared writes [1990.20ms]
+(pass) the web authors and edits current relationships but refuses their removal [2236.36ms]
 
 ::endgroup::
 
 ::group::test-bun/tree.test.ts:
-(pass) the containment tree lists every element once and tracks collapse state [0.57ms]
-(pass) manual toggles cannot hide a selection path [0.54ms]
-(pass) tree focus moves the cursor and enter drives selection and level [1.58ms]
-(pass) tree scrolling keeps the cursor inside the visible window [1.50ms]
+(pass) the containment tree lists every element once and tracks collapse state [0.56ms]
+(pass) manual toggles cannot hide a selection path [0.58ms]
+(pass) tree focus moves the cursor and enter drives selection and level [1.49ms]
+(pass) tree scrolling keeps the cursor inside the visible window [1.49ms]
 
 ::endgroup::
 
 ::group::test-bun/scanner-evidence.test.ts:
-(pass) the shared contract validates and orders complete evidence [0.71ms]
-(pass) C# watch evidence includes projects and excludes build output [0.13ms]
-(pass) an observed name alone never claims an unknown file [17.26ms]
-(pass) reconciliation qualifies reserved document names [19.97ms]
-(pass) reconciliation drops missing Code files without changing authored architecture [22.33ms]
-(pass) reconciliation keeps curated multi-file ownership and isolates new files [27.12ms]
-(pass) a qualified empty project container is reused on repeat scans [26.40ms]
-(pass) TypeScript emits one file fact and separate inferred placement [45.83ms]
-(pass) C# adapter uses its plugin package and the shared contract [65.20ms]
+(pass) the shared contract validates and orders complete evidence [0.73ms]
+(pass) C# watch evidence includes projects and excludes build output [0.10ms]
+(pass) an observed name alone never claims an unknown file [17.80ms]
+(pass) reconciliation qualifies reserved document names [21.52ms]
+(pass) reconciliation drops missing Code files without changing authored architecture [27.03ms]
+(pass) a qualified empty project container is reused on repeat scans [27.16ms]
+(pass) reconciliation keeps curated multi-file ownership and isolates new files [29.89ms]
+(pass) TypeScript emits one file fact and separate inferred placement [42.71ms]
+(pass) C# adapter uses its plugin package and the shared contract [66.54ms]
 
 ::endgroup::
 
 ::group::test-bun/web-first-run.test.ts:
-(pass) a repository with no commit yet serves the invitation with an empty history [952.50ms]
-(pass) a refused draft answers with the CLI sentence and writes nothing [1013.04ms]
-(pass) drafting from an empty world preserves draft architecture until components exist [1019.10ms]
-(pass) an empty live page shows the invitation without a system draft form [1046.14ms]
+(pass) a refused draft answers with the CLI sentence and writes nothing [832.95ms]
+(pass) an empty live page shows the invitation without a system draft form [873.85ms]
+(pass) a repository with no commit yet serves the invitation with an empty history [874.78ms]
+(pass) drafting from an empty world preserves draft architecture until components exist [1141.92ms]
 
 ::endgroup::
 
 ::group::test-bun/iso-map.test.ts:
-(pass) ground depth grows down the screen and height rises [0.25ms]
-(pass) a box shows its top and the two faces turned to the viewer [2.17ms]
-(pass) orbit projection turns visible walls and painter depth around the vertical axis [0.45ms]
-(pass) a many-file component projects as one centred compressed tower [11.72ms]
-(pass) zooming keeps the point under the cursor still and clamps to the supported range [0.32ms]
-(pass) a plain wheel pans by the scroll delta; a pinch or cmd+wheel zooms [2.90ms]
-(pass) Escape clears selection while x has no map action [0.06ms]
-(pass) an off-centre route meets the near wall of the actor it leaves, front side or under the roof [5.48ms]
-(pass) a route meets the visible upper face of a stepped tower [3.92ms]
-(pass) roof text keeps its owning shape inset [195.43ms]
-(pass) surface text fits its reserved front band [194.66ms]
-(pass) the fitted camera shows every point inside the viewport [208.83ms]
-(pass) the compass and its direction letters fit the frame without touching architecture [192.47ms]
-(pass) the project plate stays outside architecture and inside the fitted bounds [207.01ms]
-(pass) curved roof titles stay centered in their owning shape [218.79ms]
-(pass) projecting a frozen world leaves it untouched [221.86ms]
-(pass) every relationship has a polyline whose arrowhead lies on the sheet along its last step [235.40ms]
-(pass) buildings paint back to front [261.46ms]
+(pass) ground depth grows down the screen and height rises [0.17ms]
+(pass) a box shows its top and the two faces turned to the viewer [3.44ms]
+(pass) orbit projection turns visible walls and painter depth around the vertical axis [0.42ms]
+(pass) a many-file component projects as one centred compressed tower [5.81ms]
+(pass) zooming keeps the point under the cursor still and clamps to the supported range [0.28ms]
+(pass) a plain wheel pans by the scroll delta; a pinch or cmd+wheel zooms [0.10ms]
+(pass) Escape clears selection while x has no map action [0.05ms]
+(pass) an off-centre route meets the near wall of the actor it leaves, front side or under the roof [2.43ms]
+(pass) a route meets the visible upper face of a stepped tower [0.40ms]
+(pass) surface text fits its reserved front band [80.21ms]
+(pass) every relationship has a polyline whose arrowhead lies on the sheet along its last step [84.15ms]
+(pass) roof text keeps its owning shape inset [81.04ms]
+(pass) the fitted camera shows every point inside the viewport [101.81ms]
+(pass) projecting a frozen world leaves it untouched [109.25ms]
+(pass) the compass and its direction letters fit the frame without touching architecture [108.89ms]
+(pass) the project plate stays outside architecture and inside the fitted bounds [120.79ms]
+(pass) curved roof titles stay centered in their owning shape [132.77ms]
+(pass) buildings paint back to front [148.62ms]
 
 ::endgroup::
 
 ::group::test-bun/flows.test.ts:
-(pass) duplicate file declarations fail before flow resolution [19.47ms]
-(pass) Markdown links resolve ordered steps, including a callback and repeated relationship [20.16ms]
-(pass) a flow rejects a missing directed relationship [19.64ms]
-(pass) membership omits outgoing connections not authored in the scenario and a step selects one route [22.23ms]
-(pass) flow records preserve the shared sheet and reach the browser payload [30.08ms]
-(pass) flow authoring edits steps and blocks removal of referenced endpoints or connections [74.11ms]
+(pass) duplicate file declarations fail before flow resolution [18.27ms]
+(pass) a flow rejects a missing directed relationship [18.46ms]
+(pass) Markdown links resolve ordered steps, including a callback and repeated relationship [18.91ms]
+(pass) membership omits outgoing connections not authored in the scenario and a step selects one route [21.78ms]
+(pass) flow records preserve the shared sheet and reach the browser payload [28.59ms]
+(pass) flow authoring edits steps and blocks removal of referenced endpoints or connections [70.06ms]
 
 ::endgroup::
 
 ::group::test-bun/work-summary.test.ts:
-(pass) the filtered count deduplicates assignee pins and excludes unmapped tasks [0.60ms]
-(pass) initial snapshots, unchanged repaints and filter changes do not invent task activity [0.40ms]
-(pass) progress and record updates announce once even when the count stays the same [0.21ms]
-(pass) completion of shown work is announced before its count disappears under the filter [0.23ms]
-(pass) mapped arrivals and departures update the summary while hidden work stays quiet [0.31ms]
-(pass) a batch prioritizes completion and otherwise exposes its most recent task change [0.32ms]
+(pass) the filtered count deduplicates assignee pins and excludes unmapped tasks [0.63ms]
+(pass) initial snapshots, unchanged repaints and filter changes do not invent task activity [0.32ms]
+(pass) progress and record updates announce once even when the count stays the same [0.19ms]
+(pass) completion of shown work is announced before its count disappears under the filter [0.15ms]
+(pass) mapped arrivals and departures update the summary while hidden work stays quiet [0.25ms]
+(pass) a batch prioritizes completion and otherwise exposes its most recent task change [0.21ms]
 
 ::endgroup::
 
 ::group::test-bun/web-live.test.ts:
-(pass) groma web reports an invalid project without opening its map [99.01ms]
-(pass) groma web loads work asynchronously and updates only the work overlay [895.18ms]
-(pass) the Web host leaves initial scanning to its caller and applies a watched fold [1542.40ms]
-(pass) groma web serves a selected Git snapshot without changing repository state [1807.96ms]
-(pass) groma web saves the project profile and publishes it without a refresh [1882.59ms]
-(pass) groma web reads component code on demand from the selected revision [1896.83ms]
-(pass) groma web marks obsolete Markdown revisions unsupported [2140.16ms]
-(pass) groma web applies an architecture Markdown change without a refresh [2153.09ms]
+(pass) groma web reports an invalid project without opening its map [195.83ms]
+(pass) groma web loads work asynchronously and updates only the work overlay [1035.63ms]
+(pass) groma web saves the project profile and publishes it without a refresh [1270.94ms]
+(pass) the Web host leaves initial scanning to its caller and applies a watched fold [1608.43ms]
+(pass) groma web serves a selected Git snapshot without changing repository state [1735.89ms]
+(pass) groma web marks obsolete Markdown revisions unsupported [1809.37ms]
+(pass) groma web reads component code on demand from the selected revision [1879.24ms]
+(pass) groma web applies an architecture Markdown change without a refresh [2026.78ms]
 
 ::endgroup::
 
 ::group::test-bun/work-badge.test.ts:
-(pass) an existing running badge finishes once when it becomes Done [0.23ms]
-(pass) initial and unchanged Done badges do not finish again [0.05ms]
-(pass) an update that stays outside Done does not finish a badge [0.03ms]
+(pass) an existing running badge finishes once when it becomes Done [0.28ms]
+(pass) initial and unchanged Done badges do not finish again [0.07ms]
+(pass) an update that stays outside Done does not finish a badge [0.04ms]
 
 ::endgroup::
 
 ::group::test-bun/blueprint-research.test.ts:
-(pass) inert portable blueprint text > Unicode survives clipboard round-trip [2.41ms]
-(pass) inert portable blueprint text > import rejects URLs and unsupported transport versions [0.08ms]
-(pass) inert portable blueprint text > damaged clipboard text fails closed [0.06ms]
-(pass) inert portable blueprint text > future content versions are rejected without migration [0.19ms]
-(pass) inert portable blueprint text > source evidence and executable fields cannot be imported [0.33ms]
-(pass) inert portable blueprint text > unknown nested fields cannot smuggle local evidence [0.18ms]
-(pass) inert portable blueprint text > all local participant keys are unique [0.26ms]
-(pass) inert portable blueprint text > new parts require declared parent roles [0.28ms]
-(pass) inert portable blueprint text > a component cannot be used as the parent role [0.22ms]
-(pass) inert portable blueprint text > relationships cannot refer outside the pattern [0.17ms]
-(pass) inert portable blueprint text > self and duplicate relationships are rejected [1.82ms]
-(pass) inert portable blueprint text > empty outcome and oversized clipboard are rejected [0.49ms]
-(pass) inert portable blueprint text > readable export includes roles and relationships but not receiving-project IDs [2.44ms]
+(pass) inert portable blueprint text > Unicode survives clipboard round-trip [3.42ms]
+(pass) inert portable blueprint text > import rejects URLs and unsupported transport versions [0.09ms]
+(pass) inert portable blueprint text > damaged clipboard text fails closed [0.14ms]
+(pass) inert portable blueprint text > future content versions are rejected without migration [0.23ms]
+(pass) inert portable blueprint text > source evidence and executable fields cannot be imported [0.35ms]
+(pass) inert portable blueprint text > unknown nested fields cannot smuggle local evidence [0.24ms]
+(pass) inert portable blueprint text > all local participant keys are unique [0.27ms]
+(pass) inert portable blueprint text > new parts require declared parent roles [1.98ms]
+(pass) inert portable blueprint text > a component cannot be used as the parent role [0.25ms]
+(pass) inert portable blueprint text > relationships cannot refer outside the pattern [0.21ms]
+(pass) inert portable blueprint text > self and duplicate relationships are rejected [0.44ms]
+(pass) inert portable blueprint text > empty outcome and oversized clipboard are rejected [0.47ms]
+(pass) inert portable blueprint text > readable export includes roles and relationships but not receiving-project IDs [3.25ms]
 (pass) semantic placement > a different project does not get a guessed component binding [0.45ms]
-(pass) semantic placement > same-name ambiguity remains unresolved [0.22ms]
-(pass) semantic placement > wrong kinds, missing roles and unknown binding keys fail [0.51ms]
-(pass) semantic placement > draft elements are not candidates for existing roles [0.18ms]
-(pass) semantic placement > distinct roles cannot collapse into one current element [0.25ms]
-(pass) semantic placement > preview does not mutate either source and uses the bound parent [0.39ms]
-(pass) semantic placement > local identities and relationships are fully remapped [0.36ms]
-(pass) semantic placement > existing ID collisions do not overwrite an element [0.18ms]
-(pass) semantic placement > create preserves every current record and evidence byte [0.37ms]
-(pass) semantic placement > repeated paste creates independent drafts that can overlap [0.78ms]
-(pass) semantic placement > saved draft is independent of later changes to a library object [0.18ms]
-(pass) semantic placement > copying retained intent never copies receiving evidence [0.70ms]
-(pass) semantic placement > storage refusal cannot publish a partial draft [0.37ms]
-(pass) semantic placement > a sequentially stale preview cannot overwrite another saved draft [0.50ms]
-(pass) semantic placement > refreshing only a baseline cannot overwrite another draft with stale project data [0.94ms]
-(pass) semantic placement > tampered previews require another review [0.40ms]
-(pass) semantic placement > projection includes design intent without mutating current graph or draft [0.72ms]
+(pass) semantic placement > same-name ambiguity remains unresolved [0.84ms]
+(pass) semantic placement > wrong kinds, missing roles and unknown binding keys fail [0.71ms]
+(pass) semantic placement > draft elements are not candidates for existing roles [0.22ms]
+(pass) semantic placement > distinct roles cannot collapse into one current element [0.35ms]
+(pass) semantic placement > preview does not mutate either source and uses the bound parent [1.89ms]
+(pass) semantic placement > local identities and relationships are fully remapped [0.56ms]
+(pass) semantic placement > existing ID collisions do not overwrite an element [0.32ms]
+(pass) semantic placement > create preserves every current record and evidence byte [0.59ms]
+(pass) semantic placement > repeated paste creates independent drafts that can overlap [0.98ms]
+(pass) semantic placement > saved draft is independent of later changes to a library object [0.35ms]
+(pass) semantic placement > copying retained intent never copies receiving evidence [2.71ms]
+(pass) semantic placement > storage refusal cannot publish a partial draft [0.65ms]
+(pass) semantic placement > a sequentially stale preview cannot overwrite another saved draft [0.60ms]
+(pass) semantic placement > refreshing only a baseline cannot overwrite another draft with stale project data [0.49ms]
+(pass) semantic placement > tampered previews require another review [0.45ms]
+(pass) semantic placement > projection includes design intent without mutating current graph or draft [0.66ms]
 
 ::endgroup::
 
 ::group::test-bun/web-selection.test.ts:
-(pass) every concrete selection owns details and the empty selection does not [0.13ms]
-(pass) a plain architecture pick replaces the current selection [0.07ms]
+(pass) every concrete selection owns details and the empty selection does not [0.16ms]
+(pass) a plain architecture pick replaces the current selection [0.08ms]
 (pass) additive architecture picks append and toggle in selection order [0.08ms]
-(pass) task selection is separate from architecture selection [0.06ms]
+(pass) task selection is separate from architecture selection [0.08ms]
 (pass) live selection keeps known targets in their original order [0.10ms]
 
 ::endgroup::
 
 ::group::test-bun/task-diff.test.ts:
-(pass) active task diff labels files recorded by another active task as shared [21.53ms]
-(pass) completed task diff reads only its exact task commit [34.42ms]
+(pass) active task diff labels files recorded by another active task as shared [45.29ms]
+(pass) completed task diff reads only its exact task commit [62.10ms]
 
 ::endgroup::
 
 ::group::test-bun/parcel-bytecode.test.ts:
-(pass) the same Parcel import receives native events in source and standalone bytecode [283.05ms]
+(pass) the same Parcel import receives native events in source and standalone bytecode [293.31ms]
 
 ::endgroup::
 
 ::group::test-bun/tui-revision.test.ts:
-(pass) history lists branch revisions and switches read-only before returning to Current [380.74ms]
+(pass) history lists branch revisions and switches read-only before returning to Current [383.69ms]
 
 ::endgroup::
 
 ::group::test-bun/root-layout.test.ts:
-(pass) an island contains one row per child and stays separate from its neighbours [0.50ms]
-(pass) a wide row wraps its blocks and the island grows down inside the map padding [0.62ms]
+(pass) an island contains one row per child and stays separate from its neighbours [0.41ms]
+(pass) a wide row wraps its blocks and the island grows down inside the map padding [0.61ms]
 
 ::endgroup::
 
 ::group::test-bun/git-history.test.ts:
-(pass) a Git revision loads a complete isolated repository snapshot [22.91ms]
-(pass) Git history follows the selected hidden Groma directory [34.59ms]
+(pass) a Git revision loads a complete isolated repository snapshot [20.91ms]
+(pass) Git history follows the selected hidden Groma directory [34.65ms]
 
 ::endgroup::
 
 ::group::test-bun/work-folding.test.ts:
-(pass) status folding preserves map filters and moves hidden task selection to its header [0.66ms]
-(pass) component task groups and global Work share folding without coupling it to map visibility [0.91ms]
-(pass) a long record reads every row before and after links and returns from a diff to the same row [35.96ms]
+(pass) status folding preserves map filters and moves hidden task selection to its header [0.61ms]
+(pass) component task groups and global Work share folding without coupling it to map visibility [0.94ms]
+(pass) a long record reads every row before and after links and returns from a diff to the same row [34.28ms]
 
 ::endgroup::
 
 ::group::test-bun/large-world.test.ts:
 (pass) a route is painted when a segment crosses the viewport, not when only its box does [0.06ms]
-(pass) arrow keys reach every element of the root map and of every container map [4401.10ms]
-(pass) the painter visits only the items and routes that touch the viewport [4400.91ms]
-(pass) arrow navigation keeps root framing and bounds component follow [4400.75ms]
+(pass) arrow keys reach every element of the root map and of every container map [3738.20ms]
+(pass) the painter visits only the items and routes that touch the viewport [3738.02ms]
+(pass) arrow navigation keeps root framing and bounds component follow [3737.87ms]
 
 ::endgroup::
 
 ::group::test-bun/navigation.test.ts:
-(pass) map navigation enters only containers and returns to the same container [1.52ms]
-(pass) map edges preserve map focus until an explicit pane key [0.27ms]
-(pass) container arrows select only buildings in the pressed direction [0.63ms]
-(pass) root arrows walk the rows of an island and cross to its neighbours [0.39ms]
-(pass) Escape returns to the map without changing pane visibility, scope or selection [0.35ms]
-(pass) a one-row rectangle overlap selects the nearer card outside the centre cone [0.11ms]
-(pass) Work focus keeps architecture and flow state while tasks own the side panes [1.07ms]
-(pass) component Tasks and global Work open the same record, diff and architecture reference [1.44ms]
-(pass) folding the Backlog hierarchy leaves map arrows usable [0.75ms]
-(pass) How navigates declarations while What follows a selected relationship [0.83ms]
-(pass) search follows matches live and cancel restores the prior view [15.20ms]
+(pass) map navigation enters only containers and returns to the same container [2.56ms]
+(pass) map edges preserve map focus until an explicit pane key [0.49ms]
+(pass) container arrows select only buildings in the pressed direction [1.01ms]
+(pass) root arrows walk the rows of an island and cross to its neighbours [0.56ms]
+(pass) Escape returns to the map without changing pane visibility, scope or selection [0.39ms]
+(pass) a one-row rectangle overlap selects the nearer card outside the centre cone [0.12ms]
+(pass) Work focus keeps architecture and flow state while tasks own the side panes [1.32ms]
+(pass) component Tasks and global Work open the same record, diff and architecture reference [2.07ms]
+(pass) folding the Backlog hierarchy leaves map arrows usable [0.86ms]
+(pass) How navigates declarations while What follows a selected relationship [1.03ms]
+(pass) search follows matches live and cancel restores the prior view [21.62ms]
 
 ::endgroup::
 
 ::group::test-bun/inspect-details.test.ts:
-(pass) details list children, promoted peers, and files [0.35ms]
-(pass) the Tasks tab exists only while the selected component has linked work [0.09ms]
+(pass) details list children, promoted peers, and files [0.36ms]
+(pass) the Tasks tab exists only while the selected component has linked work [0.10ms]
 (pass) How shows Code without a separate Files or Findings section [0.03ms]
 (pass) the build tab resets only when the primary selection changes [0.02ms]
 (pass) live work closes Tasks when the selected component has no linked task [0.02ms]
-(pass) the details pane offers Remove only where the verb would succeed [0.15ms]
-(pass) Accept and Parent reflect the core-projected element states [0.15ms]
+(pass) the details pane offers Remove only where the verb would succeed [0.18ms]
+(pass) Accept and Parent reflect the core-projected element states [0.16ms]
 
 ::endgroup::
 
 ::group::test-bun/web-url.test.ts:
-(pass) a complete view round-trips through the canonical query hierarchy [0.84ms]
+(pass) a complete view round-trips through the canonical query hierarchy [0.86ms]
 (pass) defaults write nothing and read back as the default view [0.11ms]
-(pass) a known Git revision is shareable while unknown revisions are ignored [0.08ms]
-(pass) a component-owned source file restores and Back clears only the file drill-down [0.18ms]
-(pass) the component Tasks tab is shareable through the existing tab state [0.10ms]
-(pass) a selected relationship is carried as its source and target ids [0.10ms]
+(pass) a known Git revision is shareable while unknown revisions are ignored [0.09ms]
+(pass) a component-owned source file restores and Back clears only the file drill-down [0.23ms]
+(pass) the component Tasks tab is shareable through the existing tab state [0.09ms]
+(pass) a selected relationship is carried as its source and target ids [0.09ms]
 (pass) a selected task is carried by its id while the work knows it [0.12ms]
-(pass) unknown ids, kinds and values are ignored [0.08ms]
-(pass) explicit themes are shareable while an absent theme uses the supplied preference [0.11ms]
-(pass) map-only mode is shareable while the HUD remains the default [0.06ms]
+(pass) unknown ids, kinds and values are ignored [0.09ms]
+(pass) explicit themes are shareable while an absent theme uses the supplied preference [0.12ms]
+(pass) map-only mode is shareable while the HUD remains the default [0.08ms]
 (pass) an authored flow link opens its reader and restores the ordered step [0.11ms]
-(pass) repeated architecture parameters restore one ordered selection and ignore unknown entries [0.08ms]
-(pass) a shared multi-flow view restores every checked path and the last reader [0.13ms]
+(pass) repeated architecture parameters restore one ordered selection and ignore unknown entries [0.07ms]
+(pass) a shared multi-flow view restores every checked path and the last reader [0.16ms]
 
 ::endgroup::
 
 ::group::test-bun/flow-navigation.test.ts:
-(pass) flow reading, endpoint inspection and return retain the authored step and membership [12.28ms]
-(pass) selecting a flow step preserves map geometry and promotes its exact endpoints [13.41ms]
+(pass) flow reading, endpoint inspection and return retain the authored step and membership [11.69ms]
+(pass) selecting a flow step preserves map geometry and promotes its exact endpoints [13.57ms]
 
 ::endgroup::
 
 ::group::test-bun/web-task-camera.test.ts:
-(pass) camera focus fits task routes with context room [0.50ms]
+(pass) camera focus fits task routes with context room [0.54ms]
 
 ::endgroup::
 
 ::group::test-bun/route-spacing.test.ts:
-(pass) parallel strokes with distinct coordinates separate without losing endpoints or direction [0.47ms]
+(pass) parallel strokes with distinct coordinates separate without losing endpoints or direction [0.52ms]
 
 ::endgroup::
 
 ::group::test-bun/projection-routes.test.ts:
 (pass) a route runs orthogonally from outside its source to outside its target [0.08ms]
-(pass) routes avoid foreign cards and do not re-enter their endpoints [0.23ms]
-(pass) root routes promote hidden endpoints to their rows and skip rows of one island [0.74ms]
-(pass) repeated route promotion preserves the shared sheet and relationship identities [0.65ms]
+(pass) routes avoid foreign cards and do not re-enter their endpoints [0.25ms]
+(pass) root routes promote hidden endpoints to their rows and skip rows of one island [0.77ms]
+(pass) repeated route promotion preserves the shared sheet and relationship identities [0.73ms]
 
 ::endgroup::
 
 ::group::test-bun/building-port-attachment.test.ts:
-(pass) additional building ports subdivide the usable edge span without moving toward corners [2.10ms]
-(pass) busy stepped-tower ports meet visible faces with distinct tips clear of their corners [2.83ms]
-(pass) parallel connections approach their walls directly without a final sideways snap [2.79ms]
-(pass) shortcuts leave and enter a stepped roof away from its visible corners [0.81ms]
+(pass) additional building ports subdivide the usable edge span without moving toward corners [2.28ms]
+(pass) busy stepped-tower ports meet visible faces with distinct tips clear of their corners [2.74ms]
+(pass) parallel connections approach their walls directly without a final sideways snap [2.23ms]
+(pass) shortcuts leave and enter a stepped roof away from its visible corners [0.88ms]
 
 ::endgroup::
 
 ::group::test-bun/source-relationships.test.ts:
-(pass) changing a supplied object before passing it leaves the provider unresolved [100.84ms]
-(pass) all known alternatives within one binding must have the same provider owner [109.04ms]
-(pass) a supplied member overwritten by the receiver does not retain its original provider claim [115.12ms]
-(pass) repeated forwarding preserves distinct concrete bindings without multiplying identical evidence [116.50ms]
-(pass) uncertain alternatives prevent emission even when one known callback target remains [133.82ms]
-(pass) operation resolution follows aliases but preserves executable wrappers and concrete callback bindings [164.43ms]
-(pass) removing the observed callback removes only the derived interaction [193.79ms]
-(pass) draft interactions stay separate from current derivation and require explicit acceptance [231.13ms]
-(pass) scan replaces a CRLF derived section instead of appending duplicate rows [247.12ms]
-(pass) scan stores selected interactions without analysis graphs and reload projects current owners [257.68ms]
-(pass) editing a derived interaction takes authorship and preserves its meaning through rescans [272.83ms]
+(pass) a supplied member overwritten by the receiver does not retain its original provider claim [99.99ms]
+(pass) all known alternatives within one binding must have the same provider owner [109.76ms]
+(pass) changing a supplied object before passing it leaves the provider unresolved [109.92ms]
+(pass) repeated forwarding preserves distinct concrete bindings without multiplying identical evidence [129.97ms]
+(pass) uncertain alternatives prevent emission even when one known callback target remains [135.19ms]
+(pass) operation resolution follows aliases but preserves executable wrappers and concrete callback bindings [172.65ms]
+(pass) removing the observed callback removes only the derived interaction [195.64ms]
+(pass) scan replaces a CRLF derived section instead of appending duplicate rows [205.43ms]
+(pass) scan stores selected interactions without analysis graphs and reload projects current owners [247.67ms]
+(pass) draft interactions stay separate from current derivation and require explicit acceptance [256.59ms]
+(pass) editing a derived interaction takes authorship and preserves its meaning through rescans [273.06ms]
 
 ::endgroup::
 
 ::group::test-bun/web-task-live.test.ts:
-(pass) groma web opens without a global Backlog command [82.46ms]
-(pass) groma web loads selected task details and diff outside the initial payload [102.67ms]
+(pass) groma web opens without a global Backlog command [89.98ms]
+(pass) groma web loads selected task details and diff outside the initial payload [90.78ms]
 
 ::endgroup::
 
 ::group::test-bun/okf-profile-view.test.ts:
-(pass) Web history rejects a pre-OKF Groma revision [80.99ms]
+(pass) Web history rejects a pre-OKF Groma revision [78.27ms]
 
 ::endgroup::
 
 ::group::test-bun/structural-results.test.ts:
-(pass) component combine reports all absorbed IDs and executed paths [57.26ms]
-(pass) container combine reports moved children without replacing their IDs [70.51ms]
-(pass) group verbs report the members written, without inventing an element ID for the group [119.97ms]
-(pass) CLI move reports both ownership paths and keeps the ID [282.06ms]
-(pass) rejected structural command has no success result or file changes [289.00ms]
+(pass) component combine reports all absorbed IDs and executed paths [68.02ms]
+(pass) container combine reports moved children without replacing their IDs [68.24ms]
+(pass) group verbs report the members written, without inventing an element ID for the group [106.41ms]
+(pass) CLI move reports both ownership paths and keeps the ID [268.09ms]
+(pass) rejected structural command has no success result or file changes [277.20ms]
 
 ::endgroup::
 
 ::group::test-bun/search.test.ts:
-(pass) architecture search ranks semantic fields and returns ancestor context [0.64ms]
-(pass) architecture search returns no result for an empty query [0.07ms]
+(pass) architecture search ranks semantic fields and returns ancestor context [0.40ms]
+(pass) architecture search returns no result for an empty query [0.08ms]
 
 ::endgroup::
 
 ::group::test-bun/viewer-live.test.ts:
-(pass) groma view applies an architecture Markdown change without R [246.13ms]
-(pass) the terminal host leaves initial scanning to its caller and applies a watched fold [698.56ms]
+(pass) groma view applies an architecture Markdown change without R [244.77ms]
+(pass) the terminal host leaves initial scanning to its caller and applies a watched fold [693.27ms]
 
 ::endgroup::
 
 ::group::test-bun/relationship-text.test.ts:
-(pass) relationship text is only for exclusive endpoints [0.14ms]
-(pass) promoted peers sit at the selection depth [0.09ms]
+(pass) relationship text is only for exclusive endpoints [0.13ms]
+(pass) promoted peers sit at the selection depth [0.07ms]
 
 ::endgroup::
 
 ::group::test-bun/sheet-scene.test.ts:
-(pass) every footprint remains finite and at least two cells a side [0.71ms]
-(pass) siblings never overlap and keep the gap on one axis [0.60ms]
-(pass) a building keeps the ground its roof hides clear of its north and west neighbours [1.79ms]
-(pass) system islands and slabs reserve content padding before their title bands [0.63ms]
-(pass) islands stay west-to-east: actors first and externals last [0.24ms]
-(pass) actors and external islands centre their buildings above their title band [0.25ms]
-(pass) a group becomes a zone around its members on the parent surface [0.44ms]
-(pass) adding a sibling that sorts last keeps the earlier buildings in place [0.31ms]
-(pass) file measurements control building height and area while draft and actor heights stay fixed [0.24ms]
-(pass) source files compress into nested project-relative floors without losing a file [0.43ms]
-(pass) a surface is at least as wide as its own name [0.19ms]
-(pass) the sheet is the islands plus the margin, starting at the margin [0.27ms]
+(pass) every footprint remains finite and at least two cells a side [0.66ms]
+(pass) siblings never overlap and keep the gap on one axis [0.56ms]
+(pass) a building keeps the ground its roof hides clear of its north and west neighbours [1.77ms]
+(pass) system islands and slabs reserve content padding before their title bands [0.55ms]
+(pass) islands stay west-to-east: actors first and externals last [0.28ms]
+(pass) actors and external islands centre their buildings above their title band [0.29ms]
+(pass) a group becomes a zone around its members on the parent surface [0.37ms]
+(pass) adding a sibling that sorts last keeps the earlier buildings in place [0.40ms]
+(pass) file measurements control building height and area while draft and actor heights stay fixed [0.25ms]
+(pass) source files compress into nested project-relative floors without losing a file [0.41ms]
+(pass) a surface is at least as wide as its own name [0.21ms]
+(pass) the sheet is the islands plus the margin, starting at the margin [0.28ms]
 (pass) empty containers retain at least the nested-surface padding [0.12ms]
 (pass) children no relationship touches keep the square-ish shelf [0.20ms]
-(pass) the same world gives the same sheet and the world is untouched [14.12ms]
+(pass) the same world gives the same sheet and the world is untouched [13.94ms]
 
 ::endgroup::
 
 ::group::test-bun/welcome.test.ts:
-(pass) the welcome starts on web and returns the entered action [3.63ms]
-(pass) a production handoff suspends the welcome until its action owns the process [2.18ms]
-(pass) arrows choose one action before enter [6.17ms]
-(pass) the Back action returns to the launcher [11.57ms]
-(pass) control-c closes the welcome and releases its input handler [2.19ms]
-(pass) instructions Tab gives arrows the same reading scroll as j/k and returns arrows to guide selection [11.62ms]
-(pass) advanced commands retain selection while arrows and j/k scroll in reading focus [24.84ms]
-(pass) the welcome model reports a missing Backlog command [65.61ms]
-(pass) escape and q close without choosing an action [44.17ms]
-(pass) the welcome derives scanner readiness without executing modules [69.80ms]
+(pass) the welcome starts on web and returns the entered action [3.36ms]
+(pass) a production handoff suspends the welcome until its action owns the process [2.04ms]
+(pass) arrows choose one action before enter [5.38ms]
+(pass) the Back action returns to the launcher [10.28ms]
+(pass) control-c closes the welcome and releases its input handler [1.88ms]
+(pass) instructions Tab gives arrows the same reading scroll as j/k and returns arrows to guide selection [10.25ms]
+(pass) advanced commands retain selection while arrows and j/k scroll in reading focus [24.01ms]
+(pass) the welcome model reports a missing Backlog command [60.12ms]
+(pass) escape and q close without choosing an action [41.03ms]
+(pass) the welcome derives scanner readiness without executing modules [64.02ms]
 
 ::endgroup::
 
 ::group::test-bun/tui-source.test.ts:
-(pass) details declarations open source at their exact line and Escape returns [0.63ms]
-(pass) a task modified file opens its diff and Escape returns to the record [0.77ms]
-(pass) mixed arrow and j/k reading preserves the viewport until the cursor crosses an edge [528.33ms]
-(pass) the task record and file reader share one diff load and preserve the reading row [542.73ms]
-(pass) shared readers return the selected component structure and source [970.80ms]
-(pass) the terminal loads structure and source only when their details open [1035.79ms]
+(pass) details declarations open source at their exact line and Escape returns [0.55ms]
+(pass) a task modified file opens its diff and Escape returns to the record [0.65ms]
+(pass) mixed arrow and j/k reading preserves the viewport until the cursor crosses an edge [527.94ms]
+(pass) the task record and file reader share one diff load and preserve the reading row [542.89ms]
+(pass) shared readers return the selected component structure and source [960.02ms]
+(pass) the terminal loads structure and source only when their details open [996.75ms]
 
 ::endgroup::
 
 ::group::test-bun/architecture-findings.test.ts:
-(pass) renamed copies match exactly and keep owner identity [0.89ms]
-(pass) a missing predicate is a similar finding with a concrete difference [0.43ms]
+(pass) renamed copies match exactly and keep owner identity [0.96ms]
+(pass) a missing predicate is a similar finding with a concrete difference [0.47ms]
 (pass) unrelated computation is not clustered with readiness [0.13ms]
-(pass) similar independent rules still become a review finding [0.27ms]
-(pass) TypeScript operations match after renaming locals and keep literals [28.05ms]
-(pass) scan remembers findings for owners without writing relationships [34.41ms]
+(pass) similar independent rules still become a review finding [0.34ms]
+(pass) TypeScript operations match after renaming locals and keep literals [21.98ms]
+(pass) scan remembers findings for owners without writing relationships [34.49ms]
 
 ::endgroup::
 
 ::group::test-bun/web-layer-mode.test.ts:
-(pass) F2 motion reaches both mode poses and drives the displayed separation [2.31ms]
-(pass) exploded projection separates the three levels without changing the source scene [1.09ms]
-(pass) a relationship joins endpoints that live on different planes [0.61ms]
-(pass) orbit wraps yaw, clamps pitch, and interpolates across the yaw seam [0.12ms]
+(pass) F2 motion reaches both mode poses and drives the displayed separation [2.63ms]
+(pass) exploded projection separates the three levels without changing the source scene [1.28ms]
+(pass) a relationship joins endpoints that live on different planes [0.62ms]
+(pass) orbit wraps yaw, clamps pitch, and interpolates across the yaw seam [0.09ms]
 
 ::endgroup::
 
 ::group::test-bun/work-status-filter.test.ts:
-(pass) only statuses with pins become filters while the default selection follows the workflow [0.08ms]
+(pass) only statuses with pins become filters while the default selection follows the workflow [0.06ms]
 (pass) an unconfigured cold start cannot become an empty user filter choice [0.06ms]
-(pass) custom intermediate statuses start enabled when their first pin arrives [0.03ms]
-(pass) a filter choice survives an empty snapshot and a later pin [0.03ms]
+(pass) custom intermediate statuses start enabled when their first pin arrives [0.04ms]
+(pass) a filter choice survives an empty snapshot and a later pin [0.05ms]
 
 ::endgroup::
 
 ::group::test-bun/web-source-control.test.ts:
-(pass) back from source restores How it is built scroll [0.47ms]
-(pass) clearing source does not restore How it is built scroll [0.16ms]
+(pass) back from source restores How it is built scroll [0.71ms]
+(pass) clearing source does not restore How it is built scroll [0.17ms]
 
 ::endgroup::
 
 ::group::test-bun/sheet-route.test.ts:
-(pass) a busy building still routes every relationship [3.45ms]
-(pass) an earlier route cannot trap another port in a narrow shared-wall exit [0.51ms]
-(pass) connected elements choose ports independently of their owner surfaces [0.44ms]
-(pass) overlapping facing walls share one straight route coordinate [0.22ms]
-(pass) a facing route stays inside both wall spans instead of attaching at a corner [0.41ms]
-(pass) a corner-only facing overlap keeps the routed dogleg [0.35ms]
-(pass) nested routes sharing a building side use a non-crossing pin order [0.74ms]
-(pass) mixed turns do not block a non-crossing shared-side pin order [0.36ms]
-(pass) routing fails clearly when a relationship names an element that was not placed [0.18ms]
-(pass) every authored relationship gets one deterministic orthogonal route with attached ends [39.43ms]
-(pass) the supported viewer fixture has no staircase, reversal, or overloaded fan artifact [38.95ms]
-(pass) fixture routes avoid buildings and never share a path [50.79ms]
+(pass) a busy building still routes every relationship [3.63ms]
+(pass) an earlier route cannot trap another port in a narrow shared-wall exit [0.47ms]
+(pass) connected elements choose ports independently of their owner surfaces [0.37ms]
+(pass) overlapping facing walls share one straight route coordinate [0.31ms]
+(pass) a facing route stays inside both wall spans instead of attaching at a corner [0.39ms]
+(pass) a corner-only facing overlap keeps the routed dogleg [0.29ms]
+(pass) nested routes sharing a building side use a non-crossing pin order [0.76ms]
+(pass) mixed turns do not block a non-crossing shared-side pin order [0.41ms]
+(pass) routing fails clearly when a relationship names an element that was not placed [0.20ms]
+(pass) every authored relationship gets one deterministic orthogonal route with attached ends [26.06ms]
+(pass) the supported viewer fixture has no staircase, reversal, or overloaded fan artifact [34.54ms]
+(pass) fixture routes avoid buildings and never share a path [46.99ms]
 
 ::endgroup::
 
 ::group::test-bun/chrome.test.ts:
-(pass) details changes pane width and the selection stays centred in either map width [0.53ms]
-(pass) leaving Work focus restores the saved map camera [7.67ms]
-(pass) panes start folded by the width table [0.06ms]
-(pass) reading reserves 80 text columns when possible without changing saved pane choices [0.40ms]
+(pass) details changes pane width and the selection stays centred in either map width [0.54ms]
+(pass) leaving Work focus restores the saved map camera [7.43ms]
+(pass) panes start folded by the width table [0.05ms]
+(pass) reading reserves 80 text columns when possible without changing saved pane choices [0.31ms]
 (pass) details can scroll past their final link to the end of a record [0.10ms]
-(pass) shrinking to 80 columns retains map space and permits explicit details focus [0.20ms]
-(pass) Work focus and a folded details pane end the profile [0.37ms]
-(pass) pane keys focus, fold and reopen their pane while Tab stays inside details [0.25ms]
-(pass) a folded hierarchy gives its columns to the map and keeps the selected island centred [50.46ms]
-(pass) details always follows the current selection [59.83ms]
-(pass) a click on a root row selects it [100.11ms]
-(pass) a click on a hierarchy row selects it [108.00ms]
-(pass) p shows the project profile until Escape [111.04ms]
+(pass) shrinking to 80 columns retains map space and permits explicit details focus [0.19ms]
+(pass) Work focus and a folded details pane end the profile [0.33ms]
+(pass) pane keys focus, fold and reopen their pane while Tab stays inside details [0.28ms]
+(pass) a folded hierarchy gives its columns to the map and keeps the selected island centred [50.91ms]
+(pass) details always follows the current selection [90.31ms]
+(pass) a click on a root row selects it [103.22ms]
+(pass) a click on a hierarchy row selects it [105.85ms]
+(pass) p shows the project profile until Escape [109.38ms]
 
 ::endgroup::
 
 ::group::test-bun/web-selection-camera.test.ts:
-(pass) flow camera fits exact routes and full endpoints at separation 0 [33.55ms]
-(pass) the map area between both panes at the minimum window width keeps a positive fit [33.89ms]
-(pass) flow camera fits exact routes and full endpoints at separation 1 [33.18ms]
-(pass) container selection fits its children at separation 1 [33.17ms]
-(pass) small selections stop at readable scale while manual zoom can go closer [34.81ms]
-(pass) container selection fits its children at separation 0 [35.02ms]
+(pass) the map area between both panes at the minimum window width keeps a positive fit [27.71ms]
+(pass) container selection fits its children at separation 0 [27.21ms]
+(pass) container selection fits its children at separation 1 [27.02ms]
+(pass) flow camera fits exact routes and full endpoints at separation 0 [32.24ms]
+(pass) flow camera fits exact routes and full endpoints at separation 1 [31.89ms]
+(pass) small selections stop at readable scale while manual zoom can go closer [34.17ms]
 
 ::endgroup::
 
 ::group::test-bun/projection.test.ts:
-(pass) root projection shows islands listing rows, without cards or groups [0.81ms]
-(pass) container projection contains only its groups and component cards [0.73ms]
-(pass) component follow stays within the displayed world without moving its layout [0.78ms]
-(pass) selection changes the camera but never the world layout [0.43ms]
-(pass) routes use the same world cells while selection stays visible [0.45ms]
-(pass) flow steps keep exact endpoints while marking their visible ancestors [0.77ms]
-(pass) flow attention changes neither the selection nor the centred island [0.44ms]
-(pass) task attention frames every visible touched element together [0.33ms]
-(pass) a component selection at root stands on its container row [0.32ms]
-(pass) a root that fits stays vertically centered across selection and viewport height changes [1.23ms]
+(pass) root projection shows islands listing rows, without cards or groups [0.74ms]
+(pass) container projection contains only its groups and component cards [0.72ms]
+(pass) component follow stays within the displayed world without moving its layout [0.64ms]
+(pass) selection changes the camera but never the world layout [0.41ms]
+(pass) routes use the same world cells while selection stays visible [0.47ms]
+(pass) flow steps keep exact endpoints while marking their visible ancestors [0.76ms]
+(pass) flow attention changes neither the selection nor the centred island [0.48ms]
+(pass) task attention frames every visible touched element together [0.32ms]
+(pass) a component selection at root stands on its container row [0.34ms]
+(pass) a root that fits stays vertically centered across selection and viewport height changes [1.22ms]
 
 ::endgroup::
 
 ::group::test-bun/work-selection.test.ts:
-(pass) opening a task twice keeps it selected without duplicating or losing active work [0.09ms]
+(pass) opening a task twice keeps it selected without duplicating or losing active work [0.08ms]
 (pass) an inactive task becomes active and selected [0.07ms]
 (pass) an active task becomes selected without losing any highlight [0.03ms]
 (pass) the selected task deactivates and falls back to the latest remaining task [0.05ms]
@@ -1381,64 +1381,64 @@ bun test v1.4.1 (4661e494f)
 ::endgroup::
 
 ::group::test-bun/scanner-modules.test.ts:
-(pass) a missing scanner blocks every configured module before import [38.50ms]
-(pass) a failed scan rejects only after every scanner has finished [341.32ms]
-(pass) local scanner configuration drives inventory, loading, and removal [341.83ms]
-(pass) npm scanners install explicitly into shared cache and restore from config [355.87ms]
-(pass) scanner commands manage one local module and scan reports a missing source [950.02ms]
+(pass) a missing scanner blocks every configured module before import [37.12ms]
+(pass) a failed scan rejects only after every scanner has finished [292.04ms]
+(pass) local scanner configuration drives inventory, loading, and removal [299.18ms]
+(pass) npm scanners install explicitly into shared cache and restore from config [315.24ms]
+(pass) scanner commands manage one local module and scan reports a missing source [989.75ms]
 
 ::endgroup::
 
 ::group::test-bun/viewer-lifecycle.test.ts:
-(pass) Escape, q and Ctrl+C each leave the empty viewer [60.88ms]
-(pass) an empty world shows its next steps until a live update supplies the map [74.96ms]
-(pass) headless groma view startup releases its renderer and input handler [140.59ms]
-(pass) refresh reloads the world from core and keeps the current view [149.93ms]
-(pass) headless keys drive the viewer and leave world coordinates unchanged [150.86ms]
+(pass) Escape, q and Ctrl+C each leave the empty viewer [66.38ms]
+(pass) an empty world shows its next steps until a live update supplies the map [89.39ms]
+(pass) headless groma view startup releases its renderer and input handler [154.79ms]
+(pass) headless keys drive the viewer and leave world coordinates unchanged [157.30ms]
+(pass) refresh reloads the world from core and keeps the current view [174.66ms]
 
 ::endgroup::
 
 ::group::test-bun/okf-writers.test.ts:
-(pass) project save preserves the profile marker and unowned OKF metadata [28.49ms]
-(pass) structural edit changes only owned Groma metadata [30.28ms]
-(pass) draft emits a canonical draft OKF concept and leaves the bundle documents alone [31.72ms]
-(pass) scan refreshes and creates only owned stable profile fields [37.85ms]
-(pass) scan matching stays draft and accept flips the complete concept to stable in place [43.26ms]
-(pass) edit preserves unowned OKF metadata and Markdown while it changes meaning and tags [54.12ms]
-(pass) CLI writes overview and optional description to separate owners [552.20ms]
+(pass) structural edit changes only owned Groma metadata [40.24ms]
+(pass) project save preserves the profile marker and unowned OKF metadata [40.51ms]
+(pass) draft emits a canonical draft OKF concept and leaves the bundle documents alone [45.27ms]
+(pass) scan refreshes and creates only owned stable profile fields [53.51ms]
+(pass) scan matching stays draft and accept flips the complete concept to stable in place [58.36ms]
+(pass) edit preserves unowned OKF metadata and Markdown while it changes meaning and tags [73.27ms]
+(pass) CLI writes overview and optional description to separate owners [606.17ms]
 
 ::endgroup::
 
 ::group::test-bun/sheet-port-matching.test.ts:
-(pass) nudged busy-building endpoints stay attached to visible boundaries [3.60ms]
+(pass) nudged busy-building endpoints stay attached to visible boundaries [3.48ms]
 
 ::endgroup::
 
 ::group::test-bun/typescript-source-usage.test.ts:
-(pass) source dependencies follow bindings and explicit module execution [16.99ms]
+(pass) source dependencies follow bindings and explicit module execution [886.23ms]
 
 ::endgroup::
 
 ::group::test-bun/web-shutdown.test.ts:
-(pass) SIGTERM closes groma web, exits 0, and releases the port [834.21ms]
-(pass) SIGINT closes groma web, exits 0, and releases the port [834.61ms]
+(pass) SIGINT closes groma web, exits 0, and releases the port [919.61ms]
+(pass) SIGTERM closes groma web, exits 0, and releases the port [972.55ms]
 
 ::endgroup::
 
 ::group::test-bun/theme.test.ts:
-(pass) Auto follows the browser while explicit themes do not [0.11ms]
-(pass) a saved theme is restored while missing or invalid values use Auto [0.13ms]
+(pass) Auto follows the browser while explicit themes do not [0.17ms]
+(pass) a saved theme is restored while missing or invalid values use Auto [0.12ms]
 
 ::endgroup::
 
 ::group::test-bun/sheet-compose.test.ts:
-(pass) leaf relationships derive weighted entry, mediator, and core roles [2.56ms]
-(pass) the composed system reads west to east while complete subtrees remain together [2.01ms]
-(pass) final container positions determine the system and sheet bounds [1.98ms]
+(pass) leaf relationships derive weighted entry, mediator, and core roles [1.51ms]
+(pass) the composed system reads west to east while complete subtrees remain together [0.96ms]
+(pass) final container positions determine the system and sheet bounds [1.92ms]
 
 ::endgroup::
 
  385 pass
  0 fail
  691 expect() calls
-Ran 385 tests across 73 files. [20.91s]
+Ran 385 tests across 73 files. [20.93s]
