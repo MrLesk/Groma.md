@@ -8,22 +8,22 @@ public static class ScannerCommand
         TextWriter standardError,
         CancellationToken cancellationToken = default)
     {
-        if (args.Length != 1)
-        {
-            await standardError.WriteLineAsync("Usage: csharp-scanner <solution.sln|project.csproj>");
-            return 2;
-        }
-
         try
         {
-            string json = (await new RoslynScanner().ScanAsync(args[0], cancellationToken)).ToCanonicalJson();
+            ScanRequest request = ScanRequest.Parse(args);
+            string json = (await new RoslynScanner().ScanAsync(request, cancellationToken)).ToCanonicalJson();
             await standardOutput.WriteAsync(json);
             return 0;
         }
-        catch (Exception error) when (error is not OperationCanceledException)
+        catch (OperationCanceledException)
+        {
+            await standardError.WriteLineAsync("C# scan cancelled; no observation was published.");
+            return 1;
+        }
+        catch (Exception error)
         {
             await standardError.WriteLineAsync(error.Message);
-            return 1;
+            return error is ArgumentException ? 2 : 1;
         }
     }
 }
