@@ -1,0 +1,26 @@
+[package]
+name = "groma-rust-scanner"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.91"
+license = "MIT"
+publish = false
+
+[workspace]
+
+[dependencies]
+ra_ap_load-cargo = "=0.0.301"
+ra_ap_hir = "=0.0.301"
+ra_ap_ide_db = "=0.0.301"
+ra_ap_project_model = "=0.0.301"
+ra_ap_syntax = "=0.0.301"
+ra_ap_vfs = "=0.0.301"
+anyhow = "=1.0.104"
+serde = { version = "=1.0.229", features = ["derive"] }
+serde_json = "=1.0.151"
+
+[profile.release]
+strip = true
+
+[profile.dev]
+debug = 0
