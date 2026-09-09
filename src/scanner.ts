@@ -1,4 +1,6 @@
 import { subscribe } from '@parcel/watcher'
+import { once } from 'node:events'
+import { watch } from 'node:fs'
 import { realpath } from 'node:fs/promises'
 import path from 'node:path'
 
@@ -38,6 +40,30 @@ async function scanWithRegistry(
 ): Promise<ScanSummary> {
   const observations = await registry.collectObservations(repositoryRoot)
   return reconcileScanObservations(repositoryRoot, observations)
+}
+
+async function subscribeSources(root: string, listener: (error: Error | null, files: string[]) => void) {
+  if (process.platform !== 'win32') {
+    return subscribe(root, (error, events) => {
+      listener(error, events.map(event => path.relative(root, event.path).split(path.sep).join('/')))
+    }, { ignore: [...skippedRoots] })
+  }
+
+  // Bun's Windows fs.watch registers ReadDirectoryChangesW before returning.
+  // Parcel can return before its queued registration runs, losing the first edit.
+  const watcher = watch(root, { recursive: true }, (_event, filename) => {
+    if (filename === null) return
+    const file = filename.split(path.sep).join('/')
+    if (!skippedRoots.has(file.split('/')[0]!)) listener(null, [file])
+  })
+  watcher.on('error', error => listener(error, []))
+  return {
+    async unsubscribe() {
+      const closed = once(watcher, 'close')
+      watcher.close()
+      await closed
+    },
+  }
 }
 
 export async function watchScan(
@@ -97,16 +123,16 @@ export async function watchScan(
   }
 
   trace('subscribe start')
-  const watcher = await subscribe(root, (error, events) => {
-    trace(`native callback: ${JSON.stringify(events)}; error=${String(error)}`)
+  const watcher = await subscribeSources(root, (error, files) => {
+    trace(`native callback: ${JSON.stringify(files)}; error=${String(error)}`)
     if (error) {
       options.onError?.(error)
       return
     }
-    if (events.some(event => registry.matchesFile(path.relative(root, event.path).split(path.sep).join('/')))) {
+    if (files.some(file => registry.matchesFile(file))) {
       schedule()
     }
-  }, { ignore: [...skippedRoots] })
+  })
 
   trace('subscribe ready')
   return {

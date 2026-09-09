@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@windows_ci'
 created_date: '2026-09-09 21:16'
-updated_date: '2026-09-09 21:33'
+updated_date: '2026-09-09 21:42'
 labels:
   - testing
   - scanner
@@ -24,6 +24,7 @@ modified_files:
   - src/scanner.ts
   - test-bun/web-startup.test.ts
   - .github/workflows/ci.yml
+  - test-bun/scanner-watch.test.ts
 priority: high
 type: bug
 ordinal: 376000
@@ -59,6 +60,8 @@ When developers run the repository CI, the supported scanner watch scenarios mus
 2. Establish Windows-native reproduction evidence and separate confirmed cause from hypotheses; report the smallest fix before material changes.
 3. Implement only the responsible lifecycle or test correction, preserving existing assertions, concurrency, timeout and CI topology.
 4. Run focused regression and scenario checks, coordinate fixed-revision Windows verification and full repository checks with the root agent, then perform specification and quality review.
+
+The failed baseline locates the source-event gap after subscription readiness and before any rescan. Use synchronous Windows native source registration through Bun fs.watch in scan-lifecycle while retaining Parcel on other platforms. Keep original async assertions and diagnostics for the controlled Windows comparison, and add a direct immediate-first-source-edit regression.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
@@ -69,4 +72,6 @@ Added temporary stage timings to the existing Vue watch scenario without changin
 Diagnostic run 34406164910 (f0bde5b) failed both Java compiler scenarios at 20 seconds and the empty-project live-map scenario after 10.4 seconds (generation 1; only index.md/project.md). Vue passed in 11.825 seconds: subscribe ready 6.309s, source write 6.310s, fold 7.725s, close 7.726s, failed scan 7.744–11.778s. Local TypeScript API timing attributed a 5.412s rejected-scan delay partly to pending async API work and close (1.9s). An external controlled test copy awaiting the scan before error assertions reduced that stage to 169ms. Bun 1.4.1 expect.rs process_promise still invokes wait_for_promise; upstream issue 33261 identifies nested-loop hangs with asynchronous matchers and concurrent subprocess I/O. This is a supported hypothesis, not yet the proven Windows cause. Second diagnostic revision adds temporary Java stages, selected native watcher traces, and empty-project write timing; all original assertions and operations remain unchanged.
 
 Alex explicitly approved the prepared temporary Windows repetition step. The existing CI job now runs the same Java, Vue, and web-startup files with Bun 1.4.1 --rerun-each=10 --timeout=20000 --bail=1 after installation. No retry, concurrency override, new job, dependency, or permanent topology change was added. Installed-runner witnesses verified ten total executions, nonzero exit despite later passing repetitions, and immediate failure on the first bad repetition with --bail=1. The step is diagnostic and must be removed before final delivery. Original async assertions remain unchanged for this baseline.
+
+Windows baseline 34407681352 at a2f282d failed Vue repetition 8: all sibling tests finished by 4545ms; watch ready 6898ms; template write 6899ms; no native callback before timeout 20162ms. The rejection matcher had not run, ruling it out as the direct cause of this failure. Parcel 2.6.0 WindowsBackend::subscribe queues first ReadDirectoryChangesW via QueueUserAPC and returns without waiting. Bun 1.4.1 win_watcher.rs starts uv_fs_event_start synchronously; its pinned oven-sh/libuv 8023581113b276e7c1aee3f82da57ca0893faab1 calls ReadDirectoryChangesW before returning. Approved correction uses that existing Windows runtime path only in watchScan. It preserves skipped root/file matching, settling, one scan owner, errors, and waiting for watcher close plus active scanning. Architecture watching stays unchanged. Local focused checks passed 15 tests, one existing Maven skip, across Java/Vue/web startup/new immediate-write regression in 3.82s; changed-file lint and typecheck passed. Source review found no blocking defect or new domain concept; OKF/C4 representation is unchanged and scan-lifecycle retains ownership. Windows execution is still required; temporary traces and repetition step remain.
 <!-- SECTION:NOTES:END -->
