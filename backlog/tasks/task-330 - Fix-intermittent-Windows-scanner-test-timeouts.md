@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@windows_ci'
 created_date: '2026-09-09 21:16'
-updated_date: '2026-09-09 21:23'
+updated_date: '2026-09-09 21:33'
 labels:
   - testing
   - scanner
@@ -23,6 +23,7 @@ modified_files:
   - test-bun/java-scanner.test.ts
   - src/scanner.ts
   - test-bun/web-startup.test.ts
+  - .github/workflows/ci.yml
 priority: high
 type: bug
 ordinal: 376000
@@ -66,4 +67,6 @@ When developers run the repository CI, the supported scanner watch scenarios mus
 Added temporary stage timings to the existing Vue watch scenario without changing its operations, assertions, concurrency or timeout. Focused local run passed 4 tests and 27 assertions. Timing log /tmp/groma-task330-vue-stages-local.log showed setup 1.083s, three direct scans complete 1.877s, watch ready 1.879s, fold 2.177s, closed 2.178s, rejected malformed-source scan 2.181s to 8.067s, cleanup 8.084s. Windows diagnostics will use the existing CI workflow; this run gathers failure-stage evidence and is not validation of a fix.
 
 Diagnostic run 34406164910 (f0bde5b) failed both Java compiler scenarios at 20 seconds and the empty-project live-map scenario after 10.4 seconds (generation 1; only index.md/project.md). Vue passed in 11.825 seconds: subscribe ready 6.309s, source write 6.310s, fold 7.725s, close 7.726s, failed scan 7.744–11.778s. Local TypeScript API timing attributed a 5.412s rejected-scan delay partly to pending async API work and close (1.9s). An external controlled test copy awaiting the scan before error assertions reduced that stage to 169ms. Bun 1.4.1 expect.rs process_promise still invokes wait_for_promise; upstream issue 33261 identifies nested-loop hangs with asynchronous matchers and concurrent subprocess I/O. This is a supported hypothesis, not yet the proven Windows cause. Second diagnostic revision adds temporary Java stages, selected native watcher traces, and empty-project write timing; all original assertions and operations remain unchanged.
+
+Alex explicitly approved the prepared temporary Windows repetition step. The existing CI job now runs the same Java, Vue, and web-startup files with Bun 1.4.1 --rerun-each=10 --timeout=20000 --bail=1 after installation. No retry, concurrency override, new job, dependency, or permanent topology change was added. Installed-runner witnesses verified ten total executions, nonzero exit despite later passing repetitions, and immediate failure on the first bad repetition with --bail=1. The step is diagnostic and must be removed before final delivery. Original async assertions remain unchanged for this baseline.
 <!-- SECTION:NOTES:END -->
