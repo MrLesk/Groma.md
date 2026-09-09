@@ -73,7 +73,8 @@ export async function configuredScannerModules(
   repositoryRoot: string,
   options: ScannerResolutionOptions = {},
 ): Promise<ScannerModuleLocation[]> {
-  const configured = await readScannerConfig(repositoryRoot)
+  const config = await readScannerConfig(repositoryRoot)
+  const configured = config.scanners
   return Promise.all(configured.map(scanner => {
     return moduleLocation(repositoryRoot, scanner, options)
   }))
@@ -93,7 +94,8 @@ export async function addScanner(
   options: ScannerInstallOptions = {},
 ): Promise<ScannerInventoryItem> {
   const source = parseScannerSource(repositoryRoot, input)
-  const configured = await readScannerConfig(repositoryRoot)
+  const config = await readScannerConfig(repositoryRoot)
+  const configured = config.scanners
   if (configured.some(scanner => scanner.source === source.source)) {
     throw new Error(`scanner source is already configured: ${source.source}`)
   }
@@ -105,7 +107,7 @@ export async function addScanner(
     throw new Error(`scanner id is already configured: ${resolved.id}`)
   }
   const scanner = { id: resolved.id, source: source.source }
-  await writeScannerConfig(repositoryRoot, [...configured, scanner])
+  await writeScannerConfig(repositoryRoot, { ...config, scanners: [...configured, scanner] })
   return { ...scanner, status: 'found' }
 }
 
@@ -113,7 +115,8 @@ export async function installScanners(
   repositoryRoot: string,
   options: ScannerInstallOptions = {},
 ): Promise<number> {
-  const configured = await readScannerConfig(repositoryRoot)
+  const config = await readScannerConfig(repositoryRoot)
+  const configured = config.scanners
   let installed = 0
   for (const scanner of configured) {
     const source = parseScannerSource(repositoryRoot, scanner.source)
@@ -131,13 +134,14 @@ export async function removeScanner(
   repositoryRoot: string,
   id: string,
 ): Promise<string> {
-  const configured = await readScannerConfig(repositoryRoot)
+  const config = await readScannerConfig(repositoryRoot)
+  const configured = config.scanners
   if (!configured.some(scanner => scanner.id === id)) {
     throw new Error(`scanner is not configured: ${id}`)
   }
   await writeScannerConfig(
     repositoryRoot,
-    configured.filter(scanner => scanner.id !== id),
+    { ...config, scanners: configured.filter(scanner => scanner.id !== id) },
   )
   return id
 }

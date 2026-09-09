@@ -5,6 +5,11 @@ export interface ConfiguredScanner {
   source: string
 }
 
+export interface ScannerConfig {
+  scanners: ConfiguredScanner[]
+  exclude?: string[]
+}
+
 const scannerId = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
 
 function configuredScanner(
@@ -32,14 +37,17 @@ function configuredScanner(
 function parseScannerConfig(
   source: string,
   sourceFilename: string,
-): ConfiguredScanner[] {
+): ScannerConfig {
   const value: unknown = JSON.parse(source)
   if (value === null || typeof value !== 'object' || Array.isArray(value)) {
     throw new Error(`${sourceFilename} must be an object`)
   }
   const config = value as Record<string, unknown>
-  if (Object.keys(config).length !== 1 || !Array.isArray(config.scanners)) {
-    throw new Error(`${sourceFilename} must contain only a scanners array`)
+  if (Object.keys(config).some(key => key !== 'scanners' && key !== 'exclude') || !Array.isArray(config.scanners)) {
+    throw new Error(`${sourceFilename} must contain a scanners array and optional exclude array`)
+  }
+  if (config.exclude !== undefined && (!Array.isArray(config.exclude) || config.exclude.some(pattern => typeof pattern !== 'string'))) {
+    throw new Error(`${sourceFilename} exclude must be an array of strings`)
   }
   const scanners = config.scanners.map((scanner, index) => {
     return configuredScanner(scanner, index, sourceFilename)
@@ -54,10 +62,13 @@ function parseScannerConfig(
     ids.add(scanner.id)
     sources.add(scanner.source)
   }
-  return scanners.sort((left, right) => left.id.localeCompare(right.id))
+  return {
+    scanners: scanners.sort((left, right) => left.id.localeCompare(right.id)),
+    ...(config.exclude === undefined ? {} : { exclude: config.exclude as string[] }),
+  }
 }
 
-export async function readScannerConfig(repositoryRoot: string): Promise<ConfiguredScanner[]> {
+export async function readScannerConfig(repositoryRoot: string): Promise<ScannerConfig> {
   const filesystem = GromaFileSystem.open(repositoryRoot)
   try {
     return parseScannerConfig(
@@ -65,18 +76,18 @@ export async function readScannerConfig(repositoryRoot: string): Promise<Configu
       filesystem.sourceFilename('scanners.json'),
     )
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return []
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return { scanners: [] }
     throw error
   }
 }
 
 export async function writeScannerConfig(
   repositoryRoot: string,
-  scanners: readonly ConfiguredScanner[],
+  config: ScannerConfig,
 ): Promise<void> {
-  const ordered = [...scanners].sort((left, right) => left.id.localeCompare(right.id))
+  const ordered = [...config.scanners].sort((left, right) => left.id.localeCompare(right.id))
   await GromaFileSystem.open(repositoryRoot).write(
     'scanners.json',
-    `${JSON.stringify({ scanners: ordered }, null, 2)}\n`,
+    `${JSON.stringify({ ...config, scanners: ordered }, null, 2)}\n`,
   )
 }
