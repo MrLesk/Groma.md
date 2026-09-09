@@ -1,0 +1,10 @@
+{
+  "name": "@groma/scanner-react",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "groma": { "scanner": { "id": "react", "entry": "./dist/package/dist/index.js" } },
+  "dependencies": { "@groma/scanner": "workspace:*", "typescript": "6.0.3" },
+  "devDependencies": { "@types/react": "19.2.17", "react": "19.2.7" }
+}

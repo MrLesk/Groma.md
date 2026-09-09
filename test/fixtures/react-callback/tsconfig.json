@@ -1,0 +1,1 @@
+{"compilerOptions":{"target":"ES2022","module":"Preserve","moduleResolution":"bundler","jsx":"react-jsx","strict":true,"skipLibCheck":true,"types":["react"],"noEmit":true},"include":["*.tsx"]}

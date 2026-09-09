@@ -1,0 +1,5 @@
+import { Editor } from './editor'
+export function Host() {
+  const receive = (value: string) => { console.log(value) }
+  return <Editor saved={receive} />
+}
