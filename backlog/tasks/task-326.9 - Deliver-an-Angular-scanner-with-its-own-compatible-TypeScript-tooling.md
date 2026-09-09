@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@scanner-angular'
 created_date: '2026-09-08 21:43'
-updated_date: '2026-09-08 22:15'
+updated_date: '2026-09-09 21:07'
 labels:
   - scanners
 dependencies:
@@ -20,8 +20,8 @@ references:
   - 'https://angular.dev/reference/versions'
   - scan
   - scanner
-  - scanner-index-2
-  - scanner-build-2
+  - angular-src-scanner-index
+  - angular-scanner-build
 documentation:
   - docs/scanners/evidence.md
   - docs/scanners/creating-a-plugin.md

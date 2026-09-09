@@ -13,6 +13,7 @@ import {
   writeDocument,
 } from './markdown-emitter.ts'
 import { displayName, kebabCase } from './naming.ts'
+import { componentNames, sourceStem } from './scan-component-naming.ts'
 import { c4Kind, requireGromaMapping } from './okf-profile.ts'
 import { refreshDerivedRelationships } from './relationship-inference.ts'
 import type { ScanFile, ScanObservation, ScanScope } from '@groma/scanner'
@@ -24,11 +25,6 @@ import type {
   ElementStatus,
   ScanSummary,
 } from './types.ts'
-
-function fileDisplayName(filename: string): string {
-  const stem = filename.split('/').at(-1)?.replace(/\.[^.]+$/, '') ?? filename
-  return displayName(kebabCase(stem))
-}
 
 export function readCode(value: unknown): CodeReference[] {
   if (!Array.isArray(value)) return []
@@ -106,12 +102,13 @@ async function createRecord(
   world: World,
   input: {
     kind: C4Kind
+    id?: string
     name: string
     parent?: WorldRecord
     code?: CodeReference[]
   },
 ): Promise<WorldRecord> {
-  const id = availableId(world, input.name, input.parent)
+  const id = input.id ?? availableId(world, input.name, input.parent)
   const record: WorldRecord = {
     id,
     kind: input.kind,
@@ -213,10 +210,12 @@ function inferredContainer(
   world: World,
   observation: ScanObservation,
   scope: ScanScope,
+  candidates: Map<string, FileCandidate>,
 ): WorldRecord | undefined {
   const containers = observation.placements.flatMap(placement => {
     if (placement.scope !== scope.id) return []
     const owner = world.byCodeFile.get(placement.file)
+      ?? candidates.get(placement.file)?.parent
     if (owner?.kind === 'container') return [owner]
     const parent = owner?.parent === undefined ? undefined : world.byId.get(owner.parent ?? '')
     return parent?.kind === 'container' ? [parent] : []
@@ -315,61 +314,75 @@ function scanReference(
   }
 }
 
+interface FileCandidate {
+  file: string
+  parent: WorldRecord
+  references: CodeReference[]
+}
+
+function collectFiles(
+  candidates: Map<string, FileCandidate>,
+  observation: ScanObservation,
+  containers: Map<string, WorldRecord>,
+): void {
+  const placementByFile = new Map(observation.placements.map(placement => [placement.file, placement.scope]))
+  for (const file of observation.files) {
+    const parent = containers.get(placementByFile.get(file.file) ?? '')
+    if (parent === undefined) continue
+    const candidate = candidates.get(file.file) ?? { file: file.file, parent, references: [] }
+    if (parent.id < candidate.parent.id) candidate.parent = parent
+    const reference = scanReference(observation, file)
+    if (!candidate.references.some(item => item.scanner === reference.scanner)) candidate.references.push(reference)
+    candidates.set(file.file, candidate)
+  }
+}
+
 async function reconcileFiles(
   repositoryRoot: string,
   world: World,
-  observation: ScanObservation,
-  containers: Map<string, WorldRecord>,
+  candidates: Map<string, FileCandidate>,
   summary: ScanSummary,
 ): Promise<void> {
-  const placementByFile = new Map(observation.placements.map(placement => [
-    placement.file,
-    placement.scope,
-  ]))
-  const pending: Promise<unknown>[] = []
-  for (const file of observation.files) {
-    const owner = world.byCodeFile.get(file.file)
-    if (owner !== undefined) {
-      if (!owner.code.some(reference => reference.file === file.file && reference.scanner === observation.scanner.language)) {
-        await attachReference(repositoryRoot, world, owner, scanReference(observation, file))
-      }
+  const unowned: FileCandidate[] = []
+  for (const candidate of [...candidates.values()].sort((a, b) => a.file.localeCompare(b.file))) {
+    const named = existingChild(world, 'component', sourceStem(candidate.file), candidate.parent)
+    const draft = named?.status === 'draft' && named.code.length === 0 ? named : undefined
+    const owner = world.byCodeFile.get(candidate.file) ?? draft
+    if (owner === undefined) {
+      unowned.push(candidate)
       continue
     }
-    const scope = placementByFile.get(file.file)
-    const parent = scope === undefined ? undefined : containers.get(scope)
-    if (parent === undefined) continue
-    const reference = scanReference(observation, file)
-    const name = fileDisplayName(file.file)
-    const named = existingChild(world, 'component', name, parent)
-    if (named?.status === 'draft' && named.code.length === 0) {
-      pending.push(attachReference(repositoryRoot, world, named, reference))
-      summary.matched += 1
-    } else {
-      pending.push(createRecord(repositoryRoot, world, {
-        kind: 'component',
-        name,
-        parent,
-        code: [reference],
-      }))
-      summary.created += 1
-    }
-    if (pending.length === 16) {
-      await Promise.all(pending)
-      pending.length = 0
+    if (owner === draft) summary.matched += 1
+    for (const reference of candidate.references) {
+      if (!owner.code.some(item => item.file === reference.file && item.scanner === reference.scanner)) {
+        await attachReference(repositoryRoot, world, owner, reference)
+      }
     }
   }
-  await Promise.all(pending)
+  const names = componentNames(unowned.map(candidate => ({
+    file: candidate.file, parent: candidate.parent.id,
+  })), new Set(world.byId.keys()))
+  for (let offset = 0; offset < unowned.length; offset += 16) {
+    await Promise.all(unowned.slice(offset, offset + 16).map(candidate => createRecord(repositoryRoot, world, {
+      kind: 'component',
+      ...names.get(candidate.file)!,
+      parent: candidate.parent,
+      code: candidate.references.sort((a, b) => a.scanner.localeCompare(b.scanner)),
+    })))
+    summary.created += unowned.slice(offset, offset + 16).length
+  }
 }
 
-async function reconcileObservation(
+async function prepareObservation(
   repositoryRoot: string,
   world: World,
   observation: ScanObservation,
   summary: ScanSummary,
-): Promise<void> {
+  candidates: Map<string, FileCandidate>,
+): Promise<Map<string, WorldRecord>> {
   const inferred = new Map(observation.scopes.map(scope => [
     scope.id,
-    inferredContainer(world, observation, scope),
+    inferredContainer(world, observation, scope, candidates),
   ]))
   const system = await observationSystem(
     repositoryRoot,
@@ -386,7 +399,7 @@ async function reconcileObservation(
     inferred,
     summary,
   )
-  await reconcileFiles(repositoryRoot, world, observation, containers, summary)
+  return containers
 }
 
 export async function reconcileScanObservations(
@@ -396,9 +409,19 @@ export async function reconcileScanObservations(
   const world = indexWorld(await loadArchitecture(repositoryRoot))
   const summary: ScanSummary = { created: 0, refreshed: 0, matched: 0 }
   await refreshCuratedCode(repositoryRoot, world, observations, summary)
-  for (const observation of observations) {
-    await reconcileObservation(repositoryRoot, world, observation, summary)
+  const candidates = new Map<string, FileCandidate>()
+  const ordered = [...observations].sort((a, b) => {
+    const key = (observation: ScanObservation) => JSON.stringify([
+      observation.root.file, observation.root.name,
+      observation.scopes.map(scope => [scope.name, scope.id]).sort(),
+    ])
+    return key(a).localeCompare(key(b))
+  })
+  for (const observation of ordered) {
+    const containers = await prepareObservation(repositoryRoot, world, observation, summary, candidates)
+    collectFiles(candidates, observation, containers)
   }
+  await reconcileFiles(repositoryRoot, world, candidates, summary)
   const owners = new Map([...world.byId.values()].flatMap(record => record.code.map(reference => [reference.file, record.id] as const)))
   const conflicts = await refreshDerivedRelationships(repositoryRoot, observations, owners)
   if (conflicts.length > 0) summary.evidenceConflicts = conflicts

@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@scanner_installation'
 created_date: '2026-09-08 21:34'
-updated_date: '2026-09-08 22:27'
+updated_date: '2026-09-09 21:07'
 labels:
   - scanners
 dependencies:
@@ -22,16 +22,16 @@ references:
   - TASK-326.9
   - scan-observation
   - scan-lifecycle
-  - scanner-index
   - c-scanner
   - scanner-modules
   - init-command
   - scan
-  - scanner-index-2
   - web-server
   - viewer-semantics
   - web-shell
   - terminal-painting
+  - java-src-scanner-index
+  - angular-src-scanner-index
 documentation:
   - docs/scanners/index.md
   - docs/component-markdown.md
