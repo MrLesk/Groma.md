@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@scanner_go'
 created_date: '2026-09-08 21:34'
-updated_date: '2026-09-08 22:45'
+updated_date: '2026-09-09 21:07'
 labels:
   - scanners
 dependencies:
@@ -14,9 +14,9 @@ references:
   - 'https://github.com/MrLesk/Groma.md/tree/research/go-scanner-prototype'
   - scanner
   - scanner-adapter
-  - scanner-index-3
-  - scanner-build-3
-  - scanner-smoke
+  - go-src-scanner-index
+  - go-scanner-build
+  - go-scanner-smoke
 documentation:
   - docs/scanners/evidence.md
   - docs/scanners/creating-a-plugin.md

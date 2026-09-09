@@ -5,18 +5,18 @@ status: Done
 assignee:
   - '@scanner_vue'
 created_date: '2026-09-09 12:59'
-updated_date: '2026-09-09 13:20'
+updated_date: '2026-09-09 21:07'
 labels:
   - scanners
 dependencies:
   - TASK-326.8
 references:
   - TASK-326.9
-  - scanner-index-5
-  - scanner-project-2
   - evidence
-  - scanner-build-5
   - scanner-smoke-compiled
+  - vue-src-scanner-index
+  - vue-src-scanner-project
+  - vue-scanner-build
 documentation:
   - docs/scanners/evidence.md
   - docs/scanners/creating-a-plugin.md

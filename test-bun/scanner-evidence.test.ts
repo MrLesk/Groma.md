@@ -202,11 +202,11 @@ Curated responsibility.
       'utf8',
     )
     const added = await readFile(
-      path.join(root, 'groma/systems/shop/containers/api/components/new-helper.md'),
+      path.join(root, 'groma/systems/shop/containers/api/components/src-api-new-helper.md'),
       'utf8',
     )
     const qualified = await readFile(
-      path.join(root, 'groma/systems/shop/containers/api/components/api-new-helper.md'),
+      path.join(root, 'groma/systems/shop/containers/api/components/other-api-new-helper.md'),
       'utf8',
     )
     const scopeFile = await readFile(

@@ -167,7 +167,12 @@ tree. `groma view --plain` prints one element per ID.
 - A part a draft touches keeps its ID and its file; the tag is the only
   change.
 - Core assigns an ID only when a scan finds an unknown file, derived from its
-  recognizable file name and qualified when the world already uses that ID.
+  recognizable file name. It compares new files together, qualifies collisions
+  with the existing container and source parent context, and uses a short
+  exact-source-path hash only when readable context is exhausted. Titles omit
+  the hash. Existing owners keep their IDs on later scans. The
+  [Markdown contract](component-markdown.md#files-and-containment) defines the
+  allocation rule; source folders do not create new architecture boundaries.
 - A scanner never invents an ID for a ghost and never decides that a ghost is
   built.
 

@@ -140,6 +140,27 @@ or when a scan finds a previously unknown source. A drafted concept keeps its
 ID and its file when accepted. Architecture IDs live in Markdown, not
 application source.
 
+For new scanned components, core compares the complete batch of unowned
+source files before allocating IDs. It starts with the file stem, then the
+container ID and stem. Collisions add source parent directories, nearest
+first, before the container ID and stem. For example, repeated build files
+under a `scanner` container can become `vue-scanner-build` and
+`react-scanner-build`. Remaining collisions climb further source parents.
+Reserved document names follow the same qualification rule.
+
+If all readable context still collides after lowercase kebab normalization,
+core appends the first eight hexadecimal digits of SHA-256 of the exact
+repository-relative source path, including its extension before normalization.
+Matching hash prefixes grow until the IDs are unique. Contents and scanner
+identity do not enter that hash. Titles use the readable name without the
+hash. An already owned source keeps its stored ID on later scans, including
+when another scanner reports it.
+
+This is a Groma naming rule for existing C4 components, not another C4 boundary
+or OKF metadata field. Ordinary Markdown and OKF readers see readable titles,
+filenames, and source references; Groma core owns collision allocation and
+the existing `groma.id` identity.
+
 ### Code references
 
 `groma.code` is a list. Each entry contains only:
