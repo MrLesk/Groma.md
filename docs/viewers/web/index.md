@@ -62,7 +62,8 @@ On a live current map, Edit switches the selected element or relationship
 from reading to one form. Save at the bottom submits changed fields through
 `groma edit`; Cancel or Escape discards unsaved values. Core validates the
 complete change before writing. A refused save keeps the form and saved
-architecture. Live work updates keep an open form's unsaved values. Changing
+architecture. Live work updates and changes between Iso, 2D, and Layers keep
+an open form's unsaved values. Changing
 selection leaves that editing session. Source evidence remains read-only.
 
 Element fields are title, description, overview, technology, and parent
@@ -99,14 +100,14 @@ regardless of relationship origin. Reduced-motion mode keeps those dashes
 static. Clearing task or flow highlighting restores the origin treatment.
 Draft element outlines remain dashed.
 
-The isometric grid fills the screen. Inset 35%-paper frosted chrome floats
+The map grid fills the screen. Inset 35%-paper frosted chrome floats
 above it as one technical instrument. The header groups the groma.md lockup,
 system name, quiet flow and element counts, and revision menu on the left.
 A permanent Search field sits between that context and the view controls:
-Fit, `-`, zoom readout, `+`, Theme, Help, and Info. Controls share one
+Iso / 2D / Layers, Fit, `-`, zoom readout, `+`, Theme, Help, and Info. Controls share one
 height, and opening search leaves them in place. Header popups float with
 a clear gap below the bar. At narrower widths the
-counts and the Fit and Theme text give way to the controls.
+counts and the Revision, Fit, and Theme text give way to the controls.
 Popup triggers share a pointer cursor. Clicking outside dismisses Help, Info,
 Theme, Revision, and Search through the same popup behavior. Search cancellation
 restores its saved view; the revision tooltip remains part of its popup.
@@ -398,7 +399,7 @@ composes the sheet from the merged world: islands, slabs, buildings,
 zones and routes, all in cells. The web server ships the project profile,
 world, sheet, configured Backlog workflow, available tasks and their pins
 together; the browser only
-projects the sheet isometrically, paints it as SVG, and handles
+projects the sheet in the selected view, paints it as SVG, and handles
 camera, selection, the project-profile form, and the lit flow. It may not move a footprint or
 reroute a relationship.
 
@@ -420,10 +421,16 @@ The map restores crisp SVG rendering after movement settles.
 Hover highlights pause during camera movement, including trackpad inertia, and return after it settles.
 Selection highlights and clicking remain available throughout.
 Reduced motion applies the destination without animation. `F1` toggles the HUD for a map-only
-view. `F2` lifts the blueprint into aligned System, Container, and Component
+view. The header selects Iso, 2D, or Layers. 2D looks straight down on the same
+layout, drawing one flat footprint per element without changing its source
+files, architecture, or relationships. Switching to or from 2D is immediate.
+Iso and 2D fit the selected architecture so it remains readable; with no
+architecture selection they fit the whole map. Layers fits the whole stack.
+
+`F2` lifts the blueprint into aligned System, Container, and Component
 layers and briefly turns the view to show that it can orbit. In layer mode,
 drag to orbit horizontally with limited vertical tilt, or Shift-drag to pan;
-press `F2` again to return to the fixed nested view. Selection, flows, work
+press `F2` again to return to the previous Iso or 2D view. Selection, flows, work
 pins, scrolling, zoom, and Fit continue to use the displayed geometry. `F3`
 independently toggles a map debug panel, which remains visible in map-only
 view. It shows live FPS; architecture-load, building-placement, arrow-routing,

@@ -7,8 +7,9 @@ import { sceneAtSeparation } from '../src/viewers/web/layers/separation.ts'
 import {
   EXPLODED_POSE,
   NESTED_POSE,
+  OVERHEAD_POSE,
   ORBIT_DURATION_MS,
-  createLayerMotion,
+  createMapMotion,
   interpolatePose,
   orbitPose,
 } from '../src/viewers/web/layers/orbit.ts'
@@ -29,11 +30,11 @@ function sourceScene() {
 }
 
 test.concurrent('F2 motion reaches both mode poses and drives the displayed separation', () => {
-  const motion = createLayerMotion()
-  assert.equal(motion.active, false)
+  const motion = createMapMotion()
+  assert.equal(motion.view, 'iso')
   assert.deepEqual(motion.pose, NESTED_POSE)
-  assert.equal(motion.toggle(0, true), true)
-  assert.equal(motion.active, true)
+  assert.equal(motion.toggleLayers(0, true), true)
+  assert.equal(motion.view, 'layers')
   assert.equal(motion.step(ORBIT_DURATION_MS / 2), true)
   assert.ok(motion.pose.separation > 0 && motion.pose.separation < 1)
   assert.equal(motion.step(ORBIT_DURATION_MS), false)
@@ -44,10 +45,41 @@ test.concurrent('F2 motion reaches both mode poses and drives the displayed sepa
     'component',
   ])
 
-  motion.toggle(ORBIT_DURATION_MS, false)
-  assert.equal(motion.active, false)
+  motion.toggleLayers(ORBIT_DURATION_MS, false)
+  assert.equal(motion.view, 'iso')
   assert.deepEqual(motion.pose, NESTED_POSE)
   assert.equal(sceneAtSeparation(sourceScene(), motion.pose.separation).layerPlanes.length, 0)
+})
+
+test.concurrent('overhead switches immediately and F2 returns to the last nested view', () => {
+  const motion = createMapMotion()
+  assert.equal(motion.choose('2d', 0, true), false)
+  assert.deepEqual(motion.pose, OVERHEAD_POSE)
+  assert.equal(motion.toggleLayers(10, true), false)
+  assert.equal(motion.view, 'layers')
+  motion.orbit(80, 20)
+  assert.notDeepEqual(motion.pose, EXPLODED_POSE)
+  assert.equal(motion.toggleLayers(20, true), false)
+  assert.equal(motion.view, '2d')
+  assert.deepEqual(motion.pose, OVERHEAD_POSE)
+  motion.orbit(80, 20)
+  assert.deepEqual(motion.pose, OVERHEAD_POSE)
+
+  motion.choose('iso', 30, true)
+  assert.deepEqual(motion.pose, NESTED_POSE)
+  motion.toggleLayers(40, false)
+  motion.toggleLayers(50, false)
+  assert.equal(motion.view, 'iso')
+})
+
+test.concurrent('choosing overhead during a Layers transition cancels the old motion', () => {
+  const motion = createMapMotion()
+  motion.toggleLayers(0, true)
+  motion.step(ORBIT_DURATION_MS / 2)
+  motion.choose('2d', ORBIT_DURATION_MS / 2, true)
+  assert.equal(motion.step(ORBIT_DURATION_MS), false)
+  assert.equal(motion.view, '2d')
+  assert.deepEqual(motion.pose, OVERHEAD_POSE)
 })
 
 test.concurrent('exploded projection separates the three levels without changing the source scene', () => {

@@ -8,6 +8,7 @@ import type { TreeRow } from '../tui/tree.ts'
 import { createAddControl } from './chrome/add.ts'
 import { createEmptyState } from './chrome/empty.ts'
 import { createMapDebugPanel } from './chrome/map-debug.ts'
+import { bindMapView } from './chrome/map-view.ts'
 import { animateControl } from './chrome/motion.ts'
 import { bindChromeActions, createWebShell, mapFrame, type MapFrame } from './chrome/shell.ts'
 import { bindThemeControl, readSavedTheme } from './chrome/theme-control.ts'
@@ -21,9 +22,8 @@ import type { Camera } from './iso/camera.ts'
 import { createMap } from './iso/map.ts'
 import { createCameraAnimator } from './iso/motion.ts'
 import { bindMapPointer } from './iso/pointer.ts'
-import { projectScene } from './iso/project.ts'
-import { sceneAtSeparation } from './layers/separation.ts'
-import { createLayerAnimator, createLayerMotion } from './layers/orbit.ts'
+import { presentScene } from './iso/presentation.ts'
+import { createMapAnimator, createMapMotion } from './layers/orbit.ts'
 import { paintRelationship } from './organisms/relationship-details.ts'
 import { detailsTabAfterSelection, detailsTabAfterWork, type DetailsTab, inspectDetails, paintDetails } from './organisms/details.ts'
 import { paintHierarchy } from './organisms/hierarchy.ts'
@@ -50,15 +50,12 @@ let sheet = boot.sheet
 let project: ProjectProfile | undefined = boot.project ?? undefined
 let currentPins = boot.pins
 let mapMeta = { generation: boot.generation, timings: boot.timings }
-const layerMotion = createLayerMotion()
+const mapMotion = createMapMotion()
 const debug = createMapDebugPanel(document.body, () => ({ ...mapMeta, world, sheet }))
-function projectedLayerScene() {
-  return debug.project(() => {
-    const pose = layerMotion.pose
-    return sceneAtSeparation(projectScene(sheet, project, pose), pose.separation)
-  })
+function projectedScene() {
+  return debug.project(() => presentScene(sheet, project, mapMotion.view, mapMotion.pose))
 }
-let scene = projectedLayerScene()
+let scene = projectedScene()
 const host = document.getElementById('map')!
 const headerHost = document.getElementById('header')!
 const hierarchyHost = document.getElementById('hierarchy')!
@@ -360,14 +357,14 @@ host.addEventListener('wheel', event => {
 }, { passive: false })
 
 bindMapPointer(map, {
-  orbiting: () => layerMotion.active,
+  orbiting: () => mapMotion.view === 'layers',
   pan(dx, dy) {
     camera.move(pan(camera.current, dx, dy), false)
     touched = true
   },
   orbit(dx, dy) {
     touched = true
-    layerAnimator.orbit(dx, dy)
+    mapAnimator.orbit(dx, dy)
   },
   select: (id, additive) => select(id, additive, false),
   deselect,
@@ -393,27 +390,31 @@ function sceneCentre(bounds: typeof scene.bounds): { x: number; y: number } {
 }
 
 /** Reprojects from one pose, then either fits a mode transition or keeps an orbited map centred. */
-function repaintLayerScene(fit: boolean): void {
+function repaintScene(fit: boolean): void {
   const before = sceneCentre(scene.bounds)
-  scene = projectedLayerScene()
+  scene = projectedScene()
   const after = sceneCentre(scene.bounds)
+  paintMapView(mapMotion.view)
   debug.paint(() => map.paint(scene))
   pins.paint(currentPins)
-  fitted = fitScene(viewport())
+  const frame = viewport()
+  fitted = fitScene(frame)
   if (fit) {
-    camera.move(fitted)
-    touched = false
+    const focus = mapMotion.view === 'layers' ? undefined : fitArchitecture(scene, world, selectedArchitecture(selection), frame)
+    camera.move(focus === undefined ? fitted : pan(focus, frame.x, frame.y), false)
+    touched = focus !== undefined
   } else camera.move(pan(camera.current, (before.x - after.x) * camera.current.k, (before.y - after.y) * camera.current.k), false)
   applyCamera()
   const task = selection.kind === 'task' ? workItem(selection.id) : undefined
   paintMapState(task, activeTaskIds.map(id => workItem(id)).filter((item): item is WorkItem => item !== undefined))
 }
 
-const layerAnimator = createLayerAnimator(layerMotion, repaintLayerScene)
+const mapAnimator = createMapAnimator(mapMotion, repaintScene)
+const paintMapView = bindMapView(document.getElementById('map-view')!, mapAnimator.choose)
 
 bindChromeActions({
   hud: toggleHud,
-  layers: () => layerAnimator.toggle(),
+  layers: mapAnimator.toggleLayers,
   debug: debug.toggle,
   zoomIn: () => zoomStep(ZOOM_STEP, document.getElementById('zoom-in')!),
   zoomOut: () => zoomStep(1 / ZOOM_STEP, document.getElementById('zoom-out')!),
@@ -443,7 +444,7 @@ function applyWorld(payload: WebPayload, reset = false): void {
   sheet = payload.sheet
   project = payload.project ?? undefined
   currentPins = payload.pins
-  scene = projectedLayerScene()
+  scene = projectedScene()
   fitted = fitScene(viewport())
   if (reset) {
     authoring.cancel()

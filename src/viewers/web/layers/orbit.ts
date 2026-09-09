@@ -1,28 +1,33 @@
 import { DEFAULT_PROJECTION } from '../iso/project.ts'
 import type { ProjectionView } from '../iso/project.ts'
 
+export type MapView = 'iso' | '2d' | 'layers'
+
 export interface LayerPose extends ProjectionView {
   /** Zero is the nested map; one is the fully separated stack. */
   separation: number
 }
 
-export interface LayerMotion {
-  readonly active: boolean
+export interface MapMotion {
+  readonly view: MapView
   readonly pose: LayerPose
-  /** Starts the F2 transition and reports whether animation frames are needed. */
-  toggle(now: number, animate: boolean): boolean
+  /** Overhead switches are immediate; isometric Layers transitions may animate. */
+  choose(view: MapView, now: number, animate: boolean): boolean
+  toggleLayers(now: number, animate: boolean): boolean
   /** Advances the current transition and reports whether another frame is needed. */
   step(now: number): boolean
   /** Cancels entrance motion and orbits the fully separated stack. */
   orbit(dx: number, dy: number): void
 }
 
-export interface LayerAnimator {
-  toggle(): void
+export interface MapAnimator {
+  choose(view: MapView): void
+  toggleLayers(): void
   orbit(dx: number, dy: number): void
 }
 
 export const NESTED_POSE: LayerPose = { ...DEFAULT_PROJECTION, separation: 0 }
+export const OVERHEAD_POSE: LayerPose = { yaw: 0, pitch: 90, separation: 0 }
 export const EXPLODED_POSE: LayerPose = { yaw: 57, pitch: 36, separation: 1 }
 export const ORBIT_DURATION_MS = 650
 
@@ -66,29 +71,38 @@ export function orbitPose(pose: LayerPose, dx: number, dy: number): LayerPose {
   }
 }
 
-/** One authority for layer-mode activation, entrance motion, and orbit pose. */
-export function createLayerMotion(): LayerMotion {
-  let active = false
+/** Presentation owns its view, the nested view F2 returns to, and the orbit pose. */
+export function createMapMotion(): MapMotion {
+  let view: MapView = 'iso'
+  let nested: Exclude<MapView, 'layers'> = 'iso'
   let pose = NESTED_POSE
   let transition: { from: LayerPose; to: LayerPose; started: number } | undefined
 
+  function choose(next: MapView, now: number, animate: boolean): boolean {
+    if (next === view) return transition !== undefined
+    const overhead = next === '2d' || view === '2d'
+    view = next
+    if (next !== 'layers') nested = next
+    const target = next === 'layers' ? EXPLODED_POSE : next === '2d' ? OVERHEAD_POSE : NESTED_POSE
+    if (!animate || overhead) {
+      pose = target
+      transition = undefined
+      return false
+    }
+    transition = { from: pose, to: target, started: now }
+    return true
+  }
+
   return {
-    get active() {
-      return active
+    get view() {
+      return view
     },
     get pose() {
       return pose
     },
-    toggle(now, animate) {
-      active = !active
-      const target = active ? EXPLODED_POSE : NESTED_POSE
-      if (!animate) {
-        pose = target
-        transition = undefined
-        return false
-      }
-      transition = { from: pose, to: target, started: now }
-      return true
+    choose,
+    toggleLayers(now, animate) {
+      return choose(view === 'layers' ? nested : 'layers', now, animate)
     },
     step(now) {
       if (transition === undefined) return false
@@ -99,7 +113,7 @@ export function createLayerMotion(): LayerMotion {
       return false
     },
     orbit(dx, dy) {
-      if (!active) return
+      if (view !== 'layers') return
       transition = undefined
       pose = orbitPose({ ...pose, separation: 1 }, dx, dy)
     },
@@ -107,7 +121,7 @@ export function createLayerMotion(): LayerMotion {
 }
 
 /** Browser frame scheduling for the pure layer motion state. */
-export function createLayerAnimator(motion: LayerMotion, repaint: (fit: boolean) => void): LayerAnimator {
+export function createMapAnimator(motion: MapMotion, repaint: (fit: boolean) => void): MapAnimator {
   let frame: number | undefined
   let animating = false
 
@@ -123,18 +137,17 @@ export function createLayerAnimator(motion: LayerMotion, repaint: (fit: boolean)
     repaint(true)
     if (animating) frame = requestAnimationFrame(animate)
   }
+  const change = (apply: (now: number, animate: boolean) => boolean): void => {
+    if (frame !== undefined) cancelAnimationFrame(frame)
+    frame = undefined
+    animating = apply(performance.now(), !matchMedia('(prefers-reduced-motion: reduce)').matches)
+    repaint(true)
+    if (animating) frame = requestAnimationFrame(animate)
+  }
 
   return {
-    toggle() {
-      if (frame !== undefined) cancelAnimationFrame(frame)
-      frame = undefined
-      animating = motion.toggle(
-        performance.now(),
-        !matchMedia('(prefers-reduced-motion: reduce)').matches,
-      )
-      if (animating) frame = requestAnimationFrame(animate)
-      else repaint(true)
-    },
+    choose: view => { if (view !== motion.view) change((now, animate) => motion.choose(view, now, animate)) },
+    toggleLayers: () => change(motion.toggleLayers),
     orbit(dx, dy) {
       stopAnimation()
       motion.orbit(dx, dy)
