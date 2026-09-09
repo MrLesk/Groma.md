@@ -73,11 +73,6 @@ export async function watchScan(
     onError?: (error: unknown) => void
   } = {},
 ): Promise<{ close(): Promise<void> }> {
-  // Temporary TASK-330 tracing for the reproduced test roots; remove after diagnosis.
-  const trace = (stage: string) => {
-    if (/groma-(startup|vue-test)-/.test(repositoryRoot)) console.error(`[scan-watch ${path.basename(repositoryRoot)} ${Math.round(performance.now())}ms] ${stage}`)
-  }
-  trace('starting')
   const root = await realpath(repositoryRoot)
   const registry = await loadScannerRegistry(root)
   let timer: ReturnType<typeof setTimeout> | undefined
@@ -94,13 +89,9 @@ export async function watchScan(
     if (closed) return
     running = true
     try {
-      trace('scan start')
       const summary = await scanWithRegistry(root, registry)
-      trace('scan complete')
       if (!closed) await options.onFold?.(summary)
-      trace('fold callback complete')
     } catch (error) {
-      trace(`scan error: ${String(error)}`)
       if (!closed) options.onError?.(error)
     } finally {
       running = false
@@ -113,18 +104,14 @@ export async function watchScan(
 
   function schedule(): void {
     if (closed) return
-    trace('scheduled')
     clearTimeout(timer)
     timer = setTimeout(() => {
-      trace(`timer fired; running=${running}`)
       if (running) pending = true
       else launch()
     }, SETTLE_MS)
   }
 
-  trace('subscribe start')
   const watcher = await subscribeSources(root, (error, files) => {
-    trace(`native callback: ${JSON.stringify(files)}; error=${String(error)}`)
     if (error) {
       options.onError?.(error)
       return
@@ -134,16 +121,13 @@ export async function watchScan(
     }
   })
 
-  trace('subscribe ready')
   return {
     async close() {
       if (closed) return
-      trace('close start')
       closed = true
       clearTimeout(timer)
       await watcher.unsubscribe()
       await active
-      trace('close complete')
     },
   }
 }
