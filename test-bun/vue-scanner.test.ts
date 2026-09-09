@@ -98,34 +98,52 @@ test.concurrent('Vue overlap retains one curated physical owner and authored int
 })
 
 test.concurrent('SFC source and template edits rescan and failed enabled Vue scans preserve the map', async () => {
+  const started = performance.now()
+  const stage = (name: string) => console.error(`[vue-watch ${Math.round(performance.now() - started)}ms] ${name}`)
+  stage('setup start')
   const { temporary, root, artifact } = await setup()
+  stage('setup complete')
   let watcher: Awaited<ReturnType<typeof watchScan>> | undefined
   try {
     await addScanner(root, path.relative(root, artifact))
+    stage('scanner added')
     await scanRepository(root)
+    stage('direct scan 1 complete')
     const source = await readFile(path.join(root, 'Emitter.vue'), 'utf8')
     await writeFile(path.join(root, 'Emitter.vue'), source.replace("emit('saved', value)", 'void value'))
     await scanRepository(root)
+    stage('direct scan 2 complete')
     expect((await loadAnnotatedArchitecture(root)).relationships.flatMap(item => item.connections ?? [])).toEqual([])
     await writeFile(path.join(root, 'Emitter.vue'), source)
     await scanRepository(root)
+    stage('direct scan 3 complete')
     let folded!: () => void
     let failed!: (error: unknown) => void
     const rescanned = new Promise<void>((resolve, reject) => { folded = resolve; failed = reject })
-    watcher = await watchScan(root, { onFold: () => folded(), onError: error => failed(error) })
+    stage('watch start')
+    watcher = await watchScan(root, { onFold: () => { stage('fold received'); folded() }, onError: error => { stage(`watch error: ${String(error)}`); failed(error) } })
+    stage('watch ready')
     const host = await readFile(path.join(root, 'Host.vue'), 'utf8')
     await writeFile(path.join(root, 'Host.vue'), host.replaceAll(/ @saved="[^"]+"/g, ''))
+    stage('template written; waiting for fold')
     await rescanned
+    stage('fold wait complete')
+    stage('close start')
     await watcher.close()
+    stage('close complete')
     watcher = undefined
     expect((await loadAnnotatedArchitecture(root)).relationships.flatMap(item => item.connections ?? [])).toEqual([])
     const previous = await documents(root)
     await writeFile(path.join(root, 'Host.vue'), '<template><Emitter></template>')
+    stage('failed scan start')
     await expect(scanRepository(root)).rejects.toThrow('VUE_PROJECT_PREPARATION')
+    stage('failed scan complete')
     expect(await documents(root)).toEqual(previous)
   } finally {
+    stage('cleanup start')
     await watcher?.close()
     await rm(temporary, { recursive: true, force: true })
+    stage('cleanup complete')
   }
 })
 
