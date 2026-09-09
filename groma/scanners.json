@@ -1,0 +1,6 @@
+{
+  "scanners": [],
+  "exclude": [
+    "/scripts/"
+  ]
+}
