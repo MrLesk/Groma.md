@@ -187,30 +187,40 @@ test.concurrent('browser setup reuses shared initialization and creates Git firs
 
 test.concurrent('a new empty project opens successfully and gains components through the live scan', async () => {
   const root = await repository()
+  // Temporary TASK-330 timing identifies this root in the native watch trace.
+  const stage = (name: string) => console.error(`[web-startup ${path.basename(root)} ${Math.round(performance.now())}ms] ${name}`)
+  stage('repository ready')
   await mkdir(path.join(root, 'src'))
   await cp(path.join(fixtures, 'startup-source', 'package.json'), path.join(root, 'package.json'))
   const server = await startWebViewer(root, { port: 0, scan: true, workSource: EMPTY_WORK_SOURCE })
   try {
     assert.equal((await initialize(server.url, 'groma')).status, 303)
     assert.equal(gromaInitialization(root).initialized, true)
+    stage('scanner selection start')
     assert.equal((await scan(server.url)).status, 303)
+    stage('scanner selection complete')
     assert.equal(hasComponents((await payload(server.url)).world), false)
 
     const source = await readFile(path.join(fixtures, 'startup-source', 'src', 'main.ts'), 'utf8')
+    stage('source write start')
     await writeFile(path.join(root, 'src', 'main.ts'), source)
+    stage('source write complete')
     const deadline = Date.now() + 10000
     let current = await payload(server.url)
     while (!hasComponents(current.world) && Date.now() < deadline) {
       await Bun.sleep(50)
       current = await payload(server.url)
     }
+    stage(`poll finished; generation=${current.generation}; components=${hasComponents(current.world)}`)
     // On failure, tell apart a missed source event (no fold) from a fold whose world was never published.
     const folded = await readdir(path.join(root, 'groma'), { recursive: true })
     assert.equal(hasComponents(current.world), true, `generation ${current.generation}; groma/ holds ${folded.join(', ')}`)
     assert.ok(current.generation > 1)
   } finally {
+    stage('cleanup start')
     await server.close()
     await rm(root, { recursive: true, force: true })
+    stage('cleanup complete')
   }
 })
 

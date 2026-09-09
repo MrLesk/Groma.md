@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@windows_ci'
 created_date: '2026-09-09 21:16'
-updated_date: '2026-09-09 21:18'
+updated_date: '2026-09-09 21:23'
 labels:
   - testing
   - scanner
@@ -13,10 +13,16 @@ dependencies: []
 references:
   - scan-lifecycle
   - 'https://github.com/MrLesk/Groma.md/actions/runs/34405453834'
+  - adapter
+  - java-scanner-build
+  - web-server
 documentation:
   - docs/scanners/vue/validation.md
 modified_files:
   - test-bun/vue-scanner.test.ts
+  - test-bun/java-scanner.test.ts
+  - src/scanner.ts
+  - test-bun/web-startup.test.ts
 priority: high
 type: bug
 ordinal: 376000
@@ -25,13 +31,13 @@ ordinal: 376000
 ## Description
 
 <!-- SECTION:DESCRIPTION:BEGIN -->
-When developers run the repository CI, the supported scanner watch scenarios must complete reliably on Windows without rerunning a failed job until it happens to pass. CI run 34405453834 at d8028d50ff0962038261209008c00620a1a5613f failed only the Vue SFC source/template edit and failed-scan preservation scenario after 20000 ms. An identical Vue timeout was observed before the component naming change; the stalled stage and cause remain unknown. Investigate the observed timeout, establish its cause with stage-level evidence, and fix the smallest responsible test or product lifecycle path. Preserve actual file-change delivery, complete scans, map preservation on failed analysis, cleanup, and concurrent independent tests. Earlier Windows live-source watcher failures are relevant comparison evidence if they share the same demonstrated cause. Do not hide failures with retries, longer timeouts, skipped assertions, Windows exclusions, or reduced concurrency. Keep the regular CI topology unchanged unless a concrete diagnostic or workflow change is separately approved.
+When developers run the repository CI, the supported scanner watch scenarios must complete reliably on Windows without rerunning a failed job until it happens to pass. CI run 34405453834 at d8028d50ff0962038261209008c00620a1a5613f failed only the Vue SFC source/template edit and failed-scan preservation scenario after 20000 ms. An identical Vue timeout was observed before the component naming change; the stalled stage and cause remain unknown. Investigate the observed timeout, establish its cause with stage-level evidence, and fix the smallest responsible test or product lifecycle path. Preserve actual file-change delivery, complete scans, map preservation on failed analysis, cleanup, and concurrent independent tests. Earlier Windows live-source watcher failures are relevant comparison evidence if they share the same demonstrated cause. Do not hide failures with retries, longer timeouts, skipped assertions, Windows exclusions, or reduced concurrency. Keep the regular CI topology unchanged unless a concrete diagnostic or workflow change is separately approved. Diagnostic run 34406164910 also reproduced timeouts in both Java compiler success/rejection tests and failure of the empty-project live-map scan. These supported CI failures are in scope; investigate their causes separately until evidence establishes a connection.
 <!-- SECTION:DESCRIPTION:END -->
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
 - [ ] #1 The stalled stage and root cause of the observed Windows timeout are supported by diagnostic or reproduction evidence, with a clear distinction between cause and hypothesis.
-- [ ] #2 The supported Vue source and template edits, watched rescan, failed-analysis map preservation, and cleanup complete reliably after the fix, preserving the same observable behavior.
+- [ ] #2 The supported Vue source and template edits, watched rescan, failed-analysis map preservation, and cleanup complete reliably after the fix, preserving the same observable behavior. The Java compiler success/rejection scenarios and empty-project live-map scan also complete with their original observable behavior and cleanup.
 - [ ] #3 A focused regression check exercises the identified cause; repeated affected-scenario verification on one fixed Windows revision passes without retries, timeout increases, skipped behavior, or reduced test concurrency.
 - [ ] #4 The change uses the existing domain owner and preserves test isolation, lifecycle cleanup, and scanner ownership; runner or watcher lifecycle changes are checked against official documentation for the installed versions.
 - [ ] #5 Focused checks, the complete repository check, required simplicity reviews, and final CI on macOS, Linux, and Windows pass; the evidence and remaining limits are recorded.
@@ -58,4 +64,6 @@ When developers run the repository CI, the supported scanner watch scenarios mus
 
 <!-- SECTION:NOTES:BEGIN -->
 Added temporary stage timings to the existing Vue watch scenario without changing its operations, assertions, concurrency or timeout. Focused local run passed 4 tests and 27 assertions. Timing log /tmp/groma-task330-vue-stages-local.log showed setup 1.083s, three direct scans complete 1.877s, watch ready 1.879s, fold 2.177s, closed 2.178s, rejected malformed-source scan 2.181s to 8.067s, cleanup 8.084s. Windows diagnostics will use the existing CI workflow; this run gathers failure-stage evidence and is not validation of a fix.
+
+Diagnostic run 34406164910 (f0bde5b) failed both Java compiler scenarios at 20 seconds and the empty-project live-map scenario after 10.4 seconds (generation 1; only index.md/project.md). Vue passed in 11.825 seconds: subscribe ready 6.309s, source write 6.310s, fold 7.725s, close 7.726s, failed scan 7.744–11.778s. Local TypeScript API timing attributed a 5.412s rejected-scan delay partly to pending async API work and close (1.9s). An external controlled test copy awaiting the scan before error assertions reduced that stage to 169ms. Bun 1.4.1 expect.rs process_promise still invokes wait_for_promise; upstream issue 33261 identifies nested-loop hangs with asynchronous matchers and concurrent subprocess I/O. This is a supported hypothesis, not yet the proven Windows cause. Second diagnostic revision adds temporary Java stages, selected native watcher traces, and empty-project write timing; all original assertions and operations remain unchanged.
 <!-- SECTION:NOTES:END -->
