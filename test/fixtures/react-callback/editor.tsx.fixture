@@ -1,0 +1,4 @@
+export function Editor({ saved }: { saved: (value: string) => void }) {
+  const finish = () => { saved('ready') }
+  return <button onClick={finish}>Save</button>
+}
