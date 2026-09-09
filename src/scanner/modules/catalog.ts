@@ -36,6 +36,14 @@ export const officialScannerCatalog: readonly OfficialScanner[] = [
     description: 'Complementary Angular framework evidence with its own compatible TypeScript tooling.',
   },
   {
+    id: 'vue', package: '@groma/scanner-vue', technologies: ['vue'],
+    description: 'Complementary Vue framework evidence; a dependency declaration does not verify runtime use.',
+  },
+  {
+    id: 'react', package: '@groma/scanner-react', technologies: ['react'],
+    description: 'Complementary React framework evidence; a dependency declaration does not verify runtime use.',
+  },
+  {
     id: 'csharp', package: '@groma/scanner-csharp', technologies: ['csharp'],
     description: 'C# project evidence through Roslyn and MSBuild.',
   },
