@@ -7,20 +7,11 @@ import { scanJavaSource } from '../plugins/scanners/java/src/adapter.ts'
 import { javaCommand, mavenInvocation, run } from '../plugins/scanners/java/src/process.ts'
 import { parseScanObservation, type ScanObservation } from '@groma/scanner'
 
-// Temporary TASK-330 stage timing; remove after the Windows diagnosis.
-function timing(label: string) {
-  const started = performance.now()
-  return (stage: string) => console.error(`[java-${label} ${Math.round(performance.now() - started)}ms] ${stage}`)
-}
-
-async function fixture(stage = (_name: string) => {}) {
-  stage('fixture start')
+async function fixture() {
   const root = await mkdtemp(path.join(os.tmpdir(), 'groma-java-test-'))
   await cp(path.resolve(import.meta.dir, '../test/fixtures/java-maven'), root, { recursive: true })
   const worker = path.join(root, 'worker.jar')
-  stage('worker build start')
   await buildWorker(worker)
-  stage('worker build complete')
   return { root, worker }
 }
 
@@ -37,14 +28,10 @@ function calls(observation: ScanObservation) {
 }
 
 test.concurrent('Java compiler resolves overloads and preserves wrappers while virtual dispatch remains unknown', async () => {
-  const stage = timing('success')
-  const { root, worker } = await fixture(stage)
+  const { root, worker } = await fixture()
   try {
-    stage('first compiler scan start')
     const first = await compilerScan(root, worker)
-    stage('first compiler scan complete')
     expect(await compilerScan(root, worker)).toEqual(first)
-    stage('second compiler scan complete')
     const evidence = calls(first)
     expect(evidence).toContainEqual(expect.objectContaining({ caller: 'entry.Caller#run(sample.Port)',
       providers: ['sample.Provider#ship(int)'], unresolved: false }))
@@ -58,20 +45,16 @@ test.concurrent('Java compiler resolves overloads and preserves wrappers while v
     expect(first.invocations!.every(call => !call.binding)).toBeTrue()
     expect(first.operations!.some(operation => operation.name === 'sample.Point#x()')).toBeFalse()
     expect(evidence.some(call => call.line === 17)).toBeFalse()
-  } finally { stage('cleanup start'); await rm(root, { recursive: true, force: true }); stage('cleanup complete') }
+  } finally { await rm(root, { recursive: true, force: true }) }
 })
 
 test.concurrent('Java rejects incomplete attribution and reports missing JDK without returning partial facts', async () => {
-  const stage = timing('rejection')
-  const { root, worker } = await fixture(stage)
+  const { root, worker } = await fixture()
   try {
     await writeFile(path.join(root, 'src/main/java/Unused.java'), 'class Unused { missing.Library field; }')
-    stage('failed compiler scan start')
     await expect(compilerScan(root, worker)).rejects.toThrow('JAVA_SCAN_FAILED')
-    stage('failed compiler scan complete')
     await expect(scanJavaSource(root, { worker, java: path.join(root, 'missing-java') })).rejects.toThrow('JAVA_JDK_MISSING')
-    stage('missing JDK check complete')
-  } finally { stage('cleanup start'); await rm(root, { recursive: true, force: true }); stage('cleanup complete') }
+  } finally { await rm(root, { recursive: true, force: true }) }
 })
 
 test.concurrent('Windows Maven batch launchers use cmd while installed Java remains a direct executable', () => {
