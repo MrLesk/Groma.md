@@ -1,0 +1,24 @@
+{
+  "name": "@groma/scanner-vue",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "groma": {
+    "scanner": {
+      "id": "vue",
+      "entry": "./dist/package/dist/index.js"
+    }
+  },
+  "dependencies": {
+    "@groma/scanner": "workspace:*",
+    "@volar/typescript": "2.4.28",
+    "@vue/compiler-dom": "3.5.42",
+    "@vue/language-core": "3.3.11",
+    "typescript": "5.9.3"
+  },
+  "devDependencies": {
+    "vue": "3.5.42",
+    "@vue/compiler-sfc": "3.5.42"
+  }
+}
