@@ -30,7 +30,7 @@ test.concurrent('mixed nested declarations produce complementary candidates and 
     await writeTree(root, { '.gitignore': 'ignored/\n', 'ignored/go.mod': 'module ignored\ngo 1.1\n' })
     const result = await discoverScanners(root)
     expect(new Set(result.findings.map(finding => finding.technology))).toEqual(
-      new Set(['java', 'angular', 'typescript', 'csharp', 'go', 'rust', 'spring-boot']),
+      new Set(['java', 'angular', 'vue', 'react', 'typescript', 'csharp', 'go', 'rust', 'spring-boot']),
     )
     expect(result.findings.every(finding => !/^(node_modules|vendor|target|dist|ignored)\//.test(finding.file))).toBe(true)
     expect(result.findings.some(finding => finding.file.includes('/obj/'))).toBe(false)
@@ -38,10 +38,44 @@ test.concurrent('mixed nested declarations produce complementary candidates and 
       kind: 'framework', file: 'frontend/package.json', version: '^21.2.17',
     })
     expect(result.findings.find(finding => finding.technology === 'angular')?.resolvedVersion).toBeUndefined()
-    expect(result.recommendations.map(item => item.id)).toEqual(['typescript', 'java', 'angular', 'csharp', 'go', 'rust'])
+    expect(result.recommendations.map(item => item.id)).toEqual(['typescript', 'java', 'angular', 'vue', 'react', 'csharp', 'go', 'rust'])
     expect(result.recommendations.find(item => item.id === 'typescript')?.status).toBe('embedded')
     expect(result.recommendations.filter(item => item.id !== 'typescript').every(item => item.status === 'unavailable' && item.installSource === undefined)).toBe(true)
     expect(result.limits.some(limit => limit.includes('spring-boot'))).toBe(true)
+  } finally {
+    await rm(root, { recursive: true, force: true })
+  }
+})
+
+test.concurrent('root React and nested Vue retain installed version evidence and complementary coverage limits', async () => {
+  const root = await project()
+  try {
+    await writeTree(root, {
+      'package.json': fixture['package.json'],
+      'apps/dashboard/package.json': fixture['apps/dashboard/package.json'],
+      'node_modules/react/package.json': '{"name":"react","version":"19.1.0"}',
+      'apps/dashboard/node_modules/vue/package.json': '{"name":"vue","version":"3.5.1"}',
+    })
+    const result = await discoverScanners(root)
+    expect(result.findings).toHaveLength(2)
+    expect(result.recommendations.find(item => item.id === 'typescript')?.status).toBe('embedded')
+    for (const [technology, file, version, installed, supported] of [
+      ['react', 'package.json', '^19.0.0', '19.1.0', '^19.0.0'],
+      ['vue', 'apps/dashboard/package.json', '^3.5.0', '3.5.1', '^3.5.0'],
+    ]) {
+      const evidence = result.findings.filter(item => item.technology === technology)
+      expect(evidence[0]).toMatchObject({ kind: 'framework', file, version, resolvedVersion: { version: installed } })
+      const candidate = result.recommendations.find(item => item.id === technology)
+      expect(candidate?.status).toBe('unavailable')
+      expect(candidate?.installSource).toBeUndefined()
+      const compatible: OfficialScanner = {
+        id: technology, package: `@fixture/scanner-${technology}`, technologies: [technology], description: 'Fixture support.',
+        release: { version: '1.0.0', groma: '^0.2.0', technologyVersions: { [technology]: supported } },
+      }
+      expect(recommendScanners(evidence, [], '0.2.0', [compatible])[0]?.status).toBe('installable')
+      const incompatible = { ...compatible, release: { ...compatible.release!, technologyVersions: { [technology]: '<1.0.0' } } }
+      expect(recommendScanners(evidence, [], '0.2.0', [incompatible])[0]?.status).toBe('incompatible')
+    }
   } finally {
     await rm(root, { recursive: true, force: true })
   }

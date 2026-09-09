@@ -52,6 +52,8 @@ function packageFindings(file: string, source: string): TechnologyFinding[] {
     for (const [name, technology, kind] of [
       ['typescript', 'typescript', 'language'],
       ['@angular/core', 'angular', 'framework'],
+      ['vue', 'vue', 'framework'],
+      ['react', 'react', 'framework'],
     ] as const) {
       const version = dependencies[name]
       if (typeof version !== 'string') continue
@@ -65,7 +67,7 @@ async function resolveDependencyVersion(
   repositoryRoot: string,
   finding: TechnologyFinding,
 ): Promise<void> {
-  const packageName = finding.technology === 'angular' ? '@angular/core' : 'typescript'
+  const packageName = finding.technology === 'angular' ? '@angular/core' : finding.technology
   const require = createRequire(path.resolve(repositoryRoot, finding.file))
   // Bun's require.resolve can use its global cache. Read only normal installed-package paths.
   for (const directory of require.resolve.paths(packageName) ?? []) {

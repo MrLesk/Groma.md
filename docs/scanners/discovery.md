@@ -20,7 +20,7 @@ depth. These rules are deliberately limited:
 
 | Declaration | Discovery evidence |
 | --- | --- |
-| `package.json` | `typescript` and `@angular/core` in dependency sections, with their declared version or range |
+| `package.json` | `typescript`, `@angular/core`, `vue`, and `react` in dependency sections, with their declared version or range |
 | `tsconfig.json` | TypeScript project configuration; it does not declare the compiler version |
 | `pom.xml` | Maven project and literal `java.version`, `maven.compiler.release`, or `maven.compiler.source` values; `org.springframework.boot` is a framework clue |
 | `*.csproj` | C# project and literal `TargetFramework` or `TargetFrameworks` values |
@@ -48,7 +48,7 @@ Discovery reports that framework coverage separately.
 
 The maintained catalog in
 [`src/scanner/modules/catalog.ts`](../../src/scanner/modules/catalog.ts)
-contains TypeScript, Java, Angular, C#, Go, and Rust. Optional packages without
+contains TypeScript, Java, Angular, Vue, React, C#, Go, and Rust. Optional packages without
 a verified release have no install source or invented package version.
 Their `unavailable` state means they are relevant candidates, not ready for
 installation. Release work must supply the exact published version, Groma
@@ -70,7 +70,7 @@ The result distinguishes:
   from an exact declaration or an installed package. Unresolved ranges,
   expressions, or missing versions need project-tooling confirmation.
 
-For Angular and TypeScript dependencies, discovery also resolves the installed
+For Angular, Vue, React, and TypeScript dependencies, discovery also resolves the installed
 package manifest using normal package resolution from the declaring application.
 It reads the installed version without executing package code, preserves the
 original declared range, and records the package manifest as version evidence.
@@ -88,6 +88,12 @@ same files. Angular's compiler compatibility and its own compatible TypeScript
 tooling are separate from Groma's embedded TypeScript 7.1 SDK. Discovery retains
 TypeScript and proposes the separate Angular candidate; it does not replace
 TypeScript to avoid shared file coverage.
+
+Vue and React also add complementary framework evidence while embedded
+TypeScript stays enabled. Their dependency declarations do not prove complete
+framework runtime analysis. The catalog's `@groma/scanner-vue` and
+`@groma/scanner-react` names are unpublished placeholders until the public
+namespace, exact release versions, and supported versions are verified.
 
 Discovery and scanner selection are operational configuration. They do not
 create OKF concepts, C4 elements, or architecture boundaries. Ordinary Markdown

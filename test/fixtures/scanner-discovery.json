@@ -1,4 +1,6 @@
 {
+  "package.json": "{\"dependencies\":{\"react\":\"^19.0.0\"}}",
+  "apps/dashboard/package.json": "{\"dependencies\":{\"vue\":\"^3.5.0\"}}",
   "pom.xml": "<project><properties><java.version>25</java.version></properties><parent><groupId>org.springframework.boot</groupId></parent></project>",
   "frontend/package.json": "{\"dependencies\":{\"@angular/core\":\"^21.2.17\"},\"devDependencies\":{\"typescript\":\"~5.9.3\"}}",
   "frontend/tsconfig.json": "{}",
