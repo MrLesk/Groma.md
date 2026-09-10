@@ -44,6 +44,36 @@ test.concurrent('exported abstract classes retain class symbol identity', async 
   }
 })
 
+test.concurrent('export symbols come from declarations rather than generated source text', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'groma-ts-exports-'))
+  try {
+    await writeFile(path.join(root, 'source.ts'), [
+      'const generated = `',
+      'export const Imaginary = {}',
+      '`',
+      'export async function run() {}',
+      'export default class Service {}',
+      'export interface Input {}',
+      'export type Output = string',
+      'export enum Mode { One }',
+      'export const fixed = 1',
+      'export let mutable = 2',
+      'export var older = 3',
+      'export declare class Declared {}',
+    ].join('\n'))
+    const git = Bun.spawn(['git', 'init', '--quiet'], { cwd: root, stderr: 'pipe' })
+    expect(await git.exited).toBe(0)
+    const graph = await buildImportGraph(root)
+    expect(graph.files.find(file => file.file === 'source.ts')?.symbols).toEqual([
+      ['run', 'function'], ['Service', 'class'], ['Input', 'interface'],
+      ['Output', 'type'], ['Mode', 'enum'], ['fixed', 'const'],
+      ['mutable', 'let'], ['older', 'var'], ['Declared', 'class'],
+    ].map(([name, kind]) => ({ id: `source.ts#${name}`, name, kind })))
+  } finally {
+    await rm(root, { recursive: true, force: true })
+  }
+})
+
 test.concurrent('source dependencies follow bindings and explicit module execution', async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'groma-ts-usage-'))
   try {
