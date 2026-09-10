@@ -52,6 +52,22 @@ function caller(node: ts.Node): Operation | undefined {
   return undefined
 }
 
+/** Follow assignment targets, excluding property keys and default-value reads. */
+function writesSymbol(target: ts.Node, symbol: ts.Symbol, checker: ts.TypeChecker): boolean {
+  if (ts.isIdentifier(target)) return checker.getSymbolAtLocation(target) === symbol
+  if (ts.isShorthandPropertyAssignment(target)) return checker.getShorthandAssignmentValueSymbol(target) === symbol
+  if (ts.isArrayLiteralExpression(target)) return target.elements.some(item => writesSymbol(item, symbol, checker))
+  if (ts.isObjectLiteralExpression(target)) return target.properties.some(item => writesSymbol(item, symbol, checker))
+  if (ts.isPropertyAssignment(target)) return writesSymbol(target.initializer, symbol, checker)
+  if (ts.isSpreadElement(target) || ts.isSpreadAssignment(target) || ts.isParenthesizedExpression(target)) {
+    return writesSymbol(target.expression, symbol, checker)
+  }
+  if (ts.isBinaryExpression(target) && target.operatorToken.kind === ts.SyntaxKind.EqualsToken) {
+    return writesSymbol(target.left, symbol, checker)
+  }
+  return false
+}
+
 class Evidence {
   readonly operations = new Map<string, ScanOperation>()
   readonly invocations: ScanInvocation[] = []
@@ -102,11 +118,11 @@ class Evidence {
     const calls: ts.CallExpression[] = []
     let reassigned = false
     const checker = this.checker
-    function visit(node: ts.Node): void {
-      if (ts.isBinaryExpression(node) && ts.isIdentifier(node.left)
+    const visit = (node: ts.Node): void => {
+      if (ts.isBinaryExpression(node)
         && node.operatorToken.kind >= ts.SyntaxKind.FirstAssignment
         && node.operatorToken.kind <= ts.SyntaxKind.LastAssignment
-        && checker.getSymbolAtLocation(node.left) === symbol) reassigned = true
+        && writesSymbol(node.left, symbol, checker)) reassigned = true
       if (ts.isCallExpression(node) && ts.isIdentifier(node.expression)
         && checker.getSymbolAtLocation(node.expression) === symbol) calls.push(node)
       ts.forEachChild(node, visit)
