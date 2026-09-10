@@ -1,5 +1,10 @@
 import path from 'node:path'
 import { API, ModuleKind, ModuleResolutionKind } from 'typescript/unstable/async'
+import {
+  isClassDeclaration, isEnumDeclaration, isFunctionDeclaration, isIdentifier,
+  isInterfaceDeclaration, isTypeAliasDeclaration, isVariableStatement,
+  NodeFlags, SyntaxKind, type SourceFile, type VariableDeclarationList,
+} from 'typescript/unstable/ast'
 import type { ScanSymbol, ScanOperation, ScanInvocation } from '@groma/scanner'
 
 import { usedImportSpecifiers } from './source-usage.ts'
@@ -18,13 +23,30 @@ type SourceEvidence = {
   invocations: ScanInvocation[]
 }
 
-const exportPattern = /^export\s+(?:default\s+)?(?:declare\s+)?(?:async\s+)?(?:abstract\s+)?(function|class|interface|type|enum|const|let|var)\s+(\w+)/gm
+const declarationKinds: Partial<Record<SyntaxKind, string>> = {
+  [SyntaxKind.FunctionDeclaration]: 'function',
+  [SyntaxKind.ClassDeclaration]: 'class',
+  [SyntaxKind.InterfaceDeclaration]: 'interface',
+  [SyntaxKind.TypeAliasDeclaration]: 'type',
+  [SyntaxKind.EnumDeclaration]: 'enum',
+}
 
-function exportSymbols(file: string, source: string): ScanSymbol[] {
-  return [...source.matchAll(exportPattern)].flatMap(match => {
-    const kind = match[1]
-    const name = match[2]
-    if (kind === undefined || name === undefined) return []
+function variableSymbols(file: string, list: VariableDeclarationList): ScanSymbol[] {
+  const kind = list.flags & NodeFlags.Const ? 'const' : list.flags & NodeFlags.Let ? 'let' : 'var'
+  return list.declarations.flatMap(declaration => isIdentifier(declaration.name)
+    ? [{ id: `${file}#${declaration.name.text}`, name: declaration.name.text, kind }] : [])
+}
+
+function exportSymbols(file: string, source: SourceFile): ScanSymbol[] {
+  return source.statements.flatMap(statement => {
+    if (!isFunctionDeclaration(statement) && !isClassDeclaration(statement)
+      && !isInterfaceDeclaration(statement) && !isTypeAliasDeclaration(statement)
+      && !isEnumDeclaration(statement) && !isVariableStatement(statement)) return []
+    if (!statement.modifiers?.some(modifier => modifier.kind === SyntaxKind.ExportKeyword)) return []
+    if (isVariableStatement(statement)) return variableSymbols(file, statement.declarationList)
+    if (!statement.name) return []
+    const name = statement.name.text
+    const kind = declarationKinds[statement.kind]!
     return [{ id: `${file}#${name}`, name, kind }]
   })
 }
@@ -53,7 +75,7 @@ export async function analyzeSourceFiles(repositoryRoot: string, paths: string[]
     const files = await Promise.all(sources.map(async (source, index) => ({
       file: paths[index]!,
       specifiers: await usedImportSpecifiers(source, program.getProject().checker),
-      symbols: exportSymbols(paths[index]!, source.text),
+      symbols: exportSymbols(paths[index]!, source),
     })))
     return { files, ...evidence }
   } finally {
