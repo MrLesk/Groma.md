@@ -18,7 +18,7 @@ type SourceEvidence = {
   invocations: ScanInvocation[]
 }
 
-const exportPattern = /^export\s+(?:default\s+)?(?:declare\s+)?(?:async\s+)?(function|class|interface|type|enum|const|let|var)\s+(\w+)/gm
+const exportPattern = /^export\s+(?:default\s+)?(?:declare\s+)?(?:async\s+)?(?:abstract\s+)?(function|class|interface|type|enum|const|let|var)\s+(\w+)/gm
 
 function exportSymbols(file: string, source: string): ScanSymbol[] {
   return [...source.matchAll(exportPattern)].flatMap(match => {
