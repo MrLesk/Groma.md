@@ -25,6 +25,25 @@ const cases = [
   ['comment', "// import { Value } from './target.ts'\nexport const answer = 1", false],
 ] as const
 
+test.concurrent('exported abstract classes retain class symbol identity', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'groma-ts-symbols-'))
+  try {
+    await writeFile(path.join(root, 'classes.ts'), [
+      'export class Concrete {}',
+      'export abstract class Abstract {}',
+    ].join('\n'))
+    const git = Bun.spawn(['git', 'init', '--quiet'], { cwd: root, stderr: 'pipe' })
+    expect(await git.exited).toBe(0)
+    const graph = await buildImportGraph(root)
+    expect(graph.files.find(file => file.file === 'classes.ts')?.symbols).toEqual([
+      { id: 'classes.ts#Concrete', name: 'Concrete', kind: 'class' },
+      { id: 'classes.ts#Abstract', name: 'Abstract', kind: 'class' },
+    ])
+  } finally {
+    await rm(root, { recursive: true, force: true })
+  }
+})
+
 test.concurrent('source dependencies follow bindings and explicit module execution', async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'groma-ts-usage-'))
   try {
