@@ -20,9 +20,10 @@ function reactProject(root: string) {
   if (!manifest.dependencies?.react && !manifest.devDependencies?.react) return undefined
   try {
     createRequire(manifestFile).resolve('react')
-    const config = ts.readConfigFile(path.join(root, 'tsconfig.json'), ts.sys.readFile)
+    const configFile = path.join(root, 'tsconfig.json')
+    const config = ts.readConfigFile(configFile, ts.sys.readFile)
     if (config.error) failDiagnostics([config.error])
-    const parsed = ts.parseJsonConfigFileContent(config.config, ts.sys, root)
+    const parsed = ts.parseJsonConfigFileContent(config.config, ts.sys, root, undefined, configFile)
     failDiagnostics(parsed.errors)
     const program = ts.createProgram(parsed.fileNames, { ...parsed.options, noEmit: true })
     const sources = program.getSourceFiles().filter(source => {

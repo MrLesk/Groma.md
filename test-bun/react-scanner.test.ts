@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test'
+import { existsSync } from 'node:fs'
 import { cp, mkdtemp, readFile, rename, rm, symlink, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
@@ -70,6 +71,23 @@ test.concurrent('packaged React supplies a JSX callback beyond TypeScript with o
     conflicting.invocations![0]!.targets = [caller.id]
     expect(inferRelationships([react, conflicting], owners)).toEqual([])
     expect(inferRelationships([conflicting, react], owners)).toEqual([])
+  } finally { await rm(temporary, { recursive: true, force: true }) }
+})
+
+test.concurrent('React accepts incremental configuration without emitting build information', async () => {
+  const { temporary, root, scanner } = await setup()
+  try {
+    const file = path.join(root, 'tsconfig.json')
+    const config = JSON.parse(await readFile(file, 'utf8'))
+    config.compilerOptions.incremental = true
+    await writeFile(file, JSON.stringify(config))
+    await scanner.checkReadiness!(root)
+    const react = (await scanner.scan(root))!
+    const owners = new Map(react.files.map(file => [file.file, file.file]))
+    expect(inferRelationships([react], owners)).toEqual([
+      expect.objectContaining({ source: 'editor.tsx', target: 'host.tsx', technology: 'react' }),
+    ])
+    expect(existsSync(path.join(root, 'tsconfig.tsbuildinfo'))).toBe(false)
   } finally { await rm(temporary, { recursive: true, force: true }) }
 })
 
