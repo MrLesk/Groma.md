@@ -15,6 +15,7 @@ interface Candidate {
   endLine: number
   tokens: string[]
   fingerprint: string
+  counts: Map<string, number>
   owner?: string
 }
 
@@ -114,6 +115,7 @@ function candidateOf(
     endLine: operation.endLine,
     tokens: operation.tokens,
     fingerprint: operation.tokens.join('\0'),
+    counts: bag(operation.tokens),
     ...(owner === undefined ? {} : { owner }),
   }
 }
@@ -193,20 +195,14 @@ function laterSharing(itemIndex: number, gramSets: readonly Set<string>[], index
   return [...later]
 }
 
-function nearPair(items: readonly Candidate[], left: number, right: number): boolean {
-  if (items[left]!.fingerprint === items[right]!.fingerprint) return false
-  return lcsRatio(items[left]!.tokens, items[right]!.tokens) >= NEAR_LCS
-}
-
-function nearPairs(items: readonly Candidate[]): [number, number][] {
-  const { gramSets, index } = gramIndex(items)
-  const pairs: [number, number][] = []
-  for (let i = 0; i < items.length; i++) {
-    for (const j of laterSharing(i, gramSets, index)) {
-      if (nearPair(items, i, j)) pairs.push([i, j])
-    }
-  }
-  return pairs
+function nearPair(left: Candidate, right: Candidate): boolean {
+  const total = left.tokens.length + right.tokens.length
+  if (2 * Math.min(left.tokens.length, right.tokens.length) / total < NEAR_LCS) return false
+  // A common subsequence cannot contain more copies of a token than either body.
+  let shared = 0
+  for (const [token, count] of left.counts) shared += Math.min(count, right.counts.get(token) ?? 0)
+  if (2 * shared / total < NEAR_LCS) return false
+  return lcsRatio(left.tokens, right.tokens) >= NEAR_LCS
 }
 
 function clusters(items: readonly Candidate[]): number[][] {
@@ -214,7 +210,13 @@ function clusters(items: readonly Candidate[]): number[][] {
   for (const group of exactGroups(items)) {
     for (let index = 1; index < group.length; index++) sets.union(group[0]!, group[index]!)
   }
-  for (const [left, right] of nearPairs(items)) sets.union(left, right)
+  const { gramSets, index } = gramIndex(items)
+  for (let i = 0; i < items.length; i++) {
+    for (const j of laterSharing(i, gramSets, index)) {
+      // Findings expose connected clusters, so an internal edge cannot change the result.
+      if (sets.find(i) !== sets.find(j) && nearPair(items[i]!, items[j]!)) sets.union(i, j)
+    }
+  }
   const byRoot = new Map<number, number[]>()
   items.forEach((_, index) => {
     const root = sets.find(index)

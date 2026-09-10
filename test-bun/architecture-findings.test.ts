@@ -157,3 +157,36 @@ test.concurrent('scan remembers findings for owners without writing relationship
     await rm(root, { recursive: true, force: true })
   }
 })
+
+function findingsFor(bodies: string[][]) {
+  return detectDuplicatedLogic([observation(bodies.map((tokens, index) =>
+    operation(`${index}.ts`, `rule${index}`, tokens),
+  ))], new Map())
+}
+
+test.concurrent('duplicate comparisons retain the similarity threshold and unequal-length matches', () => {
+  const body = [...'abcdefghij']
+  expect(findingsFor([body, [...'abcdefgXYZ']])[0]?.match).toBe('similar')
+  expect(findingsFor([body, [...'abcdefWXYZ']])).toEqual([])
+  const shorter = [...'abcdefgh']
+  expect(findingsFor([shorter, [...'abcdefghijklmn']])[0]?.match).toBe('similar')
+  expect(findingsFor([shorter, [...'abcdefghijklmno']])).toEqual([])
+})
+
+test.concurrent('transitive similarity keeps every copy even when the endpoints do not match', () => {
+  const first = [...'abcdefghij']
+  const bridge = [...'abcdefgXYZ']
+  const last = [...'abcdUVWXYZ']
+  expect(findingsFor([first, last])).toEqual([])
+  const findings = findingsFor([first, bridge, [...bridge], last])
+  expect(findings).toHaveLength(1)
+  expect(findings[0]?.match).toBe('similar')
+  expect(findings[0]?.instances.map(instance => instance.file)).toEqual(['0.ts', '1.ts', '2.ts', '3.ts'])
+})
+
+test.concurrent('shared tokens still require matching multiplicity and sequence order', () => {
+  const repeated = [...'abcxxxxxxx']
+  expect(findingsFor([repeated, [...'abcxxxxyyy']])[0]?.match).toBe('similar')
+  expect(findingsFor([repeated, [...'abcxxxyyyy']])).toEqual([])
+  expect(findingsFor([[...'abcdefghij'], [...'abcjihgfed']])).toEqual([])
+})
