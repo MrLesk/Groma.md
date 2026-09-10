@@ -1,11 +1,11 @@
 ---
 id: TASK-339
 title: Reject React callback writes in destructuring assignments
-status: In Progress
+status: Done
 assignee:
   - '@codex'
 created_date: '2026-09-10 21:56'
-updated_date: '2026-09-10 22:04'
+updated_date: '2026-09-10 22:08'
 labels: []
 dependencies: []
 references:
@@ -33,7 +33,7 @@ React currently infers a certain supplied callback after destructuring overwrite
 ## Definition of Done
 <!-- DOD:BEGIN -->
 - [x] #1 Acceptance criteria have objective verification evidence.
-- [ ] #2 Relevant checks pass and changes remain task-scoped.
+- [x] #2 Relevant checks pass and changes remain task-scoped.
 - [x] #3 Public contracts or documentation are updated when behavior changes.
 - [x] #4 Implementation Plan reflects the final approach; correction history and verification are recorded in Implementation Notes.
 <!-- DOD:END -->
@@ -54,4 +54,12 @@ Final focused validation: bun test --timeout 20000 test-bun/react-scanner.test.t
 Full-check correction: changed the local visitor from a function declaration to a const arrow so TypeScript preserves the already-guarded callback symbol narrowing. No nullable fallback or assertion added. bun run typecheck and Biome pass; all 10 current React tests (including separate TASK-342) pass with repository timeout. Updated TASK-339 task-only patch and saved final source; TASK-342 baseline/final source receive the same correction, keeping its patch separate.
 
 Root verification passed: bun run check in current workspace (110 Node + 438 Bun, 7 optional-toolchain skips) and isolated HEAD checkout containing only the four audit fixes (110 Node + 424 Bun, 7 skips). No new lint warnings. Root reviewed task-only diff for scope and simplicity. Commit/push, cross-platform CI, and independent fresh review follow; task remains In Progress until delivery checks finish.
+
+Delivered in origin/main through 95683e5. CI run 34535591842 passed Linux, macOS, and Windows repository checks, standalone build and smoke checks. Independent cold review found no reason to revert this correction; two additional defects are handled in separate follow-up tasks.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Committed and pushed. Cross-platform CI passed on Linux, macOS, and Windows: https://github.com/MrLesk/Groma.md/actions/runs/34535591842. Independent review completed; additional issues are tracked separately.
+<!-- SECTION:FINAL_SUMMARY:END -->
