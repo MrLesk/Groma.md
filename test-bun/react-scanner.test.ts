@@ -105,7 +105,7 @@ test.concurrent('React rejects a reassigned callback parameter instead of inferr
   } finally { await rm(temporary, { recursive: true, force: true }) }
 })
 
-for (const assignment of ['[saved] = [() => {}]', '({ saved } = { saved: () => {} })', '({ callback: saved } = { callback: () => {} })']) {
+for (const assignment of ['[saved] = [() => {}]', '({ saved } = { saved: () => {} })', '({ callback: saved } = { callback: () => {} })', 'for (saved of [() => {}]) {}']) {
   test.concurrent(`React rejects a callback overwritten by ${assignment}`, async () => {
     const { temporary, root, scanner } = await setup()
     try {
@@ -131,6 +131,8 @@ test.concurrent('React preserves callback reads and assignments to another symbo
       [other = saved] = [saved];
       ({ saved: other } = { saved });
       { let saved = other; [saved] = [other]; }
+      for (const other of [saved]) { void other; }
+      for (let saved of [other]) { saved = other; }
       const finish =`))
     const react = (await scanner.scan(root))!
     const owners = new Map(react.files.map(file => [file.file, file.file]))

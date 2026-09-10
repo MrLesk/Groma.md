@@ -124,6 +124,7 @@ class Evidence {
         && node.operatorToken.kind >= ts.SyntaxKind.FirstAssignment
         && node.operatorToken.kind <= ts.SyntaxKind.LastAssignment
         && writesSymbol(node.left, symbol, checker)) reassigned = true
+      if (ts.isForOfStatement(node) && writesSymbol(node.initializer, symbol, checker)) reassigned = true
       if (ts.isCallExpression(node) && ts.isIdentifier(node.expression)
         && checker.getSymbolAtLocation(node.expression) === symbol) calls.push(node)
       ts.forEachChild(node, visit)
