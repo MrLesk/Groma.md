@@ -73,6 +73,20 @@ test.concurrent('packaged React supplies a JSX callback beyond TypeScript with o
   } finally { await rm(temporary, { recursive: true, force: true }) }
 })
 
+test.concurrent('React rejects a reassigned callback parameter instead of inferring the supplied handler', async () => {
+  const { temporary, root, scanner } = await setup()
+  try {
+    const file = path.join(root, 'editor.tsx')
+    const original = await readFile(file, 'utf8')
+    await writeFile(file, original.replace('const finish =', 'saved = () => {};\n  const finish ='))
+    const react = (await scanner.scan(root))!
+    const owners = new Map(react.files.map(file => [file.file, file.file]))
+    expect(inferRelationships([react], owners)).toEqual([])
+    expect(react.invocations).toEqual([])
+    expect(react.diagnostics.some(item => item.code === 'unsupported-react-binding')).toBe(true)
+  } finally { await rm(temporary, { recursive: true, force: true }) }
+})
+
 test.concurrent('React abstains on conditional handlers and JSX spreads and reports missing prerequisites', async () => {
   const { temporary, root, scanner } = await setup()
   try {

@@ -100,14 +100,20 @@ class Evidence {
     const symbol = this.checker.getSymbolAtLocation(binding.name)
     if (!symbol) return []
     const calls: ts.CallExpression[] = []
+    let reassigned = false
     const checker = this.checker
     function visit(node: ts.Node): void {
+      if (ts.isBinaryExpression(node) && ts.isIdentifier(node.left)
+        && node.operatorToken.kind >= ts.SyntaxKind.FirstAssignment
+        && node.operatorToken.kind <= ts.SyntaxKind.LastAssignment
+        && checker.getSymbolAtLocation(node.left) === symbol) reassigned = true
       if (ts.isCallExpression(node) && ts.isIdentifier(node.expression)
         && checker.getSymbolAtLocation(node.expression) === symbol) calls.push(node)
       ts.forEachChild(node, visit)
     }
     visit(component)
-    return calls
+    // Mutable callback values are unsupported; symbol identity alone cannot establish their target.
+    return reassigned ? [] : calls
   }
 
   private binding(component: Operation, attribute: ts.JsxAttribute): void {
