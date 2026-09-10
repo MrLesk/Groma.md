@@ -87,6 +87,42 @@ test.concurrent('React rejects a reassigned callback parameter instead of inferr
   } finally { await rm(temporary, { recursive: true, force: true }) }
 })
 
+for (const assignment of ['[saved] = [() => {}]', '({ saved } = { saved: () => {} })', '({ callback: saved } = { callback: () => {} })']) {
+  test.concurrent(`React rejects a callback overwritten by ${assignment}`, async () => {
+    const { temporary, root, scanner } = await setup()
+    try {
+      const file = path.join(root, 'editor.tsx')
+      const original = await readFile(file, 'utf8')
+      await writeFile(file, original.replace('const finish =', `${assignment};\n  const finish =`))
+      const react = (await scanner.scan(root))!
+      const owners = new Map(react.files.map(file => [file.file, file.file]))
+      expect(inferRelationships([react], owners)).toEqual([])
+      expect(react.invocations).toEqual([])
+      expect(react.diagnostics.some(item => item.code === 'unsupported-react-binding')).toBe(true)
+    } finally { await rm(temporary, { recursive: true, force: true }) }
+  })
+}
+
+test.concurrent('React preserves callback reads and assignments to another symbol', async () => {
+  const { temporary, root, scanner } = await setup()
+  try {
+    const file = path.join(root, 'editor.tsx')
+    const original = await readFile(file, 'utf8')
+    await writeFile(file, original.replace('const finish =', `
+      let other = saved;
+      [other = saved] = [saved];
+      ({ saved: other } = { saved });
+      { let saved = other; [saved] = [other]; }
+      const finish =`))
+    const react = (await scanner.scan(root))!
+    const owners = new Map(react.files.map(file => [file.file, file.file]))
+    expect(inferRelationships([react], owners)).toEqual([
+      expect.objectContaining({ source: 'editor.tsx', target: 'host.tsx', technology: 'react' }),
+    ])
+    expect(react.diagnostics).toEqual([])
+  } finally { await rm(temporary, { recursive: true, force: true }) }
+})
+
 test.concurrent('React abstains on conditional handlers and JSX spreads and reports missing prerequisites', async () => {
   const { temporary, root, scanner } = await setup()
   try {
