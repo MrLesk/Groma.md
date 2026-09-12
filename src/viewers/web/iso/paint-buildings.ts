@@ -26,6 +26,18 @@ function ensureFacadePattern(
   return id
 }
 
+function floorPattern(
+  layer: SVGGElement,
+  projected: ProjectedBuilding,
+  floor: BuildingFloor | undefined,
+  plane: Extract<Plane, 'left' | 'right'>,
+  view: ProjectionView,
+): string {
+  if (floor !== undefined) return ensureFacadePattern(layer, floor.facadeFileType, plane, view)
+  if (projected.building.kind === 'actor') return `dots-${plane}`
+  return `${projected.building.external ? 'cross' : 'lines'}-${plane}`
+}
+
 function paintFloor(
   layer: SVGGElement,
   buildingGroup: SVGGElement,
@@ -41,11 +53,7 @@ function paintFloor(
     group.append(svg('polygon', { points: pointsAttribute(face.points) }, `face ${face.side}`))
     if (face.side !== 'top') {
       const plane = face.plane!
-      const pattern = floor !== undefined
-        ? ensureFacadePattern(layer, floor.facadeFileType, plane, view)
-        : projected.building.kind === 'actor' ? `dots-${plane}`
-        : projected.building.external ? `cross-${plane}`
-        : `lines-${plane}`
+      const pattern = floorPattern(layer, projected, floor, plane, view)
       const attributes = { points: pointsAttribute(face.points), style: `fill:url(#${pattern})` }
       group.append(svg('polygon', attributes, `pattern ${face.side}`))
     }

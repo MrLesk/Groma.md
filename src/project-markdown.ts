@@ -19,6 +19,16 @@ function isElement(node: ComarkNode): node is ComarkElement {
 
 const childrenOf = (node: ComarkElement): ComarkNode[] => node.slice(2) as ComarkNode[]
 
+function styleOf(tag: string): MarkdownStyle | undefined {
+  switch (tag) {
+    case 'strong': return 'strong'
+    case 'em': return 'emphasis'
+    case 'code': return 'code'
+    case 'a': return 'link'
+    default: return undefined
+  }
+}
+
 function spansOf(
   nodes: readonly ComarkNode[],
   styles: readonly MarkdownStyle[] = [],
@@ -29,34 +39,31 @@ function spansOf(
       return [{ text: node, styles: [...styles] }]
     }
     if (!isElement(node)) return []
-    const style: MarkdownStyle | undefined = node[0] === 'strong' ? 'strong'
-      : node[0] === 'em' ? 'emphasis'
-        : node[0] === 'code' ? 'code'
-          : node[0] === 'a' ? 'link'
-            : undefined
+    const style = styleOf(node[0])
     const nextStyles = style === undefined || styles.includes(style) ? styles : [...styles, style]
     return spansOf(childrenOf(node), nextStyles)
   })
 }
 
+function listBlocks(node: ComarkElement): MarkdownBlock[] {
+  let index = 0
+  return childrenOf(node).flatMap(child => {
+    if (!isElement(child) || child[0] !== 'li') return []
+    index += 1
+    return [{ marker: node[0] === 'ol' ? `${index}.` : '•', spans: spansOf(childrenOf(child)) }]
+  })
+}
+
 function blocksOf(nodes: readonly ComarkNode[]): MarkdownBlock[] {
   return nodes.flatMap(node => {
-    if (typeof node === 'string') return node.trim() === '' ? [] : [{ spans: spansOf([node]) }]
+    if (typeof node === 'string') return [{ spans: spansOf([node]) }]
     if (!isElement(node)) return []
-    if (node[0] === 'p') return [{ spans: spansOf(childrenOf(node)) }]
     if (/^h[1-6]$/.test(node[0])) return [{ spans: spansOf(childrenOf(node), ['strong']) }]
     if (node[0] === 'pre') return [{ spans: spansOf(childrenOf(node), ['code']) }]
     if (node[0] === 'blockquote') {
       return blocksOf(childrenOf(node)).map(block => ({ ...block, marker: '›' }))
     }
-    if (node[0] === 'ul' || node[0] === 'ol') {
-      let index = 0
-      return childrenOf(node).flatMap(child => {
-        if (!isElement(child) || child[0] !== 'li') return []
-        index += 1
-        return [{ marker: node[0] === 'ol' ? `${index}.` : '•', spans: spansOf(childrenOf(child)) }]
-      })
-    }
+    if (node[0] === 'ul' || node[0] === 'ol') return listBlocks(node)
     return [{ spans: spansOf(childrenOf(node)) }]
   }).filter(block => block.spans.some(span => span.text.trim() !== ''))
 }

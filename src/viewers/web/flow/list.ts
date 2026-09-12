@@ -51,15 +51,13 @@ export function createFlowList() {
     list.hidden = !unfolded
     const actorIds = new Set(actors.map(actor => actor.id))
     const ungrouped = flows.filter(flow => !actorIds.has(flow.steps[0]!.source))
-    for (const [actorIndex, actor] of actors.entries()) {
-      const followingActor = actorIndex < actors.length - 1 || ungrouped.length > 0
-      const expanded = expandedActors.has(actor.id)
-      const actorFlows = flows.filter(flow => flow.steps[0]?.source === actor.id)
-      const toggle = () => {
-        if (expanded) expandedActors.delete(actor.id)
-        else expandedActors.add(actor.id)
-        paintFlows(host, world, active, onToggle, options)
-      }
+    const actorRows = (
+      actor: typeof actors[number],
+      actorFlows: typeof flows,
+      followingActor: boolean,
+      expanded: boolean,
+      toggle: () => void,
+    ) => {
       const heading = sidebarRow(actor.title, 'actor', { expanded, count: actorFlows.length, toggle })
       heading.dataset.id = actor.id
       heading.classList.toggle('selected', options.selectedIds?.includes(actor.id) === true)
@@ -74,7 +72,18 @@ export function createFlowList() {
         row.prepend(...sidebarBranches([followingActor, flowIndex < actorFlows.length - 1]))
         children.append(row)
       }
-      list.append(heading, children)
+      return [heading, children]
+    }
+    for (const [actorIndex, actor] of actors.entries()) {
+      const followingActor = actorIndex < actors.length - 1 || ungrouped.length > 0
+      const expanded = expandedActors.has(actor.id)
+      const actorFlows = flows.filter(flow => flow.steps[0]?.source === actor.id)
+      const toggle = () => {
+        if (expanded) expandedActors.delete(actor.id)
+        else expandedActors.add(actor.id)
+        paintFlows(host, world, active, onToggle, options)
+      }
+      list.append(...actorRows(actor, actorFlows, followingActor, expanded, toggle))
     }
     for (const [index, flow] of ungrouped.entries()) {
       const title = contextActor?.id === flow.steps[0]!.source ? groupedTitle(flow.title, contextActor.title) : flow.title
