@@ -33,6 +33,14 @@ Groma scans your code, draws it as a [C4](https://c4model.com) architecture map,
 
 Free, MIT-licensed, and local. No account, backend, or AI service required.
 
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset=".github/assets/workflow-dark.png">
+    <source media="(prefers-color-scheme: light)" srcset=".github/assets/workflow-light.png">
+    <img src=".github/assets/workflow-light.png" alt="Groma scans your repository into C4 architecture documents stored as OKF Markdown. Add relationships and groups to build a live architecture map that updates as your code changes." width="100%">
+  </picture>
+</p>
+
 ## Install
 
 ```sh
