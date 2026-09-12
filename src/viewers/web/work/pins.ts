@@ -96,6 +96,22 @@ export function createPins(host: HTMLElement, anchorOf: (id: string) => Point | 
       node.style.setProperty('--stem', `${Math.hypot(fan, STEM)}px`)
     }
   }
+  const updatePin = (pin: WorkPin, anchor: Point): void => {
+    let node = pinned.get(pin.key)?.node
+    if (node === undefined) {
+      node = document.createElement('div')
+      node.className = painted ? 'pin arriving' : 'pin'
+      node.innerHTML = PIN
+      node.querySelector('.head')!.addEventListener('click', () => onToggle(pin.taskId))
+      tip.attach(node.querySelector('.head')!)
+      layer.append(node)
+    }
+    pinned.set(pin.key, { node, anchor })
+    node.style.setProperty('--pin', pin.colour)
+    node.querySelector<HTMLElement>('.head')!.dataset.tip = `${pin.assignee ?? 'Unassigned'} · ${pin.title}`
+    fillWorkBadge(node, pin, finishing.has(pin.key))
+    node.querySelector('.task')!.textContent = pin.taskId
+  }
   return {
     paint(next) {
       const visible = new Set(pins
@@ -116,20 +132,7 @@ export function createPins(host: HTMLElement, anchorOf: (id: string) => Point | 
       for (const pin of pins) {
         const anchor = anchorOf(pin.elementId)
         if (anchor === undefined) continue
-        let node = pinned.get(pin.key)?.node
-        if (node === undefined) {
-          node = document.createElement('div')
-          node.className = painted ? 'pin arriving' : 'pin'
-          node.innerHTML = PIN
-          node.querySelector('.head')!.addEventListener('click', () => onToggle(pin.taskId))
-          tip.attach(node.querySelector('.head')!)
-          layer.append(node)
-        }
-        pinned.set(pin.key, { node, anchor })
-        node.style.setProperty('--pin', pin.colour)
-        node.querySelector<HTMLElement>('.head')!.dataset.tip = `${pin.assignee ?? 'Unassigned'} · ${pin.title}`
-        fillWorkBadge(node, pin, finishing.has(pin.key))
-        node.querySelector('.task')!.textContent = pin.taskId
+        updatePin(pin, anchor)
       }
       painted = true
       fanOut()

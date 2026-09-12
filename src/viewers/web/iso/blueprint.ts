@@ -142,6 +142,15 @@ function sameStyle(left: PlateRun | undefined, right: MarkdownSpan): boolean {
   return left !== undefined && left.styles.join(' ') === right.styles.join(' ')
 }
 
+function* plateTokens(spans: readonly MarkdownSpan[], width: number, size: number): Generator<MarkdownSpan> {
+  for (const span of spans) {
+    for (const token of span.text.match(/\S+|\s+/g) ?? []) {
+      const chunks = /^\s+$/.test(token) ? [token] : chunksOf(token, width, size)
+      for (const text of chunks) yield { text, styles: span.styles }
+    }
+  }
+}
+
 function wrapBlock(block: MarkdownBlock, width: number, size: number): PlateRun[][] {
   const spans = block.marker === undefined
     ? block.spans
@@ -149,26 +158,22 @@ function wrapBlock(block: MarkdownBlock, width: number, size: number): PlateRun[
   const lines: PlateRun[][] = [[]]
   let lineText = ''
   let pendingSpace = false
-  for (const span of spans) {
-    for (const token of span.text.match(/\S+|\s+/g) ?? []) {
-      if (/^\s+$/.test(token)) {
-        pendingSpace = true
-        continue
-      }
-      for (const chunk of chunksOf(token, width, size)) {
-        const separator = lineText === '' || !pendingSpace ? '' : ' '
-        if (lineText !== '' && textWidth(`${lineText}${separator}${chunk}`, size) > width) {
-          lines.push([])
-          lineText = ''
-        }
-        const text = `${lineText === '' ? '' : separator}${chunk}`
-        const line = lines.at(-1)!
-        if (sameStyle(line.at(-1), span)) line.at(-1)!.text += text
-        else line.push({ text, styles: [...span.styles] })
-        lineText += text
-        pendingSpace = false
-      }
+  for (const span of plateTokens(spans, width, size)) {
+    if (/^\s+$/.test(span.text)) {
+      pendingSpace = true
+      continue
     }
+    const separator = lineText === '' || !pendingSpace ? '' : ' '
+    if (lineText !== '' && textWidth(`${lineText}${separator}${span.text}`, size) > width) {
+      lines.push([])
+      lineText = ''
+    }
+    const text = `${lineText === '' ? '' : separator}${span.text}`
+    const line = lines.at(-1)!
+    if (sameStyle(line.at(-1), span)) line.at(-1)!.text += text
+    else line.push({ text, styles: [...span.styles] })
+    lineText += text
+    pendingSpace = false
   }
   return lines
 }
