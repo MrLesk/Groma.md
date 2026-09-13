@@ -54,8 +54,15 @@ For the first publication, run the Release workflow manually from the prepared
 source branch. A manual run validates the repository and builds scanner artifacts
 for all five targets; it does not publish. Download its `scanner-packages-*`
 artifacts, assemble them, and publish with the maintainer's npm login. npm may
-request approval in the browser. Then configure trusted publishing for each
-package. Later GitHub releases use the same workflow and publish automatically.
+request approval in the browser. Then configure trusted publishing once for each package with npm 11.15.0 or later:
+
+```sh
+npm trust github @groma/scanner --repository MrLesk/Groma.md --file release.yml --allow-publish
+```
+
+Repeat the command with each `@groma/scanner-<id>` name. The package must already
+exist, and npm requests two-factor approval for the trust change. Later GitHub
+releases use the same workflow and publish automatically.
 Do not put credentials or two-factor codes in repository files.
 
 ```sh
