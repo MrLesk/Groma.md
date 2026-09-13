@@ -1,11 +1,11 @@
 ---
 id: TASK-356
 title: Publish official scanners through one shared npm release workflow
-status: In Progress
+status: Done
 assignee:
   - '@codex'
 created_date: '2026-09-12 14:24'
-updated_date: '2026-09-13 16:00'
+updated_date: '2026-09-13 16:16'
 labels:
   - scanners
 dependencies:
@@ -68,17 +68,17 @@ The existing Java/Angular/TypeScript acceptance project is ../callforpapers, rel
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 One shared release workflow publishes the scanner author contract (@groma/scanner, subject to final namespace) and the official C#, Java, Go, Rust, Angular, Vue, React and TypeScript packages from this repository; official packages use the public plugin contract and installer without privileged loading paths.
-- [ ] #2 Versioned packages are available under the final public npm names. Required worker programs are prebuilt for the advertised OS/CPU targets; users do not compile the scanner. Required project tools and actual platform limits are documented.
-- [ ] #3 A Groma build embeds discovery and compatibility metadata from the selected published plugin versions. Setup recommends the appropriate installable official scanners through that metadata; TypeScript uses the same package flow prepared by TASK-362.
-- [ ] #4 A user with a fresh compiled Groma can select and install an official scanner, inspect its exact source/version and readiness, and scan the existing ../callforpapers Java/Angular/TypeScript example. Record the checkout, preparation commands, public package/version references, and focused evidence.
+- [x] #1 One shared release workflow publishes the scanner author contract (@groma/scanner, subject to final namespace) and the official C#, Java, Go, Rust, Angular, Vue, React and TypeScript packages from this repository; official packages use the public plugin contract and installer without privileged loading paths.
+- [x] #2 Versioned packages are available under the final public npm names. Required worker programs are prebuilt for the advertised OS/CPU targets; users do not compile the scanner. Required project tools and actual platform limits are documented.
+- [x] #3 A Groma build embeds discovery and compatibility metadata from the selected published plugin versions. Setup recommends the appropriate installable official scanners through that metadata; TypeScript uses the same package flow prepared by TASK-362.
+- [x] #4 A user with a fresh compiled Groma can select and install an official scanner, inspect its exact source/version and readiness, and scan the existing ../callforpapers Java/Angular/TypeScript example. Record the checkout, preparation commands, public package/version references, and focused evidence.
 - [x] #5 A second checkout restores the recorded exact npm selection using Groma, with project settings preserved and downloads cached across projects. Scan/viewer startup and installing a newer Groma do not silently change that selection. Existing remove and readiness commands remain usable.
-- [ ] #6 Release instructions describe one repeatable maintainer flow and the supported user installation path. The repository check passes; publication evidence names the platforms actually exercised without claiming a wider validation matrix.
+- [x] #6 Release instructions describe one repeatable maintainer flow and the supported user installation path. The repository check passes; publication evidence names the platforms actually exercised without claiming a wider validation matrix.
 <!-- AC:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 Acceptance criteria have objective verification evidence.
+- [x] #1 Acceptance criteria have objective verification evidence.
 - [x] #2 Relevant checks pass and changes remain task-scoped.
 - [x] #3 Public contracts or documentation are updated when behavior changes.
 - [x] #4 Implementation Plan reflects the final approach; correction history and verification are recorded in Implementation Notes.
@@ -87,11 +87,7 @@ The existing Java/Angular/TypeScript acceptance project is ../callforpapers, rel
 ## Implementation Plan
 
 <!-- SECTION:PLAN:BEGIN -->
-Prepare initial 0.1.0 releases under the confirmed @groma organization, with plugin-owned compatibility metadata for Groma 0.3.0. Publish the author contract first. Build the eight official scanners for all five approved targets using the shared release workflow, assemble their workers, and publish with npm authentication. Embed published metadata into a fresh Groma build; verify public installation, exact restore, and the disposable callforpapers example. Keep the main npm name groma.md. Record build targets separately from manually exercised targets.
-
-Finish the approved release: bump the changed scanner author contract to 0.1.1, retain prepared scanner 0.1.1 versions, run the repository check, and publish Groma 0.3.0 through the existing trusted GitHub release workflow. Verify the five build targets, public package metadata, a fresh compiled install and exact second-checkout restore on the prepared callforpapers example. Record actual manual platform coverage.
-
-Public consumer validation reproduced bundled framework compiler library paths pointing at the CI build checkout. Fix the shared Angular/React/Vue package builder, verify relocated packages on the existing examples, bump only these changed plugins, and publish them through the same trusted workflow without changing Groma 0.3.0. Resume public acceptance and task finalization.
+Publish official scanners and their author contract from one trusted GitHub workflow. Groma 0.3.0 embeds published discovery metadata; changed framework packages can publish through the same workflow without republishing Groma. Verify public installation, readiness, scanning, source inspection and exact restoration with compiled Groma on the recorded callforpapers example. Record all five build targets separately from macOS arm64 consumer validation.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
@@ -136,6 +132,16 @@ Alex approved the shorter Highlights / Behavior changes release notes and explic
 All eight scanner 0.1.1 packages and @groma/scanner 0.1.1 were published through GitHub OIDC in run 34765688173. CLI builds read the registry before Vue was visible: build lookups at 15:40:10–48 UTC preceded the registry publication timestamp 15:40:57. All eight exact versions now resolve through the same readPublishedScanners code. Rerunning only failed CLI jobs; no package/version/code change is required.
 
 Public consumer checks found Angular/React/Vue compiler library paths embedded from the CI host. The shared builder now ships the pinned compiler as typescript.cjs beside its existing library declarations and keeps that import external to the adapter bundle. No compiler patch, runtime fallback, added dependency or architecture semantic change. Relocated React scan on Yaak passed (245 files, 8 invocations); Angular on callforpapers passed (711 files, 121 invocations). All three compilers resolve libraries inside their installed package. Existing framework suite: 13 passed; full repository check: 16 Node and 290 Bun passed, six native skips. Added an explicit publish_scanners input to the same trusted workflow to publish corrected framework packages at 0.1.2 without republishing Groma 0.3.0. Other scanner versions remain 0.1.1. Implementer specification/quality review passed for this bounded packaging fix.
+
+Groma 0.3.0 release run 34765688173 completed successfully after rerunning CLI builds once npm exposed the exact scanner versions. All five standalone binaries and SHA256SUMS are attached. npm delayed macOS package visibility for several minutes after accepting it; a later genuinely fresh npm install (npm-clean) installed both wrapper and platform package and reports 0.3.0. Its binary matches the GitHub asset SHA-256 5de96a46499d67e04209041967e904ac7ae09ddd80fe105dfeb6b56f3b452ff9. Scanner-only fix publication is run 34767264377 at 5a6ab23; main CLI is not republished.
+
+Final acceptance passed on macOS arm64 using npm-installed Groma 0.3.0. Final public versions: @groma/scanner, Java, Go, Rust, C# and TypeScript 0.1.1; Angular, React and Vue 0.1.2. Every package has GitHub provenance. Release 34765688173 and scanner-only release 34767264377 succeeded. Both workflows built darwin-arm64, linux-x64, linux-arm64, win32-x64 and win32-arm64; only darwin-arm64 consumer behavior was manually exercised.
+
+callforpapers revision 1cb6783f3379664e3f176e72c5419064ce24dbfd was archived into /tmp/groma-public-030/callforpapers. Its previously prepared node_modules was copied with cp -cR; installed Angular is 21.2.19 and TypeScript 5.9.3. Maven preparation ran ./mvnw --batch-mode --no-transfer-progress --non-recursive org.apache.maven.plugins:maven-help-plugin:3.5.1:effective-pom org.apache.maven.plugins:maven-dependency-plugin:3.9.0:build-classpath -Doutput=/tmp/groma-public-030/cfp-pom.xml -Dmdep.outputFile=/tmp/groma-public-030/cfp-classpath.txt -DincludeScope=compile with Java 25.0.1. Groma init and discovery offered the matching plugins; bare npm package installation pinned Java/TypeScript 0.1.1 and Angular 0.1.2. Check, scan, plain view and static export passed: 1394 created records, 277 findings, and 451 components with source outlines in the export. These are snapshot counts, not accuracy claims.
+
+A separate full project copy restored the exact committed selection with the registry pointed at an unavailable local endpoint. Cached package payload files and timestamps were unchanged; the installer rewrites its own cache manifest normally. Project configuration stayed byte-identical through restore/check/scan. Removing all selections preserved saved Markdown byte-for-byte, kept plain viewing available and left the original checkout unchanged. Public Vue 0.1.2 also installed and scanned the existing vue-output fixture (5 records).
+
+Fresh npm install of groma.md@0.3.0 installed the wrapper plus macOS binary; its SHA-256 matches the GitHub asset. Tool versions and raw evidence are under /tmp/groma-public-030: environment.json, final-public-packages.json, callforpapers-public.log, restore-public.log, vue-public.log and the two static sites. Earlier temporary harness assertions were corrected to match the current bare-package recommendation and cache-wrapper behavior; no product assertion was removed. Required full check after the final code change passed 16 Node and 290 Bun tests with six existing native skips. Self specification and quality review found no remaining acceptance blocker. Existing domain reviews remain applicable; the final changes were bounded package delivery fixes, with no new OKF/C4 meaning.
 <!-- SECTION:NOTES:END -->
 
 ## Comments
@@ -147,3 +153,9 @@ created: 2026-09-12 20:41
 Astra reviewed this task without conversation history. Clarified the identified handoff gaps; unresolved release or example choices are explicitly recorded rather than inferred. Scope and To Do status are unchanged.
 ---
 <!-- COMMENTS:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Published Groma 0.3.0 and all official scanner packages through trusted GitHub publishing. Corrected framework compiler packaging and released Angular/React/Vue 0.1.2 through the same workflow without a new CLI release. Verified five-target builds, public macOS installation, callforpapers scanning and source export, exact second-checkout restore, shared cache reuse, removal and preserved saved architecture. Repository checks pass.
+<!-- SECTION:FINAL_SUMMARY:END -->
