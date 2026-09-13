@@ -1,11 +1,11 @@
 ---
 type: C4 Component
-title: Smoke compiled
+title: Src projects
 status: stable
 groma:
-  id: smoke-compiled
+  id: src-projects
   parent: scanner
   code:
     - scanner: typescript
-      file: plugins/scanners/rust/smoke-compiled.ts
+      file: plugins/scanners/typescript/src/projects.ts
 ---

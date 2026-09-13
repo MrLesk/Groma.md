@@ -112,15 +112,18 @@ title: Architecture relationships
 | Source | Target | Description | Technology |
 | --- | --- | --- | --- |
 | [src/architecture-watch.ts](../src/architecture-watch.ts) | [src/view-host.ts](../src/view-host.ts) | Invokes supplied onChange callback | typescript |
+| [src/architecture-watch.ts](../src/architecture-watch.ts) | [src/viewers/tui/scanner-settings.ts](../src/viewers/tui/scanner-settings.ts) | Invokes supplied onChange callback | typescript |
 | [src/architecture-watch.ts](../src/architecture-watch.ts) | [src/viewers/web/export.ts](../src/viewers/web/export.ts) | Invokes supplied onChange callback | typescript |
 | [src/architecture-watch.ts](../src/architecture-watch.ts) | [src/viewers/web/map-session.ts](../src/viewers/web/map-session.ts) | Invokes supplied onChange callback | typescript |
 | [src/init-command.ts](../src/init-command.ts) | [src/cli.ts](../src/cli.ts) | Invokes supplied openViewer callback | typescript |
-| [src/scanner.ts](../src/scanner.ts) | [src/cli.ts](../src/cli.ts) | Invokes supplied onError callback; Invokes supplied onFold callback | typescript |
-| [src/scanner.ts](../src/scanner.ts) | [src/view-host.ts](../src/view-host.ts) | Invokes supplied onFold callback | typescript |
-| [src/scanner.ts](../src/scanner.ts) | [src/viewers/web/export.ts](../src/viewers/web/export.ts) | Invokes supplied onFold callback | typescript |
-| [src/scanner.ts](../src/scanner.ts) | [src/viewers/web/map-session.ts](../src/viewers/web/map-session.ts) | Invokes supplied onError callback; Invokes supplied onFold callback | typescript |
+| [src/scanner.ts](../src/scanner.ts) | [src/cli.ts](../src/cli.ts) | Invokes supplied onFold callback | typescript |
+| [src/scanner/session.ts](../src/scanner/session.ts) | [src/view-host.ts](../src/view-host.ts) | Invokes supplied onFold callback; Invokes supplied onSettings callback | typescript |
+| [src/scanner/session.ts](../src/scanner/session.ts) | [src/viewers/web/map-session.ts](../src/viewers/web/map-session.ts) | Invokes supplied onFold callback; Invokes supplied onSettings callback | typescript |
+| [src/scanner/source-watch.ts](../src/scanner/source-watch.ts) | [src/cli.ts](../src/cli.ts) | Invokes supplied onError callback | typescript |
+| [src/scanner/source-watch.ts](../src/scanner/source-watch.ts) | [src/scanner.ts](../src/scanner.ts) | Invokes supplied onObservations callback | typescript |
+| [src/scanner/source-watch.ts](../src/scanner/source-watch.ts) | [src/scanner/session.ts](../src/scanner/session.ts) | Invokes supplied onError callback; Invokes supplied onObservations callback | typescript |
 | [src/viewers/tui/panes/screen.ts](../src/viewers/tui/panes/screen.ts) | [src/viewers/tui/terminal-viewer.ts](../src/viewers/tui/terminal-viewer.ts) | Invokes supplied onHierarchyRow callback; Invokes supplied onMapCell callback | typescript |
-| [src/viewers/tui/terminal-viewer.ts](../src/viewers/tui/terminal-viewer.ts) | [src/view-host.ts](../src/view-host.ts) | Invokes supplied onRefresh callback; Invokes supplied readSource callback; Invokes supplied readStructure callback; Invokes supplied readTask callback; Invokes supplied readTaskDiff callback | typescript |
+| [src/viewers/tui/terminal-viewer.ts](../src/viewers/tui/terminal-viewer.ts) | [src/view-host.ts](../src/view-host.ts) | Invokes supplied onRefresh callback; Invokes supplied openScanners callback; Invokes supplied readSource callback; Invokes supplied readStructure callback; Invokes supplied readTask callback; Invokes supplied readTaskDiff callback | typescript |
 | [src/viewers/web/authoring.ts](../src/viewers/web/authoring.ts) | [src/viewers/web/render.ts](../src/viewers/web/render.ts) | Invokes supplied live callback; Invokes supplied world callback | typescript |
 | [src/viewers/web/iso/pointer.ts](../src/viewers/web/iso/pointer.ts) | [src/viewers/web/render.ts](../src/viewers/web/render.ts) | Invokes supplied editProject callback; Invokes supplied orbiting callback; Invokes supplied select callback | typescript |
 | [src/viewers/web/search/session.ts](../src/viewers/web/search/session.ts) | [src/viewers/web/render.ts](../src/viewers/web/render.ts) | Invokes supplied anchorOf callback; Invokes supplied apply callback; Invokes supplied openTask callback; Invokes supplied previewMap callback; Invokes supplied snapshot callback; Invokes supplied taskElements callback | typescript |

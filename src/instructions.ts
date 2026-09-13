@@ -60,7 +60,7 @@ Say what must be true, not how to build it. Do not specify frameworks, file layo
 - Remove a planned collaboration: groma remove relation <source-file> <target-file>. Only draft relationships without flow references can be removed; current relationships are protected.
 - Draft outcome prose: groma edit <draft-id> --overview <markdown>
 - Project record: groma edit project [--title <text>] [--description <text>] [--overview <markdown>]
-- Remove a person, an external, a ghost, or a draft no ghost belongs to: groma remove <id>. It refuses while other parts relate to it, while a ghost still contains parts, or while ghosts carry the draft's tag, and it never removes scanned software.
+- Remove a person, an external, a ghost, a component without Code references, or a draft no ghost belongs to: groma remove <id>. For scanned components, delete the source files and run their scanner first to clear the Code references. Removal still refuses while flows use the element, other parts relate to it, it contains parts, or ghosts carry the draft's tag.
 
 Containers need a system parent. Components need a container parent. An external system has no containers. Structural edits preserve authored file interactions through current ownership and refuse to remove authored prose or concept-addressed relationships. Scans refresh the Derived relationships section from supported operation evidence and preserve authored sections. Raw dependency graphs are not persisted. Current authored text takes precedence for the same file pair; editing a derived row takes authorship. Scans never verify authored text or accept drafts.
 

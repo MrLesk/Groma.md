@@ -10,6 +10,7 @@ groma:
       file: src/viewers/source/read.ts
     - scanner: typescript
       file: src/viewers/source/structure.ts
+      symbol: readCodeStructure
     - scanner: typescript
       file: src/viewers/source/diff.ts
     - scanner: typescript
