@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@codex'
 created_date: '2026-09-12 14:24'
-updated_date: '2026-09-13 02:45'
+updated_date: '2026-09-13 15:08'
 labels:
   - scanners
 dependencies:
@@ -43,6 +43,8 @@ modified_files:
   - plugins/scanners/react/package.json
   - plugins/scanners/typescript/package.json
   - package.json
+  - packages/scanner/package.json
+  - bun.lock
 priority: high
 type: feature
 ordinal: 402000
@@ -84,6 +86,8 @@ The existing Java/Angular/TypeScript acceptance project is ../callforpapers, rel
 
 <!-- SECTION:PLAN:BEGIN -->
 Prepare initial 0.1.0 releases under the confirmed @groma organization, with plugin-owned compatibility metadata for Groma 0.3.0. Publish the author contract first. Build the eight official scanners for all five approved targets using the shared release workflow, assemble their workers, and publish with npm authentication. Embed published metadata into a fresh Groma build; verify public installation, exact restore, and the disposable callforpapers example. Keep the main npm name groma.md. Record build targets separately from manually exercised targets.
+
+Finish the approved release: bump the changed scanner author contract to 0.1.1, retain prepared scanner 0.1.1 versions, run the repository check, and publish Groma 0.3.0 through the existing trusted GitHub release workflow. Verify the five build targets, public package metadata, a fresh compiled install and exact second-checkout restore on the prepared callforpapers example. Record actual manual platform coverage.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
@@ -114,6 +118,8 @@ Trusted publishing successfully configured for @groma/scanner through npm 11.15.
 Alex requested completing trusted publishing before the newly requested nested-project scanner fix. Assemble the verified five-target workflow artifacts from run 34733177332 (source e0fabf3), publish the eight prepared 0.1.0 packages, then configure each GitHub trusted publisher. The later nested-project fix will use new package versions; published versions are immutable.
 
 Trusted publishing setup completed after Alex approved npm browser authentication. All eight official scanners are now publicly published at 0.1.0 from the assembled five-target artifacts. Each trusts GitHub repository MrLesk/Groma.md, workflow release.yml, for publication: java 48e305b4-91d1-4ce3-a688-38eda84e1caa; go 2314c52a-d51f-48fc-8e13-3cb65f5e3750; rust 22847c2f-461d-45b7-bf8f-aa7be0227411; csharp bbdde880-ecc6-4f61-bdc7-1dcde57e680c; angular c191fd5a-21a1-43dd-adb2-fa1eca7875aa; vue 921d549e-b21b-47d5-b63a-d64587f76284; react aff80efa-3c90-4832-b79c-b047fa56b52d; typescript 783bd890-1137-4ac8-b185-0f06539bec6c. The contract trust was completed earlier. Read-only npm trust list also verified groma.md and all five existing platform packages already trust this same repository/workflow. Future releases through GitHub Actions need no maintainer 2FA. No new CI release was triggered merely to test publication; fresh public consumer validation and the newly requested nested-project scanner fix remain pending.
+
+Final release pass: current source changes require @groma/scanner 0.1.1 as well as all eight prepared scanner 0.1.1 packages. Updated the contract manifest and lockfile. Full repository check passed: 16 Node and 289 Bun tests, six existing native skips. The first sandboxed run could not open local servers/FSEvents; rerunning with the required local permissions passed. Existing main CI 34764129798 passed all three operating systems. Proceeding with the authorized Groma 0.3.0 GitHub release through trusted publication; concurrent TASK-166 working-tree files are excluded from this release commit.
 <!-- SECTION:NOTES:END -->
 
 ## Comments
