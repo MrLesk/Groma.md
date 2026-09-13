@@ -11,4 +11,4 @@ groma:
   group: Web runtime
 ---
 
-Builds a complete read-only Web snapshot from the current project, architecture, work, diffs, and owned source, then publishes it as atomic static files. Watch mode replaces that snapshot locally while public browsers read only the static host.
+Builds a complete read-only Web snapshot from stored architecture, the current project, work read through its plugin, diffs, and owned source. Publishes static files for separate hosting. Source scanning belongs to the scanner adapter.
