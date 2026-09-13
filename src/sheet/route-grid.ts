@@ -64,16 +64,15 @@ function portGroups(ports: readonly PortPair[], requests: readonly RouteRequest[
   return [...groups.values()]
 }
 
-/** Add turning tracks and keep each port clear through the nearest track outside its wall. */
-function portFans(groups: readonly RoutePort[][]): { x: number[]; y: number[]; exits: Map<RoutePort, Point> } {
-  const fans = { x: [] as number[], y: [] as number[], exits: new Map<RoutePort, Point>() }
+/** Add outward turning tracks for each wall's ports. */
+function portFans(groups: readonly RoutePort[][]): { x: number[]; y: number[] } {
+  const fans = { x: [] as number[], y: [] as number[] }
   for (const group of groups) {
     for (const [index, port] of group.entries()) {
       const axis = port.side === 'east' || port.side === 'west' ? 'x' : 'y'
       const sign = port.side === 'east' || port.side === 'south' ? 1 : -1
       const gap = sign * LANE_GAP / (group.length + 1)
       fans[axis].push(port.guard[axis] + gap * (index + 1))
-      fans.exits.set(port, { ...port.guard, [axis]: port.guard[axis] + gap })
     }
   }
   return fans
@@ -90,10 +89,12 @@ function blockBuildings(grid: RouteGrid, boxes: readonly ObstacleBox[]): void {
   }
 }
 
-/** Keep the whole exit clear so an earlier path cannot trap a later port against its wall. */
-function reserveExit(grid: RouteGrid, start: number, finish: number, owner: number): void {
-  const step = Math.sign(finish - start) * (Math.floor(start / grid.xs.length) === Math.floor(finish / grid.xs.length) ? 1 : grid.xs.length)
-  for (let node = start; node !== finish + step; node += step) {
+/** Reserve the nearest outward track; a longer run can overlap a facing wall's exit. */
+function reserveExit(grid: RouteGrid, start: number, port: RoutePort, owner: number): void {
+  const horizontal = port.side === 'east' || port.side === 'west'
+  const sign = port.side === 'east' || port.side === 'south' ? 1 : -1
+  const step = sign * (horizontal ? 1 : grid.xs.length)
+  for (const node of [start, start + step]) {
     if (grid.reserved[node] && grid.reserved[node] !== owner) throw new Error('Routes share a fixed port exit')
     grid.reserved[node] = owner
   }
@@ -124,8 +125,8 @@ export function routeGrid(
   // Boundaries are blocked too: only a route's own port may open its wall.
   blockBuildings(grid, boxes)
   for (const [index, pair] of ports.entries()) {
-    reserveExit(grid, grid.ends[index]![0], node(fans.exits.get(pair.source)!), index + 1)
-    reserveExit(grid, grid.ends[index]![1], node(fans.exits.get(pair.target)!), index + 1)
+    reserveExit(grid, grid.ends[index]![0], pair.source, index + 1)
+    reserveExit(grid, grid.ends[index]![1], pair.target, index + 1)
   }
   return grid
 }
