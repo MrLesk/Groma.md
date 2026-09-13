@@ -1,5 +1,6 @@
 import { configuredScannerModules, type ScannerResolutionOptions } from './inventory.ts'
 import { importScanner } from '../registry.ts'
+import { discoverScanners } from './discovery.ts'
 
 export interface ProjectReadiness {
   id: string
@@ -14,10 +15,18 @@ export async function checkScannerReadiness(
   options: ScannerResolutionOptions = {},
 ): Promise<ProjectReadiness[]> {
   const results: ProjectReadiness[] = []
-  for (const module of await configuredScannerModules(root, options)) {
+  const modules = await configuredScannerModules(root, options)
+  const proposal = modules.some(module => module.status === 'found' && module.discovery?.compatibility)
+    ? await discoverScanners(root, options) : undefined
+  for (const module of modules) {
     if (module.status === 'missing') {
       results.push({ id: module.id, package: 'missing', project: 'blocked',
         message: `Restore ${module.source} with groma scanner install, or restore its local path.` })
+      continue
+    }
+    const compatibility = proposal?.recommendations.find(item => item.id === module.id && item.status === 'incompatible')
+    if (compatibility) {
+      results.push({ id: module.id, package: 'found', project: 'blocked', message: compatibility.reason })
       continue
     }
     try {

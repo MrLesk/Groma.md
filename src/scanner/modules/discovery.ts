@@ -8,7 +8,7 @@ import { discoveryRuleFindings } from './discovery-rules.ts'
 
 import packageJson from '../../../package.json'
 import { GromaFileSystem } from '../../groma-filesystem.ts'
-import { officialScannerCatalog, recommendScanners } from './catalog.ts'
+import { officialScannerCatalog, recommendScanners, releaseCompatibility } from './catalog.ts'
 import type { TechnologyFinding, ScannerRecommendation, OfficialScanner } from './catalog.ts'
 import { scannerInventory, configuredScannerModules } from './inventory.ts'
 import { readScannerConfig } from './config.ts'
@@ -125,9 +125,14 @@ export async function discoverScanners(
     }
   }
   const inventory = initialized ? await scannerInventory(repositoryRoot, options) : []
+  const recommendations = recommendScanners(findings, inventory, packageJson.version, catalog).map(candidate => {
+    const scanner = installed.find(scanner => scanner.id === candidate.id)
+    if (!scanner?.release) return candidate
+    const compatibility = releaseCompatibility(scanner, candidate.evidence, packageJson.version)
+    return compatibility.status === 'incompatible' ? { ...candidate, ...compatibility } : candidate
+  })
   return {
-    findings, inventory,
-    recommendations: recommendScanners(findings, inventory, packageJson.version, catalog),
+    findings, inventory, recommendations,
     limits: [...limits, ...coverageLimits(findings, catalog)],
   }
 }

@@ -12,6 +12,7 @@ import type {
   ScannerResolutionOptions,
 } from './modules/inventory.ts'
 import { officialScannerCatalog } from './modules/official-catalog.ts'
+import { discoverScanners } from './modules/discovery.ts'
 import { compileWatchPatterns } from './watch-patterns.ts'
 
 export class ScannerFailure extends Error {
@@ -91,7 +92,10 @@ export async function loadScannerRegistry(
   const excluded = (file: string) => matcher.ignores(file.split(path.sep).join('/'))
   const modules = await configuredScannerModules(repositoryRoot, options)
   const found = modules.filter((module): module is FoundScannerModule => module.status === 'found')
-  const scanners = await Promise.all(found.map(async module => {
+  const proposal = found.some(module => module.discovery?.compatibility)
+    ? await discoverScanners(repositoryRoot, options) : undefined
+  const blocked = new Set(proposal?.recommendations.filter(item => item.status === 'incompatible').map(item => item.id))
+  const scanners = await Promise.all(found.filter(module => !blocked.has(module.id)).map(async module => {
     try {
       const scanner = await importScanner(module.entry, module.id)
       return { ...scanner, scan: (root: string) => scanner.scan(root, module.settings) }

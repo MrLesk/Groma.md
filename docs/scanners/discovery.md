@@ -77,13 +77,16 @@ Source-watch include patterns do not establish language or framework support.
 The result distinguishes:
 
 - `configured`: existing selection retained, including missing packages.
-  Availability comes from the scanner inventory; it does not verify tooling
-  or compatibility of a local package.
+  Installed plugin metadata is checked for known incompatibilities; project
+  tooling is checked separately. Missing packages have no installed metadata
+  to verify.
 - `installable`: a catalogued release matches Groma and all confirmed
   technology versions. `installSource` holds the exact package/version.
 - `unavailable`: no verified release is catalogued.
 - `incompatible`: Groma or a declared technology version is outside the
-  release's support range.
+  release's support range. For installed selections, this uses the installed
+  plugin's metadata and prevents its code from loading. The selection remains
+  recorded so it can be updated or removed explicitly.
 - `uncertain`: a release exists, but version compatibility cannot be established
   from an exact declaration or an installed package. Unresolved ranges,
   expressions, or missing versions need project-tooling confirmation.
