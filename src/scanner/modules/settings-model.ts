@@ -44,7 +44,7 @@ export function scannerSettingLabel(scanner: ScannerSetting): string {
 /** Project selection and local package availability are different responsibilities. */
 export function scannerGroups(scanners: readonly ScannerSetting[], query = '') {
   const search = query.trim().toLocaleLowerCase()
-  const matching = scanners.filter(scanner => [scanner.id, scanner.name, ...scanner.technologies]
+  const matching = scanners.filter(scanner => [scanner.id, scanner.name, scanner.source ?? '', ...scanner.technologies]
     .some(value => value.toLocaleLowerCase().includes(search)))
   return [
     { title: 'Installed', scanners: matching.filter(scanner => scanner.source && scanner.status !== 'missing') },
