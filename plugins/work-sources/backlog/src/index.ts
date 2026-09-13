@@ -35,6 +35,13 @@ function startBacklog(
   })
 }
 
+function commandFailure(stderr: string, code: number | null): Error {
+  if (/unknown option[^\n]*--(?:json|watch)\b/i.test(stderr)) {
+    return new Error('Update Backlog.md to show tasks in Groma: npm install -g backlog.md. The installed CLI does not support the required JSON/watch commands.')
+  }
+  return new Error(stderr.trim() || `backlog exited ${code}`)
+}
+
 function runBacklog(command: string, arguments_: string[], repositoryRoot: string): Promise<string> {
   return new Promise((resolve, reject) => {
     const child = startBacklog(command, arguments_, repositoryRoot)
@@ -48,7 +55,7 @@ function runBacklog(command: string, arguments_: string[], repositoryRoot: strin
     child.on('error', reject)
     child.on('close', code => {
       if (code === 0) resolve(Buffer.concat(stdout).toString('utf8'))
-      else reject(new Error(stderr.trim() || `backlog exited ${code}`))
+      else reject(commandFailure(stderr, code))
     })
   })
 }
@@ -101,7 +108,7 @@ function watchBacklog(command: string, repositoryRoot: string, onTasks: (tasks: 
   const finished = new Promise<void>(resolve => {
     child.on('error', report)
     child.on('close', code => {
-      if (code !== 0) report(stderr.trim() || `CLI exited ${code}`)
+      if (code !== 0) report(commandFailure(stderr, code))
       resolve()
     })
   })

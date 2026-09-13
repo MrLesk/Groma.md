@@ -40,6 +40,9 @@ changes: the TUI marks In Progress work on referenced elements, while the web
 stands each task's pins on the element it touched last. A work refresh projects
 onto the cached map instead of composing another sheet. A failed Backlog read
 leaves the map available. A missing global Backlog.md CLI supplies empty work.
+The Backlog CLI must support `task list --json --watch`. If it rejects the
+required options, Groma reports upgrade guidance in its terminal output:
+`npm install -g backlog.md`. It does not install updates or read Backlog storage.
 Selection never changes world geometry. The web starts fitted to the whole map;
 the TUI starts on a readable root island. Routes stay on the map. One authored
 relationship is one route; on the TUI, relationships that promote to the
