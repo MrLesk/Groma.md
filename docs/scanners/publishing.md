@@ -8,6 +8,18 @@ versions; npm versions cannot be replaced. The workflow reuses exact versions
 already published and publishes only missing versions. Bump every package whose
 contents changed before starting a release.
 
+Repository validation and the five platform scanner builds start together.
+Each platform builds its independent scanners concurrently. Scanner publication
+waits for validation and every platform build to succeed. The contract publishes
+first, then the scanner packages publish concurrently. Each concurrent group
+finishes all started work before reporting any failures or advancing.
+
+Groma builds then run in parallel across the five platforms, after scanner
+publication makes their exact metadata available from npm. Release downloads and
+platform npm packages publish in parallel after those builds. The main npm
+wrapper waits for every platform package; the version update on main waits for
+both the wrapper and release downloads.
+
 Prepare a draft GitHub release and review its version, target commit and changelog
 with the maintainer before publishing it. Publishing the GitHub release starts
 the shared workflow for both scanner packages and the main Groma CLI.
@@ -72,7 +84,7 @@ bun scripts/scanner-release.ts publish /tmp/scanner-release
 ```
 
 The command refuses private or incomplete scanner release metadata. It publishes
-the contract first, followed by the scanners. After successful publication,
+the contract first, followed by the scanners concurrently. After successful publication,
 the workflow installs their metadata into the build checkout before compiling:
 
 ```sh

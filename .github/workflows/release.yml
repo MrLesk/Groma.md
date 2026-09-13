@@ -53,7 +53,6 @@ jobs:
 
   build-scanners:
     name: build-scanners-${{ matrix.platform }}
-    needs: validate
     strategy:
       fail-fast: false
       matrix:
@@ -107,7 +106,7 @@ jobs:
   publish-scanners:
     if: github.event_name == 'release' || inputs.publish_scanners
     name: publish-official-scanners
-    needs: build-scanners
+    needs: [validate, build-scanners]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
