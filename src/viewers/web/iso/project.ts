@@ -1,5 +1,5 @@
 import { ROOF_SHADOW, centredRect } from '../../../sheet/grid.ts'
-import { CONTAINER_FONT, GROUP_FONT, ISLAND_FONT, PLANE, buildingFont, curved, labelHeight, roofBlock } from '../../../sheet/measure.ts'
+import { CONTAINER_FONT, GROUP_FONT, ISLAND_FONT, ISLAND_SPACING, PLANE, buildingFont, curved, labelBand, roofBlock, textWidth } from '../../../sheet/measure.ts'
 import type {
   Building,
   CellRect,
@@ -86,23 +86,28 @@ export interface SurfaceText {
   lines: string[]
 }
 
+/** A surface name centered below its boundary, with room for a leader on the same plane. */
+export interface SurfaceLabel extends SurfaceText {
+  width: number
+}
+
 export interface ProjectedIsland {
   island: Island
   polygon: Point[]
-  text: SurfaceText
+  text: SurfaceLabel
 }
 
 export interface ProjectedZone {
   zone: Zone
   polygon: Point[]
-  text: SurfaceText
+  text: SurfaceLabel
 }
 
 export interface ProjectedSlab {
   slab: Slab
   /** Top level with the ground, sides hanging below it. */
   faces: Face[]
-  text: SurfaceText
+  text: SurfaceLabel
 }
 
 export interface ProjectedBuilding {
@@ -364,9 +369,19 @@ function roofText(building: Building, view: ProjectionView): SurfaceText {
   }
 }
 
-/** A surface's own name lies in its front band along the west corner, in front of every child. */
-function bandText(rect: CellRect, z: number, lines: string[], size: number, view: ProjectionView): SurfaceText {
-  return { origin: project(rect.gx, rect.gy + rect.d - labelHeight(size) / PLANE, z, view), lines }
+/** Packing reserves the front band for the external label, outside the painted boundary. */
+function surfaceBody(rect: CellRect, size: number): CellRect {
+  return { ...rect, d: rect.d - labelBand(size) }
+}
+
+function bandText(rect: CellRect, lines: string[], size: number, view: ProjectionView, spacing = 0): SurfaceLabel {
+  const width = Math.max(...lines.map(line => textWidth(line, size, spacing)))
+  const body = surfaceBody(rect, size)
+  return {
+    origin: project(rect.gx + (rect.w - width / PLANE) / 2, body.gy + body.d, 0, view),
+    lines,
+    width,
+  }
 }
 
 export function boundsOf(points: readonly Point[]): Bounds {
@@ -392,18 +407,18 @@ export function projectScene(
 ): ProjectedScene {
   const islands = scene.islands.map(island => ({
     island,
-    polygon: corners(island.rect, 0, view),
-    text: bandText(island.rect, 0, [island.name.toUpperCase()], ISLAND_FONT, view),
+    polygon: corners(surfaceBody(island.rect, ISLAND_FONT), 0, view),
+    text: bandText(island.rect, [island.name.toUpperCase()], ISLAND_FONT, view, ISLAND_SPACING),
   }))
   const zones = scene.zones.map(zone => ({
     zone,
-    polygon: corners(zone.rect, 0, view),
-    text: bandText(zone.rect, 0, [zone.name], GROUP_FONT, view),
+    polygon: corners(surfaceBody(zone.rect, GROUP_FONT), 0, view),
+    text: bandText(zone.rect, [zone.name], GROUP_FONT, view),
   }))
   const slabs = paintOrder(scene.slabs, view).map(slab => ({
     slab,
-    faces: boxFaces(slab.rect, -SLAB_HANG / HEIGHT_UNIT, 0, view),
-    text: bandText(slab.rect, 0, [slab.title], CONTAINER_FONT, view),
+    faces: boxFaces(surfaceBody(slab.rect, CONTAINER_FONT), -SLAB_HANG / HEIGHT_UNIT, 0, view),
+    text: bandText(slab.rect, [slab.title], CONTAINER_FONT, view),
   }))
   const buildings = paintOrder(scene.buildings, view).map(building => ({
     building,
@@ -436,6 +451,7 @@ export function projectScene(
     buildings,
     bounds: boundsOf([
       ...blueprint.frame,
+      ...[...scene.islands, ...scene.slabs, ...scene.zones].flatMap(item => corners(item.rect, 0, view)),
       ...buildings.flatMap(item => item.floors.flatMap(floor => floor.flatMap(face => face.points))),
     ]),
   }
