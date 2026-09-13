@@ -4,17 +4,26 @@ Open **Scanners** from the Groma splash screen (`s`), the terminal map
 (`Shift+S`), or the web toolbar. `groma scanner settings` opens the same terminal
 screen; without a terminal it prints the shared settings snapshot as JSON.
 
-Each row shows project matches, package availability and readiness. **Add scanner**
-accepts an exact npm package version, Git source or local package path. **Install**
-uses a confirmed recommendation. **Restore** restores that selection's package;
-for a missing local package, restore its directory. **Remove** changes this
-project's selection and keeps saved architecture. **Check again** runs preparation
-checks and a scan. **Update** requires an explicit version source for the same npm
+The same screen groups **Installed**, **Missing on this computer**, then
+**Recommended** scanners. Empty groups are hidden. Search filters the list by
+scanner name, package or technology. Recommendations give a short reason;
+**Details** reveals the source, matching files and diagnostics inline.
+
+**Add scanner** accepts an exact npm package version, Git source or local package
+path. **Install** restores a missing project selection or adds and installs a
+confirmed recommendation. Recommendations without a compatible source cannot be
+installed; Details explains why. For a missing local package, restore its
+directory. **Remove from project** changes this
+project's selection and keeps saved architecture. Scanners validate their requirements
+automatically when scanning. A failed scanner shows its error and **Retry** to run
+the project scan again after fixing the problem. **Update** requires an explicit version source for the same npm
 package or Git repository. Local packages run directly from their selected path.
-Terminal controls are shown in the footer; web update details are in each row.
+In the terminal, `/` edits search, Enter keeps the filter, and Escape clears it
+while editing. `d` toggles details; Page Up/Down scrolls the open details or moves
+through the list. Web details expand inside the selected row.
 
 A warning means no available selection matches detected source projects. A quiet
-hint means some detected technology support is missing or needs checking. Actual
+hint means some detected technology support is missing or its project match is unknown. Actual
 scanner failures show their error. No detected source project is neutral, so a
 project used only to read saved or hand-written architecture needs no scanners.
 Unknown metadata or compatibility remains unknown; a match never promises complete

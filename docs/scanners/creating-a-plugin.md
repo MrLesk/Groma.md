@@ -72,7 +72,8 @@ throw an error with concrete user instructions otherwise. Reuse the same
 validation in `scan` so preparation does not depend on running a separate
 command first. The hook must not install development tools or project
 dependencies. Groma presents its failure alongside package availability.
-Plugins without a hook are reported as unchecked and remain scannable.
+Plugins without a hook remain scannable; scanner settings do not require a
+separate preparation check.
 
 A scanner may supply `readCodeStructure(repositoryRoot, references, settings)`
 for the source outline in the viewers and static export. Each reference contains
