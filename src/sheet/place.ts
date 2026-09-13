@@ -1,7 +1,7 @@
 import { compareSemanticElements } from '../element-order.ts'
 import type { AnnotatedElement, AnnotatedRelationship, ArchitectureGraph } from '../types.ts'
 import { composePlacement } from './compose.ts'
-import { ISLAND_GAP, NESTED_CONTENT_PAD } from './forces.ts'
+import { GAP, ISLAND_GAP, NESTED_CONTENT_PAD } from './forces.ts'
 import { MARGIN, PAD, shadeOf, translate, unionRects } from './grid.ts'
 import {
   ISLAND_FONT,
@@ -20,6 +20,8 @@ import {
 import { grow, shelf } from './pack.ts'
 import type { Partnered } from './pack.ts'
 import { flowRanks } from './rank.ts'
+import { mapRelationships } from './relationships.ts'
+import { connectionCounts, portSideCells, routeReach } from './route-space.ts'
 import type {
   Building,
   BuildingFloor,
@@ -40,6 +42,7 @@ interface Node {
   key: string
   w: number
   d: number
+  connections: number
   children: { node: Node; gx: number; gy: number }[]
   paint:
     | { kind: 'building'; element: AnnotatedElement; heightUnits: number; shape: Shape; floors: BuildingFloor[]; lines: string[] }
@@ -80,7 +83,22 @@ function buildingNode(element: AnnotatedElement, ranges: FileMeasureRanges, degr
     : floors.reduce((total, floor) => total + floor.heightUnits, 0) || 1
   const w = Math.max(base.w, ...floors.map(floor => floor.footprint.w))
   const d = Math.max(base.d, ...floors.map(floor => floor.footprint.d))
-  return { key: element.representationId, w, d, children: [], paint: { kind: 'building', element, heightUnits, shape, floors, lines } }
+  return { key: element.representationId, w, d, connections: degree, children: [], paint: { kind: 'building', element, heightUnits, shape, floors, lines } }
+}
+
+/** Reserve a node's connection fan beyond the minimum gap already supplied by packing. */
+function routeMargin(node: Node): number {
+  return Math.max(0, routeReach(node.connections) - GAP / 2)
+}
+
+function subtreeConnections(key: string, children: readonly Node[], relationships: readonly Pick<AnnotatedRelationship, 'source' | 'target'>[]): number {
+  const keys = new Set([key])
+  const visit = (node: Node): void => {
+    keys.add(node.key)
+    for (const child of node.children) visit(child.node)
+  }
+  for (const child of children) visit(child)
+  return relationships.filter(relationship => keys.has(relationship.source) || keys.has(relationship.target)).length
 }
 
 /** The cells a surface's own name needs in its front band. */
@@ -101,7 +119,7 @@ interface Lifted {
   partners: Map<string, Map<string, number>>
 }
 
-function lifted(siblings: readonly Node[], relationships: readonly AnnotatedRelationship[]): Lifted {
+function lifted(siblings: readonly Node[], relationships: readonly Pick<AnnotatedRelationship, 'source' | 'target'>[]): Lifted {
   /** The sibling each node inside the surface stands in. */
   const holder = new Map<string, string>()
   const claim = (node: Node, sibling: string): void => {
@@ -135,7 +153,7 @@ function packed(
   key: string,
   children: readonly Node[],
   paint: Node['paint'],
-  relationships: readonly AnnotatedRelationship[],
+  relationships: readonly Pick<AnnotatedRelationship, 'source' | 'target'>[],
   stack = false,
 ): Node {
   const { entries, partners } = lifted(children, relationships)
@@ -147,23 +165,28 @@ function packed(
   const behind = (child: Node): number => (child.paint.kind === 'building' ? shadeOf(child.paint.heightUnits) : 0)
   const items: Partnered[] = children.map(child => ({
     key: child.key,
-    w: child.w + behind(child),
-    d: child.d + behind(child),
+    w: child.w + behind(child) + 2 * routeMargin(child),
+    d: child.d + behind(child) + 2 * routeMargin(child),
     entry: entries.has(child.key),
     partners: partners.get(child.key)!,
   }))
   const placed = stack ? shelf(items, 1) : grow(items)
   /** Systems, slabs and zones share the roomier nested-surface inset; the centred actors and external islands stay compact. */
-  const padding = paint.kind === 'island' && paint.islandKind !== 'system' ? PAD : NESTED_CONTENT_PAD
+  const connections = subtreeConnections(key, children, relationships)
+  const ownPorts = connectionCounts(relationships).get(key) ?? 0
+  const portSide = Math.ceil(portSideCells(ownPorts))
+  const minimumPadding = paint.kind === 'island' && paint.islandKind !== 'system' ? PAD : NESTED_CONTENT_PAD
+  const padding = Math.max(minimumPadding, routeReach(connections))
   const extra = padding - PAD
   const font = paint.kind === 'island' ? ISLAND_FONT : paint.kind === 'slab' ? CONTAINER_FONT : GROUP_FONT
   return {
     key,
-    w: Math.max(placed.w, nameWidth(paint)) + 2 * extra,
-    d: placed.d + 2 * extra + labelBand(font),
+    connections,
+    w: Math.max(placed.w + 2 * extra, nameWidth(paint) + 2 * extra, portSide),
+    d: Math.max(placed.d + 2 * extra + labelBand(font), portSide),
     children: children.map(child => {
       const at = placed.at.get(child.key)!
-      return { node: child, gx: at.gx + behind(child) + extra, gy: at.gy + behind(child) + extra }
+      return { node: child, gx: at.gx + behind(child) + routeMargin(child) + extra, gy: at.gy + behind(child) + routeMargin(child) + extra }
     }),
     paint,
   }
@@ -172,16 +195,19 @@ function packed(
 /**
  * Actors and external islands are squares with their buildings centred above the name band, so a
  * lone building does not sit in the corner of a strip cut for the island's
- * name. The side grows by one cell when the west and east margins would differ.
+ * name. Centring preserves the complete roof and connection allowance.
  */
 function squared(node: Node): Node {
-  const content = {
-    w: Math.max(...node.children.map(child => child.gx + child.node.w)) - PAD,
-    d: Math.max(...node.children.map(child => child.gy + child.node.d)) - PAD,
-  }
-  const side = Math.max(node.w, node.d) + (Math.max(node.w, node.d) - content.w) % 2
-  const dx = Math.floor((side - content.w) / 2) - PAD
-  const dy = Math.floor((side - labelBand(ISLAND_FONT) - content.d) / 2) - PAD
+  const content = unionRects(node.children.map(child => ({
+    gx: child.gx, gy: child.gy, w: child.node.w, d: child.node.d,
+  })))!
+  const shadow = Math.max(...node.children.map(child =>
+    child.node.paint.kind === 'building' ? shadeOf(child.node.paint.heightUnits) : 0))
+  const padding = Math.max(PAD, routeReach(node.connections)) + shadow
+  const band = labelBand(ISLAND_FONT)
+  const side = Math.max(node.w, node.d, content.w + 2 * padding, content.d + band + 2 * padding)
+  const dx = (side - content.w) / 2 - content.gx
+  const dy = (side - band - content.d) / 2 - content.gy
   return {
     ...node,
     w: side,
@@ -195,7 +221,7 @@ function withZones(
   parentKey: string,
   siblings: readonly Node[],
   elements: readonly AnnotatedElement[],
-  relationships: readonly AnnotatedRelationship[],
+  relationships: readonly Pick<AnnotatedRelationship, 'source' | 'target'>[],
 ): Node[] {
   const groupOf = new Map(elements.map(element => [element.representationId, element.group]))
   const buckets = new Map<string, { group: string | undefined; nodes: Node[] }>()
@@ -212,11 +238,8 @@ function withZones(
 }
 
 export function placeWorld(world: ArchitectureGraph): Placement {
-  const degree = new Map<string, number>()
-  for (const relationship of world.relationships) {
-    degree.set(relationship.source, (degree.get(relationship.source) ?? 0) + 1)
-    degree.set(relationship.target, (degree.get(relationship.target) ?? 0) + 1)
-  }
+  const relationships = mapRelationships(world)
+  const degree = connectionCounts(relationships)
   const ranges = fileMeasureRanges(world.elements)
   const childrenOf = (parent: string | null): AnnotatedElement[] => world.elements
     .filter(element => element.parent === parent)
@@ -228,18 +251,18 @@ export function placeWorld(world: ArchitectureGraph): Placement {
     const components = childrenOf(container.representationId).filter(child => child.kind === 'component')
     return packed(
       container.representationId,
-      withZones(container.representationId, components.map(building), components, world.relationships),
+      withZones(container.representationId, components.map(building), components, relationships),
       { kind: 'slab', element: container },
-      world.relationships,
+      relationships,
     )
   }
   const systemIsland = (system: AnnotatedElement): Node => {
     const containers = childrenOf(system.representationId).filter(child => child.kind === 'container')
     return packed(
       system.representationId,
-      withZones(system.representationId, containers.map(slab), containers, world.relationships),
+      withZones(system.representationId, containers.map(slab), containers, relationships),
       { kind: 'island', islandKind: 'system', name: system.title, element: system },
-      world.relationships,
+      relationships,
     )
   }
   const roots = childrenOf(null)
@@ -250,17 +273,17 @@ export function placeWorld(world: ArchitectureGraph): Placement {
   const islands: Node[] = []
   if (actors.length > 0) {
     islands.push(squared(packed(ACTORS_ISLAND, actors.map(building),
-      { kind: 'island', islandKind: 'actors', name: 'Actors', element: null }, world.relationships, true)))
+      { kind: 'island', islandKind: 'actors', name: 'Actors', element: null }, relationships, true)))
   }
   const systemIslands = systems.map(systemIsland)
   const externalIslands = externals.length === 0 ? [] : [squared(packed(EXTERNAL_ISLAND, externals.map(building),
-    { kind: 'island', islandKind: 'external', name: 'External systems', element: null }, world.relationships, true))]
+    { kind: 'island', islandKind: 'external', name: 'External systems', element: null }, relationships, true))]
   const all = [...islands, ...systemIslands, ...externalIslands]
-  const { entries, edges } = lifted(all, world.relationships)
+  const { entries, edges } = lifted(all, relationships)
   const ranks = flowRanks(all.map(island => island.key), entries, edges)
   const rankOf = (island: Node): number => ranks.get(island.key) ?? Number.MAX_SAFE_INTEGER
   islands.push(...systemIslands.sort((a, b) => rankOf(a) - rankOf(b)), ...externalIslands)
-  return composePlacement(collect(islands, placeRow(islands, world.relationships)), world.relationships)
+  return composePlacement(collect(islands, placeRow(islands, relationships)), relationships)
 }
 
 /**
@@ -269,13 +292,14 @@ export function placeWorld(world: ArchitectureGraph): Placement {
  * cells apart; then the actors and external islands slide along gy so the
  * centre of their buildings faces the centre of what those buildings talk to.
  */
-function placeRow(islands: readonly Node[], relationships: readonly AnnotatedRelationship[]): CellRect[] {
+function placeRow(islands: readonly Node[], relationships: readonly Pick<AnnotatedRelationship, 'source' | 'target'>[]): CellRect[] {
   const deepest = Math.max(0, ...islands.map(island => island.d))
   const origins: CellRect[] = []
   let gx = 0
-  for (const island of islands) {
+  for (const [index, island] of islands.entries()) {
     origins.push({ gx, gy: Math.round((deepest - island.d) / 2), w: island.w, d: island.d })
-    gx += island.w + ISLAND_GAP
+    const next = islands[index + 1]
+    gx += island.w + Math.max(ISLAND_GAP, routeReach(island.connections) + routeReach(next?.connections ?? 0))
   }
   const rects = new Map<string, CellRect>()
   const islandOf = new Map<string, string>()

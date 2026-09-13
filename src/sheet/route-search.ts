@@ -1,5 +1,5 @@
 import { LANE_GAP, type Point } from './route-geometry.ts'
-import type { RouteGrid } from './route-grid.ts'
+import { parallelEdges, type RouteGrid } from './route-grid.ts'
 
 /** Parallel arrays avoid an object allocation for every queued search state. */
 class SearchQueue {
@@ -80,8 +80,10 @@ export class RouteSearch {
 
   private available(node: number, edge: number, mask: number): boolean {
     const reserved = this.grid.reserved[node]!
+    const reservedEdge = this.grid.reservedEdges[edge * 2 + mask - 1]!
     return !this.grid.blocked[node] && !(this.grid.used[edge]! & mask)
       && (reserved === 0 || reserved === this.run)
+      && (reservedEdge === 0 || reservedEdge === this.run)
   }
 
   private relax(state: number, cost: number, next: number, axis: number, distance: number): void {
@@ -118,7 +120,10 @@ export class RouteSearch {
       const a = nodes[index - 1]!
       const b = nodes[index]!
       const edge = Math.min(a, b)
-      this.grid.used[edge] = this.grid.used[edge]! | (Math.abs(a - b) === 1 ? 1 : 2)
+      const axis = Math.abs(a - b) === 1 ? 0 : 1
+      for (const lane of parallelEdges(this.grid, edge, axis)) {
+        this.grid.used[lane] = this.grid.used[lane]! | (axis + 1)
+      }
     }
     const width = this.grid.xs.length
     return nodes.map(node => ({ x: this.grid.xs[node % width]!, y: this.grid.ys[Math.floor(node / width)]! }))

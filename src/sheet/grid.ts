@@ -1,4 +1,3 @@
-import { CORRIDOR, GAP } from './forces.ts'
 import type { CellRect } from './types.ts'
 
 /** Base cells inside a packed parent; surface labels use the same compact edge inset. */
@@ -10,14 +9,11 @@ export const PAD = 1
  */
 export const ROOF_SHADOW = 0.5
 /**
- * Extra cells a building claims on its north and west, where its roof hides
- * the ground. Its neighbours there stand that much further away, so the
- * corridor between them still shows CORRIDOR cells; its south and east
- * neighbours are unaffected, because nothing hides that ground.
+ * The full roof shadow is part of a building's packing envelope. Connection
+ * space is reserved outside that envelope, never borrowed from its shadow.
  */
 export function shadeOf(heightUnits: number): number {
-  /** Never negative: a wider GAP already clears the roof, and a building must not claim less than its footprint. */
-  return Math.max(0, Math.ceil(heightUnits * ROOF_SHADOW + CORRIDOR - GAP))
+  return Math.ceil(heightUnits * ROOF_SHADOW)
 }
 /** Cells of sheet around the islands; the compass rose lives in a corner of this band. */
 export const MARGIN = 4

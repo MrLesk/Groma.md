@@ -305,11 +305,16 @@ any length), by the arrows it would stand in the way of, and by the
 cells it adds to the surface's longer side, so a heavy target comes
 next to what feeds it, light intermediates settle at the edges,
 partners line up into straight runs and chains wrap instead of
-stretching. A building's roof hides the ground behind it, so it
-claims those cells on its north and west; once that shadow outgrows
-the usual gap, its neighbours there stand far enough back that the
-corridor between them still shows ground. Nothing hides the ground
-to its south and east, so those neighbours keep the usual gap.
+stretching. Placement and routing share one connection-space calculation.
+Each building reserves its full roof shadow, port clearance, and turning lanes.
+Ports keep room for a stroke lane on either side; additional connections grow
+the minimum footprint and its surrounding space. Groups, containers and islands
+include the connection space of their contents, and container composition keeps
+those allowances when moving whole subtrees. The router allocates physical lane
+width before drawing a line, including turning room for ports that will be
+routed later. It provides bypass tracks around buildings and keeps perpendicular
+crossings possible without sharing parallel strokes. These are drawing rules;
+they do not change the stored elements, relationships or source evidence.
 Nothing stands west of the entries, and children no
 relationship touches are packed as one block after them. The
 actors and external islands shift across the row, north or south, so
@@ -325,7 +330,7 @@ between them. Each group takes the maximum member measurements. Its
 distinct source-file dependents, and depth shows distinct source-file
 dependencies. Floors are ordered largest-first and lower footprints expand
 where needed so no upper floor overhangs them. Every floor stays centred on
-one tower axis. Ghost and unmeasured components keep the minimum dimensions.
+one tower axis. Ghost and unmeasured components keep the minimum dimensions required by their names and connection ports.
 Actors are round buildings (a cylinder whose circular roof holds the
 name) and external systems are pills (a stadium roof with the name on
 one line), one floor each, on their own islands; a route meets the wall

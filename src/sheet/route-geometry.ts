@@ -1,12 +1,9 @@
 import type { AnnotatedRelationship } from '../types.ts'
 import { ROOF_SHADOW } from './grid.ts'
 import type { CellRect, Route } from './types.ts'
+import { ROUTE_UNIT, ROUTE_CLEARANCE } from './route-space.ts'
 
-export const ROUTE_UNIT = 24
-export const ROUTE_CLEARANCE = ROUTE_UNIT / 2
-export const LANE_GAP = ROUTE_UNIT * 0.75
-/** Parallel lines need room for their visible strokes, even when their grid axes differ. */
-export const ROUTE_SPACING = ROUTE_UNIT / 8
+export { ROUTE_UNIT, ROUTE_CLEARANCE, LANE_GAP, ROUTE_SPACING } from './route-space.ts'
 
 export interface Point {
   x: number
