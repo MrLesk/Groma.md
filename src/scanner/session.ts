@@ -48,13 +48,9 @@ export async function createScannerSession(root: string, options: {
     checks = []
     publish(await readScannerSettings(root, checks, options))
     const registry = await loadScannerRegistry(root, options)
-    if (scan) {
-      try { await fold(await registry.collectObservations(root)) }
-      catch (error) { await report(error) }
-    }
     if (closed) return
     // With no selected scanner, only declaration matching runs; no scan evidence is written.
-    watcher = await watchObservations(root, registry, { onObservations: fold, onError: report })
+    watcher = await watchObservations(root, registry, { scan, onObservations: fold, onError: report })
   }
   function enqueue(action: () => Promise<void>, propagate = false): Promise<void> {
     const next = serial.then(async () => { if (!closed) await action() }).catch(async error => {
