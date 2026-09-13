@@ -1,11 +1,11 @@
 ---
 id: TASK-326.5
 title: Deliver the official Go scanner using Go language tooling
-status: In Progress
+status: Done
 assignee:
   - '@scanner_go'
 created_date: '2026-09-08 21:34'
-updated_date: '2026-09-09 21:07'
+updated_date: '2026-09-12 14:25'
 labels:
   - scanners
 dependencies:
@@ -17,6 +17,8 @@ references:
   - go-src-scanner-index
   - go-scanner-build
   - go-scanner-smoke
+  - TASK-352
+  - TASK-356
 documentation:
   - docs/scanners/evidence.md
   - docs/scanners/creating-a-plugin.md
@@ -47,11 +49,7 @@ ordinal: 366000
 ## Description
 
 <!-- SECTION:DESCRIPTION:BEGIN -->
-A developer with the project's Go tooling installed can install the official Go scanner and scan a supported Go project through Groma's common lifecycle. Start by fetching and inspecting research/go-scanner-prototype and reuse its completed scanner work, fixtures, and research examples where available; do not assume a green preparation workflow is a delivered scanner. At task creation the visible branch head was 87bcdef, containing research preparation only, while the project owner reported further work complete. Locate the completed work before starting a replacement implementation.
-
-Use Go's established package-loading, syntax/type, and project tools for package membership, symbol identity, and call-target evidence. Keep Groma-specific extraction in the plugin; do not implement a competing Go resolver. The local Go toolchain and project dependency preparation are documented prerequisites.
-
-Choose one supported project from the branch's research examples and one minimal independent test fixture. Implement and review that result before extending module/workspace/build-configuration coverage. Follow the parent's evidence, discovery, readiness, and architecture ownership rules.
+The supported Go example needs compiler-resolved source and operation evidence using its own compilation context and dependencies. Reuse the accepted Go research implementation and common scanner lifecycle, with explicit uncertainty and stable curated ownership. This task covers the accepted private-package Chi example and domain behavior. Public discoverability, distribution and advertised target support are consolidated in TASK-356; TASK-352 removes automated package qualification requirements.
 <!-- SECTION:DESCRIPTION:END -->
 
 ## Acceptance Criteria
@@ -59,14 +57,14 @@ Choose one supported project from the branch's research examples and one minimal
 - [x] #1 The latest completed Go research work is located and assessed, with useful code and validation reused; any genuinely missing implementation is completed under this task rather than silently assuming the prototype is finished.
 - [x] #2 The supported project is loaded through established Go tooling, using its declared compilation context and dependencies, with no custom replacement for language name/type resolution.
 - [x] #3 The scanner supplies deterministic shared-contract source and operation evidence with canonical targets and explicit uncertainty for unsupported dispatch.
-- [ ] #4 The official plugin is discoverable for the supported project, reports actionable missing-tool/project preparation requirements, and runs in compiled Groma through the common plugin lifecycle.
+- [x] #4 Discovery recognizes the supported Go project; the configured local plugin reports missing tooling or preparation requirements and runs in compiled Groma through the common lifecycle. Public package and catalog availability are owned by TASK-356.
 - [x] #5 One supported real project produces a human-reviewed map; repeated scans preserve curated ownership and a failed scan leaves the prior architecture unchanged.
-- [ ] #6 Independent fixture tests and documented language/project/tooling limits support package qualification on the declared consumer platforms.
+- [x] #6 Independent domain fixtures and the recorded Chi example establish the implemented Go behavior and document language/project/tooling limits. Automated package qualification is outside the test suite under TASK-352; public target delivery belongs to TASK-356.
 <!-- AC:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 Acceptance criteria have objective verification evidence.
+- [x] #1 Acceptance criteria have objective verification evidence.
 - [x] #2 Relevant checks pass and changes remain task-scoped.
 - [x] #3 Public contracts or documentation are updated when behavior changes.
 - [x] #4 Implementation Plan reflects the final approach; correction history and verification are recorded in Implementation Notes.
@@ -75,11 +73,7 @@ Choose one supported project from the branch's research examples and one minimal
 ## Implementation Plan
 
 <!-- SECTION:PLAN:BEGIN -->
-1. Assess research source and reuse its compiler-backed design plus pinned Chi v5.2.1 example; complete unavailable implementation with coordinator approval.
-2. Deliver a private bundled Go adapter and native go/packages + go/types worker for the root pure-Go module in the default host build context, using canonical static targets and explicit dynamic uncertainty.
-3. Reuse shared readiness with installed tooling and prepared dependencies; add independent fixture, maintainer package build, and compiled mixed-language consumer proof.
-4. Verify Chi at 71307f9b7e4e9527638bc951c42b782cd1560331, coordinator browser map/source review, repeat scans, curated source refresh, and failure atomicity.
-5. Document the exact support boundary and local platform evidence; complete cold, own specification/quality, serialized repository, and full-context reviews. Public naming/publication and additional platform qualification remain TASK-326.7.
+Reuse go/packages and go/types for supported project loading and static evidence. Integrate common readiness and compiled plugin execution, preserving uncertainty and curated ownership. Record the accepted Chi repeat/edit/failure example and domain checks; leave public distribution and target claims to TASK-356.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
@@ -108,10 +102,12 @@ Final technical acceptance: full-context complexity review passed without blocke
 Corrected packaging hygiene before technical commit: earlier handoff incorrectly said dist artifacts were ignored. Added plugin-local plugins/scanners/go/.gitignore containing only dist/, matching adjacent scanners; retained all built artifacts. No source or test behavior changed.
 
 Final coherent repository verification after the Rust regression witness: /tmp/groma-task326-go-rust-final-check.log supersedes the earlier shared check log. Node: 110 passed, 0 failed, 0 skipped. Bun: 396 passed, 0 failed, 0 skipped, 858 assertions. Native Go/Rust and Maven checks were enabled. Go has no source or test delta from its accepted implementation; its only later packaging change is plugins/scanners/go/.gitignore, already in the modified-file list and verified to ignore the built worker/package. Technical commit is ready; release gates and In Progress status remain unchanged.
+
+Scope reconciliation approved by Alex on 2026-09-12: close the accepted implementation/local-evidence scope, apply TASK-352 removal of package qualification and CI test requirements, and consolidate all remaining public delivery in TASK-356. Revised criteria describe recorded completed behavior; older notes about waiting for publication or rebuilding qualification automation are superseded. Historical evidence and modified-file traceability are preserved. No source files or tests were changed or rerun for this task-record cleanup.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
-Technical implementation accepted: private Go plugin uses go/packages and go/types, supplies canonical static operation evidence with explicit dynamic uncertainty, and runs through compiled Groma readiness and scan lifecycle. Chi v5.2.1 browser/source map and curated repeat/edit/failure preservation passed. Final full check: /tmp/groma-task326-go-rust-final-check.log (110 Node and 396 Bun tests, no failures or skips, 858 Bun assertions), with native tooling enabled. Plugin-local dist output is ignored and retained. Official publication/catalog availability and remaining declared-platform qualification are still open under TASK-326.7; TASK-326.5 remains In Progress.
+Go implementation is complete: go/packages and go/types evidence, local compiled lifecycle, Chi map acceptance and repeat/edit/failure preservation are covered by recorded checks and reviews. Public catalog availability and distribution are consolidated in TASK-356. Automated package qualification requirements are superseded by TASK-352.
 <!-- SECTION:FINAL_SUMMARY:END -->

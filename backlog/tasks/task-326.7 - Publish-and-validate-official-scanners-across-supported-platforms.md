@@ -1,11 +1,11 @@
 ---
 id: TASK-326.7
-title: Publish and validate official scanners across supported platforms
-status: In Progress
+title: Record local scanner artifact validation
+status: Done
 assignee:
   - '@codex'
 created_date: '2026-09-08 21:34'
-updated_date: '2026-09-09 13:19'
+updated_date: '2026-09-12 14:25'
 labels:
   - scanners
 dependencies:
@@ -29,6 +29,8 @@ references:
   - scanner-artifact-registry
   - validate-callforpapers-artifacts
   - validate-native-scanner-artifact
+  - TASK-352
+  - TASK-356
 documentation:
   - docs/scanners/index.md
   - docs/scanners/creating-a-plugin.md
@@ -45,43 +47,28 @@ ordinal: 368000
 ## Description
 
 <!-- SECTION:DESCRIPTION:BEGIN -->
-Developers on supported macOS, Windows, and Linux targets can install official scanner releases through Groma and reproduce the documented scan journey using their existing language tools. Deliver the package publication and consumer validation needed to turn the language tasks into available official plugins, and register the tested exact versions in the official catalog.
-
-Reuse suitable packaging and CI work from the C#, Java, Go, and Rust research branches and Groma's existing compiled-release pipeline. Validate the actual distributable package in compiled Groma rather than treating source tests or staged files as proof of consumer installation. Declare and test the supported OS/CPU and language-tool versions, including the operating-system requirements of any native worker. Do not claim support from a skipped job or a successful research setup workflow.
-
-First complete the Java/Angular/embedded-TypeScript journey on ../callforpapers, then qualify C#, Go, and Rust against their supported examples. Publish the separate Angular plugin with its own compatible TypeScript tooling and verify that Groma's embedded 7.1 SDK remains available. Test shared-file identity, complementary evidence, and explicitly reported conflicting claims without a plugin-priority winner. Include framework discovery/coverage reporting, source-change rescanning, curated ownership, explicit scan failure, and rerunning discovery after a supported project is added. Support documentation must identify limits without promising all languages, frameworks, or runtime interactions. This task implements the release pipeline and consumer checks; it is not a documentation-only sign-off.
-
-The official framework package set also includes Vue and React from TASK-326.10 and TASK-326.11. Apply the same actual-artifact consumer qualification, documented tooling, source-ownership preservation, and truthful catalog availability to their single reviewed examples after technical acceptance. Public naming and publication approval requirements remain unchanged.
+Local packaged-consumer checks established that Java, Angular, C#, Go and Rust could pass through compiled Groma installation and the approved examples on macOS arm64. This task retains that accepted historical evidence. The validation scripts and associated CI expectations were removed by TASK-352. All outstanding public package names, native artifact distribution, publishing workflow and catalog releases are consolidated in TASK-356; this record does not claim public publication or unexecuted platform validation.
 <!-- SECTION:DESCRIPTION:END -->
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Versioned official C#, Java, Go, Rust, and Angular packages are published and installable through Groma; the catalog identifies compatible versions, actual technology coverage, and Angular's complementary role alongside embedded TypeScript.
-- [ ] #2 Consumer verification uses the actual distributable artifacts with compiled Groma and documented language tools on every advertised OS/CPU target; unsupported targets and native runtime requirements are stated explicitly.
-- [ ] #3 ../callforpapers completes discovery, selection, installation, readiness, scan, and human review with Java, Angular, and embedded TypeScript, without manually configuring a plugin path or assembling compiler inputs.
-- [ ] #4 Each additional scanner passes its declared supported example through the same lifecycle; the resulting coverage report distinguishes supported analysis from unresolved or unsupported evidence.
-- [ ] #5 Source and supported HTML-template updates and repeat scans preserve curated ownership. Overlapping scanners do not duplicate elements; complementary evidence is retained and disputed claims do not produce derived relationships. An enabled scanner failure preserves the previous complete architecture, and rediscovery recognizes a newly added supported project.
-- [ ] #6 Release instructions and CI provide reproducible exact-version installation and required project preparation, with no claim that users can scan without their language tools.
-- [ ] #7 Repository checks and the required task reviews pass, and release evidence records the tested artifacts, platforms, tool versions, supported examples, and material limits.
-- [ ] #8 Vue and React packages pass their reviewed examples through the same actual-artifact consumer and declared-platform release gates, and verified exact releases are included in the official catalog.
+- [x] #1 The historical record identifies the actual locally packed Java, Angular, C#, Go and Rust artifacts, their hashes and the macOS arm64 tooling used with compiled Groma.
+- [x] #2 Recorded local consumer runs and map reviews cover the approved callforpapers, FluentValidation, Chi and globset examples, including the documented readiness, repeat/edit and failed-scan behavior.
+- [x] #3 The retained qualification record clearly distinguishes local historical evidence from public publication and other platform claims, and no longer requires the scripts and CI checks removed by TASK-352.
 <!-- AC:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 Acceptance criteria have objective verification evidence.
-- [ ] #2 Relevant checks pass and changes remain task-scoped.
-- [ ] #3 Public contracts or documentation are updated when behavior changes.
-- [ ] #4 Implementation Plan reflects the final approach; correction history and verification are recorded in Implementation Notes.
+- [x] #1 Acceptance criteria have objective verification evidence.
+- [x] #2 Relevant checks pass and changes remain task-scoped.
+- [x] #3 Public contracts or documentation are updated when behavior changes.
+- [x] #4 Implementation Plan reflects the final approach; correction history and verification are recorded in Implementation Notes.
 <!-- DOD:END -->
 
 ## Implementation Plan
 
 <!-- SECTION:PLAN:BEGIN -->
-1. Inspect package builders and exact-version installer; keep public names, native package layout, and CI topology pending coordinator/user decisions.
-2. Pack existing scanner builds with npm and exercise those artifacts through a local registry and compiled Groma in disposable consumer projects, starting with callforpapers Java/Angular/embedded TypeScript. Record artifact hashes, actual host/tool versions, coverage and map evidence.
-3. Implement the approved package layout and nonpublishing five-platform CI qualification, using existing supported examples and project preparation. Keep catalog release availability conditional on actual qualified publication.
-4. Verify curated ownership, complementary evidence, repeat/source/template edits, explicit failure preservation and rediscovery. Run focused checks; request coordinator cold review, perform specification/quality review, then serialized repository check and full-context review.
-5. Record exact qualification results and remaining publication approvals; do not publish, tag, alter authentication, or claim unexecuted platforms.
+Retain the accepted local artifact and consumer evidence in docs/scanners/release-qualification.md and task notes. Keep those results explicitly historical after removal of qualification automation in TASK-352. Track all remaining public distribution and catalog work in TASK-356.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
@@ -102,4 +89,12 @@ Implementer quality review found no blocking defect in the declared local flow. 
 The four-file local slice is ready for a scoped partial commit while TASK-326.7 remains In Progress. Full-task acceptance criteria and Definition of Done remain unchecked; publication approval, held packaging/CI decisions, Windows work and final release gates remain outstanding. No source edits, additional suite run, staging, commit or push were performed during this review.
 
 The stable four-file local artifact-validation slice passed its cold simplicity, implementer specification/quality, and final full-context reviews with no blocking findings. Shared bun run check passed: Node 110, Bun 398, 7 existing tooling-dependent skips, zero failures; six existing complexity warnings, log /tmp/groma-vue-react-check.log. Coordinator accepts this partial in-progress commit so Vue/React consumer runners can reuse the registry helper reproducibly. Optional markdown() helper naming suggestion is non-blocking and unchanged. This does not finalize publication, catalog availability, platform qualification, or held release choices.
+
+Scope reconciliation approved by Alex on 2026-09-12: close the accepted implementation/local-evidence scope, apply TASK-352 removal of package qualification and CI test requirements, and consolidate all remaining public delivery in TASK-356. Revised criteria describe recorded completed behavior; older notes about waiting for publication or rebuilding qualification automation are superseded. Historical evidence and modified-file traceability are preserved. No source files or tests were changed or rerun for this task-record cleanup.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+The accepted local artifact-validation slice is complete and retained as historical evidence. Five packed artifacts, compiled Groma consumer runs and local map reviews were recorded and reviewed. TASK-352 removed the qualification scripts and CI test requirements; all unperformed publication and advertised-target delivery work is transferred to TASK-356. No public-release or cross-platform success is claimed.
+<!-- SECTION:FINAL_SUMMARY:END -->
