@@ -1,11 +1,11 @@
 ---
 id: TASK-391
 title: Keep the first source edit visible in live scans
-status: In Progress
+status: Done
 assignee:
   - '@codex'
 created_date: '2026-09-13 21:12'
-updated_date: '2026-09-13 21:23'
+updated_date: '2026-09-13 21:26'
 labels: []
 dependencies: []
 references:
@@ -31,15 +31,15 @@ The macOS CI run for commit a394ecd8 failed because the live scanner session did
 <!-- AC:BEGIN -->
 - [x] #1 A source edit made after session setup reaches the healthy scanner while other scanners report failures.
 - [x] #2 The test keeps its evidence, failure, and recovery assertions without sleeps, retries, or a larger timeout.
-- [ ] #3 The repository checks and the macOS CI job pass.
+- [x] #3 The repository checks and the macOS CI job pass.
 <!-- AC:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 Acceptance criteria have objective verification evidence.
-- [ ] #2 Relevant checks pass and changes remain task-scoped.
-- [ ] #3 Public contracts or documentation are updated when behavior changes.
-- [ ] #4 Implementation Plan reflects the final approach; correction history and verification are recorded in Implementation Notes.
+- [x] #1 Acceptance criteria have objective verification evidence.
+- [x] #2 Relevant checks pass and changes remain task-scoped.
+- [x] #3 Public contracts or documentation are updated when behavior changes.
+- [x] #4 Implementation Plan reflects the final approach; correction history and verification are recorded in Implementation Notes.
 <!-- DOD:END -->
 
 ## Implementation Plan
@@ -60,4 +60,12 @@ The kqueue comparison crashed during concurrent watcher teardown, so it was reje
 The original three lifecycle tests passed in 100 consecutive local runs. The new source-watch regression changes a source file during the initial scan and verifies that a later scan receives the edit after the initial batch is applied. Eight focused tests passed. Specification and quality review: the change preserves scanner selection, failure isolation, and saved evidence, uses the existing queue, and adds no watcher backend or retry behavior.
 
 bun run check passed: lint, type checks, 16 Node tests, and 312 Bun tests (6 optional native-tool tests skipped). The working tree includes a separate uncommitted Python scanner task; release validation will also run against only the committed hotfix on GitHub.
+
+CI run 34783758513 passed repository checks and standalone builds on macOS, Windows, and Linux for commit 1c7768f0. The macOS failure is no longer reproduced by the original test. The watcher backend and test timeout remain unchanged.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Start the source watch before the first scan and use one queue for startup and later edits. The startup-edit regression and unchanged failure recovery tests pass. Local repository checks and all three CI platforms passed.
+<!-- SECTION:FINAL_SUMMARY:END -->
