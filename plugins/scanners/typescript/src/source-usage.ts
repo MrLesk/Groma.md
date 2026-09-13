@@ -39,7 +39,6 @@ function importBindings(source: SourceFile, dependencies: Set<string>): ImportBi
     }
     if (!isImportDeclaration(statement) || !isStringLiteral(statement.moduleSpecifier)) continue
     const specifier = statement.moduleSpecifier.text
-    if (!specifier.startsWith('.')) continue
     const clause = statement.importClause
     const names = clause ? bindingNames(clause) : []
     if (names.length === 0 && clause?.phaseModifier !== SyntaxKind.TypeKeyword) dependencies.add(specifier)

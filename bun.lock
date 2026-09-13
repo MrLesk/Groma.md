@@ -39,7 +39,7 @@
     },
     "plugins/scanners/angular": {
       "name": "@groma/scanner-angular",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "dependencies": {
         "@angular/compiler": "21.2.17",
         "@angular/compiler-cli": "21.2.17",
@@ -52,28 +52,28 @@
     },
     "plugins/scanners/csharp": {
       "name": "@groma/scanner-csharp",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "dependencies": {
         "@groma/scanner": "workspace:*",
       },
     },
     "plugins/scanners/go": {
       "name": "@groma/scanner-go",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "dependencies": {
         "@groma/scanner": "workspace:*",
       },
     },
     "plugins/scanners/java": {
       "name": "@groma/scanner-java",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "dependencies": {
         "@groma/scanner": "workspace:*",
       },
     },
     "plugins/scanners/react": {
       "name": "@groma/scanner-react",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "dependencies": {
         "@groma/scanner": "workspace:*",
         "typescript": "6.0.3",
@@ -85,14 +85,14 @@
     },
     "plugins/scanners/rust": {
       "name": "@groma/scanner-rust",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "dependencies": {
         "@groma/scanner": "workspace:*",
       },
     },
     "plugins/scanners/typescript": {
       "name": "@groma/scanner-typescript",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "dependencies": {
         "@groma/scanner": "workspace:*",
         "typescript": "7.1.0-dev.20260905.1",
@@ -100,7 +100,7 @@
     },
     "plugins/scanners/vue": {
       "name": "@groma/scanner-vue",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "dependencies": {
         "@groma/scanner": "workspace:*",
         "@volar/typescript": "2.4.28",

@@ -7,7 +7,7 @@ import { readCodeStructure } from './structure.ts'
 const scanner = {
   id: 'typescript',
   readCodeStructure,
-  watch: { include: defaultTypeScriptScannerConfig.globs, exclude: defaultTypeScriptScannerConfig.ignore },
+  watch: { include: [...defaultTypeScriptScannerConfig.globs, '**/tsconfig*.json', '**/package.json'], exclude: defaultTypeScriptScannerConfig.ignore },
   scan: (root: string) => scanTypeScriptSource(root),
 } satisfies ScannerPlugin
 

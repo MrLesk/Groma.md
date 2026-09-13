@@ -27,7 +27,7 @@ See the [shared configuration contract](../creating-a-plugin.md#scanner-settings
 
 Run `dotnet restore Library.csproj` from that input directory, then run `groma scan` from the repository root. Restore uses the project's normal NuGet settings and credentials. On macOS, use a relative restore input from its directory so `/var` and `/private/var` aliases do not enter one restore graph as separate project paths.
 
-Install a prepared local package with `groma scanner add /path/to/csharp-scanner-package`. Release publication is separate from local qualification. The package also exports `checkCSharpReadiness(repositoryRoot, settings)`, used through the same input/tool checks as scanning. It returns the selected input and SDK version; successful readiness does not prove dependency restore or compilation. A missing worker means the package needs preparation; missing tooling or compilation errors must be fixed before scanning can replace architecture evidence.
+Install a prepared local package with `groma scanner add /path/to/csharp-scanner-package`. Release publication is separate from local qualification. The package also exports `checkCSharpReadiness(repositoryRoot, { input })`, used through the same input/tool checks as scanning. It returns the selected input and SDK version; successful readiness does not prove dependency restore or compilation. A missing worker means the package needs preparation; missing tooling or compilation errors must be fixed before scanning can replace architecture evidence.
 
 ## Supported input and evidence
 
@@ -53,3 +53,13 @@ bun scripts/package-csharp-scanner.ts
 ```
 
 The build bundles the adapter and publishes a framework-dependent worker into the package. It has no installation scripts and does not include a private SDK. Run the Roslyn tests with `dotnet test plugins/scanners/csharp/dotnet/test/Groma.CSharpScanner.Tests.csproj`.
+
+## Nested projects
+
+From the repository root, the scanner finds tracked and unignored `.sln`, `.slnx`
+and `.csproj` files. Solutions are loaded first. Project roots returned by Roslyn
+prevent a solution member or project reference from being scanned again as a
+standalone input. Independent projects are scanned as additional inputs. Each
+input selects its own installed SDK; all evidence paths stay relative to the
+repository. `settings.input` still selects one explicit solution or project.
+Any selected input failure fails the complete scan.

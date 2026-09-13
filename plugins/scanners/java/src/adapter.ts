@@ -26,8 +26,9 @@ export async function checkJavaReadiness(repositoryRoot: string, options: JavaSc
   return { input, command, jar }
 }
 
-export async function scanJavaSource(repositoryRoot: string, options: JavaScanOptions = {}): Promise<ScanObservation> {
+export async function scanJavaSource(repositoryRoot: string, options: JavaScanOptions = {}): Promise<ScanObservation | undefined> {
   const { input, command, jar } = await checkJavaReadiness(repositoryRoot, options)
+  if (!input) return undefined
   let stdout: string
   try {
     stdout = await run(command, ['-Xmx1024m', '-jar', jar, input.root, input.release,
