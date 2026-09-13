@@ -10,6 +10,7 @@ the map at the same address after a successful scan.
 An initialized project runs one scan before opening. The live process then
 starts the same watch as `groma scan --watch`. Startup errors appear in the
 browser with the reported issue and the command to run after fixing it.
+The startup header shows the running Groma version during setup, loading, and errors.
 
 If startup reports an occupied concrete port, an interactive terminal shows
 the runtime error and asks whether to use

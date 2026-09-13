@@ -1,4 +1,5 @@
 import lockup from '../atoms/lockup.svg' with { type: 'text' }
+import packageJson from '../../../../package.json' with { type: 'json' }
 
 import { formatDiscovery, type ScannerDiscovery } from '../../../scanner/modules/discovery.ts'
 import { installableScanners } from '../../../scanner/modules/setup.ts'
@@ -36,8 +37,10 @@ const style = `
     background: color-mix(in srgb, var(--paper) 78%, transparent); backdrop-filter: blur(16px);
     box-shadow: 0 16px 64px color-mix(in srgb, var(--ink) 8%, transparent);
   }
-  header { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 32px; }
+  header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 32px; }
   header svg { display: block; width: 146px; height: auto; }
+  .brand { display: flex; align-items: center; gap: 8px; }
+  .version { color: var(--muted); font-size: 11px; }
   .steps { display: flex; gap: 12px; color: var(--muted); font-size: 10px; }
   .steps [aria-current] { color: var(--accent-text); }
   h1 { font-size: 24px; line-height: 1.3; margin: 0 0 28px; letter-spacing: -0.04em; }
@@ -78,7 +81,7 @@ const style = `
   main[aria-busy="true"] h1 { text-align: center; }
   @keyframes spin { to { transform: rotate(360deg); } }
   @media (prefers-reduced-motion: reduce) { .spinner { animation: none; } }
-  @media (max-width: 420px) { main { padding: 24px; } header { flex-wrap: wrap; } }
+  @media (max-width: 420px) { main { padding: 24px; } }
 `
 
 const script = `
@@ -130,7 +133,8 @@ export function renderSetupPage(input: SetupPage): string {
       + '<button type="submit">Continue</button></form>'
   }
   return '<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">'
-    + `<title>Groma setup</title><style>${style}</style></head><body><main${loading ? ' aria-busy="true"' : ''}><header>${lockup}`
+    + `<title>Groma setup</title><style>${style}</style></head><body><main${loading ? ' aria-busy="true"' : ''}><header>`
+    + `<div class="brand">${lockup}<span class="version">v${escaped(packageJson.version)}</span></div>`
     + '<nav class="steps" aria-label="Setup progress">'
     + `<span${input.initialized ? '' : ' aria-current="step"'}>1 Setup</span>`
     + `<span data-step="scan"${input.initialized ? ' aria-current="step"' : ''}>2 Scanners &amp; scan</span><span>3 Map</span></nav></header>`

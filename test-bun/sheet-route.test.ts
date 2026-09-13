@@ -204,6 +204,34 @@ test.concurrent('an earlier route cannot trap another port in a narrow shared-wa
   assert.equal(sharedPathMeasure(flat, new Set(routes.map(route => route.id)))(flat), 0)
 })
 
+test.concurrent('facing ports in a narrow gap keep distinct exits for both relationships', () => {
+  const endpoints = new Map<string, Endpoint>([
+    ['upper', { key: 'upper', kind: 'building', rect: { gx: 0, gy: 0, w: 4, d: 2 } }],
+    ['lower', { key: 'lower', kind: 'building', rect: { gx: 0, gy: 3.5, w: 4, d: 2 } }],
+    ['south', { key: 'south', kind: 'building', rect: { gx: 6, gy: 20, w: 4, d: 2 } }],
+    ['north', { key: 'north', kind: 'building', rect: { gx: 6, gy: -20, w: 4, d: 2 } }],
+  ])
+  // The facing guards have half a cell between them, less than two default exit runs.
+  const requests = [
+    { id: 'down', source: 'upper', target: 'south', description: '', origin: 'observed' as const },
+    { id: 'up', source: 'lower', target: 'north', description: '', origin: 'observed' as const },
+  ]
+
+  const routes = routeAll(endpoints, requests)
+  const flat = routes.map(route => ({
+    ...route, points: route.points.map(point => ({ x: point.gx * ROUTE_UNIT, y: point.gy * ROUTE_UNIT })),
+  }))
+
+  assert.deepEqual(routes.map(route => route.id), requests.map(request => request.id))
+  assert.deepEqual(crossingRouteIdsFor(endpoints)(flat), [])
+  assert.equal(sharedPathMeasure(flat, new Set(routes.map(route => route.id)))(flat), 0)
+  for (const route of flat) {
+    assert.equal(orthogonal(route.points), true)
+    assert.equal(onVisibleBoundary(route.points[0]!, endpoints.get(route.source)!), true)
+    assert.equal(onVisibleBoundary(route.points.at(-1)!, endpoints.get(route.target)!), true)
+  }
+})
+
 test.concurrent('connected elements choose ports independently of their owner surfaces', () => {
   const routeTo = (targetY: number) => routeAll(new Map<string, Endpoint>([
     ['west-owner', { key: 'west-owner', kind: 'slab', rect: { gx: 0, gy: 4, w: 8, d: 8 } }],
