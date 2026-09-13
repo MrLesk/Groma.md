@@ -54,7 +54,7 @@ function settingRow(scanner: ScannerSetting): string {
   const button = (action: string, title: string) => `<button type="button" data-action="${action}" data-id="${id}">${title}</button>`
   const action = scannerSettingAction(scanner)
   const primary = action ? button(action.action, action.action === 'retry' ? 'Retry' : 'Install') : scanner.source ? button('remove', 'Remove from project') : '<button type="button" disabled>Install</button>'
-  const more = scanner.source ? button('update', 'Update') + (action?.action === 'retry' ? button('remove', 'Remove from project') : '') : ''
+  const more = scanner.source ? button('update', 'Update') + (action ? button('remove', 'Remove from project') : '') : ''
   const reason = scanner.source ? '' : `<div class="scanner-match">${escaped(scannerMatchReason(scanner))}</div>`
   return `<tr data-scanner-id="${id}"><td><strong>${id}</strong><div class="scanner-origin">${scanner.official ? 'Official' : 'Third-party'}${scanner.version ? ` · ${escaped(scanner.version)}` : ''}</div>${reason}<details><summary>Details</summary><p>${escaped(scanner.source ?? scanner.installSource ?? scanner.name)}</p><p>${escaped(scanner.message)}</p><p>${escaped(scanner.matches.join('\n'))}</p>${more}</details></td>`
     + `<td class="scanner-${scanner.status}">${escaped(scannerSettingLabel(scanner))}</td><td>${primary}</td></tr>`

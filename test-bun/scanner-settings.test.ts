@@ -58,12 +58,13 @@ test.concurrent('scanner groups follow local availability while preserving proje
 
 test.concurrent('search filters every scanner group by identity or technology without losing its group', () => {
   const selected = { ...setting('one', 'ready'), name: '@team/worker', source: 'one@1.0.0', technologies: ['shared'] }
-  const missing = { ...setting('two', 'missing'), source: 'two@1.0.0', technologies: ['other'] }
+  const missing = { ...setting('two', 'missing'), source: '@team/code-scanner@1.0.0', technologies: ['other'] }
   const suggested = { ...setting('three', 'available'), technologies: ['shared'] }
   const scanners = [suggested, missing, selected]
   expect(scannerGroups(scanners, 'SHARED').map(group => group.scanners)).toEqual([[selected], [suggested]])
   expect(scannerGroups(scanners, 'worker').flatMap(group => group.scanners)).toEqual([selected])
   expect(scannerGroups(scanners, 'two').flatMap(group => group.scanners)).toEqual([missing])
+  expect(scannerGroups(scanners, 'code-scanner').map(group => group.scanners)).toEqual([[missing]])
   expect(scannerGroups(scanners, 'absent')).toEqual([])
   expect(scannerGroups(scanners, ' ').flatMap(group => group.scanners)).toEqual([selected, missing, suggested])
 })
