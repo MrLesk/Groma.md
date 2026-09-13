@@ -8,6 +8,7 @@ import {
   addScanner,
   installScanners,
   removeScanner,
+  updateScanner,
   scannerInventory,
 } from './modules/inventory.ts'
 
@@ -65,8 +66,8 @@ export function registerScannerCommands(program: Command): void {
 
   scanner
     .command('add')
-    .description('Install and enable an exact npm package or local scanner path')
-    .argument('<source>', 'package@version or ./path')
+    .description('Install and enable a scanner from npm, Git, or a local path')
+    .argument('<source>', 'package@version, git+https://repository#tag-or-commit, or ./path')
     .action(async (source: string) => {
       await runScannerCommand(async () => {
         const added = await addScanner(process.cwd(), source)
@@ -76,8 +77,19 @@ export function registerScannerCommands(program: Command): void {
     })
 
   scanner
+    .command('update')
+    .description('Replace a selected scanner with an explicit version from the same package or Git repository')
+    .argument('<id>', 'configured scanner id')
+    .argument('<source>', 'package@version or git+https://repository#tag-or-commit')
+    .action(async (id: string, source: string) => {
+      await runScannerCommand(async () => {
+        console.log(scannerLine(await updateScanner(process.cwd(), id, source)))
+      })
+    })
+
+  scanner
     .command('install')
-    .description('Restore configured npm scanner packages')
+    .description('Restore configured npm and Git scanner packages')
     .action(async () => {
       await runScannerCommand(async () => {
         const installed = await installScanners(process.cwd())

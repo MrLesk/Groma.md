@@ -5,7 +5,7 @@ export { scanAngular } from './scan.ts'
 
 export default {
   id: 'angular',
-  matchesFile: file => file.endsWith('.ts') || file.endsWith('.html') || file === 'tsconfig.json' || file === 'package.json',
+  watch: { include: ['**/*.ts', '**/*.html', 'tsconfig.json', 'package.json'], exclude: [] },
   checkReadiness: checkAngularReadiness,
   scan: scanAngular,
 } satisfies ScannerPlugin

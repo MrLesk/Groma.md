@@ -10,6 +10,7 @@ const cross = `<path d="M4 2V6M2 4H6" ${ink}/>`
 const line = `<path d="M0 3H6" ${ink}/>`
 
 function tile(id: string, plane: Plane, size: number, body: string, view: ProjectionView): string {
+  if (view.pitch === 90 && plane !== 'ground') return ''
   return `<pattern id="${id}" width="${size}" height="${size}" patternUnits="userSpaceOnUse" patternTransform="${planeMatrix(plane, undefined, view)}">${body}</pattern>`
 }
 

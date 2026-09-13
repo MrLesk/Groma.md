@@ -52,33 +52,25 @@ func scan(directory string) (*observation, error) {
 	}
 	sort.Slice(loaded, func(i, j int) bool { return loaded[i].PkgPath < loaded[j].PkgPath })
 	result := &observation{
-		SchemaVersion: 1, Complete: true,
-		Scanner: identity{"go", "go/packages + go/types", runtime.Version() + " / x/tools v0.49.0"},
-		Scopes:  []scope{}, Files: []sourceFile{}, Placements: []placement{},
-		Relationships: []relationship{}, Operations: []operation{}, Invocations: []invocation{},
-		Diagnostics: []diagnostic{{"info", "GO_ANALYSIS_SCOPE",
-			"Root module active host build context; tests and nested modules are excluded. Dynamic dispatch and providers outside this module remain unresolved. No callback binding propagation."}},
+		SchemaVersion: 1,
+		Scanner:       identity{"go", "go", "go/packages + go/types", runtime.Version() + " / x/tools v0.49.0"},
+		Roots:         []root{}, Files: []sourceFile{},
+		Operations: []operation{}, Invocations: []invocation{},
+		Diagnostics: []diagnostic{{Severity: "info", Code: "GO_ANALYSIS_SCOPE",
+			Message: "Root module active host build context; tests and nested modules are excluded. Dynamic dispatch and providers outside this module remain unresolved. No callback binding propagation."}},
 	}
 	analyzer := newEvidence(result)
-	known := map[string]bool{}
 	for _, pkg := range loaded {
 		if pkg.Module == nil || filepath.Clean(pkg.Module.Dir) != directory {
 			return nil, fmt.Errorf("only the module rooted at the selected repository is supported")
 		}
-		result.Root = root{"module", pkg.Module.Path, "go.mod"}
-		known[pkg.PkgPath] = true
-		result.Scopes = append(result.Scopes, scope{pkg.PkgPath, pkg.PkgPath})
+		result.Roots = append(result.Roots, root{ID: pkg.PkgPath, Parent: "module:" + pkg.Module.Path, Kind: "package", Name: pkg.PkgPath})
 		if err := analyzer.addPackage(directory, pkg); err != nil {
 			return nil, err
 		}
 	}
-	for _, pkg := range loaded {
-		for imported := range pkg.Imports {
-			if known[imported] {
-				result.Relationships = append(result.Relationships, relationship{pkg.PkgPath, imported, "import"})
-			}
-		}
-	}
+	module := loaded[0].Module
+	result.Roots = append(result.Roots, root{ID: "module:" + module.Path, Kind: "module", Name: module.Path, File: "go.mod"})
 	analyzer.calls()
 	return result, nil
 }
@@ -98,8 +90,7 @@ func (e *evidence) addPackage(directory string, pkg *packages.Package) error {
 			return err
 		}
 		file := &source{pkg: pkg, syntax: syntax, file: filepath.ToSlash(relative), text: data}
-		e.result.Files = append(e.result.Files, sourceFile{file.file, file.symbols()})
-		e.result.Placements = append(e.result.Placements, placement{file.file, pkg.PkgPath})
+		e.result.Files = append(e.result.Files, sourceFile{Roots: []string{pkg.PkgPath}, File: file.file, Symbols: file.symbols()})
 		e.declarations(file)
 	}
 	return nil

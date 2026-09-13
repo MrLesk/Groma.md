@@ -105,7 +105,8 @@ class Evidence {
   private unsupported(node: ts.Node): void {
     const source = node.getSourceFile()
     this.diagnostics.push({ severity: 'info', code: 'unsupported-react-binding',
-      message: `${relative(this.root, source.fileName)}:${source.getLineAndCharacterOfPosition(node.getStart()).line + 1}: No supported direct component prop-to-handler binding.` })
+      file: relative(this.root, source.fileName), line: source.getLineAndCharacterOfPosition(node.getStart()).line + 1,
+      message: 'No supported direct component prop-to-handler binding.' })
   }
 
   private propCalls(component: Operation, attribute: ts.JsxAttribute): ts.CallExpression[] {
@@ -178,9 +179,8 @@ export async function scanReact(root: string) {
   const evidence = new Evidence(root, program.getTypeChecker(), sources)
   for (const source of sources) evidence.inspect(source)
   const files = sources.map(source => ({ file: relative(root, source.fileName), symbols: [] }))
-  return createScanObservation({ scanner: { language: 'react', engine: 'typescript', engineVersion: ts.version },
-    root: { kind: 'package', name: manifest.name, file: 'package.json' },
-    scopes: [{ id: 'react-project', name: manifest.name }], files,
-    placements: files.map(({ file }) => ({ file, scope: 'react-project' })), relationships: [],
+  return createScanObservation({ scanner: { id: 'react', technology: 'typescript/react', engine: 'typescript-sdk', engineVersion: ts.version },
+    roots: [{ id: 'react-project', kind: 'package', name: manifest.name, file: 'package.json' }],
+    files: files.map(file => ({ ...file, roots: ['react-project'] })),
     operations: [...evidence.operations.values()], invocations: evidence.invocations, diagnostics: evidence.diagnostics })
 }

@@ -45,7 +45,7 @@ export interface WorkSnapshot {
 export interface WorkSource {
   read(): Promise<WorkSnapshot>
   readItem(id: string): Promise<WorkItemDetails>
-  watch(onChange: () => void): { close(): void }
+  watch(onChange: () => void): { close(): void | Promise<void> }
 }
 
 export interface WorkSourcePlugin {

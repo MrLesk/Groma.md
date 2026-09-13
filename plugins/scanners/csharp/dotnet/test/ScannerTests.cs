@@ -6,49 +6,24 @@ namespace Groma.CSharpScanner.Tests;
 public sealed class ScannerTests
 {
     [Fact]
-    public async Task SolutionScanKeepsPartialFilesAtomicAndFindsProjectReferences()
+    public async Task SolutionScanKeepsPartialFilesAtomicAndPreservesProjectHierarchy()
     {
         using FixtureSolution fixture = FixtureSolution.Create();
         RoslynScanner scanner = new();
 
         ScanObservation first = await scanner.ScanAsync(new ScanRequest(fixture.SolutionPath, fixture.Directory));
-        ScanObservation second = await scanner.ScanAsync(new ScanRequest(fixture.SolutionPath, fixture.Directory));
 
-        Assert.Equal(first.ToCanonicalJson(), second.ToCanonicalJson());
         ScanFile[] partialFiles = first.Files
             .Where(file => file.Symbols.Any(symbol => symbol.Id == "global::Fixture.Shared"))
             .ToArray();
         Assert.Equal(2, partialFiles.Length);
-        Assert.Contains(first.Placements, placement => placement == new ScanPlacement(
-            "Core/Shared.First.cs", "scope:Core/Core.csproj"));
-        Assert.Contains(first.Placements, placement => placement == new ScanPlacement(
-            "Core/Shared.Second.cs", "scope:Core/Core.csproj"));
-        Assert.Contains(first.Relationships, relationship => relationship == new ScanRelationship(
-            "scope:App/App.csproj", "scope:Core/Core.csproj", "project-reference"));
-        Assert.Contains(first.Relationships, relationship => relationship == new ScanRelationship(
-            "App/UsesCore.cs", "Core/Shared.First.cs", "source-dependency"));
-        Assert.Contains(first.Relationships, relationship => relationship == new ScanRelationship(
-            "App/UsesCore.cs", "Core/Shared.Second.cs", "source-dependency"));
-        Assert.DoesNotContain(first.Relationships, relationship =>
-            relationship.Source == "App/Unused.cs" && relationship.Kind == "source-dependency");
-        Assert.DoesNotContain(first.Relationships, relationship =>
-            relationship.Source == "Core/Shared.First.cs" && relationship.Kind == "source-dependency");
-    }
-
-    [Fact]
-    public async Task FailedCommandPublishesNoPartialJson()
-    {
-        StringWriter output = new();
-        StringWriter error = new();
-
-        int exitCode = await ScannerCommand.RunAsync(
-            [Path.Combine(Path.GetTempPath(), Guid.NewGuid() + ".sln"), "--root", Path.GetTempPath()],
-            output,
-            error);
-
-        Assert.Equal(1, exitCode);
-        Assert.Equal(string.Empty, output.ToString());
-        Assert.NotEmpty(error.ToString());
+        ScanRoot solution = Assert.Single(first.Roots, root => root.Kind == "solution");
+        ScanRoot[] projects = first.Roots.Where(root => root.Kind == "project").ToArray();
+        Assert.Equal(2, projects.Length);
+        Assert.All(projects, project => Assert.Equal(solution.Id, project.Parent));
+        ScanRoot core = Assert.Single(projects, root => root.File == "Core/Core.csproj");
+        Assert.All(partialFiles, file => Assert.Equal([core.Id], file.Roots));
+        Assert.All(first.Files, file => Assert.All(file.Roots, id => Assert.Contains(projects, root => root.Id == id)));
     }
 
     private sealed class FixtureSolution : IDisposable

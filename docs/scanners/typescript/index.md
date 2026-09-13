@@ -4,9 +4,9 @@ The TypeScript scanner reports supported `.ts` and `.tsx` files without requirin
 
 It uses `git ls-files`, the configured globs, and `.gitignore` to select files. Declaration, test, and spec files are excluded by default. Relative imports form a source graph; bare package imports do not.
 
-Each file remains one atomic evidence entry with every recognized exported function, class, interface, type, enum, or variable declared in that file. Package bins and import structure identify scopes. Import distance assigns files to the nearest scope, with common directories as the deterministic fallback. Cross-scope imports remain temporary source evidence.
+Each file remains one atomic evidence entry with every recognized exported function, class, interface, type, enum, or variable declared in that file. Package bins and import structure identify module roots below the package root. Import distance assigns files to the nearest module root, with common directories as the deterministic fallback. The import graph remains internal analysis data.
 
-These scopes and placements are evidence, not C4 ownership. Core preserves curated multi-file components and creates a singleton only for a previously unknown file.
+These source roots and file memberships are evidence, not C4 ownership. Core preserves curated multi-file components and creates a singleton only for a previously unknown file.
 
 
 ## Operations and callback wiring

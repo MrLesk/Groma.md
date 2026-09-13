@@ -57,8 +57,9 @@ inventoried. Workspaces are not supported; an active workspace produces a
 scope error. Custom build contexts, cgo, custom package drivers, and other
 module layouts have not been qualified.
 
-Each active physical source file has one placement in its loaded package.
-Package imports between loaded packages are temporary dependency evidence.
+The module is a source root, with loaded packages as its child roots. Each
+active physical source file records membership in its loaded package. Package
+imports remain internal compiler analysis data.
 The scanner reports top-level declarations, function and method bodies,
 closures, and package variable initializers containing calls.
 `go/types` and
@@ -88,20 +89,16 @@ qualification remain deliberately limited to the approved project.
 
 ## Validation
 
-Run the independent fixture and compiled consumer checks with the installed
-Go executable:
+Run the domain fixture tests with the installed Go executable:
 
 ```sh
 GROMA_TEST_GO="$(command -v go)" bun test test-bun/go-scanner.test.ts
 bun plugins/scanners/go/build.ts
-bun plugins/scanners/go/smoke.ts /absolute/path/to/compiled-groma plugins/scanners/go/dist/package
 ```
 
-Native fixture tests are opt-in through `GROMA_TEST_GO`; the missing-tool
-readiness test runs without Go. Release qualification must enable the native
-tests and run the compiled consumer on each declared platform.
+Native fixture tests are opt-in through `GROMA_TEST_GO`.
 
-Local verification on macOS arm64:
+Historical Local verification on macOS arm64:
 
 - Independent fixture: deterministic observations, imported alias identity,
   concrete methods, wrapper and closure ownership, uncertain dispatch, UTF-16

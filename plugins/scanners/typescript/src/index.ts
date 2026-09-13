@@ -1,12 +1,14 @@
 import type { ScannerPlugin } from '@groma/scanner'
 
-import { isTypeScriptScanFile } from './files.ts'
+import { defaultTypeScriptScannerConfig } from './files.ts'
 import { scanTypeScriptSource } from './scan.ts'
+import { readCodeStructure } from './structure.ts'
 
 const scanner = {
   id: 'typescript',
-  matchesFile: isTypeScriptScanFile,
-  scan: scanTypeScriptSource,
+  readCodeStructure,
+  watch: { include: defaultTypeScriptScannerConfig.globs, exclude: defaultTypeScriptScannerConfig.ignore },
+  scan: (root: string) => scanTypeScriptSource(root),
 } satisfies ScannerPlugin
 
 export default scanner

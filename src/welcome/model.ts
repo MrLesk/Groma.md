@@ -37,9 +37,9 @@ export const instructionsAction = {
 
 export const advancedCommands = [
   {
-    command: 'groma export <directory> [--watch]',
-    description: 'output folder; watch refreshes',
-    content: 'Writes the current architecture to <directory>. Add --watch to refresh that output after source changes.',
+    command: 'groma export <directory>',
+    description: 'export a static site',
+    content: 'Writes a static snapshot of the stored architecture to <directory>. Serve or upload the output separately. Run the command again to publish an updated snapshot.',
   },
   {
     command: 'groma scanner add <source>',
@@ -53,8 +53,8 @@ export const advancedCommands = [
   },
   {
     command: 'groma scanner list',
-    description: 'show built-in/found/missing',
-    content: 'Lists every configured scanner and whether it is built-in, ready, or missing.',
+    description: 'show found/missing',
+    content: 'Lists every configured scanner and whether its package is found or missing.',
   },
   {
     command: 'groma scanner remove <id>',

@@ -12,7 +12,8 @@
       "src/**/*.ts",
       "scripts/**/*.ts",
       "test/**/*.ts",
-      "test-bun/**/*.ts"
+      "test-bun/**/*.ts",
+      "examples/**/*.ts"
     ]
   },
   "formatter": {

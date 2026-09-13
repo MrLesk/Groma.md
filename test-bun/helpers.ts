@@ -1,8 +1,6 @@
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-import type { createTestRenderer } from '@opentui/core/testing'
-
 import { DETAILS_PANE_WIDTH, HIERARCHY_PANE_WIDTH, type PaneVisibility } from '../src/viewers/tui/layout.ts'
 import { sheetScene } from '../src/sheet/scene.ts'
 import type { TerminalViewModel } from '../src/viewers/tui/model.ts'
@@ -65,39 +63,6 @@ export function paneLayout(width: number, height: number, panes: PaneVisibility 
 
 export function mapViewportOf(size: { width: number; height: number }): Bounds {
   return paneLayout(size.width, size.height).mapViewport
-}
-
-export function mapRegion(frame: string, width: number): string {
-  const layout = paneLayout(width, 36)
-  return frame
-    .split('\n')
-    .map(line => [...line].slice(layout.map.x, layout.details.x).join(''))
-    .join('\n')
-}
-
-export async function press(
-  setup: Awaited<ReturnType<typeof createTestRenderer>>,
-  ...keys: string[]
-): Promise<string> {
-  for (const key of keys) {
-    if (key === 'enter') setup.mockInput.pressEnter()
-    else if (key === 'tab') setup.mockInput.pressTab()
-    else if (key === 'escape') {
-      setup.mockInput.pressEscape()
-      await new Promise(resolve => setTimeout(resolve, 50))
-    } else if (key === 'up' || key === 'down' || key === 'left' || key === 'right') {
-      setup.mockInput.pressArrow(key)
-    } else setup.mockInput.pressKey(key)
-    await setup.renderOnce()
-    if (setup.renderer.isRunning) {
-      const deadline = Date.now() + 2000
-      while (setup.renderer.isRunning && Date.now() < deadline) {
-        await new Promise(resolve => setTimeout(resolve, 16))
-      }
-      await setup.renderOnce()
-    }
-  }
-  return setup.captureCharFrame()
 }
 
 export function box(

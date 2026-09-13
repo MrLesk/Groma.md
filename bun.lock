@@ -9,7 +9,6 @@
         "@clack/prompts": "1.7.0",
         "@comark/html": "0.6.2",
         "@groma/scanner": "workspace:*",
-        "@groma/scanner-typescript": "workspace:*",
         "@groma/work-source": "workspace:*",
         "@groma/work-source-backlog": "workspace:*",
         "@opentui/core": "0.5.10",
@@ -19,7 +18,6 @@
         "diff": "9.0.0",
         "fuse.js": "7.5.0",
         "ignore": "7.0.9",
-        "typescript": "7.1.0-dev.20260905.1",
         "web-worker": "1.5.0",
         "webcola": "3.4.0",
       },
@@ -28,6 +26,7 @@
         "@types/bun": "1.4.1",
         "@types/node": "26.4.1",
         "tsx": "4.23.13",
+        "typescript": "7.1.0-dev.20260905.1",
       },
     },
     "packages/scanner": {

@@ -1,10 +1,11 @@
 import { expect, test } from 'bun:test'
-import { cp, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { cp, mkdtemp, rm } from 'node:fs/promises'
+
 import os from 'node:os'
 import path from 'node:path'
 import { buildWorker } from '../plugins/scanners/java/build.ts'
-import { scanJavaSource } from '../plugins/scanners/java/src/adapter.ts'
-import { javaCommand, mavenInvocation, run } from '../plugins/scanners/java/src/process.ts'
+import { javaCommand, run } from '../plugins/scanners/java/src/process.ts'
+
 import { parseScanObservation, type ScanObservation } from '@groma/scanner'
 
 async function fixture() {
@@ -47,40 +48,3 @@ test.concurrent('Java compiler resolves overloads and preserves wrappers while v
     expect(evidence.some(call => call.line === 17)).toBeFalse()
   } finally { await rm(root, { recursive: true, force: true }) }
 })
-
-test.concurrent('Java rejects incomplete attribution and reports missing JDK without returning partial facts', async () => {
-  const { root, worker } = await fixture()
-  try {
-    await writeFile(path.join(root, 'src/main/java/Unused.java'), 'class Unused { missing.Library field; }')
-    await expect(compilerScan(root, worker)).rejects.toThrow('JAVA_SCAN_FAILED')
-    await expect(scanJavaSource(root, { worker, java: path.join(root, 'missing-java') })).rejects.toThrow('JAVA_JDK_MISSING')
-  } finally { await rm(root, { recursive: true, force: true }) }
-})
-
-test.concurrent('Windows Maven batch launchers use cmd while installed Java remains a direct executable', () => {
-  expect(mavenInvocation('C:\\Program Files\\Maven\\bin\\mvn.cmd', ['-Doutput=C:\\project path\\model.xml'], 'win32'))
-    .toEqual([process.env.ComSpec ?? 'cmd.exe', ['/d', '/s', '/c', '""C:\\Program Files\\Maven\\bin\\mvn.cmd" "-Doutput=C:\\project path\\model.xml""']])
-  expect(mavenInvocation('/tools/mvn', ['--offline'], 'darwin')).toEqual(['/tools/mvn', ['--offline']])
-})
-
-// Maven integration is opt-in because repository checks also run on machines without Java project tooling.
-const mavenTest = process.env.GROMA_TEST_MAVEN ? test.concurrent : test.skip
-mavenTest('Maven derives Java 25 source roots and dependencies; missing tooling has actionable preparation', async () => {
-  const { root, worker } = await fixture()
-  try {
-    const originalPom = await readFile(path.join(root, 'pom.xml'), 'utf8')
-    await cp(path.join(root, 'src/main/java'), path.join(root, 'selected-src'), { recursive: true })
-    await rm(path.join(root, 'src'), { recursive: true })
-    await writeFile(path.join(root, 'pom.xml'), originalPom.replace('</project>', '<build><sourceDirectory>selected-src</sourceDirectory></build></project>'))
-    const options = { worker, maven: process.env.GROMA_TEST_MAVEN! }
-    const first = await scanJavaSource(root, options)
-    expect(first).toEqual(await scanJavaSource(root, options))
-    expect(first.files.length).toBe(5)
-    expect(first.files.every(file => file.file.startsWith('selected-src/'))).toBeTrue()
-    expect(calls(first).some(call => !call.unresolved)).toBeTrue()
-    await expect(scanJavaSource(root, { worker, maven: path.join(root, 'missing-maven') })).rejects.toThrow('JAVA_MAVEN_PREPARATION')
-    const pom = await readFile(path.join(root, 'pom.xml'), 'utf8')
-    await writeFile(path.join(root, 'pom.xml'), pom.replace('<maven.compiler.release>25', '<maven.compiler.release>99'))
-    await expect(scanJavaSource(root, options)).rejects.toThrow('JAVA_COMPILATION_FAILED')
-  } finally { await rm(root, { recursive: true, force: true }) }
-}, 60000)

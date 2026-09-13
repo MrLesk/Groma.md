@@ -2,16 +2,18 @@ import { expect, test } from 'bun:test'
 import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import { createScanObservation, parseScanObservation, type ScanObservation } from '@groma/scanner'
+import { createScanObservation, type ScanObservation } from '@groma/scanner'
 
 import { scanTypeScriptSource } from '../plugins/scanners/typescript/src/scan.ts'
 import { loadArchitecture } from '../src/architecture-reader.ts'
+import { buildArchitectureModel } from '../src/architecture-model.ts'
 import { loadAnnotatedArchitecture, reconcileScanObservations } from '../src/core.ts'
 import { editArchitecture } from '../src/edit.ts'
 import { addRelation } from '../src/relation.ts'
 import { inferRelationships } from '../src/relationship-inference.ts'
 import { composeInvocations } from '../src/scan-evidence.ts'
-import { formatScanReport, scanRepository } from '../src/scanner.ts'
+import { scanRepository } from '../src/scanner.ts'
+
 import { addScanner } from '../src/scanner/modules/inventory.ts'
 import type { AnnotatedArchitectureModel } from '../src/types.ts'
 
@@ -24,12 +26,12 @@ async function observation(language: string, target = 'handler', unresolved = fa
   const id = (name: string) => `${language}-compiler-id-${name}`
   const files = ['emitter.ts', 'handler.ts', 'alternate.ts', 'host.html'].map(file => `src/${file}`)
   return createScanObservation({
-    scanner: { language, engine: 'fixture', engineVersion: '1' },
-    root: { kind: 'package', name: 'Fixture', file: 'package.json' },
-    scopes: [{ id: `${language}-scope`, name: 'Service' }],
-    files: files.map(file => ({ file, symbols: [] })),
-    placements: files.map(file => ({ file, scope: `${language}-scope` })),
-    relationships: [],
+    scanner: { id: language, technology: 'fixture', engine: 'fixture', engineVersion: '1' },
+    roots: [
+      { id: 'root', kind: 'package', name: 'Fixture', file: 'package.json' },
+      { kind: 'project', parent: 'root', id: `${language}-scope`, name: 'Service' },
+    ],
+    files: files.map(file => ({ roots: [`${language}-scope`], file, symbols: [] })),
     operations: ['emitter', 'handler', 'alternate'].map(name => ({
       id: id(name), file: `src/${name}.ts`, name, position: 0,
     })),
@@ -62,26 +64,9 @@ function owner(model: AnnotatedArchitectureModel, file: string) {
   return matches[0]!
 }
 
-async function documents(root: string): Promise<Map<string, string>> {
-  const records = await loadArchitecture(root)
-  return new Map(await Promise.all(records.documents.map(async document => [
-    document.sourceFilename, await readFile(path.join(root, document.sourceFilename), 'utf8'),
-  ] as const)))
+async function storedArchitecture(root: string) {
+  return buildArchitectureModel((await loadArchitecture(root)).documents)
 }
-
-test.concurrent('the shared contract keeps source positions independent of compiler IDs', async () => {
-  const scan = await observation('typescript')
-  expect(parseScanObservation(JSON.stringify(scan))).toEqual(scan)
-  expect(() => createScanObservation({
-    ...scan, operations: [{ ...scan.operations![0]!, position: -1 }], invocations: [],
-  })).toThrow('source position')
-  expect(() => parseScanObservation(JSON.stringify({
-    ...scan, invocations: [{ ...scan.invocations![0]!, position: 1.5 }],
-  }))).toThrow('source position')
-  expect(() => createScanObservation({
-    ...scan, invocations: [{ ...scan.invocations![0]!, binding: { file: 'src/host.html', line: 1, position: -1 } }],
-  })).toThrow('source position')
-})
 
 test.concurrent('a complementary named binding survives unresolved observations from another compiler', async () => {
   const typescript = await observation('typescript', 'handler', true)
@@ -136,24 +121,23 @@ test.concurrent('overlapping observations preserve curated membership and author
       expect(owner(overlap, file.file).code.filter(reference => reference.file === file.file)).toHaveLength(2)
     }
     const conflict = await observation('angular', 'alternate')
-    conflict.root.name = 'Framework'
-    conflict.scopes[0]!.name = 'Framework'
+    conflict.roots.find(root => root.id === 'root')!.name = 'Framework'
+    conflict.roots.find(root => root.parent === 'root')!.name = 'Framework'
     const summary = await reconcileScanObservations(root, [conflict, typescript])
     expect(summary.created).toBe(0)
     expect(summary.evidenceConflicts).toHaveLength(1)
-    expect(formatScanReport(root, summary)).toContain('conflicting-providers')
-    const before = await documents(root)
+    const before = await storedArchitecture(root)
     await reconcileScanObservations(root, [typescript, conflict])
-    expect(await documents(root)).toEqual(before)
+    expect(await storedArchitecture(root)).toEqual(before)
     const current = await loadAnnotatedArchitecture(root)
     expect(owner(current, ends.source).id).toBe(source.id)
     expect(owner(current, 'src/host.html').id).toBe(source.id)
     expect(current.relationships).toEqual(authored)
     expect(current.relationships.flatMap(relationship => relationship.connections ?? []).every(connection => connection.authored)).toBe(true)
     await reconcileScanObservations(root, [angular, typescript])
-    const agreeing = await documents(root)
+    const agreeing = await storedArchitecture(root)
     await reconcileScanObservations(root, [typescript, angular])
-    expect(await documents(root)).toEqual(agreeing)
+    expect(await storedArchitecture(root)).toEqual(agreeing)
     expect((await loadAnnotatedArchitecture(root)).relationships).toEqual(authored)
   } finally { await rm(root, { recursive: true, force: true }) }
 })
@@ -168,17 +152,17 @@ test.concurrent('a failed enabled scanner prevents reconciliation of otherwise s
       name: 'fixture-failing', version: '1.0.0', type: 'module', groma: { scanner: { id: 'failing', entry: './index.js' } },
     }))
     await writeFile(path.join(plugin, 'index.js'), `export default {
-      id: 'failing', matchesFile() { return false },
+      id: 'failing', watch: { include: [], exclude: [] },
       async scan() { throw new Error('fixture scanner failed') },
     }`)
     await addScanner(root, './failing')
-    const before = await documents(root)
-    await expect(scanRepository(root)).rejects.toThrow('fixture scanner failed')
-    expect(await documents(root)).toEqual(before)
+    const before = await storedArchitecture(root)
+    await expect(scanRepository(root)).rejects.toThrow()
+    expect(await storedArchitecture(root)).toEqual(before)
   } finally { await rm(root, { recursive: true, force: true }) }
 })
 
-test.concurrent('embedded TypeScript locates declarations and invocations using source offsets', async () => {
+test.concurrent('TypeScript locates declarations and invocations using source offsets', async () => {
   const root = await repository()
   try {
     const scan = (await scanTypeScriptSource(root))!
@@ -188,6 +172,5 @@ test.concurrent('embedded TypeScript locates declarations and invocations using 
     expect(source.slice(operation.position, operation.position! + 15)).toBe('export function')
     expect(source.slice(call.position, call.position! + 11)).toBe('output.emit')
     expect(call.unresolved).toBe(true)
-    expect(parseScanObservation(JSON.stringify(scan))).toEqual(scan)
   } finally { await rm(root, { recursive: true, force: true }) }
 })

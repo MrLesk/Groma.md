@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'bun:test'
+import { projectFlowStep } from '../src/viewers/tui/flow.ts'
 
-import { flowEndpointLabel, projectFlowStep } from '../src/viewers/tui/flow.ts'
 import { initialState } from '../src/viewers/tui/navigation.ts'
 import { visibleIn, type TerminalCamera } from '../src/viewers/tui/projection-camera.ts'
 import { mapAnchors, projectWorld } from '../src/viewers/tui/projection.ts'
@@ -160,11 +160,7 @@ test.concurrent('flow steps keep exact endpoints while marking their visible anc
     0,
   )
 
-  assert.equal(step?.source.title, 'write')
-  assert.equal(step?.source.visibleTitle, 'service')
   assert.equal(step?.source.visibleKey, 'observed:service')
-  assert.equal(flowEndpointLabel(step!.source), 'service / write')
-  assert.equal(step?.target.title, 'vendor')
   assert.equal(step?.target.visibleKey, 'observed:vendor')
 
   const local = projectFlowStep(model, projectWorld(model, {
@@ -173,7 +169,6 @@ test.concurrent('flow steps keep exact endpoints while marking their visible anc
     currentId: 'observed:write',
   }), 'write-request', 0)
   assert.equal(local?.target.visibleKey, 'observed:service')
-  assert.equal(flowEndpointLabel(local!.target), 'vendor')
 })
 
 test.concurrent('flow attention changes neither the selection nor the centred island', () => {

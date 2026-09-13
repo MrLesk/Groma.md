@@ -1,0 +1,40 @@
+{
+  "name": "@example/groma-scanner-inventory",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Small scanner authoring example: inventory of JavaScript source files",
+  "files": [
+    "index.ts",
+    "dist",
+    "README.md",
+    "project"
+  ],
+  "dependencies": {
+    "@groma/scanner": "0.1.0"
+  },
+  "groma": {
+    "scanner": {
+      "id": "example-inventory",
+      "entry": "./dist/index.js",
+      "discovery": {
+        "technologies": [
+          "example-inventory"
+        ],
+        "rules": [
+          {
+            "type": "file",
+            "files": [
+              "**/inventory-example.json"
+            ],
+            "technology": "example-inventory",
+            "kind": "language",
+            "declaration": "Inventory teaching project"
+          }
+        ]
+      }
+    }
+  },
+  "scripts": {
+    "build": "bun build index.ts --target bun --outdir dist"
+  }
+}

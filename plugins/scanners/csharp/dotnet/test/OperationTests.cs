@@ -10,9 +10,9 @@ public sealed class OperationTests
         using ScannerFixture fixture = new();
         await fixture.RestoreAsync();
         ScanObservation scan = await fixture.ScanAsync();
-        Assert.Equal("App/App.csproj", scan.Root.File);
+        Assert.Contains(scan.Roots, root => root.File == "App/App.csproj" && root.Parent is null);
         Assert.Contains(scan.Files, file => file.File == "Core/Providers.cs");
-        Assert.Equal(2, scan.Scopes.Count);
+        Assert.Equal(2, scan.Roots.Count(root => root.Kind == "project"));
         Dictionary<string, ScanOperation> operations = scan.Operations!.ToDictionary(operation => operation.Id);
         ScanInvocation[] Direct(string member) => scan.Invocations!
             .Where(call => operations[call.Source].Name == "App.Calls.Direct()" && call.Member == member).ToArray();

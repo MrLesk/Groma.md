@@ -1,7 +1,7 @@
 # Vue scanner
 
 The Vue scanner adds single-file component (SFC) event bindings to Groma's
-embedded TypeScript evidence. Install the project's dependencies using its
+TypeScript scanner evidence. Install the project's dependencies using its
 package manager and lockfile. The scanner reads the root `tsconfig.json`;
 it does not install dependencies or execute application code.
 
@@ -20,8 +20,7 @@ groma scan
 The package bundles Vue language-core 3.3.11, Volar TypeScript 2.4.28,
 Vue compiler-dom 3.5.42 and its own TypeScript 5.9.3. Compiler-sfc 3.5.42
 provides build-time declarations only. The build
-pins compiler imports to that TypeScript installation. Groma retains its
-embedded TypeScript 7.1 SDK. Compiler libraries and Vue helper declarations
+pins compiler imports to that TypeScript installation. The separate TypeScript scanner uses its own 7.1 SDK. Compiler libraries and Vue helper declarations
 ship in the package; no consumer build or installation script is required.
 
 [Vue language tools](https://github.com/vuejs/language-tools) supply project

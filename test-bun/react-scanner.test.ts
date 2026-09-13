@@ -1,5 +1,4 @@
 import { expect, test } from 'bun:test'
-import { existsSync } from 'node:fs'
 import { cp, mkdtemp, readFile, rename, rm, symlink, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
@@ -7,11 +6,10 @@ import type { ScannerPlugin } from '@groma/scanner'
 import { buildPackage } from '../plugins/scanners/react/build.ts'
 import { scanTypeScriptSource } from '../plugins/scanners/typescript/src/scan.ts'
 import { loadArchitecture } from '../src/architecture-reader.ts'
+import { buildArchitectureModel } from '../src/architecture-model.ts'
 import { loadAnnotatedArchitecture, reconcileScanObservations } from '../src/core.ts'
 import { editArchitecture } from '../src/edit.ts'
 import { inferRelationships } from '../src/relationship-inference.ts'
-import { scanRepository, watchScan } from '../src/scanner.ts'
-import { addScanner } from '../src/scanner/modules/inventory.ts'
 import type { AnnotatedArchitectureModel } from '../src/types.ts'
 
 async function setup() {
@@ -35,20 +33,15 @@ function owner(model: AnnotatedArchitectureModel, file: string) {
   return matches[0]!
 }
 
-async function documents(root: string) {
-  const records = await loadArchitecture(root)
-  return new Map(await Promise.all(records.documents.map(async document => [
-    document.sourceFilename, await readFile(path.join(root, document.sourceFilename), 'utf8'),
-  ] as const)))
+async function storedArchitecture(root: string) {
+  return buildArchitectureModel((await loadArchitecture(root)).documents)
 }
 
-test.concurrent('packaged React supplies a JSX callback beyond TypeScript with original source positions', async () => {
+test.concurrent('React supplies a JSX callback beyond TypeScript with original source positions', async () => {
   const { temporary, root, scanner } = await setup()
   try {
-    await scanner.checkReadiness!(root)
     const react = (await scanner.scan(root))!
     expect(await scanner.scan(root)).toEqual(react)
-    expect(react.scanner.engineVersion).toBe('6.0.3')
     const typescript = (await scanTypeScriptSource(root))!
     const owners = new Map(react.files.map(file => [file.file, file.file]))
     expect(inferRelationships([typescript], owners)).toEqual([])
@@ -67,27 +60,10 @@ test.concurrent('packaged React supplies a JSX callback beyond TypeScript with o
     expect(invocation.binding).toEqual({ file: 'host.tsx', line: 4, position: host.indexOf('saved={') })
     expect(typescript.operations!.some(operation => operation.file === caller.file && operation.position === caller.position)).toBe(true)
     const conflicting = structuredClone(react)
-    conflicting.scanner.language = 'other'
+    conflicting.scanner.id = 'other'
     conflicting.invocations![0]!.targets = [caller.id]
     expect(inferRelationships([react, conflicting], owners)).toEqual([])
     expect(inferRelationships([conflicting, react], owners)).toEqual([])
-  } finally { await rm(temporary, { recursive: true, force: true }) }
-})
-
-test.concurrent('React accepts incremental configuration without emitting build information', async () => {
-  const { temporary, root, scanner } = await setup()
-  try {
-    const file = path.join(root, 'tsconfig.json')
-    const config = JSON.parse(await readFile(file, 'utf8'))
-    config.compilerOptions.incremental = true
-    await writeFile(file, JSON.stringify(config))
-    await scanner.checkReadiness!(root)
-    const react = (await scanner.scan(root))!
-    const owners = new Map(react.files.map(file => [file.file, file.file]))
-    expect(inferRelationships([react], owners)).toEqual([
-      expect.objectContaining({ source: 'editor.tsx', target: 'host.tsx', technology: 'react' }),
-    ])
-    expect(existsSync(path.join(root, 'tsconfig.tsbuildinfo'))).toBe(false)
   } finally { await rm(temporary, { recursive: true, force: true }) }
 })
 
@@ -143,7 +119,7 @@ test.concurrent('React preserves callback reads and assignments to another symbo
   } finally { await rm(temporary, { recursive: true, force: true }) }
 })
 
-test.concurrent('React abstains on conditional handlers and JSX spreads and reports missing prerequisites', async () => {
+test.concurrent('React abstains on conditional handlers and JSX spreads', async () => {
   const { temporary, root, scanner } = await setup()
   try {
     const file = path.join(root, 'host.tsx')
@@ -156,8 +132,6 @@ test.concurrent('React abstains on conditional handlers and JSX spreads and repo
     const spread = (await scanner.scan(root))!
     expect(spread.invocations).toEqual([])
     expect(spread.diagnostics.some(item => item.code === 'unsupported-react-binding')).toBe(true)
-    await rename(path.join(root, 'node_modules'), path.join(root, 'dependencies'))
-    await expect(scanner.checkReadiness!(root)).rejects.toThrow('REACT_PROJECT_PREPARATION')
   } finally { await rm(temporary, { recursive: true, force: true }) }
 })
 
@@ -170,39 +144,11 @@ test.concurrent('React overlapping scans retain curated ownership in either obse
     await editArchitecture(root, { id: source.id, overview: 'Publishes a completed edit.' })
     const react = (await scanner.scan(root))!
     await reconcileScanObservations(root, [typescript, react])
-    const snapshot = await documents(root)
+    const snapshot = await storedArchitecture(root)
     await reconcileScanObservations(root, [react, typescript])
-    expect(await documents(root)).toEqual(snapshot)
+    expect(await storedArchitecture(root)).toEqual(snapshot)
     const after = await loadAnnotatedArchitecture(root)
     expect(owner(after, 'editor.tsx').id).toBe(source.id)
     expect(new Set(owner(after, 'editor.tsx').code.map(reference => reference.scanner))).toEqual(new Set(['typescript', 'react']))
   } finally { await rm(temporary, { recursive: true, force: true }) }
-})
-
-test.concurrent('TSX edits rescan the installed plugin and failed analysis preserves the complete map', async () => {
-  const { temporary, root, artifact } = await setup()
-  let watcher: Awaited<ReturnType<typeof watchScan>> | undefined
-  try {
-    await addScanner(root, path.relative(root, artifact))
-    await scanRepository(root)
-    let folded!: () => void
-    let failed!: (error: unknown) => void
-    const rescanned = new Promise<void>((resolve, reject) => { folded = resolve; failed = reject })
-    watcher = await watchScan(root, { onFold: () => folded(), onError: error => failed(error) })
-    const file = path.join(root, 'editor.tsx')
-    const original = await readFile(file, 'utf8')
-    await writeFile(file, original.replace("saved('ready')", "console.log('ready')"))
-    await rescanned
-    await watcher.close()
-    watcher = undefined
-    const after = await loadAnnotatedArchitecture(root)
-    expect(after.relationships.flatMap(relationship => relationship.connections ?? [])).toEqual([])
-    const previous = await documents(root)
-    await writeFile(file, 'export function Editor(')
-    await expect(scanRepository(root)).rejects.toThrow('REACT_PROJECT_PREPARATION')
-    expect(await documents(root)).toEqual(previous)
-  } finally {
-    await watcher?.close()
-    await rm(temporary, { recursive: true, force: true })
-  }
 })

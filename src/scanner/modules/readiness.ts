@@ -3,7 +3,7 @@ import { importScanner } from '../registry.ts'
 
 export interface ProjectReadiness {
   id: string
-  package: 'built-in' | 'found' | 'missing'
+  package: 'found' | 'missing'
   project: 'ready' | 'blocked' | 'unchecked'
   message: string
 }
@@ -13,10 +13,7 @@ export async function checkScannerReadiness(
   root: string,
   options: ScannerResolutionOptions = {},
 ): Promise<ProjectReadiness[]> {
-  const results: ProjectReadiness[] = [{
-    id: 'typescript', package: 'built-in', project: 'ready',
-    message: 'Embedded tooling; compilation is checked during scan.',
-  }]
+  const results: ProjectReadiness[] = []
   for (const module of await configuredScannerModules(root, options)) {
     if (module.status === 'missing') {
       results.push({ id: module.id, package: 'missing', project: 'blocked',
@@ -30,7 +27,7 @@ export async function checkScannerReadiness(
           message: 'No readiness check; project compatibility is established during scan.' })
         continue
       }
-      await scanner.checkReadiness(root)
+      await scanner.checkReadiness(root, module.settings)
       results.push({ id: module.id, package: 'found', project: 'ready',
         message: 'Preparation check passed; compilation is checked during scan.' })
     } catch (error) {

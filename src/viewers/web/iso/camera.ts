@@ -158,6 +158,7 @@ export type KeyTarget = 'hierarchy' | 'control' | 'text' | 'other'
 
 export function keyTarget(target: EventTarget | null): KeyTarget {
   if (!(target instanceof Element)) return 'other'
+  if (target.closest('input[type="radio"], input[type="checkbox"]')) return 'control'
   if (target.closest('input, textarea, [contenteditable]')) return 'text'
   if (target.closest('#tree')) return 'hierarchy'
   if (target.closest('button, select')) return 'control'

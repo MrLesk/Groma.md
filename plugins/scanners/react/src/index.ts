@@ -5,7 +5,7 @@ export { scanReact } from './scan.ts'
 
 export default {
   id: 'react',
-  matchesFile: file => file.endsWith('.tsx') || file.endsWith('.ts') || file === 'tsconfig.json' || file === 'package.json',
+  watch: { include: ['**/*.tsx', '**/*.ts', 'tsconfig.json', 'package.json'], exclude: [] },
   checkReadiness: checkReactReadiness,
   scan: scanReact,
 } satisfies ScannerPlugin

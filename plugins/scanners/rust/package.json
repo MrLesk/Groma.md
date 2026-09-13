@@ -1,9 +1,45 @@
 {
   "name": "@groma/scanner-rust",
   "version": "0.1.0",
-  "private": true,
+  "private": false,
   "type": "module",
   "license": "MIT",
-  "groma": { "scanner": { "id": "rust", "entry": "./src/index.ts" } },
-  "dependencies": { "@groma/scanner": "workspace:*" }
+  "groma": {
+    "scanner": {
+      "id": "rust",
+      "entry": "./src/index.ts",
+      "discovery": {
+        "technologies": [
+          "rust"
+        ],
+        "rules": [
+          {
+            "type": "toml",
+            "files": [
+              "**/Cargo.toml"
+            ],
+            "technology": "rust",
+            "kind": "language",
+            "tables": [
+              "package",
+              "workspace"
+            ],
+            "versionPath": [
+              "package",
+              "rust-version"
+            ],
+            "declaration": "Cargo package or workspace"
+          }
+        ],
+        "compatibility": {
+          "groma": "^0.3.0",
+          "technologyVersions": {}
+        }
+      }
+    }
+  },
+  "dependencies": {
+    "@groma/scanner": "workspace:*"
+  },
+  "description": "Rust project evidence through established semantic tooling."
 }

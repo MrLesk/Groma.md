@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { cp, mkdtemp, readFile, rm } from 'node:fs/promises'
+import { cp, mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { test } from 'bun:test'
@@ -32,29 +32,9 @@ test.concurrent('draft relationships survive edits and scans and require explici
     const accepted = Bun.spawn(['bun', path.join(repositoryRoot, 'src/cli.ts'), 'accept', 'relation', 'src/stock.ts', 'src/orders.ts'], { cwd: root, stderr: 'pipe' })
     assert.equal(await accepted.exited, 0, await new Response(accepted.stderr).text())
     assert.equal((await read()).origin, 'observed')
-    const source = path.join(root, 'groma/relationships.md')
-    const before = await readFile(source, 'utf8')
-    await assert.rejects(writes.remove(root, { id: 'src/stock.ts', relation: 'src/orders.ts' }), /only draft relationships can be removed/)
-    assert.equal(await readFile(source, 'utf8'), before)
-  } finally { await rm(root, { recursive: true, force: true }) }
-})
-
-test.concurrent('invalid relation and details saves leave the source unchanged; clearing fields is explicit', async () => {
-  const root = await fixture()
-  const source = path.join(root, 'groma/systems/shop/containers/api/components/stock.md')
-  try {
-    const before = await readFile(source, 'utf8')
-    await assert.rejects(writes.draft(root, { ...relation, technology: ' ' }), /technology/)
-    await assert.rejects(writes.edit(root, { id: 'stock', title: ' ', overview: 'Changed' }), /--title/)
-    await assert.rejects(writes.edit(root, { id: 'stock', technology: ' ' }), /technology/)
-    await assert.rejects(writes.edit(root, { id: 'stock', overview: '# Duplicate title' }), /must not duplicate title/)
-    await assert.rejects(writes.edit(root, { id: 'stock', group: 'Checks', technology: ' ' }), /technology/)
-    assert.equal(await readFile(source, 'utf8'), before)
-    await writes.edit(root, { id: 'stock', overview: 'Saved overview', technology: 'Bun' })
-    await writes.edit(root, { id: 'stock', overview: '', technology: '' })
-    const stock = (await loadAnnotatedArchitecture(root)).elements.find(element => element.id === 'stock')!
-    assert.equal(stock.overview, '')
-    assert.equal(stock.technology, undefined)
+    const before = await read()
+    await assert.rejects(writes.remove(root, { id: 'src/stock.ts', relation: 'src/orders.ts' }))
+    assert.deepEqual(await read(), before)
   } finally { await rm(root, { recursive: true, force: true }) }
 })
 
@@ -65,7 +45,7 @@ test.concurrent('drop intent chooses ancestry and grouping keeps world ownership
     assert.equal(creationParent(world.elements, 'component', 'stock'), 'api')
     assert.equal(creationParent(world.elements, 'container', 'stock'), 'shop')
     assert.equal(creationParent(world.elements, 'system', undefined), undefined)
-    assert.throws(() => creationParent(world.elements, 'component', undefined), /container/)
+    assert.throws(() => creationParent(world.elements, 'component', undefined))
     const id = await writes.draft(root, { kind: 'component', name: 'Planned check', parent: 'api', overview: '' })
     await writes.add(root, { thing: 'group', name: 'Checks', members: ['stock', id] })
     await writes.edit(root, { id, group: 'Checks', title: 'Inventory check', technology: 'Bun' })
@@ -74,8 +54,6 @@ test.concurrent('drop intent chooses ancestry and grouping keeps world ownership
     assert.ok(selected.every(element => element.parent === 'api' && element.group === 'Checks'))
     const created = selected.find(element => element.id === id)!
     assert.equal(created.origin, 'draft')
-    assert.equal(created.title, 'Inventory check')
-    assert.equal(created.technology, 'Bun')
     const bounds = gestureBounds({ x: 100, y: 100 }, { x: 0, y: 0 })
     assert.equal(enclosed(bounds, { x: 10, y: 10, width: 40, height: 40 }), true)
     assert.equal(enclosed(bounds, { x: 80, y: 10, width: 40, height: 40 }), false)

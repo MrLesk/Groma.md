@@ -15,10 +15,11 @@ export function sourceStem(file: string): string {
 function readableNames(source: ComponentSource): string[] {
   const stem = sourceStem(source.file)
   const parents = source.file.split('/').slice(0, -1)
-  const names = [stem, `${source.parent}-${stem}`]
+  const names = [stem]
   for (let depth = 1; depth <= parents.length; depth += 1) {
-    names.push(kebabCase(`${parents.slice(-depth).join('-')}-${source.parent}-${stem}`))
+    names.push(kebabCase(`${parents.slice(-depth).join('-')}-${stem}`))
   }
+  names.push(`${source.parent}-${names[names.length - 1]}`)
   return [...new Set(names)]
 }
 
@@ -58,6 +59,6 @@ export function componentNames(
   }
   return new Map(candidates.map(candidate => [candidate.file, {
     id: idFor(candidate),
-    name: displayName(candidate.names[candidate.position]!),
+    name: displayName(idFor(candidate)),
   }]))
 }

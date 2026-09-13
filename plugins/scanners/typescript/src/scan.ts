@@ -184,51 +184,21 @@ export async function scanTypeScriptSource(
   const placements = placementByFile(graph, scopeFiles)
   const names = scopeNames(scopeFiles)
   const scopeId = (file: string) => `scope:${file}`
-  const relationships = new Map<string, { source: string; target: string; kind: string }>()
-
-  for (const node of graph.files) {
-    const sourcePlacement = placements.get(node.file)
-    if (sourcePlacement === undefined) continue
-    for (const imported of node.imports) {
-      const dependency = {
-        source: node.file,
-        target: imported,
-        kind: 'source-dependency',
-      }
-      relationships.set(
-        `${dependency.source}\0${dependency.target}\0${dependency.kind}`,
-        dependency,
-      )
-      const targetPlacement = placements.get(imported)
-      if (targetPlacement === undefined || targetPlacement === sourcePlacement) continue
-      const relationship = {
-        source: scopeId(sourcePlacement),
-        target: scopeId(targetPlacement),
-        kind: 'imports',
-      }
-      relationships.set(
-        `${relationship.source}\0${relationship.target}\0${relationship.kind}`,
-        relationship,
-      )
-    }
-  }
-
   const name = await packageName(repositoryRoot)
   return createScanObservation({
     scanner: {
-      language: 'typescript',
-      engine: 'typescript',
+      id: 'typescript',
+      technology: 'typescript',
+      engine: 'typescript-sdk',
       engineVersion: typescriptVersion,
     },
-    root: {
-      kind: 'package',
-      name,
-      file: existsSync(path.join(repositoryRoot, 'package.json')) ? 'package.json' : '.',
-    },
-    scopes: scopeFiles.map(file => ({ id: scopeId(file), name: names.get(file) ?? fileLabel(file) })),
-    files: graph.files.map(node => ({ file: node.file, symbols: node.symbols })),
-    placements: [...placements].map(([file, scope]) => ({ file, scope: scopeId(scope) })),
-    relationships: [...relationships.values()],
+    roots: [
+      { id: 'package', kind: 'package', name,
+        ...(existsSync(path.join(repositoryRoot, 'package.json')) ? { file: 'package.json' } : {}) },
+      ...scopeFiles.map(file => ({ id: scopeId(file), kind: 'module', parent: 'package',
+        name: names.get(file) ?? fileLabel(file), file })),
+    ],
+    files: graph.files.map(node => ({ file: node.file, roots: [scopeId(placements.get(node.file)!)], symbols: node.symbols })),
     operations: graph.operations,
     invocations: graph.invocations,
     diagnostics: [],

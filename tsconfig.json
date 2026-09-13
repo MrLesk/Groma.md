@@ -1,6 +1,10 @@
 {
   "compilerOptions": {
-    "lib": ["ESNext", "DOM", "DOM.Iterable"],
+    "lib": [
+      "ESNext",
+      "DOM",
+      "DOM.Iterable"
+    ],
     "target": "ESNext",
     "module": "Preserve",
     "moduleResolution": "bundler",
@@ -10,7 +14,10 @@
     "noEmit": true,
     "strict": true,
     "skipLibCheck": true,
-    "types": ["node", "bun"]
+    "types": [
+      "node",
+      "bun"
+    ]
   },
   "include": [
     "packages/**/*.ts",
@@ -18,6 +25,7 @@
     "scripts/**/*.ts",
     "src/**/*.ts",
     "test/**/*.ts",
-    "test-bun/**/*.ts"
+    "test-bun/**/*.ts",
+    "examples/**/*.ts"
   ]
 }

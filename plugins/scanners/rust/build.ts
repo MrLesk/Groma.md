@@ -17,20 +17,20 @@ export async function buildPackage(output: string): Promise<void> {
   await execute('cargo', ['build', '--release', '--locked', '--manifest-path', manifest], {
     env: { ...process.env, CARGO_TARGET_DIR: target }, maxBuffer: 16 * 1024 * 1024,
   })
-  await mkdir(path.join(output, 'dist/bin'), { recursive: true })
+  await mkdir(path.join(output, 'dist/bin', `${process.platform}-${process.arch}`), { recursive: true })
   const bundle = await Bun.build({
     entrypoints: [path.join(directory, 'src/index.ts')], outdir: path.join(output, 'src'),
     target: 'node', format: 'esm', naming: 'index.js',
   })
   if (!bundle.success) throw new AggregateError(bundle.logs, 'Rust scanner adapter build failed')
-  const binary = path.join(output, 'dist/bin', workerName)
+  const binary = path.join(output, 'dist/bin', `${process.platform}-${process.arch}`, workerName)
   await copyFile(path.join(target, 'release', workerName), binary)
   await chmod(binary, 0o755)
   const source = JSON.parse(await readFile(path.join(directory, 'package.json'), 'utf8'))
   await writeFile(path.join(output, 'package.json'), `${JSON.stringify({
-    name: source.name, version: source.version, private: true, type: 'module', license: 'MIT',
+    name: source.name, version: source.version, description: source.description, private: source.private, type: 'module', license: 'MIT',
     os: [process.platform], cpu: [process.arch],
-    groma: { scanner: { id: 'rust', entry: './src/index.js' } },
+    groma: { scanner: { ...source.groma.scanner, entry: './src/index.js' } },
     files: ['src', 'dist/bin', 'LICENSE', 'THIRD_PARTY_NOTICES.md'],
   }, null, 2)}\n`)
   await copyFile(path.join(directory, '../../../LICENSE'), path.join(output, 'LICENSE'))
@@ -40,7 +40,7 @@ export async function buildPackage(output: string): Promise<void> {
 if (import.meta.main) {
   const output = path.join(directory, 'dist/package')
   await buildPackage(output)
-  await mkdir(path.join(directory, 'dist/bin'), { recursive: true })
-  await copyFile(path.join(output, 'dist/bin', workerName), path.join(directory, 'dist/bin', workerName))
+  await mkdir(path.join(directory, 'dist/bin', `${process.platform}-${process.arch}`), { recursive: true })
+  await copyFile(path.join(output, 'dist/bin', `${process.platform}-${process.arch}`, workerName), path.join(directory, 'dist/bin', `${process.platform}-${process.arch}`, workerName))
   console.log(output)
 }

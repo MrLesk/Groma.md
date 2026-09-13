@@ -1,3 +1,4 @@
+import { createMapMotion } from '../src/viewers/web/iso/presentation.ts'
 import assert from 'node:assert/strict'
 
 import { test } from 'bun:test'
@@ -9,7 +10,6 @@ import {
   NESTED_POSE,
   OVERHEAD_POSE,
   ORBIT_DURATION_MS,
-  createMapMotion,
   interpolatePose,
   orbitPose,
 } from '../src/viewers/web/layers/orbit.ts'

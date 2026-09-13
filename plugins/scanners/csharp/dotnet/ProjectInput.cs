@@ -68,7 +68,7 @@ internal static class ProjectInput
                 if (!SourcePath.IsPhysicalSource(request.RepositoryRoot, document.FilePath)) continue;
                 string file = SourcePath.Relative(request.RepositoryRoot, document.FilePath!);
                 if (files.TryGetValue(file, out ProjectId? owner) && owner != project.Id)
-                    throw new InvalidDataException($"Linked source '{file}' belongs to multiple project contexts. Select one project; the shared contract requires one placement per file.");
+                    throw new InvalidDataException($"Linked source '{file}' belongs to multiple project contexts. Select one project; this scanner does not combine multiple compilation contexts for one physical source.");
                 files[file] = project.Id;
                 if (files.Count > request.MaxFiles) throw new InvalidDataException($"Source file limit exceeded ({request.MaxFiles}); select a smaller input.");
             }

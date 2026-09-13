@@ -15,15 +15,15 @@ export async function buildWorker(destination: string, go = 'go'): Promise<void>
 /** Build for the maintainer's host. Consumers receive compiled code and need no install scripts. */
 export async function buildPackage(destination: string, go = 'go'): Promise<void> {
   await mkdir(destination, { recursive: true })
-  await buildWorker(path.join(destination, 'dist', executable), go)
+  await buildWorker(path.join(destination, 'dist', `${process.platform}-${process.arch}`, executable), go)
   const built = await Bun.build({ entrypoints: [path.join(pluginRoot, 'src/index.ts')],
     outdir: path.join(destination, 'src'), target: 'bun', format: 'esm', naming: 'index.js' })
   if (!built.success) throw new Error(built.logs.join('\n'))
   const manifest = JSON.parse(await readFile(path.join(pluginRoot, 'package.json'), 'utf8'))
   await writeFile(path.join(destination, 'package.json'), `${JSON.stringify({
-    name: manifest.name, version: manifest.version, private: true, type: 'module', license: 'MIT',
+    name: manifest.name, version: manifest.version, description: manifest.description, private: manifest.private, type: 'module', license: 'MIT',
     os: [process.platform], cpu: [process.arch],
-    groma: { scanner: { id: 'go', entry: './src/index.js' } },
+    groma: { scanner: { ...manifest.groma.scanner, entry: './src/index.js' } },
   }, null, 2)}\n`)
   await cp(path.join(pluginRoot, '../../../LICENSE'), path.join(destination, 'LICENSE'))
   const goRoot = (await run(go, ['env', 'GOROOT'], pluginRoot)).trim()
@@ -38,6 +38,7 @@ if (import.meta.main) {
   const destination = path.join(pluginRoot, 'dist/package')
   await rm(destination, { recursive: true, force: true })
   await buildPackage(destination)
-  await cp(path.join(destination, 'dist', executable), path.join(pluginRoot, 'dist', executable))
+  await mkdir(path.join(pluginRoot, 'dist', `${process.platform}-${process.arch}`), { recursive: true })
+  await cp(path.join(destination, 'dist', `${process.platform}-${process.arch}`, executable), path.join(pluginRoot, 'dist', `${process.platform}-${process.arch}`, executable))
   console.log(destination)
 }

@@ -1,10 +1,11 @@
+import { createMapMotion } from '../src/viewers/web/iso/presentation.ts'
 import assert from 'node:assert/strict'
 import { test } from 'bun:test'
 
 import { fitArchitecture, fitCamera, pan, zoomAbout } from '../src/viewers/web/iso/camera.ts'
 import { boundsOf } from '../src/viewers/web/iso/project.ts'
 import { presentScene } from '../src/viewers/web/iso/presentation.ts'
-import { createMapMotion, NESTED_POSE, OVERHEAD_POSE } from '../src/viewers/web/layers/orbit.ts'
+import { NESTED_POSE, OVERHEAD_POSE } from '../src/viewers/web/layers/orbit.ts'
 import { box, uses, worldOf } from './helpers.ts'
 
 function fixture() {

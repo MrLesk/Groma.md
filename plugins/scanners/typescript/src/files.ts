@@ -98,14 +98,6 @@ function gitListFiles(repositoryRoot: string): Promise<string[]> {
   })
 }
 
-export function isTypeScriptScanFile(
-  relative: string,
-  config: TypeScriptScannerConfig = defaultTypeScriptScannerConfig,
-): boolean {
-  const file = relative.split(path.sep).join('/')
-  return fileMatcher(config)(file)
-}
-
 export async function listTypeScriptFiles(
   repositoryRoot: string,
   config: TypeScriptScannerConfig = defaultTypeScriptScannerConfig,

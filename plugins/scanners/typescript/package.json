@@ -8,5 +8,44 @@
   "dependencies": {
     "@groma/scanner": "workspace:*",
     "typescript": "7.1.0-dev.20260905.1"
-  }
+  },
+  "description": "TypeScript source and call evidence using the native TypeScript SDK.",
+  "groma": {
+    "scanner": {
+      "id": "typescript",
+      "entry": "./src/index.ts",
+      "discovery": {
+        "technologies": [
+          "typescript"
+        ],
+        "rules": [
+          {
+            "type": "dependency",
+            "files": [
+              "**/package.json"
+            ],
+            "technology": "typescript",
+            "kind": "language",
+            "package": "typescript"
+          },
+          {
+            "type": "file",
+            "files": [
+              "**/tsconfig.json"
+            ],
+            "technology": "typescript",
+            "kind": "language",
+            "declaration": "TypeScript project configuration"
+          }
+        ],
+        "compatibility": {
+          "groma": "^0.3.0",
+          "technologyVersions": {
+            "typescript": "5.9.2 || 5.9.3 || 7.0.2"
+          }
+        }
+      }
+    }
+  },
+  "private": false
 }

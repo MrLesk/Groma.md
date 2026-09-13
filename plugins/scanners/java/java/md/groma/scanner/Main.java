@@ -83,16 +83,17 @@ public final class Main {
             units.forEach(unit -> uses.scan(unit, null));
             var messages = new ArrayList<Object>();
             for (var item : diagnostics.getDiagnostics()) {
-                messages.add(Json.object("severity", "warning", "code", item.getCode(), "message", diagnostic(root, item)));
+                var message = Json.object("severity", "warning", "code", item.getCode(), "message", item.getMessage(Locale.ROOT));
+                if (item.getSource() != null) message.put("file", root.relativize(Path.of(item.getSource().toUri())).toString().replace('\\', '/'));
+                if (item.getLineNumber() > 0) message.put("line", item.getLineNumber());
+                messages.add(message);
             }
             messages.addAll(uses.diagnostics());
             return Json.object(
-                "schemaVersion", 1, "complete", true,
-                "scanner", Json.object("language", "java", "engine", "javac-tree", "engineVersion", Runtime.version().toString()),
-                "root", Json.object("kind", "maven-project", "name", root.getFileName().toString(), "file", "pom.xml"),
-                "scopes", List.of(Json.object("id", "java:source-set", "name", root.getFileName().toString())),
-                "files", index.files(), "placements", index.placements(),
-                "relationships", uses.relationships(), "operations", index.operations,
+                "schemaVersion", 1,
+                "scanner", Json.object("id", "java", "technology", "java", "engine", "javac-tree", "engineVersion", Runtime.version().toString()),
+                "roots", List.of(Json.object("id", "java:source-set", "kind", "maven-project", "name", root.getFileName().toString(), "file", "pom.xml")),
+                "files", index.files(), "operations", index.operations,
                 "invocations", uses.invocations, "diagnostics", messages);
         }
     }

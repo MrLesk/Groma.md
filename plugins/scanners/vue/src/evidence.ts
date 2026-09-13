@@ -46,7 +46,8 @@ export class VueEvidence {
         const binding = template.startTagEnd + prop.loc.start.offset
         if (!this.bind(file, element, prop, binding, template.startTagEnd)) {
           this.diagnostics.push({ severity: 'info', code: 'unsupported-vue-binding',
-            message: `${relative(this.project.root, file)}:${this.project.line(file, binding)}: ${prop.loc.source} has no supported unique SFC event-to-function binding.` })
+            file: relative(this.project.root, file), line: this.project.line(file, binding),
+            message: `${prop.loc.source} has no supported unique SFC event-to-function binding.` })
         }
       }
     }

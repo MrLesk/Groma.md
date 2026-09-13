@@ -106,14 +106,6 @@ async function installBacklog(installer: PackageInstaller): Promise<boolean> {
   }
 }
 
-async function fileExists(filename: string): Promise<boolean> {
-  try {
-    return (await stat(filename)).isFile()
-  } catch {
-    return false
-  }
-}
-
 async function pathExists(filename: string): Promise<boolean> {
   try {
     await stat(filename)
@@ -124,13 +116,13 @@ async function pathExists(filename: string): Promise<boolean> {
 }
 
 async function backlogInitialized(repositoryRoot: string): Promise<boolean> {
-  const markers = [
-    join(repositoryRoot, 'backlog', 'config.yml'),
-    join(repositoryRoot, '.backlog', 'config.yml'),
-    join(repositoryRoot, 'backlog.config.yml'),
-    join(repositoryRoot, 'backlog.json'),
-  ]
-  return (await Promise.all(markers.map(fileExists))).some(Boolean)
+  const child = Bun.spawn(['backlog', 'config', 'get', 'projectName'], {
+    cwd: repositoryRoot,
+    stdin: 'ignore',
+    stdout: 'ignore',
+    stderr: 'ignore',
+  })
+  return await child.exited === 0
 }
 
 function backlogInitCommand(projectName: string): string[] {

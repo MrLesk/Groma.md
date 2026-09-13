@@ -1,7 +1,7 @@
 # React scanner
 
 The React scanner connects a directly supplied JSX callback prop to calls on
-the component's destructured parameter. Enable it alongside embedded TypeScript.
+the component's destructured parameter. Enable it alongside the TypeScript scanner.
 Core selects relationships from the combined evidence and keeps one owner per
 physical source file.
 
@@ -21,7 +21,7 @@ groma scan
 ```
 
 The private prototype package bundles TypeScript 6.0.3 and its standard-library
-declarations. Groma's embedded TypeScript 7.1 is unchanged. No consumer build
+declarations. the TypeScript scanner's 7.1 SDK is unchanged. No consumer build
 or installation script is required. Public naming and publication are separate
 release decisions.
 

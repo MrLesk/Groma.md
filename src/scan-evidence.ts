@@ -3,7 +3,7 @@ import type { ScanDiagnostic, ScanInvocation, ScanObservation, ScanOperation } f
 export interface InvocationEvidence {
   invocation: ScanInvocation
   operations: ReadonlyMap<string, ScanOperation>
-  languages: string[]
+  scanners: string[]
 }
 
 /** Positions identify source declarations; scanner-local IDs only link facts within one observation. */
@@ -36,7 +36,7 @@ function conflictFor(claims: InvocationEvidence[]): ScanDiagnostic {
       const target = claim.operations.get(id)!
       return `${target.file}:${target.position}`
     }).sort()
-    return `${claim.languages.join(', ')} -> ${[...new Set(targets)].join(', ')}`
+    return `${claim.scanners.join(', ')} -> ${[...new Set(targets)].join(', ')}`
   })
   const binding = first.invocation.binding
   const context = binding ? ` (binding ${binding.file}:${binding.position})` : ''
@@ -62,7 +62,7 @@ function combineGroup(
   }
   claims.push({
     ...certain[0]!,
-    languages: [...new Set(certain.flatMap(evidence => evidence.languages))].sort(),
+    scanners: [...new Set(certain.flatMap(evidence => evidence.scanners))].sort(),
   })
 }
 
@@ -77,7 +77,7 @@ export function composeInvocations(observations: readonly ScanObservation[]): {
   for (const observation of observations) {
     const operations = new Map(observation.operations?.map(operation => [operation.id, operation]))
     for (const invocation of observation.invocations ?? []) {
-      const evidence = { invocation, operations, languages: [observation.scanner.language] }
+      const evidence = { invocation, operations, scanners: [observation.scanner.id] }
       const key = claimKey(evidence)
       if (key === undefined) {
         claims.push(evidence)

@@ -85,7 +85,7 @@ Later scans keep what your agent wrote. [Curation guide](docs/agent-instructions
 - **Drafts.** Sketch systems, containers, and components before they exist. They appear dashed beside the real ones until a scan matches their code and you accept them. [Draft lifecycle](docs/product-model.md#drafts)
 - **See work across the architecture.** Backlog.md tasks pin where people and agents are working; select one to highlight the components it touches and inspect its changes without leaving the map. [Task links](docs/agent-instructions/index.md#backlog-task-links)
 - **Explore past architecture with its code.** Open an earlier revision and inspect the source from that same commit, down to functions and methods.
-- **Publish an interactive site.** `groma export ./site` writes a standalone map with flows, tasks, diffs, and source; `--watch` regenerates it as the repository changes. [Static publication](docs/viewers/web/index.md#static-publication)
+- **Publish a static site.** `groma export ./site` writes a standalone map from stored architecture with flows, tasks, diffs, and source, then exits. Run it again to publish an updated snapshot. Scanning and hosting run separately. [Static publication](docs/viewers/web/index.md#static-publication)
 
 <p align="center">
   <picture>

@@ -6,6 +6,7 @@ import path from 'node:path'
 import { createScanObservation } from '@groma/scanner'
 
 import { loadArchitecture } from '../src/architecture-reader.ts'
+import { editArchitecture } from '../src/edit.ts'
 import { draftElement } from '../src/draft.ts'
 import { componentNames } from '../src/scan-component-naming.ts'
 import { reconcileScanObservations } from '../src/scan-reconciler.ts'
@@ -16,12 +17,13 @@ function names(files: string[], occupied: string[] = []) {
 
 function observation(files: string[], language = 'fixture') {
   const scan = createScanObservation({
-    scanner: { language, engine: 'fixture', engineVersion: '1' },
-    root: { kind: 'package', name: 'Example', file: 'package.json' },
-    scopes: [{ id: 'scope', name: 'Scanner' }],
-    files: files.map(file => ({ file, symbols: [] })),
-    placements: files.map(file => ({ file, scope: 'scope' })),
-    relationships: [], diagnostics: [],
+    scanner: { id: language, technology: 'fixture', engine: 'fixture', engineVersion: '1' },
+    roots: [
+      { id: 'root', kind: 'package', name: 'Example', file: 'package.json' },
+      { kind: 'project', parent: 'root', id: 'scope', name: 'Scanner' },
+    ],
+    files: files.map(file => ({ roots: ['scope'], file, symbols: [] })),
+    diagnostics: [],
   })
   // Exercise the reconciler independently of contract sorting.
   scan.files.reverse()
@@ -49,15 +51,15 @@ test.concurrent('source context separates repeated roles as a batch before a has
   for (const order of [files, [...files].reverse()]) {
     const allocated = names(order)
     for (const language of ['vue', 'react', 'java']) {
-      expect(allocated.get(`plugins/scanners/${language}/build.ts`)?.id).toBe(`${language}-scanner-build`)
+      expect(allocated.get(`plugins/scanners/${language}/build.ts`)?.id).toBe(`${language}-build`)
     }
   }
   const nested = ['first/src/build.ts', 'second/src/build.ts']
   expect([...names(nested).values()].map(value => value.id)).toEqual([
-    'first-src-scanner-build', 'second-src-scanner-build',
+    'first-src-build', 'second-src-build',
   ])
   expect(names(['unique.ts']).get('unique.ts')?.id).toBe('unique')
-  expect(names(['src/index.ts']).get('src/index.ts')?.id).toBe('scanner-index')
+  expect(names(['src/index.ts']).get('src/index.ts')?.id).toBe('src-index')
 })
 
 test.concurrent('normalized collisions hash exact paths including extensions and preserve readable titles', () => {
@@ -65,7 +67,7 @@ test.concurrent('normalized collisions hash exact paths including extensions and
   const allocated = names(files)
   for (const file of files) {
     const suffix = createHash('sha256').update(file).digest('hex').slice(0, 8)
-    expect(allocated.get(file)).toEqual({ id: `same-scanner-thing-${suffix}`, name: 'Same scanner thing' })
+    expect(allocated.get(file)).toEqual({ id: `scanner-same-thing-${suffix}`, name: `Scanner same thing ${suffix}` })
   }
   expect(names([...files].reverse())).toEqual(allocated)
 })
@@ -76,12 +78,12 @@ test.concurrent('matching short hashes extend together and avoid occupied IDs', 
   const allocated = names(files)
   for (const file of files) {
     const hash = createHash('sha256').update(file).digest('hex')
-    expect(allocated.get(file)?.id).toBe(`same-scanner-item-${hash.slice(0, 9)}`)
+    expect(allocated.get(file)?.id).toBe(`scanner-same-item-${hash.slice(0, 9)}`)
   }
   const file = files[0]!
   const hash = createHash('sha256').update(file).digest('hex')
-  const occupied = ['item', 'scanner-item', 'same-scanner-item', `same-scanner-item-${hash.slice(0, 8)}`]
-  expect(names([file], occupied).get(file)?.id).toBe(`same-scanner-item-${hash.slice(0, 9)}`)
+  const occupied = ['item', 'same-item', 'scanner-same-item', `scanner-same-item-${hash.slice(0, 8)}`]
+  expect(names([file], occupied).get(file)?.id).toBe(`scanner-same-item-${hash.slice(0, 9)}`)
 })
 
 test.concurrent('file and scanner order share one owner and preserve IDs on later scans', async () => {
@@ -94,9 +96,9 @@ test.concurrent('file and scanner order share one owner and preserve IDs on late
     const initial = await components(roots[0]!)
     expect(await components(roots[1]!)).toEqual(initial)
     expect(initial).toHaveLength(3)
-    expect(initial.find(item => item.id === 'react-scanner-build')?.code).toHaveLength(2)
+    expect(initial.find(item => item.id === 'react-build')?.code).toHaveLength(2)
     for (const language of ['vue', 'react', 'java']) {
-      expect(initial.find(item => item.id === `${language}-scanner-build`)?.code?.[0]?.file)
+      expect(initial.find(item => item.id === `${language}-build`)?.code?.[0]?.file)
         .toBe(`plugins/scanners/${language}/build.ts`)
     }
     const changed = scans.map(scan => ({ ...scan, files: scan.files.map(file => ({
@@ -123,12 +125,12 @@ test.concurrent('matching a draft keeps its identity and draft status', async ()
   } finally { await rm(root, { recursive: true, force: true }) }
 })
 
-test.concurrent('overlapping fresh scopes reuse their pending container and an existing ID wins over new collisions', async () => {
+test.concurrent('overlapping fresh roots reuse their pending container and an existing ID wins over new collisions', async () => {
   const root = await repository()
   try {
     const first = observation(['first/build.ts'])
     const overlap = observation(['first/build.ts'], 'other')
-    overlap.scopes[0]!.name = 'Other scanner'
+    overlap.roots.find(root => root.parent === 'root')!.name = 'Other scanner'
     await reconcileScanObservations(root, [first, overlap])
     const records = await loadArchitecture(root)
     expect(records.documents.filter(document => document.frontmatter.type === 'C4 Container')).toHaveLength(1)
@@ -139,5 +141,19 @@ test.concurrent('overlapping fresh scopes reuse their pending container and an e
     const later = await components(root)
     expect(later.find(item => item.code?.some(code => code.file === 'first/build.ts'))?.id).toBe('build')
     expect(later).toHaveLength(2)
+  } finally { await rm(root, { recursive: true, force: true }) }
+})
+
+
+test.concurrent('new component labels avoid authored titles and preserve existing identities', async () => {
+  const root = await repository()
+  try {
+    await reconcileScanObservations(root, [observation(['first/build.ts'])])
+    const existing = (await components(root))[0]!
+    await editArchitecture(root, { id: existing.id, title: 'Build service' })
+    await reconcileScanObservations(root, [observation(['first/build.ts', 'build-service.ts'])])
+    const after = await components(root)
+    expect(after.find(item => item.id === existing.id)?.title).toBe('Build service')
+    expect(new Set(after.map(item => item.title)).size).toBe(after.length)
   } finally { await rm(root, { recursive: true, force: true }) }
 })

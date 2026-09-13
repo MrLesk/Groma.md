@@ -45,7 +45,7 @@ coverage, not the accuracy of unreviewed runtime relationships.
 
 Compiled Groma was built with `bun scripts/build.ts /tmp/groma-java-acceptance-bin`.
 The temporary project was initialized, the built Java package added through
-`groma scanner add`, and `groma scan` completed with Java and embedded TypeScript.
+`groma scanner add`, and `groma scan` completed with Java and the TypeScript scanner.
 The Java portion therefore runs through the real compiled module host, without
 requiring a runtime TypeScript dependency or compiling the worker at installation.
 
@@ -54,11 +54,8 @@ invocation. This is intentional: compiler type binding does not prove the
 concrete Spring receiver. The scanner preserves the source inventory needed for
 curation without inventing a Java/Angular HTTP relationship.
 
-The separate `plugins/scanners/java/smoke.ts` consumer check is designed for the
-same release journey on macOS, Linux and Windows. Only the locally executed
-platform may be claimed as passed; Windows command quoting is additionally
-covered by a unit test. Platform execution and public publication remain under
-TASK-326.7.
+Package consumer checks are outside the automated test suite. The results
+in this document record historical local qualification.
 
 ## Compiled export correction
 

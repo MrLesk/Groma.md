@@ -29,11 +29,9 @@ public sealed class RoslynScanner
             : await workspace.OpenSolutionAsync(request.Input, cancellationToken: cancellationToken);
         ThrowIfWorkspaceFailed(workspaceDiagnostics, request.RepositoryRoot);
         Project[] projects = ProjectInput.ValidateLoaded(solution, request, expected);
-        Dictionary<ProjectId, string> scopes = projects.ToDictionary(project => project.Id,
-            project => $"scope:{SourcePath.Relative(request.RepositoryRoot, project.FilePath!)}");
+        Dictionary<ProjectId, string> rootIds = projects.ToDictionary(project => project.Id,
+            project => $"project:{SourcePath.Relative(request.RepositoryRoot, project.FilePath!)}");
         List<ScanFile> files = [];
-        List<ScanPlacement> placements = [];
-        HashSet<ScanRelationship> relationships = [];
         List<ScanDiagnostic> diagnostics = [];
         OperationEvidence evidence = new(request.RepositoryRoot);
 
@@ -51,30 +49,28 @@ public sealed class RoslynScanner
                     ?? throw new InvalidDataException($"Roslyn could not parse '{file}'.");
                 SemanticModel model = compilation.GetSemanticModel(tree);
                 SyntaxNode root = await tree.GetRootAsync(cancellationToken);
-                files.Add(new ScanFile(file, DeclaredSymbols(root, model, cancellationToken)));
-                placements.Add(new ScanPlacement(file, scopes[project.Id]));
-                ExtractDependencies(root, model, file, request.RepositoryRoot, relationships, cancellationToken);
+                files.Add(new ScanFile(file, [rootIds[project.Id]], DeclaredSymbols(root, model, cancellationToken)));
                 evidence.Extract(root, model, file, cancellationToken);
             }
             foreach (ProjectReference reference in project.ProjectReferences)
             {
-                if (!scopes.TryGetValue(reference.ProjectId, out string? target))
+                if (!rootIds.ContainsKey(reference.ProjectId))
                     throw new InvalidDataException("A source project reference was not loaded; no observation will be published.");
-                relationships.Add(new ScanRelationship(scopes[project.Id], target, "project-reference"));
             }
         }
         ThrowIfWorkspaceFailed(workspaceDiagnostics, request.RepositoryRoot);
-        HashSet<string> included = files.Select(file => file.File).ToHashSet(StringComparer.Ordinal);
-        // Generated implementations and metadata are not physical repository-file endpoints.
-        relationships.RemoveWhere(relationship => relationship.Kind == "source-dependency" && !included.Contains(relationship.Target));
         diagnostics.AddRange(workspaceDiagnostics.Select(diagnostic => new ScanDiagnostic("warning", "MSBUILD_WORKSPACE", NormalizeMessage(diagnostic.Message, request.RepositoryRoot))));
         diagnostics.Add(new ScanDiagnostic("info", "CSHARP_CONTEXT", $"MSBuild SDK {sdk.Version}; configuration {request.Configuration}; {projects.Length} projects. One loaded compilation context per physical project."));
         diagnostics.Add(new ScanDiagnostic("info", "CSHARP_OPERATION_SCOPE", "Explicit calls and constructions in implemented methods, accessors, local functions, lambdas and top-level statements. Implicit language calls, initializers, generated operations, receiver/delegate value flow, DI and protocol wiring are not resolved. Direct calls are evidence, not automatically architecture relationships."));
+        string inputFile = SourcePath.Relative(request.RepositoryRoot, request.Input);
+        string? solutionId = isProject ? null : $"solution:{inputFile}";
+        List<ScanRoot> roots = projects.Select(project => new ScanRoot(rootIds[project.Id], "project", project.Name,
+            SourcePath.Relative(request.RepositoryRoot, project.FilePath!), solutionId)).ToList();
+        if (solutionId is not null)
+            roots.Add(new ScanRoot(solutionId, "solution", Path.GetFileNameWithoutExtension(request.Input), inputFile));
         return ScanObservation.Create(
-            new ScannerIdentity("csharp", "roslyn", typeof(CSharpCompilation).Assembly.GetName().Version!.ToString()),
-            new ScanRoot(isProject ? "project" : "solution", Path.GetFileNameWithoutExtension(request.Input), SourcePath.Relative(request.RepositoryRoot, request.Input)),
-            projects.Select(project => new ScanScope(scopes[project.Id], project.Name)),
-            files, placements, relationships, diagnostics, evidence.Operations, evidence.Invocations);
+            new ScannerIdentity("csharp", "c#/.NET", "roslyn", typeof(CSharpCompilation).Assembly.GetName().Version!.ToString()),
+            roots, files, diagnostics, evidence.Operations, evidence.Invocations);
     }
 
     private static void CheckCompilation(Compilation compilation, Project project, string root, List<ScanDiagnostic> diagnostics, CancellationToken token)
@@ -88,7 +84,7 @@ public sealed class RoslynScanner
             throw new InvalidDataException($"Compilation failed for '{SourcePath.Relative(root, project.FilePath!)}' ({errors.Length} errors). Restore the selected project explicitly and fix compilation errors.\n" +
                 string.Join("\n", errors.Take(5).Select(error => NormalizeMessage(error.ToString(), root))));
         if (project.AnalyzerReferences.Count > 0)
-            diagnostics.Add(new ScanDiagnostic("info", "CSHARP_GENERATED_SCOPE", $"{SourcePath.Relative(root, project.FilePath!)}: compiler generators may contribute semantic input; generated documents are not emitted as primary source files."));
+            diagnostics.Add(new ScanDiagnostic("info", "CSHARP_GENERATED_SCOPE", "Compiler generators may contribute semantic input; generated documents are not emitted as primary source files.", SourcePath.Relative(root, project.FilePath!)));
     }
 
     private static ScanSymbol[] DeclaredSymbols(SyntaxNode root, SemanticModel model, CancellationToken token) =>
@@ -100,24 +96,6 @@ public sealed class RoslynScanner
                     ?? throw new InvalidDataException("Roslyn could not resolve a type declaration.");
                 return new ScanSymbol(symbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat), symbol.Name, DeclarationKind(declaration));
             }).ToArray();
-
-    private static void ExtractDependencies(SyntaxNode root, SemanticModel model, string file, string repositoryRoot, HashSet<ScanRelationship> relationships, CancellationToken token)
-    {
-        foreach (NameSyntax name in root.DescendantNodes().OfType<NameSyntax>())
-        {
-            if (name.Ancestors().Any(ancestor => ancestor is UsingDirectiveSyntax)) continue;
-            ISymbol? referenced = model.GetSymbolInfo(name, token).Symbol;
-            if (referenced is INamespaceSymbol) continue;
-            foreach (Location location in referenced?.Locations ?? [])
-            {
-                string? targetPath = location.SourceTree?.FilePath;
-                // A generated syntax tree can have a virtual path without a physical document.
-                if (targetPath is null || !File.Exists(targetPath) || !SourcePath.IsPhysicalSource(repositoryRoot, targetPath)) continue;
-                string target = SourcePath.Relative(repositoryRoot, targetPath);
-                if (target != file) relationships.Add(new ScanRelationship(file, target, "source-dependency"));
-            }
-        }
-    }
 
     private static void ThrowIfWorkspaceFailed(IEnumerable<WorkspaceDiagnostic> diagnostics, string root)
     {

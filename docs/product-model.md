@@ -85,10 +85,9 @@ operation before opening a map.
    mapped Backlog work with task details and diffs, and architecture-owned
    source inspection. It has no editor and never reads the repository or a
    running Groma server. Everything in the output directory is public data.
-   `--watch` replaces the static snapshot after supported source,
-   architecture Markdown, or Backlog changes; an open page adopts each
-   replacement without reloading. Hosting and access control belong to the
-   chosen static host, outside Groma.
+   Export reads stored architecture without starting a scanner, writes one
+   snapshot, and exits. Run it again to publish updated data. Hosting and
+   access control belong to the chosen static host, outside Groma.
 3. `groma scan`: scan this repo. Core folds structural scan evidence into Markdown
    and reports architecture findings in the command summary. Findings are review
    questions about similar implementations; they are not relationship rows.
@@ -323,7 +322,11 @@ the configured statuses and
 default status plus one `task list --json` summary containing every configured
 task, including terminal history. It reads `task view <id> --json` only for the
 task whose full details a developer opens. The last configured status is
-terminal. Groma watches `backlog/tasks` and never writes a task. A task touches
+terminal. Groma never reads or watches Backlog storage directly. Static export reads a current task snapshot. Web and terminal
+share live updates from the Backlog work source: `task list --json --watch`
+provides complete replacement lists, and the plugin notifies its host after
+each complete JSON response. Closing the subscription stops the CLI process.
+A task touches
 every element whose `groma.code` maps one of its modified files, then every element
 it references by exact `id`. The terminal map marks the assignees of each task
 In Progress on those elements. The web map stands one pin per assignee and task

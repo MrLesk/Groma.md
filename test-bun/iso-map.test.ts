@@ -186,6 +186,8 @@ test.concurrent('a plain wheel pans by the scroll delta; a pinch or cmd+wheel zo
 
 test.concurrent('Escape clears selection while x has no map action', () => {
   assert.equal(keyAction('Escape', 'other'), 'deselect')
+  assert.equal(keyAction('Escape', 'control'), 'deselect')
+  for (const key of ['Escape', '+', '-', '0']) assert.equal(keyAction(key, 'text'), undefined)
   assert.equal(keyAction('x', 'other'), undefined)
   assert.equal(keyAction('X', 'other'), undefined)
 })

@@ -1,7 +1,7 @@
 # Angular scanner
 
 The Angular scanner adds concrete external-template output bindings to the
-embedded TypeScript evidence. Enable it alongside the Java scanner for the
+TypeScript scanner evidence. Enable it alongside the Java scanner for the
 supported Maven and Angular application. All enabled scanners must complete
 before Groma updates the map.
 
@@ -35,7 +35,7 @@ dependencies, compile application output, or run application code.
 The package pins `@angular/compiler` and `@angular/compiler-cli` to 21.2.17
 and its own TypeScript to 5.9.3. Angular 21.2 supports TypeScript 5.9;
 see the [official compatibility table](https://angular.dev/reference/versions).
-Groma keeps its embedded TypeScript 7.1 SDK. The package build resolves every
+The TypeScript scanner uses its own 7.1 SDK. The package build resolves every
 compiler TypeScript import to the scanner's 5.9.3 installation before bundling,
 so workspace dependency hoisting cannot substitute Groma's compiler.
 
@@ -77,8 +77,12 @@ expressions, output mutation, or exhaustive Angular runtime behavior.
 Unresolved or unsupported event bindings produce
 `unsupported-angular-binding` diagnostics rather than relationships.
 DOM events and dependency-library outputs have no supported source output
-provider in this rule. Compiler errors fail the scan instead of yielding a
-partial observation.
+provider in this rule. TypeScript semantic errors, including incompatible types,
+fail readiness and scanning alongside syntax and Angular compiler errors.
+Compiler errors fail the scan instead of yielding a
+partial observation. Template strictness follows the project's Angular compiler
+options. Groma enables the template-checker API to resolve output bindings but
+does not enable stricter template checks than the project requests.
 
 Independent fixture tests load the built package and cover concrete callback
 endpoints, complementary TypeScript evidence, curated ownership, HTML-triggered

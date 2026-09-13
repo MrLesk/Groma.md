@@ -49,23 +49,13 @@ repository TypeScript check passed.
 
 ```sh
 bun test --timeout 20000 test-bun/react-scanner.test.ts
-bunx biome lint plugins/scanners/react/src plugins/scanners/react/build.ts plugins/scanners/react/smoke.ts test-bun/react-scanner.test.ts
+bunx biome lint plugins/scanners/react/src plugins/scanners/react/build.ts test-bun/react-scanner.test.ts
 bun run typecheck
 ```
 
-For a fresh disposable project and output directory, the packed consumer
-procedure is:
-
-```sh
-bun plugins/scanners/react/smoke.ts backlog /path/to/compiled-groma /path/to/prepared-copy /path/to/built-package /path/to/proof
-```
-
-Use `fixture` instead of `backlog` for the independent fixture. Each fresh
-download proof requires an uncached candidate installation. The procedure
-keeps source edits inside the disposable project and restores the selected
-source in a `finally` block. It emits the package and binary hashes, command
-transcript, and exported map. The tested implementation uses the existing
-shared artifact-registry utility; no public registry upload occurs.
+The results below record the historical qualification run. Automated tests
+cover callback inference and ownership; package consumer checks are outside
+the test suite.
 
 ## Review and qualification
 
