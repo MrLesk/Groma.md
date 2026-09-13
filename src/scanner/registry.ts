@@ -25,8 +25,13 @@ export class ScannerFailure extends Error {
 
 export interface ScannerRegistry {
   readonly scannerIds: readonly string[]
-  collectObservations(repositoryRoot: string, changedFiles?: readonly string[]): Promise<ScanObservation[]>
+  collectObservations(repositoryRoot: string, changedFiles?: readonly string[]): Promise<ScanBatch>
   watchesFile(relativePath: string): boolean
+}
+
+export interface ScanBatch {
+  observations: ScanObservation[]
+  failures: ScannerFailure[]
 }
 
 function stringArray(value: unknown): value is string[] {
@@ -99,7 +104,10 @@ export async function loadScannerRegistry(
     try {
       const scanner = await importScanner(module.entry, module.id)
       return { ...scanner, scan: (root: string) => scanner.scan(root, module.settings) }
-    } catch (error) { throw new ScannerFailure(module.id, error) }
+    } catch (error) {
+      // Failed imports have no source subscription. Retry/settings reload the registry.
+      return { id: module.id, watch: { include: [], exclude: [] }, async scan() { throw error } }
+    }
   }))
   const registry = createScannerRegistry(scanners, excluded)
   const discovery = compileWatchPatterns({ include: [
@@ -130,16 +138,23 @@ export function createScannerRegistry(
       const selected = [...pending]
       // Every scanner finishes before a failure surfaces, so none keeps a child process in the repository.
       const results = await Promise.allSettled(selected.map(async scanner => {
-        const result = await scanner.scan(root).catch(error => { throw new ScannerFailure(scanner.id, error) })
+        const result = await scanner.scan(root)
         const observation = result && excludeEvidence(result, excluded)
         if (observation) observations.set(scanner, observation)
         else observations.delete(scanner)
         pending.delete(scanner)
       }))
-      const failed = results.find((result): result is PromiseRejectedResult => result.status === 'rejected')
-      if (failed !== undefined) throw failed.reason
-      return scanners.map(scanner => observations.get(scanner))
-        .filter(observation => observation !== undefined)
+      const failures: ScannerFailure[] = []
+      for (const [index, result] of results.entries()) {
+        if (result.status !== 'rejected') continue
+        const scanner = selected[index]!
+        observations.delete(scanner)
+        failures.push(new ScannerFailure(scanner.id, result.reason))
+      }
+      return {
+        observations: scanners.map(scanner => observations.get(scanner)).filter(observation => observation !== undefined),
+        failures,
+      }
     },
   }
 }

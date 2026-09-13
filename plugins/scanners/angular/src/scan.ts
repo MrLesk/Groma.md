@@ -142,14 +142,13 @@ function angularProject(root: string) {
 }
 
 export async function checkAngularReadiness(root: string): Promise<void> {
-  const projects = await frameworkProjects(root, '@angular/core')
-  if (!projects.length) throw new Error('ANGULAR_PROJECT_REQUIRED: No Angular project declaration was found.')
+  const projects = await frameworkProjects(root, '@angular/core', ['.ts'])
   for (const project of projects) angularProject(project)
 }
 
 export async function scanAngular(root: string): Promise<ScanObservation | undefined> {
   const parts = []
-  for (const project of await frameworkProjects(root, '@angular/core')) {
+  for (const project of await frameworkProjects(root, '@angular/core', ['.ts'])) {
     const observation = await scanAngularProject(project, root)
     if (observation) parts.push({ key: relative(root, project), observation })
   }

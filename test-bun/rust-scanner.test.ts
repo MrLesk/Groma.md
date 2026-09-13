@@ -99,7 +99,7 @@ rustTest('registered Rust scans preserve curated ownership and a failed scan pre
     const curated = (await loadAnnotatedArchitecture(root)).elements.find(element => element.id === provider.id)!
     expect(curated.code.map(code => code.file).sort()).toEqual(['src/api.rs', 'src/provider.rs'])
     await writeFile(path.join(root, 'src/provider.rs'), 'pub fn broken(')
-    await expect(scanRepository(root)).rejects.toThrow()
+    expect((await scanRepository(root)).scannerFailures?.map(error => error.scanner)).toEqual(['rust'])
     expect(await architecture()).toEqual(before)
   })
 }, 60000)

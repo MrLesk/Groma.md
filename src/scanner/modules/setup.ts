@@ -1,7 +1,7 @@
 import type { ScannerRecommendation } from './catalog.ts'
 import { discoverScanners, formatDiscovery, type ScannerDiscovery } from './discovery.ts'
 import { addScanner, type ScannerInstallOptions } from './inventory.ts'
-import { checkScannerReadiness, formatReadiness, requireScannerReadiness } from './readiness.ts'
+import { checkScannerReadiness, formatReadiness } from './readiness.ts'
 
 export interface ScannerSetupUi {
   note(message: string, title: string): void
@@ -46,6 +46,5 @@ export async function setupScanners(
   }
   const readiness = await checkScannerReadiness(root)
   report(formatReadiness(readiness), 'Project readiness')
-  requireScannerReadiness(readiness.filter(item => item.package === 'found'))
   return true
 }

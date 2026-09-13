@@ -1,8 +1,8 @@
 # Scanners
 
 `groma scan` loads explicitly configured scanner modules through one registry. It collects every complete language
-observation before core writes architecture Markdown. If an enabled scanner is
-missing or fails, reconciliation does not start.
+observation before core writes architecture Markdown. Missing or failed scanners do not block successful observations. Their saved
+Code references and derived relationships remain available.
 
 ```text
 source → complete scanner observations → core reconciliation → Markdown
@@ -19,7 +19,9 @@ Successful scanner diagnostics appear in `ScanSummary.scannerDiagnostics`, paire
 with the originating scanner identity. The `groma scan` report shows each message's
 scanner ID, severity, code, and optional file and line. Diagnostics explain analysis
 limitations without failing the scan. They remain scan results and are not written
-to architecture Markdown. Fatal scanner errors still prevent reconciliation.
+to architecture Markdown. Import and execution failures appear separately in
+`ScanSummary.scannerFailures`, with each scanner ID and its error. Failed scanners
+contribute no fresh observation; healthy scanners still update the architecture.
 
 Core keeps curated file membership authoritative. Files already assigned to one component stay together. Only an unknown file becomes a new singleton component under its inferred source root. A drafted name match receives Code but stays a draft until `groma accept`.
 
@@ -37,9 +39,9 @@ changes and runs only matching scanners; overlapping subscriptions run together.
 Changes received during analysis are queued, and scanner runs never overlap.
 
 The session retains each scanner's latest successful observation in memory.
-After a successful batch, it emits the complete combined evidence, including
-unchanged scanners' observations. A failed scanner leaves pending work and
-prevents publication; the next relevant source change also runs that pending
+Each batch emits successful evidence, including unchanged scanners' observations,
+and all scanner failures. A failure removes that scanner's cached observation
+and leaves pending work; the next relevant source change also runs that pending
 work. There is no automatic retry. Returning `undefined` removes that scanner's
 previous observation. Closing a session releases its watcher and waits for
 active analysis and publication.
@@ -123,7 +125,8 @@ The list selects new evidence from every enabled scanner, including files
 tracked by Git. Omitting `exclude` or using `[]` adds no exclusions. Each
 scanner keeps its own language coverage and default exclusions; `!` does not
 restore files omitted by those defaults. Compiler analysis can still read
-excluded files as context, and a failed scanner still blocks the whole scan.
+excluded files as context. A failed scanner keeps its saved evidence while
+successful scanners publish their results.
 
 Run `groma scan` after editing the list. Restart an active viewer or
 `groma scan --watch` to load the new configuration; excluded source paths no

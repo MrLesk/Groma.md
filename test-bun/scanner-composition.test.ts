@@ -12,7 +12,7 @@ import { editArchitecture } from '../src/edit.ts'
 import { addRelation } from '../src/relation.ts'
 import { inferRelationships } from '../src/relationship-inference.ts'
 import { composeInvocations } from '../src/scan-evidence.ts'
-import { scanRepository } from '../src/scanner.ts'
+import { scanRepository, formatScanReport } from '../src/scanner.ts'
 
 import { addScanner } from '../src/scanner/modules/inventory.ts'
 import type { AnnotatedArchitectureModel } from '../src/types.ts'
@@ -142,23 +142,44 @@ test.concurrent('overlapping observations preserve curated membership and author
   } finally { await rm(root, { recursive: true, force: true }) }
 })
 
-test.concurrent('a failed enabled scanner prevents reconciliation of otherwise successful overlapping evidence', async () => {
+test.concurrent('healthy scanners update overlapping evidence while failed scanners retain saved Code and relationships', async () => {
   const root = await repository()
   try {
-    await reconcileScanObservations(root, [await observation('typescript'), await observation('angular')])
-    const plugin = path.join(root, 'failing')
-    await mkdir(plugin)
-    await writeFile(path.join(plugin, 'package.json'), JSON.stringify({
-      name: 'fixture-failing', version: '1.0.0', type: 'module', groma: { scanner: { id: 'failing', entry: './index.js' } },
-    }))
-    await writeFile(path.join(plugin, 'index.js'), `export default {
-      id: 'failing', watch: { include: [], exclude: [] },
-      async scan() { throw new Error('fixture scanner failed') },
-    }`)
-    await addScanner(root, './failing')
-    const before = await storedArchitecture(root)
-    await expect(scanRepository(root)).rejects.toThrow()
-    expect(await storedArchitecture(root)).toEqual(before)
+    const typescript = await observation('typescript'), angular = await observation('angular')
+    await reconcileScanObservations(root, [typescript, angular])
+    const before = await loadAnnotatedArchitecture(root)
+    for (const id of ['typescript', 'angular', 'broken']) {
+      const plugin = path.join(root, id)
+      await mkdir(plugin)
+      await writeFile(path.join(plugin, 'package.json'), JSON.stringify({
+        name: `fixture-${id}`, version: '1.0.0', type: 'module', groma: { scanner: { id, entry: './index.js' } },
+      }))
+      await writeFile(path.join(plugin, 'index.js'), id === 'broken' ? 'export default {}' : `
+        import { readFile, stat } from 'node:fs/promises'
+        export default { id: '${id}', watch: { include: ['**/*.ts'], exclude: [] }, async scan(root) {
+          if (await stat(root + '/${id}.fail').then(() => true, () => false)) throw new Error('tool unavailable')
+          return JSON.parse(await readFile(root + '/${id}.json', 'utf8'))
+        } }
+      `)
+      await addScanner(root, `./${id}`)
+    }
+    await writeFile(path.join(root, 'angular.json'), JSON.stringify(angular))
+    await writeFile(path.join(root, 'angular.fail'), '')
+    typescript.files.push({ file: 'src/new.ts', roots: ['typescript-scope'], symbols: [] })
+    typescript.invocations = []
+    await writeFile(path.join(root, 'src/new.ts'), 'export const added = 1')
+    await writeFile(path.join(root, 'typescript.json'), JSON.stringify(typescript))
+    const summary = await scanRepository(root)
+    expect(summary.scannerFailures?.map(error => error.scanner)).toEqual(['angular', 'broken'])
+    expect(formatScanReport(root, summary)).toContain('tool unavailable')
+    const after = await loadAnnotatedArchitecture(root)
+    expect(owner(after, 'src/new.ts').code.some(code => code.scanner === 'typescript')).toBe(true)
+    expect(after.elements.flatMap(element => element.code).filter(code => code.scanner === 'angular'))
+      .toEqual(before.elements.flatMap(element => element.code).filter(code => code.scanner === 'angular'))
+    expect(after.relationships).toEqual(before.relationships)
+    await rm(path.join(root, 'angular.fail'))
+    const recovered = await scanRepository(root)
+    expect(recovered.scannerFailures?.map(error => error.scanner)).toEqual(['broken'])
   } finally { await rm(root, { recursive: true, force: true }) }
 })
 
