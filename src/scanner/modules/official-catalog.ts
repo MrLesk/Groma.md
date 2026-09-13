@@ -16,10 +16,9 @@ export interface OfficialScanner {
   technologies: string[]
   description: string
   rules: ScannerDiscoveryRule[]
-  release?: { version: string; groma: string; technologyVersions: Record<string, string> }
 }
 
-/** Read only package data. A private prototype is never offered as a public release. */
+/** Embedded metadata describes detection, never claims a release is published. */
 export function scannerCatalogEntry(manifest: {
   name: string; version: string; description: string; private?: boolean
   groma: { scanner: { id: string; discovery: unknown } }
@@ -28,9 +27,6 @@ export function scannerCatalogEntry(manifest: {
   return {
     id: manifest.groma.scanner.id, package: manifest.name, description: manifest.description,
     technologies: discovery.technologies, rules: discovery.rules,
-    ...(manifest.private === true || discovery.compatibility === undefined ? {} : {
-      release: { version: manifest.version, ...discovery.compatibility },
-    }),
   }
 }
 

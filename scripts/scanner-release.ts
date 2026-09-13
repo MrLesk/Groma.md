@@ -1,5 +1,6 @@
 import { chmod, cp, mkdir, readFile, readdir, writeFile } from 'node:fs/promises'
 import path from 'node:path'
+import { readPublishedScanners } from '../src/scanner/modules/published.ts'
 
 const repository = { type: 'git', url: 'https://github.com/MrLesk/Groma.md.git' }
 const scannerIds = ['java', 'go', 'rust', 'csharp', 'angular', 'vue', 'react', 'typescript']
@@ -75,8 +76,10 @@ async function prepareWorkers(directory: string, relative: string, worker: strin
 /** Use this only after the staged packages have been published successfully. */
 async function catalog(input: string) {
   for (const id of scannerIds) {
-    const published = await manifest(path.join(input, id))
-    if (published.private || !published.groma.scanner.discovery.compatibility) {
+    const staged = await manifest(path.join(input, id))
+    const published = (await readPublishedScanners(staged.name))[staged.version]
+    if (!published) throw new Error(`${staged.name}@${staged.version}: publish this release before embedding its metadata`)
+    if (!published.groma?.scanner?.discovery?.compatibility) {
       throw new Error(`${id}: public release metadata is not ready`)
     }
     const directory = path.join('plugins/scanners', id)

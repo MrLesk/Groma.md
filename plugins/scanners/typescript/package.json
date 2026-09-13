@@ -39,10 +39,7 @@
           }
         ],
         "compatibility": {
-          "groma": "^0.3.0",
-          "technologyVersions": {
-            "typescript": "5.9.2 || 5.9.3 || 7.0.2"
-          }
+          "groma": "^0.3.0"
         }
       }
     }

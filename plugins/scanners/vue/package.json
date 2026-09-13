@@ -24,10 +24,7 @@
           }
         ],
         "compatibility": {
-          "groma": "^0.3.0",
-          "technologyVersions": {
-            "vue": "3.5.18 || 3.5.42"
-          }
+          "groma": "^0.3.0"
         }
       }
     }

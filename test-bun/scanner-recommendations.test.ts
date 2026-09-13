@@ -1,26 +1,33 @@
 import { expect, test } from 'bun:test'
 import { recommendScanners, type TechnologyFinding, type OfficialScanner } from '../src/scanner/modules/catalog.ts'
+import { parseScannerDiscovery } from '@groma/scanner'
+import { selectPublishedScanner, type PublishedScanner } from '../src/scanner/modules/published.ts'
 
 const catalog: OfficialScanner[] = [{
   id: 'language', package: 'example-scanner', description: '', technologies: ['language'], rules: [],
-  release: { version: '1.0.0', groma: '^0.2.0', technologyVersions: { language: '^7.0.0' } },
 }]
-const declaration: TechnologyFinding = {
-  technology: 'language', kind: 'language', file: 'app/package.json', declaration: 'compiler', version: '7.0.2',
-}
-const clue: TechnologyFinding = {
-  technology: 'language', kind: 'language', file: 'app/compiler.json', declaration: 'configuration',
-}
 
-test.concurrent('a configuration clue uses the version declared in its own project directory', () => {
-  expect(recommendScanners([clue, declaration], [], '0.2.0', catalog)[0]?.status).toBe('installable')
-  expect(recommendScanners([clue], [], '0.2.0', catalog)[0]?.status).toBe('uncertain')
-  expect(recommendScanners([clue, { ...declaration, file: 'other/package.json' }], [], '0.2.0', catalog)[0]?.status).toBe('uncertain')
+test.concurrent('detection recommends installation without interpreting language version syntax', () => {
+  for (const version of [undefined, '7.1.0-dev.20260905.1', '^7.0.0', 'net10.0', '1.27.1']) {
+    const finding: TechnologyFinding = { technology: 'language', kind: 'language', file: 'app/project', declaration: 'project', version }
+    const offered = recommendScanners([finding], [], catalog)
+    expect(offered[0]?.installSource).toBe('example-scanner')
+    expect(recommendScanners([finding], [{ id: 'language', source: 'example-scanner@1.0.0', status: 'missing' }], catalog)[0]?.installSource).toBeUndefined()
+  }
+  expect(recommendScanners([], [], catalog)).toEqual([])
+  expect(parseScannerDiscovery({ technologies: [], rules: [], compatibility: { groma: '^0.3.0' } }).compatibility).toEqual({ groma: '^0.3.0' })
 })
 
-test.concurrent('presence clues do not override unresolved or incompatible compiler declarations', () => {
-  for (const version of ['^7.0.0', '8.0.0']) {
-    expect(recommendScanners([clue, { ...declaration, version }], [], '0.2.0', catalog)[0]?.status)
-      .toBe(version.startsWith('^') ? 'uncertain' : 'incompatible')
-  }
+function release(version: string, groma = '^0.3.0', os = ['linux']): PublishedScanner {
+  return { name: 'example-scanner', version, os, cpu: ['x64'],
+    groma: { scanner: { id: 'language', entry: './index.js', discovery: { compatibility: { groma } } } } }
+}
+const host = { groma: '0.3.0', os: 'linux', cpu: 'x64' }
+
+test.concurrent('installation chooses the newest published stable release for Groma and this computer', () => {
+  const versions = [release('1.0.0'), release('1.1.0'), release('2.0.0', '^0.4.0'), release('3.0.0', '^0.3.0', ['darwin']), release('4.0.0-beta.1')]
+  expect(selectPublishedScanner('example-scanner', Object.fromEntries(versions.map(item => [item.version, item])), host).version).toBe('1.1.0')
+  expect(() => selectPublishedScanner('example-scanner', {}, host)).toThrow('no published stable scanner release')
+  expect(() => selectPublishedScanner('example-scanner', { one: release('1.0.0', '^0.4.0') }, host)).toThrow('Update Groma')
+  expect(() => selectPublishedScanner('example-scanner', { one: release('1.0.0', '^0.3.0', ['darwin']) }, host)).toThrow('linux/x64')
 })

@@ -60,7 +60,7 @@ export function registerScannerCommands(program: Command): void {
 
   scanner
     .command('discover')
-    .description('Find project declarations and compatible official scanner candidates')
+    .description('Find project declarations and recommend official scanners')
     .option('--json', 'Print the discovery result as JSON')
     .action(async (options: { json?: boolean }) => {
       await runScannerCommand(async () => {
@@ -72,7 +72,7 @@ export function registerScannerCommands(program: Command): void {
   scanner
     .command('add')
     .description('Install and enable a scanner from npm, Git, or a local path')
-    .argument('<source>', 'package@version, git+https://repository#tag-or-commit, or ./path')
+    .argument('<source>', 'package name, package@version, git+https://repository#tag-or-commit, or ./path')
     .action(async (source: string) => {
       await runScannerCommand(async () => {
         const added = await addScanner(process.cwd(), source)

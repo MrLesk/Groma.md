@@ -14,6 +14,10 @@ export const scannerSettingsCss = `
   #scanner-settings[open] { display: flex; flex-direction: column; }
   #scanner-settings [data-rows] { overflow: auto; min-height: 0; }
   #scanner-settings .scanner-search { margin-bottom: 14px; }
+  #scanner-settings .scanner-bulk { display: flex; gap: 8px; }
+  #scanner-settings .scanner-bulk button { margin-bottom: 14px; }
+  #scanner-settings [data-retry] { align-self: start; margin: 8px 0; }
+  #scanner-settings button[hidden] { display: none; }
   #scanner-settings header { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; }
   #scanner-settings h1 { font-size: 18px; margin: 0; flex: 1; }
   #scanner-settings button { border: 1px solid var(--hairline); border-radius: var(--control-radius); padding: 6px 10px; }
@@ -64,9 +68,10 @@ export function bindScannerSettings(data: WebDataSource): void {
   dialog.id = 'scanner-settings'
   dialog.setAttribute('aria-labelledby', 'scanner-settings-title')
   dialog.innerHTML = '<header><h1 id="scanner-settings-title">Scanners</h1><button type="button" data-add>Add scanner</button><button type="button" data-close aria-label="Close scanner settings">×</button></header>'
+    + '<div class="scanner-bulk"><button type="button" data-group="install-recommended" hidden>Install recommended scanners</button><button type="button" data-group="install-missing" hidden>Install missing scanners</button></div>'
     + '<input class="scanner-search" type="search" aria-label="Search scanners" placeholder="Search scanners">'
-    + '<form hidden><label>Scanner source<input name="source" placeholder="package@version, Git URL, or local path" required></label><button type="submit">Add</button><button type="button" data-cancel>Cancel</button></form>'
-    + '<div class="scanner-error" role="alert"></div><div data-rows></div><footer>Removing a scanner keeps saved architecture.</footer>'
+    + '<form hidden><label>Scanner source<input name="source" placeholder="package name, package@version, Git URL, or local path" required></label><button type="submit">Add</button><button type="button" data-cancel>Cancel</button></form>'
+    + '<div class="scanner-error" role="alert"></div><button type="button" data-retry hidden>Retry installation</button><div data-rows></div><footer>Removing a scanner keeps saved architecture.</footer>'
   const notice = document.createElement('div')
   notice.id = 'scanner-notice'; notice.hidden = true
   const noticeText = document.createElement('span')
@@ -81,6 +86,8 @@ export function bindScannerSettings(data: WebDataSource): void {
   let updateId: string | undefined
   let state: ScannerSettings | undefined
   let busy = false
+  let failedAction: ScannerSettingsAction | undefined
+  const retry = dialog.querySelector<HTMLButtonElement>('[data-retry]')!
 
   function paintRows(next: ScannerSettings): void {
     const expanded = new Set([...rows.querySelectorAll<HTMLDetailsElement>('details[open]')].map(item => item.closest('tr')?.querySelector('strong')?.textContent))
@@ -91,7 +98,7 @@ export function bindScannerSettings(data: WebDataSource): void {
     if (focused) rows.querySelector<HTMLElement>(`[data-scanner-id="${CSS.escape(focused)}"] button`)?.focus()
   }
   function setBusy() {
-    for (const button of dialog.querySelectorAll<HTMLButtonElement>('button[data-action], header button, form button')) {
+    for (const button of dialog.querySelectorAll<HTMLButtonElement>('button[data-action], button[data-group], button[data-retry], header button, form button')) {
       button.disabled = busy && !button.hasAttribute('data-close')
     }
   }
@@ -105,6 +112,8 @@ export function bindScannerSettings(data: WebDataSource): void {
     noticeText.textContent = next.notice.message
     document.body.classList.toggle('scanner-warning', !notice.hidden)
     paintRows(next)
+    dialog.querySelector<HTMLButtonElement>('[data-group="install-recommended"]')!.hidden = !next.scanners.some(item => !item.source && item.installSource)
+    dialog.querySelector<HTMLButtonElement>('[data-group="install-missing"]')!.hidden = !next.scanners.some(item => item.status === 'missing')
     setBusy()
     error.textContent = tone === 'error' ? next.notice.message : next.limits.join('\n')
   }
@@ -113,10 +122,11 @@ export function bindScannerSettings(data: WebDataSource): void {
     catch (cause) { error.textContent = String(cause) }
   }
   async function change(action: ScannerSettingsAction) {
-    busy = true
+    if (busy) return
+    busy = true; failedAction = undefined; retry.hidden = true
     if (state) paint(state)
     try { paint(await data.changeScanners!(action)) }
-    catch (cause) { error.textContent = cause instanceof Error ? cause.message : String(cause) }
+    catch (cause) { error.textContent = cause instanceof Error ? cause.message : String(cause); failedAction = action; retry.hidden = false }
     finally {
       busy = false; setBusy()
       if ('id' in action) rows.querySelector<HTMLElement>(`[data-scanner-id="${CSS.escape(action.id)}"] button`)?.focus()
@@ -135,6 +145,10 @@ export function bindScannerSettings(data: WebDataSource): void {
   dialog.querySelector('[data-close]')!.addEventListener('click', () => dialog.close())
   dialog.querySelector('[data-add]')!.addEventListener('click', () => sourceForm())
   dialog.querySelector('[data-cancel]')!.addEventListener('click', () => { form.hidden = true })
+  retry.addEventListener('click', () => { if (failedAction) void change(failedAction) })
+  for (const button of dialog.querySelectorAll<HTMLButtonElement>('[data-group]')) {
+    button.addEventListener('click', () => { void change({ action: button.dataset.group as 'install-recommended' | 'install-missing' }) })
+  }
   search.addEventListener('input', () => { if (state) paintRows(state); rows.scrollTop = 0 })
   rows.addEventListener('click', event => {
     const button = event.target instanceof Element ? event.target.closest<HTMLButtonElement>('button[data-action]') : null

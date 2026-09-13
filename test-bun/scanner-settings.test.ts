@@ -54,7 +54,6 @@ test.concurrent('scanner groups follow local availability while preserving proje
   expect(scannerSettingAction({ ...installed, status: 'unchecked' })).toBeUndefined()
   expect(scannerSettingAction({ ...installed, status: 'ready' })).toBeUndefined()
   expect(scannerNotice([{ ...installed, status: 'unchecked' }], []).tone).toBe('neutral')
-  expect(scannerSettingAction(setting('unavailable', 'unavailable'))).toBeUndefined()
 })
 
 test.concurrent('search filters every scanner group by identity or technology without losing its group', () => {
@@ -75,5 +74,7 @@ test.concurrent('an incompatible recommendation does not make a missing project 
   ] }
   const state = scannerSettingsState(proposal, [{ id: 'react', source: '@groma/scanner-react@1.0.0', status: 'missing' }])
   expect(state.scanners[0]?.status).toBe('missing')
+  const removed = scannerSettingsState(proposal, [{ id: 'react', source: '@groma/scanner-react@1.0.0', status: 'missing' }], [{ id: 'react', package: 'found', project: 'ready', message: '' }])
+  expect(removed.scanners[0]?.status).toBe('missing')
   expect(scannerSettingAction(state.scanners[0]!)).toEqual({ action: 'restore', id: 'react' })
 })

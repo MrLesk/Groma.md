@@ -24,10 +24,7 @@
           }
         ],
         "compatibility": {
-          "groma": "^0.3.0",
-          "technologyVersions": {
-            "angular": "21.2.19"
-          }
+          "groma": "^0.3.0"
         }
       }
     }

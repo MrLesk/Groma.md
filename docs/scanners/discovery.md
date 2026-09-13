@@ -61,43 +61,31 @@ an existing plugin's metadata and rebuilding Groma updates its recommendations.
 Adding an official plugin requires adding its manifest to the selection.
 There is no separately maintained technology detector or compatibility table.
 
-A private package, or one without release compatibility, is `unavailable` for
-public installation. Publishing a package alone does not update existing Groma
-binaries. The selected package version and its compatibility must be included
-in a new Groma build. Public package publication remains separate release work.
+Every detected official technology offers Install. Detection neither contacts npm
+nor claims that a development manifest is a published release. Installation reads
+published package metadata, chooses the newest stable release satisfying the
+Groma API requirement and this computer's OS/CPU, then records the exact version.
+Missing language versions, prereleases, version ranges, Go minimum directives and
+.NET framework names do not disable installation. The scanner validates its
+actual projects when it runs.
 
 Third-party authors use the same [metadata contract](creating-a-plugin.md#discovery-metadata).
-A package can be installed by name without appearing in the official selection;
-unlisted packages are not searched for remotely. Once selected and installed, their
-metadata participates in project matching. Settings suppress equivalent official
-recommendations when an available plugin already covers those known technologies.
-A plugin without discovery metadata remains runnable and has unknown project matching.
-Source-watch include patterns do not establish language or framework support.
+Users can add an unlisted package by name. Groma does not search for third-party
+packages remotely; installed third-party metadata participates in project matching.
+Settings suppress equivalent official recommendations when a selected plugin
+covers those technologies. A plugin without discovery metadata remains runnable
+and has unknown project matching.
 
-The result distinguishes:
+The discovery result distinguishes:
 
-- `configured`: existing selection retained, including missing packages.
-  Installed plugin metadata is checked for known incompatibilities; project
-  tooling is checked separately. Missing packages have no installed metadata
-  to verify.
-- `installable`: a catalogued release matches Groma and all confirmed
-  technology versions. `installSource` holds the exact package/version.
-- `unavailable`: no verified release is catalogued.
-- `incompatible`: Groma or a declared technology version is outside the
-  release's support range. For installed selections, this uses the installed
-  plugin's metadata and prevents its code from loading. The selection remains
-  recorded so it can be updated or removed explicitly.
-- `uncertain`: a release exists, but version compatibility cannot be established
-  from an exact declaration or an installed package. Unresolved ranges,
-  expressions, or missing versions need project-tooling confirmation.
+- `configured`: keep the project's existing selection, even when its package is missing.
+- `installable`: offer the recommended package; resolve its published version during installation.
+- `incompatible`: an installed plugin requires a different Groma API version.
+  Its code is not loaded; update Groma or explicitly change the plugin version.
 
-For Angular, Vue, React, and TypeScript dependencies, discovery also resolves the installed
-package manifest using normal package resolution from the declaring application.
-It reads the installed version without executing package code, preserves the
-original declared range, and records the package manifest as version evidence.
-An installed version must match both the declaration and the catalog's support
-range. A presence-only configuration clue can use a version declaration for the
-same technology in the same directory; another project's version is not used. An absent dependency remains unresolved; discovery does not install it.
+Dependency findings retain declared and installed versions as diagnostic evidence.
+They do not decide whether a language or framework can be scanned. Compiler and
+project tooling own that decision.
 
 One candidate covers all findings for its technology. The catalog currently
 offers one official candidate per supported technology, so there is no ranking
@@ -110,10 +98,8 @@ same files. Angular's compiler compatibility and its own compatible TypeScript
 tooling are separate from the TypeScript scanner's 7.1 SDK. Discovery proposes both scanners when applicable; it does not replace
 TypeScript to avoid shared file coverage.
 
-Vue and React also add complementary framework evidence when TypeScript is also selected. Their dependency declarations do not prove complete
-framework runtime analysis. The catalog's `@groma/scanner-vue` and
-`@groma/scanner-react` names are unpublished placeholders until the public
-namespace, exact release versions, and supported versions are verified.
+Vue and React add complementary framework evidence when TypeScript is also selected.
+Their dependency declarations do not prove complete framework runtime analysis.
 
 Discovery and scanner selection are operational configuration. They do not
 create OKF concepts, C4 elements, or architecture boundaries. Ordinary Markdown

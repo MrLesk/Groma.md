@@ -3,7 +3,7 @@
 Official scanners and the author contract remain in this repository. The shared
 release workflow stages runnable packages, publishes them to npm, and then
 builds Groma with the exact published discovery metadata. The package manifests
-own names, versions and technology compatibility. Changed packages require new
+own names, versions, detection rules and Groma API requirements. Changed packages require new
 versions; npm versions cannot be replaced. The workflow reuses exact versions
 already published and publishes only missing versions. Bump every package whose
 contents changed before starting a release.
@@ -15,14 +15,10 @@ are `0.1.0` and require Groma `^0.3.0`. The manifests own
 before each release. Keep package versions coordinated with `@groma/scanner`
 where it is a runtime dependency.
 
-Initial recommendation metadata lists the exact technology versions exercised
-by the supported examples. It does not claim all versions between them work.
-Rust and C# have no automatic version match in this release: the approved Rust
-example has no `rust-version`, and C# discovery returns MSBuild framework labels,
-not numeric compiler versions. Their candidates remain uncertain; an explicit
-`groma scanner add @groma/scanner-rust@0.1.0` or
-`groma scanner add @groma/scanner-csharp@0.1.0` uses the normal installation path.
-Readiness checks still require the project tools documented by each scanner.
+Language-version declarations do not restrict installation. Plugins validate
+project tooling when scanning and report concrete preparation instructions.
+Record the compiler versions exercised by release examples as validation evidence,
+not as exact language-version requirements in discovery metadata.
 
 The scanner build targets are macOS arm64, Linux x64 and arm64, and Windows x64
 and arm64. Building an artifact and manually exercising it are separate claims:
@@ -78,8 +74,10 @@ bun scripts/scanner-release.ts catalog /tmp/scanner-release
 bun run build
 ```
 
-The catalog command is a build-checkout operation, not evidence of publication.
-Do not run it to advertise packages which have not been published. Publishing
+The catalog command reads each exact version back from npm and fails if it is
+not published. It embeds those published detection rules into the build checkout.
+At installation time, Groma resolves a suitable release from npm again; it never
+uses a development manifest version as proof of availability. Publishing
 never silently changes an existing project's recorded scanner selection.
 
 Record exact public package versions, built targets, manually exercised targets,

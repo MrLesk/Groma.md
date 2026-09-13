@@ -43,10 +43,7 @@
           }
         ],
         "compatibility": {
-          "groma": "^0.3.0",
-          "technologyVersions": {
-            "java": "25.0.0"
-          }
+          "groma": "^0.3.0"
         }
       }
     }

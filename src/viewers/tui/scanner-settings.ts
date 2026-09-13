@@ -19,6 +19,7 @@ export async function mountScannerSettings(renderer: CliRenderer, session: Scann
   let visible: ScannerSetting[] = []
   let input: { action: 'add' | 'update'; value: string; id?: string } | undefined
   let message = ''
+  let failedAction: ScannerSettingsAction | undefined
   const done = Promise.withResolvers<void>()
   const frame = new FrameBufferRenderable(renderer, {
     id: 'scanner-settings', width: renderer.width, height: renderer.height, position: 'absolute', left: 0, top: 0, zIndex: 100,
@@ -34,7 +35,7 @@ export async function mountScannerSettings(renderer: CliRenderer, session: Scann
     if (!scanner) return
     const rows = [
       `Source: ${scanner.source ?? scanner.installSource ?? scanner.name}`,
-      scanner.message,
+      message || scanner.message,
       ...scanner.matches,
     ].flatMap(value => wrap(value, frame.width - 8))
     detailScroll = Math.max(0, Math.min(detailScroll, rows.length - height))
@@ -42,7 +43,7 @@ export async function mountScannerSettings(renderer: CliRenderer, session: Scann
   }
   function paintRow(scanner: ScannerSetting, y: number) {
     const action = scannerSettingAction(scanner)
-    const label = action ? (action.action === 'retry' ? '[Retry]' : '[Install]') : (scanner.source ? '' : '[Unavailable]')
+    const label = action ? (action.action === 'retry' ? '[Retry]' : '[Install]') : ''
     const nameWidth = 30, descriptionWidth = Math.max(18, frame.width - nameWidth - 26)
     const name = `${scanner.id}${scanner.version ? ` ${scanner.version}` : ''}`
     const description = scanner.source ? scannerSettingLabel(scanner) : scannerMatchReason(scanner)
@@ -78,9 +79,12 @@ export async function mountScannerSettings(renderer: CliRenderer, session: Scann
   function paint() {
     if (closed || frame.isDestroyed) return
     const { contentY: y } = paintShell(frame.frameBuffer, model, sheet)
-    line('Scanners                                      [a] Add scanner', y, green)
-    line(`Search: ${query}${searching ? '▌' : '  [/] Edit'}`, y + 1)
-    const start = y + 3
+    line(`Scanners                 [a] Add scanner${failedAction ? '  [r] Retry installation' : ''}`, y, green)
+    const recommended = session.state.scanners.filter(item => !item.source && item.installSource).length
+    const missing = session.state.scanners.filter(item => item.status === 'missing').length
+    line([recommended ? `[i] Install recommended scanners (${recommended})` : '', missing ? `[m] Install missing scanners (${missing})` : ''].filter(Boolean).join('  '), y + 1)
+    line(`Search: ${query}${searching ? '▌' : '  [/] Edit'}`, y + 2)
+    const start = y + 4
     const detailHeight = details ? Math.min(7, Math.floor((frame.height - start - 4) / 2)) : 0
     const listHeight = Math.max(1, frame.height - start - 4 - detailHeight)
     paintList(start, listHeight)
@@ -89,9 +93,9 @@ export async function mountScannerSettings(renderer: CliRenderer, session: Scann
     frame.requestRender()
   }
   async function change(action: ScannerSettingsAction) {
-    busy = true; message = ''; paint()
+    busy = true; message = ''; failedAction = undefined; paint()
     try { await session.change(action) }
-    catch (error) { message = error instanceof Error ? error.message : String(error) }
+    catch (error) { message = error instanceof Error ? error.message : String(error); failedAction = action }
     finally { busy = false; paint() }
   }
   function close() {
@@ -145,6 +149,9 @@ export async function mountScannerSettings(renderer: CliRenderer, session: Scann
       case '/': searching = true; break
       case 'd': details = !details; detailScroll = 0; break
       case 'a': input = { action: 'add', value: '' }; break
+      case 'i': if (session.state.scanners.some(item => !item.source && item.installSource)) void change({ action: 'install-recommended' }); break
+      case 'm': if (session.state.scanners.some(item => item.status === 'missing')) void change({ action: 'install-missing' }); break
+      case 'r': if (failedAction) void change(failedAction); break
       default: {
         const scanner = visible.find(scanner => scanner.id === selectedId)
         if (scanner) scannerKey(key, scanner)
