@@ -1,6 +1,6 @@
 ---
 type: C4 Component
-title: Process
+title: Java scanner process
 status: stable
 groma:
   id: scanner-process

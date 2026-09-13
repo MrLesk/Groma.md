@@ -1,6 +1,6 @@
 ---
 type: C4 Component
-title: Scan
+title: Angular analysis
 status: stable
 groma:
   id: scan

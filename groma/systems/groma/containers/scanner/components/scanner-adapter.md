@@ -1,6 +1,6 @@
 ---
 type: C4 Component
-title: Adapter
+title: Go scanner adapter
 status: stable
 groma:
   id: scanner-adapter

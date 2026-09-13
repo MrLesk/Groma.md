@@ -1,6 +1,6 @@
 ---
 type: C4 Component
-title: Process
+title: C# scanner process
 status: stable
 groma:
   id: process
