@@ -1,5 +1,9 @@
-import { duplicatesControl, duplicatesCss } from './duplicates/view.ts'
-import { scannerSettingsControl, scannerSettingsCss } from './scanners/settings.ts'
+import { floatingBarCss } from './atoms/floating-bar.ts'
+import { settingsControl, settingsCss } from './settings/control.ts'
+import { settingsDialogCss } from './atoms/settings-dialog.ts'
+import { duplicatesCss } from './duplicates/view.ts'
+import { scannerSettingsCss } from './scanners/settings.ts'
+import { projectReviewControl, projectReviewCss } from './review/control.ts'
 import { readFileSync } from 'node:fs'
 
 import lockup from './atoms/lockup.svg' with { type: 'text' }
@@ -60,7 +64,7 @@ const legendKinds: C4Kind[][] = [
 ]
 
 const style = `
-  ${scannerSettingsCss}${duplicatesCss}
+  ${scannerSettingsCss}${duplicatesCss}${projectReviewCss}${settingsCss}${settingsDialogCss}
   :root {
     ${cssBlock(palettes.light)}
     --backlog-mark-image: url("data:image/png;base64,${backlogMark}");
@@ -103,6 +107,7 @@ const style = `
   body.hud-hidden #hierarchy,
   body.hud-hidden #details,
   body.hud-hidden #work,
+  body.hud-hidden #map-view,
   body.hud-hidden #pins { display: none; }
   button { font: inherit; color: inherit; background: transparent; cursor: pointer; }
   button:focus-visible { outline: 2px solid var(--highlight); outline-offset: -1px; }
@@ -155,17 +160,13 @@ const style = `
   }
   #hierarchy-toggle:hover { color: var(--ink); background: var(--hover); }
   .control-icon { width: 14px; height: 14px; display: block; flex: none; }
-  #theme { position: relative; --popover-width: 160px; }
-  #theme summary { display: flex; align-items: center; gap: 7px; list-style: none; }
+  #theme { position: relative; }
+  #theme summary { display: flex; align-items: center; gap: 7px; list-style: none; cursor: pointer; box-sizing: border-box; }
   #theme summary::-webkit-details-marker { display: none; }
-  #theme summary .theme-icon { display: none; }
-  #theme[data-theme-mode="auto"] summary .auto,
-  #theme[data-theme-mode="light"] summary .light,
-  #theme[data-theme-mode="dark"] summary .dark,
-  #theme[data-theme-mode="blueprint"] summary .blueprint { display: block; }
+  #theme .label { margin-left: auto; font-size: 11px; }
   #theme .theme-option { display: flex; align-items: center; gap: 8px; cursor: pointer; }
-  #theme .theme-chevron { width: 7px; height: 7px; flex: none; margin-left: 2px; border-right: 1px solid currentColor; border-bottom: 1px solid currentColor; transform: translateY(-2px) rotate(45deg); transition: transform 160ms ease; }
-  #theme[open] .theme-chevron { transform: translateY(2px) rotate(225deg); }
+  #settings-menu #theme .theme-menu { background: var(--paper); top: 0; right: calc(100% + 8px); width: 160px; }
+  #theme .theme-chevron { width: 6px; height: 6px; flex: none; margin-left: 3px; border-left: 1px solid currentColor; border-bottom: 1px solid currentColor; transform: rotate(45deg); }
   #help { position: relative; --popover-width: 640px; }
   #help summary { list-style: none; }
   #help summary::-webkit-details-marker { display: none; }
@@ -195,7 +196,7 @@ const style = `
   @media (max-width: 1080px) {
     #header { gap: 12px; padding: 0 12px; }
     .header-context { gap: 10px; }
-    #theme summary .label, #fit > span { display: none; }
+    #fit > span { display: none; }
     #header #revision summary { min-width: 0; }
     #header #revision .revision-current, #header #revision .revision-loading { display: none; }
   }
@@ -292,7 +293,7 @@ const style = `
   #hierarchy-toggle, #details-close, #zoom-in, #zoom-out { width: 32px; height: 32px; padding: 0; }
   #zoom-in, #zoom-out { justify-content: center; font-size: 12px; line-height: 1.2; }
   .control-glyph { display: block; transform-origin: center; }
-  body #work {
+  body #work, body #map-view {
     left: calc(var(--hierarchy-inset) + 24px);
     right: calc(var(--details-inset) + 24px);
     max-width: calc(100% - var(--hierarchy-inset) - var(--details-inset) - 48px);
@@ -339,9 +340,9 @@ const style = `
   .mark { flex: none; }
   .ghost { opacity: 0.5; }
   @media (prefers-reduced-motion: reduce) {
-    #hierarchy, #hierarchy-toggle .hierarchy-chevron, #hierarchy-content, #hierarchy-title .pane-label, #details, body.details-hidden #details, body #work { transition: none; }
+    #hierarchy, #hierarchy-toggle .hierarchy-chevron, #hierarchy-content, #hierarchy-title .pane-label, #details, body.details-hidden #details, body #work, body #map-view { transition: none; }
   }
-${chromeCss}${anchoredPopoverCss}${creditsCss}${motionCss}${revisionCss}${searchCss}${highlightCss}${sourceCss}${taskDiffCss}${backlogMarkCss}${workBadgeCss}${workDetailsCss}${flowRowCss}${mapCss}${pinsCss}${workCss}${tipCss}${projectEditorCss}
+${floatingBarCss}${chromeCss}${anchoredPopoverCss}${creditsCss}${motionCss}${revisionCss}${searchCss}${highlightCss}${sourceCss}${taskDiffCss}${backlogMarkCss}${workBadgeCss}${workDetailsCss}${flowRowCss}${mapCss}${pinsCss}${workCss}${tipCss}${projectEditorCss}
 ${emptyStateCss}
 ${addDialogCss}${editorCss}
 ${relationshipCardCss}${removeCss}${editableCss}${mapDebugCss}${detailsPanelCss}${mapViewCss}`
@@ -363,13 +364,10 @@ const themeIcons: Record<WebThemeMode, string> = {
 }
 
 function themeControl(): string {
-  const currentIcons = themeModes
-    .map(mode => `<span class="theme-icon ${mode}">${themeIcons[mode]}</span>`)
-    .join('')
   const options = themeModes
     .map(mode => `<button class="anchored-option theme-option" type="button" data-theme-mode="${mode}" aria-current="${String(mode === 'auto')}">${themeIcons[mode]}<span>${themeLabel(mode)}</span></button>`)
     .join('')
-  return `<details id="theme" data-theme-mode="auto"><summary class="chrome-button" aria-label="Theme">${currentIcons}<span class="label">Auto</span><span class="theme-chevron"></span></summary><div class="anchored-popover theme-menu">${options}</div></details>`
+  return `<details id="theme" data-theme-mode="auto"><summary class="anchored-option" aria-label="Theme"><span>Theme</span><span class="label">Auto</span><span class="theme-chevron"></span></summary><div class="anchored-popover theme-menu">${options}</div></details>`
 }
 
 function helpControl(): string {
@@ -410,10 +408,10 @@ export function renderPage(payload: WebBootPayload): string {
     + `<style>${style}</style></head><body data-delivery="${payload.delivery.kind}">`
     + `<header id="header"><div class="header-context">${lockup}<span id="stats"></span>${revisionControl(payload, { history: historyIcon, loader: revisionLoader })}</div>`
     + searchControl({ search: searchIcon, close: closeIcon })
-    + `<div class="header-actions">${duplicatesControl}${mapViewControl()}<div id="map-controls" class="controls" aria-label="Map controls"><button id="fit" aria-label="Fit map">${fitIcon}<span>Fit</span></button><button id="zoom-out" aria-label="Zoom out"><span class="control-glyph">−</span></button><span id="zoom" aria-live="polite"></span><button id="zoom-in" aria-label="Zoom in"><span class="control-glyph">+</span></button></div>${themeControl()}<div class="header-utilities">${payload.delivery.kind === 'live' ? scannerSettingsControl() : ''}${helpControl()}${creditsControl(infoIcon, lockup)}</div></div>`
+    + `<div class="header-actions">${projectReviewControl}<div id="map-controls" class="controls" aria-label="Map controls"><button id="fit" aria-label="Fit map">${fitIcon}<span>Fit</span></button><button id="zoom-out" aria-label="Zoom out"><span class="control-glyph">−</span></button><span id="zoom" aria-live="polite"></span><button id="zoom-in" aria-label="Zoom in"><span class="control-glyph">+</span></button></div><div class="header-utilities">${settingsControl(themeControl())}${helpControl()}${creditsControl(infoIcon, lockup)}</div></div>`
     + '</header>'
     + `<nav id="hierarchy" aria-label="Hierarchy"><div id="hierarchy-title"><span class="pane-label">Hierarchy</span>${payload.delivery.kind === 'live' ? '<button id="add" type="button" aria-label="Add">+</button>' : ''}<button id="hierarchy-toggle" type="button" aria-controls="hierarchy-content">${hierarchyIcon}</button></div><div id="hierarchy-content"><div id="flows"></div><div id="tree"></div><div id="legend">${legend()}</div></div></nav>`
-    + '<div id="map"></div>'
+    + `<div id="map" role="tabpanel" aria-label="Architecture map"></div>${mapViewControl()}`
     + emptyState(payload)
     + `<div id="details-dock"><aside id="details" aria-label="Details"><div class="details-controls"><button id="details-expand" aria-label="Expand details" title="Expand details" aria-expanded="false">${expandIcon}${collapseIcon}</button><button id="details-close" aria-label="Close details">${closeIcon}</button></div><p class="meta"></p><h1></h1><nav class="controls tabs"></nav><div class="body"></div></aside></div>`
     + `<script type="application/json" id="world">${json}</script>`

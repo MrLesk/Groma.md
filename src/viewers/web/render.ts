@@ -1,4 +1,5 @@
-import { createDuplicatesControl } from './duplicates/control.ts'
+import { createProjectSettings } from './settings/control.ts'
+import { createProjectReview } from './review/control.ts'
 import type { ProjectProfile } from '../../project-profile.ts'
 import type { AnnotatedElement, AnnotatedRelationship, WorkItem } from '../../types.ts'
 import { elementWorkGroups, touchedElements } from '../../work/pins.ts'
@@ -28,7 +29,6 @@ import { createPins } from './work/pins.ts'
 import { createTip } from './organisms/tip.ts'
 import { createProjectEditor } from './project/editor.ts'
 import { createAuthoring } from './authoring.ts'
-import { bindScannerSettings } from './scanners/settings.ts'
 import { createRevisionControl } from './revision/control.ts'
 import { createSearchSession } from './search/session.ts'
 import { createWorkIsland } from './work/island.ts'
@@ -50,7 +50,7 @@ let mapMeta = { generation: boot.generation, timings: boot.timings }
 const mapMotion = createMapMotion()
 const debug = createMapDebugPanel(document.body, () => ({ ...mapMeta, world, sheet }))
 function projectedScene() {
-  return debug.project(() => presentScene(sheet, project, mapMotion.view, mapMotion.pose))
+  return debug.project(() => presentScene(sheet, project, mapMotion.pose))
 }
 let scene = projectedScene()
 const host = document.getElementById('map')!
@@ -68,7 +68,6 @@ const zoomHost = document.getElementById('zoom')!
 const hierarchyContent = document.getElementById('hierarchy-content')!
 const hierarchyToggle = document.getElementById('hierarchy-toggle') as HTMLButtonElement
 const map = createMap(host)
-bindScannerSettings(data)
 const edit = data.edit
 const projectEditor = edit === undefined ? undefined : createProjectEditor(input => edit({ id: 'project', ...input }))
 const emptyState = createEmptyState(document.getElementById('empty')!)
@@ -105,7 +104,8 @@ const source = createSourceControl({
   element: () => worldElement(primarySelection(selection)), readCode: data.readCode, readSource: data.readSource,
   revision: () => revisionControl.selected, repaint: paintViewState,
 })
-const duplicates = createDuplicatesControl({ world: () => world, revision: () => revisionControl.selected, readSource: data.readSource,
+createProjectSettings(data)
+const review = createProjectReview({ world: () => world, revision: () => revisionControl.selected, readSource: data.readSource,
   navigate(id, file, line) { select(id); if (file !== undefined) source.open(file, line) },
 })
 const taskDiff = createTaskDiffControl({
@@ -401,7 +401,7 @@ function repaintScene(fit: boolean): void {
   fitted = fitScene(frame)
   if (fit) {
     const focus = mapMotion.view === 'layers' ? undefined : fitArchitecture(scene, world, selectedArchitecture(selection), frame)
-    camera.move(focus === undefined ? fitted : pan(focus, frame.x, frame.y), false)
+    camera.frame(focus === undefined ? fitted : pan(focus, frame.x, frame.y), mapMotion.framing)
     touched = focus !== undefined
   } else camera.move(pan(camera.current, (before.x - after.x) * camera.current.k, (before.y - after.y) * camera.current.k), false)
   applyCamera()
@@ -483,7 +483,7 @@ function applyWork(payload: WebWorkPayload): void {
   searchControl.updateTasks(work.items)
 }
 function paintWorld(): void {
-  duplicates.refresh()
+  review.refresh()
   debug.paint(() => map.paint(scene))
   revisionControl.paintProjectEdit(map.svg)
   authoring.refresh()

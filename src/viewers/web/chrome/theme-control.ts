@@ -47,7 +47,7 @@ export function bindThemeControl(
     const selected = option.dataset.themeMode
     if (!isThemeMode(selected)) return
     control.removeAttribute('open')
-    option.blur()
+    control.querySelector('summary')!.focus()
     storage.setItem(THEME_STORAGE_KEY, selected)
     if (selected === mode) {
       onChange()

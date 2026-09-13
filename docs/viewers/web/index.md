@@ -107,12 +107,17 @@ The map grid fills the screen. Inset 35%-paper frosted chrome floats
 above it as one technical instrument. The header groups the groma.md lockup,
 system name, quiet flow and element counts, and revision menu on the left.
 A permanent Search field sits between that context and the view controls:
-Iso / 2D / Layers, Fit, `-`, zoom readout, `+`, Theme, Help, and Info. Controls share one
+Fit, `-`, zoom readout, `+`, Settings, Help, and Info. Controls share one
 height, and opening search leaves them in place. Header popups float with
 a clear gap below the bar. At narrower widths the
-counts and the Revision, Fit, and Theme text give way to the controls.
+counts and the Revision and Fit text give way to the controls.
+Iso, 2D and Layers are icon-and-label tabs in a floating bar at the top of the
+map, centered between the side panels. It shares the bottom tasks bar rounded
+surface. One selection pill slides and resizes between tabs; reduced motion
+switches it immediately. Click a tab or use Left/Right, Home and End while focused on the tabs.
+F2 still toggles Layers, and F1 hides the bar with the other map controls.
 Popup triggers share a pointer cursor. Clicking outside dismisses Help, Info,
-Theme, Revision, and Search through the same popup behavior. Search cancellation
+Settings, Theme, Revision, and Search through the same popup behavior. Search cancellation
 restores its saved view; the revision tooltip remains part of its popup.
 Help explains the map shapes, drafts, relationships, and how source-file counts,
 lines of code, and dependencies determine building sizes relative to the project.
@@ -432,9 +437,13 @@ The map restores crisp SVG rendering after movement settles.
 Hover highlights pause during camera movement, including trackpad inertia, and return after it settles.
 Selection highlights and clicking remain available throughout.
 Reduced motion applies the destination without animation. `F1` toggles the HUD for a map-only
-view. The header selects Iso, 2D, or Layers. 2D looks straight down on the same
+view. The floating camera bar selects Iso, 2D, or Layers. 2D looks straight down on the same
 layout, drawing one flat footprint per element without changing its source
-files, architecture, or relationships. Switching to or from 2D is immediate.
+files, architecture, or relationships. Switching to or from 2D turns the camera
+and lowers or raises the buildings over 850 ms, gently starting and settling.
+The tiers widen into their final footprint as they flatten; layer spacing moves
+with the camera. A new view choice continues from the displayed pose.
+Reduced motion applies the final geometry immediately.
 Iso and 2D fit the selected architecture so it remains readable; with no
 architecture selection they fit the whole map. Layers fits the whole stack.
 
@@ -584,10 +593,21 @@ relationships remain saved. With no installed selections, scanning does nothing.
 A failed active scanner reports its error and leaves the previous scan result.
 Architecture edits and Backlog updates remain live independently.
 
-Open **Scanners** in the toolbar. A warning means no installed scanner matches the detected project; a quiet
-hint means some detected support is missing or uncertain. Settings show matched
-files, package state and readiness. Add an exact npm/Git/local source, install a
-confirmed recommendation, restore a missing package, remove a project selection,
-check readiness or update a version explicitly. Successful changes update source
+The toolbar's icon-only **Settings** dropdown offers **Plugins** in live web
+and a nested **Theme** dropdown in both live web and static exports.
+Both menus fade and move gently from their trigger when opening and closing;
+reduced motion switches them immediately.
+**Plugins** opens the Settings dialog without an expand action. It groups
+installed selections, team selections missing locally, and recommendations.
+Full errors appear once in row details. Add an npm/Git/local source, install a
+recommendation, restore a missing package, remove a project selection, retry
+scanning or update a version explicitly. Successful changes update source
 subscriptions without reopening the viewer. Removal keeps saved architecture.
+A separate warning appears only when scanning needs attention and opens the
+affected plugin in Settings. Healthy projects and partial coverage hints do not
+show a warning.
+
+**Project review** contains potential duplicate findings, source comparisons and
+map navigation. Its neutral toolbar icon gains a dot when findings are available.
+Static exports offer duplicate review without plugin management.
 See [scanner settings](../../scanners/setup.md) for status details.
