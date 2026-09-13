@@ -208,3 +208,15 @@ shows bracketed actions for the active pane and always exposes Help. See the
 Up/Down and k/j move the same selection or reading cursor. The viewport stays
 still while that row is visible and follows only at its top or bottom edge.
 Returning from a source or diff keeps the parent reading position.
+
+## Saved architecture without scanners
+
+Opening an existing project does not require its scanners to be installed.
+When a configured scanner is missing, or saved Code references name a scanner
+that is no longer configured, the viewer shows the saved architecture and skips
+automatic source refresh. Elements, Code references and relationships remain
+unchanged. Architecture edits and work updates remain live. With no scanners
+configured, the viewer also reads saved data without scanning.
+
+Restore the required scanners and reopen the viewer to resume automatic source
+updates. An explicit `groma scan` still reports configured missing scanners.

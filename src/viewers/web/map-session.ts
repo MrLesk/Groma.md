@@ -5,7 +5,7 @@ import { backlogPlugin } from '@groma/work-source-backlog'
 import { watchArchitecture } from '../../architecture-watch.ts'
 import { writes } from '../../authoring.ts'
 import type { StructuralResult } from '../../curate.ts'
-import { watchScan } from '../../scanner.ts'
+import { watchViewerSources } from '../source/scanning.ts'
 import { pinsOf } from '../../work/pins.ts'
 import { listGromaRevisions, withGitRevision } from '../../history/revisions.ts'
 import { renderPage } from './page.ts'
@@ -177,7 +177,7 @@ export async function createWebMapSession(
     })
   }
 
-  const sourceWatch = await watchScan(repositoryRoot, {
+  const sourceWatch = await watchViewerSources(repositoryRoot, {
     onFold: publishWorld,
     onError: error => console.error(error instanceof Error ? error.message : String(error)),
   })
@@ -330,7 +330,7 @@ export async function createWebMapSession(
       clients.clear()
       await Promise.all([
         workWatch.close(),
-        sourceWatch.close(),
+        sourceWatch?.close(),
         architectureWatch.close(),
         worldChain,
         workChain,

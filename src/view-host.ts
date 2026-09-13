@@ -13,7 +13,7 @@ import { listGromaRevisions, withGitRevision, type GromaRevision } from './histo
 import { readTaskDiff } from './viewers/source/diff.ts'
 import { readSource } from './viewers/source/read.ts'
 import { readCodeStructure } from './viewers/source/structure.ts'
-import { watchScan } from './scanner.ts'
+import { watchViewerSources } from './viewers/source/scanning.ts'
 import { sheetScene } from './sheet/scene.ts'
 import { mountTerminalViewer } from './viewers/tui/terminal-viewer.ts'
 import type { TerminalViewer } from './viewers/tui/terminal-viewer.ts'
@@ -102,7 +102,7 @@ export async function startTerminalViewer(
       readRevision,
     })
     void pullWork()
-    const sourceWatch = await watchScan(repositoryRoot, { onFold: publish })
+    const sourceWatch = await watchViewerSources(repositoryRoot, { onFold: publish })
     const architectureWatch = await watchArchitecture(repositoryRoot, { onChange: publish })
     const workWatch = workSource.watch(() => {
       void pullWork()
@@ -111,7 +111,7 @@ export async function startTerminalViewer(
       closed = true
       await Promise.all([
         workWatch.close(),
-        sourceWatch.close(),
+        sourceWatch?.close(),
         architectureWatch.close(),
       ])
     }

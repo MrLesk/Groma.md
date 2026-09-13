@@ -16,6 +16,7 @@ import { ensureInitialized, runInitCommand } from './init-command.ts'
 import { humanInstructionGuide } from './instructions.ts'
 import { registerScannerCommands } from './scanner/cli.ts'
 import { formatScanReport, scanRepository, watchScan } from './scanner.ts'
+import { scanForViewer } from './viewers/source/scanning.ts'
 import {
   renderPlainWelcome,
   startWelcome,
@@ -90,7 +91,7 @@ async function openWeb(port?: number, scan = true): Promise<void> {
 
 async function openTerminalMap(scan = true): Promise<void> {
   const root = process.cwd()
-  if (scan) await scanRepository(root)
+  if (scan) await scanForViewer(root)
   const { startTerminalViewer } = await import('./view-host.ts')
   const viewer = await startTerminalViewer(root)
   await viewer.closed
