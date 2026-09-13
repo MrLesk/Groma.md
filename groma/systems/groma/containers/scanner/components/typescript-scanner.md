@@ -27,9 +27,6 @@ groma:
       file: plugins/scanners/typescript/src/source-operations.ts
       symbol: sourceOperations
     - scanner: typescript
-      file: plugins/scanners/typescript/src/worker.ts
-      symbol: typescriptWorkerPath
-    - scanner: typescript
       file: plugins/scanners/typescript/src/source-tokens.ts
       symbol: tokenizeOperation
 ---

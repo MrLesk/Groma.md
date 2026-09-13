@@ -138,7 +138,9 @@ operation before opening a map.
      external, a ghost, or a draft record no ghost belongs to; it refuses and
      names what blocks it while other elements relate to the part, while a
      ghost still contains parts, or while ghosts still carry the draft's tag.
-     Stable software is the scanner's: remove its code or combine it instead.
+     A scanned component can be removed after its Code list is empty: delete its
+     source files and run the owning scanner first. Flows, incoming relationships,
+     and children still block removal. Scanned systems and containers stay protected.
      Removing a draft record clears its tag from the stable parts it touched.
    - The project record is the reserved id `project`: `groma edit project
      --title <text> --description <text> --overview <markdown>` merges the

@@ -5,7 +5,4 @@ status: stable
 groma:
   id: smoke
   parent: scanner
-  code:
-    - scanner: typescript
-      file: plugins/scanners/java/smoke.ts
 ---

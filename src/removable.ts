@@ -4,7 +4,8 @@ import type { ArchitectureGraph } from './types.ts'
 export function removalBlocker(graph: ArchitectureGraph, id: string): string | undefined {
   const element = graph.elements.find(candidate => candidate.id === id)
   if (element === undefined) return `unknown id "${id}"`
-  if (element.origin === 'observed' && element.kind !== 'actor' && !element.external) {
+  const emptyComponent = element.kind === 'component' && element.code.length === 0
+  if (element.origin === 'observed' && element.kind !== 'actor' && !element.external && !emptyComponent) {
     return `${id} is found by the scanner; remove its code or combine it instead`
   }
   const flows = graph.flows.filter(flow => flow.steps.some(step => step.source === id || step.target === id))

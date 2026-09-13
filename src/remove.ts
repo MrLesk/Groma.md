@@ -26,7 +26,7 @@ export interface RemoveInput {
   members?: string[]
 }
 
-/** Removes a person, an external, a ghost, or a draft record nothing still belongs to; the scanner keeps what it found. */
+/** Removes eligible records; scanned components must have no remaining Code references. */
 export async function removeThing(repositoryRoot: string, { id, relation, members }: RemoveInput): Promise<string | StructuralResult> {
   if (relation !== undefined) return removeRelation(repositoryRoot, { source: id, target: relation })
   if (isGroupAddress(id)) return removeGroup(repositoryRoot, { address: id, members })

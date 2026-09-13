@@ -86,8 +86,8 @@ export const advancedCommands = [
   },
   {
     command: 'groma remove <id>',
-    description: 'person, external, ghost, draft, relation, group',
-    content: 'Removes a person, an external system, a ghost, a draft no ghost belongs to, a relation, or a group. Scanned software stays.',
+    description: 'remove an eligible architecture record',
+    content: 'Removes a person, external, ghost, component without Code references, unused draft, relation, or group. For scanned components, delete their source files and scan first. Dependencies can still block removal.',
   },
   {
     command: 'groma accept <id>',

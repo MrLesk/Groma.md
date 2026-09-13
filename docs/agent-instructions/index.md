@@ -112,8 +112,9 @@ a full scan and architecture curation cycle.
      component that does not exist yet, as a ghost at the path it will keep.
      The scanner alone creates stable software.
    - `groma remove <id>` takes away a person, an external, a ghost, or a draft
-     record; it refuses while something still depends on it and never removes
-     scanned software.
+     record. It also removes a scanned component after its Code references are
+     empty: delete its source files and run the owning scanner first. It refuses
+     while flows, incoming relationships, or children still depend on the element.
    - `groma edit <id> --title <text>` renames an element or a draft record
      while its id stays; `--technology <text>` sets an element's technology
      and an empty value clears it. `groma edit project --title --description
