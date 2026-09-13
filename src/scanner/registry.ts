@@ -9,13 +9,21 @@ import { readScannerConfig } from './modules/config.ts'
 import { configuredScannerModules } from './modules/inventory.ts'
 import type {
   FoundScannerModule,
-  ScannerModuleLocation,
   ScannerResolutionOptions,
 } from './modules/inventory.ts'
-import { parseScannerSource } from './modules/package.ts'
+import { officialScannerCatalog } from './modules/official-catalog.ts'
 import { compileWatchPatterns } from './watch-patterns.ts'
 
+export class ScannerFailure extends Error {
+  readonly scanner: string
+  constructor(scanner: string, cause: unknown) {
+    super(`${scanner}: ${cause instanceof Error ? cause.message : String(cause)}`, { cause })
+    this.scanner = scanner
+  }
+}
+
 export interface ScannerRegistry {
+  readonly scannerIds: readonly string[]
   collectObservations(repositoryRoot: string, changedFiles?: readonly string[]): Promise<ScanObservation[]>
   watchesFile(relativePath: string): boolean
 }
@@ -43,23 +51,6 @@ export async function importScanner(entry: string, id: string): Promise<ScannerP
   const module: unknown = await import(pathToFileURL(entry).href)
   const exported = module as { default?: unknown }
   return scannerPlugin(exported.default, id)
-}
-
-function requireFoundModules(
-  repositoryRoot: string,
-  modules: readonly ScannerModuleLocation[],
-): FoundScannerModule[] {
-  const missing = modules.find(module => module.status === 'missing')
-  if (missing === undefined) {
-    return modules.filter((module): module is FoundScannerModule => module.status === 'found')
-  }
-  const source = parseScannerSource(repositoryRoot, missing.source)
-  if (source.kind !== 'local') {
-    throw new Error(`scanner ${missing.id} is missing; run groma scanner install`)
-  }
-  throw new Error(
-    `scanner ${missing.id} is missing at ${missing.source}; restore it or run groma scanner remove ${missing.id}`,
-  )
 }
 
 function excludeEvidence(
@@ -99,12 +90,19 @@ export async function loadScannerRegistry(
   const matcher = ignore({ ignorecase: false }).add(config.exclude ?? [])
   const excluded = (file: string) => matcher.ignores(file.split(path.sep).join('/'))
   const modules = await configuredScannerModules(repositoryRoot, options)
-  const found = requireFoundModules(repositoryRoot, modules)
+  const found = modules.filter((module): module is FoundScannerModule => module.status === 'found')
   const scanners = await Promise.all(found.map(async module => {
-    const scanner = await importScanner(module.entry, module.id)
-    return { ...scanner, scan: (root: string) => scanner.scan(root, module.settings) }
+    try {
+      const scanner = await importScanner(module.entry, module.id)
+      return { ...scanner, scan: (root: string) => scanner.scan(root, module.settings) }
+    } catch (error) { throw new ScannerFailure(module.id, error) }
   }))
-  return createScannerRegistry(scanners, excluded)
+  const registry = createScannerRegistry(scanners, excluded)
+  const discovery = compileWatchPatterns({ include: [
+    ...officialScannerCatalog.flatMap(scanner => scanner.rules.flatMap(rule => rule.files)),
+    ...found.flatMap(module => module.discovery?.rules.flatMap(rule => rule.files) ?? []),
+  ], exclude: [] })
+  return { ...registry, watchesFile: file => registry.watchesFile(file) || (!excluded(file) && discovery(file)) }
 }
 
 /** One source session retains complete evidence between selective rescans. */
@@ -116,6 +114,7 @@ export function createScannerRegistry(
   const pending = new Set(scanners)
   const subscriptions = scanners.map(scanner => ({ scanner, matches: compileWatchPatterns(scanner.watch) }))
   return {
+    scannerIds: scanners.map(scanner => scanner.id),
     watchesFile(relativePath) {
       return !excluded(relativePath) && subscriptions.some(subscription => subscription.matches(relativePath))
     },
@@ -127,7 +126,7 @@ export function createScannerRegistry(
       const selected = [...pending]
       // Every scanner finishes before a failure surfaces, so none keeps a child process in the repository.
       const results = await Promise.allSettled(selected.map(async scanner => {
-        const result = await scanner.scan(root)
+        const result = await scanner.scan(root).catch(error => { throw new ScannerFailure(scanner.id, error) })
         const observation = result && excludeEvidence(result, excluded)
         if (observation) observations.set(scanner, observation)
         else observations.delete(scanner)

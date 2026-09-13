@@ -6,7 +6,7 @@ import { backlogPlugin } from '@groma/work-source-backlog'
 import packageJson from '../../package.json' with { type: 'json' }
 
 import { humanInstructionGuides } from '../instructions.ts'
-import { scannerInventory } from '../scanner/modules/inventory.ts'
+import { readScannerSettings, type ScannerSettings } from '../scanner/modules/settings.ts'
 import type { ScannerReadiness } from '../scanner/modules/inventory.ts'
 
 export const documentationUrl = 'https://groma.md'
@@ -28,6 +28,7 @@ export const welcomeActions = [
     command: 'groma scan',
     description: 'refresh architecture from source',
   },
+  { id: 'scanners', command: 'Scanners ›', description: 'Manage project scanners' },
 ] as const
 
 export const instructionsAction = {
@@ -43,13 +44,13 @@ export const advancedCommands = [
   },
   {
     command: 'groma scanner add <source>',
-    description: 'exact package@version or ./path',
-    content: 'Adds a scanner from an exact npm package version or a local directory to this project.',
+    description: 'exact npm/Git source or ./path',
+    content: 'Adds a scanner from an exact npm package version, Git source or local directory to this project.',
   },
   {
     command: 'groma scanner install',
-    description: 'restore configured npm scanners',
-    content: 'Installs the exact npm scanner versions already configured for this project. Built-in and local scanners need no installation.',
+    description: 'restore configured npm/Git scanners',
+    content: 'Restores configured npm and Git scanners. Local scanners run directly from their selected path.',
   },
   {
     command: 'groma scanner list',
@@ -121,6 +122,7 @@ export interface WelcomePlugin {
 }
 
 export interface WelcomeModel {
+  scanners?: ScannerSettings
   project: string
   folder: string
   status: string
@@ -166,15 +168,16 @@ export async function loadWelcomeModel(
   workSourcePlugin: WorkSourcePlugin = backlogPlugin,
 ): Promise<WelcomeModel> {
   const root = path.resolve(repositoryRoot)
-  const scanners = await scannerInventory(root)
+  const scanners = await readScannerSettings(root)
   const workSource = workSourcePlugin.readiness()
   return {
     project: path.basename(root),
     folder: displayFolder(root),
     status: 'Architecture ready',
+    scanners,
     plugins: [
       { id: workSourcePlugin.id, ...workSource },
-      ...scanners.map(({ id, status }) => ({ id, status })),
+
     ],
   }
 }

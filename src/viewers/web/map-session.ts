@@ -5,7 +5,8 @@ import { backlogPlugin } from '@groma/work-source-backlog'
 import { watchArchitecture } from '../../architecture-watch.ts'
 import { writes } from '../../authoring.ts'
 import type { StructuralResult } from '../../curate.ts'
-import { watchViewerSources } from '../source/scanning.ts'
+import { createScannerSession } from '../../scanner/session.ts'
+import { parseScannerSettingsAction } from '../../scanner/modules/settings.ts'
 import { pinsOf } from '../../work/pins.ts'
 import { listGromaRevisions, withGitRevision } from '../../history/revisions.ts'
 import { renderPage } from './page.ts'
@@ -61,7 +62,7 @@ async function loadMap(
 /** Owns the ready map, its request handlers, and its live subscriptions. */
 export async function createWebMapSession(
   repositoryRoot: string,
-  options: { workSource?: WorkSource } = {},
+  options: { workSource?: WorkSource; scan?: boolean } = {},
 ): Promise<{ fetch: (request: Request) => Promise<Response>; close: () => Promise<void> }> {
   const renderer = await bundleRenderer()
   const workSource = options.workSource ?? backlogPlugin.create(repositoryRoot)
@@ -177,12 +178,13 @@ export async function createWebMapSession(
     })
   }
 
-  const sourceWatch = await watchViewerSources(repositoryRoot, {
+  const scannerSession = await createScannerSession(repositoryRoot, {
+    scan: options.scan,
     onFold: publishWorld,
-    onError: error => console.error(error instanceof Error ? error.message : String(error)),
+    onSettings: settings => broadcast(encoder.encode(`event: scanners\ndata: ${JSON.stringify(settings)}\n\n`)),
   })
   const architectureWatch = await watchArchitecture(repositoryRoot, {
-    onChange: publishWorld,
+    onChange: async () => { await scannerSession.reconfigure(); await publishWorld() },
   })
   const workWatch = workSource.watch(() => {
     void publishWork()
@@ -287,6 +289,7 @@ export async function createWebMapSession(
   }
 
   const routes = new Map<string, Route>([
+    ['/scanner-settings', async () => Response.json(await scannerSession.refresh())],
     ['/render.js', rendererResponse],
     ['/revisions.json', async () => Response.json(await readRevisions())],
     ['/world.json', worldResponse],
@@ -299,6 +302,10 @@ export async function createWebMapSession(
 
   /** The shared writes at the path of their verb; each posts the input the CLI builds from its flags. */
   const writeRoutes = new Map<string, (request: Request) => Promise<Response>>([
+    ['/scanner-settings', async request => {
+      try { await scannerSession.change(parseScannerSettingsAction(await request.json())); return Response.json(scannerSession.state) }
+      catch (error) { return new Response(error instanceof Error ? error.message : String(error), { status: 400 }) }
+    }],
     ['/draft', request => writeResponse(request, writes.draft)],
     ['/add', request => writeResponse(request, writes.add)],
     ['/edit', request => writeResponse(request, writes.edit)],
@@ -330,7 +337,7 @@ export async function createWebMapSession(
       clients.clear()
       await Promise.all([
         workWatch.close(),
-        sourceWatch?.close(),
+        scannerSession?.close(),
         architectureWatch.close(),
         worldChain,
         workChain,

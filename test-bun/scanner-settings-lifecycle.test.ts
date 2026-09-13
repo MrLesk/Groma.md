@@ -1,0 +1,71 @@
+import { expect, test } from 'bun:test'
+import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import os from 'node:os'
+import path from 'node:path'
+import { createScannerSession } from '../src/scanner/session.ts'
+import { readScannerConfig, writeScannerConfig } from '../src/scanner/modules/config.ts'
+import { loadAnnotatedArchitecture } from '../src/core.ts'
+
+async function project() {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'groma-settings-live-'))
+  await cp(path.resolve(import.meta.dir, '../test/fixtures/empty-project'), root, { recursive: true })
+  const git = Bun.spawn(['git', 'init', '--quiet', root], { stdout: 'ignore', stderr: 'pipe' })
+  expect(await git.exited).toBe(0)
+  await mkdir(path.join(root, 'ui'))
+  await writeFile(path.join(root, 'ui/package.json'), JSON.stringify({ dependencies: { react: '19.0.0' } }))
+  await writeFile(path.join(root, 'ui/view.fixture'), 'first')
+  await writeScannerConfig(root, { scanners: [] })
+  const source = path.join(root, 'plugin')
+  await mkdir(source)
+  await writeFile(path.join(source, 'package.json'), JSON.stringify({ name: 'fixture', version: '1.0.0',
+    groma: { scanner: { id: 'fixture', entry: './index.ts', discovery: {
+      technologies: ['react'], rules: [{ type: 'dependency', files: ['**/package.json'], technology: 'react', kind: 'framework', package: 'react' }],
+    } } },
+  }))
+  await writeFile(path.join(source, 'index.ts'), `import { readFile } from 'node:fs/promises'
+export default { id: 'fixture', watch: { include: ['**/*.fixture'], exclude: [] }, async scan(root) {
+  return { scanner: { id: 'fixture', technology: 'react', engine: 'fixture', engineVersion: '1' }, diagnostics: [],
+    roots: [{ id: 'root', name: 'Fixture', kind: 'package', file: 'ui/package.json' }, { id: 'ui', name: 'UI', kind: 'project', parent: 'root' }],
+    files: [{ file: 'ui/view.fixture', roots: ['ui'], symbols: [{ id: 'view', kind: 'function', name: await readFile(root + '/ui/view.fixture', 'utf8') }] }] }
+} }`)
+  return { root, source }
+}
+
+test.concurrent('settings changes reconfigure live scanning and keep saved evidence when a selection is removed', async () => {
+  const { root, source } = await project()
+  let folds = 0
+  let nextFold: (() => void) | undefined
+  const session = await createScannerSession(root, { onFold() { folds++; nextFold?.() } })
+  try {
+    await session.reconfigure()
+    expect(session.state.notice.tone, JSON.stringify(session.state)).toBe('warning')
+    await session.change({ action: 'add', source })
+    expect(session.state.notice.tone).toBe('neutral')
+    expect(session.state.scanners.map(item => item.id)).toEqual(['fixture'])
+    const changed = new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error('Source edit did not reach the new scanner subscription')), 3000)
+      nextFold = () => { clearTimeout(timer); resolve() }
+    })
+    await writeFile(path.join(root, 'ui/view.fixture'), 'second')
+    await changed
+    const scanned = await loadAnnotatedArchitecture(root)
+    expect(scanned.elements.flatMap(element => element.code).some(code => code.symbol === 'second')).toBe(true)
+    nextFold = undefined
+    const config = await readScannerConfig(root)
+    await writeScannerConfig(root, { ...config, scanners: [...config.scanners, { id: 'absent', source: path.join(root, 'absent') }] })
+    await session.reconfigure()
+    const beforeCheck = folds
+    await session.change({ action: 'check' })
+    expect(folds).toBe(beforeCheck + 1)
+    expect(session.state.scanners.find(item => item.id === 'fixture')?.status).toBe('ready')
+    await writeScannerConfig(root, { ...config, exclude: ['ui/'] })
+    await session.reconfigure()
+    expect(session.state.scanners[0]?.match).toBe('none')
+    await session.change({ action: 'remove', id: 'fixture' })
+    expect((await loadAnnotatedArchitecture(root)).elements).toEqual(scanned.elements)
+    await session.change({ action: 'add', source: path.join(root, 'missing-plugin') })
+    expect(session.state.notice.tone).toBe('error')
+    expect((await readScannerConfig(root)).scanners).toEqual([])
+    expect(await readFile(path.join(root, 'ui/view.fixture'), 'utf8')).toBe('second')
+  } finally { await session.close(); await rm(root, { recursive: true, force: true }) }
+})

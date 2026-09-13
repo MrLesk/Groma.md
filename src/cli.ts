@@ -16,7 +16,6 @@ import { ensureInitialized, runInitCommand } from './init-command.ts'
 import { humanInstructionGuide } from './instructions.ts'
 import { registerScannerCommands } from './scanner/cli.ts'
 import { formatScanReport, scanRepository, watchScan } from './scanner.ts'
-import { scanForViewer } from './viewers/source/scanning.ts'
 import {
   renderPlainWelcome,
   startWelcome,
@@ -91,9 +90,8 @@ async function openWeb(port?: number, scan = true): Promise<void> {
 
 async function openTerminalMap(scan = true): Promise<void> {
   const root = process.cwd()
-  if (scan) await scanForViewer(root)
   const { startTerminalViewer } = await import('./view-host.ts')
-  const viewer = await startTerminalViewer(root)
+  const viewer = await startTerminalViewer(root, { scan })
   await viewer.closed
 }
 
@@ -124,8 +122,9 @@ async function openTerminalView(target: string | undefined, plain: boolean): Pro
   }
 }
 
-async function openTerminalMapFromWelcome(): Promise<void> {
-  const child = Bun.spawn([process.execPath, fileURLToPath(import.meta.url), 'view'], {
+async function openTerminalFromWelcome(...command: string[]): Promise<void> {
+  const entry = Bun.isStandaloneExecutable ? [] : [fileURLToPath(import.meta.url)]
+  const child = Bun.spawn([process.execPath, ...entry, ...command], {
     cwd: process.cwd(),
     stdin: 'inherit',
     stdout: 'inherit',
@@ -194,8 +193,9 @@ function unhandledWelcomeAction(action: never): never {
 async function runWelcomeAction(action: WelcomeActionId): Promise<void> {
   switch (action) {
     case 'web': return openWeb()
-    case 'view': return openTerminalMapFromWelcome()
+    case 'view': return openTerminalFromWelcome('view')
     case 'scan': return scanOnce()
+    case 'scanners': return openTerminalFromWelcome('scanner', 'settings')
     default: return unhandledWelcomeAction(action)
   }
 }
@@ -204,11 +204,13 @@ async function runInteractiveWelcome(screen: WelcomeScreen = 'launcher'): Promis
   if (!await continueWhenReady(true)) return
   const lifecycle = setInterval(() => {}, 1000)
   try {
-    const session = await startWelcome(process.cwd(), screen)
-    try {
-      if (session.selection !== undefined) await runWelcomeAction(session.selection)
-    } finally {
-      session.close()
+    let reopen = true
+    while (reopen) {
+      const session = await startWelcome(process.cwd(), screen)
+      try {
+        if (session.selection !== undefined) await runWelcomeAction(session.selection)
+      } finally { session.close() }
+      reopen = session.selection === 'scanners'
     }
   } finally {
     clearInterval(lifecycle)

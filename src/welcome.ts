@@ -288,7 +288,8 @@ export function mountWelcome(
   }
 
   function handleLauncherKey(key: KeyEvent): void {
-    if (key.name === 'up' || key.name === 'down') moveLauncher(key.name)
+    if (key.name === 's') close('scanners')
+    else if (key.name === 'up' || key.name === 'down') moveLauncher(key.name)
     else if (key.name === 'return') enterLauncher()
   }
 

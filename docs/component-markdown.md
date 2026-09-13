@@ -244,8 +244,12 @@ may be removed. This lifecycle is independent of the endpoint statuses.
 Finding a source dependency does not accept a draft interaction.
 
 Core writes selected current interactions under `## Derived relationships`,
-using the same four columns. A complete scan replaces that section and preserves
-all authored sections. A failed scanner does not start reconciliation. Raw
+using the same four columns. The derived Technology cell lists contributing
+scanner IDs, separated by commas. This is Groma application-profile meaning;
+ordinary Markdown readers see the source links, interaction and its attribution.
+A scan replaces only rows whose contributing scanners all supplied observations.
+Rows depending on absent scanners, their endpoint Code references, and authored
+sections remain intact. An empty observation set writes nothing. A failed scanner does not start reconciliation. Raw
 source dependencies never become rows merely because their endpoints resolve.
 The current [inference rule](relationship-inference.md#current-inference-rule)
 covers concretely supplied named callbacks; other interactions may be authored.

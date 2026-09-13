@@ -72,13 +72,16 @@ export async function refreshDerivedRelationships(
   repositoryRoot: string,
   observations: readonly ScanObservation[],
   owners: ReadonlyMap<string, string>,
+  retained: readonly RelationshipConnection[] = [],
 ): Promise<ScanDiagnostic[]> {
   const { claims, conflicts } = composeInvocations(observations)
   const filename = GromaFileSystem.open(repositoryRoot).sourceFilename('relationships.md')
   const present = existsSync(path.join(repositoryRoot, filename))
   const before = present ? await readDocument(repositoryRoot, filename) : `---\ntype: ${RELATIONSHIPS_TYPE}\ntitle: Architecture relationships\n---\n`
   let source = withoutDerivedSection(before)
-  for (const connection of relationshipsFromClaims(claims, owners)) {
+  const protectedPairs = new Set(retained.map(row => `${row.source}\0${row.target}`))
+  const refreshed = relationshipsFromClaims(claims, owners).filter(row => !protectedPairs.has(`${row.source}\0${row.target}`))
+  for (const connection of [...retained, ...refreshed]) {
     source = withRelationship(source, {
       ...connection,
       sourceName: connection.source,

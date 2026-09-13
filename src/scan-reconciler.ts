@@ -4,6 +4,8 @@ import { isDeepStrictEqual } from 'node:util'
 
 import { detectDuplicatedLogic, rememberArchitectureFindings } from './architecture-findings.ts'
 import { isReservedDocument } from './architecture-path.ts'
+import { buildArchitectureModel } from './architecture-model.ts'
+import { storedConnections } from './relationship-markdown.ts'
 import { loadArchitecture } from './architecture-reader.ts'
 import { architectureElementPath } from './architecture-path.ts'
 import { GromaFileSystem } from './groma-filesystem.ts'
@@ -169,6 +171,7 @@ async function refreshCuratedCode(
   world: World,
   observations: ScanObservation[],
   summary: ScanSummary,
+  protectedFiles: ReadonlySet<string>,
 ): Promise<void> {
   const evidence = new Map<string, ScanFile>()
   const activeScanners = new Set(observations.map(observation => observation.scanner.id))
@@ -187,7 +190,7 @@ async function refreshCuratedCode(
         touched = true
         return [refreshedReference(reference, found)]
       }
-      const missing = activeScanners.has(reference.scanner)
+      const missing = !protectedFiles.has(reference.file) && activeScanners.has(reference.scanner)
         && !existsSync(path.join(repositoryRoot, reference.file))
       if (missing) touched = true
       return missing ? [] : [reference]
@@ -407,13 +410,24 @@ export async function reconcileScanObservations(
   repositoryRoot: string,
   observations: ScanObservation[],
 ): Promise<ScanSummary> {
-  const world = indexWorld(await loadArchitecture(repositoryRoot))
   const summary: ScanSummary = { created: 0, refreshed: 0, matched: 0 }
+  if (!observations.length) return summary
+  const records = await loadArchitecture(repositoryRoot)
+  const model = buildArchitectureModel(records.documents)
+  const connections = storedConnections(records.documents, model.elements, (_code, file, message) => {
+    throw new Error(`${file}: ${message}`)
+  })
+  const active = new Set(observations.map(observation => observation.scanner.id))
+  // Derived technology lists the contributing scanner IDs. Incomplete evidence cannot replace that pair.
+  const retained = connections.filter(row => !row.authored && row.technology.split(', ').some(id => !active.has(id)))
+  const protectedFiles = new Set([...retained, ...connections.filter(row => row.authored)]
+    .flatMap(row => [row.source, row.target]))
+  const world = indexWorld(records)
   const diagnostics = observations.flatMap(observation => observation.diagnostics.map(diagnostic => ({
     scanner: observation.scanner, diagnostic,
   })))
   if (diagnostics.length > 0) summary.scannerDiagnostics = diagnostics
-  await refreshCuratedCode(repositoryRoot, world, observations, summary)
+  await refreshCuratedCode(repositoryRoot, world, observations, summary, protectedFiles)
   const candidates = new Map<string, FileCandidate>()
   const ordered = [...observations].sort((a, b) => {
     const key = (observation: ScanObservation) => JSON.stringify([
@@ -427,7 +441,7 @@ export async function reconcileScanObservations(
   }
   await reconcileFiles(repositoryRoot, world, candidates, summary)
   const owners = new Map([...world.byId.values()].flatMap(record => record.code.map(reference => [reference.file, record.id] as const)))
-  const conflicts = await refreshDerivedRelationships(repositoryRoot, observations, owners)
+  const conflicts = await refreshDerivedRelationships(repositoryRoot, observations, owners, retained)
   if (conflicts.length > 0) summary.evidenceConflicts = conflicts
   const findings = detectDuplicatedLogic(observations, owners)
   rememberArchitectureFindings(repositoryRoot, findings)

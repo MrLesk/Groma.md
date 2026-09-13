@@ -1,3 +1,4 @@
+import { scannerSettingsControl, scannerSettingsCss } from './scanners/settings.ts'
 import { readFileSync } from 'node:fs'
 
 import lockup from './atoms/lockup.svg' with { type: 'text' }
@@ -58,6 +59,7 @@ const legendKinds: C4Kind[][] = [
 ]
 
 const style = `
+  ${scannerSettingsCss}
   :root {
     ${cssBlock(palettes.light)}
     --backlog-mark-image: url("data:image/png;base64,${backlogMark}");
@@ -407,7 +409,7 @@ export function renderPage(payload: WebBootPayload): string {
     + `<style>${style}</style></head><body data-delivery="${payload.delivery.kind}">`
     + `<header id="header"><div class="header-context">${lockup}<span id="stats"></span>${revisionControl(payload, { history: historyIcon, loader: revisionLoader })}</div>`
     + searchControl({ search: searchIcon, close: closeIcon })
-    + `<div class="header-actions">${mapViewControl()}<div id="map-controls" class="controls" aria-label="Map controls"><button id="fit" aria-label="Fit map">${fitIcon}<span>Fit</span></button><button id="zoom-out" aria-label="Zoom out"><span class="control-glyph">−</span></button><span id="zoom" aria-live="polite"></span><button id="zoom-in" aria-label="Zoom in"><span class="control-glyph">+</span></button></div>${themeControl()}<div class="header-utilities">${helpControl()}${creditsControl(infoIcon, lockup)}</div></div>`
+    + `<div class="header-actions">${mapViewControl()}<div id="map-controls" class="controls" aria-label="Map controls"><button id="fit" aria-label="Fit map">${fitIcon}<span>Fit</span></button><button id="zoom-out" aria-label="Zoom out"><span class="control-glyph">−</span></button><span id="zoom" aria-live="polite"></span><button id="zoom-in" aria-label="Zoom in"><span class="control-glyph">+</span></button></div>${themeControl()}<div class="header-utilities">${payload.delivery.kind === 'live' ? scannerSettingsControl() : ''}${helpControl()}${creditsControl(infoIcon, lockup)}</div></div>`
     + '</header>'
     + `<nav id="hierarchy" aria-label="Hierarchy"><div id="hierarchy-title"><span class="pane-label">Hierarchy</span>${payload.delivery.kind === 'live' ? '<button id="add" type="button" aria-label="Add">+</button>' : ''}<button id="hierarchy-toggle" type="button" aria-controls="hierarchy-content">${hierarchyIcon}</button></div><div id="hierarchy-content"><div id="flows"></div><div id="tree"></div><div id="legend">${legend()}</div></div></nav>`
     + '<div id="map"></div>'

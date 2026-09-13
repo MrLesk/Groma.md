@@ -9,6 +9,7 @@ import {
   parseScannerSource,
   resolveScannerPackage,
   type ScannerSource,
+  type ResolvedScannerPackage,
 } from './package.ts'
 
 export type ScannerReadiness = 'found' | 'missing'
@@ -20,6 +21,9 @@ export interface ScannerInventoryItem {
 }
 
 export interface FoundScannerModule extends ScannerInventoryItem, ConfiguredScanner {
+  name: string
+  version: string
+  discovery?: ResolvedScannerPackage['discovery']
   entry: string
   status: 'found'
 }
@@ -60,6 +64,9 @@ async function moduleLocation(
   return {
     ...configured,
     entry: resolved.entry,
+    name: resolved.name,
+    version: resolved.version,
+    discovery: resolved.discovery,
     status: 'found',
   }
 }
@@ -168,4 +175,14 @@ export async function updateScanner(
     ...config, scanners: config.scanners.map(scanner => scanner.id === id ? updated : scanner),
   })
   return { id, source: updated.source, status: 'found' }
+}
+
+/** Restore one project selection without installing unrelated configured packages. */
+export async function restoreScanner(repositoryRoot: string, id: string, options: ScannerInstallOptions = {}): Promise<void> {
+  const configured = (await readScannerConfig(repositoryRoot)).scanners.find(scanner => scanner.id === id)
+  if (!configured) throw new Error(`scanner is not configured: ${id}`)
+  const source = parseScannerSource(repositoryRoot, configured.source)
+  if (source.kind === 'local') throw new Error(`Restore the local scanner directory: ${configured.source}`)
+  const installed = await installScannerPackage(source, cacheRoot(options), options.registry)
+  if (installed.package.id !== id) throw new Error(`restored scanner id ${installed.package.id} does not match ${id}`)
 }
