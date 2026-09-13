@@ -38,7 +38,7 @@ function projectVersion(clue: TechnologyFinding, evidence: TechnologyFinding[]):
   )) ?? clue
 }
 
-function releaseCompatibility(
+export function releaseCompatibility(
   scanner: OfficialScanner,
   evidence: TechnologyFinding[],
   gromaVersion: string,

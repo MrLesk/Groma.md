@@ -48,7 +48,7 @@ export async function createScannerSession(root: string, options: {
     checks = preparation
     publish(await readScannerSettings(root, checks))
     const registry = await loadScannerRegistry(root)
-    if (scan && !checks.some(check => check.package === 'found' && check.project === 'blocked')) {
+    if (scan && !checks.some(check => registry.scannerIds.includes(check.id) && check.project === 'blocked')) {
       try { await fold(await registry.collectObservations(root)) }
       catch (error) { await report(error) }
     }

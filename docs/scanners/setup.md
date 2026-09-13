@@ -22,7 +22,10 @@ architecture coverage. Official and third-party plugins use the same rules.
 
 The live session watches relevant source declarations through the scanner adapter,
 including with no scanner selected so new projects can appear in settings. Only
-installed project selections execute scans. An empty observation set does not
+installed project selections without known metadata incompatibilities execute scans.
+An incompatible Groma or project technology version blocks the plugin before its
+code is loaded, including preparation checks. Settings show the reason; other
+eligible scanners can still run. An empty observation set does not
 write architecture. Missing packages do not prevent available scanners from
 running. Partial scans keep Code and relationships from absent scanners, including
 relationships that need several scanners. An active scanner failure prevents that

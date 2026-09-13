@@ -1,9 +1,8 @@
 import { scannerNotice, type ScannerSetting, type ScannerSettings, type ScannerSettingsAction } from './settings-model.ts'
 export * from './settings-model.ts'
-import packageJson from '../../../package.json'
 import type { ScannerDiscovery } from './discovery.ts'
 import { discoverScanners } from './discovery.ts'
-import { officialScannerCatalog, recommendScanners } from './catalog.ts'
+import { officialScannerCatalog } from './catalog.ts'
 import { configuredScannerModules, addScanner, removeScanner, updateScanner, restoreScanner } from './inventory.ts'
 import type { ScannerModuleLocation } from './inventory.ts'
 import type { ProjectReadiness } from './readiness.ts'
@@ -37,7 +36,7 @@ function installedSetting(module: ScannerModuleLocation, proposal: ScannerDiscov
   }
   if (module.status === 'missing') base.message = `Package missing: ${module.source}`
   const candidate = proposal.recommendations.find(item => item.id === module.id)
-  if (candidate?.status === 'incompatible' && matches.length) { base.status = 'blocked'; base.message = candidate.reason }
+  if (candidate?.status === 'incompatible') { base.status = 'blocked'; base.message = candidate.reason }
   return base
 }
 
@@ -65,15 +64,6 @@ export function scannerSettingsState(proposal: ScannerDiscovery, modules: readon
 export async function readScannerSettings(root: string, checks: readonly ProjectReadiness[] = []): Promise<ScannerSettings> {
   try {
     const [proposal, modules] = await Promise.all([discoverScanners(root), configuredScannerModules(root)])
-    // Installed metadata, rather than the current official release, owns compatibility for installed plugins.
-    for (const module of modules) {
-      if (module.status !== 'found' || !module.discovery?.compatibility) continue
-      const candidate = recommendScanners(proposal.findings, [], packageJson.version, [{
-        id: module.id, package: module.name, description: '', ...module.discovery,
-        release: { version: module.version, ...module.discovery.compatibility },
-      }])[0]
-      if (candidate?.status === 'incompatible') proposal.recommendations = proposal.recommendations.map(item => item.id === module.id ? candidate : item)
-    }
     return scannerSettingsState(proposal, modules, checks)
   } catch (error) {
     return { scanners: [], notice: { tone: 'error', message: error instanceof Error ? error.message : String(error) }, limits: [] }
