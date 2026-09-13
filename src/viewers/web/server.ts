@@ -7,7 +7,7 @@ import {
 } from '../../init-command.ts'
 import { gromaInitialization } from '../../initialize.ts'
 import { loadProjectProfile } from '../../project-profile.ts'
-import { scanRepository } from '../../scanner.ts'
+import { scanForViewer } from '../source/scanning.ts'
 import { discoverScanners, type ScannerDiscovery } from '../../scanner/modules/discovery.ts'
 import { installSelectedScanners } from '../../scanner/modules/setup.ts'
 import { checkScannerReadiness, requireScannerReadiness } from '../../scanner/modules/readiness.ts'
@@ -37,7 +37,7 @@ export async function startWebViewer(
   function openMap(scan: boolean): Promise<void> {
     error = undefined
     preparing = (async () => {
-      if (scan) await scanRepository(repositoryRoot)
+      if (scan) await scanForViewer(repositoryRoot)
       map = await createWebMapSession(repositoryRoot, options)
     })().catch(failed)
     return preparing
