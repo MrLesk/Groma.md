@@ -8,6 +8,16 @@ operations they concern: under Code in How it's built, and in the scan listing.
 Exact copies list the other operations by name and file:line; similar copies add
 that they are not identical. Token bags stay off the listing. What it does does not dump findings.
 
+The web toolbar's warning icon opens **Potential duplicates** across the project.
+It is accented when the current view has findings. The panel filters groups by
+component and match type; a component filter retains copies owned elsewhere.
+Select a group, then choose two occurrences to compare their source ranges.
+Highlighted lines show textual differences, not a new similarity judgment.
+Each owned occurrence can open its source or select its component on the map.
+Closing the panel restores the underlying inspector. New world payloads replace
+the findings and cancel pending comparisons. Views without findings say that
+none are available; they do not claim that every project source was compared.
+
 ## Ownership
 
 ```text

@@ -1,10 +1,9 @@
+import { createDuplicatesControl } from './duplicates/control.ts'
 import type { ProjectProfile } from '../../project-profile.ts'
 import type { AnnotatedElement, AnnotatedRelationship, WorkItem } from '../../types.ts'
 import { elementWorkGroups, touchedElements } from '../../work/pins.ts'
-import { elementOnPath } from '../flows.ts'
-import type { FlowRef } from '../flows.ts'
-import { initialTree, semanticTreeRows, toggleExpansion } from '../tui/tree.ts'
-import type { TreeRow } from '../tui/tree.ts'
+import { elementOnPath, type FlowRef } from '../flows.ts'
+import { initialTree, semanticTreeRows, toggleExpansion, type TreeRow } from '../tui/tree.ts'
 import { createAddControl } from './chrome/add.ts'
 import { createEmptyState } from './chrome/empty.ts'
 import { createMapDebugPanel } from './chrome/map-debug.ts'
@@ -17,13 +16,11 @@ import { createWebDataSource } from './data.ts'
 import { createFlowList } from './flow/list.ts'
 import { flowFocus, flowHighlight, flowSelection, retainFlows, toggleFlowActivation, type WebFlowRef } from './flow/state.ts'
 import { paintFlowReturn, paintFlowDetails } from './flow/reader.ts'
-import { fitArchitecture, fitHighlights, fitCamera, pan, wheelAction, zoomAbout, zoomLimits, zoomReadout } from './iso/camera.ts'
-import type { Camera } from './iso/camera.ts'
+import { fitArchitecture, fitHighlights, fitCamera, pan, wheelAction, zoomAbout, zoomLimits, zoomReadout, type Camera } from './iso/camera.ts'
 import { createMap } from './iso/map.ts'
 import { createCameraAnimator } from './iso/motion.ts'
 import { bindMapPointer } from './iso/pointer.ts'
-import { presentScene } from './iso/presentation.ts'
-import { createMapAnimator, createMapMotion } from './iso/presentation.ts'
+import { presentScene, createMapAnimator, createMapMotion } from './iso/presentation.ts'
 import { paintRelationship } from './organisms/relationship-details.ts'
 import { detailsTabAfterSelection, detailsTabAfterWork, type DetailsTab, inspectDetails, paintDetails } from './organisms/details.ts'
 import { paintHierarchy } from './organisms/hierarchy.ts'
@@ -108,6 +105,9 @@ const source = createSourceControl({
   element: () => worldElement(primarySelection(selection)), readCode: data.readCode, readSource: data.readSource,
   revision: () => revisionControl.selected, repaint: paintViewState,
 })
+const duplicates = createDuplicatesControl({ world: () => world, revision: () => revisionControl.selected, readSource: data.readSource,
+  navigate(id, file, line) { select(id); if (file !== undefined) source.open(file, line) },
+})
 const taskDiff = createTaskDiffControl({
   host: detailsHost, world: () => world, readDetails: data.readTask, readDiff: data.readTaskDiff,
   repaint: paintViewState, select,
@@ -125,7 +125,6 @@ function viewport(): MapFrame {
 function fitScene(frame: MapFrame): Camera {
   return pan(fitCamera(scene.bounds, frame), frame.x, frame.y)
 }
-
 let fitted: Camera = fitScene(viewport())
 const camera = createCameraAnimator(fitted, applyCamera, map.prepareCamera)
 /** Once an interaction positions the camera, live refits stop until the viewer presses 0. */
@@ -484,6 +483,7 @@ function applyWork(payload: WebWorkPayload): void {
   searchControl.updateTasks(work.items)
 }
 function paintWorld(): void {
+  duplicates.refresh()
   debug.paint(() => map.paint(scene))
   revisionControl.paintProjectEdit(map.svg)
   authoring.refresh()
