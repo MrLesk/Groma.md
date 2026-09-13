@@ -36,8 +36,11 @@ async function subscription(wrapped: boolean) {
 }
 
 function alive(pid: number) {
-  try { process.kill(pid, 0); return true }
-  catch (error) { if ((error as NodeJS.ErrnoException).code === 'ESRCH') return false; throw error }
+  const probe = Bun.spawnSync(['ps', '-p', String(pid), '-o', 'stat='])
+  expect([0, 1], probe.stderr.toString()).toContain(probe.exitCode)
+  const state = probe.stdout.toString().trim()
+  // A terminated child can remain as a zombie until its new parent reaps it.
+  return state !== '' && !state.startsWith('Z')
 }
 
 async function close(watcher: { close(): void | Promise<void> }) {
