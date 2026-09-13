@@ -118,8 +118,9 @@ service calls or injected class-receiver inference.
 
 Conflicts are successful scan results, reported through
 `ScanSummary.evidenceConflicts` and the scan report. They are distinct from an
-enabled scanner failing to complete: all scanners must succeed before
-reconciliation starts. Repeat scans preserve authored relationships and
+enabled scanner failing to complete: failed scanners contribute no fresh
+observation, while successful scanners reconcile. Stored Code references and
+relationships that depend on a failed scanner are retained. Repeat scans preserve authored relationships and
 curated file membership in either observer order. Source offsets, provider
 sets, and conflict details stay in memory; they are not new OKF fields or C4
 elements. Ordinary Markdown readers retain the existing Code links and

@@ -8,7 +8,7 @@ public sealed class ScannerTests
     [Fact]
     public async Task SolutionScanKeepsPartialFilesAtomicAndPreservesProjectHierarchy()
     {
-        using FixtureSolution fixture = FixtureSolution.Create();
+        using FixtureSolution fixture = await FixtureSolution.CreateAsync();
         RoslynScanner scanner = new();
 
         ScanObservation first = await scanner.ScanAsync(new ScanRequest(fixture.SolutionPath, fixture.Directory));
@@ -38,7 +38,7 @@ public sealed class ScannerTests
 
         public string SolutionPath => Path.Combine(Directory, "Fixture.sln");
 
-        public static FixtureSolution Create()
+        public static async Task<FixtureSolution> CreateAsync()
         {
             FixtureSolution fixture = new(Path.Combine(
                 Path.GetTempPath(),
@@ -62,13 +62,13 @@ public sealed class ScannerTests
                 Path.Combine(fixture.Directory, "App", "Unused.cs"),
                 "using Fixture; using Alias = Fixture.Shared; namespace App; public class Unused<Shared> { public Shared Value { get; set; } = default!; }");
             File.WriteAllText(fixture.SolutionPath, SolutionFile());
-            fixture.Restore();
+            await fixture.RestoreAsync();
             return fixture;
         }
 
         public void Dispose() => System.IO.Directory.Delete(Directory, recursive: true);
 
-        private void Restore()
+        private async Task RestoreAsync()
         {
             string dotnet = Environment.GetEnvironmentVariable("DOTNET_HOST_PATH") ?? "dotnet";
             ProcessStartInfo startInfo = new(dotnet)
@@ -84,8 +84,8 @@ public sealed class ScannerTests
                 ?? throw new InvalidOperationException("Could not start dotnet restore.");
             Task<string> output = process.StandardOutput.ReadToEndAsync();
             Task<string> error = process.StandardError.ReadToEndAsync();
-            process.WaitForExit();
-            Task.WaitAll(output, error);
+            await process.WaitForExitAsync();
+            await Task.WhenAll(output, error);
             if (process.ExitCode != 0)
                 throw new InvalidOperationException(output.Result + error.Result);
         }

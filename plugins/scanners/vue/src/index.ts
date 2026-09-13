@@ -7,7 +7,7 @@ import { relative, vueProject } from './project.ts'
 
 export async function scanVue(root: string): Promise<ScanObservation | undefined> {
   const parts = []
-  for (const project of await frameworkProjects(root, 'vue')) {
+  for (const project of await frameworkProjects(root, 'vue', ['.vue'])) {
     const observation = await scanVueProject(project, root)
     if (observation) parts.push({ key: relative(root, project), observation })
   }
@@ -36,8 +36,7 @@ export default {
   id: 'vue',
   watch: { include: ['**/*.vue', '**/*.ts', '**/tsconfig*.json', '**/package.json'], exclude: [] },
   checkReadiness: async root => {
-    const projects = await frameworkProjects(root, 'vue')
-    if (!projects.length) throw new Error('VUE_PROJECT_REQUIRED: No Vue project declaration was found.')
+    const projects = await frameworkProjects(root, 'vue', ['.vue'])
     for (const project of projects) vueProject(project, root)
   },
   scan: scanVue,

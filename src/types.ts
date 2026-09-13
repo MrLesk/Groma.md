@@ -66,6 +66,7 @@ export interface FilesystemAccess {
 export type FilesystemAccessHandler = (access: FilesystemAccess) => void
 
 export interface ScanSummary {
+  scannerFailures?: { scanner: string; message: string }[]
   created: number
   refreshed: number
   matched: number

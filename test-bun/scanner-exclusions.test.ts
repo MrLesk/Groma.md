@@ -78,7 +78,7 @@ test.concurrent('every scanner filters complete evidence without narrowing invoc
     for (const id of ['first', 'second']) await addScanner(root, await plugin(root, id))
     await configure(root, ['/scripts/', '**/*.html'])
     const registry = await loadScannerRegistry(root)
-    const scans = await registry.collectObservations(root)
+    const scans = (await registry.collectObservations(root)).observations
     expect(scans.map(scan => scan.scanner.id).sort()).toEqual(['first', 'second', 'typescript'])
     for (const scan of scans) {
       expect(scan.files.map(file => file.file).sort()).toEqual(['src/kept.ts', 'src/other.ts'])
@@ -94,7 +94,7 @@ test.concurrent('every scanner filters complete evidence without narrowing invoc
       .toEqual(['src/kept.ts', 'src/kept.ts', 'src/kept.ts', 'src/other.ts', 'src/other.ts', 'src/other.ts'])
     expect(model.relationships).toEqual([])
     await configure(root, ['**'])
-    expect(await (await loadScannerRegistry(root)).collectObservations(root)).toEqual([])
+    expect((await (await loadScannerRegistry(root)).collectObservations(root)).observations).toEqual([])
   } finally { await rm(root, { recursive: true, force: true }) }
 })
 
@@ -103,7 +103,7 @@ test.concurrent('rescan keeps stored component ownership and authored content wh
   try {
     await write(root, 'scripts/hidden.ts', 'export const value = 1\n')
     await write(root, 'src/kept.ts', 'export const value = 1\n')
-    await reconcileScanObservations(root, await (await loadScannerRegistry(root)).collectObservations(root))
+    await reconcileScanObservations(root, (await (await loadScannerRegistry(root)).collectObservations(root)).observations)
     const initial = await loadAnnotatedArchitecture(root)
     const stored = initial.elements.find(element => element.code.some(code => code.file === 'scripts/hidden.ts'))!
     await editArchitecture(root, { id: stored.id, overview: 'Builds the release package.' })
@@ -112,7 +112,7 @@ test.concurrent('rescan keeps stored component ownership and authored content wh
     await write(root, 'scripts/new.ts', 'export const another = 2\n')
     await configure(root, ['/scripts/'])
     for (let scan = 0; scan < 2; scan++) {
-      await reconcileScanObservations(root, await (await loadScannerRegistry(root)).collectObservations(root))
+      await reconcileScanObservations(root, (await (await loadScannerRegistry(root)).collectObservations(root)).observations)
     }
     const current = await loadAnnotatedArchitecture(root)
     expect(current.elements).toEqual(authored.elements)

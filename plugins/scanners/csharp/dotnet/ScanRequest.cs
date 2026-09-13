@@ -59,9 +59,11 @@ internal static class SourcePath
     public static bool IsPhysicalSource(string root, string? path)
     {
         if (path is null || !path.EndsWith(".cs", StringComparison.OrdinalIgnoreCase)) return false;
-        string[] segments = Relative(root, path).Split('/');
+        string relative = Relative(root, path);
+        // SDK/package sources remain compilation context, not repository-owned evidence.
+        if (relative == ".." || relative.StartsWith("../", StringComparison.Ordinal) || Path.IsPathRooted(relative)) return false;
+        string[] segments = relative.Split('/');
         if (segments.Contains("obj", StringComparer.OrdinalIgnoreCase) || segments.Contains("bin", StringComparer.OrdinalIgnoreCase)) return false;
-        RequireInside(root, path);
         if (!File.Exists(path)) throw new FileNotFoundException("A C# compile document is missing.", path);
         return true;
     }

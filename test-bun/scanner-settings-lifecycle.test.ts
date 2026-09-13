@@ -87,3 +87,47 @@ test.concurrent('install reports preparation failures automatically and retry sc
     expect((await loadAnnotatedArchitecture(root)).elements.flatMap(element => element.code).some(code => code.symbol === 'first')).toBe(true)
   } finally { await session.close(); await rm(root, { recursive: true, force: true }) }
 })
+
+test.concurrent('live scanning updates healthy evidence, reports every failure and clears errors after recovery', async () => {
+  const { root, source } = await project()
+  for (const id of ['broken', 'tool']) {
+    const directory = path.join(root, id)
+    await mkdir(directory)
+    await writeFile(path.join(directory, 'package.json'), JSON.stringify({ name: id, version: '1.0.0',
+      groma: { scanner: { id, entry: './index.ts' } } }))
+    await writeFile(path.join(directory, 'index.ts'), id === 'broken' ? 'export default {}' : `
+      import { stat } from 'node:fs/promises'
+      export default { id: 'tool', watch: { include: ['**/*.fixture'], exclude: [] }, async scan(root) {
+        if (await stat(root + '/tool.fail').then(() => true, () => false)) throw new Error('Tool failed')
+        return undefined
+      } }
+    `)
+  }
+  await writeFile(path.join(root, 'tool.fail'), '')
+  await writeScannerConfig(root, { scanners: [
+    { id: 'fixture', source }, { id: 'broken', source: './broken' }, { id: 'tool', source: './tool' },
+  ] })
+  let nextFold: (() => void) | undefined
+  const session = await createScannerSession(root, { onFold() { nextFold?.() } })
+  const blocked = () => session.state.scanners.filter(item => item.status === 'blocked').map(item => item.id).sort()
+  try {
+    await session.reconfigure()
+    expect(blocked()).toEqual(['broken', 'tool'])
+    expect(session.state.scanners.find(item => item.id === 'fixture')?.status).toBe('ready')
+    const changed = new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error('Healthy scanner did not process the source edit')), 3000)
+      nextFold = () => { clearTimeout(timer); resolve() }
+    })
+    await writeFile(path.join(root, 'ui/view.fixture'), 'changed')
+    await changed
+    nextFold = undefined
+    expect(blocked()).toEqual(['broken', 'tool'])
+    expect((await loadAnnotatedArchitecture(root)).elements.flatMap(element => element.code).some(code => code.symbol === 'changed')).toBe(true)
+    await rm(path.join(root, 'tool.fail'))
+    await session.change({ action: 'retry' })
+    expect(blocked()).toEqual(['broken'])
+    await session.change({ action: 'remove', id: 'broken' })
+    expect(blocked()).toEqual([])
+    expect(session.state.notice.tone).not.toBe('error')
+  } finally { await session.close(); await rm(root, { recursive: true, force: true }) }
+})

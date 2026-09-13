@@ -11,7 +11,9 @@ export async function typescriptProjects(api: API, root: string, files: string[]
   async function read(file: string): Promise<void> {
     if (configurations.has(file)) return
     const config = await api.parseConfigFile(file)
-    if (config.errors.length) throw new Error(`${file}: ${config.errors.map(error => error.text).join('\n')}`)
+    // An empty input set contributes no source; other config errors still block scanning.
+    const errors = config.errors.filter(error => error.code !== 18003)
+    if (errors.length) throw new Error(`${file}: ${errors.map(error => error.text).join('\n')}`)
     configurations.set(file, config)
     for (const reference of config.projectReferences ?? []) {
       const target = (await stat(reference.path)).isDirectory() ? path.join(reference.path, 'tsconfig.json') : reference.path

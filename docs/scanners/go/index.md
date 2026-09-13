@@ -78,7 +78,7 @@ for the shared contract.
 
 These facts do not define new OKF concepts or C4 levels. Packages are initial
 placement evidence, not proof of deployment boundaries. Core preserves curated
-file ownership, waits for all enabled scanners to succeed, and writes the
+file ownership, reconciles successful scanner observations, and writes the
 existing Markdown Code links and selected relationships. Ordinary Markdown
 readers can follow those links and read authored responsibilities. Groma
 interprets file ownership and its existing relationship sections.

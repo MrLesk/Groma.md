@@ -35,14 +35,14 @@ The selected qualification example is FluentValidation 12.0.0, commit `5365d9294
 
 Inputs are SDK-style `.csproj`, `.sln`, and `.slnx` files. When input is omitted, one root solution takes precedence over root projects. Multiple candidates require explicit selection. Standard .NET, Web and Worker SDK project headers are accepted, but this is not general framework qualification. Mixed-language graphs, legacy project formats, multiple target-framework contexts, and a file shared by multiple loaded project contexts are rejected.
 
-Each physical C# source has one inventory record. Generated `bin` and `obj` sources are excluded. Roslyn resolves overloads, generic methods, extensions, partial implementations and direct calls. Virtual, interface and delegate dispatch retain uncertainty where the runtime provider is not established. Implicit calls, initializers, generated operations, receiver/delegate value flow, dependency injection and network protocols are not resolved.
+Each physical C# source inside the repository has one inventory record. Generated `bin` and `obj` sources are excluded. SDK and package source files outside the repository remain compiler context, including validation, but do not produce file or operation evidence. Project references must stay inside the repository. Roslyn resolves overloads, generic methods, extensions, partial implementations and direct calls. Virtual, interface and delegate dispatch retain uncertainty where the runtime provider is not established. Implicit calls, initializers, generated operations, receiver/delegate value flow, dependency injection and network protocols are not resolved.
 
 Solutions and projects are source roots, with each project linked to its solution
 when a solution is selected. File records identify their project root. A directly
 selected project and its loaded project references are top-level source roots.
 Root membership and operations are temporary evidence. They are not C4 components or proof of business collaborations. Core owns curated source membership and relationship selection; ordinary Markdown readers retain readable descriptions and links under the existing OKF application profile. This plugin introduces no architecture metadata or map level.
 
-`settings` also accepts `configuration` (default `Debug`), `maxProjects` (128), `maxFiles` (20000), and `timeoutSeconds` (120). Exceeded limits fail the scan; they never publish truncated evidence. Any enabled scanner failure prevents reconciliation and preserves the prior map.
+`settings` also accepts `configuration` (default `Debug`), `maxProjects` (128), `maxFiles` (20000), and `timeoutSeconds` (120). Exceeded limits fail the scan; they never publish truncated evidence. A failed scanner preserves its saved evidence; other scanners can still update the map.
 
 ## Contributor package build
 
@@ -62,4 +62,4 @@ prevent a solution member or project reference from being scanned again as a
 standalone input. Independent projects are scanned as additional inputs. Each
 input selects its own installed SDK; all evidence paths stay relative to the
 repository. `settings.input` still selects one explicit solution or project.
-Any selected input failure fails the complete scan.
+Any selected input failure fails the C# observation. Other scanners can still update the map.

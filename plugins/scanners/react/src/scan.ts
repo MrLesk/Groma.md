@@ -171,14 +171,13 @@ class Evidence {
 }
 
 export async function checkReactReadiness(root: string): Promise<void> {
-  const projects = await frameworkProjects(root, 'react')
-  if (!projects.length) throw new Error('REACT_PROJECT_REQUIRED: No React project declaration was found.')
+  const projects = await frameworkProjects(root, 'react', ['.tsx'])
   for (const project of projects) reactProject(project, root)
 }
 
 export async function scanReact(root: string) {
   const parts = []
-  for (const project of await frameworkProjects(root, 'react')) {
+  for (const project of await frameworkProjects(root, 'react', ['.tsx'])) {
     const observation = await scanReactProject(project, root)
     if (observation) parts.push({ key: relative(root, project), observation })
   }

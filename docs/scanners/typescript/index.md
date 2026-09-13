@@ -12,7 +12,8 @@ These source roots and file memberships are evidence, not C4 ownership. Core pre
 ## Operations and callback wiring
 
 Each nested `tsconfig.json` and its referenced configurations supplies compiler
-options for its included files. The nearest containing configuration owns a file;
+options for its included files. Configurations with no matching inputs contribute
+no files; other configuration errors still stop the scan. The nearest containing configuration owns a file;
 a referenced configuration wins a tie with its entry configuration. Source files
 outside configured sets still receive source analysis with the default compiler
 options. Physical source files and operations remain single entries. Compiler contexts

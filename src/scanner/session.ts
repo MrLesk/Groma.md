@@ -1,11 +1,10 @@
 import { reconcileScanObservations } from '../core.ts'
-import { loadScannerRegistry, ScannerFailure } from './registry.ts'
+import { loadScannerRegistry, type ScanBatch } from './registry.ts'
 import { watchObservations } from './source-watch.ts'
 import { readScannerConfig } from './modules/config.ts'
 import type { ProjectReadiness } from './modules/readiness.ts'
 import { changeScannerSettings, readScannerSettings, type ScannerSettings, type ScannerSettingsAction } from './modules/settings.ts'
 import type { ScannerInstallOptions } from './modules/inventory.ts'
-import type { ScanObservation } from '@groma/scanner'
 
 /** Owns scanner execution, settings state and the one source-adapter subscription for an open viewer. */
 export async function createScannerSession(root: string, options: {
@@ -29,15 +28,15 @@ export async function createScannerSession(root: string, options: {
   }
   async function report(error: unknown) {
     const message = error instanceof Error ? error.message : String(error)
-    if (error instanceof ScannerFailure) checks = [...checks.filter(check => check.id !== error.scanner), {
-      id: error.scanner, package: 'found', project: 'blocked', message,
-    }]
     const next = await readScannerSettings(root, checks, options)
     publish({ ...next, notice: { tone: 'error', message } })
   }
-  async function fold(observations: ScanObservation[]) {
+  async function fold({ observations, failures }: ScanBatch) {
     await reconcileScanObservations(root, observations)
-    checks = observations.map(observation => ({ id: observation.scanner.id, package: 'found', project: 'ready', message: 'Scan completed.' }))
+    checks = [
+      ...observations.map((observation): ProjectReadiness => ({ id: observation.scanner.id, package: 'found', project: 'ready', message: 'Scan completed.' })),
+      ...failures.map((failure): ProjectReadiness => ({ id: failure.scanner, package: 'found', project: 'blocked', message: failure.message })),
+    ]
     publish(await readScannerSettings(root, checks, options))
     if (observations.length) await options.onFold?.()
   }

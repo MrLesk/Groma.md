@@ -1,5 +1,38 @@
 {
-  "scanners": [],
+  "scanners": [
+    {
+      "id": "angular",
+      "source": "./plugins/scanners/angular"
+    },
+    {
+      "id": "csharp",
+      "source": "./plugins/scanners/csharp"
+    },
+    {
+      "id": "go",
+      "source": "./plugins/scanners/go"
+    },
+    {
+      "id": "java",
+      "source": "./plugins/scanners/java"
+    },
+    {
+      "id": "react",
+      "source": "./plugins/scanners/react"
+    },
+    {
+      "id": "rust",
+      "source": "./plugins/scanners/rust"
+    },
+    {
+      "id": "typescript",
+      "source": "./plugins/scanners/typescript"
+    },
+    {
+      "id": "vue",
+      "source": "./plugins/scanners/vue"
+    }
+  ],
   "exclude": [
     "/scripts/"
   ]

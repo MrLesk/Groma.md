@@ -1,6 +1,6 @@
 import { architectureFindingsFor, formatArchitectureFindings } from './architecture-findings.ts'
 import { reconcileScanObservations } from './core.ts'
-import { loadScannerRegistry } from './scanner/registry.ts'
+import { loadScannerRegistry, type ScanBatch } from './scanner/registry.ts'
 import { watchObservations } from './scanner/source-watch.ts'
 import type { ScanSummary } from './types.ts'
 
@@ -19,15 +19,21 @@ export function formatScanReport(repositoryRoot: string, summary: ScanSummary): 
     const message = location ? `${location}: ${diagnostic.message}` : diagnostic.message
     return `${scanner.id} · ${diagnostic.severity} · ${diagnostic.code}: ${message}`
   }) ?? []
-  return [formatScanSummary(summary), ...diagnostics, ...conflicts, ...findings].join('\n')
+  const failures = summary.scannerFailures?.map(failure => `${failure.message} (saved scanner data kept)`) ?? []
+  return [formatScanSummary(summary), ...failures, ...diagnostics, ...conflicts, ...findings].join('\n')
+}
+
+async function reconcileBatch(root: string, { observations, failures }: ScanBatch): Promise<ScanSummary> {
+  const summary = await reconcileScanObservations(root, observations)
+  if (failures.length) summary.scannerFailures = failures.map(({ scanner, message }) => ({ scanner, message }))
+  return summary
 }
 
 export async function scanRepository(
   repositoryRoot: string,
 ): Promise<ScanSummary> {
   const registry = await loadScannerRegistry(repositoryRoot)
-  const observations = await registry.collectObservations(repositoryRoot)
-  return reconcileScanObservations(repositoryRoot, observations)
+  return reconcileBatch(repositoryRoot, await registry.collectObservations(repositoryRoot))
 }
 
 export async function watchScan(
@@ -40,8 +46,8 @@ export async function watchScan(
   const registry = await loadScannerRegistry(repositoryRoot)
   if (!registry.scannerIds.length) return { async close() {} }
   return watchObservations(repositoryRoot, registry, {
-    async onObservations(observations) {
-      const summary = await reconcileScanObservations(repositoryRoot, observations)
+    async onObservations(batch) {
+      const summary = await reconcileBatch(repositoryRoot, batch)
       await options.onFold?.(summary)
     },
     onError: options.onError,

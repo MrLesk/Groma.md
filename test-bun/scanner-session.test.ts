@@ -34,31 +34,35 @@ function revision(observations: ScanObservation[], id: string) {
 test.concurrent('a source session runs matching subscriptions and keeps unaffected evidence', async () => {
   const first = scanner('first'), second = scanner('second')
   const registry = createScannerRegistry([first.plugin, second.plugin], file => file.startsWith('excluded/'))
-  const baseline = await registry.collectObservations('.')
-  const changed = await registry.collectObservations('.', ['new.first'])
+  const baseline = (await registry.collectObservations('.')).observations
+  const changed = (await registry.collectObservations('.', ['new.first'])).observations
   expect([first.calls(), second.calls()]).toEqual([2, 1])
   expect(revision(changed, 'first')).toBe('2')
   expect(changed[1]).toBe(baseline[1])
   expect(registry.watchesFile('excluded/new.first')).toBe(false)
-  expect(await registry.collectObservations('.', ['excluded/new.first', 'readme.md'])).toEqual(changed)
+  expect((await registry.collectObservations('.', ['excluded/new.first', 'readme.md'])).observations).toEqual(changed)
   expect([first.calls(), second.calls()]).toEqual([2, 1])
   await registry.collectObservations('.', ['shared.config'])
   expect([first.calls(), second.calls()]).toEqual([3, 2])
 })
 
-test.concurrent('a failed scanner blocks publication until its pending work succeeds', async () => {
+test.concurrent('a failed scanner leaves healthy evidence available and recovers on a later scan', async () => {
   const first = scanner('first'), second = scanner('second')
   const registry = createScannerRegistry([first.plugin, second.plugin], () => false)
   await registry.collectObservations('.')
   second.fail(true)
-  await expect(registry.collectObservations('.', ['shared.config'])).rejects.toThrow()
+  const failed = await registry.collectObservations('.', ['shared.config'])
+  expect(failed.failures.map(error => error.scanner)).toEqual(['second'])
+  expect(failed.observations.map(item => item.scanner.id)).toEqual(['first'])
+  expect(revision(failed.observations, 'first')).toBe('2')
   expect([first.calls(), second.calls()]).toEqual([2, 2])
-  await expect(registry.collectObservations('.', ['changed.first'])).rejects.toThrow()
+  expect((await registry.collectObservations('.', ['changed.first'])).failures).toHaveLength(1)
   second.fail(false)
   const result = await registry.collectObservations('.', ['changed.second'])
   expect([first.calls(), second.calls()]).toEqual([3, 4])
-  expect(revision(result, 'first')).toBe('3')
-  expect(revision(result, 'second')).toBe('4')
+  expect(result.failures).toEqual([])
+  expect(revision(result.observations, 'first')).toBe('3')
+  expect(revision(result.observations, 'second')).toBe('4')
 })
 
 test.concurrent('a scanner that stops supporting a project removes its previous observation', async () => {
@@ -67,10 +71,10 @@ test.concurrent('a scanner that stops supporting a project removes its previous 
   await registry.collectObservations('.')
   first.unsupported()
   const result = await registry.collectObservations('.', ['shared.config'])
-  expect(result.map(observation => observation.scanner.id)).toEqual(['second'])
+  expect(result.observations.map(observation => observation.scanner.id)).toEqual(['second'])
 })
 
-test.concurrent('a failed batch waits for other scanners before rejecting', async () => {
+test.concurrent('a mixed batch waits for every scanner and returns its failures', async () => {
   const failed = scanner('failed')
   failed.fail(true)
   const started = Promise.withResolvers<void>()
@@ -81,11 +85,11 @@ test.concurrent('a failed batch waits for other scanners before rejecting', asyn
     async scan() { started.resolve(); await finish.promise; completed = true; return undefined },
   }
   const registry = createScannerRegistry([failed.plugin, slow], () => false)
-  const result = registry.collectObservations('.').catch(error => {
+  const result = registry.collectObservations('.').then(batch => {
     expect(completed).toBe(true)
-    return error
+    return batch
   })
   await started.promise
   finish.resolve()
-  expect(await result).toBeInstanceOf(Error)
+  expect((await result).failures.map(error => error.scanner)).toEqual(['failed'])
 })

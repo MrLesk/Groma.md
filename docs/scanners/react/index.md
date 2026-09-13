@@ -68,16 +68,19 @@ direct bindings produce `unsupported-react-binding` diagnostics and no certain
 claim. Components that cannot resolve to a supported source function do not
 establish a callback interaction.
 
-TSX and TypeScript edits use the existing watch lifecycle. All enabled scanners
-must complete before architecture changes. See [validation](validation.md) for
+TSX and TypeScript edits use the existing watch lifecycle. Healthy scanners update the architecture while failed scanners keep their saved evidence. See [validation](validation.md) for
 the executed artifact checks and remaining release gates.
 
 ## Nested projects
 
 Run Groma from the repository root. The scanner finds package declarations in
 tracked and unignored files, including nested apps and libraries. Dependencies,
-dev dependencies, peer dependencies and optional dependencies identify framework
-projects. Each compiler uses that project's configuration and installed dependencies;
+dev dependencies, peer dependencies and optional dependencies identify candidates.
+A candidate also needs a tracked or unignored `tsconfig.json` and TSX source
+files belonging to that package, outside nested packages. Declaration files and
+inactive fixtures with a `.fixture` suffix do not qualify. Packages with only
+framework tooling dependencies are skipped. No matching project produces no evidence. Each compiler uses that project's configuration and installed dependencies;
 imported source in sibling repository libraries keeps its original source path.
-Readiness checks all selected projects. A project error fails the complete scan.
+Readiness checks all selected projects. An invalid selected project fails this scanner's observation; other scanners
+can still update the architecture.
 Source and nested package/configuration changes use the shared scanner watch flow.
