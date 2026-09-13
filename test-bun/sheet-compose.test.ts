@@ -6,6 +6,8 @@ import { containerFlow } from '../src/sheet/compose.ts'
 import { MARGIN, contains, unionRects } from '../src/sheet/grid.ts'
 import { ISLAND_FONT, labelBand } from '../src/sheet/measure.ts'
 import { placeWorld } from '../src/sheet/place.ts'
+import { sheetScene } from '../src/sheet/scene.ts'
+import { ROUTE_SPACING, ROUTE_UNIT, routeReach } from '../src/sheet/route-space.ts'
 import type { ArchitectureWorld } from '../src/types.ts'
 import { box, uses } from './helpers.ts'
 
@@ -101,4 +103,32 @@ test.concurrent('final container positions determine the system and sheet bounds
   assert.equal(placement.sheet.d, islands.gy + islands.d + MARGIN)
   assert.deepEqual(placeWorld(world), placement)
   assert.deepEqual(world, original)
+})
+
+
+test.concurrent('mediator composition preserves connection space as the same flow becomes busier', () => {
+  const world = flowWorld()
+  world.relationships = world.relationships.flatMap(relationship =>
+    Array.from({ length: 8 }, (_, index) => ({ ...relationship, id: `${relationship.id}:${index}` })))
+  const before = structuredClone(world)
+  const scene = sheetScene(world)
+  const flow = containerFlow(scene, 'observed:service', world.relationships)!
+  const slabs = new Map(scene.slabs.map(slab => [slab.representationId, slab]))
+  const reach = routeReach(flow.connections.reduce((count, connection) => count + connection.weight, 0))
+  const right = (id: string) => slabs.get(id)!.rect.gx + slabs.get(id)!.rect.w
+  const mediatorLeft = Math.min(...flow.mediators.map(id => slabs.get(id)!.rect.gx))
+  const mediatorRight = Math.max(...flow.mediators.map(right))
+  assert.ok(mediatorLeft - Math.max(...flow.entries.map(right)) >= 2 * reach)
+  assert.ok(slabs.get(flow.core)!.rect.gx - mediatorRight >= 2 * reach)
+  assert.equal(scene.routes.length, world.relationships.length)
+  assert.deepEqual(world, before)
+})
+
+test.concurrent('container composition retains the enclosing system port capacity', () => {
+  const world = flowWorld()
+  world.relationships.push(...Array.from({ length: 96 }, (_, index) => uses(`system:${index}`, 'architect', 'service')))
+  const scene = sheetScene(world)
+  const island = scene.islands.find(item => item.kind === 'system')!
+  assert.ok(Math.min(island.rect.w, island.rect.d) * ROUTE_UNIT / 2 >= 2 * 95 * ROUTE_SPACING)
+  assert.equal(scene.routes.length, world.relationships.length)
 })

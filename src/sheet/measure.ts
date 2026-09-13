@@ -1,8 +1,9 @@
 import type { AnnotatedElement, CodeReference, Origin } from '../types.ts'
 import type { BuildingFloor, Shape } from './types.ts'
+import { ROUTE_UNIT, portSideCells } from './route-space.ts'
 
 /** Plane pixels per cell: the roof text is laid out in these units and projected with the roof. */
-export const PLANE = 24
+export const PLANE = ROUTE_UNIT
 export const ROOF_FONT = 11
 export const COMPONENT_FONT = 16
 /** Advance of one monospace glyph as a fraction of the font size. */
@@ -21,8 +22,6 @@ export const GROUP_FONT = 22
 /** A roof line wider than this wraps, when the name has a space to wrap at. */
 const MAX_LINE_CELLS = 4
 const MIN_SIDE = 2
-/** A building touched by this many routes deepens so its front sides keep free ports. */
-const HUB_DEGREE = 8
 /** Height units of the observed file with the most code lines. */
 const MAX_HEIGHT_UNITS = 4
 /** Most visible source-file groups in one component building. */
@@ -231,7 +230,7 @@ export function roofBlock(lines: readonly string[], size = ROOF_FONT): { w: numb
   }
 }
 
-/** Footprint in cells: the roof holds the name's block (a box on its top tier, a round building inside its circle, a pill along its straight middle); a hub deepens for its ports. */
+/** The roof holds its name and every wall has room for the building's connection ports. */
 export function footprintOf(
   lines: readonly string[],
   shape: Shape,
@@ -239,19 +238,20 @@ export function footprintOf(
   size = ROOF_FONT,
 ): { w: number; d: number } {
   const block = roofBlock(lines, size)
+  const portSide = Math.ceil(portSideCells(degree))
   if (shape.kind === 'round') {
-    const side = Math.max(MIN_SIDE, Math.ceil(Math.hypot(block.w, block.d) / PLANE))
+    const side = Math.max(MIN_SIDE, portSide, Math.ceil(Math.hypot(block.w, block.d) / PLANE))
     return { w: side, d: side }
   }
   if (shape.kind === 'pill') {
     /** A semicircle of radius d / 2 at each end adds d to the straight middle. */
-    const d = Math.max(MIN_SIDE, Math.ceil(block.d / PLANE))
+    const d = Math.max(MIN_SIDE, portSide, Math.ceil(block.d / PLANE))
     return { w: Math.ceil(block.w / PLANE) + d, d }
   }
   const w = Math.ceil(block.w / PLANE)
   const d = Math.ceil(block.d / PLANE)
   return {
-    w: Math.max(MIN_SIDE, w),
-    d: Math.max(MIN_SIDE, d, degree >= HUB_DEGREE ? 3 : MIN_SIDE),
+    w: Math.max(MIN_SIDE, portSide, w),
+    d: Math.max(MIN_SIDE, portSide, d),
   }
 }

@@ -5,8 +5,8 @@
  * the half cell of ground a floor hides, is not a matter of taste and lives
  * in grid.ts.
  *
- * Placement values are tuned against the current Groma map and its focused
- * fixtures; route geometry has its own pixel-space constants.
+ * These values set minimum visual gaps. Connection space is measured by
+ * route-space.ts and can require larger envelopes.
  */
 
 /* How buildings stand, in cells ------------------------------------------ */
@@ -21,13 +21,6 @@ export const GAP = 2
 export const NESTED_CONTENT_PAD = 2
 /** Cells of screen width between islands. More separates the actors, the systems and the externals; the sheet widens by as much. */
 export const ISLAND_GAP = 3
-/**
- * Cells of visible ground a corridor keeps behind a roof. An arrow leaves its
- * port and enters its goal along two lanes each, so one cell is the least it
- * can carry; more pushes the neighbours of tall buildings further north and
- * west and widens their surface.
- */
-export const CORRIDOR = 1
 
 /* How buildings are arranged: costs in cells ----------------------------- */
 

@@ -3,8 +3,8 @@ import type { Placement } from './place.ts'
 import { MARGIN, translate, unionRects } from './grid.ts'
 import { ISLAND_FONT, ISLAND_SPACING, labelBand, nameCells } from './measure.ts'
 import type { CellRect } from './types.ts'
+import { connectionCounts, portSideCells, routeReach } from './route-space.ts'
 
-const ROUTE_SPACE_SCALE = 1.18
 const SURFACE_INSET = 2
 const UNIT_GAP = 3
 const MIN_COLUMN_GAP = 2
@@ -65,39 +65,6 @@ function moveIsland(
   }
 }
 
-function openSystemRouteSpace(
-  placement: Placement,
-  islandKey: string,
-  membership: ReturnType<typeof islandMembership>,
-): number {
-  const island = placement.islands.find(candidate => candidate.key === islandKey)!
-  const root = { ...island.rect }
-  const scalePosition = (rect: CellRect): CellRect => ({
-    ...rect,
-    gx: root.gx + (rect.gx - root.gx) * ROUTE_SPACE_SCALE,
-    gy: root.gy + (rect.gy - root.gy) * ROUTE_SPACE_SCALE,
-  })
-  island.rect = { ...root, w: root.w * ROUTE_SPACE_SCALE, d: root.d * ROUTE_SPACE_SCALE }
-  for (const slab of placement.slabs) if (slab.island === islandKey) {
-    slab.rect = scalePosition(slab.rect)
-    slab.rect.w *= ROUTE_SPACE_SCALE
-    slab.rect.d *= ROUTE_SPACE_SCALE
-  }
-  for (const building of placement.buildings) {
-    if (membership.buildingIsland.get(building.representationId) === islandKey) {
-      building.rect = scalePosition(building.rect)
-    }
-  }
-  for (const zone of placement.zones) {
-    if (membership.zoneIsland.get(zone.key) === islandKey) {
-      zone.rect = scalePosition(zone.rect)
-      zone.rect.w *= ROUTE_SPACE_SCALE
-      zone.rect.d *= ROUTE_SPACE_SCALE
-    }
-  }
-  return island.rect.w - root.w
-}
-
 function owners(placement: Placement): Map<string, string> {
   const result = new Map<string, string>()
   for (const island of placement.islands) {
@@ -110,7 +77,7 @@ function owners(placement: Placement): Map<string, string> {
 }
 
 function connections(
-  relationships: readonly AnnotatedRelationship[],
+  relationships: readonly Pick<AnnotatedRelationship, 'source' | 'target'>[],
   ownerByElement: ReadonlyMap<string, string>,
 ): Connection[] {
   const grouped = new Map<string, Connection>()
@@ -146,7 +113,7 @@ function mediatorScore(id: string, mediators: ReadonlySet<string>, flow: readonl
 export function containerFlow(
   placement: Placement,
   systemIsland: string,
-  relationships: readonly AnnotatedRelationship[],
+  relationships: readonly Pick<AnnotatedRelationship, 'source' | 'target'>[],
 ): ContainerFlow | null {
   const units = placement.slabs.filter(slab => slab.island === systemIsland)
   if (units.length < 2) return null
@@ -233,7 +200,7 @@ function applyPositions(
 function composeSystem(
   placement: Placement,
   systemIsland: string,
-  relationships: readonly AnnotatedRelationship[],
+  relationships: readonly Pick<AnnotatedRelationship, 'source' | 'target'>[],
 ): number {
   const flow = containerFlow(placement, systemIsland, relationships)
   if (!flow || flow.mediators.length === 0) return 0
@@ -242,17 +209,25 @@ function composeSystem(
   const units = new Map(placement.slabs
     .filter(slab => slab.island === systemIsland)
     .map(slab => [slab.representationId, slab]))
+  const demand = flow.connections.filter(connection => units.has(connection.source) || units.has(connection.target))
+    .reduce((count, connection) => count + connection.weight, 0)
+  const ownPorts = connectionCounts(relationships).get(island.key) ?? 0
+  const portSide = Math.ceil(portSideCells(ownPorts))
+  const reach = routeReach(demand)
+  const inset = Math.max(SURFACE_INSET, reach, routeReach(ownPorts))
+  const unitGap = Math.max(UNIT_GAP, 2 * reach)
+  const minimumColumnGap = Math.max(MIN_COLUMN_GAP, 2 * reach)
   const positions = new Map([...units].map(([id, unit]) => [id, { ...unit.rect }]))
   const entries = flow.entries.map(id => units.get(id)!)
   const mediators = flow.mediators.map(id => units.get(id)!)
   const core = units.get(flow.core)!
-  const innerTop = island.rect.gy + SURFACE_INSET
-  const innerBottom = island.rect.gy + island.rect.d - SURFACE_INSET - labelBand(ISLAND_FONT)
+  const innerTop = island.rect.gy + inset
+  const innerBottom = island.rect.gy + island.rect.d - inset - labelBand(ISLAND_FONT)
   const entryRight = Math.max(...entries.map(unit => unit.rect.gx + unit.rect.w))
   const mediatorWidth = Math.max(...mediators.map(unit => unit.rect.w))
   const occupiedWidth = entryRight + mediatorWidth + core.rect.w
-  const availableRight = island.rect.gx + island.rect.w - SURFACE_INSET
-  const extraWidth = Math.max(0, occupiedWidth + 2 * MIN_COLUMN_GAP - availableRight)
+  const availableRight = island.rect.gx + island.rect.w - inset
+  const extraWidth = Math.max(0, occupiedWidth + 2 * minimumColumnGap - availableRight)
   const freeWidth = availableRight + extraWidth - occupiedWidth
   const columnGap = freeWidth / 2
   const mediatorX = entryRight + columnGap
@@ -264,7 +239,7 @@ function composeSystem(
     return { total: result.total + connected.total, weight: result.weight + connected.weight }
   }, { total: 0, weight: 0 })
   const mediatorHeight = mediators.reduce((total, unit) => total + unit.rect.d, 0)
-    + UNIT_GAP * (mediators.length - 1)
+    + unitGap * (mediators.length - 1)
   const currentCentre = mediators.reduce((total, unit) => total + centre(unit.rect).y, 0) / mediators.length
   const preferredCentre = preferred.weight > 0 ? preferred.total / preferred.weight : currentCentre
   let mediatorY = clamp(preferredCentre - mediatorHeight / 2, innerTop, innerBottom - mediatorHeight)
@@ -274,7 +249,7 @@ function composeSystem(
       gx: mediatorX + (mediatorWidth - mediator.rect.w) / 2,
       gy: mediatorY,
     })
-    mediatorY += mediator.rect.d + UNIT_GAP
+    mediatorY += mediator.rect.d + unitGap
   }
 
   const upstream = new Set([...entryIds, ...flow.mediators])
@@ -290,26 +265,25 @@ function composeSystem(
   })
 
   const occupied = unionRects([...positions.values()])!
-  const dx = island.rect.gx + SURFACE_INSET - occupied.gx
-  const dy = island.rect.gy + SURFACE_INSET - occupied.gy
+  const dx = island.rect.gx + inset - occupied.gx
+  const dy = island.rect.gy + inset - occupied.gy
   for (const [id, rect] of positions) positions.set(id, translate(rect, dx, dy))
-  island.rect.w = Math.max(occupied.w + 2 * SURFACE_INSET, nameCells(island.name.toUpperCase(), ISLAND_FONT, ISLAND_SPACING))
-  island.rect.d = occupied.d + 2 * SURFACE_INSET + labelBand(ISLAND_FONT)
+  island.rect.w = Math.max(occupied.w + 2 * inset, nameCells(island.name.toUpperCase(), ISLAND_FONT, ISLAND_SPACING), portSide)
+  island.rect.d = Math.max(occupied.d + 2 * inset + labelBand(ISLAND_FONT), portSide)
   applyPositions(placement, units, positions)
   return island.rect.w - originalWidth
 }
 
-/** Opens route space, then composes each internal system from its weighted container flow. */
+/** Composes weighted container flow while preserving measured connection space. */
 export function composePlacement(
   placement: Placement,
-  relationships: readonly AnnotatedRelationship[],
+  relationships: readonly Pick<AnnotatedRelationship, 'source' | 'target'>[],
 ): Placement {
   const membership = islandMembership(placement)
   let shiftX = 0
   for (const island of [...placement.islands].sort((a, b) => a.rect.gx - b.rect.gx)) {
     if (shiftX !== 0) moveIsland(placement, island.key, shiftX, 0, membership)
     if (island.kind === 'system') {
-      shiftX += openSystemRouteSpace(placement, island.key, membership)
       shiftX += composeSystem(placement, island.key, relationships)
     }
   }
