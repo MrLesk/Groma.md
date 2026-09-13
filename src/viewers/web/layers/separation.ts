@@ -45,7 +45,7 @@ function shift(point: Point, lift: number): Point {
   return { x: point.x, y: point.y - lift }
 }
 
-function shiftText(text: SurfaceText, lift: number): SurfaceText {
+function shiftText<T extends SurfaceText>(text: T, lift: number): T {
   return { ...text, origin: shift(text.origin, lift) }
 }
 

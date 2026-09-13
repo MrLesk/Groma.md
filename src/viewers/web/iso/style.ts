@@ -155,8 +155,7 @@ export const mapCss = `
   #map .face.left { fill: var(--left-fill); }
   #map .actor .face { fill: var(--paper); }
   #map .zone .ground { fill: url(#hatch-ground); }
-  /* the sheet's name chips only: the Live work island has chips of its own that must stay clickable */
-  #map .pattern, #map > .map-surface .chip { stroke: none; pointer-events: none; }
+  #map .pattern { stroke: none; pointer-events: none; }
   #map .island.actors .pattern { fill: url(#dots); }
   #map .island.external .pattern { fill: url(#cross); }
   #map .slab .pattern { fill: url(#grain); }
@@ -167,10 +166,14 @@ export const mapCss = `
   #map .building.external .pattern.left { fill: url(#cross-left); }
   #map .building.external .pattern.right { fill: url(#cross-right); }
   #map .camera[data-facades-hidden] .building .pattern { display: none; }
-  #map > .map-surface .chip { fill: var(--paper); }
+  #map .label-hit { fill: transparent; stroke: none; pointer-events: all; }
+  #map .label-leader {
+    stroke: var(--map-line); stroke-width: calc(var(--stroke) * var(--emphasis, 1) * var(--weight, 1));
+    vector-effect: non-scaling-stroke; pointer-events: none;
+  }
   #map .ghost { opacity: 0.8; }
   #map .ghost .face, #map .ghost .ground { fill: none; pointer-events: all; }
-  #map .ghost .pattern, #map .ghost .chip { display: none; }
+  #map .ghost .pattern { display: none; }
   #map .ghost.draft .face, #map .ghost.draft .ground,
   #map .route-base.ghost.draft, #map .route.ghost.draft:not(.touched):not(.lit) .line { stroke-dasharray: 4 3; }
   #map .text { fill: var(--ink); pointer-events: none; }
@@ -213,5 +216,7 @@ export const mapCss = `
   #map .building.lit > .label .text, #map .slab.lit > .label .text, #map .island.lit > .label .text {
     fill: var(--ink); font-weight: 600;
   }
+  #map :is(.island, .slab):is(.selected, .touched, .lit, .context) > .surface-label .text { fill: var(--highlight); }
+  #map :is(.island, .slab):is(.selected, .touched, .lit, .context) > .surface-label .label-leader { stroke: var(--highlight); }
   ${layerCss}
 `

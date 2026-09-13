@@ -280,14 +280,15 @@ Actors, external systems, and each internal system are flat islands
 on the sheet, in one row along the grid from west to east so flows
 read that way: the actors island, then the systems, then the external
 systems; on screen the row runs from the upper left down to the right.
-The actors and external islands are squares with their buildings
-stacked in one column and centred above their name band, each a little bigger than what
+The actors and external islands have their buildings stacked in one column
+and centered above an external name band, each a little bigger than what
 stands on it. Inside every system island, slab and zone,
 relationships decide where the children stand. These three nested
-surfaces keep two cells of padding around their contents, plus a front strip
-measured for their title. Actors and external islands keep one cell around
-their contents above the title strip. Surface names sit close to the outer edge;
-the extra clearance is above them, toward the contents. The
+surfaces keep two cells of padding around their contents. Actors and external
+islands keep one cell around their contents. Every packed surface reserves a
+front band outside its painted boundary for its title and a short leader line.
+The parent includes each child's complete envelope, so nested names stay clear
+of sibling contents and the parent's boundary. The
 plain system surface sits half a tint step lighter on the same grey
 scale, so the broadest internal boundary stays in the background.
 The children something outside the surface feeds stand first, in a
@@ -339,12 +340,12 @@ external island crosses, container slabs a faint grain, and system
 islands have none; every pattern is laid in the plane it lies on. Facade
 patterns stop below readable size while every floor face remains, and the
 minor grid yields to its major lines only at the most distant scale.
-Sibling groups are flat hatched zones around their members. A
-translucent chip lies under every island, slab and zone name. Line
+Sibling groups are flat hatched zones around their members. Their names use
+the same external label treatment as islands and slabs. Line
 style means origin: observed items are solid, draft ghosts dashed,
 and only a route leaving an element an active
 task touches for one it does not adds accent dots; ghosts are hollow,
-with no fill, pattern or chip, and slightly faded.
+with no fill or pattern, and slightly faded.
 
 Weight follows depth, like heading levels: islands, slabs, buildings
 and routes each sit one level below the one before, every level 1.4
@@ -358,13 +359,15 @@ and every stroke scales with the square root of the zoom relative to
 fit, between three quarters and twice its fit width. Island, slab,
 zone, and building names always show.
 
-Names lie on the surfaces they belong to, skewed with the sheet: a
-building's name on its roof, wrapped onto two lines when it is long,
-and an island's, slab's, or zone's name in the free band along its
-front edge. Text size follows the visible hierarchy: project title at 52 plane
+Building names stay on their roofs, wrapped onto two lines when long. Island,
+slab, and zone names sit below their own front boundaries, centered on a short
+leader line. Names and leaders follow the sheet plane in both isometric and
+2D overhead views. System and container labels select their owning element;
+their text and leader share the boundary's selection and lit-state highlight.
+Text size follows the visible hierarchy: project title at 52 plane
 pixels, systems at 38, containers at 29, groups at 22, and components at 16.
-Roofs, title strips, and the project plate grow to fit their text. Surface names
-stay close to the outer edge, with extra clearance toward the contents above.
+Roofs, external label bands, and the project plate grow to fit their text.
+Camera fit includes the complete surface envelopes, including external labels.
 Groups remain visual groupings within their existing parent.
 
 Routes follow the lattice: one route per authored relationship,

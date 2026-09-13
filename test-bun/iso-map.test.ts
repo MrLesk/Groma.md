@@ -4,7 +4,7 @@ import { test } from 'bun:test'
 
 import { loadAnnotatedArchitecture } from '../src/core.ts'
 import { ROOF_SHADOW, centredRect } from '../src/sheet/grid.ts'
-import { CONTAINER_FONT, GROUP_FONT, ISLAND_FONT, PLANE, SURFACE_PAD, buildingFont, curved, labelBand, labelHeight, roofBlock, textPadding, textWidth } from '../src/sheet/measure.ts'
+import { CONTAINER_FONT, GROUP_FONT, ISLAND_FONT, PLANE, SURFACE_PAD, buildingFont, curved, labelHeight, roofBlock, textPadding, textWidth } from '../src/sheet/measure.ts'
 import { sheetScene } from '../src/sheet/scene.ts'
 import type { Building, RoutePoint, SheetScene } from '../src/sheet/types.ts'
 import type { Bounds, Point } from '../src/types.ts'
@@ -24,8 +24,10 @@ import {
   project,
   projectScene,
 } from '../src/viewers/web/iso/project.ts'
-import type { ProjectedScene } from '../src/viewers/web/iso/project.ts'
-import { box, openclawFixtureRoot, viewerFixtureRoot, worldOf } from './helpers.ts'
+import type { ProjectedScene, ProjectionView } from '../src/viewers/web/iso/project.ts'
+import { presentScene } from '../src/viewers/web/iso/presentation.ts'
+import { NESTED_POSE, OVERHEAD_POSE } from '../src/viewers/web/layers/orbit.ts'
+import { box, openclawFixtureRoot, repositoryRoot, viewerFixtureRoot, worldOf } from './helpers.ts'
 
 const profile = (title: string, overview: string): ProjectProfile => ({
   title,
@@ -311,19 +313,64 @@ test.concurrent('curved roof titles stay centered in their owning shape', async 
   }
 })
 
-test.concurrent('surface text fits its reserved front band', async () => {
-  const scene = await fixtureScene(viewerFixtureRoot)
-  const surfaces = [
-    ...scene.islands.map(({ island, text }) => ({ rect: island.rect, text, size: ISLAND_FONT })),
-    ...scene.slabs.map(({ slab, text }) => ({ rect: slab.rect, text, size: CONTAINER_FONT })),
-    ...scene.zones.map(({ zone, text }) => ({ rect: zone.rect, text, size: GROUP_FONT })),
-  ]
-  for (const { rect, text, size } of surfaces) {
-    assert.deepEqual(text.origin, project(rect.gx, rect.gy + rect.d - labelHeight(size) / PLANE, 0))
-    assert.ok(labelHeight(size) <= labelBand(size) * PLANE)
-    for (const line of text.lines) assert.ok(textWidth(line, size) + 2 * SURFACE_PAD <= rect.w * PLANE)
+/** Inverse of the ground plane, also locating lifted roofs over the cells they hide. */
+function groundPoint(point: Point, view: ProjectionView): Point {
+  const u = project(1, 0, 0, view)
+  const v = project(0, 1, 0, view)
+  const determinant = u.x * v.y - u.y * v.x
+  return {
+    x: (point.x * v.y - point.y * v.x) / determinant,
+    y: (u.x * point.y - u.y * point.x) / determinant,
   }
-})
+}
+
+for (const mode of ['iso', '2d'] as const) {
+  test.concurrent(`${mode} external labels clear their surfaces and roofs and fit the camera`, async () => {
+    const world = await loadAnnotatedArchitecture(`${repositoryRoot}/test/fixtures/plain-view`)
+    const sheet = sheetScene(world)
+    const before = structuredClone(sheet)
+    const scene = presentScene(sheet, projectProfile, mode, mode === 'iso' ? NESTED_POSE : OVERHEAD_POSE)
+    const surfaces = [
+      ...scene.islands.map(({ island, polygon, text }) => ({ rect: island.rect, polygon, text, size: ISLAND_FONT })),
+      ...scene.slabs.map(({ slab, faces, text }) => ({ rect: slab.rect, polygon: faces.find(face => face.side === 'top')!.points, text, size: CONTAINER_FONT })),
+      ...scene.zones.map(({ zone, polygon, text }) => ({ rect: zone.rect, polygon, text, size: GROUP_FONT })),
+    ]
+    assert.ok(scene.zones.length > 0 && scene.slabs.length > 0)
+    const labels = surfaces.map(({ rect, polygon, text, size }) => {
+      const origin = groundPoint(text.origin, scene.view)
+      const body = screenBox(polygon.map(point => groundPoint(point, scene.view)))
+      const label = {
+        x: origin.x, y: origin.y + 3 * SURFACE_PAD / PLANE,
+        width: text.width / PLANE, height: size * 1.1 / PLANE,
+      }
+      assert.ok(Math.abs(origin.y - (body.y + body.height)) < 1e-8, 'leader starts on the boundary')
+      assert.ok(label.y > body.y + body.height, 'text is outside its own surface')
+      assert.ok(Math.abs(label.x + label.width / 2 - (rect.gx + rect.w / 2)) < 1e-8, 'label is centered')
+      assert.ok(label.x >= rect.gx && label.x + label.width <= rect.gx + rect.w)
+      assert.ok(label.y + label.height <= rect.gy + rect.d + 1e-8, 'label fits the packed envelope')
+      return label
+    })
+    const roofs = scene.buildings.flatMap(item => item.floors.flatMap(floor => floor
+      .filter(face => face.side === 'top')
+      .map(face => screenBox(face.points.map(point => groundPoint(point, scene.view))))))
+    for (const [index, label] of labels.entries()) {
+      assert.ok(roofs.every(roof => !overlaps(label, roof)), 'labels clear building roofs')
+      assert.ok(labels.slice(index + 1).every(other => !overlaps(label, other)), 'nested labels do not overlap')
+    }
+    for (const viewport of [{ width: 1200, height: 400 }, { width: 400, height: 1200 }]) {
+      const camera = fitCamera(scene.bounds, viewport)
+      for (const { text, size } of surfaces) {
+        for (const [x, y] of [[0, 0], [text.width, 0], [0, labelHeight(size)], [text.width, labelHeight(size)]]) {
+          const delta = project(x! / PLANE, y! / PLANE, 0, scene.view)
+          const px = (text.origin.x + delta.x) * camera.k + camera.x
+          const py = (text.origin.y + delta.y) * camera.k + camera.y
+          assert.ok(px >= 0 && px <= viewport.width && py >= 0 && py <= viewport.height, 'camera includes labels and leaders')
+        }
+      }
+    }
+    assert.deepEqual(sheet, before)
+  })
+}
 
 
 test.concurrent('projecting a frozen world leaves it untouched', async () => {

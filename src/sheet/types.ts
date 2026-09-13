@@ -25,6 +25,7 @@ export interface Island {
   name: string
   /** The system element, for system islands only. */
   element: SheetItem | null
+  /** Packed envelope including the external label band along +gy. */
   rect: CellRect
 }
 
@@ -35,12 +36,14 @@ export interface Zone {
   /** Island key or slab representation id the zone lies on. */
   parent: string
   members: string[]
+  /** Packed envelope including the external label band along +gy. */
   rect: CellRect
 }
 
 /** A container: a slab level with its system island. */
 export interface Slab extends SheetItem {
   island: string
+  /** Packed envelope including the external label band along +gy. */
   rect: CellRect
 }
 
