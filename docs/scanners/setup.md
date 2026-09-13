@@ -9,16 +9,27 @@ The same screen groups **Installed**, **Missing on this computer**, then
 scanner name, package or technology. Recommendations give a short reason;
 **Details** reveals the source, matching files and diagnostics inline.
 
-**Add scanner** accepts an exact npm package version, Git source or local package
-path. **Install** restores a missing project selection or adds and installs a
-confirmed recommendation. Recommendations without a compatible source cannot be
-installed; Details explains why. For a missing local package, restore its
-directory. **Remove from project** changes this
-project's selection and keeps saved architecture. Scanners validate their requirements
-automatically when scanning. A failed scanner shows its error and **Retry** to run
-the project scan again after fixing the problem. **Update** requires an explicit version source for the same npm
-package or Git repository. Local packages run directly from their selected path.
-In the terminal, `/` edits search, Enter keeps the filter, and Escape clears it
+**Install** selects a published stable release for this Groma version and
+computer, saves its exact version, and scans. **Install recommended scanners**
+performs that flow for all current recommendations. **Install missing scanners**
+restores the exact selections shared by the team and scans. Both actions keep
+successful installations if another package fails; Retry attempts the remaining
+work. Existing selections are never silently upgraded.
+
+**Add scanner** accepts a package name, exact npm version, Git source or local
+package path. Bare names use the same published-release selection. For a missing
+local package, restore its directory. **Remove from project** keeps saved
+architecture. **Update** requires an explicit version source for the same npm
+package or Git repository.
+
+Scanners validate project requirements when scanning. A failed scanner shows its
+error and **Retry** after fixing the problem. Download and release-selection
+failures show the affected package, the next step and **Retry installation**.
+Full error output is available inline through Details in the terminal. Groma does
+not install project dependencies or development tools on the user's behalf.
+
+In the terminal, `i` installs recommended scanners, `m` installs missing scanners,
+and `r` retries a failed installation. `/` edits search, Enter keeps the filter, and Escape clears it
 while editing. `d` toggles details; Page Up/Down scrolls the open details or moves
 through the list. Web details expand inside the selected row.
 
@@ -32,7 +43,7 @@ architecture coverage. Official and third-party plugins use the same rules.
 The live session watches relevant source declarations through the scanner adapter,
 including with no scanner selected so new projects can appear in settings. Only
 installed project selections without known metadata incompatibilities execute scans.
-An incompatible Groma or project technology version blocks the plugin before its
+An incompatible Groma API version blocks the plugin before its
 code is loaded, including preparation checks. Settings show the reason; other
 eligible scanners can still run. An empty observation set does not
 write architecture. Missing packages do not prevent available scanners from
@@ -64,9 +75,9 @@ exact package versions. Disable an existing scanner explicitly with
 ## Package availability and project readiness
 
 `groma scanner discover` reads declarations and reports project matches and official candidates;
-it does not run plugins or install anything. An unavailable candidate has no
-verified release and cannot be selected for installation. The current optional
-catalog entries remain unavailable until their releases are qualified.
+it does not run plugins or install anything. Detection offers a package name.
+Install resolves a published release for Groma and this computer; the scanner
+then validates the project tooling and language support.
 
 `groma scanner list` reports whether each configured package is found or missing without executing it. `groma scanner check` separately loads
 enabled plugins and runs their preparation checks:

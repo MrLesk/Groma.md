@@ -4,6 +4,7 @@ import { watchObservations } from './source-watch.ts'
 import { readScannerConfig } from './modules/config.ts'
 import type { ProjectReadiness } from './modules/readiness.ts'
 import { changeScannerSettings, readScannerSettings, type ScannerSettings, type ScannerSettingsAction } from './modules/settings.ts'
+import type { ScannerInstallOptions } from './modules/inventory.ts'
 import type { ScanObservation } from '@groma/scanner'
 
 /** Owns scanner execution, settings state and the one source-adapter subscription for an open viewer. */
@@ -11,8 +12,8 @@ export async function createScannerSession(root: string, options: {
   scan?: boolean
   onSettings?: (settings: ScannerSettings) => void
   onFold?: () => void | Promise<void>
-} = {}) {
-  let state = await readScannerSettings(root)
+} & ScannerInstallOptions = {}) {
+  let state = await readScannerSettings(root, [], options)
   let checks: ProjectReadiness[] = []
   let watcher: Awaited<ReturnType<typeof watchObservations>> | undefined
   let config = ''
@@ -31,13 +32,13 @@ export async function createScannerSession(root: string, options: {
     if (error instanceof ScannerFailure) checks = [...checks.filter(check => check.id !== error.scanner), {
       id: error.scanner, package: 'found', project: 'blocked', message,
     }]
-    const next = await readScannerSettings(root, checks)
+    const next = await readScannerSettings(root, checks, options)
     publish({ ...next, notice: { tone: 'error', message } })
   }
   async function fold(observations: ScanObservation[]) {
     await reconcileScanObservations(root, observations)
     checks = observations.map(observation => ({ id: observation.scanner.id, package: 'found', project: 'ready', message: 'Scan completed.' }))
-    publish(await readScannerSettings(root, checks))
+    publish(await readScannerSettings(root, checks, options))
     if (observations.length) await options.onFold?.()
   }
   async function start(scan: boolean) {
@@ -46,8 +47,8 @@ export async function createScannerSession(root: string, options: {
     if (closed) return
     config = JSON.stringify(await readScannerConfig(root))
     checks = []
-    publish(await readScannerSettings(root, checks))
-    const registry = await loadScannerRegistry(root)
+    publish(await readScannerSettings(root, checks, options))
+    const registry = await loadScannerRegistry(root, options)
     if (scan) {
       try { await fold(await registry.collectObservations(root)) }
       catch (error) { await report(error) }
@@ -56,10 +57,13 @@ export async function createScannerSession(root: string, options: {
     // With no selected scanner, only declaration matching runs; no scan evidence is written.
     watcher = await watchObservations(root, registry, { onObservations: fold, onError: report })
   }
-  function enqueue(action: () => Promise<void>): Promise<void> {
-    const next = serial.then(async () => { if (!closed) await action() })
-    serial = next.catch(report)
-    return serial
+  function enqueue(action: () => Promise<void>, propagate = false): Promise<void> {
+    const next = serial.then(async () => { if (!closed) await action() }).catch(async error => {
+      await report(error)
+      if (propagate) throw error
+    })
+    serial = next.catch(() => {})
+    return next
   }
   void enqueue(() => start(options.scan !== false))
 
@@ -69,7 +73,7 @@ export async function createScannerSession(root: string, options: {
       listeners.add(listener)
       return () => { listeners.delete(listener) }
     },
-    async refresh() { publish(await readScannerSettings(root, checks)); return state },
+    async refresh() { publish(await readScannerSettings(root, checks, options)); return state },
     reconfigure() {
       return enqueue(async () => {
         if (JSON.stringify(await readScannerConfig(root)) !== config) await start(true)
@@ -80,10 +84,10 @@ export async function createScannerSession(root: string, options: {
         // Stop in-flight evidence before a new selection can own source updates.
         await watcher?.close()
         watcher = undefined
-        try { await changeScannerSettings(root, action) }
-        catch (error) { await start(false); throw error }
+        try { await changeScannerSettings(root, action, options) }
+        catch (error) { await start(true); throw error }
         await start(true)
-      })
+      }, true)
     },
     async close() {
       closed = true

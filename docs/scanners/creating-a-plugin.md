@@ -113,8 +113,7 @@ For a framework detected through a dependency:
           "package": "@example/ui"
         }],
         "compatibility": {
-          "groma": "^0.2.0",
-          "technologyVersions": { "example-ui": "^1.0.0" }
+          "groma": "^0.2.0"
         }
       }
     }
@@ -136,11 +135,12 @@ report an additional technology outside `technologies` to expose a coverage gap.
 | `toml` | `tables`: at least one named top-level table must exist. `versionPath`: keys leading to the version string. `declaration` explains the clue. |
 | `text` | `versionPattern`: regular expression evaluated with the multiline flag; the first capture is the version. `declaration` explains the clue. |
 
-Set `compatibility` only for the release selected for installation. The catalog
-uses the package's exact `version`, compatible Groma range, and technology ranges.
-Private packages are never offered as public releases. File presence without a
-confirmed version does not establish compatibility. Project readiness remains
-the installed scanner's responsibility.
+Declare the supported Groma API range in `compatibility.groma`. Groma uses
+that requirement and standard npm `os`/`cpu` fields to choose a published release
+when the user installs a package by name. Language versions are discovery evidence,
+not installation restrictions. Validate compiler versions, dependencies and
+project preparation inside `scan`, with concrete instructions when something is
+missing or unsupported. A tested example version is not a supported-version range.
 
 The official catalog imports selected plugin manifests and is embedded by
 `bun run build`. Updating metadata for an existing selected plugin needs no

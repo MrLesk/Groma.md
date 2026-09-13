@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto'
 import { homedir } from 'node:os'
 import { mkdir, mkdtemp, readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
 import path from 'node:path'
+import { isNpmPackageName } from './published.ts'
 
 export interface NpmScannerSource {
   kind: 'npm'
@@ -35,7 +36,6 @@ export interface ResolvedScannerPackage {
 }
 
 const exactVersion = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/
-const packageName = /^(?:@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*$/
 const scannerId = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
 
 export function defaultScannerCacheRoot(): string {
@@ -47,7 +47,7 @@ function npmSource(source: string): NpmScannerSource | undefined {
   if (separator <= 0) return undefined
   const name = source.slice(0, separator)
   const version = source.slice(separator + 1)
-  if (!packageName.test(name) || !exactVersion.test(version)) return undefined
+  if (!isNpmPackageName(name) || !exactVersion.test(version)) return undefined
   return { kind: 'npm', name, source: `${name}@${version}`, version }
 }
 
@@ -197,7 +197,7 @@ async function installDependencies(directory: string, source: string, registry?:
   })
   const [exitCode, stderr] = await Promise.all([child.exited, new Response(child.stderr).text()])
   if (exitCode !== 0) {
-    throw new Error(`could not install ${source}: ${stderr.trim() || `exit ${exitCode}`}`)
+    throw new Error(`Could not download ${source}. Check your connection and registry access, then retry.\n${stderr.trim() || `exit ${exitCode}`}`)
   }
 }
 

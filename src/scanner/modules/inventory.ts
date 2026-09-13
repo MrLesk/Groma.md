@@ -1,3 +1,4 @@
+import { isNpmPackageName, publishedScannerSource } from './published.ts'
 import {
   readScannerConfig,
   writeScannerConfig,
@@ -95,7 +96,9 @@ export async function addScanner(
   input: string,
   options: ScannerInstallOptions = {},
 ): Promise<ScannerInventoryItem> {
-  const source = parseScannerSource(repositoryRoot, input)
+  const selected = input.trim()
+  const source = parseScannerSource(repositoryRoot, isNpmPackageName(selected)
+    ? await publishedScannerSource(selected, options.registry) : selected)
   const config = await readScannerConfig(repositoryRoot)
   const configured = config.scanners
   if (configured.some(scanner => scanner.source === source.source)) {

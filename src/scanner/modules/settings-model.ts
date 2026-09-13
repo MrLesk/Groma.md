@@ -7,7 +7,7 @@ export interface ScannerSetting {
   technologies: string[]
   matches: string[]
   match: 'matched' | 'none' | 'unknown'
-  status: 'ready' | 'unchecked' | 'blocked' | 'missing' | 'available' | 'unavailable'
+  status: 'ready' | 'unchecked' | 'blocked' | 'missing' | 'available'
   message: string
   installSource?: string
 }
@@ -20,7 +20,7 @@ export type ScannerSettingsAction =
   | { action: 'add'; source: string }
   | { action: 'install' | 'restore' | 'remove'; id: string }
   | { action: 'update'; id: string; source: string }
-  | { action: 'retry' }
+  | { action: 'retry' | 'install-recommended' | 'install-missing' }
 
 export function scannerNotice(scanners: readonly ScannerSetting[], limits: readonly string[]): ScannerSettings['notice'] {
   if (scanners.some(scanner => scanner.status === 'blocked')) return { tone: 'error', message: 'A scanner needs attention. Saved architecture is available.' }
@@ -38,7 +38,7 @@ export function scannerNotice(scanners: readonly ScannerSetting[], limits: reado
 export function scannerSettingLabel(scanner: ScannerSetting): string {
   if (scanner.status === 'blocked') return scanner.message
   if (scanner.match === 'none' && scanner.status !== 'missing') return 'No matching project files'
-  return { ready: '', unchecked: '', missing: 'Package missing', available: 'Not installed', unavailable: 'No confirmed release' }[scanner.status]
+  return { ready: '', unchecked: '', missing: 'Package missing', available: 'Not installed' }[scanner.status]
 }
 
 /** Project selection and local package availability are different responsibilities. */

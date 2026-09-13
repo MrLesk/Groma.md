@@ -4,6 +4,7 @@ import type { ScannerDiscovery } from './discovery.ts'
 import { discoverScanners } from './discovery.ts'
 import { officialScannerCatalog } from './catalog.ts'
 import { configuredScannerModules, addScanner, removeScanner, updateScanner, restoreScanner } from './inventory.ts'
+import type { ScannerInstallOptions } from './inventory.ts'
 import type { ScannerModuleLocation } from './inventory.ts'
 import type { ProjectReadiness } from './readiness.ts'
 
@@ -30,7 +31,7 @@ function installedSetting(module: ScannerModuleLocation, proposal: ScannerDiscov
     match: projectMatch(technologies, matches),
     status: module.status === 'missing' ? 'missing' : 'unchecked', message: '',
   }
-  if (readiness) {
+  if (readiness && module.status === 'found') {
     base.status = readinessStatus(readiness)
     base.message = readiness.message
   }
@@ -51,45 +52,59 @@ export function scannerSettingsState(proposal: ScannerDiscovery, modules: readon
     if (technologies.length && technologies.every(technology => covered.has(technology))) continue
     scanners.push({
       id: candidate.id, name: candidate.package, official: official !== undefined,
-      version: official?.release?.version, technologies,
+      technologies,
       matches: [...new Set(candidate.evidence.map(finding => finding.file))],
       match: candidate.evidence.length ? 'matched' : 'none',
-      status: candidate.status === 'installable' ? 'available' : 'unavailable',
+      status: 'available',
       message: candidate.reason, installSource: candidate.installSource,
     })
   }
   return { scanners, notice: scannerNotice(scanners, proposal.limits), limits: proposal.limits }
 }
 
-export async function readScannerSettings(root: string, checks: readonly ProjectReadiness[] = []): Promise<ScannerSettings> {
+export async function readScannerSettings(root: string, checks: readonly ProjectReadiness[] = [], options: ScannerInstallOptions = {}): Promise<ScannerSettings> {
   try {
-    const [proposal, modules] = await Promise.all([discoverScanners(root), configuredScannerModules(root)])
+    const [proposal, modules] = await Promise.all([discoverScanners(root, options), configuredScannerModules(root, options)])
     return scannerSettingsState(proposal, modules, checks)
   } catch (error) {
     return { scanners: [], notice: { tone: 'error', message: error instanceof Error ? error.message : String(error) }, limits: [] }
   }
 }
 
-export async function changeScannerSettings(root: string, action: ScannerSettingsAction): Promise<void> {
+export async function changeScannerSettings(root: string, action: ScannerSettingsAction, options: ScannerInstallOptions = {}): Promise<void> {
   switch (action.action) {
-    case 'add': await addScanner(root, action.source); return
+    case 'add': await addScanner(root, action.source, options); return
     case 'remove': await removeScanner(root, action.id); return
-    case 'restore': await restoreScanner(root, action.id); return
-    case 'update': await updateScanner(root, action.id, action.source); return
+    case 'restore': await restoreScanner(root, action.id, options); return
+    case 'update': await updateScanner(root, action.id, action.source, options); return
     case 'retry': return
+    case 'install-recommended': case 'install-missing': await installGroup(root, action.action, options); return
     case 'install': {
-      const item = (await readScannerSettings(root)).scanners.find(scanner => scanner.id === action.id)
-      if (!item?.installSource) throw new Error('No confirmed compatible release is available. Add an explicit scanner source instead.')
-      await addScanner(root, item.installSource)
+      const item = (await readScannerSettings(root, [], options)).scanners.find(scanner => scanner.id === action.id)
+      if (!item?.installSource) throw new Error('This scanner is no longer recommended. Review the current scanner list.')
+      await addScanner(root, item.installSource, options)
     }
   }
+}
+
+async function installGroup(root: string, group: 'install-recommended' | 'install-missing', options: ScannerInstallOptions) {
+  const settings = await readScannerSettings(root, [], options)
+  const selected = settings.scanners.filter(item => group === 'install-recommended' ? !item.source && item.installSource : item.source && item.status === 'missing')
+  const errors: string[] = []
+  for (const item of selected) {
+    try {
+      if (group === 'install-recommended') await addScanner(root, item.installSource!, options)
+      else await restoreScanner(root, item.id, options)
+    } catch (error) { errors.push(`${item.id}: ${error instanceof Error ? error.message : String(error)}`) }
+  }
+  if (errors.length) throw new Error(errors.join('\n'))
 }
 
 export function parseScannerSettingsAction(input: unknown): ScannerSettingsAction {
   if (!input || typeof input !== 'object') throw new Error('Scanner action required')
   const value = input as Record<string, unknown>
   const action = value.action
-  if (action === 'retry') return { action }
+  if (action === 'retry' || action === 'install-recommended' || action === 'install-missing') return { action }
   if (action === 'add' && typeof value.source === 'string') return { action, source: value.source }
   if (typeof value.id !== 'string') throw new Error('Scanner id required')
   if (action === 'update' && typeof value.source === 'string') return { action, id: value.id, source: value.source }

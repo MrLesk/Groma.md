@@ -29,8 +29,7 @@
           }
         ],
         "compatibility": {
-          "groma": "^0.3.0",
-          "technologyVersions": {}
+          "groma": "^0.3.0"
         }
       }
     }

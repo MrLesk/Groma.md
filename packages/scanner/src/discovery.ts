@@ -17,8 +17,8 @@ export interface ScannerDiscoveryMetadata {
   /** Technologies actually covered; rules may also report unsupported framework clues. */
   technologies: string[]
   rules: ScannerDiscoveryRule[]
-  /** Set only for a release selected for public installation. */
-  compatibility?: { groma: string; technologyVersions: Record<string, string> }
+  /** Groma API requirement; project tooling compatibility belongs to scan(). */
+  compatibility?: { groma: string }
 }
 
 function object(value: unknown): Record<string, unknown> {
@@ -74,8 +74,6 @@ export function parseScannerDiscovery(value: unknown): ScannerDiscoveryMetadata 
     const compatibility = object(input.compatibility)
     result.compatibility = {
       groma: string(compatibility.groma),
-      technologyVersions: Object.fromEntries(Object.entries(object(compatibility.technologyVersions))
-        .map(([technology, version]) => [technology, string(version)])),
     }
   }
   return result
