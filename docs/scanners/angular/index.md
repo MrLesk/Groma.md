@@ -26,7 +26,7 @@ declarations. Consumers do not run a package build or installation script.
 The prototype package name is not a public publication commitment.
 
 Prepare the application's ordinary dependencies using its package manager.
-The scanner reads the root `tsconfig.json`, its configured source entry points,
+The scanner reads each selected project's `tsconfig.json`, its configured source entry points,
 and the Angular resources reachable from that program. It does not install
 dependencies, compile application output, or run application code.
 
@@ -88,3 +88,13 @@ Independent fixture tests load the built package and cover concrete callback
 endpoints, complementary TypeScript evidence, curated ownership, HTML-triggered
 rescan, and failure preservation. See [validation](validation.md) for the
 real-project result and remaining release gates.
+
+## Nested projects
+
+Run Groma from the repository root. The scanner finds package declarations in
+tracked and unignored files, including nested apps and libraries. Dependencies,
+dev dependencies, peer dependencies and optional dependencies identify framework
+projects. Each compiler uses that project's configuration and installed dependencies;
+imported source in sibling repository libraries keeps its original source path.
+Readiness checks all selected projects. A project error fails the complete scan.
+Source and nested package/configuration changes use the shared scanner watch flow.

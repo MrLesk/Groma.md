@@ -4,6 +4,8 @@ import { Call, PropertyRead, TmplAstRecursiveVisitor, tmplAstVisitAll, type Tmpl
 import { createCompilerHost, NgtscProgram, readConfiguration, VERSION } from '@angular/compiler-cli'
 import { createScanObservation, type ScanDiagnostic, type ScanInvocation, type ScanObservation, type ScanOperation } from '@groma/scanner'
 import ts from 'typescript'
+import { frameworkProjects, hasDependency } from '../../projects.ts'
+import { combineObservations } from '../../observations.ts'
 
 type TemplateChecker = ReturnType<NgtscProgram['compiler']['getTemplateTypeChecker']>
 
@@ -123,7 +125,7 @@ function angularProject(root: string) {
   const manifestPath = path.join(root, 'package.json')
   if (!existsSync(manifestPath)) return undefined
   const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'))
-  if (!manifest.dependencies?.['@angular/core'] && !manifest.devDependencies?.['@angular/core']) return undefined
+  if (!hasDependency(manifest, '@angular/core')) return undefined
   try {
     const config = readConfiguration(path.join(root, 'tsconfig.json'))
     failDiagnostics(config.errors)
@@ -140,11 +142,22 @@ function angularProject(root: string) {
 }
 
 export async function checkAngularReadiness(root: string): Promise<void> {
-  if (!angularProject(root)) throw new Error('ANGULAR_PROJECT_REQUIRED: Select a project with @angular/core in its root package.json, or disable the angular scanner.')
+  const projects = await frameworkProjects(root, '@angular/core')
+  if (!projects.length) throw new Error('ANGULAR_PROJECT_REQUIRED: No Angular project declaration was found.')
+  for (const project of projects) angularProject(project)
 }
 
 export async function scanAngular(root: string): Promise<ScanObservation | undefined> {
-  const project = angularProject(root)
+  const parts = []
+  for (const project of await frameworkProjects(root, '@angular/core')) {
+    const observation = await scanAngularProject(project, root)
+    if (observation) parts.push({ key: relative(root, project), observation })
+  }
+  return combineObservations(parts)
+}
+
+async function scanAngularProject(projectRoot: string, root: string): Promise<ScanObservation | undefined> {
+  const project = angularProject(projectRoot)
   if (!project) return undefined
   const { manifest, ng } = project
   const program: ts.Program = ng.getTsProgram()
@@ -166,7 +179,7 @@ export async function scanAngular(root: string): Promise<ScanObservation | undef
       id: `${relative(root, source.fileName)}#${node.getStart()}`, name: node.name?.text ?? 'default', kind: 'class',
     })) })), ...[...evidence.templates].map(file => ({ file, symbols: [] }))]
   return createScanObservation({ scanner: { id: 'angular', technology: 'typescript/angular', engine: '@angular/compiler-cli', engineVersion: VERSION.full },
-    roots: [{ id: 'angular-project', kind: 'package', name: manifest.name, file: 'package.json' }],
+    roots: [{ id: 'angular-project', kind: 'package', name: manifest.name, file: relative(root, path.join(projectRoot, 'package.json')) }],
     files: files.map(file => ({ ...file, roots: ['angular-project'] })),
     operations: [...evidence.operations.values()], invocations: evidence.invocations, diagnostics: evidence.diagnostics })
 }

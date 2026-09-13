@@ -24,28 +24,6 @@ export interface ImportGraph {
   invocations: ScanInvocation[]
 }
 
-function resolveSpecifier(
-  fromFile: string,
-  specifier: string,
-  files: Set<string>,
-): string | undefined {
-  if (!specifier.startsWith('.')) return undefined
-  const joined = path.posix.normalize(path.posix.join(path.posix.dirname(fromFile), specifier))
-  const candidates = specifier.endsWith('.ts') || specifier.endsWith('.tsx')
-    ? [joined]
-    : [
-      joined,
-      joined.replace(/\.jsx?$/, '.ts'),
-      joined.replace(/\.jsx?$/, '.tsx'),
-      `${joined}.ts`,
-      `${joined}.tsx`,
-      `${joined}.js`,
-      `${joined}/index.ts`,
-      `${joined}/index.tsx`,
-    ]
-  return candidates.find(candidate => files.has(candidate))
-}
-
 export function fileStem(file: string): string {
   return path.posix.basename(file).replace(/\.tsx?$/, '')
 }
@@ -79,15 +57,13 @@ export async function buildImportGraph(
   const paths = await listTypeScriptFiles(repositoryRoot, config)
   const files = new Set(paths)
   const { files: analyses, operations, invocations } = await analyzeSourceFiles(repositoryRoot, paths)
-  const nodes = new Map<string, ImportGraphNode>(analyses.map(({ file, specifiers, symbols }) => [file, {
-    file,
-    imports: [...new Set(specifiers.flatMap(specifier => {
-      const resolved = resolveSpecifier(file, specifier, files)
-      return resolved === undefined ? [] : [resolved]
-    }))].sort(),
-    importedBy: [],
-    symbols,
-  }]))
+  const nodes = new Map<string, ImportGraphNode>()
+  for (const analysis of analyses) {
+    const node = nodes.get(analysis.file) ?? { file: analysis.file, imports: [], importedBy: [], symbols: [] }
+    node.imports = [...new Set([...node.imports, ...analysis.imports.filter(file => files.has(file))])].sort()
+    node.symbols = [...new Map([...node.symbols, ...analysis.symbols].map(symbol => [symbol.id, symbol])).values()]
+    nodes.set(node.file, node)
+  }
 
   for (const node of nodes.values()) {
     for (const imported of node.imports) nodes.get(imported)?.importedBy.push(node.file)

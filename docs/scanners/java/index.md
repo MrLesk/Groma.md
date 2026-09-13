@@ -7,7 +7,7 @@ Core owns architecture placement, curated ownership and relationship selection.
 Maven configuration is temporary evidence, not a new OKF record or C4 element.
 The resulting architecture remains ordinary Markdown with exact source links.
 
-The supported example is one root Maven module with Java 25 main sources, as
+The supported example is a Maven module with Java 25 main sources, as
 used by callforpapers. Maven 3.9.15 and JDK 25.0.1 were tested. Select the project
 JDK through `JAVA_HOME` or PATH. The packaged worker is Java 21 bytecode, but
 this does not claim source-project qualification for every release since 21.
@@ -67,7 +67,7 @@ does not report those bindings, so ordinary Java calls do not create derived
 architecture relationships. Authored interactions remain the way to express the
 reviewed company-merge workflow.
 
-Reactor builds, Gradle, JPMS module paths, test source sets, custom build-added
+Automatic reactor compilation, Gradle, JPMS module paths, test source sets, custom build-added
 source roots, preview features and alternate compiler/toolchain selection are
 outside this delivery. These limits are not claims about Java or Maven generally.
 The scanner does not parse Java names or resolve dependencies itself.
@@ -80,3 +80,12 @@ supply Git, their project JDK and Maven or its wrapper.
 
 Run `bun test test-bun/java-scanner.test.ts` with JDK 25 and Maven on PATH
 for source operation resolution tests. See the historical [validation record](validation.md).
+
+## Nested projects
+
+Groma selects tracked and unignored `pom.xml` files throughout the repository.
+Each module uses its own effective Maven model and compile classpath. POM-only
+aggregators have no source observation. Prepare reactor dependencies and generated
+source through the project's build before scanning; Groma does not run a reactor
+build. Evidence paths remain relative to the repository. Nested POM and `.mvn`
+changes refresh the Java scanner.

@@ -44,7 +44,10 @@ executable, Bun, or Node runtime. Groma loads the adapter through its existing
 plugin interface. Package availability remains separate from project readiness
 in the [common setup journey](../setup.md).
 
-The default input is the repository's root Cargo.toml. To select one original
+By default, the scanner finds tracked and unignored Cargo.toml files throughout
+the repository. Cargo metadata identifies workspace membership, so each workspace
+is scanned once, including a workspace that also has a root package. The selected
+manifest directory controls Cargo and rustup toolchain selection. To select one original
 Cargo manifest inside a repository, set `settings` on the existing `rust` entry
 in the shared `scanners.json` inside `groma/` or `.groma/`. Preserve its installed source:
 

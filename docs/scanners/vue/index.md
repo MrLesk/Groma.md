@@ -2,7 +2,7 @@
 
 The Vue scanner adds single-file component (SFC) event bindings to Groma's
 TypeScript scanner evidence. Install the project's dependencies using its
-package manager and lockfile. The scanner reads the root `tsconfig.json`;
+package manager and lockfile. The scanner reads each selected project's `tsconfig.json`;
 it does not install dependencies or execute application code.
 
 ```sh
@@ -65,3 +65,13 @@ owns that interpretation. No new architecture metadata is added.
 
 See [validation](validation.md) for the pinned project and executed release
 checks. This prototype package name does not imply public publication.
+
+## Nested projects
+
+Run Groma from the repository root. The scanner finds package declarations in
+tracked and unignored files, including nested apps and libraries. Dependencies,
+dev dependencies, peer dependencies and optional dependencies identify framework
+projects. Each compiler uses that project's configuration and installed dependencies;
+imported source in sibling repository libraries keeps its original source path.
+Readiness checks all selected projects. A project error fails the complete scan.
+Source and nested package/configuration changes use the shared scanner watch flow.

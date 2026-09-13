@@ -2,10 +2,8 @@ import { access } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { parseScanObservation, type ScanObservation, type ScannerSettings } from '@groma/scanner'
-import { findCSharpInput, parseCSharpSettings } from './config.ts'
+import { validateInput, parseCSharpSettings } from './config.ts'
 import { run } from './process.ts'
-
-export { findCSharpInput } from './config.ts'
 
 export const workerDll = fileURLToPath(new URL('../dist/worker/Groma.CSharpScanner.dll', import.meta.url))
 
@@ -17,8 +15,8 @@ export async function requireWorker(file = workerDll): Promise<void> {
 async function prepareCSharpScan(repositoryRoot: string, settings: ScannerSettings, dotnet: string, worker: string) {
   const root = path.resolve(repositoryRoot)
   const config = parseCSharpSettings(settings)
-  const input = await findCSharpInput(root, config.input)
-  if (!input) throw new Error('No C# input was selected. Set settings.input on the csharp entry in scanners.json or disable the csharp scanner.')
+  if (!config.input) throw new Error('C# analysis requires a selected project or solution input.')
+  const input = await validateInput(root, config.input)
   await requireWorker(worker)
   const options = { cwd: path.dirname(input), timeoutSeconds: config.timeoutSeconds }
   let sdkVersion: string

@@ -13,8 +13,8 @@ final class MavenModel {
     static Object read(Path file) throws Exception {
         var factory = DocumentBuilderFactory.newInstance();
         var document = factory.newDocumentBuilder().parse(file.toFile());
-        if (!text(document, "count(/project/modules/module)").equals("0")) {
-            throw new IllegalArgumentException("Only a single Maven module is supported; reactor builds are not supported");
+        if (text(document, "/project/packaging").equals("pom")) {
+            return Json.object("aggregator", true);
         }
         String plugin = "/project/build/plugins/plugin[artifactId='maven-compiler-plugin']/configuration/";
         String release = first(document, List.of(plugin + "release", "/project/properties/maven.compiler.release"));

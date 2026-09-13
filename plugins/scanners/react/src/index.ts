@@ -5,7 +5,7 @@ export { scanReact } from './scan.ts'
 
 export default {
   id: 'react',
-  watch: { include: ['**/*.tsx', '**/*.ts', 'tsconfig.json', 'package.json'], exclude: [] },
+  watch: { include: ['**/*.tsx', '**/*.ts', '**/tsconfig*.json', '**/package.json'], exclude: [] },
   checkReadiness: checkReactReadiness,
   scan: scanReact,
 } satisfies ScannerPlugin

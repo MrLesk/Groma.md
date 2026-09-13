@@ -1,6 +1,7 @@
-import { readdir, stat } from 'node:fs/promises'
+import { stat } from 'node:fs/promises'
 import path from 'node:path'
 import type { ScannerSettings } from '@groma/scanner'
+import { projectFiles } from '../../projects.ts'
 
 export interface CSharpConfig {
   input?: string
@@ -40,19 +41,19 @@ export function parseCSharpSettings(config: ScannerSettings = {}): CSharpConfig 
   }
 }
 
-export async function findCSharpInput(root: string, selected?: string): Promise<string | undefined> {
-  if (selected !== undefined) return validateInput(root, selected)
-  const files = (await readdir(root, { withFileTypes: true })).filter(entry => entry.isFile()).map(entry => entry.name).sort()
-  const solutions = files.filter(file => /\.slnx?$/i.test(file))
-  const candidates = solutions.length ? solutions : files.filter(file => /\.csproj$/i.test(file))
-  if (candidates.length > 1) throw new Error(`Several C# scan inputs exist; set settings.input on the csharp entry in scanners.json: ${candidates.join(', ')}`)
-  return candidates.length ? path.resolve(root, candidates[0]!) : undefined
-}
-
-async function validateInput(root: string, selected: string): Promise<string> {
+export async function validateInput(root: string, selected: string): Promise<string> {
   const full = path.resolve(root, selected)
   const relative = path.relative(root, full)
   if (relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) throw new Error('C# scan input must stay inside the repository')
   if (!/\.(?:csproj|slnx?)$/i.test(full) || !(await stat(full)).isFile()) throw new Error('C# input must be an existing .csproj, .sln, or .slnx file')
   return full
+}
+
+/** Solutions are loaded first; their returned project roots cover later project candidates. */
+export async function csharpInputs(root: string, settings: ScannerSettings): Promise<string[]> {
+  const config = parseCSharpSettings(settings)
+  if (config.input) return [await validateInput(root, config.input)]
+  const files = await projectFiles(root, file => /\.(?:csproj|slnx?)$/i.test(file))
+  return [...files.filter(file => /\.slnx?$/i.test(file)), ...files.filter(file => /\.csproj$/i.test(file))]
+    .map(file => path.resolve(root, file))
 }

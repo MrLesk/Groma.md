@@ -39,10 +39,10 @@ export async function mavenCommand(root: string): Promise<string> {
 export const mavenGoals = ['org.apache.maven.plugins:maven-help-plugin:3.5.1:effective-pom',
   'org.apache.maven.plugins:maven-dependency-plugin:3.9.0:build-classpath']
 
-export async function readJavaInput(repositoryRoot: string, java: string, worker: string, maven?: string): Promise<JavaInput> {
+export async function readJavaInput(repositoryRoot: string, java: string, worker: string, maven?: string): Promise<JavaInput | undefined> {
   const root = await realpath(repositoryRoot)
   if (!await exists(path.join(root, 'pom.xml'))) {
-    throw new Error('JAVA_UNSUPPORTED_BUILD: The Java scanner supports a root single-module Maven pom.xml. Gradle and other build arrangements are not supported.')
+    throw new Error('JAVA_UNSUPPORTED_BUILD: The Java scanner supports Maven pom.xml projects. Gradle and other build arrangements are not supported.')
   }
   const temporary = await mkdtemp(path.join(os.tmpdir(), 'groma-java-model-'))
   try {
@@ -56,8 +56,9 @@ export async function readJavaInput(repositoryRoot: string, java: string, worker
       throw new Error(`JAVA_MAVEN_PREPARATION: Install the project JDK and Maven (or use its wrapper), then run ${command} ${mavenGoals.join(' ')} -DincludeScope=compile once with dependency access. Scans use Maven offline. ${error instanceof Error ? error.message : error}`)
     }
     const exported = JSON.parse(await run(java, ['-jar', worker, 'model', model], root)) as {
-      release: string; encoding: string; sourceRoot: string; generatedRoot: string; output: string; name: string
+      aggregator?: boolean; release: string; encoding: string; sourceRoot: string; generatedRoot: string; output: string; name: string
     }
+    if (exported.aggregator) return undefined
     const files = await collect(root, exported.sourceRoot)
     if (!files.length) throw new Error('JAVA_EMPTY_SOURCE_SET: Maven main source directory contains no Java sources.')
     if (files.some(file => file.endsWith('module-info.java'))) throw new Error('JAVA_UNSUPPORTED_BUILD: JPMS module paths are not supported.')

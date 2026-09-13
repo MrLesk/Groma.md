@@ -4,6 +4,7 @@ import path from 'node:path'
 import { proxyCreateProgram } from '@volar/typescript'
 import { createParsedCommandLine, createVueLanguagePlugin, SourceMap, VueVirtualCode, type Language } from '@vue/language-core'
 import ts from 'typescript'
+import { hasDependency } from '../../projects.ts'
 
 // Hoisted tooling declarations see the host SDK; the bundled runtime uses pinned TS 5.9.3.
 export const vueTypeScript = ts as unknown as Parameters<typeof createVueLanguagePlugin>[0]
@@ -35,8 +36,8 @@ export class VueProject {
   private language!: Language<string>
   private readonly plugin
 
-  constructor(root: string) {
-    this.root = root
+  constructor(root: string, repositoryRoot = root) {
+    this.root = repositoryRoot
     const configFile = path.join(root, 'tsconfig.json')
     const config = ts.readJsonConfigFile(configFile, ts.sys.readFile)
     const vue = createParsedCommandLine(vueTypeScript, ts.sys, configFile)
@@ -105,15 +106,15 @@ export class VueProject {
   }
 }
 
-export function vueProject(root: string) {
+export function vueProject(root: string, repositoryRoot = root) {
   const manifestFile = path.join(root, 'package.json')
   if (!existsSync(manifestFile)) return undefined
   const manifest = JSON.parse(readFileSync(manifestFile, 'utf8'))
-  if (!manifest.dependencies?.vue && !manifest.devDependencies?.vue) return undefined
+  if (!hasDependency(manifest, 'vue')) return undefined
   try {
     createRequire(manifestFile).resolve('vue/package.json')
-    return { manifest, project: new VueProject(root) }
+    return { manifest, project: new VueProject(root, repositoryRoot) }
   } catch (error) {
-    throw new Error(`VUE_PROJECT_PREPARATION: Install project dependencies with its declared package manager and lockfile; ensure root tsconfig.json and Vue sources are valid. ${error}`)
+    throw new Error(`VUE_PROJECT_PREPARATION: Install project dependencies with its declared package manager and lockfile; ensure project tsconfig.json and Vue sources are valid. ${error}`)
   }
 }

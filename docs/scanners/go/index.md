@@ -40,7 +40,7 @@ groma scan
 ```
 
 `scanner setup` calls the shared readiness hook. It reports a missing worker,
-missing Go installation, unsupported project root, or missing project
+missing Go installation, invalid module selection, or missing project
 preparation. Scan runs the same check. Neither command installs tools or
 downloads dependencies: the adapter sets `GOTOOLCHAIN=local`,
 `GOPROXY=off`, and `GOSUMDB=off`, and uses `-mod=readonly`.
@@ -51,11 +51,12 @@ Go may use its normal compiler cache.
 The approved example is Chi's root pure-Go module in the default host build
 context. `go/packages.Load` loads `./...` with typed syntax and module
 information; Go owns file membership, imports, dependencies, and symbol
-resolution. Tests are excluded. Nested example modules, directories excluded
-by Go's package patterns, and inactive platform/build-tag files are not
-inventoried. Workspaces are not supported; an active workspace produces a
-scope error. Custom build contexts, cgo, custom package drivers, and other
-module layouts have not been qualified.
+resolution. Tests are excluded. Groma selects each tracked or unignored `go.mod`, including
+nested modules, and runs Go from that module directory. An enclosing `go.work`
+continues to control Go's dependency resolution. Go's package patterns keep a
+nested module out of its parent module's source set, so it is scanned separately.
+Inactive platform/build-tag files are not inventoried. Custom build contexts,
+cgo and custom package drivers have not been qualified.
 
 The module is a source root, with loaded packages as its child roots. Each
 active physical source file records membership in its loaded package. Package

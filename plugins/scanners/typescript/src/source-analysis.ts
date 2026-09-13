@@ -8,11 +8,13 @@ import {
 import type { ScanSymbol, ScanOperation, ScanInvocation } from '@groma/scanner'
 
 import { usedImportSpecifiers } from './source-usage.ts'
+import { typescriptProjects, type TypeScriptProject } from './projects.ts'
+import { resolvedImports } from './source-imports.ts'
 import { sourceOperations } from './source-operations.ts'
 
 export interface SourceAnalysis {
   file: string
-  specifiers: string[]
+  imports: string[]
   symbols: ScanSymbol[]
 }
 
@@ -50,30 +52,45 @@ function exportSymbols(file: string, source: SourceFile): ScanSymbol[] {
   })
 }
 
-/** One program keeps operation identity and callback wiring shared across the owned source set. */
+/** Each compiler project resolves its own aliases; only selected repository source becomes evidence. */
 export async function analyzeSourceFiles(repositoryRoot: string, paths: string[]): Promise<SourceEvidence> {
   if (paths.length === 0) return { files: [], operations: [], invocations: [] }
   const api = new API({ cwd: repositoryRoot })
   try {
-    const program = await api.createProgram(paths.map(file => path.join(repositoryRoot, file)), {
-      compilerOptions: {
-        noLib: true, noResolve: true, types: [], allowJs: true,
-        moduleResolution: ModuleResolutionKind.Bundler, module: ModuleKind.Preserve,
-      },
-    })
-    const sources = await Promise.all(paths.map(async file => {
-      const source = await program.getSourceFile(path.join(repositoryRoot, file))
-      if (!source) throw new Error(`TypeScript could not parse ${file}`)
-      return source
-    }))
-    const evidence = await sourceOperations(repositoryRoot, sources, program.getProject().checker)
-    const files = await Promise.all(sources.map(async (source, index) => ({
-      file: paths[index]!,
-      specifiers: await usedImportSpecifiers(source, program.getProject().checker),
-      symbols: exportSymbols(paths[index]!, source),
-    })))
-    return { files, ...evidence }
+    const result: SourceEvidence = { files: [], operations: [], invocations: [] }
+    for (const project of await typescriptProjects(api, repositoryRoot, paths)) {
+      if (!project.config) {
+        const analyzed = new Set(result.files.map(file => path.resolve(repositoryRoot, file.file)))
+        project.files = project.files.filter(file => !analyzed.has(file))
+        if (!project.files.length) continue
+      }
+      const evidence = await analyzeProject(api, repositoryRoot, paths, project)
+      result.files.push(...evidence.files)
+      result.operations.push(...evidence.operations)
+      result.invocations.push(...evidence.invocations)
+    }
+    result.operations = [...new Map(result.operations.map(operation => [operation.id, operation])).values()]
+    return result
   } finally {
     await api.close()
   }
+}
+
+async function analyzeProject(api: API, repositoryRoot: string, paths: string[], project: TypeScriptProject): Promise<SourceEvidence> {
+    const program = await api.createProgram(project.files, {
+      compilerOptions: { ...(project.config?.options ?? {
+        noLib: true, types: [], allowJs: true,
+        moduleResolution: ModuleResolutionKind.Bundler, module: ModuleKind.Preserve,
+      }), noEmit: true },
+    })
+    const sources = await Promise.all(paths.map(file => program.getSourceFile(path.join(repositoryRoot, file))))
+    const selectedProgramSources = sources.filter((source): source is SourceFile => source !== undefined)
+    const checker = program.getProject().checker
+    const evidence = await sourceOperations(repositoryRoot, selectedProgramSources, checker)
+    const files = await Promise.all(selectedProgramSources.map(async source => {
+      const file = path.relative(repositoryRoot, source.fileName).split(path.sep).join('/')
+      return { file, imports: await resolvedImports(repositoryRoot, source, await usedImportSpecifiers(source, checker), checker),
+        symbols: exportSymbols(file, source) }
+    }))
+    return { files, ...evidence }
 }

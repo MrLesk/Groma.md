@@ -33,11 +33,8 @@ export async function checkGoReadiness(repositoryRoot: string, options: GoScanOp
   } catch (error) {
     throw new Error(`GO_TOOLCHAIN_MISSING: Install the project's Go toolchain and add its bin directory to PATH (Go 1.27.1 for the qualified example). ${error}`)
   }
-  if (context.GOWORK && context.GOWORK !== 'off') {
-    throw new Error('GO_PROJECT_SCOPE: This scanner supports one root module. Select the supported module with GOWORK=off; workspace analysis is not qualified.')
-  }
   if (context.GOMOD !== path.join(root, 'go.mod')) {
-    throw new Error('GO_PROJECT_SCOPE: Run Groma at the supported Go module root containing go.mod.')
+    throw new Error('GO_PROJECT_SCOPE: The selected project must contain go.mod.')
   }
   env.PATH = `${path.join(context.GOROOT, 'bin')}${path.delimiter}${process.env.PATH ?? ''}`
   try { await run(options.go ?? 'go', ['list', '-mod=readonly', '-deps', './...'], root, env) }

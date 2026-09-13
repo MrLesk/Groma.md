@@ -3,6 +3,8 @@ import { createRequire } from 'node:module'
 import path from 'node:path'
 import { createScanObservation, type ScanDiagnostic, type ScanInvocation, type ScanOperation } from '@groma/scanner'
 import ts from 'typescript'
+import { frameworkProjects, hasDependency } from '../../projects.ts'
+import { combineObservations } from '../../observations.ts'
 
 function relative(root: string, file: string): string {
   return path.relative(root, file).split(path.sep).join('/')
@@ -13,11 +15,11 @@ function failDiagnostics(diagnostics: readonly ts.Diagnostic[]): void {
   if (errors.length) throw new Error(errors.map(item => `${item.file?.fileName ?? 'React'}: ${ts.flattenDiagnosticMessageText(item.messageText, '\n')}`).join('\n'))
 }
 
-function reactProject(root: string) {
+function reactProject(root: string, repositoryRoot = root) {
   const manifestFile = path.join(root, 'package.json')
   if (!existsSync(manifestFile)) return undefined
   const manifest = JSON.parse(readFileSync(manifestFile, 'utf8'))
-  if (!manifest.dependencies?.react && !manifest.devDependencies?.react) return undefined
+  if (!hasDependency(manifest, 'react')) return undefined
   try {
     createRequire(manifestFile).resolve('react')
     const configFile = path.join(root, 'tsconfig.json')
@@ -27,10 +29,10 @@ function reactProject(root: string) {
     failDiagnostics(parsed.errors)
     const program = ts.createProgram(parsed.fileNames, { ...parsed.options, noEmit: true })
     const sources = program.getSourceFiles().filter(source => {
-      const file = relative(root, source.fileName)
+      const file = relative(repositoryRoot, source.fileName)
       return file.endsWith('.tsx') && !source.isDeclarationFile && !file.startsWith('../') && !file.includes('node_modules/')
     })
-    if (!sources.length) throw new Error('The root tsconfig.json must include React TSX source files.')
+    if (!sources.length) throw new Error('The project tsconfig.json must include React TSX source files.')
     const react = ts.resolveModuleName('react', sources[0]!.fileName, parsed.options, ts.sys).resolvedModule
     if (!react?.resolvedFileName.endsWith('.d.ts')) throw new Error('Install @types/react in the project.')
     failDiagnostics(program.getOptionsDiagnostics())
@@ -38,7 +40,7 @@ function reactProject(root: string) {
     for (const source of sources) failDiagnostics(program.getSemanticDiagnostics(source))
     return { manifest, program, sources }
   } catch (error) {
-    throw new Error(`REACT_PROJECT_PREPARATION: Install the project dependencies with its declared package manager and lockfile; provide a valid root tsconfig.json and type-correct TSX files. ${error}`)
+    throw new Error(`REACT_PROJECT_PREPARATION: Install the project dependencies with its declared package manager and lockfile; provide a valid project tsconfig.json and type-correct TSX files. ${error}`)
   }
 }
 
@@ -169,18 +171,29 @@ class Evidence {
 }
 
 export async function checkReactReadiness(root: string): Promise<void> {
-  if (!reactProject(root)) throw new Error('REACT_PROJECT_REQUIRED: Select a project with React in its root package.json, or disable the react scanner.')
+  const projects = await frameworkProjects(root, 'react')
+  if (!projects.length) throw new Error('REACT_PROJECT_REQUIRED: No React project declaration was found.')
+  for (const project of projects) reactProject(project, root)
 }
 
 export async function scanReact(root: string) {
-  const project = reactProject(root)
+  const parts = []
+  for (const project of await frameworkProjects(root, 'react')) {
+    const observation = await scanReactProject(project, root)
+    if (observation) parts.push({ key: relative(root, project), observation })
+  }
+  return combineObservations(parts)
+}
+
+async function scanReactProject(projectRoot: string, root: string) {
+  const project = reactProject(projectRoot, root)
   if (!project) return undefined
   const { manifest, program, sources } = project
   const evidence = new Evidence(root, program.getTypeChecker(), sources)
   for (const source of sources) evidence.inspect(source)
   const files = sources.map(source => ({ file: relative(root, source.fileName), symbols: [] }))
   return createScanObservation({ scanner: { id: 'react', technology: 'typescript/react', engine: 'typescript-sdk', engineVersion: ts.version },
-    roots: [{ id: 'react-project', kind: 'package', name: manifest.name, file: 'package.json' }],
+    roots: [{ id: 'react-project', kind: 'package', name: manifest.name, file: relative(root, path.join(projectRoot, 'package.json')) }],
     files: files.map(file => ({ ...file, roots: ['react-project'] })),
     operations: [...evidence.operations.values()], invocations: evidence.invocations, diagnostics: evidence.diagnostics })
 }
