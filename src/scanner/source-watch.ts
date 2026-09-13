@@ -39,8 +39,9 @@ export async function watchObservations(
   repositoryRoot: string,
   registry: ScannerRegistry,
   options: {
+    scan?: boolean
     onObservations: (batch: ScanBatch) => void | Promise<void>
-    onError?: (error: unknown) => void
+    onError?: (error: unknown) => void | Promise<void>
   },
 ): Promise<{ close(): Promise<void> }> {
   const root = await realpath(repositoryRoot)
@@ -63,7 +64,7 @@ export async function watchObservations(
       const observations = await registry.collectObservations(root, files)
       if (!closed) await options.onObservations(observations)
     } catch (error) {
-      if (!closed) options.onError?.(error)
+      if (!closed) await options.onError?.(error)
     } finally {
       running = false
       if (changed.size && !closed && timer === undefined) launch()
@@ -89,6 +90,12 @@ export async function watchObservations(
     for (const file of relevant) changed.add(file)
     schedule()
   })
+
+  // Subscribe before the first scan so edits during startup enter the same queue.
+  if (options.scan) {
+    launch()
+    await active
+  }
 
   return {
     async close() {

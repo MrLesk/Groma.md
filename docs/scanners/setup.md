@@ -46,6 +46,8 @@ project used only to read saved or hand-written architecture needs no scanners.
 Unknown metadata or compatibility remains unknown; a match never promises complete
 architecture coverage. Official and third-party plugins use the same rules.
 
+The live session starts its source watch before the first scan. Edits made during
+that scan wait for the current batch to finish.
 The live session watches relevant source declarations through the scanner adapter,
 including with no scanner selected so new projects can appear in settings. Only
 installed project selections without known metadata incompatibilities execute scans.
