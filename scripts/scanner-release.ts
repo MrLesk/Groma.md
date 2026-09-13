@@ -18,6 +18,13 @@ async function run(command: string[]) {
   if (await child.exited !== 0) throw new Error(`Failed: ${command.join(' ')}`)
 }
 
+/** Finish every started operation before reporting failure or advancing the release. */
+async function completeTogether(operations: Promise<void>[]) {
+  const results = await Promise.allSettled(operations)
+  const failures = results.flatMap(result => result.status === 'rejected' ? [result.reason] : [])
+  if (failures.length > 0) throw new AggregateError(failures, 'Scanner release operations failed')
+}
+
 /** Stage runnable packages for this host; publishing is a separate explicit action. */
 async function stage(output: string) {
   await mkdir(output, { recursive: true })
@@ -36,10 +43,10 @@ async function stage(output: string) {
     vue: (await import('../plugins/scanners/vue/build.ts')).buildPackage,
     react: (await import('../plugins/scanners/react/build.ts')).buildPackage,
   }
-  for (const [id, build] of Object.entries(builders)) {
-    await build(path.join(output, id))
-  }
-  await run([process.execPath, 'scripts/package-csharp-scanner.ts', path.join(output, 'csharp')])
+  await completeTogether([
+    ...Object.entries(builders).map(([id, build]) => build(path.join(output, id))),
+    run([process.execPath, 'scripts/package-csharp-scanner.ts', path.join(output, 'csharp')]),
+  ])
   for (const id of scannerIds) {
     const directory = path.join(output, id)
     await writeManifest(directory, { ...await manifest(directory), repository, publishConfig: { access: 'public' } })
@@ -111,11 +118,13 @@ async function publish(input: string) {
       throw new Error(`${id}: confirm public names, versions and compatibility before publishing`)
     }
   }
-  for (const id of ['contract', ...scannerIds]) {
-    const directory = path.join(input, id)
-    if (await isPublished(directory)) console.log(`${id}: exact version already published`)
-    else await run(['npm', 'publish', directory, '--access', 'public'])
-  }
+  await publishPackage(path.join(input, 'contract'))
+  await completeTogether(scannerIds.map(id => publishPackage(path.join(input, id))))
+}
+
+async function publishPackage(directory: string) {
+  if (await isPublished(directory)) console.log(`${path.basename(directory)}: exact version already published`)
+  else await run(['npm', 'publish', directory, '--access', 'public'])
 }
 
 const [command, input, output] = process.argv.slice(2)
