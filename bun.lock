@@ -31,7 +31,7 @@
     },
     "packages/scanner": {
       "name": "@groma/scanner",
-      "version": "0.1.0",
+      "version": "0.1.1",
     },
     "packages/work-source": {
       "name": "@groma/work-source",
