@@ -1,0 +1,10 @@
+---
+type: C4 Container
+title: Groma application
+status: stable
+groma:
+  id: cli
+  parent: groma-md
+---
+
+Runs the Groma commands on the user computer. Owns architecture storage, scanner execution, terminal views, local HTTP delivery, and static export. Shared libraries have one source owner here; the browser can also use their pure data functions.

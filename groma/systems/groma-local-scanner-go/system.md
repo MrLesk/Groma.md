@@ -1,7 +1,9 @@
 ---
 type: C4 System
-title: groma.local/scanner-go
+title: Go analysis tool
 status: stable
 groma:
   id: groma-local-scanner-go
 ---
+
+Provides Go source analysis for Groma through a separate worker process.

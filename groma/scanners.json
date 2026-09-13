@@ -6,7 +6,10 @@
     },
     {
       "id": "csharp",
-      "source": "./plugins/scanners/csharp"
+      "source": "./plugins/scanners/csharp",
+      "settings": {
+        "input": "plugins/scanners/csharp/dotnet/Groma.CSharpScanner.csproj"
+      }
     },
     {
       "id": "go",
@@ -22,7 +25,10 @@
     },
     {
       "id": "rust",
-      "source": "./plugins/scanners/rust"
+      "source": "./plugins/scanners/rust",
+      "settings": {
+        "manifest": "plugins/scanners/rust/native/Cargo.toml"
+      }
     },
     {
       "id": "typescript",
@@ -34,6 +40,9 @@
     }
   ],
   "exclude": [
-    "/scripts/"
+    "/scripts/",
+    "/test/",
+    "/test-bun/",
+    "/plugins/scanners/csharp/dotnet/test/"
   ]
 }
