@@ -1,6 +1,6 @@
 ---
 type: C4 Component
-title: Layer modes
+title: Layer geometry
 status: stable
 groma:
   id: layer-modes
@@ -15,4 +15,4 @@ groma:
       file: src/viewers/web/layers/paint.ts
 ---
 
-Keeps orbit, separation, and layer-paint projections as explicit views of the same immutable architecture scene.
+Computes orbit poses and separated layer projections, and paints layer planes and labels from the same immutable architecture scene. Map presentation owns view selection and animation scheduling.

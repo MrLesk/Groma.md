@@ -1,6 +1,6 @@
 ---
 type: C4 Component
-title: Scan
+title: React analysis
 status: stable
 groma:
   id: scanner-scan

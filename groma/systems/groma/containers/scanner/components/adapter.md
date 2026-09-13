@@ -1,6 +1,6 @@
 ---
 type: C4 Component
-title: Adapter
+title: Java scanner adapter
 status: stable
 groma:
   id: adapter
