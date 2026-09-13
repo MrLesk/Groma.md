@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { cp, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 
 import os from 'node:os'
 import path from 'node:path'
@@ -8,7 +8,9 @@ import { createScanObservation } from '@groma/scanner'
 import { listTypeScriptFiles } from '../plugins/scanners/typescript/src/files.ts'
 import { scanTypeScriptSource } from '../plugins/scanners/typescript/src/scan.ts'
 import { loadArchitecture } from '../src/architecture-reader.ts'
-import { reconcileScanObservations } from '../src/core.ts'
+import { requireGromaMapping } from '../src/okf-profile.ts'
+import { upsertCode } from '../src/markdown-emitter.ts'
+import { loadAnnotatedArchitecture, reconcileScanObservations } from '../src/core.ts'
 
 const packageFiles = {
   'groma/index.md': '---\nokf_version: "0.2"\n---\n',
@@ -184,61 +186,21 @@ Curated responsibility.
   }
 })
 
-test.concurrent('reconciliation drops missing Code files without changing authored architecture', async () => {
-  const profilePath = 'groma/systems/shop/containers/api/components/profile.md'
-  const legacyPath = 'groma/systems/shop/containers/api/components/legacy.md'
-  const root = await temporaryTree({
-    ...packageFiles,
-    'src/profile.ts': 'export function readProfile() {}\n',
-    [profilePath]: `---
-type: C4 Component
-title: Profile
-status: stable
-groma:
-  id: profile
-  parent: api
-  group: Data
-  code:
-    - scanner: typescript
-      file: src/profile.ts
-      symbol: oldProfile
-    - scanner: typescript
-      file: src/moved-profile.ts
-      symbol: movedProfile
----
-
-Reads the customer profile.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [Api](../container.md) | Shares the profile | Function call |
-`,
-    [legacyPath]: `---
-type: C4 Component
-title: Legacy
-status: stable
-groma:
-  id: legacy
-  parent: api
-  code:
-    - scanner: typescript
-      file: src/legacy.ts
----
-
-Keeps an authored responsibility after its only source file moves.
-`,
-  })
+test.concurrent('reconciliation drops unreferenced missing Code files without changing authored architecture', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'groma-code-refresh-'))
   try {
-    const summary = await reconcileScanObservations(root, [observation([
-      { file: 'src/profile.ts', symbols: ['readProfile'] },
-    ])])
-
-    expect(summary).toEqual({ created: 0, refreshed: 2, matched: 0 })
-  } finally {
-    await rm(root, { recursive: true, force: true })
-  }
+    await cp(path.resolve(import.meta.dir, '../test/fixtures/flows'), root, { recursive: true })
+    const before = await loadAnnotatedArchitecture(root)
+    const element = before.elements.find(item => item.code.length > 0)!
+    const file = element.code[0]!.file
+    const record = (await loadArchitecture(root)).documents.find(item => item.frontmatter.groma !== undefined && requireGromaMapping(item.frontmatter, item.sourceFilename).id === element.id)!
+    await upsertCode(root, record.sourceFilename, [...element.code.map(({ scanner, file, symbol }) => ({ scanner, file, symbol })), { scanner: 'typescript', file: 'src/moved.fixture' }])
+    await reconcileScanObservations(root, [observation([{ file }])])
+    const after = await loadAnnotatedArchitecture(root)
+    expect(after.elements.find(item => item.id === element.id)?.code.some(code => code.file === 'src/moved.fixture')).toBe(false)
+    expect(after.elements.map(item => [item.id, item.parent, item.origin])).toEqual(before.elements.map(item => [item.id, item.parent, item.origin]))
+    expect(after.relationships).toEqual(before.relationships)
+  } finally { await rm(root, { recursive: true, force: true }) }
 })
 
 test.concurrent('an observed name alone never claims an unknown file', async () => {

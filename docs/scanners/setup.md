@@ -1,4 +1,36 @@
-# Select scanners and check project readiness
+# Project scanner settings
+
+Open **Scanners** from the Groma splash screen (`s`), the terminal map
+(`Shift+S`), or the web toolbar. `groma scanner settings` opens the same terminal
+screen; without a terminal it prints the shared settings snapshot as JSON.
+
+Each row shows project matches, package availability and readiness. **Add scanner**
+accepts an exact npm package version, Git source or local package path. **Install**
+uses a confirmed recommendation. **Restore** restores that selection's package;
+for a missing local package, restore its directory. **Remove** changes this
+project's selection and keeps saved architecture. **Check again** runs preparation
+checks and a scan. **Update** requires an explicit version source for the same npm
+package or Git repository. Local packages run directly from their selected path.
+Terminal controls are shown in the footer; web update details are in each row.
+
+A warning means no available selection matches detected source projects. A quiet
+hint means some detected technology support is missing or needs checking. Actual
+scanner failures show their error. No detected source project is neutral, so a
+project used only to read saved or hand-written architecture needs no scanners.
+Unknown metadata or compatibility remains unknown; a match never promises complete
+architecture coverage. Official and third-party plugins use the same rules.
+
+The live session watches relevant source declarations through the scanner adapter,
+including with no scanner selected so new projects can appear in settings. Only
+installed project selections execute scans. An empty observation set does not
+write architecture. Missing packages do not prevent available scanners from
+running. Partial scans keep Code and relationships from absent scanners, including
+relationships that need several scanners. An active scanner failure prevents that
+batch from replacing the last result. Package changes and shared exclusions update
+subscriptions without restarting. Architecture and Backlog updates have separate
+subscriptions.
+
+## Initialization and command-line setup
 
 `groma init` reviews scanner support before its first scan. The terminal shows
 project declarations, evidence locations, package availability, and coverage
@@ -19,7 +51,7 @@ exact package versions. Disable an existing scanner explicitly with
 
 ## Package availability and project readiness
 
-`groma scanner discover` reads declarations and reports official candidates;
+`groma scanner discover` reads declarations and reports project matches and official candidates;
 it does not run plugins or install anything. An unavailable candidate has no
 verified release and cannot be selected for installation. The current optional
 catalog entries remain unavailable until their releases are qualified.
@@ -42,8 +74,9 @@ the project's dependencies or the TypeScript scanner's SDK.
 
 Groma does not install a JDK, .NET SDK, or project dependencies. Follow the
 reported project-tool instructions explicitly, then run `groma scanner check`
-again. A failed enabled scanner prevents architecture reconciliation; Groma
-does not present the other scanners' partial result as a completed update.
+again. A failed active scanner prevents that batch from reaching architecture
+reconciliation. Missing or unselected packages contribute no observation and do
+not prevent other installed selections from running.
 
 ## Noninteractive use
 

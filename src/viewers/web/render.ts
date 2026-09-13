@@ -31,6 +31,7 @@ import { createPins } from './work/pins.ts'
 import { createTip } from './organisms/tip.ts'
 import { createProjectEditor } from './project/editor.ts'
 import { createAuthoring } from './authoring.ts'
+import { bindScannerSettings } from './scanners/settings.ts'
 import { createRevisionControl } from './revision/control.ts'
 import { createSearchSession } from './search/session.ts'
 import { createWorkIsland } from './work/island.ts'
@@ -40,7 +41,6 @@ import { noSelection, primarySelection, retainSelection, selectArchitecture, sel
 import { createSourceControl } from './source/control.ts'
 import { createTaskDiffControl } from './task-diff/control.ts'
 import { readView, writeView } from './url.ts'
-
 const ZOOM_STEP = 1.25
 const boot = JSON.parse(document.getElementById('world')!.textContent!) as WebBootPayload
 const data = createWebDataSource(boot)
@@ -71,6 +71,7 @@ const zoomHost = document.getElementById('zoom')!
 const hierarchyContent = document.getElementById('hierarchy-content')!
 const hierarchyToggle = document.getElementById('hierarchy-toggle') as HTMLButtonElement
 const map = createMap(host)
+bindScannerSettings(data)
 const edit = data.edit
 const projectEditor = edit === undefined ? undefined : createProjectEditor(input => edit({ id: 'project', ...input }))
 const emptyState = createEmptyState(document.getElementById('empty')!)

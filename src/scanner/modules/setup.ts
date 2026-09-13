@@ -46,6 +46,6 @@ export async function setupScanners(
   }
   const readiness = await checkScannerReadiness(root)
   report(formatReadiness(readiness), 'Project readiness')
-  requireScannerReadiness(readiness)
+  requireScannerReadiness(readiness.filter(item => item.package === 'found'))
   return true
 }

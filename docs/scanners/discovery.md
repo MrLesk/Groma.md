@@ -8,7 +8,8 @@ groma scanner discover --json
 ```
 
 Discovery reads project declarations, preserves their repository-relative
-evidence paths, and matches the discovery rules embedded from official plugin manifests. It
+evidence paths, and matches rules from official plugin manifests and selected
+installed third-party plugin manifests. It
 does not install or execute plugins, run project builds, change scanner
 selection, or write architecture. Rerun it after adding a nested application
 to see the additional support needed alongside the existing selection.
@@ -67,7 +68,11 @@ in a new Groma build. Public package publication remains separate release work.
 
 Third-party authors use the same [metadata contract](creating-a-plugin.md#discovery-metadata).
 A package can be installed by name without appearing in the official selection;
-unlisted packages are not automatically discovered or recommended.
+unlisted packages are not searched for remotely. Once selected and installed, their
+metadata participates in project matching. Settings suppress equivalent official
+recommendations when an available plugin already covers those known technologies.
+A plugin without discovery metadata remains runnable and has unknown project matching.
+Source-watch include patterns do not establish language or framework support.
 
 The result distinguishes:
 

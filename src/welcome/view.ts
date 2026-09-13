@@ -194,7 +194,7 @@ function drawContext(
   text(buffer, `└${'─'.repeat(sheet.innerWidth)}┘`, x, y + 2, width, terminalForeground, terminalBackground)
 }
 
-function paintShell(
+export function paintShell(
   buffer: OptimizedBuffer,
   model: WelcomeModel,
   sheet: WelcomeSheet,
@@ -311,9 +311,15 @@ export function paintLauncher(
 ): void {
   const shell = paintShell(buffer, model, sheet)
   const rows = launcherRows(selectedIndex)
-  drawTable(buffer, sheet, rows, arrowVisible, shell.x, shell.contentY)
+  const notice = model.scanners?.notice
+  if (notice?.message) {
+    text(buffer, `[s] Scanners · ${notice.message}`, shell.x + 2, shell.contentY, shell.width - 4,
+      RGBA.fromHex(notice.tone === 'hint' ? '#7AAFC5' : '#D8A652'), terminalBackground)
+  }
+  const tableY = shell.contentY + (notice?.message ? 2 : 0)
+  drawTable(buffer, sheet, rows, arrowVisible, shell.x, tableY)
   const pluginsY = Math.max(
-    shell.contentY + rows.length * 2 + 1,
+    tableY + rows.length * 2 + 1,
     buffer.height - 2,
   )
   drawParts(buffer, [

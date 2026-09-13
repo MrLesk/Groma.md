@@ -38,6 +38,7 @@ export async function watchScan(
   } = {},
 ): Promise<{ close(): Promise<void> }> {
   const registry = await loadScannerRegistry(repositoryRoot)
+  if (!registry.scannerIds.length) return { async close() {} }
   return watchObservations(repositoryRoot, registry, {
     async onObservations(observations) {
       const summary = await reconcileScanObservations(repositoryRoot, observations)

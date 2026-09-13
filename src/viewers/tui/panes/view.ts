@@ -14,11 +14,13 @@ import { DETAILS_TABS, detailsLines, flowLines, keysLines, profileLines, taskLin
 import { diffLines, sourceLines } from './code.ts'
 import { hierarchyLines, legendLines, revisionLines, workListLines } from './hierarchy.ts'
 import { HIERARCHY_CONTENT_WIDTH, type DetailsView, type ScreenView } from './screen.ts'
-import { plain, type Line, type PaneLines } from './text.ts'
+import { chunk, plain, type Line, type PaneLines } from './text.ts'
 import type { AnnotatedElement } from '../../../types.ts'
 
 /** A compact entry to Backlog, centered below the architecture canvas. */
 function recapLine(theme: ViewerTheme, world: TerminalViewModel, width: number): Line | undefined {
+  const notice = world.scanners?.notice
+  if (notice?.message) return [chunk(` [S] Scanners · ${notice.message} `, notice.tone === 'hint' ? theme.syntax.type : theme.modified)]
   if (world.revision === undefined && !isEmptyWorld(world) && !hasComponents(world)) {
     return [plain(theme, ` ${noComponentsTitle} · ${noComponentsHint} `)]
   }
@@ -216,7 +218,7 @@ export function screenView(
       ? scopeStats(world, { ...state, level: projection.level }, selected) ?? rootStats(world, world.flows.length, workOpen)
       : `${world.revision.shortId} · ${world.revision.subject}`,
     focus: state.focus,
-    footer: footerLine(world, state, selected, lit, step),
+    footer: `${footerLine(world, state, selected, lit, step)}  [S] Scanners`,
     hierarchy: hierarchyView(theme, world, state, selectionId),
     legend: workOpen || historyOpen ? undefined : legendLines(theme, HIERARCHY_CONTENT_WIDTH),
     details: detailsView(theme, world, state, selected, lit),

@@ -7,10 +7,8 @@ import {
 } from '../../init-command.ts'
 import { gromaInitialization } from '../../initialize.ts'
 import { loadProjectProfile } from '../../project-profile.ts'
-import { scanForViewer } from '../source/scanning.ts'
 import { discoverScanners, type ScannerDiscovery } from '../../scanner/modules/discovery.ts'
 import { installSelectedScanners } from '../../scanner/modules/setup.ts'
-import { checkScannerReadiness, requireScannerReadiness } from '../../scanner/modules/readiness.ts'
 import { createWebMapSession } from './map-session.ts'
 import { renderSetupPage } from './startup/page.ts'
 
@@ -37,8 +35,7 @@ export async function startWebViewer(
   function openMap(scan: boolean): Promise<void> {
     error = undefined
     preparing = (async () => {
-      if (scan) await scanForViewer(repositoryRoot)
-      map = await createWebMapSession(repositoryRoot, options)
+      map = await createWebMapSession(repositoryRoot, { ...options, scan })
     })().catch(failed)
     return preparing
   }
@@ -82,7 +79,6 @@ export async function startWebViewer(
       const input = await request.formData()
       await installSelectedScanners(repositoryRoot, proposal, input.getAll('scanner').map(String))
       proposal = await discoverScanners(repositoryRoot)
-      requireScannerReadiness(await checkScannerReadiness(repositoryRoot))
       await openMap(true)
       if (error !== undefined) return setupResponse(400)
       proposal = undefined

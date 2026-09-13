@@ -10,7 +10,7 @@ import packageJson from '../../../package.json'
 import { GromaFileSystem } from '../../groma-filesystem.ts'
 import { officialScannerCatalog, recommendScanners } from './catalog.ts'
 import type { TechnologyFinding, ScannerRecommendation, OfficialScanner } from './catalog.ts'
-import { scannerInventory } from './inventory.ts'
+import { scannerInventory, configuredScannerModules } from './inventory.ts'
 import { readScannerConfig } from './config.ts'
 import type { ScannerInventoryItem, ScannerResolutionOptions } from './inventory.ts'
 
@@ -100,12 +100,18 @@ export async function discoverScanners(
   options: ScannerResolutionOptions = {},
   catalog: readonly OfficialScanner[] = officialScannerCatalog,
 ): Promise<ScannerDiscovery> {
+  const initialized = GromaFileSystem.find(repositoryRoot) !== undefined
+  const modules = initialized ? await configuredScannerModules(repositoryRoot, options) : []
+  const installed = modules.flatMap(module => module.status === 'found' && module.discovery ? [{
+    id: module.id, package: module.name, description: '', ...module.discovery,
+    release: module.discovery.compatibility ? { version: module.version, ...module.discovery.compatibility } : undefined,
+  }] : [])
+  catalog = [...catalog.filter(item => !installed.some(module => module.id === item.id)), ...installed]
   const findings: TechnologyFinding[] = []
   const limits: string[] = []
   const rules = catalog.flatMap(scanner => scanner.rules.map(rule => ({
     rule, matches: compileWatchPatterns({ include: rule.files, exclude: [] }),
   })))
-  const initialized = GromaFileSystem.find(repositoryRoot) !== undefined
   const config = initialized ? await readScannerConfig(repositoryRoot) : undefined
   const matcher = ignore({ ignorecase: false }).add(config?.exclude ?? [])
   for (const file of await projectDeclarations(repositoryRoot, rules)) {

@@ -569,12 +569,16 @@ where you left it, an untouched one refits to the new sheet.
 
 ## Saved architecture without scanners
 
-Opening an existing project does not require its scanners to be installed.
-When a configured scanner is missing, or saved Code references name a scanner
-that is no longer configured, the viewer shows the saved architecture and skips
-automatic source refresh. Elements, Code references and relationships remain
-unchanged. Architecture edits and work updates remain live. With no scanners
-configured, the viewer also reads saved data without scanning.
+Opening an existing project always reads saved architecture. Available selected
+scanners can refresh their evidence while missing or removed scanners' Code and
+relationships remain saved. With no installed selections, scanning does nothing.
+A failed active scanner reports its error and leaves the previous scan result.
+Architecture edits and Backlog updates remain live independently.
 
-Restore the required scanners and reopen the viewer to resume automatic source
-updates. An explicit `groma scan` still reports configured missing scanners.
+Open **Scanners** in the toolbar. A warning means no installed scanner matches the detected project; a quiet
+hint means some detected support is missing or uncertain. Settings show matched
+files, package state and readiness. Add an exact npm/Git/local source, install a
+confirmed recommendation, restore a missing package, remove a project selection,
+check readiness or update a version explicitly. Successful changes update source
+subscriptions without reopening the viewer. Removal keeps saved architecture.
+See [scanner settings](../../scanners/setup.md) for status details.

@@ -1,3 +1,4 @@
+import type { ScannerSettings, ScannerSettingsAction } from '../../scanner/modules/settings-model.ts'
 import type { AcceptInput, AddInput, DraftInput, EditArchitectureInput, RemoveInput } from '../../authoring.ts'
 import type { WorkItemDetails } from '../../types.ts'
 import { PUBLISHED_EVENT, PUBLISHED_VERSION_EVENT } from './payload.ts'
@@ -7,6 +8,9 @@ import type { CodeFile } from '../source/structure.ts'
 import type { TaskDiffPayload } from '../source/diff.ts'
 
 export interface WebDataSource {
+  readScanners?(): Promise<ScannerSettings>
+  changeScanners?(action: ScannerSettingsAction): Promise<ScannerSettings>
+  onScanners?: (state: ScannerSettings) => void
   readWorld(revision?: string): Promise<WebPayload>
   readRevisions(): Promise<WebRevision[]>
   readCode(element: string, revision?: string): Promise<readonly CodeFile[]>
@@ -50,6 +54,12 @@ function selected(path: string, values: Record<string, string | undefined>): str
 
 function liveDataSource(): WebDataSource {
   return {
+    readScanners: () => responseJson('/scanner-settings'),
+    async changeScanners(action) {
+      const response = await fetch('/scanner-settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(action) })
+      if (!response.ok) throw new Error(await response.text())
+      return response.json() as Promise<ScannerSettings>
+    },
     readRevisions() {
       return responseJson('/revisions.json')
     },
@@ -75,6 +85,7 @@ function liveDataSource(): WebDataSource {
     accept: input => send('/accept', input),
     subscribe(handlers) {
       const events = new EventSource('/events')
+      events.addEventListener('scanners', event => this.onScanners?.(JSON.parse(event.data) as ScannerSettings))
       events.addEventListener('world', event => {
         handlers.world(JSON.parse(event.data) as WebPayload)
       })

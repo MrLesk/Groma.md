@@ -36,6 +36,7 @@ const PAN_FRAMES = 4
 const PAN_MS = 30
 
 interface ViewerOptions {
+  openScanners?: () => Promise<void>
   level?: TerminalLevel
   currentId?: string
   onRefresh?: () => void | Promise<void>
@@ -101,6 +102,7 @@ export function mountTerminalViewer(
     ...(options.currentId === undefined ? {} : { currentId: options.currentId }),
   }
   let closed = false
+  let scannerSettingsOpen = false
   let resolveClosed!: () => void
   const closedPromise = new Promise<void>(resolve => {
     resolveClosed = resolve
@@ -397,14 +399,26 @@ export function mountTerminalViewer(
     return true
   }
 
-  function onKeypress(key: KeyEvent): void {
-    if (key.eventType === 'release') return
+  function openScannerSettings(key: KeyEvent): boolean {
+    if (key.name === 's' && key.shift && !key.ctrl && state.search === undefined && options.openScanners) {
+      scannerSettingsOpen = true
+      void options.openScanners().finally(() => { scannerSettingsOpen = false; repaint() })
+      return true
+    }
+    return false
+  }
+
+  function globalKey(key: KeyEvent): boolean {
+    if (key.eventType === 'release' || scannerSettingsOpen) return true
+    if (openScannerSettings(key)) return true
     // Groma owns pane navigation; focused toolkit scrollbars must not scroll again.
     key.preventDefault()
-    if (key.ctrl && key.name === 'c') {
-      destroy()
-      return
-    }
+    if (key.ctrl && key.name === 'c') { destroy(); return true }
+    return false
+  }
+
+  function onKeypress(key: KeyEvent): void {
+    if (globalKey(key)) return
     if (handleEmptyWorldKey(key)) return
     if (state.search) {
       onSearchKey(key)

@@ -1,3 +1,4 @@
+import { parseScannerDiscovery, type ScannerDiscoveryMetadata } from '@groma/scanner'
 import { createHash } from 'node:crypto'
 import { homedir } from 'node:os'
 import { mkdir, mkdtemp, readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
@@ -26,6 +27,7 @@ export interface GitScannerSource {
 export type ScannerSource = NpmScannerSource | LocalScannerSource | GitScannerSource
 
 export interface ResolvedScannerPackage {
+  discovery?: ScannerDiscoveryMetadata
   entry: string
   id: string
   name: string
@@ -146,6 +148,7 @@ async function scannerPackage(packageRoot: string): Promise<ResolvedScannerPacka
     id: scanner.id,
     name: manifest.name,
     version: manifest.version,
+    ...(scanner.discovery === undefined ? {} : { discovery: parseScannerDiscovery(scanner.discovery) }),
   }
 }
 
