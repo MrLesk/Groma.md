@@ -120,7 +120,12 @@ export async function installScanners(
   let installed = 0
   for (const scanner of configured) {
     const source = parseScannerSource(repositoryRoot, scanner.source)
-    if (source.kind === 'local') continue
+    if (source.kind === 'local') {
+      if (await resolveScannerPackage(source, cacheRoot(options)) === undefined) {
+        throw new Error(`Scanner ${scanner.id} is missing. Restore the local scanner directory: ${scanner.source}`)
+      }
+      continue
+    }
     const { package: resolved } = await installScannerPackage(source, cacheRoot(options), options.registry)
     if (resolved.id !== scanner.id) {
       throw new Error(`configured scanner ${scanner.id} resolves to manifest id ${resolved.id}`)

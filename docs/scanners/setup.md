@@ -108,6 +108,9 @@ groma scan
 
 Local scanner paths remain available for development through `scanner add`;
 they do not establish that an official public release exists.
+Bulk install also checks local selections and fails with the missing directory
+when one is unavailable. To share a local scanner with colleagues, commit its
+runnable package and select a path relative to the repository.
 
 Scanner selection and readiness are operational configuration, not OKF
 concepts or C4 elements. Ordinary Markdown and OKF readers keep the same
