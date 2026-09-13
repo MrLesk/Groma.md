@@ -364,6 +364,13 @@ groma scanner remove python
 `install` restores configured npm and Git packages. `remove` disables a scanner without
 deleting shared cache data.
 
+For a runnable example, use the [inventory teaching scanner](https://github.com/MrLesk/groma-scanner-example/tree/v0.1.0)
+with its supplied project fixture and Groma 0.3.0 or later:
+
+```sh
+groma scanner add 'git+https://github.com/MrLesk/groma-scanner-example.git#v0.1.0'
+```
+
 A Git source must use public HTTPS and contain one runnable scanner package at
 its repository root. Include bundled entry code and required worker assets in
 the selected tag or commit. Groma installs declared dependencies with installation
