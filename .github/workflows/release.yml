@@ -3,6 +3,11 @@ name: Release
 # Publishing a GitHub release creates its tag and starts this workflow; the tag names the version.
 on:
   workflow_dispatch:
+    inputs:
+      publish_scanners:
+        description: Publish changed scanner packages without releasing Groma
+        type: boolean
+        default: false
   release:
     types: [published]
 
@@ -100,7 +105,7 @@ jobs:
           if-no-files-found: error
 
   publish-scanners:
-    if: github.event_name == 'release'
+    if: github.event_name == 'release' || inputs.publish_scanners
     name: publish-official-scanners
     needs: build-scanners
     runs-on: ubuntu-latest
@@ -132,6 +137,7 @@ jobs:
           if-no-files-found: error
 
   build:
+    if: github.event_name == 'release'
     name: build-${{ matrix.target }}
     needs: publish-scanners
     strategy:

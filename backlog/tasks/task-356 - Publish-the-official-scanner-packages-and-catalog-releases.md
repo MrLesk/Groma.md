@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@codex'
 created_date: '2026-09-12 14:24'
-updated_date: '2026-09-13 15:19'
+updated_date: '2026-09-13 16:00'
 labels:
   - scanners
 dependencies:
@@ -20,6 +20,7 @@ references:
   - rust-src-scanner-index
   - rust-scanner-build
   - scanner-modules
+  - framework-package
 documentation:
   - docs/scanners/index.md
   - docs/scanners/creating-a-plugin.md
@@ -45,6 +46,7 @@ modified_files:
   - package.json
   - packages/scanner/package.json
   - bun.lock
+  - plugins/scanners/framework-package.ts
 priority: high
 type: feature
 ordinal: 402000
@@ -88,6 +90,8 @@ The existing Java/Angular/TypeScript acceptance project is ../callforpapers, rel
 Prepare initial 0.1.0 releases under the confirmed @groma organization, with plugin-owned compatibility metadata for Groma 0.3.0. Publish the author contract first. Build the eight official scanners for all five approved targets using the shared release workflow, assemble their workers, and publish with npm authentication. Embed published metadata into a fresh Groma build; verify public installation, exact restore, and the disposable callforpapers example. Keep the main npm name groma.md. Record build targets separately from manually exercised targets.
 
 Finish the approved release: bump the changed scanner author contract to 0.1.1, retain prepared scanner 0.1.1 versions, run the repository check, and publish Groma 0.3.0 through the existing trusted GitHub release workflow. Verify the five build targets, public package metadata, a fresh compiled install and exact second-checkout restore on the prepared callforpapers example. Record actual manual platform coverage.
+
+Public consumer validation reproduced bundled framework compiler library paths pointing at the CI build checkout. Fix the shared Angular/React/Vue package builder, verify relocated packages on the existing examples, bump only these changed plugins, and publish them through the same trusted workflow without changing Groma 0.3.0. Resume public acceptance and task finalization.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
@@ -124,6 +128,14 @@ Final release pass: current source changes require @groma/scanner 0.1.1 as well 
 Release 34764733268 built all five scanner targets but publication failed before uploading packages: npm parsed scanner-packages/contract as GitHub shorthand. The publish entry now resolves the staging directory to an absolute path, matching stage/assemble handling. Publish a corrected Groma 0.3.1 release rather than move the public v0.3.0 Git tag. Scanner packages remain the unpublished 0.1.1 versions.
 
 Verified with the installed npm argument parser: scanner-packages/contract is type git, while its resolved absolute path is type directory. Full check after the one-line fix passed: 16 Node and 290 Bun tests, six native skips (the working tree also contains concurrent TASK-166 checks). Release CI validates the exact committed snapshot independently.
+
+Release paused after Alex raised that the changelog had not been aligned. Cancelled workflow 34765239797 for v0.3.1 during validation, before scanner build/publication. npm still reports groma.md 0.2.0 and scanner contract/TypeScript 0.1.0. GitHub release entries v0.3.0 and v0.3.1 exist, but no npm package or binary was published by either attempt. Do not resume publication until the changelog and release sequence are aligned with Alex.
+
+Alex approved the shorter Highlights / Behavior changes release notes and explicitly requested deleting both attempted tags/releases and creating a clean v0.3.0. Deleted the v0.3.0 and v0.3.1 GitHub releases and remote tags, then created v0.3.0 at corrected commit 184072e67d4bf66be49b7154314346dfca5e5040 with the reviewed notes and v0.2.0...v0.3.0 comparison. This supersedes the publication pause and v0.3.1 plan. Trusted release workflow restarted; successful package publication and consumer checks remain to be verified.
+
+All eight scanner 0.1.1 packages and @groma/scanner 0.1.1 were published through GitHub OIDC in run 34765688173. CLI builds read the registry before Vue was visible: build lookups at 15:40:10–48 UTC preceded the registry publication timestamp 15:40:57. All eight exact versions now resolve through the same readPublishedScanners code. Rerunning only failed CLI jobs; no package/version/code change is required.
+
+Public consumer checks found Angular/React/Vue compiler library paths embedded from the CI host. The shared builder now ships the pinned compiler as typescript.cjs beside its existing library declarations and keeps that import external to the adapter bundle. No compiler patch, runtime fallback, added dependency or architecture semantic change. Relocated React scan on Yaak passed (245 files, 8 invocations); Angular on callforpapers passed (711 files, 121 invocations). All three compilers resolve libraries inside their installed package. Existing framework suite: 13 passed; full repository check: 16 Node and 290 Bun passed, six native skips. Added an explicit publish_scanners input to the same trusted workflow to publish corrected framework packages at 0.1.2 without republishing Groma 0.3.0. Other scanner versions remain 0.1.1. Implementer specification/quality review passed for this bounded packaging fix.
 <!-- SECTION:NOTES:END -->
 
 ## Comments

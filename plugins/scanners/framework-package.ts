@@ -14,10 +14,12 @@ export async function buildFrameworkPackage(root: string, destination: string): 
   const result = await Bun.build({
     entrypoints: [path.join(root, 'src/index.ts')], outdir: output, target: 'bun', format: 'esm', naming: 'index.js',
     plugins: [{ name: `${id}-typescript`, setup(build) {
-      build.onResolve({ filter: /^typescript$/ }, () => ({ path: typescript }))
+      build.onResolve({ filter: /^typescript$/ }, () => ({ path: './typescript.cjs', external: true }))
     } }],
   })
   if (!result.success) throw new Error(result.logs.join('\n'))
+  // Keep the compiler beside its libraries so its own filename resolves at runtime.
+  await cp(typescript, path.join(output, 'typescript.cjs'))
   for (const file of await readdir(declarations)) {
     if (file.startsWith('lib.') && file.endsWith('.d.ts')) await cp(path.join(declarations, file), path.join(output, file))
   }

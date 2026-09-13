@@ -8,6 +8,12 @@ versions; npm versions cannot be replaced. The workflow reuses exact versions
 already published and publishes only missing versions. Bump every package whose
 contents changed before starting a release.
 
+Prepare a draft GitHub release and review its version, target commit and changelog
+with the maintainer before publishing it. Publishing the GitHub release starts
+the shared workflow for both scanner packages and the main Groma CLI.
+To release changed scanners without a new Groma version, run the same workflow
+manually with `publish_scanners` enabled. Leave it disabled for a build-only run.
+
 The author contract is `@groma/scanner`. Official packages use
 `@groma/scanner-<id>`; the main CLI remains `groma.md`. Initial scanner versions
 are `0.1.0` and require Groma `^0.3.0`. The manifests own
@@ -79,6 +85,11 @@ not published. It embeds those published detection rules into the build checkout
 At installation time, Groma resolves a suitable release from npm again; it never
 uses a development manifest version as proof of availability. Publishing
 never silently changes an existing project's recorded scanner selection.
+
+A newly accepted npm upload may take time to appear in registry reads. If the
+catalog step reports a missing version immediately after successful publication,
+confirm that exact version is visible with `npm view <package>@<version> version`,
+then rerun the failed workflow jobs. Keep the existing release and package versions.
 
 Record exact public package versions, built targets, manually exercised targets,
 and the fresh-install and second-checkout restore results in the release task.
