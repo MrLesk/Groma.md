@@ -8,15 +8,26 @@ The worker requires the .NET 10 runtime. Its Roslyn dependencies are 5.9.0 and M
 
 Use `dotnet` on PATH, or set `DOTNET_HOST_PATH` to the installed dotnet executable. The scanner uses the selected input directory for SDK lookup. [Microsoft's SDK selection documentation](https://learn.microsoft.com/en-us/dotnet/core/versions/selection) explains how `global.json` is found. An unavailable pinned SDK fails instead of using a different SDK.
 
-For a nested project, create `groma.csharp.json` at the repository root:
+For a nested project, set `settings` on the existing `csharp` entry in the
+shared `scanners.json` inside `groma/` or `.groma/`. Preserve its installed source:
 
 ```json
-{ "input": "src/Library/Library.csproj" }
+{
+  "id": "csharp",
+  "source": "./tools/csharp-scanner-package",
+  "settings": { "input": "src/Library/Library.csproj" }
+}
 ```
+
+When `input` is omitted, the scanner selects a single root solution, or a
+single root project when no solution exists. Multiple candidates require an
+explicit `settings.input`. Paths are relative to the repository root. Run a
+new scan or restart the active viewer or watch session after editing settings.
+See the [shared configuration contract](../creating-a-plugin.md#scanner-settings).
 
 Run `dotnet restore Library.csproj` from that input directory, then run `groma scan` from the repository root. Restore uses the project's normal NuGet settings and credentials. On macOS, use a relative restore input from its directory so `/var` and `/private/var` aliases do not enter one restore graph as separate project paths.
 
-Install a prepared local package with `groma scanner add /path/to/csharp-scanner-package`. Release publication is separate from local qualification. The package also exports `checkCSharpReadiness(repositoryRoot)`, used through the same input/tool checks as scanning. It returns the selected input and SDK version; successful readiness does not prove dependency restore or compilation. A missing worker means the package needs preparation; missing tooling or compilation errors must be fixed before scanning can replace architecture evidence.
+Install a prepared local package with `groma scanner add /path/to/csharp-scanner-package`. Release publication is separate from local qualification. The package also exports `checkCSharpReadiness(repositoryRoot, settings)`, used through the same input/tool checks as scanning. It returns the selected input and SDK version; successful readiness does not prove dependency restore or compilation. A missing worker means the package needs preparation; missing tooling or compilation errors must be fixed before scanning can replace architecture evidence.
 
 ## Supported input and evidence
 
@@ -26,9 +37,12 @@ Inputs are SDK-style `.csproj`, `.sln`, and `.slnx` files. When input is omitted
 
 Each physical C# source has one inventory record. Generated `bin` and `obj` sources are excluded. Roslyn resolves overloads, generic methods, extensions, partial implementations and direct calls. Virtual, interface and delegate dispatch retain uncertainty where the runtime provider is not established. Implicit calls, initializers, generated operations, receiver/delegate value flow, dependency injection and network protocols are not resolved.
 
-Source relationships and operations are temporary evidence. They are not C4 components or proof of business collaborations. Core owns curated source membership and relationship selection; ordinary Markdown readers retain readable descriptions and links under the existing OKF application profile. This plugin introduces no architecture metadata or map level.
+Solutions and projects are source roots, with each project linked to its solution
+when a solution is selected. File records identify their project root. A directly
+selected project and its loaded project references are top-level source roots.
+Root membership and operations are temporary evidence. They are not C4 components or proof of business collaborations. Core owns curated source membership and relationship selection; ordinary Markdown readers retain readable descriptions and links under the existing OKF application profile. This plugin introduces no architecture metadata or map level.
 
-Configuration also accepts `configuration` (default `Debug`), `maxProjects` (128), `maxFiles` (20000), and `timeoutSeconds` (120). Exceeded limits fail the scan; they never publish truncated evidence. Any enabled scanner failure prevents reconciliation and preserves the prior map.
+`settings` also accepts `configuration` (default `Debug`), `maxProjects` (128), `maxFiles` (20000), and `timeoutSeconds` (120). Exceeded limits fail the scan; they never publish truncated evidence. Any enabled scanner failure prevents reconciliation and preserves the prior map.
 
 ## Contributor package build
 
@@ -36,7 +50,6 @@ With .NET 10 SDK installed, restore `plugins/scanners/csharp/dotnet/Groma.CSharp
 
 ```sh
 bun scripts/package-csharp-scanner.ts
-bun scripts/validate-csharp-package.ts dist/groma dist/csharp-scanner-package
 ```
 
-The build bundles the adapter and publishes a framework-dependent worker into the package. It has no installation scripts and does not include a private SDK. Run the Roslyn tests with `dotnet test plugins/scanners/csharp/dotnet/test/Groma.CSharpScanner.Tests.csproj` and adapter tests with `bun test test-bun/csharp-scanner.test.ts`.
+The build bundles the adapter and publishes a framework-dependent worker into the package. It has no installation scripts and does not include a private SDK. Run the Roslyn tests with `dotnet test plugins/scanners/csharp/dotnet/test/Groma.CSharpScanner.Tests.csproj`.

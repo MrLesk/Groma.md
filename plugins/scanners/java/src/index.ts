@@ -1,9 +1,9 @@
 import type { ScannerPlugin } from '@groma/scanner'
-import { checkJavaReadiness, isJavaScanFile, scanJavaSource } from './adapter.ts'
+import { checkJavaReadiness, scanJavaSource } from './adapter.ts'
 
 const scanner = {
   id: 'java',
-  matchesFile: isJavaScanFile,
+  watch: { include: ['**/*.java', 'pom.xml', '.mvn/**'], exclude: [] },
   checkReadiness: async root => { await checkJavaReadiness(root) },
   scan: scanJavaSource,
 } satisfies ScannerPlugin

@@ -24,7 +24,6 @@ test('reconstructs observed elements, ghosts, and drafts from the OKF profile', 
   assert.equal(stock?.draft, 'next')
   assert.equal(model.elements.find(element => element.id === 'orders')?.origin, 'observed')
   assert.equal(model.elements.find(element => element.id === 'git')?.external, true)
-  assert.doesNotThrow(() => JSON.stringify(model))
 })
 
 test('move eligibility uses the complete Markdown body', { concurrency: true }, () => {

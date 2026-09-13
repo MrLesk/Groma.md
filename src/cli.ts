@@ -3,7 +3,7 @@
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-import { Command } from 'commander'
+import { Command, Option } from 'commander'
 import { confirm } from '@clack/prompts'
 import packageJson from '../package.json' with { type: 'json' }
 
@@ -156,21 +156,12 @@ async function initializeProject(
   }
 }
 
-async function exportWeb(directory: string, watch: boolean): Promise<void> {
+async function exportWeb(directory: string): Promise<void> {
   const root = process.cwd()
-  await scanRepository(root)
   const { exportWebViewer } = await import('./viewers/web/export.ts')
-  const exported = await exportWebViewer(root, directory, {
-    watch,
-    onError: error => console.error(error instanceof Error ? error.message : String(error)),
-  })
+  const exported = await exportWebViewer(root, directory)
   console.log(`groma export at ${path.resolve(directory)}`)
-  if (!watch) {
-    await exported.close()
-    return
-  }
-  stopOnSignal(() => exported.close())
-  await exported.closed
+  await exported.close()
 }
 
 async function scanOnce(): Promise<void> {
@@ -261,9 +252,13 @@ program
   .command('export')
   .description('Export the browser map as a read-only static site')
   .argument('<directory>', 'output directory')
-  .option('--watch', 'refresh the static snapshot when local inputs change')
-  .action(async (directory: string, options) => {
-    await exportWeb(directory, options.watch === true)
+  .addOption(new Option('--watch').hideHelp())
+  .on('option:watch', () => {
+    console.log('Coming soon.')
+    process.exit(0)
+  })
+  .action(async (directory: string) => {
+    await exportWeb(directory)
   })
 
 program

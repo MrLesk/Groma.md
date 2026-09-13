@@ -1,9 +1,40 @@
 {
   "name": "@groma/scanner-go",
   "version": "0.1.0",
-  "private": true,
+  "private": false,
   "type": "module",
   "license": "MIT",
-  "groma": { "scanner": { "id": "go", "entry": "./src/index.ts" } },
-  "dependencies": { "@groma/scanner": "workspace:*" }
+  "groma": {
+    "scanner": {
+      "id": "go",
+      "entry": "./src/index.ts",
+      "discovery": {
+        "technologies": [
+          "go"
+        ],
+        "rules": [
+          {
+            "type": "text",
+            "files": [
+              "**/go.mod"
+            ],
+            "technology": "go",
+            "kind": "language",
+            "versionPattern": "^go\\s+(\\S+)",
+            "declaration": "Go module go directive"
+          }
+        ],
+        "compatibility": {
+          "groma": "^0.3.0",
+          "technologyVersions": {
+            "go": "1.20.0"
+          }
+        }
+      }
+    }
+  },
+  "dependencies": {
+    "@groma/scanner": "workspace:*"
+  },
+  "description": "Go project evidence through Go language tooling."
 }

@@ -109,8 +109,8 @@ export async function startTerminalViewer(
     })
     const stopWatches = async () => {
       closed = true
-      workWatch.close()
       await Promise.all([
+        workWatch.close(),
         sourceWatch.close(),
         architectureWatch.close(),
       ])

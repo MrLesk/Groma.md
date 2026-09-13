@@ -4,7 +4,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { parseScanObservation, type ScanObservation } from '@groma/scanner'
 
-const packagedWorker = fileURLToPath(new URL(`../dist/worker${process.platform === 'win32' ? '.exe' : ''}`, import.meta.url))
+const packagedWorker = fileURLToPath(new URL(`../dist/${process.platform}-${process.arch}/worker${process.platform === 'win32' ? '.exe' : ''}`, import.meta.url))
 
 export interface GoScanOptions {
   go?: string

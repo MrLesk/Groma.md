@@ -25,7 +25,7 @@ This page is the browser surface. The shared viewer rules live in
 
 ## Static publication
 
-`groma export <directory>` writes the current Web view as static HTML,
+`groma export <directory>` reads stored architecture and writes the Web view as static HTML,
 JavaScript, snapshot, and generation files. The read-only page includes the
 project profile, architecture and flows, mapped Backlog tasks with their
 details and diffs, and source inspection for files owned by architecture
@@ -38,17 +38,19 @@ access the static host. Groma supplies no public server, authentication, or
 access control. Publish the directory only through a static host whose access
 rules match the project.
 
-With `--watch`, Groma keeps running locally and atomically replaces the static
-snapshot after supported source, architecture Markdown, or Backlog changes.
-An already-open page polls only the small `version.js` file on its static host,
-then loads `snapshot.js` when the generation changes. It adopts that snapshot
-without a reload. No inbound connection to Groma is opened.
+Export does not run a scanner. Run `groma scan` first when source changes need
+to be reflected in the stored architecture.
+
+Export writes one snapshot and exits. Run the command again to publish updated
+architecture, tasks, diffs, and owned source files. Serve or upload the output
+separately. Backlog tasks are read through the shared CLI work source; Groma
+does not inspect Backlog storage.
 
 ## Layout
 
 When no components exist, the page points to `groma scanner setup` for a
 coverage review. An empty world shows the project name and explains that
-TypeScript is embedded while other languages use optional scanner packages. A world with existing architecture
+Source scanning uses the plugins selected for this project. A world with existing architecture
 keeps its map and navigation beneath a compact, dismissible notice. The first
 component removes the notice without a reload. Historical views hide it.
 

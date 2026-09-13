@@ -129,9 +129,9 @@ contract; framework extraction has its own scanner fixture.
 
 ## Completion, precision, and uncertainty
 
-The current observation's `complete: true` means the scanner successfully
-produced its complete declared observation for reconciliation. It is not a
-claim that every possible runtime call has been identified.
+Returning an observation means the scanner successfully produced its declared
+analysis for reconciliation. Failure throws; there is no `complete` flag.
+Success does not claim that every possible runtime call has been identified.
 
 A successful operation analysis can contain unresolved targets. Distinguish a
 known provider set from whether that set may be incomplete. A single target

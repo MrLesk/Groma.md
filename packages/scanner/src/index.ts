@@ -1,18 +1,19 @@
+export { parseScannerDiscovery } from './discovery.ts'
+export type { ScannerDiscoveryMetadata, ScannerDiscoveryRule } from './discovery.ts'
+
 export interface ScannerIdentity {
-  language: string
+  id: string
+  technology: string
   engine: string
   engineVersion: string
 }
 
 export interface ScanRoot {
+  id: string
   kind: string
   name: string
-  file: string
-}
-
-export interface ScanScope {
-  id: string
-  name: string
+  file?: string
+  parent?: string
 }
 
 export interface ScanSymbol {
@@ -23,24 +24,16 @@ export interface ScanSymbol {
 
 export interface ScanFile {
   file: string
+  roots: string[]
   symbols: ScanSymbol[]
-}
-
-export interface ScanPlacement {
-  file: string
-  scope: string
-}
-
-export interface ScanRelationship {
-  source: string
-  target: string
-  kind: string
 }
 
 export interface ScanDiagnostic {
   severity: string
   code: string
   message: string
+  file?: string
+  line?: number
 }
 
 export interface ScanOperation {
@@ -71,27 +64,67 @@ export interface ScanInvocation {
 export interface ScanObservation {
   schemaVersion: 1
   scanner: ScannerIdentity
-  complete: true
-  root: ScanRoot
-  scopes: ScanScope[]
+  roots: ScanRoot[]
   files: ScanFile[]
-  placements: ScanPlacement[]
-  relationships: ScanRelationship[]
   /** Omitted when a scanner does not extract operation evidence. Never persisted as a graph. */
   operations?: ScanOperation[]
   invocations?: ScanInvocation[]
   diagnostics: ScanDiagnostic[]
 }
 
-export interface ScannerPlugin {
-  id: string
-  matchesFile(relativePath: string): boolean
-  /** Check installed tools and project preparation; throw concrete instructions when blocked. */
-  checkReadiness?(repositoryRoot: string): Promise<void>
-  scan(repositoryRoot: string): Promise<ScanObservation | undefined>
+/** Scanner-owned JSON settings supplied by Groma; plugins do not read Groma configuration files. */
+export type ScannerSettings = Readonly<Record<string, unknown>>
+
+type DeclarationScope = 'export' | 'internal'
+type MemberScope = 'public' | 'protected' | 'private'
+
+interface DeclarationBase {
+  name: string
+  line: number
+  scope: DeclarationScope
+  entry: boolean
 }
 
-type ObservationInput = Omit<ScanObservation, 'schemaVersion' | 'complete'>
+export interface CodeCallable extends DeclarationBase {
+  kind: 'function'
+}
+
+export interface CodeMember {
+  name: string
+  line: number
+  scope: MemberScope
+  entry: boolean
+}
+
+export interface CodeClass extends DeclarationBase {
+  kind: 'class'
+  members: CodeMember[]
+}
+
+export type CodeDeclaration = CodeCallable | CodeClass
+
+export interface CodeFile {
+  file: string
+  declarations: CodeDeclaration[]
+}
+
+export interface SourceReference {
+  file: string
+  symbols: string[]
+}
+
+export interface ScannerPlugin {
+  id: string
+  /** Repository-relative patterns for source and configuration changes that trigger analysis. */
+  watch: { include: string[]; exclude: string[] }
+  /** Check installed tools and project preparation; throw concrete instructions when blocked. */
+  checkReadiness?(repositoryRoot: string, settings?: ScannerSettings): Promise<void>
+  /** Optional source outline for Code references; this data is never architecture persistence. */
+  readCodeStructure?(repositoryRoot: string, references: readonly SourceReference[], settings?: ScannerSettings): Promise<CodeFile[]>
+  scan(repositoryRoot: string, settings?: ScannerSettings): Promise<ScanObservation | undefined>
+}
+
+type ObservationInput = Omit<ScanObservation, 'schemaVersion'>
 
 function compare(...values: string[]): string {
   return values.join('\0')
@@ -108,9 +141,11 @@ function uniqueBy<T>(values: T[], key: (value: T) => string, label: string): T[]
 }
 
 export function createScanObservation(input: ObservationInput): ScanObservation {
-  const scopes = uniqueBy(input.scopes, scope => scope.id, 'scope id')
+  const roots = validateRoots(input.roots)
+  const rootIds = new Set(roots.map(root => root.id))
   const files = uniqueBy(input.files.map(file => ({
     ...file,
+    roots: [...new Set(file.roots)].sort(),
     symbols: [...new Map(file.symbols.map(symbol => [
       compare(symbol.id, symbol.kind),
       symbol,
@@ -118,65 +153,59 @@ export function createScanObservation(input: ObservationInput): ScanObservation 
       return compare(left.id, left.kind).localeCompare(compare(right.id, right.kind))
     }),
   })), file => file.file, 'file path')
-  const scopeIds = new Set(scopes.map(scope => scope.id))
   const filePaths = new Set(files.map(file => file.file))
-  const placements = [...new Map(input.placements.map(placement => [
-    compare(placement.file, placement.scope),
-    placement,
-  ])).values()].sort((left, right) => {
-    return compare(left.file, left.scope).localeCompare(compare(right.file, right.scope))
-  })
-  const relationships = [...new Map(input.relationships.map(relationship => [
-    compare(relationship.source, relationship.target, relationship.kind),
-    relationship,
-  ])).values()].sort((left, right) => {
-    return compare(left.source, left.target, left.kind)
-      .localeCompare(compare(right.source, right.target, right.kind))
-  })
-
-  const placedFiles = new Set<string>()
-  for (const placement of placements) {
-    if (!filePaths.has(placement.file)) {
-      throw new Error(`placement references unknown file: ${placement.file}`)
-    }
-    if (!scopeIds.has(placement.scope)) {
-      throw new Error(`placement references unknown scope: ${placement.scope}`)
-    }
-    if (placedFiles.has(placement.file)) {
-      throw new Error(`file has multiple placements: ${placement.file}`)
-    }
-    placedFiles.add(placement.file)
-  }
-  for (const file of filePaths) {
-    if (!placedFiles.has(file)) throw new Error(`file has no placement: ${file}`)
-  }
-  const evidenceIds = new Set([...scopeIds, ...filePaths])
-  for (const relationship of relationships) {
-    if (!evidenceIds.has(relationship.source)) {
-      throw new Error(`relationship references unknown source: ${relationship.source}`)
-    }
-    if (!evidenceIds.has(relationship.target)) {
-      throw new Error(`relationship references unknown target: ${relationship.target}`)
+  for (const file of files) {
+    if (file.roots.length === 0) throw new Error(`file has no root: ${file.file}`)
+    for (const root of file.roots) {
+      if (!rootIds.has(root)) throw new Error(`file references unknown root: ${root}`)
     }
   }
+  for (const diagnostic of input.diagnostics) diagnosticLocation(diagnostic)
 
   return {
     schemaVersion: 1,
     scanner: input.scanner,
-    complete: true,
-    root: input.root,
-    scopes,
+    roots,
     files,
-    placements,
-    relationships,
     ...operationEvidence(input, filePaths),
     diagnostics: [...new Map(input.diagnostics.map(diagnostic => [
-      compare(diagnostic.severity, diagnostic.code, diagnostic.message),
+      diagnosticKey(diagnostic),
       diagnostic,
     ])).values()].sort((left, right) => {
-      return compare(left.severity, left.code, left.message)
-        .localeCompare(compare(right.severity, right.code, right.message))
+      return diagnosticKey(left).localeCompare(diagnosticKey(right))
     }),
+  }
+}
+
+function validateRoots(input: ScanRoot[]): ScanRoot[] {
+  const roots = uniqueBy(input, root => root.id, 'root id')
+  const byId = new Map(roots.map(root => [root.id, root]))
+  for (const root of roots) {
+    const visited = new Set<string>([root.id])
+    let parent = root.parent
+    while (parent !== undefined) {
+      if (visited.has(parent)) throw new Error(`root hierarchy contains a cycle: ${parent}`)
+      visited.add(parent)
+      const ancestor = byId.get(parent)
+      if (ancestor === undefined) throw new Error(`root references unknown parent: ${parent}`)
+      parent = ancestor.parent
+    }
+  }
+  return roots
+}
+
+function diagnosticKey(diagnostic: ScanDiagnostic): string {
+  return compare(diagnostic.severity, diagnostic.code, diagnostic.message,
+    diagnostic.file ?? '', String(diagnostic.line ?? ''))
+}
+
+function diagnosticLocation(value: { file?: unknown; line?: unknown }): Pick<ScanDiagnostic, 'file' | 'line'> {
+  if (value.line !== undefined && (!Number.isInteger(value.line) || Number(value.line) < 1)) {
+    throw new Error('diagnostic.line must be a positive integer')
+  }
+  return {
+    ...(value.file === undefined ? {} : { file: string(value.file, 'diagnostic.file') }),
+    ...(value.line === undefined ? {} : { line: Number(value.line) }),
   }
 }
 
@@ -200,33 +229,31 @@ function array(value: unknown, label: string): unknown[] {
 export function parseScanObservation(source: string): ScanObservation {
   const value = object(JSON.parse(source), 'observation')
   if (value.schemaVersion !== 1) throw new Error('unsupported scanner schema')
-  if (value.complete !== true) throw new Error('scanner observation is incomplete')
   const scanner = object(value.scanner, 'scanner')
-  const root = object(value.root, 'root')
 
   return createScanObservation({
     scanner: {
-      language: string(scanner.language, 'scanner.language'),
+      id: string(scanner.id, 'scanner.id'),
+      technology: string(scanner.technology, 'scanner.technology'),
       engine: string(scanner.engine, 'scanner.engine'),
       engineVersion: string(scanner.engineVersion, 'scanner.engineVersion'),
     },
-    root: {
-      kind: string(root.kind, 'root.kind'),
-      name: string(root.name, 'root.name'),
-      file: string(root.file, 'root.file'),
-    },
     ...parseOperations(value),
-    scopes: array(value.scopes, 'scopes').map((entry, index) => {
-      const scope = object(entry, `scopes[${index}]`)
+    roots: array(value.roots, 'roots').map(entry => {
+      const root = object(entry, 'root')
       return {
-        id: string(scope.id, `scopes[${index}].id`),
-        name: string(scope.name, `scopes[${index}].name`),
+        id: string(root.id, 'root.id'),
+        kind: string(root.kind, 'root.kind'),
+        name: string(root.name, 'root.name'),
+        ...(root.file === undefined ? {} : { file: string(root.file, 'root.file') }),
+        ...(root.parent === undefined ? {} : { parent: string(root.parent, 'root.parent') }),
       }
     }),
     files: array(value.files, 'files').map((entry, index) => {
       const file = object(entry, `files[${index}]`)
       return {
         file: string(file.file, `files[${index}].file`),
+        roots: array(file.roots, 'file.roots').map(root => string(root, 'file.root')),
         symbols: array(file.symbols, `files[${index}].symbols`).map((entry, symbolIndex) => {
           const symbol = object(entry, `files[${index}].symbols[${symbolIndex}]`)
           return {
@@ -237,27 +264,13 @@ export function parseScanObservation(source: string): ScanObservation {
         }),
       }
     }),
-    placements: array(value.placements, 'placements').map((entry, index) => {
-      const placement = object(entry, `placements[${index}]`)
-      return {
-        file: string(placement.file, `placements[${index}].file`),
-        scope: string(placement.scope, `placements[${index}].scope`),
-      }
-    }),
-    relationships: array(value.relationships, 'relationships').map((entry, index) => {
-      const relationship = object(entry, `relationships[${index}]`)
-      return {
-        source: string(relationship.source, `relationships[${index}].source`),
-        target: string(relationship.target, `relationships[${index}].target`),
-        kind: string(relationship.kind, `relationships[${index}].kind`),
-      }
-    }),
     diagnostics: array(value.diagnostics, 'diagnostics').map((entry, index) => {
       const diagnostic = object(entry, `diagnostics[${index}]`)
       return {
         severity: string(diagnostic.severity, `diagnostics[${index}].severity`),
         code: string(diagnostic.code, `diagnostics[${index}].code`),
         message: string(diagnostic.message, `diagnostics[${index}].message`),
+        ...diagnosticLocation(diagnostic),
       }
     }),
   })

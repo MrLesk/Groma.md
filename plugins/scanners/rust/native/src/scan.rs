@@ -67,7 +67,8 @@ pub fn scan(input: Input) -> anyhow::Result<Value> {
         if contexts != 1 {
             diagnostics.push(json!({
                 "severity": "warning", "code": "rust-unsupported-compilation-contexts",
-                "message": format!("{file}: {contexts} compilation contexts; declarations and calls are omitted. The physical source keeps one curated owner.")
+                "file": file,
+                "message": format!("{contexts} compilation contexts; declarations and calls are omitted. The physical source keeps one curated owner.")
             }));
             continue;
         }
@@ -97,21 +98,19 @@ pub fn scan(input: Input) -> anyhow::Result<Value> {
         );
     }
     let invocations = calls(&sources, &sema, &db, &functions);
-    let scope = input
-        .manifest
-        .strip_prefix(&format!("{}/", input.root))
+    let scope = Path::new(&input.manifest)
+        .strip_prefix(&input.root)
         .context("manifest is outside the repository")?
+        .to_string_lossy()
         .replace('\\', "/");
-    let placements: Vec<_> = files
-        .iter()
-        .map(|file| json!({"file": file["file"], "scope": scope}))
-        .collect();
+    for file in &mut files {
+        file["roots"] = json!([scope]);
+    }
     Ok(json!({
-        "schemaVersion": 1, "complete": true,
-        "scanner": {"language": "rust", "engine": "rust-analyzer-hir", "engineVersion": "0.0.301"},
-        "root": {"kind": "cargo", "name": input.name, "file": scope},
-        "scopes": [{"id": scope, "name": input.name}],
-        "files": files, "placements": placements, "relationships": [],
+        "schemaVersion": 1,
+        "scanner": {"id": "rust", "technology": "rust", "engine": "rust-analyzer-hir", "engineVersion": "0.0.301"},
+        "roots": [{"id": scope, "kind": "cargo", "name": input.name, "file": scope}],
+        "files": files,
         "operations": operations, "invocations": invocations, "diagnostics": diagnostics,
     }))
 }

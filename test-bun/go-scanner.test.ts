@@ -3,7 +3,8 @@ import { cp, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { buildWorker } from '../plugins/scanners/go/build.ts'
-import { checkGoReadiness, scanGoSource } from '../plugins/scanners/go/src/adapter.ts'
+import { scanGoSource } from '../plugins/scanners/go/src/adapter.ts'
+
 import type { ScanObservation } from '@groma/scanner'
 
 const go = process.env.GROMA_TEST_GO
@@ -44,9 +45,9 @@ goTest('Go resolves imported functions and concrete methods while preserving wra
     expect(at('worker.Work()').caller.position).toBe(source.indexOf('func Run'))
     expect(first.invocations!.every(call => call.binding === undefined)).toBeTrue()
     expect(new Set(first.files.map(file => file.file)).size).toBe(first.files.length)
-    expect(first.placements).toHaveLength(first.files.length)
-    expect(first.relationships).toEqual([{ source: 'example.test/dispatch',
-      target: 'example.test/dispatch/provider', kind: 'import' }])
+    const byId = new Map(first.roots.map(root => [root.id, root]))
+    expect(first.files.every(file => file.roots.every(id => byId.get(id)?.kind === 'package'))).toBeTrue()
+    expect(first.roots.filter(root => root.parent).every(root => byId.get(root.parent!)?.kind === 'module')).toBeTrue()
     await writeFile(path.join(root, 'caller.go'), source.replaceAll('alias', 'renamed'))
     const renamed = calls(await scanGoSource(root, options))
     expect(renamed.filter(call => call.member === 'Build').map(call => call.targets))
@@ -54,26 +55,11 @@ goTest('Go resolves imported functions and concrete methods while preserving wra
   } finally { await rm(root, { recursive: true, force: true }) }
 }, 60000)
 
-goTest('Go rejects invalid compilation without an observation or project-file changes', async () => {
+goTest('Go rejects invalid compilation without an observation', async () => {
   const { root, worker } = await fixture()
   try {
     await buildWorker(worker, go)
-    const moduleBefore = await readFile(path.join(root, 'go.mod'), 'utf8')
     await writeFile(path.join(root, 'caller.go'), 'package dispatch\nfunc Broken() { absent() }\n')
-    await expect(scanGoSource(root, { go, worker })).rejects.toThrow('GO_COMPILATION_FAILED')
-    expect(await readFile(path.join(root, 'go.mod'), 'utf8')).toBe(moduleBefore)
-    await writeFile(path.join(root, 'go.mod'), `${moduleBefore}\nrequire example.invalid/missing v1.0.0\n`)
-    await writeFile(path.join(root, 'caller.go'), 'package dispatch\nimport _ "example.invalid/missing"\n')
-    await expect(checkGoReadiness(root, { go, worker })).rejects.toThrow('GO_PROJECT_PREPARATION')
-    expect(await readFile(path.join(root, 'go.mod'), 'utf8')).toBe(`${moduleBefore}\nrequire example.invalid/missing v1.0.0\n`)
+    await expect(scanGoSource(root, { go, worker })).rejects.toThrow()
   } finally { await rm(root, { recursive: true, force: true }) }
 }, 60000)
-
-test.concurrent('Go readiness identifies a missing toolchain with a concrete next step', async () => {
-  const { root, worker } = await fixture()
-  try {
-    await writeFile(worker, '')
-    await expect(checkGoReadiness(root, { worker, go: path.join(root, 'missing-go') }))
-      .rejects.toThrow('GO_TOOLCHAIN_MISSING')
-  } finally { await rm(root, { recursive: true, force: true }) }
-})

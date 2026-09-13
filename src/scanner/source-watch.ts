@@ -1,0 +1,103 @@
+import { subscribe } from '@parcel/watcher'
+import { once } from 'node:events'
+import { watch } from 'node:fs'
+import { realpath } from 'node:fs/promises'
+import path from 'node:path'
+import type { ScanObservation } from '@groma/scanner'
+
+import { gromaDirectories } from '../groma-filesystem.ts'
+import type { ScannerRegistry } from './registry.ts'
+
+const SETTLE_MS = 150
+const skippedRoots = new Set(['.git', ...gromaDirectories, 'node_modules'])
+
+async function subscribeSources(root: string, listener: (error: Error | null, files: string[]) => void) {
+  if (process.platform !== 'win32') {
+    return subscribe(root, (error, events) => {
+      listener(error, events.map(event => path.relative(root, event.path).split(path.sep).join('/')))
+    }, { ignore: [...skippedRoots] })
+  }
+
+  // Bun's Windows fs.watch registers ReadDirectoryChangesW before returning.
+  // Parcel can return before its queued registration runs, losing the first edit.
+  const watcher = watch(root, { recursive: true }, (_event, filename) => {
+    if (filename === null) return
+    const file = filename.split(path.sep).join('/')
+    if (!skippedRoots.has(file.split('/')[0]!)) listener(null, [file])
+  })
+  watcher.on('error', error => listener(error, []))
+  return {
+    async unsubscribe() {
+      const closed = once(watcher, 'close')
+      watcher.close()
+      await closed
+    },
+  }
+}
+
+/** Owns source watching and emits evidence; architecture storage belongs to the caller. */
+export async function watchObservations(
+  repositoryRoot: string,
+  registry: ScannerRegistry,
+  options: {
+    onObservations: (observations: ScanObservation[]) => void | Promise<void>
+    onError?: (error: unknown) => void
+  },
+): Promise<{ close(): Promise<void> }> {
+  const root = await realpath(repositoryRoot)
+  const changed = new Set<string>()
+  let timer: ReturnType<typeof setTimeout> | undefined
+  let running = false
+  let closed = false
+  let active = Promise.resolve()
+
+  function launch(): void {
+    active = run()
+  }
+
+  async function run(): Promise<void> {
+    if (closed) return
+    running = true
+    const files = [...changed]
+    changed.clear()
+    try {
+      const observations = await registry.collectObservations(root, files)
+      if (!closed) await options.onObservations(observations)
+    } catch (error) {
+      if (!closed) options.onError?.(error)
+    } finally {
+      running = false
+      if (changed.size && !closed && timer === undefined) launch()
+    }
+  }
+
+  function schedule(): void {
+    clearTimeout(timer)
+    timer = setTimeout(() => {
+      timer = undefined
+      if (!running && !closed) launch()
+    }, SETTLE_MS)
+  }
+
+  const watcher = await subscribeSources(root, (error, files) => {
+    if (closed) return
+    if (error) {
+      options.onError?.(error)
+      return
+    }
+    const relevant = files.filter(file => file !== '' && registry.watchesFile(file))
+    if (!relevant.length) return
+    for (const file of relevant) changed.add(file)
+    schedule()
+  })
+
+  return {
+    async close() {
+      if (closed) return
+      closed = true
+      clearTimeout(timer)
+      await watcher.unsubscribe()
+      await active
+    },
+  }
+}

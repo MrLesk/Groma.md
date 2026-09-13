@@ -1,6 +1,7 @@
 import { execFile } from 'node:child_process'
-import { access, readFile } from 'node:fs/promises'
+import { access } from 'node:fs/promises'
 import path from 'node:path'
+import type { ScannerSettings } from '@groma/scanner'
 import { promisify } from 'node:util'
 
 export const execute = promisify(execFile)
@@ -16,21 +17,18 @@ export async function exists(file: string): Promise<boolean> {
   try { await access(file); return true } catch { return false }
 }
 
-async function manifestAt(root: string): Promise<string> {
-  const config = path.join(root, '.groma-rust.json')
-  if (!await exists(config)) return path.join(root, 'Cargo.toml')
-  const value: unknown = JSON.parse(await readFile(config, 'utf8'))
-  if (!value || typeof value !== 'object' || !('manifest' in value) ||
-      typeof value.manifest !== 'string') {
-    throw new Error('RUST_PROJECT_SELECTION: Set .groma-rust.json to {"manifest":"path/to/Cargo.toml"}.')
+function manifestAt(root: string, settings: ScannerSettings): string {
+  if (settings.manifest === undefined) return path.join(root, 'Cargo.toml')
+  if (typeof settings.manifest !== 'string') {
+    throw new Error('RUST_PROJECT_SELECTION: Set settings.manifest on the rust entry in scanners.json to a Cargo.toml path.')
   }
-  return path.resolve(root, value.manifest)
+  return path.resolve(root, settings.manifest)
 }
 
-export async function readRustProject(root: string, options: RustOptions): Promise<RustInput> {
-  const manifest = await manifestAt(root)
+export async function readRustProject(root: string, settings: ScannerSettings, options: RustOptions): Promise<RustInput> {
+  const manifest = manifestAt(root, settings)
   if (!await exists(manifest)) {
-    throw new Error('RUST_PROJECT_MISSING: Select an existing Cargo.toml with .groma-rust.json {"manifest":"path/to/Cargo.toml"}.')
+    throw new Error('RUST_PROJECT_MISSING: Select an existing Cargo.toml with settings.manifest on the rust entry in scanners.json.')
   }
   let metadata: CargoMetadata
   try {

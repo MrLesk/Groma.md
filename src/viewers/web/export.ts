@@ -1,13 +1,11 @@
-import { existsSync } from 'node:fs'
 import { mkdir, rename, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 
-import { EMPTY_WORK_SOURCE } from '@groma/work-source'
+import { EMPTY_WORK_SNAPSHOT } from '@groma/work-source'
 import type { WorkSource } from '@groma/work-source'
 import { backlogPlugin } from '@groma/work-source-backlog'
 
 import { watchArchitecture } from '../../architecture-watch.ts'
-import { watchScan } from '../../scanner.ts'
 import { pinsOf } from '../../work/pins.ts'
 import { renderPage } from './page.ts'
 import { PUBLISHED_EVENT, PUBLISHED_VERSION_EVENT } from './payload.ts'
@@ -20,12 +18,6 @@ import { readTaskDiff } from '../source/diff.ts'
 export interface WebExportHandle {
   readonly closed: Promise<void>
   close(): Promise<void>
-}
-
-function availableWorkSource(repositoryRoot: string): WorkSource {
-  return existsSync(path.join(repositoryRoot, 'backlog'))
-    ? backlogPlugin.create(repositoryRoot)
-    : EMPTY_WORK_SOURCE
 }
 
 async function publishedTaskDiff(repositoryRoot: string, item: WebPayload['work']['items'][number], work: WebPayload['work']) {
@@ -79,7 +71,7 @@ async function publishedSnapshot(
 ): Promise<WebBootPayload> {
   const [map, work] = await Promise.all([
     loadMapRoot(repositoryRoot),
-    workSource.read(),
+    workSource.read().catch(() => EMPTY_WORK_SNAPSHOT),
   ])
   const payload: WebPayload = {
     generation,
@@ -120,7 +112,7 @@ export async function exportWebViewer(
   options: { watch?: boolean; workSource?: WorkSource; onError?: (error: unknown) => void } = {},
 ): Promise<WebExportHandle> {
   const output = path.resolve(outputDirectory)
-  const workSource = options.workSource ?? availableWorkSource(repositoryRoot)
+  const workSource = options.workSource ?? backlogPlugin.create(repositoryRoot)
   const renderer = await bundleRenderer()
   await mkdir(output, { recursive: true })
   await replaceFile(path.join(output, 'render.js'), renderer)
@@ -148,10 +140,6 @@ export async function exportWebViewer(
     })
   }
 
-  const sourceWatch = options.watch ? await watchScan(repositoryRoot, {
-    onFold: schedule,
-    onError: options.onError,
-  }) : undefined
   const architectureWatch = options.watch ? await watchArchitecture(repositoryRoot, { onChange: schedule }) : undefined
   const workWatch = options.watch ? workSource.watch(schedule) : undefined
 
@@ -162,7 +150,6 @@ export async function exportWebViewer(
       closed = true
       await Promise.all([
         workWatch?.close(),
-        sourceWatch?.close(),
         architectureWatch?.close(),
         chain,
       ])

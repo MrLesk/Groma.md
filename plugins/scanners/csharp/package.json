@@ -8,10 +8,36 @@
   "groma": {
     "scanner": {
       "id": "csharp",
-      "entry": "./src/index.ts"
+      "entry": "./src/index.ts",
+      "discovery": {
+        "technologies": [
+          "csharp"
+        ],
+        "rules": [
+          {
+            "type": "xml",
+            "files": [
+              "**/*.csproj"
+            ],
+            "technology": "csharp",
+            "kind": "language",
+            "versionTags": [
+              "TargetFramework",
+              "TargetFrameworks"
+            ],
+            "declaration": "MSBuild TargetFramework"
+          }
+        ],
+        "compatibility": {
+          "groma": "^0.3.0",
+          "technologyVersions": {}
+        }
+      }
     }
   },
   "dependencies": {
     "@groma/scanner": "workspace:*"
-  }
+  },
+  "description": "C# project evidence through Roslyn and MSBuild.",
+  "private": false
 }

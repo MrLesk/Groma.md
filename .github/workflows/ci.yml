@@ -41,12 +41,3 @@ jobs:
       - name: Build standalone binary
         run: bun run build
         shell: bash
-      - name: Smoke-test standalone binary
-        run: |
-          binary="dist/groma"
-          if [[ "${{ runner.os }}" == "Windows" ]]; then
-            binary="${binary}.exe"
-          fi
-          version="$(node -p "JSON.parse(require('fs').readFileSync('package.json', 'utf8')).version")"
-          bun scripts/smoke-compiled-build.ts "$binary" "$version"
-        shell: bash

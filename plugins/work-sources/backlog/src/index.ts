@@ -1,6 +1,4 @@
 import { spawn } from 'node:child_process'
-import { accessSync, constants, existsSync, watch } from 'node:fs'
-import path from 'node:path'
 
 import {
   EMPTY_WORK_SOURCE,
@@ -10,49 +8,34 @@ import {
   type WorkSourcePlugin,
 } from '@groma/work-source'
 
-export type BacklogCommand = (
-  arguments_: string[],
-  repositoryRoot: string,
-) => Promise<string>
-
 type BacklogCommandResolver = () => string | null
 
 const installCommand = 'bun i -g backlog.md'
 
 function findBacklogCommand(): string | null {
-  const names = process.platform === 'win32'
-    ? ['backlog.exe', 'backlog.cmd', 'backlog']
-    : ['backlog']
-  for (const directory of (process.env.PATH ?? '').split(path.delimiter)) {
-    for (const name of names) {
-      const command = path.join(directory, name)
-      try {
-        accessSync(command, constants.X_OK)
-        return command
-      } catch {
-        // Keep looking through PATH.
-      }
-    }
-  }
-  return null
+  return Bun.which('backlog')
 }
 
-function runBacklog(
+function startBacklog(
   command: string,
   arguments_: string[],
   repositoryRoot: string,
-): Promise<string> {
+) {
+  const shim = process.platform === 'win32' && command.toLowerCase().endsWith('.cmd')
+  const args = shim
+    ? ['/d', '/s', '/c', `""${command}" ${arguments_.join(' ')}"`]
+    : arguments_
+  return spawn(shim ? 'cmd.exe' : command, args, {
+    cwd: repositoryRoot,
+    stdio: ['ignore', 'pipe', 'pipe'],
+    windowsVerbatimArguments: shim,
+    windowsHide: true,
+  })
+}
+
+function runBacklog(command: string, arguments_: string[], repositoryRoot: string): Promise<string> {
   return new Promise((resolve, reject) => {
-    const shim = process.platform === 'win32' && command.toLowerCase().endsWith('.cmd')
-    const args = shim
-      ? ['/d', '/s', '/c', `""${command}" ${arguments_.join(' ')}"`]
-      : arguments_
-    const child = spawn(shim ? 'cmd.exe' : command, args, {
-      cwd: repositoryRoot,
-      stdio: ['ignore', 'pipe', 'pipe'],
-      windowsVerbatimArguments: shim,
-      windowsHide: true,
-    })
+    const child = startBacklog(command, arguments_, repositoryRoot)
     const stdout: Buffer[] = []
     let stderr = ''
     child.stdout.on('data', chunk => stdout.push(chunk as Buffer))
@@ -68,9 +51,81 @@ function runBacklog(
   })
 }
 
-const taskDirectory = (repositoryRoot: string): string => path.join(repositoryRoot, 'backlog', 'tasks')
-
 type BacklogTaskSummary = Omit<WorkItem, 'updatedAt'> & { updatedAt: string | null }
+
+/** Backlog emits complete JSON objects, which can span or share stdout chunks. */
+function taskListStream(onTasks: (tasks: BacklogTaskSummary[]) => void): (chunk: string) => void {
+  let buffer = ''
+  let position = 0
+  let depth = 0
+  let quoted = false
+  let escaped = false
+
+  function endsObject(character: string): boolean {
+    if (escaped) {
+      escaped = false
+      return false
+    }
+    if (quoted && character === '\\') {
+      escaped = true
+      return false
+    }
+    if (character === '"') quoted = !quoted
+    if (quoted) return false
+    if (character === '{') depth++
+    return character === '}' && --depth === 0
+  }
+
+  return chunk => {
+    buffer += chunk
+    while (position < buffer.length) {
+      if (!endsObject(buffer[position++]!)) continue
+      const { tasks } = JSON.parse(buffer.slice(0, position)) as { tasks: BacklogTaskSummary[] }
+      buffer = buffer.slice(position)
+      position = 0
+      onTasks(tasks)
+    }
+  }
+}
+
+function watchBacklog(command: string, repositoryRoot: string, onTasks: (tasks: BacklogTaskSummary[]) => void) {
+  const child = startBacklog(command, ['task', 'list', '--json', '--watch'], repositoryRoot)
+  let closed = false
+  let stderr = ''
+  const report = (error: unknown) => {
+    if (!closed) console.error(`Backlog watch: ${error instanceof Error ? error.message : String(error)}`)
+  }
+  const finished = new Promise<void>(resolve => {
+    child.on('error', report)
+    child.on('close', code => {
+      if (code !== 0) report(stderr.trim() || `CLI exited ${code}`)
+      resolve()
+    })
+  })
+  async function close(): Promise<void> {
+    if (!closed) {
+      closed = true
+      if (child.pid !== undefined && child.exitCode === null && child.signalCode === null) {
+        if (process.platform === 'win32') {
+          // The npm command shim owns the actual Backlog process on Windows.
+          const killer = spawn('taskkill', ['/PID', String(child.pid), '/T', '/F'], { stdio: 'ignore', windowsHide: true })
+          killer.on('error', error => console.error(error.message))
+        } else child.kill()
+      }
+    }
+    await finished
+  }
+  const receive = taskListStream(tasks => { if (!closed) onTasks(tasks) })
+  child.stdout.setEncoding('utf8')
+  child.stdout.on('data', (chunk: string) => {
+    if (closed) return
+    try { receive(chunk) }
+    catch (error) { report(error); void close() }
+  })
+  child.stderr.setEncoding('utf8')
+  child.stderr.on('data', (chunk: string) => { stderr += chunk })
+  return { close }
+}
 
 type BacklogTaskDetails = Omit<WorkItemDetails,
   'description' | 'implementationPlan' | 'implementationNotes' | 'comments'
@@ -81,19 +136,21 @@ type BacklogTaskDetails = Omit<WorkItemDetails,
   comments: { body: string; createdAt: string | null; author: string | null }[]
 }
 
-export function createBacklogSource(
+function createBacklogSource(
   repositoryRoot: string,
-  run: BacklogCommand,
+  command: string,
 ): WorkSource {
+  let watchedTasks: BacklogTaskSummary[] | undefined
+  const run = (args: string[]) => runBacklog(command, args, repositoryRoot)
   return {
     async read() {
-      const [tasksText, statusesText, defaultStatusText] = await Promise.all([
-        run(['task', 'list', '--json'], repositoryRoot),
-        run(['config', 'get', 'statuses'], repositoryRoot),
-        run(['config', 'get', 'defaultStatus'], repositoryRoot),
+      const [tasks, statusesText, defaultStatusText] = await Promise.all([
+        watchedTasks ?? run(['task', 'list', '--json'])
+          .then(text => (JSON.parse(text) as { tasks: BacklogTaskSummary[] }).tasks),
+        run(['config', 'get', 'statuses']),
+        run(['config', 'get', 'defaultStatus']),
       ])
-      const { tasks } = JSON.parse(tasksText) as { tasks: BacklogTaskSummary[] }
-      const items = tasks.map(task => ({
+      const items = (watchedTasks ?? tasks).map(task => ({
         id: task.id,
         title: task.title,
         status: task.status,
@@ -108,7 +165,7 @@ export function createBacklogSource(
       return { statuses, defaultStatus: defaultStatusText.trim(), items }
     },
     async readItem(id) {
-      const output = await run(['task', 'view', id, '--json'], repositoryRoot)
+      const output = await run(['task', 'view', id, '--json'])
       const { task } = JSON.parse(output) as { task: BacklogTaskDetails }
       return {
         id: task.id,
@@ -125,10 +182,16 @@ export function createBacklogSource(
       }
     },
     watch(onChange) {
-      const tasks = taskDirectory(repositoryRoot)
-      if (!existsSync(tasks)) return { close() {} }
-      const watcher = watch(tasks, { recursive: false }, onChange)
-      return { close: () => watcher.close() }
+      const watcher = watchBacklog(command, repositoryRoot, tasks => {
+        watchedTasks = tasks
+        onChange()
+      })
+      return {
+        async close() {
+          await watcher.close()
+          watchedTasks = undefined
+        },
+      }
     },
   }
 }
@@ -147,9 +210,7 @@ export function createBacklogPlugin(
       const command = resolveCommand()
       return command === null
         ? EMPTY_WORK_SOURCE
-        : createBacklogSource(repositoryRoot, (arguments_, root) => {
-          return runBacklog(command, arguments_, root)
-        })
+        : createBacklogSource(repositoryRoot, command)
     },
   }
 }

@@ -1,36 +1,28 @@
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 
-import { parseScanObservation, type ScanObservation, type ScannerPlugin } from '@groma/scanner'
+import { parseScanObservation, type ScanObservation, type ScannerPlugin, type ScannerSettings } from '@groma/scanner'
 import { checkRustToolchain, execute, exists, readRustProject, type RustOptions } from './project.ts'
 
 const executable = fileURLToPath(new URL(
-  `../dist/bin/groma-rust-scanner${process.platform === 'win32' ? '.exe' : ''}`,
+  `../dist/bin/${process.platform}-${process.arch}/groma-rust-scanner${process.platform === 'win32' ? '.exe' : ''}`,
   import.meta.url,
 ))
 
-export function isRustScanFile(file: string): boolean {
-  const segments = file.replaceAll('\\', '/').split('/')
-  if (segments.some(segment => ['target', 'node_modules', '.git', 'vendor', 'dist'].includes(segment))) return false
-  const name = segments.at(-1)
-  return file.endsWith('.rs') || ['Cargo.toml', 'Cargo.lock', '.groma-rust.json',
-    'rust-toolchain', 'rust-toolchain.toml'].includes(name ?? '') || segments.includes('.cargo')
-}
-
-export async function checkRustReadiness(repositoryRoot: string, options: RustOptions = {}) {
+export async function checkRustReadiness(repositoryRoot: string, settings: ScannerSettings = {}, options: RustOptions = {}) {
   const root = path.resolve(repositoryRoot)
   const worker = options.worker ?? executable
   if (!await exists(worker)) {
     throw new Error('RUST_WORKER_MISSING: Install the packaged Rust scanner, or build it with bun plugins/scanners/rust/build.ts.')
   }
   await checkRustToolchain(root, options)
-  return { input: await readRustProject(root, options), worker }
+  return { input: await readRustProject(root, settings, options), worker }
 }
 
 export async function scanRustSource(
-  repositoryRoot: string, options: RustOptions = {},
+  repositoryRoot: string, settings: ScannerSettings = {}, options: RustOptions = {},
 ): Promise<ScanObservation> {
-  const { input, worker } = await checkRustReadiness(repositoryRoot, options)
+  const { input, worker } = await checkRustReadiness(repositoryRoot, settings, options)
   try {
     const pending = execute(worker, [], {
       cwd: input.root, encoding: 'utf8', timeout: 120_000,
@@ -46,8 +38,12 @@ export async function scanRustSource(
 
 const scanner = {
   id: 'rust',
-  matchesFile: isRustScanFile,
-  checkReadiness: async root => { await checkRustReadiness(root) },
+  watch: {
+    include: ['**/*.rs', '**/Cargo.toml', '**/Cargo.lock',
+      '**/rust-toolchain', '**/rust-toolchain.toml', '**/.cargo/**'],
+    exclude: ['**/target/**', '**/node_modules/**', '**/.git/**', '**/vendor/**', '**/dist/**'],
+  },
+  checkReadiness: async (root, settings) => { await checkRustReadiness(root, settings) },
   scan: scanRustSource,
 } satisfies ScannerPlugin
 

@@ -1,8 +1,10 @@
+import type { ScannerSettings } from '@groma/scanner'
 import { GromaFileSystem } from '../../groma-filesystem.ts'
 
 export interface ConfiguredScanner {
   id: string
   source: string
+  settings?: ScannerSettings
 }
 
 export interface ScannerConfig {
@@ -22,8 +24,12 @@ function configuredScanner(
   }
   const candidate = value as Record<string, unknown>
   const fields = Object.keys(candidate)
-  if (fields.length !== 2 || !fields.includes('id') || !fields.includes('source')) {
-    throw new Error(`${sourceFilename} scanners[${index}] must contain only id and source`)
+  if (fields.some(field => !['id', 'source', 'settings'].includes(field))) {
+    throw new Error(`${sourceFilename} scanners[${index}] must contain id, source and optional settings`)
+  }
+  if (candidate.settings !== undefined && (candidate.settings === null
+    || typeof candidate.settings !== 'object' || Array.isArray(candidate.settings))) {
+    throw new Error(`${sourceFilename} scanners[${index}].settings must be an object`)
   }
   if (typeof candidate.id !== 'string' || !scannerId.test(candidate.id)) {
     throw new Error(`${sourceFilename} scanners[${index}].id must be lowercase kebab-case`)
@@ -31,7 +37,9 @@ function configuredScanner(
   if (typeof candidate.source !== 'string' || candidate.source.trim() === '') {
     throw new Error(`${sourceFilename} scanners[${index}].source must be non-empty`)
   }
-  return { id: candidate.id, source: candidate.source }
+  return { id: candidate.id, source: candidate.source,
+    ...(candidate.settings === undefined ? {} : { settings: candidate.settings as ScannerSettings }),
+  }
 }
 
 function parseScannerConfig(

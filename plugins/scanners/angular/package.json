@@ -1,13 +1,35 @@
 {
   "name": "@groma/scanner-angular",
   "version": "0.1.0",
-  "private": true,
+  "private": false,
   "type": "module",
   "license": "MIT",
   "groma": {
     "scanner": {
       "id": "angular",
-      "entry": "./dist/package/dist/index.js"
+      "entry": "./dist/package/dist/index.js",
+      "discovery": {
+        "technologies": [
+          "angular"
+        ],
+        "rules": [
+          {
+            "type": "dependency",
+            "files": [
+              "**/package.json"
+            ],
+            "technology": "angular",
+            "kind": "framework",
+            "package": "@angular/core"
+          }
+        ],
+        "compatibility": {
+          "groma": "^0.3.0",
+          "technologyVersions": {
+            "angular": "21.2.19"
+          }
+        }
+      }
     }
   },
   "dependencies": {
@@ -18,5 +40,6 @@
   },
   "devDependencies": {
     "@angular/core": "21.2.17"
-  }
+  },
+  "description": "Complementary Angular framework evidence with its own compatible TypeScript tooling."
 }

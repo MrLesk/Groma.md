@@ -37,33 +37,6 @@ async function prepareCreditAssets(root: string): Promise<string[]> {
   return assets
 }
 
-/** `<os>-<cpu>` of the compile target as `@typescript/typescript-<os>-<cpu>` names it. */
-function typescriptPlatform(): string {
-  if (target === undefined) return `${process.platform}-${process.arch}`
-  const platforms: Record<string, string> = {
-    'bun-linux-x64-baseline': 'linux-x64',
-    'bun-linux-arm64': 'linux-arm64',
-    'bun-darwin-arm64': 'darwin-arm64',
-    'bun-windows-x64-baseline': 'win32-x64',
-    'bun-windows-arm64': 'win32-arm64',
-  }
-  const platform = platforms[target]
-  if (platform === undefined) throw new Error(`no TypeScript worker mapping for build target ${target}`)
-  return platform
-}
-
-/** The native TypeScript worker starts only with `lib.d.ts` beside it; scanner programs use `noLib`, so nothing else ships. */
-async function prepareTypeScriptWorkerAsset(root: string): Promise<string> {
-  const platform = typescriptPlatform()
-  const lib = path.join('node_modules', '@typescript', `typescript-${platform}`, 'lib')
-  const executable = platform.startsWith('win32-') ? 'tsc.exe' : 'tsc'
-  const directory = path.join(root, 'groma-typescript-worker')
-  await mkdir(directory)
-  await copyFile(path.join(lib, executable), path.join(directory, executable))
-  await copyFile(path.join(lib, 'lib.d.ts'), path.join(directory, 'lib.d.ts'))
-  return directory
-}
-
 async function prepareRendererAsset(root: string): Promise<string> {
   const build = await Bun.build({
     entrypoints: [path.resolve('src/viewers/web/render.ts')],
@@ -81,7 +54,6 @@ const compile: Bun.CompileBuildOptions = {
   assets: [
     ...await prepareCreditAssets(packedRoot),
     await prepareRendererAsset(packedRoot),
-    await prepareTypeScriptWorkerAsset(packedRoot),
     'docs',
   ],
   autoloadDotenv: false,

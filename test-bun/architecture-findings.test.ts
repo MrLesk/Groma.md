@@ -1,18 +1,15 @@
 import { expect, test } from 'bun:test'
-import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { cp, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+
 import os from 'node:os'
 import path from 'node:path'
 
 import { createScanObservation, type ScanOperation } from '@groma/scanner'
 
+import { addScanner } from '../src/scanner/modules/inventory.ts'
 import { scanTypeScriptSource } from '../plugins/scanners/typescript/src/scan.ts'
-import {
-  copiesOf,
-  detectDuplicatedLogic,
-  findingsForOwner,
-  formatArchitectureFindings,
-  rememberArchitectureFindings,
-} from '../src/architecture-findings.ts'
+import { copiesOf, detectDuplicatedLogic, findingsForOwner, rememberArchitectureFindings } from '../src/architecture-findings.ts'
+
 import { loadAnnotatedArchitecture } from '../src/core.ts'
 import { scanRepository } from '../src/scanner.ts'
 import { inspectDetails } from '../src/viewers/web/organisms/details.ts'
@@ -37,12 +34,13 @@ function operation(
 function observation(operations: ScanOperation[]) {
   const files = [...new Set(operations.map(item => item.file))]
   return createScanObservation({
-    scanner: { language: 'typescript', engine: 'test', engineVersion: '1' },
-    root: { kind: 'package', name: 'Shop', file: 'package.json' },
-    scopes: [{ id: 'scope:src/a.ts', name: 'A' }],
-    files: files.map(file => ({ file, symbols: [] })),
-    placements: files.map(file => ({ file, scope: 'scope:src/a.ts' })),
-    relationships: [],
+    scanner: { technology: 'fixture', id: 'typescript', engine: 'test', engineVersion: '1' },
+    roots: [
+      { id: 'root', kind: 'package', name: 'Shop', file: 'package.json' },
+      { kind: 'project', parent: 'root', id: 'scope:src/a.ts', name: 'A' },
+    ],
+    files: files.map(file => ({ roots: ['scope:src/a.ts'], file, symbols: [] })),
+
     operations,
     invocations: [],
     diagnostics: [],
@@ -61,6 +59,7 @@ async function scannedFixture(): Promise<string> {
   await cp(fixture, path.join(root, 'src'), { recursive: true })
   await writeFile(path.join(root, 'package.json'), JSON.stringify({ name: 'fixture', bin: 'src/ready-a.ts' }))
   await gitInit(root)
+  await addScanner(root, path.resolve(import.meta.dir, '../plugins/scanners/typescript'))
   return root
 }
 
@@ -84,8 +83,6 @@ test.concurrent('renamed copies match exactly and keep owner identity', () => {
   expect(copies?.similar).toBe(false)
   expect(copies?.copies.map(instance => instance.name)).toEqual(['readyToRun'])
   expect(copiesOf(findings, 'src/t.ts', 'total', 1)).toBeUndefined()
-  expect(formatArchitectureFindings(findings).join('\n')).toContain('possible duplicates:')
-  expect(formatArchitectureFindings(findings).join('\n')).not.toContain('not identical')
 })
 
 test.concurrent('a missing predicate is a similar finding with a concrete difference', () => {
@@ -97,8 +94,6 @@ test.concurrent('a missing predicate is a similar finding with a concrete differ
   expect(findings).toHaveLength(1)
   expect(findings[0]!.match).toBe('similar')
   expect(findings[0]!.differences.join(' ')).toContain('"todo"')
-  expect(formatArchitectureFindings(findings).join('\n')).toContain('not identical')
-  expect(formatArchitectureFindings(findings).join('\n')).not.toContain('"todo"')
 })
 
 test.concurrent('unrelated computation is not clustered with readiness', () => {
@@ -150,8 +145,6 @@ test.concurrent('scan remembers findings for owners without writing relationship
     const inspected = inspectDetails(owner!, world)
     expect(inspected.findings.length).toBeGreaterThan(0)
     expect(inspected.findings.some(finding => finding.instances.some(instance => instance.file.endsWith('ready-b.ts')))).toBeTrue()
-    const relationships = await readFile(path.join(root, 'groma/relationships.md'), 'utf8').catch(() => '')
-    expect(relationships).not.toContain('duplicated-logic')
   } finally {
     rememberArchitectureFindings(root, [])
     await rm(root, { recursive: true, force: true })

@@ -16,7 +16,7 @@ import { displayName, kebabCase } from './naming.ts'
 import { componentNames, sourceStem } from './scan-component-naming.ts'
 import { c4Kind, requireGromaMapping } from './okf-profile.ts'
 import { refreshDerivedRelationships } from './relationship-inference.ts'
-import type { ScanFile, ScanObservation, ScanScope } from '@groma/scanner'
+import type { ScanFile, ScanObservation, ScanRoot } from '@groma/scanner'
 import type {
   ArchitectureDocument,
   ArchitectureRecords,
@@ -44,6 +44,7 @@ function codeFileKey(scanner: string, file: string): string {
 
 interface WorldRecord {
   id: string
+  title: string
   kind: C4Kind
   parent?: string | null
   status: ElementStatus
@@ -65,6 +66,7 @@ function worldRecord(document: ArchitectureDocument): WorldRecord | undefined {
   if (parent !== undefined && parent !== null && typeof parent !== 'string') return undefined
   return {
     id,
+    title: String(document.frontmatter.title),
     kind,
     parent,
     status: document.frontmatter.status === 'draft' ? 'draft' : 'stable',
@@ -109,8 +111,12 @@ async function createRecord(
   },
 ): Promise<WorldRecord> {
   const id = input.id ?? availableId(world, input.name, input.parent)
+  const name = isReservedDocument(`${kebabCase(input.name)}.md`)
+    ? displayName(id)
+    : input.name
   const record: WorldRecord = {
     id,
+    title: name,
     kind: input.kind,
     parent: input.parent?.id,
     status: 'stable',
@@ -122,9 +128,6 @@ async function createRecord(
     }),
     code: input.code ?? [],
   }
-  const name = isReservedDocument(`${kebabCase(input.name)}.md`)
-    ? displayName(id)
-    : input.name
   // Reserve identity before yielding so independent file writes keep scan order.
   world.byId.set(id, record)
   for (const reference of record.code) {
@@ -168,10 +171,10 @@ async function refreshCuratedCode(
   summary: ScanSummary,
 ): Promise<void> {
   const evidence = new Map<string, ScanFile>()
-  const activeScanners = new Set(observations.map(observation => observation.scanner.language))
+  const activeScanners = new Set(observations.map(observation => observation.scanner.id))
   for (const observation of observations) {
     for (const file of observation.files) {
-      evidence.set(codeFileKey(observation.scanner.language, file.file), file)
+      evidence.set(codeFileKey(observation.scanner.id, file.file), file)
     }
   }
 
@@ -209,13 +212,13 @@ function mostFrequent(records: WorldRecord[]): WorldRecord | undefined {
 function inferredContainer(
   world: World,
   observation: ScanObservation,
-  scope: ScanScope,
+  root: ScanRoot,
   candidates: Map<string, FileCandidate>,
 ): WorldRecord | undefined {
-  const containers = observation.placements.flatMap(placement => {
-    if (placement.scope !== scope.id) return []
-    const owner = world.byCodeFile.get(placement.file)
-      ?? candidates.get(placement.file)?.parent
+  const containers = observation.files.flatMap(file => {
+    if (!file.roots.includes(root.id)) return []
+    const owner = world.byCodeFile.get(file.file)
+      ?? candidates.get(file.file)?.parent
     if (owner?.kind === 'container') return [owner]
     const parent = owner?.parent === undefined ? undefined : world.byId.get(owner.parent ?? '')
     return parent?.kind === 'container' ? [parent] : []
@@ -258,7 +261,7 @@ async function attachReference(
 async function observationSystem(
   repositoryRoot: string,
   world: World,
-  observation: ScanObservation,
+  root: ScanRoot,
   inferred: Map<string, WorldRecord | undefined>,
   summary: ScanSummary,
 ): Promise<WorldRecord> {
@@ -266,11 +269,11 @@ async function observationSystem(
     const candidate = systemFor(world, record)
     return candidate === undefined ? [] : [candidate]
   }))
-  system ??= existingChild(world, 'system', observation.root.name)
+  system ??= existingChild(world, 'system', root.name)
   if (system === undefined) {
     system = await createRecord(repositoryRoot, world, {
       kind: 'system',
-      name: observation.root.name,
+      name: root.name,
     })
     summary.created += 1
   }
@@ -280,24 +283,24 @@ async function observationSystem(
 async function observationContainers(
   repositoryRoot: string,
   world: World,
-  observation: ScanObservation,
+  roots: ScanRoot[],
   system: WorldRecord,
   inferred: Map<string, WorldRecord | undefined>,
   summary: ScanSummary,
 ): Promise<Map<string, WorldRecord>> {
   const containers = new Map<string, WorldRecord>()
-  for (const scope of observation.scopes) {
-    let container = inferred.get(scope.id)
-      ?? existingChild(world, 'container', scope.name, system)
+  for (const root of roots) {
+    let container = inferred.get(root.id)
+      ?? existingChild(world, 'container', root.name, system)
     if (container === undefined) {
       container = await createRecord(repositoryRoot, world, {
         kind: 'container',
-        name: scope.name,
+        name: root.name,
         parent: system,
       })
       summary.created += 1
     }
-    containers.set(scope.id, container)
+    containers.set(root.id, container)
   }
   return containers
 }
@@ -308,7 +311,7 @@ function scanReference(
 ): CodeReference {
   const symbol = file.symbols.length === 1 ? file.symbols[0]?.name : undefined
   return {
-    scanner: observation.scanner.language,
+    scanner: observation.scanner.id,
     file: file.file,
     ...(symbol === undefined ? {} : { symbol }),
   }
@@ -325,9 +328,8 @@ function collectFiles(
   observation: ScanObservation,
   containers: Map<string, WorldRecord>,
 ): void {
-  const placementByFile = new Map(observation.placements.map(placement => [placement.file, placement.scope]))
   for (const file of observation.files) {
-    const parent = containers.get(placementByFile.get(file.file) ?? '')
+    const parent = file.roots.flatMap(id => containers.get(id) ?? []).sort((a, b) => a.id.localeCompare(b.id))[0]
     if (parent === undefined) continue
     const candidate = candidates.get(file.file) ?? { file: file.file, parent, references: [] }
     if (parent.id < candidate.parent.id) candidate.parent = parent
@@ -361,7 +363,7 @@ async function reconcileFiles(
   }
   const names = componentNames(unowned.map(candidate => ({
     file: candidate.file, parent: candidate.parent.id,
-  })), new Set(world.byId.keys()))
+  })), new Set([...world.byId.values()].flatMap(record => [record.id, kebabCase(record.title)])))
   for (let offset = 0; offset < unowned.length; offset += 16) {
     await Promise.all(unowned.slice(offset, offset + 16).map(candidate => createRecord(repositoryRoot, world, {
       kind: 'component',
@@ -380,25 +382,24 @@ async function prepareObservation(
   summary: ScanSummary,
   candidates: Map<string, FileCandidate>,
 ): Promise<Map<string, WorldRecord>> {
-  const inferred = new Map(observation.scopes.map(scope => [
-    scope.id,
-    inferredContainer(world, observation, scope, candidates),
-  ]))
-  const system = await observationSystem(
-    repositoryRoot,
-    world,
-    observation,
-    inferred,
-    summary,
-  )
-  const containers = await observationContainers(
-    repositoryRoot,
-    world,
-    observation,
-    system,
-    inferred,
-    summary,
-  )
+  const byId = new Map(observation.roots.map(root => [root.id, root]))
+  const memberships = new Set(observation.files.flatMap(file => file.roots))
+  const groups = new Map<ScanRoot, ScanRoot[]>()
+  const parents = new Set(observation.roots.map(root => root.parent))
+  for (const root of observation.roots.filter(root => memberships.has(root.id) || !parents.has(root.id))) {
+    let top = root
+    while (top.parent !== undefined) top = byId.get(top.parent)!
+    const members = groups.get(top) ?? []
+    members.push(root)
+    groups.set(top, members)
+  }
+  const containers = new Map<string, WorldRecord>()
+  for (const [top, roots] of groups) {
+    const inferred = new Map(roots.map(root => [root.id, inferredContainer(world, observation, root, candidates)]))
+    const system = await observationSystem(repositoryRoot, world, top, inferred, summary)
+    const found = await observationContainers(repositoryRoot, world, roots, system, inferred, summary)
+    for (const [id, container] of found) containers.set(id, container)
+  }
   return containers
 }
 
@@ -408,12 +409,15 @@ export async function reconcileScanObservations(
 ): Promise<ScanSummary> {
   const world = indexWorld(await loadArchitecture(repositoryRoot))
   const summary: ScanSummary = { created: 0, refreshed: 0, matched: 0 }
+  const diagnostics = observations.flatMap(observation => observation.diagnostics.map(diagnostic => ({
+    scanner: observation.scanner, diagnostic,
+  })))
+  if (diagnostics.length > 0) summary.scannerDiagnostics = diagnostics
   await refreshCuratedCode(repositoryRoot, world, observations, summary)
   const candidates = new Map<string, FileCandidate>()
   const ordered = [...observations].sort((a, b) => {
     const key = (observation: ScanObservation) => JSON.stringify([
-      observation.root.file, observation.root.name,
-      observation.scopes.map(scope => [scope.name, scope.id]).sort(),
+      observation.roots.map(root => [root.file, root.name, root.id, root.parent]).sort(),
     ])
     return key(a).localeCompare(key(b))
   })

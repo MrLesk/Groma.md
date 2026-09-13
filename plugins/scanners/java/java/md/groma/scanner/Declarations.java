@@ -94,13 +94,8 @@ final class Declarations extends TreePathScanner<Void, Void> {
         return root.relativize(Path.of(unit.getSourceFile().toUri())).toString().replace('\\', '/');
     }
 
-    boolean containsFile(String file) { return symbols.containsKey(file); }
-
     List<Object> files() {
-        return symbols.entrySet().stream().map(entry -> (Object) Json.object("file", entry.getKey(), "symbols", entry.getValue())).toList();
+        return symbols.entrySet().stream().map(entry -> (Object) Json.object("file", entry.getKey(), "roots", List.of("java:source-set"), "symbols", entry.getValue())).toList();
     }
 
-    List<Object> placements() {
-        return symbols.keySet().stream().map(file -> (Object) Json.object("file", file, "scope", "java:source-set")).toList();
-    }
 }

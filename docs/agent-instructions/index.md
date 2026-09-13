@@ -236,7 +236,7 @@ scenario knowledge over C4 relationships, not another C4 element or container.
 
 ## Scanner coverage
 
-The embedded TypeScript scanner reads `.ts` and `.tsx` files selected through
+The TypeScript scanner reads `.ts` and `.tsx` files selected through
 Git's tracked and unignored untracked file inventory. Its default exclusions
 are `test/**`, `test-bun/**`, declaration files (`*.d.ts`), and `*.test.ts`,
 `*.test.tsx`, `*.spec.ts`, and `*.spec.tsx`. Test fixtures in other directories

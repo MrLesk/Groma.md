@@ -1,16 +1,58 @@
 {
   "name": "@groma/scanner-java",
   "version": "0.1.0",
-  "private": true,
+  "private": false,
   "type": "module",
   "license": "MIT",
   "groma": {
     "scanner": {
       "id": "java",
-      "entry": "./src/index.ts"
+      "entry": "./src/index.ts",
+      "discovery": {
+        "technologies": [
+          "java"
+        ],
+        "rules": [
+          {
+            "type": "xml",
+            "files": [
+              "**/pom.xml"
+            ],
+            "technology": "java",
+            "kind": "language",
+            "versionTags": [
+              "java.version",
+              "maven.compiler.release",
+              "maven.compiler.source"
+            ],
+            "declaration": "Maven project; Java version unresolved"
+          },
+          {
+            "type": "xml",
+            "files": [
+              "**/pom.xml"
+            ],
+            "technology": "spring-boot",
+            "kind": "framework",
+            "versionTags": [],
+            "when": {
+              "tag": "groupId",
+              "equals": "org.springframework.boot"
+            },
+            "declaration": "org.springframework.boot declaration; runtime use unverified"
+          }
+        ],
+        "compatibility": {
+          "groma": "^0.3.0",
+          "technologyVersions": {
+            "java": "25.0.0"
+          }
+        }
+      }
     }
   },
   "dependencies": {
     "@groma/scanner": "workspace:*"
-  }
+  },
+  "description": "Java compiler and project evidence; framework runtime use is not verified."
 }

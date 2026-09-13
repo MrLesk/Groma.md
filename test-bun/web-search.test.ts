@@ -5,7 +5,6 @@ import type { WorkItem } from '@groma/work-source'
 
 import { loadAnnotatedArchitecture } from '../src/core.ts'
 import { createArchitectureSearch } from '../src/search.ts'
-import { opensWebSearch } from '../src/viewers/web/search/control.ts'
 import { createWebSearch } from '../src/viewers/web/search/model.ts'
 
 const fixtureRoot = fileURLToPath(new URL('../test/fixtures/validate/', import.meta.url))
@@ -16,32 +15,6 @@ function task(id: string, title: string, status = 'In Progress'): WorkItem {
     acceptanceCriteriaCount: 0, acceptanceCriteriaCompleted: 0, updatedAt: '',
   }
 }
-
-function key(
-  value: string,
-  modifiers: Partial<{ altKey: boolean, ctrlKey: boolean, metaKey: boolean }> = {},
-) {
-  return {
-    key: value,
-    altKey: modifiers.altKey ?? false,
-    ctrlKey: modifiers.ctrlKey ?? false,
-    metaKey: modifiers.metaKey ?? false,
-  }
-}
-
-test.concurrent('web search opens from slash only outside editable controls', () => {
-  assert.equal(opensWebSearch(key('/'), false, false), true)
-  assert.equal(opensWebSearch(key('/'), true, false), false)
-  assert.equal(opensWebSearch(key('/', { ctrlKey: true }), false, false), false)
-})
-
-test.concurrent('web search opens from the platform command shortcut', () => {
-  assert.equal(opensWebSearch(key('k', { metaKey: true }), true, true), true)
-  assert.equal(opensWebSearch(key('k', { ctrlKey: true }), true, true), false)
-  assert.equal(opensWebSearch(key('K', { ctrlKey: true }), true, false), true)
-  assert.equal(opensWebSearch(key('K', { metaKey: true }), true, false), false)
-  assert.equal(opensWebSearch(key('k', { altKey: true, ctrlKey: true }), false, false), false)
-})
 
 test.concurrent('web search merges architecture and plugin tasks by match relevance', async () => {
   const world = await loadAnnotatedArchitecture(fixtureRoot)

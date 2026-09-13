@@ -35,8 +35,8 @@ export async function buildPackage(destination: string): Promise<void> {
     outdir: path.join(destination, 'src'), target: 'bun', format: 'esm', naming: 'index.js' })
   if (!built.success) throw new Error(built.logs.join('\n'))
   await writeFile(path.join(destination, 'package.json'), `${JSON.stringify({
-    name: manifest.name, version: manifest.version, type: 'module', license: 'MIT',
-    groma: { scanner: { id: 'java', entry: './src/index.js' } },
+    name: manifest.name, version: manifest.version, description: manifest.description, private: manifest.private, type: 'module', license: 'MIT',
+    groma: { scanner: { ...manifest.groma.scanner, entry: './src/index.js' } },
   }, null, 2)}\n`)
   await cp(path.join(pluginRoot, '../../../LICENSE'), path.join(destination, 'LICENSE'))
 }

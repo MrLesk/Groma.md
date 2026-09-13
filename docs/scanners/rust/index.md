@@ -45,11 +45,21 @@ plugin interface. Package availability remains separate from project readiness
 in the [common setup journey](../setup.md).
 
 The default input is the repository's root Cargo.toml. To select one original
-Cargo manifest inside a repository, write `.groma-rust.json`:
+Cargo manifest inside a repository, set `settings` on the existing `rust` entry
+in the shared `scanners.json` inside `groma/` or `.groma/`. Preserve its installed source:
 
 ```json
-{"manifest":"crates/globset/Cargo.toml"}
+{
+  "id": "rust",
+  "source": "./tools/rust-scanner-package",
+  "settings": { "manifest": "crates/globset/Cargo.toml" }
+}
 ```
+
+The manifest path is relative to the repository root. Run a new scan or restart
+the active viewer or watch session after editing settings. The scanner receives
+settings from Groma; it does not read a separate Groma configuration file. See
+the [shared configuration contract](../creating-a-plugin.md#scanner-settings).
 
 A package manifest selects its library and binary targets. A workspace manifest
 selects member library and binary targets. The original Cargo workspace remains
@@ -83,11 +93,11 @@ both include the same source module.
 Cross-package `#[path]` loading is not supported by the pinned engine in the
 observed example. An engine module-loading error fails the scan; no source-root
 workaround is applied. Invalid Rust syntax also fails the scan. Other unresolved
-semantics remain uncertain evidence. `complete: true` means the declared
-extraction finished, not that Cargo compiled the application or all Rust runtime
-behavior was discovered.
+semantics remain uncertain evidence. Returning an observation means the declared
+extraction finished. It does not claim that Cargo compiled the application or
+that all Rust runtime behavior was discovered.
 
-The existing selected-manifest scope provides initial placement only. Build
+The selected manifest is a source root and provides initial placement evidence. Build
 targets and compilation contexts are not new C4 boxes or OKF concepts.
 Ordinary Markdown readers retain the same readable Code links. Groma core owns
 the single curated source owner and the common relationship policy; the plugin

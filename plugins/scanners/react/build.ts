@@ -1,36 +1,14 @@
-import { cp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises'
-import { createRequire } from 'node:module'
+import { cp, rm } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { buildFrameworkPackage } from '../framework-package.ts'
 
 const root = fileURLToPath(new URL('./', import.meta.url))
-const require = createRequire(new URL('./package.json', import.meta.url))
 
-/** Package the pinned compiler and its declarations without using Groma's embedded SDK. */
 export async function buildPackage(destination: string): Promise<void> {
-  const output = path.join(destination, 'dist')
-  await mkdir(output, { recursive: true })
-  const typescript = require.resolve('typescript')
-  const result = await Bun.build({
-    entrypoints: [path.join(root, 'src/index.ts')], outdir: output, target: 'bun', format: 'esm', naming: 'index.js',
-    plugins: [{ name: 'react-typescript', setup(build) {
-      build.onResolve({ filter: /^typescript$/ }, () => ({ path: typescript }))
-    } }],
-  })
-  if (!result.success) throw new Error(result.logs.join('\n'))
-  for (const file of await readdir(path.dirname(typescript))) {
-    if (file.startsWith('lib.') && file.endsWith('.d.ts')) await cp(path.join(path.dirname(typescript), file), path.join(output, file))
-  }
-  const manifest = JSON.parse(await readFile(path.join(root, 'package.json'), 'utf8'))
-  await writeFile(path.join(destination, 'package.json'), `${JSON.stringify({
-    name: manifest.name, version: manifest.version, private: true, type: 'module', license: 'MIT',
-    groma: { scanner: { id: 'react', entry: './dist/index.js' } },
-  }, null, 2)}\n`)
-  await cp(path.join(root, '../../../LICENSE'), path.join(destination, 'LICENSE'))
-  await cp(path.join(path.dirname(typescript), '../LICENSE.txt'), path.join(destination, 'typescript-LICENSE.txt'))
-  await cp(path.join(path.dirname(typescript), '../ThirdPartyNoticeText.txt'), path.join(destination, 'typescript-ThirdPartyNoticeText.txt'))
-  await cp(path.join(root, '../../../docs/scanners/react/index.md'), path.join(destination, 'README.md'))
-  await cp(path.join(root, '../../../docs/scanners/react/validation.md'), path.join(destination, 'validation.md'))
+  const declarations = await buildFrameworkPackage(root, destination)
+  await cp(path.join(declarations, '../LICENSE.txt'), path.join(destination, 'typescript-LICENSE.txt'))
+  await cp(path.join(declarations, '../ThirdPartyNoticeText.txt'), path.join(destination, 'typescript-ThirdPartyNoticeText.txt'))
 }
 
 if (import.meta.main) {

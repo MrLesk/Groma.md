@@ -13,10 +13,6 @@ export interface JavaScanOptions {
   timeout?: number
 }
 
-export function isJavaScanFile(file: string): boolean {
-  return file.endsWith('.java') || file === 'pom.xml' || file.startsWith('.mvn/')
-}
-
 export async function checkJavaReadiness(repositoryRoot: string, options: JavaScanOptions = {}) {
   const jar = options.worker ?? worker
   if (!await exists(jar)) throw new Error('JAVA_WORKER_MISSING: Install the packaged Java scanner, or build it with bun plugins/scanners/java/build.ts.')
@@ -41,7 +37,6 @@ export async function scanJavaSource(repositoryRoot: string, options: JavaScanOp
     throw new Error(`JAVA_COMPILATION_FAILED: No observation was produced. Use the project's declared JDK ${input.release}, resolve Maven dependencies, and prepare required generated sources with the project's documented build command. ${error}`)
   }
   const observation = parseScanObservation(stdout)
-  observation.root.name = input.name
-  observation.scopes[0]!.name = input.name
+  observation.roots[0]!.name = input.name
   return observation
 }

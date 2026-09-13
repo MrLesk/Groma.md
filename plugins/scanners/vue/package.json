@@ -1,13 +1,35 @@
 {
   "name": "@groma/scanner-vue",
   "version": "0.1.0",
-  "private": true,
+  "private": false,
   "type": "module",
   "license": "MIT",
   "groma": {
     "scanner": {
       "id": "vue",
-      "entry": "./dist/package/dist/index.js"
+      "entry": "./dist/package/dist/index.js",
+      "discovery": {
+        "technologies": [
+          "vue"
+        ],
+        "rules": [
+          {
+            "type": "dependency",
+            "files": [
+              "**/package.json"
+            ],
+            "technology": "vue",
+            "kind": "framework",
+            "package": "vue"
+          }
+        ],
+        "compatibility": {
+          "groma": "^0.3.0",
+          "technologyVersions": {
+            "vue": "3.5.18 || 3.5.42"
+          }
+        }
+      }
     }
   },
   "dependencies": {
@@ -20,5 +42,6 @@
   "devDependencies": {
     "vue": "3.5.42",
     "@vue/compiler-sfc": "3.5.42"
-  }
+  },
+  "description": "Complementary Vue framework evidence; a dependency declaration does not verify runtime use."
 }

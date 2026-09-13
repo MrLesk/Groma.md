@@ -1,10 +1,44 @@
 {
   "name": "@groma/scanner-react",
   "version": "0.1.0",
-  "private": true,
+  "private": false,
   "type": "module",
   "license": "MIT",
-  "groma": { "scanner": { "id": "react", "entry": "./dist/package/dist/index.js" } },
-  "dependencies": { "@groma/scanner": "workspace:*", "typescript": "6.0.3" },
-  "devDependencies": { "@types/react": "19.2.17", "react": "19.2.7" }
+  "groma": {
+    "scanner": {
+      "id": "react",
+      "entry": "./dist/package/dist/index.js",
+      "discovery": {
+        "technologies": [
+          "react"
+        ],
+        "rules": [
+          {
+            "type": "dependency",
+            "files": [
+              "**/package.json"
+            ],
+            "technology": "react",
+            "kind": "framework",
+            "package": "react"
+          }
+        ],
+        "compatibility": {
+          "groma": "^0.3.0",
+          "technologyVersions": {
+            "react": "19.2.7"
+          }
+        }
+      }
+    }
+  },
+  "dependencies": {
+    "@groma/scanner": "workspace:*",
+    "typescript": "6.0.3"
+  },
+  "devDependencies": {
+    "@types/react": "19.2.17",
+    "react": "19.2.7"
+  },
+  "description": "Complementary React framework evidence; a dependency declaration does not verify runtime use."
 }

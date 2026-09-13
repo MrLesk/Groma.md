@@ -37,7 +37,7 @@ function relationshipsFromClaims(
   owners: ReadonlyMap<string, string>,
 ): RelationshipConnection[] {
   const pairs = new Map<string, RelationshipConnection>()
-  for (const { invocation, operations, languages } of claims) {
+  for (const { invocation, operations, scanners } of claims) {
     const interaction = suppliedNamedCallback(invocation, operations, owners)
     if (!interaction) continue
     for (const target of interaction.targets) {
@@ -49,7 +49,7 @@ function relationshipsFromClaims(
       descriptions.add(description)
       pairs.set(key, {
         source, target: target.file, description: [...descriptions].sort().join('; '),
-        technology: [...new Set([...(existing?.technology.split(', ') ?? []), ...languages])].sort().join(', '),
+        technology: [...new Set([...(existing?.technology.split(', ') ?? []), ...scanners])].sort().join(', '),
         status: 'stable', authored: false,
       })
     }

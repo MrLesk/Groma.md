@@ -5,7 +5,6 @@ import com.sun.source.util.TreePath;
 import com.sun.source.util.TreePathScanner;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.TreeSet;
 import javax.lang.model.element.Element;
 import javax.lang.model.element.ElementKind;
 import javax.lang.model.element.ExecutableElement;
@@ -14,7 +13,6 @@ import javax.lang.model.element.Modifier;
 /** Binding is not runtime dispatch. Unknown receivers never become guessed providers. */
 final class Uses extends TreePathScanner<Void, String> {
     private final Declarations index;
-    private final TreeSet<String> references = new TreeSet<>();
     final List<Object> invocations = new ArrayList<>();
     private int unresolved;
     private int methodReferences;
@@ -32,19 +30,8 @@ final class Uses extends TreePathScanner<Void, String> {
 
     @Override public Void visitImport(ImportTree tree, String caller) { return null; }
 
-    @Override public Void visitIdentifier(IdentifierTree tree, String caller) {
-        reference();
-        return super.visitIdentifier(tree, caller);
-    }
-
-    @Override public Void visitMemberSelect(MemberSelectTree tree, String caller) {
-        reference();
-        return super.visitMemberSelect(tree, caller);
-    }
-
     @Override public Void visitMemberReference(MemberReferenceTree tree, String caller) {
         methodReferences++;
-        reference();
         // Creating a method reference does not invoke it.
         return super.visitMemberReference(tree, caller);
     }
@@ -84,23 +71,6 @@ final class Uses extends TreePathScanner<Void, String> {
         long line = unit.getLineMap().getLineNumber(index.trees.getSourcePositions().getStartPosition(unit, tree));
         invocations.add(Json.object("source", caller, "targets", target == null ? List.of() : List.of(target),
             "unresolved", target == null, "line", line, "member", member));
-    }
-
-    private void reference() {
-        var element = index.trees.getElement(getCurrentPath());
-        if (element == null) return;
-        var declaration = index.trees.getPath(element);
-        if (declaration == null) return;
-        String source = index.file(getCurrentPath().getCompilationUnit());
-        String target = index.file(declaration.getCompilationUnit());
-        if (!source.equals(target) && index.containsFile(target)) references.add(source + "\0" + target);
-    }
-
-    List<Object> relationships() {
-        return references.stream().map(pair -> {
-            int separator = pair.indexOf('\0');
-            return (Object) Json.object("source", pair.substring(0, separator), "target", pair.substring(separator + 1), "kind", "java:symbol-reference");
-        }).toList();
     }
 
     List<Object> diagnostics() {

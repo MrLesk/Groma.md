@@ -20,11 +20,12 @@ await mkdir(destination, { recursive: true })
 await rm(path.join(destination, 'dist'), { recursive: true, force: true })
 await cp(dist, path.join(destination, 'dist'), { recursive: true })
 await cp(path.join(root, 'LICENSE'), path.join(destination, 'LICENSE'))
+const manifest = JSON.parse(await readFile(path.join(source, 'package.json'), 'utf8'))
 await writeFile(path.join(destination, 'package.json'), `${JSON.stringify({
-  name: '@groma/scanner-csharp', version: '0.1.0', type: 'module', license: 'MIT',
-  description: 'Roslyn/MSBuild C# scanner for Groma',
+  name: manifest.name, version: manifest.version, private: manifest.private, type: 'module', license: 'MIT',
+  description: manifest.description,
   exports: './dist/index.js', files: ['dist', 'LICENSE', 'README.md'],
-  groma: { scanner: { id: 'csharp', entry: './dist/index.js' } },
+  groma: { scanner: { ...manifest.groma.scanner, entry: './dist/index.js' } },
 }, null, 2)}\n`)
 await writeFile(path.join(destination, 'README.md'), await readFile(path.join(root, 'docs/scanners/dotnet-csharp/index.md'), 'utf8'))
 console.log(destination)

@@ -13,17 +13,16 @@ export async function scanVue(root: string): Promise<ScanObservation | undefined
   }
   const files = project.files.map(source => ({ file: relative(root, source.fileName), symbols: [] }))
   return createScanObservation({
-    scanner: { language: 'vue', engine: '@vue/language-core', engineVersion: '3.3.11' },
-    root: { kind: 'package', name: manifest.name, file: 'package.json' },
-    scopes: [{ id: 'vue-project', name: manifest.name }], files,
-    placements: files.map(({ file }) => ({ file, scope: 'vue-project' })), relationships: [],
+    scanner: { id: 'vue', technology: 'typescript/vue', engine: '@vue/language-core', engineVersion: '3.3.11' },
+    roots: [{ id: 'vue-project', kind: 'package', name: manifest.name, file: 'package.json' }],
+    files: files.map(file => ({ ...file, roots: ['vue-project'] })),
     operations: [...evidence.operations.values()], invocations: evidence.invocations, diagnostics: evidence.diagnostics,
   })
 }
 
 export default {
   id: 'vue',
-  matchesFile: file => file.endsWith('.vue') || file.endsWith('.ts') || file === 'tsconfig.json' || file === 'package.json',
+  watch: { include: ['**/*.vue', '**/*.ts', 'tsconfig.json', 'package.json'], exclude: [] },
   checkReadiness: async root => {
     if (!vueProject(root)) throw new Error('VUE_PROJECT_REQUIRED: Select a project with vue in its root package.json, or disable the vue scanner.')
   },

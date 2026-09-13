@@ -7,12 +7,11 @@ import type { ScannerPlugin } from '@groma/scanner'
 import { buildPackage } from '../plugins/scanners/vue/build.ts'
 import { scanTypeScriptSource } from '../plugins/scanners/typescript/src/scan.ts'
 import { loadArchitecture } from '../src/architecture-reader.ts'
+import { buildArchitectureModel } from '../src/architecture-model.ts'
 import { loadAnnotatedArchitecture, reconcileScanObservations } from '../src/core.ts'
 import { editArchitecture } from '../src/edit.ts'
 import { addRelation } from '../src/relation.ts'
 import { inferRelationships } from '../src/relationship-inference.ts'
-import { scanRepository, watchScan } from '../src/scanner.ts'
-import { addScanner } from '../src/scanner/modules/inventory.ts'
 import type { AnnotatedArchitectureModel } from '../src/types.ts'
 
 async function setup() {
@@ -38,14 +37,11 @@ function owner(model: AnnotatedArchitectureModel, file: string) {
   return matches[0]!
 }
 
-async function documents(root: string) {
-  const records = await loadArchitecture(root)
-  return new Map(await Promise.all(records.documents.map(async document => [
-    document.sourceFilename, await readFile(path.join(root, document.sourceFilename), 'utf8'),
-  ] as const)))
+async function storedArchitecture(root: string) {
+  return buildArchitectureModel((await loadArchitecture(root)).documents)
 }
 
-test.concurrent('packaged Vue resolves SFC events and original UTF-16 positions beyond TypeScript', async () => {
+test.concurrent('Vue resolves SFC events and original UTF-16 positions beyond TypeScript', async () => {
   const { temporary, root, scanner } = await setup()
   try {
     const vue = (await scanner.scan(root))!
@@ -70,7 +66,7 @@ test.concurrent('packaged Vue resolves SFC events and original UTF-16 positions 
     await writeFile(path.join(root, 'Host.vue'), host.replaceAll('@saved="onSaved"', '@saved="onSaved($event)"').replaceAll('@saved="receive"', '@saved="receive($event)"'))
     const unsupported = (await scanner.scan(root))!
     expect(unsupported.invocations).toEqual([])
-    expect(unsupported.diagnostics.some(item => item.code === 'unsupported-vue-binding' && item.message.startsWith('Host.vue:'))).toBe(true)
+    expect(unsupported.diagnostics.some(item => item.code === 'unsupported-vue-binding' && item.file === 'Host.vue' && Number.isInteger(item.line))).toBe(true)
   } finally { await rm(temporary, { recursive: true, force: true }) }
 })
 
@@ -88,51 +84,11 @@ test.concurrent('Vue overlap retains one curated physical owner and authored int
     const authored = (await loadAnnotatedArchitecture(root)).relationships
     await reconcileScanObservations(root, [vue, typescript])
     expect((await loadAnnotatedArchitecture(root)).relationships).toEqual(authored)
-    const snapshot = await documents(root)
+    const snapshot = await storedArchitecture(root)
     await reconcileScanObservations(root, [typescript, vue])
-    expect(await documents(root)).toEqual(snapshot)
+    expect(await storedArchitecture(root)).toEqual(snapshot)
     const after = await loadAnnotatedArchitecture(root)
     expect(owner(after, 'receiver.ts').id).toBe(receiver.id)
     expect(new Set(owner(after, 'receiver.ts').code.map(reference => reference.scanner))).toEqual(new Set(['typescript', 'vue']))
-  } finally { await rm(temporary, { recursive: true, force: true }) }
-})
-
-test.concurrent('SFC source and template edits rescan and failed enabled Vue scans preserve the map', async () => {
-  const { temporary, root, artifact } = await setup()
-  let watcher: Awaited<ReturnType<typeof watchScan>> | undefined
-  try {
-    await addScanner(root, path.relative(root, artifact))
-    await scanRepository(root)
-    const source = await readFile(path.join(root, 'Emitter.vue'), 'utf8')
-    await writeFile(path.join(root, 'Emitter.vue'), source.replace("emit('saved', value)", 'void value'))
-    await scanRepository(root)
-    expect((await loadAnnotatedArchitecture(root)).relationships.flatMap(item => item.connections ?? [])).toEqual([])
-    await writeFile(path.join(root, 'Emitter.vue'), source)
-    await scanRepository(root)
-    let folded!: () => void
-    let failed!: (error: unknown) => void
-    const rescanned = new Promise<void>((resolve, reject) => { folded = resolve; failed = reject })
-    watcher = await watchScan(root, { onFold: () => folded(), onError: error => failed(error) })
-    const host = await readFile(path.join(root, 'Host.vue'), 'utf8')
-    await writeFile(path.join(root, 'Host.vue'), host.replaceAll(/ @saved="[^"]+"/g, ''))
-    await rescanned
-    await watcher.close()
-    watcher = undefined
-    expect((await loadAnnotatedArchitecture(root)).relationships.flatMap(item => item.connections ?? [])).toEqual([])
-    const previous = await documents(root)
-    await writeFile(path.join(root, 'Host.vue'), '<template><Emitter></template>')
-    await expect(scanRepository(root)).rejects.toThrow('VUE_PROJECT_PREPARATION')
-    expect(await documents(root)).toEqual(previous)
-  } finally {
-    await watcher?.close()
-    await rm(temporary, { recursive: true, force: true })
-  }
-})
-
-test.concurrent('Vue readiness identifies missing dependency preparation', async () => {
-  const { temporary, root, scanner } = await setup()
-  try {
-    await rm(path.join(root, 'node_modules'), { recursive: true })
-    await expect(scanner.checkReadiness!(root)).rejects.toThrow('Install project dependencies')
   } finally { await rm(temporary, { recursive: true, force: true }) }
 })

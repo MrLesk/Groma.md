@@ -37,7 +37,7 @@ All 212 tracked regular files match the original checkout byte-for-byte;
 Git submodule entries are excluded from that file comparison.
 
 Dependencies were prepared with `cargo fetch --locked`. A disposable full
-checkout selected the globset manifest through `.groma-rust.json`; the scanner
+checkout selected the globset manifest explicitly; the scanner
 and compiled Groma then used the original workspace. The other ripgrep packages
 were not included in the emitted inventory.
 
@@ -79,23 +79,22 @@ bun plugins/scanners/rust/build.ts
 GROMA_TEST_RUST="$PWD/plugins/scanners/rust/dist/bin/groma-rust-scanner" \
   bun test --timeout 60000 test-bun/rust-scanner.test.ts
 cargo clippy --locked --manifest-path plugins/scanners/rust/native/Cargo.toml -- -D warnings
-bun plugins/scanners/rust/smoke-compiled.ts /absolute/path/to/compiled/groma
 ```
 
 The suite covers canonical aliases, inherent calls, uncertain trait/function
 pointer dispatch, deferred closure bodies, distinct chained calls at one source
 offset, the wrong-provider witness, shared-source identity, deterministic
-output, curated ownership across repeat scans, actionable readiness, and failed
+output, curated ownership across repeat scans, and failed
 scan preservation. Each test owns its temporary fixture and runs concurrently.
 Native tests are opt-in because a general repository checkout need not contain
-a built Rust worker or project toolchain. The final focused run passed 6 tests
+a built Rust worker or project toolchain. The historical focused run passed 6 tests
 and 33 assertions. The complete repository check passed 110 Node tests and
 396 Bun tests with 858 assertions, no failures, and no skipped Bun tests; the
 native Rust and Go suites were enabled. Native Clippy with warnings denied,
 targeted Biome, and TypeScript checks also passed.
 
-The smoke command uses `npm pack` and extracts that actual artifact before
-loading it into compiled Groma. It verifies `scanner check`, a successful
+The historical smoke run used `npm pack` and extracted that actual artifact before
+loading it into compiled Groma. It verified `scanner check`, a successful
 scan, curated repeat scans, and unchanged Markdown after malformed Rust fails.
 Only macOS arm64 was exercised. Public publication and other platforms remain
 TASK-326.7 release qualification work.

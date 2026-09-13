@@ -78,18 +78,5 @@ The package contains bundled ESM and a precompiled JAR, with no bundled JDK,
 install script, Node requirement or platform-specific runtime payload. Consumers
 supply Git, their project JDK and Maven or its wrapper.
 
-Run the same consumer check on every release target with JDK 25 and Maven on PATH:
-
-```sh
-bun plugins/scanners/java/smoke.ts /absolute/path/to/compiled-groma /absolute/path/to/built-package
-```
-
-The check installs the built module, scans an independent Maven fixture, preserves
-curated ownership through two scans, checks exported TypeScript Code details,
-and proves a failed scan leaves the previous map unchanged. On Windows pass the compiled `groma.exe`; the adapter launches
-`mvn.cmd` and `mvnw.cmd` through `cmd.exe`, including paths with spaces.
-
-macOS arm64 passed locally. Linux x64/arm64 and Windows x64/arm64 consumer runs
-remain release gates under TASK-326.7. A Windows command-construction test is
-not a Windows execution result. No package has been published. See the
-[validation record](validation.md).
+Run `bun test test-bun/java-scanner.test.ts` with JDK 25 and Maven on PATH
+for source operation resolution tests. See the historical [validation record](validation.md).

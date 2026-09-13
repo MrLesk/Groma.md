@@ -9,7 +9,6 @@ import type { ScanSymbol, ScanOperation, ScanInvocation } from '@groma/scanner'
 
 import { usedImportSpecifiers } from './source-usage.ts'
 import { sourceOperations } from './source-operations.ts'
-import { typescriptWorkerPath } from './worker.ts'
 
 export interface SourceAnalysis {
   file: string
@@ -54,11 +53,7 @@ function exportSymbols(file: string, source: SourceFile): ScanSymbol[] {
 /** One program keeps operation identity and callback wiring shared across the owned source set. */
 export async function analyzeSourceFiles(repositoryRoot: string, paths: string[]): Promise<SourceEvidence> {
   if (paths.length === 0) return { files: [], operations: [], invocations: [] }
-  const tsserverPath = await typescriptWorkerPath()
-  const api = new API({
-    cwd: repositoryRoot,
-    ...(tsserverPath === undefined ? {} : { tsserverPath }),
-  })
+  const api = new API({ cwd: repositoryRoot })
   try {
     const program = await api.createProgram(paths.map(file => path.join(repositoryRoot, file)), {
       compilerOptions: {

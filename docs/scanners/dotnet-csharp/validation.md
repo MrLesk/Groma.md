@@ -17,7 +17,7 @@ The source witnesses match the research baseline:
 - `AbstractValidator.cs:271` resolves construction and `When` to `Internal/ConditionBuilder.cs` without unresolved alternatives.
 - `AbstractValidator.cs:349,359` retains `OnRuleAdded` as a known virtual declaration candidate with `unresolved: true`.
 
-The package was relocated into a path containing spaces and loaded by compiled Groma. The independent project-reference fixture produced six files, two scopes, 19 operations, and 24 invocations. Repeated scans preserved the map byte-for-byte. Combining the two partial-operation files through Groma kept their common curated owner after a valid source edit. A deliberate compilation failure preserved the complete previous map.
+The package was relocated into a path containing spaces and loaded by compiled Groma. The independent project-reference fixture produced six files, two project groups, 19 operations, and 24 invocations. Repeated scans preserved the map byte-for-byte. Combining the two partial-operation files through Groma kept their common curated owner after a valid source edit. A deliberate compilation failure preserved the complete previous map.
 
 Compiled Groma also scanned the pinned FluentValidation project. The first scan took 2.477 seconds on this machine. The second scan preserved all architecture Markdown. Adding a valid TypeScript probe and a broken C# probe made the combined scan fail before reconciliation; the map remained byte-identical. The probes were removed and tracked application source stayed unchanged. Map interpretation and review are recorded in TASK-326.2.
 
@@ -27,15 +27,9 @@ The research failure reproduced on SDK 10.0.400: absolute solution paths below `
 
 The original default Roslyn test command passes all 17 tests, including that solution case. Eight concurrent Bun tests cover input selection, configuration, scan-trigger files, tooling readiness, failed worker output, and bounded process failure. Focused lint and TypeScript checks pass. The repository-wide check and separate reviews are recorded in the Backlog task.
 
-## Reproduce
+## Domain tests
 
-Install .NET 10 for the worker and the selected project's SDK. Follow the [package preparation steps](index.md). Restore the pinned project from its own directory using a relative input. In a disposable checkout without existing Groma state:
-
-```sh
-bun scripts/validate-csharp-package.ts /path/to/groma /path/to/csharp-scanner-package
-bun scripts/validate-csharp-repository.ts /path/to/disposable/FluentValidation \
-  src/FluentValidation/FluentValidation.csproj /path/to/groma \
-  /path/to/csharp-scanner-package /path/to/evidence
-```
-
-The repository validation retains the Groma map, scanner selection, and generated agent instructions for review. It removes only its two source probes. The script refuses to overwrite existing state. It does not restore the target project or run the application.
+Run `bun run test:csharp` with .NET 10 installed. These tests cover source
+operation resolution, hierarchy, and ownership. The results above record the
+historical qualification run; package and configuration checks are not part
+of the automated test suite.

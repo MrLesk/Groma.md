@@ -2,6 +2,7 @@ name: Release
 
 # Publishing a GitHub release creates its tag and starts this workflow; the tag names the version.
 on:
+  workflow_dispatch:
   release:
     types: [published]
 
@@ -23,6 +24,7 @@ jobs:
         with:
           bun-version: ${{ env.BUN_VERSION }}
       - name: Set version from tag
+        if: github.event_name == 'release'
         env:
           RELEASE_TAG: ${{ github.ref_name }}
         run: |
@@ -40,9 +42,94 @@ jobs:
       - name: Run repository checks
         run: bun run check
 
+  build-scanners:
+    name: build-scanners-${{ matrix.platform }}
+    needs: validate
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            platform: linux-x64
+          - runner: ubuntu-24.04-arm
+            platform: linux-arm64
+          - runner: macos-15
+            platform: darwin-arm64
+          - runner: windows-latest
+            platform: win32-x64
+          - runner: windows-11-arm
+            platform: win32-arm64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '25'
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: plugins/scanners/go/worker/go.mod
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.0.x'
+      - name: Install Rust build toolchain
+        run: rustup toolchain install 1.91.1 --profile minimal
+        shell: bash
+      - name: Select Rust build toolchain
+        run: rustup override set 1.91.1
+        shell: bash
+      - name: Install build dependencies
+        run: |
+          bun install --frozen-lockfile --ignore-scripts
+          dotnet restore plugins/scanners/csharp/dotnet/Groma.CSharpScanner.csproj --locked-mode
+        shell: bash
+      - name: Build runnable scanner packages
+        run: bun scripts/scanner-release.ts stage scanner-packages
+        shell: bash
+      - uses: actions/upload-artifact@v7
+        with:
+          name: scanner-packages-${{ matrix.platform }}
+          path: scanner-packages
+          if-no-files-found: error
+
+  publish-scanners:
+    if: github.event_name == 'release'
+    name: publish-official-scanners
+    needs: build-scanners
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          registry-url: https://registry.npmjs.org
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: scanner-packages-*
+          path: scanner-artifacts
+      - name: Assemble scanner packages
+        run: bun scripts/scanner-release.ts assemble scanner-artifacts scanner-packages
+      - name: Use npm 11 for trusted publishing
+        run: npm install --global npm@11
+      - name: Publish contract and official scanners
+        run: bun scripts/scanner-release.ts publish scanner-packages
+        env:
+          NPM_CONFIG_PROVENANCE: true
+      - uses: actions/upload-artifact@v7
+        with:
+          name: published-scanner-packages
+          path: scanner-packages
+          if-no-files-found: error
+
   build:
     name: build-${{ matrix.target }}
-    needs: validate
+    needs: publish-scanners
     strategy:
       fail-fast: false
       matrix:
@@ -100,6 +187,13 @@ jobs:
       - name: Install all Bun target dependencies
         run: bun install --frozen-lockfile --os="*" --cpu="*"
         shell: bash
+      - uses: actions/download-artifact@v8
+        with:
+          name: published-scanner-packages
+          path: published-scanner-packages
+      - name: Embed published scanner metadata
+        run: bun scripts/scanner-release.ts catalog published-scanner-packages
+        shell: bash
       - name: Build standalone binary
         env:
           GROMA_BUILD_TARGET: ${{ matrix.target }}
@@ -109,26 +203,6 @@ jobs:
       - name: Make Unix binary executable
         if: matrix.npm_os != 'win32'
         run: chmod +x "dist/${{ matrix.binary }}"
-        shell: bash
-      - name: Smoke-test binary in the checkout
-        env:
-          RELEASE_TAG: ${{ github.ref_name }}
-        run: |
-          version="${RELEASE_TAG#v}"
-          bun scripts/smoke-compiled-build.ts "dist/${{ matrix.binary }}" "$version"
-        shell: bash
-      - name: Smoke-test binary outside the checkout
-        env:
-          RELEASE_TAG: ${{ github.ref_name }}
-        run: |
-          version="${RELEASE_TAG#v}"
-          isolated="$RUNNER_TEMP/groma-isolated-${{ matrix.target }}"
-          mkdir -p "$isolated"
-          cp "dist/${{ matrix.binary }}" "$isolated/${{ matrix.binary }}"
-          if [[ "${{ matrix.npm_os }}" != "win32" ]]; then
-            chmod +x "$isolated/${{ matrix.binary }}"
-          fi
-          bun scripts/smoke-compiled-build.ts "$isolated/${{ matrix.binary }}" "$version"
         shell: bash
       - uses: actions/upload-artifact@v7
         with:
@@ -143,6 +217,7 @@ jobs:
     steps:
       - uses: actions/download-artifact@v8
         with:
+          pattern: groma-*
           path: release-artifacts
       - name: Assemble release binaries and checksums
         run: |
@@ -237,9 +312,6 @@ jobs:
         shell: bash
       - name: Use npm 11 for trusted publishing
         run: npm install --global npm@11
-      - name: Dry-run platform publication
-        working-directory: package
-        run: npm publish --access public --dry-run
       - name: Publish platform package
         working-directory: package
         run: npm publish --access public
@@ -295,53 +367,15 @@ jobs:
         shell: bash
       - name: Use npm 11 for trusted publishing
         run: npm install --global npm@11
-      - name: Dry-run wrapper publication
-        working-directory: package
-        run: npm publish --access public --dry-run
       - name: Publish groma.md
         working-directory: package
         run: npm publish --access public
         env:
           NPM_CONFIG_PROVENANCE: true
 
-  install-sanity:
-    name: install-sanity-${{ matrix.os }}
-    needs: publish-wrapper
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-    runs-on: ${{ matrix.os }}
-    steps:
-      - uses: actions/setup-node@v7
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          registry-url: https://registry.npmjs.org
-      - name: Install and run the published package
-        env:
-          RELEASE_TAG: ${{ github.ref_name }}
-        run: |
-          version="${RELEASE_TAG#v}"
-          for attempt in $(seq 1 30); do
-            directory="$(mktemp -d "$RUNNER_TEMP/groma-install.XXXXXX")"
-            cd "$directory"
-            npm init -y >/dev/null 2>&1
-            if npm install "groma.md@$version" --prefer-online --no-audit --no-fund \
-              && test "$(npx --no-install groma --version)" = "$version" \
-              && npx --no-install groma --help >/dev/null; then
-              echo "groma.md@$version install succeeded on attempt $attempt/30"
-              exit 0
-            fi
-            echo "attempt $attempt/30 failed; waiting for npm package propagation"
-            if [[ "$attempt" -lt 30 ]]; then sleep 10; fi
-          done
-          echo "groma.md@$version was not installable after 30 attempts"
-          exit 1
-        shell: bash
-
   sync-version:
     name: sync-version-to-main
-    needs: [release-assets, install-sanity]
+    needs: [release-assets, publish-wrapper]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7

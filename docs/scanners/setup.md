@@ -4,8 +4,7 @@
 project declarations, evidence locations, package availability, and coverage
 gaps, then offers the installable packages in one selection. The browser saves
 project settings first, then shows the same proposal with package checkboxes
-before scanning. Existing scanner selections and embedded TypeScript are
-retained. Clear a new package selection to decline it.
+before scanning. Existing scanner selections are retained. Clear a new package selection to decline it.
 
 Run the journey again after project technologies change:
 
@@ -25,8 +24,7 @@ it does not run plugins or install anything. An unavailable candidate has no
 verified release and cannot be selected for installation. The current optional
 catalog entries remain unavailable until their releases are qualified.
 
-`groma scanner list` reports whether each configured package is built in,
-found, or missing without executing it. `groma scanner check` separately loads
+`groma scanner list` reports whether each configured package is found or missing without executing it. `groma scanner check` separately loads
 enabled plugins and runs their preparation checks:
 
 - `ready`: the plugin's preparation check passed; the scan can still report a
@@ -40,7 +38,7 @@ Java checks its packaged worker, the project JDK, and the prepared offline Maven
 model. C# checks its worker, selected SDK, runtime, and project input. Angular
 uses its bundled compiler and compatible TypeScript tooling to check the
 project configuration and Angular compilation. This tooling does not replace
-the project's dependencies or Groma's embedded TypeScript SDK.
+the project's dependencies or the TypeScript scanner's SDK.
 
 Groma does not install a JDK, .NET SDK, or project dependencies. Follow the
 reported project-tool instructions explicitly, then run `groma scanner check`

@@ -1,4 +1,4 @@
-import type { MapView } from '../layers/orbit.ts'
+import type { MapView } from '../iso/presentation.ts'
 
 const views: { value: MapView; label: string; title: string }[] = [
   { value: 'iso', label: 'Iso', title: 'Isometric' },

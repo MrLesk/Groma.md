@@ -46,7 +46,7 @@ so far with `projectActiveWork`, and mounts
 `mountTerminalViewer(renderer, viewModel, { palette, onRefresh })`. It then
 pulls work with `workSource.read()` and starts three watches: `watchScan` for
 source folds, `watchArchitecture` for architecture Markdown, and
-`workSource.watch` for Backlog task files.
+`workSource.watch` for work-source notifications from the Backlog CLI stream.
 
 Source, Markdown, and manual refreshes serialize architecture reloads and sheet
 composition before calling the plugin's `update`. Work refreshes read Backlog
@@ -69,11 +69,24 @@ The TUI plugin is `mountTerminalViewer(renderer, viewModel, options)` in
 
 Work comes through the public `@groma/work-source` contract: `read()`
 resolves the configured workflow and available Backlog tasks, and
-`watch(onChange)` returns a handle whose `close()` stops watching the task files. The default is
+`watch(onChange)` returns a handle whose `close()` stops notifications and may
+return a promise; hosts await it when shutting down. The default is
 the embedded `@groma/work-source-backlog` plugin; both hosts take another
 source through their `workSource` option. When the global Backlog.md CLI is
 missing, the embedded plugin supplies empty work so architecture remains
 fully available.
+
+The Backlog plugin reads only through the CLI and does not inspect or watch
+Backlog storage. Each subscription starts `backlog task list --json --watch`.
+The plugin reads complete successive JSON objects, replaces its task list, and
+notifies the host. Work reads use the latest streamed list and CLI workflow
+configuration; selected task details still come from `task view --json`.
+Closing the subscription stops and awaits the CLI process. Watch errors are
+reported without restarting the command.
+
+Web and terminal subscribe to this work-source flow. Static export reads one
+current task snapshot and does not start source scanning.
+Source watching and reconciliation belong to the scanner adapter.
 
 Leave when asked means `destroy`, which Ctrl+C calls. The plugin marks
 itself closed, removes its frame callback and key listener, settles

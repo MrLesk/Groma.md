@@ -1,3 +1,9 @@
+import path from 'node:path'
+import { officialScannerCatalog } from './official-catalog.ts'
+import type { OfficialScanner } from './official-catalog.ts'
+export { officialScannerCatalog } from './official-catalog.ts'
+export type { OfficialScanner } from './official-catalog.ts'
+
 import type { ScannerInventoryItem } from './inventory.ts'
 
 export interface TechnologyFinding {
@@ -9,58 +15,10 @@ export interface TechnologyFinding {
   resolvedVersion?: { version: string; file: string }
 }
 
-export interface OfficialScanner {
-  id: string
-  package: string
-  technologies: string[]
-  description: string
-  /** Present only for a verified release, never a planned package version. */
-  release?: {
-    version: string
-    groma: string
-    technologyVersions: Record<string, string>
-  }
-}
-
-export const officialScannerCatalog: readonly OfficialScanner[] = [
-  {
-    id: 'typescript', package: '@groma/scanner-typescript', technologies: ['typescript'],
-    description: 'Embedded TypeScript scanner using the Groma TypeScript SDK.',
-  },
-  {
-    id: 'java', package: '@groma/scanner-java', technologies: ['java'],
-    description: 'Java compiler and project evidence; framework runtime use is not verified.',
-  },
-  {
-    id: 'angular', package: '@groma/scanner-angular', technologies: ['angular'],
-    description: 'Complementary Angular framework evidence with its own compatible TypeScript tooling.',
-  },
-  {
-    id: 'vue', package: '@groma/scanner-vue', technologies: ['vue'],
-    description: 'Complementary Vue framework evidence; a dependency declaration does not verify runtime use.',
-  },
-  {
-    id: 'react', package: '@groma/scanner-react', technologies: ['react'],
-    description: 'Complementary React framework evidence; a dependency declaration does not verify runtime use.',
-  },
-  {
-    id: 'csharp', package: '@groma/scanner-csharp', technologies: ['csharp'],
-    description: 'C# project evidence through Roslyn and MSBuild.',
-  },
-  {
-    id: 'go', package: '@groma/scanner-go', technologies: ['go'],
-    description: 'Go project evidence through Go language tooling.',
-  },
-  {
-    id: 'rust', package: '@groma/scanner-rust', technologies: ['rust'],
-    description: 'Rust project evidence through established semantic tooling.',
-  },
-]
-
 export interface ScannerRecommendation {
   id: string
   package: string
-  status: 'embedded' | 'configured' | 'installable' | 'unavailable' | 'incompatible' | 'uncertain'
+  status: 'configured' | 'installable' | 'unavailable' | 'incompatible' | 'uncertain'
   evidence: TechnologyFinding[]
   reason: string
   installSource?: string
@@ -69,6 +27,15 @@ export interface ScannerRecommendation {
 function exactVersion(value: string | undefined): string | undefined {
   if (value === undefined || !/^\d+(?:\.\d+){0,2}$/.test(value)) return undefined
   return [...value.split('.'), '0', '0'].slice(0, 3).join('.')
+}
+
+/** Presence-only clues use version evidence only within the same project directory. */
+function projectVersion(clue: TechnologyFinding, evidence: TechnologyFinding[]): TechnologyFinding {
+  if (clue.version !== undefined) return clue
+  return evidence.find(candidate => (
+    candidate.technology === clue.technology && candidate.version !== undefined
+    && path.posix.dirname(candidate.file) === path.posix.dirname(clue.file)
+  )) ?? clue
 }
 
 function releaseCompatibility(
@@ -83,7 +50,8 @@ function releaseCompatibility(
   if (!Bun.semver.satisfies(gromaVersion, release.groma)) {
     return { status: 'incompatible', reason: `Requires Groma ${release.groma}.` }
   }
-  for (const finding of evidence) {
+  for (const clue of evidence) {
+    const finding = projectVersion(clue, evidence)
     const version = exactVersion(finding.resolvedVersion?.version ?? finding.version)
     const supported = release.technologyVersions[finding.technology]
     if (version === undefined || supported === undefined) {
@@ -113,9 +81,6 @@ export function recommendScanners(
     const configured = inventory.find(item => item.id === scanner.id)
     if (evidence.length === 0 && configured === undefined) return []
     const base = { id: scanner.id, package: scanner.package, evidence }
-    if (configured?.status === 'built-in') {
-      return [{ ...base, status: 'embedded' as const, reason: scanner.description }]
-    }
     if (configured !== undefined) {
       return [{
         ...base, status: 'configured' as const,

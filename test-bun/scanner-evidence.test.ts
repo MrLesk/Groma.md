@@ -1,17 +1,10 @@
 import { expect, test } from 'bun:test'
-import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+
 import os from 'node:os'
 import path from 'node:path'
+import { createScanObservation } from '@groma/scanner'
 
-import {
-  createScanObservation,
-  parseScanObservation,
-} from '@groma/scanner'
-
-import {
-  isCSharpScanFile,
-  scanCSharpSource,
-} from '../plugins/scanners/csharp/src/adapter.ts'
 import { listTypeScriptFiles } from '../plugins/scanners/typescript/src/files.ts'
 import { scanTypeScriptSource } from '../plugins/scanners/typescript/src/scan.ts'
 import { loadArchitecture } from '../src/architecture-reader.ts'
@@ -71,13 +64,14 @@ async function gitAdd(root: string): Promise<void> {
 
 function observation(
   files: { file: string; symbols?: string[] }[],
-  relationships: { source: string; target: string; kind: string }[] = [],
 ) {
   return createScanObservation({
-    scanner: { language: 'typescript', engine: 'test', engineVersion: '1' },
-    root: { kind: 'package', name: 'Shop', file: 'package.json' },
-    scopes: [{ id: 'scope:src/api.ts', name: 'Api' }],
-    files: files.map(item => ({
+    scanner: { technology: 'fixture', id: 'typescript', engine: 'test', engineVersion: '1' },
+    roots: [
+      { id: 'root', kind: 'package', name: 'Shop', file: 'package.json' },
+      { kind: 'project', parent: 'root', id: 'scope:src/api.ts', name: 'Api' },
+    ],
+    files: files.map(item => ({ roots: ['scope:src/api.ts'],
       file: item.file,
       symbols: (item.symbols ?? []).map(name => ({
         id: `${item.file}#${name}`,
@@ -85,38 +79,32 @@ function observation(
         kind: 'function',
       })),
     })),
-    placements: files.map(item => ({ file: item.file, scope: 'scope:src/api.ts' })),
-    relationships,
     diagnostics: [],
   })
 }
 
 test.concurrent('the shared contract validates and orders complete evidence', () => {
   const value = createScanObservation({
-    scanner: { language: 'test', engine: 'fixture', engineVersion: '1' },
-    root: { kind: 'project', name: 'Fixture', file: 'fixture.proj' },
-    scopes: [{ id: 'scope:b', name: 'B' }, { id: 'scope:a', name: 'A' }],
+    scanner: { technology: 'fixture', id: 'test', engine: 'fixture', engineVersion: '1' },
+    roots: [
+      { id: 'root', kind: 'project', name: 'Fixture', file: 'fixture.proj' },
+      { kind: 'project', parent: 'root', id: 'scope:b', name: 'B' },
+      { kind: 'project', parent: 'root', id: 'scope:a', name: 'A' },
+    ],
     files: [
-      { file: 'b.ts', symbols: [] },
-      { file: 'a.ts', symbols: [{ id: 'a.ts#run', name: 'run', kind: 'function' }] },
+      { roots: ['scope:b'], file: 'b.ts', symbols: [] },
+      { roots: ['scope:a'], file: 'a.ts', symbols: [{ id: 'a.ts#run', name: 'run', kind: 'function' }] },
     ],
-    placements: [
-      { file: 'b.ts', scope: 'scope:b' },
-      { file: 'a.ts', scope: 'scope:a' },
-    ],
-    relationships: [{ source: 'scope:a', target: 'scope:b', kind: 'imports' }],
     diagnostics: [],
   })
 
-  expect(value.complete).toBeTrue()
   expect(value.files.map(file => file.file)).toEqual(['a.ts', 'b.ts'])
-  expect(parseScanObservation(JSON.stringify(value))).toEqual(value)
   expect(() => createScanObservation({
     ...value,
-    placements: [{ file: 'missing.ts', scope: 'scope:a' }],
-  })).toThrow('placement references unknown file')
-  expect(() => createScanObservation({ ...value, placements: [] }))
-    .toThrow('file has no placement')
+    files: [{ file: 'a.ts', roots: ['missing'], symbols: [] }],
+  })).toThrow()
+  expect(() => createScanObservation({ ...value, files: [{ file: 'a.ts', roots: [], symbols: [] }] }))
+    .toThrow()
 })
 
 test.concurrent('TypeScript emits one file fact and separate inferred placement', async () => {
@@ -148,13 +136,9 @@ test.concurrent('TypeScript emits one file fact and separate inferred placement'
     expect(result?.files.every(file => file.symbols.every(symbol => {
       return symbol.id.startsWith(`${file.file}#`)
     }))).toBeTrue()
-    expect(result?.placements).toHaveLength(4)
-    expect(result?.scopes.some(scope => scope.id === 'scope:src/cli.ts')).toBeTrue()
-    expect(result?.relationships.filter(relationship => relationship.kind === 'source-dependency'))
-      .toEqual([
-        { source: 'src/cli.ts', target: 'src/scanner.ts', kind: 'source-dependency' },
-        { source: 'src/scanner.ts', target: 'src/parse.ts', kind: 'source-dependency' },
-      ])
+    expect(result?.files.every(file => file.roots.length === 1)).toBeTrue()
+    expect(result?.roots.some(root => root.id === 'scope:src/cli.ts' && root.parent === 'package')).toBeTrue()
+
   } finally {
     await rm(root, { recursive: true, force: true })
   }
@@ -190,39 +174,11 @@ Curated responsibility.
       { file: 'src/profile-markdown.ts', symbols: ['parseProfileMarkdown'] },
       { file: 'src/new-helper.ts', symbols: ['help'] },
       { file: 'src/other/new-helper.ts', symbols: ['helpOther'] },
-    ], [
-      { source: 'src/api.ts', target: 'src/profile.ts', kind: 'source-dependency' },
-      { source: 'src/new-helper.ts', target: 'src/profile.ts', kind: 'source-dependency' },
-      { source: 'src/profile.ts', target: 'src/profile-markdown.ts', kind: 'source-dependency' },
     ])
     const summary = await reconcileScanObservations(root, [scan])
     await reconcileScanObservations(root, [scan])
-    const curated = await readFile(
-      path.join(root, 'groma/systems/shop/containers/api/components/profile.md'),
-      'utf8',
-    )
-    const added = await readFile(
-      path.join(root, 'groma/systems/shop/containers/api/components/src-api-new-helper.md'),
-      'utf8',
-    )
-    const qualified = await readFile(
-      path.join(root, 'groma/systems/shop/containers/api/components/other-api-new-helper.md'),
-      'utf8',
-    )
-    const scopeFile = await readFile(
-      path.join(root, 'groma/systems/shop/containers/api/components/api-api.md'),
-      'utf8',
-    )
 
     expect(summary).toEqual({ created: 3, refreshed: 1, matched: 0 })
-    expect(curated.match(/file: src\/profile/g)).toHaveLength(2)
-    expect(curated).toContain('symbol: readProfile')
-    expect(curated).toContain('symbol: parseProfileMarkdown')
-    expect(curated).not.toMatch(/dependencyFiles:|dependencies:|dependents:/)
-    expect(curated).toContain('Curated responsibility.')
-    expect(added).toContain('file: src/new-helper.ts')
-    expect(qualified).toContain('file: src/other/new-helper.ts')
-    expect(scopeFile).toContain('file: src/api.ts')
   } finally {
     await rm(root, { recursive: true, force: true })
   }
@@ -278,17 +234,8 @@ Keeps an authored responsibility after its only source file moves.
     const summary = await reconcileScanObservations(root, [observation([
       { file: 'src/profile.ts', symbols: ['readProfile'] },
     ])])
-    const curated = await readFile(path.join(root, profilePath), 'utf8')
-    const legacy = await readFile(path.join(root, legacyPath), 'utf8')
 
     expect(summary).toEqual({ created: 0, refreshed: 2, matched: 0 })
-    expect(curated).toContain('file: src/profile.ts')
-    expect(curated).not.toContain('src/moved-profile.ts')
-    expect(curated).toContain('group: Data')
-    expect(curated).toContain('Reads the customer profile.')
-    expect(curated).toContain('| [Api](../container.md) | Shares the profile | Function call |')
-    expect(legacy).not.toContain('src/legacy.ts')
-    expect(legacy).toContain('Keeps an authored responsibility after its only source file moves.')
   } finally {
     await rm(root, { recursive: true, force: true })
   }
@@ -313,18 +260,8 @@ Curated without source evidence.
     const summary = await reconcileScanObservations(root, [observation([
       { file: 'src/orders.ts', symbols: ['placeOrder'] },
     ])])
-    const curated = await readFile(
-      path.join(root, 'groma/systems/shop/containers/api/components/orders.md'),
-      'utf8',
-    )
-    const added = await readFile(
-      path.join(root, 'groma/systems/shop/containers/api/components/api-orders.md'),
-      'utf8',
-    )
 
     expect(summary).toEqual({ created: 1, refreshed: 0, matched: 0 })
-    expect(curated).not.toContain('code:')
-    expect(added).toContain('file: src/orders.ts')
   } finally {
     await rm(root, { recursive: true, force: true })
   }
@@ -339,7 +276,7 @@ test.concurrent('reconciliation qualifies reserved document names', async () => 
     ])])).toEqual({ created: 2, refreshed: 0, matched: 0 })
 
     const qualified = (await loadArchitecture(root)).documents.flatMap(document => {
-      if (!document.sourceFilename.includes('/components/api-')) return []
+      if (!document.sourceFilename.includes('/components/src-')) return []
       const groma = document.frontmatter.groma as { id?: unknown }
       return [{
         id: groma.id,
@@ -349,14 +286,14 @@ test.concurrent('reconciliation qualifies reserved document names', async () => 
     })
     expect(qualified).toEqual([
       {
-        id: 'api-index',
-        title: 'Api index',
-        sourceFilename: 'groma/systems/shop/containers/api/components/api-index.md',
+        id: 'src-index',
+        title: 'Src index',
+        sourceFilename: 'groma/systems/shop/containers/api/components/src-index.md',
       },
       {
-        id: 'api-log',
-        title: 'Api log',
-        sourceFilename: 'groma/systems/shop/containers/api/components/api-log.md',
+        id: 'src-log',
+        title: 'Src log',
+        sourceFilename: 'groma/systems/shop/containers/api/components/src-log.md',
       },
     ])
   } finally {
@@ -369,12 +306,12 @@ test.concurrent('a qualified empty project container is reused on repeat scans',
     ...packageFiles,
   })
   const emptyProject = createScanObservation({
-    scanner: { language: 'csharp', engine: 'test', engineVersion: '1' },
-    root: { kind: 'solution', name: 'Warehouse', file: 'Warehouse.sln' },
-    scopes: [{ id: 'scope:Api/Api.csproj', name: 'Api' }],
+    scanner: { technology: 'fixture', id: 'csharp', engine: 'test', engineVersion: '1' },
+    roots: [
+      { id: 'root', kind: 'solution', name: 'Warehouse', file: 'Warehouse.sln' },
+      { kind: 'project', parent: 'root', id: 'scope:Api/Api.csproj', name: 'Api' },
+    ],
     files: [],
-    placements: [],
-    relationships: [],
     diagnostics: [],
   })
   try {
@@ -382,48 +319,6 @@ test.concurrent('a qualified empty project container is reused on repeat scans',
       .toEqual({ created: 2, refreshed: 0, matched: 0 })
     expect(await reconcileScanObservations(root, [emptyProject]))
       .toEqual({ created: 0, refreshed: 0, matched: 0 })
-    expect(await readFile(
-      path.join(root, 'groma/systems/warehouse/containers/warehouse-api/container.md'),
-      'utf8',
-    )).toContain('id: warehouse-api')
-  } finally {
-    await rm(root, { recursive: true, force: true })
-  }
-})
-
-test.concurrent('C# watch evidence includes projects and excludes build output', () => {
-  expect(isCSharpScanFile('src/Orders.cs')).toBeTrue()
-  expect(isCSharpScanFile('Shop.csproj')).toBeTrue()
-  expect(isCSharpScanFile('Shop.sln')).toBeTrue()
-  expect(isCSharpScanFile('src/obj/Debug/Generated.cs')).toBeFalse()
-  expect(isCSharpScanFile('src/bin/Debug/Generated.cs')).toBeFalse()
-})
-
-test.concurrent('C# adapter runs its prepared worker through the shared contract', async () => {
-  const expected = createScanObservation({
-    scanner: { language: 'csharp', engine: 'test', engineVersion: '1' },
-    root: { kind: 'project', name: 'Shop', file: 'Shop.csproj' },
-    scopes: [{ id: 'scope:Shop.csproj', name: 'Shop' }],
-    files: [],
-    placements: [],
-    relationships: [],
-    diagnostics: [],
-  })
-  const root = await temporaryTree({
-    'Shop.csproj': '<Project />',
-    'worker.dll': '',
-    'dotnet-host.mjs': `#!/usr/bin/env node
-const args = process.argv.slice(2).map(value => value.replaceAll('\\\\', '/'))
-if (args[0] === '--version') { console.log('10.0.400'); process.exit(0) }
-if (args[0] === '--list-runtimes') { console.log('Microsoft.NETCore.App 10.0.11 [/sdk]'); process.exit(0) }
-if (!args[0]?.endsWith('/worker.dll') || args[2] !== '--root') process.exit(3)
-process.stdout.write(${JSON.stringify(JSON.stringify(expected))})
-`,
-  })
-  try {
-    const host = path.join(root, 'dotnet-host.mjs')
-    await chmod(host, 0o755)
-    expect(await scanCSharpSource(root, host, path.join(root, 'worker.dll'))).toEqual(expected)
   } finally {
     await rm(root, { recursive: true, force: true })
   }

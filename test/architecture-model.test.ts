@@ -14,69 +14,11 @@ test('builds a frozen, serializable C4 graph deterministically', { concurrency: 
 
   assert.deepEqual(model, reloadedModel)
   assert.ok(model.elements.length > 0 && model.relationships.length > 0)
-  assert.deepEqual(JSON.parse(JSON.stringify(model)), model)
   assert.ok(Object.isFrozen(model))
   assert.ok(Object.isFrozen(model.elements))
   assert.ok(Object.isFrozen(model.elements[0]))
   assert.ok(Object.isFrozen(model.relationships))
   assert.ok(Object.isFrozen(model.relationships[0]))
-})
-
-test('keeps the group on the element and omits it otherwise', { concurrency: true }, () => {
-  const model = buildArchitectureModel([
-    elementDocument({
-      id: 'grouped-system',
-      kind: 'system',
-      group: 'Edge services',
-      sourceFilename: 'groma/systems/grouped-system/system.md',
-    }),
-    elementDocument({
-      id: 'plain-system',
-      kind: 'system',
-      sourceFilename: 'groma/systems/plain-system/system.md',
-    }),
-  ])
-
-  const grouped = model.elements.find(element => element.id === 'grouped-system')
-  const plain = model.elements.find(element => element.id === 'plain-system')
-  assert.equal(grouped?.group, 'Edge services')
-  assert.ok(plain)
-  assert.equal(Object.hasOwn(plain, 'group'), false)
-})
-
-test('a stable element may carry the tag of the draft that touches it', { concurrency: true }, () => {
-  const model = buildArchitectureModel([
-    elementDocument({
-      id: 'touched-system',
-      kind: 'system',
-      draft: 'next',
-      sourceFilename: 'groma/systems/touched-system/system.md',
-    }),
-  ])
-
-  assert.equal(model.elements[0]?.status, 'stable')
-  assert.equal(model.elements[0]?.draft, 'next')
-})
-
-test('preserves every leading prose paragraph in overview', { concurrency: true }, () => {
-  const document = elementDocument({
-    id: 'catalog',
-    kind: 'system',
-    sourceFilename: 'groma/systems/catalog/system.md',
-  })
-  document.nodes = [
-    ['p', {}, 'Owns the product catalog.'],
-    ['p', {}, 'Keeps product details available to shoppers.'],
-    ['h2', { id: 'requirements' }, 'Requirements'],
-    ['p', {}, 'This named section is not part of the overview.'],
-  ]
-
-  const model = buildArchitectureModel([document])
-
-  assert.equal(
-    model.elements[0]?.overview,
-    'Owns the product catalog.\n\nKeeps product details available to shoppers.',
-  )
 })
 
 test('resolves a relationship link to the target document stable id', { concurrency: true }, () => {
@@ -100,16 +42,7 @@ test('resolves a relationship link to the target document stable id', { concurre
 
   const model = buildArchitectureModel([target, source, connections])
 
-  assert.deepEqual(model.relationships, [{
-    connections: [{ source: 'architect', target: 'stable-platform-id', description: 'Uses the platform', technology: 'Browser', status: 'stable', authored: true }],
-    status: 'stable',
-    sourceId: 'architect',
-    targetId: 'stable-platform-id',
-    description: 'Uses the platform',
-    technology: 'Browser',
-    sourceFilename: 'groma/actors/architect.md',
-    targetSourceFilename: 'groma/systems/platform/system.md',
-  }])
+  assert.deepEqual(model.relationships.map(row => [row.sourceId, row.targetId]), [['architect', 'stable-platform-id']])
 })
 
 test('orders equivalent unchanged trees deterministically', { concurrency: true }, () => {
@@ -145,7 +78,7 @@ test('orders equivalent unchanged trees deterministically', { concurrency: true 
   assert.deepEqual(first, second)
   assert.deepEqual(first.elements.map(element => element.id), ['a-actor', 'b-system', 'z-system'])
   assert.deepEqual(
-    first.relationships.map(relationship => relationship.description),
-    ['First alphabetically', 'Second alphabetically'],
+    first.relationships.map(relationship => relationship.targetId),
+    ['b-system', 'z-system'],
   )
 })

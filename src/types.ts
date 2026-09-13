@@ -1,4 +1,4 @@
-import type { ScanDiagnostic } from '@groma/scanner'
+import type { ScanDiagnostic, ScannerIdentity } from '@groma/scanner'
 
 export type C4Kind = 'actor' | 'system' | 'container' | 'component'
 export type Origin = 'observed' | 'draft'
@@ -69,6 +69,8 @@ export interface ScanSummary {
   created: number
   refreshed: number
   matched: number
+  /** Messages from successful scanners, with their origin; omitted when there are none. */
+  scannerDiagnostics?: { scanner: ScannerIdentity; diagnostic: ScanDiagnostic }[]
   /** Architecture findings from the current scan; omitted when there are none. */
   findings?: number
   /** Successful observations disagree; disputed claims do not establish derived relationships. */

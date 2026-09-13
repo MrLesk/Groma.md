@@ -85,7 +85,8 @@ class Evidence {
 
   private unsupported(event: TmplAstBoundEvent, template: string): void {
     this.diagnostics.push({ severity: 'info', code: 'unsupported-angular-binding',
-      message: `${template}:${event.sourceSpan.start.line + 1}: ${event.name} has no supported unique source output-to-method binding.` })
+      file: template, line: event.sourceSpan.start.line + 1,
+      message: `${event.name} has no supported unique source output-to-method binding.` })
   }
 
   inspect(event: TmplAstBoundEvent, component: ts.ClassDeclaration, template: string): void {
@@ -126,9 +127,10 @@ function angularProject(root: string) {
   try {
     const config = readConfiguration(path.join(root, 'tsconfig.json'))
     failDiagnostics(config.errors)
-    const options = { ...config.options, noEmit: true, strictTemplates: true, _enableTemplateTypeChecker: true }
+    const options = { ...config.options, noEmit: true, _enableTemplateTypeChecker: true }
     const ng = new NgtscProgram(config.rootNames, options, createCompilerHost({ options }))
     failDiagnostics(ng.getTsSyntacticDiagnostics())
+    failDiagnostics(ng.getTsSemanticDiagnostics())
     failDiagnostics(ng.getNgOptionDiagnostics())
     failDiagnostics(ng.getNgSemanticDiagnostics())
     return { manifest, ng }
@@ -163,9 +165,8 @@ export async function scanAngular(root: string): Promise<ScanObservation | undef
     symbols: source.statements.filter(ts.isClassDeclaration).map(node => ({
       id: `${relative(root, source.fileName)}#${node.getStart()}`, name: node.name?.text ?? 'default', kind: 'class',
     })) })), ...[...evidence.templates].map(file => ({ file, symbols: [] }))]
-  return createScanObservation({ scanner: { language: 'angular', engine: '@angular/compiler-cli', engineVersion: VERSION.full },
-    root: { kind: 'package', name: manifest.name, file: 'package.json' },
-    scopes: [{ id: 'angular-project', name: manifest.name }],
-    files, placements: files.map(({ file }) => ({ file, scope: 'angular-project' })), relationships: [],
+  return createScanObservation({ scanner: { id: 'angular', technology: 'typescript/angular', engine: '@angular/compiler-cli', engineVersion: VERSION.full },
+    roots: [{ id: 'angular-project', kind: 'package', name: manifest.name, file: 'package.json' }],
+    files: files.map(file => ({ ...file, roots: ['angular-project'] })),
     operations: [...evidence.operations.values()], invocations: evidence.invocations, diagnostics: evidence.diagnostics })
 }

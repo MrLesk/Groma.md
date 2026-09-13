@@ -25,7 +25,7 @@ adapter. These counts describe this snapshot, not coverage requirements.
 Both the independent fixture and the real project completed the normal
 compiled-Groma discovery, init, exact-package install, readiness, scan and
 export journey. The local registry served an actual `npm pack` artifact;
-its download was observed. The package ran alongside embedded TypeScript 7.1.
+its download was observed. The package ran alongside the TypeScript scanner 7.1.
 The real project was an isolated clone; the modified source and template were
 restored byte for byte after validation.
 
@@ -50,17 +50,13 @@ Scanner source/build/smoke lint and repository type checking passed.
 bun install --frozen-lockfile --ignore-scripts
 bun plugins/scanners/vue/build.ts
 bun test --timeout 20000 test-bun/vue-scanner.test.ts
-bunx biome lint plugins/scanners/vue/src plugins/scanners/vue/build.ts plugins/scanners/vue/smoke-compiled.ts test-bun/vue-scanner.test.ts
+bunx biome lint plugins/scanners/vue/src plugins/scanners/vue/build.ts test-bun/vue-scanner.test.ts
 bun run typecheck
-bun plugins/scanners/vue/smoke-compiled.ts /path/to/compiled-groma /path/to/disposable-prepared-project /path/to/evidence repl
 ```
 
-Use `fixture` as the final argument for a copy of `test/fixtures/vue-output`
-with `receiver.ts.fixture` renamed to `receiver.ts`, Vue dependencies installed,
-and Git initialized. Both projects need fresh Groma state. The artifact journey
-also requires a fresh cache for the prototype `@groma/scanner-vue@0.1.0`
-candidate so it can verify a download rather than reuse an earlier build.
-The runner changes only these disposable projects and restores edited sources.
+The results below record the historical qualification run. Automated tests
+cover source evidence and ownership; package consumer checks are outside
+the test suite.
 
 ## Release limits
 
