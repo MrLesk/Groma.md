@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@codex'
 created_date: '2026-09-12 14:24'
-updated_date: '2026-09-13 15:08'
+updated_date: '2026-09-13 15:19'
 labels:
   - scanners
 dependencies:
@@ -120,6 +120,10 @@ Alex requested completing trusted publishing before the newly requested nested-p
 Trusted publishing setup completed after Alex approved npm browser authentication. All eight official scanners are now publicly published at 0.1.0 from the assembled five-target artifacts. Each trusts GitHub repository MrLesk/Groma.md, workflow release.yml, for publication: java 48e305b4-91d1-4ce3-a688-38eda84e1caa; go 2314c52a-d51f-48fc-8e13-3cb65f5e3750; rust 22847c2f-461d-45b7-bf8f-aa7be0227411; csharp bbdde880-ecc6-4f61-bdc7-1dcde57e680c; angular c191fd5a-21a1-43dd-adb2-fa1eca7875aa; vue 921d549e-b21b-47d5-b63a-d64587f76284; react aff80efa-3c90-4832-b79c-b047fa56b52d; typescript 783bd890-1137-4ac8-b185-0f06539bec6c. The contract trust was completed earlier. Read-only npm trust list also verified groma.md and all five existing platform packages already trust this same repository/workflow. Future releases through GitHub Actions need no maintainer 2FA. No new CI release was triggered merely to test publication; fresh public consumer validation and the newly requested nested-project scanner fix remain pending.
 
 Final release pass: current source changes require @groma/scanner 0.1.1 as well as all eight prepared scanner 0.1.1 packages. Updated the contract manifest and lockfile. Full repository check passed: 16 Node and 289 Bun tests, six existing native skips. The first sandboxed run could not open local servers/FSEvents; rerunning with the required local permissions passed. Existing main CI 34764129798 passed all three operating systems. Proceeding with the authorized Groma 0.3.0 GitHub release through trusted publication; concurrent TASK-166 working-tree files are excluded from this release commit.
+
+Release 34764733268 built all five scanner targets but publication failed before uploading packages: npm parsed scanner-packages/contract as GitHub shorthand. The publish entry now resolves the staging directory to an absolute path, matching stage/assemble handling. Publish a corrected Groma 0.3.1 release rather than move the public v0.3.0 Git tag. Scanner packages remain the unpublished 0.1.1 versions.
+
+Verified with the installed npm argument parser: scanner-packages/contract is type git, while its resolved absolute path is type directory. Full check after the one-line fix passed: 16 Node and 290 Bun tests, six native skips (the working tree also contains concurrent TASK-166 checks). Release CI validates the exact committed snapshot independently.
 <!-- SECTION:NOTES:END -->
 
 ## Comments
