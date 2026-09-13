@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@codex'
 created_date: '2026-09-12 14:24'
-updated_date: '2026-09-13 02:30'
+updated_date: '2026-09-13 02:45'
 labels:
   - scanners
 dependencies:
@@ -110,6 +110,10 @@ After TypeScript extraction, the disposable callforpapers checkout also passed c
 npm publication completed successfully after Alex approved two-factor authentication: @groma/scanner@0.1.0. Anonymous npm view confirms the package and tarball; integrity matches the reviewed artifact (sha512-CguHkd4CiTeFxML8IAYkvHLtygjKBCVRDYVmtwe1oohmvZY6R9AED3QIp8BCtcsPYVMw6yx5idBAiZxZG2QUxA==). Alex explicitly authorized committing the prepared shared source and pushing to main. Continue with that release snapshot and the shared workflow build-only run.
 
 Trusted publishing successfully configured for @groma/scanner through npm 11.15.0 after Alex completed its separate 2FA approval. npm returned configuration b894935b-25be-4ffb-aa8a-52eb8912044d, provider github, repository MrLesk/Groma.md, file release.yml, permissions publish and stage publish. The eight plugin packages must first exist before their trust configuration can be added. No long-lived token was created. The temporary npm CLI is installed under /tmp/groma-npm-tools; the system npm installation is unchanged.
+
+Alex requested completing trusted publishing before the newly requested nested-project scanner fix. Assemble the verified five-target workflow artifacts from run 34733177332 (source e0fabf3), publish the eight prepared 0.1.0 packages, then configure each GitHub trusted publisher. The later nested-project fix will use new package versions; published versions are immutable.
+
+Trusted publishing setup completed after Alex approved npm browser authentication. All eight official scanners are now publicly published at 0.1.0 from the assembled five-target artifacts. Each trusts GitHub repository MrLesk/Groma.md, workflow release.yml, for publication: java 48e305b4-91d1-4ce3-a688-38eda84e1caa; go 2314c52a-d51f-48fc-8e13-3cb65f5e3750; rust 22847c2f-461d-45b7-bf8f-aa7be0227411; csharp bbdde880-ecc6-4f61-bdc7-1dcde57e680c; angular c191fd5a-21a1-43dd-adb2-fa1eca7875aa; vue 921d549e-b21b-47d5-b63a-d64587f76284; react aff80efa-3c90-4832-b79c-b047fa56b52d; typescript 783bd890-1137-4ac8-b185-0f06539bec6c. The contract trust was completed earlier. Read-only npm trust list also verified groma.md and all five existing platform packages already trust this same repository/workflow. Future releases through GitHub Actions need no maintainer 2FA. No new CI release was triggered merely to test publication; fresh public consumer validation and the newly requested nested-project scanner fix remain pending.
 <!-- SECTION:NOTES:END -->
 
 ## Comments

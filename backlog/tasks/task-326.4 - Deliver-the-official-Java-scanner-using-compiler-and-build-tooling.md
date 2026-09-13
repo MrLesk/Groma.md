@@ -1,11 +1,11 @@
 ---
 id: TASK-326.4
 title: Deliver the official Java scanner using compiler and build tooling
-status: In Progress
+status: Done
 assignee:
   - '@codex-java'
 created_date: '2026-09-08 21:34'
-updated_date: '2026-09-08 22:35'
+updated_date: '2026-09-12 14:25'
 labels:
   - scanners
 dependencies: []
@@ -15,6 +15,8 @@ references:
   - ../callforpapers/pom.xml
   - scan-lifecycle
   - read-read
+  - TASK-352
+  - TASK-356
 documentation:
   - docs/scanners/evidence.md
   - docs/scanners/creating-a-plugin.md
@@ -53,11 +55,7 @@ ordinal: 365000
 ## Description
 
 <!-- SECTION:DESCRIPTION:BEGIN -->
-A developer with the project's Java tooling installed can install the official Java scanner and scan one supported Maven project without manually assembling its dependency classpath. Start from research/java-scanner-prototype and reuse the compiler-backed worker, adapter, fixtures, packaging work, and real-project validation that fit these requirements. Do not restart the scanner or import the branch's conflicting Backlog records.
-
-Use javac/compiler APIs for Java meaning and the project's build tooling for source roots, dependencies, and compilation configuration. The project JDK is a prerequisite; a bundled JDK is not required. Use ../callforpapers as the supported Maven acceptance project and a minimal independent fixture for automated behavior tests. Its declared JDK is currently Java 25; the research prototype's older language-level limits must not silently exclude this approved example. Reuse the branch's Maven/Petclinic findings as implementation evidence. Gradle and other build arrangements are not part of this first delivery. Framework declarations inform discovery/support reporting; they do not automatically create architecture relationships.
-
-Supply the Java portion of the Java/Angular/embedded-TypeScript acceptance journey. The plugin can be implemented and verified through existing explicit scanner installation before guided discovery is completed. Identify the supported language/build versions, project preparation, and evidence limits. Reuse the established compiler analysis rather than growing custom Java language interpretation.
+The approved callforpapers Maven project needs Java source and operation evidence from compiler and project tooling using its declared JDK, without hand-maintained dependency JAR lists. Reuse the accepted Java research implementation and shared scanner lifecycle, preserving uncertainty and curated architecture. This task covers the accepted Java implementation and documented local example. Public packaging and advertised platform delivery are owned by TASK-356; TASK-352 removes automated package-consumer qualification requirements.
 <!-- SECTION:DESCRIPTION:END -->
 
 ## Acceptance Criteria
@@ -67,12 +65,12 @@ Supply the Java portion of the Java/Angular/embedded-TypeScript acceptance journ
 - [x] #3 Missing project tooling or dependencies produce concrete preparation instructions through the shared readiness flow, while unsupported build arrangements are identified clearly.
 - [x] #4 The scanner returns deterministic shared-contract evidence with canonical targets and explicit uncertainty, without treating unresolved dispatch or framework declarations as proven collaborations.
 - [x] #5 The packaged Java plugin runs in compiled Groma and contributes the Java evidence for ../callforpapers; its supported result is human-reviewed, repeat scans preserve curated architecture, and failure preserves the previous map.
-- [ ] #6 Automated behavior tests use minimal independent fixtures; documented support and package checks include the Windows consumer execution path as well as the other declared platforms before release qualification.
+- [x] #6 Retained domain tests use independent fixtures, and the recorded Java example documents required JDK/Maven tooling and analysis limits. Automated package-consumer qualification is outside the test suite under TASK-352; public target delivery belongs to TASK-356.
 <!-- AC:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 Acceptance criteria have objective verification evidence.
+- [x] #1 Acceptance criteria have objective verification evidence.
 - [x] #2 Relevant checks pass and changes remain task-scoped.
 - [x] #3 Public contracts or documentation are updated when behavior changes.
 - [x] #4 Implementation Plan reflects the final approach; correction history and verification are recorded in Implementation Notes.
@@ -81,15 +79,7 @@ Supply the Java portion of the Java/Angular/embedded-TypeScript acceptance journ
 ## Implementation Plan
 
 <!-- SECTION:PLAN:BEGIN -->
-1. Reuse the research javac worker and adapter; retain canonical compiler targets and conservative unresolved dispatch.
-2. Replace manual configuration with the supported single-module Maven main-source model and dependency classpath, using the project wrapper/configuration and installed JDK 25. Keep generation as explicit preparation when needed.
-3. Package portable Java bytecode plus bundled ESM without a bundled JDK; integrate the shared readiness hook once its owner establishes it.
-4. Verify deterministic evidence and failures on independent Maven fixtures, then validate compiled package consumption, repeated ownership, failure preservation and actual callforpapers evidence in a temporary copy.
-5. Document supported scope/platform qualification gaps and submit coordinator simplicity and acceptance reviews before finalization.
-
-6. Requalify compiled export for the Java/TypeScript acceptance project: reuse the existing TypeScript worker path in the source-structure reader and extend the Java package smoke with a minimal TypeScript export witness.
-
-7. Provision JDK 25 explicitly in the existing three-OS CI check jobs so the approved Java 25 fixture and Java 21 worker compilation use the required compiler.
+Reuse Java compiler APIs and Maven project inputs to produce shared scanner evidence, integrate readiness, and preserve curated architecture across repeat and failed scans. Record the accepted local callforpapers package and map review; retain domain behavior tests and tooling documentation. Keep public distribution and platform claims in TASK-356.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
@@ -116,4 +106,12 @@ The coordinated repository check after the isolated release-fixture correction p
 Coordinator confirms TASK-326.3 shared readiness integration: compiled CLI reports Java ready on the prepared acceptance copy, followed by a successful scan preserving all curated Markdown. The latest coordinated repository check passes: Node 110; Bun 386 passed, 1 tooling integration skip, 0 failed. All implementation, targeted, full-context and map reviews passed. AC3 is verified; AC6 remains unchecked because actual Windows/Linux consumer execution remains release qualification work. Task remains In Progress. Coordinator assigned the two Java-only bun.lock workspace/package entries to this task and authorized committing/pushing the verified implementation. The Java entrypoint will be staged at its pre-installation baseline; TASK-326.3 readiness wiring remains in the working file for its own commit.
 
 CI run 34286237315 on e310872 failed only the Java compiler prerequisites: Linux/Windows selected JDK17 and could not compile --release21; macOS could not analyze --release25. With coordinator lease, .github/workflows/ci.yml now adds actions/setup-java@v6 with distribution temurin and java-version 25 before existing dependency/check steps. Official action README documents this exact configuration and that it sets JAVA_HOME/PATH (https://github.com/actions/setup-java). YAML parsed successfully; removing the added setup step makes the parsed workflow exactly equal to HEAD, proving matrix, fail-fast, checks and assertions are unchanged. Focused Java checks with explicit local JDK25 and actual Maven integration passed: 4 tests, 19 assertions, 0 failures. git diff --check passed. No tests skipped or weakened, no release-workflow changes, no full suite/commit/push performed; coordinator will schedule requalification.
+
+Scope reconciliation approved by Alex on 2026-09-12: close the accepted implementation/local-evidence scope, apply TASK-352 removal of package qualification and CI test requirements, and consolidate all remaining public delivery in TASK-356. Revised criteria describe recorded completed behavior; older notes about waiting for publication or rebuilding qualification automation are superseded. Historical evidence and modified-file traceability are preserved. No source files or tests were changed or rerun for this task-record cleanup.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Java implementation is complete: Maven/JDK-driven analysis, shared readiness, deterministic evidence and the compiled local callforpapers example were accepted in recorded implementation, map and review evidence. The old automated Windows/Linux package-consumer gate is superseded by TASK-352; public packaging and truthful target support belong to TASK-356.
+<!-- SECTION:FINAL_SUMMARY:END -->

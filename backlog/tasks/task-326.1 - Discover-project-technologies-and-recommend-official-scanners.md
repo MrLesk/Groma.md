@@ -1,11 +1,11 @@
 ---
 id: TASK-326.1
 title: Discover project technologies and recommend official scanners
-status: In Progress
+status: Done
 assignee:
   - '@scanner-discovery'
 created_date: '2026-09-08 21:34'
-updated_date: '2026-09-09 13:18'
+updated_date: '2026-09-12 14:25'
 labels:
   - scanners
 dependencies: []
@@ -18,6 +18,8 @@ references:
   - discovery
   - TASK-326.10
   - TASK-326.11
+  - TASK-352
+  - TASK-356
 documentation:
   - docs/scanners/index.md
   - docs/scanners/creating-a-plugin.md
@@ -38,13 +40,7 @@ ordinal: 362000
 ## Description
 
 <!-- SECTION:DESCRIPTION:BEGIN -->
-A developer can inspect one repository and understand which official scanner plugins fit its languages and frameworks, including nested applications. Build on the existing scanner inventory and installation contract. The parent task defines the scope and language-tooling policy.
-
-Use lightweight project evidence for discovery and established project tooling for semantic confirmation after installation. Support the Java/Angular project at ../callforpapers and the project declarations required by the C#, Go, and Rust delivery tasks. Recommend Java and the separate Angular plugin while retaining embedded TypeScript. Shared file coverage is intentional: Angular adds framework evidence and is not redundant merely because TypeScript already scans those files. State Angular compiler compatibility separately from the embedded TypeScript SDK. Match supported framework declarations to the support actually provided by a plugin; a declared dependency is not proof of runtime use. Discovery must not require installing the plugin it is trying to recommend.
-
-An official catalog is maintained by Groma. It identifies the supported technology, compatible plugin package/version, and evidence for a recommendation. Prefer coverage through a small suitable set; do not invent numerical confidence scores or force a winner between materially different choices. Keep discovery rules within the supported examples and exclude dependency/generated content from project-owned discovery. Reuse branch project-selection and detection work where suitable.
-
-Include Vue and React project declarations and their separate complementary framework plugins in discovery for the examples accepted in TASK-326.10 and TASK-326.11. Preserve declaration evidence and installed-version confirmation, the embedded TypeScript recommendation, and explicit unavailable status until compatible public package releases are verified. Do not claim complete framework runtime analysis from a dependency declaration.
+Developers need evidence-backed discovery of supported languages and frameworks across root and nested applications before installing scanner plugins. Preserve declaration locations, distinguish framework declarations from proven runtime behavior, retain embedded TypeScript and existing selections, and report unavailable or uncertain support honestly. The implementation covers the approved callforpapers Java/Angular example and the reviewed C#, Go, Rust, Vue and React declarations. Public package publication and verified catalog releases belong exclusively to TASK-356.
 <!-- SECTION:DESCRIPTION:END -->
 
 ## Acceptance Criteria
@@ -52,7 +48,7 @@ Include Vue and React project declarations and their separate complementary fram
 - [x] #1 Discovery finds the supported language/project declarations in both the repository root and nested applications of the acceptance project, without stopping after the first match or counting dependency/generated directories as project applications.
 - [x] #2 Each detected language or framework is associated with its evidence location; a framework declaration is reported as a discovery clue rather than verified runtime use.
 - [x] #3 Recommendations come from the official catalog and account for Groma compatibility, declared technology/version support, and already available plugins; unreleased or incompatible packages are not offered as installable.
-- [ ] #4 For ../callforpapers, the proposal retains embedded TypeScript and recommends compatible official Java and Angular plugins. Angular is complementary support despite scanning some of the same files; genuinely redundant installations are avoided and unclear alternatives are explained.
+- [x] #4 For callforpapers, discovery identifies Java and Angular as complementary to embedded TypeScript and reports their actual configured or unavailable state honestly. Verified public release availability is owned by TASK-356.
 - [x] #5 Recognized technologies without a suitable plugin and uncertain findings remain visible as coverage limits; documentation states that discovery covers supported rules rather than every possible technology.
 - [x] #6 Rerunning discovery after adding a supported nested project identifies the new support needed while retaining the existing configured selection.
 - [x] #7 The reviewed Vue and React project declarations produce evidence-backed complementary scanner recommendations, with supported-version limits and unavailable public releases represented honestly.
@@ -60,7 +56,7 @@ Include Vue and React project declarations and their separate complementary fram
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 Acceptance criteria have objective verification evidence.
+- [x] #1 Acceptance criteria have objective verification evidence.
 - [x] #2 Relevant checks pass and changes remain task-scoped.
 - [x] #3 Public contracts or documentation are updated when behavior changes.
 - [x] #4 Implementation Plan reflects the final approach; correction history and verification are recorded in Implementation Notes.
@@ -69,14 +65,7 @@ Include Vue and React project declarations and their separate complementary fram
 ## Implementation Plan
 
 <!-- SECTION:PLAN:BEGIN -->
-1. Add read-only declaration discovery in the existing scanner module-management domain, using project-owned Git inventory and supported root/nested ecosystem manifests. Preserve exact evidence paths and unresolved declarations.
-2. Match findings to an official catalog, distinguish embedded/configured support from additions, and expose unreleased or unverified compatibility as coverage limits without installation offers. Keep Angular complementary to TypeScript.
-3. Add scanner discover text/JSON entry points without modifying configuration or architecture; document supported rules and limitations.
-4. Verify independent mixed-project fixtures, selection retention, compatibility decisions, and read-only callforpapers discovery. Obtain coordinator review and an exclusive repository-check slot.
-
-5. Confirm installed Angular/TypeScript dependency versions through standard node_modules resolution paths without executing code, preserving declared ranges and separate version evidence. This allows compatible Angular releases to match the approved project shape without a custom range solver.
-
-6. Extend the existing package declaration and installed-version rules to Vue and React, with complementary unavailable official candidates. Add one root/nested fixture check and update discovery documentation; preserve the current configuration, evidence model, and release qualification gate.
+Use the existing scanner inventory and official catalog to discover supported project declarations, retain evidence and configured selections, and classify compatibility and coverage. Verify the approved root/nested examples and complementary framework recommendations. Keep public release metadata conditional on actual publication in TASK-356.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
@@ -95,10 +84,12 @@ Coordinator accepted the verified technical implementation, cold and full-contex
 Vue/React discovery extension is code-stable. Added vue/react dependency declarations to the existing package.json rule and reused installed-version resolution, with complementary unavailable @groma catalog placeholders and no fabricated release support. Extended the existing mixed fixture with root React and nested Vue; one additional concurrent test proves declaration evidence, installed versions, retained embedded TypeScript, unavailable public packages, compatible fixture releases, and out-of-support rejection. Focused discovery suite: 7 pass, 50 assertions; scoped Biome lint and git diff --check pass. Own specification review confirms AC7 implementation behavior with fixture evidence; public release qualification remains TASK-326.7 and AC4 remains open. Own quality review found no blocking defect or new infrastructure. Awaiting coordinator shared check and full-context gate; no commit or push.
 
 Vue/React extension accepted by coordinator: final full-context review passed with no changes required; shared bun run check passed (Node 110, Bun 398, 7 tool-dependent skips, zero failures; six existing complexity warnings), log /tmp/groma-vue-react-check.log. Actual packed Vue REPL and React Backlog consumer reports confirm root project declaration evidence, installed versions, embedded TypeScript retained, and unavailable complementary public candidates. AC7 is verified. AC4 and whole-task completion remain open for published Java/Angular catalog qualification.
+
+Scope reconciliation approved by Alex on 2026-09-12: close the accepted implementation/local-evidence scope, apply TASK-352 removal of package qualification and CI test requirements, and consolidate all remaining public delivery in TASK-356. Revised criteria describe recorded completed behavior; older notes about waiting for publication or rebuilding qualification automation are superseded. Historical evidence and modified-file traceability are preserved. No source files or tests were changed or rerun for this task-record cleanup.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
-Implemented read-only scanner discovery with root/nested declaration evidence, installed-version confirmation, retained embedded TypeScript, and complementary Angular, Vue, and React candidates. Vue/React fixture and actual packed consumer discovery checks pass; shared repository check and final complexity review pass. Public release catalog qualification remains open under TASK-326.7, so TASK-326.1 stays In Progress.
+Discovery implementation is complete: root/nested declaration evidence, configured selections, compatibility handling and complementary framework recommendations were accepted in the recorded focused, consumer and review evidence. Completion covers truthful unavailable catalog entries; public release qualification and catalog activation are consolidated in TASK-356.
 <!-- SECTION:FINAL_SUMMARY:END -->
