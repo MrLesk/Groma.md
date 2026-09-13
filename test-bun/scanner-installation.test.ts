@@ -31,8 +31,9 @@ async function fixture() {
         if (await stat(root + '/tool-missing').then(() => true, () => false)) throw new Error('Install the project tool.');
         return { scanner: { id: '${id}', technology: '${id}', engine: 'fixture', engineVersion: '1' }, diagnostics: [], roots: [], files: [] };
       } }`)
-    const pack = Bun.spawn(['tar', '-czf', path.join(root, `${id}.tgz`), '-C', directory, 'package'], { stdout: 'ignore', stderr: 'pipe' })
-    expect(await pack.exited).toBe(0)
+    const pack = Bun.spawn(['tar', '-czf', `${id}.tgz`, '-C', `packages/${id}`, 'package'], { cwd: root, stdout: 'ignore', stderr: 'pipe' })
+    const error = await new Response(pack.stderr).text()
+    expect(await pack.exited, error).toBe(0)
   }
   const unavailable = new Set<string>()
   const downloads: string[] = []
