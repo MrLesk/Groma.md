@@ -3,8 +3,10 @@
 Official scanners and the author contract remain in this repository. The shared
 release workflow stages runnable packages, publishes them to npm, and then
 builds Groma with the exact published discovery metadata. The package manifests
-own names, versions and technology compatibility. A new release must use new
-package versions; npm versions cannot be replaced.
+own names, versions and technology compatibility. Changed packages require new
+versions; npm versions cannot be replaced. The workflow reuses exact versions
+already published and publishes only missing versions. Bump every package whose
+contents changed before starting a release.
 
 The author contract is `@groma/scanner`. Official packages use
 `@groma/scanner-<id>`; the main CLI remains `groma.md`. Initial scanner versions

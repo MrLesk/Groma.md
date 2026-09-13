@@ -86,6 +86,20 @@ async function catalog(input: string) {
   }
 }
 
+/** Existing exact versions are reused; a release may change only some packages. */
+async function isPublished(directory: string): Promise<boolean> {
+  const value = await manifest(directory)
+  const source = `${value.name}@${value.version}`
+  const child = Bun.spawn(['npm', 'view', source, 'version', '--json'], { stdout: 'pipe', stderr: 'pipe' })
+  const [output, error, code] = await Promise.all([
+    new Response(child.stdout).text(), new Response(child.stderr).text(), child.exited,
+  ])
+  const result = JSON.parse(output)
+  if (code === 0 && result === value.version) return true
+  if (result.error?.code === 'E404') return false
+  throw new Error(`Cannot check ${source}: ${error || output}`)
+}
+
 /** Publish only explicitly prepared public manifests, using the caller's npm authentication. */
 async function publish(input: string) {
   for (const id of scannerIds) {
@@ -95,7 +109,9 @@ async function publish(input: string) {
     }
   }
   for (const id of ['contract', ...scannerIds]) {
-    await run(['npm', 'publish', path.join(input, id), '--access', 'public'])
+    const directory = path.join(input, id)
+    if (await isPublished(directory)) console.log(`${id}: exact version already published`)
+    else await run(['npm', 'publish', directory, '--access', 'public'])
   }
 }
 
