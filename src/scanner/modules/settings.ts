@@ -36,7 +36,7 @@ function installedSetting(module: ScannerModuleLocation, proposal: ScannerDiscov
   }
   if (module.status === 'missing') base.message = `Package missing: ${module.source}`
   const candidate = proposal.recommendations.find(item => item.id === module.id)
-  if (candidate?.status === 'incompatible') { base.status = 'blocked'; base.message = candidate.reason }
+  if (module.status === 'found' && candidate?.status === 'incompatible') { base.status = 'blocked'; base.message = candidate.reason }
   return base
 }
 
@@ -76,7 +76,7 @@ export async function changeScannerSettings(root: string, action: ScannerSetting
     case 'remove': await removeScanner(root, action.id); return
     case 'restore': await restoreScanner(root, action.id); return
     case 'update': await updateScanner(root, action.id, action.source); return
-    case 'check': return
+    case 'retry': return
     case 'install': {
       const item = (await readScannerSettings(root)).scanners.find(scanner => scanner.id === action.id)
       if (!item?.installSource) throw new Error('No confirmed compatible release is available. Add an explicit scanner source instead.')
@@ -89,7 +89,7 @@ export function parseScannerSettingsAction(input: unknown): ScannerSettingsActio
   if (!input || typeof input !== 'object') throw new Error('Scanner action required')
   const value = input as Record<string, unknown>
   const action = value.action
-  if (action === 'check') return { action }
+  if (action === 'retry') return { action }
   if (action === 'add' && typeof value.source === 'string') return { action, source: value.source }
   if (typeof value.id !== 'string') throw new Error('Scanner id required')
   if (action === 'update' && typeof value.source === 'string') return { action, id: value.id, source: value.source }

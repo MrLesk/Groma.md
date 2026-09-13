@@ -46,7 +46,7 @@ for (const mismatch of ['groma', 'react']) {
       expect(checks.find(item => item.id === 'blocked')?.project).toBe('blocked')
       session = await createScannerSession(root)
       await session.reconfigure()
-      await session.change({ action: 'check' })
+      await session.change({ action: 'retry' })
       expect((await readFile(path.join(root, 'calls.txt'), 'utf8'))).toHaveLength(4)
       expect(session.state.scanners.find(item => item.id === 'blocked')?.status).toBe('blocked')
       await session.change({ action: 'remove', id: 'eligible' })

@@ -22,8 +22,9 @@ async function project() {
       technologies: ['react'], rules: [{ type: 'dependency', files: ['**/package.json'], technology: 'react', kind: 'framework', package: 'react' }],
     } } },
   }))
-  await writeFile(path.join(source, 'index.ts'), `import { readFile } from 'node:fs/promises'
+  await writeFile(path.join(source, 'index.ts'), `import { readFile, stat } from 'node:fs/promises'
 export default { id: 'fixture', watch: { include: ['**/*.fixture'], exclude: [] }, async scan(root) {
+  if (await stat(root + '/tool-missing').then(() => true, () => false)) throw new Error('Install the project tool.')
   return { scanner: { id: 'fixture', technology: 'react', engine: 'fixture', engineVersion: '1' }, diagnostics: [],
     roots: [{ id: 'root', name: 'Fixture', kind: 'package', file: 'ui/package.json' }, { id: 'ui', name: 'UI', kind: 'project', parent: 'root' }],
     files: [{ file: 'ui/view.fixture', roots: ['ui'], symbols: [{ id: 'view', kind: 'function', name: await readFile(root + '/ui/view.fixture', 'utf8') }] }] }
@@ -55,7 +56,7 @@ test.concurrent('settings changes reconfigure live scanning and keep saved evide
     await writeScannerConfig(root, { ...config, scanners: [...config.scanners, { id: 'absent', source: path.join(root, 'absent') }] })
     await session.reconfigure()
     const beforeCheck = folds
-    await session.change({ action: 'check' })
+    await session.change({ action: 'retry' })
     expect(folds).toBe(beforeCheck + 1)
     expect(session.state.scanners.find(item => item.id === 'fixture')?.status).toBe('ready')
     await writeScannerConfig(root, { ...config, exclude: ['ui/'] })
@@ -67,5 +68,22 @@ test.concurrent('settings changes reconfigure live scanning and keep saved evide
     expect(session.state.notice.tone).toBe('error')
     expect((await readScannerConfig(root)).scanners).toEqual([])
     expect(await readFile(path.join(root, 'ui/view.fixture'), 'utf8')).toBe('second')
+  } finally { await session.close(); await rm(root, { recursive: true, force: true }) }
+})
+
+test.concurrent('install reports preparation failures automatically and retry scans after the tool is restored', async () => {
+  const { root, source } = await project()
+  await writeFile(path.join(root, 'tool-missing'), '')
+  const before = await loadAnnotatedArchitecture(root)
+  const session = await createScannerSession(root)
+  try {
+    await session.change({ action: 'add', source })
+    expect(session.state.scanners[0]?.status).toBe('blocked')
+    expect(session.state.scanners[0]?.message).toContain('Install the project tool.')
+    expect((await loadAnnotatedArchitecture(root)).elements).toEqual(before.elements)
+    await rm(path.join(root, 'tool-missing'))
+    await session.change({ action: 'retry' })
+    expect(session.state.scanners[0]?.status).toBe('ready')
+    expect((await loadAnnotatedArchitecture(root)).elements.flatMap(element => element.code).some(code => code.symbol === 'first')).toBe(true)
   } finally { await session.close(); await rm(root, { recursive: true, force: true }) }
 })

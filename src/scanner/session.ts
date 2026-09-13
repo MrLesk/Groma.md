@@ -2,7 +2,7 @@ import { reconcileScanObservations } from '../core.ts'
 import { loadScannerRegistry, ScannerFailure } from './registry.ts'
 import { watchObservations } from './source-watch.ts'
 import { readScannerConfig } from './modules/config.ts'
-import { checkScannerReadiness, type ProjectReadiness } from './modules/readiness.ts'
+import type { ProjectReadiness } from './modules/readiness.ts'
 import { changeScannerSettings, readScannerSettings, type ScannerSettings, type ScannerSettingsAction } from './modules/settings.ts'
 import type { ScanObservation } from '@groma/scanner'
 
@@ -40,15 +40,15 @@ export async function createScannerSession(root: string, options: {
     publish(await readScannerSettings(root, checks))
     if (observations.length) await options.onFold?.()
   }
-  async function start(scan: boolean, preparation: ProjectReadiness[] = []) {
+  async function start(scan: boolean) {
     await watcher?.close()
     watcher = undefined
     if (closed) return
     config = JSON.stringify(await readScannerConfig(root))
-    checks = preparation
+    checks = []
     publish(await readScannerSettings(root, checks))
     const registry = await loadScannerRegistry(root)
-    if (scan && !checks.some(check => registry.scannerIds.includes(check.id) && check.project === 'blocked')) {
+    if (scan) {
       try { await fold(await registry.collectObservations(root)) }
       catch (error) { await report(error) }
     }
@@ -82,8 +82,7 @@ export async function createScannerSession(root: string, options: {
         watcher = undefined
         try { await changeScannerSettings(root, action) }
         catch (error) { await start(false); throw error }
-        const preparation = action.action === 'check' ? await checkScannerReadiness(root) : []
-        await start(true, preparation)
+        await start(true)
       })
     },
     async close() {
