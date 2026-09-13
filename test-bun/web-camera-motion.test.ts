@@ -44,3 +44,20 @@ test.concurrent('direct gestures or reduced motion replace and cancel an animate
   expect(motion.step(CAMERA_DURATION_MS * 2)).toBe(false)
   expect(motion.current).toEqual(direct)
 })
+
+test.concurrent('spatial framing starts at the displayed camera and follows the moving projected bounds', () => {
+  const initial = { x: 20, y: 30, k: 1 }
+  const motion = createCameraMotion(initial)
+  const target = { x: -80, y: -50, k: 2 }
+  motion.frame(target, 0)
+  expect(motion.current).toEqual(initial)
+  motion.frame(target, 0.5)
+  expect(motion.current).toEqual({ x: -30, y: -10, k: 1.5 })
+  const interrupted = { ...motion.current }
+  const next = { x: 60, y: 90, k: 0.5 }
+  motion.frame(next, 0)
+  expect(motion.current).toEqual(interrupted)
+  motion.frame(next, 1)
+  expect(motion.current).toEqual(next)
+  expect(motion.step(1000)).toBe(false)
+})

@@ -5,7 +5,7 @@ import { test } from 'bun:test'
 import { fitArchitecture, fitCamera, pan, zoomAbout } from '../src/viewers/web/iso/camera.ts'
 import { boundsOf } from '../src/viewers/web/iso/project.ts'
 import { presentScene } from '../src/viewers/web/iso/presentation.ts'
-import { NESTED_POSE, OVERHEAD_POSE } from '../src/viewers/web/layers/orbit.ts'
+import { NESTED_POSE, OVERHEAD_POSE, PLAN_DURATION_MS } from '../src/viewers/web/layers/orbit.ts'
 import { box, uses, worldOf } from './helpers.ts'
 
 function fixture() {
@@ -30,8 +30,8 @@ function fixture() {
 test.concurrent('overhead flattens floors into one footprint without changing architecture or evidence', () => {
   const world = fixture()
   const before = structuredClone(world)
-  const iso = presentScene(world.sheet, undefined, 'iso', NESTED_POSE)
-  const plan = presentScene(world.sheet, undefined, '2d', OVERHEAD_POSE)
+  const iso = presentScene(world.sheet, undefined, NESTED_POSE)
+  const plan = presentScene(world.sheet, undefined, OVERHEAD_POSE)
   const source = world.sheet.buildings.find(item => item.id === 'part')!
   const flat = plan.buildings.find(item => item.building.id === 'part')!
   assert.ok(source.floors.length > 1)
@@ -45,7 +45,7 @@ test.concurrent('overhead flattens floors into one footprint without changing ar
   assert.deepEqual(plan.routes.map(item => item.route), iso.routes.map(item => item.route))
   assert.deepEqual(plan.slabs.map(item => item.slab), iso.slabs.map(item => item.slab))
   assert.deepEqual(world, before)
-  assert.deepEqual(presentScene(world.sheet, undefined, 'iso', NESTED_POSE), iso)
+  assert.deepEqual(presentScene(world.sheet, undefined, NESTED_POSE), iso)
 })
 
 test.concurrent('view switches keep projected geometry usable by shared fitting, zoom and pan', () => {
@@ -54,7 +54,7 @@ test.concurrent('view switches keep projected geometry usable by shared fitting,
   const viewport = { width: 800, height: 600 }
   for (const view of ['iso', '2d', 'layers', '2d', 'iso'] as const) {
     motion.choose(view, 0, false)
-    const scene = presentScene(world.sheet, undefined, motion.view, motion.pose)
+    const scene = presentScene(world.sheet, undefined, motion.pose)
     const fit = fitCamera(scene.bounds, viewport)
     const selected = fitArchitecture(scene, world, ['observed:part', 'draft:next'], viewport)!
     assert.ok(selected.k >= fit.k)
@@ -65,4 +65,35 @@ test.concurrent('view switches keep projected geometry usable by shared fitting,
     assert.ok(Object.values(moved).every(Number.isFinite))
     for (const route of scene.routes) assert.deepEqual(route.arrow.at, route.points.at(-1))
   }
+})
+
+
+test.concurrent('intermediate plan geometry settles continuously without changing identities or evidence', () => {
+  const world = fixture(), before = structuredClone(world)
+  const motion = createMapMotion()
+  const spatial = presentScene(world.sheet, undefined, motion.pose)
+  motion.choose('2d', 0, true)
+  assert.deepEqual(presentScene(world.sheet, undefined, motion.pose), spatial)
+  motion.step(PLAN_DURATION_MS / 2)
+  const midway = presentScene(world.sheet, undefined, motion.pose)
+  const source = world.sheet.buildings.find(item => item.id === 'part')!
+  const middle = midway.buildings.find(item => item.building.id === 'part')!
+  assert.ok(middle.building.heightUnits > 0 && middle.building.heightUnits < source.heightUnits)
+  assert.equal(middle.floors.length, source.floors.length)
+  assert.deepEqual(middle.building.floors.flatMap(floor => floor.files), source.floors.flatMap(floor => floor.files))
+  motion.step(PLAN_DURATION_MS - 1)
+  const almost = presentScene(world.sheet, undefined, motion.pose)
+  motion.step(PLAN_DURATION_MS)
+  const plan = presentScene(world.sheet, undefined, motion.pose)
+  const lastRoof = almost.buildings.find(item => item.building.id === 'part')!.floors.at(-1)!.find(face => face.side === 'top')!
+  const planRoof = plan.buildings.find(item => item.building.id === 'part')!.floors[0]![0]!
+  lastRoof.points.forEach((point, index) => {
+    assert.ok(Math.hypot(point.x - planRoof.points[index]!.x, point.y - planRoof.points[index]!.y) < 0.01)
+  })
+  assert.deepEqual(midway.routes.map(route => route.route), spatial.routes.map(route => route.route))
+  motion.choose('iso', PLAN_DURATION_MS, true)
+  assert.deepEqual(presentScene(world.sheet, undefined, motion.pose), plan)
+  motion.step(PLAN_DURATION_MS * 2)
+  assert.deepEqual(presentScene(world.sheet, undefined, motion.pose), spatial)
+  assert.deepEqual(world, before)
 })

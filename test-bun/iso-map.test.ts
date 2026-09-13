@@ -329,7 +329,7 @@ for (const mode of ['iso', '2d'] as const) {
     const world = await loadAnnotatedArchitecture(`${repositoryRoot}/test/fixtures/plain-view`)
     const sheet = sheetScene(world)
     const before = structuredClone(sheet)
-    const scene = presentScene(sheet, projectProfile, mode, mode === 'iso' ? NESTED_POSE : OVERHEAD_POSE)
+    const scene = presentScene(sheet, projectProfile, mode === 'iso' ? NESTED_POSE : OVERHEAD_POSE)
     const surfaces = [
       ...scene.islands.map(({ island, polygon, text }) => ({ rect: island.rect, polygon, text, size: ISLAND_FONT })),
       ...scene.slabs.map(({ slab, faces, text }) => ({ rect: slab.rect, polygon: faces.find(face => face.side === 'top')!.points, text, size: CONTAINER_FONT })),

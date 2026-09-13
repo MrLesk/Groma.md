@@ -1,13 +1,18 @@
 # Project scanner settings
 
 Open **Scanners** from the Groma splash screen (`s`), the terminal map
-(`Shift+S`), or the web toolbar. `groma scanner settings` opens the same terminal
+(`Shift+S`), or **Settings → Plugins** in the web toolbar.
+`groma scanner settings` opens the same terminal
 screen; without a terminal it prints the shared settings snapshot as JSON.
 
 The same screen groups **Installed**, **Missing on this computer**, then
 **Recommended** scanners. Empty groups are hidden. Search filters the list by
 scanner name, package or technology. Recommendations give a short reason;
 **Details** reveals the source, matching files and diagnostics inline.
+The web labels the missing group **Set up for this project** and puts bulk
+installation beside each group. Settings is always available in live web.
+A warning appears only when scanning needs attention and opens the affected
+plugin in Settings. Potential duplicates belong to the separate Project review.
 
 **Install** selects a published stable release for this Groma version and
 computer, saves its exact version, and scans. **Install recommended scanners**
@@ -25,7 +30,8 @@ package or Git repository.
 Scanners validate project requirements when scanning. A failed scanner shows its
 error and **Retry** after fixing the problem. Download and release-selection
 failures show the affected package, the next step and **Retry installation**.
-Full error output is available inline through Details in the terminal. Groma does
+Full error output is available inline through Details; the web shows **Needs
+attention** on the row and keeps the full diagnostic in **Error details**. Groma does
 not install project dependencies or development tools on the user's behalf.
 
 In the terminal, `i` installs recommended scanners, `m` installs missing scanners,
@@ -48,8 +54,9 @@ code is loaded, including preparation checks. Settings show the reason; other
 eligible scanners can still run. An empty observation set does not
 write architecture. Missing packages do not prevent available scanners from
 running. Partial scans keep Code and relationships from absent scanners, including
-relationships that need several scanners. An active scanner failure prevents that
-batch from replacing the last result. Package changes and shared exclusions update
+relationships that need several scanners. An active scanner failure keeps that scanner's
+saved result while successful scanners update theirs. Each failed scanner shows
+its own error. Setup reports readiness problems and continues to the scan. Package changes and shared exclusions update
 subscriptions without restarting. Architecture and Backlog updates have separate
 subscriptions.
 

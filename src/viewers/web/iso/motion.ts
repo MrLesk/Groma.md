@@ -6,6 +6,7 @@ export const CAMERA_DURATION_MS = 220
 export function createCameraMotion(initial: Camera) {
   let current = initial
   let target = initial
+  let framingFrom = initial
   let transition: { from: Camera; started: number } | undefined
   return {
     get current() { return current },
@@ -14,6 +15,17 @@ export function createCameraMotion(initial: Camera) {
       target = to
       transition = animate ? { from: current, started: now } : undefined
       if (!animate) current = to
+    },
+    /** Follow changing projected bounds on the same clock as the spatial transition. */
+    frame(to: Camera, amount: number) {
+      if (amount === 0) framingFrom = current
+      target = to
+      transition = undefined
+      current = amount === 1 ? to : {
+        k: framingFrom.k + (to.k - framingFrom.k) * amount,
+        x: framingFrom.x + (to.x - framingFrom.x) * amount,
+        y: framingFrom.y + (to.y - framingFrom.y) * amount,
+      }
     },
     step(now: number): boolean {
       if (transition === undefined) return false
@@ -50,6 +62,12 @@ export function createCameraAnimator(initial: Camera, paint: () => void, prepare
   return {
     get current() { return motion.current },
     get target() { return motion.target },
+    frame(to: Camera, amount: number) {
+      stopFrame()
+      prepare()
+      motion.frame(to, amount)
+      frame = requestAnimationFrame(tick)
+    },
     move(to: Camera, animate = true) {
       stopFrame()
       prepare()
