@@ -3,3 +3,5 @@
 node_modules/
 /dist/
 /npm-release/
+/plugins/scanners/typescript/dist/
+/test/fixtures/csharp-operations/**/obj/
