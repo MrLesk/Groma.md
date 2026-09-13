@@ -20,6 +20,7 @@ function startBacklog(
   command: string,
   arguments_: string[],
   repositoryRoot: string,
+  detached = false,
 ) {
   const shim = process.platform === 'win32' && command.toLowerCase().endsWith('.cmd')
   const args = shim
@@ -30,6 +31,7 @@ function startBacklog(
     stdio: ['ignore', 'pipe', 'pipe'],
     windowsVerbatimArguments: shim,
     windowsHide: true,
+    detached,
   })
 }
 
@@ -89,7 +91,8 @@ function taskListStream(onTasks: (tasks: BacklogTaskSummary[]) => void): (chunk:
 }
 
 function watchBacklog(command: string, repositoryRoot: string, onTasks: (tasks: BacklogTaskSummary[]) => void) {
-  const child = startBacklog(command, ['task', 'list', '--json', '--watch'], repositoryRoot)
+  // The npm launcher and native watcher share a group owned by this subscription.
+  const child = startBacklog(command, ['task', 'list', '--json', '--watch'], repositoryRoot, process.platform !== 'win32')
   let closed = false
   let stderr = ''
   const report = (error: unknown) => {
@@ -102,17 +105,19 @@ function watchBacklog(command: string, repositoryRoot: string, onTasks: (tasks: 
       resolve()
     })
   })
-  async function close(): Promise<void> {
-    if (!closed) {
-      closed = true
-      if (child.pid !== undefined && child.exitCode === null && child.signalCode === null) {
-        if (process.platform === 'win32') {
-          // The npm command shim owns the actual Backlog process on Windows.
-          const killer = spawn('taskkill', ['/PID', String(child.pid), '/T', '/F'], { stdio: 'ignore', windowsHide: true })
-          killer.on('error', error => console.error(error.message))
-        } else child.kill()
-      }
+  function stopProcess(): void {
+    if (child.pid === undefined || child.exitCode !== null || child.signalCode !== null) return
+    if (process.platform === 'win32') {
+      // The npm command shim owns the actual Backlog process on Windows.
+      const killer = spawn('taskkill', ['/PID', String(child.pid), '/T', '/F'], { stdio: 'ignore', windowsHide: true })
+      killer.on('error', error => console.error(error.message))
+      return
     }
+    try { process.kill(-child.pid, 'SIGTERM') }
+    catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error }
+  }
+  async function close(): Promise<void> {
+    if (!closed) { closed = true; stopProcess() }
     await finished
   }
   const receive = taskListStream(tasks => { if (!closed) onTasks(tasks) })
