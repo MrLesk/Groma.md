@@ -14,12 +14,10 @@ import type { AddInput, RemoveInput } from './authoring.ts'
 import { agentInstructionGuide } from './agent-instructions.ts'
 import { ensureInitialized, runInitCommand } from './init-command.ts'
 import { humanInstructionGuide } from './instructions.ts'
+import { registerLintCommand } from './lint-command.ts'
 import { registerScannerCommands } from './scanner/cli.ts'
 import { formatScanReport, scanRepository, watchScan } from './scanner.ts'
-import {
-  renderPlainWelcome,
-  startWelcome,
-} from './welcome.ts'
+import { renderPlainWelcome, startWelcome } from './welcome.ts'
 import type { WelcomeActionId, WelcomeScreen } from './welcome.ts'
 
 const program = new Command()
@@ -292,6 +290,7 @@ program
   })
 
 registerScannerCommands(program)
+registerLintCommand(program)
 
 program
   .command('draft')

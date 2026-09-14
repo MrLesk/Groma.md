@@ -26,6 +26,7 @@ source code ──scan──▶ groma|.groma/*.md ──view──▶ maps
    - groma add relation, groma edit relation, groma remove relation — author or reword a file interaction, or remove a draft interaction. Current relationships cannot be removed.
    - groma remove — take away a person, an external, a ghost, a draft nothing belongs to, a draft relation, or a group.
 5. groma accept <id> — accept a ghost only if a scan has matched it. The file stays where it is; only its status changes.
+6. groma lint — report architecture issues from current scanner evidence. The first rule checks for possible duplicate logic. Saved architecture stays unchanged. Exit code 1 means findings or a scanner failure; 0 means no findings in the available evidence.
 
 ## Rules of engagement
 

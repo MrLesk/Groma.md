@@ -1,5 +1,19 @@
 # Architecture findings
 
+## CLI check
+
+Run `groma lint` to check for architecture issues. The first rule reports possible
+duplicate logic, with operation names and source file:line locations. It uses
+current evidence from configured, installed scanners and respects project
+exclusions. It does not write architecture records or change scanner selections.
+
+The command exits with code 1 when it finds issues or a scanner fails, and 0
+otherwise. An empty result applies only to the available scanner evidence;
+it does not mean that every source file was checked. Run `groma scanner list`
+to see which scanners are installed.
+
+## Review findings
+
 Architecture findings are review questions about implementations, not map
 collaborations. They do not become C4 elements, containment, or relationship
 rows. An ordinary Markdown reader of the architecture tree never sees them.
