@@ -15,6 +15,7 @@ interface Options {
 /** Duplicate review owns comparisons; the shared project dialog owns navigation and dismissal. */
 export function createDuplicatesControl(options: Options) {
   const panel = options.host
+  const detail = node('section', '', 'duplicate-detail')
   const reader = comparisonReader<[string, string]>()
   let owner = ''
   let match = ''
@@ -39,7 +40,7 @@ export function createDuplicatesControl(options: Options) {
     return operationSource(payload.source, instance)
   }
 
-  function comparison(finding: ArchitectureFinding): HTMLElement {
+  function comparison(finding: ArchitectureFinding, row?: HTMLElement): HTMLElement {
     const section = node('section')
     const selectors = node('div', '', 'duplicate-filters')
     const entries: [string, string][] = finding.instances.map((instance, index) => [String(index), `${instance.name} · ${instance.file}:${instance.startLine}`])
@@ -47,7 +48,7 @@ export function createDuplicatesControl(options: Options) {
       selectors.append(choice(side === 0 ? 'Left occurrence' : 'Right occurrence', entries, String(pair[side]), value => {
         pair[side] = Number(value)
         if (pair[0] === pair[1]) pair[1 - side] = Number(entries.find(([id]) => Number(id) !== pair[side])![0])
-        paint()
+        showComparison(finding)
       }))
     }
     const left = finding.instances[pair[0]]!
@@ -55,14 +56,22 @@ export function createDuplicatesControl(options: Options) {
     const body = node('div', 'Loading source', 'duplicate-comparison')
     section.append(selectors, body)
     void reader.read(async () => Promise.all([read(left), read(right)]), result => {
-      if (result instanceof Error) { body.textContent = result.message; return }
-      const lines = compareOperations(result[0], result[1], [left.startLine, right.startLine])
-      body.replaceChildren(
-        sourceColumn(left, component(left)?.title, lines[0], source => navigate(left, source)),
-        sourceColumn(right, component(right)?.title, lines[1], source => navigate(right, source)),
-      )
+      if (result instanceof Error) body.textContent = result.message
+      else {
+        const lines = compareOperations(result[0], result[1], [left.startLine, right.startLine])
+        body.replaceChildren(
+          sourceColumn(left, component(left)?.title, lines[0], source => navigate(left, source)),
+          sourceColumn(right, component(right)?.title, lines[1], source => navigate(right, source)),
+        )
+      }
+      row?.scrollIntoView({ block: 'start' })
     })
     return section
+  }
+
+  function showComparison(finding: ArchitectureFinding, row?: HTMLElement): void {
+    reader.invalidate()
+    detail.replaceChildren(comparison(finding, row))
   }
 
   function filters(findings: readonly ArchitectureFinding[]): HTMLElement {
@@ -79,23 +88,46 @@ export function createDuplicatesControl(options: Options) {
   function candidate(finding: ArchitectureFinding): HTMLElement {
     const row = node('button', '', 'duplicate-row')
     row.type = 'button'
-    row.setAttribute('aria-pressed', String(finding.id === selected))
-    row.append(node('span', finding.title), node('span', finding.match === 'exact' ? 'Same structure' : 'Similar'), node('span', `${finding.instances.length} copies`))
-    row.addEventListener('click', () => { selected = finding.id; pair = [0, 1]; paint() })
+    row.setAttribute('aria-expanded', String(finding.id === selected))
+    const arrow = node('span', '›', 'duplicate-arrow')
+    arrow.setAttribute('aria-hidden', 'true')
+    row.append(arrow, node('span', finding.title), node('span', finding.match === 'exact' ? 'Same structure' : 'Similar'), node('span', `${finding.instances.length} copies`))
+    row.addEventListener('click', () => {
+      selected = selected === finding.id ? undefined : finding.id
+      pair = [0, 1]
+      reader.invalidate()
+      detail.remove()
+      for (const button of panel.querySelectorAll('.duplicate-row')) button.setAttribute('aria-expanded', String(button === row && selected !== undefined))
+      if (selected === undefined) return
+      row.after(detail)
+      showComparison(finding, row)
+      row.scrollIntoView({ block: 'start' })
+    })
     return row
+  }
+
+  function groupList(groups: readonly ArchitectureFinding[]): HTMLElement {
+    const list = node('div', '', 'duplicate-list')
+    for (const finding of groups) {
+      list.append(candidate(finding))
+      if (finding.id === selected) { list.append(detail); showComparison(finding) }
+    }
+    return list
   }
 
   function paint(): void {
     reader.invalidate()
     const findings = options.world().findings
     const groups = duplicateGroups(findings ?? [], owner, match)
-    if (!groups.some(finding => finding.id === selected)) { selected = groups[0]?.id; pair = [0, 1] }
-    const list = node('div', '', 'duplicate-list')
-    list.append(...groups.map(candidate))
-    panel.replaceChildren(filters(findings ?? []), node('p', `${groups.length} ${groups.length === 1 ? 'group' : 'groups'}`, 'pane-label'), list)
-    const finding = groups.find(item => item.id === selected)
-    if (finding !== undefined) panel.append(comparison(finding))
-    else panel.append(node('p', findings === undefined ? 'No duplicate findings available for this view.' : 'No matching duplicate groups.'))
+    if (!groups.some(finding => finding.id === selected)) { selected = undefined; pair = [0, 1] }
+    const list = groupList(groups)
+    const toolbar = node('div', '', 'duplicate-toolbar')
+    const count = groups.length === findings?.length ? String(groups.length) : `${groups.length} of ${findings?.length ?? 0}`
+    const heading = node('h2', `Potential duplicates · ${count}`)
+    heading.id = 'duplicates-title'
+    toolbar.append(heading, filters(findings ?? []))
+    panel.replaceChildren(toolbar, list)
+    if (groups.length === 0) list.append(node('p', findings === undefined ? 'No duplicate findings available for this view.' : 'No matching duplicate groups.'))
   }
 
   return {

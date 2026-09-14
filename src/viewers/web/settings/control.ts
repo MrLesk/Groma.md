@@ -56,7 +56,7 @@ export function createProjectSettings(data: WebDataSource) {
   const warning = document.getElementById('scanner-warning')!
   plugins.hidden = false
   let target: ReturnType<typeof scannerWarning>
-  const popup = createSettingsDialog('project-settings', 'Settings', '<h2 id="plugins-title">Plugins</h2><section id="scanner-settings" aria-labelledby="plugins-title"></section>', { expandable: false })
+  const popup = createSettingsDialog('project-settings', 'Settings', '<h2 id="plugins-title">Plugins</h2><section id="scanner-settings" aria-labelledby="plugins-title"></section>')
   const settings = bindScannerSettings(data, popup.dialog.querySelector<HTMLElement>('#scanner-settings')!, state => {
     target = scannerWarning(state)
     warning.hidden = !target

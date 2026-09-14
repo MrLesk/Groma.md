@@ -12,7 +12,10 @@ The web toolbar's review icon opens **Project review**, showing **Potential dupl
 across the project. The neutral icon has a dot when findings are available.
 Plugin management lives separately in **Settings → Plugins**. Project review filters groups by
 component and match type; a component filter retains copies owned elsewhere.
-Select a group, then choose two occurrences to compare their source ranges.
+The filters sit beside the section heading. Click a group to expand its source
+comparison directly below the row. Click it again to collapse it. Opening another
+group closes the previous comparison. Choose two occurrences to compare their
+source ranges. The dialog has no enlarge control.
 Highlighted lines show textual differences, not a new similarity judgment.
 Each owned occurrence can open its source or select its component on the map.
 Closing the popup restores the underlying inspector and cancels pending
