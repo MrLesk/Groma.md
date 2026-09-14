@@ -71,6 +71,13 @@
         "@groma/scanner": "workspace:*",
       },
     },
+    "plugins/scanners/python": {
+      "name": "@groma/scanner-python",
+      "version": "0.1.0",
+      "dependencies": {
+        "@groma/scanner": "workspace:*",
+      },
+    },
     "plugins/scanners/react": {
       "name": "@groma/scanner-react",
       "version": "0.1.3",
@@ -248,6 +255,8 @@
     "@groma/scanner-go": ["@groma/scanner-go@workspace:plugins/scanners/go"],
 
     "@groma/scanner-java": ["@groma/scanner-java@workspace:plugins/scanners/java"],
+
+    "@groma/scanner-python": ["@groma/scanner-python@workspace:plugins/scanners/python"],
 
     "@groma/scanner-react": ["@groma/scanner-react@workspace:plugins/scanners/react"],
 

@@ -1,0 +1,20 @@
+raise RuntimeError("Source must never execute")
+
+class Worker:
+    @decorate(factory())
+    async def run(self, value=default()):
+        "🐍"; self.port.send(value)
+        def nested():
+            inner()
+        thunk = lambda: anonymous()
+        values = (deferred() for item in items)
+        nested()
+        class Local:
+            initialized = class_body()
+            def work(self):
+                local_work()
+        return thunk
+
+
+def dispatch(callback):
+    callback()

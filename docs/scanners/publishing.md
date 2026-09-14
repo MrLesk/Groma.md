@@ -43,7 +43,8 @@ and arm64. Building an artifact and manually exercising it are separate claims:
 record each explicitly.
 Go, Rust and TypeScript packages include workers in platform-specific directories. Java and
 C# packages include their portable workers and require the documented project
-JDK or .NET tools. Framework packages carry their compiler dependencies.
+JDK or .NET tools. Python ships a portable standard-library worker and requires
+the consumer's Python 3.11+ interpreter; it has no platform-specific binary. Framework packages carry their compiler dependencies.
 
 For a local host build with Java, Go, Rust and .NET available:
 
@@ -53,7 +54,7 @@ dotnet restore plugins/scanners/csharp/dotnet/Groma.CSharpScanner.csproj --locke
 bun scripts/scanner-release.ts stage /tmp/scanner-packages
 ```
 
-This stages the contract and eight scanner packages without contacting npm.
+This stages the contract and nine scanner packages without contacting npm.
 Use these folders with `groma scanner add` for focused local validation. For a
 multi-platform release, collect the staged host directories, then assemble them:
 

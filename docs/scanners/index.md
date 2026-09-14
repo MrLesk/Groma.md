@@ -142,6 +142,7 @@ authored relationships remain intact.
 - [Discover project technologies and official scanner candidates](discovery.md)
 - [Select scanners and check project readiness](setup.md)
 - [TypeScript](typescript/index.md)
+- [Python](python/index.md)
 - [C#/.NET](dotnet-csharp/index.md)
 - [Shared contract](creating-a-plugin.md)
 
