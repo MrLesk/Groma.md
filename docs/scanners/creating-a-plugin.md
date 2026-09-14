@@ -384,10 +384,13 @@ packages, or load an unconfigured module.
 
 ## Update a scanner
 
-Choose an exact version of the same npm package, or a tag or commit in the same
-Git repository:
+For an npm scanner, omit the source or use its package name to install the newest
+compatible stable release. You can also choose an exact version of the same npm
+package, or a tag or commit in the same Git repository:
 
 ```sh
+groma scanner update python
+groma scanner update python @example/groma-scanner-python
 groma scanner update python @example/groma-scanner-python@1.1.0
 groma scanner update python git+https://github.com/example/python-scanner.git#v1.1.0
 ```

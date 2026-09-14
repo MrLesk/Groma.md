@@ -19,7 +19,7 @@ export interface ScannerSettings {
 export type ScannerSettingsAction =
   | { action: 'add'; source: string }
   | { action: 'install' | 'restore' | 'remove'; id: string }
-  | { action: 'update'; id: string; source: string }
+  | { action: 'update'; id: string; source?: string }
   | { action: 'retry' | 'install-recommended' | 'install-missing' }
 
 export function scannerNotice(scanners: readonly ScannerSetting[], limits: readonly string[]): ScannerSettings['notice'] {

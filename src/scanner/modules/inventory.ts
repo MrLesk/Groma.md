@@ -163,14 +163,17 @@ function samePackage(current: ScannerSource, replacement: ScannerSource): boolea
 export async function updateScanner(
   repositoryRoot: string,
   id: string,
-  input: string,
+  input?: string,
   options: ScannerInstallOptions = {},
 ): Promise<ScannerInventoryItem> {
   const config = await readScannerConfig(repositoryRoot)
   const selected = config.scanners.find(scanner => scanner.id === id)
   if (selected === undefined) throw new Error(`scanner is not configured: ${id}`)
   const current = parseScannerSource(repositoryRoot, selected.source)
-  const replacement = parseScannerSource(repositoryRoot, input)
+  const requested = input?.trim() ?? (current.kind === 'npm' ? current.name : undefined)
+  if (requested === undefined) throw new Error('Git updates require a tag or commit; local plugins run from their configured path')
+  const replacement = parseScannerSource(repositoryRoot, isNpmPackageName(requested)
+    ? await publishedScannerSource(requested, options.registry) : requested)
   if (!samePackage(current, replacement)) {
     throw new Error('scanner update must keep the same npm package or Git repository; local plugins run from their configured path')
   }

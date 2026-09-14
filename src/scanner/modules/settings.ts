@@ -107,7 +107,7 @@ export function parseScannerSettingsAction(input: unknown): ScannerSettingsActio
   if (action === 'retry' || action === 'install-recommended' || action === 'install-missing') return { action }
   if (action === 'add' && typeof value.source === 'string') return { action, source: value.source }
   if (typeof value.id !== 'string') throw new Error('Scanner id required')
-  if (action === 'update' && typeof value.source === 'string') return { action, id: value.id, source: value.source }
+  if (action === 'update' && (value.source === undefined || typeof value.source === 'string')) return { action, id: value.id, source: value.source }
   if (action === 'install' || action === 'restore' || action === 'remove') return { action, id: value.id }
   throw new Error('Unknown scanner action')
 }
