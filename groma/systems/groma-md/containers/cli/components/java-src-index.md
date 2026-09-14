@@ -14,7 +14,7 @@ groma:
       file: plugins/scanners/java/src/maven.ts
     - scanner: typescript
       file: plugins/scanners/java/src/process.ts
-  group: Scanner plugins
+  group: Language analysis
 ---
 
 Selects Maven projects and checks the Java tools. Starts the Java worker with the prepared project model.

@@ -13,7 +13,7 @@ groma:
       symbol: projectScanner
     - scanner: typescript
       file: plugins/scanners/observations.ts
-  group: Scanner plugins
+  group: Scanner support
 ---
 
 Finds supported project inputs. Combines project results with paths that start at the repository root.

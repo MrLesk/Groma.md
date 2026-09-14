@@ -12,7 +12,7 @@ groma:
       file: src/viewers/web/selection.ts
     - scanner: typescript
       file: src/viewers/web/url.ts
-  group: Map controls
+  group: Browser session
 ---
 
 Connects browser controls to the current architecture and task state. Updates the selection and page address when the map changes.

@@ -15,7 +15,7 @@ groma:
       file: src/scanner/modules/catalog.ts
     - scanner: typescript
       file: src/scanner/modules/official-catalog.ts
-  group: Plugin management
+  group: Scanner management
 ---
 
 Reads project declarations and plugin metadata. Recommends scanners that match the project technologies.
