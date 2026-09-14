@@ -21,7 +21,7 @@ test.concurrent('Python keeps function ownership, nested projects and exact sour
   try {
     const file = path.join(root, 'service.py')
     // Python source lines exclude Unicode separators inside strings; keep CRLF offsets too.
-    const source = (await readFile(file, 'utf8')).replace('🐍', '🐍\u2028text').replaceAll('\n', '\r\n')
+    const source = (await readFile(file, 'utf8')).replace('🐍', '🐍\u2028text').replace(/\r?\n/g, '\r\n')
     await writeFile(file, source)
     await scanner.checkReadiness(root)
     const first = (await scanner.scan(root))!
