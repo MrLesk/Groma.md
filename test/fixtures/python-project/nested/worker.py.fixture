@@ -1,0 +1,2 @@
+async def work():
+    await publish()

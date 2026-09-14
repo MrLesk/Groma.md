@@ -9,6 +9,7 @@ import react from '../../../plugins/scanners/react/package.json'
 import csharp from '../../../plugins/scanners/csharp/package.json'
 import go from '../../../plugins/scanners/go/package.json'
 import rust from '../../../plugins/scanners/rust/package.json'
+import python from '../../../plugins/scanners/python/package.json'
 
 export interface OfficialScanner {
   id: string
@@ -33,5 +34,5 @@ export function scannerCatalogEntry(manifest: {
 // This is the official selection. Imported JSON is embedded by Groma's existing build.
 // Detection and compatibility information live exclusively in the selected packages.
 export const officialScannerCatalog: readonly OfficialScanner[] = [
-  typescript, java, angular, vue, react, csharp, go, rust,
+  typescript, java, angular, vue, react, csharp, go, rust, python,
 ].map(scannerCatalogEntry)

@@ -1,0 +1,56 @@
+{
+  "name": "@groma/scanner-python",
+  "version": "0.1.0",
+  "private": false,
+  "type": "module",
+  "license": "MIT",
+  "description": "Python source evidence through the standard Python parser.",
+  "groma": {
+    "scanner": {
+      "id": "python",
+      "entry": "./src/index.ts",
+      "discovery": {
+        "technologies": [
+          "python"
+        ],
+        "rules": [
+          {
+            "type": "toml",
+            "files": [
+              "**/pyproject.toml"
+            ],
+            "technology": "python",
+            "kind": "language",
+            "tables": [
+              "project",
+              "build-system",
+              "tool"
+            ],
+            "versionPath": [
+              "project",
+              "requires-python"
+            ],
+            "declaration": "Python project configuration"
+          },
+          {
+            "type": "file",
+            "files": [
+              "**/setup.py",
+              "**/setup.cfg",
+              "**/requirements.txt"
+            ],
+            "technology": "python",
+            "kind": "language",
+            "declaration": "Python project or dependency declaration"
+          }
+        ],
+        "compatibility": {
+          "groma": "^0.3.0"
+        }
+      }
+    }
+  },
+  "dependencies": {
+    "@groma/scanner": "workspace:*"
+  }
+}
