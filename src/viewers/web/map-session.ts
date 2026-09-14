@@ -6,7 +6,7 @@ import { watchArchitecture } from '../../architecture-watch.ts'
 import { writes } from '../../authoring.ts'
 import type { StructuralResult } from '../../curate.ts'
 import { createScannerSession } from '../../scanner/session.ts'
-import { parseScannerSettingsAction } from '../../scanner/modules/settings.ts'
+import { parseScannerSettingsAction, withScannerUpgrades } from '../../scanner/modules/settings.ts'
 import { pinsOf } from '../../work/pins.ts'
 import { listGromaRevisions, withGitRevision } from '../../history/revisions.ts'
 import { renderPage } from './page.ts'
@@ -289,7 +289,10 @@ export async function createWebMapSession(
   }
 
   const routes = new Map<string, Route>([
-    ['/scanner-settings', async () => Response.json(await scannerSession.refresh())],
+    ['/scanner-settings', async (_request, url) => {
+      const settings = await scannerSession.refresh()
+      return Response.json(url.searchParams.has('updates') ? await withScannerUpgrades(settings) : settings)
+    }],
     ['/render.js', rendererResponse],
     ['/revisions.json', async () => Response.json(await readRevisions())],
     ['/world.json', worldResponse],

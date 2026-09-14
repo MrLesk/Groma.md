@@ -7,6 +7,25 @@ import { configuredScannerModules, addScanner, removeScanner, updateScanner, res
 import type { ScannerInstallOptions } from './inventory.ts'
 import type { ScannerModuleLocation } from './inventory.ts'
 import type { ProjectReadiness } from './readiness.ts'
+import { parseScannerSource } from './package.ts'
+import { readPublishedScanners, selectPublishedScanner } from './published.ts'
+
+/** Optional registry reads for an open settings dialog; scan readiness stays unchanged. */
+export async function withScannerUpgrades(settings: ScannerSettings, registry?: string): Promise<ScannerSettings> {
+  const upgrades: NonNullable<ScannerSettings['upgrades']> = {}
+  await Promise.all(settings.scanners.map(async scanner => {
+    if (!scanner.source || !scanner.version || scanner.status === 'missing') return
+    const source = parseScannerSource('.', scanner.source)
+    if (source.kind !== 'npm') return
+    try {
+      const release = selectPublishedScanner(source.name, await readPublishedScanners(source.name, registry))
+      if (Bun.semver.order(release.version, scanner.version) > 0) upgrades[scanner.source] = { version: release.version }
+    } catch (error) {
+      upgrades[scanner.source] = { error: error instanceof Error ? error.message : String(error) }
+    }
+  }))
+  return { ...settings, upgrades }
+}
 
 function readinessStatus(check: ProjectReadiness): ScannerSetting['status'] {
   if (check.package === 'missing') return 'missing'
