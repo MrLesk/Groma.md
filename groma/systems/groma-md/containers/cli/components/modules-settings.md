@@ -12,7 +12,7 @@ groma:
       file: src/scanner/modules/settings-model.ts
     - scanner: typescript
       file: src/scanner/modules/setup.ts
-  group: Plugin management
+  group: Scanner management
 ---
 
 Builds the shared scanner settings state. Applies install, update, and remove actions after user selection.

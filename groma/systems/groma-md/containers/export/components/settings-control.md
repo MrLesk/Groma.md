@@ -17,7 +17,7 @@ groma:
       file: src/viewers/web/atoms/theme.ts
     - scanner: typescript
       file: src/viewers/web/chrome/motion.ts
-  group: Map controls
+  group: Browser controls
 ---
 
 Shows the Settings menu and theme choices. Opens plugin settings and points to scanners that need attention. Supplies animations for shared controls.

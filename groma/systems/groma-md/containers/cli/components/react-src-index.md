@@ -10,7 +10,7 @@ groma:
       file: plugins/scanners/react/src/index.ts
     - scanner: typescript
       file: plugins/scanners/react/src/scan.ts
-  group: Scanner plugins
+  group: Language analysis
 ---
 
 Reads React source with its compiler. Returns component and JSX callback evidence.

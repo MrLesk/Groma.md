@@ -12,7 +12,7 @@ groma:
     - scanner: typescript
       file: plugins/scanners/typescript/src/source-tokens.ts
       symbol: tokenizeOperation
-  group: Scanner plugins
+  group: Language analysis
 ---
 
 Reads TypeScript operations and their source positions. Supplies call evidence and tokens for the review of possible copies.

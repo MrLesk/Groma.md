@@ -30,7 +30,7 @@ groma:
     - scanner: typescript
       file: plugins/scanners/rust/notices.ts
       symbol: writeNotices
-  group: Scanner plugins
+  group: Scanner development
 ---
 
 Builds the official scanner packages and native workers. Includes the required compiler files and license notices for distribution.

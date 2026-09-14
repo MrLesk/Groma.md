@@ -8,7 +8,7 @@ groma:
   code:
     - scanner: typescript
       file: src/scanner/modules/readiness.ts
-  group: Plugin management
+  group: Scanner management
 ---
 
 Runs the preparation checks supplied by each selected scanner. Reports missing tools or packages before a scan.

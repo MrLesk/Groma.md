@@ -14,7 +14,7 @@ groma:
     - scanner: typescript
       file: plugins/scanners/vue/src/evidence.ts
       symbol: VueEvidence
-  group: Scanner plugins
+  group: Language analysis
 ---
 
 Reads Vue source and template data. Returns declarations and event callback evidence.

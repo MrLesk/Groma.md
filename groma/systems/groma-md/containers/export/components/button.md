@@ -27,7 +27,7 @@ groma:
       file: src/viewers/web/atoms/settings-dialog.ts
     - scanner: typescript
       file: src/viewers/web/atoms/text.ts
-  group: Map controls
+  group: Browser controls
 ---
 
 Supplies the buttons, dialogs, menus, and text styles used by the browser panels.

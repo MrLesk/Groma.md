@@ -10,7 +10,7 @@ groma:
       file: plugins/scanners/angular/src/index.ts
     - scanner: typescript
       file: plugins/scanners/angular/src/scan.ts
-  group: Scanner plugins
+  group: Language analysis
 ---
 
 Checks Angular projects with the Angular compiler. Returns source and template callback evidence.
