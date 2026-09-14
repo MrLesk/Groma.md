@@ -83,10 +83,10 @@ export function registerScannerCommands(program: Command): void {
 
   scanner
     .command('update')
-    .description('Replace a selected scanner with an explicit version from the same package or Git repository')
+    .description('Update an npm scanner to its newest compatible release, or choose an exact source')
     .argument('<id>', 'configured scanner id')
-    .argument('<source>', 'package@version or git+https://repository#tag-or-commit')
-    .action(async (id: string, source: string) => {
+    .argument('[source]', 'package name, package@version, or git+https://repository#tag-or-commit')
+    .action(async (id: string, source?: string) => {
       await runScannerCommand(async () => {
         console.log(scannerLine(await updateScanner(process.cwd(), id, source)))
       })

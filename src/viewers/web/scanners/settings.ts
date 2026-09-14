@@ -1,5 +1,6 @@
 import type { WebDataSource } from '../data.ts'
 import { escaped } from '../atoms/escape.ts'
+import { isNpmPackageName } from '../../../scanner/modules/published.ts'
 import { scannerGroups, scannerSettingAction, scannerMatchReason, type ScannerSetting, type ScannerSettings, type ScannerSettingsAction } from '../../../scanner/modules/settings-model.ts'
 
 export const scannerSettingsCss = `
@@ -41,7 +42,9 @@ function settingRow(scanner: ScannerSetting): string {
   const button = (action: string, title: string) => `<button class="chrome-button" type="button" data-action="${action}" data-id="${id}">${title}</button>`
   const action = scannerSettingAction(scanner)
   const primary = action ? button(action.action, action.action === 'retry' ? 'Retry' : 'Install') : scanner.source ? button('remove', 'Remove') : ''
-  const more = scanner.source ? button('update', 'Update') + (action ? button('remove', 'Remove from project') : '') : ''
+  const npm = scanner.source && isNpmPackageName(scanner.source.slice(0, scanner.source.lastIndexOf('@')))
+  const update = npm ? button('update', 'Update') + button('version', 'Choose version') : button('version', 'Update')
+  const more = scanner.source ? update + (action ? button('remove', 'Remove from project') : '') : ''
   const reason = scanner.source && scanner.match !== 'none' ? '' : `<div class="scanner-match" title="${escaped(scannerMatchReason(scanner))}">${escaped(scannerMatchReason(scanner))}</div>`
   const status = scanner.status === 'blocked' ? '<span class="scanner-status">Needs attention</span>' : ''
   return `<div class="scanner-row" data-scanner-id="${id}"><div><div class="scanner-name"><strong>${id}</strong><span class="scanner-origin">${scanner.official ? 'Official' : 'Third-party'}</span><span class="scanner-version">${escaped(scanner.version ?? '')}</span>${status}</div>${reason}`
@@ -92,7 +95,7 @@ export function bindScannerSettings(data: WebDataSource, host: HTMLElement, onSt
     for (const button of host.querySelectorAll<HTMLButtonElement>('button')) button.disabled = busy !== undefined
     if (busy && 'id' in busy) {
       const button = rows.querySelector<HTMLButtonElement>(`[data-scanner-id="${CSS.escape(busy.id)}"] > button`)
-      if (button) button.textContent = busy.action === 'remove' ? 'Removing…' : 'Installing…'
+      if (button) button.textContent = busy.action === 'remove' ? 'Removing…' : busy.action === 'update' ? 'Updating…' : 'Installing…'
     }
   }
   function paint(next: ScannerSettings): void {
@@ -148,7 +151,8 @@ export function bindScannerSettings(data: WebDataSource, host: HTMLElement, onSt
     if (button.dataset.group) { void change({ action: button.dataset.group as 'install-recommended' | 'install-missing' }); return }
     const id = button.dataset.id!, action = button.dataset.action
     if (action === 'retry') void change({ action })
-    else if (action === 'update') sourceForm(id)
+    else if (action === 'update') void change({ action, id })
+    else if (action === 'version') sourceForm(id)
     else if (action === 'install' || action === 'restore' || action === 'remove') void change({ action, id })
   })
   form.addEventListener('submit', event => {

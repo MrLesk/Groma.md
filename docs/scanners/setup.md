@@ -24,8 +24,17 @@ work. Existing selections are never silently upgraded.
 **Add scanner** accepts a package name, exact npm version, Git source or local
 package path. Bare names use the same published-release selection. For a missing
 local package, restore its directory. **Remove from project** keeps saved
-architecture. **Update** requires an explicit version source for the same npm
-package or Git repository.
+architecture. For npm scanners, **Update** installs the newest compatible stable
+release and saves its exact version. **Choose version** accepts an exact version
+of the same package. Git updates require a tag or commit in the same repository.
+
+The CLI uses the same release selection:
+
+```sh
+groma scanner update typescript
+groma scanner update typescript @groma/scanner-typescript
+groma scanner update typescript @groma/scanner-typescript@0.1.2
+```
 
 Scanners validate project requirements when scanning. A failed scanner shows its
 error and **Retry** after fixing the problem. Download and release-selection
