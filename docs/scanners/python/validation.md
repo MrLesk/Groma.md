@@ -119,3 +119,9 @@ The archive is `/tmp/groma-scanner-python-0.1.0.tgz`.
 The full repository check passed: lint, type checks, 16 Node tests and 312 Bun
 tests, with six existing optional native-tool tests skipped. The four Python
 tests passed with 28 assertions.
+
+[CI run 34814084303](https://github.com/MrLesk/Groma.md/actions/runs/34814084303)
+passed repository checks and standalone builds on Linux, macOS, and Windows.
+The position fixture normalizes checked-out line endings before it writes CRLF,
+so Windows checkouts do not add blank source lines. This CI evidence covers the
+fixture tests on all three systems; the two full project scans remain macOS checks.

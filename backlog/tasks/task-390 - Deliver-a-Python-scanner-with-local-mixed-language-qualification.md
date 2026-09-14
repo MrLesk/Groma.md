@@ -1,11 +1,11 @@
 ---
 id: TASK-390
 title: Deliver a Python scanner with local mixed-language qualification
-status: In Progress
+status: Done
 assignee:
   - '@codex'
 created_date: '2026-09-13 21:11'
-updated_date: '2026-09-14 06:34'
+updated_date: '2026-09-14 06:37'
 labels: []
 dependencies: []
 references:
@@ -48,7 +48,7 @@ Developers need Python source evidence through the existing scanner installation
 - [x] #2 Syntax failures return no partial observation; nested projects and Git source boundaries are covered by concurrent fixture tests.
 - [x] #3 The official catalog, package build, release workflow and user documentation include the Python scanner.
 - [x] #4 A packed local plugin is exercised through Groma on cloned mixed-language projects, with revisions, commands, coverage and limitations recorded.
-- [ ] #5 bun run check passes and required simplicity, specification and quality reviews are recorded.
+- [x] #5 bun run check passes and required simplicity, specification and quality reviews are recorded.
 <!-- AC:END -->
 
 ## Definition of Done
@@ -85,6 +85,8 @@ The Unicode line-boundary regression failed before the two-line worker correctio
 Windows CI exposed a fixture setup error: Git already checks out CRLF, and replacing every LF with CRLF creates CR-CR-LF, adding blank Python lines. Exact source positions passed; the fixed line-number expectation failed. Normalize existing CRLF before applying the test line endings, keeping all assertions.
 
 The Windows checkout reproduction produced line 11 with the old fixture preparation and line 6 with normalization; both kept exact byte-derived positions. The unchanged assertions now pass locally. Full repository check passed again: 16 Node tests, 312 Bun tests, 6 optional native skips. Awaiting the Windows CI rerun before release.
+
+CI run 34814084303 passed repository checks and standalone builds on Linux, macOS, and Windows for d7314ab3. The original Windows line assertion is retained and passes. All implementation acceptance criteria are met. The Python npm bootstrap awaits the maintainer sign-in; v0.3.2 is a draft with Python included.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
