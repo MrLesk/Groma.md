@@ -21,13 +21,12 @@ interface Options {
 /** Project review owns findings; plugin configuration lives in Settings. */
 export function createProjectReview(options: Options) {
   const toggle = document.getElementById('duplicates-toggle')!
-  const popup = createSettingsDialog('project-review', 'Project review', '<h2 id="duplicates-title">Potential duplicates</h2><section id="duplicates-panel" aria-labelledby="duplicates-title"></section>', { onClose: () => duplicates.hide() })
+  const popup = createSettingsDialog('project-review', 'Project review', '<section id="duplicates-panel" aria-labelledby="duplicates-title"></section>', { onClose: () => duplicates.hide() })
   const duplicates = createDuplicatesControl({ ...options, host: popup.dialog.querySelector<HTMLElement>('#duplicates-panel')!, close: popup.close })
   function paintIndicator() {
     const count = options.world().findings?.length ?? 0
     toggle.dataset.findings = String(count > 0)
     toggle.title = count ? `Project review · ${count} duplicate ${count === 1 ? 'group' : 'groups'}` : 'Project review'
-    popup.dialog.querySelector('h2')!.textContent = `Potential duplicates${count ? ` · ${count}` : ''}`
   }
   toggle.addEventListener('click', () => { popup.open(toggle); duplicates.show() })
   paintIndicator()
