@@ -25,8 +25,13 @@ work. Existing selections are never silently upgraded.
 package path. Bare names use the same published-release selection. For a missing
 local package, restore its directory. **Remove from project** keeps saved
 architecture. For npm scanners, **Update** installs the newest compatible stable
-release and saves its exact version. **Choose version** accepts an exact version
-of the same package. Git updates require a tag or commit in the same repository.
+release and saves its exact version. Opening web settings checks for newer
+compatible releases and shows the installed and available versions with **Update**
+on the row. The button installs that shown version. An available upgrade does not
+raise a scan warning. Update check errors appear in Details without changing scan
+readiness. **Remove from project** and **Choose version** are in Details.
+**Choose version** accepts an exact version of the same package. Git updates
+require a tag or commit in the same repository.
 
 The CLI uses the same release selection:
 

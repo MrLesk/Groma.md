@@ -8,7 +8,7 @@ import type { CodeFile } from '../source/structure.ts'
 import type { TaskDiffPayload } from '../source/diff.ts'
 
 export interface WebDataSource {
-  readScanners?(): Promise<ScannerSettings>
+  readScanners?(checkUpdates?: boolean): Promise<ScannerSettings>
   changeScanners?(action: ScannerSettingsAction): Promise<ScannerSettings>
   onScanners?: (state: ScannerSettings) => void
   readWorld(revision?: string): Promise<WebPayload>
@@ -54,7 +54,7 @@ function selected(path: string, values: Record<string, string | undefined>): str
 
 function liveDataSource(): WebDataSource {
   return {
-    readScanners: () => responseJson('/scanner-settings'),
+    readScanners: checkUpdates => responseJson(checkUpdates ? '/scanner-settings?updates' : '/scanner-settings'),
     async changeScanners(action) {
       const response = await fetch('/scanner-settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(action) })
       if (!response.ok) throw new Error(await response.text())

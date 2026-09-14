@@ -15,12 +15,19 @@ export interface ScannerSettings {
   scanners: ScannerSetting[]
   notice: { tone: 'neutral' | 'hint' | 'warning' | 'error'; message: string }
   limits: string[]
+  upgrades?: Record<string, { version?: string; error?: string }>
 }
 export type ScannerSettingsAction =
   | { action: 'add'; source: string }
   | { action: 'install' | 'restore' | 'remove'; id: string }
   | { action: 'update'; id: string; source?: string }
   | { action: 'retry' | 'install-recommended' | 'install-missing' }
+
+/** An offered update belongs to the exact source that was checked. */
+export function scannerUpgradeAction(scanner: ScannerSetting, upgrades: ScannerSettings['upgrades']): ScannerSettingsAction | undefined {
+  const version = scanner.source ? upgrades?.[scanner.source]?.version : undefined
+  return version ? { action: 'update', id: scanner.id, source: `${scanner.name}@${version}` } : undefined
+}
 
 export function scannerNotice(scanners: readonly ScannerSetting[], limits: readonly string[]): ScannerSettings['notice'] {
   if (scanners.some(scanner => scanner.status === 'blocked')) return { tone: 'error', message: 'A scanner needs attention. Saved architecture is available.' }
