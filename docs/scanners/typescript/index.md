@@ -4,9 +4,9 @@ The TypeScript scanner reports supported `.ts` and `.tsx` files without requirin
 
 It uses `git ls-files`, the configured globs, and `.gitignore` to select files. Declaration, test, and spec files are excluded by default. The compiler resolves used imports, including aliases and package exports, to selected repository source. External dependencies do not become source entries.
 
-Each file remains one atomic evidence entry with every recognized exported function, class, interface, type, enum, or variable declared in that file. Package bins and import structure identify module roots below the package root. Import distance assigns files to the nearest module root, with common directories as the deterministic fallback. The import graph remains internal analysis data.
+Each file remains one atomic evidence entry with every recognized exported function, class, interface, type, enum, or variable declared in that file. Scanned package `bin` entries and files with no incoming source imports are candidate module roots below the package root. Imported helpers do not become additional roots because they have dependencies or multiple callers. A package can have several candidates, with or without `bin` metadata. If no candidate exists, the first scanned file supplies one root. Import distance assigns other files to the nearest root, with common directories as the deterministic fallback. The import graph remains internal analysis data.
 
-These source roots and file memberships are evidence, not C4 ownership. Core preserves curated multi-file components and creates a singleton only for a previously unknown file.
+These source roots and file memberships are evidence, not confirmed application boundaries: imports alone cannot identify separate processes, deployed applications, or shared-library ownership. Core preserves curated multi-file components and their C4 ownership, and creates a singleton only for a previously unknown file.
 
 
 ## Operations and callback wiring

@@ -1,0 +1,23 @@
+{
+  "initial": {
+    "package.json": "{\"name\":\"command-fixture\",\"bin\":\"main.ts\"}",
+    "main.ts": "import { value } from './value.ts'; console.log(value());",
+    "value.ts": "import { leaf } from './leaf.ts'; export function value() { return leaf(); }",
+    "leaf.ts": "export function leaf() { return 1; }"
+  },
+  "added": {
+    "main.ts": "import { run } from './command.ts'; console.log(run());",
+    "command.ts": "import { value } from './value.ts'; export function run() { return value(); }"
+  },
+  "independent": {
+    "worker.ts": "import { value } from './value.ts'; console.log(value());"
+  },
+  "cases": [
+    { "name": "a declared executable", "manifest": { "bin": "main.ts" } },
+    { "name": "an entry without bin metadata", "manifest": {} },
+    { "name": "a CLI beside an independent entry", "manifest": { "bin": "main.ts" }, "independent": true },
+    { "name": "multiple declared executables", "manifest": { "bin": { "first": "main.ts", "second": "worker.ts" } }, "independent": true },
+    { "name": "multiple entries without bin metadata", "manifest": {}, "independent": true },
+    { "name": "an executable compiled to unscanned output", "manifest": { "bin": "dist/main.js" }, "independent": true }
+  ]
+}
