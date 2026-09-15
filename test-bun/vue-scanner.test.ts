@@ -1,7 +1,6 @@
 import { expect, test } from 'bun:test'
-import { cp, mkdir, mkdtemp, readFile, rename, rm, symlink, writeFile } from 'node:fs/promises'
+import { cp, mkdtemp, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
-import { createRequire } from 'node:module'
 import path from 'node:path'
 import type { ScannerPlugin } from '@groma/scanner'
 import { buildPackage } from '../plugins/scanners/vue/build.ts'
@@ -21,9 +20,6 @@ async function setup() {
   await cp(path.resolve(import.meta.dir, '../test/fixtures/empty-project'), root, { recursive: true })
   await cp(path.resolve(import.meta.dir, '../test/fixtures/vue-output'), root, { recursive: true })
   await rename(path.join(root, 'receiver.ts.fixture'), path.join(root, 'receiver.ts'))
-  await mkdir(path.join(root, 'node_modules'))
-  const require = createRequire(new URL('../plugins/scanners/vue/package.json', import.meta.url))
-  await symlink(path.dirname(require.resolve('vue/package.json')), path.join(root, 'node_modules/vue'), 'dir')
   const child = Bun.spawn(['git', 'init', '--quiet'], { cwd: root, stdout: 'ignore', stderr: 'pipe' })
   expect(await child.exited, await new Response(child.stderr).text()).toBe(0)
   await buildPackage(artifact)

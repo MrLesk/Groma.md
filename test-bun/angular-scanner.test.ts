@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { cp, mkdtemp, readFile, rename, rm, symlink, writeFile } from 'node:fs/promises'
+import { cp, mkdtemp, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import type { ScannerPlugin } from '@groma/scanner'
@@ -21,7 +21,6 @@ async function setup() {
   await cp(path.resolve(import.meta.dir, '../test/fixtures/empty-project'), root, { recursive: true })
   await cp(fixture, root, { recursive: true })
   for (const name of ['emitter', 'host']) await rename(path.join(root, `${name}.ts.fixture`), path.join(root, `${name}.ts`))
-  await symlink(path.resolve(import.meta.dir, '../node_modules'), path.join(root, 'node_modules'), 'dir')
   const child = Bun.spawn(['git', 'init', '--quiet'], { cwd: root, stdout: 'ignore', stderr: 'pipe' })
   expect(await child.exited, await new Response(child.stderr).text()).toBe(0)
   await buildPackage(artifact)
@@ -85,5 +84,24 @@ test.concurrent('Angular overlap and repeat scans retain a curated source owner'
     const after = await loadAnnotatedArchitecture(root)
     expect(owner(after, 'emitter.ts').id).toBe(source.id)
     expect(new Set(owner(after, 'emitter.ts').code.map(reference => reference.scanner))).toEqual(new Set(['typescript', 'angular']))
+  } finally { await rm(temporary, { recursive: true, force: true }) }
+})
+
+test.concurrent('Angular preserves external parent bindings to an output provider with an inline template', async () => {
+  const { temporary, root, scanner } = await setup()
+  try {
+    const before = (await scanner.scan(root))!
+    const file = path.join(root, 'emitter.ts')
+    await writeFile(file, (await readFile(file, 'utf8')).replace("templateUrl: './emitter.html'", "template: ''"))
+    await rm(path.join(root, 'emitter.html'))
+    const after = (await scanner.scan(root))!
+    const targets = (observation: typeof before) => observation.invocations!.map(call => ({
+      member: call.member,
+      files: call.targets.map(id => observation.operations!.find(operation => operation.id === id)!.file),
+      unresolved: call.unresolved,
+    }))
+    expect(targets(after)).toEqual(targets(before))
+    expect(after.invocations).toHaveLength(1)
+    expect(after.files.some(file => file.file === 'emitter.html')).toBe(false)
   } finally { await rm(temporary, { recursive: true, force: true }) }
 })

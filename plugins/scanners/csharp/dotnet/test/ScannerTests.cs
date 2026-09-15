@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Xunit;
 
 namespace Groma.CSharpScanner.Tests;
@@ -8,7 +7,7 @@ public sealed class ScannerTests
     [Fact]
     public async Task SolutionScanKeepsPartialFilesAtomicAndPreservesProjectHierarchy()
     {
-        using FixtureSolution fixture = await FixtureSolution.CreateAsync();
+        using FixtureSolution fixture = FixtureSolution.Create();
         RoslynScanner scanner = new();
 
         ScanObservation first = await scanner.ScanAsync(new ScanRequest(fixture.SolutionPath, fixture.Directory));
@@ -38,7 +37,7 @@ public sealed class ScannerTests
 
         public string SolutionPath => Path.Combine(Directory, "Fixture.sln");
 
-        public static async Task<FixtureSolution> CreateAsync()
+        public static FixtureSolution Create()
         {
             FixtureSolution fixture = new(Path.Combine(
                 Path.GetTempPath(),
@@ -62,33 +61,10 @@ public sealed class ScannerTests
                 Path.Combine(fixture.Directory, "App", "Unused.cs"),
                 "using Fixture; using Alias = Fixture.Shared; namespace App; public class Unused<Shared> { public Shared Value { get; set; } = default!; }");
             File.WriteAllText(fixture.SolutionPath, SolutionFile());
-            await fixture.RestoreAsync();
             return fixture;
         }
 
         public void Dispose() => System.IO.Directory.Delete(Directory, recursive: true);
-
-        private async Task RestoreAsync()
-        {
-            string dotnet = Environment.GetEnvironmentVariable("DOTNET_HOST_PATH") ?? "dotnet";
-            ProcessStartInfo startInfo = new(dotnet)
-            {
-                WorkingDirectory = Directory,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                UseShellExecute = false,
-            };
-            startInfo.ArgumentList.Add("restore");
-            startInfo.ArgumentList.Add(Path.GetRelativePath(Directory, SolutionPath));
-            using Process process = Process.Start(startInfo)
-                ?? throw new InvalidOperationException("Could not start dotnet restore.");
-            Task<string> output = process.StandardOutput.ReadToEndAsync();
-            Task<string> error = process.StandardError.ReadToEndAsync();
-            await process.WaitForExitAsync();
-            await Task.WhenAll(output, error);
-            if (process.ExitCode != 0)
-                throw new InvalidOperationException(output.Result + error.Result);
-        }
 
         private static string ProjectFile(string extra = "") => $$"""
             <Project Sdk="Microsoft.NET.Sdk">

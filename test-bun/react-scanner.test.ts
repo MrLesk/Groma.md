@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { cp, mkdtemp, readFile, rename, rm, symlink, writeFile } from 'node:fs/promises'
+import { cp, mkdtemp, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import type { ScannerPlugin } from '@groma/scanner'
@@ -19,7 +19,6 @@ async function setup() {
   await cp(path.resolve(import.meta.dir, '../test/fixtures/empty-project'), root, { recursive: true })
   await cp(path.resolve(import.meta.dir, '../test/fixtures/react-callback'), root, { recursive: true })
   for (const name of ['editor', 'host']) await rename(path.join(root, `${name}.tsx.fixture`), path.join(root, `${name}.tsx`))
-  await symlink(path.resolve(import.meta.dir, '../node_modules'), path.join(root, 'node_modules'), 'dir')
   const child = Bun.spawn(['git', 'init', '--quiet'], { cwd: root, stdout: 'ignore', stderr: 'pipe' })
   expect(await child.exited, await new Response(child.stderr).text()).toBe(0)
   await buildPackage(artifact)

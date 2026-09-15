@@ -8,7 +8,6 @@ public sealed class OperationTests
     public async Task NestedProjectPreservesCanonicalCallsWithoutClaimingRuntimeDispatch()
     {
         using ScannerFixture fixture = new();
-        await fixture.RestoreAsync();
         ScanObservation scan = await fixture.ScanAsync();
         Assert.Contains(scan.Roots, root => root.File == "App/App.csproj" && root.Parent is null);
         Assert.Contains(scan.Files, file => file.File == "Core/Providers.cs");
@@ -51,7 +50,6 @@ public sealed class OperationTests
     public async Task LambdaAndLocalBodiesKeepTheirOwnCallerAndExpressionTreesAreNotCalls()
     {
         using ScannerFixture fixture = new();
-        await fixture.RestoreAsync();
         ScanObservation scan = await fixture.ScanAsync();
         Dictionary<string, ScanOperation> operations = scan.Operations!.ToDictionary(operation => operation.Id);
         ScanInvocation[] nested = scan.Invocations!.Where(call => operations[call.Source].Name == "App.Calls.Nested()").ToArray();
@@ -67,7 +65,6 @@ public sealed class OperationTests
     public async Task SolutionAndProjectEvidenceAreDeterministicAndUseTheSamePhysicalFileScope()
     {
         using ScannerFixture fixture = new();
-        await fixture.RestoreAsync();
         ScanObservation first = await fixture.ScanAsync(fixture.Solution);
         ScanObservation second = await fixture.ScanAsync(fixture.Solution);
         Assert.Equal(first.ToCanonicalJson(), second.ToCanonicalJson());

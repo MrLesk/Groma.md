@@ -1,15 +1,12 @@
-import { access, mkdtemp, readFile, readdir, realpath, rm } from 'node:fs/promises'
-import os from 'node:os'
+import { access, readdir, realpath } from 'node:fs/promises'
 import path from 'node:path'
-import { mavenInvocation, run } from './process.ts'
+import { run } from './process.ts'
 
 export interface JavaInput {
   root: string
   release: string
   encoding: string
-  classpath: string[]
   files: string[]
-  generatedRoot: string
   name: string
 }
 
@@ -31,40 +28,16 @@ async function collect(root: string, directory: string): Promise<string[]> {
   return files.sort()
 }
 
-export async function mavenCommand(root: string): Promise<string> {
-  const wrapper = path.join(root, process.platform === 'win32' ? 'mvnw.cmd' : 'mvnw')
-  return await exists(wrapper) ? wrapper : process.platform === 'win32' ? 'mvn.cmd' : 'mvn'
-}
-
-export const mavenGoals = ['org.apache.maven.plugins:maven-help-plugin:3.5.1:effective-pom',
-  'org.apache.maven.plugins:maven-dependency-plugin:3.9.0:build-classpath']
-
-export async function readJavaInput(repositoryRoot: string, java: string, worker: string, maven?: string): Promise<JavaInput | undefined> {
+export async function readJavaInput(repositoryRoot: string, java: string, worker: string): Promise<JavaInput | undefined> {
   const root = await realpath(repositoryRoot)
-  if (!await exists(path.join(root, 'pom.xml'))) {
-    throw new Error('JAVA_UNSUPPORTED_BUILD: The Java scanner supports Maven pom.xml projects. Gradle and other build arrangements are not supported.')
+  const pom = path.join(root, 'pom.xml')
+  if (!await exists(pom)) throw new Error('JAVA_UNSUPPORTED_BUILD: The Java scanner supports Maven pom.xml projects.')
+  const model = JSON.parse(await run(java, ['-jar', worker, 'model', pom], root)) as {
+    aggregator?: boolean; release: string; encoding: string; sourceRoot: string; name: string
   }
-  const temporary = await mkdtemp(path.join(os.tmpdir(), 'groma-java-model-'))
-  try {
-    const model = path.join(temporary, 'pom.xml')
-    const classpath = path.join(temporary, 'classpath.txt')
-    const command = maven ?? await mavenCommand(root)
-    const args = ['--offline', '--batch-mode', '--no-transfer-progress', '--non-recursive', ...mavenGoals,
-      `-Doutput=${model}`, `-Dmdep.outputFile=${classpath}`, '-DincludeScope=compile']
-    try { await run(...mavenInvocation(command, args), root) }
-    catch (error) {
-      throw new Error(`JAVA_MAVEN_PREPARATION: Install the project JDK and Maven (or use its wrapper), then run ${command} ${mavenGoals.join(' ')} -DincludeScope=compile once with dependency access. Scans use Maven offline. ${error instanceof Error ? error.message : error}`)
-    }
-    const exported = JSON.parse(await run(java, ['-jar', worker, 'model', model], root)) as {
-      aggregator?: boolean; release: string; encoding: string; sourceRoot: string; generatedRoot: string; output: string; name: string
-    }
-    if (exported.aggregator) return undefined
-    const files = await collect(root, exported.sourceRoot)
-    if (!files.length) throw new Error('JAVA_EMPTY_SOURCE_SET: Maven main source directory contains no Java sources.')
-    if (files.some(file => file.endsWith('module-info.java'))) throw new Error('JAVA_UNSUPPORTED_BUILD: JPMS module paths are not supported.')
-    const dependencies = (await readFile(classpath, 'utf8')).trim().split(path.delimiter).filter(Boolean)
-    if (await exists(exported.output)) dependencies.push(exported.output)
-    return { root, release: exported.release, encoding: exported.encoding, name: exported.name, files,
-      classpath: dependencies, generatedRoot: await exists(exported.generatedRoot) ? exported.generatedRoot : '' }
-  } finally { await rm(temporary, { recursive: true, force: true }) }
+  if (model.aggregator) return undefined
+  const sourceRoot = path.resolve(root, model.sourceRoot)
+  const files = await exists(sourceRoot) ? await collect(root, sourceRoot) : []
+  if (!files.length) return undefined
+  return { root, release: model.release, encoding: model.encoding, name: model.name, files }
 }

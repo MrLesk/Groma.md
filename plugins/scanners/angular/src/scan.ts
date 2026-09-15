@@ -1,13 +1,12 @@
 import { existsSync, readFileSync } from 'node:fs'
 import path from 'node:path'
-import { Call, PropertyRead, TmplAstRecursiveVisitor, tmplAstVisitAll, type TmplAstBoundEvent } from '@angular/compiler'
-import { createCompilerHost, NgtscProgram, readConfiguration, VERSION } from '@angular/compiler-cli'
+import { Call, ImplicitReceiver, PropertyRead, CssSelector, SelectorMatcher, TmplAstRecursiveVisitor, tmplAstVisitAll, parseTemplate, type TmplAstElement, type TmplAstBoundEvent } from '@angular/compiler'
+import { readConfiguration, VERSION } from '@angular/compiler-cli'
 import { createScanObservation, type ScanDiagnostic, type ScanInvocation, type ScanObservation, type ScanOperation } from '@groma/scanner'
 import ts from 'typescript'
 import { frameworkProjects, hasDependency } from '../../projects.ts'
 import { combineObservations } from '../../observations.ts'
-
-type TemplateChecker = ReturnType<NgtscProgram['compiler']['getTemplateTypeChecker']>
+import { componentImports, sourceComponent, sourceOutput, type SourceComponent } from './components.ts'
 
 function relative(root: string, file: string): string {
   return path.relative(root, file).split(path.sep).join('/')
@@ -39,7 +38,7 @@ function operationName(node: ts.Node): string {
   return `callback at ${node.getSourceFile().getLineAndCharacterOfPosition(node.getStart()).line + 1}`
 }
 
-/** Angular proves the bound output property; TypeScript locates calls on that exact declaration. */
+/** TypeScript binds local property access independently of external Angular declarations. */
 function outputEmissions(declaration: ts.Declaration, checker: ts.TypeChecker): ts.CallExpression[] {
   if (!ts.isPropertyDeclaration(declaration) || !ts.isClassDeclaration(declaration.parent)) return []
   const calls: ts.CallExpression[] = []
@@ -56,9 +55,9 @@ function outputEmissions(declaration: ts.Declaration, checker: ts.TypeChecker): 
 }
 
 class BindingVisitor extends TmplAstRecursiveVisitor {
-  private readonly inspect: (event: TmplAstBoundEvent) => void
-  constructor(inspect: (event: TmplAstBoundEvent) => void) { super(); this.inspect = inspect }
-  override visitBoundEvent(event: TmplAstBoundEvent): void { this.inspect(event) }
+  private readonly inspect: (element: TmplAstElement) => void
+  constructor(inspect: (element: TmplAstElement) => void) { super(); this.inspect = inspect }
+  override visitElement(element: TmplAstElement): void { this.inspect(element); super.visitElement(element) }
 }
 
 class Evidence {
@@ -68,11 +67,9 @@ class Evidence {
   readonly templates = new Set<string>()
 
   private readonly root: string
-  private readonly templatesChecker: TemplateChecker
   private readonly checker: ts.TypeChecker
-  constructor(root: string, templatesChecker: TemplateChecker, checker: ts.TypeChecker) {
+  constructor(root: string, checker: ts.TypeChecker) {
     this.root = root
-    this.templatesChecker = templatesChecker
     this.checker = checker
   }
 
@@ -91,18 +88,15 @@ class Evidence {
       message: `${event.name} has no supported unique source output-to-method binding.` })
   }
 
-  inspect(event: TmplAstBoundEvent, component: ts.ClassDeclaration, template: string): void {
-    const output = this.templatesChecker.getSymbolOfNode(event, component)
+  inspect(event: TmplAstBoundEvent, child: SourceComponent | undefined, component: ts.ClassDeclaration, template: string): void {
     const handler = event.handler instanceof Call ? event.handler : ('ast' in event.handler ? event.handler.ast : event.handler)
-    if (!output || !('bindings' in output) || output.bindings.length !== 1
-      || !(handler instanceof Call) || !(handler.receiver instanceof PropertyRead)) {
+    if (!child || !(handler instanceof Call) || !(handler.receiver instanceof PropertyRead)
+      || !(handler.receiver.receiver instanceof ImplicitReceiver)) {
       this.unsupported(event, template)
       return
     }
-    const binding = output.bindings[0]!
-    const outputDeclaration = this.templatesChecker.getTsSymbolOfSymbol(binding)?.valueDeclaration
-    const handlerSymbol = this.templatesChecker.getSymbolOfNode(handler.receiver, component)
-    const target = handlerSymbol && this.templatesChecker.getTsSymbolOfSymbol(handlerSymbol)?.valueDeclaration
+    const outputDeclaration = sourceOutput(child, event.name, this.checker)
+    const target = this.checker.getTypeAtLocation(component).getProperty(handler.receiver.name)?.valueDeclaration
     if (!outputDeclaration || !target || !ts.isMethodDeclaration(target) || !target.body
       || !owned(this.root, target.getSourceFile()) || !owned(this.root, outputDeclaration.getSourceFile())) {
       this.unsupported(event, template)
@@ -129,15 +123,11 @@ function angularProject(root: string) {
   try {
     const config = readConfiguration(path.join(root, 'tsconfig.json'))
     failDiagnostics(config.errors)
-    const options = { ...config.options, noEmit: true, _enableTemplateTypeChecker: true }
-    const ng = new NgtscProgram(config.rootNames, options, createCompilerHost({ options }))
-    failDiagnostics(ng.getTsSyntacticDiagnostics())
-    failDiagnostics(ng.getTsSemanticDiagnostics())
-    failDiagnostics(ng.getNgOptionDiagnostics())
-    failDiagnostics(ng.getNgSemanticDiagnostics())
-    return { manifest, ng }
+    const program = ts.createProgram(config.rootNames, { ...config.options, noEmit: true } as ts.CompilerOptions)
+    failDiagnostics(program.getSyntacticDiagnostics())
+    return { manifest, program }
   } catch (error) {
-    throw new Error(`ANGULAR_PROJECT_PREPARATION: Install the project dependencies with its declared package manager and lockfile, and ensure tsconfig.json is valid. ${error}`)
+    throw new Error(`ANGULAR_SOURCE_INVALID: Check the project tsconfig.json and TypeScript syntax. ${error}`)
   }
 }
 
@@ -158,21 +148,13 @@ export async function scanAngular(root: string): Promise<ScanObservation | undef
 async function scanAngularProject(projectRoot: string, root: string): Promise<ScanObservation | undefined> {
   const project = angularProject(projectRoot)
   if (!project) return undefined
-  const { manifest, ng } = project
-  const program: ts.Program = ng.getTsProgram()
-  const templateChecker = ng.compiler.getTemplateTypeChecker()
-  const evidence = new Evidence(root, templateChecker, program.getTypeChecker())
+  const { manifest, program } = project
+  const checker = program.getTypeChecker()
+  const evidence = new Evidence(root, checker)
   const sources = program.getSourceFiles().filter(source => owned(root, source))
-  for (const source of sources) {
-    for (const component of source.statements.filter(ts.isClassDeclaration)) {
-      const template = templateChecker.getTemplate(component)
-      const resource = ng.compiler.getDirectiveResources(component)?.template
-      if (!template || !resource?.path) continue
-      const file = relative(root, resource.path)
-      evidence.templates.add(file)
-      tmplAstVisitAll(new BindingVisitor(event => evidence.inspect(event, component, file)), template)
-    }
-  }
+  const components = sources.flatMap(source => source.statements.filter(ts.isClassDeclaration)
+    .flatMap(node => sourceComponent(node, checker) ?? []))
+  for (const component of components) inspectTemplate(root, component, components, checker, evidence)
   const files = [...sources.map(source => ({ file: relative(root, source.fileName),
     symbols: source.statements.filter(ts.isClassDeclaration).map(node => ({
       id: `${relative(root, source.fileName)}#${node.getStart()}`, name: node.name?.text ?? 'default', kind: 'class',
@@ -181,4 +163,28 @@ async function scanAngularProject(projectRoot: string, root: string): Promise<Sc
     roots: [{ id: 'angular-project', kind: 'package', name: manifest.name, file: relative(root, path.join(projectRoot, 'package.json')) }],
     files: files.map(file => ({ ...file, roots: ['angular-project'] })),
     operations: [...evidence.operations.values()], invocations: evidence.invocations, diagnostics: evidence.diagnostics })
+}
+
+function inspectTemplate(root: string, component: SourceComponent, components: SourceComponent[], checker: ts.TypeChecker, evidence: Evidence): void {
+  if (!component.template) return
+  const filename = path.resolve(path.dirname(component.declaration.getSourceFile().fileName), component.template)
+  const file = relative(root, filename)
+  const parsed = parseTemplate(readFileSync(filename, 'utf8'), file)
+  if (parsed.errors?.length) throw new Error(`ANGULAR_TEMPLATE_INVALID: ${parsed.errors.join('\n')}`)
+  evidence.templates.add(file)
+  const imports = componentImports(component, checker)
+  const matcher = new SelectorMatcher<SourceComponent>()
+  for (const child of components.filter(item => imports.has(item.declaration))) {
+    matcher.addSelectables(CssSelector.parse(child.selector), child)
+  }
+  tmplAstVisitAll(new BindingVisitor(element => {
+    const selector = new CssSelector()
+    selector.setElement(element.name)
+    for (const attribute of element.attributes) selector.addAttribute(attribute.name, attribute.value)
+    for (const input of element.inputs) selector.addAttribute(input.name, '')
+    const matches = new Set<SourceComponent>()
+    matcher.match(selector, (_selector, child) => matches.add(child))
+    const child = matches.size === 1 ? [...matches][0] : undefined
+    for (const event of element.outputs) evidence.inspect(event, child, component.declaration, file)
+  }), parsed.nodes)
 }

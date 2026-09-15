@@ -25,9 +25,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-python@v6
-        with:
-          python-version: '3.14'
       - uses: actions/setup-java@v6
         with:
           distribution: temurin
@@ -79,7 +76,7 @@ jobs:
       - uses: actions/setup-java@v6
         with:
           distribution: temurin
-          java-version: '21'
+          java-version: '25'
       - uses: actions/setup-go@v6
         with:
           go-version-file: plugins/scanners/go/worker/go.mod
@@ -99,6 +96,9 @@ jobs:
         shell: bash
       - name: Build runnable scanner packages
         run: bun scripts/scanner-release.ts stage scanner-packages
+        shell: bash
+      - name: Check fresh checkouts without project tools
+        run: GROMA_TEST_PACKAGES=scanner-packages bun test --timeout 60000 test-bun/scanner-fresh-checkout.test.ts
         shell: bash
       - uses: actions/upload-artifact@v7
         with:

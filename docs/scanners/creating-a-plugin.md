@@ -67,13 +67,16 @@ complete observation, replacing this scanner's previous observation in the
 session. Unaffected scanners retain their evidence for core's combined view.
 
 A plugin may also implement `async checkReadiness(repositoryRoot, settings): Promise<void>`.
-Return when the required installed tools and project preparation are available;
-throw an error with concrete user instructions otherwise. Reuse the same
-validation in `scan` so preparation does not depend on running a separate
-command first. The hook must not install development tools or project
-dependencies. Groma presents its failure alongside package availability.
-Plugins without a hook remain scannable; scanner settings do not require a
-separate preparation check.
+Return when supported source inputs and the scanner's own tools are available.
+The installed scanner must carry the parsers, compiler libraries, workers and
+runtimes needed for its supported source scan. A fresh checkout must not need
+project dependency installation, a project build, or a separately installed
+language SDK. Scanning must not download tools, execute install scripts, or run
+project build steps. Missing external symbols leave individual facts unresolved;
+they do not prevent inventory and provable local facts. Invalid source syntax
+or unsupported project configuration may fail with a concrete diagnostic.
+Reuse input validation in `scan`; callers need not run readiness first.
+Plugins without a hook remain scannable.
 
 A scanner may supply `readCodeStructure(repositoryRoot, references, settings)`
 for the source outline in the viewers and static export. Each reference contains
@@ -138,8 +141,8 @@ report an additional technology outside `technologies` to expose a coverage gap.
 Declare the supported Groma API range in `compatibility.groma`. Groma uses
 that requirement and standard npm `os`/`cpu` fields to choose a published release
 when the user installs a package by name. Language versions are discovery evidence,
-not installation restrictions. Validate compiler versions, dependencies and
-project preparation inside `scan`, with concrete instructions when something is
+not installation restrictions. Validate supported source configuration and
+scanner-owned tools inside `scan`, with concrete instructions when something is
 missing or unsupported. A tested example version is not a supported-version range.
 
 The official catalog imports selected plugin manifests and is embedded by

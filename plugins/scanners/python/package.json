@@ -51,6 +51,7 @@
     }
   },
   "dependencies": {
-    "@groma/scanner": "workspace:*"
+    "@groma/scanner": "workspace:*",
+    "pyodide": "314.0.7"
   }
 }

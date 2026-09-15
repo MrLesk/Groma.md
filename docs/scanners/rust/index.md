@@ -1,118 +1,53 @@
-# Rust
+# Rust scanner
 
-The Rust scanner uses pinned rust-analyzer HIR 0.0.301 to load Cargo projects
-and identify source functions and call targets. HIR is the engine's semantic
-model: it supplies module membership, name resolution, and type information.
-The adapter does not implement another Rust resolver.
-
-The current delivery is a private local package for review. No public Rust
-scanner version or platform matrix is qualified here. The exercised platform
-is macOS arm64. See [validation](validation.md) for the supported real example
-and recorded checks.
-
-## Prepare and use
-
-Install the project's Rust toolchain, including Cargo, rustc, and matching
-standard library sources. The verified setup uses Rust 1.91.1:
+The Rust scanner carries a native rust-analyzer HIR worker. HIR is the engine's
+model for source names, modules and types. A source checkout needs no Cargo,
+rustc, rust-src, downloaded crates or application build.
 
 ```sh
-rustup component add rust-src
-cargo fetch --manifest-path Cargo.toml
-```
-
-Dependency preparation is explicit. The scanner runs Cargo metadata offline
-with a locked dependency graph; it does not fetch packages or install tools.
-It does not run project build scripts or procedural macros.
-
-A maintainer builds the scanner package with Bun and Rust 1.91 or newer:
-
-```sh
-bun plugins/scanners/rust/build.ts
-```
-
-Register the resulting local package from an initialized target repository:
-
-```sh
-groma scanner add /absolute/path/to/groma/plugins/scanners/rust/dist/package
-groma scanner check
+groma scanner add @groma/scanner-rust
 groma scan
 ```
 
-The package contains a native worker and a bundled JavaScript adapter. Its
-consumer needs Cargo, rustc, and rust-src, but no separate rust-analyzer
-executable, Bun, or Node runtime. Groma loads the adapter through its existing
-plugin interface. Package availability remains separate from project readiness
-in the [common setup journey](../setup.md).
+Maintainers build with Bun and Rust using `bun plugins/scanners/rust/build.ts`.
+The resulting package contains the native worker, bundled adapter and licenses.
+Scanner consumers do not build the worker or install a separate language runtime.
 
-By default, the scanner finds tracked and unignored Cargo.toml files throughout
-the repository. Cargo metadata identifies workspace membership, so each workspace
-is scanned once, including a workspace that also has a root package. The selected
-manifest directory controls Cargo and rustup toolchain selection. To select one original
-Cargo manifest inside a repository, set `settings` on the existing `rust` entry
-in the shared `scanners.json` inside `groma/` or `.groma/`. Preserve its installed source:
+## Project inputs
 
-```json
-{
-  "id": "rust",
-  "source": "./tools/rust-scanner-package",
-  "settings": { "manifest": "crates/globset/Cargo.toml" }
-}
-```
+The adapter reads tracked and unignored `Cargo.toml` files with a TOML parser.
+Workspace members and exclusions, package names, editions, library/binary paths,
+local workspace dependencies and declared default features supply a source
+crate graph. It passes that graph directly to rust-analyzer's `ProjectJson`
+API. The engine loads modules and resolves source names. Cargo metadata,
+rustc, build scripts and procedural macros are never executed.
 
-The manifest path is relative to the repository root. Run a new scan or restart
-the active viewer or watch session after editing settings. The scanner receives
-settings from Groma; it does not read a separate Groma configuration file. See
-the [shared configuration contract](../creating-a-plugin.md#scanner-settings).
-
-A package manifest selects its library and binary targets. A workspace manifest
-selects member library and binary targets. The original Cargo workspace remains
-intact, and rust-analyzer may read dependencies to resolve the selected source.
-Only files belonging to selected modules are emitted. Test, example, benchmark,
-and build-script targets are outside the extraction scope.
+By default each workspace is scanned once. A package selects its library and
+binary targets; a workspace selects its members. `settings.manifest` on the
+existing Rust scanner entry selects one manifest relative to the repository.
+Test, example, benchmark and build-script targets are outside this extraction.
+External crates and standard-library types remain unresolved. This source
+loader does not evaluate custom target configurations or build-generated flags.
 
 ## Evidence and uncertainty
 
-The supported example uses default Cargo features and the host target. The
-scanner emits physical source files, source functions, UTF-16 declaration/call
-positions, direct calls, and inherent method calls. Re-exports resolve to their
-implementation; an executable wrapper remains a separate operation. Targets
-outside the selected source inventory remain unresolved.
+The scanner emits module source files, functions, exact UTF-16 positions and
+calls. Locally resolvable re-exports and inherent methods retain their source
+targets. Executable wrappers remain separate operations. Trait dispatch,
+function-pointer and callback value flow, closure and async-block bodies,
+macro-expanded call bodies and generated sources are not extracted.
 
-Trait dispatch, function-pointer and callback value flow, closure and async-block
-bodies, macro-expanded call bodies, and generated sources are not extracted.
-Procedural macros and build-script output are disabled. Declarative macros may
-participate in the engine's name resolution; this does not make expanded call
-bodies part of the observation. A call with unsupported dispatch has no certain
-provider. There is no supplied-callback inference in this version.
+A physical file shared by multiple module contexts appears once, with no guessed
+declarations or targets and a `rust-unsupported-compilation-contexts` diagnostic.
+Invalid syntax or an engine module-loading error fails the observation.
+Unresolved external semantics do not fail the source scan. A completed scan
+does not claim that the application compiles.
 
-One physical file may belong to several compilation contexts. If rust-analyzer
-reports more than one module context for a file, the scanner emits that file
-once, omits its declarations and call claims, and reports
-`rust-unsupported-compilation-contexts`. Calls targeting omitted declarations
-also remain unresolved. It never selects the first context or unions conflicting
-targets. The minimal reviewed example is one package whose library and binary
-both include the same source module.
+Crates and compiler contexts are temporary evidence, not new OKF concepts or
+C4 levels. Core owns curated file membership and relationship policy. Markdown
+readers retain readable Code links and responsibilities. Ordinary Rust calls
+do not automatically become architecture relationships.
 
-Cross-package `#[path]` loading is not supported by the pinned engine in the
-observed example. An engine module-loading error fails the scan; no source-root
-workaround is applied. Invalid Rust syntax also fails the scan. Other unresolved
-semantics remain uncertain evidence. Returning an observation means the declared
-extraction finished. It does not claim that Cargo compiled the application or
-that all Rust runtime behavior was discovered.
-
-The selected manifest is a source root and provides initial placement evidence. Build
-targets and compilation contexts are not new C4 boxes or OKF concepts.
-Ordinary Markdown readers retain the same readable Code links. Groma core owns
-the single curated source owner and the common relationship policy; the plugin
-does not store a compiler graph, infer deployment boundaries, or write
-architecture Markdown. Direct calls do not automatically become map arrows.
-
-## Design sources
-
-The [rust-analyzer architecture guide](https://rust-analyzer.github.io/book/contributing/architecture.html)
-defines the semantic model and its crate-context boundary. The pinned
-[HIR API](https://docs.rs/ra_ap_hir/0.0.301/ra_ap_hir/) and
-[Cargo loader](https://docs.rs/ra_ap_load-cargo/0.0.301/ra_ap_load_cargo/)
-supply the implementation boundary. Using those language tools keeps the
-resolution decision valid across projects; this delivery only qualifies the
-one selected example, not every Rust workspace.
+The [rust-analyzer project JSON format](https://rust-analyzer.github.io/book/non_cargo_based_projects.html)
+provides the source graph interface. See
+[fresh-checkout validation](../fresh-checkout-validation.md) for exercised flows.

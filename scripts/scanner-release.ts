@@ -60,18 +60,19 @@ async function assemble(input: string, output: string) {
   if (hosts.length === 0) throw new Error('No scanner build artifacts')
   await cp(path.join(input, hosts[0]!), output, { recursive: true })
   for (const host of hosts.slice(1)) {
-    for (const id of ['go', 'rust', 'typescript']) {
+    for (const id of ['go', 'rust', 'typescript', 'java', 'csharp']) {
       await cp(path.join(input, host, id, 'dist'), path.join(output, id, 'dist'), { recursive: true })
     }
   }
-  for (const [id, worker] of Object.entries({ go: 'worker', rust: 'groma-rust-scanner', typescript: 'tsc' })) {
+  for (const [id, worker] of Object.entries({ go: 'worker', rust: 'groma-rust-scanner', typescript: 'tsc', java: 'runtime/bin/java', csharp: 'worker/Groma.CSharpScanner' })) {
     await prepareWorkers(path.join(output, id), id === 'rust' ? 'dist/bin' : 'dist', worker)
   }
 }
 
 async function prepareWorkers(directory: string, relative: string, worker: string) {
   const value = await manifest(directory)
-  const platforms = await readdir(path.join(directory, relative))
+  const platforms = (await readdir(path.join(directory, relative), { withFileTypes: true }))
+    .filter(entry => entry.isDirectory() && /^(darwin|linux|win32)-(arm64|x64)$/.test(entry.name)).map(entry => entry.name)
   for (const platform of platforms) {
     await chmod(path.join(directory, relative, platform,
       `${worker}${platform.startsWith('win32-') ? '.exe' : ''}`), 0o755)

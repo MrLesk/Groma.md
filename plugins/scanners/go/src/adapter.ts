@@ -7,7 +7,6 @@ import { parseScanObservation, type ScanObservation } from '@groma/scanner'
 const packagedWorker = fileURLToPath(new URL(`../dist/${process.platform}-${process.arch}/worker${process.platform === 'win32' ? '.exe' : ''}`, import.meta.url))
 
 export interface GoScanOptions {
-  go?: string
   worker?: string
 }
 
@@ -26,26 +25,12 @@ export async function checkGoReadiness(repositoryRoot: string, options: GoScanOp
   const worker = options.worker ?? packagedWorker
   try { await access(worker) }
   catch { throw new Error('GO_WORKER_MISSING: Install the packaged Go scanner for this platform, or build it with bun plugins/scanners/go/build.ts.') }
-  const env: NodeJS.ProcessEnv = { ...process.env, GOTOOLCHAIN: 'local', GOPROXY: 'off', GOSUMDB: 'off' }
-  let context: { GOMOD: string; GOWORK: string; GOROOT: string }
-  try {
-    context = JSON.parse(await run(options.go ?? 'go', ['env', '-json', 'GOMOD', 'GOWORK', 'GOROOT'], root, env))
-  } catch (error) {
-    throw new Error(`GO_TOOLCHAIN_MISSING: Install the project's Go toolchain and add its bin directory to PATH (Go 1.27.1 for the qualified example). ${error}`)
-  }
-  if (context.GOMOD !== path.join(root, 'go.mod')) {
-    throw new Error('GO_PROJECT_SCOPE: The selected project must contain go.mod.')
-  }
-  env.PATH = `${path.join(context.GOROOT, 'bin')}${path.delimiter}${process.env.PATH ?? ''}`
-  try { await run(options.go ?? 'go', ['list', '-mod=readonly', '-deps', './...'], root, env) }
-  catch (error) {
-    throw new Error(`GO_PROJECT_PREPARATION: Prepare dependencies and generated source with the project's documented build commands (go mod download for module dependencies), then retry. Scan does not download tools or modules. ${error}`)
-  }
-  return { root, worker, env }
+  await access(path.join(root, 'go.mod'))
+  return { root, worker }
 }
 
 export async function scanGoSource(repositoryRoot: string, options: GoScanOptions = {}): Promise<ScanObservation> {
-  const { root, worker, env } = await checkGoReadiness(repositoryRoot, options)
-  try { return parseScanObservation(await run(worker, [root], root, env)) }
-  catch (error) { throw new Error(`GO_COMPILATION_FAILED: No observation was produced. Correct compilation errors with the project's Go toolchain and prepare its dependencies and generated source. ${error}`) }
+  const { root, worker } = await checkGoReadiness(repositoryRoot, options)
+  try { return parseScanObservation(await run(worker, [root], root)) }
+  catch (error) { throw new Error(`GO_SOURCE_INVALID: No observation was produced. Check Go source syntax and module declarations. ${error}`) }
 }

@@ -25,12 +25,11 @@ declarations. the TypeScript scanner's 7.1 SDK is unchanged. No consumer build
 or installation script is required. Public naming and publication are separate
 release decisions.
 
-Install the application's declared dependencies and React types with its
-package manager and lockfile. The scanner reads each selected project's `tsconfig.json` through
-the TypeScript compiler and inventories its owned TSX source files. Missing
-React dependencies, invalid configuration, syntax errors, and semantic errors
-in those TSX files fail preparation with instructions. It does not claim to
-type-check unrelated server source files. It does not run application code.
+The scanner reads each selected project's `tsconfig.json` and owned TSX files
+using its bundled TypeScript compiler. Project dependencies and React types do
+not need to be installed. Invalid configuration and source syntax fail with a
+diagnostic; missing external types do not prevent local callback extraction.
+The scanner does not run application code or require successful type checking.
 
 ## Evidence and tooling
 
@@ -68,7 +67,7 @@ direct bindings produce `unsupported-react-binding` diagnostics and no certain
 claim. Components that cannot resolve to a supported source function do not
 establish a callback interaction.
 
-TSX and TypeScript edits use the existing watch lifecycle. Healthy scanners update the architecture while failed scanners keep their saved evidence. See [validation](validation.md) for
+TSX and TypeScript edits use the existing watch lifecycle. Healthy scanners update the architecture while failed scanners keep their saved evidence. See [fresh-checkout validation](../fresh-checkout-validation.md) for
 the executed artifact checks and remaining release gates.
 
 ## Nested projects
@@ -79,7 +78,7 @@ dev dependencies, peer dependencies and optional dependencies identify candidate
 A candidate also needs a tracked or unignored `tsconfig.json` and TSX source
 files belonging to that package, outside nested packages. Declaration files and
 inactive fixtures with a `.fixture` suffix do not qualify. Packages with only
-framework tooling dependencies are skipped. No matching project produces no evidence. Each compiler uses that project's configuration and installed dependencies;
+framework tooling dependencies are skipped. No matching project produces no evidence. Each compiler uses that project's configuration and local source;
 imported source in sibling repository libraries keeps its original source path.
 Readiness checks all selected projects. An invalid selected project fails this scanner's observation; other scanners
 can still update the architecture.

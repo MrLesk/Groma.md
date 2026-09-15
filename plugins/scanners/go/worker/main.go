@@ -8,7 +8,6 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"sort"
 	"strings"
 
 	"golang.org/x/tools/go/packages"
@@ -37,28 +36,20 @@ func scan(directory string) (*observation, error) {
 	if err != nil {
 		return nil, err
 	}
-	loaded, err := packages.Load(&packages.Config{
-		Dir: directory, Mode: packages.LoadSyntax | packages.NeedModule,
-		Tests: false, BuildFlags: []string{"-mod=readonly"},
-	}, "./...")
-	if err != nil {
-		return nil, err
-	}
-	if packages.PrintErrors(loaded) != 0 {
-		return nil, fmt.Errorf("prepare project dependencies and correct Go compilation errors")
-	}
+	loaded, messages, err := loadSources(directory)
+	if err != nil { return nil, err }
 	if len(loaded) == 0 {
 		return nil, fmt.Errorf("the root module has no active Go packages")
 	}
-	sort.Slice(loaded, func(i, j int) bool { return loaded[i].PkgPath < loaded[j].PkgPath })
 	result := &observation{
 		SchemaVersion: 1,
-		Scanner:       identity{"go", "go", "go/packages + go/types", runtime.Version() + " / x/tools v0.49.0"},
+		Scanner:       identity{"go", "go", "go/parser + go/types", runtime.Version() + " / x/tools v0.49.0"},
 		Roots:         []root{}, Files: []sourceFile{},
 		Operations: []operation{}, Invocations: []invocation{},
 		Diagnostics: []diagnostic{{Severity: "info", Code: "GO_ANALYSIS_SCOPE",
 			Message: "Root module active host build context; tests and nested modules are excluded. Dynamic dispatch and providers outside this module remain unresolved. No callback binding propagation."}},
 	}
+	result.Diagnostics = append(result.Diagnostics, messages...)
 	analyzer := newEvidence(result)
 	for _, pkg := range loaded {
 		if pkg.Module == nil || filepath.Clean(pkg.Module.Dir) != directory {

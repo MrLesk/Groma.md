@@ -1,5 +1,4 @@
 import { existsSync, readFileSync } from 'node:fs'
-import { createRequire } from 'node:module'
 import path from 'node:path'
 import { proxyCreateProgram } from '@volar/typescript'
 import { createParsedCommandLine, createVueLanguagePlugin, SourceMap, VueVirtualCode, type Language } from '@vue/language-core'
@@ -112,9 +111,8 @@ export function vueProject(root: string, repositoryRoot = root) {
   const manifest = JSON.parse(readFileSync(manifestFile, 'utf8'))
   if (!hasDependency(manifest, 'vue')) return undefined
   try {
-    createRequire(manifestFile).resolve('vue/package.json')
     return { manifest, project: new VueProject(root, repositoryRoot) }
   } catch (error) {
-    throw new Error(`VUE_PROJECT_PREPARATION: Install project dependencies with its declared package manager and lockfile; ensure project tsconfig.json and Vue sources are valid. ${error}`)
+    throw new Error(`VUE_SOURCE_INVALID: Check the project tsconfig.json and Vue syntax. ${error}`)
   }
 }

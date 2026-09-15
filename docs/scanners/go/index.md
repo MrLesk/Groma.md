@@ -1,132 +1,49 @@
 # Go scanner
 
-The Go plugin loads the selected project through Go's package and type tooling,
-then supplies source and operation evidence to Groma's shared scan lifecycle.
-The current qualification target is [Chi v5.2.1](https://github.com/go-chi/chi/tree/v5.2.1),
-commit `71307f9b7e4e9527638bc951c42b782cd1560331`, using Go 1.27.1 on macOS arm64.
-
-This is a private, locally built package. No public Go scanner version or
-cross-platform qualification is claimed here.
-
-## Install and scan
-
-Install Go 1.27.1 and put its `bin` directory on `PATH`. Prepare the project's
-dependencies and generated source using its own build instructions.
-For ordinary module dependencies, the preparation command is `go mod download`.
-
-A maintainer builds the plugin once:
+The Go scanner includes a native worker containing Go's parser and type checker.
+A fresh source checkout needs no Go installation, module cache, dependency
+download or application build.
 
 ```sh
-cd plugins/scanners/go/worker
-go mod download
-cd ../../../..
-bun plugins/scanners/go/build.ts
-```
-
-The output `plugins/scanners/go/dist/package` contains a bundled JavaScript
-adapter, native worker, manifest, and licenses. It has no installation scripts
-or runtime dependency on scanner source. The build targets the maintainer's
-host operating system and architecture. The worker uses
-`golang.org/x/tools v0.49.0`; project loading still requires the installed Go
-toolchain.
-
-From the selected Go module root:
-
-```sh
-groma init 'My project' --directory groma
-groma scanner add /absolute/path/to/built/package
-groma scanner setup
+groma scanner add @groma/scanner-go
 groma scan
 ```
 
-`scanner setup` calls the shared readiness hook. It reports a missing worker,
-missing Go installation, invalid module selection, or missing project
-preparation. Scan runs the same check. Neither command installs tools or
-downloads dependencies: the adapter sets `GOTOOLCHAIN=local`,
-`GOPROXY=off`, and `GOSUMDB=off`, and uses `-mod=readonly`.
-Go may use its normal compiler cache.
+Maintainers build with `bun plugins/scanners/go/build.ts`. Building requires
+Go and the scanner's own build dependencies. The resulting package includes
+the adapter, native worker and upstream licenses, with no installation scripts.
 
-## Supported context and evidence
+## Source and evidence
 
-The approved example is Chi's root pure-Go module in the default host build
-context. `go/packages.Load` loads `./...` with typed syntax and module
-information; Go owns file membership, imports, dependencies, and symbol
-resolution. Tests are excluded. Groma selects each tracked or unignored `go.mod`, including
-nested modules, and runs Go from that module directory. An enclosing `go.work`
-continues to control Go's dependency resolution. Go's package patterns keep a
-nested module out of its parent module's source set, so it is scanned separately.
-Inactive platform/build-tag files are not inventoried. Custom build contexts,
-cgo and custom package drivers have not been qualified.
+Each tracked or unignored `go.mod` identifies a module. The worker reads its
+module declaration and parses active host-platform Go files with `go/parser`.
+`go/build.MatchFile` selects files; test files, vendor, testdata and nested
+modules are excluded. Nested modules are scanned independently. cgo and custom
+build contexts are outside this source loader.
 
-The module is a source root, with loaded packages as its child roots. Each
-active physical source file records membership in its loaded package. Package
-imports remain internal compiler analysis data.
-The scanner reports top-level declarations, function and method bodies,
-closures, and package variable initializers containing calls.
-`go/types` and
-[`typeutil.StaticCallee`](https://pkg.go.dev/golang.org/x/tools/go/types/typeutil#StaticCallee)
-supply canonical static targets. Imported aliases resolve to the implementation.
-Executable wrappers remain operations. An immediately invoked closure owns
-its body calls.
+The source importer gives `go/types` local packages from that module.
+External packages, including standard-library declarations, are unresolved
+context. The scanner does not invoke `go`, use its cache, or evaluate `go.work`.
+Missing dependencies produce diagnostics without blocking source inventory.
+Invalid syntax still fails the scan.
 
-Interfaces, function-valued fields or variables, returned function values,
-and providers outside the selected module remain unresolved.
-There is no callback-binding propagation, framework relationship inference,
-body-token comparison, or execution-order model. Builtins and type conversions
-are not source operation calls. Source offsets are zero-based UTF-16 positions
-for the shared contract.
+Files retain package and module membership. Functions, methods, closures and
+package initializers supply operations and exact UTF-16 source positions.
+Local imported aliases and concrete method calls retain their canonical target.
+Interfaces, function values and providers outside the module remain unresolved.
+An immediately invoked closure owns its own calls. Builtins and type conversions
+are not operation calls. There is no callback propagation or framework inference.
 
-These facts do not define new OKF concepts or C4 levels. Packages are initial
-placement evidence, not proof of deployment boundaries. Core preserves curated
-file ownership, reconciles successful scanner observations, and writes the
-existing Markdown Code links and selected relationships. Ordinary Markdown
-readers can follow those links and read authored responsibilities. Groma
-interprets file ownership and its existing relationship sections.
-The current shared rule does not turn ordinary Go calls into map arrows.
+These are temporary source facts. Packages are not proof of C4 deployment
+boundaries, and do not create new OKF concepts. Core preserves curated source
+ownership and writes ordinary Markdown Code links and reviewed relationships.
+Ordinary Go calls do not automatically become map arrows.
 
-This boundary is language-independent: compiler tools own language meaning;
-the common lifecycle owns architecture. The current implementation and
-qualification remain deliberately limited to the approved project.
-
-## Validation
-
-Run the domain fixture tests with the installed Go executable:
+Run fixture tests with the maintainer Go executable:
 
 ```sh
 GROMA_TEST_GO="$(command -v go)" bun test test-bun/go-scanner.test.ts
-bun plugins/scanners/go/build.ts
 ```
 
-Native fixture tests are opt-in through `GROMA_TEST_GO`.
-
-Historical Local verification on macOS arm64:
-
-- Independent fixture: deterministic observations, imported alias identity,
-  concrete methods, wrapper and closure ownership, uncertain dispatch, UTF-16
-  positions, and failed compilation/preparation without module-file changes.
-- Compiled consumer: relocated source-free package, readiness, mixed Go and
-  TypeScript ownership, repeat scans, curated ownership after a source edit,
-  and a failed scan leaving the prior map unchanged.
-- Chi: 35 active files, 240 operations, and 559 invocations; 205 have concrete
-  module-local targets and 354 remain unresolved. Repeated scans preserve
-  curated Markdown. A temporary source edit preserves the owner and authored
-  responsibility; a failed scan preserves the full previous map.
-
-The Chi map is scan evidence with one reviewed request-dispatch responsibility,
-not a claim of complete architectural curation or automatic HTTP relationships.
-Human map review and final platform/publication qualification are separate
-acceptance gates.
-
-## Research provenance
-
-The fetched `research/go-scanner-prototype` branch still ended at preparation
-commit `87bcdef`. Its only workflow artifact contained development tools,
-source checkout, and pinned evaluation repositories. The research task
-reported a local prototype checkpoint but stated that source publication was
-interrupted. Its recovery archive was not accessible through the available
-task attachment or browser session.
-
-This implementation reuses the recorded compiler-backed design and pinned Chi
-example; it does not claim to reuse unavailable source or to validate the old
-checkpoint. The old report's 36-file inventory included inactive build
-variants. The current approved host context contains 35 active files.
+The separate packaged test removes language tools from PATH. See
+[fresh-checkout validation](../fresh-checkout-validation.md).

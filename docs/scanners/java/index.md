@@ -1,91 +1,50 @@
 # Java scanner
 
-The Java plugin uses Maven's effective project model and compile dependency
-classpath, then the installed JDK's `JavacTask` and `Trees` compiler APIs. It
-returns source inventory, declarations, source references and operation facts.
-Core owns architecture placement, curated ownership and relationship selection.
-Maven configuration is temporary evidence, not a new OKF record or C4 element.
-The resulting architecture remains ordinary Markdown with exact source links.
+The Java scanner carries its own Java compiler runtime and uses `JavacTask`
+and `Trees` to read source. A fresh Maven checkout needs no installed JDK,
+Maven, dependency cache, generated sources, or application build.
 
-The supported example is a Maven module with Java 25 main sources, as
-used by callforpapers. Maven 3.9.15 and JDK 25.0.1 were tested. Select the project
-JDK through `JAVA_HOME` or PATH. The packaged worker is Java 21 bytecode, but
-this does not claim source-project qualification for every release since 21.
-
-## Install and prepare
-
-Build locally, then install the package through Groma:
+From an initialized project:
 
 ```sh
-bun plugins/scanners/java/build.ts
-# From the project to scan:
-groma scanner add /absolute/path/to/plugins/scanners/java/dist/package
-```
-
-Use the project's Maven wrapper (`mvnw` or `mvnw.cmd`) when present. Otherwise,
-install Maven and put `mvn` on PATH. Initialize the wrapper and resolve the
-exporter plugins and project dependencies once with network access:
-
-```sh
-./mvnw --batch-mode --no-transfer-progress \
-  org.apache.maven.plugins:maven-help-plugin:3.5.1:effective-pom \
-  org.apache.maven.plugins:maven-dependency-plugin:3.9.0:build-classpath \
-  -DincludeScope=compile
+groma scanner add @groma/scanner-java
 groma scan
 ```
 
-On Windows use `.\mvnw.cmd` and enter the Maven arguments on one line. A project
-without a wrapper uses `mvn` instead. Maven reads the project's `.mvn` settings,
-parent POMs, active profiles and dependency management. No manual JAR list or
-Groma-specific Java configuration is required. Normal scans run Maven offline;
-Maven writes its temporary model and classpath outside the project. The wrapper
-itself may bootstrap Maven if it has not been initialized. Build extensions and
-wrapper scripts execute as normal project tooling.
+For local development, a maintainer with JDK 25 builds the package with
+`bun plugins/scanners/java/build.ts`, then adds the resulting
+`plugins/scanners/java/dist/package` directory to Groma. The package contains
+bundled JavaScript, a precompiled worker JAR and a platform-specific compiler
+runtime. The runtime includes its upstream license notices.
 
-The adapter's `checkJavaReadiness(repositoryRoot)` returns the Maven-derived
-input, Java command and packaged worker path, or throws an actionable diagnostic.
-Scanning reuses that result. This checks tooling and project inputs; successful
-source attribution is established only when the scan completes. Shared guided
-readiness presentation belongs to the scanner installation workflow.
+## Source inputs
 
-## Evidence and limits
+Tracked and unignored `pom.xml` files identify projects. Each POM supplies
+literal source settings and properties: main source directory, language release,
+encoding and artifact name. Defaults are `src/main/java`, the bundled compiler's
+language version and UTF-8. POM-only aggregators supply no source observation.
 
-The effective POM supplies the main source directory, release, encoding, output
-and generated-source directory. Maven resolves compile dependencies. The worker
-analyzes authored main sources; existing generated annotation sources may supply
-compiler context but are not added as architecture components. Annotation
-processors and application code are not executed by the compiler worker.
-Callforpapers scanned without generation or compilation preparation. A project
-that needs generated types must prepare them through its documented build.
+The scanner does not evaluate Maven, parent POMs, profiles, build plugins,
+annotation processors or dependency declarations. It does not load project
+JARs or generated outputs. Custom build-added roots and Gradle are outside the
+supported source loader. Unsupported language versions and invalid syntax fail
+with a diagnostic; missing external types do not fail the source scan.
 
+## Evidence
+
+The worker inventories authored main sources, declarations and operations.
 Static, private, final, explicit constructor and supported direct receiver calls
-can name exact source implementations. Overridable receivers, external code and
-generated implementations remain unresolved. Method references do not imply
-invocation. Spring declarations do not prove injection or runtime collaborations.
-The current core rule selects concrete callback bindings; this Java extractor
-does not report those bindings, so ordinary Java calls do not create derived
-architecture relationships. Authored interactions remain the way to express the
-reviewed company-merge workflow.
+can name exact local implementations. Calls affected by attribution errors,
+unknown virtual dispatch or missing external code stay unresolved. Method
+references do not imply invocation. Spring declarations do not prove dependency
+injection or runtime collaborations.
 
-Automatic reactor compilation, Gradle, JPMS module paths, test source sets, custom build-added
-source roots, preview features and alternate compiler/toolchain selection are
-outside this delivery. These limits are not claims about Java or Maven generally.
-The scanner does not parse Java names or resolve dependencies itself.
+The shared relationship rule selects concrete callback bindings. Ordinary Java
+calls do not become architecture arrows. Core owns curated source membership
+and relationship selection. POM settings and compiler facts are temporary
+evidence, not new OKF records or C4 elements. Markdown readers retain ordinary
+Code links and reviewed responsibilities.
 
-## Package qualification
-
-The package contains bundled ESM and a precompiled JAR, with no bundled JDK,
-install script, Node requirement or platform-specific runtime payload. Consumers
-supply Git, their project JDK and Maven or its wrapper.
-
-Run `bun test test-bun/java-scanner.test.ts` with JDK 25 and Maven on PATH
-for source operation resolution tests. See the historical [validation record](validation.md).
-
-## Nested projects
-
-Groma selects tracked and unignored `pom.xml` files throughout the repository.
-Each module uses its own effective Maven model and compile classpath. POM-only
-aggregators have no source observation. Prepare reactor dependencies and generated
-source through the project's build before scanning; Groma does not run a reactor
-build. Evidence paths remain relative to the repository. Nested POM and `.mvn`
-changes refresh the Java scanner.
+Run `bun test test-bun/java-scanner.test.ts` with the maintainer JDK to test
+local resolution and uncertainty. The packaged fresh-checkout test runs with
+no JDK on PATH. See [fresh-checkout validation](../fresh-checkout-validation.md).

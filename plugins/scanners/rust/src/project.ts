@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process'
-import { access } from 'node:fs/promises'
+import { access, readFile, readdir } from 'node:fs/promises'
 import path from 'node:path'
 import type { ScannerSettings } from '@groma/scanner'
 import { promisify } from 'node:util'
@@ -7,12 +7,18 @@ import { projectFiles } from '../../projects.ts'
 
 export const execute = promisify(execFile)
 
-interface CargoTarget { kind: string[]; src_path: string }
-interface CargoPackage { id: string; name: string; manifest_path: string; targets: CargoTarget[] }
-interface CargoMetadata { workspace_root: string; workspace_members: string[]; packages: CargoPackage[] }
-
-export interface RustInput { root: string; manifest: string; name: string; targets: string[] }
-export interface RustOptions { cargo?: string; rustc?: string; worker?: string }
+interface Manifest {
+  package?: { name: string; edition?: string | { workspace: boolean }; autobins?: boolean }
+  workspace?: { members?: string[]; exclude?: string[]; package?: { edition?: string }; dependencies?: Record<string, Dependency> }
+  lib?: { path?: string; name?: string }
+  bin?: { path?: string; name: string }[]
+  dependencies?: Record<string, Dependency>
+  features?: Record<string, string[]>
+}
+type Dependency = string | { path?: string; workspace?: boolean }
+interface Crate { root_module: string; display_name: string; edition: string; deps: { crate: number; name: string }[]; cfg: string[] }
+export interface RustInput { root: string; manifest: string; name: string; targets: string[]; crates: Crate[] }
+export interface RustOptions { worker?: string }
 
 export async function exists(file: string): Promise<boolean> {
   try { await access(file); return true } catch { return false }
@@ -20,61 +26,123 @@ export async function exists(file: string): Promise<boolean> {
 
 function manifestAt(root: string, settings: ScannerSettings): string {
   if (settings.manifest === undefined) return path.join(root, 'Cargo.toml')
-  if (typeof settings.manifest !== 'string') {
-    throw new Error('RUST_PROJECT_SELECTION: Set settings.manifest on the rust entry in scanners.json to a Cargo.toml path.')
-  }
+  if (typeof settings.manifest !== 'string') throw new Error('RUST_PROJECT_SELECTION: settings.manifest must be a Cargo.toml path.')
   return path.resolve(root, settings.manifest)
 }
 
-export async function readRustProject(root: string, settings: ScannerSettings, options: RustOptions, workspace = false): Promise<RustInput> {
+async function read(file: string): Promise<Manifest> {
+  return Bun.TOML.parse(await readFile(file, 'utf8')) as Manifest
+}
+
+async function members(manifest: string, model: Manifest): Promise<string[]> {
+  const directory = path.dirname(manifest)
+  const files = model.package ? [manifest] : []
+  for (const pattern of model.workspace?.members ?? []) {
+    const glob = new Bun.Glob(`${pattern.replace(/\/$/, '')}/Cargo.toml`)
+    for await (const file of glob.scan({ cwd: directory })) {
+      const member = path.posix.dirname(file)
+      if (model.workspace?.exclude?.some(exclude => new Bun.Glob(exclude).match(member))) continue
+      files.push(path.resolve(directory, file))
+    }
+  }
+  return [...new Set(files)].sort()
+}
+
+function features(model: Manifest): string[] {
+  const enabled = new Set<string>()
+  function add(name: string): void {
+    if (enabled.has(name) || name.includes('/') || name.startsWith('dep:')) return
+    enabled.add(name)
+    for (const nested of model.features?.[name] ?? []) add(nested)
+  }
+  if (model.features?.default) add('default')
+  return [...enabled].sort().map(name => `feature="${name}"`)
+}
+
+type SourceTarget = { file: string; name: string; library: boolean }
+type Package = { file: string; model: Manifest }
+
+async function automaticBins(directory: string, model: Manifest): Promise<NonNullable<Manifest['bin']>> {
+  if (model.package?.autobins === false) return []
+  const bins = []
+  if (await exists(path.join(directory, 'src/main.rs'))) bins.push({ name: model.package!.name, path: 'src/main.rs' })
+  const binRoot = path.join(directory, 'src/bin')
+  if (!await exists(binRoot)) return bins
+  for (const entry of await readdir(binRoot, { withFileTypes: true })) {
+    const file = entry.isDirectory() ? `src/bin/${entry.name}/main.rs` : `src/bin/${entry.name}`
+    if (file.endsWith('.rs') && await exists(path.join(directory, file))) bins.push({ name: path.basename(entry.name, '.rs'), path: file })
+  }
+  return bins
+}
+
+async function targets(manifest: string, model: Manifest): Promise<SourceTarget[]> {
+  const directory = path.dirname(manifest)
+  const result: SourceTarget[] = []
+  const library = path.resolve(directory, model.lib?.path ?? 'src/lib.rs')
+  if (await exists(library)) result.push({ file: library, name: model.lib?.name ?? model.package!.name.replaceAll('-', '_'), library: true })
+  const bins = [...model.bin ?? []]
+  for (const bin of await automaticBins(directory, model)) if (!bins.some(item => item.name === bin.name)) bins.push(bin)
+  for (const bin of bins) {
+    const file = path.resolve(directory, bin.path ?? `src/bin/${bin.name}.rs`)
+    if (await exists(file)) result.push({ file, name: bin.name.replaceAll('-', '_'), library: false })
+  }
+  return result
+}
+
+async function sourceCrates(packages: Package[], model: Manifest) {
+  const crates: Crate[] = []
+  const libraries = new Map<string, number>()
+  const owners: Package[] = []
+  for (const pkg of packages) {
+    for (const target of await targets(pkg.file, pkg.model)) {
+      const edition = pkg.model.package?.edition
+      if (target.library) libraries.set(pkg.file, crates.length)
+      crates.push({ root_module: target.file, display_name: target.name,
+        edition: typeof edition === 'string' ? edition : model.workspace?.package?.edition ?? '2015', deps: [], cfg: features(pkg.model) })
+      owners.push(pkg)
+    }
+  }
+  return { crates, libraries, owners }
+}
+
+function dependencies(pkg: Package, manifest: string, model: Manifest, libraries: Map<string, number>): Crate['deps'] {
+  const deps: Crate['deps'] = []
+  for (const [name, declaration] of Object.entries(pkg.model.dependencies ?? {})) {
+    const inherited = typeof declaration === 'object' && declaration.workspace
+    const dependency = inherited ? model.workspace?.dependencies?.[name] : declaration
+    if (typeof dependency !== 'object' || !dependency.path) continue
+    const file = path.resolve(path.dirname(inherited ? manifest : pkg.file), dependency.path, 'Cargo.toml')
+    const target = libraries.get(file)
+    if (target !== undefined) deps.push({ crate: target, name: name.replaceAll('-', '_') })
+  }
+  return deps
+}
+
+export async function readRustProject(root: string, settings: ScannerSettings): Promise<RustInput> {
   const manifest = manifestAt(root, settings)
-  if (!await exists(manifest)) {
-    throw new Error('RUST_PROJECT_MISSING: Select an existing Cargo.toml with settings.manifest on the rust entry in scanners.json.')
+  const model = await read(manifest)
+  const files = await members(manifest, model)
+  const packages = await Promise.all(files.map(async file => ({ file, model: await read(file) })))
+  const { crates, libraries, owners } = await sourceCrates(packages, model)
+  for (const [index, crate] of crates.entries()) {
+    const pkg = owners[index]!
+    crate.deps = dependencies(pkg, manifest, model, libraries)
+    const library = libraries.get(pkg.file)
+    if (library !== undefined && library !== index) crate.deps.push({ crate: library, name: crates[library]!.display_name })
   }
-  let metadata: CargoMetadata
-  try {
-    const result = await execute(options.cargo ?? 'cargo',
-      ['metadata', '--format-version', '1', '--offline', '--locked', '--manifest-path', manifest],
-      { cwd: path.dirname(manifest), maxBuffer: 64 * 1024 * 1024 })
-    metadata = JSON.parse(result.stdout)
-  } catch (error) {
-    throw new Error(`RUST_CARGO_NOT_READY: Install the project's Rust toolchain, then run cargo fetch --manifest-path "${manifest}" to prepare its lockfile and dependencies. ${error}`)
-  }
-  const packageAtManifest = metadata.packages.find(pkg => pkg.manifest_path === manifest)
-  const packages = packageAtManifest && !workspace ? [packageAtManifest] :
-    metadata.packages.filter(pkg => metadata.workspace_members.includes(pkg.id))
-  const targets = packages.flatMap(pkg => pkg.targets)
-    .filter(target => target.kind.some(kind => kind === 'lib' || kind === 'bin'))
-    .map(target => target.src_path).sort()
-  if (!targets.length) throw new Error('RUST_TARGET_MISSING: The selected Cargo project needs a library or binary target.')
-  return { root, manifest, name: packageAtManifest?.name ?? path.basename(path.dirname(manifest)), targets }
+  if (!crates.length) throw new Error('RUST_TARGET_MISSING: The selected Cargo project needs a library or binary target.')
+  return { root, manifest, name: model.package?.name ?? path.basename(path.dirname(manifest)), targets: crates.map(crate => crate.root_module).sort(), crates }
 }
 
-export async function checkRustToolchain(root: string, options: RustOptions): Promise<void> {
-  try {
-    await execute(options.cargo ?? 'cargo', ['--version'], { cwd: root })
-    const result = await execute(options.rustc ?? 'rustc', ['--print', 'sysroot'], { cwd: root })
-    const library = path.join(result.stdout.trim(), 'lib/rustlib/src/rust/library')
-    if (!await exists(library)) throw new Error('Rust standard library sources are missing.')
-  } catch (error) {
-    throw new Error(`RUST_TOOLCHAIN_MISSING: Install the project's Rust toolchain with Cargo and rustc, and add its standard library sources with rustup component add rust-src. ${error}`)
-  }
-}
-
-export async function rustProjects(root: string, settings: ScannerSettings, options: RustOptions = {}): Promise<string[]> {
+export async function rustProjects(root: string, settings: ScannerSettings): Promise<string[]> {
   if (settings.manifest !== undefined) return [manifestAt(root, settings)]
   const selected = new Set<string>()
   const covered = new Set<string>()
   for (const file of await projectFiles(root, file => path.posix.basename(file) === 'Cargo.toml')) {
     const manifest = path.resolve(root, file)
     if (covered.has(manifest)) continue
-    const { stdout } = await execute(options.cargo ?? 'cargo',
-      ['metadata', '--no-deps', '--format-version', '1', '--offline', '--locked', '--manifest-path', manifest],
-      { cwd: path.dirname(manifest), maxBuffer: 64 * 1024 * 1024 })
-    const metadata: CargoMetadata = JSON.parse(stdout)
-    selected.add(path.join(metadata.workspace_root, 'Cargo.toml'))
-    for (const pkg of metadata.packages) if (metadata.workspace_members.includes(pkg.id)) covered.add(pkg.manifest_path)
-    covered.add(path.join(metadata.workspace_root, 'Cargo.toml'))
+    selected.add(manifest)
+    for (const member of await members(manifest, await read(manifest))) covered.add(member)
   }
   return [...selected].sort()
 }

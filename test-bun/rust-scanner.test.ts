@@ -21,7 +21,6 @@ async function fixture(name: string, action: (root: string) => Promise<void>) {
   const root = await mkdtemp(path.join(os.tmpdir(), 'groma rust '))
   try {
     await cp(path.resolve(import.meta.dir, '../test/fixtures', name), root, { recursive: true })
-    await execute('cargo', ['generate-lockfile', '--offline'], { cwd: root })
     await action(root)
   } finally { await rm(root, { recursive: true, force: true }) }
 }
@@ -60,7 +59,6 @@ rustTest('rust-analyzer owns alias and inherent method targets while unsupported
 
 rustTest('wildcard import of a local module never resolves to the dependency with the same name', async () => {
   await fixture('rust-collision', async root => {
-    await execute('cargo', ['run', '--offline', '--locked', '--quiet', '-p', 'app'], { cwd: root })
     const observation = await scanRustSource(root, {}, { worker })
     const call = evidence(observation).find(call => call.caller.name === 'main')!
     expect(call.unresolved).toBeFalse()

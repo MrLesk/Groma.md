@@ -5,10 +5,14 @@ import com.sun.source.util.TreePath;
 import com.sun.source.util.TreePathScanner;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 import javax.lang.model.element.Element;
 import javax.lang.model.element.ElementKind;
 import javax.lang.model.element.ExecutableElement;
 import javax.lang.model.element.Modifier;
+import javax.tools.Diagnostic;
+import javax.tools.JavaFileObject;
 
 /** Binding is not runtime dispatch. Unknown receivers never become guessed providers. */
 final class Uses extends TreePathScanner<Void, String> {
@@ -17,7 +21,13 @@ final class Uses extends TreePathScanner<Void, String> {
     private int unresolved;
     private int methodReferences;
 
-    Uses(Declarations index) { this.index = index; }
+    private final Map<java.net.URI, List<Diagnostic<? extends JavaFileObject>>> errors;
+
+    Uses(Declarations index, List<Diagnostic<? extends JavaFileObject>> diagnostics) {
+        this.index = index;
+        this.errors = diagnostics.stream().filter(item -> item.getKind() == Diagnostic.Kind.ERROR && item.getSource() != null)
+            .collect(Collectors.groupingBy(item -> item.getSource().toUri()));
+    }
 
     @Override public Void scan(Tree tree, String caller) {
         if (tree == null || !index.authored.contains(tree)) return null;
@@ -65,12 +75,22 @@ final class Uses extends TreePathScanner<Void, String> {
 
     private void invocation(Tree tree, String caller, Element element, boolean exact, String member) {
         if (caller == null) return;
-        String target = exact ? index.operationFor.get(element) : null;
+        String target = exact && !hasError(tree) ? index.operationFor.get(element) : null;
         if (target == null) unresolved++;
         var unit = getCurrentPath().getCompilationUnit();
         long line = unit.getLineMap().getLineNumber(index.trees.getSourcePositions().getStartPosition(unit, tree));
         invocations.add(Json.object("source", caller, "targets", target == null ? List.of() : List.of(target),
             "unresolved", target == null, "line", line, "member", member));
+    }
+
+    private boolean hasError(Tree tree) {
+        var type = index.trees.getTypeMirror(getCurrentPath());
+        if (type != null && type.getKind() == javax.lang.model.type.TypeKind.ERROR) return true;
+        var unit = getCurrentPath().getCompilationUnit();
+        long start = index.trees.getSourcePositions().getStartPosition(unit, tree);
+        long end = index.trees.getSourcePositions().getEndPosition(unit, tree);
+        return errors.getOrDefault(unit.getSourceFile().toUri(), List.of()).stream()
+            .anyMatch(item -> item.getStartPosition() < end && item.getEndPosition() >= start);
     }
 
     List<Object> diagnostics() {

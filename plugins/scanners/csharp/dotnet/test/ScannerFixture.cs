@@ -1,4 +1,3 @@
-using System.Diagnostics;
 
 namespace Groma.CSharpScanner.Tests;
 
@@ -23,22 +22,6 @@ internal sealed class ScannerFixture : IDisposable
         string full = Path.Combine(Root, file);
         Directory.CreateDirectory(Path.GetDirectoryName(full)!);
         File.WriteAllText(full, contents);
-    }
-
-    public async Task RestoreAsync(string? input = null)
-    {
-        ProcessStartInfo start = new(Environment.GetEnvironmentVariable("DOTNET_HOST_PATH") ?? "dotnet")
-        {
-            WorkingDirectory = Root, RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false,
-        };
-        foreach (string arg in new[] { "restore", Path.GetRelativePath(Root, input ?? Solution), "--nologo" }) start.ArgumentList.Add(arg);
-        using Process process = Process.Start(start) ?? throw new InvalidOperationException("Could not restore the fixture.");
-        Task<string> output = process.StandardOutput.ReadToEndAsync();
-        Task<string> error = process.StandardError.ReadToEndAsync();
-        using CancellationTokenSource timeout = new(TimeSpan.FromSeconds(30));
-        try { await process.WaitForExitAsync(timeout.Token); }
-        catch (OperationCanceledException) { process.Kill(entireProcessTree: true); throw; }
-        if (process.ExitCode != 0) throw new InvalidOperationException(await output + await error);
     }
 
     public Task<ScanObservation> ScanAsync(string? input = null, int maxProjects = 128, int maxFiles = 20_000) =>

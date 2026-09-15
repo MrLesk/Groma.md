@@ -62,13 +62,30 @@ completes, so the first edit can update the open map.
 Optional modules are enabled only through `scanners.json` in the selected
 `groma/` or `.groma/` directory, normally written by `groma scanner add`.
 `groma scanner list` derives found and missing package availability without executing third-party code.
-`groma scanner check` runs enabled plugins' project preparation checks.
+`groma scanner check` checks source inputs and scanner-owned tools.
 Network installation happens only after explicit selection in setup,
 `scanner add`, `scanner update`, or `scanner install`.
 
 Bare `groma` shows scanner readiness beside the embedded Backlog work-source
 readiness in one fixed bottom row. The complete scanner inventory and scanner
 management syntax remain under Advanced commands.
+
+## Fresh checkouts
+
+Each official scanner carries the tools needed for its supported source scan.
+Installing project dependencies, building the application, or installing a
+language SDK is not a prerequisite. Scanner installation supplies the engines;
+scanning itself does not download or execute project tools.
+
+Missing external types and generated code can limit individual call targets.
+The scanner still reports source declarations and proven local interactions,
+with unresolved facts left uncertain. This does not promise full application
+compilation or every framework behavior. Syntax errors remain scan failures.
+
+This changes scanner execution, not the architecture model. In OKF, readers
+still see ordinary Markdown, Code links and relationship rows. In C4, parsers
+and runtimes belong to the existing scanner responsibility; dependencies do
+not become new map elements. Groma core continues to own architectural meaning.
 
 ## Scanner settings
 
