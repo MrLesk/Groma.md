@@ -22,15 +22,6 @@ import {
 } from './graph.ts'
 import { displayName, kebabCase } from './naming.ts'
 
-function isPaintFile(file: string, node: ImportGraphNode): boolean {
-  const segments = file.split('/')
-  return segments.includes('atoms')
-    || segments.includes('molecules')
-    || segments.includes('organisms')
-    || fileStem(file) === 'paint'
-    || node.symbols.some(symbol => symbol.name.startsWith('draw'))
-}
-
 async function packageBins(repositoryRoot: string): Promise<string[]> {
   try {
     const source = await readFile(path.join(repositoryRoot, 'package.json'), 'utf8')
@@ -46,62 +37,12 @@ async function packageBins(repositoryRoot: string): Promise<string[]> {
   return []
 }
 
-function includeImportedScopes(
-  scopes: Set<string>,
-  structuralImports: (file: string) => string[],
-  liveImporters: (file: string) => string[],
-): void {
-  for (const scope of [...scopes]) {
-    for (const imported of structuralImports(scope)) {
-      if (structuralImports(imported).length === 0) continue
-      if (liveImporters(imported).every(importer => scopes.has(importer))) scopes.add(imported)
-    }
-  }
-}
-
-function includeSharedScopes(
-  graph: ImportGraph,
-  scopes: Set<string>,
-  excluded: Set<string>,
-  structuralImports: (file: string) => string[],
-  liveImporters: (file: string) => string[],
-): void {
-  let grew = true
-  while (grew) {
-    grew = false
-    for (const node of graph.files) {
-      if (excluded.has(node.file) || scopes.has(node.file)) continue
-      if (structuralImports(node.file).length === 0) continue
-      if (liveImporters(node.file).filter(importer => scopes.has(importer)).length < 2) continue
-      scopes.add(node.file)
-      grew = true
-    }
-  }
-}
-
 function inferScopeFiles(graph: ImportGraph, bins: string[]): string[] {
-  const byFile = new Map(graph.files.map(node => [node.file, node]))
-  const excluded = new Set(graph.files.flatMap(node => {
-    return fileStem(node.file) === 'types' || isPaintFile(node.file, node)
-      ? [node.file]
-      : []
-  }))
-  const structuralImports = (file: string) => {
-    return (byFile.get(file)?.imports ?? []).filter(imported => !excluded.has(imported))
-  }
-  const liveImporters = (file: string) => {
-    return (byFile.get(file)?.importedBy ?? []).filter(importer => !excluded.has(importer))
-  }
-  const roots = graph.files
-    .filter(node => node.importedBy.length === 0 && !excluded.has(node.file))
-    .sort((left, right) => {
-      return structuralImports(right.file).length - structuralImports(left.file).length
-        || left.file.localeCompare(right.file)
-    })
-  const scopes = new Set(bins.filter(file => byFile.has(file)))
-  if (scopes.size === 0 && roots[0] !== undefined) scopes.add(roots[0].file)
-  includeImportedScopes(scopes, structuralImports, liveImporters)
-  includeSharedScopes(graph, scopes, excluded, structuralImports, liveImporters)
+  const declared = new Set(bins)
+  // Entry candidates may own helpers; a helper's dependencies or callers do not make it an entry.
+  const scopes = new Set(graph.files
+    .filter(node => declared.has(node.file) || node.importedBy.length === 0)
+    .map(node => node.file))
   if (scopes.size === 0 && graph.files[0] !== undefined) scopes.add(graph.files[0].file)
   return [...scopes].sort()
 }

@@ -30,6 +30,7 @@ title: Architecture relationships
 | [plugins/scanners/csharp/dotnet/Command.cs](../plugins/scanners/csharp/dotnet/Command.cs) | [plugins/scanners/csharp/dotnet/Scanner.cs](../plugins/scanners/csharp/dotnet/Scanner.cs) | Runs the requested compiler analysis | Function call |
 | [plugins/scanners/go/src/adapter.ts](../plugins/scanners/go/src/adapter.ts) | [plugins/scanners/go/worker/main.go](../plugins/scanners/go/worker/main.go) | Starts Go analysis and reads its result | Child process and JSON |
 | [plugins/scanners/rust/src/index.ts](../plugins/scanners/rust/src/index.ts) | [plugins/scanners/rust/native/src/main.rs](../plugins/scanners/rust/native/src/main.rs) | Starts Rust analysis and reads its result | Child process and JSON |
+| [src/cli.ts](../src/cli.ts) | [src/lint-command.ts](../src/lint-command.ts) | Registers the lint command on the shared CLI program | Function call |
 
 ## Derived relationships
 
