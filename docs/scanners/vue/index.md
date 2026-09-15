@@ -1,9 +1,9 @@
 # Vue scanner
 
 The Vue scanner adds single-file component (SFC) event bindings to Groma's
-TypeScript scanner evidence. Install the project's dependencies using its
-package manager and lockfile. The scanner reads each selected project's `tsconfig.json`;
-it does not install dependencies or execute application code.
+TypeScript scanner evidence. Its bundled compiler tools read local source
+without project dependencies. The scanner reads each selected project's
+`tsconfig.json`; it does not execute application code.
 
 ```sh
 bun install --frozen-lockfile --ignore-scripts
@@ -51,7 +51,8 @@ Options API events, runtime `defineEmits` arrays, dynamic components, dynamic
 event names, handler expressions or modifiers, state stores, routing, server
 frameworks or arbitrary event mutation. Compiler syntax/template errors fail
 the scan and preserve the previous complete map. Readiness errors explain
-missing project dependencies or invalid configuration.
+invalid configuration or source syntax. Typed event names are read from the
+local `defineEmits` type literal; missing Vue types do not erase that evidence.
 
 Vue contributes `vue` Code provenance for configured source files. Shared core
 keeps one physical-file owner, interprets complementary and conflicting
@@ -63,7 +64,7 @@ is source evidence; it does not automatically define a C4 responsibility or
 add a containment level. Groma's existing ownership and relationship model
 owns that interpretation. No new architecture metadata is added.
 
-See [validation](validation.md) for the pinned project and executed release
+See [fresh-checkout validation](../fresh-checkout-validation.md) for the pinned project and executed release
 checks. This prototype package name does not imply public publication.
 
 ## Nested projects
@@ -74,7 +75,7 @@ dev dependencies, peer dependencies and optional dependencies identify candidate
 A candidate also needs a tracked or unignored `tsconfig.json` and Vue source
 files belonging to that package, outside nested packages. Declaration files and
 inactive fixtures with a `.fixture` suffix do not qualify. Packages with only
-framework tooling dependencies are skipped. No matching project produces no evidence. Each compiler uses that project's configuration and installed dependencies;
+framework tooling dependencies are skipped. No matching project produces no evidence. Each compiler uses that project's configuration and local source;
 imported source in sibling repository libraries keeps its original source path.
 Readiness checks all selected projects. An invalid selected project fails this scanner's observation; other scanners
 can still update the architecture.

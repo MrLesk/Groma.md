@@ -1,4 +1,4 @@
-import { cp, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { access, cp, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { run } from './src/adapter.ts'
@@ -27,7 +27,9 @@ export async function buildPackage(destination: string, go = 'go'): Promise<void
   }, null, 2)}\n`)
   await cp(path.join(pluginRoot, '../../../LICENSE'), path.join(destination, 'LICENSE'))
   const goRoot = (await run(go, ['env', 'GOROOT'], pluginRoot)).trim()
-  await cp(path.join(goRoot, 'LICENSE'), path.join(destination, 'GO-LICENSE'))
+  const license = path.join(goRoot, 'LICENSE')
+  const licensePath = await access(license).then(() => license, () => path.join(goRoot, '../LICENSE'))
+  await cp(licensePath, path.join(destination, 'GO-LICENSE'))
   const moduleCache = (await run(go, ['env', 'GOMODCACHE'], pluginRoot)).trim()
   await cp(path.join(moduleCache, 'golang.org/x/tools@v0.49.0/LICENSE'), path.join(destination, 'GO-TOOLS-LICENSE'))
   await cp(path.join(moduleCache, 'golang.org/x/sync@v0.22.0/LICENSE'), path.join(destination, 'GO-SYNC-LICENSE'))

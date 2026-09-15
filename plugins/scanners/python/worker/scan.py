@@ -134,16 +134,3 @@ def scan(files):
         observation["operations"].extend(evidence.operations)
         observation["invocations"].extend(evidence.invocations)
     return observation
-
-
-if __name__ == "__main__":
-    try:
-        if sys.version_info < (3, 11):
-            raise RuntimeError("Python 3.11 or newer is required")
-        if "--check" in sys.argv:
-            print(sys.version.split()[0])
-        else:
-            print(json.dumps(scan(json.load(sys.stdin)["files"])))
-    except (OSError, SyntaxError, ValueError, RuntimeError) as error:
-        print(str(error), file=sys.stderr)
-        sys.exit(1)

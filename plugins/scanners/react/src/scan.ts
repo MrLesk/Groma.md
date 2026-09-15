@@ -1,5 +1,4 @@
 import { existsSync, readFileSync } from 'node:fs'
-import { createRequire } from 'node:module'
 import path from 'node:path'
 import { createScanObservation, type ScanDiagnostic, type ScanInvocation, type ScanOperation } from '@groma/scanner'
 import ts from 'typescript'
@@ -21,7 +20,6 @@ function reactProject(root: string, repositoryRoot = root) {
   const manifest = JSON.parse(readFileSync(manifestFile, 'utf8'))
   if (!hasDependency(manifest, 'react')) return undefined
   try {
-    createRequire(manifestFile).resolve('react')
     const configFile = path.join(root, 'tsconfig.json')
     const config = ts.readConfigFile(configFile, ts.sys.readFile)
     if (config.error) failDiagnostics([config.error])
@@ -33,14 +31,10 @@ function reactProject(root: string, repositoryRoot = root) {
       return file.endsWith('.tsx') && !source.isDeclarationFile && !file.startsWith('../') && !file.includes('node_modules/')
     })
     if (!sources.length) throw new Error('The project tsconfig.json must include React TSX source files.')
-    const react = ts.resolveModuleName('react', sources[0]!.fileName, parsed.options, ts.sys).resolvedModule
-    if (!react?.resolvedFileName.endsWith('.d.ts')) throw new Error('Install @types/react in the project.')
-    failDiagnostics(program.getOptionsDiagnostics())
     failDiagnostics(program.getSyntacticDiagnostics())
-    for (const source of sources) failDiagnostics(program.getSemanticDiagnostics(source))
     return { manifest, program, sources }
   } catch (error) {
-    throw new Error(`REACT_PROJECT_PREPARATION: Install the project dependencies with its declared package manager and lockfile; provide a valid project tsconfig.json and type-correct TSX files. ${error}`)
+    throw new Error(`REACT_SOURCE_INVALID: Check the project tsconfig.json and TSX syntax. ${error}`)
   }
 }
 

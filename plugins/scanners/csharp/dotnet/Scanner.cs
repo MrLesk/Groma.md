@@ -1,9 +1,6 @@
-using Microsoft.Build.Locator;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
-using Microsoft.CodeAnalysis.MSBuild;
-using System.Collections.Concurrent;
 
 namespace Groma.CSharpScanner;
 
@@ -14,20 +11,9 @@ public sealed class RoslynScanner
         request = request with { Input = Path.GetFullPath(request.Input), RepositoryRoot = Path.GetFullPath(request.RepositoryRoot) };
         request.Validate();
         string[] expected = ProjectInput.ExpectedProjects(request);
-        VisualStudioInstance sdk = ProjectInput.RegisterMSBuild(request.Input);
-        ConcurrentQueue<WorkspaceDiagnostic> workspaceDiagnostics = new();
-        using MSBuildWorkspace workspace = MSBuildWorkspace.Create(new Dictionary<string, string>
-        {
-            ["Configuration"] = request.Configuration,
-        });
-        workspace.LoadMetadataForReferencedProjects = false;
-        workspace.SkipUnrecognizedProjects = false;
-        workspace.RegisterWorkspaceFailedHandler(args => workspaceDiagnostics.Enqueue(args.Diagnostic));
+        using AdhocWorkspace workspace = new();
         bool isProject = request.Input.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase);
-        Solution solution = isProject
-            ? (await workspace.OpenProjectAsync(request.Input, cancellationToken: cancellationToken)).Solution
-            : await workspace.OpenSolutionAsync(request.Input, cancellationToken: cancellationToken);
-        ThrowIfWorkspaceFailed(workspaceDiagnostics, request.RepositoryRoot);
+        Solution solution = SourceProject.Load(workspace, request, expected);
         Project[] projects = ProjectInput.ValidateLoaded(solution, request, expected);
         Dictionary<ProjectId, string> rootIds = projects.ToDictionary(project => project.Id,
             project => $"project:{SourcePath.Relative(request.RepositoryRoot, project.FilePath!)}");
@@ -58,9 +44,7 @@ public sealed class RoslynScanner
                     throw new InvalidDataException("A source project reference was not loaded; no observation will be published.");
             }
         }
-        ThrowIfWorkspaceFailed(workspaceDiagnostics, request.RepositoryRoot);
-        diagnostics.AddRange(workspaceDiagnostics.Select(diagnostic => new ScanDiagnostic("warning", "MSBUILD_WORKSPACE", NormalizeMessage(diagnostic.Message, request.RepositoryRoot))));
-        diagnostics.Add(new ScanDiagnostic("info", "CSHARP_CONTEXT", $"MSBuild SDK {sdk.Version}; configuration {request.Configuration}; {projects.Length} projects. One loaded compilation context per physical project."));
+        diagnostics.Add(new ScanDiagnostic("info", "CSHARP_CONTEXT", $"Declared C# source; configuration {request.Configuration}; {projects.Length} projects. External packages, MSBuild imports and source generators are not executed."));
         diagnostics.Add(new ScanDiagnostic("info", "CSHARP_OPERATION_SCOPE", "Explicit calls and constructions in implemented methods, accessors, local functions, lambdas and top-level statements. Implicit language calls, initializers, generated operations, receiver/delegate value flow, DI and protocol wiring are not resolved. Direct calls are evidence, not automatically architecture relationships."));
         string inputFile = SourcePath.Relative(request.RepositoryRoot, request.Input);
         string? solutionId = isProject ? null : $"solution:{inputFile}";
@@ -80,11 +64,10 @@ public sealed class RoslynScanner
             .OrderBy(diagnostic => diagnostic.Location.SourceTree?.FilePath, StringComparer.Ordinal)
             .ThenBy(diagnostic => diagnostic.Location.SourceSpan.Start)
             .ThenBy(diagnostic => diagnostic.Id, StringComparer.Ordinal).ToArray();
-        if (errors.Length > 0)
-            throw new InvalidDataException($"Compilation failed for '{SourcePath.Relative(root, project.FilePath!)}' ({errors.Length} errors). Restore the selected project explicitly and fix compilation errors.\n" +
-                string.Join("\n", errors.Take(5).Select(error => NormalizeMessage(error.ToString(), root))));
-        if (project.AnalyzerReferences.Count > 0)
-            diagnostics.Add(new ScanDiagnostic("info", "CSHARP_GENERATED_SCOPE", "Compiler generators may contribute semantic input; generated documents are not emitted as primary source files.", SourcePath.Relative(root, project.FilePath!)));
+        foreach (SyntaxTree tree in compilation.SyntaxTrees)
+            if (tree.GetDiagnostics(token).Any(diagnostic => diagnostic.Severity == DiagnosticSeverity.Error))
+                throw new InvalidDataException($"Invalid C# syntax in '{tree.FilePath}'.");
+        diagnostics.AddRange(errors.Select(error => new ScanDiagnostic("warning", error.Id, NormalizeMessage(error.ToString(), root))));
     }
 
     private static ScanSymbol[] DeclaredSymbols(SyntaxNode root, SemanticModel model, CancellationToken token) =>
@@ -96,13 +79,6 @@ public sealed class RoslynScanner
                     ?? throw new InvalidDataException("Roslyn could not resolve a type declaration.");
                 return new ScanSymbol(symbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat), symbol.Name, DeclarationKind(declaration));
             }).ToArray();
-
-    private static void ThrowIfWorkspaceFailed(IEnumerable<WorkspaceDiagnostic> diagnostics, string root)
-    {
-        WorkspaceDiagnostic? failure = diagnostics.Where(diagnostic => diagnostic.Kind == WorkspaceDiagnosticKind.Failure)
-            .OrderBy(diagnostic => diagnostic.Message, StringComparer.Ordinal).FirstOrDefault();
-        if (failure is not null) throw new InvalidDataException($"MSBuild workspace failed: {NormalizeMessage(failure.Message, root)}");
-    }
 
     private static string DeclarationKind(MemberDeclarationSyntax declaration) => declaration switch
     {

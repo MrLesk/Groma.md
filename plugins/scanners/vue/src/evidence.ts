@@ -24,9 +24,10 @@ function immutable(node: Operation): boolean {
     && (parent.parent.flags & ts.NodeFlags.Const) !== 0
 }
 
-function includesEvent(type: ts.Type, event: string): boolean {
-  if (type.isStringLiteral()) return type.value === event
-  return type.isUnion() && type.types.some(item => item.isStringLiteral() && item.value === event)
+function includesEvent(type: ts.TypeNode | undefined, event: string): boolean {
+  if (!type) return false
+  if (ts.isLiteralTypeNode(type) && ts.isStringLiteral(type.literal)) return type.literal.text === event
+  return ts.isUnionTypeNode(type) && type.types.some(item => includesEvent(item, event))
 }
 
 export class VueEvidence {
@@ -102,20 +103,37 @@ export class VueEvidence {
   private emissions(sfc: VueVirtualCode, event: string): ts.CallExpression[] {
     const symbol = this.emitSymbol(sfc)
     const source = this.project.program.getSourceFile(sfc.fileName)
-    if (!symbol || !source) return []
+    if (!symbol || !source || !this.declaresEvent(sfc, event)) return []
     const calls: ts.CallExpression[] = []
     const checker = this.project.checker
     function visit(node: ts.Node): void {
       if (ts.isCallExpression(node) && checker.getSymbolAtLocation(node.expression) === symbol) {
         const argument = node.arguments[0]
-        const parameter = checker.getResolvedSignature(node)?.parameters[0]
-        if (argument && ts.isStringLiteral(argument) && argument.text === event && parameter
-          && includesEvent(checker.getTypeOfSymbolAtLocation(parameter, node), event)) calls.push(node)
+        if (argument && ts.isStringLiteral(argument) && argument.text === event) calls.push(node)
       }
       ts.forEachChild(node, visit)
     }
     visit(source)
     return calls
+  }
+
+  private declaresEvent(sfc: VueVirtualCode, event: string): boolean {
+    const setup = sfc.ir.scriptSetup
+    if (!setup) return false
+    const range = parseScriptSetupRanges(vueTypeScript, setup.ast, this.project.options).defineEmits?.typeArg
+    if (!range) return false
+    let declared = false
+    function visit(node: ts.Node): void {
+      if (node.getStart(setup!.ast) === range!.start && ts.isTypeLiteralNode(node)) {
+        declared = node.members.some(member =>
+          ts.isPropertySignature(member) && (ts.isIdentifier(member.name) || ts.isStringLiteral(member.name))
+            ? member.name.text === event
+            : ts.isCallSignatureDeclaration(member) && includesEvent(member.parameters[0]?.type, event))
+      }
+      ts.forEachChild(node, visit)
+    }
+    visit(setup.ast)
+    return declared
   }
 
   private addOperation(node: Operation): string | undefined {

@@ -43,8 +43,10 @@ internal sealed class OperationEvidence(string repositoryRoot)
             string? caller = FindCaller(node, callers);
             if (caller is null) continue;
             IOperation? operation = model.GetOperation(node, cancellationToken);
-            if (operation is not (IInvocationOperation or IObjectCreationOperation or IDynamicInvocationOperation or IDynamicObjectCreationOperation or IFunctionPointerInvocationOperation)) continue;
+            if (operation is not (IInvocationOperation or IObjectCreationOperation or IDynamicInvocationOperation or IDynamicObjectCreationOperation or IFunctionPointerInvocationOperation or IInvalidOperation)) continue;
             (IMethodSymbol? target, bool unresolved) = Target(operation);
+            if (model.GetDiagnostics(node.Span, cancellationToken).Any(diagnostic => diagnostic.Severity == DiagnosticSeverity.Error))
+                (target, unresolved) = (null, true);
             string? targetId = ImplementationId(target);
             string? member = target?.Name ?? (node is InvocationExpressionSyntax call ? CallName(call.Expression) : null);
             invocations.Add(new PendingInvocation(caller, targetId, unresolved,

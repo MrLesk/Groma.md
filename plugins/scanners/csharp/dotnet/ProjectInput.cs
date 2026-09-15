@@ -1,4 +1,3 @@
-using Microsoft.Build.Locator;
 using Microsoft.CodeAnalysis;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
@@ -7,29 +6,6 @@ namespace Groma.CSharpScanner;
 
 internal static class ProjectInput
 {
-    private static readonly object RegistrationLock = new();
-    private static string? registeredPath;
-
-    public static VisualStudioInstance RegisterMSBuild(string input)
-    {
-        lock (RegistrationLock)
-        {
-            VisualStudioInstance instance = MSBuildLocator.QueryVisualStudioInstances(new VisualStudioInstanceQueryOptions
-            {
-                WorkingDirectory = Path.GetDirectoryName(Path.GetFullPath(input))!,
-                DiscoveryTypes = DiscoveryType.DotNetSdk,
-            }).FirstOrDefault() ?? throw new InvalidDataException("No compatible .NET SDK was found for this input. Install the SDK selected by its global.json and run dotnet restore from the input directory.");
-            if (registeredPath is not null && registeredPath != instance.MSBuildPath)
-                throw new InvalidDataException("A different project SDK requires a fresh scanner process.");
-            if (!MSBuildLocator.IsRegistered)
-            {
-                MSBuildLocator.RegisterInstance(instance);
-                registeredPath = instance.MSBuildPath;
-            }
-            return instance;
-        }
-    }
-
     public static string[] ExpectedProjects(ScanRequest request)
     {
         string extension = Path.GetExtension(request.Input).ToLowerInvariant();
@@ -58,7 +34,7 @@ internal static class ProjectInput
         if (projects.GroupBy(project => Path.GetFullPath(project.FilePath!), StringComparer.Ordinal).Any(group => group.Count() > 1))
             throw new InvalidDataException("Multiple target-framework contexts for one project are unsupported. Select a single-target project; conditional compilations are not merged.");
         HashSet<string> loaded = projects.Select(project => Path.GetFullPath(project.FilePath!)).ToHashSet(StringComparer.Ordinal);
-        if (expected.Any(path => !loaded.Contains(path))) throw new InvalidDataException("MSBuild omitted a requested project; no observation will be published.");
+        if (expected.Any(path => !loaded.Contains(path))) throw new InvalidDataException("Source loading omitted a requested project; no observation will be published.");
         Dictionary<string, ProjectId> files = new(StringComparer.Ordinal);
         foreach (Project project in projects)
         {

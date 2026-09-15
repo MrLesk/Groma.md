@@ -15,6 +15,7 @@ pub struct Input {
     pub manifest: String,
     pub name: String,
     pub targets: Vec<String>,
+    pub crates: Vec<Value>,
 }
 
 struct Source {
@@ -24,12 +25,16 @@ struct Source {
 }
 
 pub fn scan(input: Input) -> anyhow::Result<Value> {
-    let config = ra_ap_project_model::CargoConfig {
-        set_test: false,
-        all_targets: false,
-        sysroot: Some(ra_ap_project_model::RustLibSource::Discover),
-        extra_args: vec!["--offline".into(), "--locked".into()],
-        ..Default::default()
+    // Supply a source crate graph directly; Cargo, rustc and build scripts are never invoked.
+    let base = ra_ap_vfs::AbsPathBuf::assert_utf8(std::path::PathBuf::from(&input.root));
+    let project = ra_ap_project_model::ProjectJson::new(None, &base,
+        serde_json::from_value(json!({ "crates": input.crates }))?);
+    let workspace = ra_ap_project_model::ProjectWorkspace {
+        kind: ra_ap_project_model::ProjectWorkspaceKind::Json(project),
+        sysroot: ra_ap_project_model::Sysroot::empty(),
+        rustc_cfg: Vec::new(), toolchain: None,
+        target_layout: Err("No target compiler is used for source scanning".into()),
+        cfg_overrides: Default::default(), extra_includes: Vec::new(), set_test: false,
     };
     let load = ra_ap_load_cargo::LoadCargoConfig {
         load_out_dirs_from_check: false,
@@ -37,8 +42,8 @@ pub fn scan(input: Input) -> anyhow::Result<Value> {
         prefill_caches: false,
     };
     let (db, vfs, _) =
-        ra_ap_load_cargo::load_workspace_at(Path::new(&input.manifest), &config, &load, &|_| {})
-            .context("rust-analyzer could not load the prepared Cargo project")?;
+        ra_ap_load_cargo::load_workspace(workspace, &Default::default(), &load)
+            .context("rust-analyzer could not load the source crate graph")?;
     let sema = Semantics::new(&db);
     let selected: HashSet<_> = input.targets.iter().collect();
     let crates: Vec<_> = Crate::all(&db)
@@ -53,7 +58,7 @@ pub fn scan(input: Input) -> anyhow::Result<Value> {
     let mut sources = Vec::new();
     let mut diagnostics = vec![json!({
         "severity": "information", "code": "rust-analysis-scope",
-        "message": "Default Cargo features, host target, library/binary source only. Build-script output, procedural macros, expanded calls, trait dispatch and callback value flow are not extracted."
+        "message": "Declared default features and library/binary source only; external crates and standard library types remain unresolved. Build-script output, procedural macros, expanded calls, trait dispatch and callback value flow are not extracted."
     })];
     for file_id in file_ids {
         let absolute = vfs.file_path(file_id).to_string();
@@ -138,7 +143,9 @@ fn selected_files(
             }
         }
     }
-    Ok(files.into_iter().collect())
+    let mut selected: Vec<_> = files.into_iter().collect();
+    selected.sort();
+    Ok(selected)
 }
 
 fn declarations(

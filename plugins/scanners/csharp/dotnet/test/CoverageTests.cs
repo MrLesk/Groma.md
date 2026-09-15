@@ -16,7 +16,6 @@ public sealed class CoverageTests
             fixture.Write("App/App.csproj", project.Replace("</Project>",
                 $"<ItemGroup><Compile Include=\"{external}\" /></ItemGroup></Project>", StringComparison.Ordinal));
             fixture.Write("App/Consumer.cs", "public class Consumer { public int Read() => Dependency.Value(); }");
-            await fixture.RestoreAsync();
             ScanObservation result = await fixture.ScanAsync();
             Assert.Contains(result.Files, file => file.File == "App/Consumer.cs");
             Assert.DoesNotContain(result.Files, file => file.File.StartsWith("../", StringComparison.Ordinal));
@@ -38,7 +37,6 @@ public sealed class CoverageTests
             string source = File.ReadAllText(Path.Combine(fixture.Root, project));
             fixture.Write(project, source.Replace("</Project>", "<ItemGroup><Compile Include=\"../Shared.cs\" /></ItemGroup></Project>", StringComparison.Ordinal));
         }
-        await fixture.RestoreAsync();
         await Assert.ThrowsAsync<InvalidDataException>(() => fixture.ScanAsync());
     }
 }

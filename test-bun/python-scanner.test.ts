@@ -2,28 +2,33 @@ import { expect, test } from 'bun:test'
 import { cp, mkdir, mkdtemp, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import scanner from '../plugins/scanners/python/src/index.ts'
+import { buildPackage } from '../plugins/scanners/python/build.ts'
+import type { ScannerPlugin } from '@groma/scanner'
 import { compileWatchPatterns } from '../src/scanner/watch-patterns.ts'
 
 async function fixture() {
-  const root = await mkdtemp(path.join(os.tmpdir(), 'groma-python-test-'))
+  const temporary = await mkdtemp(path.join(os.tmpdir(), 'groma-python-test-'))
+  const root = path.join(temporary, 'project')
+  const artifact = path.join(temporary, 'scanner')
+  await buildPackage(artifact)
+  const scanner: ScannerPlugin = (await import(path.join(artifact, 'src/index.js'))).default
   await cp(path.resolve(import.meta.dir, '../test/fixtures/python-project'), root, { recursive: true })
   for (const file of ['service.py', 'nested/worker.py']) {
     await rename(path.join(root, `${file}.fixture`), path.join(root, file))
   }
   const git = Bun.spawn(['git', 'init', '--quiet'], { cwd: root })
   if (await git.exited !== 0) throw new Error('Could not initialize fixture')
-  return root
+  return { root, temporary, scanner }
 }
 
 test.concurrent('Python keeps function ownership, nested projects and exact source positions without executing code', async () => {
-  const root = await fixture()
+  const { root, temporary, scanner } = await fixture()
   try {
     const file = path.join(root, 'service.py')
     // Python source lines exclude Unicode separators inside strings; keep CRLF offsets too.
     const source = (await readFile(file, 'utf8')).replace('🐍', '🐍\u2028text').replace(/\r?\n/g, '\r\n')
     await writeFile(file, source)
-    await scanner.checkReadiness(root)
+    await scanner.checkReadiness!(root)
     const first = (await scanner.scan(root))!
     expect(await scanner.scan(root)).toEqual(first)
     const roots = new Map(first.roots.map(item => [item.id, item]))
@@ -40,11 +45,11 @@ test.concurrent('Python keeps function ownership, nested projects and exact sour
     for (const text of ['factory()', 'default()', 'anonymous()', 'deferred()', 'class_body()']) expect(at(text)).toBeUndefined()
     expect(first.invocations!.every(call => call.unresolved && call.targets.length === 0 && !call.binding)).toBe(true)
     expect(first.diagnostics.some(item => item.code === 'PYTHON_SYNTAX_ONLY')).toBe(true)
-  } finally { await rm(root, { recursive: true, force: true }) }
+  } finally { await rm(temporary, { recursive: true, force: true }) }
 })
 
 test.concurrent('Python excludes ignored files, environments and tests while keeping tracked and untracked source', async () => {
-  const root = await fixture()
+  const { root, temporary, scanner } = await fixture()
   try {
     await writeFile(path.join(root, '.gitignore'), 'ignored.py\ntracked.py\n')
     for (const file of ['ignored.py', 'tracked.py', 'test_bad.py', 'conftest.py']) {
@@ -62,23 +67,21 @@ test.concurrent('Python excludes ignored files, environments and tests while kee
     expect(watches('nested/pyproject.toml')).toBe(true)
     expect(watches('.venv/bad.py')).toBe(false)
     expect(watches('tests/bad.py')).toBe(false)
-  } finally { await rm(root, { recursive: true, force: true }) }
+  } finally { await rm(temporary, { recursive: true, force: true }) }
 })
 
 test.concurrent('Python rejects syntax and scope errors without returning partial observations', async () => {
-  const root = await fixture()
+  const { root, temporary, scanner } = await fixture()
   try {
     for (const source of ['def broken(:\n', 'return 1\n']) {
       await writeFile(path.join(root, 'nested/worker.py'), source)
       await expect(scanner.scan(root)).rejects.toThrow('PYTHON_SCAN_FAILED')
     }
-    await expect(scanner.scan(root, { python: '' })).rejects.toThrow('settings.python')
-    await expect(scanner.checkReadiness(root, { python: path.join(root, 'absent-python') })).rejects.toThrow('Python 3.11')
-  } finally { await rm(root, { recursive: true, force: true }) }
+  } finally { await rm(temporary, { recursive: true, force: true }) }
 })
 
 test.concurrent('Python supports source without packaging metadata and returns no observation without source', async () => {
-  const root = await fixture()
+  const { root, temporary, scanner } = await fixture()
   try {
     await rm(path.join(root, 'pyproject.toml'))
     await rm(path.join(root, 'nested'), { recursive: true })
@@ -88,5 +91,5 @@ test.concurrent('Python supports source without packaging metadata and returns n
     expect(result.files[0]?.roots).toEqual([result.roots[0]!.id])
     await rm(path.join(root, 'service.py'))
     expect(await scanner.scan(root)).toBeUndefined()
-  } finally { await rm(root, { recursive: true, force: true }) }
+  } finally { await rm(temporary, { recursive: true, force: true }) }
 })

@@ -2,8 +2,7 @@
 
 The Angular scanner adds concrete external-template output bindings to the
 TypeScript scanner evidence. Enable it alongside the Java scanner for the
-supported Maven and Angular application. All enabled scanners must complete
-before Groma updates the map.
+supported Maven and Angular application. Healthy scanners update the map; failed scanners retain their saved evidence.
 
 ## Build and install
 
@@ -25,10 +24,10 @@ The package contains a bundled ESM entry and TypeScript standard-library
 declarations. Consumers do not run a package build or installation script.
 The prototype package name is not a public publication commitment.
 
-Prepare the application's ordinary dependencies using its package manager.
-The scanner reads each selected project's `tsconfig.json`, its configured source entry points,
-and the Angular resources reachable from that program. It does not install
-dependencies, compile application output, or run application code.
+The scanner reads each selected project's `tsconfig.json`, source entry points
+and external templates. The package supplies the compiler tools; project
+`node_modules`, application compilation and dependency installation are not
+required. Application code is never executed.
 
 ## Compiler tooling
 
@@ -39,11 +38,10 @@ The TypeScript scanner uses its own 7.1 SDK. The package build resolves every
 compiler TypeScript import to the scanner's 5.9.3 installation before bundling,
 so workspace dependency hoisting cannot substitute Groma's compiler.
 
-The adapter uses `NgtscProgram`, its template type checker, and the compiler's
-template and TypeScript symbols. These version-specific compiler APIs are
-pinned with the package. Angular owns template parsing, directive matching,
-output binding, and handler resolution; the adapter does not recreate them.
-See [Angular template type checking](https://angular.dev/tools/cli/template-typecheck).
+Angular's template parser and selector matcher read template syntax. TypeScript
+resolves local class, property and handler identities. The adapter recognizes
+literal `@Component` metadata, direct standalone imports and Angular output
+API imports from source, even when the Angular package is absent.
 
 ## Supported evidence
 
@@ -77,16 +75,15 @@ expressions, output mutation, or exhaustive Angular runtime behavior.
 Unresolved or unsupported event bindings produce
 `unsupported-angular-binding` diagnostics rather than relationships.
 DOM events and dependency-library outputs have no supported source output
-provider in this rule. TypeScript semantic errors, including incompatible types,
-fail readiness and scanning alongside syntax and Angular compiler errors.
-Compiler errors fail the scan instead of yielding a
-partial observation. Template strictness follows the project's Angular compiler
-options. Groma enables the template-checker API to resolve output bindings but
-does not enable stricter template checks than the project requests.
+provider in this rule. Missing external types and unsupported bindings remain
+uncertain. Invalid TypeScript or template syntax fails the observation. Source
+scanning does not perform Angular application type checking. Nonliteral
+component metadata, module-based scopes and indirect imports are outside the
+supported binding extraction.
 
 Independent fixture tests load the built package and cover concrete callback
 endpoints, complementary TypeScript evidence, curated ownership, HTML-triggered
-rescan, and failure preservation. See [validation](validation.md) for the
+rescan, and failure preservation. See [fresh-checkout validation](../fresh-checkout-validation.md) for the
 real-project result and remaining release gates.
 
 ## Nested projects
@@ -97,7 +94,7 @@ dev dependencies, peer dependencies and optional dependencies identify candidate
 A candidate also needs a tracked or unignored `tsconfig.json` and TypeScript source
 files belonging to that package, outside nested packages. Declaration files and
 inactive fixtures with a `.fixture` suffix do not qualify. Packages with only
-framework tooling dependencies are skipped. No matching project produces no evidence. Each compiler uses that project's configuration and installed dependencies;
+framework tooling dependencies are skipped. No matching project produces no evidence. Each compiler uses that project's configuration and local source;
 imported source in sibling repository libraries keeps its original source path.
 Readiness checks all selected projects. An invalid selected project fails this scanner's observation; other scanners
 can still update the architecture.

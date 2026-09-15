@@ -100,29 +100,27 @@ exact package versions. Disable an existing scanner explicitly with
 `groma scanner discover` reads declarations and reports project matches and official candidates;
 it does not run plugins or install anything. Detection offers a package name.
 Install resolves a published release for Groma and this computer; the scanner
-then validates the project tooling and language support.
+then validates source inputs and language support.
 
 `groma scanner list` reports whether each configured package is found or missing without executing it. `groma scanner check` separately loads
-enabled plugins and runs their preparation checks:
+enabled plugins and runs their source-readiness checks:
 
-- `ready`: the plugin's preparation check passed; the scan can still report a
-  compilation or analysis error.
-- `blocked`: a package, project tool, or preparation step is missing. The
+- `ready`: the source-readiness check passed; the scan can still report a
+  syntax or analysis error.
+- `blocked`: scanner assets or supported source inputs are missing or invalid. The
   plugin's concrete instructions are printed and the command fails.
-- `unchecked`: the plugin has no preparation hook. It remains enabled and its
+- `unchecked`: the plugin has no readiness hook. It remains enabled and its
   scan establishes whether the project is supported.
 
-Java checks its packaged worker, the project JDK, and the prepared offline Maven
-model. C# checks its worker, selected SDK, runtime, and project input. Angular
-uses its bundled compiler and compatible TypeScript tooling to check the
-project configuration and Angular compilation. This tooling does not replace
-the project's dependencies or the TypeScript scanner's SDK.
+Java and C# check their bundled workers and runtimes plus source project
+inputs. Framework scanners use their own compiler tools. A supported fresh
+checkout needs no installed project dependencies, build output, or separately
+installed language SDK. Missing external types remain unresolved facts.
 
-Groma does not install a JDK, .NET SDK, or project dependencies. Follow the
-reported project-tool instructions explicitly, then run `groma scanner check`
-again. A failed active scanner prevents that batch from reaching architecture
-reconciliation. Missing or unselected packages contribute no observation and do
-not prevent other installed selections from running.
+If scanner assets are missing, reinstall the scanner package. Correct invalid
+source or unsupported configuration according to its diagnostic. Failed scanners
+retain their saved evidence while successful scanners update architecture.
+Missing or unselected packages do not prevent other selections from running.
 
 ## Noninteractive use
 
@@ -158,4 +156,4 @@ runnable package and select a path relative to the repository.
 Scanner selection and readiness are operational configuration, not OKF
 concepts or C4 elements. Ordinary Markdown and OKF readers keep the same
 architecture records and links. Groma's existing scanner module management
-owns package selection; each language plugin owns preparation requirements.
+owns package selection; each language plugin owns its source inputs and bundled analysis tools.

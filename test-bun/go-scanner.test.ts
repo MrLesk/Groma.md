@@ -28,7 +28,7 @@ goTest('Go resolves imported functions and concrete methods while preserving wra
   const { root, worker } = await fixture()
   try {
     await buildWorker(worker, go)
-    const options = { go, worker }
+    const options = { worker }
     const first = await scanGoSource(root, options)
     expect(await scanGoSource(root, options)).toEqual(first)
     const source = await readFile(path.join(root, 'caller.go'), 'utf8')
@@ -55,11 +55,14 @@ goTest('Go resolves imported functions and concrete methods while preserving wra
   } finally { await rm(root, { recursive: true, force: true }) }
 }, 60000)
 
-goTest('Go rejects invalid compilation without an observation', async () => {
+goTest('Go preserves unresolved calls without dependencies and rejects malformed syntax', async () => {
   const { root, worker } = await fixture()
   try {
     await buildWorker(worker, go)
     await writeFile(path.join(root, 'caller.go'), 'package dispatch\nfunc Broken() { absent() }\n')
-    await expect(scanGoSource(root, { go, worker })).rejects.toThrow()
+    const observation = await scanGoSource(root, { worker })
+    expect(observation.invocations).toEqual([expect.objectContaining({ targets: [], unresolved: true })])
+    await writeFile(path.join(root, 'caller.go'), 'package dispatch\nfunc Broken( {\n')
+    await expect(scanGoSource(root, { worker })).rejects.toThrow()
   } finally { await rm(root, { recursive: true, force: true }) }
 }, 60000)

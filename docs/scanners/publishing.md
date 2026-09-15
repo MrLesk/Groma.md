@@ -34,17 +34,20 @@ before each release. Keep package versions coordinated with `@groma/scanner`
 where it is a runtime dependency.
 
 Language-version declarations do not restrict installation. Plugins validate
-project tooling when scanning and report concrete preparation instructions.
+source inputs using their bundled analysis tools. Consumers do not prepare
+project dependencies or install a language SDK.
 Record the compiler versions exercised by release examples as validation evidence,
 not as exact language-version requirements in discovery metadata.
 
 The scanner build targets are macOS arm64, Linux x64 and arm64, and Windows x64
 and arm64. Building an artifact and manually exercising it are separate claims:
 record each explicitly.
-Go, Rust and TypeScript packages include workers in platform-specific directories. Java and
-C# packages include their portable workers and require the documented project
-JDK or .NET tools. Python ships a portable standard-library worker and requires
-the consumer's Python 3.11+ interpreter; it has no platform-specific binary. Framework packages carry their compiler dependencies.
+Go, Rust and TypeScript packages include native workers. Java includes a
+compiler runtime built with `jlink`; C# includes a self-contained .NET runtime.
+Those assets are assembled per platform. Python includes CPython and its
+standard library through Pyodide WebAssembly assets. Framework packages carry
+their compiler libraries and TypeScript declarations. All nine scan supported
+fresh checkouts without project dependencies or language tools on PATH.
 
 For a local host build with Java, Go, Rust and .NET available:
 
@@ -54,7 +57,8 @@ dotnet restore plugins/scanners/csharp/dotnet/Groma.CSharpScanner.csproj --locke
 bun scripts/scanner-release.ts stage /tmp/scanner-packages
 ```
 
-This stages the contract and nine scanner packages without contacting npm.
+This stages the contract and nine scanner packages without publishing them.
+Maintainer builds may download scanner build dependencies and runtime packs.
 Use these folders with `groma scanner add` for focused local validation. For a
 multi-platform release, collect the staged host directories, then assemble them:
 
@@ -107,5 +111,15 @@ then rerun the failed workflow jobs. Keep the existing release and package versi
 Record exact public package versions, built targets, manually exercised targets,
 and the fresh-install and second-checkout restore results in the release task.
 The existing Java/Angular/TypeScript acceptance project is `../callforpapers`;
-use a disposable prepared copy and record its revision and tool versions.
-No automated package qualification or install-sanity suite is required.
+use a disposable source-only copy and record its revision and scanner versions.
+Each release host runs the packaged fresh-checkout suite before uploading:
+
+```sh
+GROMA_TEST_PACKAGES=/tmp/scanner-packages bun test --timeout 60000 test-bun/scanner-fresh-checkout.test.ts
+```
+
+The suite relocates each package, scans an independent fixture with an empty
+home and only Git on PATH, checks useful local facts, repeats the scan and
+compares source bytes. The JavaScript harness rejects network fetches.
+This is evidence for the exercised host, not a claim of testing every target.
+See [fresh-checkout validation](fresh-checkout-validation.md).
