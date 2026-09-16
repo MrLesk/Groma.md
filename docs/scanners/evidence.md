@@ -39,6 +39,23 @@ supplied to a parameter.
 
 ## Vocabulary and introduction order
 
+### Explicit multi-file source units
+
+A scanner can report a primary source file and the files explicitly associated
+with it by a supported language or framework declaration. Core creates one
+component for an unambiguous unit and attaches unowned members to its existing
+owner. Identical proposals from overlapping scanners do not create extra
+components. Intersecting different units and different established owners
+produce review diagnostics; core does not merge or reassign those files.
+
+Associations remain temporary. The durable result is ordinary component Code
+references, not another C4 level or stored association history. When current
+evidence no longer jointly supports an existing component's retained files,
+core reports that membership for review and retains ownership. The message
+does not distinguish a previous scan association from a human-curated combine.
+Scanners without association extraction do not produce that diagnostic.
+Existing missing-file and incomplete-scanner retention rules still apply.
+
 An **operation** is executable work: a function, method, constructor, or
 executable module initializer. An import spelling, namespace, interface type,
 or file is not itself an operation. A file can contain several operations.

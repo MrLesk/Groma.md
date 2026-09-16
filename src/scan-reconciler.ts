@@ -16,6 +16,7 @@ import {
 } from './markdown-emitter.ts'
 import { displayName, kebabCase } from './naming.ts'
 import { componentNames, sourceStem } from './scan-component-naming.ts'
+import { sourceUnitGroups } from './scan-source-units.ts'
 import { c4Kind, requireGromaMapping } from './okf-profile.ts'
 import { refreshDerivedRelationships } from './relationship-inference.ts'
 import type { ScanFile, ScanObservation, ScanRoot } from '@groma/scanner'
@@ -324,6 +325,25 @@ interface FileCandidate {
   file: string
   parent: WorldRecord
   references: CodeReference[]
+  owner?: WorldRecord
+}
+
+function associateCandidates(
+  candidates: Map<string, FileCandidate>,
+  observations: ScanObservation[],
+  world: World,
+) {
+  const { units, diagnostics } = sourceUnitGroups(observations, world.byCodeFile)
+  for (const unit of units) {
+    const members = unit.files.map(file => candidates.get(file))
+    const primary = candidates.get(unit.primary)
+    if (!primary || members.some(member => member === undefined)) continue
+    const owner = unit.files.flatMap(file => world.byCodeFile.get(file) ?? [])[0]
+    const references = members.flatMap(member => member!.references)
+    for (const file of unit.files) candidates.delete(file)
+    candidates.set(unit.primary, { ...primary, references, owner })
+  }
+  return diagnostics
 }
 
 function collectFiles(
@@ -352,7 +372,7 @@ async function reconcileFiles(
   for (const candidate of [...candidates.values()].sort((a, b) => a.file.localeCompare(b.file))) {
     const named = existingChild(world, 'component', sourceStem(candidate.file), candidate.parent)
     const draft = named?.status === 'draft' && named.code.length === 0 ? named : undefined
-    const owner = world.byCodeFile.get(candidate.file) ?? draft
+    const owner = candidate.owner ?? world.byCodeFile.get(candidate.file) ?? draft
     if (owner === undefined) {
       unowned.push(candidate)
       continue
@@ -439,9 +459,10 @@ export async function reconcileScanObservations(
     const containers = await prepareObservation(repositoryRoot, world, observation, summary, candidates)
     collectFiles(candidates, observation, containers)
   }
+  const unitConflicts = associateCandidates(candidates, observations, world)
   await reconcileFiles(repositoryRoot, world, candidates, summary)
   const owners = new Map([...world.byId.values()].flatMap(record => record.code.map(reference => [reference.file, record.id] as const)))
-  const conflicts = await refreshDerivedRelationships(repositoryRoot, observations, owners, retained)
+  const conflicts = [...unitConflicts, ...await refreshDerivedRelationships(repositoryRoot, observations, owners, retained)]
   if (conflicts.length > 0) summary.evidenceConflicts = conflicts
   const findings = detectDuplicatedLogic(observations, owners)
   rememberArchitectureFindings(repositoryRoot, findings)

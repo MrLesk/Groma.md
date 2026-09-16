@@ -28,6 +28,12 @@ export interface ScanFile {
   symbols: ScanSymbol[]
 }
 
+/** An explicit language or framework declaration associates these source files. */
+export interface ScanSourceUnit {
+  primary: string
+  files: string[]
+}
+
 export interface ScanDiagnostic {
   severity: string
   code: string
@@ -66,6 +72,8 @@ export interface ScanObservation {
   scanner: ScannerIdentity
   roots: ScanRoot[]
   files: ScanFile[]
+  /** Omitted by scanners without association extraction; an empty array reports none found. */
+  sourceUnits?: ScanSourceUnit[]
   /** Omitted when a scanner does not extract operation evidence. Never persisted as a graph. */
   operations?: ScanOperation[]
   invocations?: ScanInvocation[]
@@ -167,6 +175,7 @@ export function createScanObservation(input: ObservationInput): ScanObservation 
     scanner: input.scanner,
     roots,
     files,
+    ...sourceUnits(input.sourceUnits, filePaths),
     ...operationEvidence(input, filePaths),
     diagnostics: [...new Map(input.diagnostics.map(diagnostic => [
       diagnosticKey(diagnostic),
@@ -175,6 +184,22 @@ export function createScanObservation(input: ObservationInput): ScanObservation 
       return diagnosticKey(left).localeCompare(diagnosticKey(right))
     }),
   }
+}
+
+function sourceUnits(input: unknown, paths: Set<string>): Pick<ScanObservation, 'sourceUnits'> {
+  if (input === undefined) return {}
+  const units = array(input, 'sourceUnits').map(entry => {
+    const unit = object(entry, 'source unit')
+    const primary = string(unit.primary, 'source unit.primary')
+    const files = [...new Set(array(unit.files, 'source unit.files').map(file => string(file, 'source unit.file')))].sort()
+    if (!files.includes(primary)) throw new Error(`source unit omits primary file: ${primary}`)
+    for (const file of files) {
+      if (!paths.has(file)) throw new Error(`source unit references unknown file: ${file}`)
+    }
+    return { primary, files }
+  })
+  return { sourceUnits: [...new Map(units.map(unit => [compare(unit.primary, ...unit.files), unit])).values()]
+    .sort((a, b) => compare(a.primary, ...a.files).localeCompare(compare(b.primary, ...b.files))) }
 }
 
 function validateRoots(input: ScanRoot[]): ScanRoot[] {
@@ -239,6 +264,7 @@ export function parseScanObservation(source: string): ScanObservation {
       engineVersion: string(scanner.engineVersion, 'scanner.engineVersion'),
     },
     ...parseOperations(value),
+    ...sourceUnits(value.sourceUnits, new Set(array(value.files, 'files').map(entry => string(object(entry, 'file').file, 'file.file')))),
     roots: array(value.roots, 'roots').map(entry => {
       const root = object(entry, 'root')
       return {

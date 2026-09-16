@@ -84,6 +84,10 @@ function excludeEvidence(
   })
   return {
     ...observation, files, roots,
+    ...(observation.sourceUnits === undefined ? {} : {
+      sourceUnits: observation.sourceUnits.filter(unit => paths.has(unit.primary))
+        .map(unit => ({ ...unit, files: unit.files.filter(file => paths.has(file)) })),
+    }),
     ...(operations === undefined ? {} : { operations, invocations }),
   }
 }
