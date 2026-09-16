@@ -27,6 +27,7 @@ import {
 import type { ProjectedScene, ProjectionView } from '../src/viewers/web/iso/project.ts'
 import { presentScene } from '../src/viewers/web/iso/presentation.ts'
 import { NESTED_POSE, OVERHEAD_POSE } from '../src/viewers/web/layers/orbit.ts'
+import { SURFACE_SCREEN_PAD, surfaceLabelInsets } from '../src/viewers/web/iso/text.ts'
 import { box, openclawFixtureRoot, repositoryRoot, viewerFixtureRoot, worldOf } from './helpers.ts'
 
 const profile = (title: string, overview: string): ProjectProfile => ({
@@ -359,12 +360,27 @@ for (const mode of ['iso', '2d'] as const) {
     }
     for (const viewport of [{ width: 1200, height: 400 }, { width: 400, height: 1200 }]) {
       const camera = fitCamera(scene.bounds, viewport)
+      const padding = surfaceLabelInsets(camera.k, scene.view)
       for (const { text, size } of surfaces) {
-        for (const [x, y] of [[0, 0], [text.width, 0], [0, labelHeight(size)], [text.width, labelHeight(size)]]) {
+        const bottom = labelHeight(size) + 2 * padding.y
+        for (const [x, y] of [[-padding.x, 0], [text.width + padding.x, 0], [-padding.x, bottom], [text.width + padding.x, bottom]]) {
           const delta = project(x! / PLANE, y! / PLANE, 0, scene.view)
           const px = (text.origin.x + delta.x) * camera.k + camera.x
           const py = (text.origin.y + delta.y) * camera.k + camera.y
           assert.ok(px >= 0 && px <= viewport.width && py >= 0 && py <= viewport.height, 'camera includes labels and leaders')
+        }
+      }
+      for (const zoom of [camera.k / 2, camera.k, camera.k * 2, 4]) {
+        const inset = surfaceLabelInsets(zoom, scene.view)
+        for (const [x, y] of [[inset.x, 0], [0, inset.y]]) {
+          const delta = project(x! / PLANE, y! / PLANE, 0, scene.view)
+          assert.ok(Math.abs(Math.hypot(delta.x, delta.y) * zoom - SURFACE_SCREEN_PAD) < 0.03,
+            'additional text clearance stays in screen pixels at every zoom')
+        }
+        const spaced = labels.map(label => ({ ...label, y: label.y + inset.y / PLANE }))
+        for (const [index, label] of spaced.entries()) {
+          assert.ok(roofs.every(roof => !overlaps(label, roof)), 'added clearance keeps text off roofs')
+          assert.ok(spaced.slice(index + 1).every(other => !overlaps(label, other)), 'spaced labels remain separate')
         }
       }
     }

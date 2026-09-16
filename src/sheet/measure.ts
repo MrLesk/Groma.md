@@ -14,10 +14,10 @@ export const SURFACE_PAD = 10
 export const ROOF_LINE_HEIGHT = 13
 /** Map heading sizes in plane pixels. */
 export const PROJECT_FONT = 52
-export const ISLAND_FONT = 38
+export const ISLAND_FONT = 48
 export const ISLAND_SPACING = 0.14
-export const CONTAINER_FONT = 29
-export const GROUP_FONT = 22
+export const CONTAINER_FONT = 36
+export const GROUP_FONT = 28
 
 /** A roof line wider than this wraps, when the name has a space to wrap at. */
 const MAX_LINE_CELLS = 4
