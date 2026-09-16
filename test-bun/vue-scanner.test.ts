@@ -11,6 +11,7 @@ import { loadAnnotatedArchitecture, reconcileScanObservations } from '../src/cor
 import { editArchitecture } from '../src/edit.ts'
 import { addRelation } from '../src/relation.ts'
 import { inferRelationships } from '../src/relationship-inference.ts'
+import { createScannerSession } from '../src/scanner/session.ts'
 import type { AnnotatedArchitectureModel } from '../src/types.ts'
 
 async function setup() {
@@ -20,6 +21,7 @@ async function setup() {
   await cp(path.resolve(import.meta.dir, '../test/fixtures/empty-project'), root, { recursive: true })
   await cp(path.resolve(import.meta.dir, '../test/fixtures/vue-output'), root, { recursive: true })
   await rename(path.join(root, 'receiver.ts.fixture'), path.join(root, 'receiver.ts'))
+  await rename(path.join(root, 'logic.ts.fixture'), path.join(root, 'logic.ts'))
   const child = Bun.spawn(['git', 'init', '--quiet'], { cwd: root, stdout: 'ignore', stderr: 'pipe' })
   expect(await child.exited, await new Response(child.stderr).text()).toBe(0)
   await buildPackage(artifact)
@@ -87,4 +89,51 @@ test.concurrent('Vue overlap retains one curated physical owner and authored int
     expect(owner(after, 'receiver.ts').id).toBe(receiver.id)
     expect(new Set(owner(after, 'receiver.ts').code.map(reference => reference.scanner))).toEqual(new Set(['typescript', 'vue']))
   } finally { await rm(temporary, { recursive: true, force: true }) }
+})
+
+test.concurrent('Vue external blocks share one component while imports and transitive styles stay separate', async () => {
+  const { temporary, root, scanner } = await setup()
+  try {
+    const vue = (await scanner.scan(root))!, typescript = (await scanTypeScriptSource(root))!
+    expect(vue.files.some(file => file.file === 'shared.css')).toBe(false)
+    await reconcileScanObservations(root, [vue, typescript])
+    const model = await loadAnnotatedArchitecture(root)
+    const id = owner(model, 'External.vue').id
+    for (const file of ['logic.ts', 'markup.html', 'panel.css']) expect(owner(model, file).id).toBe(id)
+    expect(owner(model, 'receiver.ts').id).not.toBe(id)
+    expect(model.relationships).toHaveLength(2)
+    await editArchitecture(root, { id, overview: 'Collects the response.' })
+    const before = await storedArchitecture(root)
+    expect((await reconcileScanObservations(root, [typescript, vue])).created).toBe(0)
+    expect(await storedArchitecture(root)).toEqual(before)
+  } finally { await rm(temporary, { recursive: true, force: true }) }
+})
+
+test.concurrent('Vue rejects external scripts combined with script setup', async () => {
+  const { temporary, root, scanner } = await setup()
+  try {
+    await writeFile(path.join(root, 'External.vue'), '<script setup lang="ts" src="./logic.ts"></script>')
+    await expect(scanner.scan(root)).rejects.toThrow('script setup')
+    await writeFile(path.join(root, 'External.vue'), '<script lang="ts" src="./logic.ts"></script><script setup lang="ts">const value = 1</script>')
+    await expect(scanner.scan(root)).rejects.toThrow('script setup')
+  } finally { await rm(temporary, { recursive: true, force: true }) }
+})
+
+test.concurrent('the live Vue session refreshes after external script, template, and style edits', async () => {
+  const { temporary, root, artifact } = await setup()
+  let complete: (() => void) | undefined
+  const session = await createScannerSession(root, { onFold() { complete?.() } })
+  try {
+    await session.change({ action: 'add', source: artifact })
+    expect(session.state.scanners.find(scanner => scanner.id === 'vue')?.status).toBe('ready')
+    const id = owner(await loadAnnotatedArchitecture(root), 'External.vue').id
+    for (const file of ['logic.ts', 'markup.html', 'panel.css']) {
+      const changed = Promise.withResolvers<void>()
+      complete = () => changed.resolve()
+      const filename = path.join(root, file)
+      await writeFile(filename, (await readFile(filename, 'utf8')) + '\n')
+      await changed.promise
+      expect(owner(await loadAnnotatedArchitecture(root), file).id).toBe(id)
+    }
+  } finally { await session.close(); await rm(temporary, { recursive: true, force: true }) }
 })

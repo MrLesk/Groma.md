@@ -3,6 +3,7 @@ import path from 'node:path'
 import { proxyCreateProgram } from '@volar/typescript'
 import { createParsedCommandLine, createVueLanguagePlugin, SourceMap, VueVirtualCode, type Language } from '@vue/language-core'
 import ts from 'typescript'
+import type { ScanSourceUnit } from '@groma/scanner'
 import { hasDependency } from '../../projects.ts'
 
 // Hoisted tooling declarations see the host SDK; the bundled runtime uses pinned TS 5.9.3.
@@ -67,9 +68,29 @@ export class VueProject {
     return code instanceof VueVirtualCode ? code : undefined
   }
 
+  sourceUnit(file: string): ScanSourceUnit | undefined {
+    const sfc = this.sfc(file)
+    if (!sfc) return undefined
+    const primary = relative(this.root, file)
+    const blocks = [sfc.ir.script, sfc.ir.template, ...sfc.ir.styles]
+    const companions = blocks.flatMap(block => {
+      const src = block?.attrs.src
+      if (typeof src !== 'string' || !src.startsWith('.')) return []
+      const filename = path.resolve(path.dirname(file), src)
+      const member = relative(this.root, filename)
+      if (member.startsWith('../')) return []
+      readFileSync(filename, 'utf8')
+      return [member]
+    })
+    return { primary, files: [primary, ...companions] }
+  }
+
   private validateSfc(file: string): void {
     const sfc = this.sfc(file)
     if (!sfc) return
+    if (sfc.ir.scriptSetup && (sfc.ir.scriptSetup.attrs.src !== undefined || sfc.ir.script?.attrs.src !== undefined)) {
+      throw new Error(`${file}: script setup cannot use src or be combined with an external script block`)
+    }
     const errors = [...sfc.vueSfc?.errors ?? [], ...sfc.ir.template?.errors ?? []]
     if (errors.length) throw new Error(`${file}: ${errors.map(error => typeof error === 'string' ? error : error.message).join('\n')}`)
   }

@@ -1,0 +1,2 @@
+import { receive } from './receiver'
+export default { methods: { receive } }
