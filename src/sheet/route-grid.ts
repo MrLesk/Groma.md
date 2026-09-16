@@ -19,6 +19,8 @@ export interface RouteGrid {
   reserved: Uint32Array
   reservedEdges: Uint32Array
   used: Uint8Array
+  /** Axes of actual route strokes through each node, without lane padding. */
+  strokes: Uint8Array
   ends: [number, number][]
 }
 
@@ -170,6 +172,7 @@ export function routeGrid(
     reserved: new Uint32Array(size),
     reservedEdges: new Uint32Array(size * 2),
     used: new Uint8Array(size),
+    strokes: new Uint8Array(size),
     ends: ports.map(pair => [node(pair.source.guard), node(pair.target.guard)]),
   }
   // Boundaries are blocked too: only a route's own port may open its wall.

@@ -175,7 +175,7 @@ test.concurrent('actors and external islands centre their buildings above their 
   ]))
   for (const kind of ['actors', 'external'] as const) {
     const island = scene.islands.find(item => item.kind === kind)!
-    assert.equal(island.rect.w, island.rect.d)
+    assert.notEqual(island.rect.w, island.rect.d)
     const rects = scene.buildings.filter(building => building.surface === island.key).map(building => building.rect)
     const west = Math.min(...rects.map(rect => rect.gx)) - island.rect.gx
     const east = island.rect.gx + island.rect.w - Math.max(...rects.map(rect => rect.gx + rect.w))
@@ -185,6 +185,15 @@ test.concurrent('actors and external islands centre their buildings above their 
     assert.ok(Math.abs(north - south) <= 1)
     assert.ok(west >= PAD && north >= PAD && south >= PAD)
   }
+})
+
+test.concurrent('adding actors grows the column depth without widening its island', () => {
+  const actors = (count: number) => sheetScene(worldOf(Array.from({ length: count }, (_, index) =>
+    box(`actor-${index}`, 'actor', unit)))).islands[0]!.rect
+  const short = actors(2)
+  const tall = actors(8)
+  assert.equal(tall.w, short.w)
+  assert.ok(tall.d > short.d)
 })
 
 test.concurrent('a group becomes a zone around its members on the parent surface', () => {

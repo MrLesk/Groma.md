@@ -35,13 +35,19 @@ export function routeAll(endpoints: ReadonlyMap<string, Endpoint>, requests: rea
   if (requests.length === 0) return []
   const ports = portsFor(endpoints, requests)
   const search = new RouteSearch(routeGrid(endpoints, requests, ports))
-  const routes: FlatRoute[] = []
-  for (const index of routeOrder(requests)) {
+  const order = routeOrder(requests)
+  for (const index of order) {
     const request = requests[index]!
     const pair = ports[index]!
     const axis = pair.source.side === 'east' || pair.source.side === 'west' ? 0 : 1
-    const points = search.route(index, axis, request.id)
-    routes[index] = { ...request, points: compactPath(attachWalls(points, pair)) }
+    search.route(index, axis, request.id)
+  }
+  const routes: FlatRoute[] = []
+  for (const index of order) {
+    const request = requests[index]!
+    const pair = ports[index]!
+    const axis = pair.source.side === 'east' || pair.source.side === 'west' ? 0 : 1
+    routes[index] = { ...request, points: compactPath(attachWalls(search.untangle(index, axis, request.id), pair)) }
   }
   orderBuildingFans(endpoints, routes)
   alignFacingRoutes(endpoints, routes)

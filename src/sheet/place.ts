@@ -193,11 +193,11 @@ function packed(
 }
 
 /**
- * Actors and external islands are squares with their buildings centred above the name band, so a
+ * Actors and external islands fit their buildings, centred above the name band, so a
  * lone building does not sit in the corner of a strip cut for the island's
  * name. Centring preserves the complete roof and connection allowance.
  */
-function squared(node: Node): Node {
+function centredIsland(node: Node): Node {
   const content = unionRects(node.children.map(child => ({
     gx: child.gx, gy: child.gy, w: child.node.w, d: child.node.d,
   })))!
@@ -205,13 +205,14 @@ function squared(node: Node): Node {
     child.node.paint.kind === 'building' ? shadeOf(child.node.paint.heightUnits) : 0))
   const padding = Math.max(PAD, routeReach(node.connections)) + shadow
   const band = labelBand(ISLAND_FONT)
-  const side = Math.max(node.w, node.d, content.w + 2 * padding, content.d + band + 2 * padding)
-  const dx = (side - content.w) / 2 - content.gx
-  const dy = (side - band - content.d) / 2 - content.gy
+  const w = Math.max(node.w, content.w + 2 * padding)
+  const d = Math.max(node.d, content.d + band + 2 * padding)
+  const dx = (w - content.w) / 2 - content.gx
+  const dy = (d - band - content.d) / 2 - content.gy
   return {
     ...node,
-    w: side,
-    d: side,
+    w,
+    d,
     children: node.children.map(child => ({ ...child, gx: child.gx + dx, gy: child.gy + dy })),
   }
 }
@@ -272,11 +273,11 @@ export function placeWorld(world: ArchitectureGraph): Placement {
 
   const islands: Node[] = []
   if (actors.length > 0) {
-    islands.push(squared(packed(ACTORS_ISLAND, actors.map(building),
+    islands.push(centredIsland(packed(ACTORS_ISLAND, actors.map(building),
       { kind: 'island', islandKind: 'actors', name: 'Actors', element: null }, relationships, true)))
   }
   const systemIslands = systems.map(systemIsland)
-  const externalIslands = externals.length === 0 ? [] : [squared(packed(EXTERNAL_ISLAND, externals.map(building),
+  const externalIslands = externals.length === 0 ? [] : [centredIsland(packed(EXTERNAL_ISLAND, externals.map(building),
     { kind: 'island', islandKind: 'external', name: 'External systems', element: null }, relationships, true))]
   const all = [...islands, ...systemIslands, ...externalIslands]
   const { entries, edges } = lifted(all, relationships)

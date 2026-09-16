@@ -59,6 +59,10 @@ export class RouteSearch {
   private parents: Int32Array
   private closed: Uint32Array
   private run = 0
+  private owner = 0
+  private crossingCost = 0
+  private turnCost = LANE_GAP
+  private paths = new Map<number, number[]>()
   private targetX = 0
   private targetY = 0
   private queue = new SearchQueue()
@@ -82,8 +86,8 @@ export class RouteSearch {
     const reserved = this.grid.reserved[node]!
     const reservedEdge = this.grid.reservedEdges[edge * 2 + mask - 1]!
     return !this.grid.blocked[node] && !(this.grid.used[edge]! & mask)
-      && (reserved === 0 || reserved === this.run)
-      && (reservedEdge === 0 || reservedEdge === this.run)
+      && (reserved === 0 || reserved === this.owner)
+      && (reservedEdge === 0 || reservedEdge === this.owner)
   }
 
   private relax(state: number, cost: number, next: number, axis: number, distance: number): void {
@@ -92,7 +96,9 @@ export class RouteSearch {
     if (!this.available(next, edge, axis + 1)) return
     const nextState = next * 2 + axis
     if (this.closed[nextState] === this.run) return
-    const nextCost = cost + distance + (axis === (state & 1) ? 0 : LANE_GAP)
+    const crossing = this.grid.strokes[next]! & (axis === 0 ? 2 : 1)
+    const nextCost = cost + distance + (axis === (state & 1) ? 0 : this.turnCost)
+      + (crossing ? this.crossingCost : 0)
     if (this.seen[nextState] === this.run && nextCost >= this.scores[nextState]!) return
     this.scores[nextState] = nextCost
     this.seen[nextState] = this.run
@@ -112,26 +118,74 @@ export class RouteSearch {
     if (y + 1 < ys.length) this.relax(state, cost, node + xs.length, 1, ys[y + 1]! - ys[y]!)
   }
 
-  private path(finish: number): Point[] {
+  private path(finish: number): number[] {
     const nodes: number[] = []
     for (let state = finish; state !== -1; state = this.parents[state]!) nodes.push(state >>> 1)
-    nodes.reverse()
+    return nodes.reverse()
+  }
+
+  private occupy(nodes: readonly number[]): void {
     for (let index = 1; index < nodes.length; index += 1) {
       const a = nodes[index - 1]!
       const b = nodes[index]!
       const edge = Math.min(a, b)
       const axis = Math.abs(a - b) === 1 ? 0 : 1
+      this.grid.strokes[a] = this.grid.strokes[a]! | (axis + 1)
+      this.grid.strokes[b] = this.grid.strokes[b]! | (axis + 1)
       for (const lane of parallelEdges(this.grid, edge, axis)) {
         this.grid.used[lane] = this.grid.used[lane]! | (axis + 1)
       }
     }
+  }
+
+  private points(nodes: readonly number[]): Point[] {
     const width = this.grid.xs.length
     return nodes.map(node => ({ x: this.grid.xs[node % width]!, y: this.grid.ys[Math.floor(node / width)]! }))
   }
 
-  route(index: number, axis: number, id: string): Point[] {
+  route(index: number, axis: number, id: string): void {
+    const nodes = this.search(index, axis, id)
+    this.paths.set(index, nodes)
+    this.occupy(nodes)
+  }
+
+  private pathCost(nodes: readonly number[], firstAxis: number): number {
+    const points = this.points(nodes)
+    let cost = 0
+    let previousAxis = firstAxis
+    for (let index = 1; index < nodes.length; index += 1) {
+      const axis = Math.abs(nodes[index]! - nodes[index - 1]!) === 1 ? 0 : 1
+      const crossing = this.grid.strokes[nodes[index]!]! & (axis === 0 ? 2 : 1)
+      cost += Math.abs(points[index]!.x - points[index - 1]!.x)
+        + Math.abs(points[index]!.y - points[index - 1]!.y)
+        + (axis === previousAxis ? 0 : this.turnCost) + (crossing ? this.crossingCost : 0)
+      previousAxis = axis
+    }
+    return cost
+  }
+
+  /** Improve one complete route with all other paths fixed, preserving its valid original. */
+  untangle(index: number, axis: number, id: string): Point[] {
+    const original = this.paths.get(index)!
+    this.grid.used.fill(0)
+    this.grid.strokes.fill(0)
+    for (const [other, nodes] of this.paths) if (other !== index) this.occupy(nodes)
+    // Prefer an eight-bend detour to crossing, but avoid small zigzags to save distance.
+    this.turnCost = LANE_GAP * 4
+    this.crossingCost = this.turnCost * 8
+    const candidate = this.search(index, axis, id)
+    const chosen = this.pathCost(candidate, axis) < this.pathCost(original, axis) ? candidate : original
+    this.paths.set(index, chosen)
+    this.crossingCost = 0
+    this.turnCost = LANE_GAP
+    this.occupy(chosen)
+    return this.points(chosen)
+  }
+
+  private search(index: number, axis: number, id: string): number[] {
     const [start, target] = this.grid.ends[index]!
-    this.run = index + 1
+    this.run += 1
+    this.owner = index + 1
     this.targetX = this.grid.xs[target % this.grid.xs.length]!
     this.targetY = this.grid.ys[Math.floor(target / this.grid.xs.length)]!
     this.queue.size = 0
