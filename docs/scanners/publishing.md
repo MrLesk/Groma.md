@@ -46,7 +46,8 @@ Go, Rust and TypeScript packages include native workers. Java includes a
 compiler runtime built with `jlink`; C# includes a self-contained .NET runtime.
 Those assets are assembled per platform. Python includes CPython and its
 standard library through Pyodide WebAssembly assets. Framework packages carry
-their compiler libraries and TypeScript declarations. All nine scan supported
+their compiler libraries and TypeScript declarations. PHP bundles a JavaScript
+parser and does not need a PHP runtime. Official packages scan supported
 fresh checkouts without project dependencies or language tools on PATH.
 
 For a local host build with Java, Go, Rust and .NET available:
