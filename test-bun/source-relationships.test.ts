@@ -32,6 +32,37 @@ function owner(model: AnnotatedArchitectureModel, file: string) {
 
 const ends = { source: 'src/worker.ts', target: 'src/provider.ts' }
 
+test.concurrent('named callbacks aggregate once per directed pair across invocation and scanner order', async () => {
+  const root = await repository()
+  try {
+    await writeFile(path.join(root, 'src/caller.ts'), `
+import { send } from './api.ts'
+import { run } from './worker.ts'
+run({ cancelled: send, error: send, merged: send })
+`)
+    await writeFile(path.join(root, 'src/worker.ts'), `
+export function run(actions) {
+  actions.merged('result'); actions.cancelled('result');
+  actions.error('result'); actions.merged('again');
+}
+`)
+    const observation = (await scanTypeScriptSource(root))!
+    const reversed = { ...observation, invocations: [...observation.invocations!].reverse() }
+    const owners = new Map(observation.files.map(file => [file.file, file.file]))
+    const rows = inferRelationships([observation, reversed], owners)
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toMatchObject(ends)
+    expect(rows[0]!.description.split(': ')[1]?.split(', ')).toEqual(['cancelled', 'error', 'merged'])
+    expect(rows[0]!.description.match(/callbacks/g)).toHaveLength(1)
+    expect(inferRelationships([reversed, observation], owners)).toEqual(rows)
+    await scanRepository(root)
+    const first = await loadAnnotatedArchitecture(root)
+    expect(first.relationships[0]!.connections?.[0]?.description).toBe(rows[0]!.description)
+    await scanRepository(root)
+    expect(await loadAnnotatedArchitecture(root)).toEqual(first)
+  } finally { await rm(root, { recursive: true, force: true }) }
+})
+
 test.concurrent('operation resolution follows aliases but preserves executable wrappers and concrete callback bindings', async () => {
   const root = await repository()
   try {

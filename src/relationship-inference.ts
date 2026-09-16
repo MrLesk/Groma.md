@@ -36,25 +36,25 @@ function relationshipsFromClaims(
   claims: readonly InvocationEvidence[],
   owners: ReadonlyMap<string, string>,
 ): RelationshipConnection[] {
-  const pairs = new Map<string, RelationshipConnection>()
+  const pairs = new Map<string, { source: string; target: string; members: Set<string>; scanners: Set<string> }>()
   for (const { invocation, operations, scanners } of claims) {
     const interaction = suppliedNamedCallback(invocation, operations, owners)
     if (!interaction) continue
     for (const target of interaction.targets) {
       const source = interaction.source.file
       const key = `${source}\0${target.file}`
-      const description = `Invokes supplied ${interaction.member} callback`
-      const existing = pairs.get(key)
-      const descriptions = new Set(existing?.description.split('; ') ?? [])
-      descriptions.add(description)
-      pairs.set(key, {
-        source, target: target.file, description: [...descriptions].sort().join('; '),
-        technology: [...new Set([...(existing?.technology.split(', ') ?? []), ...scanners])].sort().join(', '),
-        status: 'stable', authored: false,
-      })
+      const pair = pairs.get(key) ?? { source, target: target.file, members: new Set<string>(), scanners: new Set<string>() }
+      pair.members.add(interaction.member)
+      for (const scanner of scanners) pair.scanners.add(scanner)
+      pairs.set(key, pair)
     }
   }
-  return [...pairs.values()].sort((left, right) => `${left.source}\0${left.target}`.localeCompare(`${right.source}\0${right.target}`))
+  return [...pairs.values()].map(({ source, target, members, scanners }): RelationshipConnection => ({
+    source, target,
+    description: `Invokes supplied callback${members.size === 1 ? '' : 's'}: ${[...members].sort().join(', ')}`,
+    technology: [...scanners].sort().join(', '),
+    status: 'stable', authored: false,
+  })).sort((left, right) => `${left.source}\0${left.target}`.localeCompare(`${right.source}\0${right.target}`))
 }
 
 /** Replace only the core-owned section; keep authored sections and other Markdown intact. */

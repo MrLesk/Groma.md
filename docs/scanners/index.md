@@ -23,12 +23,14 @@ to architecture Markdown. Import and execution failures appear separately in
 `ScanSummary.scannerFailures`, with each scanner ID and its error. Failed scanners
 contribute no fresh observation; healthy scanners still update the architecture.
 
-Core keeps curated file membership authoritative. Files already assigned to one component stay together. Only an unknown file becomes a new singleton component under its inferred source root. A drafted name match receives Code but stays a draft until `groma accept`.
+Core keeps curated file membership authoritative. Files already assigned to one component stay together. An explicit scanner source unit can associate unowned companion files with one component; other unknown files become singleton components under their inferred source roots. Conflicting ownership is reported for review. A drafted name match receives Code but stays a draft until `groma accept`.
 
-New component labels use the source filename, then directory context, and then
-container context to distinguish repeated roles. If a hash is still needed,
-it appears in the label as well as the ID. Allocation avoids existing IDs and
-titles; scans preserve previously authored titles and identities.
+New component titles use the source filename without its final extension.
+Identifier casing such as `ProposalService` is preserved; filename separators
+become spaces. Identity allocation uses directory and container context, then a
+hash when needed, independently of that title. Components may share a title;
+their IDs and exact Code references distinguish them. Repeated scans preserve
+existing titles and identities, including human or agent curation.
 
 Source watching belongs to one shared source runtime per watch session. The
 first relevant change collects an initial observation from every enabled scanner.

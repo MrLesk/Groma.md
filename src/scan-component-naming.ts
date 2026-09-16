@@ -59,6 +59,6 @@ export function componentNames(
   }
   return new Map(candidates.map(candidate => [candidate.file, {
     id: idFor(candidate),
-    name: displayName(idFor(candidate)),
+    name: displayName(candidate.file.split('/').at(-1)!.replace(/\.[^.]+$/, '').replace(/[_.]/g, '-')),
   }]))
 }
