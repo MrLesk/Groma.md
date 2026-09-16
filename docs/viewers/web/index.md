@@ -287,8 +287,8 @@ on the sheet, in one row along the grid from west to east so flows
 read that way: the actors island, then the systems, then the external
 systems; on screen the row runs from the upper left down to the right.
 The actors and external islands have their buildings stacked in one column
-and centered above an external name band, each a little bigger than what
-stands on it. Inside every system island, slab and zone,
+and centered above an external name band. Width and depth fit the content
+independently, without forcing these islands into squares. Inside every system island, slab and zone,
 relationships decide where the children stand. These three nested
 surfaces keep two cells of padding around their contents. Actors and external
 islands keep one cell around their contents. Every packed surface reserves a
@@ -375,8 +375,9 @@ slab, and zone names sit below their own front boundaries, centered on a short
 leader line. Names and leaders follow the sheet plane in both isometric and
 2D overhead views. System and container labels select their owning element;
 their text and leader share the boundary's selection and lit-state highlight.
-Text size follows the visible hierarchy: project title at 52 plane
-pixels, systems at 48, containers at 36, groups at 28, and components at 16.
+Text size follows the visible hierarchy: project title at 65 plane
+pixels, systems and the project overview at 48, containers at 36, groups at 28,
+and components at 16.
 Roofs, external label bands, and the project plate grow to fit their text.
 Camera fit includes the complete surface envelopes, including external labels.
 Hierarchy text has eight additional screen pixels of clearance after its
@@ -401,12 +402,17 @@ building's back sides are hidden under its roof, so there a route
 starts or ends on the
 ground just behind the building where the roof's shadow ends: on screen
 the line emerges from, or its arrowhead touches, the back of the
-roof, with no visible step. Endpoints stay in the middle half of each usable
+roof, with no visible step. The displayed endpoint meets the visible building
+outline in the current view; in 2D it reaches the flattened footprint instead
+of stopping at the isometric roof offset. Endpoint bends move with those ports
+without adding small staircases beside the building. Endpoints stay in the middle half of each usable
 wall, including after shortcuts. Parallel runs keep enough distance for their
 visible strokes to remain distinct. When two middles do not line up, the line stays
 straight and the longer side gives way. Each route ends in an
 arrowhead lying on the sheet that keeps its screen size at every
-zoom. A route's description is its tooltip. Every selected box draws
+zoom. Routes prefer a detour around existing arrows to an unnecessary crossing,
+with a bend cost that keeps those detours simple. Every relationship remains
+visible at normal contrast. A route's description is its tooltip. Every selected box draws
 every edge and its name in the accent green, the name in bold, the
 slab or island it stands on is
 outlined in the accent as its context, and the routes that touch the

@@ -1,9 +1,8 @@
-import { ROOF_SHADOW, centredRect } from '../../../sheet/grid.ts'
+import { centredRect } from '../../../sheet/grid.ts'
 import { CONTAINER_FONT, GROUP_FONT, ISLAND_FONT, ISLAND_SPACING, PLANE, buildingFont, curved, labelBand, roofBlock, textWidth } from '../../../sheet/measure.ts'
 import type {
   Building,
   CellRect,
-  RoutePoint,
   Island,
   Route,
   SheetScene,
@@ -187,14 +186,14 @@ export function paintOrder<T extends { rect: CellRect }>(
     depthKey(left.rect, view) - depthKey(right.rect, view) || left.rect.gx - right.rect.gx)
 }
 
-/** A curved footprint in ground cells: every point `radius` from the segment between the two cap centres, which runs from `west` to `east` along `middle`; in a square the caps share a centre and the shape is a circle. `back` slides the shape north-west, under a roof that hides that much ground. */
-function stadium(rect: CellRect, back = 0): { radius: number; west: number; east: number; middle: number } {
+/** A curved footprint in ground cells: every point `radius` from the segment between the two cap centres, which runs from `west` to `east` along `middle`; in a square the caps share a centre and the shape is a circle. */
+function stadium(rect: CellRect): { radius: number; west: number; east: number; middle: number } {
   const radius = Math.min(rect.w, rect.d) / 2
   return {
     radius,
-    west: rect.gx + radius - back,
-    east: rect.gx + rect.w - radius - back,
-    middle: rect.gy + rect.d / 2 - back,
+    west: rect.gx + radius,
+    east: rect.gx + rect.w - radius,
+    middle: rect.gy + rect.d / 2,
   }
 }
 
@@ -209,30 +208,6 @@ function roofOutline(rect: CellRect): { gx: number; gy: number }[] {
     },
   )
   return [...arc(east, -Math.PI / 2, Math.PI / 2), ...arc(west, Math.PI / 2, (3 * Math.PI) / 2)]
-}
-
-/**
- * Where a route meets a curved building: it was routed against the square
- * footprint, so an off-centre end sits beside the wall rather than on it. A
- * route leaves and meets a side square on, so the end slides along its own
- * axis onto the near wall of the shape, and the line reaches what the viewer sees
- * instead of stopping beside it. An end west or north of the footprint is the
- * anchor of a back side, which the router already placed where the roof's
- * shadow ends, so the shape slides under the roof to meet it there.
- */
-function onWall(point: RoutePoint, towards: RoutePoint, building: Building | undefined): RoutePoint {
-  if (building === undefined || !curved(building.shape)) return point
-  const { rect } = building
-  const shadowed = point.gx < rect.gx || point.gy < rect.gy
-  const { radius, west, east, middle } = stadium(rect, shadowed ? building.heightUnits * ROOF_SHADOW : 0)
-  /** Half the chord the outline cuts on a line `off` from the middle. A port sits inside a side at least two radii long, so the root is always real. */
-  const half = (off: number): number => Math.sqrt(Math.max(0, radius * radius - off * off))
-  if (point.gy === towards.gy) {
-    const chord = half(point.gy - middle)
-    return { gx: point.gx < towards.gx ? east + chord : west - chord, gy: point.gy }
-  }
-  const chord = half(point.gx - Math.min(Math.max(point.gx, west), east))
-  return { gx: point.gx, gy: point.gy < towards.gy ? middle + chord : middle - chord }
 }
 
 function cross(left: Point, right: Point): number {
@@ -250,17 +225,16 @@ function rayEdgeDistance(origin: Point, direction: Point, start: Point, end: Poi
 }
 
 /**
- * A stepped tower is routed against its largest footprint, but its highest
- * visible face may be narrower. Extend the short endpoint leg until it first
- * meets a face the viewer can see, so the line never stops on the invisible
- * full-size roof used only for obstacle clearance.
+ * Shared routes reserve isometric roof clearance. Attach each endpoint leg to
+ * the first visible face in the current pose, including flattened footprints
+ * and buildings without source-file floors. The route body stays unchanged.
  */
 function onVisibleBuilding(
   at: Point,
   from: Point,
   building: ProjectedBuilding | undefined,
 ): Point {
-  if (building === undefined || curved(building.building.shape) || building.building.floors.length === 0) return at
+  if (building === undefined) return at
   const direction = { x: at.x - from.x, y: at.y - from.y }
   const distances: number[] = []
   for (const face of building.floors.flat()) {
@@ -425,13 +399,10 @@ export function projectScene(
     floors: buildingFloors(building, view),
     text: roofText(building, view),
   }))
-  const standing = new Map(scene.buildings.map(building => [building.representationId, building]))
   const visibleBuildings = new Map(buildings.map(building => [building.building.representationId, building]))
   const routes = scene.routes.map(route => {
-    const cells = [...route.points]
+    const cells = route.points
     const end = cells.length - 1
-    cells[0] = onWall(cells[0]!, cells[1]!, standing.get(route.source))
-    cells[end] = onWall(cells[end]!, cells[end - 1]!, standing.get(route.target))
     const points = cells.map(point => project(point.gx, point.gy, 0, view))
     points[0] = onVisibleBuilding(points[0]!, points[1]!, visibleBuildings.get(route.source))
     points[end] = onVisibleBuilding(points[end]!, points[end - 1]!, visibleBuildings.get(route.target))
