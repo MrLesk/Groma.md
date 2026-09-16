@@ -4,9 +4,13 @@ The web plugin shows Groma's world in a browser. `groma web` starts it.
 If the Groma directory, index, or project record is missing, the local server
 shows browser setup for the project name and architecture folder. An existing
 folder keeps its location. Continue uses the shared initialization operation,
-then shows discovered technologies and scanner selection. Check readiness &
-scan installs the selected additions, checks project preparation, and opens
-the map at the same address after a successful scan.
+then shows one selection row per scanner with detected versions and installation
+state. Detection paths stay in collapsed, searchable details; declarations without
+a version do not create a warning. Scanner problems appear before ordinary choices.
+Install & scan installs the selected additions; with no additions selected, the
+action is Scan project. Both open the map at the same address after preparation.
+The loading screen stays visible until the initial scanner session has finished
+and its architecture update is ready. An empty map is reported only after that scan.
 An initialized project runs one scan before opening. The live process then
 starts the same watch as `groma scan --watch`. Startup errors appear in the
 browser with the reported issue and the command to run after fixing it.
