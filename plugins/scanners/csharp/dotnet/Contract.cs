@@ -7,6 +7,7 @@ public sealed record ScannerIdentity(string Id, string Technology, string Engine
 public sealed record ScanRoot(string Id, string Kind, string Name, string? File = null, string? Parent = null);
 public sealed record ScanSymbol(string Id, string Name, string Kind);
 public sealed record ScanFile(string File, IReadOnlyList<string> Roots, IReadOnlyList<ScanSymbol> Symbols);
+public sealed record ScanSourceUnit(string Primary, IReadOnlyList<string> Files);
 public sealed record ScanOperation(string Id, string File, string Name);
 public sealed record ScanInvocation(string Source, IReadOnlyList<string> Targets, bool Unresolved, int Line, string? Member = null);
 public sealed record ScanDiagnostic(string Severity, string Code, string Message, string? File = null, int? Line = null);
@@ -18,7 +19,8 @@ public sealed record ScanObservation(
     IReadOnlyList<ScanFile> Files,
     IReadOnlyList<ScanDiagnostic> Diagnostics,
     IReadOnlyList<ScanOperation>? Operations = null,
-    IReadOnlyList<ScanInvocation>? Invocations = null)
+    IReadOnlyList<ScanInvocation>? Invocations = null,
+    IReadOnlyList<ScanSourceUnit>? SourceUnits = null)
 {
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -33,7 +35,8 @@ public sealed record ScanObservation(
         IEnumerable<ScanFile> files,
         IEnumerable<ScanDiagnostic> diagnostics,
         IEnumerable<ScanOperation>? operations = null,
-        IEnumerable<ScanInvocation>? invocations = null)
+        IEnumerable<ScanInvocation>? invocations = null,
+        IEnumerable<ScanSourceUnit>? sourceUnits = null)
     {
         ScanRoot[] orderedRoots = ValidateRoots(roots);
         ScanFile[] orderedFiles = UniqueBy(
@@ -87,6 +90,7 @@ public sealed record ScanObservation(
             Files: orderedFiles,
             Operations: orderedOperations,
             Invocations: orderedInvocations,
+            SourceUnits: ValidateUnits(sourceUnits, filePaths),
             Diagnostics: messages
                 .Distinct()
                 .OrderBy(diagnostic => diagnostic.Severity, StringComparer.Ordinal)
@@ -98,6 +102,21 @@ public sealed record ScanObservation(
     }
 
     public string ToCanonicalJson() => JsonSerializer.Serialize(this, JsonOptions) + "\n";
+
+    private static ScanSourceUnit[]? ValidateUnits(IEnumerable<ScanSourceUnit>? input, HashSet<string> paths)
+    {
+        if (input is null) return null;
+        ScanSourceUnit[] units = input.Select(unit => unit with
+        {
+            Files = unit.Files.Distinct().Order(StringComparer.Ordinal).ToArray(),
+        }).OrderBy(unit => unit.Primary, StringComparer.Ordinal).ToArray();
+        foreach (ScanSourceUnit unit in units)
+        {
+            Require(unit.Files.Contains(unit.Primary), "Source unit omits its primary file.");
+            Require(unit.Files.All(paths.Contains), "Source unit references an unknown file.");
+        }
+        return units;
+    }
 
     private static ScanRoot[] ValidateRoots(IEnumerable<ScanRoot> input)
     {

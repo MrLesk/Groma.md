@@ -18,6 +18,7 @@ public sealed class RoslynScanner
         Dictionary<ProjectId, string> rootIds = projects.ToDictionary(project => project.Id,
             project => $"project:{SourcePath.Relative(request.RepositoryRoot, project.FilePath!)}");
         List<ScanFile> files = [];
+        List<ScanSourceUnit> sourceUnits = [];
         List<ScanDiagnostic> diagnostics = [];
         OperationEvidence evidence = new(request.RepositoryRoot);
 
@@ -27,6 +28,7 @@ public sealed class RoslynScanner
             Compilation compilation = await project.GetCompilationAsync(cancellationToken)
                 ?? throw new InvalidDataException($"Roslyn could not compile '{project.Name}'.");
             CheckCompilation(compilation, project, request.RepositoryRoot, diagnostics, cancellationToken);
+            sourceUnits.AddRange(PartialSourceUnits.Extract(compilation, request.RepositoryRoot, cancellationToken));
             foreach (Document document in project.Documents.OrderBy(document => document.FilePath, StringComparer.Ordinal))
             {
                 if (!SourcePath.IsPhysicalSource(request.RepositoryRoot, document.FilePath)) continue;
@@ -54,7 +56,7 @@ public sealed class RoslynScanner
             roots.Add(new ScanRoot(solutionId, "solution", Path.GetFileNameWithoutExtension(request.Input), inputFile));
         return ScanObservation.Create(
             new ScannerIdentity("csharp", "c#/.NET", "roslyn", typeof(CSharpCompilation).Assembly.GetName().Version!.ToString()),
-            roots, files, diagnostics, evidence.Operations, evidence.Invocations);
+            roots, files, diagnostics, evidence.Operations, evidence.Invocations, sourceUnits);
     }
 
     private static void CheckCompilation(Compilation compilation, Project project, string root, List<ScanDiagnostic> diagnostics, CancellationToken token)

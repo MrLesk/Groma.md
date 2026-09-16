@@ -40,6 +40,19 @@ local declarations and supported operations remain available.
 
 ## Evidence
 
+Partial class declarations in separate authored files are proposed as one source
+unit when Roslyn identifies the same class in the same project. Each file must
+contain only that type, and every declaration must qualify. Same-name classes
+in other namespaces or projects are independent. Files containing additional
+types remain separate source evidence. This does not associate Razor, XAML, or
+generated source.
+
+Core creates one component with all member Code references, attaches newly
+discovered unowned partial files, and retains curated ownership on repeat scans.
+Conflicting owners or disappearing associations produce review diagnostics.
+The existing C# source watcher includes new partial files. No project restore,
+build, or source-generator execution is needed.
+
 Roslyn resolves local overloads, generic methods, extensions, partial
 implementations and direct calls. Calls with type errors, virtual dispatch,
 interfaces and delegates retain uncertainty. Implicit calls, initializers,
