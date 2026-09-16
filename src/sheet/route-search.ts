@@ -58,6 +58,9 @@ export class RouteSearch {
   private seen: Uint32Array
   private parents: Int32Array
   private closed: Uint32Array
+  private laneUses: Uint32Array
+  private strokeUses: Uint32Array
+  private costLimit = Infinity
   private run = 0
   private owner = 0
   private crossingCost = 0
@@ -74,6 +77,8 @@ export class RouteSearch {
     this.seen = new Uint32Array(states)
     this.parents = new Int32Array(states)
     this.closed = new Uint32Array(states)
+    this.laneUses = new Uint32Array(states)
+    this.strokeUses = new Uint32Array(states)
   }
 
   private heuristic(node: number): number {
@@ -99,11 +104,13 @@ export class RouteSearch {
     const crossing = this.grid.strokes[next]! & (axis === 0 ? 2 : 1)
     const nextCost = cost + distance + (axis === (state & 1) ? 0 : this.turnCost)
       + (crossing ? this.crossingCost : 0)
+    const remaining = this.heuristic(next)
+    if (nextCost + remaining >= this.costLimit) return
     if (this.seen[nextState] === this.run && nextCost >= this.scores[nextState]!) return
     this.scores[nextState] = nextCost
     this.seen[nextState] = this.run
     this.parents[nextState] = state
-    this.queue.push(nextState, nextCost, nextCost + this.heuristic(next) * 1.15)
+    this.queue.push(nextState, nextCost, nextCost + remaining * 1.15)
   }
 
   private expand(state: number, cost: number): void {
@@ -124,16 +131,22 @@ export class RouteSearch {
     return nodes.reverse()
   }
 
-  private occupy(nodes: readonly number[]): void {
+  private mark(uses: Uint32Array, masks: Uint8Array, node: number, axis: number, change: number): void {
+    const slot = node * 2 + axis
+    uses[slot] = uses[slot]! + change
+    masks[node] = uses[slot]! > 0 ? masks[node]! | (axis + 1) : masks[node]! & ~(axis + 1)
+  }
+
+  private occupy(nodes: readonly number[], change = 1): void {
     for (let index = 1; index < nodes.length; index += 1) {
       const a = nodes[index - 1]!
       const b = nodes[index]!
       const edge = Math.min(a, b)
       const axis = Math.abs(a - b) === 1 ? 0 : 1
-      this.grid.strokes[a] = this.grid.strokes[a]! | (axis + 1)
-      this.grid.strokes[b] = this.grid.strokes[b]! | (axis + 1)
+      this.mark(this.strokeUses, this.grid.strokes, a, axis, change)
+      this.mark(this.strokeUses, this.grid.strokes, b, axis, change)
       for (const lane of parallelEdges(this.grid, edge, axis)) {
-        this.grid.used[lane] = this.grid.used[lane]! | (axis + 1)
+        this.mark(this.laneUses, this.grid.used, lane, axis, change)
       }
     }
   }
@@ -167,14 +180,12 @@ export class RouteSearch {
   /** Improve one complete route with all other paths fixed, preserving its valid original. */
   untangle(index: number, axis: number, id: string): Point[] {
     const original = this.paths.get(index)!
-    this.grid.used.fill(0)
-    this.grid.strokes.fill(0)
-    for (const [other, nodes] of this.paths) if (other !== index) this.occupy(nodes)
+    // Remove only this route; shared nodes and lane margins retain other routes' counts.
+    this.occupy(original, -1)
     // Prefer an eight-bend detour to crossing, but avoid small zigzags to save distance.
     this.turnCost = LANE_GAP * 4
     this.crossingCost = this.turnCost * 8
-    const candidate = this.search(index, axis, id)
-    const chosen = this.pathCost(candidate, axis) < this.pathCost(original, axis) ? candidate : original
+    const chosen = this.search(index, axis, id, original)
     this.paths.set(index, chosen)
     this.crossingCost = 0
     this.turnCost = LANE_GAP
@@ -182,12 +193,14 @@ export class RouteSearch {
     return this.points(chosen)
   }
 
-  private search(index: number, axis: number, id: string): number[] {
+  private search(index: number, axis: number, id: string, original?: number[]): number[] {
     const [start, target] = this.grid.ends[index]!
     this.run += 1
     this.owner = index + 1
     this.targetX = this.grid.xs[target % this.grid.xs.length]!
     this.targetY = this.grid.ys[Math.floor(target / this.grid.xs.length)]!
+    // Distance is a lower bound: a path at this cost cannot improve the valid original.
+    this.costLimit = original === undefined ? Infinity : this.pathCost(original, axis)
     this.queue.size = 0
     const first = start * 2 + axis
     this.scores[first] = 0
@@ -202,6 +215,7 @@ export class RouteSearch {
       if (state >>> 1 === target) return this.path(state)
       this.expand(state, cost)
     }
+    if (original !== undefined) return original
     throw new Error(`Could not route relationship ${id}`)
   }
 }
