@@ -103,12 +103,19 @@ The architecture lives in a `groma/` folder as an [Open Knowledge Format 0.2](ht
 
 | Language or framework | Status |
 | --- | --- |
-| TypeScript | ✅ Available |
-| C#/.NET | ⏳ Coming soon |
-| Java | ⏳ Coming soon |
+| [TypeScript](docs/scanners/typescript/index.md) | ✅ Available |
+| [Angular](docs/scanners/angular/index.md) | ✅ Available |
+| [React](docs/scanners/react/index.md) | ✅ Available |
+| [Vue](docs/scanners/vue/index.md) | ✅ Available |
+| [C#/.NET](docs/scanners/dotnet-csharp/index.md) | ✅ Available |
+| [Go](docs/scanners/go/index.md) | ✅ Available |
+| [Java (Maven)](docs/scanners/java/index.md) | ✅ Available |
+| [Python](docs/scanners/python/index.md) | ✅ Available |
+| [Rust](docs/scanners/rust/index.md) | ✅ Available |
+| [PHP](docs/scanners/php/index.md) | ✅ Available |
 | Your favorite language or framework | [Submit an issue with your request](https://github.com/MrLesk/Groma.md/issues) |
 
-More languages arrive as [scanner plugins](docs/scanners/creating-a-plugin.md); add your own with `groma scanner add`. See [TypeScript support](docs/scanners/typescript/index.md) for what the scanner reads and [which relationships it detects](docs/relationship-inference.md#current-inference-rule).
+More languages arrive as [scanner plugins](docs/scanners/creating-a-plugin.md); add your own with `groma scanner add`. Each scanner's page describes what it reads. See [which relationships Groma detects](docs/relationship-inference.md#current-inference-rule).
 
 ## Experimental
 
