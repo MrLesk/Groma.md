@@ -159,17 +159,38 @@ async function scanAngularProject(projectRoot: string, root: string): Promise<Sc
     symbols: source.statements.filter(ts.isClassDeclaration).map(node => ({
       id: `${relative(root, source.fileName)}#${node.getStart()}`, name: node.name?.text ?? 'default', kind: 'class',
     })) })), ...[...evidence.templates].map(file => ({ file, symbols: [] }))]
+  const sourceUnits = components.map(component => {
+    const primary = relative(root, component.declaration.getSourceFile().fileName)
+    const companions = [component.template, ...component.styles].flatMap(resource => {
+      if (resource === undefined) return []
+      const file = componentResource(root, component, resource)
+      if (file === undefined) return []
+      readFileSync(path.join(root, file), 'utf8')
+      return [file]
+    })
+    return { primary, files: [primary, ...companions] }
+  })
+  for (const file of new Set(sourceUnits.flatMap(unit => unit.files))) {
+    if (!files.some(source => source.file === file)) files.push({ file, symbols: [] })
+  }
   return createScanObservation({ scanner: { id: 'angular', technology: 'typescript/angular', engine: '@angular/compiler-cli', engineVersion: VERSION.full },
     roots: [{ id: 'angular-project', kind: 'package', name: manifest.name, file: relative(root, path.join(projectRoot, 'package.json')) }],
     files: files.map(file => ({ ...file, roots: ['angular-project'] })),
+    sourceUnits,
     operations: [...evidence.operations.values()], invocations: evidence.invocations, diagnostics: evidence.diagnostics })
+}
+
+function componentResource(root: string, component: SourceComponent, resource: string): string | undefined {
+  if (path.isAbsolute(resource) || /^[a-z][a-z0-9+.-]*:/i.test(resource)) return undefined
+  const file = relative(root, path.resolve(path.dirname(component.declaration.getSourceFile().fileName), resource))
+  return file.startsWith('../') ? undefined : file
 }
 
 function inspectTemplate(root: string, component: SourceComponent, components: SourceComponent[], checker: ts.TypeChecker, evidence: Evidence): void {
   if (!component.template) return
-  const filename = path.resolve(path.dirname(component.declaration.getSourceFile().fileName), component.template)
-  const file = relative(root, filename)
-  const parsed = parseTemplate(readFileSync(filename, 'utf8'), file)
+  const file = componentResource(root, component, component.template)
+  if (file === undefined) return
+  const parsed = parseTemplate(readFileSync(path.join(root, file), 'utf8'), file)
   if (parsed.errors?.length) throw new Error(`ANGULAR_TEMPLATE_INVALID: ${parsed.errors.join('\n')}`)
   evidence.templates.add(file)
   const imports = componentImports(component, checker)

@@ -5,6 +5,7 @@ export interface SourceComponent {
   metadata: ts.ObjectLiteralExpression
   selector: string
   template?: string
+  styles: string[]
 }
 
 /** Recognize the imported Angular API even when its package is not installed. */
@@ -27,6 +28,13 @@ function literal(expression: ts.Expression | undefined): string | undefined {
   return expression && ts.isStringLiteralLike(expression) ? expression.text : undefined
 }
 
+function componentStyles(metadata: ts.ObjectLiteralExpression): string[] {
+  const single = literal(property(metadata, 'styleUrl'))
+  const multiple = property(metadata, 'styleUrls')
+  return [...(single === undefined ? [] : [single]),
+    ...(multiple && ts.isArrayLiteralExpression(multiple) ? multiple.elements.flatMap(item => literal(item) ?? []) : [])]
+}
+
 export function sourceComponent(declaration: ts.ClassDeclaration, checker: ts.TypeChecker): SourceComponent | undefined {
   for (const decorator of ts.getDecorators(declaration) ?? []) {
     const call = decorator.expression
@@ -35,7 +43,7 @@ export function sourceComponent(declaration: ts.ClassDeclaration, checker: ts.Ty
     if (!metadata || !ts.isObjectLiteralExpression(metadata)) continue
     const selector = literal(property(metadata, 'selector'))
     const template = literal(property(metadata, 'templateUrl'))
-    if (selector) return { declaration, metadata, selector, template }
+    if (selector) return { declaration, metadata, selector, template, styles: componentStyles(metadata) }
   }
   return undefined
 }

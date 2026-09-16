@@ -1,7 +1,7 @@
 # Angular scanner
 
-The Angular scanner adds concrete external-template output bindings to the
-TypeScript scanner evidence. Enable it alongside the Java scanner for the
+The Angular scanner adds explicit component source units and concrete
+external-template output bindings to the TypeScript scanner evidence. Enable it alongside the Java scanner for the
 supported Maven and Angular application. Healthy scanners update the map; failed scanners retain their saved evidence.
 
 ## Build and install
@@ -45,6 +45,14 @@ API imports from source, even when the Angular package is absent.
 
 ## Supported evidence
 
+Literal `templateUrl`, `styleUrl`, and `styleUrls` declarations associate a
+component class with its directly named local template and stylesheet files.
+Core uses that source unit to create one component, or attach new unowned files
+to its existing owner. All member paths appear in Code details. Inline content
+does not create files; ordinary imports, neighboring files, global styles, and
+transitive stylesheet imports do not become companion files. Shared companions
+and conflicting curated ownership follow the core source-unit review rules.
+
 A direct method call in an external template can bind a single resolved
 source output property to a source method with a body. TypeScript locates
 `emit()` calls on that exact property declaration. An emit inside an arrow
@@ -58,12 +66,13 @@ unresolved while Angular establishes the concrete binding.
 
 Angular reports `angular` Code provenance for its source contribution.
 The exact source path keeps one curated owner across both scanners. HTML edits
-participate in the existing watch lifecycle. Repeat scans retain authored
+participate in the existing watch lifecycle, as do CSS, SCSS, Sass, Less, and Stylus
+source edits. Repeat scans retain authored
 architecture, and compiler errors leave the previous complete map in place.
 
 In OKF, the result remains ordinary Code links and readable relationship rows.
-In C4, an Angular component is source evidence, not a new architecture level
-or an automatic architecture component. Core owns relationship interpretation;
+In C4, an Angular declaration supplies source-unit evidence, not a new
+architecture level. Core owns component ownership and relationship interpretation;
 the plugin does not write architecture or introduce metadata.
 
 ## Coverage limits

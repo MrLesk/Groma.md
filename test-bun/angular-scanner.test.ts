@@ -10,6 +10,7 @@ import { buildArchitectureModel } from '../src/architecture-model.ts'
 import { loadAnnotatedArchitecture, reconcileScanObservations } from '../src/core.ts'
 import { editArchitecture } from '../src/edit.ts'
 import { inferRelationships } from '../src/relationship-inference.ts'
+import { createScannerSession } from '../src/scanner/session.ts'
 import type { AnnotatedArchitectureModel } from '../src/types.ts'
 
 const fixture = path.resolve(import.meta.dir, '../test/fixtures/angular-output')
@@ -104,4 +105,40 @@ test.concurrent('Angular preserves external parent bindings to an output provide
     expect(after.invocations).toHaveLength(1)
     expect(after.files.some(file => file.file === 'emitter.html')).toBe(false)
   } finally { await rm(temporary, { recursive: true, force: true }) }
+})
+
+test.concurrent('Angular packages class, template and declared styles as one source unit without dependencies', async () => {
+  const { temporary, root, scanner } = await setup()
+  try {
+    const angular = (await scanner.scan(root))!
+    const typescript = (await scanTypeScriptSource(root))!
+    expect(angular.files.some(file => file.file === 'shared.css')).toBe(false)
+    await reconcileScanObservations(root, [typescript, angular])
+    const model = await loadAnnotatedArchitecture(root)
+    for (const [primary, companions] of [['host.ts', ['host.html', 'host.scss']], ['emitter.ts', ['emitter.html', 'emitter.css']]] as const) {
+      for (const file of companions) expect(owner(model, file).id).toBe(owner(model, primary).id)
+    }
+    expect(owner(model, 'emitter.ts').id).not.toBe(owner(model, 'host.ts').id)
+    expect(model.relationships).toHaveLength(1)
+    await editArchitecture(root, { id: owner(model, 'host.ts').id, title: 'Result handler' })
+    const before = await storedArchitecture(root)
+    expect((await reconcileScanObservations(root, [angular, typescript])).created).toBe(0)
+    expect(await storedArchitecture(root)).toEqual(before)
+  } finally { await rm(temporary, { recursive: true, force: true }) }
+})
+
+test.concurrent('the live scanner session refreshes a component when its external stylesheet changes', async () => {
+  const { temporary, root, artifact } = await setup()
+  let complete: (() => void) | undefined
+  const session = await createScannerSession(root, { onFold() { complete?.() } })
+  try {
+    await session.change({ action: 'add', source: artifact })
+    expect(session.state.scanners.find(scanner => scanner.id === 'angular')?.status).toBe('ready')
+    const before = await storedArchitecture(root)
+    const changed = Promise.withResolvers<void>()
+    complete = () => changed.resolve()
+    await writeFile(path.join(root, 'host.scss'), ':host { display: flex; }')
+    await changed.promise
+    expect(await storedArchitecture(root)).toEqual(before)
+  } finally { await session.close(); await rm(temporary, { recursive: true, force: true }) }
 })
