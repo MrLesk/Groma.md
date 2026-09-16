@@ -60,9 +60,11 @@ export async function createScannerSession(root: string, options: {
     serial = next.catch(() => {})
     return next
   }
-  void enqueue(() => start(options.scan !== false))
+  const ready = enqueue(() => start(options.scan !== false))
 
   return {
+    /** Resolves after the initial scan, including its architecture update and failure reporting. */
+    ready,
     get state() { return state },
     subscribe(listener: (state: ScannerSettings) => void) {
       listeners.add(listener)

@@ -183,6 +183,7 @@ export async function createWebMapSession(
     onFold: publishWorld,
     onSettings: settings => broadcast(encoder.encode(`event: scanners\ndata: ${JSON.stringify(settings)}\n\n`)),
   })
+  await scannerSession.ready
   const architectureWatch = await watchArchitecture(repositoryRoot, {
     onChange: async () => { await scannerSession.reconfigure(); await publishWorld() },
   })

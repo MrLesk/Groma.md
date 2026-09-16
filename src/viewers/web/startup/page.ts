@@ -1,12 +1,13 @@
 import lockup from '../atoms/lockup.svg' with { type: 'text' }
 import packageJson from '../../../../package.json' with { type: 'json' }
 
-import { formatDiscovery, type ScannerDiscovery } from '../../../scanner/modules/discovery.ts'
-import { installableScanners } from '../../../scanner/modules/setup.ts'
+import type { ScannerDiscovery } from '../../../scanner/modules/discovery.ts'
+import { scannerSelection, scannerSelectionScript } from './scanners.ts'
 
 import type { GromaInitResult } from '../../../initialize.ts'
 import { escaped } from '../atoms/escape.ts'
 import { cssBlock, palettes } from '../atoms/theme.ts'
+import { chromeCss } from '../atoms/chrome.ts'
 
 type GromaDirectory = GromaInitResult['directory']
 
@@ -37,6 +38,7 @@ const style = `
     background: color-mix(in srgb, var(--paper) 78%, transparent); backdrop-filter: blur(16px);
     box-shadow: 0 16px 64px color-mix(in srgb, var(--ink) 8%, transparent);
   }
+  main.scanner-setup { width: min(640px, 100%); padding: 36px; }
   header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 32px; }
   header svg { display: block; width: 146px; height: auto; }
   .brand { display: flex; align-items: center; gap: 8px; }
@@ -45,8 +47,36 @@ const style = `
   .steps [aria-current] { color: var(--accent-text); }
   h1 { font-size: 24px; line-height: 1.3; margin: 0 0 28px; letter-spacing: -0.04em; }
   form { display: grid; gap: 24px; }
-  .proposal { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; max-height: 45vh; overflow-y: auto; }
-  .scanners { display: grid; gap: 12px; }
+  .project-name { color: var(--muted); font-size: 12px; margin: 0 0 10px; overflow-wrap: anywhere; }
+  .scanner-list { display: grid; gap: 12px; }
+  .scanner-card { border: 1px solid var(--hairline); border-radius: 12px; overflow: hidden; min-width: 0; }
+  .scanner-card:has(input[name="scanner"]:checked) { border-color: color-mix(in srgb, var(--accent) 45%, var(--hairline)); }
+  .scanner-choice { display: flex; align-items: center; gap: 14px; padding: 20px; }
+  label.scanner-choice { cursor: pointer; }
+  label.scanner-choice:hover { background: var(--hover); }
+  .scanner-choice input { margin: 0; width: 16px; height: 16px; flex-shrink: 0; accent-color: var(--accent); }
+  .scanner-heading { display: grid; gap: 4px; flex: 1; min-width: 0; overflow-wrap: anywhere; }
+  .scanner-heading strong { font-size: 16px; font-weight: 600; }
+  .detected-version { font-size: 11px; color: var(--muted); }
+  .scanner-state { font-size: 10px; color: var(--accent-text); background: var(--hover); padding: 4px 8px; border-radius: 5px; }
+  .scanner-state.attention { color: var(--syntax-number); }
+  .scanner-issue { margin: 0 20px 16px; font-size: 12px; overflow-wrap: anywhere; }
+  details summary { padding: 12px 20px; cursor: pointer; color: var(--muted); font-size: 11px; }
+  details summary:hover { color: var(--ink); }
+  details summary span { float: right; margin-left: 8px; }
+  .scanner-evidence { border-top: 1px solid var(--hairline); }
+  .evidence-body { padding: 4px 20px 16px; display: grid; gap: 12px; }
+  .scanner-package { font-size: 11px; color: var(--muted); overflow-wrap: anywhere; }
+  .evidence-search { min-width: 0; width: 100%; padding: 10px 12px; border: 1px solid var(--hairline); border-radius: 6px; background: var(--paper); color: var(--ink); font: inherit; font-size: 12px; }
+  .evidence-list { list-style: none; margin: 0; padding: 0; max-height: 240px; overflow-y: auto; }
+  .evidence-list li { display: grid; gap: 4px; padding: 12px 0; border-top: 1px solid var(--hairline); overflow-wrap: anywhere; font-size: 11px; }
+  .evidence-list li span { color: var(--muted); }
+  .evidence-list code { font: inherit; }
+  .no-matches, .scanner-empty { margin: 0; color: var(--muted); font-size: 12px; }
+  .coverage-notes { border: 1px solid var(--hairline); border-radius: 8px; }
+  .coverage-notes ul { padding: 0 24px 12px 36px; margin: 0; max-height: 240px; overflow-y: auto; font-size: 12px; overflow-wrap: anywhere; }
+  .coverage-notes li + li { margin-top: 10px; }
+  [hidden] { display: none !important; }
   label, legend { font-size: 11px; }
   .name { display: grid; gap: 8px; }
   input[type="text"] {
@@ -68,6 +98,7 @@ const style = `
     color: var(--accent-text); background: var(--hover); font: inherit; cursor: pointer;
   }
   button:hover { background: color-mix(in srgb, var(--accent) 12%, var(--paper)); }
+  #scanner-selection > button { min-height: 46px; font-weight: 600; }
   button:disabled { cursor: progress; opacity: 0.65; }
   :focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
   .error { margin: 0 0 24px; overflow-wrap: anywhere; white-space: pre-wrap; color: var(--diff-removed); }
@@ -81,10 +112,20 @@ const style = `
   main[aria-busy="true"] h1 { text-align: center; }
   @keyframes spin { to { transform: rotate(360deg); } }
   @media (prefers-reduced-motion: reduce) { .spinner { animation: none; } }
-  @media (max-width: 420px) { main { padding: 24px; } }
+  @media (max-width: 420px) {
+    body { padding: 16px 12px; }
+    main, main.scanner-setup { padding: 24px 20px; }
+    .scanner-choice { padding: 16px 14px; gap: 10px; flex-wrap: wrap; }
+    .scanner-state { margin-left: auto; }
+    details summary { padding: 12px 14px; }
+    details summary span { float: none; display: block; margin: 4px 0 0 14px; }
+    .evidence-body { padding: 4px 14px 14px; }
+  }
+  ${chromeCss}
 `
 
 const script = `
+  ${scannerSelectionScript}
   const theme = localStorage.getItem('groma.theme');
   if (['light', 'dark', 'blueprint'].includes(theme)) document.documentElement.dataset.theme = theme;
   if (document.querySelector('main[aria-busy="true"]')) {
@@ -95,7 +136,7 @@ const script = `
     document.querySelector('h1').textContent = 'Preparing your architecture';
     document.querySelector('[aria-current]')?.removeAttribute('aria-current');
     document.querySelector('[data-step="scan"]').setAttribute('aria-current', 'step');
-    const button = document.querySelector('button');
+    const button = document.querySelector('button[type="submit"], form button');
     button.disabled = true;
     button.textContent = 'Preparing…';
   });
@@ -118,12 +159,8 @@ export function renderSetupPage(input: SetupPage): string {
   const error = input.error === undefined ? '' : `<p class="error" role="alert">${escaped(input.error)}</p>`
   let content = `<h1>Preparing your architecture</h1>`
   if (input.proposal !== undefined) {
-    const choices = installableScanners(input.proposal).map(item =>
-      `<label><input type="checkbox" name="scanner" value="${escaped(item.id)}" checked> ${escaped(item.installSource!)}</label>`).join('')
-    const selection = choices ? `<fieldset class="scanners"><legend>Install selected packages</legend>${choices}</fieldset>` : ''
-    content = `<h1>Review project scanners</h1>${error}<pre class="proposal">${escaped(formatDiscovery(input.proposal))}</pre>`
-      + `<form method="post" action="/scanners">${selection}`
-      + '<button type="submit">Check readiness &amp; scan</button></form>'
+    content = `<p class="project-name">${escaped(input.projectName)}</p><h1>Set up scanners</h1>${error}`
+      + scannerSelection(input.proposal)
   } else if (input.error !== undefined && input.initialized) {
     content = `<h1>Could not open architecture</h1>${error}<p class="next">Fix the reported issue, then run groma web again.</p>`
   } else if (!input.initialized) {
@@ -133,7 +170,7 @@ export function renderSetupPage(input: SetupPage): string {
       + '<button type="submit">Continue</button></form>'
   }
   return '<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">'
-    + `<title>Groma setup</title><style>${style}</style></head><body><main${loading ? ' aria-busy="true"' : ''}><header>`
+    + `<title>Groma setup</title><style>${style}</style></head><body><main${input.proposal ? ' class="scanner-setup"' : ''}${loading ? ' aria-busy="true"' : ''}><header>`
     + `<div class="brand">${lockup}<span class="version">v${escaped(packageJson.version)}</span></div>`
     + '<nav class="steps" aria-label="Setup progress">'
     + `<span${input.initialized ? '' : ' aria-current="step"'}>1 Setup</span>`
