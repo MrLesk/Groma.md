@@ -7,6 +7,9 @@ export function relocateObservation(observation: ScanObservation, directory: str
   return { ...observation,
     roots: observation.roots.map(root => ({ ...root, ...(root.file ? { file: file(root.file) } : {}) })),
     files: observation.files.map(source => ({ ...source, file: file(source.file) })),
+    ...(observation.sourceUnits === undefined ? {} : {
+      sourceUnits: observation.sourceUnits.map(unit => ({ primary: file(unit.primary), files: unit.files.map(file) })),
+    }),
     operations: observation.operations?.map(operation => ({ ...operation, file: file(operation.file) })),
     invocations: observation.invocations?.map(call => ({ ...call,
       ...(call.binding ? { binding: { ...call.binding, file: file(call.binding.file) } } : {}) })),
@@ -22,6 +25,7 @@ export function combineObservations(parts: { key: string; observation: ScanObser
   const operations: NonNullable<ScanObservation['operations']> = []
   const invocations: NonNullable<ScanObservation['invocations']> = []
   const diagnostics: ScanObservation['diagnostics'] = []
+  const sourceUnits: NonNullable<ScanObservation['sourceUnits']> = []
   for (const { key, observation } of parts) {
     const id = (value: string) => JSON.stringify([key, value])
     roots.push(...observation.roots.map(root => ({ ...root, id: id(root.id), ...(root.parent ? { parent: id(root.parent) } : {}) })))
@@ -34,7 +38,10 @@ export function combineObservations(parts: { key: string; observation: ScanObser
     operations.push(...(observation.operations ?? []).map(operation => ({ ...operation, id: id(operation.id) })))
     invocations.push(...(observation.invocations ?? []).map(call => ({ ...call, source: id(call.source), targets: call.targets.map(id) })))
     diagnostics.push(...observation.diagnostics)
+    sourceUnits.push(...observation.sourceUnits ?? [])
   }
   return createScanObservation({ scanner: parts[0]!.observation.scanner, roots, files: [...files.values()],
-    operations, invocations, diagnostics })
+    operations, invocations, diagnostics,
+    ...(parts.some(part => part.observation.sourceUnits !== undefined) ? { sourceUnits } : {}),
+  })
 }

@@ -177,6 +177,13 @@ scans may refresh supported symbols but preserve curated file membership,
 unowned metadata, and authored Markdown.
 The exact source path has one owner across scanners. Separate scanner
 contributions do not create duplicate owners. Core compares overlapping
+source-unit declarations to associate explicitly related files on a fresh scan
+or attach new unowned members to an existing component. Conflicting proposals
+retain established ownership and report a review diagnostic. When an association
+disappears, core retains the existing Code references and reports that current
+evidence no longer jointly supports them. These declarations and review messages
+are temporary evidence, not stored fields or another architecture level.
+Core also compares overlapping
 operation claims at source locations; conflicting certain providers remain
 scan diagnostics and cannot establish a derived relationship. Source offsets
 and those conflict details are not stored in Code references.

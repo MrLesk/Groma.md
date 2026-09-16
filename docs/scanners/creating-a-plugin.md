@@ -7,6 +7,8 @@ A scanner is an ECMAScript module that implements `ScannerPlugin` from
 `@groma/scanner`. It translates one source ecosystem into a complete
 `ScanObservation`. It does not read architecture Markdown, write files, assign
 architecture IDs, or combine source files into components.
+It may report explicit source associations through `sourceUnits`; core decides
+whether existing ownership permits one component for those files.
 
 This page describes the executable plugin contract. The
 [evidence semantics](evidence.md) define operations, canonical targets,
@@ -65,6 +67,22 @@ Watch patterns select scan triggers; compiler project rules still determine
 the files analyzed by `scan`. Each `scan` receives the repository root and its optional settings object and returns one
 complete observation, replacing this scanner's previous observation in the
 session. Unaffected scanners retain their evidence for core's combined view.
+
+## Explicit source units
+
+`sourceUnits` is an optional array of `{ primary, files }`. Both fields use exact
+repository-relative source paths; every member must be in `files` inventory,
+and the primary must be a member. The primary identifies the source declaration
+used for initial component naming and placement. For example, a framework can
+associate a class with its explicitly declared template and styles. Do not use
+filename similarity, ordinary imports, or folder proximity to propose a unit.
+
+Omit the field when the scanner does not extract associations. Return an empty
+array when extraction ran and found none. Overlapping declarations remain
+separate claims for core to review, never a request for a transitive merge.
+Project relocation updates every member path. Shared exclusions remove excluded
+members, and remove a whole unit when its primary is excluded. Scanners must
+watch their companion file types as well as the declaring source.
 
 A plugin may also implement `async checkReadiness(repositoryRoot, settings): Promise<void>`.
 Return when supported source inputs and the scanner's own tools are available.

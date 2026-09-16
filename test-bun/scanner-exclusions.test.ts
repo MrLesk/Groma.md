@@ -47,6 +47,10 @@ function observation(language: string): ScanObservation {
       { kind: 'project', parent: 'root', id: 'scripts', name: 'Scripts' },
     ],
     files,
+    sourceUnits: [
+      { primary: paths[0]!, files: [paths[0]!, paths[2]!, paths[3]!] },
+      { primary: paths[1]!, files: [paths[1]!, paths[3]!] },
+    ],
     operations: paths.filter(file => file.endsWith('.ts')).map(file => ({ id: file, file, name: file, position: 0 })),
     invocations: [
       { source: paths[0]!, targets: [paths[1]!], unresolved: false, line: 1, binding: { file: paths[2]!, line: 1 } },
@@ -84,6 +88,9 @@ test.concurrent('every scanner filters complete evidence without narrowing invoc
       expect(scan.files.map(file => file.file).sort()).toEqual(['src/kept.ts', 'src/other.ts'])
       expect(scan.roots.some(root => root.id === 'scripts')).toBeFalse()
       expect(scan.roots.some(root => root.id === 'root' || root.id === 'package')).toBeTrue()
+      if (scan.scanner.id !== 'typescript') {
+        expect(scan.sourceUnits).toEqual([{ primary: 'src/kept.ts', files: ['src/kept.ts', 'src/other.ts'] }])
+      }
       expect(scan.invocations).toEqual(scan.scanner.id === 'typescript' ? [] : [
         { source: 'src/kept.ts', targets: ['src/other.ts'], unresolved: false, line: 5 },
       ])
