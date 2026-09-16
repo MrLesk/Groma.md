@@ -17,6 +17,7 @@ import {
 } from './scale.ts'
 import { mapDefs } from './style.ts'
 import { svg } from './svg.ts'
+import { padSurfaceLabels } from './text.ts'
 
 /** A graph-paper tile: minor lines every cell, one major line each way. */
 const TILE_SIZE = GRID_TILE_CELLS * PLANE
@@ -138,6 +139,7 @@ export function createMap(host: HTMLElement): IsoMap {
   let cameraTimer: ReturnType<typeof setTimeout> | undefined
   let latestCamera: { current: Camera; zoomRatio: number; showGrid: boolean } | undefined
   let gridView: ProjectionView = DEFAULT_PROJECTION
+  let labels: SVGGElement[] = []
   /** The slab or system island each building and slab stands on, by id. */
   let surfaces = new Map<string, string>()
 
@@ -206,6 +208,7 @@ export function createMap(host: HTMLElement): IsoMap {
       const scaleChanged = current.k !== composed?.k || zoomRatio !== composedZoomRatio
       const cameraChanged = current.x !== composed?.x || current.y !== composed?.y || current.k !== composed?.k
       if (!cameraChanged && !scaleChanged) return false
+      if (current.k !== composed?.k) padSurfaceLabels(labels, current.k, gridView)
       composed = current
       composedZoomRatio = zoomRatio
       latestCamera = { current, zoomRatio, showGrid }
@@ -240,6 +243,8 @@ export function createMap(host: HTMLElement): IsoMap {
         ...scene.buildings.map(({ building }) => [building.representationId, building.surface] as const),
         ...scene.slabs.map(({ slab }) => [slab.representationId, slab.island] as const),
       ])
+      labels = [...ground.world.querySelectorAll<SVGGElement>('.surface-label')]
+      padSurfaceLabels(labels, composed?.k ?? 1, gridView)
     },
     select(ids) {
       const directItems = new Set<string>()

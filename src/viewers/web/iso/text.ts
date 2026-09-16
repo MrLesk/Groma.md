@@ -1,7 +1,34 @@
-import { SURFACE_PAD, labelHeight, textLineHeight, textPadding } from '../../../sheet/measure.ts'
+import { PLANE, SURFACE_PAD, labelHeight, textLineHeight, textPadding } from '../../../sheet/measure.ts'
 import type { ProjectionView, SurfaceLabel, SurfaceText } from './project.ts'
-import { planeMatrix } from './project.ts'
-import { svg } from './svg.ts'
+import { planeMatrix, project } from './project.ts'
+import { round, svg } from './svg.ts'
+
+/** Additional space around hierarchy text, measured along each projected axis in screen pixels. */
+export const SURFACE_SCREEN_PAD = 8
+
+export function surfaceLabelInsets(zoom: number, view: ProjectionView): { x: number; y: number } {
+  const length = (x: number, y: number) => {
+    const axis = project(x / PLANE, y / PLANE, 0, view)
+    // Match the rounded axes actually used by planeMatrix.
+    return Math.hypot(round(axis.x), round(axis.y))
+  }
+  return { x: SURFACE_SCREEN_PAD / (zoom * length(1, 0)), y: SURFACE_SCREEN_PAD / (zoom * length(0, 1)) }
+}
+
+/** Update only label clearances; camera motion never changes packed architecture geometry. */
+export function padSurfaceLabels(labels: readonly SVGGElement[], zoom: number, view: ProjectionView): void {
+  const padding = surfaceLabelInsets(zoom, view)
+  for (const label of labels) {
+    const text = label.querySelector('text')!
+    const hit = label.querySelector('rect')!
+    const width = Number(text.getAttribute('x')) * 2
+    const size = Number(text.getAttribute('font-size'))
+    text.setAttribute('dy', String(padding.y))
+    hit.setAttribute('x', String(-padding.x))
+    hit.setAttribute('width', String(width + 2 * padding.x))
+    hit.setAttribute('height', String(labelHeight(size) + 2 * padding.y))
+  }
+}
 
 /** Building names stay inset on their own roofs, laid out in plane pixels. */
 export function surfaceText(

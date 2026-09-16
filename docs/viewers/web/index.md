@@ -376,9 +376,16 @@ leader line. Names and leaders follow the sheet plane in both isometric and
 2D overhead views. System and container labels select their owning element;
 their text and leader share the boundary's selection and lit-state highlight.
 Text size follows the visible hierarchy: project title at 52 plane
-pixels, systems at 38, containers at 29, groups at 22, and components at 16.
+pixels, systems at 48, containers at 36, groups at 28, and components at 16.
 Roofs, external label bands, and the project plate grow to fit their text.
 Camera fit includes the complete surface envelopes, including external labels.
+Hierarchy text has eight additional screen pixels of clearance after its
+leader, with eight screen pixels beside and below it in the selectable area.
+This additional padding is corrected for projection and camera scale on every
+zoom frame, including temporary camera transforms. The existing plane-space
+label band still scales with the architecture. Camera movement changes only
+the added text clearance and hit area, never the packed world. The fit margin
+also contains this added clearance. No component name is hidden at any zoom.
 Groups remain visual groupings within their existing parent.
 
 Routes follow the lattice: one route per authored relationship,
