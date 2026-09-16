@@ -92,11 +92,14 @@ binding. The binding may be a supplied object argument or the supported
 Angular named output-to-handler template binding. This evidence remains
 temporary and does not alter authored relationship meaning.
 
-The stored statement is `Invokes supplied <member> callback`, with the scanner
-language as its mechanism. This is a source-supported possible interaction,
-not a promise that a branch runs in every execution. Multiple named callbacks
-for one ordered file pair share a row. Their statements remain visible after
-component, container, and system projection.
+The stored statement is `Invokes supplied callback: <member>`, with the scanner
+language as its mechanism. Several callbacks for one ordered file pair share
+one statement, such as `Invokes supplied callbacks: cancelled, error, merged`.
+Distinct names are sorted and included once, independently of scanner and
+invocation order. This is a source-supported possible interaction, not a promise
+that a branch runs in every execution. It does not classify a callback as an
+event. The statement remains visible after component, container, and system
+projection and in ordinary Markdown. Authored descriptions remain unchanged.
 
 This first rule does not classify ordinary direct calls as architectural work.
 It does not infer HTTP, event-bus, class-receiver, or service-operation meaning.

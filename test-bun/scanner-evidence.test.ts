@@ -249,12 +249,12 @@ test.concurrent('reconciliation qualifies reserved document names', async () => 
     expect(qualified).toEqual([
       {
         id: 'src-index',
-        title: 'Src index',
+        title: 'Index',
         sourceFilename: 'groma/systems/shop/containers/api/components/src-index.md',
       },
       {
         id: 'src-log',
-        title: 'Src log',
+        title: 'Log',
         sourceFilename: 'groma/systems/shop/containers/api/components/src-log.md',
       },
     ])

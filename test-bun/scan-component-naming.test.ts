@@ -63,13 +63,20 @@ test.concurrent('source context separates repeated roles as a batch before a has
 })
 
 test.concurrent('normalized collisions hash exact paths including extensions and preserve readable titles', () => {
-  const files = ['same/Thing.ts', 'same/thing.ts', 'same/thing.js', 'same/thing!.ts']
+  const files = ['same/Thing.ts', 'same/thing.ts', 'same/thing.js', 'same/thing.html']
   const allocated = names(files)
   for (const file of files) {
     const suffix = createHash('sha256').update(file).digest('hex').slice(0, 8)
-    expect(allocated.get(file)).toEqual({ id: `scanner-same-thing-${suffix}`, name: `Scanner same thing ${suffix}` })
+    expect(allocated.get(file)).toEqual({ id: `scanner-same-thing-${suffix}`, name: 'Thing' })
   }
   expect(names([...files].reverse())).toEqual(allocated)
+})
+
+test.concurrent('display names retain source identifier casing independently of occupied identities', () => {
+  const files = ['src/ProposalService.java', 'src/company-list.component.ts', 'src/index.ts']
+  const allocated = names(files, ['proposalservice', 'company-list-component', 'src-index'])
+  expect([...allocated.values()].map(value => value.name)).toEqual(['ProposalService', 'Company list component', 'Index'])
+  expect(allocated.get(files[0]!)?.id).not.toBe('proposalservice')
 })
 
 test.concurrent('matching short hashes extend together and avoid occupied IDs', () => {
@@ -105,7 +112,9 @@ test.concurrent('file and scanner order share one owner and preserve IDs on late
       ...file, symbols: [{ id: 'changed', name: 'changed', kind: 'function' }],
     })) }))
     expect((await reconcileScanObservations(roots[0]!, changed)).created).toBe(0)
-    expect((await components(roots[0]!)).map(item => item.id)).toEqual(initial.map(item => item.id))
+    expect(await components(roots[0]!)).toEqual(initial.map(item => ({
+      ...item, code: item.code?.map(code => ({ ...code, symbol: 'changed' })),
+    })))
     await reconcileScanObservations(roots[0]!, [observation(['later/build.ts'])])
     const later = await components(roots[0]!)
     expect(later.filter(item => initial.some(prior => prior.id === item.id))).toHaveLength(3)
@@ -145,7 +154,7 @@ test.concurrent('overlapping fresh roots reuse their pending container and an ex
 })
 
 
-test.concurrent('new component labels avoid authored titles and preserve existing identities', async () => {
+test.concurrent('authored titles do not force identity qualifiers into new display titles', async () => {
   const root = await repository()
   try {
     await reconcileScanObservations(root, [observation(['first/build.ts'])])
@@ -154,6 +163,7 @@ test.concurrent('new component labels avoid authored titles and preserve existin
     await reconcileScanObservations(root, [observation(['first/build.ts', 'build-service.ts'])])
     const after = await components(root)
     expect(after.find(item => item.id === existing.id)?.title).toBe('Build service')
-    expect(new Set(after.map(item => item.title)).size).toBe(after.length)
+    expect(after.find(item => item.id !== existing.id)?.title).toBe('Build service')
+    expect(new Set(after.map(item => item.id)).size).toBe(after.length)
   } finally { await rm(root, { recursive: true, force: true }) }
 })

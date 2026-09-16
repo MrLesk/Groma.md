@@ -14,7 +14,7 @@ import {
   upsertCode,
   writeDocument,
 } from './markdown-emitter.ts'
-import { displayName, kebabCase } from './naming.ts'
+import { kebabCase } from './naming.ts'
 import { componentNames, sourceStem } from './scan-component-naming.ts'
 import { sourceUnitGroups } from './scan-source-units.ts'
 import { c4Kind, requireGromaMapping } from './okf-profile.ts'
@@ -114,9 +114,7 @@ async function createRecord(
   },
 ): Promise<WorldRecord> {
   const id = input.id ?? availableId(world, input.name, input.parent)
-  const name = isReservedDocument(`${kebabCase(input.name)}.md`)
-    ? displayName(id)
-    : input.name
+  const name = input.name
   const record: WorldRecord = {
     id,
     title: name,
