@@ -1,11 +1,5 @@
-import { compareSemanticElements } from '../../../element-order.ts'
-import type { AnnotatedElement, ArchitectureGraph } from '../../../types.ts'
-
-export function primarySystem(world: ArchitectureGraph): AnnotatedElement | undefined {
-  return world.elements
-    .filter(element => element.kind === 'system' && !element.external)
-    .sort(compareSemanticElements)[0]
-}
+import type { ProjectProfile } from '../../../project-profile.ts'
+import type { ArchitectureGraph } from '../../../types.ts'
 
 /** Internal C4 levels; actors and external systems stay outside this summary. */
 export function c4Counts(world: Pick<ArchitectureGraph, 'elements'>): { system: number; container: number; component: number } {
@@ -17,13 +11,20 @@ export function c4Counts(world: Pick<ArchitectureGraph, 'elements'>): { system: 
   return counts
 }
 
-export function paintWorldStats(host: HTMLElement, world: ArchitectureGraph): void {
-  const system = primarySystem(world)
+/**
+ * Names the project from its profile beside the internal C4 counts. The header stays empty only when no Groma
+ * package is loaded, because the reader rejects a Groma directory without a valid `project.md`.
+ */
+export function paintHeaderSummary(
+  host: HTMLElement,
+  world: Pick<ArchitectureGraph, 'elements'>,
+  project: Pick<ProjectProfile, 'title'> | undefined,
+): void {
   host.replaceChildren()
-  if (system === undefined) return
+  if (project === undefined) return
   const name = document.createElement('span')
   name.className = 'project-name'
-  name.textContent = system.title
+  name.textContent = project.title
   const counts = document.createElement('span')
   counts.className = 'world-counts'
   counts.textContent = Object.entries(c4Counts(world))

@@ -109,7 +109,8 @@ Draft element outlines remain dashed.
 
 The map grid fills the screen. Inset 35%-paper frosted chrome floats
 above it as one technical instrument. The header groups the groma.md lockup,
-system name, quiet flow and element counts, and revision menu on the left.
+project title from `project.md`, quiet system, container, and component counts,
+and revision menu on the left.
 A permanent Search field sits between that context and the view controls:
 Fit, `-`, zoom readout, `+`, Settings, Help, and Info. Controls share one
 height, and opening search leaves them in place. Header popups float with

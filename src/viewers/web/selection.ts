@@ -1,3 +1,6 @@
+import { compareSemanticElements } from '../../element-order.ts'
+import type { AnnotatedElement, ArchitectureGraph } from '../../types.ts'
+
 export type Selection =
   | { kind: 'none' }
   | { kind: 'architecture'; ids: readonly string[] }
@@ -5,6 +8,13 @@ export type Selection =
   | { kind: 'flow'; id: string }
 
 export const noSelection: Selection = { kind: 'none' }
+
+/** The internal system a current map selects when its address names nothing. */
+export function primarySystem(world: ArchitectureGraph): AnnotatedElement | undefined {
+  return world.elements
+    .filter(element => element.kind === 'system' && !element.external)
+    .sort(compareSemanticElements)[0]
+}
 
 export function primarySelection(selection: Selection): string | undefined {
   if (selection.kind === 'task' || selection.kind === 'flow') return selection.id

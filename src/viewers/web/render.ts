@@ -12,7 +12,7 @@ import { bindMapView } from './chrome/map-view.ts'
 import { animateControl } from './chrome/motion.ts'
 import { bindChromeActions, createWebShell, mapFrame, type MapFrame } from './chrome/shell.ts'
 import { bindThemeControl, readSavedTheme } from './chrome/theme-control.ts'
-import { paintWorldStats, primarySystem } from './chrome/stats.ts'
+import { paintHeaderSummary } from './chrome/stats.ts'
 import { createWebDataSource } from './data.ts'
 import { createFlowList } from './flow/list.ts'
 import { flowFocus, flowHighlight, flowSelection, retainFlows, toggleFlowActivation, type WebFlowRef } from './flow/state.ts'
@@ -34,7 +34,7 @@ import { createSearchSession } from './search/session.ts'
 import { createWorkIsland } from './work/island.ts'
 import { openWorkSelection, toggleWorkSelection } from './work/selection.ts'
 import type { WebBootPayload, WebPayload, WebWorkPayload } from './payload.ts'
-import { noSelection, primarySelection, retainSelection, selectArchitecture, selectedArchitecture, selectTask } from './selection.ts'
+import { noSelection, primarySelection, primarySystem, retainSelection, selectArchitecture, selectedArchitecture, selectTask } from './selection.ts'
 import { createSourceControl } from './source/control.ts'
 import { createTaskDiffControl } from './task-diff/control.ts'
 import { readView, writeView } from './url.ts'
@@ -193,7 +193,7 @@ function paintViewState(commitUrl = true): void {
   paintFlows(flowsHost, world, activeFlows, toggleFlow, {
     title: 'Actors', selectedIds: selectedArchitecture(selection), onSelectActor: select,
   })
-  paintWorldStats(statsHost, world)
+  paintHeaderSummary(statsHost, world, project)
   paintDetailsState(task)
   shell.paint(selection)
 }
