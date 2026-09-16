@@ -24,17 +24,22 @@ async function scanVueProject(projectRoot: string, root: string): Promise<ScanOb
     if (sfc) evidence.inspect(source.fileName, sfc)
   }
   const files = project.files.map(source => ({ file: relative(root, source.fileName), symbols: [] }))
+  const sourceUnits = project.files.flatMap(source => project.sourceUnit(source.fileName) ?? [])
+  for (const file of new Set(sourceUnits.flatMap(unit => unit.files))) {
+    if (!files.some(source => source.file === file)) files.push({ file, symbols: [] })
+  }
   return createScanObservation({
     scanner: { id: 'vue', technology: 'typescript/vue', engine: '@vue/language-core', engineVersion: '3.3.11' },
     roots: [{ id: 'vue-project', kind: 'package', name: manifest.name, file: relative(root, path.join(projectRoot, 'package.json')) }],
     files: files.map(file => ({ ...file, roots: ['vue-project'] })),
+    sourceUnits,
     operations: [...evidence.operations.values()], invocations: evidence.invocations, diagnostics: evidence.diagnostics,
   })
 }
 
 export default {
   id: 'vue',
-  watch: { include: ['**/*.vue', '**/*.ts', '**/tsconfig*.json', '**/package.json'], exclude: [] },
+  watch: { include: ['**/*.vue', '**/*.ts', '**/*.js', '**/*.html', '**/*.css', '**/*.scss', '**/*.sass', '**/*.less', '**/*.styl', '**/tsconfig*.json', '**/package.json'], exclude: [] },
   checkReadiness: async root => {
     const projects = await frameworkProjects(root, 'vue', ['.vue'])
     for (const project of projects) vueProject(project, root)

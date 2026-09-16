@@ -32,6 +32,26 @@ supplied-callback evidence contract; it has no separate name or type resolver.
 
 ## Supported interaction
 
+### External source blocks
+
+A `.vue` file can explicitly name local external script, template, and style
+files with `src="./file"` or `src="../file"`, as described in the
+[Vue SFC specification](https://vuejs.org/api/sfc-spec#src-imports).
+The scanner reports those direct companions as one source unit. Core assigns
+one component when ownership is unambiguous and preserves curated membership
+on repeats. Code details expose the `.vue` file and every companion.
+Imports from the script, global styles, transitive stylesheet imports, and
+similarly named neighboring files do not extend that association.
+
+Inline blocks create no extra files. External scripts cannot be combined with
+`script setup`; Vue's [script setup restrictions](https://vuejs.org/api/sfc-script-setup#restrictions)
+still apply. External block association does not add Options API or external
+template event inference; the inline interaction rule below remains unchanged.
+Edits to JavaScript, TypeScript, HTML, CSS, SCSS, Sass, Less, and Stylus companions
+trigger the existing shared scanner refresh.
+
+### Inline event bindings
+
 The qualified example is Vue REPL's CodeMirror `change` event bound to the
 parent's `onChange` function. A static imported SFC must use a typed
 `defineEmits` declaration assigned to a constant. A call to that same symbol
