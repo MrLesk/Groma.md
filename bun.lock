@@ -71,6 +71,14 @@
         "@groma/scanner": "workspace:*",
       },
     },
+    "plugins/scanners/php": {
+      "name": "@groma/scanner-php",
+      "version": "0.1.0",
+      "dependencies": {
+        "@groma/scanner": "workspace:*",
+        "php-parser": "3.7.0",
+      },
+    },
     "plugins/scanners/python": {
       "name": "@groma/scanner-python",
       "version": "0.1.0",
@@ -256,6 +264,8 @@
     "@groma/scanner-go": ["@groma/scanner-go@workspace:plugins/scanners/go"],
 
     "@groma/scanner-java": ["@groma/scanner-java@workspace:plugins/scanners/java"],
+
+    "@groma/scanner-php": ["@groma/scanner-php@workspace:plugins/scanners/php"],
 
     "@groma/scanner-python": ["@groma/scanner-python@workspace:plugins/scanners/python"],
 
@@ -500,6 +510,8 @@
     "node-releases": ["node-releases@2.0.54", "", {}, "sha512-YHs7BmmcsdAI5Ozuf8JZo6PT0mv2GIWC9vMfvUC3dp65M8hn7Ux8CPL+2oBI7juNuj9d0ndhTcznq2ODBps9cQ=="],
 
     "path-browserify": ["path-browserify@1.0.1", "", {}, "sha512-b7uo2UCUOYZcnF/3ID0lulOJi/bafxa1xPe7ZPsammBSpjSWQkjNxlt635YGS2MiR9GjvuXCtz2emr3jbsz98g=="],
+
+    "php-parser": ["php-parser@3.7.0", "", {}, "sha512-JRc1t78GZAEa+MuzVC5A5RJS1NDFTS4UnprUEu/NnsN9cyHbGZLUqghO9IQZUSCay62HYQiWd3PxyWAEF45zmA=="],
 
     "picocolors": ["picocolors@1.1.1", "", {}, "sha512-xceH2snhtb5M9liqDsmEw56le376mTZkEX/jEb/RxNFyegNul7eNslCXP9FDj/Lcu0X8KEyMceP2ntpaHrDEVA=="],
 

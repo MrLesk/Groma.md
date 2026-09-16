@@ -3,7 +3,7 @@ import path from 'node:path'
 import { readPublishedScanners } from '../src/scanner/modules/published.ts'
 
 const repository = { type: 'git', url: 'https://github.com/MrLesk/Groma.md.git' }
-const scannerIds = ['java', 'go', 'rust', 'csharp', 'angular', 'vue', 'react', 'typescript', 'python']
+const scannerIds = ['java', 'go', 'rust', 'csharp', 'angular', 'vue', 'react', 'typescript', 'python', 'php']
 
 async function manifest(directory: string) {
   return JSON.parse(await readFile(path.join(directory, 'package.json'), 'utf8'))
@@ -35,6 +35,7 @@ async function stage(output: string) {
   await writeManifest(contract, { ...await manifest('packages/scanner'), license: 'MIT', repository,
     files: ['src', 'LICENSE'], publishConfig: { access: 'public' } })
   const builders = {
+    php: (await import('../plugins/scanners/php/build.ts')).buildPackage,
     python: (await import('../plugins/scanners/python/build.ts')).buildPackage,
     typescript: (await import('../plugins/scanners/typescript/build.ts')).buildPackage,
     java: (await import('../plugins/scanners/java/build.ts')).buildPackage,

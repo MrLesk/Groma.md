@@ -1,0 +1,37 @@
+{
+  "name": "@groma/scanner-php",
+  "version": "0.1.0",
+  "private": false,
+  "type": "module",
+  "license": "MIT",
+  "description": "PHP source declarations and operations without project dependencies.",
+  "groma": {
+    "scanner": {
+      "id": "php",
+      "entry": "./src/index.ts",
+      "discovery": {
+        "technologies": [
+          "php"
+        ],
+        "rules": [
+          {
+            "type": "file",
+            "files": [
+              "**/*.php"
+            ],
+            "technology": "php",
+            "kind": "language",
+            "declaration": "PHP source files"
+          }
+        ],
+        "compatibility": {
+          "groma": "^0.3.0"
+        }
+      }
+    }
+  },
+  "dependencies": {
+    "@groma/scanner": "workspace:*",
+    "php-parser": "3.7.0"
+  }
+}
