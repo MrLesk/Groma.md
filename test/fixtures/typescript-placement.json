@@ -1,0 +1,6 @@
+{
+  "package.json": "{\"name\":\"scope-fixture\",\"bin\":\"main.ts\"}",
+  "main.ts": "import { serve } from './domain/service.ts'; export function main() { return serve() }",
+  "domain/service.ts": "import { value } from './value.ts'; export function serve() { return value() }",
+  "domain/value.ts": "export function value() { return 1 }"
+}
