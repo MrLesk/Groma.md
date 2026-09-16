@@ -1,6 +1,6 @@
 import type { MarkdownBlock, MarkdownSpan, MarkdownStyle } from '../../../project-markdown.ts'
 import type { ProjectProfile } from '../../../project-profile.ts'
-import { PLANE, PROJECT_FONT, textPadding, textWidth } from '../../../sheet/measure.ts'
+import { ISLAND_FONT, PLANE, PROJECT_FONT, textPadding, textWidth } from '../../../sheet/measure.ts'
 import type { CellRect } from '../../../sheet/types.ts'
 import type { Point } from '../../../types.ts'
 
@@ -194,10 +194,10 @@ function projectPlate(
   const editSize = 0.82 * scale
   const editInset = 0.16 * scale
   const editReservationWidth = editSize + editInset * 2
-  const titleSize = PROJECT_FONT
-  const titleLineHeight = PROJECT_FONT * 1.2
-  const overviewSize = 6 * scale
-  const overviewLineHeight = 7.5 * scale
+  const titleSize = PROJECT_FONT * 1.25
+  const titleLineHeight = titleSize * 1.2
+  const overviewSize = ISLAND_FONT
+  const overviewLineHeight = overviewSize * 1.25
   const metaSize = 4.5 * scale
   const contentInset = Math.max(0.25 * scale, textPadding(titleSize) / PLANE)
   const pencilGutter = 0.5 * scale

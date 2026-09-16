@@ -1,5 +1,6 @@
 import type { ProjectProfile } from '../../../project-profile.ts'
-import type { SheetScene } from '../../../sheet/types.ts'
+import { ROOF_SHADOW } from '../../../sheet/grid.ts'
+import type { Building, RoutePoint, SheetScene } from '../../../sheet/types.ts'
 import type { LayerPose } from '../layers/orbit.ts'
 import { EXPLODED_POSE, NESTED_POSE, OVERHEAD_POSE, ORBIT_DURATION_MS, PLAN_DURATION_MS, interpolatePose, orbitPose } from '../layers/orbit.ts'
 import { sceneAtSeparation, type LayeredScene } from '../layers/separation.ts'
@@ -28,12 +29,44 @@ export interface MapAnimator {
 }
 
 
+/** Settle a back-wall port with its roof while preserving the routed ground path. */
+function flattenRouteEnd(points: RoutePoint[], building: Building | undefined, amount: number): RoutePoint[] {
+  if (!building) return points
+  const [at, next] = points as [RoutePoint, RoutePoint, ...RoutePoint[]]
+  const horizontal = at.gy === next.gy
+  const behind = horizontal ? at.gx < building.rect.gx : at.gy < building.rect.gy
+  if (!behind) return points
+  const shift = building.heightUnits * ROOF_SHADOW * amount
+  const end = { gx: at.gx + shift, gy: at.gy + shift }
+  const along = horizontal ? 'gy' : 'gx'
+  let join = 1
+  // The settled port can overtake several short bends in the roof shadow.
+  // Consume those bends instead of reversing their perpendicular runs.
+  while (join + 2 < points.length
+    && points[join + 1]![along] > at[along]
+    && points[join + 1]![along] <= end[along]) join += 2
+  const bend = { ...points[join]!, [along]: end[along] }
+  return [end, bend, ...points.slice(join + 1)]
+}
+
 /** Flatten a presentation copy; the sheet and its source evidence remain untouched. */
 function flattenSheet(sheet: SheetScene, amount: number): SheetScene {
   if (amount === 0) return sheet
   const height = 1 - amount
+  const buildings = new Map(sheet.buildings.map(building => [building.representationId, building]))
   return {
     ...sheet,
+    routes: sheet.routes.map(route => {
+      const points = [...route.points]
+      if (points.length === 2) {
+        const middle = { gx: (points[0]!.gx + points[1]!.gx) / 2, gy: (points[0]!.gy + points[1]!.gy) / 2 }
+        points.splice(1, 0, { ...middle }, { ...middle })
+      }
+      const fromSource = flattenRouteEnd(points, buildings.get(route.source), amount)
+      const settled = flattenRouteEnd(fromSource.reverse(), buildings.get(route.target), amount).reverse()
+      return { ...route, points: settled.filter((point, index) => index === 0
+        || point.gx !== settled[index - 1]!.gx || point.gy !== settled[index - 1]!.gy) }
+    }),
     buildings: sheet.buildings.map(building => ({
       ...building,
       heightUnits: building.heightUnits * height,
@@ -57,6 +90,7 @@ function flattenSheet(sheet: SheetScene, amount: number): SheetScene {
 /** Geometry follows the displayed pose, even while the selected destination is another view. */
 export function presentScene(sheet: SheetScene, profile: ProjectProfile | undefined, pose: LayerPose): LayeredScene {
   const projected = projectScene(flattenSheet(sheet, pose.flatten), profile, pose)
+  projected.routes.forEach((item, index) => { item.route = sheet.routes[index]! })
   if (pose.flatten === 1) {
     projected.slabs = projected.slabs.map(item => ({ ...item, faces: item.faces.filter(face => face.side === 'top') }))
     projected.buildings = projected.buildings.map(item => ({

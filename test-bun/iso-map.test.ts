@@ -211,53 +211,57 @@ test.concurrent('every relationship has a polyline whose arrowhead lies on the s
   }
 })
 
-test.concurrent('an off-centre route meets the near wall of the actor it leaves, front side or under the roof', () => {
-  const actor: Building = {
-    representationId: 'observed:actor', id: 'actor', title: 'Actor', origin: 'observed',
-    kind: 'actor', external: false, surface: 'actors', rect: { gx: 4, gy: 4, w: 4, d: 4 },
-    heightUnits: 1, shape: { kind: 'round' }, floors: [], lines: ['Actor'],
-  }
-  const leg = (id: string, from: RoutePoint, to: RoutePoint, arriving = false): SheetScene['routes'][number] => ({
-    id,
-    source: arriving ? 'other' : actor.representationId,
-    target: arriving ? actor.representationId : 'other',
-    description: '', origin: 'observed', points: arriving ? [to, from] : [from, to],
-  })
-  /** A back side is hidden under the roof, so the router anchors a route half a cell behind the footprint, where a one-floor roof stops shading the ground. */
-  const shadow = actor.heightUnits * ROOF_SHADOW
-  const scene: SheetScene = {
-    sheet: { gx: 0, gy: 0, w: 12, d: 12 }, islands: [], zones: [], slabs: [], buildings: [actor],
-    routes: [
-      leg('south', { gx: 5, gy: 8 }, { gx: 5, gy: 10 }),
-      leg('east', { gx: 8, gy: 7 }, { gx: 10, gy: 7 }, true),
-      leg('west', { gx: 4 - shadow, gy: 5 }, { gx: 2, gy: 5 }),
-      leg('north', { gx: 5, gy: 4 - shadow }, { gx: 5, gy: 2 }),
-    ],
-  }
-  /** Back from screen pixels to ground cells, one cell east being `unit`. */
-  const unit = project(1, 0, 0)
-  const ground = ({ x, y }: Point): RoutePoint => ({ gx: (y / unit.y + x / unit.x) / 2, gy: (y / unit.y - x / unit.x) / 2 })
-  const drawn = projectScene(scene, projectProfile).routes
-  const radius = actor.rect.w / 2
+function onSegment(at: Point, start: Point, end: Point): boolean {
+  const length = Math.hypot(end.x - start.x, end.y - start.y)
+  if (length < 1e-8) return false
+  const cross = (at.x - start.x) * (end.y - start.y) - (at.y - start.y) * (end.x - start.x)
+  const along = (at.x - start.x) * (end.x - start.x) + (at.y - start.y) * (end.y - start.y)
+  return Math.abs(cross) < 1e-6 && along >= -1e-6 && along <= length * length + 1e-6
+}
 
-  for (const { route, points } of drawn) {
-    const arriving = route.target === actor.representationId
-    const met = ground(points[arriving ? points.length - 1 : 0]!)
-    const port = route.points[arriving ? route.points.length - 1 : 0]!
-    const adjacent = route.points[arriving ? route.points.length - 2 : 1]!
-    const direction = (end: RoutePoint): number[] => arriving
-      ? [Math.sign(end.gx - adjacent.gx), Math.sign(end.gy - adjacent.gy)]
-      : [Math.sign(adjacent.gx - end.gx), Math.sign(adjacent.gy - end.gy)]
-    /** A front-side end meets the circle on the ground; a back-side one meets the same circle slid under the roof, which is where the shadow anchor already stands. */
-    const behind = port.gx < actor.rect.gx || port.gy < actor.rect.gy ? shadow : 0
-    const centre = { gx: actor.rect.gx + radius - behind, gy: actor.rect.gy + radius - behind }
-    assert.ok(Math.abs(Math.hypot(met.gx - centre.gx, met.gy - centre.gy) - radius) < 1e-9, `${route.id} misses the wall`)
-    /** The near wall, not the one across the shape. */
-    assert.ok(Math.hypot(met.gx - port.gx, met.gy - port.gy) < radius, `${route.id} crosses to the far wall`)
-    assert.deepEqual(direction(met), direction(port), `${route.id} changes direction`)
+for (const shape of [{ kind: 'round' }, { kind: 'pill' }, { kind: 'block' }] as const) {
+  for (const pose of [NESTED_POSE, OVERHEAD_POSE]) {
+    test.concurrent(`${shape.kind} route ends meet visible outlines at pitch ${pose.pitch} without moving route bodies`, () => {
+      const building: Building = {
+        representationId: 'observed:end', id: 'end', title: 'End', origin: 'observed',
+        kind: shape.kind === 'round' ? 'actor' : 'component', external: shape.kind === 'pill',
+        surface: 'surface', rect: { gx: 4, gy: 4, w: 6, d: 4 },
+        heightUnits: shape.kind === 'block' ? 4 : 1, shape, floors: [], lines: ['End'],
+      }
+      const leg = (id: string, from: RoutePoint, to: RoutePoint, arriving = false): SheetScene['routes'][number] => ({
+        id, source: arriving ? 'other' : building.representationId,
+        target: arriving ? building.representationId : 'other',
+        description: '', origin: 'observed', points: arriving ? [to, from] : [from, to],
+      })
+      const shadow = building.heightUnits * ROOF_SHADOW
+      const scene: SheetScene = {
+        sheet: { gx: 0, gy: 0, w: 14, d: 12 }, islands: [], zones: [], slabs: [], buildings: [building],
+        routes: [
+          leg('south', { gx: 7, gy: 8 }, { gx: 7, gy: 11 }),
+          leg('east', { gx: 10, gy: 7 }, { gx: 13, gy: 7 }, true),
+          leg('west', { gx: 4 - shadow, gy: 5 - shadow }, { gx: 0, gy: 5 - shadow }, true),
+          leg('north', { gx: 6 - shadow, gy: 4 - shadow }, { gx: 6 - shadow, gy: 0 }),
+        ],
+      }
+      const before = structuredClone(scene)
+      const drawn = presentScene(scene, undefined, pose)
+      const faces = drawn.buildings[0]!.floors.flat()
+      for (const { route, points } of drawn.routes) {
+        const arriving = route.target === building.representationId
+        const at = points[arriving ? points.length - 1 : 0]!
+        const adjacent = points[arriving ? 0 : points.length - 1]!
+        const originalAdjacent = route.points[arriving ? route.points.length - 2 : 1]!
+        assert.deepEqual(adjacent, project(originalAdjacent.gx, originalAdjacent.gy, 0, pose))
+        if (pose.flatten === 1) assert.ok(points.slice(1).every((point, index) =>
+          Math.abs(point.x - points[index]!.x) < 1e-6 || Math.abs(point.y - points[index]!.y) < 1e-6))
+        const onEdge = faces.some(face => face.points.some((start, index) =>
+          onSegment(at, start, face.points[(index + 1) % face.points.length]!)))
+        assert.ok(onEdge, `${shape.kind} ${pose.pitch} ${route.id} misses its visible outline`)
+      }
+      assert.deepEqual(scene, before)
+    })
   }
-  assert.equal(new Set(drawn.map(({ route, points }) => JSON.stringify(ground(points[route.target === actor.representationId ? points.length - 1 : 0]!)))).size, drawn.length)
-})
+}
 
 test.concurrent('a route meets the visible upper face of a stepped tower', () => {
   const tower: Building = {

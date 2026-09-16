@@ -97,3 +97,50 @@ test.concurrent('intermediate plan geometry settles continuously without changin
   assert.deepEqual(presentScene(world.sheet, undefined, motion.pose), spatial)
   assert.deepEqual(world, before)
 })
+
+test.concurrent('flattening settles back-wall ports through the existing bends without endpoint staircases', () => {
+  const world = fixture()
+  const sheet = world.sheet
+  const target = sheet.buildings.find(building => building.id === 'part')!
+  const shadow = target.heightUnits / 2
+  const x = target.rect.gx - shadow
+  const y = target.rect.gy - shadow + target.rect.d / 2
+  const route = {
+    id: 'arrives', source: 'outside', target: target.representationId, origin: 'observed' as const, description: '',
+    points: [{ gx: x - 8, gy: y - 4 }, { gx: x - 4, gy: y - 4 }, { gx: x - 4, gy: y }, { gx: x, gy: y }],
+  }
+  const input = { ...sheet, routes: [route] }
+  const before = structuredClone(input)
+  const projected = presentScene(input, undefined, OVERHEAD_POSE).routes[0]!
+  assert.equal(projected.points.length, route.points.length)
+  assert.ok(projected.points.slice(1).every((point, index) =>
+    Math.abs(point.x - projected.points[index]!.x) < 1e-6
+    || Math.abs(point.y - projected.points[index]!.y) < 1e-6))
+  assert.deepEqual(input, before)
+})
+
+for (const vertical of [false, true]) for (const fromStart of [false, true]) {
+  test.concurrent(`flattening removes overtaken bends at a ${vertical ? 'north' : 'west'} ${fromStart ? 'source' : 'target'} port`, () => {
+    const sheet = fixture().sheet
+    const target = { ...sheet.buildings.find(building => building.id === 'part')!,
+      rect: { gx: 20, gy: 20, w: 6, d: 6 }, heightUnits: 4, floors: [],
+    }
+    const points = [[10, 23], [16, 23], [16, 19], [17, 19], [17, 18.5], [18, 18.5]]
+      .map(([x, y]) => ({ gx: (vertical ? y : x)!, gy: (vertical ? x : y)! }))
+    if (fromStart) points.reverse()
+    const route = { id: 'arrives', source: fromStart ? target.representationId : 'outside',
+      target: fromStart ? 'outside' : target.representationId, origin: 'observed' as const, description: '', points }
+    const input = { ...sheet, buildings: [target], routes: [route] }
+    const before = structuredClone(input)
+    for (const flatten of [0.5, 1]) {
+      const displayed = presentScene(input, undefined, { ...OVERHEAD_POSE, flatten }).routes[0]!.points
+      assert.equal(displayed.length, 4)
+      const length = displayed.slice(1).reduce((sum, point, index) => sum
+        + Math.abs(point.x - displayed[index]!.x) + Math.abs(point.y - displayed[index]!.y), 0)
+      const first = displayed[0]!, last = displayed.at(-1)!
+      assert.ok(Math.abs(length - Math.abs(last.x - first.x) - Math.abs(last.y - first.y)) < 1e-6,
+        'the route must not double back after its port settles')
+    }
+    assert.deepEqual(input, before)
+  })
+}
