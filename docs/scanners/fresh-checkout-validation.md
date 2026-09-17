@@ -43,7 +43,7 @@ byte-identical between runs; project source and dependency declarations were
 unchanged. Existing framework fixtures also verify curated ownership and
 preservation of authored architecture.
 
-Missing external Java definitions remain compiler diagnostics and uncertain
+Missing external Java definitions become one summary diagnostic and uncertain
 calls. They do not prevent inventory or local call evidence. Diagnostics are
 indexed by source file so checking individual calls does not repeatedly search
 all project errors. This scan reports missing-type limitations; it does not

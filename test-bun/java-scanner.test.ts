@@ -49,7 +49,7 @@ test.concurrent('Java compiler resolves overloads and preserves wrappers while v
   } finally { await rm(root, { recursive: true, force: true }) }
 })
 
-test.concurrent('Java retains proven local calls while missing external types and invalid overload arguments stay unresolved', async () => {
+test.concurrent('Java retains proven local calls while missing external types and unresolved names leave calls unresolved in one summary diagnostic', async () => {
   const { root, worker } = await fixture()
   try {
     await writeFile(path.join(root, 'src/main/java/Caller.java'), `package entry;
@@ -63,5 +63,10 @@ public class Caller {
     expect(evidence).toContainEqual(expect.objectContaining({ providers: ['sample.Provider#ship(int)'], unresolved: false }))
     expect(evidence.filter(call => call.member === 'ship' && call.unresolved)).toHaveLength(1)
     expect(evidence.find(call => call.member === 'work')).toMatchObject({ providers: [], unresolved: true })
+    const missing = observation.diagnostics.filter(item => item.code === 'JAVA_MISSING_EXTERNAL_TYPES')
+    expect(missing).toHaveLength(1)
+    expect(missing[0]!.message).toStartWith('3 ')
+    expect(missing[0]!.message).toContain('unavailable')
+    expect(observation.diagnostics.some(item => item.code.startsWith('compiler.err.'))).toBeFalse()
   } finally { await rm(root, { recursive: true, force: true }) }
 })

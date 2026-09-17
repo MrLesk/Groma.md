@@ -11,14 +11,29 @@ export function formatScanSummary(summary: ScanSummary): string {
   return `${counts}${findings}${conflicts}`
 }
 
+type ScannerDiagnostic = NonNullable<ScanSummary['scannerDiagnostics']>[number]
+
+/** One line per scanner and code: diagnostic count, then the first listed diagnostic as an example. */
+function formatScannerDiagnostics(diagnostics: ScannerDiagnostic[]): string[] {
+  const groups = new Map<string, { first: ScannerDiagnostic; count: number }>()
+  for (const entry of diagnostics) {
+    const key = JSON.stringify([entry.scanner.id, entry.diagnostic.code])
+    const group = groups.get(key)
+    if (group) group.count++
+    else groups.set(key, { first: entry, count: 1 })
+  }
+  return [...groups.values()].map(({ first: { scanner, diagnostic }, count }) => {
+    const location = [diagnostic.file, diagnostic.line].filter(value => value !== undefined).join(':')
+    const [firstLine] = diagnostic.message.split('\n')
+    const example = location ? `${location}: ${firstLine}` : firstLine
+    return `${scanner.id} · ${diagnostic.severity} · ${diagnostic.code} ×${count}: ${example}`
+  })
+}
+
 export function formatScanReport(repositoryRoot: string, summary: ScanSummary): string {
   const findings = formatArchitectureFindings(architectureFindingsFor(repositoryRoot))
   const conflicts = summary.evidenceConflicts?.map(conflict => `${conflict.code}: ${conflict.message}`) ?? []
-  const diagnostics = summary.scannerDiagnostics?.map(({ scanner, diagnostic }) => {
-    const location = [diagnostic.file, diagnostic.line].filter(value => value !== undefined).join(':')
-    const message = location ? `${location}: ${diagnostic.message}` : diagnostic.message
-    return `${scanner.id} · ${diagnostic.severity} · ${diagnostic.code}: ${message}`
-  }) ?? []
+  const diagnostics = formatScannerDiagnostics(summary.scannerDiagnostics ?? [])
   const failures = summary.scannerFailures?.map(failure => `${failure.message} (saved scanner data kept)`) ?? []
   return [formatScanSummary(summary), ...failures, ...diagnostics, ...conflicts, ...findings].join('\n')
 }

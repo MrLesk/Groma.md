@@ -195,3 +195,27 @@ test.concurrent('TypeScript locates declarations and invocations using source of
     expect(call.unresolved).toBe(true)
   } finally { await rm(root, { recursive: true, force: true }) }
 })
+
+test.concurrent('the scan report prints one line per scanner and diagnostic code while failures stay individual', () => {
+  const scanner = (id: string) => ({ id, technology: 'fixture', engine: 'fixture', engineVersion: '1' })
+  const diagnostic = (file: string) => ({ severity: 'info', code: 'shared', message: 'detail\nsecond line', file, line: 7 })
+  const report = formatScanReport(crypto.randomUUID(), {
+    created: 0, refreshed: 0, matched: 0,
+    scannerFailures: [{ scanner: 'first', message: 'first failed' }, { scanner: 'second', message: 'second failed' }],
+    scannerDiagnostics: [
+      { scanner: scanner('a'), diagnostic: diagnostic('one.ts') },
+      { scanner: scanner('a'), diagnostic: diagnostic('two.ts') },
+      { scanner: scanner('b'), diagnostic: diagnostic('three.ts') },
+    ],
+  }).split('\n')
+  expect(report).toHaveLength(5)
+  expect(report.filter(line => line.includes('failed'))).toHaveLength(2)
+  const groups = report.filter(line => line.includes('shared'))
+  expect(groups).toHaveLength(2)
+  const [first, second] = groups
+  expect(first).toContain('one.ts')
+  expect(first).not.toContain('two.ts')
+  expect(first).toMatch(/\b2\b/)
+  expect(second).toContain('three.ts')
+  expect(second).toMatch(/\b1\b/)
+})
