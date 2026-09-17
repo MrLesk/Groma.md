@@ -61,8 +61,8 @@ function observation(language: string): ScanObservation {
     ],
     httpEndpoints: [{ operation: paths[1]!, method: 'GET', path: [{ kind: 'literal', value: 'hidden' }] }],
     httpRequests: [
-      { operation: paths[1]!, method: 'GET', base: 'none', path: [] },
-      { operation: paths[0]!, method: 'GET', base: 'none', path: [{ kind: 'literal', value: 'hidden' }] },
+      { operation: paths[1]!, method: 'GET', path: [] },
+      { operation: paths[0]!, method: 'GET', path: [{ kind: 'literal', value: 'hidden' }] },
     ],
     diagnostics: [],
   })

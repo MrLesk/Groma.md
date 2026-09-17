@@ -20,12 +20,12 @@ interface SentRequest {
 }
 
 /**
- * A known request has a method, no unknown text, and a path core can compare: either it starts at
- * the server root, or a configured base is followed by a literal segment.
+ * A known request has a method and no unknown text. A path after a configured base must start with
+ * a literal segment, because the base itself contributes no text core can compare.
  */
 function knownRequest(request: ScanHttpRequest): request is ScanHttpRequest & { method: string; path: KnownSegment[] } {
   if (request.method === undefined || request.path.some(segment => segment.kind === 'unknown')) return false
-  return request.base === 'none' || (request.base === 'configured' && request.path[0]?.kind === 'literal')
+  return !request.configured || request.path[0]?.kind === 'literal'
 }
 
 /** Operation IDs are local to their observation, so each fact is resolved to its file there. */
@@ -49,21 +49,22 @@ function httpFacts(observations: readonly ScanObservation[]): { endpoints: Serve
 
 /**
  * A dynamic segment fills a parameter or catch-all position. It could also equal a literal at
- * runtime: `sibling` treats that as a match, which keeps a literal route in another file uncertain.
+ * runtime: `dynamicFillsLiteral` treats that as a match, which keeps a literal route in another
+ * file uncertain.
  */
-function matches(endpoint: readonly HttpEndpointSegment[], request: readonly KnownSegment[], sibling: boolean): boolean {
+function matches(endpoint: readonly HttpEndpointSegment[], request: readonly KnownSegment[], dynamicFillsLiteral: boolean): boolean {
   const [head, ...rest] = endpoint
   if (head === undefined) return request.length === 0
   if (head.kind === 'catch-all') return request.length >= (head.optional ? 0 : 1)
-  if (head.kind === 'parameter' && head.optional && matches(rest, request, sibling)) return true
+  if (head.kind === 'parameter' && head.optional && matches(rest, request, dynamicFillsLiteral)) return true
   const [segment, ...remaining] = request
   if (segment === undefined) return false
-  if (head.kind === 'literal' && !literalFilled(head.value, segment, sibling)) return false
-  return matches(rest, remaining, sibling)
+  if (head.kind === 'literal' && !literalFilled(head.value, segment, dynamicFillsLiteral)) return false
+  return matches(rest, remaining, dynamicFillsLiteral)
 }
 
-function literalFilled(value: string, segment: KnownSegment, sibling: boolean): boolean {
-  return segment.kind === 'literal' ? segment.value === value : sibling
+function literalFilled(value: string, segment: KnownSegment, dynamicFillsLiteral: boolean): boolean {
+  return segment.kind === 'literal' ? segment.value === value : dynamicFillsLiteral
 }
 
 type Segment = HttpEndpointSegment | KnownSegment
@@ -80,12 +81,12 @@ function removablePrefix(prefix: Segment | undefined, next: Segment | undefined,
 function matchRank(
   endpoint: readonly HttpEndpointSegment[],
   request: readonly KnownSegment[],
-  sibling: boolean,
+  dynamicFillsLiteral: boolean,
 ): number | undefined {
   const catchAll = endpoint.some(segment => segment.kind === 'catch-all') ? 1 : 0
-  if (matches(endpoint, request, sibling)) return catchAll
-  if (removablePrefix(request[0], request[1], endpoint[0]) && matches(endpoint, request.slice(1), sibling)) return 2 + catchAll
-  if (removablePrefix(endpoint[0], endpoint[1], request[0]) && matches(endpoint.slice(1), request, sibling)) return 2 + catchAll
+  if (matches(endpoint, request, dynamicFillsLiteral)) return catchAll
+  if (removablePrefix(request[0], request[1], endpoint[0]) && matches(endpoint, request.slice(1), dynamicFillsLiteral)) return 2 + catchAll
+  if (removablePrefix(endpoint[0], endpoint[1], request[0]) && matches(endpoint.slice(1), request, dynamicFillsLiteral)) return 2 + catchAll
   return undefined
 }
 

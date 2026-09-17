@@ -4,7 +4,7 @@ import { array, object, string } from './values.ts'
 export { parseScannerDiscovery } from './discovery.ts'
 export type { ScannerDiscoveryMetadata, ScannerDiscoveryRule } from './discovery.ts'
 export type {
-  HttpEndpointSegment, HttpRequestBase, HttpRequestSegment, ScanHttpEndpoint, ScanHttpRequest,
+  HttpEndpointSegment, HttpRequestSegment, ScanHttpEndpoint, ScanHttpRequest,
 } from './http.ts'
 
 export interface ScannerIdentity {
