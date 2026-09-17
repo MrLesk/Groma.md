@@ -238,6 +238,13 @@ class Evidence(ast.NodeVisitor):
         self.generic_visit(node)
 
 
+def read_source(file):
+    with tokenize.open(file) as stream:
+        encoding = stream.encoding
+    with open(file, encoding=encoding, newline="") as stream:
+        return stream.read()
+
+
 def scan(files):
     roots, memberships = source_roots(files)
     observation = {"schemaVersion": 1,
@@ -247,10 +254,7 @@ def scan(files):
                    "diagnostics": [{"severity": "info", "code": "PYTHON_SYNTAX_ONLY",
                                     "message": "Python syntax evidence only: call targets, imports, decorators and framework wiring are not resolved."}]}
     for file, owner in memberships.items():
-        with tokenize.open(file) as stream:
-            encoding = stream.encoding
-        with open(file, encoding=encoding, newline="") as stream:
-            source = stream.read()
+        source = read_source(file)
         tree = ast.parse(source, filename=file)
         # Validate scope rules too, but never execute the resulting code object.
         compile(tree, file, "exec")
@@ -260,3 +264,57 @@ def scan(files):
         observation["operations"].extend(evidence.operations)
         observation["invocations"].extend(evidence.invocations)
     return observation
+
+
+FUNCTIONS = (ast.FunctionDef, ast.AsyncFunctionDef)
+
+
+def visibility(name, member):
+    """Python visibility comes from the name alone; dunder names are public."""
+    if not name.startswith("_") or (name.startswith("__") and name.endswith("__")):
+        return "public"
+    if member and not name.startswith("__"):
+        return "protected"
+    return "private"
+
+
+def is_property_accessor(function):
+    """A property, cached property, or property getter, setter or deleter is an accessor, not a method."""
+    return any((isinstance(decorator, ast.Name) and decorator.id in ("property", "cached_property"))
+               or (isinstance(decorator, ast.Attribute)
+                   and decorator.attr in ("getter", "setter", "deleter", "cached_property"))
+               for decorator in function.decorator_list)
+
+
+def outline_declarations(tree, symbols):
+    """Source outline of the statements directly in a module body."""
+    def symbol(name, line, owner=None):
+        # The scan names a method `Class.method`, so a member's Code link uses that form.
+        qualified = name if owner is None else f"{owner}.{name}"
+        return {"name": name, "line": line, "visibility": visibility(name, owner is not None),
+                "entry": qualified in symbols}
+
+    declarations = []
+    for node in tree.body:
+        if isinstance(node, FUNCTIONS):
+            declarations.append({"kind": "function", **symbol(node.name, node.lineno)})
+        elif isinstance(node, ast.ClassDef):
+            members = [symbol(item.name, item.lineno, owner=node.name) for item in node.body
+                       if isinstance(item, FUNCTIONS) and not is_property_accessor(item)]
+            declarations.append({"kind": "type", **symbol(node.name, node.lineno), "members": members})
+        elif isinstance(node, (ast.Assign, ast.AnnAssign)) and isinstance(node.value, ast.Lambda):
+            # Only a lambda bound directly to a name; wrapped values such as partial(...) are not functions.
+            targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+            declarations.extend({"kind": "function", **symbol(target.id, target.lineno)}
+                                for target in targets if isinstance(target, ast.Name))
+    return declarations
+
+
+def outline(references):
+    files = []
+    for reference in references:
+        file = reference["file"]
+        declarations = outline_declarations(ast.parse(read_source(file), filename=file), set(reference["symbols"]))
+        if declarations:
+            files.append({"file": file, "declarations": declarations})
+    return files

@@ -3,9 +3,11 @@ import { cp, mkdir, mkdtemp, readdir, readFile, rename, rm, writeFile } from 'no
 import os from 'node:os'
 import path from 'node:path'
 import { buildPackage } from '../plugins/scanners/python/build.ts'
-import type { ScannerPlugin } from '@groma/scanner'
+import type { CodeSymbol, ScannerPlugin } from '@groma/scanner'
+import { loadAnnotatedArchitecture } from '../src/core.ts'
 import { addScanner } from '../src/scanner/modules/inventory.ts'
 import { compileWatchPatterns } from '../src/scanner/watch-patterns.ts'
+import { readCodeStructure } from '../src/viewers/source/structure.ts'
 
 const fixtures = path.resolve(import.meta.dir, '../test/fixtures')
 const cli = path.resolve(import.meta.dir, '../src/cli.ts')
@@ -91,6 +93,39 @@ test.concurrent('lint finds identical and near-duplicate Python functions but ne
     expect(findings).toEqual([
       { at: ['invoice.py:1', 'quote.py:1'], identical: false },
       { at: ['readiness.py:1', 'scheduling.py:1'], identical: true },
+    ])
+  } finally { await rm(temporary, { recursive: true, force: true }) }
+})
+
+test.concurrent('a component outlines its Python file beside a TypeScript file under the Python visibility rules', async () => {
+  const { root, temporary, artifact } = await fixture('python-outline')
+  try {
+    await addScanner(root, artifact)
+    await addScanner(root, path.resolve(import.meta.dir, '../plugins/scanners/typescript'))
+    const world = await loadAnnotatedArchitecture(root)
+    const component = world.elements.find(element => element.kind === 'component')!
+    const files = await readCodeStructure(root, world, null, component.representationId) ?? []
+    expect(files.map(file => file.file)).toEqual([...new Set(component.code.map(reference => reference.file))])
+    const symbol = ({ name, line, visibility, entry }: CodeSymbol) => [name, line, visibility, entry]
+    const python = files.find(file => file.file.endsWith('.py'))!.declarations.map(declaration => [
+      declaration.kind, ...symbol(declaration), declaration.kind === 'type' ? declaration.members.map(symbol) : [],
+    ])
+    // Type aliases, wrapped values, nested declarations, class attributes and properties are absent.
+    // Code links name a function as place_order and a method as OrderService.fetch.
+    expect(python).toEqual([
+      ['function', 'place_order', 6, 'public', true, []],
+      ['function', '_audit', 10, 'private', false, []],
+      ['function', 'ship', 16, 'public', false, []],
+      ['function', 'notify', 17, 'public', false, []],
+      ['type', 'OrderService', 21, 'public', false, [
+        ['__init__', 28, 'public', false],
+        ['load', 32, 'public', false],
+        ['_protect', 47, 'protected', false],
+        ['__hide', 50, 'private', false],
+        ['__len__', 53, 'public', false],
+        ['fetch', 56, 'public', true],
+      ]],
+      ['type', '_Draft', 60, 'private', false, [['submit', 61, 'public', false]]],
     ])
   } finally { await rm(temporary, { recursive: true, force: true }) }
 })

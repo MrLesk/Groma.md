@@ -67,6 +67,35 @@ Correct reported syntax errors or use a scanner release supporting the source
 language version. Readiness checks source availability and the packaged worker;
 full syntax validation happens during the scan.
 
+## Source outline
+
+Components list the declarations of their Python files under the
+[shared outline contract](../creating-a-plugin.md#source-outline). The worker
+parses each requested file with the same `ast` parser and lists only
+statements directly in the module body:
+
+- `def` and `async def`, and lambdas assigned directly to a module-level name,
+  are functions.
+- Classes are types. Their members are the `def` and `async def` statements
+  directly in the class body, including static methods, class methods and
+  `__init__`.
+
+Properties are not members: methods decorated with `@property`,
+`@cached_property`, `@functools.cached_property`, or a property's `.getter`,
+`.setter`, or `.deleter`. Nested classes and functions, class attributes
+holding lambdas, type aliases, and other assignments such as `partial(...)` are
+not listed either, nor are declarations inside module-level `if` or `try`
+blocks. A declaration's line is its `def`, `class`, or assigned name's line.
+
+Visibility comes from names alone. Dunder names and names without a leading
+underscore are `public`. Members named `_name` are `protected` and members named
+`__name` are `private`. Other top-level names starting with `_` are `private`.
+`__all__` does not change visibility.
+
+A declaration is an entry when a Code link names it: a top-level declaration by
+its name, such as `place_order`, and a member by its class and name, such as
+`OrderService.fetch`, the form the scan uses for methods.
+
 ## Compared operations
 
 `groma lint` and scan findings compare Python operations under the

@@ -1,0 +1,62 @@
+import functools
+
+type Money = int
+
+
+def place_order(order):
+    return order
+
+
+async def _audit(order):
+    def nested():
+        return order
+    return nested
+
+
+ship = lambda order: order
+notify: object = lambda order: order
+retry = functools.partial(place_order)
+
+
+class OrderService:
+    handler = lambda self: self
+
+    class Line:
+        def total(self):
+            return 0
+
+    def __init__(self, store):
+        self.store = store
+
+    @classmethod
+    def load(cls):
+        return cls(None)
+
+    @property
+    def size(self):
+        return 0
+
+    @size.setter
+    def size(self, value):
+        self.store = value
+
+    @functools.cached_property
+    def summary(self):
+        return self
+
+    def _protect(self):
+        return self
+
+    def __hide(self):
+        return self
+
+    def __len__(self):
+        return 0
+
+    async def fetch(self):
+        return self
+
+
+class _Draft:
+    def submit(self):
+        return self
