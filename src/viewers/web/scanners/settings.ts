@@ -1,5 +1,6 @@
 import type { WebDataSource } from '../data.ts'
 import { escaped } from '../atoms/escape.ts'
+import { scannerName } from './name.ts'
 import { isNpmPackageName } from '../../../scanner/modules/published.ts'
 import { scannerGroups, scannerSettingAction, scannerUpgradeAction, scannerMatchReason, type ScannerSetting, type ScannerSettings, type ScannerSettingsAction } from '../../../scanner/modules/settings-model.ts'
 
@@ -11,30 +12,47 @@ export const scannerSettingsCss = `
   #scanner-settings button { white-space: nowrap; }
   #scanner-settings button:disabled { opacity: .5; cursor: not-allowed; }
   #scanner-settings [data-action="install"], #scanner-settings [data-action="restore"], #scanner-settings [data-action="update"], #scanner-settings [data-group] { color: var(--accent-text); }
-  #scanner-settings .scanner-group { margin-bottom: 20px; }
-  #scanner-settings .scanner-group-heading { display: flex; align-items: center; gap: 12px; margin-bottom: 4px; }
+  #scanner-settings .scanner-group { display: grid; gap: 12px; margin-bottom: 24px; }
+  #scanner-settings .scanner-group:last-child { margin-bottom: 0; }
+  #scanner-settings .scanner-group-heading { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
   #scanner-settings h2 { flex: 1; margin: 0; font-size: 12px; }
   #scanner-settings .scanner-count { color: var(--muted); font-weight: 400; margin-left: 8px; }
-  #scanner-settings .scanner-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 16px; padding: 12px 0; border-bottom: 1px solid var(--hairline); }
-  #scanner-settings .scanner-row > div { min-width: 0; }
-  #scanner-settings .scanner-row > button { align-self: start; }
-  #scanner-settings .scanner-name { display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px; }
-  #scanner-settings .scanner-origin, #scanner-settings .scanner-version { color: var(--muted); font-size: 11px; }
-  #scanner-settings .scanner-origin { border: 1px solid var(--hairline); border-radius: 4px; padding: 1px 5px; }
-  #scanner-settings .scanner-match { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); margin-top: 5px; }
-  #scanner-settings .scanner-status { color: var(--syntax-number); }
-  #scanner-settings details { margin-top: 6px; }
-  #scanner-settings summary { cursor: pointer; color: var(--muted); }
-  #scanner-settings details p, #scanner-settings pre { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; margin: 8px 0; }
+  #scanner-settings .scanner-row { min-width: 0; border: 1px solid var(--hairline); border-radius: 12px; overflow: hidden; }
+  #scanner-settings .scanner-header { display: flex; align-items: center; flex-wrap: wrap; gap: 14px; padding: 20px; }
+  #scanner-settings .scanner-heading { display: grid; gap: 4px; flex: 1; min-width: 120px; overflow-wrap: anywhere; }
+  #scanner-settings .scanner-heading strong { font-size: 16px; font-weight: 600; }
+  #scanner-settings .scanner-version, #scanner-settings .scanner-origin { color: var(--muted); font-size: 11px; }
+  #scanner-settings .scanner-status { font-size: 10px; color: var(--accent-text); background: var(--hover); padding: 4px 8px; border-radius: 5px; }
+  #scanner-settings .scanner-status.attention { color: var(--syntax-number); }
+  #scanner-settings .scanner-primary:has(button) { display: flex; }
+  #scanner-settings .scanner-primary button { border-color: color-mix(in srgb, var(--accent) 45%, var(--hairline)); background: var(--hover); color: var(--accent-text); }
+  #scanner-settings .scanner-match { color: var(--muted); margin: 0 20px 16px; overflow-wrap: anywhere; font-size: 12px; }
+  #scanner-settings .scanner-row details { border-top: 1px solid var(--hairline); }
+  #scanner-settings summary { padding: 12px 20px; cursor: pointer; color: var(--muted); font-size: 11px; }
+  #scanner-settings summary:hover { color: var(--ink); }
+  #scanner-settings summary .scanner-count { float: right; }
+  #scanner-settings .scanner-body { padding: 4px 20px 16px; display: grid; gap: 12px; }
+  #scanner-settings .scanner-body p, #scanner-settings pre { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; margin: 0; }
+  #scanner-settings .scanner-package { overflow-wrap: anywhere; color: var(--muted); font: inherit; font-size: 11px; }
+  #scanner-settings .scanner-evidence { list-style: none; margin: 0; padding: 0; max-height: 240px; overflow: auto; }
+  #scanner-settings .scanner-evidence li { padding: 12px 0; border-top: 1px solid var(--hairline); overflow-wrap: anywhere; font-size: 11px; }
   #scanner-settings .scanner-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+  #scanner-settings [data-action="remove"] { color: var(--diff-removed); }
   #scanner-settings .scanner-notice { margin: 0; color: var(--muted); }
   #scanner-settings .scanner-notice[data-tone="error"], #scanner-settings .scanner-notice[data-tone="warning"] { color: var(--syntax-number); }
-  #scanner-settings form { display: flex; gap: 10px; align-items: end; }
+  #scanner-settings form { display: flex; flex-wrap: wrap; gap: 10px; align-items: end; }
   #scanner-settings label { display: grid; gap: 8px; flex: 1; min-width: 0; }
   #scanner-settings input { width: 100%; box-sizing: border-box; border: 1px solid var(--hairline); border-radius: var(--control-radius); background: var(--paper); color: var(--ink); padding: 9px; font: inherit; }
   #scanner-settings .scanner-error { color: var(--diff-removed); }
   #scanner-settings .scanner-error summary { color: inherit; }
   #scanner-settings [hidden] { display: none; }
+  @media (max-width: 640px) {
+    #scanner-settings .scanner-header { padding: 14px; gap: 10px; }
+    #scanner-settings summary { padding: 12px 14px; }
+    #scanner-settings .scanner-body { padding: 4px 14px 14px; }
+    #scanner-settings .scanner-match { margin: 0 14px 14px; }
+    #scanner-settings form label { flex-basis: 100%; }
+  }
 `
 
 function rowActions(scanner: ScannerSetting, upgrades: ScannerSettings['upgrades']) {
@@ -49,16 +67,33 @@ function rowActions(scanner: ScannerSetting, upgrades: ScannerSettings['upgrades
   return { primary, more }
 }
 
+function detectionDetails(scanner: ScannerSetting): string {
+  if (!scanner.matches.length) return ''
+  return `<input type="search" data-evidence-search aria-label="Search ${escaped(scannerName(scanner.id))} detection details" placeholder="Filter by path…">`
+    + `<ul class="scanner-evidence">${scanner.matches.map(file => `<li>${escaped(file)}</li>`).join('')}</ul><p data-no-matches hidden>No matching paths</p>`
+}
+
 function settingRow(scanner: ScannerSetting, upgrades: ScannerSettings['upgrades']): string {
-  const id = escaped(scanner.id)
   const { primary, more } = rowActions(scanner, upgrades)
   const upgrade = scanner.source ? upgrades?.[scanner.source] : undefined
-  const reason = scanner.source && scanner.match !== 'none' ? '' : `<div class="scanner-match" title="${escaped(scannerMatchReason(scanner))}">${escaped(scannerMatchReason(scanner))}</div>`
-  const status = scanner.status === 'blocked' ? '<span class="scanner-status">Needs attention</span>' : ''
-  const version = `${scanner.version ?? ''}${upgrade?.version ? ` → ${upgrade.version}` : ''}`
+  const attention = scanner.status === 'blocked' || scanner.status === 'missing'
+  const status = { blocked: 'Needs attention', missing: 'Needs attention', ready: 'Installed', unchecked: 'Installed', available: 'Not installed' }[scanner.status]
+  const reason = scanner.source && scanner.match !== 'none' ? '' : `<p class="scanner-match">${escaped(scannerMatchReason(scanner))}</p>`
+  const version = [scanner.version, upgrade?.version].filter(Boolean).join(' → ')
+  const metadata = [version, scanner.official ? 'Official' : 'Third-party'].filter(Boolean).join(' · ')
   const updateError = upgrade?.error ? `<p>Could not check for updates. ${escaped(upgrade.error)}</p>` : ''
-  return `<div class="scanner-row" data-scanner-id="${id}"><div><div class="scanner-name"><strong>${id}</strong><span class="scanner-origin">${scanner.official ? 'Official' : 'Third-party'}</span><span class="scanner-version">${escaped(version)}</span>${status}</div>${reason}`
-    + `<details><summary>${scanner.status === 'blocked' ? 'Error details' : 'Details'}</summary><p>${escaped(scanner.source ?? scanner.installSource ?? scanner.name)}</p><p>${escaped(scanner.message)}</p><p>${escaped(scanner.matches.join('\n'))}</p>${updateError}<div class="scanner-actions">${more}</div></details></div>${primary}</div>`
+  const count = scanner.matches.length ? `<span class="scanner-count">${scanner.matches.length} ${scanner.matches.length === 1 ? 'path' : 'paths'}</span>` : ''
+  return `<section class="scanner-row" data-scanner-id="${escaped(scanner.id)}"><div class="scanner-header"><div class="scanner-heading"><strong>${escaped(scannerName(scanner.id))}</strong><span class="scanner-version">${escaped(metadata)}</span></div><span class="scanner-status${attention ? ' attention' : ''}">${status}</span><div class="scanner-primary">${primary}</div></div>${reason}`
+    + `<details><summary>${attention ? 'Scanner details' : 'Detection details'}${count}</summary><div class="scanner-body"><code class="scanner-package">${escaped(scanner.source ?? scanner.installSource ?? scanner.name)}</code>`
+    + `${scanner.message ? `<p>${escaped(scanner.message)}</p>` : ''}${detectionDetails(scanner)}${updateError}<div class="scanner-actions">${more}</div></div></details></section>`
+}
+
+function filterEvidence(input: HTMLInputElement): void {
+  const body = input.closest('.scanner-body')!
+  const query = input.value.trim().toLocaleLowerCase()
+  const items = [...body.querySelectorAll<HTMLElement>('.scanner-evidence li')]
+  for (const item of items) item.hidden = !item.textContent.toLocaleLowerCase().includes(query)
+  body.querySelector<HTMLElement>('[data-no-matches]')!.hidden = items.some(item => !item.hidden)
 }
 
 function settingGroup(group: ReturnType<typeof scannerGroups>[number], showBulk: boolean, upgrades: ScannerSettings['upgrades']): string {
@@ -97,15 +132,21 @@ export function bindScannerSettings(data: WebDataSource, host: HTMLElement, onSt
   function paintRows(next: ScannerSettings): void {
     const expanded = new Set([...rows.querySelectorAll<HTMLDetailsElement>('details[open]')].map(item => item.closest<HTMLElement>('[data-scanner-id]')?.dataset.scannerId))
     const focused = document.activeElement?.closest<HTMLElement>('[data-scanner-id]')?.dataset.scannerId
+    const focusedSelector = document.activeElement?.matches('[data-evidence-search]') ? '[data-evidence-search]' : 'button'
+    const filters = new Map([...rows.querySelectorAll<HTMLInputElement>('[data-evidence-search]')].map(input => [input.closest<HTMLElement>('[data-scanner-id]')!.dataset.scannerId, input.value]))
     const groups = scannerGroups(next.scanners, search.value)
     rows.innerHTML = groups.length ? groups.map(group => settingGroup(group, !search.value.trim(), upgrades)).join('') : '<p>No scanners match.</p>'
     for (const detail of rows.querySelectorAll('details')) detail.open = expanded.has(detail.closest<HTMLElement>('[data-scanner-id]')?.dataset.scannerId)
-    if (focused) rows.querySelector<HTMLElement>(`[data-scanner-id="${CSS.escape(focused)}"] button`)?.focus()
+    for (const input of rows.querySelectorAll<HTMLInputElement>('[data-evidence-search]')) {
+      input.value = filters.get(input.closest<HTMLElement>('[data-scanner-id]')!.dataset.scannerId) ?? ''
+      filterEvidence(input)
+    }
+    if (focused) rows.querySelector<HTMLElement>(`[data-scanner-id="${CSS.escape(focused)}"] ${focusedSelector}`)?.focus()
   }
   function setBusy() {
     for (const button of host.querySelectorAll<HTMLButtonElement>('button')) button.disabled = busy !== undefined
     if (!busy || !('id' in busy)) return
-    const button = rows.querySelector<HTMLButtonElement>(`[data-scanner-id="${CSS.escape(busy.id)}"] > button`)
+    const button = rows.querySelector<HTMLButtonElement>(`[data-scanner-id="${CSS.escape(busy.id)}"] .scanner-primary button`)
     if (!button) return
     button.textContent = busy.action === 'remove' ? 'Removing…' : busy.action === 'update' ? 'Updating…' : 'Installing…'
   }
@@ -145,7 +186,7 @@ export function bindScannerSettings(data: WebDataSource, host: HTMLElement, onSt
       busy = undefined
       if (state) paintRows(state)
       setBusy()
-      const next = 'id' in action ? rows.querySelector<HTMLElement>(`[data-scanner-id="${CSS.escape(action.id)}"] > button`) : undefined
+      const next = 'id' in action ? rows.querySelector<HTMLElement>(`[data-scanner-id="${CSS.escape(action.id)}"] .scanner-primary button`) : undefined
       ;(next ?? search).focus()
     }
   }
@@ -160,6 +201,9 @@ export function bindScannerSettings(data: WebDataSource, host: HTMLElement, onSt
   host.querySelector('[data-cancel]')!.addEventListener('click', () => { form.hidden = true })
   retry.addEventListener('click', () => { if (failedAction) void change(failedAction) })
   search.addEventListener('input', () => { if (state) paintRows(state); setBusy(); rows.scrollTop = 0 })
+  rows.addEventListener('input', event => {
+    if (event.target instanceof HTMLInputElement && event.target.matches('[data-evidence-search]')) filterEvidence(event.target)
+  })
   rows.addEventListener('click', event => {
     const button = event.target instanceof Element ? event.target.closest<HTMLButtonElement>('button') : null
     if (!button) return
