@@ -1,19 +1,33 @@
-import type { AnnotatedRelationship, ArchitectureGraph } from '../types.ts'
+import type { AnnotatedRelationship } from '../types.ts'
 
-export function actionCaption(
-  relationship: { source: string; target: string; description: string },
-  outgoing: boolean,
-  nameOf: (id: string) => string | undefined,
-): { title: string; detail: string } {
-  return outgoing
-    ? { title: relationship.description, detail: nameOf(relationship.target) ?? relationship.target }
-    : { title: nameOf(relationship.source) ?? relationship.source, detail: relationship.description }
+/** One ordered pair of endpoints at the selection's depth, with every relationship it summarizes. */
+export interface RelationshipPair {
+  outgoing: boolean
+  peerId: string
+  relationships: AnnotatedRelationship[]
 }
 
-export function outgoingActions(elementId: string | undefined, world: ArchitectureGraph): AnnotatedRelationship[] {
-  if (elementId === undefined) return []
-  const parentOf = parentOfElements(world.elements)
-  return world.relationships.filter(relationship => promotedPeer(relationship, elementId, parentOf)?.outgoing === true)
+/** The selection's relationships, promoted to its depth and listed once per direction and peer, in first-seen order. */
+export function relationshipPairs(
+  relationships: readonly AnnotatedRelationship[],
+  selectedId: string,
+  parentOf: ParentOf,
+): RelationshipPair[] {
+  const pairs = new Map<string, RelationshipPair>()
+  for (const relationship of relationships) {
+    const ends = promotedPeer(relationship, selectedId, parentOf)
+    if (ends === null) continue
+    const key = `${ends.outgoing}\0${ends.peerId}`
+    const pair = pairs.get(key)
+    if (pair === undefined) pairs.set(key, { ...ends, relationships: [relationship] })
+    else pair.relationships.push(relationship)
+  }
+  return [...pairs.values()]
+}
+
+/** Each distinct description of a pair, in first-seen order. */
+export function pairDescriptions(pair: { relationships: readonly { description: string }[] }): string[] {
+  return [...new Set(pair.relationships.map(relationship => relationship.description))]
 }
 
 export type ParentOf = (id: string) => string | null

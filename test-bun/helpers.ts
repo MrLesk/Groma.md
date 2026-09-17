@@ -32,6 +32,8 @@ export const viewerFixtureRoot = path.join(
   'fixtures',
   'viewer-view',
 )
+/** Two systems whose components call each other in both directions. */
+export const relationshipPairsFixtureRoot = path.join(repositoryRoot, 'test', 'fixtures', 'relationship-pairs')
 /** The generated large world: four systems, twenty containers, three hundred components. */
 export const largeWorldFixtureRoot = path.join(repositoryRoot, 'test', 'fixtures', 'large-world')
 /** Upper-band product world authored from OpenClaw docs, not its old scanner dump. */

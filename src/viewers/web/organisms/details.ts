@@ -25,10 +25,10 @@ import {
   paintSelectionControls,
 } from './writes.ts'
 import { paintRemoveControl } from './remove.ts'
-import { relationshipCard, type RelationshipCardData } from './relationship-card.ts'
+import { relationshipPairCard, type RelationshipPairData } from './relationship-card.ts'
 import {
   parentOfElements,
-  promotedPeer,
+  relationshipPairs,
 } from '../../relationship-text.ts'
 
 export interface InspectedChild {
@@ -45,7 +45,7 @@ export interface Inspected {
   kindLabel: string
   origin: Origin
   overview: string
-  relationships: RelationshipCardData[]
+  relationships: RelationshipPairData[]
   flows: FlowRowData[]
   children: InspectedChild[]
   technology: string[]
@@ -114,19 +114,20 @@ export function inspectDetails(
   world: ArchitectureGraph,
 ): Inspected {
   const byId = new Map(world.elements.map(item => [item.representationId, item]))
-  const parentOf = parentOfElements(world.elements)
-  const relationships: RelationshipCardData[] = []
-  for (const relationship of world.relationships) {
-    const ends = promotedPeer(relationship, element.representationId, parentOf)
-    if (ends == null) continue
-    const peer = byId.get(ends.peerId)!
-    relationships.push({
-      id: relationship.id,
-      source: ends.outgoing ? element : peer,
-      target: ends.outgoing ? peer : element,
-      description: relationship.description,
-    })
-  }
+  const pairs = relationshipPairs(world.relationships, element.representationId, parentOfElements(world.elements))
+  const relationships = pairs.map((pair): RelationshipPairData => {
+    const peer = byId.get(pair.peerId)!
+    return {
+      source: pair.outgoing ? element : peer,
+      target: pair.outgoing ? peer : element,
+      relationships: pair.relationships.map(relationship => ({
+        id: relationship.id,
+        description: relationship.description,
+        source: byId.get(relationship.source)!,
+        target: byId.get(relationship.target)!,
+      })),
+    }
+  })
   const children: InspectedChild[] = []
   for (const childId of element.children) {
     const child = byId.get(childId)
@@ -211,6 +212,22 @@ function paintTabs(tabsHost: HTMLElement, availableTabs: DetailsTab[], shownTab:
   }
 }
 
+/** Key of the only unfolded combined pair; module state so it survives details repaints (same pattern as `expandedCopiesKey`). */
+let openPair: string | undefined
+
+function paintRelationshipPairs(list: HTMLElement, inspected: Inspected, onSelect: DetailsOptions['onSelect']): void {
+  list.replaceChildren()
+  for (const pair of inspected.relationships) {
+    const key = [inspected.id, pair.source.representationId, pair.target.representationId].join('\0')
+    const item = document.createElement('li')
+    item.append(relationshipPairCard(pair, onSelect, inspected.id, key === openPair, () => {
+      openPair = key === openPair ? undefined : key
+      paintRelationshipPairs(list, inspected, onSelect)
+    }))
+    list.append(item)
+  }
+}
+
 export function paintDetails(host: HTMLElement, inspected: Inspected, options: DetailsOptions): void {
   const { onSelect, onToggleFlow, activeFlows, tab, onTab, code, onSource, workGroups, onTask, onRemove, onAccept, onEdit, onRead, selection } = options
   if (onEdit !== undefined && isEditing(host, inspected.id)) return
@@ -235,15 +252,10 @@ export function paintDetails(host: HTMLElement, inspected: Inspected, options: D
 
     relationships: () => {
       if (inspected.relationships.length === 0) return
-      body.append(heading('Relationships'))
       const list = document.createElement('ul')
       list.className = 'relationships'
-      for (const relationship of inspected.relationships) {
-        const item = document.createElement('li')
-        item.append(relationshipCard(relationship, onSelect, inspected.id))
-        list.append(item)
-      }
-      body.append(list)
+      body.append(heading('Relationships'), list)
+      paintRelationshipPairs(list, inspected, onSelect)
     },
 
     flows: () => {

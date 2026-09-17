@@ -35,11 +35,11 @@ function visibleEndpoint(
   return visibleEndpointFor(id, visible, byId, boundary)
 }
 
-/** A flow contains only its authored legs; a relationship selection contains one route. */
+/** A flow contains only its authored legs; a relationship selection contains every relationship of its pair. */
 export function litLegs(world: TerminalViewModel, lit: LitAction): AnnotatedRelationship[] {
   if (world.flows.some(flow => flow.id === lit.id)) return flowLegs(lit.id, world)
-  const relationship = world.relationships.find(item => item.id === lit.id)
-  return relationship === undefined ? [] : [relationship]
+  const ids = lit.relationshipIds ?? [lit.id]
+  return world.relationships.filter(item => ids.includes(item.id))
 }
 
 /** Exact authored endpoints paired with the cards that represent them in the current scope. */

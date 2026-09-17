@@ -3,8 +3,10 @@ import { expect, test } from 'bun:test'
 import {
   parentOfElements,
   promotedPeer,
+  relationshipPairs,
   showsRelationshipText,
 } from '../src/viewers/relationship-text.ts'
+import { relationshipPairsFixtureRoot, terminalModel } from './helpers.ts'
 
 const hierarchy = () => parentOfElements([
   { representationId: 'compute', parent: 'core' },
@@ -46,5 +48,22 @@ test.concurrent('promoted peers sit at the selection depth', () => {
   expect(promotedPeer(serviceToGit, 'service', parentOf)).toEqual({
     outgoing: true,
     peerId: 'external',
+  })
+})
+
+test.concurrent('relationship pairs list each ordered pair of ends once at the selection depth', async () => {
+  const model = await terminalModel(relationshipPairsFixtureRoot)
+  const parentOf = parentOfElements(model.elements)
+  const pairs = (id: string) => Object.fromEntries(relationshipPairs(model.relationships, id, parentOf).map(pair => [
+    `${pair.outgoing ? 'to' : 'from'} ${pair.peerId}`,
+    pair.relationships.map(relationship => `${relationship.source}>${relationship.target}`).sort(),
+  ]))
+  const towardBackend = ['speakers>people', 'talks>people', 'talks>sessions']
+  expect(pairs('site')).toEqual({ 'to backend': towardBackend, 'from backend': ['sessions>talks'] })
+  expect(pairs('pages')).toEqual({ 'to api': towardBackend, 'from api': ['sessions>talks'] })
+  expect(pairs('talks')).toEqual({
+    'to sessions': ['talks>sessions'],
+    'to people': ['talks>people'],
+    'from sessions': ['sessions>talks'],
   })
 })

@@ -7,6 +7,8 @@ import type {
   C4Kind,
   WorldElement,
 } from '../src/types.ts'
+import { pairDescriptions } from '../src/viewers/relationship-text.ts'
+import { relationshipPairsFixtureRoot, terminalModel } from './helpers.ts'
 
 function element(
   id: string,
@@ -85,14 +87,25 @@ test.concurrent('details list children, promoted peers, and files', () => {
   const outgoing = core.relationships[0]!
   expect(outgoing.source.representationId).toBe(core.id)
   expect(outgoing.target.representationId).toBe('web')
-  expect(outgoing.id).toBe(fixture.relationships[0]!.id)
+  expect(outgoing.relationships[0]!.source.representationId).toBe('layout')
 
   const web = inspectDetails(fixture.elements[3]!, fixture)
   const incoming = web.relationships[0]!
   expect(incoming.source.representationId).toBe(core.id)
   expect(incoming.target.representationId).toBe(web.id)
-  expect(incoming.id).toBe(outgoing.id)
+  expect(incoming.relationships[0]!.id).toBe(outgoing.relationships[0]!.id)
 
+})
+
+test.concurrent('details list a combined pair once with its exact relationships and distinct descriptions', async () => {
+  const model = await terminalModel(relationshipPairsFixtureRoot)
+  const site = inspectDetails(model.elements.find(element => element.id === 'site')!, model)
+  const ends = (item: { source: { representationId: string }; target: { representationId: string } }) =>
+    `${item.source.representationId}>${item.target.representationId}`
+  expect(site.relationships.map(ends).sort()).toEqual(['backend>site', 'site>backend'])
+  const toBackend = site.relationships.find(pair => ends(pair) === 'site>backend')!
+  expect(toBackend.relationships.map(ends).sort()).toEqual(['speakers>people', 'talks>people', 'talks>sessions'])
+  expect(pairDescriptions(toBackend)).toHaveLength(2)
 })
 
 test.concurrent('the Tasks tab exists only while the selected component has linked work', () => {
