@@ -4,10 +4,12 @@ use std::path::Path;
 use anyhow::{Context, bail};
 use ra_ap_hir::{AnyDiagnostic, AsAssocItem, CallableKind, Crate, Function, Semantics};
 use ra_ap_ide_db::RootDatabase;
-use ra_ap_syntax::{AstNode, SyntaxNode, WalkEvent, ast, ast::HasName};
+use ra_ap_syntax::{AstNode, SyntaxNode, TextSize, WalkEvent, ast, ast::HasName};
 use ra_ap_vfs::FileId;
 use serde::Deserialize;
 use serde_json::{Value, json};
+
+use crate::tokens::operation_tokens;
 
 #[derive(Deserialize)]
 pub struct Input {
@@ -161,15 +163,22 @@ fn declarations(
             .descendants()
             .filter_map(ast::Fn::cast)
         {
-            let (Some(function), Some(name), Some(_)) =
+            let (Some(function), Some(name), Some(body)) =
                 (sema.to_def(&syntax), syntax.name(), syntax.body())
             else {
                 continue;
             };
-            let position = position(&source.text, syntax.syntax());
+            let start = first_token_start(syntax.syntax());
+            let position = position(&source.text, start);
             let id = format!("{}:{position}", source.file);
             functions.insert(function, id.clone());
-            operations.push(json!({"id": id, "file": source.file, "name": name.text().to_string(), "position": position}));
+            // Every Rust operation is a named function; core applies the minimum compared sizes.
+            operations.push(json!({
+                "id": id, "file": source.file, "name": name.text().to_string(), "position": position,
+                "startLine": line(&source.text, start),
+                "endLine": line(&source.text, syntax.syntax().text_range().end()),
+                "tokens": operation_tokens(sema, &syntax, &body),
+            }));
         }
     }
     (operations, functions)
@@ -205,15 +214,11 @@ fn calls(
                             .is_none()
                     })
                     .and_then(|function| functions.get(&function));
-                let offset = position(&source.text, &node);
-                let line = source.text[..usize::from(node.text_range().start())]
-                    .bytes()
-                    .filter(|byte| *byte == b'\n')
-                    .count()
-                    + 1;
+                let offset = position(&source.text, first_token_start(&node));
                 let mut invocation = json!({
                     "source": caller, "targets": target.into_iter().collect::<Vec<_>>(),
-                    "unresolved": target.is_none(), "line": line, "position": offset,
+                    "unresolved": target.is_none(),
+                    "line": line(&source.text, node.text_range().start()), "position": offset,
                 });
                 if let Some(name) =
                     ast::MethodCallExpr::cast(node.clone()).and_then(|call| call.name_ref())
@@ -260,13 +265,23 @@ fn call_target(node: &SyntaxNode, sema: &Semantics<'_, RootDatabase>) -> Option<
     }
 }
 
-fn position(text: &str, syntax: &SyntaxNode) -> usize {
-    let offset = syntax
+/// Start of the first token that is not whitespace or a comment.
+fn first_token_start(syntax: &SyntaxNode) -> TextSize {
+    syntax
         .descendants_with_tokens()
         .filter_map(|element| element.into_token())
         .find(|token| !token.kind().is_trivia())
         .map_or(syntax.text_range().start(), |token| {
             token.text_range().start()
-        });
+        })
+}
+
+/// Zero-based UTF-16 offset.
+fn position(text: &str, offset: TextSize) -> usize {
     text[..usize::from(offset)].encode_utf16().count()
+}
+
+/// One-based line.
+fn line(text: &str, offset: TextSize) -> usize {
+    text[..usize::from(offset)].bytes().filter(|byte| *byte == b'\n').count() + 1
 }

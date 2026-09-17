@@ -78,6 +78,32 @@ rustTest('shared compilation source has one identity and no guessed provider fro
   })
 }, 60000)
 
+rustTest('lint finds identical and near-duplicate Rust functions but never closures or constant initializers', async () => {
+  await fixture('rust-duplicates', async root => {
+    // Every function body carries tokens; core, not the scanner, skips small bodies.
+    const observation = await scanRustSource(root, {}, { worker })
+    expect(observation.operations!.every(operation => operation.tokens!.length > 0)).toBeTrue()
+    await cp(path.resolve(import.meta.dir, '../test/fixtures/empty-project'), root, { recursive: true })
+    await execute('git', ['init', '--quiet'], { cwd: root })
+    await addScanner(root, packagePath)
+    const lint = Bun.spawn([process.execPath, cli, 'lint'], { cwd: root, stdout: 'pipe', stderr: 'pipe' })
+    const [code, out, error] = await Promise.all([lint.exited, new Response(lint.stdout).text(), new Response(lint.stderr).text()])
+    expect(code, error).toBe(1)
+    // Each finding starts on an unindented line; similar copies are marked as not identical.
+    const findings = out.trim().split(/\n(?=\S)/).map(finding => ({
+      at: [...finding.matchAll(/\S+\.rs:\d+/g)].map(match => match[0]).sort(),
+      identical: !finding.includes('not identical'),
+    }))
+    // Renamed locals match exactly, also in an associated function and in macro ranges.
+    // Swapped enum arms, tiny copies and closures are absent.
+    expect(findings).toEqual([
+      { at: ['src/invoice.rs:3', 'src/quote.rs:3'], identical: false },
+      { at: ['src/labels.rs:1', 'src/labels.rs:6'], identical: true },
+      { at: ['src/readiness.rs:3', 'src/scheduling.rs:6'], identical: true },
+    ])
+  })
+}, 60000)
+
 rustTest('registered Rust scans preserve curated ownership and a failed scan preserves the prior architecture', async () => {
   await fixture('rust-semantic', async root => {
     await execute('git', ['init', '--quiet'], { cwd: root })
