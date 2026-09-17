@@ -72,10 +72,11 @@ that type, at the type name in its first `impl` block. `impl` blocks for a
 generic parameter, such as `impl<T> Store for T`, or for a type that is not a
 path, such as a reference or a tuple, are not listed. Functions nested in
 functions, other constants and statics, associated constants and types, type
-and trait aliases, and items inside macros are not listed either. Neither are
-items under a `cfg` condition on `test`, such as an inline `#[cfg(test)] mod
-tests`, which the scan does not read either. A declaration's line is its
-name's line.
+and trait aliases, and items inside macros are not listed either. An item is
+also left out when one of its `cfg` attributes mentions `test`, which covers an
+inline `#[cfg(test)] mod tests`, the code the scan leaves out as well. The
+condition is not evaluated, so `#[cfg(not(test))]` items are left out too,
+although the scan does read them. A declaration's line is its name's line.
 
 Visibility comes from the item's own `pub`; an enclosing module does not
 narrow it. Methods in a trait definition take the trait's visibility, and
