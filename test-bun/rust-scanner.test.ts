@@ -10,7 +10,8 @@ import { loadArchitecture } from '../src/architecture-reader.ts'
 import { buildArchitectureModel } from '../src/architecture-model.ts'
 import { scanRepository } from '../src/scanner.ts'
 import { addScanner } from '../src/scanner/modules/inventory.ts'
-import type { ScanObservation } from '@groma/scanner'
+import { readCodeStructure } from '../src/viewers/source/structure.ts'
+import type { CodeSymbol, ScanObservation } from '@groma/scanner'
 
 const worker = process.env.GROMA_TEST_RUST
 const rustTest = worker ? test.concurrent : test.skip
@@ -100,6 +101,46 @@ rustTest('lint finds identical and near-duplicate Rust functions but never closu
       { at: ['src/invoice.rs:3', 'src/quote.rs:3'], identical: false },
       { at: ['src/labels.rs:1', 'src/labels.rs:6'], identical: true },
       { at: ['src/readiness.rs:3', 'src/scheduling.rs:6'], identical: true },
+    ])
+  })
+}, 60000)
+
+rustTest('a component outlines its Rust file beside a TypeScript file under the Rust visibility rules', async () => {
+  await fixture('rust-outline', async root => {
+    await addScanner(root, packagePath)
+    await addScanner(root, path.resolve(import.meta.dir, '../plugins/scanners/typescript'))
+    const world = await loadAnnotatedArchitecture(root)
+    const component = world.elements.find(element => element.kind === 'component')!
+    const files = await readCodeStructure(root, world, null, component.representationId) ?? []
+    expect(files.map(file => file.file)).toEqual([...new Set(component.code.map(reference => reference.file))])
+    const symbol = ({ name, line, visibility, entry }: CodeSymbol) => [name, line, visibility, entry]
+    const rust = files.find(file => file.file.endsWith('.rs'))!.declarations.map(declaration => [
+      declaration.kind, ...symbol(declaration), declaration.kind === 'type' ? declaration.members.map(symbol) : [],
+    ])
+    // Nested fns, plain constants, aliases, associated constants, blanket impls, macro bodies and
+    // cfg(test) items are absent. Inline modules are transparent. Code links name place_order and load.
+    expect(rust).toEqual([
+      ['function', 'place_order', 3, 'public', true, []],
+      ['function', 'audit', 10, 'private', false, []],
+      ['function', 'ship', 12, 'internal', false, []],
+      ['function', 'notify', 14, 'internal', false, []],
+      ['function', 'hide', 16, 'private', false, []],
+      ['function', 'ON_PLACED', 18, 'public', false, []],
+      ['type', 'Order', 23, 'public', false, [
+        ['new', 28, 'public', false],
+        ['load', 32, 'private', true],
+        ['refresh', 36, 'internal', false],
+        ['save', 48, 'public', false],
+      ]],
+      ['type', 'Store', 39, 'internal', false, [['save', 40, 'internal', false], ['count', 42, 'internal', false]]],
+      ['type', 'Status', 51, 'private', false, [['is_open', 59, 'public', false]]],
+      ['type', 'Bits', 64, 'public', false, []],
+      ['function', 'purge', 70, 'public', false, []],
+      ['type', 'Report', 72, 'private', false, []],
+      // Declared in another file: one public entry at the first impl block.
+      ['type', 'Invoice', 75, 'public', false, [['total', 76, 'public', false], ['discount', 98, 'private', false]]],
+      // Its impl block comes first; members still join the declaration.
+      ['type', 'Printer', 89, 'private', false, [['print', 86, 'private', false]]],
     ])
   })
 }, 60000)
