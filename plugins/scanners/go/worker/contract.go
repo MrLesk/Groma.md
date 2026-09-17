@@ -28,6 +28,10 @@ type operation struct {
 	File     string `json:"file"`
 	Name     string `json:"name"`
 	Position int    `json:"position"`
+	// A compared operation reports its range and tokens, even when its body has no tokens.
+	StartLine int      `json:"startLine,omitzero"`
+	EndLine   int      `json:"endLine,omitzero"`
+	Tokens    []string `json:"tokens,omitzero"`
 }
 type invocation struct {
 	Source     string   `json:"source"`
