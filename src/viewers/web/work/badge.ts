@@ -9,6 +9,9 @@ const RING_LENGTH = 2 * Math.PI * RING_RADIUS
 
 /** How long a visible work badge takes to turn into its Done face. */
 export const WORK_BADGE_FLIP_MS = 500
+export const WORK_BADGE_HOLD_MS = 2500
+export const WORK_BADGE_FADE_MS = 300
+export const WORK_BADGE_FINISH_MS = WORK_BADGE_FLIP_MS + WORK_BADGE_HOLD_MS + WORK_BADGE_FADE_MS
 
 export const workBadgeCss = `
   .badge { position: relative; width: 40px; height: 40px; perspective: 200px; }
@@ -25,7 +28,12 @@ export const workBadgeCss = `
   .badge .face.front { background: color-mix(in srgb, var(--paper) 78%, transparent); color: var(--ink); border: 1px solid var(--pin); }
   .badge .face.back { background: color-mix(in srgb, var(--accent) 85%, transparent); color: var(--on-colour); transform: rotateY(180deg); font-size: 14px; }
   .work-done .badge .card { transform: rotateY(180deg); }
-  .work-finishing .badge .card { animation: work-badge-finish ${WORK_BADGE_FLIP_MS}ms ease both; }
+  .work-finishing .badge .card { animation: work-badge-finish ${WORK_BADGE_FLIP_MS}ms ease var(--work-finish-delay, 0ms) both; }
+  .work-disappearing { animation: work-badge-disappear ${WORK_BADGE_FINISH_MS}ms linear var(--work-finish-delay, 0ms) both; }
+  @keyframes work-badge-disappear {
+    0%, ${(WORK_BADGE_FLIP_MS + WORK_BADGE_HOLD_MS) / WORK_BADGE_FINISH_MS * 100}% { opacity: 1; }
+    100% { opacity: 0; }
+  }
   @keyframes work-badge-finish {
     from { transform: rotateY(0); }
     to { transform: rotateY(180deg); }
@@ -45,7 +53,11 @@ export function finishingWorkKeys(previous: readonly WorkPin[], next: readonly W
 }
 
 /** Fills a work badge with its state, assignee mark and acceptance-criteria progress. */
-export function fillWorkBadge(host: HTMLElement, pin: WorkPin, finishing = false): void {
+export function fillWorkBadge(host: HTMLElement, pin: WorkPin, finishingAt?: number): void {
+  const finishing = finishingAt !== undefined
+  if (finishing && !host.classList.contains('work-finishing')) {
+    host.style.setProperty('--work-finish-delay', `${finishingAt - Date.now()}ms`)
+  }
   host.classList.toggle('work-done', pin.terminal)
   host.classList.toggle('work-finishing', finishing)
   host.querySelector<HTMLElement>('.face.front')!.innerHTML = pin.assignee === null

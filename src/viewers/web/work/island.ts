@@ -2,7 +2,7 @@ import type { WorkPin } from '../../../work/pins.ts'
 import type { WorkSnapshot } from '../../../types.ts'
 import type { Tip } from '../organisms/tip.ts'
 import { BACKLOG_MARK } from './backlog-mark.ts'
-import { fillWorkBadge, finishingWorkKeys, WORK_BADGE, WORK_BADGE_FLIP_MS } from './badge.ts'
+import { fillWorkBadge, finishingWorkKeys, WORK_BADGE, WORK_BADGE_FINISH_MS } from './badge.ts'
 import { preservedWorkStatuses, toggleWorkStatus, workStatusFilters } from '../../../work/status-filter.ts'
 import type { WorkStatusFilterState } from '../../../work/status-filter.ts'
 import { createWorkSummary, workSummaryCss } from './summary.ts'
@@ -69,13 +69,13 @@ function button(className: string, html: string, onClick: () => void): HTMLButto
   return node
 }
 
-function chip(pin: WorkPin, finishing: boolean, onToggle: (id: string) => void, tip: Tip): HTMLButtonElement {
+function chip(pin: WorkPin, finishingAt: number | undefined, onToggle: (id: string) => void, tip: Tip): HTMLButtonElement {
   const node = button('chip', `${WORK_BADGE}<span>${pin.taskId}</span>`, () => onToggle(pin.taskId))
   node.dataset.task = pin.taskId
   node.style.setProperty('--pin', pin.colour)
   node.dataset.tip = `${pin.assignee ?? 'Unassigned'} · ${pin.title}`
   tip.attach(node)
-  fillWorkBadge(node, pin, finishing)
+  fillWorkBadge(node, pin, finishingAt)
   return node
 }
 
@@ -103,10 +103,8 @@ export function createWorkIsland(
   let work: WorkSnapshot = { statuses: [], defaultStatus: '', items: [] }
   const summary = createWorkSummary(tip)
   let statusFilters: WorkStatusFilterState | undefined
-  /** Done pins kept visible until their flip ends. */
-  const finishing = new Set<string>()
-  /** Finishing pins that have not yet been inserted with their animation class. */
-  const animating = new Set<string>()
+  /** Completion start times keep the flip, hold and fade continuous across rebuilds. */
+  const finishing = new Map<string, number>()
   let open = false
   let active: readonly string[] = []
   let selected: string | undefined
@@ -136,7 +134,11 @@ export function createWorkIsland(
     const order = new Map(work.statuses.map((status, index) => [status, index]))
     const shown = pins.filter(pin => statusFilters!.enabled.includes(pin.status) || finishing.has(pin.key))
     shown.sort((left, right) => order.get(left.status)! - order.get(right.status)!)
-    strip.append(...shown.map(pin => chip(pin, animating.has(pin.key), onToggle, tip)))
+    strip.append(...shown.map(pin => {
+      const node = chip(pin, finishing.get(pin.key), onToggle, tip)
+      node.classList.toggle('work-disappearing', finishing.has(pin.key) && !statusFilters!.enabled.includes(pin.status))
+      return node
+    }))
     return [
       label,
       ...statusFilters!.available.map(toggle),
@@ -165,7 +167,6 @@ export function createWorkIsland(
     foldAnimation = undefined
     foldRevision += 1
     content.replaceChildren(...parts())
-    animating.clear()
     island.hidden = work.statuses.length === 0
     island.classList.toggle('open', open)
     // the strip stays where it was, so a repaint moves it only to reveal a selected chip
@@ -218,8 +219,7 @@ export function createWorkIsland(
       const started = finishingWorkKeys(pins, nextPins)
       for (const key of started) {
         if (visible.has(key)) {
-          finishing.add(key)
-          animating.add(key)
+          finishing.set(key, Date.now())
         } else started.delete(key)
       }
       const enabled = preservedWorkStatuses(work.statuses, statusFilters?.enabled)
@@ -236,7 +236,7 @@ export function createWorkIsland(
       if (started.size > 0) setTimeout(() => {
         for (const key of started) finishing.delete(key)
         rebuild()
-      }, WORK_BADGE_FLIP_MS)
+      }, WORK_BADGE_FINISH_MS)
     },
     activate(nextActive, nextSelected) {
       active = nextActive

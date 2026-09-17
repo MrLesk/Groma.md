@@ -2,7 +2,7 @@ import type { WorkItem, WorkSnapshot } from '../../../types.ts'
 import type { WorkPin } from '../../../work/pins.ts'
 import type { Tip } from '../organisms/tip.ts'
 import { BACKLOG_MARK } from './backlog-mark.ts'
-import { WORK_BADGE_FLIP_MS } from './badge.ts'
+import { WORK_BADGE_FLIP_MS, WORK_BADGE_HOLD_MS, WORK_BADGE_FINISH_MS } from './badge.ts'
 
 export const workSummaryCss = `
   #work .mark { position: relative; display: grid; place-items: center; width: 28px; height: 28px; }
@@ -82,9 +82,12 @@ export function createWorkSummary(tip: Tip) {
     for (const animation of element.getAnimations({ subtree: true })) animation.cancel()
     if (matchMedia('(prefers-reduced-motion: reduce)').matches) return
     if (change?.kind === 'completed') {
-      card.animate([{ transform: 'rotateY(0)' }, { transform: 'rotateY(180deg)' }], {
-        duration: WORK_BADGE_FLIP_MS, iterations: 2, direction: 'alternate', easing: 'ease',
-      })
+      card.animate([
+        { transform: 'rotateY(0)', opacity: 1, offset: 0, easing: 'ease' },
+        { transform: 'rotateY(180deg)', opacity: 1, offset: WORK_BADGE_FLIP_MS / WORK_BADGE_FINISH_MS },
+        { transform: 'rotateY(180deg)', opacity: 1, offset: (WORK_BADGE_FLIP_MS + WORK_BADGE_HOLD_MS) / WORK_BADGE_FINISH_MS },
+        { transform: 'rotateY(180deg)', opacity: 0, offset: 1 },
+      ], { duration: WORK_BADGE_FINISH_MS })
     } else if (delta !== 0) {
       count.animate([{ transform: `translateY(${delta > 0 ? 100 : -100}%)`, opacity: 0 }, { transform: 'translateY(0)', opacity: 1 }], { duration: 300, easing: 'ease-out' })
       badge.animate([{ transform: 'translateY(0)' }, { transform: 'translateY(-4px)', offset: 0.5 }, { transform: 'translateY(0)', offset: 0.75 }, { transform: 'translateY(0)' }], { duration: 700, easing: 'ease-out' })
