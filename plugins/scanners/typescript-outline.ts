@@ -56,6 +56,17 @@ interface OutlineScope {
   symbols: readonly string[]
   /** Local names this scope's export lists make public. */
   exported: ReadonlySet<string>
+  /** The block exports nothing, so no top-level declaration is public. */
+  topLevelPrivate: boolean
+}
+
+export interface OutlineBlock {
+  /** Name whose extension selects the dialect, such as `.ts` or `.tsx`. */
+  fileName: string
+  text: string
+  symbols: readonly string[]
+  /** Nothing in the block can be imported, as in a Vue `<script setup>` block. */
+  topLevelPrivate?: boolean
 }
 
 const NO_EXPORTS: ReadonlySet<string> = new Set()
@@ -70,6 +81,7 @@ function listedExports(ts: OutlineCompiler, statement: Node): string[] {
 }
 
 function topLevelVisibility(scope: OutlineScope, name: string, statement: Node): CodeVisibility {
+  if (scope.topLevelPrivate) return 'private'
   const exported = (scope.ts.getCombinedModifierFlags(statement) & scope.ts.ModifierFlags.Export) !== 0
   return exported || scope.exported.has(name) ? 'public' : 'private'
 }
@@ -144,6 +156,14 @@ function declarationsIn(scope: OutlineScope, statements: readonly Node[]): CodeD
   })
 }
 
+/** Outline one block of source text by parsing it alone. */
+export function outlineDeclarations(ts: OutlineCompiler, block: OutlineBlock): CodeDeclaration[] {
+  const source = ts.createSourceFile(block.fileName, block.text, ts.ScriptTarget.Latest, true)
+  const exported = new Set(source.statements.flatMap(statement => listedExports(ts, statement)))
+  const scope = { ts, source, symbols: block.symbols, exported, topLevelPrivate: block.topLevelPrivate === true }
+  return declarationsIn(scope, source.statements)
+}
+
 /** Outline each referenced TypeScript file by parsing its source alone. */
 export async function readTypeScriptOutline(
   ts: OutlineCompiler,
@@ -152,10 +172,9 @@ export async function readTypeScriptOutline(
 ): Promise<CodeFile[]> {
   const files: CodeFile[] = []
   for (const reference of references) {
-    const filename = path.join(repositoryRoot, reference.file)
-    const source = ts.createSourceFile(filename, await readFile(filename, 'utf8'), ts.ScriptTarget.Latest, true)
-    const exported = new Set(source.statements.flatMap(statement => listedExports(ts, statement)))
-    const declarations = declarationsIn({ ts, source, symbols: reference.symbols, exported }, source.statements)
+    const fileName = path.join(repositoryRoot, reference.file)
+    const text = await readFile(fileName, 'utf8')
+    const declarations = outlineDeclarations(ts, { fileName, text, symbols: reference.symbols })
     if (declarations.length > 0) files.push({ file: reference.file, declarations })
   }
   return files
