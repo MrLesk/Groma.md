@@ -2,7 +2,7 @@ import path from 'node:path'
 import { projectFiles } from '../../projects.ts'
 import { projectScanner } from '../../project-scanner.ts'
 import type { ScannerPlugin } from '@groma/scanner'
-import { checkJavaReadiness, scanJavaSource } from './adapter.ts'
+import { checkJavaReadiness, readJavaOutline, scanJavaSource } from './adapter.ts'
 import { buildScripts, gradleProjects, settingsScripts, withGradleDiagnostics } from './gradle.ts'
 
 const scanner = {
@@ -12,6 +12,7 @@ const scanner = {
     exclude: [],
   },
   checkReadiness: async root => { await checkJavaReadiness(root) },
+  readCodeStructure: readJavaOutline,
   scan: scanJavaSource,
 } satisfies ScannerPlugin
 
