@@ -29,8 +29,22 @@ depth. These rules are declared by the current official plugins:
 | `pyproject.toml` | Python project configuration and literal `project.requires-python`, when present |
 | `setup.py`, `setup.cfg`, `requirements.txt` | Python project or dependency declaration |
 | `*.php` | PHP source; no Composer manifest is required |
+| `*.swift` | Swift source; no package manifest is required |
 | `go.mod` | Go module and its `go` version directive |
 | `Cargo.toml` | Cargo package or workspace, with a literal package `rust-version` when present |
+
+A file-presence rule whose patterns are all extension globs, such as `*.php`
+and `*.swift`, reports one line per technology with the number of matching
+files and the first path:
+
+```text
+php	version unresolved	PHP source files: 21 files; first plugins/php/src/plugin.php
+```
+
+Every other rule keeps one line per matching file, including a file-presence
+rule that names exact files such as `tsconfig.json` or `setup.py`, and a parsed
+project file such as `*.csproj`. The `--json` result always lists every
+finding.
 
 Dependency and generated directories are excluded by path segment:
 `node_modules`, `vendor`, `target`, `dist`, `build`, `bin`, `obj`, `.gradle`,

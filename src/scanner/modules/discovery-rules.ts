@@ -36,12 +36,17 @@ function xmlFindings(
   return findings.length === 0 ? [{ ...base, declaration: rule.declaration }] : findings
 }
 
+/** A presence rule whose patterns all match a file extension finds its technology in source files, not in a project declaration. */
+function findsSourceFiles(rule: Extract<ScannerDiscoveryRule, { type: 'file' }>): boolean {
+  return rule.files.every(pattern => (pattern.split('/').at(-1) ?? '').startsWith('*.'))
+}
+
 export function discoveryRuleFindings(file: string, source: string, rule: ScannerDiscoveryRule): TechnologyFinding[] {
   const base = { technology: rule.technology, kind: rule.kind, file }
   switch (rule.type) {
     case 'dependency': return dependencyFindings(file, source, rule)
     case 'xml': return xmlFindings(file, source, rule)
-    case 'file': return [{ ...base, declaration: rule.declaration }]
+    case 'file': return [{ ...base, declaration: rule.declaration, sourceFiles: findsSourceFiles(rule) }]
     case 'text': return [{ ...base, declaration: rule.declaration, version: new RegExp(rule.versionPattern, 'm').exec(source)?.[1] }]
     case 'toml': {
       const manifest = record(Bun.TOML.parse(source))

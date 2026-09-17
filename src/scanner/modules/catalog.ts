@@ -10,6 +10,8 @@ export interface TechnologyFinding {
   declaration: string
   version?: string
   resolvedVersion?: { version: string; file: string }
+  /** The rule found this technology in source files rather than in one project declaration. */
+  sourceFiles?: boolean
 }
 
 export interface ScannerRecommendation {
