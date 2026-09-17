@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test'
 import path from 'node:path'
 
-import { readCodeStructure as readTypeScriptOutline } from '../plugins/scanners/typescript/src/structure.ts'
+import { readCodeStructure as readReferenceOutline } from '../plugins/scanners/typescript/src/structure.ts'
 import { loadAnnotatedArchitecture } from '../src/core.ts'
 import { readCodeStructure, type CodeFile } from '../src/viewers/source/structure.ts'
 import { declarationStops } from '../src/viewers/tui/navigation-details.ts'
@@ -48,7 +48,7 @@ test.concurrent('the web details pane loads the outline of a component without T
 })
 
 test.concurrent('the TypeScript outline applies the shared declaration and visibility rules', async () => {
-  const [file] = await readTypeScriptOutline(typescriptFixture, [{ file: 'outline.ts', symbols: [] }])
+  const [file] = await readReferenceOutline(typescriptFixture, [{ file: 'outline.ts', symbols: [] }])
   const summary = file?.declarations.map(declaration => [
     declaration.kind,
     declaration.name,

@@ -75,6 +75,20 @@ In C4, an Angular declaration supplies source-unit evidence, not a new
 architecture level. Core owns component ownership and relationship interpretation;
 the plugin does not write architecture or introduce metadata.
 
+## Source outline
+
+The scanner outlines the TypeScript files in a component's Code with the
+TypeScript rules of the [source outline contract](../creating-a-plugin.md#source-outline):
+top-level functions and types (classes, interfaces, enums), including namespace
+contents, and each type's constructors and methods. Every declaration has its
+line and visibility, and `entry` marks the names the Code links give. Templates
+and stylesheets have no outline. The package's own TypeScript parses each file
+alone, without `tsconfig.json`, dependencies or compilation.
+
+Core outlines each file once. For a source that the TypeScript scanner also
+owns, the scanner with the lowest id among the file's Code links outlines it,
+here Angular, with the symbols of all those links.
+
 ## Coverage limits
 
 This revision qualifies the CompanyMergeDialog output-to-parent-handler flow.
@@ -92,7 +106,7 @@ supported binding extraction.
 
 Independent fixture tests load the built package and cover concrete callback
 endpoints, complementary TypeScript evidence, curated ownership, HTML-triggered
-rescan, and failure preservation. See [fresh-checkout validation](../fresh-checkout-validation.md) for the
+rescan, failure preservation, and the source outline. See [fresh-checkout validation](../fresh-checkout-validation.md) for the
 real-project result and remaining release gates.
 
 ## Nested projects
