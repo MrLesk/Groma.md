@@ -90,8 +90,9 @@ The following facts require later examples before joining the shared exchange:
 - **Registration and dispatch contracts:** event-bus or framework registration
   beyond the current concretely supplied named callback. An event key alone is
   insufficient.
-- **Protocol endpoints:** sending or receiving role, application/address
-  identity, protocol, method or operation, and route or channel facts.
+- **Protocol endpoints beyond HTTP:** sending or receiving role,
+  application/address identity, protocol, operation, and channel facts.
+  [HTTP endpoints and requests](#http-endpoints-and-requests) are defined below.
 - **Operation effects:** observed state/resource accesses and owner-local calls,
   with unknown effects preserved. No observed effect does not prove purity.
 
@@ -143,6 +144,84 @@ elements. Ordinary Markdown readers retain the existing Code links and
 authored relationship meaning. The independent
 [composition fixture](../../test/fixtures/scanner-composition/) exercises this
 contract; framework extraction has its own scanner fixture.
+
+## HTTP endpoints and requests
+
+A scanner that recognizes its ecosystem's routing and HTTP clients reports
+the endpoints the application serves and the requests it sends. It never
+refers to another scanner. Core joins the facts of every observation with the
+[HTTP request rule](../relationship-inference.md#http-requests).
+
+An **endpoint** is a method, a path, and the operation that handles it. Only a
+server handler that answers HTTP requests is an endpoint. A client-side router
+route, middleware, an interceptor, a proxy rule, and a security matcher such as
+`/api/**` are not endpoints, even though they are written as path patterns;
+reporting one would claim an answer nothing serves, or hide a real provider.
+The method is `*` when the endpoint accepts every method. The path is the
+complete path the application serves, with every prefix the source declares,
+such as class-level prefixes, route groups, and mounted routers. Each segment
+is one of:
+
+| Segment | Matches |
+| --- | --- |
+| Literal | Exactly its text |
+| Parameter | One segment with any text |
+| Optional parameter | One such segment, or none |
+| Catch-all | The remaining segments, at least one; always last |
+| Optional catch-all | The remaining segments, possibly none; always last |
+
+An endpoint declared by file location uses the same shape. The scanner
+translates the location into segments and reports the operation that the
+location designates, such as an exported handler or the file's module
+initializer. An optional literal or segment group becomes one endpoint for each
+variant.
+
+A **request** is a method, a URL, and the operation that supplies the URL. The
+fact states which parts the source proves:
+
+| Part | Reported as |
+| --- | --- |
+| Method | A known method, or omitted |
+| Base | `none`, `configured`, or `unresolved` |
+| Path segment | A literal, a dynamic segment, or unknown text |
+
+Decide the base by what the scanner can see, with no framework-specific rule:
+
+- The scanner resolves the base to literal text. When that text contains a
+  scheme or authority, the request leaves this application's root, so the base
+  is `unresolved`. Otherwise report its path as ordinary literal segments and
+  use `none`.
+- The scanner cannot see the value, such as a named configuration or
+  environment setting or a constant defined elsewhere: the base is
+  `configured`, and its content is not part of the path.
+- Nothing precedes a root-relative path: the base is `none`.
+
+Core derives a row from a `none` base, or from a `configured` base followed by
+a literal segment. An `unresolved` base produces no row. Report the request
+anyway; the fact records what the scanner saw. Core assumes a configured base
+addresses a server in this repository, so a configuration value that points at
+a third-party service can produce a wrong row; that is an accepted limit.
+
+The path ends before the query and fragment, which are ignored even when they
+are computed. Literal text uses URL path characters; percent-encode anything
+else. Core compares the text exactly.
+
+A computed value that fills one whole segment is dynamic; other computed text is
+unknown, which covers a partly known segment and an unknown remainder. Literals
+and values the scanner proves constant are literal text. A request made through
+a local helper counts only when the scanner proves that the helper passes the
+URL and method to a recognized client unchanged. The request is then reported at
+the helper's caller. A helper that prepends a configured base value still passes
+a known path. Any other transformation, an unrecognized client, or unresolved
+helper callers leave the request unknown. A declarative client that shares
+annotations with server routes reports requests, never endpoints. Scanners that
+inspect the same file may report the same fact without creating ambiguity, and
+an unknown request does not veto another scanner's known one.
+
+The facts are temporary evidence. They add no OKF field or stored route and do
+not become C4 elements. A derived row is an ordinary relationship between the
+requesting and providing files, so a Markdown reader sees a linked statement
+such as `Calls HTTP endpoint: GET /talks/:id`.
 
 ## Completion, precision, and uncertainty
 

@@ -5,8 +5,8 @@ source evidence. People and coding agents author interactions whose meaning
 cannot be established automatically. A useful result explains responsibilities
 and their interactions; its quality is not determined by its relationship count.
 
-This page records the implemented first rule, its limits, and the research
-needed to extend it. The
+This page records the implemented rules, their limits, and the research
+needed to extend them. The
 [Markdown contract](component-markdown.md) describes current storage, and the
 [scanner authoring guide](scanners/creating-a-plugin.md) describes the executable
 plugin API. Evidence semantics live in
@@ -42,10 +42,11 @@ statement or accept a draft.
 
 ## OKF and C4
 
-Operations, calls, and bindings are supporting source facts. They do not become
-C4 components, containers, or another viewer level. A selected relationship
-connects existing architectural responsibilities. File ownership is an input;
-scanning a dependency does not change that ownership.
+Operations, calls, bindings, and HTTP endpoint and request facts are supporting
+source facts. They do not become C4 components, containers, or another viewer
+level, and they are not stored. A selected relationship connects existing
+architectural responsibilities. File ownership is an input; scanning a
+dependency does not change that ownership.
 
 Ordinary Markdown and OKF readers should understand the persisted statement
 through its linked endpoints, description, and mechanism. OKF provides the
@@ -100,9 +101,12 @@ invocation order. This is a source-supported possible interaction, not a promise
 that a branch runs in every execution. It does not classify a callback as an
 event. The statement remains visible after component, container, and system
 projection and in ordinary Markdown. Authored descriptions remain unchanged.
+Several derived interactions for one ordered file pair share one row: their
+statements are joined with a semicolon, and the mechanism lists every
+contributing scanner.
 
-This first rule does not classify ordinary direct calls as architectural work.
-It does not infer HTTP, event-bus, class-receiver, or service-operation meaning.
+The callback rule does not classify ordinary direct calls as architectural work.
+Neither rule infers event-bus, class-receiver, or service-operation meaning.
 Bare callbacks supplied to generic functions also remain evidence. The rule
 covers named capabilities supplied through concrete object arguments, starting
 with Groma's initialization and viewer callbacks. Its coverage is intentionally
@@ -110,10 +114,58 @@ limited; authored relationships still carry domain meaning not established by
 this rule. No score, name keyword, authored-pair match, or import threshold is
 used to select a relationship.
 
+### HTTP requests
+
+Scanners report the HTTP endpoints an application serves and the requests it
+sends as [HTTP facts](scanners/evidence.md#http-endpoints-and-requests). Core
+joins the facts of every observation. A derived row cannot be deleted, because
+the next scan restores it, while a missing row can still be authored. Core
+therefore derives a row only when all of these hold:
+
+1. The request method is known and equals the endpoint method, or the endpoint
+   accepts every method.
+2. The request path is comparable: either nothing precedes it, or a configured
+   base is followed by a literal segment. An unresolved base, a configured base
+   with no literal segment of its own, and partly known text produce no row.
+3. The paths are equal. A literal matches the same literal or a parameter. A
+   dynamic segment matches a parameter or a catch-all. An optional parameter
+   may be absent, and a catch-all takes the remaining segments. The paths may
+   also be equal after removing one leading literal segment that only one side
+   states, such as `/api` or a deployment path, when both sides then continue
+   with the same literal.
+4. Only the endpoints a router would prefer remain: an exact path hides one
+   that needed a leading segment removed, and a literal or parameter path hides
+   a catch-all. A fallback route therefore no longer blocks a specific route.
+5. Every remaining endpoint belongs to one file. Several endpoints in that file
+   are allowed; endpoints in several files produce no row. A dynamic segment
+   could equal a literal at runtime, so a literal path in another file also
+   makes a request ambiguous: a request to `/talks/` plus a dynamic segment
+   produces no row when one file serves `/talks/:id` and another `/talks/archive`.
+6. At least one remaining endpoint is reached without a dynamic segment
+   standing in for a literal. Those endpoints provide the row.
+7. The requesting and providing files have different owners.
+
+The row runs from the requesting file to the providing file. Its statement
+lists each reached endpoint with the request method, such as
+`Calls HTTP endpoint: GET /talks/:id`. `:id?` marks an optional parameter;
+`:path+` and `:path*` mark catch-alls that require or allow a remainder.
+The mechanism lists the contributing scanners, as for other derived rows.
+
+Tolerating one leading segment is an accepted trade-off that is expected to be
+right in most repositories. Requiring a shared literal after the removed
+segment keeps a prefix from pairing with an unrelated parameter. The rule does
+not model hosts, ports, deployments, or routers that resolve by registration
+order. A configured base is assumed to address a server in this repository, so
+a configuration value that points at a third-party service can produce a wrong
+row; that is an accepted limit. Scanners decide what a base is from what they
+can see, as [scanner evidence](scanners/evidence.md#http-endpoints-and-requests)
+describes. Literal text is compared exactly, including case.
+
 ## Provider rules and later candidates
 
-Rules 1–3 are implemented for the supported extraction below. Rule 5 is enabled
-only for concretely supplied named callbacks. Rules 4 and 6 remain proposals.
+Rules 1–3 are implemented for the supported extraction below. Rule 4 is
+implemented for HTTP requests. Rule 5 is enabled only for concretely supplied
+named callbacks. Rule 6 remains a proposal.
 
 1. Resolve identity-preserving aliases and re-exports to their canonical
    operation before applying ownership. A call whose caller and provider share
@@ -124,10 +176,10 @@ only for concretely supplied named callbacks. Rules 4 and 6 remain proposals.
 3. For a call with several possible targets, an owner-level claim is possible
    only if all supported alternatives have that owner and none are unresolved.
    Do not name one implementation when only the owner is established.
-4. Match protocol interactions using receiving application identity, protocol,
-   operation or method, and endpoint information. Equal route strings alone
-   are insufficient. Scanners recognize source constructs; core joins the
-   reported endpoint facts.
+4. Match protocol interactions using protocol, method, and endpoint
+   information. Scanners recognize source constructs; core joins the reported
+   facts. Without application identity, equal routes in several providing
+   files and requests to a literal host produce no row.
 5. For callbacks, require a concrete binding and an invocation or supported
    dispatch contract. Registration and dispatch have different directions.
    Passing a function does not by itself establish that it is called.

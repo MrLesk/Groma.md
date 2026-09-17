@@ -8,17 +8,19 @@ container.
 ## Derived and authored relationships
 
 Scanners return temporary source and operation evidence. Core applies the
-[shared inference rule](https://github.com/MrLesk/Groma.md/blob/main/docs/relationship-inference.md#current-inference-rule)
+[shared inference rules](https://github.com/MrLesk/Groma.md/blob/main/docs/relationship-inference.md#current-inference-rule)
 and writes the interactions it selects under `Derived relationships` in
 `relationships.md`. It does not store raw dependency graphs or put every used
-import on the map. The rule covers concretely supplied named callbacks;
-ordinary calls and unresolved wiring need your interpretation.
+import on the map. The rules cover concretely supplied named callbacks, and
+HTTP requests whose scanners report a certain endpoint match. Ordinary calls
+and unresolved wiring need your interpretation.
 
-Author the interactions the rule cannot see, including HTTP calls with no
-import between the files. For the same file pair, current authored text takes
-precedence, and editing a derived row makes it authored. Scans refresh evidence
-without rewriting, verifying, or accepting authored rows. Parents summarize the
-same claim; an aggregate path does not establish a runtime workflow.
+Author the interactions the rules cannot see, including an HTTP call whose
+scanner reports no facts or whose target is uncertain. For the same file pair,
+current authored text takes precedence, and editing a derived row makes it
+authored. Scans refresh evidence without rewriting, verifying, or accepting
+authored rows. Parents summarize the same claim; an aggregate path does not
+establish a runtime workflow.
 
 ## Commands
 
