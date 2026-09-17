@@ -45,6 +45,27 @@ files and dependency/build output directories. Core applies configured source
 exclusions. Test source is otherwise treated like other PHP source; projects can
 exclude it explicitly.
 
+## Source outline
+
+The web and terminal maps list a PHP file's declarations under the
+[shared outline rules](../creating-a-plugin.md#source-outline). The scanner
+parses the file with the bundled parser and lists what is declared directly in
+the file or in a braced or unbraced `namespace` block:
+
+- functions, including a function declared directly inside
+  `if (!function_exists('name')) { ... }` when the guard names that function;
+- closures and arrow functions assigned directly to a variable, listed under
+  the variable name, such as `$format`;
+- classes, interfaces, traits, and enums, with every method as a member,
+  including static, abstract, and interface methods and `__construct`.
+
+Top-level declarations are `public`. Members are `private` or `protected` when
+declared so, and `public` otherwise. Properties, constants, enum cases, trait
+`use` statements, and declarations inside functions, methods, or other
+control-flow blocks are not listed. A declaration is marked as
+an entry when the component's Code names its scan symbol, such as
+`Shop\OrderService` or `Shop\OrderService::store`.
+
 ## Compared operations
 
 `groma lint` and scan findings compare PHP operations under the
@@ -73,8 +94,9 @@ are not compared.
 
 Independent fixtures cover declarations, mixed PHP/HTML, nested function
 ownership, exact source locations, unresolved calls, invalid syntax, discovery
-without Composer, repeat scans, live source edits, and identical,
-near-duplicate and renamed bodies found by `groma lint`. The fresh-checkout
+without Composer, repeat scans, live source edits, identical,
+near-duplicate and renamed bodies found by `groma lint`, and the source outline
+of PHP files beside a TypeScript file in one component. The fresh-checkout
 package check removes language tools from PATH and blocks JavaScript network
 access.
 See [local qualification](validation.md) for the Call for Papers example.

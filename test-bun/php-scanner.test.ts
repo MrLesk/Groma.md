@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test'
 import { cp, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import type { ScannerPlugin } from '@groma/scanner'
+import type { CodeSymbol, ScannerPlugin } from '@groma/scanner'
 import { buildPackage } from '../plugins/scanners/php/build.ts'
 import { discoverScanners } from '../src/scanner/modules/discovery.ts'
 import { addScanner } from '../src/scanner/modules/inventory.ts'
@@ -10,6 +10,7 @@ import { loadAnnotatedArchitecture, reconcileScanObservations } from '../src/cor
 import { loadArchitecture } from '../src/architecture-reader.ts'
 import { editArchitecture } from '../src/edit.ts'
 import { createScannerSession } from '../src/scanner/session.ts'
+import { readCodeStructure } from '../src/viewers/source/structure.ts'
 
 const fixtures = path.resolve(import.meta.dir, '../test/fixtures')
 
@@ -74,6 +75,47 @@ test.concurrent('lint finds identical and near-duplicate PHP functions and metho
     expect(findings).toEqual([
       { at: ['invoice.php:4', 'quote.php:8'], identical: false },
       { at: ['readiness.php:4', 'scheduling.php:6'], identical: true },
+    ])
+  } finally { await rm(temporary, { recursive: true, force: true }) }
+})
+
+test.concurrent('a component outlines its PHP files beside a TypeScript file under the PHP declaration rules', async () => {
+  const { temporary, root, artifact, scanner } = await setup('php-outline')
+  try {
+    await addScanner(root, artifact)
+    await addScanner(root, path.resolve(import.meta.dir, '../plugins/scanners/typescript'))
+    const world = await loadAnnotatedArchitecture(root)
+    const component = world.elements.find(element => element.kind === 'component')!
+    // The fixture's Code symbols are names the scan reports, so entries follow the scan's naming.
+    const scanned = (await scanner.scan(root))!.files.flatMap(file => file.symbols.map(symbol => symbol.name))
+    const named = component.code.flatMap(reference => reference.scanner === 'php' && reference.symbol ? [reference.symbol] : [])
+    expect(named).toHaveLength(3)
+    expect(scanned).toEqual(expect.arrayContaining(named))
+    const files = await readCodeStructure(root, world, null, component.representationId) ?? []
+    expect(files.map(file => file.file)).toEqual([...new Set(component.code.map(reference => reference.file))])
+    const symbol = ({ name, line, visibility, entry }: CodeSymbol) => [name, line, visibility, entry]
+    const php = files.filter(file => file.file.endsWith('.php')).map(file => file.declarations.map(declaration => [
+      declaration.kind, ...symbol(declaration), declaration.kind === 'type' ? declaration.members.map(symbol) : [],
+    ]))
+    // Nested closures, closures in arrays, functions under other conditions, constants, properties
+    // and enum cases are absent; the function named by its function_exists guard is listed.
+    expect(php).toEqual([
+      [
+        ['function', 'place_order', 3, 'public', true, []],
+        ['function', '$formatOrder', 13, 'public', false, []],
+        ['function', 'order_label', 17, 'public', false, []],
+      ],
+      [
+        ['type', 'Priced', 6, 'public', false, [['total', 8, 'public', false]]],
+        ['type', 'OrderService', 11, 'public', true, [
+          ['__construct', 16, 'public', false],
+          ['store', 20, 'protected', true],
+          ['limit', 22, 'private', false],
+          ['total', 28, 'public', false],
+        ]],
+        ['type', 'Audited', 34, 'public', false, [['audit', 36, 'public', false]]],
+        ['type', 'Status', 41, 'public', false, [['label', 45, 'public', false]]],
+      ],
     ])
   } finally { await rm(temporary, { recursive: true, force: true }) }
 })
