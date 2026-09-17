@@ -52,6 +52,38 @@ The [rust-analyzer project JSON format](https://rust-analyzer.github.io/book/non
 provides the source graph interface. See
 [fresh-checkout validation](../fresh-checkout-validation.md) for exercised flows.
 
+## Source outline
+
+Components list the declarations of their Rust files under the
+[shared outline contract](../creating-a-plugin.md#source-outline). The worker
+parses each requested file on its own with the Rust 2021 grammar, so the
+outline needs no Cargo project or crate graph. It lists items directly in the
+file and in inline `mod` blocks:
+
+- `fn` items, and closures written directly as a `const` or `static` value, are
+  functions.
+- Structs, enums, unions and traits are types. A trait's members are its method
+  signatures and default methods. A type's members are the `fn` items of every
+  `impl` block for it in the file, including associated functions without
+  `self`.
+
+An `impl` block for a type declared in another file adds one `public` entry for
+that type, at the type name in its first `impl` block. `impl` blocks for a
+generic parameter, such as `impl<T> Store for T`, or for a type that is not a
+path, such as a reference or a tuple, are not listed. Functions nested in
+functions, other constants and statics, associated constants and types, type
+and trait aliases, and items inside macros are not listed either. Neither are
+items under a `cfg` condition on `test`, such as an inline `#[cfg(test)] mod
+tests`, which the scan does not read either. A declaration's line is its
+name's line.
+
+Visibility comes from the item's own `pub`; an enclosing module does not
+narrow it. Methods in a trait definition take the trait's visibility, and
+methods in a trait `impl` are `public`.
+
+A declaration is an entry when a Code link names it by its bare name, such as
+`place_order` or `load`, the form the scan uses for functions and methods.
+
 ## Compared operations
 
 `groma lint` and scan findings compare Rust operations under the

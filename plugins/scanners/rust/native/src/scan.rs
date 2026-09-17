@@ -9,6 +9,7 @@ use ra_ap_vfs::FileId;
 use serde::Deserialize;
 use serde_json::{Value, json};
 
+use crate::text::{line, position};
 use crate::tokens::operation_tokens;
 
 #[derive(Deserialize)]
@@ -274,14 +275,4 @@ fn first_token_start(syntax: &SyntaxNode) -> TextSize {
         .map_or(syntax.text_range().start(), |token| {
             token.text_range().start()
         })
-}
-
-/// Zero-based UTF-16 offset.
-fn position(text: &str, offset: TextSize) -> usize {
-    text[..usize::from(offset)].encode_utf16().count()
-}
-
-/// One-based line.
-fn line(text: &str, offset: TextSize) -> usize {
-    text[..usize::from(offset)].bytes().filter(|byte| *byte == b'\n').count() + 1
 }

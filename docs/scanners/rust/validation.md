@@ -84,8 +84,9 @@ cargo clippy --locked --manifest-path plugins/scanners/rust/native/Cargo.toml --
 The suite covers canonical aliases, inherent calls, uncertain trait/function
 pointer dispatch, deferred closure bodies, distinct chained calls at one source
 offset, the wrong-provider witness, shared-source identity, deterministic
-output, curated ownership across repeat scans, failed scan preservation, and
-`groma lint` duplicate and near-duplicate findings. Each test owns its
+output, curated ownership across repeat scans, failed scan preservation,
+`groma lint` duplicate and near-duplicate findings, and the source outline of a
+component that also holds a TypeScript file. Each test owns its
 temporary fixture and runs concurrently. Native tests are opt-in because a
 general repository checkout need not contain a built Rust worker or project
 toolchain.
@@ -95,8 +96,8 @@ The 9 September focused run, before the lint case existed, passed 6 tests and
 396 Bun tests with 858 assertions, no failures, and no skipped Bun tests; the
 native Rust and Go suites were enabled. Native Clippy with warnings denied,
 targeted Biome, and TypeScript checks also passed. On 17 September 2026, with
-the lint case, the focused run of `test-bun/rust-scanner.test.ts` passed
-5 tests and 28 assertions.
+the lint and outline cases, the focused run of `test-bun/rust-scanner.test.ts`
+passed 6 tests and 30 assertions.
 
 The historical smoke run used `npm pack` and extracted that actual artifact before
 loading it into compiled Groma. It verified `scanner check`, a successful

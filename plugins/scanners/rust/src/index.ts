@@ -2,7 +2,7 @@ import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 
 import { combineObservations } from '../../observations.ts'
-import { parseScanObservation, type ScanObservation, type ScannerPlugin, type ScannerSettings } from '@groma/scanner'
+import { parseScanObservation, type CodeFile, type ScanObservation, type ScannerPlugin, type ScannerSettings } from '@groma/scanner'
 import { execute, exists, readRustProject, rustProjects, type RustOptions } from './project.ts'
 
 const executable = fileURLToPath(new URL(
@@ -26,15 +26,19 @@ export async function scanRustSource(
   return runRust(input, worker)
 }
 
+/** Runs the native worker with JSON on stdin and returns its JSON output. */
+async function runWorker(worker: string, args: string[], input: unknown, cwd: string): Promise<string> {
+  const pending = execute(worker, args, {
+    cwd, encoding: 'utf8', timeout: 120_000,
+    maxBuffer: 64 * 1024 * 1024, killSignal: 'SIGKILL', windowsHide: true,
+  })
+  pending.child.stdin?.end(JSON.stringify(input))
+  return (await pending).stdout
+}
+
 async function runRust(input: Awaited<ReturnType<typeof readRustProject>>, worker: string): Promise<ScanObservation> {
   try {
-    const pending = execute(worker, [], {
-      cwd: path.dirname(input.manifest), encoding: 'utf8', timeout: 120_000,
-      maxBuffer: 64 * 1024 * 1024, killSignal: 'SIGKILL', windowsHide: true,
-    })
-    pending.child.stdin?.end(JSON.stringify(input))
-    const { stdout } = await pending
-    return parseScanObservation(stdout)
+    return parseScanObservation(await runWorker(worker, [], input, path.dirname(input.manifest)))
   } catch (error) {
     throw new Error(`RUST_ANALYSIS_FAILED: No observation was produced. Check the selected Cargo project and the engine diagnostic. ${error}`)
   }
@@ -51,6 +55,11 @@ const scanner = {
     const projects = await rustProjects(root, settings)
     if (!projects.length) throw new Error('RUST_PROJECT_MISSING: No Cargo.toml was found.')
     for (const manifest of projects) await checkRustReadiness(root, { ...settings, manifest })
+  },
+  // Each file is parsed alone, so the outline needs no Cargo project.
+  readCodeStructure: async (root, references): Promise<CodeFile[]> => {
+    if (references.length === 0) return []
+    return JSON.parse(await runWorker(executable, ['outline'], { root, references }, root))
   },
   scan: async (root, settings = {}) => {
     const parts = []
