@@ -1,24 +1,11 @@
-import { Engine, type Node } from 'php-parser'
+import { Engine } from 'php-parser'
 import type { ScanInvocation, ScanOperation, ScanSymbol } from '@groma/scanner'
+import { children, nameOf, type Syntax } from './syntax.ts'
+import { operationTokens } from './tokens.ts'
 
-type Syntax = Node & { name?: unknown; body?: unknown }
 interface Scope { namespace: string; type?: string; operation?: string }
 const types = new Set(['class', 'interface', 'trait', 'enum'])
 const callables = new Set(['function', 'method', 'closure', 'arrowfunc'])
-
-function syntax(value: unknown): value is Syntax {
-  return value !== null && typeof value === 'object' && 'kind' in value && typeof value.kind === 'string'
-}
-
-function nameOf(value: unknown): string | undefined {
-  if (typeof value === 'string') return value
-  return syntax(value) && typeof value.name === 'string' ? value.name : undefined
-}
-
-function children(node: Syntax): Syntax[] {
-  return Object.entries(node).filter(([key]) => !['loc', 'leadingComments', 'trailingComments'].includes(key))
-    .flatMap(([, value]) => Array.isArray(value) ? value.filter(syntax) : syntax(value) ? [value] : [])
-}
 
 /** PHP syntax facts only: declarations do not establish runtime loading or call targets. */
 export function phpEvidence(file: string, source: string) {
@@ -38,7 +25,9 @@ export function phpEvidence(file: string, source: string) {
     if (local) symbols.push({ id, name, kind: node.kind })
     if (types.has(node.kind)) return { namespace: scope.namespace, type: name }
     if (!node.body) return { ...scope, operation: undefined }
-    operations.push({ id, file, name, position })
+    // Only named functions and methods, constructors included, are compared; closures and arrow functions are not.
+    const comparable = local ? { startLine: node.loc!.start.line, endLine: node.loc!.end.line, tokens: operationTokens(node) } : {}
+    operations.push({ id, file, name, position, ...comparable })
     return { ...scope, operation: id }
   }
 

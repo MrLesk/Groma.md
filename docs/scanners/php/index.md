@@ -45,10 +45,36 @@ files and dependency/build output directories. Core applies configured source
 exclusions. Test source is otherwise treated like other PHP source; projects can
 exclude it explicitly.
 
+## Compared operations
+
+`groma lint` and scan findings compare PHP operations under the
+[shared rule](../../architecture-findings.md#compared-operations). The scanner
+attaches a source range and body tokens to:
+
+- functions with a body, including functions declared inside other bodies;
+- methods with a body, including constructors and methods of anonymous classes.
+
+Parameters and local variables become slots from their first use, because PHP
+variables have function scope. `$this`, superglobals, names declared `global`,
+and static properties such as `self::$count` keep their names. A closure body
+sees only the variables it imports with `use`; an arrow function body sees the
+enclosing variables.
+
+These named operations are not compared:
+
+- closures and arrow functions, including those assigned to a variable or to an
+  array key. This is a PHP exception to the shared rule; the scanner treats every
+  closure and arrow function as an anonymous callback.
+
+Top-level code and property and constant initializers are not operations and
+are not compared.
+
 ## Validation
 
 Independent fixtures cover declarations, mixed PHP/HTML, nested function
 ownership, exact source locations, unresolved calls, invalid syntax, discovery
-without Composer, repeat scans and live source edits. The fresh-checkout package
-check removes language tools from PATH and blocks JavaScript network access.
+without Composer, repeat scans, live source edits, and identical,
+near-duplicate and renamed bodies found by `groma lint`. The fresh-checkout
+package check removes language tools from PATH and blocks JavaScript network
+access.
 See [local qualification](validation.md) for the Call for Papers example.
