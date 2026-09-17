@@ -2,9 +2,10 @@ import { expect, test } from 'bun:test'
 import { cp, mkdtemp, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import type { ScannerPlugin } from '@groma/scanner'
+import type { ScannerPlugin, SourceReference } from '@groma/scanner'
 import { buildPackage } from '../plugins/scanners/angular/build.ts'
 import { scanTypeScriptSource } from '../plugins/scanners/typescript/src/scan.ts'
+import { readCodeStructure as readReferenceOutline } from '../plugins/scanners/typescript/src/structure.ts'
 import { loadArchitecture } from '../src/architecture-reader.ts'
 import { buildArchitectureModel } from '../src/architecture-model.ts'
 import { loadAnnotatedArchitecture, reconcileScanObservations } from '../src/core.ts'
@@ -12,8 +13,10 @@ import { editArchitecture } from '../src/edit.ts'
 import { inferRelationships } from '../src/relationship-inference.ts'
 import { createScannerSession } from '../src/scanner/session.ts'
 import type { AnnotatedArchitectureModel } from '../src/types.ts'
+import { readCodeStructure } from '../src/viewers/source/structure.ts'
 
 const fixture = path.resolve(import.meta.dir, '../test/fixtures/angular-output')
+const outlineFixture = path.resolve(import.meta.dir, '../test/fixtures/angular-outline')
 
 async function setup() {
   const temporary = await mkdtemp(path.join(os.tmpdir(), 'groma-angular-test-'))
@@ -24,6 +27,16 @@ async function setup() {
   for (const name of ['emitter', 'host']) await rename(path.join(root, `${name}.ts.fixture`), path.join(root, `${name}.ts`))
   const child = Bun.spawn(['git', 'init', '--quiet'], { cwd: root, stdout: 'ignore', stderr: 'pipe' })
   expect(await child.exited, await new Response(child.stderr).text()).toBe(0)
+  await buildPackage(artifact)
+  const scanner: ScannerPlugin = (await import(path.join(artifact, 'dist/index.js'))).default
+  return { temporary, root, artifact, scanner }
+}
+
+async function outlineSetup() {
+  const temporary = await mkdtemp(path.join(os.tmpdir(), 'groma-angular-outline-'))
+  const root = path.join(temporary, 'project')
+  const artifact = path.join(temporary, 'scanner')
+  await cp(outlineFixture, root, { recursive: true })
   await buildPackage(artifact)
   const scanner: ScannerPlugin = (await import(path.join(artifact, 'dist/index.js'))).default
   return { temporary, root, artifact, scanner }
@@ -141,4 +154,56 @@ test.concurrent('the live scanner session refreshes a component when its externa
     await changed.promise
     expect(await storedArchitecture(root)).toEqual(before)
   } finally { await session.close(); await rm(temporary, { recursive: true, force: true }) }
+})
+
+test.concurrent('the built Angular package outlines component sources', async () => {
+  const { temporary, root, scanner } = await outlineSetup()
+  try {
+    const files = await scanner.readCodeStructure!(root, [{ file: 'profile.component.ts', symbols: ['ProfileComponent'] }])
+    const summary = files.map(file => [file.file, file.declarations.map(declaration => [
+      declaration.kind, declaration.name, declaration.line, declaration.visibility, declaration.entry,
+      declaration.kind === 'type' ? declaration.members.map(member => [member.name, member.line, member.visibility]) : [],
+    ])])
+
+    // Decorated declarations report the line of their name.
+    expect(summary).toEqual([['profile.component.ts', [
+      ['function', 'initials', 3, 'private', false, []],
+      ['function', 'greeting', 7, 'public', false, []],
+      ['type', 'ProfileComponent', 13, 'public', true, [
+        ['constructor', 16, 'public'], ['save', 21, 'public'], ['label', 26, 'protected'], ['#reset', 30, 'private'],
+      ]],
+    ]]])
+  } finally { await rm(temporary, { recursive: true, force: true }) }
+})
+
+test.concurrent('the built Angular package and the TypeScript scanner outline a source alike', async () => {
+  const { temporary, root, scanner } = await outlineSetup()
+  try {
+    const sources: [string, SourceReference][] = [
+      [path.resolve(import.meta.dir, '../test/fixtures/typescript-outline'), { file: 'outline.ts', symbols: ['listed'] }],
+      [root, { file: 'profile.component.ts', symbols: ['ProfileComponent'] }],
+    ]
+    for (const [sourceRoot, reference] of sources) {
+      const outline = await scanner.readCodeStructure!(sourceRoot, [reference])
+      expect(outline).toHaveLength(1)
+      expect(outline).toEqual(await readReferenceOutline(sourceRoot, [reference]))
+    }
+  } finally { await rm(temporary, { recursive: true, force: true }) }
+})
+
+test.concurrent('a file Angular and TypeScript both own shows one outline', async () => {
+  const { temporary, root, artifact, scanner } = await outlineSetup()
+  try {
+    await writeFile(path.join(root, 'groma/scanners.json'), JSON.stringify({ scanners: [
+      { id: 'typescript', source: path.resolve(import.meta.dir, '../plugins/scanners/typescript') },
+      { id: 'angular', source: artifact },
+    ] }))
+    const world = await loadAnnotatedArchitecture(root)
+    const component = world.elements.find(element => element.kind === 'component')!
+    const files = await readCodeStructure(root, world, null, component.representationId)
+
+    // The component's Code lists this source under both scanners; only the TypeScript link names ProfileComponent.
+    expect(files).toEqual(await scanner.readCodeStructure!(root, [{ file: 'profile.component.ts', symbols: ['ProfileComponent'] }]))
+    expect(files?.[0]?.declarations.find(declaration => declaration.name === 'ProfileComponent')?.entry).toBe(true)
+  } finally { await rm(temporary, { recursive: true, force: true }) }
 })

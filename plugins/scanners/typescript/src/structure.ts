@@ -27,6 +27,8 @@ import {
 
 import type { CodeDeclaration, CodeFile, CodeFunction, CodeSymbol, CodeType, CodeVisibility, SourceReference } from '@groma/scanner'
 
+// The framework scanners apply the same outline rules with a classic compiler in ../../typescript-outline.ts; change both together.
+
 interface OutlineScope {
   source: SourceFile
   /** Symbols the Code reference names. */

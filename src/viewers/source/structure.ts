@@ -2,10 +2,35 @@ import type { CodeFile, SourceReference } from '@groma/scanner'
 import { configuredScannerModules, type FoundScannerModule } from '../../scanner/modules/inventory.ts'
 import { importScanner } from '../../scanner/registry.ts'
 import { withGitRevision } from '../../history/revisions.ts'
-import type { ArchitectureGraph } from '../../types.ts'
+import type { ArchitectureGraph, CodeReference } from '../../types.ts'
 export type { CodeDeclaration, CodeFile, CodeSymbol, CodeVisibility } from '@groma/scanner'
 
-/** Ask each configured scanner that owns part of the component's Code for its outline, in Code order. */
+interface OutlineRequest {
+  /** The configured scanner that outlines the file. */
+  scanner?: string
+  reference: SourceReference
+}
+
+/**
+ * One request per Code file, in Code order. A file several scanners own, such as an Angular source that
+ * TypeScript also owns, is outlined once: by the lowest configured scanner id among its links, with the
+ * symbols of all its links.
+ */
+function outlineRequests(code: readonly CodeReference[], scannerIds: ReadonlySet<string>): OutlineRequest[] {
+  const requests = new Map<string, OutlineRequest>()
+  for (const link of code) {
+    const request = requests.get(link.file) ?? { reference: { file: link.file, symbols: [] } }
+    const { symbols } = request.reference
+    if (link.symbol !== undefined && !symbols.includes(link.symbol)) symbols.push(link.symbol)
+    if (scannerIds.has(link.scanner) && (request.scanner === undefined || link.scanner < request.scanner)) {
+      request.scanner = link.scanner
+    }
+    requests.set(link.file, request)
+  }
+  return [...requests.values()]
+}
+
+/** Ask the configured scanners for the outline of each file in the component's Code, in Code order. */
 export async function readCodeStructure(
   repositoryRoot: string,
   world: ArchitectureGraph,
@@ -16,20 +41,16 @@ export async function readCodeStructure(
     candidate.kind === 'component' && candidate.representationId === elementId
   ))
   if (element === undefined) return undefined
-  const modules = await configuredScannerModules(repositoryRoot)
-  const providers = await Promise.all(modules.filter((module): module is FoundScannerModule => (
-    module.status === 'found' && element.code.some(reference => reference.scanner === module.id)
-  )).map(async module => {
-    const scanner = await importScanner(module.entry, module.id)
-    const references = new Map<string, SourceReference>()
-    for (const reference of element.code.filter(reference => reference.scanner === module.id)) {
-      const found = references.get(reference.file) ?? { file: reference.file, symbols: [] }
-      if (reference.symbol !== undefined && !found.symbols.includes(reference.symbol)) found.symbols.push(reference.symbol)
-      references.set(reference.file, found)
-    }
-    return { scanner, references: [...references.values()], settings: module.settings }
-  }))
-  const order = [...new Set(element.code.map(reference => reference.file))]
+  const modules = (await configuredScannerModules(repositoryRoot))
+    .filter((module): module is FoundScannerModule => module.status === 'found')
+  const requests = outlineRequests(element.code, new Set(modules.map(module => module.id)))
+  const providers = await Promise.all(modules.filter(module => requests.some(request => request.scanner === module.id))
+    .map(async module => ({
+      scanner: await importScanner(module.entry, module.id),
+      references: requests.filter(request => request.scanner === module.id).map(request => request.reference),
+      settings: module.settings,
+    })))
+  const order = requests.map(request => request.reference.file)
   const load = async (root: string): Promise<CodeFile[]> => {
     const files = await Promise.all(providers.map(({ scanner, references, settings }) => (
       scanner.readCodeStructure?.(root, references, settings) ?? []
