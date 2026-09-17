@@ -105,7 +105,7 @@ async function openTerminalView(target: string | undefined, plain: boolean): Pro
   if (!await continueWhenReady(interactiveTerminal() && target === undefined && !plain)) return
   if (target) {
     const { renderPlainRecord } = await import('./plain-world.ts')
-    const result = await renderPlainRecord(process.cwd(), target)
+    const result = await renderPlainRecord(process.cwd(), target, plain)
     if (!result.ok) {
       console.error(result.message)
       process.exitCode = 1
@@ -266,7 +266,7 @@ program
   .command('view')
   .description('Scan this repo and open the terminal map')
   .argument('[target]', 'element or flow id for complete Markdown, draft id, or exact source file')
-  .option('--plain', 'print a compact world overview with groups and a flow index')
+  .option('--plain', 'print actors, systems, their relationships and flows; with an element id, that element, its children, and its incoming and outgoing relationships')
   .action(async (target: string | undefined, options) => {
     try {
       await openTerminalView(target, Boolean(program.opts().plain || options.plain))
