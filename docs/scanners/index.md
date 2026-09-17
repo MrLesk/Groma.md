@@ -16,12 +16,16 @@ source groups. C# preserves solutions and Roslyn projects. Dependency graphs sta
 inside scanners; they are not a shared relationships field.
 
 Successful scanner diagnostics appear in `ScanSummary.scannerDiagnostics`, paired
-with the originating scanner identity. The `groma scan` report shows each message's
-scanner ID, severity, code, and optional file and line. Diagnostics explain analysis
-limitations without failing the scan. They remain scan results and are not written
-to architecture Markdown. Import and execution failures appear separately in
-`ScanSummary.scannerFailures`, with each scanner ID and its error. Failed scanners
-contribute no fresh observation; healthy scanners still update the architecture.
+with the originating scanner identity. The `groma scan` report prints the summary
+counts, then one line per scanner ID and diagnostic code: severity, the diagnostic
+count as `×N`, and the first listed diagnostic as an example, with its optional
+file and line and the first line of its message. Diagnostics explain analysis limitations without
+failing the scan. They remain scan results and are not written to architecture
+Markdown. Import and execution failures appear separately in
+`ScanSummary.scannerFailures`, with each scanner ID and its error. The report
+prints every failure in full, including each syntax error that failed a scan.
+Failed scanners contribute no fresh observation; healthy scanners still update the
+architecture.
 
 Core keeps curated file membership authoritative. Files already assigned to one component stay together. An explicit scanner source unit can associate unowned companion files with one component; other unknown files become singleton components under their inferred source roots. Conflicting ownership is reported for review. A drafted name match receives Code but stays a draft until `groma accept`.
 

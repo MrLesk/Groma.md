@@ -15,6 +15,7 @@ import java.util.Collections;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import javax.tools.Diagnostic;
 import javax.tools.DiagnosticCollector;
@@ -76,13 +77,13 @@ public final class Main {
             units.forEach(unit -> index.scan(unit, null));
             var uses = new Uses(index, diagnostics.getDiagnostics());
             units.forEach(unit -> uses.scan(unit, null));
+            var missing = new MissingTypes();
             var messages = new ArrayList<Object>();
             for (var item : diagnostics.getDiagnostics()) {
-                var message = Json.object("severity", "warning", "code", item.getCode(), "message", item.getMessage(Locale.ROOT));
-                if (item.getSource() != null) message.put("file", root.relativize(Path.of(item.getSource().toUri())).toString().replace('\\', '/'));
-                if (item.getLineNumber() > 0) message.put("line", item.getLineNumber());
-                messages.add(message);
+                if (!missing.add(item)) messages.add(message(root, item, "warning", item.getCode(), item.getMessage(Locale.ROOT)));
             }
+            var summary = missing.diagnostic(root);
+            if (summary != null) messages.add(summary);
             messages.addAll(uses.diagnostics());
             return Json.object(
                 "schemaVersion", 1,
@@ -94,7 +95,18 @@ public final class Main {
     }
 
     private static String diagnostic(Path root, Diagnostic<? extends JavaFileObject> item) {
-        String location = item.getSource() == null ? "compiler" : root.relativize(Path.of(item.getSource().toUri())).toString().replace('\\', '/');
+        String location = item.getSource() == null ? "compiler" : file(root, item);
         return location + ":" + item.getLineNumber() + ": " + item.getCode() + ": " + item.getMessage(Locale.ROOT);
+    }
+
+    static Map<String, Object> message(Path root, Diagnostic<? extends JavaFileObject> item, String severity, String code, String text) {
+        var message = Json.object("severity", severity, "code", code, "message", text);
+        if (item.getSource() != null) message.put("file", file(root, item));
+        if (item.getLineNumber() > 0) message.put("line", item.getLineNumber());
+        return message;
+    }
+
+    private static String file(Path root, Diagnostic<? extends JavaFileObject> item) {
+        return root.relativize(Path.of(item.getSource().toUri())).toString().replace('\\', '/');
     }
 }

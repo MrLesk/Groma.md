@@ -27,8 +27,18 @@ language version and UTF-8. POM-only aggregators supply no source observation.
 The scanner does not evaluate Maven, parent POMs, profiles, build plugins,
 annotation processors or dependency declarations. It does not load project
 JARs or generated outputs. Custom build-added roots and Gradle are outside the
-supported source loader. Unsupported language versions and invalid syntax fail
-with a diagnostic; missing external types do not fail the source scan.
+supported source loader. Unsupported language versions fail the scan; invalid
+syntax fails it with every syntax error listed.
+
+Missing external types do not fail the source scan. Their "cannot find symbol"
+and "package does not exist" compiler errors form one
+`JAVA_MISSING_EXTERNAL_TYPES` info diagnostic with the number of unresolved
+references, an example location and the five most frequently missing packages.
+In the `groma scan` report, that reference count is part of the message; the
+`×N` diagnostic count for this code is 1. javac cannot tell a missing dependency
+from any other unresolved name, so the count includes every unresolved name,
+such as a typo. Other compiler errors are reported as warnings with their javac
+code.
 
 ## Evidence
 
