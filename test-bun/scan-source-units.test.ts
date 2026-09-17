@@ -12,12 +12,12 @@ import type { AnnotatedArchitectureModel } from '../src/types.ts'
 const paths = ['emitter.ts', 'handler.ts', 'alternate.ts', 'host.html']
 const unit = { primary: 'emitter.ts', files: ['emitter.ts', 'host.html'] }
 
-function observation(units: ScanSourceUnit[] | undefined = [unit], scanner = 'fixture') {
+function observation(units: ScanSourceUnit[] = [unit], scanner = 'fixture') {
   return createScanObservation({
     scanner: { id: scanner, technology: scanner, engine: 'fixture', engineVersion: '1' },
     roots: [{ id: 'app', kind: 'project', name: 'App' }],
     files: paths.map(file => ({ file, roots: ['app'], symbols: [] })),
-    ...(units === undefined ? {} : { sourceUnits: units }),
+    sourceUnits: units,
     operations: paths.slice(0, 2).map(file => ({ id: file, file, name: file, position: 0 })),
     invocations: [{ source: 'emitter.ts', targets: ['handler.ts'], unresolved: false, line: 2,
       member: 'saved', binding: { file: 'host.html', line: 1 } }],
@@ -56,8 +56,7 @@ test.concurrent('source units survive parsing, project relocation, and overlappi
 test.concurrent('one source unit owns every file and scanner reference through reorder and repeat scans', async () => {
   const root = await repository()
   try {
-    const scan = observation(), overlap = observation(undefined, 'other')
-    delete overlap.sourceUnits
+    const scan = observation(), overlap = observation([], 'other')
     await reconcileScanObservations(root, [scan, overlap])
     const before = await loadAnnotatedArchitecture(root)
     const component = owner(before, 'emitter.ts')
@@ -87,11 +86,8 @@ test.concurrent('new companion joins a curated owner and later missing associati
     expect(owner(current, 'alternate.ts').id).toBe(id)
     expect(owner(current, unit.primary).title).toBe('Result dispatch')
     const summary = await reconcileScanObservations(root, [observation([])])
-    expect(summary.evidenceConflicts?.map(item => item.code)).toContain('unconfirmed-source-unit-membership')
+    expect(summary.evidenceConflicts).toBeUndefined()
     expect(await loadAnnotatedArchitecture(root)).toEqual(current)
-    const noAssociations = observation()
-    delete noAssociations.sourceUnits
-    expect((await reconcileScanObservations(root, [noAssociations])).evidenceConflicts).toBeUndefined()
   } finally { await rm(root, { recursive: true, force: true }) }
 })
 
@@ -119,7 +115,7 @@ test.concurrent('relationships inside a source unit do not become architecture s
   } finally { await rm(root, { recursive: true, force: true }) }
 })
 
-test.concurrent('manual combines and moves remain authoritative when source units are scanned again', async () => {
+test.concurrent('manual combines and moves remain authoritative without warnings when source units are scanned again', async () => {
   const root = await repository()
   try {
     const scan = observation()
@@ -131,7 +127,7 @@ test.concurrent('manual combines and moves remain authoritative when source unit
     await editArchitecture(root, { id: component.id, combine: [owner(initial, 'alternate.ts').id] })
     await editArchitecture(root, { id: component.id, parent: destination.id })
     const curated = await loadAnnotatedArchitecture(root)
-    await reconcileScanObservations(root, [scan])
+    expect((await reconcileScanObservations(root, [scan])).evidenceConflicts).toBeUndefined()
     const current = await loadAnnotatedArchitecture(root)
     expect(owner(current, 'emitter.ts').parent).toBe(destination.id)
     for (const file of ['emitter.ts', 'host.html', 'alternate.ts']) {
@@ -140,7 +136,7 @@ test.concurrent('manual combines and moves remain authoritative when source unit
   } finally { await rm(root, { recursive: true, force: true }) }
 })
 
-test.concurrent('a removed companion declaration is reported even when the scanner stops inventorying that file', async () => {
+test.concurrent('a removed companion declaration keeps its owner without a warning when the scanner stops inventorying that file', async () => {
   const root = await repository()
   try {
     await reconcileScanObservations(root, [observation()])
@@ -149,7 +145,7 @@ test.concurrent('a removed companion declaration is reported even when the scann
     changed.files = changed.files.filter(file => file.file !== 'host.html')
     changed.invocations = []
     const summary = await reconcileScanObservations(root, [changed])
-    expect(summary.evidenceConflicts?.map(item => item.code)).toContain('unconfirmed-source-unit-membership')
+    expect(summary.evidenceConflicts).toBeUndefined()
     const retained = owner(await loadAnnotatedArchitecture(root), 'host.html')
     expect(retained.id).toBe(owner(before, 'host.html').id)
     expect(retained.code.map(code => code.file)).toEqual(owner(before, 'host.html').code.map(code => code.file))

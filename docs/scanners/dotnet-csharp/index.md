@@ -49,7 +49,7 @@ generated source.
 
 Core creates one component with all member Code references, attaches newly
 discovered unowned partial files, and retains curated ownership on repeat scans.
-Conflicting owners or disappearing associations produce review diagnostics.
+Conflicting owners produce review diagnostics.
 The existing C# source watcher includes new partial files. No project restore,
 build, or source-generator execution is needed.
 
