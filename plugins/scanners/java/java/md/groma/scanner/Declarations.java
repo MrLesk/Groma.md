@@ -54,10 +54,16 @@ final class Declarations extends TreePathScanner<Void, Void> {
         if (tree.getBody() != null) {
             var element = trees.getElement(getCurrentPath());
             if (element == null) throw new IllegalStateException("Unbound executable declaration");
-            operation(tree, element.getEnclosingElement() + "#" + element);
+            // A method of an anonymous class, including an enum constant body, is an anonymous callback.
+            operation(tree, element.getEnclosingElement() + "#" + element, anonymous() ? null : Tokens.of(tree, authored));
             operationFor.put(element, operationAt.get(tree));
         }
         return super.visitMethod(tree, unused);
+    }
+
+    /** Only the declaring class decides: a named local class inside an anonymous body still declares names. */
+    private boolean anonymous() {
+        return getCurrentPath().getParentPath().getLeaf() instanceof ClassTree type && type.getSimpleName().isEmpty();
     }
 
     @Override public Void visitLambdaExpression(LambdaExpressionTree tree, Void unused) {
@@ -80,9 +86,22 @@ final class Declarations extends TreePathScanner<Void, Void> {
     }
 
     private void operation(Tree tree, String name) {
+        operation(tree, name, null);
+    }
+
+    /** Only an operation with tokens is compared as possible duplicate logic. */
+    private void operation(Tree tree, String name, List<Object> tokens) {
         String id = identity(tree);
+        var unit = getCurrentPath().getCompilationUnit();
         operationAt.put(tree, id);
-        operations.add(Json.object("id", id, "file", file(getCurrentPath().getCompilationUnit()), "name", name));
+        var fact = Json.object("id", id, "file", file(unit), "name", name);
+        if (tokens != null) {
+            var lines = unit.getLineMap();
+            fact.put("startLine", lines.getLineNumber(trees.getSourcePositions().getStartPosition(unit, tree)));
+            fact.put("endLine", lines.getLineNumber(trees.getSourcePositions().getEndPosition(unit, tree)));
+            fact.put("tokens", tokens);
+        }
+        operations.add(fact);
     }
 
     private String identity(Tree tree) {
