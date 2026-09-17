@@ -1,7 +1,6 @@
 import type { TaskDiffPayload } from '../source/diff.ts'
 import { flowsThrough } from '../flows.ts'
-import { outgoingActions } from '../relationship-text.ts'
-import { parentOfElements, promotedPeer } from '../relationship-text.ts'
+import { parentOfElements, relationshipPairs, type RelationshipPair } from '../relationship-text.ts'
 import { reduceFlowReading } from './flow-navigation.ts'
 import type { PaneVisibility } from './layout.ts'
 import {
@@ -145,7 +144,9 @@ export function detailsCommands(
 ): (AnnotatedRelationship | ArchitectureFlow)[] {
   if (state.profile || state.keys || state.detailsTab !== 'what') return []
   if (state.currentId === undefined) return []
-  return [...selectionRelationships(world, state.currentId), ...selectionFlows(world, state.currentId)]
+  // A relationship pair is picked by its first relationship.
+  const relationships = selectionPairs(world, state.currentId).map(pair => pair.relationships[0]!)
+  return [...relationships, ...selectionFlows(world, state.currentId)]
 }
 
 /** Authored flows containing this element or an endpoint inside it. */
@@ -153,25 +154,41 @@ export function selectionFlows(world: TerminalViewModel, elementId: string): Arc
   return flowsThrough(elementId, world)
 }
 
-/** The selection's relationships in the details pane's order: its own outgoing ones, then everything pointing at it or its promoted parent. */
-export function selectionRelationships(world: TerminalViewModel, elementId: string): AnnotatedRelationship[] {
-  const parentOf = parentOfElements(world.elements)
-  const incoming = world.relationships.filter(relationship => promotedPeer(relationship, elementId, parentOf)?.outgoing === false)
-  return [...outgoingActions(elementId, world), ...incoming]
+/** The selection's relationship pairs in the details pane's order: outgoing pairs, then incoming ones. */
+export function selectionPairs(world: TerminalViewModel, elementId: string): RelationshipPair[] {
+  const pairs = relationshipPairs(world.relationships, elementId, parentOfElements(world.elements))
+  return [...pairs.filter(pair => pair.outgoing), ...pairs.filter(pair => !pair.outgoing)]
 }
 
-/** One focused flow or relationship. */
+/** The selection's pair holding the picked relationship. */
+function pickedPair(world: TerminalViewModel, state: Pick<ViewerState, 'currentId' | 'activeActionId'>): RelationshipPair | undefined {
+  if (state.currentId === undefined) return undefined
+  return selectionPairs(world, state.currentId)
+    .find(pair => pair.relationships.some(relationship => relationship.id === state.activeActionId))
+}
+
+/** The details command id of the picked action: a flow's own id, or the first relationship of the pair holding the picked relationship. */
+export function pickedCommandId(world: TerminalViewModel, state: Pick<ViewerState, 'currentId' | 'activeActionId'>): string | undefined {
+  const pair = pickedPair(world, state)
+  return pair === undefined ? state.activeActionId : pair.relationships[0]!.id
+}
+
+/** One focused flow or relationship, with every relationship a picked details pair summarizes. */
 export interface LitAction {
   id?: string
+  relationshipIds?: readonly string[]
 }
 
-/** The one selected flow or relationship, temporarily quiet while Work owns the map. */
+/** The one selected flow or relationship pair, temporarily quiet while Work owns the map. */
 export function litAction(
-  _world: TerminalViewModel,
+  world: TerminalViewModel,
   state: ViewerState,
 ): LitAction {
   if (state.work !== undefined) return {}
-  return { id: state.activeActionId }
+  const pair = pickedPair(world, state)
+  return pair === undefined
+    ? { id: state.activeActionId }
+    : { id: state.activeActionId, relationshipIds: pair.relationships.map(relationship => relationship.id) }
 }
 
 function resolve(
@@ -222,7 +239,7 @@ function reduceMapNavigation(world: TerminalViewModel, state: ViewerState, actio
   if (action === 'enter') {
     return selected && canEnter(selected)
       ? syncTree(world, { ...current, ...enterView(world, selected) })
-      : enterDetails(current)
+      : enterDetails(world, current)
   }
   if (!selected || !isMapDirection(action)) return current
   return syncTree(world, { ...current, ...moveView(world, current, selected, action) })
@@ -296,8 +313,9 @@ function reduceSelectionDetails(world: TerminalViewModel, current: ViewerState, 
   if (picked === undefined) return current
   if ('steps' in picked) return toggleFlow(current, picked.id)
   if (world.flows.some(flow => flow.id === current.activeActionId)) return followRelationship(world, current, picked)
-  if (action === 'enter' && picked.id === current.activeActionId) return followRelationship(world, current, picked)
-  return { ...current, activeActionId: current.activeActionId === picked.id ? undefined : picked.id, actionStep: undefined }
+  const pickedId = pickedCommandId(world, current)
+  if (action === 'enter' && picked.id === pickedId) return followRelationship(world, current, picked)
+  return { ...current, activeActionId: pickedId === picked.id ? undefined : picked.id, actionStep: undefined }
 }
 
 /** The one terminal reducer: history owns its modal rules, then the normal map handles everything else. */
@@ -360,11 +378,11 @@ export function clickTreeRow(world: TerminalViewModel, state: ViewerState, id: s
 }
 
 /** Details focus starts with the cursor on the already-picked command. */
-function enterDetails(current: ViewerState): ViewerState {
+function enterDetails(world: TerminalViewModel, current: ViewerState): ViewerState {
   return {
     ...current,
     focus: 'details',
-    actionCursor: current.activeActionId,
+    actionCursor: pickedCommandId(world, current),
     panes: { ...current.panes, details: true },
   }
 }

@@ -82,10 +82,14 @@ Both use `groma accept`, with the relationship addressed by its two endpoints.
 Element relationship lists and relationship details use the same horizontal
 Source → Destination row. Clickable endpoint names and kinds flank the
 relationship description and arrow. Element lists mark the selected endpoint
-with THIS; the badge follows direction and can appear on either side. Clicking
-the center action in an element list opens the relationship details. Lists
-preserve map-level peer promotion; relationship details show exact authored
-endpoints. Compact text and dividers separate rows without enclosing borders
+with THIS; the badge follows direction and can appear on either side. Lists
+preserve map-level peer promotion and show each ordered endpoint pair once,
+with the distinct descriptions of every relationship it combines. Clicking the
+center action of a single-relationship pair opens the relationship details.
+Clicking the center of a combined pair unfolds its relationships beneath it,
+each with its exact endpoints and its own center action; one pair stays
+unfolded at a time. Relationship details show exact authored endpoints.
+Compact text and dividers separate rows without enclosing borders
 or side padding. Rows omit technology, which remains available in Edit.
 A current relationship is labeled
 Current; this means an authored current collaboration, not scanner ownership.

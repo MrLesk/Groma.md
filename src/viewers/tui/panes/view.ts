@@ -1,9 +1,8 @@
-import { actionCaption } from '../../relationship-text.ts'
 import { hasComponents, isEmptyWorld, noComponentsHint, noComponentsTitle } from '../../../empty-world.ts'
 import type { ViewerTheme } from '../atoms/theme.ts'
 import { flowEndpointLabel, type ProjectedFlowStep } from '../flow.ts'
 import type { TerminalViewModel } from '../model.ts'
-import { detailsTabs, type LitAction, type ViewerState } from '../navigation.ts'
+import { detailsTabs, pickedCommandId, type LitAction, type ViewerState } from '../navigation.ts'
 import { detailsContentWidth, terminalLayout } from '../layout.ts'
 import { ancestorOfKind, canEnter } from '../navigation-spatial.ts'
 import type { TerminalProjection } from '../projection.ts'
@@ -34,8 +33,7 @@ function recapLine(theme: ViewerTheme, world: TerminalViewModel, width: number):
 function actionTitle(world: TerminalViewModel, lit: LitAction, step: ProjectedFlowStep | undefined): string | undefined {
   const litCommand = world.relationships.find(item => item.id === lit.id)
   if (litCommand === undefined && step === undefined) return world.flows.find(flow => flow.id === lit.id)?.title
-  const titles = new Map(world.elements.map(item => [item.representationId, item.title]))
-  if (step === undefined) return actionCaption(litCommand!, true, id => titles.get(id) ?? id).title
+  if (step === undefined) return litCommand!.description
   return `leg ${step.index + 1}/${step.total} · ${flowEndpointLabel(step.source)}`
     + ` → ${flowEndpointLabel(step.target)} · ${step.description}`
 }
@@ -228,5 +226,5 @@ export function screenView(
 
 function selectedDetails(theme: ViewerTheme, world: TerminalViewModel, state: ViewerState, selected: AnnotatedElement): PaneLines {
   const structure = state.codeStructure?.elementId === selected.representationId ? state.codeStructure.files : undefined
-  return detailsLines(theme, selected, world, detailsContentWidth(state), state.detailsTab, state.activeActionId, state.actionCursor, structure, state.workList)
+  return detailsLines(theme, selected, world, detailsContentWidth(state), state.detailsTab, pickedCommandId(world, state), state.actionCursor, structure, state.workList)
 }

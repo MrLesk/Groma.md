@@ -176,8 +176,12 @@ a port dot on the border cell of each end (none on a top border, where the name
 sits) and a short label on or beside a route segment, clear of card and row text.
 Paths avoid foreign cards. Where two
 unlit routes cross, a junction glyph marks the crossing. A lit flow marches from
-source to target while its cells stay fixed. Enter on a relationship row in the
-details pane selects the other end of the already highlighted relationship.
+source to target while its cells stay fixed. The details pane lists each
+ordered pair of the selection and a peer at its depth once, with the distinct
+descriptions of every relationship it combines. A highlighted row lists each
+of those relationships beneath it with its exact ends and lights all of them
+on the map. Enter on a relationship row in the details pane selects the other
+end of the already highlighted row's first relationship.
 Browsing a relationship row moves only its cursor. Space toggles its highlight;
 Enter first highlights it and then follows it.
 

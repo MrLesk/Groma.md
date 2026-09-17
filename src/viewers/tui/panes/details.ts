@@ -1,14 +1,13 @@
 import { TextAttributes } from '@opentui/core'
 
 import { copiesOf, type OperationCopies } from '../../../architecture-findings.ts'
-import { actionCaption, outgoingActions } from '../../relationship-text.ts'
+import { pairDescriptions, type RelationshipPair } from '../../relationship-text.ts'
 import { kindLabel } from '../../atoms/kind.ts'
 import type { ProjectProfile } from '../../../project-profile.ts'
-import { parentOfElements, promotedPeer } from '../../relationship-text.ts'
 import type { ViewerTheme } from '../atoms/theme.ts'
 import type { TerminalViewModel } from '../model.ts'
 import { KEYS_BOX } from '../keys.ts'
-import { selectionFlows, selectionRelationships, type DetailsTab } from '../navigation.ts'
+import { selectionFlows, selectionPairs, type DetailsTab } from '../navigation.ts'
 import { workRowId, workRows, workRowSelection, type WorkListSettings } from '../work/model.ts'
 import { workListLines } from './hierarchy.ts'
 import { taskFileRows } from './code.ts'
@@ -16,7 +15,6 @@ import type {
   AnnotatedElement,
   ArchitectureFinding,
   ArchitectureFlow,
-  AnnotatedRelationship,
   WorkChecklistItem,
   WorkItem,
   WorkItemDetails,
@@ -116,40 +114,34 @@ function howLines(theme: ViewerTheme, element: AnnotatedElement, world: Terminal
   return { lines: [...technology, ...code.lines], cursor: code.cursor === undefined ? undefined : technology.length + code.cursor }
 }
 
-interface RelationshipRow {
-  relationship: AnnotatedRelationship
-  outgoing: boolean
-  peer: AnnotatedElement | undefined
+/** Beneath a lit row: each relationship it summarizes with both exact ends, led by its description when there are several. */
+function exactLines(theme: ViewerTheme, row: RelationshipPair, byId: Elements, width: number): Line[] {
+  const combined = row.relationships.length > 1
+  return row.relationships.flatMap(relationship => [
+    ...(combined ? wrap(relationship.description, width - 2).map(line => [plain(theme, `  ${line}`)]) : []),
+    ...wrap(`${byId.get(relationship.source)?.title ?? relationship.source} → ${byId.get(relationship.target)?.title ?? relationship.target}`, width - 2)
+      .map(line => [dim(theme, `  ${line}`)]),
+  ])
 }
 
-/** The selection's relationships in pick order, each with the peer it points at or arrives from. */
-function relationshipRows(element: AnnotatedElement, world: TerminalViewModel, byId: Elements): RelationshipRow[] {
-  const parentOf = parentOfElements(world.elements)
-  const outgoing = new Set(outgoingActions(element.representationId, world).map(relationship => relationship.id))
-  return selectionRelationships(world, element.representationId).map(relationship => {
-    const isOutgoing = outgoing.has(relationship.id)
-    const peerId = isOutgoing ? relationship.target : promotedPeer(relationship, element.representationId, parentOf)?.peerId ?? relationship.source
-    return { relationship, outgoing: isOutgoing, peer: byId.get(peerId) }
-  })
-}
-
-function relationshipLines(theme: ViewerTheme, row: RelationshipRow, byId: Elements, width: number, lit: boolean, atCursor: boolean): Line[] {
+function relationshipLines(theme: ViewerTheme, row: RelationshipPair, byId: Elements, width: number, lit: boolean, atCursor: boolean): Line[] {
   const arrow = row.outgoing ? '→ ' : '← '
-  const caption = actionCaption(row.relationship, row.outgoing, id => byId.get(id)?.title)
-  const rest = caption.detail === '' ? '' : ` · ${caption.detail}`
-  const peerMark: Line = row.outgoing || row.peer === undefined ? [] : [kindMark(theme, row.peer.kind, row.peer.external), plain(theme, ' ')]
+  const peer = byId.get(row.peerId)
+  const peerTitle = peer?.title ?? row.peerId
+  const descriptions = pairDescriptions(row).join('; ')
+  const title = row.outgoing ? descriptions : peerTitle
+  const detail = row.outgoing ? peerTitle : descriptions
+  const rest = detail === '' ? '' : ` · ${detail}`
+  const peerMark: Line = row.outgoing || peer === undefined ? [] : [kindMark(theme, peer.kind, peer.external), plain(theme, ' ')]
   const markWidth = peerMark.length === 0 ? 0 : 2
-  // The lit row names both ends beneath it; Enter on it follows the relationship there.
-  const ends = lit
-    ? wrap(`${byId.get(row.relationship.source)?.title ?? row.relationship.source} → ${byId.get(row.relationship.target)?.title ?? row.relationship.target}`, width - 2)
-      .map(line => [dim(theme, `  ${line}`)])
-    : []
-  if (arrow.length + markWidth + caption.title.length + rest.length <= width) {
-    return [styleRow(theme, [dim(theme, arrow), ...peerMark, plain(theme, caption.title), dim(theme, rest)], width, lit, atCursor), ...ends]
+  // Enter on the lit row follows its first relationship there.
+  const ends = lit ? exactLines(theme, row, byId, width) : []
+  if (arrow.length + markWidth + title.length + rest.length <= width) {
+    return [styleRow(theme, [dim(theme, arrow), ...peerMark, plain(theme, title), dim(theme, rest)], width, lit, atCursor), ...ends]
   }
   return [
-    styleRow(theme, [dim(theme, arrow), ...peerMark, plain(theme, caption.title)], width, lit, atCursor),
-    ...wrap(caption.detail, width - arrow.length).map(line => styleRow(theme, [dim(theme, `${' '.repeat(arrow.length)}${line}`)], width, lit, false)),
+    styleRow(theme, [dim(theme, arrow), ...peerMark, plain(theme, title)], width, lit, atCursor),
+    ...wrap(detail, width - arrow.length).map(line => styleRow(theme, [dim(theme, `${' '.repeat(arrow.length)}${line}`)], width, lit, false)),
     ...ends,
   ]
 }
@@ -174,15 +166,15 @@ function flowChoiceLines(theme: ViewerTheme, title: string, width: number, activ
     [plain(theme, `${index === 0 ? (active ? '☑ ' : '☐ ') : '  '}${line}`)], width, active, atCursor))
 }
 
-function whatLines(theme: ViewerTheme, element: AnnotatedElement, world: TerminalViewModel, byId: Elements, width: number, activeActionId: string | undefined, actionCursor: string | undefined): PaneLines {
+function whatLines(theme: ViewerTheme, element: AnnotatedElement, world: TerminalViewModel, byId: Elements, width: number, pickedId: string | undefined, actionCursor: string | undefined): PaneLines {
   const lines: Line[] = element.overview ? [[], ...wrap(element.overview, width).map(row => [plain(theme, row)])] : []
   let cursor: number | undefined
-  const rows = relationshipRows(element, world, byId)
+  const rows = selectionPairs(world, element.representationId)
   if (rows.length > 0) lines.push([], heading(theme, 'Relationships', width))
   for (const row of rows) {
-    const atCursor = row.relationship.id === actionCursor
+    const atCursor = row.relationships[0]!.id === actionCursor
     if (atCursor) cursor = lines.length
-    const active = row.relationship.id === activeActionId
+    const active = row.relationships[0]!.id === pickedId
     lines.push(...relationshipLines(theme, row, byId, width, active, atCursor))
   }
   const flows = selectionFlows(world, element.representationId)
@@ -190,7 +182,7 @@ function whatLines(theme: ViewerTheme, element: AnnotatedElement, world: Termina
   for (const flow of flows) {
     const atCursor = flow.id === actionCursor
     if (atCursor) cursor = lines.length
-    lines.push(...flowChoiceLines(theme, flow.title, width, flow.id === activeActionId, atCursor))
+    lines.push(...flowChoiceLines(theme, flow.title, width, flow.id === pickedId, atCursor))
   }
   lines.push(...childRows(theme, element, byId, width))
   return { lines, cursor }
@@ -203,7 +195,8 @@ export function detailsLines(
   world: TerminalViewModel,
   width: number,
   tab: DetailsTab,
-  activeActionId: string | undefined,
+  /** The picked flow, or the first relationship of the picked pair. */
+  pickedId: string | undefined,
   actionCursor: string | undefined,
   structure: readonly CodeFile[] | undefined,
   workList?: WorkListSettings,
@@ -219,7 +212,7 @@ export function detailsLines(
     ? componentTaskLines(theme, element, world, width, actionCursor, workList)
     : tab === 'how'
     ? howLines(theme, element, world, width, actionCursor, structure)
-    : whatLines(theme, element, world, byId, width, activeActionId, actionCursor)
+    : whatLines(theme, element, world, byId, width, pickedId, actionCursor)
   return {
     lines: [head, ...body.lines],
     ...(body.cursor === undefined ? {} : { cursor: body.cursor + 1 }),
