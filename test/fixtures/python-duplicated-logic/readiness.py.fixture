@@ -1,0 +1,4 @@
+def can_start(task):
+    """Only unblocked, assigned work may start."""
+    open_blockers = [blocker for blocker in task.blockers if blocker.status != "done"]
+    return task.status == "todo" and not open_blockers and task.assignee is not None

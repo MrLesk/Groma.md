@@ -1,0 +1,4 @@
+def invoice_total(order):
+    subtotal = sum(line.price * line.quantity for line in order.lines)
+    discount = subtotal * 0.1 if order.customer.loyal else 0
+    return round(subtotal - discount + order.shipping, 2)
