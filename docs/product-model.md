@@ -56,12 +56,15 @@ operation before opening a map.
    Each live process then starts the same watch as `groma scan --watch`, so a
    later source change folds and the map updates. An architecture Markdown
    change reloads the world without scanning. `groma view --plain`, or `groma
-   view` when stdout is not a TTY, prints the world as plain text without
-   scanning and does not start the TUI. This compact overview includes group
-   names on their components and an index of flow IDs and titles.
+   view` when stdout is not a TTY, prints the C4 context level as plain text
+   without scanning and does not start the TUI: actors, systems, external
+   systems, the relationships between them, and indexes of flows and drafts.
+   `groma view <element-id> --plain` goes one level down: the element, its
+   direct children, and the relationships crossing its boundary, split into
+   incoming and outgoing.
    `groma view <element-id|flow-id|file>` returns the exact complete authored
-   Markdown, including metadata, every Code reference, relationships, and
-   named sections. A flow record includes its ordered Steps table. An exact
+   Markdown, including metadata, every Code reference, and named sections.
+   A flow record includes its ordered Steps table. An exact
    repository-relative source file resolves the element whose `groma.code`
    names it and returns the same record as that element's ID. A draft ID
    returns its outcome, completion state, and member summary. Unknown targets
@@ -162,7 +165,7 @@ An architecture ID is a stable lowercase kebab-case name in Markdown. Groma
 does not put architecture IDs in application source.
 
 Every element has one file for its whole life, and every ID is unique in the
-tree. `groma view --plain` prints one element per ID.
+tree. `groma view <id>` resolves exactly one element.
 
 - A drafted element receives its ID when Groma drafts it. That is the ID it
   keeps when accepted, in the same file.
