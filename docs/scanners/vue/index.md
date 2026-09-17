@@ -107,7 +107,41 @@ dependencies or compilation.
 
 Core outlines each file once. For a script that the TypeScript scanner also
 owns, the scanner with the lowest id among the file's Code links outlines it,
-there TypeScript, with the symbols of all those links.
+here TypeScript, with the symbols of all those links.
+
+## Compared operations
+
+`groma lint` and scan findings compare Vue operations under the
+[shared rule](../../architecture-findings.md#compared-operations). In the
+`<script>` and `<script setup>` blocks of a single-file component, the scanner
+attaches a source range, in the `.vue` file's own lines, and body tokens to:
+
+- function declarations and named function expressions, including the functions
+  a `<script setup>` block exposes to its template;
+- methods with an identifier name and a body, in classes and in object
+  literals, such as the `methods` of an exported options object;
+- arrow functions and function expressions assigned to a variable or to a
+  property of an object literal.
+
+Unnamed arrow functions and function expressions are anonymous callbacks, as
+are functions written directly on an object literal passed to a call, `new`, or
+a decorator: `setup()` on the argument of `defineComponent({ ... })` is not
+compared, while the methods nested under its `methods` property are. Top-level
+statements of a block are initializer code, and template expressions are not
+operations. The scanner reports every named body whatever its size, because core
+applies the minimum body sizes.
+
+The named operations the [TypeScript scanner](../typescript/index.md#compared-operations)
+lists as not compared yet, such as constructors, accessors, and methods whose
+name is not an identifier, are not compared here either.
+
+Local names become slots in order of appearance, while operators, literals,
+property names, and names the block does not declare stay as written, so a
+recursive call keeps the name it calls. The token spellings are the
+[TypeScript scanner's](../typescript/index.md#compared-operations), so one body
+compares equal in a single-file component script and in a module. Scripts the
+component keeps in a separate file are TypeScript modules, which the TypeScript
+scanner compares.
 
 ## Nested projects
 

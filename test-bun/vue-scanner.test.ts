@@ -194,7 +194,7 @@ test.concurrent('a script Vue and TypeScript both own shows one outline', async 
     const component = world.elements.find(element => element.kind === 'component')!
     const files = await readCodeStructure(root, world, null, component.representationId) ?? []
 
-    // TypeScript outlines the shared script, and only the Vue link names greeting.
+    // Only the Vue link names greeting, whichever scanner outlines the shared script.
     expect(files.map(file => file.file)).toEqual(['Profile.vue', 'greeting.ts'])
     expect(files[1]).toEqual((await scanner.readCodeStructure!(root, [{ file: 'greeting.ts', symbols: ['greeting'] }]))[0])
     expect(files[1]?.declarations.find(declaration => declaration.name === 'greeting')?.entry).toBe(true)

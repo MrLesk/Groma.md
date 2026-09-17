@@ -160,7 +160,7 @@ function declarationsIn(scope: OutlineScope, statements: readonly Node[]): CodeD
 export function outlineDeclarations(ts: OutlineCompiler, block: OutlineBlock): CodeDeclaration[] {
   const source = ts.createSourceFile(block.fileName, block.text, ts.ScriptTarget.Latest, true)
   const exported = new Set(source.statements.flatMap(statement => listedExports(ts, statement)))
-  const scope = { ts, source, symbols: block.symbols, exported, topLevelPrivate: block.topLevelPrivate === true }
+  const scope = { ts, source, symbols: block.symbols, exported, topLevelPrivate: block.topLevelPrivate ?? false }
   return declarationsIn(scope, source.statements)
 }
 

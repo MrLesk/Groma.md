@@ -5,12 +5,13 @@ status: Done
 assignee:
   - '@claude'
 created_date: '2026-09-16 19:38'
-updated_date: '2026-09-17 18:44'
+updated_date: '2026-09-17 18:56'
 labels: []
 dependencies: []
 references:
   - scanners-typescript-outline
   - vue-src-index
+  - vue-src-outline
 modified_files:
   - plugins/scanners/typescript-outline.ts
   - plugins/scanners/vue/src/outline.ts
@@ -69,6 +70,8 @@ Vue single-file components show no declarations. The Vue scanner already reads s
 The shared plugins/scanners/typescript-outline.ts gained outlineDeclarations(ts, block), which outlines one block of source text and accepts topLevelPrivate for a block that exports nothing; readTypeScriptOutline now reads whole files through it, so Angular and React behavior is unchanged. plugins/scanners/vue/src/outline.ts parses a single-file component with the parser @vue/language-core already exports (no project, tsconfig, Volar program or new dependency), outlines the <script> and <script setup> blocks in source order, and keeps each block inside the .vue text with everything before it blanked except line breaks, so declarations report the line they occupy in the .vue file without offset arithmetic. The block's lang attribute names the dialect; a <script setup> block exports nothing, so its top-level declarations are private while members keep TypeScript member visibility. Templates and stylesheets, which Vue also owns, are skipped.
 Fixture test/fixtures/vue-outline: Profile.vue (a <script lang=ts> block with a non-exported function and an exported class with constructor, public and protected methods, and a <script setup lang=ts> block with a function and a ref binding), greeting.ts, and a groma tree whose component Code lists Profile.vue under vue, greeting.ts under vue with symbol greeting, and greeting.ts under typescript.
 Verification: bun test --timeout 20000 test-bun/vue-scanner.test.ts 8 pass. The built package outlines Profile.vue as initials private (line 2), Members public (line 6) with constructor, initials and protected first (lines 7, 9, 13), and save private (line 25) from the script setup block; its outline of greeting.ts and of test/fixtures/typescript-outline/outline.ts equals the TypeScript reference outline. Through core, the co-owned greeting.ts is outlined once by the TypeScript scanner (lowest scanner id) and carries entry from the symbol only the vue link names, with Profile.vue first in Code order. Isolated worktree bun run check exit 0 (lint: existing warning in test-bun/iso-map.test.ts only; tsc clean; node 16 pass; bun 433 pass, 25 skip, 0 fail). bun plugins/scanners/vue/build.ts succeeded in that worktree with the outline and the single-file component parser bundled.
+
+Cold review corrections (coordinator decisions): the commit stands, and seven small fixes ride in the TASK-424.7 commit because that work already extracts the single-file component parsing into plugins/scanners/vue/src/sfc.ts. Applied there: the outline's script pattern narrowed to .vue, .ts and .js; componentDeclarations' parameter renamed to fileName; the redundant satisfies OutlineBlock and its type import dropped; topLevelPrivate read with ?? false in plugins/scanners/typescript-outline.ts; the shared-script test comment no longer claims which scanner outlined the file; 'there TypeScript' corrected to 'here TypeScript' in docs/scanners/vue/index.md; and this task now also references vue-src-outline.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
