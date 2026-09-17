@@ -12,7 +12,7 @@ links, not a full scan and curation cycle.
 | `backlog task view <task-id> --plain` | a Backlog task ID; shows the current modified-file list and references |
 | `backlog task edit <task-id> --modified-file <path>` | repository-relative paths; the flags replace the complete list |
 | `backlog task edit <task-id> --add-ref <id>` or `--remove-ref <id>` | exact Groma element IDs |
-| `groma view <source-file>` | an exact repository-relative source file; prints the record of its owning component |
+| `groma view <source-file>` | an exact repository-relative source file; prints its owning component's ID and the file's relationships |
 
 Architecture references must be real element IDs. File paths, titles, group
 addresses, and issue URLs do not identify map elements.

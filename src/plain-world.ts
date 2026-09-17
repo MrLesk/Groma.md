@@ -1,5 +1,5 @@
 import { draftRecordOf } from './architecture-model.ts'
-import { annotateArchitecture } from './core.ts'
+import { annotateArchitecture, originOf } from './core.ts'
 import { loadArchitecture } from './architecture-reader.ts'
 import { emptyWorldLines, isEmptyWorld } from './empty-world.ts'
 import { loadProjectProfile } from './project-profile.ts'
@@ -185,7 +185,42 @@ function formatDraftRecord(
   return sections.join('\n\n')
 }
 
-/** Resolves the target in order: element drill-down (plain only), element or flow Markdown, draft summary, source file, unknown target. */
+/**
+ * The file connections of map relationships whose endpoint is this exact file. Rows addressed to the owning
+ * element, and rows between files of one component, are not listed.
+ */
+export function fileConnections(
+  world: ArchitectureGraph,
+  file: string,
+): { incoming: PlainRelationship[]; outgoing: PlainRelationship[] } {
+  const rows = world.relationships.flatMap(relationship => relationship.connections ?? []).map(connection => ({
+    ...connection,
+    origin: originOf(connection.status),
+  }))
+  return {
+    incoming: rows.filter(row => row.target === file),
+    outgoing: rows.filter(row => row.source === file),
+  }
+}
+
+/**
+ * Answers every target no earlier branch resolved, including mistyped ids: a source file answers with its owning
+ * component, the file's connections, and the command for the owner's record.
+ */
+function fileAnswer(world: ArchitectureGraph, file: string): PlainRecordResult {
+  const owner = world.elements.find(element => element.code.some(reference => reference.file === file))
+  if (owner === undefined) return { ok: false, message: `unknown target: ${file}` }
+  const { incoming, outgoing } = fileConnections(world, file)
+  const sections = [
+    plainSection('Owner', [`${owner.id}  ${owner.kind}  ${owner.title}`, `parent: ${owner.parent}`]),
+    plainRelationshipSection('Incoming relationships', incoming),
+    plainRelationshipSection('Outgoing relationships', outgoing),
+    `Complete owner record: groma view ${owner.id}`,
+  ]
+  return { ok: true, text: `${sections.join('\n\n')}\n` }
+}
+
+/** Resolves the target in order: element drill-down (plain only), element or flow Markdown, draft summary, source file answer, unknown target. */
 export async function renderPlainRecord(
   repositoryRoot: string,
   target: string,
@@ -209,14 +244,5 @@ export async function renderPlainRecord(
   if (draft !== undefined) {
     return { ok: true, text: `${formatDraftRecord(draft, draftItems(draft, model.elements))}\n` }
   }
-  const [match, extra] = model.elements.filter(item => {
-    return item.code.some(reference => reference.file === target)
-  })
-  if (extra !== undefined) {
-    return { ok: false, message: `several elements share ${target}` }
-  }
-  if (match !== undefined) {
-    return { ok: true, text: await readDocument(repositoryRoot, documentById.get(match.id)!.sourceFilename) }
-  }
-  return { ok: false, message: `unknown target: ${target}` }
+  return fileAnswer(model, target)
 }

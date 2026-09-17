@@ -71,7 +71,7 @@ Read the current Groma architecture with `groma agent-instructions` and `groma v
 Any file resolves to the architecture that owns it, so an agent can start from the code it just changed:
 
 ```sh
-groma view src/orders.ts    # the architecture record that owns this file
+groma view src/orders.ts    # the owner of this file and its relationships
 ```
 
 Later scans keep what your agent wrote. [Agent guides](docs/agent-instructions/index.md)

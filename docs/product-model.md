@@ -62,14 +62,17 @@ operation before opening a map.
    `groma view <element-id> --plain` goes one level down: the element, its
    direct children, and the relationships crossing its boundary, split into
    incoming and outgoing.
-   `groma view <element-id|flow-id|file>` returns the exact complete authored
+   `groma view <element-id|flow-id>` returns the exact complete authored
    Markdown, including metadata, every Code reference, and named sections.
    A flow record includes its ordered Steps table. An exact
    repository-relative source file resolves the element whose `groma.code`
-   names it and returns the same record as that element's ID. A draft ID
-   returns its outcome, completion state, and member summary. Unknown targets
-   and files shared by several elements fail with a clear message. These
-   reads do not scan or change architecture.
+   names it and returns that owner's ID, kind, title, and parent, the file
+   connections of map relationships, split into incoming and outgoing, and the
+   command that prints the owner's complete record. Rows between files of one
+   component are not listed. A draft ID returns its outcome, completion state,
+   and member summary. Unknown targets fail with a clear message, and loading
+   fails when several elements share a file. These reads do not scan or change
+   architecture.
    If the Groma directory, index, or project record is missing, `groma web`
    serves browser setup for the project name and architecture folder. Submitting
    setup initializes the project, scans automatically, and opens the map at the
