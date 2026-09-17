@@ -3,6 +3,7 @@ import path from 'node:path'
 import { createScanObservation, type ScannerPlugin } from '@groma/scanner'
 import { projectFiles } from '../../projects.ts'
 import { phpEvidence } from './evidence.ts'
+import { readCodeStructure } from './outline.ts'
 
 async function inventory(root: string) {
   return projectFiles(root, file => file.endsWith('.php'))
@@ -10,6 +11,7 @@ async function inventory(root: string) {
 
 export default {
   id: 'php',
+  readCodeStructure,
   watch: { include: ['**/*.php'], exclude: [] },
   async checkReadiness(root) {
     if (!(await inventory(root)).length) throw new Error('php: No PHP source files were found in the Git repository.')
