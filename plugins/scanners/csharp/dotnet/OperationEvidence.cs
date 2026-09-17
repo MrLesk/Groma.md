@@ -28,7 +28,7 @@ internal sealed class OperationEvidence(string repositoryRoot)
             IMethodSymbol? method = ExecutableMethod(node, model, cancellationToken);
             if (method is null) continue;
             string id = NodeId(file, node);
-            operations.TryAdd(id, new ScanOperation(id, file, method.ToDisplayString(SymbolDisplayFormat.CSharpErrorMessageFormat)));
+            operations.TryAdd(id, ScanOperationOf(id, file, node, method, model, cancellationToken));
             callers.Add(node, id);
         }
         if (root is CompilationUnitSyntax unit && unit.Members.OfType<GlobalStatementSyntax>().Any())
@@ -52,6 +52,15 @@ internal sealed class OperationEvidence(string repositoryRoot)
             invocations.Add(new PendingInvocation(caller, targetId, unresolved,
                 node.GetLocation().GetLineSpan().StartLinePosition.Line + 1, member));
         }
+    }
+
+    /// <summary>Named operations carry the source range and tokens core compares; lambdas and anonymous methods do not.</summary>
+    private static ScanOperation ScanOperationOf(string id, string file, SyntaxNode node, IMethodSymbol method, SemanticModel model, CancellationToken cancellationToken)
+    {
+        string name = method.ToDisplayString(SymbolDisplayFormat.CSharpErrorMessageFormat);
+        if (node is AnonymousFunctionExpressionSyntax) return new ScanOperation(id, file, name);
+        FileLinePositionSpan lines = node.GetLocation().GetLineSpan();
+        return new ScanOperation(id, file, name, lines.StartLinePosition.Line + 1, lines.EndLinePosition.Line + 1, OperationTokens.Of(node, method, model, cancellationToken));
     }
 
     private static IMethodSymbol? ExecutableMethod(SyntaxNode node, SemanticModel model, CancellationToken token) => node switch

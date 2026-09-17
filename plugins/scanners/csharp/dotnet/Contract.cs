@@ -8,7 +8,8 @@ public sealed record ScanRoot(string Id, string Kind, string Name, string? File 
 public sealed record ScanSymbol(string Id, string Name, string Kind);
 public sealed record ScanFile(string File, IReadOnlyList<string> Roots, IReadOnlyList<ScanSymbol> Symbols);
 public sealed record ScanSourceUnit(string Primary, IReadOnlyList<string> Files);
-public sealed record ScanOperation(string Id, string File, string Name);
+/// <summary>Named operations add their inclusive 1-based line range and binding-normalized body tokens.</summary>
+public sealed record ScanOperation(string Id, string File, string Name, int? StartLine = null, int? EndLine = null, IReadOnlyList<string>? Tokens = null);
 public sealed record ScanInvocation(string Source, IReadOnlyList<string> Targets, bool Unresolved, int Line, string? Member = null);
 public sealed record ScanDiagnostic(string Severity, string Code, string Message, string? File = null, int? Line = null);
 
