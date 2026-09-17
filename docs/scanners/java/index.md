@@ -114,6 +114,26 @@ A type is an entry when a Code link names it, such as `Orders`, the form the
 scan uses for a file's only type. A member is an entry when a Code link names
 it with its type, such as `Orders.place`.
 
+## Compared operations
+
+`groma lint` and scan findings compare Java operations under the
+[shared rule](../../architecture-findings.md#compared-operations). The scanner
+attaches a source range and body tokens to every method and constructor with a
+body, including the methods of a local class.
+
+Lambdas and the methods of an anonymous class body, including an enum constant
+body, are anonymous callbacks. Static and instance initializer blocks and field
+initializers are initializer code. Neither carries tokens.
+
+Parameters and the names declared in the body, such as locals, loop, catch and
+pattern variables and a local class's fields, become slots in declaration
+order, so renaming a local does not change the tokens. Field, type and method
+names stay as written, including a called name a local shadows and the
+operation's own name in a recursive call, as do literals, operators, `.member`
+and `::member` names, array index operands and control keywords. Declared types
+are tokens too, so bodies differing only in `int` and `long`, or `List` and
+`ArrayList`, are not identical.
+
 ## Evidence
 
 The worker inventories authored main sources, declarations and operations.
