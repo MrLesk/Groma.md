@@ -3,10 +3,16 @@ import type { ScanObservation, ScanOperation } from '@groma/scanner'
 
 import type { ArchitectureFinding, ArchitectureFindingInstance } from './types.ts'
 
-const MIN_TOKENS = 8
+/** Every compared body, including each identical copy, needs this many tokens. */
+const MIN_COMPARED_TOKENS = 8
+/**
+ * Near-duplicates need this many tokens in each body. In smaller bodies one or two changed tokens,
+ * such as up and down, still pass the near-duplicate ratio. Measured on a real project, near
+ * matches of 16 to 23 tokens were mirrored hooks.
+ */
+const MIN_NEAR_TOKENS = 24
 const GRAM = 3
 const NEAR_LCS = 0.7
-const SKIP_NAMES = new Set(['callback', '(module)'])
 
 interface Candidate {
   file: string
@@ -104,8 +110,7 @@ function candidateOf(
   operation: ScanOperation,
   owners: ReadonlyMap<string, string>,
 ): Candidate | undefined {
-  if (!operation.tokens || operation.tokens.length < MIN_TOKENS) return undefined
-  if (SKIP_NAMES.has(operation.name)) return undefined
+  if (!operation.tokens || operation.tokens.length < MIN_COMPARED_TOKENS) return undefined
   if (operation.startLine === undefined || operation.endLine === undefined) return undefined
   const owner = owners.get(operation.file)
   return {
@@ -196,6 +201,7 @@ function laterSharing(itemIndex: number, gramSets: readonly Set<string>[], index
 }
 
 function nearPair(left: Candidate, right: Candidate): boolean {
+  if (Math.min(left.tokens.length, right.tokens.length) < MIN_NEAR_TOKENS) return false
   const total = left.tokens.length + right.tokens.length
   if (2 * Math.min(left.tokens.length, right.tokens.length) / total < NEAR_LCS) return false
   // A common subsequence cannot contain more copies of a token than either body.

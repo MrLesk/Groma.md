@@ -15,11 +15,13 @@ import { scanRepository } from '../src/scanner.ts'
 import { inspectDetails } from '../src/viewers/web/organisms/details.ts'
 import type { ArchitectureFinding } from '../src/types.ts'
 
-const fixture = path.resolve(import.meta.dir, '../test/fixtures/duplicated-logic')
+const fixtures = path.resolve(import.meta.dir, '../test/fixtures')
 
-const readyTokens = [
+/** Synthetic tokens of one rule, sized above the near-duplicate minimum. */
+const ruleTokens = [
   'return', '$0', '.status', '===', '"todo"', '&&', '$0', '.dependencies', '.every', 'call',
-  'fn', '$1', '.status', '===', '"done"',
+  'fn', '$1', '.status', '===', '"done"', '&&', '$0', '.assignee', '!==', 'null',
+  '&&', '$0', '.blockers', '.length', '===', '0',
 ]
 
 function operation(
@@ -52,12 +54,12 @@ async function gitInit(root: string): Promise<void> {
   expect(await process.exited, await new Response(process.stderr).text()).toBe(0)
 }
 
-async function scannedFixture(): Promise<string> {
+async function scannedFixture(fixture = 'duplicated-logic', bin = 'src/ready-a.ts'): Promise<string> {
   const root = await mkdtemp(path.join(os.tmpdir(), 'groma-findings-'))
-  await cp(path.resolve(import.meta.dir, '../test/fixtures/empty-project'), root, { recursive: true })
+  await cp(path.join(fixtures, 'empty-project'), root, { recursive: true })
   await mkdir(path.join(root, 'src'))
-  await cp(fixture, path.join(root, 'src'), { recursive: true })
-  await writeFile(path.join(root, 'package.json'), JSON.stringify({ name: 'fixture', bin: 'src/ready-a.ts' }))
+  await cp(path.join(fixtures, fixture), path.join(root, 'src'), { recursive: true })
+  await writeFile(path.join(root, 'package.json'), JSON.stringify({ name: 'fixture', bin }))
   await gitInit(root)
   await addScanner(root, path.resolve(import.meta.dir, '../plugins/scanners/typescript'))
   return root
@@ -69,8 +71,8 @@ function namesOf(finding: ArchitectureFinding): string[] {
 
 test.concurrent('renamed copies match exactly and keep owner identity', () => {
   const findings = detectDuplicatedLogic([observation([
-    operation('src/a.ts', 'canStart', readyTokens),
-    operation('src/b.ts', 'readyToRun', readyTokens),
+    operation('src/a.ts', 'canStart', ruleTokens),
+    operation('src/b.ts', 'readyToRun', ruleTokens),
   ])], new Map([['src/a.ts', 'ready-a'], ['src/b.ts', 'ready-b']]))
   expect(findings).toHaveLength(1)
   expect(findings[0]!.match).toBe('exact')
@@ -86,9 +88,9 @@ test.concurrent('renamed copies match exactly and keep owner identity', () => {
 })
 
 test.concurrent('a missing predicate is a similar finding with a concrete difference', () => {
-  const shorter = readyTokens.filter(token => token !== '"todo"')
+  const shorter = ruleTokens.filter(token => token !== '"todo"')
   const findings = detectDuplicatedLogic([observation([
-    operation('src/a.ts', 'canStart', readyTokens),
+    operation('src/a.ts', 'canStart', ruleTokens),
     operation('src/c.ts', 'readyWithoutStatus', shorter),
   ])], new Map([['src/a.ts', 'ready-a'], ['src/c.ts', 'ready-c']]))
   expect(findings).toHaveLength(1)
@@ -98,7 +100,7 @@ test.concurrent('a missing predicate is a similar finding with a concrete differ
 
 test.concurrent('unrelated computation is not clustered with readiness', () => {
   const findings = detectDuplicatedLogic([observation([
-    operation('src/a.ts', 'canStart', readyTokens),
+    operation('src/a.ts', 'canStart', ruleTokens),
     operation('src/t.ts', 'total', ['return', '$0', '.reduce', 'call', 'fn', '$1', '$2', '+', '$2', '0']),
   ])], new Map([['src/a.ts', 'ready-a'], ['src/t.ts', 'total']]))
   expect(findings.some(finding => namesOf(finding).includes('canStart') && namesOf(finding).includes('total'))).toBeFalse()
@@ -107,10 +109,11 @@ test.concurrent('unrelated computation is not clustered with readiness', () => {
 test.concurrent('similar independent rules still become a review finding', () => {
   const publish = [
     'return', '$0', '.status', '===', '"draft"', '&&', '$0', '.reviewers', '.every', 'call',
-    'fn', '$1', '.approved',
+    'fn', '$1', '.approved', '&&', '$0', '.assignee', '!==', 'null',
+    '&&', '$0', '.blockers', '.length', '===', '0',
   ]
   const findings = detectDuplicatedLogic([observation([
-    operation('src/a.ts', 'canStart', readyTokens),
+    operation('src/a.ts', 'canStart', ruleTokens),
     operation('src/p.ts', 'canPublish', publish),
   ])], new Map([['src/a.ts', 'ready-a'], ['src/p.ts', 'publish']]))
   expect(findings).toHaveLength(1)
@@ -127,6 +130,20 @@ test.concurrent('TypeScript operations match after renaming locals and keep lite
     expect(byName.get('canStart')?.tokens?.join(' ')).toContain('"todo"')
     expect(byName.get('canStart')?.tokens).not.toEqual(byName.get('readyWithoutStatus')?.tokens)
     expect(byName.get('canStart')?.startLine).toBeGreaterThan(0)
+  } finally {
+    await rm(root, { recursive: true, force: true })
+  }
+})
+
+test.concurrent('callbacks written in an object passed to a call or constructor are not compared', async () => {
+  const root = await scannedFixture('call-argument-callbacks', 'src/observers.ts')
+  try {
+    const scanned = (await scanTypeScriptSource(root))!
+    const findings = detectDuplicatedLogic([scanned], new Map())
+    expect(findings).toHaveLength(1)
+    expect(findings[0]!.match).toBe('exact')
+    expect(namesOf(findings[0]!)).toEqual(['next', 'reportOrder'])
+    expect(findings[0]!.instances.map(instance => instance.startLine)).toEqual([28, 34])
   } finally {
     await rm(root, { recursive: true, force: true })
   }
@@ -151,25 +168,39 @@ test.concurrent('scan remembers findings for owners without writing relationship
   }
 })
 
+/** Each letter stands for three tokens so the bodies reach the near-duplicate minimum. */
+function spread(letters: string): string[] {
+  return [...letters].flatMap(letter => [letter, `${letter}.`, `${letter}()`])
+}
+
 function findingsFor(bodies: string[][]) {
   return detectDuplicatedLogic([observation(bodies.map((tokens, index) =>
     operation(`${index}.ts`, `rule${index}`, tokens),
   ))], new Map())
 }
 
+test.concurrent('near-duplicates need larger bodies than identical copies', () => {
+  const body = (size: number) => Array.from({ length: size }, (_, index) => `t${index}`)
+  const changed = (size: number) => [...body(size - 1), 'other']
+  expect(findingsFor([body(23), changed(23)])).toEqual([])
+  expect(findingsFor([body(24), changed(24)])[0]?.match).toBe('similar')
+  expect(findingsFor([body(8), body(8)])[0]?.match).toBe('exact')
+  expect(findingsFor([body(7), body(7)])).toEqual([])
+})
+
 test.concurrent('duplicate comparisons retain the similarity threshold and unequal-length matches', () => {
-  const body = [...'abcdefghij']
-  expect(findingsFor([body, [...'abcdefgXYZ']])[0]?.match).toBe('similar')
-  expect(findingsFor([body, [...'abcdefWXYZ']])).toEqual([])
-  const shorter = [...'abcdefgh']
-  expect(findingsFor([shorter, [...'abcdefghijklmn']])[0]?.match).toBe('similar')
-  expect(findingsFor([shorter, [...'abcdefghijklmno']])).toEqual([])
+  const body = spread('abcdefghij')
+  expect(findingsFor([body, spread('abcdefgXYZ')])[0]?.match).toBe('similar')
+  expect(findingsFor([body, spread('abcdefWXYZ')])).toEqual([])
+  const shorter = spread('abcdefgh')
+  expect(findingsFor([shorter, spread('abcdefghijklmn')])[0]?.match).toBe('similar')
+  expect(findingsFor([shorter, spread('abcdefghijklmno')])).toEqual([])
 })
 
 test.concurrent('transitive similarity keeps every copy even when the endpoints do not match', () => {
-  const first = [...'abcdefghij']
-  const bridge = [...'abcdefgXYZ']
-  const last = [...'abcdUVWXYZ']
+  const first = spread('abcdefghij')
+  const bridge = spread('abcdefgXYZ')
+  const last = spread('abcdUVWXYZ')
   expect(findingsFor([first, last])).toEqual([])
   const findings = findingsFor([first, bridge, [...bridge], last])
   expect(findings).toHaveLength(1)
@@ -178,8 +209,8 @@ test.concurrent('transitive similarity keeps every copy even when the endpoints 
 })
 
 test.concurrent('shared tokens still require matching multiplicity and sequence order', () => {
-  const repeated = [...'abcxxxxxxx']
-  expect(findingsFor([repeated, [...'abcxxxxyyy']])[0]?.match).toBe('similar')
-  expect(findingsFor([repeated, [...'abcxxxyyyy']])).toEqual([])
-  expect(findingsFor([[...'abcdefghij'], [...'abcjihgfed']])).toEqual([])
+  const repeated = spread('abcxxxxxxx')
+  expect(findingsFor([repeated, spread('abcxxxxyyy')])[0]?.match).toBe('similar')
+  expect(findingsFor([repeated, spread('abcxxxyyyy')])).toEqual([])
+  expect(findingsFor([spread('abcdefghij'), spread('abcjihgfed')])).toEqual([])
 })

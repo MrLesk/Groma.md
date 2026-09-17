@@ -1,7 +1,7 @@
 import path from 'node:path'
 import {
   isArrowFunction, isAsExpression, isBinaryExpression, isCallExpression, isConditionalExpression,
-  isFunctionDeclaration, isFunctionExpression, isIdentifier, isMethodDeclaration,
+  isFunctionDeclaration, isFunctionExpression, isIdentifier, isMethodDeclaration, isNewExpression,
   isNonNullExpression, isObjectLiteralExpression, isParameterDeclaration, isParenthesizedExpression,
   isPropertyAccessExpression, isPropertyAssignment, isShorthandPropertyAssignment,
   isVariableDeclaration, isSpreadAssignment, NodeFlags, SyntaxKind,
@@ -48,12 +48,33 @@ function location(root: string, node: Node): { file: string; line: number; posit
   }
 }
 
-function operationName(node: Node): string {
-  if (!node.parent) return '(module)'
-  if (isIdentifier(node)) return node.text
+/**
+ * A function written as a property of an object literal argument, such as `subscribe({ next: value => ... })`.
+ * The argument may belong to a function call, a `new` call, or a decorator, which is a call.
+ */
+function callArgumentProperty(node: Node): boolean {
+  const property = isPropertyAssignment(node.parent) ? node.parent : node
+  if (!isPropertyAssignment(property) && !isMethodDeclaration(property)) return false
+  const invocation = property.parent.parent
+  return isObjectLiteralExpression(property.parent) && (isCallExpression(invocation) || isNewExpression(invocation))
+}
+
+/** Name of an operation core may compare; undefined for module code and anonymous callbacks. */
+function comparableName(node: Node): string | undefined {
+  if (!node.parent || callArgumentProperty(node)) return undefined
   if ('name' in node && node.name && isIdentifier(node.name as Node)) return (node.name as { text: string }).text
   if (isPropertyAssignment(node.parent) || isVariableDeclaration(node.parent)) return node.parent.name.getText()
-  return 'callback'
+  return undefined
+}
+
+/** Binding-normalized body tokens with their inclusive source range. */
+function comparableBody(node: Node): Pick<ScanOperation, 'startLine' | 'endLine' | 'tokens'> {
+  const source = node.getSourceFile()
+  return {
+    startLine: source.getLineAndCharacterOfPosition(node.getStart()).line + 1,
+    endLine: source.getLineAndCharacterOfPosition(node.end).line + 1,
+    tokens: tokenizeOperation(node),
+  }
 }
 
 function caller(node: Node): Node {
@@ -229,17 +250,14 @@ export async function sourceOperations(root: string, sources: SourceFile[], chec
     const { file } = location(root, node)
     const id = `${file}#${node.parent ? node.getStart() : 'module'}`
     if (!operations.has(id)) {
-      const source = node.getSourceFile()
-      const start = source.getLineAndCharacterOfPosition(node.getStart())
-      const end = source.getLineAndCharacterOfPosition(node.end)
+      const name = comparableName(node)
       operations.set(id, {
         id,
         file,
-        name: operationName(node),
+        name: name ?? '(anonymous)',
         position: node.getStart(),
-        startLine: start.line + 1,
-        endLine: end.line + 1,
-        tokens: tokenizeOperation(node),
+        // Only named operations are compared as possible duplicate logic.
+        ...(name === undefined ? {} : comparableBody(node)),
       })
     }
     return id
