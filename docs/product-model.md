@@ -38,8 +38,9 @@ returns to the launcher, whose arrows continue to select actions.
 Bare `groma instructions` opens this screen on a TTY. Named guides,
 non-interactive use, and `--plain` remain plain text. This catalog is for
 people. `groma agent-instructions [guide]` is a separate, always-plain catalog
-of agent operating rules; `curation` is its default guide. Every shipped guide
-points readers to both catalogs.
+of agent operating rules. Without a guide name it prints an index naming each
+task-focused guide, when to read it, and the command that prints it. Every
+human guide and the agent index point readers to both catalogs.
 
 `groma init` is the explicit repository-registration action for coding agents.
 It reconciles one short managed Groma block in each distinct root `AGENTS.md`

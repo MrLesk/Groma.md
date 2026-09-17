@@ -62,7 +62,7 @@ Backlog.md provides the tasks shown on the map; Groma works without it. macOS re
 
 The first scan gives you components and detected relationships. Your coding agent turns them into architecture: it reads the code, names responsibilities, merges records that belong together, and adds the relationships the scanner cannot see. Always do this after the first scan.
 
-Agents use the same CLI as people. `groma init` registers Groma in your `AGENTS.md` or `CLAUDE.md`, `groma agent-instructions` prints the curation guide, and every command explains itself through `--help`. Ask your agent:
+Agents use the same CLI as people. `groma init` registers Groma in your `AGENTS.md` or `CLAUDE.md`, `groma agent-instructions` prints an index of task-focused agent guides, and every command explains itself through `--help`. Ask your agent:
 
 ```text
 Read the current Groma architecture with `groma agent-instructions` and `groma view --plain`. Compare it with the source code, then annotate the architecture so it reflects the code: combine records that share a responsibility, add missing overviews and relationships, and keep Backlog.md task links current. Use Groma's CLI for architecture changes, then summarize what you changed.
@@ -74,7 +74,7 @@ Any file resolves to the architecture that owns it, so an agent can start from t
 groma view src/orders.ts    # the architecture record that owns this file
 ```
 
-Later scans keep what your agent wrote. [Curation guide](docs/agent-instructions/index.md)
+Later scans keep what your agent wrote. [Agent guides](docs/agent-instructions/index.md)
 
 ## What you get
 
@@ -83,7 +83,7 @@ Later scans keep what your agent wrote. [Curation guide](docs/agent-instructions
 - **Live updates.** Saving code refreshes source evidence and detected relationships; new files become new components.
 - **Relationships and flows.** Describe how components interact, then chain relationships into named flows readers can step through. [Relationships and flows](docs/component-markdown.md)
 - **Drafts.** Sketch systems, containers, and components before they exist. They appear dashed beside the real ones until a scan matches their code and you accept them. [Draft lifecycle](docs/product-model.md#drafts)
-- **See work across the architecture.** Backlog.md tasks pin where people and agents are working; select one to highlight the components it touches and inspect its changes without leaving the map. [Task links](docs/agent-instructions/index.md#backlog-task-links)
+- **See work across the architecture.** Backlog.md tasks pin where people and agents are working; select one to highlight the components it touches and inspect its changes without leaving the map. [Task links](docs/agent-instructions/backlog.md)
 - **Explore past architecture with its code.** Open an earlier revision and inspect the source from that same commit, down to functions and methods.
 - **Publish a static site.** `groma export ./site` writes a standalone map from stored architecture with flows, tasks, diffs, and source, then exits. Run it again to publish an updated snapshot. Scanning and hosting run separately. [Static publication](docs/viewers/web/index.md#static-publication)
 
