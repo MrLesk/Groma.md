@@ -2,12 +2,13 @@ import path from 'node:path'
 import { projectFiles } from '../../projects.ts'
 import { projectScanner } from '../../project-scanner.ts'
 import type { ScannerPlugin } from '@groma/scanner'
-import { checkGoReadiness, scanGoSource } from './adapter.ts'
+import { checkGoReadiness, readGoCodeStructure, scanGoSource } from './adapter.ts'
 
 const scanner = {
   id: 'go',
   watch: { include: ['**/*.go', '**/go.mod', '**/go.sum', '**/go.work'], exclude: [] },
   checkReadiness: async root => { await checkGoReadiness(root) },
+  readCodeStructure: readGoCodeStructure,
   scan: scanGoSource,
 } satisfies ScannerPlugin
 

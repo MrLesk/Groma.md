@@ -57,3 +57,25 @@ type observation struct {
 	Invocations   []invocation `json:"invocations"`
 	Diagnostics   []diagnostic `json:"diagnostics"`
 }
+
+// Source outline: a Groma SourceReference in, a CodeFile out.
+type reference struct {
+	File    string   `json:"file"`
+	Symbols []string `json:"symbols"`
+}
+type codeSymbol struct {
+	Name       string `json:"name"`
+	Line       int    `json:"line"`
+	Visibility string `json:"visibility"`
+	Entry      bool   `json:"entry"`
+}
+type codeDeclaration struct {
+	Kind string `json:"kind"`
+	codeSymbol
+	// Types always list members; functions omit them.
+	Members []codeSymbol `json:"members,omitzero"`
+}
+type codeFile struct {
+	File         string            `json:"file"`
+	Declarations []codeDeclaration `json:"declarations"`
+}

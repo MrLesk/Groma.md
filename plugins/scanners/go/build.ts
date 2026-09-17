@@ -9,7 +9,7 @@ const executable = `worker${process.platform === 'win32' ? '.exe' : ''}`
 export async function buildWorker(destination: string, go = 'go'): Promise<void> {
   await mkdir(path.dirname(destination), { recursive: true })
   await run(go, ['build', '-mod=readonly', '-trimpath', '-ldflags=-buildid=', '-o', destination, '.'],
-    path.join(pluginRoot, 'worker'), { ...process.env, GOTOOLCHAIN: 'local', CGO_ENABLED: '0' })
+    path.join(pluginRoot, 'worker'), { env: { ...process.env, GOTOOLCHAIN: 'local', CGO_ENABLED: '0' } })
 }
 
 /** Build for the maintainer's host. Consumers receive compiled code and need no install scripts. */

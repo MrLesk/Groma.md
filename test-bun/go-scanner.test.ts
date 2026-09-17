@@ -3,11 +3,13 @@ import { cp, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { buildWorker } from '../plugins/scanners/go/build.ts'
-import { scanGoSource } from '../plugins/scanners/go/src/adapter.ts'
+import { readGoCodeStructure, scanGoSource } from '../plugins/scanners/go/src/adapter.ts'
+import { loadAnnotatedArchitecture } from '../src/core.ts'
 import { readScannerConfig, writeScannerConfig } from '../src/scanner/modules/config.ts'
 import { addScanner } from '../src/scanner/modules/inventory.ts'
+import { readCodeStructure } from '../src/viewers/source/structure.ts'
 
-import type { ScanObservation } from '@groma/scanner'
+import type { CodeType, ScanObservation } from '@groma/scanner'
 
 const go = process.env.GROMA_TEST_GO
 const goTest = go ? test.concurrent : test.skip
@@ -126,5 +128,56 @@ goTest('groma lint reports identical and near-duplicate Go bodies across renamed
     expect(findings).toContainEqual({
       locations: [`copy.go:${lineOf(copy, 'func Completion')}`, `ready.go:${lineOf(ready, 'func Progress')}`], similar: true,
     })
+  } finally { await rm(root, { recursive: true, force: true }) }
+}, 60000)
+
+goTest('Go outlines defined types with their receiver methods and top-level functions', async () => {
+  const { root, worker } = await fixture('go-outline')
+  try {
+    await buildWorker(worker, go)
+    const [file] = await readGoCodeStructure(root, [{ file: 'store.go', symbols: ['NewStore'] }], { worker })
+    const summary = file!.declarations.map(declaration => [
+      declaration.kind,
+      declaration.name,
+      declaration.visibility,
+      declaration.kind === 'type' ? declaration.members.map(member => [member.name, member.visibility]) : [],
+    ])
+    // Aliases, wrapped function values and blank functions or methods are not listed.
+    expect(summary).toEqual([
+      ['type', 'Store', 'public', [['Close', 'public'], ['Read', 'public']]],
+      ['type', 'Reader', 'public', [['Read', 'public'], ['Close', 'public']]],
+      ['type', 'Count', 'public', []],
+      ['type', 'Pair', 'public', [['first', 'internal']]],
+      ['function', 'Normalize', 'public', []],
+      ['function', 'NewStore', 'public', []],
+      ['type', 'remote', 'internal', [['fetch', 'internal']]],
+      ['function', 'decorate', 'internal', []],
+    ])
+    const source = await readFile(path.join(root, 'store.go'), 'utf8')
+    const declared = (name: string) => file!.declarations.find(declaration => declaration.name === name)!
+    // A type declared in this file keeps its declaration; one declared elsewhere sits at its first method.
+    expect(declared('Store').line).toBe(lineOf(source, 'type Store'))
+    expect(declared('remote').line).toBe(lineOf(source, 'func (r remote)'))
+    const store = file!.declarations.find((declaration): declaration is CodeType => declaration.name === 'Store')!
+    expect(store.members[0]!.line).toBe(lineOf(source, 'func (s *Store) Close'))
+    expect(file!.declarations.filter(declaration => declaration.entry).map(declaration => declaration.name)).toEqual(['NewStore'])
+  } finally { await rm(root, { recursive: true, force: true }) }
+}, 60000)
+
+goTest('a component with Go and TypeScript files outlines every file in Code order', async () => {
+  const { root, worker } = await fixture('go-outline')
+  try {
+    await buildWorker(worker, go)
+    await addScanner(root, path.resolve(import.meta.dir, '../plugins/scanners/go'))
+    await addScanner(root, path.resolve(import.meta.dir, '../plugins/scanners/typescript'))
+    const config = await readScannerConfig(root)
+    await writeScannerConfig(root, {
+      ...config, scanners: config.scanners.map(scanner => scanner.id === 'go' ? { ...scanner, settings: { worker } } : scanner),
+    })
+    const world = await loadAnnotatedArchitecture(root)
+    const component = world.elements.find(element => element.kind === 'component')!
+    const files = await readCodeStructure(root, world, null, component.representationId) ?? []
+    expect(files.map(file => file.file)).toEqual(component.code.map(reference => reference.file))
+    expect(files.every(file => file.declarations.length > 0)).toBeTrue()
   } finally { await rm(root, { recursive: true, force: true }) }
 }, 60000)
