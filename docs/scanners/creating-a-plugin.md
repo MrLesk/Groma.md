@@ -216,7 +216,7 @@ report an additional technology outside `technologies` to expose a coverage gap.
 | Rule type | Fields and behavior |
 | --- | --- |
 | `dependency` | `package`: dependency name in JSON dependency sections. Reads the declared version and resolves the installed version beside that project declaration. |
-| `file` | `declaration`: explanation of the file-presence clue; version remains unresolved. |
+| `file` | `declaration`: explanation of the file-presence clue; version remains unresolved. Patterns that are all extension globs report one summarized discovery line per technology, with the file count and the first path; any exact filename keeps one line per matching file. |
 | `xml` | `versionTags`: literal tags containing versions; semicolon lists are split. Optional `when: {tag, equals}` requires an exact tag value. `declaration` explains the clue when no version exists. |
 | `toml` | `tables`: at least one named top-level table must exist. `versionPath`: keys leading to the version string. `declaration` explains the clue. |
 | `text` | `versionPattern`: regular expression evaluated with the multiline flag; the first capture is the version. `declaration` explains the clue. |
@@ -439,10 +439,11 @@ Each fact names the declared `operation` that handles or sends it;
   segments are `{ kind: 'literal', value }`, `{ kind: 'parameter', name }`,
   and `{ kind: 'catch-all', name }`. Parameters and catch-alls accept
   `optional: true`; a catch-all is the last segment.
-- A request has `base` (`none`, `configured`, or `unresolved`), `path`, and
-  `method` only when it is known. Its segments are
+- A request has `path`, `method` only when it is known, and `configured: true`
+  when the path follows a configuration value. Its segments are
   `{ kind: 'literal', value }`, `{ kind: 'dynamic' }` for one whole computed
-  segment, and `{ kind: 'unknown' }` for text that is not fully proven.
+  segment, and `{ kind: 'unknown' }` for text that is not fully proven,
+  including a base that states a host or cannot be resolved.
 
 Literal values and names are nonempty RFC 3986 path characters, so a segment
 never contains `/`, a query, or a fragment. Omit empty segments. For a route
@@ -460,7 +461,7 @@ never contains `/`, a query, or a fragment. Omit empty segments. For a route
     ]
   }],
   "httpRequests": [{
-    "operation": "load", "method": "GET", "base": "configured",
+    "operation": "load", "method": "GET", "configured": true,
     "path": [{ "kind": "literal", "value": "talks" }, { "kind": "dynamic" }]
   }]
 }

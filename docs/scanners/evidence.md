@@ -182,25 +182,27 @@ fact states which parts the source proves:
 | Part | Reported as |
 | --- | --- |
 | Method | A known method, or omitted |
-| Base | `none`, `configured`, or `unresolved` |
 | Path segment | A literal, a dynamic segment, or unknown text |
+| `configured` | Set when the path follows a configuration value |
 
-Decide the base by what the scanner can see, with no framework-specific rule:
+Decide what precedes the path by what the scanner can see, with no
+framework-specific rule:
 
-- The scanner resolves the base to literal text. When that text contains a
-  scheme or authority, the request leaves this application's root, so the base
-  is `unresolved`. Otherwise report its path as ordinary literal segments and
-  use `none`.
+- Nothing precedes a root-relative path: report the segments alone.
+- The scanner resolves the base to literal text without a scheme or authority:
+  report its path as ordinary literal segments.
 - The scanner cannot see the value, such as a named configuration or
-  environment setting or a constant defined elsewhere: the base is
-  `configured`, and its content is not part of the path.
-- Nothing precedes a root-relative path: the base is `none`.
+  environment setting or a constant defined elsewhere: set `configured` and
+  report the path that follows it. The base's own content is not part of the
+  path.
+- The base states a host, or the scanner cannot resolve it at all: report a
+  leading `unknown` segment instead. Core then derives nothing, and the fact
+  still records what the scanner saw.
 
-Core derives a row from a `none` base, or from a `configured` base followed by
-a literal segment. An `unresolved` base produces no row. Report the request
-anyway; the fact records what the scanner saw. Core assumes a configured base
-addresses a server in this repository, so a configuration value that points at
-a third-party service can produce a wrong row; that is an accepted limit.
+Core derives a row when no segment is unknown, and a `configured` path starts
+with a literal segment. Core assumes a configured base addresses a server in
+this repository, so a configuration value that points at a third-party service
+can produce a wrong row; that is an accepted limit.
 
 The path ends before the query and fragment, which are ignored even when they
 are computed. Literal text uses URL path characters; percent-encode anything
@@ -222,6 +224,38 @@ The facts are temporary evidence. They add no OKF field or stored route and do
 not become C4 elements. A derived row is an ordinary relationship between the
 requesting and providing files, so a Markdown reader sees a linked statement
 such as `Calls HTTP endpoint: GET /talks/:id`.
+
+### Producer checklist
+
+Every scanner decides the same six questions. Each scanner page answers them in
+this order, with its ecosystem's constructs:
+
+1. **Which prefixes belong in the path.** Include every prefix the source
+   declares: a class-level or controller prefix, a mounted group's prefix, and a
+   router's own path. A Spring `@RequestMapping("/api")` class with
+   `@GetMapping("/talks")` reports `/api/talks`. When a group's prefix is not
+   literal, report nothing for its routes.
+2. **Whether the construct is an endpoint.** Only a handler that answers HTTP
+   requests is. A client-side router route, middleware, an interceptor, a proxy
+   rule, and a security matcher such as `/api/**` are not. A declarative client
+   that shares the server's annotations reports requests.
+3. **Dynamic or unknown.** `` `/talks/${id}` `` fills one whole segment, so it
+   is dynamic. `` `/talks/${id}-${slug}` `` and `` `/talks/${rest}` `` where the
+   value may contain a slash are unknown, as is a path built from an unknown
+   value.
+4. **The local helper.** `get('/talks')` calling a local
+   `get(path) { return fetch(base + path) }` reports one request at the caller,
+   because the URL and method reach the client unchanged. A helper that edits
+   the path, chooses the method, or reaches an unrecognized client reports
+   nothing.
+5. **The base.** `fetch('/api/talks')` has no base. `fetch(API_URL + '/talks')`
+   with `API_URL` read from configuration sets `configured`.
+   `fetch('https://api.example.com/talks')` and `fetch(buildUrl(x))` report a
+   leading `unknown` segment.
+6. **Which operation a file-location route names.** The operation the location
+   designates: the exported handler for that method, or the file's module
+   initializer when the file exports no such handler. `app/api/talks/route.ts`
+   with an exported `GET` names that function.
 
 ## Completion, precision, and uncertainty
 

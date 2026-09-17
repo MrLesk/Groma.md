@@ -26,13 +26,6 @@ export interface ScanHttpEndpoint {
   path: HttpEndpointSegment[]
 }
 
-/**
- * What precedes a request path: nothing for a root-relative URL, a value the application
- * reads from configuration, or a base that rules the request out, such as a literal host
- * or a value the scanner cannot resolve.
- */
-export type HttpRequestBase = 'none' | 'configured' | 'unresolved'
-
 /** An HTTP request the application sends. */
 export interface ScanHttpRequest {
   /**
@@ -42,15 +35,19 @@ export interface ScanHttpRequest {
   operation: string
   /** Uppercase method; omitted when the source does not prove it. */
   method?: string
-  base: HttpRequestBase
-  /** Path after the base, ending before any query or fragment. */
+  /**
+   * The path follows a value the application reads from configuration, such as an API URL
+   * setting. A base the scanner resolves to a host, or cannot resolve at all, is instead a
+   * leading `unknown` segment.
+   */
+  configured?: boolean
+  /** Path after any base, ending before the query and fragment. */
   path: HttpRequestSegment[]
 }
 
 /** RFC 3986 path characters, which exclude `/`, `?`, `#`, braces and table separators. */
 const pathText = /^[A-Za-z0-9\-._~!$&'()*+,;=:@%]+$/
 const methodToken = /^[A-Z][A-Z-]*$/
-const bases = new Set<unknown>(['none', 'configured', 'unresolved'])
 
 function fail(message: string): never {
   throw new Error(message)
@@ -101,11 +98,11 @@ function endpoint(value: unknown, operations: ReadonlySet<string>): ScanHttpEndp
 
 function request(value: unknown, operations: ReadonlySet<string>): ScanHttpRequest {
   const fact = object(value, 'HTTP request')
-  if (!bases.has(fact.base)) fail(`unknown HTTP request base: ${String(fact.base)}`)
+  if (fact.configured !== undefined && typeof fact.configured !== 'boolean') fail('HTTP request configured must be a boolean')
   return {
     operation: operation(fact.operation, operations),
     ...(fact.method === undefined ? {} : { method: method(fact.method, 'HTTP request method', false) }),
-    base: fact.base as HttpRequestBase,
+    ...(fact.configured ? { configured: true } : {}),
     path: array(fact.path, 'HTTP request path').map(requestSegment),
   }
 }

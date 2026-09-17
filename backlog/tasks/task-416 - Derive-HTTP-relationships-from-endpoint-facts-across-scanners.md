@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@claude'
 created_date: '2026-09-16 19:38'
-updated_date: '2026-09-17 18:38'
+updated_date: '2026-09-17 18:49'
 labels: []
 dependencies: []
 references:
@@ -106,4 +106,11 @@ Also applied: host and unknown bases merged into one unresolved base (the unknow
 Deviation from finding 10: the JSON checks moved to a new packages/scanner/src/values.ts, imported by index.ts and http.ts. Importing them from index.ts would have made object/string/array public package exports and created a circular import.
 Verification: test-bun/http-relationships.test.ts, 38 tests (14 match cases including the three precedence cases, 18 no-row cases, owner checks, endpoint and scanner aggregation, callback merge, contract round-trip and rejections, reconcile precedence and retention, stored label escaping). Isolated bun run check exited 0 (Bun 428 passed, 24 skipped, 0 failed; Node 16 passed; Biome findings only in untouched files).
 DoD #1 stays unchecked because AC #6 needs the Angular and Java producers.
+
+Full-context complexity review applied (behavior identical apart from the fact shape).
+1. The three-state base is gone. ScanHttpRequest now carries an optional configured flag, and a base that states a host or that the scanner cannot resolve arrives as a leading unknown segment. knownRequest reads: no unknown segment, and a configured path starts with a literal segment. The bases set, its validation branch and the docs row are deleted; HttpRequestBase is no longer exported.
+2. The matches, literalFilled and matchRank parameter is now dynamicFillsLiteral.
+3. docs/scanners/evidence.md gained a producer checklist: six numbered decisions with one canonical example each (prefixes in a path, whether a construct is an endpoint, dynamic versus unknown, the local helper, the base, and which operation a file-location route names). Every scanner page answers the same six in that order.
+4. docs/relationship-inference.md step 4 now states that exactness is compared first, so a request to /api/talks prefers another file's exact /api/:rest+ over a /talks that needs /api removed.
+Verification: focused tests 38 of 38; isolated bun run check exited 0 (Bun 434 passed, 25 skipped, 0 failed; Node 16 passed).
 <!-- SECTION:NOTES:END -->

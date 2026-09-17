@@ -4,7 +4,7 @@ import os from 'node:os'
 import path from 'node:path'
 import {
   createScanObservation, parseScanObservation,
-  type HttpEndpointSegment, type HttpRequestBase, type HttpRequestSegment, type ScanHttpEndpoint, type ScanHttpRequest,
+  type HttpEndpointSegment, type HttpRequestSegment, type ScanHttpEndpoint, type ScanHttpRequest,
   type ScanInvocation, type ScanObservation,
 } from '@groma/scanner'
 
@@ -47,13 +47,13 @@ function endpoint(file: string, method: string, route: string): ScanHttpEndpoint
   return { operation: file, method, path }
 }
 
-/** `{}` is a dynamic segment and `?` unknown text. */
-function request(method: string | undefined, url: string, base: HttpRequestBase = 'none'): ScanHttpRequest {
+/** `{}` is a dynamic segment and `?` unknown text; a configured base precedes the path. */
+function request(method: string | undefined, url: string, configured = false): ScanHttpRequest {
   const path = url.split('/').filter(Boolean).map((part): HttpRequestSegment => {
     if (part === '{}') return { kind: 'dynamic' }
     return part === '?' ? { kind: 'unknown' } : { kind: 'literal', value: part }
   })
-  return { operation: client, ...(method === undefined ? {} : { method }), base, path }
+  return { operation: client, ...(method === undefined ? {} : { method }), ...(configured ? { configured: true } : {}), path }
 }
 
 function derive(endpoints: ScanHttpEndpoint[], requests: ScanHttpRequest[], owners = separateOwners) {
@@ -64,9 +64,9 @@ const matches: [string, ScanHttpEndpoint[], ScanHttpRequest, string][] = [
   ['a literal path', [endpoint(talks, 'GET', '/talks')], request('GET', '/talks'), 'GET /talks'],
   ['a dynamic value in a parameter', [endpoint(talks, 'GET', '/talks/:id')], request('GET', '/talks/{}'), 'GET /talks/:id'],
   ['a literal in a parameter', [endpoint(talks, 'DELETE', '/talks/:id')], request('DELETE', '/talks/7'), 'DELETE /talks/:id'],
-  ['a configured base', [endpoint(talks, 'GET', '/talks')], request('GET', '/talks', 'configured'), 'GET /talks'],
+  ['a configured base', [endpoint(talks, 'GET', '/talks')], request('GET', '/talks', true), 'GET /talks'],
   ['a prefix only the request states', [endpoint(talks, 'GET', '/talks/:id')], request('GET', '/api/talks/{}'), 'GET /talks/:id'],
-  ['a prefix only the endpoint states', [endpoint(talks, 'GET', '/api/talks')], request('GET', '/talks', 'configured'), 'GET /api/talks'],
+  ['a prefix only the endpoint states', [endpoint(talks, 'GET', '/api/talks')], request('GET', '/talks', true), 'GET /api/talks'],
   ['an omitted optional parameter', [endpoint(talks, 'GET', '/talks/:page?')], request('GET', '/talks'), 'GET /talks/:page?'],
   ['a present optional parameter', [endpoint(talks, 'GET', '/talks/:page?/all')], request('GET', '/talks/2/all'), 'GET /talks/:page?/all'],
   ['a catch-all remainder', [endpoint(talks, 'GET', '/files/:path+')], request('GET', '/files/a/{}'), 'GET /files/:path+'],
@@ -94,9 +94,9 @@ const abstentions: [string, ScanHttpEndpoint[], ScanHttpRequest][] = [
   ['an unknown method', [endpoint(talks, '*', '/talks')], request(undefined, '/talks')],
   ['a partly known segment', [endpoint(talks, 'GET', '/talks/:id')], request('GET', '/talks/?')],
   ['an unknown remainder', [endpoint(talks, 'GET', '/talks/:rest+')], request('GET', '/talks/?')],
-  ['an unresolved base, such as a literal host', [endpoint(talks, 'GET', '/talks')], request('GET', '/talks', 'unresolved')],
-  ['a configured base with no path of its own', [endpoint(talks, 'GET', '/')], request('GET', '/', 'configured')],
-  ['a configured base before a dynamic segment', [endpoint(talks, 'GET', '/:slug')], request('GET', '/{}', 'configured')],
+  ['a literal host, reported as a leading unknown segment', [endpoint(talks, 'GET', '/talks')], request('GET', '/?/talks')],
+  ['a configured base with no path of its own', [endpoint(talks, 'GET', '/')], request('GET', '/', true)],
+  ['a configured base before a dynamic segment', [endpoint(talks, 'GET', '/:slug')], request('GET', '/{}', true)],
   ['a dynamic value against a literal', [endpoint(talks, 'GET', '/talks/archive')], request('GET', '/talks/{}')],
   ['a sibling literal path in another file',
     [endpoint(talks, 'GET', '/talks/:id'), endpoint(archive, 'GET', '/talks/archive')], request('GET', '/talks/{}')],
@@ -151,7 +151,7 @@ test.concurrent('a callback and an HTTP request between the same files share one
 test.concurrent('HTTP facts survive JSON exchange and reject input core cannot match exactly', () => {
   const observation = scan('fixture', {
     httpEndpoints: [endpoint(talks, '*', '/talks/:id?/:rest+')],
-    httpRequests: [request(undefined, '/talks/{}/?', 'configured')],
+    httpRequests: [request(undefined, '/talks/{}/?', true)],
   })
   expect(parseScanObservation(JSON.stringify(observation))).toEqual(observation)
   const invalid = (facts: Record<string, unknown>) => () => parseScanObservation(JSON.stringify({ ...observation, ...facts }))
@@ -162,7 +162,7 @@ test.concurrent('HTTP facts survive JSON exchange and reject input core cannot m
   expect(invalid({ httpEndpoints: [endpoint(talks, 'GET', '/:rest+/talks')] })).toThrow('must be last')
   expect(invalid({ httpEndpoints: [endpoint(talks, 'get', '/talks')] })).toThrow('uppercase HTTP method')
   expect(invalid({ httpRequests: [request('*', '/talks')] })).toThrow('uppercase HTTP method')
-  expect(invalid({ httpRequests: [request('GET', '/talks', 'host' as HttpRequestBase)] })).toThrow('base')
+  expect(invalid({ httpRequests: [{ ...request('GET', '/talks'), configured: 'yes' }] })).toThrow('configured')
   expect(invalid({ httpRequests: [{ ...request('GET', '/talks'), operation: 'missing' }] })).toThrow('unknown operation')
   expect(invalid({ operations: undefined, httpRequests: [request('GET', '/talks')] })).toThrow('require operation declarations')
 })
@@ -179,7 +179,7 @@ test.concurrent('scans store derived HTTP rows, keep them while a contributing s
   const root = await repository()
   try {
     const server = scan('server', { httpEndpoints: [endpoint(talks, 'GET', '/talks/:id')] })
-    const browser = scan('client', { httpRequests: [request('GET', '/api/talks/{}', 'configured')] })
+    const browser = scan('client', { httpRequests: [request('GET', '/api/talks/{}', true)] })
     await reconcileScanObservations(root, [server, browser])
     const derived = await loadAnnotatedArchitecture(root)
     expect(derived.relationships).toEqual([expect.objectContaining({
