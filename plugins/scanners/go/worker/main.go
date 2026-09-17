@@ -14,10 +14,16 @@ import (
 )
 
 func main() {
-	if len(os.Args) != 2 {
-		fail(fmt.Errorf("expected repository root"))
+	var result any
+	var err error
+	switch {
+	case len(os.Args) == 3 && os.Args[1] == "outline":
+		result, err = outline(os.Args[2], os.Stdin)
+	case len(os.Args) == 2:
+		result, err = scan(os.Args[1])
+	default:
+		err = fmt.Errorf("expected a repository root, or outline and a repository root")
 	}
-	result, err := scan(os.Args[1])
 	if err != nil {
 		fail(err)
 	}
@@ -27,7 +33,7 @@ func main() {
 }
 
 func fail(err error) {
-	fmt.Fprintln(os.Stderr, "GO_SCAN_FAILED:", err)
+	fmt.Fprintln(os.Stderr, "GO_WORKER_FAILED:", err)
 	os.Exit(1)
 }
 

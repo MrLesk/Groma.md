@@ -48,6 +48,23 @@ GROMA_TEST_GO="$(command -v go)" bun test test-bun/go-scanner.test.ts
 The separate packaged test removes language tools from PATH. See
 [fresh-checkout validation](../fresh-checkout-validation.md).
 
+## Source outline
+
+The worker outlines Go files under the
+[shared outline rules](../creating-a-plugin.md#source-outline) by parsing each
+referenced file with `go/parser` only. It does not type-check or read other
+files.
+
+- Types are defined types such as `type Store struct{}` or `type Count int`,
+  never aliases. Interface method signatures are their members.
+- A method with receiver `T`, `*T`, or generic `T[P]` is a member of the file's
+  entry for `T`. When another file declares `T`, the entry sits at the first
+  such method.
+- Functions are top-level functions and function literals assigned directly to
+  a package-level variable.
+- Exported names are `public`; other names are `internal`. Blank `_` names are
+  not listed.
+
 ## Compared operations
 
 `groma lint` and scan findings compare Go operations under the
