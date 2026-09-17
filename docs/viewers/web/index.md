@@ -525,7 +525,8 @@ even with no mapped tasks: folded it is a compact pill with
 the Backlog document mark in greyscale, a small badge counting unique mapped tasks
 in the enabled status filters (including zero), and a chevron pointing up.
 The badge briefly pulses when shown work changes, rolls and bounces when its count
-changes, and flips to a checkmark and back when shown work completes. Initial and
+changes, and flips to a checkmark when shown work completes. The checkmark stays
+for 2.5 seconds, then fades out over 300 ms before the count returns. Initial and
 unchanged snapshots stay quiet. Reduced motion keeps the count without animation.
 Hovering the mark shows the status counts and latest observed change. The badge
 uses the same work snapshot and filters as the expanded panel and adds no label
@@ -539,7 +540,8 @@ brings the first pin in its status. The configured default and terminal
 statuses start hidden; every other configured status starts shown. A filter
 hides or shows both the matching pins and chips. A visible chip also flips
 once when its task becomes Done. Each completing badge stays visible through
-the flip, then follows the Done filter; work that was already hidden does not
+the flip and a 2.5-second checkmark hold. If the Done filter is off, the pin or chip
+then fades out over 300 ms; otherwise it stays visible. Work that was already hidden does not
 appear just to animate. Done chips are grey. Hovering a chip, like hovering a
 pin head, shows the task's title. The pins still shown on an element fan out
 leftwards from that foot point afresh, so a pin left alone stands

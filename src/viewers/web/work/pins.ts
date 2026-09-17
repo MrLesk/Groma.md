@@ -1,6 +1,6 @@
 import type { Point } from '../../../types.ts'
 import type { WorkPin } from '../../../work/pins.ts'
-import { fillWorkBadge, finishingWorkKeys, WORK_BADGE, WORK_BADGE_FLIP_MS } from './badge.ts'
+import { fillWorkBadge, finishingWorkKeys, WORK_BADGE, WORK_BADGE_FINISH_MS } from './badge.ts'
 import type { Camera } from '../iso/camera.ts'
 import type { Tip } from '../organisms/tip.ts'
 
@@ -68,7 +68,7 @@ export function createPins(host: HTMLElement, anchorOf: (id: string) => Point | 
   const pinned = new Map<string, { node: HTMLElement; anchor: Point }>()
   let pins: readonly WorkPin[] = []
   let enabledStatuses: readonly string[] = []
-  const finishing = new Set<string>()
+  const finishing = new Map<string, number>()
   let camera: Camera | undefined
   /** The first paint is the page's baseline; only pins first seen after it announce their arrival. */
   let painted = false
@@ -91,6 +91,7 @@ export function createPins(host: HTMLElement, anchorOf: (id: string) => Point | 
       placed.set(pin.elementId, index + 1)
       const fan = -index * FAN_PITCH
       const { node } = pinned.get(pin.key)!
+      node.classList.toggle('work-disappearing', finishing.has(pin.key) && !enabledStatuses.includes(pin.status))
       node.style.setProperty('--fan', `${fan}px`)
       node.style.setProperty('--lean', `${Math.atan2(fan, STEM)}rad`)
       node.style.setProperty('--stem', `${Math.hypot(fan, STEM)}px`)
@@ -109,7 +110,8 @@ export function createPins(host: HTMLElement, anchorOf: (id: string) => Point | 
     pinned.set(pin.key, { node, anchor })
     node.style.setProperty('--pin', pin.colour)
     node.querySelector<HTMLElement>('.head')!.dataset.tip = `${pin.assignee ?? 'Unassigned'} · ${pin.title}`
-    fillWorkBadge(node, pin, finishing.has(pin.key))
+    if (finishing.has(pin.key)) node.classList.remove('arriving')
+    fillWorkBadge(node, pin, finishing.get(pin.key))
     node.querySelector('.task')!.textContent = pin.taskId
   }
   return {
@@ -119,7 +121,7 @@ export function createPins(host: HTMLElement, anchorOf: (id: string) => Point | 
         .map(pin => pin.key))
       const started = finishingWorkKeys(pins, next)
       for (const key of started) {
-        if (visible.has(key)) finishing.add(key)
+        if (visible.has(key)) finishing.set(key, Date.now())
         else started.delete(key)
       }
       pins = next
@@ -140,10 +142,10 @@ export function createPins(host: HTMLElement, anchorOf: (id: string) => Point | 
       if (started.size > 0) setTimeout(() => {
         for (const key of started) {
           finishing.delete(key)
-          pinned.get(key)?.node.classList.remove('work-finishing')
+          pinned.get(key)?.node.classList.remove('work-finishing', 'work-disappearing')
         }
         fanOut()
-      }, WORK_BADGE_FLIP_MS)
+      }, WORK_BADGE_FINISH_MS)
     },
     place(current) {
       const scaleChanged = camera?.k !== current.k
