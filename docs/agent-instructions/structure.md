@@ -14,8 +14,9 @@ the scanner cannot see.
 1. Exclude development and test tooling that is not product architecture.
 2. Settle container boundaries. Read each container's source files and identify
    the application or data store it represents.
-3. Combine files that implement one responsibility into skyscrapers, and move
-   components that belong under another container.
+3. Combine files that implement one responsibility into skyscrapers, detach
+   files that belong elsewhere, and move components that belong under another
+   container.
 4. Group independently meaningful sibling components by domain.
 5. Declare the people and outside systems the scan cannot see.
 6. Curate one system or container at a time and review the rendered map.
@@ -26,6 +27,7 @@ the scanner cannot see.
 | --- | --- |
 | `groma edit <survivor> --combine <absorbed...>` | IDs of scanned containers or components with the same kind and parent |
 | `groma edit <component> --parent <container>` | a scanned component ID and a container ID |
+| `groma edit <component> --detach <file...>` | a component ID and exact repository-relative files it owns |
 | `groma edit <component> --group <name>` or `--ungroup` | a component ID; the group name is free text |
 | `groma add group <name> <component...>` | sibling component IDs |
 | `groma edit group <address> --title <text>` | a group address |
@@ -42,8 +44,8 @@ delete its source files and run `groma scan` first. Removal refuses while
 flows, incoming relationships, or children depend on the element.
 
 These commands validate the complete change before writing. Do not edit
-architecture Markdown with generic file tools. Combine, move, group, ungroup,
-and group add, rename, or removal are structural commands: they print the paths
+architecture Markdown with generic file tools. Combine, detach, move, group,
+ungroup, and group add, rename, or removal are structural commands: they print the paths
 and IDs they changed, which `groma agent-instructions backlog` explains how to
 record.
 
@@ -92,10 +94,36 @@ owners and do not block these operations. The survivor may already have
 authored meaning. An individual component move likewise requires an empty body
 and no concept-addressed relationships touching that component.
 
-If a mistaken combine needs a split or individual-file reassignment, stop and
-report the exact current and intended owners: the CLI does not provide that
-correction. Do not clear authored meaning or edit architecture files to bypass
-the restriction.
+## Splits and single-file moves
+
+Detach takes files out of a component that should not own them. The component
+keeps its ID and meaning, and its other files. The next scan gives each
+detached file its own new component in the container the scanner infers, and
+combine or move then places it:
+
+```sh
+groma edit reports --detach src/reports/security.ts
+groma scan
+groma view src/reports/security.ts
+# Combine the printed owner into the component that should own the file.
+groma edit security --combine <printed-owner-id>
+```
+
+Detach refuses a file the component does not own and writes nothing. It also
+refuses a file whose relationship a flow step uses. Detach and combine are
+separate edits. File relationships stay stored while a file has no owner and
+follow the new owner after the scan.
+
+Detaching every file leaves an empty component that keeps its ID and meaning.
+Combine the new component back into it after the scan, or remove the emptied
+component before scanning.
+
+A scanner may declare several files as one source unit, such as a component
+and its template. A scan returns a detached member to the owner of the rest of
+its unit. Detach every file of the unit to give the unit one new component.
+
+Do not clear authored meaning or edit architecture files to bypass a refused
+combine or move.
 
 ## Skyscrapers
 

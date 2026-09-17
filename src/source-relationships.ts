@@ -38,8 +38,10 @@ export function sourceRelationships(
   const relationships = new Map<string, ArchitectureRelationship>()
   for (const connection of connections) {
     if (!connection.authored && authored.has(pairKey(connection.source, connection.target))) continue
-    const source = endpoints.get(connection.source)!
-    const target = endpoints.get(connection.target)!
+    const source = endpoints.get(connection.source)
+    const target = endpoints.get(connection.target)
+    // A row naming a file without an owner, for example after a detach, stays stored and returns to the map once a scan owns the file.
+    if (!source || !target) continue
     if (source.id === target.id) continue
     const key = pairKey(source.id, target.id)
     let relationship = relationships.get(key)

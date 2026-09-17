@@ -22,7 +22,7 @@ source code ──scan──▶ groma|.groma/*.md ──view──▶ maps
 4. Change the architecture through Groma, not by editing its files.
    - groma add — declare a person, an external system, a draft, a relation, or a group; the scanner never sees those.
    - groma draft — a new system, container or component becomes a ghost at the path it will keep.
-   - groma edit — rename, update meaning or technology, tag a part with a draft, group scan evidence, move an empty scanned component, combine empty scan records, or change the project record.
+   - groma edit — rename, update meaning or technology, tag a part with a draft, group scan evidence, move an empty scanned component, combine empty scan records, detach files from a component so the next scan gives them their own, or change the project record.
    - groma add relation, groma edit relation, groma remove relation — author or reword a file interaction, or remove a draft interaction. Current relationships cannot be removed.
    - groma remove — take away a person, an external, a ghost, a draft nothing belongs to, a draft relation, or a group.
 5. groma accept <id> — accept a ghost only if a scan has matched it. The file stays where it is; only its status changes.

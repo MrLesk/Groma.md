@@ -119,8 +119,13 @@ operation before opening a map.
      title, description, overview and technology in place and tags the element
      with a draft; every field posts the input `groma edit` takes.
    - Atomic scan evidence is curated with `groma edit`: combine empty scan
-     records, move an empty scanned component, and group or ungroup sibling
-     components. These operations validate the whole change before writing.
+     records, move an empty scanned component, detach files from a component,
+     and group or ungroup sibling components. These operations validate the
+     whole change before writing. `--detach <file...>` removes those files
+     from the component's Code; the next scan gives each detached file its own
+     component unless another file of its scanner source unit still has an
+     owner. Relationship rows naming a file without an owner stay stored and
+     return to the map once a scan owns the file.
    - A group is a name on each sibling component and is addressed as
      `<container-id>/<group-kebab>`: `groma add group <name> <ids...>` names
      it, `groma edit group <address> --title <text>` renames every member,
