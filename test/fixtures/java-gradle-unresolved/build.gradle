@@ -1,0 +1,13 @@
+plugins {
+    id 'java'
+}
+
+def generatedSources = file("$buildDir/generated/java")
+
+sourceSets {
+    main {
+        java {
+            srcDirs = [generatedSources]
+        }
+    }
+}

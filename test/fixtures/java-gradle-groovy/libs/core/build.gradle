@@ -1,0 +1,14 @@
+plugins { id 'java-library' }
+
+sourceCompatibility = 1.8
+
+sourceSets {
+    main {
+        java {
+            srcDirs = ['src/java']
+        }
+    }
+    test {
+        java.srcDir 'src/checks'
+    }
+}

@@ -109,7 +109,7 @@ The architecture lives in a `groma/` folder as an [Open Knowledge Format 0.2](ht
 | [Vue](docs/scanners/vue/index.md) | ✅ Available |
 | [C#/.NET](docs/scanners/dotnet-csharp/index.md) | ✅ Available |
 | [Go](docs/scanners/go/index.md) | ✅ Available |
-| [Java (Maven)](docs/scanners/java/index.md) | ✅ Available |
+| [Java (Maven, Gradle)](docs/scanners/java/index.md) | ✅ Available |
 | [Python](docs/scanners/python/index.md) | ✅ Available |
 | [Rust](docs/scanners/rust/index.md) | ✅ Available |
 | [PHP](docs/scanners/php/index.md) | ✅ Available |

@@ -26,6 +26,19 @@ export async function buildWorker(destination: string): Promise<void> {
   } finally { await rm(classes, { recursive: true, force: true }) }
 }
 
+/** License texts of the npm packages bundled into the scanner module, found from bundle input paths. */
+async function writeNotices(inputs: string[], output: string): Promise<void> {
+  const directories = new Set(inputs.flatMap(input => /^(.*node_modules\/(?:@[^/]+\/)?[^/]+)\//.exec(input.replaceAll('\\', '/'))?.[1] ?? []))
+  const sections = ['The Java scanner module bundles these npm packages. Their license texts follow.\n']
+  for (const directory of [...directories].map(item => path.resolve(item)).sort()) {
+    const manifest = JSON.parse(await readFile(path.join(directory, 'package.json'), 'utf8'))
+    const license = (await readdir(directory)).find(name => /^licen[cs]e/i.test(name))
+    if (!license) throw new Error(`Review the missing license text for ${manifest.name}@${manifest.version}`)
+    sections.push(`\n${manifest.name} ${manifest.version}\nLicense: ${manifest.license}\n\n${await readFile(path.join(directory, license), 'utf8')}`)
+  }
+  await writeFile(output, sections.join(''))
+}
+
 /** Maintainer build; consumers receive the worker and bundled module without install scripts. */
 export async function buildPackage(destination: string): Promise<void> {
   await mkdir(destination, { recursive: true })
@@ -40,8 +53,9 @@ export async function buildPackage(destination: string): Promise<void> {
   if (!javaHome) throw new Error('Cannot locate the build JDK for compiler release definitions.')
   await cp(path.join(javaHome, 'lib/ct.sym'), path.join(runtime, 'lib/ct.sym'))
   const built = await Bun.build({ entrypoints: [path.join(pluginRoot, 'src/index.ts')],
-    outdir: path.join(destination, 'src'), target: 'bun', format: 'esm', naming: 'index.js' })
+    outdir: path.join(destination, 'src'), target: 'bun', format: 'esm', naming: 'index.js', metafile: true })
   if (!built.success) throw new Error(built.logs.join('\n'))
+  await writeNotices(Object.keys(built.metafile?.inputs ?? {}), path.join(destination, 'THIRD-PARTY-NOTICES.txt'))
   await writeFile(path.join(destination, 'package.json'), `${JSON.stringify({
     name: manifest.name, version: manifest.version, description: manifest.description, private: manifest.private, type: 'module', license: 'MIT',
     os: [process.platform], cpu: [process.arch],

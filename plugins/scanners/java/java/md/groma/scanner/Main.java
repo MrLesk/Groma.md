@@ -34,12 +34,14 @@ public final class Main {
                 return;
             }
             if (args.length != 3) throw new IllegalArgumentException("Expected root, release and encoding");
+            // An empty release selects the bundled compiler's own language version.
+            var release = args[1].isEmpty() ? Integer.toString(Runtime.version().feature()) : args[1];
             if (Runtime.version().feature() < 21) throw new IllegalArgumentException("JDK 21 or newer is required");
             var root = Path.of(args[0]).toRealPath();
             var input = new BufferedReader(new InputStreamReader(System.in, StandardCharsets.UTF_8));
             var files = input.lines().filter(line -> !line.isEmpty()).map(root::resolve).toList();
             if (files.isEmpty()) throw new IllegalArgumentException("No Java files supplied");
-            System.out.println(Json.encode(analyze(root, files, args[1], args[2])));
+            System.out.println(Json.encode(analyze(root, files, release, args[2])));
         } catch (Exception error) {
             System.err.println("JAVA_SCAN_FAILED: " + error.getMessage());
             System.exit(2);
@@ -88,7 +90,7 @@ public final class Main {
             return Json.object(
                 "schemaVersion", 1,
                 "scanner", Json.object("id", "java", "technology", "java", "engine", "javac-tree", "engineVersion", Runtime.version().toString()),
-                "roots", List.of(Json.object("id", "java:source-set", "kind", "maven-project", "name", root.getFileName().toString(), "file", "pom.xml")),
+                "roots", List.of(Json.object("id", "java:source-set", "kind", "java-project", "name", root.getFileName().toString())),
                 "files", index.files(), "operations", index.operations,
                 "invocations", uses.invocations, "diagnostics", messages);
         }

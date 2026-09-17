@@ -1,6 +1,6 @@
 import { fileURLToPath } from 'node:url'
 import { parseScanObservation, type ScanObservation } from '@groma/scanner'
-import { exists, readJavaInput } from './maven.ts'
+import { exists, readJavaInput } from './java-input.ts'
 import { run } from './process.ts'
 
 const worker = fileURLToPath(new URL('../dist/worker.jar', import.meta.url))
@@ -35,6 +35,8 @@ export async function scanJavaSource(repositoryRoot: string, options: JavaScanOp
     throw new Error(`JAVA_SOURCE_INVALID: No observation was produced. Check the declared Java language version and source syntax. ${error}`)
   }
   const observation = parseScanObservation(stdout)
-  observation.roots[0]!.name = input.name
+  // The worker only compiles sources; the project's name, kind and build declaration come from its input.
+  const [root] = observation.roots
+  observation.roots[0] = { ...root!, name: input.name, kind: input.kind, ...(input.file ? { file: input.file } : {}) }
   return observation
 }
