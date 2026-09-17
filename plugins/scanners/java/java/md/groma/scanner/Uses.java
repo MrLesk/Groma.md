@@ -96,7 +96,7 @@ final class Uses extends TreePathScanner<Void, String> {
     List<Object> diagnostics() {
         return List.of(
             Json.object("severity", "info", "code", "JAVA_SOURCE_SET", "message",
-                "Maven main sources only. No annotation processing, synthetic declarations, callback binding or framework runtime dispatch inference."),
+                "Main sources only. No annotation processing, synthetic declarations, callback binding or framework runtime dispatch inference."),
             Json.object("severity", "info", "code", "JAVA_UNRESOLVED_CALLS", "message",
                 unresolved + " calls have no supported source implementation target (virtual dispatch, external code or generated declarations)."),
             Json.object("severity", "info", "code", "JAVA_METHOD_REFERENCES", "message",

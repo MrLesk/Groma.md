@@ -28,6 +28,17 @@
             "declaration": "Maven project; Java version unresolved"
           },
           {
+            "type": "text",
+            "files": [
+              "**/build.gradle",
+              "**/build.gradle.kts"
+            ],
+            "technology": "java",
+            "kind": "language",
+            "versionPattern": "(?:JavaLanguageVersion\\.of\\(\\s*|JavaVersion\\.VERSION_(?:1_)?)(\\d+)",
+            "declaration": "Gradle build script; Java sources unverified"
+          },
+          {
             "type": "xml",
             "files": [
               "**/pom.xml"
@@ -49,7 +60,8 @@
     }
   },
   "dependencies": {
-    "@groma/scanner": "workspace:*"
+    "@groma/scanner": "workspace:*",
+    "good-enough-parser": "1.1.23"
   },
   "description": "Java compiler and project evidence; framework runtime use is not verified."
 }

@@ -18,7 +18,6 @@ final class MavenModel {
         }
         String plugin = "/project/build/plugins/plugin[artifactId='maven-compiler-plugin']/configuration/";
         String release = first(document, List.of(plugin + "release", "/project/properties/maven.compiler.release", "/project/properties/java.version", "/project/properties/maven.compiler.source"));
-        if (release.isEmpty()) release = Integer.toString(Runtime.version().feature());
         if (release.startsWith("1.")) release = release.substring(2);
         String encoding = first(document, List.of(plugin + "encoding", "/project/properties/project.build.sourceEncoding"));
         if (encoding.isEmpty()) encoding = "UTF-8";

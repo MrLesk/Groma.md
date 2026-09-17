@@ -1,0 +1,15 @@
+plugins {
+    id 'java'
+}
+
+dependencies {
+    implementation project(':libs:core')
+}
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(17)
+    }
+}
+
+sourceSets.main.java.srcDir tasks.named('generateGrammar')

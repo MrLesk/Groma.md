@@ -24,6 +24,7 @@ depth. These rules are declared by the current official plugins:
 | `package.json` | `typescript`, `@angular/core`, `vue`, and `react` in dependency sections, with their declared version or range |
 | `tsconfig.json` | TypeScript project configuration; it does not declare the compiler version |
 | `pom.xml` | Maven project and literal `java.version`, `maven.compiler.release`, or `maven.compiler.source` values; `org.springframework.boot` is a framework clue |
+| `build.gradle`, `build.gradle.kts` | Gradle build script and the first literal `JavaLanguageVersion.of(...)` or `JavaVersion.VERSION_...` value, when present; Java sources are not verified |
 | `*.csproj` | C# project and literal `TargetFramework` or `TargetFrameworks` values |
 | `pyproject.toml` | Python project configuration and literal `project.requires-python`, when present |
 | `setup.py`, `setup.cfg`, `requirements.txt` | Python project or dependency declaration |
