@@ -75,6 +75,38 @@ for Roslyn tests. Fixtures are scanned without restore. The packaged test
 removes language tools from PATH; see
 [fresh-checkout validation](../fresh-checkout-validation.md).
 
+## Source outline
+
+Components list the declarations of their C# files under the
+[shared outline contract](../creating-a-plugin.md#source-outline). The worker
+parses each requested file with Roslyn syntax alone, without loading its
+project, restoring packages or building.
+
+- Classes, structs, records, interfaces, enums and delegates declared directly
+  in the file or inside its namespaces are types. Enums and delegates have no
+  members.
+- A type's members are the methods, interface method signatures, constructors,
+  finalizers and operators declared in its body, each overload separately.
+  Constructors are named after the type and finalizers `~Type`; operators are
+  named like `operator +` or `implicit operator int`.
+
+Nested types, record and class primary constructors, fields, properties,
+indexers, events, accessors and top-level statements are not listed. Each file
+of a partial type lists the type with the members that file declares. A
+declaration's line is its name's line; an operator's line is its `operator`
+keyword's line. A member is an entry only when a Code link names it as
+`Type.Member`.
+
+The outline parses without preprocessor symbols, while a scan uses the
+project's. Code inside `#if DEBUG` is therefore skipped, and `#else` branches
+are listed.
+
+Visibility follows the contract's C# row: `protected internal` and
+`private protected` are `protected`, and a `file` type is `private`. Without an
+access modifier, top-level types are `internal`, interface members `public`
+and other members `private`. A partial declaration without a modifier reports
+that default, even when another part declares its access.
+
 ## Compared operations
 
 `groma lint` and scan findings compare C# operations under the
