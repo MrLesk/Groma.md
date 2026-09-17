@@ -265,7 +265,7 @@ program
 program
   .command('view')
   .description('Scan this repo and open the terminal map')
-  .argument('[target]', 'element or flow id for complete Markdown, draft id, or exact source file')
+  .argument('[target]', 'element or flow id for complete Markdown, draft id, or exact source file for its owner and file relationships')
   .option('--plain', 'print actors, systems, their relationships and flows; with an element id, that element, its children, and its incoming and outgoing relationships')
   .action(async (target: string | undefined, options) => {
     try {

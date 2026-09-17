@@ -20,7 +20,7 @@ export { acceptGhost, type AcceptResult } from './accept.ts'
 export { reconcileScanObservations } from './scan-reconciler.ts'
 
 /** The map word for a lifecycle status: drafts are ghosts, everything stable was observed. */
-function originOf(status: ElementStatus): Origin {
+export function originOf(status: ElementStatus): Origin {
   return status === 'draft' ? 'draft' : 'observed'
 }
 

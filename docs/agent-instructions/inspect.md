@@ -19,7 +19,7 @@ add descriptions, actors, flows, groups, or relationship rows.
 | `groma view <target>` | an element ID: actor, external system, system, container, or component | Without `--plain`, prints that complete Markdown record, including its Code references. Does not scan. |
 | | a flow ID | Prints the flow record with its steps. |
 | | a draft ID | Prints the draft's outcome and the elements it touches. |
-| | an exact repository-relative source file | Prints the record of the component that owns the file. |
+| | an exact repository-relative source file | Prints the owning component's ID, kind, title, and parent, the file connections of map relationships split into incoming and outgoing, and the command for the owner's complete record. Rows between files of one component are not listed; `groma view <owner-id> --plain` lists relationships that name the owner element. |
 | `groma scanner list` | none | Lists the configured scanners and whether each is ready. |
 | `groma lint` | none | Reports possible duplicate logic from fresh scanner evidence. Findings are review questions: they are not relationships and do not merge components. |
 
