@@ -2,15 +2,17 @@ import { expect, test } from 'bun:test'
 import { cp, mkdtemp, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import type { ScannerPlugin } from '@groma/scanner'
+import type { ScannerPlugin, SourceReference } from '@groma/scanner'
 import { buildPackage } from '../plugins/scanners/react/build.ts'
 import { scanTypeScriptSource } from '../plugins/scanners/typescript/src/scan.ts'
+import { readCodeStructure as readReferenceOutline } from '../plugins/scanners/typescript/src/structure.ts'
 import { loadArchitecture } from '../src/architecture-reader.ts'
 import { buildArchitectureModel } from '../src/architecture-model.ts'
 import { loadAnnotatedArchitecture, reconcileScanObservations } from '../src/core.ts'
 import { editArchitecture } from '../src/edit.ts'
 import { inferRelationships } from '../src/relationship-inference.ts'
 import type { AnnotatedArchitectureModel } from '../src/types.ts'
+import { readCodeStructure } from '../src/viewers/source/structure.ts'
 
 async function setup() {
   const temporary = await mkdtemp(path.join(os.tmpdir(), 'groma-react-test-'))
@@ -21,6 +23,16 @@ async function setup() {
   for (const name of ['editor', 'host']) await rename(path.join(root, `${name}.tsx.fixture`), path.join(root, `${name}.tsx`))
   const child = Bun.spawn(['git', 'init', '--quiet'], { cwd: root, stdout: 'ignore', stderr: 'pipe' })
   expect(await child.exited, await new Response(child.stderr).text()).toBe(0)
+  await buildPackage(artifact)
+  const scanner: ScannerPlugin = (await import(path.join(artifact, 'dist/index.js'))).default
+  return { temporary, root, artifact, scanner }
+}
+
+async function outlineSetup() {
+  const temporary = await mkdtemp(path.join(os.tmpdir(), 'groma-react-outline-'))
+  const root = path.join(temporary, 'project')
+  const artifact = path.join(temporary, 'scanner')
+  await cp(path.resolve(import.meta.dir, '../test/fixtures/react-outline'), root, { recursive: true })
   await buildPackage(artifact)
   const scanner: ScannerPlugin = (await import(path.join(artifact, 'dist/index.js'))).default
   return { temporary, root, artifact, scanner }
@@ -149,5 +161,52 @@ test.concurrent('React overlapping scans retain curated ownership in either obse
     const after = await loadAnnotatedArchitecture(root)
     expect(owner(after, 'editor.tsx').id).toBe(source.id)
     expect(new Set(owner(after, 'editor.tsx').code.map(reference => reference.scanner))).toEqual(new Set(['typescript', 'react']))
+  } finally { await rm(temporary, { recursive: true, force: true }) }
+})
+
+test.concurrent('the built React package outlines components, classes and functions', async () => {
+  const { temporary, root, scanner } = await outlineSetup()
+  try {
+    const files = await scanner.readCodeStructure!(root, [{ file: 'profile.tsx', symbols: ['Profile'] }])
+    const summary = files.map(file => [file.file, file.declarations.map(declaration => [
+      declaration.kind, declaration.name, declaration.line, declaration.visibility, declaration.entry,
+      declaration.kind === 'type' ? declaration.members.map(member => [member.name, member.line, member.visibility]) : [],
+    ])])
+
+    // The memo-wrapped component is not a function literal bound to its name.
+    expect(summary).toEqual([['profile.tsx', [
+      ['function', 'initials', 3, 'private', false, []],
+      ['function', 'Avatar', 7, 'public', false, []],
+      ['function', 'Profile', 9, 'public', true, []],
+      ['type', 'Counter', 15, 'public', false, [['label', 16, 'public'], ['increment', 20, 'protected'], ['render', 22, 'public']]],
+    ]]])
+
+    // The package's own compiler must read the shared rules exactly as the TypeScript scanner does.
+    const sources: [string, SourceReference][] = [
+      [root, { file: 'profile.tsx', symbols: ['Profile'] }],
+      [path.resolve(import.meta.dir, '../test/fixtures/typescript-outline'), { file: 'outline.ts', symbols: ['listed'] }],
+    ]
+    for (const [sourceRoot, reference] of sources) {
+      const outline = await scanner.readCodeStructure!(sourceRoot, [reference])
+      expect(outline).toHaveLength(1)
+      expect(outline).toEqual(await readReferenceOutline(sourceRoot, [reference]))
+    }
+  } finally { await rm(temporary, { recursive: true, force: true }) }
+})
+
+test.concurrent('a file React and TypeScript both own shows one outline', async () => {
+  const { temporary, root, artifact, scanner } = await outlineSetup()
+  try {
+    await writeFile(path.join(root, 'groma/scanners.json'), JSON.stringify({ scanners: [
+      { id: 'typescript', source: path.resolve(import.meta.dir, '../plugins/scanners/typescript') },
+      { id: 'react', source: artifact },
+    ] }))
+    const world = await loadAnnotatedArchitecture(root)
+    const component = world.elements.find(element => element.kind === 'component')!
+    const files = await readCodeStructure(root, world, null, component.representationId)
+
+    // The component's Code lists this source under both scanners; only the TypeScript link names Profile.
+    expect(files).toEqual(await scanner.readCodeStructure!(root, [{ file: 'profile.tsx', symbols: ['Profile'] }]))
+    expect(files?.[0]?.declarations.find(declaration => declaration.name === 'Profile')?.entry).toBe(true)
   } finally { await rm(temporary, { recursive: true, force: true }) }
 })

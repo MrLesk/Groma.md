@@ -57,6 +57,25 @@ In OKF, the result remains readable Code links and relationship rows. In C4,
 React components remain source evidence, not automatic architecture components
 or a new containment level. Core owns interpretation and curated ownership.
 
+## Source outline
+
+The scanner outlines the TSX files in a component's Code with the TypeScript
+rules of the [source outline contract](../creating-a-plugin.md#source-outline):
+top-level functions and types (classes, interfaces, enums), including namespace
+contents, and each type's constructors and methods. A function component is a
+top-level function or a function literal bound directly to a top-level name;
+wrapped values such as `memo(...)` and `forwardRef(...)` are not listed, so a
+file whose only component is a `memo(...)` value has no declarations and is left
+out of the outline, while its Code file still appears. A class component is a
+type with its methods. Every declaration has its line and
+visibility, and `entry` marks the names the Code links give. The package's own
+TypeScript parses each file alone, without `tsconfig.json`, dependencies or
+compilation.
+
+Core outlines each file once. For a source that the TypeScript scanner also
+owns, the scanner with the lowest id among the file's Code links outlines it,
+here React, with the symbols of all those links.
+
 ## Limits
 
 This revision qualifies the Backlog.md CleanupModal success callback. It does
