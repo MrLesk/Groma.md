@@ -162,7 +162,11 @@ order. A configured base is assumed to address a server in this repository, so
 a configuration value that points at a third-party service can produce a wrong
 row; that is an accepted limit. Scanners decide what a base is from what they
 can see, as [scanner evidence](scanners/evidence.md#http-endpoints-and-requests)
-describes. Literal text is compared exactly, including case.
+describes. Literal text is compared without regard to case, because some
+frameworks route case-insensitively and generate a path from a class or
+controller name. Where two endpoints differ only in case, they either share a
+file or the one-file rule already abstains. A row keeps the endpoint's own
+spelling.
 
 ## Provider rules and later candidates
 

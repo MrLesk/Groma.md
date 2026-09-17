@@ -63,15 +63,20 @@ function matches(endpoint: readonly HttpEndpointSegment[], request: readonly Kno
   return matches(rest, remaining, dynamicFillsLiteral)
 }
 
+/** Some frameworks route case-insensitively, and template-generated paths differ only in case. */
+function sameText(left: string, right: string): boolean {
+  return left.toLowerCase() === right.toLowerCase()
+}
+
 function literalFilled(value: string, segment: KnownSegment, dynamicFillsLiteral: boolean): boolean {
-  return segment.kind === 'literal' ? segment.value === value : dynamicFillsLiteral
+  return segment.kind === 'literal' ? sameText(segment.value, value) : dynamicFillsLiteral
 }
 
 type Segment = HttpEndpointSegment | KnownSegment
 
 /** A leading literal only one side states is removable when both sides then continue with the same literal. */
 function removablePrefix(prefix: Segment | undefined, next: Segment | undefined, other: Segment | undefined): boolean {
-  return prefix?.kind === 'literal' && next?.kind === 'literal' && other?.kind === 'literal' && next.value === other.value
+  return prefix?.kind === 'literal' && next?.kind === 'literal' && other?.kind === 'literal' && sameText(next.value, other.value)
 }
 
 /**
