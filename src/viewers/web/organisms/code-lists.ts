@@ -3,7 +3,7 @@ import {
   copiesOf,
   type OperationCopies,
 } from '../../../architecture-findings.ts'
-import type { CodeDeclaration, CodeFile } from '../../source/structure.ts'
+import type { CodeDeclaration, CodeFile, CodeSymbol, CodeVisibility } from '../../source/structure.ts'
 import { sidebarBranches } from './sidebar-row.ts'
 
 function countFact(count: number, singular: string, plural: string): string {
@@ -22,7 +22,7 @@ function fileFacts(reference: CodeReference): string {
 
 interface CodeGroup {
   file: string
-  reference?: CodeReference
+  reference: CodeReference
   declarations: readonly CodeDeclaration[]
 }
 
@@ -42,16 +42,11 @@ function groupedCode(
       declarations: byFile.get(reference.file) ?? [],
     })
   }
-  for (const file of structure) {
-    if (seen.has(file.file)) continue
-    seen.add(file.file)
-    groups.push({ file: file.file, declarations: file.declarations })
-  }
   return groups
 }
 
-function codeFacts(entry: boolean, scope: string, line: number, kind?: string): string {
-  return [entry ? 'entry' : undefined, scope, kind, `line ${line}`]
+function codeFacts(entry: boolean, visibility: CodeVisibility, line: number, kind?: string): string {
+  return [entry ? 'entry' : undefined, visibility, kind, `line ${line}`]
     .filter(fact => fact !== undefined)
     .join(' · ')
 }
@@ -201,7 +196,7 @@ function codeEntry(
 
 function memberItem(
   file: string,
-  member: { name: string; line: number; scope: string; entry: boolean },
+  member: CodeSymbol,
   following: readonly boolean[],
   context: CopiesContext,
 ): HTMLElement {
@@ -210,7 +205,7 @@ function memberItem(
     file,
     member.name,
     member.line,
-    codeFacts(member.entry, member.scope, member.line),
+    codeFacts(member.entry, member.visibility, member.line),
     true,
     following,
     copies,
@@ -229,13 +224,13 @@ function declarationItem(
     file,
     declaration.name,
     declaration.line,
-    codeFacts(declaration.entry, declaration.scope, declaration.line, declaration.kind === 'class' ? 'class' : undefined),
+    codeFacts(declaration.entry, declaration.visibility, declaration.line, declaration.kind === 'type' ? 'type' : undefined),
     declaration.kind === 'function',
     [follows],
     copies,
     context,
   )
-  if (declaration.kind === 'class' && declaration.members.length > 0) {
+  if (declaration.kind === 'type' && declaration.members.length > 0) {
     const members = document.createElement('ul')
     members.className = 'code-members'
     declaration.members.forEach((member, index) => {
@@ -257,7 +252,7 @@ function fileRow(group: CodeGroup, onSource: (file: string, line?: number) => vo
   file.className = 'link source-file'
   file.textContent = group.file
   file.setAttribute('aria-label', `Open source ${group.file}`)
-  if (group.reference !== undefined) file.title = fileFacts(group.reference)
+  file.title = fileFacts(group.reference)
   file.addEventListener('click', () => onSource(group.file))
   return file
 }

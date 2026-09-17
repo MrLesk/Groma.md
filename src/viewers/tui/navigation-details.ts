@@ -27,9 +27,10 @@ export function declarationStops(
 ): string[] {
   const structure = state.codeStructure
   if (state.detailsTab !== 'how' || state.profile || state.keys || structure === undefined || structure.elementId !== state.currentId) return []
+  // readCodeStructure returns files in the component's Code order, the order the pane draws them.
   return structure.files.flatMap(file => file.declarations.flatMap(declaration => [
     `${file.file}:${declaration.line}`,
-    ...(declaration.kind === 'class' ? declaration.members.map(member => `${file.file}:${member.line}`) : []),
+    ...(declaration.kind === 'type' ? declaration.members.map(member => `${file.file}:${member.line}`) : []),
   ]))
 }
 

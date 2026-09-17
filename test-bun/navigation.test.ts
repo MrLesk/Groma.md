@@ -346,8 +346,8 @@ test.concurrent('How navigates declarations while What follows a selected relati
   let state: ViewerState = {
     ...initialState(model), currentId: 'observed:pleft', focus: 'details', detailsTab: 'how',
     codeStructure: { elementId: 'observed:pleft', files: [{ file: 'src/part.ts', declarations: [
-      { kind: 'function', name: 'run', line: 8, scope: 'export', entry: true },
-      { kind: 'function', name: 'save', line: 18, scope: 'export', entry: false },
+      { kind: 'function', name: 'run', line: 8, visibility: 'public', entry: true },
+      { kind: 'function', name: 'save', line: 18, visibility: 'public', entry: false },
     ] }] },
   }
   assert.deepEqual(detailsCommands(model, state), [])

@@ -143,9 +143,7 @@ export function createSourceControl(options: SourceControlOptions): SourceContro
       structureElement = element
       structureRevision = revision
       codeFiles = []
-      if (element.code.some(reference => reference.scanner === 'typescript')) {
-        void loadStructure(element, revision)
-      }
+      if (element.code.length > 0) void loadStructure(element, revision)
       return codeFiles
     },
     open(nextFile, nextLine) {

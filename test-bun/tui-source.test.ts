@@ -42,12 +42,12 @@ test.concurrent('details declarations open source at their exact line and Escape
       files: [{
         file: 'src/orders.ts',
         declarations: [{
-          kind: 'class',
+          kind: 'type',
           name: 'OrderBook',
           line: 5,
-          scope: 'export',
+          visibility: 'public',
           entry: true,
-          members: [{ name: 'total', line: 6, scope: 'public', entry: false }],
+          members: [{ name: 'total', line: 6, visibility: 'public', entry: false }],
         }],
       }],
     },

@@ -242,12 +242,14 @@ on or inside the selected element. Each opens the same flow reader as the
 hierarchy. Actors keep their real relationships and their authored flows.
 How it's built holds the evidence: the technology the element's Markdown
 declares (`groma.technology: SVG, Bun serve` renders as one chip per
-comma-separated part), and named TypeScript structure under Code. Code follows
-the authored file order. Each file is the full path; its measurements sit on
-hover. Declarations nest under that file. It includes exported and module-private top-level
-callables; named classes group their public, protected, and private methods.
-The Code reference symbol is marked as the entry point, while nested callbacks
-stay out. A declaration opens read-only source at its visibly marked line; a
+comma-separated part), and the source outline under Code. Code follows the
+authored file order, whichever scanners own its files. Each file is the full
+path; its measurements sit on hover. Declarations nest under that file:
+top-level functions and types with their visibility, and each type's methods
+and constructors, as the
+[source outline contract](../../scanners/creating-a-plugin.md#source-outline)
+defines. The Code reference symbol is marked as the entry point, while nested
+callbacks stay out. A declaration opens read-only source at its visibly marked line; a
 file opens at the top. Back from a file returns How it's built to the same
 reading position. A method with possible copies shows a warning labeled possible duplicates;
 the warning expands the other copies nested under that method, each with

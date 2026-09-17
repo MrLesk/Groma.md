@@ -72,7 +72,6 @@ export interface ScanObservation {
   scanner: ScannerIdentity
   roots: ScanRoot[]
   files: ScanFile[]
-  /** Omitted by scanners without association extraction; an empty array reports none found. */
   sourceUnits?: ScanSourceUnit[]
   /** Omitted when a scanner does not extract operation evidence. Never persisted as a graph. */
   operations?: ScanOperation[]
@@ -83,33 +82,37 @@ export interface ScanObservation {
 /** Scanner-owned JSON settings supplied by Groma; plugins do not read Groma configuration files. */
 export type ScannerSettings = Readonly<Record<string, unknown>>
 
-type DeclarationScope = 'export' | 'internal'
-type MemberScope = 'public' | 'protected' | 'private'
+/**
+ * Who may use a declaration by name, on one scale for every language:
+ * `public` any dependent code, `protected` the declaring type and its subtypes,
+ * `internal` the same package, module, assembly or crate, and `private` the
+ * declaring type (for a member) or the declaring file or module (top level).
+ */
+export type CodeVisibility = 'public' | 'protected' | 'internal' | 'private'
 
-interface DeclarationBase {
+/** One named declaration in a source outline: a top-level function or type, or a type's method. */
+export interface CodeSymbol {
   name: string
+  /** 1-based line of the declared name. */
   line: number
-  scope: DeclarationScope
+  visibility: CodeVisibility
+  /** The Code reference's `symbols` contain this name. */
   entry: boolean
 }
 
-export interface CodeCallable extends DeclarationBase {
+/** A top-level function, or a function literal assigned directly to a top-level name. */
+export interface CodeFunction extends CodeSymbol {
   kind: 'function'
 }
 
-export interface CodeMember {
-  name: string
-  line: number
-  scope: MemberScope
-  entry: boolean
+/** A top-level class, interface, struct, record, enum, trait, protocol or defined type; never an alias. */
+export interface CodeType extends CodeSymbol {
+  kind: 'type'
+  /** Every method and constructor this file declares on the type, in source order. */
+  members: CodeSymbol[]
 }
 
-export interface CodeClass extends DeclarationBase {
-  kind: 'class'
-  members: CodeMember[]
-}
-
-export type CodeDeclaration = CodeCallable | CodeClass
+export type CodeDeclaration = CodeFunction | CodeType
 
 export interface CodeFile {
   file: string
@@ -127,7 +130,7 @@ export interface ScannerPlugin {
   watch: { include: string[]; exclude: string[] }
   /** Check source inputs and scanner-owned tools. Project dependency installation or builds must not be prerequisites. */
   checkReadiness?(repositoryRoot: string, settings?: ScannerSettings): Promise<void>
-  /** Optional source outline for Code references; this data is never architecture persistence. */
+  /** Source outline for Code references, required of official scanners; this data is never architecture persistence. */
   readCodeStructure?(repositoryRoot: string, references: readonly SourceReference[], settings?: ScannerSettings): Promise<CodeFile[]>
   scan(repositoryRoot: string, settings?: ScannerSettings): Promise<ScanObservation | undefined>
 }
