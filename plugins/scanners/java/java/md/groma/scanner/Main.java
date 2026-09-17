@@ -33,19 +33,29 @@ public final class Main {
                 System.out.println(Json.encode(MavenModel.read(Path.of(args[1]))));
                 return;
             }
+            if (args.length == 2 && args[0].equals("outline")) {
+                var root = Path.of(args[1]).toRealPath();
+                System.out.println(Json.encode(Outline.read(root, sourceFiles(root))));
+                return;
+            }
             if (args.length != 3) throw new IllegalArgumentException("Expected root, release and encoding");
             // An empty release selects the bundled compiler's own language version.
             var release = args[1].isEmpty() ? Integer.toString(Runtime.version().feature()) : args[1];
             if (Runtime.version().feature() < 21) throw new IllegalArgumentException("JDK 21 or newer is required");
             var root = Path.of(args[0]).toRealPath();
-            var input = new BufferedReader(new InputStreamReader(System.in, StandardCharsets.UTF_8));
-            var files = input.lines().filter(line -> !line.isEmpty()).map(root::resolve).toList();
+            var files = sourceFiles(root);
             if (files.isEmpty()) throw new IllegalArgumentException("No Java files supplied");
             System.out.println(Json.encode(analyze(root, files, release, args[2])));
         } catch (Exception error) {
             System.err.println("JAVA_SCAN_FAILED: " + error.getMessage());
             System.exit(2);
         }
+    }
+
+    /** One repository-relative source path per standard input line, resolved against the root. */
+    private static List<Path> sourceFiles(Path root) {
+        var input = new BufferedReader(new InputStreamReader(System.in, StandardCharsets.UTF_8));
+        return input.lines().filter(line -> !line.isEmpty()).map(root::resolve).toList();
     }
 
     private static Object analyze(Path root, List<Path> files, String release, String encoding) throws Exception {

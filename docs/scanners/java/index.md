@@ -84,6 +84,36 @@ entries. A project left without Java sources supplies no observation, but its
 warnings still reach the scan report. The scanner does not read convention
 plugins, `buildSrc` logic, `gradle.properties` or declared source encodings.
 
+## Source outline
+
+Components list the declarations of their Java files under the
+[shared outline contract](../creating-a-plugin.md#source-outline). The worker
+parses each requested file with the bundled compiler's parser, as UTF-8 and
+without a classpath or type resolution. A syntax error drops the declarations
+that follow it, and a file the parser rejects at its first token, such as one
+starting with a byte order mark or holding binary content, outlines nothing.
+
+- Top-level classes, interfaces, enums, records and annotation types are
+  types. Package declarations are transparent. Java has no top-level functions:
+  a compact source file of top-level methods outlines as one `internal` type
+  named after the file, at line 1, holding those methods.
+- A type's members are the methods and constructors in its body: static,
+  abstract, default and private interface methods, interface and annotation
+  element signatures, and compact record constructors. Each overload is listed
+  separately, and constructors are named after the type.
+- Fields, initializer blocks, nested types, anonymous classes and enum
+  constant bodies are not listed.
+
+A line is the line of the declared name. Visibility follows the Java modifier:
+`public`, `protected` or `private`. Without one, interface and annotation
+members are `public`, a record's compact constructor takes the record's own
+access, enum constructors are `private`, and other members and top-level types
+are `internal` (package access).
+
+A type is an entry when a Code link names it, such as `Orders`, the form the
+scan uses for a file's only type. A member is an entry when a Code link names
+it with its type, such as `Orders.place`.
+
 ## Evidence
 
 The worker inventories authored main sources, declarations and operations.
