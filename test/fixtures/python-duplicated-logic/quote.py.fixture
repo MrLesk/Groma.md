@@ -1,0 +1,4 @@
+def quote_total(basket):
+    subtotal = sum(line.price * line.quantity for line in basket.lines)
+    discount = subtotal * 0.2 if basket.customer.loyal else 0
+    return round(subtotal - discount, 2)

@@ -56,9 +56,9 @@ operation, call position, line and member name when present. Every call target
 is unresolved: Python runtime binding is outside this parser's evidence.
 Decorators, defaults, annotations, module/class initialization, lambdas and
 lazy generator expressions do not provide invocation evidence. Imports,
-framework wiring, concrete callbacks and normalized body tokens are not
-analyzed. This version produces no derived call relationships or duplicate-body
-findings. Every observation includes a `PYTHON_SYNTAX_ONLY` diagnostic.
+framework wiring and concrete callbacks are not analyzed. This version produces
+no derived call relationships. Every observation includes a `PYTHON_SYNTAX_ONLY`
+diagnostic.
 
 Source is parsed and compiled for syntax and scope validation, but the code
 object is never executed. Invalid source or project TOML fails the whole Python
@@ -66,6 +66,24 @@ observation. Other healthy scanners follow Groma's existing failure isolation.
 Correct reported syntax errors or use a scanner release supporting the source
 language version. Readiness checks source availability and the packaged worker;
 full syntax validation happens during the scan.
+
+## Compared operations
+
+`groma lint` and scan findings compare Python operations under the
+[shared rule](../../architecture-findings.md#compared-operations). The scanner
+attaches a source range, from the `def` line to the body's last line, and body
+tokens to every `def` and `async def`: module functions, methods including
+`__init__`, and functions nested in functions or classes.
+
+Parameters and the names a function binds, including comprehension variables
+and nested function names, become slots; a function does not bind names it
+declares `global` or `nonlocal`. Docstrings, decorators, parameter defaults and
+annotations are not body tokens.
+
+Lambdas, including those in a dictionary passed to a call or decorator, are
+anonymous callbacks and are never compared. A function's tokens include the
+functions, lambdas, classes and generator expressions nested in it. Module and
+class-body code are initializers and are not compared.
 
 ## Architecture meaning
 

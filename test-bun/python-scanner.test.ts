@@ -1,24 +1,28 @@
 import { expect, test } from 'bun:test'
-import { cp, mkdir, mkdtemp, readFile, rename, rm, writeFile } from 'node:fs/promises'
+import { cp, mkdir, mkdtemp, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { buildPackage } from '../plugins/scanners/python/build.ts'
 import type { ScannerPlugin } from '@groma/scanner'
+import { addScanner } from '../src/scanner/modules/inventory.ts'
 import { compileWatchPatterns } from '../src/scanner/watch-patterns.ts'
 
-async function fixture() {
+const fixtures = path.resolve(import.meta.dir, '../test/fixtures')
+const cli = path.resolve(import.meta.dir, '../src/cli.ts')
+
+async function fixture(name = 'python-project') {
   const temporary = await mkdtemp(path.join(os.tmpdir(), 'groma-python-test-'))
   const root = path.join(temporary, 'project')
   const artifact = path.join(temporary, 'scanner')
   await buildPackage(artifact)
   const scanner: ScannerPlugin = (await import(path.join(artifact, 'src/index.js'))).default
-  await cp(path.resolve(import.meta.dir, '../test/fixtures/python-project'), root, { recursive: true })
-  for (const file of ['service.py', 'nested/worker.py']) {
-    await rename(path.join(root, `${file}.fixture`), path.join(root, file))
+  await cp(path.join(fixtures, name), root, { recursive: true })
+  for (const file of await readdir(root, { recursive: true })) {
+    if (file.endsWith('.fixture')) await rename(path.join(root, file), path.join(root, file.slice(0, -'.fixture'.length)))
   }
   const git = Bun.spawn(['git', 'init', '--quiet'], { cwd: root })
   if (await git.exited !== 0) throw new Error('Could not initialize fixture')
-  return { root, temporary, scanner }
+  return { root, temporary, scanner, artifact }
 }
 
 test.concurrent('Python keeps function ownership, nested projects and exact source positions without executing code', async () => {
@@ -67,6 +71,27 @@ test.concurrent('Python excludes ignored files, environments and tests while kee
     expect(watches('nested/pyproject.toml')).toBe(true)
     expect(watches('.venv/bad.py')).toBe(false)
     expect(watches('tests/bad.py')).toBe(false)
+  } finally { await rm(temporary, { recursive: true, force: true }) }
+})
+
+test.concurrent('lint finds identical and near-duplicate Python functions but never callbacks or initialization code', async () => {
+  const { root, temporary, artifact } = await fixture('python-duplicated-logic')
+  try {
+    await cp(path.join(fixtures, 'empty-project'), root, { recursive: true })
+    await addScanner(root, artifact)
+    const lint = Bun.spawn([process.execPath, cli, 'lint'], { cwd: root, stdout: 'pipe', stderr: 'pipe' })
+    const [code, out, error] = await Promise.all([lint.exited, new Response(lint.stdout).text(), new Response(lint.stderr).text()])
+    expect(code, error).toBe(1)
+    // Each finding starts on an unindented line; similar copies are marked as not identical.
+    const findings = out.trim().split(/\n(?=\S)/).map(finding => ({
+      at: [...finding.matchAll(/\S+\.py:\d+/g)].map(match => match[0]).sort(),
+      identical: !finding.includes('not identical'),
+    }))
+    // The renamed readiness copy matches exactly; the identical lambdas and initialization loops are absent.
+    expect(findings).toEqual([
+      { at: ['invoice.py:1', 'quote.py:1'], identical: false },
+      { at: ['readiness.py:1', 'scheduling.py:1'], identical: true },
+    ])
   } finally { await rm(temporary, { recursive: true, force: true }) }
 })
 

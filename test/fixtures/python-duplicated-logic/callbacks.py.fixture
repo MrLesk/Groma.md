@@ -1,0 +1,12 @@
+orders.subscribe({"next": lambda order: alerts.warn("large order", order.id) if order.total > 100 else None})
+refunds.subscribe({"next": lambda refund: alerts.warn("large order", refund.id) if refund.total > 100 else None})
+
+for order in orders.pending:
+    if order.total > 100:
+        alerts.warn("large order", order.id)
+
+
+class Replay:
+    for order in orders.pending:
+        if order.total > 100:
+            alerts.warn("large order", order.id)

@@ -47,6 +47,130 @@ def source_roots(files):
     return list(projects.values()), memberships
 
 
+NODE_TOKENS = {ast.Add: "+", ast.Sub: "-", ast.Mult: "*", ast.MatMult: "@", ast.Div: "/", ast.Mod: "%",
+               ast.Pow: "**", ast.LShift: "<<", ast.RShift: ">>", ast.BitOr: "|", ast.BitXor: "^",
+               ast.BitAnd: "&", ast.FloorDiv: "//", ast.And: "and", ast.Or: "or", ast.Not: "not",
+               ast.Invert: "~", ast.UAdd: "+", ast.USub: "-", ast.Eq: "==", ast.NotEq: "!=", ast.Lt: "<",
+               ast.LtE: "<=", ast.Gt: ">", ast.GtE: ">=", ast.Is: "is", ast.IsNot: "is not", ast.In: "in",
+               ast.NotIn: "not in", ast.Return: "return", ast.If: "if", ast.IfExp: "if", ast.For: "for",
+               ast.AsyncFor: "for", ast.comprehension: "for", ast.While: "while", ast.Raise: "raise",
+               ast.Try: "try", ast.TryStar: "try", ast.ExceptHandler: "except", ast.With: "with",
+               ast.AsyncWith: "with", ast.Await: "await", ast.Yield: "yield", ast.YieldFrom: "yield",
+               ast.Assign: "=", ast.AugAssign: "=", ast.AnnAssign: "=", ast.NamedExpr: ":=", ast.Delete: "del",
+               ast.Assert: "assert", ast.Break: "break", ast.Continue: "continue", ast.Call: "call",
+               ast.Starred: "*"}
+SCOPES = (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda, ast.ClassDef)
+
+
+def statements(scope):
+    """Code that runs in a scope; a docstring is documentation, like a comment."""
+    if isinstance(scope, ast.Lambda):
+        return [scope.body]
+    return scope.body[1:] if ast.get_docstring(scope, clean=False) is not None else scope.body
+
+
+def parameters(scope):
+    if isinstance(scope, ast.ClassDef):
+        return []
+    args = scope.args
+    return [item.arg for item in [*args.posonlyargs, *args.args, args.vararg, *args.kwonlyargs, args.kwarg]
+            if item is not None]
+
+
+def children(node):
+    for field, value in ast.iter_fields(node):
+        if field == "annotation":
+            continue
+        for item in value if isinstance(value, list) else [value]:
+            if isinstance(item, ast.AST):
+                yield item
+
+
+def local_names(scope):
+    """Names a scope binds: parameters and every binding outside nested scopes.
+
+    A function does not bind names it declares `global` or `nonlocal`. Known simplifications: comprehension
+    variables share the function's scope, and names bound in a class body are visible to methods nested in it.
+    """
+    names = set(parameters(scope))
+    declared = set()
+    pending = list(statements(scope))
+    while pending:
+        node = pending.pop()
+        if isinstance(node, (ast.Global, ast.Nonlocal)):
+            declared.update(node.names)
+        elif isinstance(node, ast.Name) and not isinstance(node.ctx, ast.Load):
+            names.add(node.id)
+        elif isinstance(node, ast.alias):
+            names.add((node.asname or node.name).split(".")[0])
+        else:
+            # Definitions, except handlers and match captures bind a string name or rest.
+            names.update(item for item in (getattr(node, "name", None), getattr(node, "rest", None))
+                         if isinstance(item, str))
+        if not isinstance(node, SCOPES):
+            pending.extend(children(node))
+    return names - declared
+
+
+def node_token(node):
+    """The token a node adds before its children: an attribute or keyword name, an operator or a keyword."""
+    if isinstance(node, ast.Attribute):
+        return f".{node.attr}"
+    if isinstance(node, ast.keyword):
+        return "**" if node.arg is None else f"k.{node.arg}"
+    return NODE_TOKENS.get(type(node))
+
+
+class BodyTokens:
+    """Binding-normalized tokens of one operation body: local names become slots in order of appearance."""
+
+    def __init__(self):
+        self.tokens = []
+        self.bindings = []
+        self.count = 0
+
+    def slot(self, identifier):
+        for names, slots in reversed(self.bindings):
+            if identifier in names:
+                if identifier not in slots:
+                    slots[identifier] = self.count
+                    self.count += 1
+                return f"${slots[identifier]}"
+        return identifier
+
+    def enter(self, node):
+        # Only parameters and statements belong to a body; decorators, defaults and annotations do not.
+        self.bindings.append((local_names(node), {}))
+        for name in parameters(node):
+            self.slot(name)
+        for statement in statements(node):
+            self.walk(statement)
+        self.bindings.pop()
+
+    def walk(self, node):
+        if isinstance(node, SCOPES):
+            self.tokens.append("class" if isinstance(node, ast.ClassDef) else "fn")
+            self.enter(node)
+            return
+        if isinstance(node, ast.Name):
+            self.tokens.append(self.slot(node.id))
+            return
+        if isinstance(node, ast.Constant):
+            self.tokens.append(repr(node.value))
+            return
+        token = node_token(node)
+        if token is not None:
+            self.tokens.append(token)
+        for child in children(node):
+            self.walk(child)
+
+
+def body_tokens(function):
+    body = BodyTokens()
+    body.enter(function)
+    return body.tokens
+
+
 class Evidence(ast.NodeVisitor):
     def __init__(self, file, source):
         self.file = file
@@ -87,8 +211,10 @@ class Evidence(ast.NodeVisitor):
 
     def visit_FunctionDef(self, node):
         identity, name = self.declaration(node, "function")
+        # Every def is a named operation; lambdas and module or class code never become operations.
         self.operations.append({"id": identity, "file": self.file, "name": name,
-                                "position": self.position(node)})
+                                "position": self.position(node), "startLine": node.lineno,
+                                "endLine": node.end_lineno, "tokens": body_tokens(node)})
         # Decorators, annotations and defaults execute outside this function body.
         self.body(node, identity)
 
