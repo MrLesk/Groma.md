@@ -74,3 +74,25 @@ Run `dotnet test plugins/scanners/csharp/dotnet/test/Groma.CSharpScanner.Tests.c
 for Roslyn tests. Fixtures are scanned without restore. The packaged test
 removes language tools from PATH; see
 [fresh-checkout validation](../fresh-checkout-validation.md).
+
+## Compared operations
+
+`groma lint` and scan findings compare C# operations under the
+[shared rule](../../architecture-findings.md#compared-operations). The scanner
+attaches a source range and body tokens to every implemented:
+
+- method, constructor, finalizer and operator;
+- property, indexer and event accessor, including an expression-bodied getter;
+- local function, including one declared among top-level statements.
+
+Other lambdas and anonymous methods, such as those passed as arguments, are
+anonymous callbacks. Top-level statements and field and property initializers
+are not compared.
+
+These named operations are not compared:
+
+- lambdas and anonymous methods assigned to a variable, field or property, or
+  written in an object initializer.
+
+Parameter and local names become slots. Their declared types remain tokens, so
+copies that differ only in those types are not identical.
