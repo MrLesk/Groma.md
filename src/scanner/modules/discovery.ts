@@ -138,13 +138,37 @@ export async function discoverScanners(
   }
 }
 
+interface FindingGroup {
+  finding: TechnologyFinding
+  fileCount: number
+}
+
+/** Source-file findings collapse into one group per technology and declaration; each project declaration keeps its own. */
+function findingGroups(findings: readonly TechnologyFinding[]): FindingGroup[] {
+  const groups = new Map<string | TechnologyFinding, FindingGroup>()
+  for (const finding of findings) {
+    const key = finding.sourceFiles ? `${finding.technology}\0${finding.declaration}` : finding
+    const group = groups.get(key)
+    if (group === undefined) groups.set(key, { finding, fileCount: 1 })
+    else group.fileCount += 1
+  }
+  return [...groups.values()]
+}
+
+function findingLine({ finding, fileCount }: FindingGroup): string {
+  const version = finding.version ?? 'version unresolved'
+  if (finding.sourceFiles) {
+    const evidence = fileCount === 1 ? finding.file : `${fileCount} files; first ${finding.file}`
+    return `${finding.technology}\t${version}\t${finding.declaration}: ${evidence}`
+  }
+  const clue = finding.kind === 'framework' ? 'framework declaration, runtime use unverified' : 'project declaration'
+  const resolved = finding.resolvedVersion === undefined ? ''
+    : `; installed ${finding.resolvedVersion.version} at ${finding.resolvedVersion.file}`
+  return `${finding.technology}\t${version}\t${finding.file} (${finding.declaration}; ${clue}${resolved})`
+}
+
 export function formatDiscovery(discovery: ScannerDiscovery): string {
-  const lines = discovery.findings.map(finding => {
-    const clue = finding.kind === 'framework' ? 'framework declaration, runtime use unverified' : 'project declaration'
-    const resolved = finding.resolvedVersion === undefined ? ''
-      : `; installed ${finding.resolvedVersion.version} at ${finding.resolvedVersion.file}`
-    return `${finding.technology}\t${finding.version ?? 'version unresolved'}\t${finding.file} (${finding.declaration}; ${clue}${resolved})`
-  })
+  const lines = findingGroups(discovery.findings).map(findingLine)
   for (const recommendation of discovery.recommendations) {
     lines.push(`${recommendation.id}\t${recommendation.status}\t${recommendation.installSource ?? recommendation.package}\t${recommendation.reason}`)
   }
