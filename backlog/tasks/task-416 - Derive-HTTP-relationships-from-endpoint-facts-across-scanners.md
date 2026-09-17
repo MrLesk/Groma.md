@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@claude'
 created_date: '2026-09-16 19:38'
-updated_date: '2026-09-17 18:49'
+updated_date: '2026-09-17 22:43'
 labels: []
 dependencies: []
 references:
@@ -113,4 +113,6 @@ Full-context complexity review applied (behavior identical apart from the fact s
 3. docs/scanners/evidence.md gained a producer checklist: six numbered decisions with one canonical example each (prefixes in a path, whether a construct is an endpoint, dynamic versus unknown, the local helper, the base, and which operation a file-location route names). Every scanner page answers the same six in that order.
 4. docs/relationship-inference.md step 4 now states that exactness is compared first, so a request to /api/talks prefers another file's exact /api/:rest+ over a /talks that needs /api removed.
 Verification: focused tests 38 of 38; isolated bun run check exited 0 (Bun 434 passed, 25 skipped, 0 failed; Node 16 passed).
+
+Follow-up: core compares literal path segments without regard to case, including the dropped-prefix comparison, because frameworks such as ASP.NET route case-insensitively and generate paths like /api/Talks from a controller name. A row keeps the endpoint's own spelling. Two endpoints differing only in case either share a file or already fall under the one-file abstention. Tests added for a case-differing match, a dropped prefix before a case-differing segment, and two files differing only in case (no row). Recorded in docs/relationship-inference.md and the evidence.md checklist. Isolated bun run check exited 0 (Bun 439 passed, 25 skipped, 0 failed; Node 16 passed).
 <!-- SECTION:NOTES:END -->

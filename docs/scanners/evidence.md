@@ -206,7 +206,7 @@ can produce a wrong row; that is an accepted limit.
 
 The path ends before the query and fragment, which are ignored even when they
 are computed. Literal text uses URL path characters; percent-encode anything
-else. Core compares the text exactly.
+else. Core compares literal text without regard to case.
 
 A computed value that fills one whole segment is dynamic; other computed text is
 unknown, which covers a partly known segment and an unknown remainder. Literals
@@ -234,7 +234,9 @@ this order, with its ecosystem's constructs:
    declares: a class-level or controller prefix, a mounted group's prefix, and a
    router's own path. A Spring `@RequestMapping("/api")` class with
    `@GetMapping("/talks")` reports `/api/talks`. When a group's prefix is not
-   literal, report nothing for its routes.
+   literal, report nothing for its routes. Report the spelling the source uses,
+   including a name a template generates such as `/api/Talks`; core compares
+   literal text without regard to case.
 2. **Whether the construct is an endpoint.** Only a handler that answers HTTP
    requests is. A client-side router route, middleware, an interceptor, a proxy
    rule, and a security matcher such as `/api/**` are not. A declarative client
