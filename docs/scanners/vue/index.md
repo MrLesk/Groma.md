@@ -87,6 +87,28 @@ owns that interpretation. No new architecture metadata is added.
 See [fresh-checkout validation](../fresh-checkout-validation.md) for the pinned project and executed release
 checks. This prototype package name does not imply public publication.
 
+## Source outline
+
+The scanner outlines every script it owns in a component's Code with the
+TypeScript rules of the [source outline contract](../creating-a-plugin.md#source-outline):
+top-level functions and types (classes, interfaces, enums), including namespace
+contents, and each type's constructors and methods. Every declaration has its
+line and visibility, and `entry` marks the names the Code links give. Templates
+and stylesheets have no outline.
+
+A single-file component is read with the Vue single-file component parser: the
+`<script>` and `<script setup>` blocks are outlined in source order, each in the
+dialect its `lang` attribute names, and every declaration reports the line it
+occupies in the `.vue` file. A `<script setup>` block exports nothing, because
+its top-level bindings are the component's own API for its template, so its
+top-level declarations are private; members keep their TypeScript visibility.
+The package's own TypeScript parses each block alone, without `tsconfig.json`,
+dependencies or compilation.
+
+Core outlines each file once. For a script that the TypeScript scanner also
+owns, the scanner with the lowest id among the file's Code links outlines it,
+there TypeScript, with the symbols of all those links.
+
 ## Nested projects
 
 Run Groma from the repository root. The scanner finds package declarations in

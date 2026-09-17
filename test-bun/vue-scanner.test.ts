@@ -2,9 +2,10 @@ import { expect, test } from 'bun:test'
 import { cp, mkdtemp, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import type { ScannerPlugin } from '@groma/scanner'
+import type { ScannerPlugin, SourceReference } from '@groma/scanner'
 import { buildPackage } from '../plugins/scanners/vue/build.ts'
 import { scanTypeScriptSource } from '../plugins/scanners/typescript/src/scan.ts'
+import { readCodeStructure as readReferenceOutline } from '../plugins/scanners/typescript/src/structure.ts'
 import { loadArchitecture } from '../src/architecture-reader.ts'
 import { buildArchitectureModel } from '../src/architecture-model.ts'
 import { loadAnnotatedArchitecture, reconcileScanObservations } from '../src/core.ts'
@@ -13,6 +14,7 @@ import { addRelation } from '../src/relation.ts'
 import { inferRelationships } from '../src/relationship-inference.ts'
 import { createScannerSession } from '../src/scanner/session.ts'
 import type { AnnotatedArchitectureModel } from '../src/types.ts'
+import { readCodeStructure } from '../src/viewers/source/structure.ts'
 
 async function setup() {
   const temporary = await mkdtemp(path.join(os.tmpdir(), 'groma-vue-test-'))
@@ -24,6 +26,16 @@ async function setup() {
   await rename(path.join(root, 'logic.ts.fixture'), path.join(root, 'logic.ts'))
   const child = Bun.spawn(['git', 'init', '--quiet'], { cwd: root, stdout: 'ignore', stderr: 'pipe' })
   expect(await child.exited, await new Response(child.stderr).text()).toBe(0)
+  await buildPackage(artifact)
+  const scanner: ScannerPlugin = (await import(path.join(artifact, 'dist/index.js'))).default
+  return { temporary, root, artifact, scanner }
+}
+
+async function outlineSetup() {
+  const temporary = await mkdtemp(path.join(os.tmpdir(), 'groma-vue-outline-'))
+  const root = path.join(temporary, 'project')
+  const artifact = path.join(temporary, 'scanner')
+  await cp(path.resolve(import.meta.dir, '../test/fixtures/vue-outline'), root, { recursive: true })
   await buildPackage(artifact)
   const scanner: ScannerPlugin = (await import(path.join(artifact, 'dist/index.js'))).default
   return { temporary, root, artifact, scanner }
@@ -136,4 +148,55 @@ test.concurrent('the live Vue session refreshes after external script, template,
       expect(owner(await loadAnnotatedArchitecture(root), file).id).toBe(id)
     }
   } finally { await session.close(); await rm(temporary, { recursive: true, force: true }) }
+})
+
+test.concurrent('the built Vue package outlines single-file component scripts at their file lines', async () => {
+  const { temporary, root, scanner } = await outlineSetup()
+  try {
+    const files = await scanner.readCodeStructure!(root, [{ file: 'Profile.vue', symbols: ['Members'] }])
+    const summary = files.map(file => [file.file, file.declarations.map(declaration => [
+      declaration.kind, declaration.name, declaration.line, declaration.visibility, declaration.entry,
+      declaration.kind === 'type' ? declaration.members.map(member => [member.name, member.line, member.visibility]) : [],
+    ])])
+
+    // The script setup block exports nothing, so save is private; every line is the line of the .vue file.
+    expect(summary).toEqual([['Profile.vue', [
+      ['function', 'initials', 2, 'private', false, []],
+      ['type', 'Members', 6, 'public', true, [['constructor', 7, 'public'], ['initials', 9, 'public'], ['first', 13, 'protected']]],
+      ['function', 'save', 25, 'private', false, []],
+    ]]])
+  } finally { await rm(temporary, { recursive: true, force: true }) }
+})
+
+test.concurrent('the built Vue package and the TypeScript scanner outline a script alike', async () => {
+  const { temporary, root, scanner } = await outlineSetup()
+  try {
+    const sources: [string, SourceReference][] = [
+      [root, { file: 'greeting.ts', symbols: ['greeting'] }],
+      [path.resolve(import.meta.dir, '../test/fixtures/typescript-outline'), { file: 'outline.ts', symbols: ['listed'] }],
+    ]
+    for (const [sourceRoot, reference] of sources) {
+      const outline = await scanner.readCodeStructure!(sourceRoot, [reference])
+      expect(outline).toHaveLength(1)
+      expect(outline).toEqual(await readReferenceOutline(sourceRoot, [reference]))
+    }
+  } finally { await rm(temporary, { recursive: true, force: true }) }
+})
+
+test.concurrent('a script Vue and TypeScript both own shows one outline', async () => {
+  const { temporary, root, artifact, scanner } = await outlineSetup()
+  try {
+    await writeFile(path.join(root, 'groma/scanners.json'), JSON.stringify({ scanners: [
+      { id: 'typescript', source: path.resolve(import.meta.dir, '../plugins/scanners/typescript') },
+      { id: 'vue', source: artifact },
+    ] }))
+    const world = await loadAnnotatedArchitecture(root)
+    const component = world.elements.find(element => element.kind === 'component')!
+    const files = await readCodeStructure(root, world, null, component.representationId) ?? []
+
+    // TypeScript outlines the shared script, and only the Vue link names greeting.
+    expect(files.map(file => file.file)).toEqual(['Profile.vue', 'greeting.ts'])
+    expect(files[1]).toEqual((await scanner.readCodeStructure!(root, [{ file: 'greeting.ts', symbols: ['greeting'] }]))[0])
+    expect(files[1]?.declarations.find(declaration => declaration.name === 'greeting')?.entry).toBe(true)
+  } finally { await rm(temporary, { recursive: true, force: true }) }
 })

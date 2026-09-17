@@ -3,6 +3,7 @@ import { VueEvidence } from './evidence.ts'
 import path from 'node:path'
 import { frameworkProjects } from '../../projects.ts'
 import { combineObservations } from '../../observations.ts'
+import { readVueOutline } from './outline.ts'
 import { relative, vueProject } from './project.ts'
 
 export async function scanVue(root: string): Promise<ScanObservation | undefined> {
@@ -40,6 +41,7 @@ async function scanVueProject(projectRoot: string, root: string): Promise<ScanOb
 export default {
   id: 'vue',
   watch: { include: ['**/*.vue', '**/*.ts', '**/*.js', '**/*.html', '**/*.css', '**/*.scss', '**/*.sass', '**/*.less', '**/*.styl', '**/tsconfig*.json', '**/package.json'], exclude: [] },
+  readCodeStructure: readVueOutline,
   checkReadiness: async root => {
     const projects = await frameworkProjects(root, 'vue', ['.vue'])
     for (const project of projects) vueProject(project, root)
