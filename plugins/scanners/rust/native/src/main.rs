@@ -1,4 +1,5 @@
 mod scan;
+mod tokens;
 
 use std::io::Read;
 

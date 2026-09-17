@@ -76,7 +76,7 @@ Build the local package, then run the opt-in native suite:
 
 ```sh
 bun plugins/scanners/rust/build.ts
-GROMA_TEST_RUST="$PWD/plugins/scanners/rust/dist/bin/groma-rust-scanner" \
+GROMA_TEST_RUST="$PWD/plugins/scanners/rust/dist/bin/$(node -p '`${process.platform}-${process.arch}`')/groma-rust-scanner" \
   bun test --timeout 60000 test-bun/rust-scanner.test.ts
 cargo clippy --locked --manifest-path plugins/scanners/rust/native/Cargo.toml -- -D warnings
 ```
@@ -84,14 +84,19 @@ cargo clippy --locked --manifest-path plugins/scanners/rust/native/Cargo.toml --
 The suite covers canonical aliases, inherent calls, uncertain trait/function
 pointer dispatch, deferred closure bodies, distinct chained calls at one source
 offset, the wrong-provider witness, shared-source identity, deterministic
-output, curated ownership across repeat scans, and failed
-scan preservation. Each test owns its temporary fixture and runs concurrently.
-Native tests are opt-in because a general repository checkout need not contain
-a built Rust worker or project toolchain. The historical focused run passed 6 tests
-and 33 assertions. The complete repository check passed 110 Node tests and
+output, curated ownership across repeat scans, failed scan preservation, and
+`groma lint` duplicate and near-duplicate findings. Each test owns its
+temporary fixture and runs concurrently. Native tests are opt-in because a
+general repository checkout need not contain a built Rust worker or project
+toolchain.
+
+The 9 September focused run, before the lint case existed, passed 6 tests and
+33 assertions. The complete repository check passed 110 Node tests and
 396 Bun tests with 858 assertions, no failures, and no skipped Bun tests; the
 native Rust and Go suites were enabled. Native Clippy with warnings denied,
-targeted Biome, and TypeScript checks also passed.
+targeted Biome, and TypeScript checks also passed. On 17 September 2026, with
+the lint case, the focused run of `test-bun/rust-scanner.test.ts` passed
+5 tests and 28 assertions.
 
 The historical smoke run used `npm pack` and extracted that actual artifact before
 loading it into compiled Groma. It verified `scanner check`, a successful

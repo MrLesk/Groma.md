@@ -34,8 +34,8 @@ loader does not evaluate custom target configurations or build-generated flags.
 The scanner emits module source files, functions, exact UTF-16 positions and
 calls. Locally resolvable re-exports and inherent methods retain their source
 targets. Executable wrappers remain separate operations. Trait dispatch,
-function-pointer and callback value flow, closure and async-block bodies,
-macro-expanded call bodies and generated sources are not extracted.
+function-pointer and callback value flow, calls in closure and async-block
+bodies, macro-expanded call bodies and generated sources are not extracted.
 
 A physical file shared by multiple module contexts appears once, with no guessed
 declarations or targets and a `rust-unsupported-compilation-contexts` diagnostic.
@@ -51,3 +51,29 @@ do not automatically become architecture relationships.
 The [rust-analyzer project JSON format](https://rust-analyzer.github.io/book/non_cargo_based_projects.html)
 provides the source graph interface. See
 [fresh-checkout validation](../fresh-checkout-validation.md) for exercised flows.
+
+## Compared operations
+
+`groma lint` and scan findings compare Rust operations under the
+[shared rule](../../architecture-findings.md#compared-operations). The scanner
+attaches a source range and body tokens to every function with a body:
+
+- free functions, including `fn` items nested in another function body;
+- methods and associated functions in `impl` blocks;
+- trait methods with a default body.
+
+Closures and async blocks are anonymous callbacks; their tokens belong to the
+function that contains them. These functions are not compared:
+
+- functions produced by macros;
+- functions under inactive `cfg` conditions, such as `#[cfg(test)]`;
+- functions in a file with several compilation contexts.
+
+Macro arguments are raw token trees. A name inside them takes the slot of the
+latest local binding with that name. Names inside format strings, such as
+`format!("{count}")`, stay text.
+
+The standard library is not loaded, so rust-analyzer cannot tell an unresolved
+name in a pattern from a new binding. An identifier pattern that starts with an
+uppercase letter, such as `None` or a glob-imported `Less`, stays text,
+because Rust names enum variants and constants that way.
