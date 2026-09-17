@@ -40,7 +40,7 @@ stay separate: `groma agent-instructions [guide]` always prints plain Markdown.
 - [Viewers](viewers/index.md)
 - [Web viewer and live work](viewers/web/index.md)
 - [Architecture Markdown contract](component-markdown.md)
-- [Agent instructions for curating a scan](agent-instructions/index.md)
+- [Agent guides](agent-instructions/index.md)
 
 ## Change and accept
 

@@ -11,7 +11,7 @@ import { writes } from './authoring.ts'
 import type { StructuralResult } from './curate.ts'
 import { isGroupAddress } from './naming.ts'
 import type { AddInput, RemoveInput } from './authoring.ts'
-import { agentInstructionGuide } from './agent-instructions.ts'
+import { agentGuideNames, readAgentGuide } from './agent-instructions.ts'
 import { ensureInitialized, runInitCommand } from './init-command.ts'
 import { humanInstructionGuide } from './instructions.ts'
 import { registerLintCommand } from './lint-command.ts'
@@ -303,7 +303,7 @@ program
   .option('--parent <id>', 'parent element id')
   .option('--technology <text>', 'implementation technology')
   .option('--draft <draft-id>', 'the draft record this ghost belongs to')
-  .addHelpText('after', '\nCuration examples: groma agent-instructions curation')
+  .addHelpText('after', '\nAgent guides: groma agent-instructions')
   .action(async (kind: string, name: string, target: string | undefined, options) => {
     try {
       const id = await writes.draft(process.cwd(), {
@@ -364,7 +364,7 @@ program
   .option('--steps <markdown>', 'flow Steps table: From | To | Action, with Markdown endpoint links')
   .option('--description <text>', 'optional short summary, or how the source uses the target')
   .option('--technology <text>', 'technology of an external, or the interaction mechanism of a relation')
-  .addHelpText('after', '\nCuration examples: groma agent-instructions curation')
+  .addHelpText('after', '\nAgent guides: groma agent-instructions')
   .action(async (thing: string, name: string, ids: string[], options) => {
     try {
       const id = await writes.add(process.cwd(), {
@@ -413,7 +413,7 @@ program
   .option('--ungroup', 'remove this component from its group')
   .option('--parent <id>', 'move an empty scanned component to this container')
   .option('--combine <ids...>', 'combine empty siblings; container children move to the survivor')
-  .addHelpText('after', '\nCuration examples: groma agent-instructions curation')
+  .addHelpText('after', '\nAgent guides: groma agent-instructions')
   .action(async (id: string, ids: string[], options) => {
     try {
       const { id: target, relation } = addressed(id, ids)
@@ -483,16 +483,16 @@ program
 
 program
   .command('agent-instructions')
-  .description('Print a shipped agent instruction guide')
-  .argument('[guide]', 'curation')
+  .description('Print the agent guide index, or one named guide')
+  .argument('[guide]', agentGuideNames.join(', '))
   .action(async (guide: string | undefined) => {
-    const selected = await agentInstructionGuide(guide)
+    const selected = await readAgentGuide(guide)
     if (selected === undefined) {
       console.error(`unknown agent guide: ${guide}`)
       process.exitCode = 1
       return
     }
-    console.log(selected.content)
+    console.log(selected)
   })
 
 await program.parseAsync()

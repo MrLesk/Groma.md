@@ -9,27 +9,21 @@ const managedBlockPattern = /<!-- groma:start -->[\s\S]*?<!-- groma:end -->/g
 const managedAgentInstructions = `<!-- groma:start -->
 ## Groma
 
-This project uses Groma. Run \`groma agent-instructions\` when scanning or curating architecture, or changing scanner or architecture-model behavior. Do not edit Groma-owned architecture files directly.
-
-When the \`backlog\` CLI is available and you work on a Backlog task, immediately record each changed repository-relative file through \`backlog task edit <task-id> --modified-file <path>\`, preserving the full existing modified-file list. Add exact affected \`groma.id\` values to that task's references through \`backlog task edit <task-id> --add-ref <groma-id>\`. After a structural command, record all reported paths and replace absorbed references with surviving IDs through the Backlog CLI before another change. Run \`groma agent-instructions\` for the full procedure.
+This project uses Groma. Before you scan, inspect, or curate architecture, or change files for a Backlog task, run \`groma agent-instructions\` and read the guide it names for that job. Do not edit Groma-owned architecture files directly.
 <!-- groma:end -->`
 
-export const agentInstructionGuides = [
-  {
-    id: 'curation',
-    source: compiledAsset('docs', 'agent-instructions', 'index.md')
-      ?? new URL('../docs/agent-instructions/index.md', import.meta.url),
-  },
-] as const
+/** Guides printed by name; running the command without a name prints the index that routes to them. */
+export const agentGuideNames = ['inspect', 'structure', 'describe', 'relationships', 'backlog'] as const
 
-export async function agentInstructionGuide(id: string | undefined) {
-  const selected = id ?? 'curation'
-  const guide = agentInstructionGuides.find(candidate => candidate.id === selected)
-  if (guide === undefined) return undefined
-  return {
-    id: guide.id,
-    content: (await readFile(guide.source, 'utf8')).trimEnd(),
-  }
+function guideSource(name: string): string | URL {
+  return compiledAsset('docs', 'agent-instructions', `${name}.md`)
+    ?? new URL(`../docs/agent-instructions/${name}.md`, import.meta.url)
+}
+
+/** The index when no guide is named, a named guide's Markdown, or undefined for an unknown name. */
+export async function readAgentGuide(name: string | undefined): Promise<string | undefined> {
+  if (name !== undefined && !(agentGuideNames as readonly string[]).includes(name)) return undefined
+  return (await readFile(guideSource(name ?? 'index'), 'utf8')).trimEnd()
 }
 
 function missingFile(error: unknown): boolean {

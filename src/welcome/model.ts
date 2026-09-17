@@ -101,11 +101,10 @@ export const advancedCommands = [
   },
   {
     command: 'groma agent-instructions [guide]',
-    description: 'guide: curation',
+    description: 'guide named in the index',
     content: [
-      'Prints a Markdown guide for coding agents.',
-      'Pass [guide] to choose one.',
-      'The default guide is curation.',
+      'Prints the index of Markdown guides for coding agents.',
+      'Pass [guide] to print one guide the index names.',
       'This command always stays plain text.',
     ].join('\n'),
   },
