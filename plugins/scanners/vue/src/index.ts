@@ -3,6 +3,7 @@ import { VueEvidence } from './evidence.ts'
 import path from 'node:path'
 import { frameworkProjects } from '../../projects.ts'
 import { combineObservations } from '../../observations.ts'
+import { addComparedOperations } from './operations.ts'
 import { readVueOutline } from './outline.ts'
 import { relative, vueProject } from './project.ts'
 
@@ -24,6 +25,7 @@ async function scanVueProject(projectRoot: string, root: string): Promise<ScanOb
     const sfc = project.sfc(source.fileName)
     if (sfc) evidence.inspect(source.fileName, sfc)
   }
+  addComparedOperations(project, evidence.operations)
   const files = project.files.map(source => ({ file: relative(root, source.fileName), symbols: [] }))
   const sourceUnits = project.files.flatMap(source => project.sourceUnit(source.fileName) ?? [])
   for (const file of new Set(sourceUnits.flatMap(unit => unit.files))) {
