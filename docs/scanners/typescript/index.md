@@ -30,3 +30,25 @@ selected. Jelly was compared offline and is not required to run this scanner.
 
 Changes to nested TypeScript configurations or package manifests refresh the
 scanner through the same watch runtime as source edits.
+
+## Compared operations
+
+`groma lint` and scan findings compare TypeScript operations under the
+[shared rule](../../architecture-findings.md#compared-operations). The scanner
+attaches a source range and body tokens to:
+
+- function declarations and named function expressions;
+- methods with an identifier name and a body, in classes and object literals;
+- arrow functions and function expressions assigned to a `const`, `let`, or
+  `var` variable, or to a property of an object literal.
+
+Functions written as properties or method shorthand of an object literal passed
+directly to a function call, `new`, or a decorator are anonymous callbacks, as
+are other unnamed arrow functions and function expressions.
+
+These named operations are not compared yet:
+
+- constructors and `get` or `set` accessors;
+- methods whose name is not an identifier, such as `#run()`, `'run'()`, or
+  `[key]()`;
+- functions assigned to class fields, such as `onClick = () => {}`.

@@ -43,8 +43,8 @@ none are available; they do not claim that every project source was compared.
 source → scanner tokens (temporary) → core comparison → findings on the annotated world
 ```
 
-Scanners report named operations, source ranges, and binding-normalized tokens.
-They do not decide that duplication is a problem. Core fingerprints those
+Scanners report source ranges and binding-normalized tokens for named
+operations. They do not decide that duplication is a problem. Core fingerprints those
 tokens, groups exact clones and near-duplicates, maps each instance to its
 component owner, and lists concrete token differences. Fingerprints stay in
 memory for the current process. A scan never writes suspected duplication as
@@ -59,7 +59,31 @@ logic**. Near-matches add the tokens that are not shared. Neither claim
 proves that the operations implement one business rule or that they should
 share an implementation.
 
-Anonymous callbacks, module initializers, and very small bodies are omitted.
+## Compared operations
+
+A scanner attaches a source range and body tokens only to a **named
+operation**: a function, method, or constructor declared with its own name,
+or a function assigned to a named variable or written as a property value of
+an object literal, except in the argument case below. Core compares only
+operations that carry tokens. A scanner attaches none to:
+
+- module and other initializer code;
+- **anonymous callbacks**: lambdas, closures, and function expressions without
+  a declared name, and functions written as property values of an object, map,
+  or dictionary literal passed directly as an argument of a function call, a
+  constructor call, or a decorator, such as `subscribe({ next: ..., error: ... })`.
+
+The [TypeScript scanner](scanners/typescript/index.md#compared-operations)
+lists which TypeScript operations it compares.
+
+Core applies both minimum body sizes, counted in binding-normalized tokens, so
+scanners report every named body regardless of its size:
+
+- **Identical copies** need at least 8 tokens in each body.
+- **Near-duplicates** need at least 24 tokens in each body. In smaller bodies,
+  one or two changed tokens, such as `up` and `down`, still pass the similarity
+  ratio, so mirrored operations would be reported as shared logic.
+
 Test files already excluded by the TypeScript scanner are not compared.
 
 ## OKF and C4

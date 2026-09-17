@@ -37,7 +37,9 @@ test.concurrent('lint checks fresh scanner evidence and reports failures without
     const before = await snapshot(path.join(root, 'groma'))
     const duplicates = await command(root, 'lint')
     expect(duplicates.code, duplicates.error).toBe(1)
-    for (const file of ['ready-a', 'ready-b', 'ready-c']) expect(duplicates.out).toMatch(new RegExp(`src/${file}\\.ts:\\d+`))
+    // Small identical copies are reported; a small near-duplicate is not.
+    for (const file of ['ready-a', 'ready-b']) expect(duplicates.out).toMatch(new RegExp(`src/${file}\\.ts:\\d+`))
+    expect(duplicates.out).not.toContain('src/ready-c.ts')
     expect(await snapshot(path.join(root, 'groma'))).toEqual(before)
 
     await rm(path.join(root, 'src/ready-b.ts'))
