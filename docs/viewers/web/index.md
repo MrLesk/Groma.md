@@ -625,7 +625,10 @@ Both menus fade and move gently from their trigger when opening and closing;
 reduced motion switches them immediately.
 **Plugins** opens the Settings dialog without an expand action. It groups
 installed selections, team selections missing locally, and recommendations.
-Full errors appear once in row details. Add an npm/Git/local source, install a
+Each scanner card shows its name, version, origin, and installation status.
+Collapsed details contain the package source, full errors, and detected paths.
+Filter paths within a card; long lists scroll inside the details section.
+Add an npm/Git/local source, install a
 recommendation, restore a missing package, remove a project selection, retry
 scanning or update a version explicitly. Successful changes update source
 subscriptions without reopening the viewer. Removal keeps saved architecture.

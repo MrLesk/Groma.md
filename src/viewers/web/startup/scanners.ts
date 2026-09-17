@@ -2,14 +2,7 @@ import type { ScannerRecommendation, TechnologyFinding } from '../../../scanner/
 import type { ScannerDiscovery } from '../../../scanner/modules/discovery.ts'
 import { installableScanners } from '../../../scanner/modules/setup.ts'
 import { escaped } from '../atoms/escape.ts'
-
-const names: Record<string, string> = {
-  typescript: 'TypeScript', javascript: 'JavaScript', csharp: 'C#', php: 'PHP',
-}
-
-function scannerName(id: string): string {
-  return names[id] ?? id.charAt(0).toUpperCase() + id.slice(1)
-}
+import { scannerName } from '../scanners/name.ts'
 
 function evidenceRow(finding: TechnologyFinding): string {
   const version = finding.resolvedVersion?.version ?? finding.version
