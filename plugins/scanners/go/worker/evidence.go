@@ -54,22 +54,35 @@ func functionKey(pkg *packages.Package, pos token.Pos) string {
 	return fmt.Sprintf("%s:%d", position.Filename, position.Offset)
 }
 
-func (e *evidence) addBody(s *source, declaration ast.Node, executable ast.Node, name string) string {
+// addBody records an operation. Only operations with tokens are compared as possible duplicate logic.
+func (e *evidence) addBody(s *source, declaration ast.Node, executable ast.Node, name string, tokens []string) string {
 	id := s.id(declaration.Pos())
-	e.result.Operations = append(e.result.Operations, operation{id, s.file, name, s.offset(declaration.Pos())})
+	fact := operation{ID: id, File: s.file, Name: name, Position: s.offset(declaration.Pos())}
+	if tokens != nil {
+		fact.StartLine = s.pkg.Fset.Position(declaration.Pos()).Line
+		fact.EndLine = s.pkg.Fset.Position(declaration.End()).Line
+		fact.Tokens = tokens
+	}
+	e.result.Operations = append(e.result.Operations, fact)
 	e.bodies = append(e.bodies, body{s, executable, id})
 	return id
 }
 
 func (e *evidence) declarations(s *source) {
+	info := s.pkg.TypesInfo
 	for _, decl := range s.syntax.Decls {
 		switch node := decl.(type) {
 		case *ast.FuncDecl:
 			if node.Body == nil {
 				continue
 			}
-			function := s.pkg.TypesInfo.Defs[node.Name].(*types.Func)
-			id := e.addBody(s, node, node.Body, function.FullName())
+			function := info.Defs[node.Name].(*types.Func)
+			var tokens []string
+			// Package init functions are initializer code.
+			if node.Recv != nil || node.Name.Name != "init" {
+				tokens = operationTokens(info, node)
+			}
+			id := e.addBody(s, node, node.Body, function.FullName(), tokens)
 			e.operationByFunctionPosition[functionKey(s.pkg, function.Pos())] = id
 		case *ast.GenDecl:
 			if node.Tok == token.VAR {
@@ -77,13 +90,85 @@ func (e *evidence) declarations(s *source) {
 			}
 		}
 	}
+	names := namedLiterals(s.syntax)
 	ast.Inspect(s.syntax, func(node ast.Node) bool {
 		literal, ok := node.(*ast.FuncLit)
-		if ok {
-			e.literals[literal] = e.addBody(s, literal, literal.Body, "closure")
+		if !ok {
+			return true
+		}
+		name, named := names[literal]
+		if named {
+			e.literals[literal] = e.addBody(s, literal, literal.Body, name, operationTokens(info, literal))
+		} else {
+			e.literals[literal] = e.addBody(s, literal, literal.Body, "closure", nil)
 		}
 		return true
 	})
+}
+
+// namedLiterals names the function literals that are named operations: those assigned to a named
+// variable, and keyed elements of a composite literal that is not written directly as a call argument.
+func namedLiterals(file *ast.File) map[*ast.FuncLit]string {
+	names := map[*ast.FuncLit]string{}
+	argumentLiterals := map[*ast.CompositeLit]bool{}
+	ast.Inspect(file, func(node ast.Node) bool {
+		switch node := node.(type) {
+		case *ast.CallExpr:
+			// A call is visited before its arguments.
+			for _, argument := range node.Args {
+				if composite := argumentLiteral(argument); composite != nil {
+					argumentLiterals[composite] = true
+				}
+			}
+		case *ast.ValueSpec:
+			for index, value := range node.Values {
+				if index < len(node.Names) {
+					nameLiteral(names, node.Names[index], value)
+				}
+			}
+		case *ast.AssignStmt:
+			for index, value := range node.Rhs {
+				if index < len(node.Lhs) {
+					nameLiteral(names, node.Lhs[index], value)
+				}
+			}
+		case *ast.CompositeLit:
+			if !argumentLiterals[node] {
+				nameElements(names, node)
+			}
+		}
+		return true
+	})
+	return names
+}
+
+// argumentLiteral returns a composite literal passed as the argument itself, alone or behind &.
+func argumentLiteral(argument ast.Expr) *ast.CompositeLit {
+	if address, ok := argument.(*ast.UnaryExpr); ok && address.Op == token.AND {
+		argument = address.X
+	}
+	composite, _ := argument.(*ast.CompositeLit)
+	return composite
+}
+
+func nameLiteral(names map[*ast.FuncLit]string, target ast.Expr, value ast.Expr) {
+	literal, isLiteral := value.(*ast.FuncLit)
+	variable, isVariable := target.(*ast.Ident)
+	if isLiteral && isVariable && variable.Name != "_" {
+		names[literal] = variable.Name
+	}
+}
+
+func nameElements(names map[*ast.FuncLit]string, composite *ast.CompositeLit) {
+	for _, element := range composite.Elts {
+		field, isField := element.(*ast.KeyValueExpr)
+		if !isField {
+			continue
+		}
+		if literal, isLiteral := field.Value.(*ast.FuncLit); isLiteral {
+			names[literal] = types.ExprString(field.Key)
+		}
+	}
 }
 
 // A package variable initializer can call code outside any declared function.
@@ -101,7 +186,7 @@ func (e *evidence) initializers(s *source, decl *ast.GenDecl) {
 			return true
 		})
 		if hasCall {
-			e.addBody(s, value, value, "initializer")
+			e.addBody(s, value, value, "initializer", nil)
 		}
 	}
 }

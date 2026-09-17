@@ -47,3 +47,25 @@ GROMA_TEST_GO="$(command -v go)" bun test test-bun/go-scanner.test.ts
 
 The separate packaged test removes language tools from PATH. See
 [fresh-checkout validation](../fresh-checkout-validation.md).
+
+## Compared operations
+
+`groma lint` and scan findings compare Go operations under the
+[shared rule](../../architecture-findings.md#compared-operations). The scanner
+attaches a source range and body tokens to:
+
+- functions and methods with a body, except `init` functions;
+- function literals assigned to a named variable with `var`, `:=`, or `=`;
+- function literals written as any keyed element of a composite literal, such
+  as a struct field or map value.
+
+These function literals take the variable name, or the key's source text, as
+their operation name. Keyed function literals in a composite literal passed
+directly to a call, alone or behind `&`, are anonymous callbacks, as are all
+other function literals. Package variable initializers and `init` functions
+are initializer code. Go has no constructors.
+
+Receivers and named results are bound with the parameters in declaration
+order. Every other name declared inside the operation becomes a slot in order
+of first use. Package-level names, including the operation's own name, stay as
+written.
