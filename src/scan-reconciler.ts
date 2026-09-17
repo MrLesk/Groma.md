@@ -332,11 +332,10 @@ function associateCandidates(
   world: World,
 ) {
   const { units, diagnostics } = sourceUnitGroups(observations, world.byCodeFile)
-  for (const unit of units) {
+  for (const { unit, owner } of units) {
     const members = unit.files.map(file => candidates.get(file))
     const primary = candidates.get(unit.primary)
     if (!primary || members.some(member => member === undefined)) continue
-    const owner = unit.files.flatMap(file => world.byCodeFile.get(file) ?? [])[0]
     const references = members.flatMap(member => member!.references)
     for (const file of unit.files) candidates.delete(file)
     candidates.set(unit.primary, { ...primary, references, owner })
