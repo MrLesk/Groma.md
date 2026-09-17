@@ -3,9 +3,9 @@ import { configuredScannerModules, type FoundScannerModule } from '../../scanner
 import { importScanner } from '../../scanner/registry.ts'
 import { withGitRevision } from '../../history/revisions.ts'
 import type { ArchitectureGraph } from '../../types.ts'
-export type { CodeDeclaration, CodeFile } from '@groma/scanner'
+export type { CodeDeclaration, CodeFile, CodeSymbol, CodeVisibility } from '@groma/scanner'
 
-/** Ask configured scanners for the selected component's source outline. */
+/** Ask each configured scanner that owns part of the component's Code for its outline, in Code order. */
 export async function readCodeStructure(
   repositoryRoot: string,
   world: ArchitectureGraph,
@@ -29,11 +29,12 @@ export async function readCodeStructure(
     }
     return { scanner, references: [...references.values()], settings: module.settings }
   }))
+  const order = [...new Set(element.code.map(reference => reference.file))]
   const load = async (root: string): Promise<CodeFile[]> => {
     const files = await Promise.all(providers.map(({ scanner, references, settings }) => (
       scanner.readCodeStructure?.(root, references, settings) ?? []
     )))
-    return files.flat()
+    return files.flat().sort((left, right) => order.indexOf(left.file) - order.indexOf(right.file))
   }
   return revision === null ? load(repositoryRoot) : withGitRevision(repositoryRoot, revision, load)
 }

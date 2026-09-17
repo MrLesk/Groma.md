@@ -38,7 +38,7 @@ function technologyRows(theme: ViewerTheme, element: AnnotatedElement, width: nu
   return [[], heading(theme, 'Technology', width), [plain(theme, technology.join(' · '))]]
 }
 
-/** A function with its parentheses, a class, or a member: its line and what it is. */
+/** A function with its parentheses, a type, or a member: its line and what it is. */
 function declarationRows(
   theme: ViewerTheme,
   file: string,
@@ -48,17 +48,17 @@ function declarationRows(
   findings: readonly ArchitectureFinding[],
   indent = '',
 ): PaneLines {
-  const facts = [declaration.entry ? 'entry' : undefined, declaration.scope, declaration.kind === 'class' ? 'class' : undefined, `line ${declaration.line}`].filter(fact => fact !== undefined).join(' · ')
+  const facts = [declaration.entry ? 'entry' : undefined, declaration.visibility, declaration.kind === 'type' ? 'type' : undefined, `line ${declaration.line}`].filter(fact => fact !== undefined).join(' · ')
   const name = declaration.kind === 'function' ? `${declaration.name}()` : declaration.name
   const key = `${file}:${declaration.line}`
   const lines: Line[] = [styleRow(theme, [plain(theme, `${indent}${name}`), dim(theme, ` · ${facts}`)], width, false, key === actionCursor)]
   let cursor = key === actionCursor ? 0 : undefined
   lines.push(...copyLines(theme, copiesOf(findings, file, declaration.name, declaration.line), width, `${indent}  `))
-  if (declaration.kind === 'class') {
+  if (declaration.kind === 'type') {
     for (const member of declaration.members) {
       const memberKey = `${file}:${member.line}`
       if (memberKey === actionCursor) cursor = lines.length
-      lines.push(styleRow(theme, [plain(theme, `${indent}  ${member.name}()`), dim(theme, ` · ${member.scope} · line ${member.line}`)], width, false, memberKey === actionCursor))
+      lines.push(styleRow(theme, [plain(theme, `${indent}  ${member.name}()`), dim(theme, ` · ${member.visibility} · line ${member.line}`)], width, false, memberKey === actionCursor))
       lines.push(...copyLines(theme, copiesOf(findings, file, member.name, member.line), width, `${indent}    `))
     }
   }

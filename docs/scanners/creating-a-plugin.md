@@ -77,12 +77,11 @@ used for initial component naming and placement. For example, a framework can
 associate a class with its explicitly declared template and styles. Do not use
 filename similarity, ordinary imports, or folder proximity to propose a unit.
 
-Omit the field when the scanner does not extract associations. Return an empty
-array when extraction ran and found none. Overlapping declarations remain
-separate claims for core to review, never a request for a transitive merge.
-Project relocation updates every member path. Shared exclusions remove excluded
-members, and remove a whole unit when its primary is excluded. Scanners must
-watch their companion file types as well as the declaring source.
+Overlapping declarations remain separate claims for core to review, never a
+request for a transitive merge. Project relocation updates every member path.
+Shared exclusions remove excluded members, and remove a whole unit when its
+primary is excluded. Scanners must watch their companion file types as well as
+the declaring source.
 
 A plugin may also implement `async checkReadiness(repositoryRoot, settings): Promise<void>`.
 Return when supported source inputs and the scanner's own tools are available.
@@ -96,13 +95,79 @@ or unsupported project configuration may fail with a concrete diagnostic.
 Reuse input validation in `scan`; callers need not run readiness first.
 Plugins without a hook remain scannable.
 
-A scanner may supply `readCodeStructure(repositoryRoot, references, settings)`
-for the source outline in the viewers and static export. Each reference contains
-`file` and the `symbols` named by the component's Code links. Return `CodeFile[]`
-from the shared contract: functions and classes with source lines, visibility,
-and entry markers. The TypeScript scanner supplies this existing outline.
-The viewer uses only configured providers; a plugin without the hook contributes
-no outline. These results are read-only source details, not architecture records.
+## Source outline
+
+Every official scanner implements
+`readCodeStructure(repositoryRoot, references, settings)`. It supplies the
+declarations listed under a component's Code in the web and terminal maps and
+the static export. The hook is optional for other plugins; a plugin without it
+contributes no outline. The outline is read-only source detail, never an
+architecture record. Build it by parsing source only: no project dependencies,
+builds, or project tools.
+
+Each reference holds one owned `file` and the `symbols` its Code links name.
+Return one `CodeFile` (`{ file, declarations }`) per reference; omit files
+without declarations. Groma orders the files by the component's Code. List
+`declarations` in source order.
+
+Top-level means directly in the file or inside a namespace, package, or module
+block, such as a C# `namespace`, a braced PHP namespace, a TypeScript
+`namespace` or `module`, or a Rust inline `mod`. A declaration inside another
+type or function is nested and is not listed.
+
+- `kind: 'function'` is a top-level function, or a function literal (arrow
+  function, function expression, or lambda) assigned directly to a top-level
+  name. Wrapped values such as `memo(...)`, `forwardRef(...)`, or
+  `partial(...)` are not listed.
+- `kind: 'type'` is a top-level class, interface, struct, record, enum, trait,
+  or protocol, or a Go defined type such as `type X struct{}` or `type X int`.
+  Type aliases are never listed: TypeScript `type X = ...`, Go `type X = Y`,
+  and Rust `type X = ...`.
+- A type's `members` are the functions declared in its body or in an `impl`
+  block for it: static or instance, with or without a body, including
+  interface method signatures, abstract methods, and constructors. Each
+  declaration is listed separately, including overloads and TypeScript overload
+  signatures. Constructors use their source name, such as `constructor`,
+  `__init__`, `__construct`, or the type name.
+- Fields, properties, property signatures (even with a function type),
+  accessors, and nested types are not listed.
+- Methods declared apart from their type, as Go receiver methods and Rust
+  `impl` blocks are, belong to one entry for that type per file. When the file
+  declares the type, the entry is that declaration with the type's visibility.
+  Otherwise the entry has the line of the file's first such method or block,
+  and its visibility comes from the type name in Go and is `public` in every
+  other language.
+
+Every declaration and member has `name`, `line` (the 1-based line of the
+name), `visibility`, and `entry`. `entry` is true when the reference's
+`symbols` contain the name. `visibility` states who may use the name:
+
+| Value | Who may use it |
+| --- | --- |
+| `public` | Any code that can depend on the declaring file, module, or package |
+| `protected` | The declaring type and its subtypes |
+| `internal` | Code in the same package, module, assembly, or crate |
+| `private` | A member: the declaring type. A top-level declaration: the declaring file or module |
+
+Apply the language's own rule, including its default when the source has no
+modifier. A member keeps its own access; the enclosing type does not narrow
+it. Any access that also admits subtypes is `protected`. Languages map as
+follows; a dash means the language has no such case.
+
+| Language | `public` | `protected` | `internal` | `private` |
+| --- | --- | --- | --- | --- |
+| TypeScript, Angular, React | Top-level `export`, or a name in the file's own `export { name }` list, `export default name`, or `export = name`; members without `private` or `protected` | `protected` | - | Other top-level declarations; `private` and `#name` members |
+| Vue | As TypeScript in `<script>` | As TypeScript | - | As TypeScript; every `<script setup>` top-level declaration |
+| Java | `public`; interface members without a modifier | `protected` | No modifier elsewhere (package access) | `private` |
+| C# | `public`; interface members without a modifier | `protected`, `protected internal`, `private protected` | `internal`; top-level types without a modifier | `private`; other members without a modifier |
+| Go | Names starting with an upper-case letter | - | Other names | - |
+| Rust | `pub`. Methods in a trait definition take the trait's visibility, and methods in a trait `impl` are `public` | - | `pub(crate)`, `pub(super)`, `pub(in path)` | No `pub`, `pub(self)` |
+| Python | Other names, including `__init__` and other `__dunder__` names | Members named `_name` | - | Members named `__name`; top-level names starting with `_` |
+| PHP | `public`; members without a modifier; top-level functions and types | `protected` | - | `private` |
+
+TypeScript re-exports from other files (`export { name } from '...'`) do not
+change any declaration's visibility. Python visibility comes from names alone;
+`__all__` does not change it.
 
 ## Discovery metadata
 

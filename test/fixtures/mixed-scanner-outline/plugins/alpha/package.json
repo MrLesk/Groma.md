@@ -1,0 +1,6 @@
+{
+  "name": "alpha",
+  "version": "1.0.0",
+  "type": "module",
+  "groma": { "scanner": { "id": "alpha", "entry": "./index.js" } }
+}
