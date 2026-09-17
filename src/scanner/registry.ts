@@ -76,6 +76,7 @@ function excludeEvidence(
   const roots = observation.roots.filter(root => rootIds.has(root.id))
   const operations = observation.operations?.filter(operation => paths.has(operation.file))
   const operationIds = new Set(operations?.map(operation => operation.id))
+  const httpFacts = <Fact extends { operation: string }>(facts: Fact[]) => facts.filter(fact => operationIds.has(fact.operation))
   // Drop the whole claim: pruning targets could turn an uncertain call into a certain one.
   const invocations = observation.invocations?.filter(invocation => {
     return operationIds.has(invocation.source)
@@ -89,6 +90,10 @@ function excludeEvidence(
         .map(unit => ({ ...unit, files: unit.files.filter(file => paths.has(file)) })),
     }),
     ...(operations === undefined ? {} : { operations, invocations }),
+    // An excluded file is outside the architecture, so its endpoints stop competing for a request.
+    // A remaining match can become unique; that follows the exclusion, unlike a pruned call target.
+    ...(observation.httpEndpoints && { httpEndpoints: httpFacts(observation.httpEndpoints) }),
+    ...(observation.httpRequests && { httpRequests: httpFacts(observation.httpRequests) }),
   }
 }
 

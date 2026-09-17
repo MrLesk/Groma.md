@@ -1,5 +1,11 @@
+import { httpEvidence, type ScanHttpEndpoint, type ScanHttpRequest } from './http.ts'
+import { array, object, string } from './values.ts'
+
 export { parseScannerDiscovery } from './discovery.ts'
 export type { ScannerDiscoveryMetadata, ScannerDiscoveryRule } from './discovery.ts'
+export type {
+  HttpEndpointSegment, HttpRequestBase, HttpRequestSegment, ScanHttpEndpoint, ScanHttpRequest,
+} from './http.ts'
 
 export interface ScannerIdentity {
   id: string
@@ -76,6 +82,9 @@ export interface ScanObservation {
   /** Omitted when a scanner does not extract operation evidence. Never persisted as a graph. */
   operations?: ScanOperation[]
   invocations?: ScanInvocation[]
+  /** Omitted when a scanner does not extract HTTP evidence. Facts link to declared operations. */
+  httpEndpoints?: ScanHttpEndpoint[]
+  httpRequests?: ScanHttpRequest[]
   diagnostics: ScanDiagnostic[]
 }
 
@@ -180,6 +189,7 @@ export function createScanObservation(input: ObservationInput): ScanObservation 
     files,
     ...sourceUnits(input.sourceUnits, filePaths),
     ...operationEvidence(input, filePaths),
+    ...httpEvidence(input.httpEndpoints, input.httpRequests, input.operations && new Set(input.operations.map(operation => operation.id))),
     diagnostics: [...new Map(input.diagnostics.map(diagnostic => [
       diagnosticKey(diagnostic),
       diagnostic,
@@ -237,23 +247,6 @@ function diagnosticLocation(value: { file?: unknown; line?: unknown }): Pick<Sca
   }
 }
 
-function object(value: unknown, label: string): Record<string, unknown> {
-  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
-    throw new Error(`${label} must be an object`)
-  }
-  return value as Record<string, unknown>
-}
-
-function string(value: unknown, label: string): string {
-  if (typeof value !== 'string') throw new Error(`${label} must be a string`)
-  return value
-}
-
-function array(value: unknown, label: string): unknown[] {
-  if (!Array.isArray(value)) throw new Error(`${label} must be an array`)
-  return value
-}
-
 export function parseScanObservation(source: string): ScanObservation {
   const value = object(JSON.parse(source), 'observation')
   if (value.schemaVersion !== 1) throw new Error('unsupported scanner schema')
@@ -267,6 +260,9 @@ export function parseScanObservation(source: string): ScanObservation {
       engineVersion: string(scanner.engineVersion, 'scanner.engineVersion'),
     },
     ...parseOperations(value),
+    // createScanObservation validates both fact lists.
+    httpEndpoints: value.httpEndpoints as ScanHttpEndpoint[] | undefined,
+    httpRequests: value.httpRequests as ScanHttpRequest[] | undefined,
     ...sourceUnits(value.sourceUnits, new Set(array(value.files, 'files').map(entry => string(object(entry, 'file').file, 'file.file')))),
     roots: array(value.roots, 'roots').map(entry => {
       const root = object(entry, 'root')

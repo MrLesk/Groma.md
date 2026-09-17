@@ -258,8 +258,10 @@ A scan replaces only rows whose contributing scanners all supplied observations.
 Rows depending on absent scanners, their endpoint Code references, and authored
 sections remain intact. An empty observation set writes nothing. A failed scanner does not start reconciliation. Raw
 source dependencies never become rows merely because their endpoints resolve.
-The current [inference rule](relationship-inference.md#current-inference-rule)
-covers concretely supplied named callbacks; other interactions may be authored.
+The current [inference rules](relationship-inference.md#current-inference-rule)
+cover concretely supplied named callbacks and certain HTTP requests; other
+interactions may be authored. One derived row states every selected
+interaction for its file pair, with statements separated by semicolons.
 
 A current authored row takes precedence over a derived row for the same exact
 file pair. Editing a derived row takes authorship of its text. Subsequent scans

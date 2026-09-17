@@ -3,6 +3,7 @@ import path from 'node:path'
 import type { ScanDiagnostic, ScanInvocation, ScanObservation, ScanOperation } from '@groma/scanner'
 
 import { GromaFileSystem } from './groma-filesystem.ts'
+import { httpRelationships } from './http-relationships.ts'
 import { readDocument, withRelationship, writeDocument } from './markdown-emitter.ts'
 import { RELATIONSHIPS_TYPE } from './okf-profile.ts'
 import { composeInvocations, type InvocationEvidence } from './scan-evidence.ts'
@@ -29,7 +30,26 @@ export function inferRelationships(
   observations: readonly ScanObservation[],
   owners: ReadonlyMap<string, string>,
 ): RelationshipConnection[] {
-  return relationshipsFromClaims(composeInvocations(observations).claims, owners)
+  return derivedRows(composeInvocations(observations).claims, observations, owners)
+}
+
+/** Each ordered file pair has one derived row that states every supported interaction and its scanners. */
+function derivedRows(
+  claims: readonly InvocationEvidence[],
+  observations: readonly ScanObservation[],
+  owners: ReadonlyMap<string, string>,
+): RelationshipConnection[] {
+  const rows = new Map<string, RelationshipConnection>()
+  for (const row of [...relationshipsFromClaims(claims, owners), ...httpRelationships(observations, owners)]) {
+    const key = `${row.source}\0${row.target}`
+    const existing = rows.get(key)
+    rows.set(key, existing === undefined ? row : {
+      ...existing,
+      description: `${existing.description}; ${row.description}`,
+      technology: [...new Set([...existing.technology.split(', '), ...row.technology.split(', ')])].sort().join(', '),
+    })
+  }
+  return [...rows.values()].sort((left, right) => `${left.source}\0${left.target}`.localeCompare(`${right.source}\0${right.target}`))
 }
 
 function relationshipsFromClaims(
@@ -54,7 +74,7 @@ function relationshipsFromClaims(
     description: `Invokes supplied callback${members.size === 1 ? '' : 's'}: ${[...members].sort().join(', ')}`,
     technology: [...scanners].sort().join(', '),
     status: 'stable', authored: false,
-  })).sort((left, right) => `${left.source}\0${left.target}`.localeCompare(`${right.source}\0${right.target}`))
+  }))
 }
 
 /** Replace only the core-owned section; keep authored sections and other Markdown intact. */
@@ -80,7 +100,7 @@ export async function refreshDerivedRelationships(
   const before = present ? await readDocument(repositoryRoot, filename) : `---\ntype: ${RELATIONSHIPS_TYPE}\ntitle: Architecture relationships\n---\n`
   let source = withoutDerivedSection(before)
   const protectedPairs = new Set(retained.map(row => `${row.source}\0${row.target}`))
-  const refreshed = relationshipsFromClaims(claims, owners).filter(row => !protectedPairs.has(`${row.source}\0${row.target}`))
+  const refreshed = derivedRows(claims, observations, owners).filter(row => !protectedPairs.has(`${row.source}\0${row.target}`))
   for (const connection of [...retained, ...refreshed]) {
     source = withRelationship(source, {
       ...connection,

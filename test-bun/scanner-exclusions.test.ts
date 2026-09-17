@@ -59,6 +59,11 @@ function observation(language: string): ScanObservation {
       { source: paths[0]!, targets: [paths[3]!], unresolved: false, line: 4, binding: { file: paths[2]!, line: 1 } },
       { source: paths[0]!, targets: [paths[3]!], unresolved: false, line: 5 },
     ],
+    httpEndpoints: [{ operation: paths[1]!, method: 'GET', path: [{ kind: 'literal', value: 'hidden' }] }],
+    httpRequests: [
+      { operation: paths[1]!, method: 'GET', base: 'none', path: [] },
+      { operation: paths[0]!, method: 'GET', base: 'none', path: [{ kind: 'literal', value: 'hidden' }] },
+    ],
     diagnostics: [],
   })
 }
@@ -94,6 +99,10 @@ test.concurrent('every scanner filters complete evidence without narrowing invoc
       expect(scan.invocations).toEqual(scan.scanner.id === 'typescript' ? [] : [
         { source: 'src/kept.ts', targets: ['src/other.ts'], unresolved: false, line: 5 },
       ])
+      if (scan.scanner.id !== 'typescript') {
+        expect(scan.httpEndpoints).toEqual([])
+        expect(scan.httpRequests?.map(request => request.operation)).toEqual(['src/kept.ts'])
+      }
     }
     await reconcileScanObservations(root, scans)
     const model = await loadAnnotatedArchitecture(root)

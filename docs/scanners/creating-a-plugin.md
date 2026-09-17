@@ -306,6 +306,7 @@ same JSON, which their module reads with `parseScanObservation`.
   and declarations in `symbols`. A file may belong to more than one root.
 - `operations` and `invocations`: optional executable work and call evidence.
   Operations may include source ranges and binding-normalized body tokens.
+- `httpEndpoints` and `httpRequests`: optional HTTP facts linked to operations.
 - `diagnostics`: messages with `severity`, `code`, and `message`; optional `file`
   and positive, one-based `line` locate the issue without embedding its location
   in the message. A project-level message can omit both.
@@ -417,15 +418,53 @@ same file. Core keeps one owner for that source path.
 
 All paths are repository-relative. Root parents and file memberships must resolve
 inside the observation, and the root hierarchy must have no cycles. Invocation
-endpoints must identify declared operations. Duplicate primary keys and malformed
-JSON are rejected before core reconciliation. Diagnostic locations are preserved
-when ordering and removing duplicate messages.
+endpoints and HTTP facts must identify declared operations. Shared exclusions
+drop HTTP facts whose operation is in an excluded file. Duplicate primary keys
+and malformed JSON are rejected before core reconciliation. Diagnostic
+locations are preserved when ordering and removing duplicate messages.
 
 Language-specific project rules stay inside the scanner. The scanner registry
 loads every enabled module through the same contract, and core applies the rules
 in the [scanner overview](index.md). A scanner must include a fixture proving
 deterministic output, atomic files, root membership, supported operation
 evidence, and failure without partial output.
+
+### HTTP endpoints and requests
+
+A scanner without HTTP extraction omits `httpEndpoints` and `httpRequests`.
+Each fact names the declared `operation` that handles or sends it;
+[scanner evidence](evidence.md#http-endpoints-and-requests) defines the meaning.
+
+- An endpoint has `method`, an uppercase method or `*`, and `path`. Its
+  segments are `{ kind: 'literal', value }`, `{ kind: 'parameter', name }`,
+  and `{ kind: 'catch-all', name }`. Parameters and catch-alls accept
+  `optional: true`; a catch-all is the last segment.
+- A request has `base` (`none`, `configured`, or `unresolved`), `path`, and
+  `method` only when it is known. Its segments are
+  `{ kind: 'literal', value }`, `{ kind: 'dynamic' }` for one whole computed
+  segment, and `{ kind: 'unknown' }` for text that is not fully proven.
+
+Literal values and names are nonempty RFC 3986 path characters, so a segment
+never contains `/`, a query, or a fragment. Omit empty segments. For a route
+`/api/talks/{id}` handled by `show`, and `fetch(API_URL + '/talks/' + id)` in
+`load`, where `API_URL` comes from configuration:
+
+```json
+{
+  "httpEndpoints": [{
+    "operation": "show", "method": "GET",
+    "path": [
+      { "kind": "literal", "value": "api" },
+      { "kind": "literal", "value": "talks" },
+      { "kind": "parameter", "name": "id" }
+    ]
+  }],
+  "httpRequests": [{
+    "operation": "load", "method": "GET", "base": "configured",
+    "path": [{ "kind": "literal", "value": "talks" }, { "kind": "dynamic" }]
+  }]
+}
+```
 
 ## Add a scanner
 
