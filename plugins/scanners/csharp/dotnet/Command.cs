@@ -10,6 +10,11 @@ public static class ScannerCommand
     {
         try
         {
+            if (args is ["--outline", string outline])
+            {
+                await standardOutput.WriteAsync(SourceOutline.Run(outline, cancellationToken));
+                return 0;
+            }
             ScanRequest request = ScanRequest.Parse(args);
             string json = (await new RoslynScanner().ScanAsync(request, cancellationToken)).ToCanonicalJson();
             await standardOutput.WriteAsync(json);

@@ -1,7 +1,7 @@
 import { access } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { parseScanObservation, type ScanObservation, type ScannerSettings } from '@groma/scanner'
+import { parseScanObservation, type CodeFile, type ScanObservation, type ScannerSettings, type SourceReference } from '@groma/scanner'
 import { validateInput, parseCSharpSettings } from './config.ts'
 import { run } from './process.ts'
 
@@ -34,4 +34,14 @@ export async function scanCSharpSource(repositoryRoot: string, settings: Scanner
     '--max-projects', String(config.maxProjects), '--max-files', String(config.maxFiles),
   ], { cwd: path.dirname(input), timeoutSeconds: config.timeoutSeconds })
   return parseScanObservation(stdout)
+}
+
+/** Outlines Code reference files from C# syntax alone, without loading a project. */
+export async function readCSharpOutline(repositoryRoot: string, references: readonly SourceReference[], settings: ScannerSettings = {}): Promise<CodeFile[]> {
+  await requireWorker()
+  const root = path.resolve(repositoryRoot)
+  const { stdout } = await run(workerExecutable, ['--outline', JSON.stringify({ root, references })], {
+    cwd: root, timeoutSeconds: parseCSharpSettings(settings).timeoutSeconds,
+  })
+  return JSON.parse(stdout) as CodeFile[]
 }

@@ -3,7 +3,7 @@ import { csharpInputs } from './config.ts'
 import { combineObservations } from '../../observations.ts'
 import type { ScannerPlugin } from '@groma/scanner'
 
-import { checkCSharpReadiness, scanCSharpSource } from './adapter.ts'
+import { checkCSharpReadiness, readCSharpOutline, scanCSharpSource } from './adapter.ts'
 export { checkCSharpReadiness } from './adapter.ts'
 
 const scanner = {
@@ -20,6 +20,7 @@ const scanner = {
     if (!inputs.length) throw new Error('No C# project or solution was found.')
     for (const input of inputs) await checkCSharpReadiness(root, { ...settings, input })
   },
+  readCodeStructure: readCSharpOutline,
   scan: async (root, settings = {}) => {
     const parts = []
     const covered = new Set<string>()
