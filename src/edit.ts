@@ -32,6 +32,7 @@ export interface EditArchitectureInput extends MeaningChanges {
   ungroup?: boolean
   parent?: string
   combine?: string[]
+  detach?: string[]
   steps?: string
 }
 
@@ -45,6 +46,7 @@ function isStructural(input: EditArchitectureInput): boolean {
     || input.ungroup === true
     || input.parent !== undefined
     || (input.combine?.length ?? 0) > 0
+    || (input.detach?.length ?? 0) > 0
 }
 
 /** The project record: its title, description and overview, merged into the current profile. */
@@ -140,7 +142,7 @@ export async function editArchitecture(
   const source = hasMeaning ? await elementMeaning(repositoryRoot, records, element, input) : undefined
 
   if (isStructural(input)) {
-    return curateElement(repositoryRoot, model, {
+    return curateElement(repositoryRoot, records, model, {
       id: input.id,
       title: input.title,
       technology: input.technology,
@@ -151,6 +153,7 @@ export async function editArchitecture(
       ungroup: input.ungroup,
       parent: optionalText(input.parent),
       combine: input.combine,
+      detach: input.detach,
     })
   }
 

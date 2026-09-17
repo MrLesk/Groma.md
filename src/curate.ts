@@ -1,6 +1,9 @@
-import { parseFrontmatter } from 'comark'
+import { parseFrontmatter, parseMarkdown } from 'comark'
 
 import { architectureElementPath } from './architecture-path.ts'
+import { buildArchitectureModel } from './architecture-model.ts'
+import { resolveFlows } from './flow-model.ts'
+import { requireGromaMapping } from './okf-profile.ts'
 import { GromaFileSystem } from './groma-filesystem.ts'
 import {
   readDocument,
@@ -13,8 +16,10 @@ import {
 import { moveBlocker } from './move.ts'
 import type { MeaningChanges } from './markdown-emitter.ts'
 import type {
+  ArchitectureDocument,
   ArchitectureElement,
   ArchitectureModel,
+  ArchitectureRecords,
   CodeReference,
 } from './types.ts'
 
@@ -24,6 +29,8 @@ export interface CurateInput extends MeaningChanges {
   ungroup?: boolean
   parent?: string
   combine?: string[]
+  /** Source files whose Code references leave the component; the next scan gives them owners. */
+  detach?: string[]
 }
 
 /** Facts from a completed structural write; paths are repository-relative. */
@@ -47,6 +54,7 @@ interface Rewrite {
 interface CurationContext {
   filesystem: GromaFileSystem
   repositoryRoot: string
+  records: ArchitectureRecords
   model: ArchitectureModel
   byId: Map<string, ArchitectureElement>
 }
@@ -164,6 +172,9 @@ function validateCurationInput(input: CurateInput): void {
   if (input.parent !== undefined && (input.combine?.length ?? 0) > 0) {
     throw new Error('--parent and --combine must be separate edits')
   }
+  if ((input.detach?.length ?? 0) > 0 && (input.combine?.length ?? 0) > 0) {
+    throw new Error('--detach and --combine must be separate edits')
+  }
 }
 
 function groupedSource(
@@ -180,6 +191,50 @@ function groupedSource(
     'group',
     input.ungroup === true ? undefined : input.group?.trim(),
   )
+}
+
+function detachedSource(
+  target: ArchitectureElement,
+  source: string,
+  files: string[] | undefined,
+): string {
+  if (files === undefined || files.length === 0) return source
+  const detached = new Set(files)
+  const unowned = [...detached].filter(file => !target.code.some(reference => reference.file === file))
+  if (unowned.length > 0) throw new Error(`"${target.id}" does not own ${unowned.join(', ')}`)
+  return withGromaCode(source, target.code.filter(reference => !detached.has(reference.file)))
+}
+
+/** Flow steps need their relationship: detaching the file behind one would leave the flow unresolvable. */
+async function requireResolvableFlows(
+  context: CurationContext,
+  target: ArchitectureElement,
+  source: string,
+  files: readonly string[],
+): Promise<void> {
+  if (context.records.flows.length === 0) return
+  const tree = await parseMarkdown(source)
+  const rewritten = {
+    sourceFilename: target.sourceFilename,
+    body: parseFrontmatter(source).content,
+    nodes: tree.nodes,
+    frontmatter: tree.frontmatter,
+  } as ArchitectureDocument
+  const model = buildArchitectureModel(context.records.documents
+    .map(document => document.sourceFilename === target.sourceFilename ? rewritten : document))
+  const broken = context.records.flows
+    .filter(flow => {
+      try {
+        resolveFlows([flow], model)
+        return false
+      } catch {
+        return true
+      }
+    })
+    .map(flow => requireGromaMapping(flow.frontmatter, flow.sourceFilename).id)
+  if (broken.length > 0) {
+    throw new Error(`cannot detach ${files.join(', ')}: used by flows ${broken.join(', ')}`)
+  }
 }
 
 function movedTarget(
@@ -284,20 +339,25 @@ async function combineElements(
   }
 }
 
-/** Structural curation of one element: group, move, or fold empty scan records into it; each element keeps its own status. */
+/** Structural curation of one element: group, detach files, move, or fold empty scan records into it; each element keeps its own status. */
 export async function curateElement(
   repositoryRoot: string,
+  records: ArchitectureRecords,
   model: ArchitectureModel,
   input: CurateInput,
 ): Promise<StructuralResult> {
   validateCurationInput(input)
   const byId = new Map(model.elements.map(element => [element.id, element]))
   const filesystem = GromaFileSystem.open(repositoryRoot)
-  const context = { filesystem, repositoryRoot, model, byId }
+  const context = { filesystem, repositoryRoot, records, model, byId }
   const target = requireElement(byId, input.id)
   const originalSource = await readDocument(repositoryRoot, target.sourceFilename)
   const grouped = groupedSource(target, originalSource, input)
-  const moved = movedTarget(context, target, grouped, input.parent)
+  const detached = detachedSource(target, grouped, input.detach)
+  if (input.detach !== undefined && input.detach.length > 0) {
+    await requireResolvableFlows(context, target, detached, input.detach)
+  }
+  const moved = movedTarget(context, target, detached, input.parent)
   const combined = await combineElements(context, target, moved.source, input.combine)
   const targetSource = withMeaning(combined.targetSource, input)
   const rewrites = [...combined.rewrites]
