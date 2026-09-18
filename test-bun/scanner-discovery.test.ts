@@ -67,3 +67,21 @@ test.concurrent('a single source file needs no count, and exact project files ke
       .toEqual(['project.json', 'web/project.json'])
   } finally { await rm(root, { recursive: true, force: true }) }
 })
+
+test.concurrent('a source-file technology counts each file once, whichever rules and scanners match it', async () => {
+  const rule = (files: string[], declaration: string) => ({
+    type: 'file' as const, kind: 'language' as const, technology: 'sourcelang', files, declaration,
+  })
+  const [source] = catalog
+  const overlapping: OfficialScanner[] = [
+    { ...source!, rules: [rule(['**/*.example'], 'Example source files'), rule(['**/*.sample'], 'Example samples')] },
+    { ...source!, id: 'other-source-plugin', package: 'other-source-scanner', rules: [rule(['**/*.example'], 'Example source files')] },
+  ]
+  const root = await repository(2)
+  try {
+    await writeFile(path.join(root, 'page.sample'), 'sample\n')
+    const [line, ...extra] = evidence(formatDiscovery(await discoverScanners(root, {}, overlapping)), 'sourcelang')
+    expect(extra).toEqual([])
+    expect(line).toContain('3 files; first page-0.example')
+  } finally { await rm(root, { recursive: true, force: true }) }
+})
