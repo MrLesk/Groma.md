@@ -107,7 +107,7 @@ Angular packages installed, so a `get` method on any other object is never a
 request. `request(new HttpRequest(...))`, `jsonp`, and a client this scan never
 sees injected report nothing.
 
-The six [producer decisions](../evidence.md#producer-checklist) for this
+The [producer decisions](../evidence.md#producer-checklist) for this
 ecosystem:
 
 1. **Prefixes.** None to add: the scanner reports no endpoint, and a request's
@@ -126,20 +126,25 @@ ecosystem:
    literal initializer that the project never assigns again is literal text. So
    is a property of an object literal such a variable holds: the last property
    with its name, while the literal has no spread, computed key or accessor, and
-   no code in the project assigns or deletes that property or an object above it,
-   hands one of them to other code, or calls a method through them, and no
+   no code in the project assigns or deletes that property or an object above
+   it, hands one of them to other code, or calls a method through them, and no
    module object holding it, such as a namespace import, a re-exported namespace
-   or a dynamic import's result, is used other than to read one export by name. An
-   environment object holding `/api` therefore reports `/api/talks`. A field read through `this`, such as
-   `this.base`, holds the service's own base setting and sets `configured`, as
-   does a value the scanner cannot see, such as a constant imported from a
-   package or declared ambiently. A base that states a host, a parameter, a value
-   a call returns, and any other computed value report a leading unknown segment,
-   and core derives nothing from them. A literal environment base is the value in
-   the source file, which an Angular build's `fileReplacements` can swap for
-   another environment, so the reported path is the development one.
+   or a dynamic import's result, is used other than to read one export by name.
+   An environment object holding `/api` therefore reports `/api/talks`. A field
+   read through `this`, such as `this.base`, holds the service's own base
+   setting and sets `configured`, as does a value the scanner cannot see, such
+   as a constant imported from a package or declared ambiently. A base that
+   states a host, a parameter, a value a call returns, and any other computed
+   value report a leading unknown segment, and core derives nothing from them. A
+   literal environment base is the value in the source file, which an Angular
+   build's `fileReplacements` can swap for another environment, so the reported
+   path is the development one.
 6. **File-location routes.** None: every request names the function that runs
    the call, and a call outside any function reports nothing.
+7. **Constrained segments.** None: the scanner reports no endpoint, so it reads
+   no route pattern.
+8. **Registration order.** None: without endpoints there is no route order to
+   report.
 
 ## Coverage limits
 
