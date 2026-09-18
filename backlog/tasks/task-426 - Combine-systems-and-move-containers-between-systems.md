@@ -5,13 +5,15 @@ status: Done
 assignee:
   - '@claude'
 created_date: '2026-09-16 20:42'
-updated_date: '2026-09-18 14:31'
+updated_date: '2026-09-18 17:46'
 labels: []
 dependencies: []
 references:
   - curate
   - src-cli
   - src-core
+  - write-commands
+  - instructions
 modified_files:
   - src/curate.ts
   - src/core.ts
@@ -20,6 +22,7 @@ modified_files:
   - test-bun/system-curation.test.ts
   - docs/agent-instructions/structure.md
   - docs/product-model.md
+  - src/instructions.ts
 type: feature
 ordinal: 499000
 ---
@@ -58,6 +61,12 @@ Scans create one system for each scanner observation, so a repository with sever
 7. Verify with bun run check in an isolated worktree and the CLI on a scratch repository with two scanned systems.
 
 8. Collapse the shared rules: curate calls requiresEmptyMeaning and requireUnrelated directly, the web move eligibility becomes isMovable in src/core.ts, and src/move.ts is deleted.
+
+Review-fix round (external reviews at cf8e7975):
+9. Fix: a scan finds a stable container that owns no files, directly or through its components, only by its scanned name under its system (src/scan-reconciler.ts), so combining it away, moving it, renaming it, or renaming or combining its system made the next scans recreate it (reproduced: 2 then 1 created after combining two empty projects; the same for a rename, which also covers the TASK-427 finding). Moving a populated container out of a system that keeps such a container also recreated that container under the destination (reproduced). src/curate.ts refuses both before writing; structure.md and product-model.md state the rule; test-bun/system-curation.test.ts covers each refusal with an empty-project observation.
+10. Fix: groma edit --combine help names systems (src/write-commands.ts).
+11. Fix: the web movable flag is false for a component a flow step names, because the move relocates its document and the write refuses it (src/core.ts); the existing flow test asserts it.
+12. Ask the orchestrator, not implemented: the grok-all finding that combine and move could repoint concept-addressed links like a rename instead of refusing them asks for new behavior no acceptance criterion requires, and approving it would replace step 11.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
@@ -68,10 +77,18 @@ Verification: test-bun/system-curation.test.ts (synthetic observations for two p
 
 Cold review applied (no must-fix findings). structuralBlocker is gone: movedTarget calls requiresEmptyMeaning and requireUnrelated, which the combine path already uses, and the web move eligibility is now isMovable in src/core.ts, so src/move.ts was deleted. The parent kind comes from the exported expectedParentKinds instead of a second table, the moved-child relocation moved out of the loop header into movedDescendants, and the wrong-parent message now reads 'has kind <kind>' instead of 'is a actor'. The structure guide states both scopes (empty body on a replaced record and the children a combine absorbs directly; no concept-addressed relationship anywhere under a moved or absorbed record), and the product-model sentence was trimmed and rewrapped. Tests gained a second scan with an element comparison after the container move and a case covering the three new refusals (external destination, external with internal combine, container into a container).
 Re-verification: focused tests pass (4 system-curation, detach, editing, and the node core tests). bun run check in an isolated worktree at 21e9e02c with only TASK-426 changes, including the deletion of src/move.ts, passed: biome and tsc clean apart from existing warnings in other files, 16 node tests and 464 bun tests pass (30 skipped), 0 fail.
+
+Review-fix round: skipped the grok-all finding that combine and move could repoint concept-addressed links like a rename instead of refusing a subtree with an authored concept row. Verified (an authored actor-to-container row blocks both the system combine and the container move, and a current row cannot be removed), but the orchestrator declined it: no acceptance criterion requires lifting the refusal, and AC #1 asks for the same authored-metadata rules as other combines. The web movable fix for flow endpoints stays. The detached-file 'not scanned yet' explanation belongs to TASK-413 in another lane.
+
+Review-fix round (external reviews at cf8e7975): a scan finds a stable container that owns no files only by its scanned name under its system (existingChild in src/scan-reconciler.ts), so combining it away, moving or renaming it, renaming or combining its system, or moving a populated sibling out of its system made the next scans recreate it (reproduced in memory: 2 then 1 created after combining two empty projects). requireScanFindable in src/curate.ts refuses these writes before anything is written; this also covers the TASK-427 empty-container rename. The --combine help names systems. The web movable flag is false for a component a flow step names, whose move the write refuses. Cold review applied: the refusal names what to do instead (combine the other systems into its system, or change the title instead of the ID); the helper is foundOnlyByName and points at existingChild and inferredContainer; the test comments the two refusals the conservative rule adds; structure.md lists the rule among the system refusals; docs/product-model.md Identity no longer says an element keeps one file for its whole life; the human guides in src/instructions.ts describe --id, a container move to another system and system combines.
+Follow-up (not fixed): the scan finds a container through files of its own project (inferredContainer), but the stored architecture does not record which project a file belongs to, so the guard can only count files owned anywhere under the container. A component moved into an empty container, followed by a rename of that container, still passes the guard and the next scan recreates the container (reproduced). The docs state the own-project rule.
+Verification: test-bun/system-curation.test.ts covers six refusals on an empty-project observation and the movable flag of a flow endpoint; both fail without their fix. bun run check in an isolated worktree at d0abfc0e with only these changes passed: biome clean apart from existing diagnostics in other files, tsc clean, 16 node and 519 bun tests pass (34 skipped), 0 fail.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
 groma edit <system> --combine <system...> now moves the absorbed systems' containers, with their components, under the surviving system and removes the absorbed records, and groma edit <container> --parent <system> moves a container with everything stored under it to another system. Both report created, changed and removed paths with the replacements, keep every file's owner, and leave two following scans creating no element. One relocated() helper carries a moved document's subtree, the shared rules (empty body, no authored concept relationship under the moved record) come from the existing combine checks, an external system is refused as a destination or combine partner, and the flow check now guards every structural write. Verified with test-bun/system-curation.test.ts on synthetic two-project observations (combine, container move, refusals, and two scans after each operation), the real CLI on a scratch repository with two scanned projects, and bun run check in an isolated worktree (16 node and 464 bun tests pass).
+
+Review-fix round: a combine, move or rename that would move or remove a scanned container owning no files, or move a container out of the system such a container stays in, is now refused with what to do instead, because the next scan finds that container only by its name and would recreate it; the --combine help names systems, the web movable flag excludes flow endpoints, and the human guides and product model describe renames, container moves and system combines. Verified with new system-curation tests and bun run check in an isolated worktree.
 <!-- SECTION:FINAL_SUMMARY:END -->

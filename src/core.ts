@@ -59,13 +59,17 @@ function connectionCounts(relationships: readonly ArchitectureRelationship[]): M
   }]))
 }
 
-/** The web pane offers a new parent only for an empty component that owns no authored relationship. */
+/**
+ * The web pane offers a new parent only for an empty component that owns no authored relationship and
+ * that no flow step names, because a move relocates the document those links name.
+ */
 function isMovable(
   element: ArchitectureElement,
   authored: readonly ArchitectureRelationship[],
+  flowEndpoints: ReadonlySet<string>,
   body: string,
 ): boolean {
-  if (element.kind !== 'component' || body.trim() !== '') return false
+  if (element.kind !== 'component' || body.trim() !== '' || flowEndpoints.has(element.id)) return false
   return !authored.some(relationship => relationship.connections.some(connection => connection.authored
     && (connection.source === element.id || connection.target === element.id)))
 }
@@ -79,6 +83,8 @@ export function annotateArchitecture(
   const documents = new Map(records.documents.map(document => [document.sourceFilename, document]))
   const authored = model.relationships.filter(relationship =>
     relationship.connections.some(connection => connection.authored))
+  const flows = resolveFlows(records.flows, model)
+  const flowEndpoints = new Set(flows.flatMap(flow => flow.steps.flatMap(step => [step.source, step.target])))
   const elements = model.elements.map<AnnotatedElement>(element => ({
     representationId: element.id,
     id: element.id,
@@ -92,13 +98,13 @@ export function annotateArchitecture(
     ...(element.group === undefined ? {} : { group: element.group }),
     ...(element.technology === undefined ? {} : { technology: element.technology }),
     code: element.code.map(reference => ({ ...reference, ...(counts.get(reference.file) ?? { dependencies: 0, dependents: 0 }) })),
-    movable: isMovable(element, authored, documents.get(element.sourceFilename)!.body),
+    movable: isMovable(element, authored, flowEndpoints, documents.get(element.sourceFilename)!.body),
     origin: originOf(element.status),
     ...(element.draft === undefined ? {} : { draft: element.draft }),
   }))
 
   return {
-    flows: resolveFlows(records.flows, model),
+    flows,
     drafts: records.drafts.map(document => draftRecordOf(document).id).sort(),
     elements: withDirectChildren(elements),
     relationships: model.relationships.map((relationship, index) => {

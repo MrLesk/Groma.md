@@ -22,7 +22,7 @@ source code ──scan──▶ groma|.groma/*.md ──view──▶ maps
 4. Change the architecture through Groma, not by editing its files.
    - groma add — declare a person, an external system, a draft, a relation, or a group; the scanner never sees those.
    - groma draft — a new system, container or component becomes a ghost at the path it will keep.
-   - groma edit — rename, update meaning or technology, tag a part with a draft, group scan evidence, move an empty scanned component, combine empty scan records, detach files from a component so the next scan gives them their own, or change the project record.
+   - groma edit — retitle, rename an id, update meaning or technology, tag a part with a draft, group scan evidence, move an empty scanned component or container, combine empty scan records including systems, detach files from a component so the next scan gives them their own, or change the project record.
    - groma add relation, groma edit relation, groma remove relation — author or reword a file interaction, or remove a draft interaction. Current relationships cannot be removed.
    - groma remove — take away a person, an external, a ghost, a draft nothing belongs to, a draft relation, or a group.
 5. groma accept <id> — accept a ghost only if a scan has matched it. The file stays where it is; only its status changes.
@@ -33,7 +33,7 @@ source code ──scan──▶ groma|.groma/*.md ──view──▶ maps
 - Do not edit files under the selected Groma directory by hand.
 - The architecture id is the kebab-case id in Markdown. Source code is evidence.
 - A scan never accepts a ghost or a draft relationship.
-- Every id is unique: one file per part, for its whole life.
+- Every id is unique, and each part has one file. The file moves only when a move, combine, or id rename changes the part's parent or id.
 
 ${instructionDirectory}`
 
@@ -48,12 +48,13 @@ Say what must be true, not how to build it. Do not specify frameworks, file layo
 - Part an existing draft touches: groma edit <id> --draft <draft-id>
   Same box, still solid; the tag says the draft changes it. An empty --draft value clears the tag.
 - Rename a part or a draft record, id unchanged: groma edit <id> --title <text>
+- Rename the id of a system, container, or component: groma edit <id> --id <new-id>. Its document and the documents under it move, and relationship rows and flow steps that link them follow.
 - Technology of an element: groma edit <id> --technology <text>. Pass an empty value to remove it.
 - Current long overview: groma edit <id> --overview <markdown>. Pass an empty value to clear it.
 - Optional concise description: groma edit <id> --description <text>. Pass an empty value to remove it.
 - Group sibling components: groma add group <name> <ids...>. A group is addressed as <container-id>/<group-kebab>: groma edit group <address> --title <text> renames it, groma remove group <address> [ids...] takes the named members out or dissolves it. One component: groma edit <id> --group <name> or --ungroup.
-- Move an empty scanned component: groma edit <id> --parent <container-id>
-- Combine empty scan records into one responsibility: groma edit <target-id> --combine <source-id...>
+- Move an empty scanned component to another container, or a container with its components to another system: groma edit <id> --parent <container-id|system-id>
+- Combine empty scanned systems, containers, or components into one: groma edit <target-id> --combine <source-id...>
 - Current collaboration: groma add relation <source-file> <target-file> --description <prose> --technology <text>. One authored row per ordered file pair in relationships.md. Actor and external-system declarations may use concept IDs.
 - Planned collaboration: groma draft relation <source-file> <target-file> --description <prose> --technology <text>. Its dashed identity is independent of both endpoints.
 - Accept a planned collaboration: groma accept relation <source-file> <target-file>. Scans never accept relationships.
@@ -63,7 +64,7 @@ Say what must be true, not how to build it. Do not specify frameworks, file layo
 - Project record: groma edit project [--title <text>] [--description <text>] [--overview <markdown>]
 - Remove a person, an external, a ghost, a component without Code references, or a draft no ghost belongs to: groma remove <id>. For scanned components, delete the source files and run their scanner first to clear the Code references. Removal still refuses while flows use the element, other parts relate to it, it contains parts, or ghosts carry the draft's tag.
 
-Containers need a system parent. Components need a container parent. An external system has no containers. Structural edits preserve authored file interactions through current ownership and refuse to remove authored prose or concept-addressed relationships. Scans refresh the Derived relationships section from supported operation evidence and preserve authored sections. Raw dependency graphs are not persisted. Current authored text takes precedence for the same file pair; editing a derived row takes authorship. Scans never verify authored text or accept drafts.
+Containers need a system parent. Components need a container parent. An external system has no containers. Structural edits preserve authored file interactions through current ownership and refuse to remove authored prose or concept-addressed relationships. A scanned container that owns no files keeps its id and system, because scans find it only by its name. Scans refresh the Derived relationships section from supported operation evidence and preserve authored sections. Raw dependency graphs are not persisted. Current authored text takes precedence for the same file pair; editing a derived row takes authorship. Scans never verify authored text or accept drafts.
 
 ${instructionDirectory}`
 

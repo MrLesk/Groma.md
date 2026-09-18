@@ -99,6 +99,14 @@ these operations do not repoint links; a rename does.
 File connections follow their current owners and do not block these operations.
 The survivor may already have authored meaning.
 
+A scan finds a container through the files of its own project that the
+container or its components own, and otherwise only by its scanned name and
+system. A rename, move or combine that would move or remove a scanned container
+owning no files, alone or with its system, is refused, and so is moving another
+container out of the system it stays in, because the next scan would create
+that container again. Combine the other systems into its system instead, and
+change its title instead of its ID.
+
 ## Renaming an ID
 
 A scanned ID comes from a file or project name, so it can stop describing what
@@ -121,7 +129,8 @@ detach. The result prints `replaced: <old-id> -> <new-id>`; record it in the
 Backlog task as `groma agent-instructions backlog` explains.
 
 Scans find elements through the files they own, not through their IDs, so the
-new ID survives every later scan.
+new ID survives every later scan. A scanned container that owns no files keeps
+its ID.
 
 ## Splits and single-file moves
 
@@ -175,8 +184,10 @@ groma edit depot-warehouse --parent shop
 A container carries its components to the new system. A system emptied this way
 stays until you combine it into the surviving system. Both operations refuse a
 container or system with authored meaning under the same rules as component
-moves and combines, refuse an external system as a destination, and refuse a
-change that would leave a flow step unresolvable.
+moves and combines, refuse an external system as a destination, refuse to move
+or remove a scanned container that owns no files, or to move a container out of
+the system such a container stays in, and refuse a change that would leave a
+flow step unresolvable.
 
 ## Skyscrapers
 
