@@ -89,6 +89,52 @@ Core outlines each file once. For a source that the TypeScript scanner also
 owns, the scanner with the lowest id among the file's Code links outlines it,
 here Angular, with the symbols of all those links.
 
+## HTTP endpoints and requests
+
+The scanner reports [HTTP facts](../evidence.md#http-endpoints-and-requests) for
+Angular's `HttpClient`. An Angular application is a client: it serves no endpoint.
+
+| Construct | Reported |
+| --- | --- |
+| `get`, `post`, `put`, `patch`, `delete`, `head`, `options` | Request with that method and the URL the first argument states |
+| `request(method, url)` | Request with that literal method; a computed method leaves the method out |
+
+The receiver must hold the injected client: a constructor parameter property, a
+field, or a local whose declared type is `HttpClient`, or one that
+`inject(HttpClient)` supplies, with `HttpClient` imported from
+`@angular/common/http`. Both names are recognized from source, without the
+Angular packages installed, so a `get` method on any other object is never a
+request. `request(new HttpRequest(...))`, `jsonp`, and a client this scan never
+sees injected report nothing.
+
+The six [producer decisions](../evidence.md#producer-checklist) for this
+ecosystem:
+
+1. **Prefixes.** None to add: the scanner reports no endpoint, and a request's
+   path is the URL its own call states, after the base rule below.
+2. **Endpoints.** None. Angular's router routes navigate inside the browser, and
+   interceptors and guards answer no request; reporting either would claim an
+   answer nothing serves and could hide the file that really serves the path.
+3. **Dynamic or unknown.** `` `/talks/${id}` `` fills one whole segment, so it
+   is dynamic. `` `/talks/${id}-latest` ``, a path built from an unresolved
+   value, and a URL the scanner cannot read at the call are unknown. The query
+   and fragment are dropped, computed or not.
+4. **Local helpers.** Not supported: the URL is read at the client call, so a
+   helper that forwards a path parameter reports unknown text, and its callers
+   report nothing. Author those rows.
+5. **Bases.** A root-relative literal path has no base. A `const`, an
+   object-literal property, and a `readonly` field whose class never assigns
+   `this.<name>` again are literal text, so an environment object holding `/api`
+   reports `/api/talks`. A mutable field and a `readonly` field a constructor
+   replaces are computed. A value the scanner cannot see, such as a constant
+   imported from a package, sets `configured`. A base that states a host, a
+   parameter, and any other computed value report a leading unknown segment, and
+   core derives nothing from them. A literal environment base is the value in
+   the source file, which an Angular build's `fileReplacements` can swap for
+   another environment, so the reported path is the development one.
+6. **File-location routes.** None: every request names the function that runs
+   the call, and a call outside any function reports nothing.
+
 ## Coverage limits
 
 This revision qualifies the CompanyMergeDialog output-to-parent-handler flow.
@@ -106,7 +152,7 @@ supported binding extraction.
 
 Independent fixture tests load the built package and cover concrete callback
 endpoints, complementary TypeScript evidence, curated ownership, HTML-triggered
-rescan, failure preservation, and the source outline. See [fresh-checkout validation](../fresh-checkout-validation.md) for the
+rescan, failure preservation, the source outline, and the HTTP requests. See [fresh-checkout validation](../fresh-checkout-validation.md) for the
 real-project result and remaining release gates.
 
 ## Nested projects

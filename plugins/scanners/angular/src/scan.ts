@@ -7,6 +7,7 @@ import ts from 'typescript'
 import { frameworkProjects, hasDependency } from '../../projects.ts'
 import { combineObservations } from '../../observations.ts'
 import { componentImports, sourceComponent, sourceOutput, type SourceComponent } from './components.ts'
+import { angularHttpRequests } from './http.ts'
 
 function relative(root: string, file: string): string {
   return path.relative(root, file).split(path.sep).join('/')
@@ -73,7 +74,8 @@ class Evidence {
     this.checker = checker
   }
 
-  private operation(node: ts.Node): string {
+  /** One operation per function, shared by binding and HTTP facts. */
+  operationId(node: ts.Node): string {
     const source = node.getSourceFile()
     const file = relative(this.root, source.fileName)
     const position = node.getStart()
@@ -107,7 +109,7 @@ class Evidence {
     for (const call of calls) {
       const caller = enclosingOperation(call)
       if (!caller) continue
-      this.invocations.push({ source: this.operation(caller), targets: [this.operation(target)], unresolved: false,
+      this.invocations.push({ source: this.operationId(caller), targets: [this.operationId(target)], unresolved: false,
         member: event.name, line: call.getSourceFile().getLineAndCharacterOfPosition(call.getStart()).line + 1,
         position: call.getStart(), binding: { file: template, line: event.sourceSpan.start.line + 1,
           position: event.sourceSpan.start.offset } })
@@ -155,6 +157,10 @@ async function scanAngularProject(projectRoot: string, root: string): Promise<Sc
   const components = sources.flatMap(source => source.statements.filter(ts.isClassDeclaration)
     .flatMap(node => sourceComponent(node, checker) ?? []))
   for (const component of components) inspectTemplate(root, component, components, checker, evidence)
+  const httpRequests = angularHttpRequests(sources, checker, call => {
+    const caller = enclosingOperation(call)
+    return caller === undefined ? undefined : evidence.operationId(caller)
+  })
   const files = [...sources.map(source => ({ file: relative(root, source.fileName),
     symbols: source.statements.filter(ts.isClassDeclaration).map(node => ({
       id: `${relative(root, source.fileName)}#${node.getStart()}`, name: node.name?.text ?? 'default', kind: 'class',
@@ -177,7 +183,8 @@ async function scanAngularProject(projectRoot: string, root: string): Promise<Sc
     roots: [{ id: 'angular-project', kind: 'package', name: manifest.name, file: relative(root, path.join(projectRoot, 'package.json')) }],
     files: files.map(file => ({ ...file, roots: ['angular-project'] })),
     sourceUnits,
-    operations: [...evidence.operations.values()], invocations: evidence.invocations, diagnostics: evidence.diagnostics })
+    operations: [...evidence.operations.values()], invocations: evidence.invocations, diagnostics: evidence.diagnostics,
+    ...(httpRequests.length ? { httpRequests } : {}) })
 }
 
 function componentResource(root: string, component: SourceComponent, resource: string): string | undefined {

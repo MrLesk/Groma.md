@@ -9,12 +9,12 @@ export interface SourceComponent {
 }
 
 /** Recognize the imported Angular API even when its package is not installed. */
-export function angularImport(node: ts.Node, checker: ts.TypeChecker, name: string): boolean {
+export function angularImport(node: ts.Node, checker: ts.TypeChecker, name: string, module = '@angular/core'): boolean {
   const declaration = checker.getSymbolAtLocation(node)?.declarations?.[0]
   if (!declaration || !ts.isImportSpecifier(declaration)) return false
   const imported = declaration.parent.parent.parent
   return ts.isImportDeclaration(imported) && ts.isStringLiteral(imported.moduleSpecifier)
-    && imported.moduleSpecifier.text === '@angular/core' && (declaration.propertyName ?? declaration.name).text === name
+    && imported.moduleSpecifier.text === module && (declaration.propertyName ?? declaration.name).text === name
 }
 
 export function property(object: ts.ObjectLiteralExpression, name: string): ts.Expression | undefined {
