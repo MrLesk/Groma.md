@@ -1,6 +1,6 @@
 import ts from 'typescript'
-import { urlParts } from '../../http-values.ts'
-import type { FileScope } from './http-scope.ts'
+import { urlContext, urlParts, type UrlContext } from '../../http-values.ts'
+import { fileChecker, type FileScope } from './http-scope.ts'
 
 /*
  * Values one file states. URL text and method names come from the shared ../../http-values.ts, which
@@ -8,16 +8,17 @@ import type { FileScope } from './http-scope.ts'
  * and routers of this ecosystem are written with.
  */
 
-export interface HttpReader {
+export interface HttpReader extends UrlContext {
   ts: typeof ts
-  checker: FileScope['checker']
+  checker: ts.TypeChecker
   scope: FileScope
 }
 
 const methodPattern = /^[A-Z][A-Z-]*$/
 
-export function httpReader(scope: FileScope): HttpReader {
-  return { ts, checker: scope.checker, scope }
+/** The shared value reader resolves names with the compiler, over this one file. */
+export function httpReader(source: ts.SourceFile, scope: FileScope): HttpReader {
+  return { ...urlContext(ts, fileChecker(source), [source], true), scope }
 }
 
 /** An uppercase method token the shared contract accepts. */

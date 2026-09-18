@@ -1,0 +1,17 @@
+import { everything as barrel } from './barrel'
+import * as everything from './exposed'
+import { shared } from './shared'
+
+shared.talks = 'https://api.example.com/talks'
+
+for (const value of Object.values(everything)) value.talks = 'https://api.example.com/talks'
+
+for (const value of Object.values(barrel)) value.talks = 'https://api.example.com/talks'
+
+void import('./lazy').then(loaded => Object.values(loaded).forEach(value => { value.talks = 'https://api.example.com/talks' }))
+
+void import('./handed').then(relocateAll)
+
+function relocateAll(loaded: Record<string, { talks: string }>): void {
+  for (const value of Object.values(loaded)) value.talks = 'https://api.example.com/talks'
+}

@@ -70,7 +70,7 @@ test.concurrent('the built Vue package reports Nuxt and axios requests, includin
       'web/client.ts#based GET /api/talks',
       'web/client.ts#configured GET configured:/talks',
       'web/client.ts#configuredCall PUT /api/talks',
-      'web/client.ts#helper GET /<unknown>',
+      'web/client.ts#helper no-method /<unknown>',
       'web/client.ts#listed GET /api/talks',
       'web/client.ts#load GET /api/talks',
       'web/client.ts#removed DELETE /api/talks/<dynamic>',

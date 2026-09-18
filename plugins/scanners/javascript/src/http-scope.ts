@@ -13,23 +13,32 @@ export interface ModuleOrigin {
   name: string
 }
 
-/** A fabricated symbol: the shared value reader needs only the declaration behind a name. */
-interface NameSymbol {
-  flags: number
-  valueDeclaration: ts.Node
-}
-
 export interface FileScope {
-  /** The checker the shared URL reader expects, resolving names inside this file only. */
-  checker: {
-    getSymbolAtLocation(node: ts.Node): NameSymbol | undefined
-    getAliasedSymbol(symbol: NameSymbol): NameSymbol
-  }
   /** The declaration a name refers to at this position, or undefined when the file does not declare it. */
   declarationOf(node: ts.Node): ts.Node | undefined
   /** True when the file assigns this name again, so its value is not the one its declaration states. */
   reassigns(name: string): boolean
   originOf(node: ts.Node): ModuleOrigin | undefined
+}
+
+/**
+ * The compiler's own name resolution for one file, as a program holding only that file: imports and
+ * the runtime's globals resolve to nothing, as everything outside the file does for this scanner.
+ */
+export function fileChecker(source: ts.SourceFile): ts.TypeChecker {
+  const options: ts.CompilerOptions = { allowJs: true, noLib: true, noResolve: true, types: [], noEmit: true }
+  const host: ts.CompilerHost = {
+    getSourceFile: name => name === source.fileName ? source : undefined,
+    getDefaultLibFileName: () => 'lib.d.ts',
+    writeFile: () => undefined,
+    getCurrentDirectory: () => '',
+    getCanonicalFileName: name => name,
+    useCaseSensitiveFileNames: () => true,
+    getNewLine: () => '\n',
+    fileExists: name => name === source.fileName,
+    readFile: () => undefined,
+  }
+  return ts.createProgram([source.fileName], options, host).getTypeChecker()
 }
 
 /** The module a `require('name')` call reads. */
@@ -190,15 +199,6 @@ export function fileScope(source: ts.SourceFile): FileScope {
     return bound.get(node.text)
   }
   return {
-    checker: {
-      getSymbolAtLocation(node: ts.Node) {
-        const declaration = declarationOf(node)
-        return declaration === undefined ? undefined : { flags: 0, valueDeclaration: declaration }
-      },
-      getAliasedSymbol(symbol: NameSymbol) {
-        return symbol
-      },
-    },
     declarationOf,
     reassigns: name => assigned.has(name),
     originOf(node: ts.Node) {

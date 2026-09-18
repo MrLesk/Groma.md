@@ -77,8 +77,8 @@ test.concurrent('the built Angular package reports HttpClient requests and serve
       // A base stating a host, and a base that is a parameter, are unknown.
       'external GET /<unknown>/talks',
       'fromBase GET /<unknown>/talks',
-      // A class field is never a base, because a constructor can replace it.
-      'latest GET /<unknown>/talks/latest',
+      // A field holding the client's base is its setting, which is configuration.
+      'latest GET configured:/talks/latest',
       'list GET /api/talks',
       // One computed segment is dynamic; a partly computed segment is unknown.
       'one GET /api/speakers/<dynamic>',

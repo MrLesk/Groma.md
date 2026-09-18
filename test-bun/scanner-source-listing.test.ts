@@ -42,8 +42,8 @@ const listings: [ScannerPlugin, string, string[]][] = [
   [react, 'react-http', [
     'app/api/(admin)/audit/route.ts', 'app/api/docs/[[...slug]]/route.ts', 'app/api/files/[...path]/route.ts',
     'app/api/index/route.ts', 'app/api/talks/[id]/route.ts', 'app/api/talks/route.ts', 'drafts.tsx',
-    'pages/api.tsx', 'pages/api/drafts/index.ts', 'pages/api/health.ts', 'pages/api/index/list.ts',
-    'pages/api/speakers/[id].ts', 'shadow.tsx', 'src/app/api/status/route.ts', 'talks.tsx',
+    'options.tsx', 'pages/api.tsx', 'pages/api/drafts/index.ts', 'pages/api/health.ts', 'pages/api/index/list.ts',
+    'pages/api/speakers/[id].ts', 'shadow.tsx', 'src/app/api/status/route.ts', 'talks.tsx', 'uncertain.tsx',
   ]],
   // A package manifest is not analyzed source.
   [swift, 'swift-source', ['Ledger.swift', 'Other.swift']],

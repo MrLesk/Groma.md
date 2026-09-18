@@ -1,0 +1,6 @@
+{
+  "name": "src-router",
+  "private": true,
+  "type": "module",
+  "dependencies": { "react": "19.2.7", "next": "16.0.0" }
+}

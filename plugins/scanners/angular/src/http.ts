@@ -1,7 +1,7 @@
 import type { ScanHttpRequest } from '@groma/scanner'
 import ts from 'typescript'
 import { requestUrl } from '../../http-url.ts'
-import { declarationOf, methodName, urlParts, type UrlContext } from '../../http-values.ts'
+import { declarationOf, methodName, urlContext, urlParts, type UrlContext } from '../../http-values.ts'
 import { angularImport } from './components.ts'
 
 const CLIENT = '@angular/common/http'
@@ -64,14 +64,15 @@ function clientCall(
 
 /**
  * The requests Angular's HttpClient sends. Angular serves no endpoint: its router routes,
- * interceptors and guards answer no HTTP request.
+ * interceptors and guards answer no HTTP request. `sources` are every file of the project, so a
+ * change to a value anywhere in them keeps that value from being folded.
  */
 export function angularHttpRequests(
   sources: readonly ts.SourceFile[],
   checker: ts.TypeChecker,
   callerOperation: (call: ts.Node) => string | undefined,
 ): ScanHttpRequest[] {
-  const context: AngularContext = { ts, checker }
+  const context: AngularContext = urlContext(ts, checker, sources)
   const requests: ScanHttpRequest[] = []
   const visit = (node: ts.Node): void => {
     if (ts.isCallExpression(node)) {

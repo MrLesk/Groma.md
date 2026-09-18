@@ -6,7 +6,7 @@ import { frameworkProjects, hasDependency } from '../../projects.ts'
 import { combineObservations } from '../../observations.ts'
 import { executable, type Operation } from './functions.ts'
 import { reactHttpRequests } from './http.ts'
-import { nextRouteEndpoints, routeLocation } from './routes.ts'
+import { nextRouteEndpoints, nextRouters, routeLocation } from './routes.ts'
 
 function relative(root: string, file: string): string {
   return path.relative(root, file).split(path.sep).join('/')
@@ -35,10 +35,13 @@ function reactProject(root: string, repositoryRoot = root) {
     })
     const sources = owned.filter(source => source.fileName.endsWith('.tsx'))
     if (!sources.length) throw new Error('The project tsconfig.json must include React TSX source files.')
-    // Next.js declares endpoints by file location, so those files are read besides the components.
-    const routes = owned.filter(source => routeLocation(relative(root, source.fileName)) !== undefined)
+    // Next.js declares endpoints by file location, so a Next.js project's route files are read besides
+    // the components. Another server's files in the same places serve paths of its own.
+    const routers = nextRouters(root)
+    const routes = hasDependency(manifest, 'next')
+      ? owned.filter(source => routeLocation(relative(root, source.fileName), routers) !== undefined) : []
     failDiagnostics(program.getSyntacticDiagnostics())
-    return { manifest, program, sources, routes }
+    return { manifest, program, owned, sources, routes, routers }
   } catch (error) {
     throw new Error(`REACT_SOURCE_INVALID: Check the project tsconfig.json and TSX syntax. ${error}`)
   }
@@ -182,14 +185,14 @@ export async function scanReact(root: string) {
 async function scanReactProject(projectRoot: string, root: string) {
   const project = reactProject(projectRoot, root)
   if (!project) return undefined
-  const { manifest, program, sources, routes } = project
+  const { manifest, program, owned, sources, routes, routers } = project
   const evidence = new Evidence(root, program.getTypeChecker(), sources)
   for (const source of sources) evidence.inspect(source)
-  const httpRequests = reactHttpRequests(sources, program.getTypeChecker(), call => {
+  const httpRequests = reactHttpRequests(sources, owned, program.getTypeChecker(), call => {
     const operation = caller(call)
     return operation === undefined ? undefined : evidence.operationId(operation)
   })
-  const httpEndpoints = nextRouteEndpoints(routes, projectRoot, handler => evidence.operationId(handler))
+  const httpEndpoints = nextRouteEndpoints(routes, projectRoot, routers, handler => evidence.operationId(handler))
   const files = [...new Set([...sources, ...routes].map(source => relative(root, source.fileName)))]
     .map(file => ({ file, symbols: [] }))
   return createScanObservation({ scanner: { id: 'react', technology: 'typescript/react', engine: 'typescript-sdk', engineVersion: ts.version },

@@ -11,7 +11,7 @@ export function javaScriptHttpFacts(source: ts.SourceFile, evidence: FileEvidenc
   httpEndpoints: ScanHttpEndpoint[]
   httpRequests: ScanHttpRequest[]
 } {
-  const reader = httpReader(fileScope(source))
+  const reader = httpReader(source, fileScope(source))
   const context = { reader, operationAt: (node: ts.Node) => evidence.operationAt(node) }
   return {
     httpEndpoints: httpEndpoints(context, source, evidence.calls),

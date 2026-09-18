@@ -1,27 +1,24 @@
 import type { ScanHttpRequest } from '@groma/scanner'
-import { requestUrl, type UrlPart } from './http-url.ts'
-import { methodName, urlParts, constantOf, type UrlCompiler, type UrlContext } from './http-values.ts'
+import { computedPart, joinBase, requestUrl, type UrlPart } from './http-url.ts'
+import { declarationOf, heldAt, heldParts, methodName, urlParts, type UrlCompiler, type UrlContext } from './http-values.ts'
 
 /*
  * The client forms the framework scanners read the same way: an options object's method, and the
- * axios call shapes. Each scanner keeps only the recognition its ecosystem needs, such as which name
- * is a runtime client. The TypeScript scanner has its own copy over the native SDK; change both
- * together.
+ * axios call shapes. Every option is read through the shared value reader, so a changed, duplicated
+ * or unreadable property is never taken for the literal it once held. Each scanner keeps only the
+ * recognition its ecosystem needs, such as which name is a runtime client. The TypeScript scanner
+ * has its own copy over the native SDK; change both together.
  */
 interface Node {
   kind: number
+  parent: Node
   getSourceFile(): { fileName: string; isDeclarationFile: boolean }
 }
 interface TextNode extends Node { text: string }
-interface Property extends Node { name?: Node; initializer?: Node }
 interface PropertyAccess extends Node { expression: Node; name: TextNode }
-export interface ObjectLiteral extends Node { properties: readonly Property[] }
 export interface Call extends Node { expression: Node; arguments: readonly Node[] }
 
 export interface ClientCompiler extends UrlCompiler {
-  isObjectLiteralExpression(node: Node): node is ObjectLiteral
-  isSpreadAssignment(node: Node): boolean
-  isShorthandPropertyAssignment(node: Node): boolean
   isCallExpression(node: Node): node is Call
   isPropertyAccessExpression(node: Node): node is PropertyAccess
 }
@@ -30,72 +27,103 @@ export interface ClientContext extends UrlContext {
   ts: ClientCompiler
 }
 
-/** An axios client: `axios` itself with no base, or an instance created with one. */
+/** An axios client: the base it starts every path with, and the method of a request that states none. */
 export interface Client {
   base: UrlPart[]
-}
-
-/**
- * The single object literal an expression certainly holds. A spread can override any property, and a
- * property name the scanner cannot read could be the one it looks for, so neither states anything.
- */
-export function objectValue(context: ClientContext, node: Node | undefined): ObjectLiteral | undefined {
-  const { ts } = context
-  if (node === undefined) return undefined
-  const resolved = ts.isObjectLiteralExpression(node) ? node : constantOf<Node>(context, node)
-  if (resolved === undefined || !ts.isObjectLiteralExpression(resolved)) return undefined
-  const readable = resolved.properties.every(property => (
-    !ts.isSpreadAssignment(property) && property.name !== undefined
-    && (ts.isIdentifier(property.name) || ts.isStringLiteral(property.name))
-  ))
-  return readable ? resolved : undefined
-}
-
-export function propertyValue(context: ClientContext, object: ObjectLiteral, name: string): Node | undefined {
-  const { ts } = context
-  for (const property of object.properties) {
-    const key = property.name
-    if (key === undefined || !ts.isIdentifier(key) && !ts.isStringLiteral(key) || key.text !== name) continue
-    if (property.initializer !== undefined) return property.initializer
-    // `{ method }` states a value the scanner must still resolve.
-    if (ts.isShorthandPropertyAssignment(property)) return key
-  }
-  return undefined
-}
-
-/** No options means the default method; options the scanner cannot read leave the method out. */
-export function optionsMethod(context: ClientContext, options: Node | undefined): { method?: string } {
-  if (options === undefined) return { method: 'GET' }
-  const object = objectValue(context, options)
-  if (object === undefined) return {}
-  const declared = propertyValue(context, object, 'method')
-  if (declared === undefined) return { method: 'GET' }
-  const method = methodName(context, declared)
-  return method === undefined ? {} : { method }
+  /** Undefined when the client's configuration hides it. */
+  method: string | undefined
 }
 
 export type RequestFact = Omit<ScanHttpRequest, 'operation'>
 
-function urlRequest(
-  context: ClientContext, base: UrlPart[], method: string | undefined, url: Node | undefined,
-): RequestFact | undefined {
-  if (url === undefined) return undefined
-  return { ...(method === undefined ? {} : { method }), ...requestUrl([...base, ...urlParts(context, url)]) }
+/** The method options state, the fallback when they state none, and nothing when they hide it. */
+function declaredMethod(context: ClientContext, options: Node | undefined, fallback: string | undefined): string | undefined {
+  if (options === undefined) return fallback
+  const declared = heldAt(context, options, 'method')
+  if (declared === 'absent') return fallback
+  return typeof declared === 'string' ? undefined : methodName(context, declared.node)
 }
 
-/** The `axios(config)` and `axios.request(config)` forms, whose method defaults to GET. */
-function configRequest(context: ClientContext, base: UrlPart[], config: Node | undefined): RequestFact | undefined {
-  const options = objectValue(context, config)
-  if (options === undefined) return undefined
-  const declared = propertyValue(context, options, 'method')
-  const method = declared === undefined ? 'GET' : methodName(context, declared)
-  return urlRequest(context, base, method, propertyValue(context, options, 'url'))
+/** The base a configuration states, the fallback when it states none, and a hidden one as the value it is. */
+function declaredBase(context: ClientContext, config: Node | undefined, fallback: UrlPart[]): UrlPart[] {
+  if (config === undefined) return fallback
+  const base = heldAt(context, config, 'baseURL')
+  return base === 'absent' ? fallback : heldParts(context, base)
+}
+
+/** No options means the default method; options the scanner cannot read leave the method out. */
+export function optionsMethod(context: ClientContext, options: Node | undefined): { method?: string } {
+  const method = declaredMethod(context, options, 'GET')
+  return method === undefined ? {} : { method }
+}
+
+function urlText(ts: ClientCompiler, node: Node): boolean {
+  if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node) || ts.isTemplateExpression(node)) return true
+  return ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.PlusToken
+}
+
+/**
+ * The method of a `fetch`-style call: its options state it for a URL, while any other input, such as a
+ * `Request`, carries a method of its own.
+ */
+export function fetchMethod(context: ClientContext, input: Node, options: Node | undefined): { method?: string } {
+  const value = heldAt(context, input)
+  const url = value === 'unseen' || (typeof value === 'object' && urlText(context.ts, value.node))
+  return url ? optionsMethod(context, options) : {}
+}
+
+/**
+ * A client after the sources set its `defaults`: exactly one assignment to `defaults.baseURL` or
+ * `defaults.method` is that setting; more than one, or any other change to `defaults`, hides both.
+ * Interceptors, and code the client is handed to, are not read.
+ */
+function withDefaults(context: ClientContext, client: Client, holders: readonly Node[]): Client {
+  const found = holders.map(holder => context.bindings.settings(holder, ['defaults'], ['baseURL', 'method']))
+  // The bindings describe nodes by less of their shape than these readers need.
+  const bases = found.flatMap(settings => settings.assigned.get('baseURL') ?? []) as Node[]
+  const methods = found.flatMap(settings => settings.assigned.get('method') ?? []) as Node[]
+  if (found.some(settings => settings.changed) || bases.length > 1 || methods.length > 1) return { base: [computedPart], method: undefined }
+  return {
+    base: bases[0] === undefined ? client.base : urlParts(context, bases[0]),
+    method: methods[0] === undefined ? client.method : methodName(context, methods[0]),
+  }
+}
+
+/** `axios` itself, as the `axios.defaults` assignments in the sources leave it. */
+export function defaultClient(context: ClientContext): Client {
+  return withDefaults(context, { base: [], method: 'GET' }, context.bindings.defaultImports('axios') as Node[])
+}
+
+/**
+ * One request: the call's own method, else the one its options or client state, and its path after
+ * the base the request configuration states, else the client's.
+ */
+function sent(
+  context: ClientContext, client: Client, url: UrlPart[], method: string | undefined, config: Node | undefined,
+): RequestFact {
+  const effective = method ?? declaredMethod(context, config, client.method)
+  const base = declaredBase(context, config, client.base)
+  return { ...(effective === undefined ? {} : { method: effective }), ...requestUrl(joinBase(base, url)) }
+}
+
+/** The `axios(config)` and `axios.request(config)` forms, whose URL is one of the options. */
+function configRequest(context: ClientContext, client: Client, config: Node | undefined): RequestFact | undefined {
+  const url = config === undefined ? 'absent' : heldAt(context, config, 'url')
+  return url === 'absent' ? undefined : sent(context, client, heldParts(context, url), undefined, config)
+}
+
+function holdsObject(context: ClientContext, node: Node | undefined): boolean {
+  const value = node === undefined ? undefined : heldAt(context, node)
+  return typeof value === 'object' && context.ts.isObjectLiteralExpression(value.node)
 }
 
 const SHORTHAND = new Map([
   ['get', 'GET'], ['post', 'POST'], ['put', 'PUT'], ['patch', 'PATCH'],
   ['delete', 'DELETE'], ['head', 'HEAD'], ['options', 'OPTIONS'],
 ])
+
+/** The shorthands whose second argument is the request body, which moves the configuration to the third. */
+const WITH_BODY = new Set(['post', 'put', 'patch'])
 
 /**
  * The request an axios call sends. `resolveClient` decides which names hold a client, because that is
@@ -106,24 +134,49 @@ export function axiosRequest(
 ): RequestFact | undefined {
   const { ts } = context
   const callee = call.expression
+  const [first, second, third] = call.arguments
   if (ts.isPropertyAccessExpression(callee)) {
     const client = resolveClient(callee.expression)
     if (client === undefined) return undefined
     const member = callee.name.text
     const method = SHORTHAND.get(member)
-    if (method !== undefined) return urlRequest(context, client.base, method, call.arguments[0])
-    return member === 'request' ? configRequest(context, client.base, call.arguments[0]) : undefined
+    if (method !== undefined && first !== undefined) {
+      return sent(context, client, urlParts(context, first), method, WITH_BODY.has(member) ? third : second)
+    }
+    return member === 'request' ? configRequest(context, client, first) : undefined
   }
   const client = resolveClient(callee)
-  if (client === undefined) return undefined
-  const [first, second] = call.arguments
-  if (objectValue(context, first) !== undefined) return configRequest(context, client.base, first)
-  return urlRequest(context, client.base, optionsMethod(context, second).method, first)
+  if (client === undefined || first === undefined) return undefined
+  if (holdsObject(context, first)) return configRequest(context, client, first)
+  return sent(context, client, urlParts(context, first), undefined, second)
 }
 
-/** The base an `axios.create({ baseURL })` call states, for a client the scanner has recognized. */
-export function createdBase(context: ClientContext, created: Call): UrlPart[] {
-  const config = objectValue(context, created.arguments[0])
-  const baseUrl = config === undefined ? undefined : propertyValue(context, config, 'baseURL')
-  return baseUrl === undefined ? [] : urlParts(context, baseUrl)
+/** The variable whose initializer is the expression. */
+function holderOf(context: ClientContext, node: Node): Node | undefined {
+  const { ts } = context
+  let current = node
+  while (ts.isParenthesizedExpression(current.parent) || ts.isAsExpression(current.parent)
+    || ts.isSatisfiesExpression(current.parent) || ts.isNonNullExpression(current.parent)) current = current.parent
+  return ts.isVariableDeclaration(current.parent) ? current.parent : undefined
+}
+
+/**
+ * The instance `axios.create(config)` makes, when a name certainly holds one: the base and default method
+ * its configuration states, else those of `axios` when nothing sets them there, and then its own
+ * `defaults`. `isAxios` recognizes the default client, which is where the ecosystems differ.
+ */
+export function createdClient(context: ClientContext, node: Node, isAxios: (node: Node) => boolean): Client | undefined {
+  const { ts } = context
+  const created = heldAt(context, node)
+  const call = typeof created === 'object' && ts.isCallExpression(created.node) ? created.node : undefined
+  const callee = call?.expression
+  if (call === undefined || callee === undefined || !ts.isPropertyAccessExpression(callee)) return undefined
+  if (callee.name.text !== 'create' || !isAxios(callee.expression)) return undefined
+  // `axios.create` copies what `axios.defaults` hold when it runs, which the scan cannot order.
+  const parent = defaultClient(context)
+  const inherited: Client = { base: parent.base.length === 0 ? [] : [computedPart], method: parent.method === 'GET' ? 'GET' : undefined }
+  const [config] = call.arguments
+  const client = { base: declaredBase(context, config, inherited.base), method: declaredMethod(context, config, inherited.method) }
+  const holders = [declarationOf(context, node), holderOf(context, call)].filter(holder => holder !== undefined)
+  return withDefaults(context, client, [...new Set(holders)])
 }

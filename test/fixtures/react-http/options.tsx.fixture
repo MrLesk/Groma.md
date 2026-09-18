@@ -1,0 +1,38 @@
+import axios from 'axios'
+
+const init = { method: 'POST' }
+init.method = 'DELETE'
+const opts = { url: '/api/talks' }
+opts.url = 'https://api.example.com/talks'
+const requested = { url: '/api/talks' }
+requested.url = 'https://api.example.com/talks'
+const settings = { baseURL: '/api' }
+settings.baseURL = 'https://api.example.com'
+
+const outside = axios.create(settings)
+const loaded = axios.create(readConfig())
+const posting = axios.create({ baseURL: '/api', method: 'post' })
+
+declare function readConfig(): { baseURL: string }
+
+export const changedMethod = () => fetch('/api/talks', init)
+
+export const changedUrl = () => axios(opts)
+
+export const changedRequest = () => axios.request(requested)
+
+export const changedBase = () => outside.get('/talks')
+
+export const duplicated = () => axios({ url: '/api/first', url: '/api/talks' })
+
+export const requestBase = () => axios.get('/api/talks', { baseURL: 'https://api.example.com' })
+
+export const bodyConfig = () => axios.post('/talks', {}, { baseURL: '/api' })
+
+export const readBase = () => loaded.get('/talks')
+
+export const joined = () => posting('talks')
+
+export const absoluteOverBase = () => posting.get('https://api.example.com/talks')
+
+export const Options = () => <span>{String(changedMethod())}</span>
