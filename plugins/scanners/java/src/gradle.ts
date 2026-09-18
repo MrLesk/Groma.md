@@ -18,6 +18,14 @@ const skipped = new Set(['whitespace', 'comment', '_start', '_end'])
 const listWrappers = new Set(['file', 'files', 'listOf', 'setOf'])
 const versionWrappers = new Set(['JavaVersion', 'JavaLanguageVersion', 'of', 'toVersion'])
 const sourceSetters = new Set(['srcDir', 'srcDirs', 'setSrcDirs'])
+// Declarations under control flow or inside a function apply only when a Gradle run takes that path.
+const controlFlow = new Set(['if', 'else', 'when', 'switch', 'for', 'while', 'do', 'try', 'catch', 'finally'])
+/** Stands in the path for a function body, such as `private def f() {` or `fun f() {`. */
+const functionBody = '<function>'
+/** Stands in the path for a selector the scanner cannot read, such as `named(name)`. */
+const unreadable = '?'
+/** Blocks that configure every element of a collection, such as every source set. */
+const everyElement = new Set(['all', 'configureEach', 'each', 'forEach'])
 
 /** Literal declarations read from one Gradle script; nothing is evaluated. */
 export interface GradleScript {
@@ -41,6 +49,7 @@ type Versions = Partial<Record<'release' | 'source' | 'toolchain', string>>
 type Reader = (script: GradleScript, versions: Versions, statement: Statement) => string | undefined
 
 const unresolved = 'needs a Gradle run to resolve; the scan uses literal declarations and Gradle conventions.'
+const configuresOthers = 'applies to this project; the other projects it configures need a Gradle run to resolve.'
 
 function isTree(node: Node | undefined, bracket: string): node is parser.WrappedTree {
   return node?.type === 'wrapped-tree' && node.startsWith.value === bracket
@@ -80,10 +89,12 @@ function statements(children: Node[]): Node[][] {
   return found
 }
 
-function literals(node: Node): string[] {
+/** The literal string a selector or block-call argument names, or `unreadable` when it holds anything else. */
+function selected(node: Node): string[] {
   const [only, ...others] = 'children' in node ? significant(node.children) : []
-  const value = only && others.length === 0 ? stringValue(only) : undefined
-  return value === undefined ? [] : [value]
+  if (only === undefined) return []
+  const value = others.length === 0 ? stringValue(only) : undefined
+  return [value ?? unreadable]
 }
 
 /** `sourceSets["main"].java` and `getByName("main").java` name the element they select. */
@@ -94,7 +105,7 @@ function chain(nodes: Node[]): { names: string[]; rest: Node[] } {
     names.push(node.value)
     index += 1
     while (isTree(nodes[index], '[') || (isTree(nodes[index], '(') && isOperator(nodes[index + 1], '.'))) {
-      names.push(...literals(nodes[index]!))
+      names.push(...selected(nodes[index]!))
       index += 1
     }
     if (!isOperator(nodes[index], '.')) break
@@ -113,15 +124,24 @@ function statementOf(path: string[], rest: Node[], line: number): Statement {
   return { path, values: isOperator(first, '+=') ? rest.slice(1) : rest, assigned: false, line }
 }
 
+/**
+ * The path a statement's blocks configure. Block-call arguments join it: `named("main") {` scopes like `main {`.
+ * A name after the chain, as in `def f() {`, declares a function.
+ */
+function blockScope(path: string[], rest: Node[]): string[] {
+  const body = rest[0]?.type === 'symbol' ? [functionBody] : []
+  return [...path, ...body, ...rest.filter(node => isTree(node, '(')).flatMap(selected)]
+}
+
 function readBlock(children: Node[], scope: string[], visit: (statement: Statement) => void): void {
   for (const nodes of statements(children)) {
     const { names, rest } = chain(nodes)
     if (names.length === 0) continue
     const path = [...scope, ...names]
-    const block = rest.at(-1)
-    if (isTree(block, '{') && !rest.some(node => isOperator(node, '='))) {
-      // Literal block-call arguments join the path: `named("main") {` scopes like `main {`.
-      readBlock(block.children, [...path, ...rest.slice(0, -1).flatMap(literals)], visit)
+    if (isTree(rest.at(-1), '{') && !rest.some(node => isOperator(node, '='))) {
+      // Every block is read, such as both of `if (...) { } else { }`.
+      const scoped = blockScope(path, rest)
+      for (const block of rest) if (isTree(block, '{')) readBlock(block.children, scoped, visit)
     } else visit(statementOf(path, rest, (nodes[0] as lexer.Token).line))
   }
 }
@@ -214,9 +234,22 @@ const settingsReaders: Readers = [
     () => "is not applied; the scan uses Gradle's default project directory and build script name."],
 ]
 
+/** A source set the scanner cannot name, such as `named(name)` or every source set in `all { }`, may be `main`. */
+function unnamedSourceSet(path: string[]): boolean {
+  return path.some(name => name === unreadable || everyElement.has(name))
+}
+
+/**
+ * Blocks, dotted chains and selectors such as `named("main")` spell the same source set, so the path only needs `main`
+ * and `java`.
+ */
+function mainSources(path: string[]): boolean {
+  return sourceSetters.has(path.at(-1)!) && path.includes('java') && (path.includes('main') || unnamedSourceSet(path))
+}
+
 const buildReaders: Readers = [
-  // Blocks, dotted chains and selectors such as `named("main")` spell the same source set, so the path only needs `main` and `java`.
-  [path => sourceSetters.has(path.at(-1)!) && path.includes('main') && path.includes('java'), (script, _versions, statement) => {
+  [mainSources, (script, _versions, statement) => {
+    if (unnamedSourceSet(statement.path)) return unresolved
     const found = literalStrings(statement.values)
     const replace = statement.assigned || statement.path.at(-1) === 'setSrcDirs'
     script.sourceRoots = replace ? found.values : [...script.sourceRoots, ...found.values]
@@ -227,10 +260,17 @@ const buildReaders: Readers = [
   [path => path.at(-1) === 'languageVersion' && path.includes('toolchain'), versionReader('toolchain')],
 ]
 
-/** Build configuration injected into other projects is resolved only by a Gradle run. */
+/** Build configuration for other projects, such as `subprojects`, `configure(...)` or `project(...)`, is resolved only by a Gradle run. */
 function injected(path: string[]): boolean {
-  return path.some((name, index) => name === 'subprojects' || name === 'allprojects'
-    || (name === 'project' && path[index + 1]?.startsWith(':') === true))
+  return path.some((name, index) => name === 'subprojects' || (name === 'configure' && path[index + 1] === unreadable)
+    || (name === 'project' && (path[index + 1]?.startsWith(':') === true || path[index + 1] === unreadable)))
+}
+
+/** Why a declaration was not fully applied to this project, or undefined; `read` applies it. */
+function reasonFor(path: string[], settings: boolean, read: () => string | undefined): string | undefined {
+  if (path.some(name => controlFlow.has(name) || name === functionBody) || (!settings && injected(path))) return unresolved
+  // `allprojects` also configures the project whose script declares it.
+  return read() ?? (!settings && path.includes('allprojects') ? configuresOthers : undefined)
 }
 
 export function readGradleScript(source: string, file: string): GradleScript {
@@ -241,7 +281,7 @@ export function readGradleScript(source: string, file: string): GradleScript {
   readBlock((groovy.parse(source).node as parser.RootTree).children, [], statement => {
     const reader = readers.find(([matches]) => matches(statement.path))?.[1]
     if (reader === undefined) return
-    const reason = !settings && injected(statement.path) ? unresolved : reader(script, versions, statement)
+    const reason = reasonFor(statement.path, settings, () => reader(script, versions, statement))
     if (reason === undefined) return
     script.diagnostics.push({
       severity: 'warning', code: 'JAVA_GRADLE_UNRESOLVED', file, line: statement.line,

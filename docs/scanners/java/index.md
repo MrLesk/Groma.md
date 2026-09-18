@@ -71,18 +71,25 @@ Each project's own build script supplies:
 
 Gradle sources are read as UTF-8.
 
-A declaration whose value only a Gradle run could resolve produces a
-`JAVA_GRADLE_UNRESOLVED` warning with its script and line. Examples are
-variables, project properties, version catalogs, string templates and computed
-lists, and these declarations inside `subprojects`, `allprojects` or
-`project(':path')` blocks. Settings that assign `projectDir` or `buildFileName`
-also produce it, even with a literal value; those projects keep Gradle's default
-directory and build script name. Literal values of the same declaration and
-other literal declarations still apply: an adding declaration keeps
-`src/main/java`, while a replacing `srcDirs = [...]` keeps only its literal
-entries. A project left without Java sources supplies no observation, but its
-warnings still reach the scan report. The scanner does not read convention
-plugins, `buildSrc` logic, `gradle.properties` or declared source encodings.
+A declaration whose value only a Gradle run could resolve, such as a variable,
+project property, version catalog entry, string template or computed list,
+produces a `JAVA_GRADLE_UNRESOLVED` warning with its script and line. Literal
+values of the same declaration and other literal declarations still apply: an
+adding declaration keeps `src/main/java`, while a replacing `srcDirs = [...]`
+keeps only its literal entries.
+
+Declarations under control flow (`if`, `else`, `when`, `switch`, loops and
+`try`), inside a function, for a source set the scanner cannot name, such as
+`named(name)` or every source set in `all { }`, or inside `subprojects`,
+`configure(...)` or `project(...)` blocks produce the warning and are not
+applied, even with literal values. Settings that assign `projectDir` or
+`buildFileName` also produce it; those projects keep Gradle's default directory
+and build script name. A declaration inside `allprojects` applies to the
+project whose script holds it and produces the warning for the other projects
+it configures. A project left without Java sources supplies no observation,
+but its warnings still reach the scan report. The scanner does not read
+convention plugins, `buildSrc` logic, `gradle.properties` or declared source
+encodings.
 
 ## Source outline
 
