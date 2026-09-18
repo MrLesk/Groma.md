@@ -58,7 +58,7 @@ final class Declarations extends TreePathScanner<Void, Void> {
             var element = trees.getElement(getCurrentPath());
             if (element == null) throw new IllegalStateException("Unbound executable declaration");
             // A method of an anonymous class, including an enum constant body, is an anonymous callback.
-            operation(tree, element.getEnclosingElement() + "#" + element, anonymous() ? null : Tokens.of(tree, authored));
+            operation(tree, element.getEnclosingElement() + "#" + element, anonymous() ? null : Tokens.of(getCurrentPath(), trees, authored));
             operationFor.put(element, operationAt.get(tree));
         }
         return super.visitMethod(tree, unused);

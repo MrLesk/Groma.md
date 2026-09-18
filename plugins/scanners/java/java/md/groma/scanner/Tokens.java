@@ -2,10 +2,10 @@ package md.groma.scanner;
 
 import com.sun.source.tree.AssignmentTree;
 import com.sun.source.tree.BinaryTree;
-import com.sun.source.tree.BlockTree;
 import com.sun.source.tree.ClassTree;
 import com.sun.source.tree.CompoundAssignmentTree;
 import com.sun.source.tree.ConditionalExpressionTree;
+import com.sun.source.tree.ExpressionTree;
 import com.sun.source.tree.IdentifierTree;
 import com.sun.source.tree.LambdaExpressionTree;
 import com.sun.source.tree.LiteralTree;
@@ -14,59 +14,63 @@ import com.sun.source.tree.MemberSelectTree;
 import com.sun.source.tree.MethodInvocationTree;
 import com.sun.source.tree.MethodTree;
 import com.sun.source.tree.NewClassTree;
+import com.sun.source.tree.ParenthesizedTree;
 import com.sun.source.tree.PrimitiveTypeTree;
+import com.sun.source.tree.SwitchExpressionTree;
 import com.sun.source.tree.Tree;
 import com.sun.source.tree.UnaryTree;
 import com.sun.source.tree.VariableTree;
-import com.sun.source.util.TreeScanner;
-import java.util.ArrayDeque;
+import com.sun.source.util.TreePath;
+import com.sun.source.util.TreePathScanner;
+import com.sun.source.util.Trees;
 import java.util.ArrayList;
-import java.util.Deque;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
-import java.util.function.Supplier;
+import javax.lang.model.element.Element;
 
 /**
- * Binding-normalized tokens of one method or constructor body. Names declared inside the body become
- * slots, so renaming a local does not change the tokens; every other name stays as written.
+ * Binding-normalized tokens of one method or constructor body. Each variable declared inside the body becomes a
+ * slot, and a name is that slot where the compiler binds it to the declaration, so renaming a local does not change
+ * the tokens; every other name stays as written. The trees must be attributed, since the bindings come from javac.
  */
-final class Tokens extends TreeScanner<Void, Void> {
+final class Tokens extends TreePathScanner<Void, Void> {
     private static final Map<Tree.Kind, String> OPERATORS = operators();
     private static final Map<Tree.Kind, String> KEYWORDS = keywords();
 
     private final List<Object> tokens = new ArrayList<>();
-    private final Deque<Map<String, String>> scopes = new ArrayDeque<>();
+    private final Map<Element, String> slots = new HashMap<>();
+    private final Trees trees;
     private final Set<Tree> authored;
     private int nextSlot;
 
-    private Tokens(Set<Tree> authored) {
+    private Tokens(Trees trees, Set<Tree> authored) {
+        this.trees = trees;
         this.authored = authored;
-        scopes.push(new HashMap<>());
     }
 
     /** Compiler-inserted members, such as a default constructor, are not part of the authored body. */
-    static List<Object> of(MethodTree method, Set<Tree> authored) {
-        var reader = new Tokens(authored);
-        for (var parameter : method.getParameters()) reader.declare(parameter.getName().toString());
-        reader.scan(method.getBody(), null);
+    static List<Object> of(TreePath method, Trees trees, Set<Tree> authored) {
+        var reader = new Tokens(trees, authored);
+        var tree = (MethodTree) method.getLeaf();
+        reader.declareParameters(method, tree.getParameters());
+        reader.scan(new TreePath(method, tree.getBody()), null);
         return reader.tokens;
     }
 
-    private String declare(String name) {
-        var slot = "$" + nextSlot++;
-        scopes.peek().put(name, slot);
-        return slot;
+    private void declareParameters(TreePath owner, List<? extends VariableTree> parameters) {
+        for (var parameter : parameters) declare(new TreePath(owner, parameter));
     }
 
-    private String slot(String name) {
-        for (var scope : scopes) {
-            var found = scope.get(name);
-            if (found != null) return found;
-        }
-        return name;
+    private String declare(TreePath variable) {
+        var slot = "$" + nextSlot++;
+        var element = trees.getElement(variable);
+        // Without a binding the declaration keeps its slot token but no reference can reach it; a null key would
+        // give every unresolved identifier this slot.
+        if (element != null) slots.put(element, slot);
+        return slot;
     }
 
     @Override public Void scan(Tree tree, Void unused) {
@@ -76,13 +80,9 @@ final class Tokens extends TreeScanner<Void, Void> {
         return super.scan(tree, unused);
     }
 
-    @Override public Void visitBlock(BlockTree tree, Void unused) {
-        return scoped(() -> super.visitBlock(tree, unused));
-    }
-
     @Override public Void visitVariable(VariableTree tree, Void unused) {
         scan(tree.getType(), unused);
-        tokens.add(declare(tree.getName().toString()));
+        tokens.add(declare(getCurrentPath()));
         if (tree.getInitializer() != null) {
             tokens.add("=");
             scan(tree.getInitializer(), unused);
@@ -96,7 +96,8 @@ final class Tokens extends TreeScanner<Void, Void> {
     }
 
     @Override public Void visitIdentifier(IdentifierTree tree, Void unused) {
-        tokens.add(slot(tree.getName().toString()));
+        var slot = slots.get(trees.getElement(getCurrentPath()));
+        tokens.add(slot != null ? slot : tree.getName().toString());
         return null;
     }
 
@@ -138,25 +139,32 @@ final class Tokens extends TreeScanner<Void, Void> {
 
     @Override public Void visitClass(ClassTree tree, Void unused) {
         tokens.add("class");
-        return scoped(() -> super.visitClass(tree, unused));
+        return super.visitClass(tree, unused);
     }
 
     @Override public Void visitMethod(MethodTree tree, Void unused) {
         tokens.add("fn");
-        return scoped(() -> {
-            for (var parameter : tree.getParameters()) declare(parameter.getName().toString());
-            scan(tree.getBody(), unused);
-            return null;
-        });
+        declareParameters(getCurrentPath(), tree.getParameters());
+        return scan(tree.getBody(), unused);
     }
 
     @Override public Void visitLambdaExpression(LambdaExpressionTree tree, Void unused) {
         tokens.add("fn");
-        return scoped(() -> {
-            for (var parameter : tree.getParameters()) declare(parameter.getName().toString());
-            scan(tree.getBody(), unused);
-            return null;
-        });
+        declareParameters(getCurrentPath(), tree.getParameters());
+        return scan(tree.getBody(), unused);
+    }
+
+    /**
+     * Parentheses inside an expression group operands and stay. Parentheses directly under a statement, a declaration
+     * or a switch selector wrap a whole expression and are left out.
+     */
+    @Override public Void visitParenthesized(ParenthesizedTree tree, Void unused) {
+        var parent = getCurrentPath().getParentPath().getLeaf();
+        if (!(parent instanceof ExpressionTree) || parent instanceof SwitchExpressionTree) return scan(tree.getExpression(), unused);
+        tokens.add("(");
+        scan(tree.getExpression(), unused);
+        tokens.add(")");
+        return null;
     }
 
     @Override public Void visitBinary(BinaryTree tree, Void unused) {
@@ -195,11 +203,6 @@ final class Tokens extends TreeScanner<Void, Void> {
         scan(tree.getTrueExpression(), unused);
         tokens.add(":");
         return scan(tree.getFalseExpression(), unused);
-    }
-
-    private Void scoped(Supplier<Void> body) {
-        scopes.push(new HashMap<>());
-        try { return body.get(); } finally { scopes.pop(); }
     }
 
     private static Map<Tree.Kind, String> operators() {

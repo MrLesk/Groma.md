@@ -200,14 +200,17 @@ Lambdas and the methods of an anonymous class body, including an enum constant
 body, are anonymous callbacks. Static and instance initializer blocks and field
 initializers are initializer code. Neither carries tokens.
 
-Parameters and the names declared in the body, such as locals, loop, catch and
-pattern variables and a local class's fields, become slots in declaration
-order, so renaming a local does not change the tokens. Field, type and method
-names stay as written, including a called name a local shadows and the
-operation's own name in a recursive call, as do literals, operators, `.member`
-and `::member` names, array index operands and control keywords. Declared types
-are tokens too, so bodies differing only in `int` and `long`, or `List` and
-`ArrayList`, are not identical.
+Parameters and the variables declared in the body, such as locals, loop, catch
+and pattern variables and a local class's fields, become slots in declaration
+order, so renaming a local does not change the tokens. A name is a slot only
+where the compiler binds it to such a declaration, so a field read after a loop
+variable of the same name has gone out of scope stays a field. Field, type and
+method names stay as written, including a called name a local shadows and the
+operation's own name in a recursive call, as do literals, operators, the
+parentheses that group operands, `.member` and `::member` names, array index
+operands and control keywords. Declared types are tokens too, so bodies
+differing only in `int` and `long`, or `List` and `ArrayList`, are not
+identical.
 
 ## Evidence
 

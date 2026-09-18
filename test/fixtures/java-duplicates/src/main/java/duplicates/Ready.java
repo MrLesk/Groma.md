@@ -50,4 +50,16 @@ public class Ready {
     public int helper() {
         return 1;
     }
+
+    int left;
+
+    public int afterLoop() {
+        for (int left = 0; left < 2; left++) {
+        }
+        return left + 1;
+    }
+
+    public int combine(int a, int b, int c) {
+        return (a + b) * c;
+    }
 }
