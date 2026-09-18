@@ -157,8 +157,9 @@ Endpoints:
   `Controller` suffix, and `[action]` the literal `[ActionName]` or else the
   method name without a trailing `Async`. When a source file may set
   `SuppressAsyncSuffixInActionNames` to anything but `true`, the `[action]`
-  path of a method ending in `Async` reports nothing. A class `[Route]`
-  starting with `~/` starts at the root.
+  path of a method ending in `Async` reports nothing, and when the source names
+  `RouteTokenTransformerConvention`, every `[controller]` or `[action]` path
+  reports nothing. A class `[Route]` starting with `~/` starts at the root.
 - a controller is a public, top-level, non-generic, non-abstract class declared
   in one place, named `*Controller`, marked `[Controller]` or deriving from
   `ControllerBase` or `Controller`, and not `[NonController]`, counting the
@@ -168,9 +169,10 @@ Endpoints:
   source does not declare, reports nothing. An action is a public, non-static,
   non-generic method with a body and without `[NonAction]`.
 - minimal APIs: `MapGet`, `MapPost`, `MapPut`, `MapDelete`, `MapPatch`, and
-  `MapMethods` with literal methods, on the application from `Build()` or
-  `WebApplication.Create()`, or on a `MapGroup` chain. The handler is a lambda
-  or a method the call names.
+  `MapMethods` with literal methods, on a `MapGroup` chain or on the
+  application: the result of `Build()` or `WebApplication.Create()`, or any
+  name declared as `WebApplication`, such as a parameter. The handler is a
+  lambda or a method the call names.
 
 Requests:
 
@@ -183,13 +185,13 @@ Requests:
   a method has no body, so its request declares the operation itself.
 
 Literal routes and URLs and values the compiler proves constant, such as a
-`const` field, become facts. A local, or a readonly field declared in the file
-that uses it, stands for its initializer when that file never assigns it again;
-a readonly field counts only when every part of its type is in that file. These
-report nothing: conventional routing; an action with `[AcceptVerbs]`; `[area]`
-and other route tokens; `IApplicationBuilder.Map` middleware branches;
-framework constants such as `HttpMethods.Get`; and a route on a builder that is
-reassigned, carries a computed prefix, or arrives as a parameter.
+`const` field, become facts. A local, or a readonly field whose type is declared
+entirely in the file that uses it, stands for its initializer when that file
+never assigns it again. These report nothing: conventional routing; an action
+with `[AcceptVerbs]`; `[area]` and other route tokens; `IApplicationBuilder.Map`
+middleware branches; framework constants such as `HttpMethods.Get`; and a route
+on a group that is reassigned or carries a computed prefix, or on an
+`IEndpointRouteBuilder` that arrives as a parameter.
 
 The [producer checklist](../evidence.md#producer-checklist) for C#:
 

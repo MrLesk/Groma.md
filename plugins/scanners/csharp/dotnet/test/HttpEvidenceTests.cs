@@ -14,12 +14,11 @@ public sealed class HttpEvidenceTests
         string Sent(ScanHttpRequest request) =>
             $"{request.Method ?? "?"} {(request.Configured == true ? "configured " : "")}{Route(request.Path)} <- {operations[request.Operation].Name}";
 
-        // Absent: the [area] token, a conventionally routed controller, an abstract controller, controllers whose base
-        // declares a public method (DerivedArchiveController) or a [Route] (DerivedController), is marked
-        // [NonController] (HiddenArchiveController) or is not declared in source (ExternalController), a partial
-        // controller, an internal controller and a class that is not a controller, non-action methods ([NonAction],
-        // private, static, generic), an [AcceptVerbs] action, a computed pattern or method list, a Map branch, a
-        // reassigned or computed group, and a route on a builder that arrives as a parameter.
+        // Absent: the [area] token; a conventionally routed controller; an abstract, partial or internal controller; a
+        // controller whose base declares a public method or a [Route], is marked [NonController] or is not declared in
+        // source; a class that is not a controller; non-action methods ([NonAction], private, static, generic); an
+        // [AcceptVerbs] action; a computed pattern or method list; a Map branch; a reassigned or computed group; and a
+        // route on an IEndpointRouteBuilder that arrives as a parameter.
         Assert.Equal(new[]
         {
             "* /api/Talks/Feed <- Shop.TalksController.Feed()",
@@ -34,6 +33,9 @@ public sealed class HttpEvidenceTests
             // A segment mixing text with a placeholder is one constrained parameter.
             "GET /api/Talks/:version~/talks <- Shop.TalksController.Versioned(int)",
             "GET /api/Talks/archive/:year~ <- Shop.TalksController.Year(int)",
+            // A constraint may hold doubled braces or a slash inside its placeholder.
+            "GET /api/Talks/codes/:code~ <- Shop.TalksController.Code(string)",
+            "GET /api/Talks/deep/:path~ <- Shop.TalksController.Deep(string)",
             // Each verb attribute with a template serves only its own method on its own template.
             "GET /api/Talks/drafts <- Shop.TalksController.Publish()",
             // A [Route] takes the methods of the template-less verb attributes.
@@ -74,8 +76,12 @@ public sealed class HttpEvidenceTests
             "GET /unknown <- Shop.PartialClient.Load()",
             // Text continuing a configuration value's last segment is unknown.
             "GET /unknown <- Shop.SettingsClient.Glued()",
+            // A local written through a ref alias, a ref argument or a deconstruction holds no single value.
+            "GET /unknown <- Shop.TalkClient.Aliased()",
             "GET /unknown <- Shop.TalkClient.Any(string)",
             "GET /unknown <- Shop.TalkClient.Recent(bool)",
+            "GET /unknown <- Shop.TalkClient.Referenced()",
+            "GET /unknown <- Shop.TalkClient.Swapped()",
             "GET /unknown/api/settings <- Shop.SettingsClient.Lookalike()",
             // Only System.Environment reads an environment variable.
             "GET /unknown/api/settings/lookalike <- Shop.SettingsClient.LookalikeVariable()",
@@ -115,6 +121,27 @@ public sealed class HttpEvidenceTests
         Assert.Equal(new[] { "GET /api/async/Newest" }, scan.HttpEndpoints!
             .Where(endpoint => operations[endpoint.Operation].Name.StartsWith("Shop.AsyncController.", StringComparison.Ordinal))
             .Select(endpoint => $"{endpoint.Method} {Route(endpoint.Path)}"));
+    }
+
+    [Fact]
+    public async Task ARouteTokenTransformerLeavesTokenPathsUnknown()
+    {
+        using ScannerFixture fixture = new("csharp-http");
+        fixture.Write("Setup.cs", """
+            using Microsoft.AspNetCore.Mvc;
+            using Microsoft.AspNetCore.Mvc.ApplicationModels;
+
+            static class Setup
+            {
+                public static void Configure(MvcOptions options) =>
+                    options.Conventions.Add(new RouteTokenTransformerConvention(new KebabCase()));
+            }
+            """);
+        ScanObservation scan = await fixture.ScanAsync(Path.Combine(fixture.Root, "Http.csproj"));
+        string[] paths = [.. scan.HttpEndpoints!.Select(endpoint => Route(endpoint.Path))];
+        // Paths built from [controller] or [action] are unknown, while a literal controller route still reports.
+        Assert.DoesNotContain(paths, path => path.StartsWith("/api/Talks", StringComparison.Ordinal) || path.StartsWith("/api/async", StringComparison.Ordinal));
+        Assert.Contains("/api/rooted", paths);
     }
 
     private static string Route(IReadOnlyList<ScanHttpSegment> path) => "/" + string.Join("/", path.Select(segment => segment.Kind switch

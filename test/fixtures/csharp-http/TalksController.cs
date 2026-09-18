@@ -64,6 +64,12 @@ public sealed class TalksController : ControllerBase
 
     [HttpGet(template: "named")]
     public string Named() => "named";
+
+    [HttpGet("deep/{path:regex(^a/b$)}")]
+    public string Deep(string path) => path;
+
+    [HttpGet("codes/{code:regex(^a{{3}}$)}")]
+    public string Code(string code) => code;
 }
 
 [Route("api/async")]

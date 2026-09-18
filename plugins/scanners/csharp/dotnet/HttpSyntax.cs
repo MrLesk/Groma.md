@@ -27,13 +27,8 @@ internal static class HttpSyntax
     public static ExpressionSyntax? Argument(AttributeSyntax attribute) => attribute.ArgumentList?.Arguments
         .FirstOrDefault(argument => argument.NameEquals is null)?.Expression;
 
-    public static string CallName(ExpressionSyntax expression) => expression switch
-    {
-        MemberAccessExpressionSyntax access => access.Name.Identifier.ValueText,
-        MemberBindingExpressionSyntax binding => binding.Name.Identifier.ValueText,
-        SimpleNameSyntax name => name.Identifier.ValueText,
-        _ => "",
-    };
+    /// <summary>The name a call or member access uses, or empty when the expression names nothing.</summary>
+    public static string CallName(ExpressionSyntax expression) => OperationEvidence.CallName(expression) ?? "";
 
     public static ExpressionSyntax? Receiver(InvocationExpressionSyntax call) =>
         call.Expression is MemberAccessExpressionSyntax access ? access.Expression : null;
@@ -55,7 +50,7 @@ internal static class HttpSyntax
     }
 
     /// <summary>The single assigned value of a local, parameter or field declaration.</summary>
-    public static ExpressionSyntax? Initializer(ISymbol symbol) =>
+    private static ExpressionSyntax? Initializer(ISymbol symbol) =>
         symbol.DeclaringSyntaxReferences.FirstOrDefault()?.GetSyntax() is VariableDeclaratorSyntax { Initializer: not null } declarator
             ? declarator.Initializer!.Value : null;
 
@@ -105,7 +100,7 @@ internal static class HttpSyntax
             IFieldSymbol { IsReadOnly: true } field => field.ContainingType.DeclaringSyntaxReferences.All(part => part.SyntaxTree == model.SyntaxTree),
             _ => false,
         };
-        if (!contained || Initializer(symbol!) is not ExpressionSyntax value || value.SyntaxTree != model.SyntaxTree) return null;
+        if (!contained || Initializer(symbol!) is not ExpressionSyntax value) return null;
         return Written(symbol!, model, cancellationToken) ? null : value;
     }
 

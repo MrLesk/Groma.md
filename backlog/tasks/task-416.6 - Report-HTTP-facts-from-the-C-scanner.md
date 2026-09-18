@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@claude'
 created_date: '2026-09-16 20:15'
-updated_date: '2026-09-18 19:35'
+updated_date: '2026-09-18 23:07'
 labels: []
 dependencies: []
 references:
@@ -40,6 +40,7 @@ modified_files:
   - test/fixtures/csharp-http/Partials.cs
   - test/fixtures/csharp-http/Partials.Parts.cs
   - test/fixtures/csharp-http/SettingsClient.cs
+  - plugins/scanners/csharp/dotnet/Command.cs
 parent_task_id: TASK-416
 type: feature
 ordinal: 477000
@@ -90,6 +91,19 @@ Review-fix round (external reviews of cf8e7975; fact format for constraints appr
 16. Configuration reads (orchestrator decision): an IConfiguration indexer, GetValue, GetConnectionString, a section's Value, or Environment.GetEnvironmentVariable followed by a path starting with / is a configured base; a read continued without / and any other computed start stay a leading unknown.
 
 17. Re-review: pin the base [Route], undeclared-base, lowercase-suffix, System.Environment and DefinesRoute checks in the fixture; when any source file may set SuppressAsyncSuffixInActionNames to anything but true, an [action] path of a method ending in Async reports nothing.
+
+Simplicity round (cold junior-maintainer review):
+18. Split Controller, Selectors and HttpRoutes.EndpointSegment so each stays at or under 15 cognitive complexity (the route expansion becomes its own step, Selectors puts * in directly).
+19. Pin TemplateParts and the escaped-brace check with a {path:regex(^a/b$)} fixture action; constraints start at the first ':' (IndexOf).
+20. Pin Written's ref-argument, ref-expression and deconstruction writes with fixture lines.
+21. Decided: any name declared as WebApplication is the application root (drop the initializer and write checks); HttpSyntax.Initializer becomes private; docs list every root form and say a parameter builder reports.
+22. Delete the dead same-file check in SingleValue; one statement of the file condition in the docs.
+23. One owner for ~/: class prefixes go through HttpRoutes.Join; Templates becomes ClassPrefixes.
+24. One owner of the whole-source option scan in HttpEndpoints (no flag threaded through constructors where avoidable); pin the '= true' exemption.
+25. Decided defect: when the source constructs a RouteTokenTransformerConvention, [controller] and [action] paths report nothing (red fixture, documented).
+26. Names: IsController says it has known routes, silent becomes templatelessMethods, Command.cs outline becomes outlineRequest, and one CallName shared with OperationEvidence.
+27. HttpRoutes.Request checks an empty URL first.
+28. Tests: the HttpEvidenceTests absent-list comment no longer names fixture classes.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
@@ -106,6 +120,9 @@ Re-verification: bun run test:csharp 15/15. Packaged C# tests 4/4; core now deri
 
 Review-fix round (external reviews of cf8e7975, a cold review and a targeted re-review): controller routes follow ASP.NET Core's selector rule (checked against DefaultApplicationModelProvider.CreateSelectors), so each verb attribute with a template serves only its own method and template-less verb attributes serve the class prefix unless a [Route] took them; [AcceptVerbs] actions report nothing. Only eligible controllers and actions serve: public, top-level, non-generic, non-abstract classes declared in one place, named *Controller, marked [Controller] or deriving from ControllerBase/Controller, not [NonController] (inherited attributes count), and with no project base that declares a public method or a [Route] or is not declared in source; public, non-static, non-generic actions without [NonAction]. [action] is a literal [ActionName] or the method name without Async, and unknown for an Async method when any source file may set SuppressAsyncSuffixInActionNames to anything but true. A named template: argument is the template, a class [Route] starting with ~/ starts at the root, and WebApplication.Create() is an application root. Route constraints set constrained, and a mixed segment is one constrained parameter (http-spec.md; ASP.NET Core reports no order). Requests: a local or readonly field that holds one value resolves to its initializer (HttpSyntax.SingleValue, shared with the minimal-API builder), and an IConfiguration read (indexer, GetValue, GetConnectionString, section Value) or System.Environment.GetEnvironmentVariable followed by a path starting with / is a configured base (orchestrator decision); other computed starts stay a leading unknown.
 Verification: on the pre-round code the extended csharp-http fixture showed every wrong endpoint and request base listed above; removing the base [Route], undeclared-base, case-insensitive suffix, System.Environment, DefinesRoute, Async-suffix and partial-type checks each fails a dotnet test. In an isolated worktree at 9574e0a1: bun run test:csharp 18/18; packaged csharp-http, csharp-outline, csharp-lint, csharp-source-units and csharp-process pass (7/7), with core deriving GET /api/Talks, GET /api/Talks/:id, GET /api/Talks/Feed, GET /api/Talks/latest and POST /api/Talks from TalkClient.cs and GET /api/Talks, GET /api/Talks/:id and POST /api/Talks from TalksApi.cs; bun run check passed (Biome with only existing diagnostics in other files, typecheck, node 16/16, bun 570 pass, 35 skip, 0 fail).
+
+Simplicity round (cold junior-maintainer review): Controller now expands routes through Routes(prefixes, selectors), Selectors puts * in directly and classifies attributes in one pass, and HttpRoutes.EndpointSegment reads its pieces through Pieces, so each stays at or under 15 cognitive complexity. The whole-source scan is one owner, HttpEndpoints.Conventions, which returns TokenConventions (Async suffix kept, token transformer named) once per scan; the Scanner-level loop and the per-file bool are gone. New decided defect fixed: when the source names RouteTokenTransformerConvention, [controller] and [action] paths report nothing. Any name declared as WebApplication is the application root (the initializer and write checks only hid correct facts); HttpSyntax.Initializer is private and SingleValue loses a dead same-file check. Class prefixes go through HttpRoutes.Join, so ~/ has one owner (Templates became ClassPrefixes); constraints start at the first ':'; HttpRoutes.Request checks an empty URL first. Renames: IsControllerWithKnownRoutes, templatelessMethods, Command.cs outlineRequest, and HttpSyntax.CallName delegates to OperationEvidence.CallName. Fixture lines now pin template splitting at slashes inside a constraint, escaped braces inside a placeholder, ref-argument, ref-alias and deconstruction writes, the '= true' exemption and the token transformer.
+Verification: each of 14 pinned rules (template slash, placeholder escape, three write kinds, true exemption, transformer, base [Route], undeclared base, lowercase suffix, DefinesRoute, Async suffix, partial guard, System.Environment) fails a dotnet test when removed. In an isolated worktree at 681118c6: bun run test:csharp 19/19; packaged csharp-http, csharp-outline, csharp-lint, csharp-source-units and csharp-process pass (7/7); bun run check passed (Biome with only existing diagnostics in other files, typecheck, node 16/16, bun 590 pass, 35 skip, 0 fail).
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
@@ -114,4 +131,6 @@ Verification: on the pre-round code the extended csharp-http fixture showed ever
 The C# scanner now reports HTTP facts from Roslyn syntax, without restoring ASP.NET Core or client packages. Endpoints come from attribute-routed controllers (class [Route] prefixes, verb and route attributes, [controller] and [action] tokens, ~/ and / overrides) and from minimal API MapGet/MapPost/MapPut/MapDelete/MapPatch and MapMethods on the application or a MapGroup chain. Requests come from HttpClient calls recognized by the receiver's type, including SendAsync with a request message, and from Refit-style interfaces, whose bodiless methods the scanner declares as operations. Only literal routes and URLs, compiler constants, and locals or readonly fields that hold one value become facts: computed patterns, inherited or token routes, middleware branches and untraceable builders report nothing, and a computed URL or host becomes a leading unknown segment. combineObservations now remaps fact operation ids for every worker scanner. Verified by dotnet HttpEvidenceTests, which asserts the complete fact sets of test/fixtures/csharp-http (test:csharp 15/15), by the packaged test-bun/csharp-http.test.ts, where core derives rows to Program.cs and TalksController.cs, by test-bun/scan-source-units.test.ts for the remap, and by the isolated bun run check.
 
 Review-fix round: controller routes now follow ASP.NET Core's selector and eligibility rules (per-attribute verbs, public actions of real, single-declaration controllers whose bases add no routes or actions, [ActionName] and the Async suffix), route constraints and mixed segments are reported as constrained, and request bases resolve single-valued locals and readonly fields and treat configuration reads followed by / as configured. Verified by the extended csharp-http fixture in HttpEvidenceTests (test:csharp 18/18), the packaged csharp-http test against the committed core, and the isolated bun run check.
+
+Simplicity round: the controller and template parsers were split below the complexity limit, source-wide token settings have one owner (including the RouteTokenTransformerConvention rule), and every guarded rule is pinned by a fixture line, verified by test:csharp 19/19, the packaged tests and the isolated bun run check.
 <!-- SECTION:FINAL_SUMMARY:END -->

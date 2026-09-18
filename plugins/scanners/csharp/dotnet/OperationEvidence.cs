@@ -108,7 +108,8 @@ internal sealed class OperationEvidence(string repositoryRoot)
         _ => (null, true),
     };
 
-    private static string? CallName(ExpressionSyntax expression) => expression switch
+    /// <summary>The name a call or member access uses, or null when the expression names nothing.</summary>
+    internal static string? CallName(ExpressionSyntax expression) => expression switch
     {
         MemberAccessExpressionSyntax access => access.Name.Identifier.ValueText,
         MemberBindingExpressionSyntax binding => binding.Name.Identifier.ValueText,

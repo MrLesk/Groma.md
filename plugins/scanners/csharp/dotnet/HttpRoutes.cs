@@ -62,28 +62,34 @@ internal static class HttpRoutes
     /// </summary>
     private static ScanHttpSegment? EndpointSegment(string part)
     {
-        StringBuilder text = new();
-        List<Placeholder> placeholders = [];
-        for (int index = 0; index < part.Length; index++)
-        {
-            if (Escaped(part, index)) text.Append(part[index++]);
-            else if (part[index] == '{')
-            {
-                int close = PlaceholderEnd(part, index);
-                if (close < 0) return null;
-                placeholders.Add(Placeholder.Of(part[(index + 1)..close]));
-                index = close;
-            }
-            else if (part[index] == '}') return null;
-            else text.Append(part[index]);
-        }
-        if (placeholders.Count == 0) return new ScanHttpSegment("literal", Value: Literal(text.ToString()));
+        if (Pieces(part) is not (string text, List<Placeholder> placeholders)) return null;
+        if (placeholders.Count == 0) return new ScanHttpSegment("literal", Value: Literal(text));
         Placeholder first = placeholders[0];
         if (first.Name.Length == 0) return null;
         if (placeholders.Count > 1 || text.Length > 0) return new ScanHttpSegment("parameter", Name: Literal(first.Name), Constrained: true);
         // A catch-all in ASP.NET Core also matches no remaining segment.
         return new ScanHttpSegment(first.CatchAll ? "catch-all" : "parameter", Name: Literal(first.Name),
             Optional: first.CatchAll || first.Optional ? true : null, Constrained: first.Constrained ? true : null);
+    }
+
+    /// <summary>A segment's literal text, with escaped braces as text, and its placeholders; null when a brace is unmatched.</summary>
+    private static (string Text, List<Placeholder> Placeholders)? Pieces(string part)
+    {
+        StringBuilder text = new();
+        List<Placeholder> placeholders = [];
+        for (int index = 0; index < part.Length; index++)
+        {
+            if (Escaped(part, index)) text.Append(part[index++]);
+            else if (part[index] == '}') return null;
+            else if (part[index] != '{') text.Append(part[index]);
+            else if (PlaceholderEnd(part, index) is int close and >= 0)
+            {
+                placeholders.Add(Placeholder.Of(part[(index + 1)..close]));
+                index = close;
+            }
+            else return null;
+        }
+        return (text.ToString(), placeholders);
     }
 
     /// <summary>The brace that closes the placeholder opened at start, or -1 when none does.</summary>
@@ -112,7 +118,7 @@ internal static class HttpRoutes
             int defaultValue = OutsideParentheses(text, '=');
             string declared = defaultValue >= 0 ? text[..defaultValue] : text.TrimEnd('?');
             bool optional = defaultValue >= 0 || declared.Length < text.Length;
-            int constraints = OutsideParentheses(declared, ':');
+            int constraints = declared.IndexOf(':');
             return new Placeholder((constraints >= 0 ? declared[..constraints] : declared).Trim(), catchAll, optional, constraints >= 0);
         }
 
@@ -167,13 +173,9 @@ internal static class HttpRoutes
     /// </summary>
     public static (bool Configured, ScanHttpSegment[] Path) Request(IReadOnlyList<UrlPart> parts)
     {
+        if (parts.Count == 0) return (false, [new ScanHttpSegment("unknown")]);
         List<ScanHttpSegment> path = [];
-        string? first = parts.Count > 0 ? parts[0].Text : null;
-        if (parts.Count == 0)
-        {
-            path.Add(new ScanHttpSegment("unknown"));
-            return (false, [.. path]);
-        }
+        string? first = parts[0].Text;
         if (first is null)
         {
             // A configuration value followed by a path is a configured base; text continuing its last segment is not.

@@ -22,15 +22,37 @@ internal static class HttpEndpoints
         ["MapGet"] = "GET", ["MapPost"] = "POST", ["MapPut"] = "PUT", ["MapDelete"] = "DELETE", ["MapPatch"] = "PATCH",
     };
 
+    /// <summary>
+    /// Settings anywhere in the scanned source that change what [controller] and [action] stand for: assigning
+    /// SuppressAsyncSuffixInActionNames anything but true keeps Async in action names, and a
+    /// RouteTokenTransformerConvention rewrites every token value.
+    /// </summary>
+    internal sealed record TokenConventions(bool KeepsAsyncSuffix, bool TransformsTokens);
+
+    public static async Task<TokenConventions> Conventions(IEnumerable<Document> documents, CancellationToken cancellationToken)
+    {
+        bool keepsAsyncSuffix = false;
+        bool transformsTokens = false;
+        foreach (Document document in documents)
+        {
+            if (await document.GetSyntaxRootAsync(cancellationToken) is not SyntaxNode root) continue;
+            keepsAsyncSuffix |= root.DescendantNodes().OfType<AssignmentExpressionSyntax>().Any(assignment =>
+                HttpSyntax.CallName(assignment.Left) == "SuppressAsyncSuffixInActionNames" && !assignment.Right.IsKind(SyntaxKind.TrueLiteralExpression));
+            transformsTokens |= root.DescendantNodes().OfType<SimpleNameSyntax>()
+                .Any(name => name.Identifier.ValueText == "RouteTokenTransformerConvention");
+        }
+        return new TokenConventions(keepsAsyncSuffix, transformsTokens);
+    }
+
     public static List<ScanHttpEndpoint> Of(SyntaxNode root, SemanticModel model, string file, string repositoryRoot,
-        bool keepsAsyncSuffix, CancellationToken cancellationToken)
+        TokenConventions conventions, CancellationToken cancellationToken)
     {
         List<ScanHttpEndpoint> endpoints = [];
         foreach (TypeDeclarationSyntax type in root.DescendantNodes().OfType<TypeDeclarationSyntax>())
         {
             cancellationToken.ThrowIfCancellationRequested();
             // A declarative client shares these attributes but sends requests, so only classes serve.
-            if (type is not InterfaceDeclarationSyntax) Controller(type, model, file, keepsAsyncSuffix, endpoints, cancellationToken);
+            if (type is not InterfaceDeclarationSyntax) Controller(type, model, file, conventions, endpoints, cancellationToken);
         }
         foreach (InvocationExpressionSyntax call in root.DescendantNodes().OfType<InvocationExpressionSyntax>())
         {
@@ -40,30 +62,34 @@ internal static class HttpEndpoints
         return endpoints;
     }
 
-    private static void Controller(TypeDeclarationSyntax type, SemanticModel model, string file, bool keepsAsyncSuffix,
+    private static void Controller(TypeDeclarationSyntax type, SemanticModel model, string file, TokenConventions conventions,
         List<ScanHttpEndpoint> endpoints, CancellationToken cancellationToken)
     {
-        if (!IsController(type, model, cancellationToken)) return;
-        List<string>? prefixes = Templates(type.AttributeLists, model, cancellationToken);
-        if (prefixes is null) return;
-        string name = type.Identifier.ValueText;
-        if (name.EndsWith("Controller", StringComparison.OrdinalIgnoreCase)) name = name[..^"Controller".Length];
+        if (!IsControllerWithKnownRoutes(type, model, cancellationToken)
+            || ClassPrefixes(type.AttributeLists, model, cancellationToken) is not { } prefixes) return;
+        string? controller = ControllerName(type, conventions);
         foreach (MethodDeclarationSyntax action in type.Members.OfType<MethodDeclarationSyntax>())
         {
             if (!IsAction(action, model, cancellationToken) || Selectors(action, model, cancellationToken) is not { } selectors) continue;
             string operation = OperationId.Of(file, action);
-            string? actionName = ActionName(action, model, keepsAsyncSuffix, cancellationToken);
-            foreach (string prefix in prefixes.Count == 0 ? [""] : prefixes)
+            string? actionName = ActionName(action, model, conventions, cancellationToken);
+            foreach ((string method, string template) in Routes(prefixes, selectors))
             {
-                foreach (Selector selector in selectors)
-                {
-                    // Without a class prefix, an action needs its own template to be routable.
-                    if (prefix.Length == 0 && selector.Template.Length == 0) continue;
-                    string? path = Tokens(HttpRoutes.Join(prefix, selector.Template), name, actionName);
-                    if (path is null || HttpRoutes.Endpoint(path) is not ScanHttpSegment[] segments) continue;
-                    foreach (string method in selector.Methods.Count == 0 ? ["*"] : selector.Methods)
-                        endpoints.Add(new ScanHttpEndpoint(operation, method, segments));
-                }
+                if (Tokens(template, controller, actionName) is string path && HttpRoutes.Endpoint(path) is ScanHttpSegment[] segments)
+                    endpoints.Add(new ScanHttpEndpoint(operation, method, segments));
+            }
+        }
+    }
+
+    /// <summary>Each method and template an action serves: every route it declares under every class prefix.</summary>
+    private static IEnumerable<(string Method, string Template)> Routes(List<string> prefixes, List<Selector> selectors)
+    {
+        foreach (string prefix in prefixes.Count == 0 ? [""] : prefixes)
+        {
+            // Without a class prefix, an action needs its own template to be routable.
+            foreach (Selector selector in selectors.Where(selector => prefix.Length > 0 || selector.Template.Length > 0))
+            {
+                foreach (string method in selector.Methods) yield return (method, HttpRoutes.Join(prefix, selector.Template));
             }
         }
     }
@@ -75,7 +101,7 @@ internal static class HttpEndpoints
     /// and [Route] prefixes, so a base between it and ControllerBase that declares either, or that the source does not
     /// declare, leaves its routes unknown and it reports nothing.
     /// </summary>
-    private static bool IsController(TypeDeclarationSyntax type, SemanticModel model, CancellationToken cancellationToken)
+    private static bool IsControllerWithKnownRoutes(TypeDeclarationSyntax type, SemanticModel model, CancellationToken cancellationToken)
     {
         if (model.GetDeclaredSymbol(type, cancellationToken) is not INamedTypeSymbol
             {
@@ -113,42 +139,49 @@ internal static class HttpEndpoints
         && !action.AttributeLists.SelectMany(list => list.Attributes).Any(attribute => HttpSyntax.AttributeName(attribute) == "NonAction");
 
     /// <summary>
-    /// The name [action] stands for: a literal [ActionName], or else the method name without a trailing Async, which
-    /// ASP.NET Core drops by default. Null when [ActionName] is not a constant the compilation proves, or when the
-    /// source may keep the suffix and the name ends with Async.
+    /// The name [controller] stands for: the class name without its Controller suffix. Null when a token transformer
+    /// rewrites it.
     /// </summary>
-    private static string? ActionName(MethodDeclarationSyntax action, SemanticModel model, bool keepsAsyncSuffix, CancellationToken cancellationToken)
+    private static string? ControllerName(TypeDeclarationSyntax type, TokenConventions conventions)
     {
+        if (conventions.TransformsTokens) return null;
+        string name = type.Identifier.ValueText;
+        return name.EndsWith("Controller", StringComparison.OrdinalIgnoreCase) ? name[..^"Controller".Length] : name;
+    }
+
+    /// <summary>
+    /// The name [action] stands for: a literal [ActionName], or else the method name without a trailing Async, which
+    /// ASP.NET Core drops by default. Null when a token transformer rewrites it, when [ActionName] is not a constant
+    /// the compilation proves, or when the source may keep the suffix and the name ends with Async.
+    /// </summary>
+    private static string? ActionName(MethodDeclarationSyntax action, SemanticModel model, TokenConventions conventions, CancellationToken cancellationToken)
+    {
+        if (conventions.TransformsTokens) return null;
         AttributeSyntax? named = action.AttributeLists.SelectMany(list => list.Attributes)
             .FirstOrDefault(attribute => HttpSyntax.AttributeName(attribute) == "ActionName");
         if (named is not null) return HttpSyntax.Constant(model, HttpSyntax.Argument(named), cancellationToken);
         string name = action.Identifier.ValueText;
         if (!name.EndsWith("Async", StringComparison.Ordinal)) return name;
-        return keepsAsyncSuffix ? null : name[..^"Async".Length];
+        return conventions.KeepsAsyncSuffix ? null : name[..^"Async".Length];
     }
 
-    /// <summary>Whether this file may set SuppressAsyncSuffixInActionNames to anything but true.</summary>
-    public static bool KeepsAsyncSuffix(SyntaxNode root) => root.DescendantNodes().OfType<AssignmentExpressionSyntax>()
-        .Any(assignment => HttpSyntax.CallName(assignment.Left) == "SuppressAsyncSuffixInActionNames"
-            && !assignment.Right.IsKind(SyntaxKind.TrueLiteralExpression));
-
     /// <summary>
-    /// Class-level route prefixes, or null when one is computed and hides every action's path. A prefix starting with
-    /// ~/ starts at the root, as an action template does.
+    /// Class-level route prefixes, rooted like an action template, or null when one is computed and hides every
+    /// action's path.
     /// </summary>
-    private static List<string>? Templates(SyntaxList<AttributeListSyntax> lists, SemanticModel model, CancellationToken cancellationToken)
+    private static List<string>? ClassPrefixes(SyntaxList<AttributeListSyntax> lists, SemanticModel model, CancellationToken cancellationToken)
     {
-        List<string> templates = [];
+        List<string> prefixes = [];
         foreach (AttributeSyntax attribute in lists.SelectMany(list => list.Attributes))
         {
             if (HttpSyntax.AttributeName(attribute) != "Route") continue;
             if (HttpSyntax.Constant(model, HttpSyntax.Argument(attribute), cancellationToken) is not string text) return null;
-            templates.Add(text.StartsWith("~/", StringComparison.Ordinal) ? text[1..] : text);
+            prefixes.Add(HttpRoutes.Join("", text));
         }
-        return templates;
+        return prefixes;
     }
 
-    /// <summary>One route of an action: the methods it allows, none meaning every method, on a template under the class prefix.</summary>
+    /// <summary>One route of an action: the methods it allows, * for every method, on a template under the class prefix.</summary>
     private sealed record Selector(IReadOnlyList<string> Methods, string Template);
 
     /// <summary>
@@ -159,39 +192,41 @@ internal static class HttpEndpoints
     /// </summary>
     private static List<Selector>? Selectors(MethodDeclarationSyntax action, SemanticModel model, CancellationToken cancellationToken)
     {
+        AttributeSyntax[] attributes = [.. action.AttributeLists.SelectMany(list => list.Attributes)];
+        if (attributes.Any(attribute => HttpSyntax.AttributeName(attribute) == "AcceptVerbs")) return null;
         List<(string? Method, string Template)> routes = [];
-        List<string> silent = [];
-        foreach (AttributeSyntax attribute in action.AttributeLists.SelectMany(list => list.Attributes))
+        List<string> templatelessMethods = [];
+        foreach (AttributeSyntax attribute in attributes.Where(IsRouting))
         {
-            string name = HttpSyntax.AttributeName(attribute);
-            if (name == "AcceptVerbs") return null;
-            string? method = ActionVerbs.GetValueOrDefault(name);
-            if (method is null && name != "Route") continue;
-            ExpressionSyntax? template = HttpSyntax.Argument(attribute);
-            if (method is not null && template is null && !DefinesRoute(attribute))
-            {
-                if (!silent.Contains(method)) silent.Add(method);
-                continue;
-            }
-            if ((template is null ? "" : HttpSyntax.Constant(model, template, cancellationToken)) is not string text) return null;
-            routes.Add((method, text));
+            string? method = ActionVerbs.GetValueOrDefault(HttpSyntax.AttributeName(attribute));
+            if (method is not null && HttpSyntax.Argument(attribute) is null && !DefinesRoute(attribute)) templatelessMethods.Add(method);
+            else if (Template(attribute, model, cancellationToken) is string template) routes.Add((method, template));
+            else return null;
         }
-        List<Selector> selectors = [.. routes.Select(route => new Selector(route.Method is null ? silent : [route.Method], route.Template))];
-        if (silent.Count > 0 && routes.All(route => route.Method is not null)) selectors.Add(new Selector(silent, ""));
+        List<string> routeMethods = templatelessMethods.Count > 0 ? templatelessMethods : ["*"];
+        List<Selector> selectors = [.. routes.Select(route => new Selector(route.Method is null ? routeMethods : [route.Method], route.Template))];
+        if (templatelessMethods.Count > 0 && routes.All(route => route.Method is not null)) selectors.Add(new Selector(templatelessMethods, ""));
         return selectors;
     }
+
+    private static bool IsRouting(AttributeSyntax attribute) =>
+        HttpSyntax.AttributeName(attribute) is var name && (name == "Route" || ActionVerbs.ContainsKey(name));
+
+    /// <summary>A routing attribute's template: empty when it states none, null when it is computed.</summary>
+    private static string? Template(AttributeSyntax attribute, SemanticModel model, CancellationToken cancellationToken) =>
+        HttpSyntax.Argument(attribute) is ExpressionSyntax template ? HttpSyntax.Constant(model, template, cancellationToken) : "";
 
     /// <summary>A Name or Order makes a verb attribute define its own route even without a template.</summary>
     private static bool DefinesRoute(AttributeSyntax attribute) => attribute.ArgumentList?.Arguments
         .Any(argument => argument.NameEquals?.Name.Identifier.ValueText is "Name" or "Order") == true;
 
     /// <summary>
-    /// Replaces the route tokens ASP.NET Core fills in. Any other token, or an [action] whose name the source does not
+    /// Replaces the route tokens ASP.NET Core fills in. Any other token, or a token whose value the source does not
     /// prove, leaves the path unknown.
     /// </summary>
-    private static string? Tokens(string path, string controller, string? action)
+    private static string? Tokens(string path, string? controller, string? action)
     {
-        path = path.Replace("[controller]", controller, StringComparison.OrdinalIgnoreCase);
+        if (controller is not null) path = path.Replace("[controller]", controller, StringComparison.OrdinalIgnoreCase);
         if (action is not null) path = path.Replace("[action]", action, StringComparison.OrdinalIgnoreCase);
         return path.Contains('[') || path.Contains(']') ? null : path;
     }
@@ -263,11 +298,8 @@ internal static class HttpEndpoints
         }
         if (builder is MemberAccessExpressionSyntax access) return Prefix(access.Name, model, depth + 1, cancellationToken);
         if (builder is not SimpleNameSyntax) return null;
-        // A name that holds one value carries that value's prefix.
+        // A name that holds one value carries that value's prefix; any name declared as a WebApplication is the root.
         if (HttpSyntax.SingleValue(model, builder, cancellationToken) is ExpressionSyntax value) return Prefix(value, model, depth + 1, cancellationToken);
-        // Otherwise only a WebApplication that is never assigned here, such as a parameter, is the application root.
-        ISymbol? symbol = model.GetSymbolInfo(builder, cancellationToken).Symbol;
-        return symbol is not null && HttpSyntax.Initializer(symbol) is null && !HttpSyntax.Written(symbol, model, cancellationToken)
-            && HttpSyntax.DeclaredTypeName(symbol) == "WebApplication" ? "" : null;
+        return HttpSyntax.DeclaredTypeName(model.GetSymbolInfo(builder, cancellationToken).Symbol) == "WebApplication" ? "" : null;
     }
 }
