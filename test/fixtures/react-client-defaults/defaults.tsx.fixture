@@ -7,6 +7,9 @@ const posting = axios.create({ baseURL: '/api', method: 'post' })
 posting.defaults.method = 'get'
 const inherits = axios.create({ method: 'put' })
 const stated = axios.create({ baseURL: '/api' })
+const twice = axios.create({ baseURL: '/api' })
+twice.defaults.baseURL = '/v1'
+twice.defaults.baseURL = '/v2'
 
 export const sharedCall = () => shared.get('/talks')
 
@@ -19,5 +22,7 @@ export const defaultCall = () => axios.get('/talks')
 export const inheritedCall = () => inherits('/talks')
 
 export const statedCall = () => stated.get('/talks')
+
+export const twiceCall = () => twice.get('/talks')
 
 export const Defaults = () => <span>{String(sharedCall())}</span>

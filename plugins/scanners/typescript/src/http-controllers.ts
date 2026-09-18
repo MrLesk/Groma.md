@@ -6,7 +6,8 @@ import {
 
 import { below, type Placed, type Placement } from '../../http-order.ts'
 import { blockedPath, endpointPath, readablePrefix } from '../../http-paths.ts'
-import { importOrigin, urlParts, type HttpContext } from './http-values.ts'
+import type { RouterContext } from '../../http-routers.ts'
+import { importOrigin, urlParts } from '../../http-values.ts'
 
 /** NestJS method decorators from `@nestjs/common`. */
 const controllerMembers = new Map([
@@ -21,55 +22,55 @@ interface NestApplication {
   ordered: boolean
 }
 
-async function nestFactoryCreate(call: CallExpression, context: HttpContext): Promise<boolean> {
+async function nestFactoryCreate(context: RouterContext, call: CallExpression): Promise<boolean> {
   const callee = call.expression
   if (!isPropertyAccessExpression(callee) || callee.name.text !== 'create') return false
-  const origin = await importOrigin(callee.expression, context.checker)
+  const origin = await importOrigin(context, callee.expression)
   return origin?.module === '@nestjs/core' && origin.name === 'NestFactory'
 }
 
 /** `NestFactory.create(AppModule, new FastifyAdapter())` serves through Fastify, which prefers the most specific route. */
-async function fastifyAdapter(call: CallExpression, context: HttpContext): Promise<boolean> {
+async function fastifyAdapter(context: RouterContext, call: CallExpression): Promise<boolean> {
   const adapter = call.arguments[1]
   if (adapter === undefined || !isNewExpression(adapter)) return false
-  return (await importOrigin(adapter.expression, context.checker))?.module === '@nestjs/platform-fastify'
+  return (await importOrigin(context, adapter.expression))?.module === '@nestjs/platform-fastify'
 }
 
-async function nestApplication(calls: readonly CallExpression[], context: HttpContext): Promise<NestApplication> {
+async function nestApplication(context: RouterContext, calls: readonly CallExpression[]): Promise<NestApplication> {
   const creations: CallExpression[] = []
-  for (const call of calls) if (await nestFactoryCreate(call, context)) creations.push(call)
+  for (const call of calls) if (await nestFactoryCreate(context, call)) creations.push(call)
   const [only] = creations
   if (only === undefined || creations.length > 1) return { ordered: true }
-  return { application: context.file(only), ordered: !await fastifyAdapter(only, context) }
+  return { application: context.file(only), ordered: !await fastifyAdapter(context, only) }
 }
 
-async function decoratorCall(node: Node, name: string, context: HttpContext): Promise<CallExpression | undefined> {
+async function decoratorCall(context: RouterContext, node: Node, name: string): Promise<CallExpression | undefined> {
   const modifiers = ('modifiers' in node ? node.modifiers : undefined) as readonly Node[] | undefined
   for (const modifier of modifiers ?? []) {
     if (!isDecorator(modifier) || !isCallExpression(modifier.expression)) continue
     const callee = modifier.expression.expression
     if (!isIdentifier(callee) || callee.text !== name) continue
-    if ((await importOrigin(callee, context.checker))?.module === '@nestjs/common') return modifier.expression
+    if ((await importOrigin(context, callee))?.module === '@nestjs/common') return modifier.expression
   }
   return undefined
 }
 
 /** A decorator's path, or undefined with the literal text it starts with when the path is computed. */
-async function decoratorPath(decorator: CallExpression, context: HttpContext): Promise<{ path?: string; prefix: string }> {
+async function decoratorPath(context: RouterContext, decorator: CallExpression): Promise<{ path?: string; prefix: string }> {
   const [argument] = decorator.arguments
   if (argument === undefined) return { path: '', prefix: '' }
-  const parts = await urlParts(argument, context)
+  const parts = await urlParts(context, argument)
   return parts.length === 1 && parts[0]!.kind === 'text' ? { path: parts[0]!.text, prefix: '' } : { prefix: readablePrefix(parts) }
 }
 
 /** One controller method serves every route its decorators declare; a computed route blocks its prefix. */
-async function controllerMethod(member: Node, controller: Placement, context: HttpContext): Promise<Placed[]> {
+async function controllerMethod(context: RouterContext, member: Node, controller: Placement): Promise<Placed[]> {
   if (!isMethodDeclaration(member) || !member.body) return []
   const placed: Placed[] = []
   for (const [name, method] of controllerMembers) {
-    const decorator = await decoratorCall(member, name, context)
+    const decorator = await decoratorCall(context, member, name)
     if (decorator === undefined) continue
-    const { path, prefix } = await decoratorPath(decorator, context)
+    const { path, prefix } = await decoratorPath(context, decorator)
     const placement = below(controller, undefined, path ?? prefix)
     const operation = await context.handlerOperation(member, member)
     placed.push({ endpoint: { operation, method, path: path === undefined ? blockedPath(placement.prefix) : endpointPath(placement.prefix) }, placement })
@@ -78,15 +79,15 @@ async function controllerMethod(member: Node, controller: Placement, context: Ht
 }
 
 /** The endpoints of one controller class; a controller whose own path is computed blocks every route below it. */
-async function controllerClass(statement: Node, nest: NestApplication, context: HttpContext): Promise<Placed[]> {
+async function controllerClass(context: RouterContext, statement: Node, nest: NestApplication): Promise<Placed[]> {
   if (!isClassDeclaration(statement)) return []
-  const decorator = await decoratorCall(statement, 'Controller', context)
+  const decorator = await decoratorCall(context, statement, 'Controller')
   if (decorator === undefined) return []
-  const { path, prefix } = await decoratorPath(decorator, context)
+  const { path, prefix } = await decoratorPath(context, decorator)
   const application = nest.application ?? context.file(statement)
   const controller: Placement = { prefix: path ?? prefix, application, rank: [], known: false, ordered: nest.ordered }
   const placed: Placed[] = []
-  for (const member of statement.members) placed.push(...await controllerMethod(member, controller, context))
+  for (const member of statement.members) placed.push(...await controllerMethod(context, member, controller))
   if (path !== undefined) return placed
   return placed.map(entry => ({ ...entry, endpoint: { ...entry.endpoint, path: blockedPath(prefix) } }))
 }
@@ -96,12 +97,12 @@ async function controllerClass(statement: Node, nest: NestApplication, context: 
  * follow across modules, so every endpoint of the application shares one position.
  */
 export async function controllerEndpoints(
-  sources: readonly SourceFile[], calls: readonly CallExpression[], context: HttpContext,
+  context: RouterContext, sources: readonly SourceFile[], calls: readonly CallExpression[],
 ): Promise<Placed[]> {
-  const nest = await nestApplication(calls, context)
+  const nest = await nestApplication(context, calls)
   const placed: Placed[] = []
   for (const source of sources) {
-    for (const statement of source.statements) placed.push(...await controllerClass(statement, nest, context))
+    for (const statement of source.statements) placed.push(...await controllerClass(context, statement, nest))
   }
   return placed
 }

@@ -1,4 +1,7 @@
-import { wrapper, type WrapperCompiler } from './http-syntax.ts'
+import {
+  unwrapped, wrapper,
+  type ImportOrigin, type Node, type SourceFile, type TextNode as Identifier, type Wrapped, type WrapperCompiler,
+} from './http-syntax.ts'
 
 /*
  * How the sources name and use variables, read from syntax alone: an index of names, imports and dynamic
@@ -6,14 +9,8 @@ import { wrapper, type WrapperCompiler } from './http-syntax.ts'
  * value on or only reads it. Shared by every TypeScript-family scanner: the classic compiler's and the
  * native SDK's nodes have the same shape.
  */
-interface Node {
-  kind: number
-  parent: Node
-}
-interface Identifier extends Node { text: string }
-interface Access extends Node { expression: Node; name: Node }
+interface Access extends Node { expression: Node; name: Identifier }
 interface ElementAccess extends Node { expression: Node; argumentExpression: Node }
-interface Wrapped extends Node { expression: Node }
 interface Binary extends Node { left: Node; right: Node; operatorToken: { kind: number } }
 interface Unary extends Node { operator: number; operand: Node }
 interface Loop extends Node { initializer: Node }
@@ -22,9 +19,8 @@ interface Initialized extends Node { initializer: Node }
 interface FunctionLike extends Node { parameters: readonly Named[] }
 interface Call extends Node { expression: Node; arguments: readonly Node[] }
 interface ImportDeclaration extends Node { moduleSpecifier: Node }
-interface ImportSpecifier extends Named { propertyName?: Identifier }
+interface ImportSpecifier extends Named { name: Identifier; propertyName?: Identifier }
 interface Modified extends Node { modifiers?: readonly { kind: number }[] }
-export interface SourceFile extends Node { fileName: string }
 
 export interface UseCompiler extends WrapperCompiler {
   SyntaxKind: {
@@ -40,7 +36,7 @@ export interface UseCompiler extends WrapperCompiler {
   isDeleteExpression(node: Node): node is Wrapped
   isForInStatement(node: Node): node is Loop
   isForOfStatement(node: Node): node is Loop
-  isArrayLiteralExpression(node: Node): boolean
+  isArrayLiteralExpression(node: Node): node is Node & { elements: readonly Node[] }
   isObjectLiteralExpression(node: Node): boolean
   isSpreadElement(node: Node): boolean
   isSpreadAssignment(node: Node): boolean
@@ -204,6 +200,9 @@ export interface IndexCompiler extends UseCompiler {
   isFunctionExpression(node: Node): node is FunctionLike
   isImportDeclaration(node: Node): node is ImportDeclaration
   isImportSpecifier(node: Node): node is ImportSpecifier
+  isImportEqualsDeclaration(node: Node): node is Named & { moduleReference: Node }
+  isExternalModuleReference(node: Node): node is Wrapped
+  isBindingElement(node: Node): node is Node & { name?: Node; propertyName?: Node; parent: Node & { parent: Node } }
 }
 
 /**
@@ -241,38 +240,55 @@ export interface Index {
   defaults: Map<string, Node[]>
 }
 
-/** The module a `require('m')` call loads. */
+/** The module a `require('m')` call, or the `require('m')` of `import x = require('m')`, loads. */
 export function requiredModule(ts: IndexCompiler, node: Node | undefined): string | undefined {
+  if (node !== undefined && ts.isExternalModuleReference(node)) return ts.isStringLiteral(node.expression) ? node.expression.text : undefined
   if (node === undefined || !ts.isCallExpression(node) || !ts.isIdentifier(node.expression) || node.expression.text !== 'require') return undefined
   const [specifier] = node.arguments
   return specifier !== undefined && ts.isStringLiteral(specifier) ? specifier.text : undefined
 }
 
-/** `const http = require('m')` or `const http = require('m').default`, which name the default export. */
-function defaultRequire(ts: IndexCompiler, declaration: { initializer?: Node }): string | undefined {
-  const value = declaration.initializer
+/** The export an import statement binds under `name`, when its module is written as a string. */
+function importModule(ts: IndexCompiler, statement: Node, name: string): ImportOrigin | undefined {
+  return ts.isImportDeclaration(statement) && ts.isStringLiteral(statement.moduleSpecifier)
+    ? { module: statement.moduleSpecifier.text, name } : undefined
+}
+
+/** `require('m')`, the module's default export, and `require('m').name`, one of its exports. */
+function requiredValue(ts: IndexCompiler, initializer: Node | undefined): ImportOrigin | undefined {
+  const value = initializer === undefined ? undefined : unwrapped(ts, initializer)
   const direct = requiredModule(ts, value)
-  if (direct !== undefined || value === undefined || !ts.isPropertyAccessExpression(value)) return direct
-  return ts.isIdentifier(value.name) && value.name.text === 'default' ? requiredModule(ts, value.expression) : undefined
+  if (direct !== undefined) return { module: direct, name: 'default' }
+  if (value === undefined || !ts.isPropertyAccessExpression(value) || !ts.isIdentifier(value.name)) return undefined
+  const module = requiredModule(ts, unwrapped(ts, value.expression))
+  return module === undefined ? undefined : { module, name: value.name.text }
 }
 
 /**
- * The module a default import names: `import http from 'm'`, `import { default as http } from 'm'`, or
- * the CommonJS `const http = require('m')`.
+ * The module export a declaration binds: an import clause the default export, a namespace import the
+ * module itself, an import specifier its named export, and `import x = require('m')` and the CommonJS
+ * `require('m')`, `require('m').name` and `{ name } = require('m')` as a required module's.
  */
+export function boundExport(ts: IndexCompiler, declaration: Node): ImportOrigin | undefined {
+  if (ts.isImportClause(declaration)) return importModule(ts, declaration.parent, 'default')
+  if (ts.isNamespaceImport(declaration)) return importModule(ts, declaration.parent.parent, '*')
+  if (ts.isImportSpecifier(declaration)) {
+    return importModule(ts, declaration.parent.parent.parent, (declaration.propertyName ?? declaration.name).text)
+  }
+  if (ts.isImportEqualsDeclaration(declaration)) return requiredValue(ts, declaration.moduleReference)
+  if (ts.isVariableDeclaration(declaration)) return requiredValue(ts, declaration.initializer)
+  if (!ts.isBindingElement(declaration)) return undefined
+  const variable = declaration.parent.parent
+  const module = ts.isVariableDeclaration(variable) ? requiredModule(ts, variable.initializer) : undefined
+  const key = declaration.propertyName ?? declaration.name
+  return module !== undefined && key !== undefined && ts.isIdentifier(key) ? { module, name: key.text } : undefined
+}
+
+/** The declaration a name binds to a module's default export, and that module. */
 function defaultImport(ts: IndexCompiler, name: Identifier): { declaration: Node; module: string } | undefined {
-  const parent = name.parent
-  if (ts.isVariableDeclaration(parent) && parent.name === name) {
-    const module = defaultRequire(ts, parent)
-    return module === undefined ? undefined : { declaration: parent, module }
-  }
-  let statement: Node | undefined
-  if (ts.isImportClause(parent) && parent.name === name) statement = parent.parent
-  else if (ts.isImportSpecifier(parent) && parent.name === name && parent.propertyName?.text === 'default') {
-    statement = parent.parent.parent.parent
-  }
-  if (statement === undefined || !ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier)) return undefined
-  return { declaration: parent, module: statement.moduleSpecifier.text }
+  const declaration = name.parent as Node & { name?: Node }
+  const origin = declaration.name === name ? boundExport(ts, declaration) : undefined
+  return origin?.name === 'default' ? { declaration, module: origin.module } : undefined
 }
 
 function indexName(ts: IndexCompiler, index: Index, node: Identifier): void {

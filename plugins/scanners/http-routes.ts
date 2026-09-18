@@ -3,9 +3,11 @@ import { below, type Placed, type Placement } from './http-order.ts'
 import { blockedPath, endpointPath, readablePrefix } from './http-paths.ts'
 import {
   atTopLevel, entryStart, mounting, ORDERED, routeMembers, routeMethod, routerRegistrations, unreadHonoMembers,
-  type Call, type Node, type Registrar, type Registration, type Registrations, type RouterContext,
+  type Call, type Registrar, type Registration, type Registrations, type RouterContext,
 } from './http-routers.ts'
+import type { Node } from './http-syntax.ts'
 import { methodText } from './http-url.ts'
+import { declarationOf, heldAt, importOrigin, literalText, objectEntries, runtimeGlobal, urlParts } from './http-values.ts'
 
 /*
  * The endpoints the registrations ./http-routers.ts finds serve, placed where their registrar is
@@ -40,7 +42,7 @@ async function registrarArgument(argument: Node, routing: Omit<Routing, 'mounts'
     && argument.expression.name.text === 'routes' ? argument.expression.expression : undefined
   const named = exposed ?? argument
   if (!ts.isIdentifier(named)) return undefined
-  const declaration = await routing.context.declarationOf(named)
+  const declaration = await declarationOf(routing.context, named)
   const registrar = declaration === undefined ? undefined : routing.registrars.get(declaration)
   if (registrar === undefined) return undefined
   // A Koa router is mounted through its `routes()`, any other registrar as itself.
@@ -59,9 +61,9 @@ async function foreignRouter(argument: Node, routing: Omit<Routing, 'mounts'>): 
   if (ts.isCallExpression(argument) && ts.isPropertyAccessExpression(argument.expression)) {
     return argument.expression.name.text === 'routes'
   }
-  const origin = await routing.context.importOrigin(argument)
+  const origin = await importOrigin(routing.context, argument)
   if (origin?.module.startsWith('.') !== true) return false
-  const held = await routing.context.heldAt(argument)
+  const held = await heldAt(routing.context, argument)
   return typeof held !== 'object' || !ts.isFunctionLike(held.node)
 }
 
@@ -80,7 +82,7 @@ async function mountOf(
     const child = await registrarArgument(argument, routing)
     if (child !== undefined) children.push(child)
   }
-  const prefix = unprefixed === undefined ? await routing.context.literalText(first) : ''
+  const prefix = unprefixed === undefined ? await literalText(routing.context, first) : ''
   return { children, ...(prefix === undefined ? {} : { prefix }) }
 }
 
@@ -147,7 +149,7 @@ function placements(declaration: Node, entry: Node, routing: Routing, seen: Read
 async function methodList(node: Node | undefined, context: RouterContext): Promise<string[]> {
   if (node === undefined) return []
   const values = context.ts.isArrayLiteralExpression(node) ? [...node.elements] : [node]
-  const methods = await Promise.all(values.map(async value => methodText(await context.literalText(value))))
+  const methods = await Promise.all(values.map(async value => methodText(await literalText(context, value))))
   return methods.every(method => method !== undefined) ? methods as string[] : []
 }
 
@@ -174,7 +176,7 @@ function served(place: Place, route: string, methods: readonly string[], operati
 
 /** The expression an option object's property certainly holds. */
 async function option(context: RouterContext, options: Node, name: string): Promise<Node | undefined> {
-  const value = await context.heldAt(options, name)
+  const value = await heldAt(context, options, name)
   return typeof value === 'object' ? value.node : undefined
 }
 
@@ -183,11 +185,11 @@ async function routeOptions(registration: Registration, place: Place, routing: R
   const { context } = routing
   const { call } = registration
   const argument = call.arguments[0]!
-  const options = await context.heldAt(argument)
+  const options = await heldAt(context, argument)
   if (typeof options !== 'object' || !context.ts.isObjectLiteralExpression(options.node)) {
-    return blocked(place, readablePrefix(await context.urlParts(argument)), '*', call, routing)
+    return blocked(place, readablePrefix(await urlParts(context, argument)), '*', call, routing)
   }
-  const url = await context.literalText(await option(context, argument, 'url'))
+  const url = await literalText(context, await option(context, argument, 'url'))
   const methods = await methodList(await option(context, argument, 'method'), context)
   if (url === undefined || methods.length === 0) return blocked(place, url ?? '', '*', call, routing)
   const operation = await context.handlerOperation(await option(context, argument, 'handler'), call)
@@ -200,8 +202,8 @@ async function unreadCall(registration: Registration, place: Place, routing: Rou
   const { context } = routing
   const [first, second] = call.arguments
   const path = member === 'on' ? second : first
-  const prefix = path === undefined ? '' : readablePrefix(await context.urlParts(path))
-  const method = member === 'on' ? methodText(await context.literalText(first)) : undefined
+  const prefix = path === undefined ? '' : readablePrefix(await urlParts(context, path))
+  const method = member === 'on' ? methodText(await literalText(context, first)) : undefined
   return blocked(place, prefix, method ?? '*', call, routing)
 }
 
@@ -212,8 +214,8 @@ async function unreadCall(registration: Registration, place: Place, routing: Rou
 async function registerCall(registration: Registration, place: Place, routing: Routing): Promise<Placed[]> {
   const { call } = registration
   const options = call.arguments[1]
-  const prefix = options === undefined ? 'absent' : await routing.context.heldAt(options, 'prefix')
-  const readable = typeof prefix === 'object' ? readablePrefix(await routing.context.urlParts(prefix.node)) : ''
+  const prefix = options === undefined ? 'absent' : await heldAt(routing.context, options, 'prefix')
+  const readable = typeof prefix === 'object' ? readablePrefix(await urlParts(routing.context, prefix.node)) : ''
   return blocked(place, readable, '*', call, routing, true)
 }
 
@@ -222,7 +224,7 @@ async function pathArgument(registration: Registration, routing: Routing): Promi
   const [first, second] = registration.call.arguments
   const named = registration.member !== 'redirect' && registration.call.arguments.length > 2
     && routing.registrars.get(registration.declaration)!.framework === 'koa'
-  const name = named ? await routing.context.literalText(first) : undefined
+  const name = named ? await literalText(routing.context, first) : undefined
   return name !== undefined && !name.startsWith('/') ? second! : first!
 }
 
@@ -238,7 +240,7 @@ async function routeCall(registration: Registration, place: Place, routing: Rout
   if (member === 'route' && call.arguments.length === 1) return routeOptions(registration, place, routing)
   const method = routeMethod(member, framework)
   if (method === undefined || call.arguments.length < 2) return []
-  const parts = await routing.context.urlParts(await pathArgument(registration, routing))
+  const parts = await urlParts(routing.context, await pathArgument(registration, routing))
   const route = parts.length === 1 && parts[0]!.kind === 'text' ? parts[0]!.text : undefined
   if (route === undefined || (member === 'redirect' && !route.startsWith('/'))) {
     return blocked(place, route === undefined ? readablePrefix(parts) : '', method, call, routing)
@@ -263,7 +265,7 @@ async function mountCall(registration: Registration, place: Place, routing: Rout
     && (await Promise.all(call.arguments.map(argument => foreignRouter(argument, routing)))).some(Boolean)
   const blocks = hidden || foreign || (prefix === undefined ? children.length > 0 : children.length === 0 && call.arguments.length > 1)
   if (!blocks) return []
-  const parts = await routing.context.urlParts(call.arguments[0]!)
+  const parts = await urlParts(routing.context, call.arguments[0]!)
   return blocked(place, prefix ?? readablePrefix(parts), '*', call, routing)
 }
 
@@ -280,9 +282,9 @@ async function registrationEndpoints(registration: Registration, routing: Routin
  * scan cannot read blocks its paths, and a registrar handed to other code blocks from its own root.
  */
 export async function routerEndpoints(
-  sources: readonly Node[], calls: readonly Call[], context: RouterContext,
+  context: RouterContext, sources: readonly Node[], calls: readonly Call[],
 ): Promise<Placed[]> {
-  const found = await routerRegistrations(sources, calls, context)
+  const found = await routerRegistrations(context, sources, calls)
   const partial = { ...found, context }
   const routing: Routing = { ...partial, mounts: await collectMounts(partial) }
   const placed = found.escapes.flatMap(({ reference, declaration }) => placements(declaration, reference, routing)
@@ -297,9 +299,9 @@ async function bunServe(call: Call, context: RouterContext): Promise<boolean> {
   const callee = call.expression
   if (ts.isPropertyAccessExpression(callee)) {
     const receiver = callee.expression
-    return ts.isIdentifier(receiver) && receiver.text === 'Bun' && callee.name.text === 'serve' && await context.global(receiver)
+    return ts.isIdentifier(receiver) && receiver.text === 'Bun' && callee.name.text === 'serve' && await runtimeGlobal(context, receiver)
   }
-  const origin = await context.importOrigin(callee)
+  const origin = await importOrigin(context, callee)
   return origin?.module === 'bun' && origin.name === 'serve'
 }
 
@@ -315,9 +317,9 @@ function serveMethod(key: string): string | undefined {
  */
 async function serveRoute(route: string, value: Node, call: Call, context: RouterContext): Promise<ScanHttpEndpoint[]> {
   const path = endpointPath(route)
-  const byMethod = await context.objectEntries(value)
+  const byMethod = await objectEntries(context, value)
   if (byMethod === undefined) {
-    const held = await context.heldAt(value)
+    const held = await heldAt(context, value)
     const handler = typeof held === 'object' && context.ts.isFunctionLike(held.node)
     return handler ? [{ operation: await context.handlerOperation(value, call), method: '*', path }] : []
   }
@@ -330,13 +332,13 @@ async function serveRoute(route: string, value: Node, call: Call, context: Route
 }
 
 /** Bun.serve routes, which prefer the most specific route and so carry no order. */
-export async function serveEndpoints(calls: readonly Call[], context: RouterContext): Promise<ScanHttpEndpoint[]> {
+export async function serveEndpoints(context: RouterContext, calls: readonly Call[]): Promise<ScanHttpEndpoint[]> {
   const endpoints: ScanHttpEndpoint[] = []
   for (const call of calls) {
     const [options] = call.arguments
     if (options === undefined || !await bunServe(call, context)) continue
-    const routes = await context.heldAt(options, 'routes')
-    const entries = typeof routes === 'object' ? await context.objectEntries(routes.node) : undefined
+    const routes = await heldAt(context, options, 'routes')
+    const entries = typeof routes === 'object' ? await objectEntries(context, routes.node) : undefined
     for (const [route, value] of entries ?? []) endpoints.push(...await serveRoute(route, value, call, context))
   }
   return endpoints

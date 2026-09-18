@@ -67,3 +67,9 @@ declare global {
 export async function ambientRoot(): Promise<unknown> {
   return fetch(`${API_ROOT}/talks`)
 }
+
+const requiredClient = require('axios')
+
+export async function viaRequire(): Promise<unknown> {
+  return requiredClient.get('/api/required')
+}

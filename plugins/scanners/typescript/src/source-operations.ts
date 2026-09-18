@@ -9,11 +9,13 @@ import {
 import { SymbolFlags, type Checker, type Symbol as CompilerSymbol } from 'typescript/unstable/async'
 import type { ScanHttpEndpoint, ScanHttpRequest, ScanInvocation, ScanOperation } from '@groma/scanner'
 
-import { bindingUses } from './http-bindings.ts'
-import { httpEndpoints } from './http-endpoints.ts'
-import { httpRequests } from './http-requests.ts'
-import type { HttpContext } from './http-values.ts'
+import { axiosRequest, fetchRequest, runtimeFetch } from '../../http-clients.ts'
+import type { RouterContext } from '../../http-routers.ts'
+import type { Node as SharedNode } from '../../http-syntax.ts'
+import { urlContext } from '../../http-values.ts'
 import { typeScriptOperations } from '../../typescript-operations.ts'
+import { nativeChecker, syntax } from './http-checker.ts'
+import { httpEndpoints } from './http-endpoints.ts'
 
 interface Values {
   nodes: Node[]
@@ -264,23 +266,28 @@ async function sourceHttpFacts(
   owned: Set<string>,
   operation: (node: Node) => string,
 ): Promise<{ httpEndpoints: ScanHttpEndpoint[]; httpRequests: ScanHttpRequest[] }> {
+  const native = (node: SharedNode) => node as unknown as Node
   const certainValues = async (node: Node): Promise<Node[] | undefined> => {
     const values = await resolver.resolve(node, 0, false)
     return values.some(value => value.unresolved) ? undefined : values.flatMap(value => value.nodes)
   }
-  const context: HttpContext = {
-    checker,
-    bindings: bindingUses(checker, sources),
-    file: node => location(root, node).file,
-    callerOperation: node => operation(caller(node)),
+  const context: RouterContext = {
+    ...urlContext(syntax, nativeChecker(checker), sources),
+    frameworks: new Set(['express', 'fastify', 'hono']),
+    // The program holds every file that imports a registrar.
+    exportsEscape: false,
+    file: node => location(root, native(node)).file,
+    callerOperation: node => operation(caller(native(node))),
     async handlerOperation(handler, registration) {
-      const values = handler === undefined ? undefined : await certainValues(handler)
+      const values = handler === undefined ? undefined : await certainValues(native(handler))
       const handlers = (values ?? []).filter(node => executable(node) && owned.has(location(root, node).file))
-      return handlers.length === 1 ? operation(handlers[0]!) : operation(caller(registration))
+      return handlers.length === 1 ? operation(handlers[0]!) : operation(caller(native(registration)))
     },
   }
-  return {
-    httpEndpoints: await httpEndpoints(sources, resolver.calls, context),
-    httpRequests: await httpRequests(resolver.calls, context),
+  const httpRequests: ScanHttpRequest[] = []
+  for (const call of resolver.calls) {
+    const request = await fetchRequest(context, call, callee => runtimeFetch(context, callee)) ?? await axiosRequest(context, call)
+    if (request !== undefined) httpRequests.push({ operation: context.callerOperation(call), ...request })
   }
+  return { httpEndpoints: await httpEndpoints(context, sources, resolver.calls), httpRequests }
 }

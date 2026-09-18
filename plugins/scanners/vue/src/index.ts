@@ -27,7 +27,7 @@ async function scanVueProject(projectRoot: string, root: string): Promise<ScanOb
     const sfc = project.sfc(source.fileName)
     if (sfc) evidence.inspect(source.fileName, sfc)
   }
-  const { httpRequests, httpEndpoints } = vueHttpFacts({
+  const { httpRequests, httpEndpoints } = await vueHttpFacts({
     project,
     projectRoot,
     nuxt: hasDependency(manifest, 'nuxt'),

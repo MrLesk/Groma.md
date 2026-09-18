@@ -10,8 +10,8 @@ async function scanFixture(fixture = 'typescript-http'): Promise<{ scan: ScanObs
   const root = await mkdtemp(path.join(os.tmpdir(), 'groma-ts-http-'))
   await cp(path.resolve(import.meta.dir, '../test/fixtures', fixture), root, { recursive: true })
   // The fixture ships framework imports this repository does not install, so its sources stay unbuilt.
-  for (const name of await readdir(root)) {
-    await rename(path.join(root, name), path.join(root, name.replace(/\.fixture$/, '')))
+  for (const name of await readdir(root, { recursive: true })) {
+    if (name.endsWith('.fixture')) await rename(path.join(root, name), path.join(root, name.slice(0, -'.fixture'.length)))
   }
   for (const command of [['git', 'init', '--quiet'], ['git', 'add', '-A']]) {
     const child = Bun.spawn(command, { cwd: root, stdout: 'ignore', stderr: 'pipe' })
@@ -135,6 +135,8 @@ test.concurrent('fetch and axios requests keep every proven part and mark the re
       'GET /?/talks values.ts#joinedHost',
       // An instance configured by a call has an unknown base.
       'GET /?/talks values.ts#readBase',
+      // A CommonJS `require` of axios is the client too.
+      'GET /api/required values.ts#viaRequire',
       'GET /api/speakers axios-client.ts#listSpeakers',
       'GET /api/talks client.ts#loadPage',
       'GET /api/talks client.ts#loadTalks',
@@ -229,5 +231,69 @@ test.concurrent('an assignment to the axios defaults in another file sets the ba
       `${request.method} ${request.configured ? '<base>' : ''}/${request.path.map(requestLabel).join('/')}`
     ))
     expect(requests).toEqual(['GET <base>/talks'])
+  } finally { await clean() }
+})
+
+/** Each request as `operation method path`, with a configured base and a computed segment marked. */
+function requestsIn(scan: ScanObservation, file: string): string[] {
+  const operations = new Map(scan.operations?.map(operation => [operation.id, operation]))
+  return (scan.httpRequests ?? []).flatMap(request => {
+    const operation = operations.get(request.operation)!
+    if (operation.file !== file) return []
+    const url = `${request.configured ? 'configured:' : ''}/${request.path.map(segment => (
+      segment.kind === 'literal' ? segment.value : `<${segment.kind}>`
+    )).join('/')}`
+    return [`${operation.name} ${request.method ?? 'no-method'} ${url}`]
+  }).sort()
+}
+
+test.concurrent('values fold as the framework scanners fold them, whatever changes an object or a client', async () => {
+  const { scan, clean } = await scanFixture('react-http')
+  try {
+    // A property nothing changes holds its literal. An alias, a function the object is handed to, one of
+    // its methods or accessors, another file, or a module object holding it can change it: a namespace
+    // import, a re-exported namespace, or a dynamic import's result. A Request carries its own method, a
+    // value a call returns and a literal host are unknown, and `isAxiosError` and `post` are no clients.
+    expect(requestsIn(scan, 'uncertain.tsx')).toEqual([
+      'continued GET /<unknown>/talks',
+      'joinedHost GET /<unknown>/talks',
+      'reassignedProperty no-method /<unknown>',
+      'requested no-method /<unknown>',
+      'returned GET /<unknown>/talks',
+      'routed GET /api/talks',
+      'typedParameter no-method /<unknown>',
+      'viaAccessor no-method /<unknown>',
+      'viaAlias no-method /<unknown>',
+      'viaArgument no-method /<unknown>',
+      'viaDynamicImport no-method /<unknown>',
+      'viaHandedImport no-method /<unknown>',
+      'viaMethod no-method /<unknown>',
+      'viaNamespace no-method /<unknown>',
+      'viaOtherFile no-method /<unknown>',
+      'viaReexport no-method /<unknown>',
+    ])
+    // A `fetch` the program declares, or imports from its own module or a package other than
+    // `node-fetch`, is that function.
+    expect(['shadow.tsx', 'wrapped.tsx', 'required.tsx'].flatMap(file => requestsIn(scan, file))).toEqual([])
+  } finally { await clean() }
+})
+
+test.concurrent('an axios client is configured by what the program sets on its defaults', async () => {
+  const { scan, clean } = await scanFixture('react-client-defaults')
+  try {
+    expect(requestsIn(scan, 'defaults.tsx')).toEqual([
+      // The one assignment to the default client's baseURL, in another file, reads configuration.
+      'defaultCall GET configured:/talks',
+      // An instance copies the default client's base when it is created, which the scan cannot order.
+      'inheritedCall PUT /<unknown>/talks',
+      // A change to defaults other than one assignment hides the base.
+      'mergedCall GET /<unknown>/talks',
+      'postingCall GET /api/talks',
+      // One assignment in another file sets an instance's base.
+      'sharedCall GET /<unknown>/talks',
+      'statedCall GET /api/talks',
+      // Two assignments to one setting leave it unknown.
+      'twiceCall GET /<unknown>/talks',
+    ])
   } finally { await clean() }
 })

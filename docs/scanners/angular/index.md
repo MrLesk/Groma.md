@@ -122,23 +122,13 @@ ecosystem:
 4. **Local helpers.** Not supported: the URL is read at the client call, so a
    helper that forwards a path parameter reports unknown text, and its callers
    report nothing. Author those rows.
-5. **Bases.** A root-relative literal path has no base. A variable with a
-   literal initializer that the project never assigns again is literal text. So
-   is a property of an object literal such a variable holds: the last property
-   with its name, while the literal has no spread, computed key or accessor, and
-   no code in the project assigns or deletes that property or an object above
-   it, hands one of them to other code, or calls a method through them, and no
-   module object holding it, such as a namespace import, a re-exported namespace
-   or a dynamic import's result, is used other than to read one export by name.
-   An environment object holding `/api` therefore reports `/api/talks`. A field
-   read through `this`, such as `this.base`, holds the service's own base
-   setting and sets `configured`, as does a value the scanner cannot see, such
-   as a constant imported from a package or declared ambiently. A base that
-   states a host, a parameter, a value a call returns, and any other computed
-   value report a leading unknown segment, and core derives nothing from them. A
-   literal environment base is the value in the source file, which an Angular
-   build's `fileReplacements` can swap for another environment, so the reported
-   path is the development one.
+5. **Bases.** The [React
+   scanner's](../react/index.md#http-endpoints-and-requests) decision 5 holds
+   unchanged, so an environment object holding `/api` reports `/api/talks`, and
+   a field read through `this`, such as `this.base`, is the service's own base
+   setting and sets `configured`. A literal environment base is the value in the
+   source file, which an Angular build's `fileReplacements` can swap for another
+   environment, so the reported path is the development one.
 6. **File-location routes.** None: every request names the function that runs
    the call, and a call outside any function reports nothing.
 7. **Constrained segments.** None: the scanner reports no endpoint, so it reads

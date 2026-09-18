@@ -1,0 +1,4 @@
+import { fetch } from './wrapper'
+
+// A `fetch` the project exports from its own module is that function, not the runtime's client.
+export const wrapped = () => fetch('/api/wrapped')

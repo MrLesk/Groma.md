@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@claude'
 created_date: '2026-09-16 20:15'
-updated_date: '2026-09-18 21:24'
+updated_date: '2026-09-18 23:26'
 labels: []
 dependencies: []
 references:
@@ -120,6 +120,8 @@ Review-fix round, implemented (awaiting cold review, not committed): the native 
 Follow-ups (non-blocking): (1) two ordered applications created in one file share one application key, because the fact identifies an application by its file, so their positions interleave; (2) an Express 4 bare `*` route also matches `/`, but it is reported as a catch-all that needs at least one segment.
 
 Cold review round, applied: (1) blockedPath kept a plain catch-all from a prefix such as '*'; it now always drops it for the constrained optional remainder (Hono use('*'), on('PURGE', '/cache/*')). (2) Chained registrations were skipped; chainedDeclaration follows calls that return their registrar, and entries sort by member-name position. (3) compare was not transitive; withOrder cuts ranks first (two-apps fixture), and mount ranks carry the child's argument position (ordered-server admin before audit). (4) Both copies read the Ambient flag (declare global fixtures in typescript-http values and react-http talks). (5) Hand-offs block, per the coordinator's decisions: counted in the creating file and every registering file, in any statement (outside the top level the order is unknown), never for serving uses or exports (legacy-server, shared-app/shared-routes, hosted-app/hosted-routes, express-extras, hono serve, ordered-server createServer, express-server http.createServer, two-apps module.exports and export specifier). Counting the creating file goes beyond 'files that register': it runs before any importer's registrations, so its hand-offs can capture them. (6) Shared syntax helpers and wrapper deduped. (7) Express 5 optional group and Hono optional wildcard. (8) Header comments, the JavaScript path comment and decisions 7 and 8 corrected; the middleware rule covers a handler next to a recognized router in one use call. Verification: each rule mutation-checked (cut, mount position, own-file, registering files, creating file, top-level filter, export assignment, export specifier, basePath chain, createServer member, settings chain, serving) fails the TypeScript HTTP tests; isolated bun install --frozen-lockfile and bun run check exit 0 (583 pass, 35 skip, 0 fail; the two complexity warnings are in untouched tests).
+
+Simplicity round, committed under TASK-416.3: the TypeScript scanner's native copies of the value, binding and request readers are deleted; it now runs the shared asynchronous readers through its native checker adapter (typescript/src/http-checker.ts), and its endpoints build a RouterContext from the shared UrlContext. With the shared readers it now recognizes CommonJS require for axios, node-fetch and Express registrars (values.ts viaRequire fixture), counts a node-fetch default import as fetch, and no longer counts a fetch imported from any other module; its HTTP test also runs React's value and client-defaults fixtures.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary

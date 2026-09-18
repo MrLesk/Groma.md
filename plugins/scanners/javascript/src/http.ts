@@ -1,8 +1,12 @@
 import type { ScanHttpEndpoint, ScanHttpRequest } from '@groma/scanner'
 import ts from 'typescript'
-import { urlContext } from '../../http-values.ts'
+import { classicChecker } from '../../http-checker.ts'
+import { withOrder } from '../../http-order.ts'
+import type { RouterCompiler, RouterContext } from '../../http-routers.ts'
+import { routerEndpoints, serveEndpoints } from '../../http-routes.ts'
+import type { Node } from '../../http-syntax.ts'
+import { heldAt, urlContext } from '../../http-values.ts'
 import type { FileEvidence } from './evidence.ts'
-import { httpEndpoints } from './http-endpoints.ts'
 import { httpRequest } from './http-requests.ts'
 
 /**
@@ -25,21 +29,41 @@ function fileChecker(source: ts.SourceFile): ts.TypeChecker {
   return ts.createProgram([source.fileName], options, host).getTypeChecker()
 }
 
+function classic(node: Node): ts.Node {
+  return node as unknown as ts.Node
+}
+
 /**
- * The HTTP facts one file states, named against the operations its evidence already recorded. The
- * shared readers resolve names with the compiler over this one file, so a value from another file is
- * one the scan cannot see.
+ * The shared readers' context over this one file. The file is read alone, so a value from another file
+ * is one the scan cannot see, and exporting a router hands it to files the scan never reads.
  */
+function fileContext(source: ts.SourceFile, evidence: FileEvidence): RouterContext {
+  const context = urlContext(ts as typeof ts & RouterCompiler, classicChecker(ts, fileChecker(source)), [source], true)
+  const operationAt = (node: Node): string => evidence.operationAt(classic(node))
+  return {
+    ...context,
+    frameworks: new Set(['express', 'fastify', 'hono', 'koa']),
+    exportsEscape: true,
+    async handlerOperation(handler, registration) {
+      const held = handler === undefined ? undefined : await heldAt(context, handler)
+      return typeof held === 'object' && ts.isFunctionLike(classic(held.node)) ? operationAt(held.node) : operationAt(registration)
+    },
+    callerOperation: operationAt,
+    file: node => node.getSourceFile().fileName,
+  }
+}
+
+/** The HTTP facts one file states, named against the operations its evidence already recorded. */
 export async function javaScriptHttpFacts(source: ts.SourceFile, evidence: FileEvidence): Promise<{
   httpEndpoints: ScanHttpEndpoint[]
   httpRequests: ScanHttpRequest[]
 }> {
-  const context = urlContext(ts, fileChecker(source), [source], true)
-  return {
-    httpEndpoints: await httpEndpoints(context, source, evidence),
-    httpRequests: evidence.calls.flatMap(call => {
-      const request = httpRequest(context, call)
-      return request === undefined ? [] : [{ operation: evidence.operationAt(call), ...request }]
-    }),
+  const context = fileContext(source, evidence)
+  const httpRequests: ScanHttpRequest[] = []
+  for (const call of evidence.calls) {
+    const request = await httpRequest(context, call)
+    if (request !== undefined) httpRequests.push({ operation: evidence.operationAt(call), ...request })
   }
+  const placed = await routerEndpoints(context, [source], evidence.calls)
+  return { httpEndpoints: [...withOrder(placed), ...await serveEndpoints(context, evidence.calls)], httpRequests }
 }

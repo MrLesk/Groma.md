@@ -43,7 +43,8 @@ const listings: [ScannerPlugin, string, string[]][] = [
     'app/api/(admin)/audit/route.ts', 'app/api/docs/[[...slug]]/route.ts', 'app/api/files/[...path]/route.ts',
     'app/api/index/route.ts', 'app/api/talks/[id]/route.ts', 'app/api/talks/route.ts', 'drafts.tsx',
     'options.tsx', 'pages/api.tsx', 'pages/api/drafts/index.ts', 'pages/api/health.ts', 'pages/api/index/list.ts',
-    'pages/api/speakers/[id].ts', 'shadow.tsx', 'src/app/api/status/route.ts', 'talks.tsx', 'uncertain.tsx',
+    'pages/api/speakers/[id].ts', 'required.tsx', 'shadow.tsx', 'src/app/api/status/route.ts', 'talks.tsx',
+    'uncertain.tsx', 'wrapped.tsx',
   ]],
   // A package manifest is not analyzed source.
   [swift, 'swift-source', ['Ledger.swift', 'Other.swift']],
@@ -57,7 +58,7 @@ const listings: [ScannerPlugin, string, string[]][] = [
     'web/server/api/talks.get.ts', 'web/server/api/talks.post.ts', 'web/server/api/talks/[id].delete.ts',
     'web/server/api/talks/[id].get.ts', 'web/server/api/talks/declared.get.ts', 'web/server/api/talks/named.get.ts',
     'web/server/api/wild/[...].ts', 'web/server/handlers.ts', 'web/server/middleware/auth.ts',
-    'web/server/routes/feed.tsx', 'web/server/routes/health.ts',
+    'web/server/routes/feed.tsx', 'web/server/routes/health.ts', 'web/undici.ts',
   ]],
 ]
 

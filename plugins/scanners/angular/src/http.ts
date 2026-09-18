@@ -1,14 +1,11 @@
 import type { ScanHttpRequest } from '@groma/scanner'
 import ts from 'typescript'
+import { classicChecker } from '../../http-checker.ts'
 import { requestUrl } from '../../http-url.ts'
 import { declarationOf, methodName, urlContext, urlParts, type UrlContext } from '../../http-values.ts'
 import { angularImport } from './components.ts'
 
 const CLIENT = '@angular/common/http'
-
-interface AngularContext extends UrlContext {
-  checker: ts.TypeChecker
-}
 
 /** The HttpClient methods that take the URL first. */
 const METHODS = new Map([
@@ -33,22 +30,22 @@ function declaredClient(type: ts.TypeNode | undefined, checker: ts.TypeChecker):
  * whose type is `HttpClient`, or one that `inject(HttpClient)` supplies. A method name alone proves
  * nothing, since any object can have a `get`.
  */
-function isHttpClient(node: ts.Expression, context: AngularContext): boolean {
-  const declaration = declarationOf<ts.Declaration>(context, node)
+async function isHttpClient(context: UrlContext, checker: ts.TypeChecker, node: ts.Expression): Promise<boolean> {
+  const declaration = await declarationOf(context, node) as ts.Declaration | undefined
   if (declaration === undefined) return false
-  if (ts.isParameter(declaration)) return declaredClient(declaration.type, context.checker)
+  if (ts.isParameter(declaration)) return declaredClient(declaration.type, checker)
   if (ts.isPropertyDeclaration(declaration) || ts.isVariableDeclaration(declaration)) {
-    return declaredClient(declaration.type, context.checker) || injectsClient(declaration.initializer, context.checker)
+    return declaredClient(declaration.type, checker) || injectsClient(declaration.initializer, checker)
   }
   return false
 }
 
 /** The method and URL of one client call; `request` names its method first. */
-function clientCall(
-  call: ts.CallExpression, context: AngularContext,
-): { method?: string; url: ts.Expression } | undefined {
+async function clientCall(
+  context: UrlContext, checker: ts.TypeChecker, call: ts.CallExpression,
+): Promise<{ method?: string; url: ts.Expression } | undefined> {
   const callee = call.expression
-  if (!ts.isPropertyAccessExpression(callee) || !isHttpClient(callee.expression, context)) return undefined
+  if (!ts.isPropertyAccessExpression(callee) || !await isHttpClient(context, checker, callee.expression)) return undefined
   const method = METHODS.get(callee.name.text)
   if (method !== undefined) {
     const url = call.arguments[0]
@@ -58,7 +55,7 @@ function clientCall(
   // `request(method, url)`; the single `HttpRequest` form states no separate URL.
   const url = call.arguments[1]
   if (url === undefined) return undefined
-  const named = methodName(context, call.arguments[0])
+  const named = await methodName(context, call.arguments[0])
   return { ...(named === undefined ? {} : { method: named }), url }
 }
 
@@ -67,27 +64,28 @@ function clientCall(
  * interceptors and guards answer no HTTP request. `sources` are every file of the project, so a
  * change to a value anywhere in them keeps that value from being folded.
  */
-export function angularHttpRequests(
+export async function angularHttpRequests(
   sources: readonly ts.SourceFile[],
   checker: ts.TypeChecker,
   callerOperation: (call: ts.Node) => string | undefined,
-): ScanHttpRequest[] {
-  const context: AngularContext = urlContext(ts, checker, sources)
-  const requests: ScanHttpRequest[] = []
+): Promise<ScanHttpRequest[]> {
+  const context = urlContext(ts, classicChecker(ts, checker), sources)
+  const calls: ts.CallExpression[] = []
   const visit = (node: ts.Node): void => {
-    if (ts.isCallExpression(node)) {
-      const client = clientCall(node, context)
-      const operation = client === undefined ? undefined : callerOperation(node)
-      if (client !== undefined && operation !== undefined) {
-        requests.push({
-          operation,
-          ...(client.method === undefined ? {} : { method: client.method }),
-          ...requestUrl(urlParts(context, client.url)),
-        })
-      }
-    }
+    if (ts.isCallExpression(node)) calls.push(node)
     ts.forEachChild(node, visit)
   }
   for (const source of sources) visit(source)
+  const requests: ScanHttpRequest[] = []
+  for (const call of calls) {
+    const client = await clientCall(context, checker, call)
+    const operation = client === undefined ? undefined : callerOperation(call)
+    if (client === undefined || operation === undefined) continue
+    requests.push({
+      operation,
+      ...(client.method === undefined ? {} : { method: client.method }),
+      ...requestUrl(await urlParts(context, client.url)),
+    })
+  }
   return requests
 }

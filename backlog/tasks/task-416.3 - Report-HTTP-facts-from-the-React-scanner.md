@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@claude'
 created_date: '2026-09-16 20:15'
-updated_date: '2026-09-18 19:46'
+updated_date: '2026-09-18 23:26'
 labels: []
 dependencies: []
 references:
@@ -77,6 +77,27 @@ modified_files:
   - test/fixtures/react-http/lazy.ts.fixture
   - test-bun/vue-http.test.ts
   - test/fixtures/react-http/handed.ts.fixture
+  - plugins/scanners/http-syntax.ts
+  - plugins/scanners/http-checker.ts
+  - plugins/scanners/http-routers.ts
+  - plugins/scanners/http-routes.ts
+  - plugins/scanners/typescript/src/http-checker.ts
+  - plugins/scanners/typescript/src/http-controllers.ts
+  - plugins/scanners/typescript/src/http-endpoints.ts
+  - plugins/scanners/typescript/src/source-operations.ts
+  - plugins/scanners/typescript/src/http-bindings.ts
+  - plugins/scanners/typescript/src/http-requests.ts
+  - plugins/scanners/angular/src/scan.ts
+  - plugins/scanners/vue/src/index.ts
+  - plugins/scanners/javascript/src/http-requests.ts
+  - plugins/scanners/javascript/src/http-endpoints.ts
+  - test/fixtures/react-http/wrapper.ts.fixture
+  - test/fixtures/react-http/wrapped.tsx.fixture
+  - test-bun/typescript-http.test.ts
+  - docs/scanners/typescript/index.md
+  - test/fixtures/vue-http/web/undici.ts.fixture
+  - test/fixtures/react-http/required.tsx.fixture
+  - test/fixtures/typescript-http/values.ts.fixture
 parent_task_id: TASK-416
 type: feature
 ordinal: 474000
@@ -116,6 +137,8 @@ Certain HTTP relationships need endpoint and request facts from every ecosystem.
 Open question for the coordinator: AC #1 also requires Next.js route handlers and API routes as endpoints, while the current instruction says React is a client only. The React scanner reads only TSX sources of projects that depend on react, so file-location endpoints in route.ts files would first need the scanner to read and own .ts files. Reported before implementing.
 
 Review-fix round (external cold reviews at cf8e7975). Fix: (1) React treats every axios export as a client (isAxiosError, mergeConfig, a named post): accept only the default import, resolved through the checker so a shadowing parameter is never the import. (2) Next.js file-location endpoints need the project to declare next. (3) Inactive src routers: Next.js reads app and pages from the project root, or from src only when the root has none, per router. (4) Shared http-url.ts: classify the URL start after joining adjacent literal fragments, so '/' + '//host/...' is a host. (5) Shared http-url.ts: a configured base followed by text that does not start with / is a leading unknown segment. (6) Shared http-values.ts: object properties are no longer folded through the checker's type-directed property symbol; a property path is read structurally from a const object literal (last property with the name wins, a spread or computed key leaves it unknown) and only while no write, escape or non-primitive read in the analyzed sources can change it (new plugins/scanners/http-bindings.ts); an unresolved expression root such as getConfig().x or this.x is computed, never configured. The same rewrite removes the type-directed paths where a parameter typed as an object literal or a reassigned let object folded a literal. (7) React page decision 1 and the stale source comment say React reports no endpoint. Call sites of the shared context (Angular, Vue, http-clients.ts, JavaScript) adapt to the context carrying the bindings; the JavaScript reader gets a real one-file checker for that. Skipped here: axios request-level baseURL, create(config) and named exports in Vue (TASK-416.4), the TypeScript and JavaScript copies (TASK-416.1, TASK-416.11).
+
+Simplicity round (owner request, junior-maintainer review of the request and value readers): fix React's runtime fetch check, which read the value declaration without following an import, so a project's own imported fetch wrapper counted as the runtime's. Make the shared value, binding and client readers asynchronous over a small checker-question context that the classic compiler and the native SDK each answer in one adapter, and delete the TypeScript scanner's native copies; fold the repeated fetch request assembly into one shared reader, the narrowing-only context types into UrlContext, and the local node declarations into one structural Node; put the context first in every reader; point the Vue and Angular pages at the React page for the shared paragraphs; drop the test checks that could never fail.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
@@ -147,6 +170,8 @@ Cold review round 1 applied: (1) http-clients.ts no longer has its own object re
 Cold review round 2 applied: (1) axios defaults: http-bindings settings() reads what the sources set below a variable's defaults; exactly one assignment to defaults.baseURL or defaults.method on the default import (every file's axios default import) or on an instance's variable sets it, more than one or any other change to defaults (Object.assign, reassignment, compound writes) hides base and method; an instance without its own base copies axios.defaults when created, which the scan cannot order, so an assigned default base leaves it unknown; the axios client recognition moved into the shared createdClient and defaultClient; interceptors and code a client is handed to are an accepted residual risk stated on the React and Vue pages. (2) Module objects are recognized by resolution: an imported name whose alias resolves to a module (namespace import, export * as re-export) or a dynamic import's result by its type, used other than as x.name, makes that module's exports, through getExportsOfModule, never unchanged; decision 5 on the React, Vue and Angular pages says module object. (3) fetchMethod: a fetch-style input that is not URL text (a Request, a parameter) leaves the method out; applies to React fetch and Vue fetch, $fetch and useFetch. (4) JavaScript page states the script globals rule; the bindings header names the four scanners. The syntactic use classification moved to plugins/scanners/http-uses.ts. Fixtures: test/fixtures/react-client-defaults (default import in another file, instance defaults in another file, Object.assign on defaults, a defaults method, an inheriting instance, a control), react-http cfg, barrel, lazy and writer lines, and a Request input. Verified: isolated bun run check exit 0 (572 pass, 35 skip); disabling the defaults, Request-input or module-object rule each fails its test lines.
 
 Final review round applied: a dynamic import whose module object is not bound by const x = await import() or a .then(function literal) parameter (handed to a call, .then(fn), a promise held in a variable) escapes its module directly, through the module symbol of its specifier; bound ones are tracked by the binding's symbol. import { default as http } from 'axios' counts as a default import for defaults. Docs: the JavaScript script rule names top-level let and var; the React and Vue defaults sentence says any other change to defaults itself or to baseURL and method hides both, and the accepted risks now list the single-assignment ordering assumption, interceptors, code a client is handed to, a re-exported default client, an alias and a destructured defaults. Follow-ups recorded for their tasks: the React isAxios move into http-clients.ts for Vue (TASK-416.4); the JavaScript scanner's own axios reader ignores defaults until TASK-416.11 replaces it with the shared one. Verified: isolated worktree at fabb8811, bun install --frozen-lockfile and bun run check exit 0 (576 pass, 35 skip; only the existing php build lint warning); disabling the unbound dynamic import or the named default import rule fails its test line; React, Angular, Vue and JavaScript builds succeed.
+
+Simplicity round (owner request, junior-maintainer review of the request and value readers). Defect: the runtime fetch check read the value declaration without following an import, so a fetch the project imports from its own module, or import fetch = require('undici'), counted as the runtime's; wrapped.tsx and required.tsx fixtures prove it (HEAD reported wrapped GET /api/wrapped). Refactor: the shared value, binding and client readers are asynchronous and ask a checker only the questions in plugins/scanners/http-checker.ts, answered by the classic adapter there and the native one in typescript/src/http-checker.ts; the TypeScript scanner's native copies (http-values, http-bindings, http-requests) and the JavaScript endpoint adapter are deleted, and RouterContext extends UrlContext. One fetchRequest serves React, JavaScript, Vue (ofetch for $fetch and useFetch) and TypeScript through runtimeFetch, which counts the runtime's fetch and node-fetch's default export; Vue's fetch goes through it too (undici.ts fixture). One boundExport reader states which export an import, import-equals or require binding names, for importOrigin, its per-file name filter and the axios defaults index. The narrowing context types and the local node declarations are gone, the context comes first, Vue and Angular link to React for the shared rules, and two checks that could never fail are folded into their expected lists. Coverage: the TypeScript test runs React's uncertain, shadow, wrapped, required and client-defaults cases (a two-assignment case was added), so the rule mutations that used to survive now fail. Verified: isolated bun install --frozen-lockfile and bun run check exit 0 (596 pass, 35 skip, 0 fail); the targeted check found every fact identical across the five scanners except the stated fixes.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
@@ -155,4 +180,6 @@ Final review round applied: a dynamic import whose module object is not bound by
 The React scanner now reports the HTTP facts of its ecosystem: requests through fetch, axios and axios.create instances in the TSX files it reads, and the endpoints a Next.js project declares by file location, from app/**/route.ts method handlers and pages/api/** default exports, so core can derive client-to-server rows inside one React project. The producer halves both frameworks share were extracted to plugins/scanners/http-url.ts and http-values.ts, over a small structural compiler interface, and four rules that had drifted between producers were settled: a NUL hole marker, a constant being a const or object-literal property and never a class field, an ambient-only root being configured, and import.meta.env being configured; Angular moved onto those halves and the TypeScript scanner's own copies now agree and reuse the compiler-free half. Verified with test/fixtures/react-http and test-bun/react-http.test.ts: the built package reports every supported call and abstention, the twelve endpoints of the fixture's route tree including route groups, catch-alls, index rules and a src/app root, and core derives rows from talks.tsx to the route files that serve it. Isolated bun run check exit 0, and the React and Angular package builds pass. Documented in docs/scanners/react/index.md, which answers the six producer decisions.
 
 Review-fix round after external cold reviews: the React scanner accepts only the axios default import, gates Next.js endpoints on a next dependency and reads app and pages from the root or from src only when the root has none. The shared readers no longer fold values the source does not prove: URL text is classified after joining literal pieces, a configured base must be followed by a slash, a property path is read structurally from an object literal only while plugins/scanners/http-bindings.ts finds no write, escape, accessor, method call, module-object escape or script global that could change it, a never-reassigned let or var and a this field follow the owner's base rule, and every fetch and axios option, a request's own baseURL and a client's defaults are read the same way. Verified with react-http, react-next-routers, react-client-defaults and javascript-http regression fixtures that fail on the previous code, and an isolated bun run check.
+
+The simplicity round made the value, binding and client readers one asynchronous implementation that every TypeScript-family scanner uses through a small checker adapter, deleted the native copies, and fixed an imported project or package fetch being read as the runtime's.
 <!-- SECTION:FINAL_SUMMARY:END -->
