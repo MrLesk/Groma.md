@@ -139,26 +139,30 @@ export async function discoverScanners(
 }
 
 interface FindingGroup {
+  /** The first finding, whose declaration and path label the group. */
   finding: TechnologyFinding
-  fileCount: number
+  files: Set<string>
 }
 
-/** Source-file findings collapse into one group per technology and declaration; each project declaration keeps its own. */
+/**
+ * Source-file findings collapse into one group per technology, counting each file once however many rules match
+ * it; each project declaration keeps its own.
+ */
 function findingGroups(findings: readonly TechnologyFinding[]): FindingGroup[] {
   const groups = new Map<string | TechnologyFinding, FindingGroup>()
   for (const finding of findings) {
-    const key = finding.sourceFiles ? `${finding.technology}\0${finding.declaration}` : finding
+    const key = finding.sourceFiles ? finding.technology : finding
     const group = groups.get(key)
-    if (group === undefined) groups.set(key, { finding, fileCount: 1 })
-    else group.fileCount += 1
+    if (group === undefined) groups.set(key, { finding, files: new Set([finding.file]) })
+    else group.files.add(finding.file)
   }
   return [...groups.values()]
 }
 
-function findingLine({ finding, fileCount }: FindingGroup): string {
+function findingLine({ finding, files }: FindingGroup): string {
   const version = finding.version ?? 'version unresolved'
   if (finding.sourceFiles) {
-    const evidence = fileCount === 1 ? finding.file : `${fileCount} files; first ${finding.file}`
+    const evidence = files.size === 1 ? finding.file : `${files.size} files; first ${finding.file}`
     return `${finding.technology}\t${version}\t${finding.declaration}: ${evidence}`
   }
   const clue = finding.kind === 'framework' ? 'framework declaration, runtime use unverified' : 'project declaration'

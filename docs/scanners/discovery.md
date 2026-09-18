@@ -45,10 +45,10 @@ files and the first path:
 php	version unresolved	PHP source files: 21 files; first plugins/php/src/plugin.php
 ```
 
-Every other rule keeps one line per matching file, including a file-presence
-rule that names exact files such as `tsconfig.json` or `setup.py`, and a parsed
-project file such as `*.csproj`. The `--json` result always lists every
-finding.
+Every other rule prints one line per finding: a file-presence rule that names
+exact files such as `tsconfig.json` or `setup.py` finds each matching file once,
+and a parsed project file such as `*.csproj` or `package.json` can hold several
+declarations. The `--json` result always lists every finding.
 
 Dependency and generated directories are excluded by path segment:
 `node_modules`, `vendor`, `target`, `dist`, `build`, `bin`, `obj`, `.gradle`,
