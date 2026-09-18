@@ -105,7 +105,7 @@ export interface CodeSymbol {
   /** 1-based line of the declared name. */
   line: number
   visibility: CodeVisibility
-  /** The Code reference's `symbols` contain this name. */
+  /** The Code reference's `symbols` name this symbol in the spelling this scanner's Code links use, so a member may be qualified by its type. */
   entry: boolean
 }
 
@@ -128,6 +128,7 @@ export interface CodeFile {
   declarations: CodeDeclaration[]
 }
 
+/** One Code file to outline; its `symbols` may come from another scanner's Code links for the same file. */
 export interface SourceReference {
   file: string
   symbols: string[]

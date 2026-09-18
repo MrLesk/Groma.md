@@ -1,11 +1,11 @@
 ---
 id: TASK-410
 title: Show source outlines for every official scanner
-status: In Progress
+status: Done
 assignee:
   - '@claude'
 created_date: '2026-09-16 19:37'
-updated_date: '2026-09-17 06:31'
+updated_date: '2026-09-18 06:24'
 labels: []
 dependencies: []
 references:
@@ -55,18 +55,18 @@ The web and terminal maps list the classes and methods behind a component only w
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Every official scanner returns an outline for the files it owns: types with their methods and top-level functions, each with name, line and visibility.
-- [ ] #2 Outlines come from parsing source only and need no project dependencies, builds or project tool execution.
+- [x] #1 Every official scanner returns an outline for the files it owns: types with their methods and top-level functions, each with name, line and visibility.
+- [x] #2 Outlines come from parsing source only and need no project dependencies, builds or project tool execution.
 - [x] #3 A component whose Code mixes files from several scanners shows the outline of every file in the web and terminal maps.
 - [x] #4 The scanner plugin contract documents the outline as part of every official scanner and defines how language visibility maps to it.
 <!-- AC:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 Acceptance criteria have objective verification evidence.
+- [x] #1 Acceptance criteria have objective verification evidence.
 - [x] #2 Relevant checks pass and changes remain task-scoped.
 - [x] #3 Public contracts or documentation are updated when behavior changes.
-- [ ] #4 Implementation Plan reflects the final approach; correction history and verification are recorded in Implementation Notes.
+- [x] #4 Implementation Plan reflects the final approach; correction history and verification are recorded in Implementation Notes.
 <!-- DOD:END -->
 
 ## Implementation Plan
@@ -79,6 +79,8 @@ Contract slice (AC #3, #4); the nine subtasks deliver each scanner's outline.
 4. Update consumers (TUI details pane and declaration stops, web code list) to the new fields.
 5. AC #3: return readCodeStructure results in the component's Code order (the terminal cursor follows outline order), and let the web details pane request an outline for any component with Code, not only one with a typescript-owned file. Cover both with a minimal two-scanner fixture, and cover the TypeScript reference rules with a small fixture.
 6. Run bun run check (isolated when other work in progress breaks the shared tree); verify the web and terminal maps on the fixture; self-review specification and quality.
+
+7. Parent closeout: state the four rules the per-language reviews exposed (the entry symbol spelling, one scanner per owned file, PHP's function_exists guard, named function types) in the contract and the scanner types, then record outline evidence for every official scanner, building the opt-in Go, Rust and C# workers to run their outline tests.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
@@ -94,4 +96,28 @@ Cold review corrections (coordinator decisions), applied: namespace, package and
 From TASK-422: core no longer distinguishes an omitted sourceUnits from an empty array, so the omit-versus-empty guidance was removed from docs/scanners/creating-a-plugin.md and from the ScanObservation.sourceUnits comment in packages/scanner/src/index.ts.
 docs/viewers/web/index.md How it's built paragraph now describes the scanner-neutral outline and links the contract (edited after TASK-419 committed).
 Verification after corrections: bun test test-bun/code-outline.test.ts 3 pass. Isolated worktree bun run check: exit 0 (existing lint findings only in untouched files), tsc clean, node 16 pass, bun 371 pass 17 skip 0 fail.
+
+Parent closeout.
+
+Contract clarifications from the per-language reviews, added to docs/scanners/creating-a-plugin.md and the types in packages/scanner/src/index.ts:
+1. entry is true when the reference's symbols name the symbol in the spelling that scanner's Code links use: a member qualified by its type, or its bare name. Members are Type.member in Java, C# and Python, and Namespace\Type::method in PHP beside a top-level Namespace\name; every other scanner matches bare names. A link naming a type never marks its members.
+2. When several configured scanners own a file, Groma requests its outline from the lowest scanner id only, and that reference holds the symbols of every Code link for the file (outlineRequests in src/viewers/source/structure.ts).
+3. PHP also counts a function declared directly inside if (!function_exists('name')) as top-level.
+4. A named type whose form is a function, a C# delegate or a Go type X func(...), is a type with no members.
+
+AC #1. All ten official scanners (typescript, java, angular, vue, react, csharp, go, rust, python, php) implement readCodeStructure. Verified in a detached worktree at fb4ea929 holding only this change. The unconditional outline tests pass through core readCodeStructure or the plugin adapter and assert kind, name, line and visibility: java-outline, python-scanner, php-scanner, angular-scanner, react-scanner, vue-scanner and code-outline (the ten outline test files ran 42 pass, 0 fail; the 13 skips are the opt-in native cases). Those three were then built and run: GROMA_TEST_GO go-scanner.test.ts 6 pass, including "Go outlines defined types with their receiver methods and top-level functions"; plugins/scanners/rust/build.ts then GROMA_TEST_RUST rust-scanner.test.ts 6 pass and 30 assertions, including the Rust outline over all 13 declarations; scripts/package-csharp-scanner.ts then GROMA_TEST_CSHARP_PACKAGE csharp-outline.test.ts 1 pass. Direct outline runs recorded the fields those two tests do not assert: the C# fixture returns OrderService with eleven members at their lines under public, protected, internal and private, the delegate OrderPlaced as a type with no members, and both Place overloads marked as entries by the single link OrderService.Place; a Go probe returns type Handler func(id int) error as a type with no members beside a struct with its receiver method and a top-level function; a TypeScript probe returns a class with its constructor and methods plus exported and file-private top-level functions with lines and visibility. Java and C# emit no kind 'function' because neither language has top-level functions. No JavaScript scanner exists yet; TASK-418 owns it and its criteria require the outline.
+
+AC #2. Each outline path parses source with a scanner-owned parser and needs no project dependency, build or project tool execution: java runs the bundled JDK on worker.jar over a file list on stdin and calls task.parse() with -proc:none, so no attribution or bytecode is needed; csharp runs the packaged self-contained worker, which parses with CSharpSyntaxTree.ParseText and returns before reading any project input; go and rust run their prebuilt workers over a JSON reference list (parser.ParseFile with SkipObjectResolution, ast::SourceFile::parse per file) and both skip the go.mod and Cargo readiness checks their scan paths need; python copies only the referenced files into its bundled Pyodide filesystem and calls ast.parse, importing no project module; php parses with the bundled php-parser and needs neither Composer nor a php binary; angular, react and vue call ts.createSourceFile on the TypeScript copied into their own bundle, never createProgram, and vue adds the bundled @vue/language-core SFC parse. The typescript scanner uses its own pinned TypeScript async project API, so it was probed directly: it outlines a file whose declared dependency is not installed with no node_modules present, and also a file the project tsconfig excludes.
+
+Verification: isolated worktree bun run check exit 0 (biome 1 warning and 2 infos, all in untouched files; tsc clean; node 16 pass; bun 436 pass, 25 skip, 0 fail).
+
+Non-blocking follow-ups on test coverage, not required by an acceptance criterion: csharp-outline.test.ts asserts only kind and entry, so C# members, lines, visibilities and the delegate rest on the recorded run; the Go fixture has no type X func(...) case; the TypeScript reference test omits line and entry.
+
+Cold review corrections to the contract wording: entry names the symbol in the spelling that scanner's Code links use, PHP members are Namespace\Type::method beside a top-level Namespace\name, the function_exists guard counts only the function it names, a file's outline goes to the lowest scanner id among its Code links (including a scanner without the hook, which then leaves the file without an outline), and a named function type has an empty members list. Re-verified in a detached worktree at fa5ac2d8 holding only this change: bun run check exit 0 (biome 1 warning and 2 infos in untouched files, tsc clean, node 16 pass, bun 457 pass 0 fail).
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Every official scanner returns a source outline through readCodeStructure, and the plugin contract now states the rules the per-language reviews exposed: the entry symbol spelling each scanner writes, one scanner per owned file, PHP's function_exists guard, and named function types as memberless types. Verified in a detached worktree holding only this change: the unconditional outline tests pass and the opt-in Go, Rust and C# outline suites pass after building their workers, direct outline runs recorded the C#, Go and TypeScript fields those tests leave unasserted, probes confirmed the outline needs no installed project dependencies or project tool, and bun run check exits 0.
+<!-- SECTION:FINAL_SUMMARY:END -->
