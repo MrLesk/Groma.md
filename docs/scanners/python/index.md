@@ -105,9 +105,19 @@ tokens to every `def` and `async def`: module functions, methods including
 `__init__`, and functions nested in functions or classes.
 
 Parameters and the names a function binds, including comprehension variables
-and nested function names, become slots; a function does not bind names it
-declares `global` or `nonlocal`. Docstrings, decorators, parameter defaults and
-annotations are not body tokens.
+and nested function names, become slots in order of appearance; a def, class,
+import, except or match name appears where it is bound. A function does not
+bind names it declares `global` or `nonlocal`. An import inside a function
+keeps the imported module and member, such as `math.floor`, and only its local
+name becomes a slot. Docstrings, decorators, parameter defaults and annotations
+are not body tokens.
+
+The syntax tree has no parentheses, so an operand of an operator that is itself
+a binary, boolean or comparison expression is wrapped in `(` and `)`:
+`(a + b) * c` and `a + b * c` differ, and a chain such as `a < b <= c` stays one
+run. A subscript writes `index`, a slice keeps where each bound stands, a
+dictionary unpacking writes `**` where its key would be, and an else block
+starts with `else`.
 
 Lambdas, including those in a dictionary passed to a call or decorator, are
 anonymous callbacks and are never compared. A function's tokens include the

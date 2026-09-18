@@ -58,8 +58,9 @@ NODE_TOKENS = {ast.Add: "+", ast.Sub: "-", ast.Mult: "*", ast.MatMult: "@", ast.
                ast.AsyncWith: "with", ast.Await: "await", ast.Yield: "yield", ast.YieldFrom: "yield",
                ast.Assign: "=", ast.AugAssign: "=", ast.AnnAssign: "=", ast.NamedExpr: ":=", ast.Delete: "del",
                ast.Assert: "assert", ast.Break: "break", ast.Continue: "continue", ast.Call: "call",
-               ast.Starred: "*"}
+               ast.Starred: "*", ast.Subscript: "index"}
 SCOPES = (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda, ast.ClassDef)
+GROUPED = (ast.BinOp, ast.BoolOp, ast.Compare)
 
 
 def statements(scope):
@@ -77,13 +78,54 @@ def parameters(scope):
             if item is not None]
 
 
+def operator_expression(node):
+    """Operators and operands in source order: `a + b`, `not a`, the chains `a and b and c` and `a < b <= c`."""
+    if isinstance(node, ast.BinOp):
+        return [node.left, node.op, node.right]
+    if isinstance(node, ast.UnaryOp):
+        return [node.op, node.operand]
+    if isinstance(node, ast.BoolOp):
+        return [node.values[0], *(part for value in node.values[1:] for part in (node.op, value))]
+    if isinstance(node, ast.Compare):
+        return [node.left, *(part for pair in zip(node.ops, node.comparators) for part in pair)]
+    return None
+
+
+def parts(node):
+    """A node's children in source order with the markers its tokens need.
+
+    The syntax tree has no parentheses, so an operand that is itself a binary, boolean or comparison expression is
+    wrapped in `(` and `)`. A slice separates its bounds with `:`, a dictionary unpacking writes `**` where its key
+    would be, and an else block starts with `else`.
+    """
+    if (operands := operator_expression(node)) is not None:
+        for part in operands:
+            yield from ("(", part, ")") if isinstance(part, GROUPED) else (part,)
+    elif isinstance(node, ast.Slice):
+        step = (":", node.step) if node.step is not None else ()
+        yield from (part for part in (node.lower, ":", node.upper, *step) if part is not None)
+    elif isinstance(node, ast.Dict):
+        for key, value in zip(node.keys, node.values):
+            yield "**" if key is None else key
+            yield value
+    else:
+        for field, value in ast.iter_fields(node):
+            if field == "orelse" and isinstance(value, list) and value:
+                yield "else"
+            if field != "annotation":
+                yield from (item for item in (value if isinstance(value, list) else [value])
+                            if isinstance(item, ast.AST))
+
+
 def children(node):
-    for field, value in ast.iter_fields(node):
-        if field == "annotation":
-            continue
-        for item in value if isinstance(value, list) else [value]:
-            if isinstance(item, ast.AST):
-                yield item
+    return (part for part in parts(node) if isinstance(part, ast.AST))
+
+
+def bound_names(node):
+    """Names a node binds without a Name node: a def or class name, an import alias, an except or match capture."""
+    if isinstance(node, ast.alias):
+        return [(node.asname or node.name).split(".")[0]]
+    return [item for item in (getattr(node, "name", None), getattr(node, "rest", None)) if isinstance(item, str)]
 
 
 def local_names(scope):
@@ -101,24 +143,31 @@ def local_names(scope):
             declared.update(node.names)
         elif isinstance(node, ast.Name) and not isinstance(node.ctx, ast.Load):
             names.add(node.id)
-        elif isinstance(node, ast.alias):
-            names.add((node.asname or node.name).split(".")[0])
         else:
-            # Definitions, except handlers and match captures bind a string name or rest.
-            names.update(item for item in (getattr(node, "name", None), getattr(node, "rest", None))
-                         if isinstance(item, str))
+            names.update(bound_names(node))
         if not isinstance(node, SCOPES):
             pending.extend(children(node))
     return names - declared
 
 
-def node_token(node):
-    """The token a node adds before its children: an attribute or keyword name, an operator or a keyword."""
+def imported(statement, alias):
+    """What an import names: `import os.path` gives `os.path`, `from ..shop import cart` gives `..shop.cart`."""
+    if isinstance(statement, ast.Import):
+        return alias.name
+    return "." * statement.level + ".".join(part for part in (statement.module, alias.name) if part)
+
+
+def node_tokens(node):
+    """Tokens a node adds before its children: an attribute or keyword name, an import, an operator or a keyword."""
     if isinstance(node, ast.Attribute):
-        return f".{node.attr}"
+        return [f".{node.attr}"]
     if isinstance(node, ast.keyword):
-        return "**" if node.arg is None else f"k.{node.arg}"
-    return NODE_TOKENS.get(type(node))
+        return ["**" if node.arg is None else f"k.{node.arg}"]
+    if isinstance(node, (ast.Import, ast.ImportFrom)):
+        # The imported module and member stay; only the local name becomes a slot.
+        return ["import", *(imported(node, alias) for alias in node.names)]
+    token = NODE_TOKENS.get(type(node))
+    return [] if token is None else [token]
 
 
 class BodyTokens:
@@ -148,21 +197,23 @@ class BodyTokens:
         self.bindings.pop()
 
     def walk(self, node):
+        # A def, class, import, except or match name takes its slot where it is bound, not where it is first used.
+        for name in bound_names(node):
+            self.slot(name)
         if isinstance(node, SCOPES):
             self.tokens.append("class" if isinstance(node, ast.ClassDef) else "fn")
             self.enter(node)
-            return
-        if isinstance(node, ast.Name):
+        elif isinstance(node, ast.Name):
             self.tokens.append(self.slot(node.id))
-            return
-        if isinstance(node, ast.Constant):
+        elif isinstance(node, ast.Constant):
             self.tokens.append(repr(node.value))
-            return
-        token = node_token(node)
-        if token is not None:
-            self.tokens.append(token)
-        for child in children(node):
-            self.walk(child)
+        else:
+            self.tokens.extend(node_tokens(node))
+            for part in parts(node):
+                if isinstance(part, str):
+                    self.tokens.append(part)
+                else:
+                    self.walk(part)
 
 
 def body_tokens(function):

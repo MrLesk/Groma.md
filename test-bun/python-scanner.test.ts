@@ -161,7 +161,9 @@ test.concurrent('lint finds identical and near-duplicate Python functions but ne
       at: [...finding.matchAll(/\S+\.py:\d+/g)].map(match => match[0]).sort(),
       identical: !finding.includes('not identical'),
     }))
-    // The renamed readiness copy matches exactly; the identical lambdas and initialization loops are absent.
+    // The renamed readiness copy matches exactly; the identical lambdas and initialization loops are absent, and
+    // so are the distinct.py pairs, which differ only in grouping, subscripts, slices, else blocks, dictionary
+    // unpacking, the nested function called or the import.
     expect(findings).toEqual([
       { at: ['invoice.py:1', 'quote.py:1'], identical: false },
       { at: ['readiness.py:1', 'scheduling.py:1'], identical: true },

@@ -1,0 +1,139 @@
+def head(items, n):
+    return items[:n] + [1, 2, 3, 4]
+
+
+def tail(items, n):
+    return items[n:] + [1, 2, 3, 4]
+
+
+def pick_first():
+    def first():
+        return 1
+
+    def second():
+        return 2
+
+    return first() + 10 + 20
+
+
+def pick_second():
+    def first():
+        return 1
+
+    def second():
+        return 2
+
+    return second() + 10 + 20
+
+
+def round_down(x):
+    from math import floor
+    return floor(x) + 1 + 2
+
+
+def round_up(x):
+    from math import ceil
+    return ceil(x) + 1 + 2
+
+
+def grouped_sum(a, b, c):
+    return (a + b) * c + 10
+
+
+def plain_sum(a, b, c):
+    return a + b * c + 10
+
+
+def either_pair(a, b, c, d):
+    return a and b or c or d or 1
+
+
+def all_three(a, b, c, d):
+    return a and b and c or d or 1
+
+
+def left_compare(a, b, c):
+    return (a < b) == c and 10
+
+
+def right_compare(a, b, c):
+    return a < (b == c) and 10
+
+
+def all_then_either(a, b, c, d):
+    return a and b and c or d or 10
+
+
+def pairs_either(a, b, c, d):
+    return a and b or c and d or 10
+
+
+def within(lo, x, hi, ok):
+    return lo <= x < hi and ok or 10
+
+
+def ordered(lo, x, hi, ok):
+    return lo <= x and hi < ok or 10
+
+
+def one_argument(a, b, c, d):
+    return check(a and b and c, d) + 1
+
+
+def two_arguments(a, b, c, d):
+    return check(a and b, c and d) + 1
+
+
+def two_then_one(a, b, c):
+    return [a, b] + [c] + [1, 2]
+
+
+def one_then_two(a, b, c):
+    return [a] + [b, c] + [1, 2]
+
+
+def slice_then_index(items, n, m):
+    return items[n:][m] + 1 + 2
+
+
+def slice_between(items, n, m):
+    return items[n:m] + 1 + 2
+
+
+def pick_else(c, x):
+    if c:
+        x = 1
+    else:
+        x = 2
+    return x + 10
+
+
+def pick_after(c, x):
+    if c:
+        x = 1
+    x = 2
+    return x + 10
+
+
+def merge_first(a, b, c):
+    return {**a, b: c, "x": 1, "y": 2}
+
+
+def merge_last(a, b, c):
+    return {b: a, **c, "x": 1, "y": 2}
+
+
+def lookup(table, key):
+    return log(table[key], "found", 1, 2)
+
+
+def pair(table, key):
+    return log((table, key), "found", 1, 2)
+
+
+def negated_power(a, b):
+    return check(-a ** b, 1, 2, 3)
+
+
+def power_of_negated(a, b):
+    return check((-a) ** b, 1, 2, 3)
