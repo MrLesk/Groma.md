@@ -497,7 +497,13 @@ Each fact names the declared `operation` that handles or sends it;
 - An endpoint has `method`, an uppercase method or `*`, and `path`. Its
   segments are `{ kind: 'literal', value }`, `{ kind: 'parameter', name }`,
   and `{ kind: 'catch-all', name }`. Parameters and catch-alls accept
-  `optional: true`; a catch-all is the last segment.
+  `optional: true`, and `constrained: true` when the application accepts only
+  some of their values; a catch-all is the last segment. An endpoint whose
+  router takes the first registered match also has
+  `order: { application, position }`: the repository-relative path of the file
+  that creates the application, or of the file that declares the route when
+  the scanner cannot identify that file, and a nonnegative integer position in
+  its registration sequence.
 - A request has `path`, `method` only when it is known, and `configured: true`
   when the path follows a configuration value. Its segments are
   `{ kind: 'literal', value }`, `{ kind: 'dynamic' }` for one whole computed

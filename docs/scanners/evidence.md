@@ -170,6 +170,31 @@ is one of:
 | Catch-all | The remaining segments, at least one; always last |
 | Optional catch-all | The remaining segments, possibly none; always last |
 
+A parameter or catch-all is **constrained** when the application accepts only
+some of the values its kind allows. A typed or pattern-restricted parameter,
+such as `{id:int}`, `<int:id>` or `{id<\d+>}`, is a constrained parameter, and
+so is one segment that mixes literal text with a placeholder, such as
+`talk-{id}`. A pattern that may span segments, or that the format cannot state
+otherwise, becomes a constrained optional catch-all in its place, and the rest
+of the route is dropped. A constrained segment is never widened to a plain one
+and its endpoint is never omitted: widening lets a request the application
+rejects reach the endpoint, and omitting it lets another file's route take the
+requests it serves. The
+[HTTP request rule](../relationship-inference.md#http-requests) states how core
+matches constrained segments.
+
+A router that tries routes in the order they were registered and takes the
+first match, such as Express or Django, gives each endpoint an `order`: the
+`application`, which is the repository-relative path of the file that creates
+the application, or of the file that declares the route when the scanner cannot
+identify that file, and the endpoint's `position` in that application's
+registration sequence. A smaller position is tried first. Endpoints whose
+relative order the scanner cannot prove share one position, so one position for
+every endpoint of an application is always safe. A router that prefers the most
+specific route omits `order`. The
+[HTTP request rule](../relationship-inference.md#http-requests) states how core
+ranks by position.
+
 An endpoint declared by file location uses the same shape. The scanner
 translates the location into segments and reports the operation that the
 location designates, such as an exported handler or the file's module
@@ -199,10 +224,12 @@ framework-specific rule:
   leading `unknown` segment instead. Core then derives nothing, and the fact
   still records what the scanner saw.
 
-Core derives a row when no segment is unknown, and a `configured` path starts
-with a literal segment. Core assumes a configured base addresses a server in
-this repository, so a configuration value that points at a third-party service
-can produce a wrong row; that is an accepted limit.
+Core compares a request with endpoints only when no segment is unknown and a
+`configured` path starts with a literal segment; the
+[HTTP request rule](../relationship-inference.md#http-requests) states when a
+comparable request derives a row. Core assumes a configured base addresses a
+server in this repository, so a configuration value that points at a
+third-party service can produce a wrong row; that is an accepted limit.
 
 The path ends before the query and fragment, which are ignored even when they
 are computed. Literal text uses URL path characters; percent-encode anything
@@ -227,8 +254,8 @@ such as `Calls HTTP endpoint: GET /talks/:id`.
 
 ### Producer checklist
 
-Every scanner decides the same six questions. Each scanner page answers them in
-this order, with its ecosystem's constructs:
+Every scanner decides the same eight questions. Each scanner page answers them
+in this order, with its ecosystem's constructs:
 
 1. **Which prefixes belong in the path.** Include every prefix the source
    declares: a class-level or controller prefix, a mounted group's prefix, and a
@@ -260,6 +287,24 @@ this order, with its ecosystem's constructs:
    designates: the exported handler for that method, or the file's module
    initializer when the file exports no such handler. `app/api/talks/route.ts`
    with an exported `GET` names that function.
+7. **Which segments are constrained.** A typed, pattern-restricted or
+   mixed-text segment is a constrained parameter: `{id:int}` reports
+   `{ kind: 'parameter', name: 'id', constrained: true }`. A pattern that may
+   span segments is a constrained optional catch-all that replaces the rest of
+   the route: `^files/(?P<path>[a-z/]+)\.txt$` reports `files` and then
+   `{ kind: 'catch-all', name: 'path', optional: true, constrained: true }`.
+8. **Registration order.** A router that takes the first registered match
+   reports `order` on every endpoint. In a root URLconf `mysite/urls.py`, a
+   Django `path('<name>/', ...)` followed by `path('talks/', ...)` reports
+   `{ application: 'mysite/urls.py', position: 0 }` and then position `1`.
+   Number the sequence the scanner proves, such as one URLconf and its
+   includes, or one file's mounts and each mounted router's source order;
+   endpoints whose relative order it cannot prove share one position. When
+   the scanner cannot identify the file that creates the application,
+   `application` is the file that declares the route. A fallback the framework
+   always tries last, such as Laravel's `Route::fallback`, takes the largest
+   position. A router that prefers the
+   most specific route, such as Spring or ASP.NET Core, omits `order`.
 
 ## Completion, precision, and uncertainty
 

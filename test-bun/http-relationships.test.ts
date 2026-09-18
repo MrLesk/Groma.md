@@ -35,16 +35,28 @@ function scan(id: string, facts: Facts): ScanObservation {
   })
 }
 
-/** `:id` is a parameter, `:id?` optional, `:rest+` a catch-all and `:rest*` an optional catch-all. */
+/**
+ * `:id` is a parameter, `:id?` optional, `:rest+` a catch-all and `:rest*` an optional catch-all;
+ * a trailing `!` marks a constrained parameter or catch-all.
+ */
 function endpoint(file: string, method: string, route: string): ScanHttpEndpoint {
   const path = route.split('/').filter(Boolean).map((part): HttpEndpointSegment => {
-    const variable = /^:(\w+)([?+*]?)$/.exec(part)
+    const variable = /^:(\w+)([?+*]?)(!?)$/.exec(part)
     if (!variable) return { kind: 'literal', value: part }
     const suffix = variable[2]
     const kind = suffix === '+' || suffix === '*' ? 'catch-all' : 'parameter'
-    return { kind, name: variable[1]!, ...(suffix === '?' || suffix === '*' ? { optional: true } : {}) }
+    return {
+      kind, name: variable[1]!,
+      ...(suffix === '?' || suffix === '*' ? { optional: true } : {}),
+      ...(variable[3] ? { constrained: true } : {}),
+    }
   })
   return { operation: file, method, path }
+}
+
+/** An endpoint of a router that takes the first registered match, at its registration position. */
+function registered(fact: ScanHttpEndpoint, position: number, application = 'src/server.ts'): ScanHttpEndpoint {
+  return { ...fact, order: { application, position } }
 }
 
 /** `{}` is a dynamic segment and `?` unknown text; a configured base precedes the path. */
@@ -89,6 +101,32 @@ const matches: [string, ScanHttpEndpoint[], ScanHttpRequest, string][] = [
     [endpoint(talks, 'GET', '/talks'), endpoint(archive, 'GET', '/:rest+')], request('GET', '/talks'), 'GET /talks'],
   ['a parameter before a fallback catch-all in another file',
     [endpoint(talks, 'GET', '/talks/:id'), endpoint(archive, '*', '/talks/:rest+')], request('GET', '/talks/9'), 'GET /talks/:id'],
+  ['a path that ends before another file\'s unused optional parameter',
+    [endpoint(talks, 'GET', '/talks'), endpoint(archive, 'GET', '/talks/:page?')], request('GET', '/talks'), 'GET /talks'],
+  ['the root path before another file\'s empty optional catch-all',
+    [endpoint(talks, 'GET', '/'), endpoint(archive, 'GET', '/:rest*')], request('GET', '/'), 'GET /'],
+  ['a path that ends before an unused optional parameter in the same file',
+    [endpoint(talks, 'GET', '/talks'), endpoint(talks, 'GET', '/talks/:page?')], request('GET', '/talks'), 'GET /talks'],
+  ['a parameter route whose literal sibling is in the same file',
+    [endpoint(talks, 'GET', '/talks/:id'), endpoint(talks, 'GET', '/talks/archive')], request('GET', '/talks/{}'), 'GET /talks/:id'],
+  ['a dynamic value in a constrained parameter', [endpoint(talks, 'GET', '/talks/:id!')], request('GET', '/talks/{}'), 'GET /talks/:id'],
+  ['a literal route beside a constrained parameter in another file',
+    [endpoint(talks, 'GET', '/talks/archive'), endpoint(archive, 'GET', '/talks/:id!')], request('GET', '/talks/archive'),
+    'GET /talks/archive'],
+  ['the first registered match in a first-match application',
+    [registered(endpoint(talks, '*', '/:name'), 0), registered(endpoint(archive, '*', '/talks'), 1)], request('GET', '/talks'), 'GET /:name'],
+  ['a parameter route registered before a literal sibling in another file',
+    [registered(endpoint(talks, 'GET', '/talks/:id'), 0), registered(endpoint(archive, 'GET', '/talks/archive'), 1)],
+    request('GET', '/talks/archive'), 'GET /talks/:id'],
+  ['a route registered before a fallback in another file',
+    [registered(endpoint(talks, 'GET', '/api/talks/:id'), 0), registered(endpoint(archive, 'GET', '/:rest*'), 1)],
+    request('GET', '/api/talks/{}'), 'GET /api/talks/:id'],
+  ['an exact path before a prefixed one registered earlier',
+    [registered(endpoint(archive, 'GET', '/talks'), 0), registered(endpoint(talks, 'GET', '/api/talks'), 1)],
+    request('GET', '/api/talks'), 'GET /api/talks'],
+  ['a parameter route registered before a literal sibling in the same file',
+    [registered(endpoint(talks, 'GET', '/users/:id'), 0), registered(endpoint(talks, 'GET', '/users/me'), 1)],
+    request('GET', '/users/me'), 'GET /users/:id'],
 ]
 
 for (const [name, endpoints, sent, label] of matches) {
@@ -121,6 +159,44 @@ const abstentions: [string, ScanHttpEndpoint[], ScanHttpRequest][] = [
   ['a prefix followed by a parameter', [endpoint(talks, 'GET', '/api/:id')], request('GET', '/talks')],
   ['a prefix that leaves nothing to compare', [endpoint(talks, 'GET', '/')], request('GET', '/talks')],
   ['a catch-all without its required remainder', [endpoint(talks, 'GET', '/files/:path+')], request('GET', '/files')],
+  ['a literal that a constrained parameter may reject', [endpoint(talks, 'GET', '/talks/:id!')], request('GET', '/talks/abc')],
+  ['a literal that a constrained parameter may accept before another file\'s fallback',
+    [endpoint(talks, 'GET', '/:page+'), endpoint(archive, 'GET', '/talks/:id!')], request('GET', '/talks/7')],
+  ['a remainder that a constrained catch-all may reject', [endpoint(talks, 'GET', '/files/:rest+!')], request('GET', '/files/{}')],
+  ['a fallback in another file registered in unknown order',
+    [registered(endpoint(talks, 'GET', '/api/talks'), 0), registered(endpoint(archive, 'GET', '/:rest*'), 0)], request('GET', '/api/talks')],
+  ['two routes in one file registered in unknown order',
+    [registered(endpoint(talks, 'GET', '/users/me'), 0), registered(endpoint(talks, 'GET', '/users/:id'), 0)], request('GET', '/users/me')],
+  ['a literal in another file registered before the reached parameter',
+    [registered(endpoint(archive, 'GET', '/talks/archive'), 0), registered(endpoint(talks, 'GET', '/talks/:id'), 1)],
+    request('GET', '/talks/{}')],
+  ['a literal registered at the same position as the reached parameter',
+    [registered(endpoint(talks, 'GET', '/talks/:id'), 0), registered(endpoint(archive, 'GET', '/talks/archive'), 0)],
+    request('GET', '/talks/{}')],
+  ['paths that removed different leading segments in one application',
+    [registered(endpoint(archive, 'GET', '/v1/talks/:id'), 1), registered(endpoint(talks, 'GET', '/v2/talks/:id'), 0)],
+    request('GET', '/talks/{}', true)],
+  ['a removed request prefix beside a removed endpoint prefix in one application',
+    [registered(endpoint(talks, 'GET', '/talks'), 1), registered(endpoint(archive, 'GET', '/v1/api/talks'), 0)],
+    request('GET', '/api/talks')],
+  ['paths that removed different leading segments',
+    [endpoint(talks, 'GET', '/v1/talks/archive'), endpoint(archive, 'GET', '/v2/talks/:id')], request('GET', '/talks/archive', true)],
+  ['a removed request prefix beside a removed endpoint prefix',
+    [endpoint(talks, 'GET', '/talks'), endpoint(archive, 'GET', '/v1/api/talks')], request('GET', '/api/talks')],
+  ['an exact fallback catch-all beside a path that removed a prefix',
+    [endpoint(archive, 'GET', '/:rest*'), endpoint(talks, 'GET', '/talks')], request('GET', '/api/talks')],
+  ['a constrained parameter beside a catch-all in another file',
+    [endpoint(talks, 'GET', '/talks/:id!'), endpoint(archive, 'GET', '/talks/:rest+')], request('GET', '/talks/{}')],
+  ['a constrained parameter registered before a parameter route in another file',
+    [registered(endpoint(talks, 'GET', '/talks/:id!'), 0), registered(endpoint(archive, 'GET', '/talks/:slug'), 1)],
+    request('GET', '/talks/{}')],
+  ['routes of two applications in one repository',
+    [registered(endpoint(talks, 'GET', '/api/talks'), 3, 'api/server.ts'), registered(endpoint(archive, 'GET', '/:rest*'), 0, 'web/server.ts')],
+    request('GET', '/api/talks')],
+  ['a first-match route beside a most-specific route',
+    [endpoint(talks, 'GET', '/api/talks'), registered(endpoint(archive, 'GET', '/:rest*'), 0)], request('GET', '/api/talks')],
+  ['a literal in another file that a dynamic segment could reach after a dropped prefix',
+    [endpoint(talks, 'GET', '/api/talks/:id/:section'), endpoint(archive, 'GET', '/archive/details')], request('GET', '/talks/{}/details')],
 ]
 
 for (const [name, endpoints, sent] of abstentions) {
@@ -148,6 +224,25 @@ test.concurrent('one file pair lists every reached endpoint once with every cont
   expect(inferRelationships([server, requests, pages], separateOwners)).toEqual(rows)
 })
 
+test.concurrent('an optional catch-all beside a controller\'s routes takes no request those routes end on', () => {
+  const endpoints = [
+    endpoint(talks, 'GET', '/api/Talks'), endpoint(talks, 'GET', '/api/Talks/:id'),
+    endpoint(talks, 'POST', '/api/Talks/:id?'), endpoint(talks, 'GET', '/api/Talks/:slug*'),
+  ]
+  const sent = [request('GET', '/api/talks'), request('GET', '/api/talks/{}'), request('POST', '/api/talks')]
+  expect(derive(endpoints, sent).map(row => row.description))
+    .toEqual(['Calls HTTP endpoints: GET /api/Talks, GET /api/Talks/:id, POST /api/Talks/:id?'])
+})
+
+test.concurrent('registration positions from different scanners are not compared', () => {
+  const rows = inferRelationships([
+    scan('javascript', { httpEndpoints: [registered(endpoint(archive, 'GET', '/:rest*'), 0)] }),
+    scan('typescript', { httpEndpoints: [registered(endpoint(talks, 'GET', '/api/talks'), 1)] }),
+    scan('client', { httpRequests: [request('GET', '/api/talks')] }),
+  ], separateOwners)
+  expect(rows).toEqual([])
+})
+
 test.concurrent('a callback and an HTTP request between the same files share one derived row', () => {
   const invocation: ScanInvocation = {
     source: client, targets: [talks], unresolved: false, line: 1, member: 'saved', binding: { file: archive, line: 1 },
@@ -162,7 +257,7 @@ test.concurrent('a callback and an HTTP request between the same files share one
 
 test.concurrent('HTTP facts survive JSON exchange and reject input core cannot match exactly', () => {
   const observation = scan('fixture', {
-    httpEndpoints: [endpoint(talks, '*', '/talks/:id?/:rest+')],
+    httpEndpoints: [registered(endpoint(talks, '*', '/talks/:id?!/:rest+'), 2)],
     httpRequests: [request(undefined, '/talks/{}/?', true)],
   })
   expect(parseScanObservation(JSON.stringify(observation))).toEqual(observation)
@@ -175,6 +270,10 @@ test.concurrent('HTTP facts survive JSON exchange and reject input core cannot m
   expect(invalid({ httpEndpoints: [endpoint(talks, 'get', '/talks')] })).toThrow('uppercase HTTP method')
   expect(invalid({ httpRequests: [request('*', '/talks')] })).toThrow('uppercase HTTP method')
   expect(invalid({ httpRequests: [{ ...request('GET', '/talks'), configured: 'yes' }] })).toThrow('configured')
+  const loose = { ...endpoint(talks, 'GET', '/'), path: [{ kind: 'parameter', name: 'id', constrained: 'int' }] }
+  expect(invalid({ httpEndpoints: [loose] })).toThrow('constrained')
+  expect(invalid({ httpEndpoints: [registered(endpoint(talks, 'GET', '/'), 1.5)] })).toThrow('nonnegative integer')
+  expect(invalid({ httpEndpoints: [registered(endpoint(talks, 'GET', '/'), 0, '')] })).toThrow('nonempty')
   expect(invalid({ httpRequests: [{ ...request('GET', '/talks'), operation: 'missing' }] })).toThrow('unknown operation')
   expect(invalid({ operations: undefined, httpRequests: [request('GET', '/talks')] })).toThrow('require operation declarations')
 })

@@ -1,12 +1,20 @@
-import { array, object } from './values.ts'
+import { array, object, string } from './values.ts'
 
 /** One segment of an endpoint path as the application declares it. */
 export type HttpEndpointSegment =
   | { kind: 'literal'; value: string }
-  /** One segment with any text; an optional parameter also matches no segment. */
-  | { kind: 'parameter'; name: string; optional?: boolean }
-  /** The remaining segments: at least one, or any number when optional. Always last. */
-  | { kind: 'catch-all'; name: string; optional?: boolean }
+  /**
+   * One segment with any text; an optional parameter also matches no segment. A constrained
+   * parameter accepts only some text, such as a typed or pattern-restricted value, or a segment
+   * that mixes literal text with a placeholder.
+   */
+  | { kind: 'parameter'; name: string; optional?: boolean; constrained?: boolean }
+  /**
+   * The remaining segments: at least one, or any number when optional. Always last. A constrained
+   * catch-all accepts only some remainders; it also stands for a pattern that may span segments,
+   * in place of that pattern and everything after it.
+   */
+  | { kind: 'catch-all'; name: string; optional?: boolean; constrained?: boolean }
 
 /** One segment of a request path, as far as the source proves its text. */
 export type HttpRequestSegment =
@@ -24,6 +32,19 @@ export interface ScanHttpEndpoint {
   method: string
   /** Complete path the application serves, with every prefix the source declares. */
   path: HttpEndpointSegment[]
+  /**
+   * Set only by a router that tries routes in registration order and takes the first match; a
+   * router that prefers the most specific route omits it.
+   */
+  order?: {
+    /**
+     * Repository-relative path of the file that creates the application, or of the file that
+     * declares the route when the scanner cannot identify that file.
+     */
+    application: string
+    /** Registration position: a smaller one is tried first, and equal ones have an unknown order. */
+    position: number
+  }
 }
 
 /** An HTTP request the application sends. */
@@ -75,8 +96,15 @@ function endpointSegment(value: unknown, last: boolean): HttpEndpointSegment {
   if (segment.kind === 'literal') return { kind: 'literal', value: text(segment.value, 'HTTP literal segment') }
   if (segment.kind !== 'parameter' && segment.kind !== 'catch-all') fail(`unknown HTTP endpoint segment kind: ${String(segment.kind)}`)
   if (segment.kind === 'catch-all' && !last) fail('an HTTP catch-all segment must be last')
-  if (segment.optional !== undefined && typeof segment.optional !== 'boolean') fail('HTTP segment optional must be a boolean')
-  return { kind: segment.kind, name: text(segment.name, 'HTTP segment name'), ...(segment.optional ? { optional: true } : {}) }
+  for (const flag of ['optional', 'constrained'] as const) {
+    if (segment[flag] !== undefined && typeof segment[flag] !== 'boolean') fail(`HTTP segment ${flag} must be a boolean`)
+  }
+  return {
+    kind: segment.kind,
+    name: text(segment.name, 'HTTP segment name'),
+    ...(segment.optional ? { optional: true } : {}),
+    ...(segment.constrained ? { constrained: true } : {}),
+  }
 }
 
 function requestSegment(value: unknown): HttpRequestSegment {
@@ -86,6 +114,17 @@ function requestSegment(value: unknown): HttpRequestSegment {
   return fail(`unknown HTTP request segment kind: ${String(segment.kind)}`)
 }
 
+function order(value: unknown): NonNullable<ScanHttpEndpoint['order']> {
+  const fact = object(value, 'HTTP endpoint order')
+  const application = string(fact.application, 'HTTP endpoint order application')
+  if (application === '') fail('HTTP endpoint order application must be nonempty')
+  const position = fact.position
+  if (typeof position !== 'number' || !Number.isInteger(position) || position < 0) {
+    fail('HTTP endpoint order position must be a nonnegative integer')
+  }
+  return { application, position }
+}
+
 function endpoint(value: unknown, operations: ReadonlySet<string>): ScanHttpEndpoint {
   const fact = object(value, 'HTTP endpoint')
   const path = array(fact.path, 'HTTP endpoint path')
@@ -93,6 +132,7 @@ function endpoint(value: unknown, operations: ReadonlySet<string>): ScanHttpEndp
     operation: operation(fact.operation, operations),
     method: method(fact.method, 'HTTP endpoint method', true),
     path: path.map((segment, index) => endpointSegment(segment, index === path.length - 1)),
+    ...(fact.order === undefined ? {} : { order: order(fact.order) }),
   }
 }
 
