@@ -145,14 +145,32 @@ Endpoints:
 
 - attribute-routed controllers: `[Route]` on the class with `[HttpGet]`,
   `[HttpPost]`, `[HttpPut]`, `[HttpDelete]`, `[HttpPatch]`, `[HttpHead]`,
-  `[HttpOptions]` or `[Route]` on an action. Each template the action declares
-  serves every method its verb attributes allow, and an action with no template
-  serves the class prefix. An action that declares no verb attribute serves
-  every method. `[controller]` and `[action]` become the class name without its
-  `Controller` suffix and the method name.
+  `[HttpOptions]` or `[Route]` on an action. As in ASP.NET Core, each `[Route]`
+  and each verb attribute with a template, `Name` or `Order` is one route. A
+  verb attribute's route serves only its own method, so
+  `[HttpGet("a")] [HttpPost("b")]` serves GET `a` and POST `b`. A `[Route]`
+  serves the methods of the verb attributes without a template, or every method
+  when there are none. Verb attributes without a template that no `[Route]`
+  took serve the class prefix, so `[HttpPost] [HttpPut("{id?}")]` serves PUT
+  `{id?}` and POST on the prefix. An action without routing attributes
+  reports nothing. `[controller]` becomes the class name without its
+  `Controller` suffix, and `[action]` the literal `[ActionName]` or else the
+  method name without a trailing `Async`. When a source file may set
+  `SuppressAsyncSuffixInActionNames` to anything but `true`, the `[action]`
+  path of a method ending in `Async` reports nothing. A class `[Route]`
+  starting with `~/` starts at the root.
+- a controller is a public, top-level, non-generic, non-abstract class declared
+  in one place, named `*Controller`, marked `[Controller]` or deriving from
+  `ControllerBase` or `Controller`, and not `[NonController]`, counting the
+  attributes of its bases. A controller also serves the public methods and
+  `[Route]` prefixes of its bases, so one with a base between it and
+  `ControllerBase` that declares a public method or a `[Route]`, or that the
+  source does not declare, reports nothing. An action is a public, non-static,
+  non-generic method with a body and without `[NonAction]`.
 - minimal APIs: `MapGet`, `MapPost`, `MapPut`, `MapDelete`, `MapPatch`, and
-  `MapMethods` with literal methods, on the application or on a `MapGroup`
-  chain. The handler is a lambda or a method the call names.
+  `MapMethods` with literal methods, on the application from `Build()` or
+  `WebApplication.Create()`, or on a `MapGroup` chain. The handler is a lambda
+  or a method the call names.
 
 Requests:
 
@@ -165,17 +183,13 @@ Requests:
   a method has no body, so its request declares the operation itself.
 
 Literal routes and URLs and values the compiler proves constant, such as a
-`const` field, become facts. A readonly field is not proof, because a
-constructor may assign it another value. These report nothing: conventional
-routing; an inherited class `[Route]`, so a controller without its own `[Route]`
-is skipped unless it derives straight from `ControllerBase` or `Controller`, and
-an abstract controller is skipped; `[area]` and other route tokens; a segment
-mixing text with a parameter such as `v{version}/talks`;
-`IApplicationBuilder.Map` middleware branches; framework constants such as
-`HttpMethods.Get`; and a route on a builder that is reassigned, carries a
-computed prefix, or arrives as a parameter. A verb attribute without a template
-only constrains methods, so `[HttpPost] [HttpPut("{id?}")]` serves POST and PUT
-on `{id?}` alone.
+`const` field, become facts. A local, or a readonly field declared in the file
+that uses it, stands for its initializer when that file never assigns it again;
+a readonly field counts only when every part of its type is in that file. These
+report nothing: conventional routing; an action with `[AcceptVerbs]`; `[area]`
+and other route tokens; `IApplicationBuilder.Map` middleware branches;
+framework constants such as `HttpMethods.Get`; and a route on a builder that is
+reassigned, carries a computed prefix, or arrives as a parameter.
 
 The [producer checklist](../evidence.md#producer-checklist) for C#:
 
@@ -195,8 +209,18 @@ The [producer checklist](../evidence.md#producer-checklist) for C#:
    path and its callers report nothing.
 5. **The base.** A leading `/` has no base. A relative path such as
    `"api/talks"`, which `HttpClient` resolves against its base address, and
-   every declarative template set `configured`.
-   `"https://api.example.com/talks"` and a computed URL report a leading
-   `unknown` segment.
+   every declarative template set `configured`, and so does a configuration
+   read followed by a path starting with `/`: an `IConfiguration` indexer,
+   `GetValue`, `GetConnectionString`, a section's `Value`, or
+   `Environment.GetEnvironmentVariable`. `"https://api.example.com/talks"`, a
+   parameter, a configuration read continued without `/`, and any other computed
+   URL report a leading `unknown` segment.
 6. **Which operation a file-location route names.** C# declares no routes by
    file location, so the scanner names no operation that way.
+7. **Which segments are constrained.** A route constraint makes its parameter
+   or catch-all constrained: `{id:int}`, `{id:int?}` and
+   `{**path:regex(...)}`. A segment mixing text with placeholders, such as
+   `v{version}` or `{id}.{format}`, is one constrained parameter named after its
+   first placeholder. A default value or a final `?` makes a parameter optional.
+8. **Registration order.** ASP.NET Core prefers the most specific route, so the
+   scanner reports no `order`.

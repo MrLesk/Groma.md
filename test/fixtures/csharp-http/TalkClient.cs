@@ -28,6 +28,33 @@ public sealed class TalkClient(HttpClient client, LocalCache cache)
     public Task<HttpResponseMessage> FeedItems() => client.GetAsync(Feed);
 
     public Task<string> Cached(string key) => cache.GetStringAsync(key);
+
+    public Task<HttpResponseMessage> Latest()
+    {
+        string url = "/api/talks/latest";
+        return client.GetAsync(url);
+    }
+
+    public Task<HttpResponseMessage> Recent(bool all)
+    {
+        string url = "/api/talks/recent";
+        if (all) url = "/api/talks";
+        return client.GetAsync(url);
+    }
+}
+
+public sealed class ArchiveClient
+{
+    private readonly HttpClient client;
+    private readonly string archive = "/api/talks/archive";
+
+    public ArchiveClient(HttpClient client, string archive)
+    {
+        this.client = client;
+        this.archive = archive;
+    }
+
+    public Task<HttpResponseMessage> Load() => client.GetAsync(archive);
 }
 
 public sealed class LocalCache

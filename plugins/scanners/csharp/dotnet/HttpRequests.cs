@@ -94,7 +94,7 @@ internal static class HttpRequests
             {
                 string verb = HttpSyntax.AttributeName(attribute);
                 if (!DeclarativeVerbs.Contains(verb)) continue;
-                if (HttpSyntax.Constant(model, HttpSyntax.Template(attribute), cancellationToken) is not string template) continue;
+                if (HttpSyntax.Constant(model, HttpSyntax.Argument(attribute), cancellationToken) is not string template) continue;
                 string operation = OperationId.Of(file, declared);
                 // A default implementation is already an operation; only a bodiless declaration needs one here.
                 if (declared.Body is null && declared.ExpressionBody is null)

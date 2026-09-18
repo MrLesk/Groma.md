@@ -27,9 +27,9 @@ packaged('C# HTTP facts reach core, which derives a row for the paths it can com
     expect(rows.sort()).toEqual([
       ['TalkClient.cs', 'Program.cs', 'Calls HTTP endpoint: HEAD /ping', 'csharp'],
       ['TalkClient.cs', 'TalksController.cs',
-        'Calls HTTP endpoints: GET /api/Talks, GET /api/Talks/:id, POST /api/Talks/:id?', 'csharp'],
+        'Calls HTTP endpoints: GET /api/Talks, GET /api/Talks/:id, GET /api/Talks/Feed, GET /api/Talks/latest, POST /api/Talks', 'csharp'],
       ['TalksApi.cs', 'TalksController.cs',
-        'Calls HTTP endpoints: GET /api/Talks, GET /api/Talks/:id, POST /api/Talks/:id?', 'csharp'],
+        'Calls HTTP endpoints: GET /api/Talks, GET /api/Talks/:id, POST /api/Talks', 'csharp'],
     ])
   } finally { await rm(root, { recursive: true, force: true }) }
 }, 60000)

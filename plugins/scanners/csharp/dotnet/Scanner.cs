@@ -21,7 +21,7 @@ public sealed class RoslynScanner
         List<ScanSourceUnit> sourceUnits = [];
         List<ScanDiagnostic> diagnostics = [];
         OperationEvidence evidence = new(request.RepositoryRoot);
-        HttpEvidence http = new(request.RepositoryRoot);
+        HttpEvidence http = new(request.RepositoryRoot, await KeepsAsyncSuffix(projects, cancellationToken));
 
         foreach (Project project in projects)
         {
@@ -60,6 +60,16 @@ public sealed class RoslynScanner
         return ScanObservation.Create(
             new ScannerIdentity("csharp", "c#/.NET", "roslyn", typeof(CSharpCompilation).Assembly.GetName().Version!.ToString()),
             roots, files, diagnostics, operations, evidence.Invocations, sourceUnits, served, sent);
+    }
+
+    /// <summary>ASP.NET Core drops a trailing Async from action names unless a source file may turn that off.</summary>
+    private static async Task<bool> KeepsAsyncSuffix(Project[] projects, CancellationToken cancellationToken)
+    {
+        foreach (Document document in projects.SelectMany(project => project.Documents))
+        {
+            if (await document.GetSyntaxRootAsync(cancellationToken) is SyntaxNode root && HttpEndpoints.KeepsAsyncSuffix(root)) return true;
+        }
+        return false;
     }
 
     private static void CheckCompilation(Compilation compilation, Project project, string root, List<ScanDiagnostic> diagnostics, CancellationToken token)

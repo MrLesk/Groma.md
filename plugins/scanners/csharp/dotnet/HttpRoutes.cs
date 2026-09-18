@@ -2,47 +2,131 @@ using System.Text;
 
 namespace Groma.CSharpScanner;
 
-/// <summary>One piece of a URL expression: text the source proves, or a value it computes.</summary>
-internal readonly record struct UrlPart(string? Text)
+/// <summary>One piece of a URL expression: text the source proves, or a value it computes, possibly from configuration.</summary>
+internal readonly record struct UrlPart(string? Text, bool Configured = false)
 {
     public static UrlPart Computed => new((string?)null);
+    public static UrlPart Setting => new(null, Configured: true);
     public bool IsComputed => Text is null;
 }
 
 /// <summary>
-/// Route templates and request URLs as contract path segments. A route segment that mixes text with a parameter
-/// cannot be expressed, so its endpoint is dropped rather than guessed.
+/// Route templates and request URLs as contract path segments. A route constraint, or text mixed with a placeholder in
+/// one segment, accepts only some values, so that segment is a constrained parameter rather than a plain one.
 /// </summary>
 internal static class HttpRoutes
 {
-    /// <summary>Endpoint segments of an ASP.NET Core route template, or null when one segment is not expressible.</summary>
+    /// <summary>Endpoint segments of an ASP.NET Core route template, or null when the template is malformed.</summary>
     public static ScanHttpSegment[]? Endpoint(string template)
     {
         List<ScanHttpSegment> path = [];
-        foreach (string part in template.Split('/', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        foreach (string part in TemplateParts(template))
         {
-            ScanHttpSegment? segment = EndpointSegment(part);
-            if (segment is null) return null;
             // A catch-all takes the remaining segments, so nothing may follow it.
             if (path.Count > 0 && path[^1].Kind == "catch-all") return null;
+            if (EndpointSegment(part) is not ScanHttpSegment segment) return null;
             path.Add(segment);
         }
         return [.. path];
     }
 
+    /// <summary>Template segments, split at slashes outside placeholders, because a constraint's pattern may hold one.</summary>
+    private static IEnumerable<string> TemplateParts(string template)
+    {
+        List<string> parts = [];
+        int depth = 0;
+        int start = 0;
+        for (int index = 0; index < template.Length; index++)
+        {
+            char character = template[index];
+            if (Escaped(template, index)) index++;
+            else if (character == '{') depth++;
+            else if (character == '}') depth--;
+            else if (character == '/' && depth == 0)
+            {
+                parts.Add(template[start..index]);
+                start = index + 1;
+            }
+        }
+        parts.Add(template[start..]);
+        return parts.Select(part => part.Trim()).Where(part => part.Length > 0);
+    }
+
+    /// <summary>A doubled brace is one literal brace, inside a placeholder or outside it.</summary>
+    private static bool Escaped(string text, int index) =>
+        text[index] is '{' or '}' && index + 1 < text.Length && text[index + 1] == text[index];
+
+    /// <summary>
+    /// Literal text, one placeholder, or text mixed with placeholders, which is one constrained parameter named after
+    /// its first placeholder. Null when a brace is unmatched or a placeholder has no name.
+    /// </summary>
     private static ScanHttpSegment? EndpointSegment(string part)
     {
-        if (!part.Contains('{') && !part.Contains('}')) return new ScanHttpSegment("literal", Value: Literal(part));
-        if (!part.StartsWith('{') || !part.EndsWith('}')) return null;
-        string inner = part[1..^1];
-        if (inner.Contains('{') || inner.Contains('}')) return null;
-        // A catch-all in ASP.NET Core also matches no remaining segment; a default value or ? makes a parameter optional.
-        bool catchAll = inner.StartsWith('*');
-        inner = inner.TrimStart('*');
-        bool optional = catchAll || inner.Contains('?') || inner.Contains('=');
-        string name = inner.Split(':', '?', '=')[0].Trim();
-        return name.Length == 0 ? null
-            : new ScanHttpSegment(catchAll ? "catch-all" : "parameter", Name: Literal(name), Optional: optional ? true : null);
+        StringBuilder text = new();
+        List<Placeholder> placeholders = [];
+        for (int index = 0; index < part.Length; index++)
+        {
+            if (Escaped(part, index)) text.Append(part[index++]);
+            else if (part[index] == '{')
+            {
+                int close = PlaceholderEnd(part, index);
+                if (close < 0) return null;
+                placeholders.Add(Placeholder.Of(part[(index + 1)..close]));
+                index = close;
+            }
+            else if (part[index] == '}') return null;
+            else text.Append(part[index]);
+        }
+        if (placeholders.Count == 0) return new ScanHttpSegment("literal", Value: Literal(text.ToString()));
+        Placeholder first = placeholders[0];
+        if (first.Name.Length == 0) return null;
+        if (placeholders.Count > 1 || text.Length > 0) return new ScanHttpSegment("parameter", Name: Literal(first.Name), Constrained: true);
+        // A catch-all in ASP.NET Core also matches no remaining segment.
+        return new ScanHttpSegment(first.CatchAll ? "catch-all" : "parameter", Name: Literal(first.Name),
+            Optional: first.CatchAll || first.Optional ? true : null, Constrained: first.Constrained ? true : null);
+    }
+
+    /// <summary>The brace that closes the placeholder opened at start, or -1 when none does.</summary>
+    private static int PlaceholderEnd(string part, int start)
+    {
+        for (int index = start + 1; index < part.Length; index++)
+        {
+            if (Escaped(part, index)) index++;
+            else if (part[index] == '}') return index;
+            else if (part[index] == '{') return -1;
+        }
+        return -1;
+    }
+
+    /// <summary>
+    /// A placeholder such as <c>{*path}</c>, <c>{id:int?}</c> or <c>{page=1}</c>: a leading <c>*</c> marks a catch-all,
+    /// <c>:</c> starts its constraints, and a default value or a final <c>?</c> makes it optional. A constraint's
+    /// arguments sit in parentheses and may contain those characters.
+    /// </summary>
+    private readonly record struct Placeholder(string Name, bool CatchAll, bool Optional, bool Constrained)
+    {
+        public static Placeholder Of(string text)
+        {
+            bool catchAll = text.StartsWith('*');
+            text = text.TrimStart('*');
+            int defaultValue = OutsideParentheses(text, '=');
+            string declared = defaultValue >= 0 ? text[..defaultValue] : text.TrimEnd('?');
+            bool optional = defaultValue >= 0 || declared.Length < text.Length;
+            int constraints = OutsideParentheses(declared, ':');
+            return new Placeholder((constraints >= 0 ? declared[..constraints] : declared).Trim(), catchAll, optional, constraints >= 0);
+        }
+
+        private static int OutsideParentheses(string text, char wanted)
+        {
+            int depth = 0;
+            for (int index = 0; index < text.Length; index++)
+            {
+                if (text[index] == '(') depth++;
+                else if (text[index] == ')') depth--;
+                else if (text[index] == wanted && depth == 0) return index;
+            }
+            return -1;
+        }
     }
 
     /// <summary>An action template under its controller prefix. A template starting with ~/ or / replaces the prefix.</summary>
@@ -92,7 +176,13 @@ internal static class HttpRoutes
         }
         if (first is null)
         {
-            // A computed start may hold a host, so whatever it produces stays unknown.
+            // A configuration value followed by a path is a configured base; text continuing its last segment is not.
+            if (parts[0].Configured && parts.Count > 1 && parts[1].Text is string rest && rest.StartsWith('/'))
+            {
+                Segments(parts.Skip(1), path, unresolvedBase: false);
+                return (true, [.. path]);
+            }
+            // Any other computed start may hold a host, so whatever it produces stays unknown.
             Segments(parts, path, unresolvedBase: true);
             return (false, [.. path]);
         }

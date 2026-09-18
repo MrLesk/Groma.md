@@ -14,7 +14,7 @@ public sealed record ScanInvocation(string Source, IReadOnlyList<string> Targets
 public sealed record ScanDiagnostic(string Severity, string Code, string Message, string? File = null, int? Line = null);
 
 /// <summary>One path segment: an endpoint's literal, parameter or catch-all, or a request's literal, dynamic or unknown.</summary>
-public sealed record ScanHttpSegment(string Kind, string? Value = null, string? Name = null, bool? Optional = null);
+public sealed record ScanHttpSegment(string Kind, string? Value = null, string? Name = null, bool? Optional = null, bool? Constrained = null);
 public sealed record ScanHttpEndpoint(string Operation, string Method, IReadOnlyList<ScanHttpSegment> Path);
 /// <summary>A request whose path follows a configured base sets <c>Configured</c>; an unresolvable base is a leading unknown segment.</summary>
 public sealed record ScanHttpRequest(string Operation, IReadOnlyList<ScanHttpSegment> Path, string? Method = null, bool? Configured = null);
@@ -130,7 +130,7 @@ public sealed record ScanObservation(
     }
 
     private static string PathKey(IReadOnlyList<ScanHttpSegment> path) =>
-        string.Join("/", path.Select(segment => $"{segment.Kind}:{segment.Value ?? segment.Name}:{segment.Optional}"));
+        string.Join("/", path.Select(segment => $"{segment.Kind}:{segment.Value ?? segment.Name}:{segment.Optional}:{segment.Constrained}"));
 
     public string ToCanonicalJson() => JsonSerializer.Serialize(this, JsonOptions) + "\n";
 
