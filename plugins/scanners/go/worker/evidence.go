@@ -16,6 +16,8 @@ type source struct {
 	syntax *ast.File
 	file   string
 	text   []byte
+	// Local package aliases, which name the frameworks this file uses.
+	imports map[string]string
 }
 type body struct {
 	source *source
@@ -25,12 +27,23 @@ type body struct {
 type evidence struct {
 	result                      *observation
 	bodies                      []body
+	sources                     []*source
 	operationByFunctionPosition map[string]string
 	literals                    map[*ast.FuncLit]string
+	// Operation IDs this observation declares; a fact may only reference one of them.
+	recorded map[string]bool
+	// Values that carry routes or send requests, and the mount each router serves under.
+	routers map[types.Object]router
+	clients map[types.Object]bool
+	mounted map[types.Object]mount
+	// Operations whose routers are built for a mount, so their served paths are longer.
+	silenced map[string]bool
 }
 
 func newEvidence(result *observation) *evidence {
-	return &evidence{result: result, operationByFunctionPosition: map[string]string{}, literals: map[*ast.FuncLit]string{}}
+	return &evidence{result: result, operationByFunctionPosition: map[string]string{}, literals: map[*ast.FuncLit]string{},
+		recorded: map[string]bool{}, routers: map[types.Object]router{}, clients: map[types.Object]bool{},
+		mounted: map[types.Object]mount{}, silenced: map[string]bool{}}
 }
 
 func (s *source) offset(pos token.Pos) int {
@@ -64,6 +77,7 @@ func (e *evidence) addBody(s *source, declaration ast.Node, executable ast.Node,
 		fact.Tokens = tokens
 	}
 	e.result.Operations = append(e.result.Operations, fact)
+	e.recorded[id] = true
 	e.bodies = append(e.bodies, body{s, executable, id})
 	return id
 }
