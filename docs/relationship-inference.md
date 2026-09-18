@@ -172,15 +172,21 @@ therefore derives a row only when all of these hold:
 6. A dynamic segment could also equal a literal at runtime, including the
    literal that follows a removed leading segment, and a constrained segment
    may accept a literal. An endpoint that such a value possibly reaches, at
-   least as preferred as the row's endpoints, competes with them. When a row
-   endpoint needs a dynamic segment to satisfy a constraint, every endpoint the
-   request reaches competes, because values the constraint rejects go
-   elsewhere. The row's endpoints and every competing endpoint belong to one
-   file; endpoints in several files produce no row. A request to `/talks/` plus
-   a dynamic segment therefore produces no row when one file serves
-   `/talks/:id` and another `/talks/archive`, or when one file serves a
-   constrained `/talks/:id` and another `/talks/:rest+`, and reaches
-   `/talks/:id` when one file serves `/talks/:id` and `/talks/archive`.
+   least as preferred as the row's endpoints, competes with them. Routers rank
+   constrained segments by their own rules, so a reachable endpoint with a
+   constrained segment competes whatever its specificity; only a constrained
+   endpoint registered after the row's endpoint does not compete. A route
+   registered earlier that a scanner could not read therefore blocks later
+   matches of its prefix in other files. When a row endpoint has a constrained
+   segment, every endpoint the request reaches competes, because values the
+   constraint rejects go elsewhere. The row's endpoints and every competing
+   endpoint belong to one file; endpoints in several files produce no row. A
+   request to `/talks/` plus a dynamic segment therefore produces no row when
+   one file serves `/talks/:id` and another `/talks/archive`, or when one file
+   serves a constrained `/talks/:id` and another `/talks/:rest+`, and reaches
+   `/talks/:id` when one file serves `/talks/:id` and `/talks/archive`. A
+   request to `/files/a/report.json` produces no row when one file serves
+   `/files/:dir/:name` and another a constrained `/files/:path*`.
 7. The requesting and providing files have different owners.
 
 The row runs from the requesting file to the providing file. Its statement

@@ -303,8 +303,12 @@ in this order, with its ecosystem's constructs:
    the scanner cannot identify the file that creates the application,
    `application` is the file that declares the route. A fallback the framework
    always tries last, such as Laravel's `Route::fallback`, takes the largest
-   position. A router that prefers the
-   most specific route, such as Spring or ASP.NET Core, omits `order`.
+   position. A route the scanner sees but cannot read, such as one with an
+   unknown handler or an unresolved include or mount, is reported at its
+   position as its readable literal prefix followed by a constrained optional
+   catch-all, with method `*`, so no later route of that prefix in another file
+   derives a row. A router that prefers the most specific route, such as Spring
+   or ASP.NET Core, omits `order`.
 
 ## Completion, precision, and uncertainty
 
