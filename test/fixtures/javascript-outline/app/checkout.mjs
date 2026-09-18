@@ -22,6 +22,11 @@ export class OrderService {
     return orders.length
   }
 
+  /** @private */
+  audit(order) {
+    return order.id
+  }
+
   get size() {
     return this.pending.length
   }

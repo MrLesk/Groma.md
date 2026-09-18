@@ -158,7 +158,8 @@ test.concurrent('a component outlines its JavaScript files with module, CommonJS
     ]))
     // The accessor, the fields and the nested helpers are absent. An unexported module declaration is
     // private, while a CommonJS export and a browser script's globals are public. A CommonJS file that
-    // publishes a function value names no local declaration, so its own helpers stay private.
+    // publishes a function value names no local declaration, so its own helpers stay private. A JSDoc
+    // `@private` tag is documentation, so the member it describes stays public.
     expect(outline).toEqual([
       [
         ['function', 'placeOrder', 1, 'public', true, []],
@@ -168,6 +169,7 @@ test.concurrent('a component outlines its JavaScript files with module, CommonJS
           ['submit', 13, 'public', false],
           ['#limit', 17, 'private', false],
           ['total', 21, 'public', false],
+          ['audit', 26, 'public', false],
         ]],
       ],
       [
