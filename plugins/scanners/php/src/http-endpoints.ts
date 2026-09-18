@@ -1,9 +1,8 @@
-import type { ScanHttpEndpoint } from '@groma/scanner'
-import { staysWithinSegment, unreadablePattern, type Requirements } from './http-routes.ts'
-import { joinRoutes, literalText, noRoute, routeText, type Constants, type RouteText } from './http-url.ts'
-import { proved, unresolvedRoute, type Receiver, type Receivers, type Router } from './receivers.ts'
+import { staysInSegment, unreadablePattern, type Requirements } from './http-routes.ts'
+import { joinRoutes, literalText, noRoute, routeText, unresolvedRoute, type Constants, type RouteText } from './http-url.ts'
+import { proved, type Receiver, type Receivers, type Router } from './receivers.ts'
 import {
-  calledFunction, field, list, memberOf, moduleOperationId, nameOf, operationId, qualifiedName, symbolName, typeName,
+  calledFunction, field, list, memberOf, moduleOperationId, nameOf, operationId, qualifiedName, receiverOf, symbolName, typeName,
   type Fields, type NameScope,
 } from './syntax.ts'
 
@@ -11,9 +10,12 @@ import {
 export type Handler = { operation: string } | { symbol: string }
 
 /**
- * A route entry of one file, before handler symbols name operations and before the file that loads a
- * Laravel routes file adds its prefix and Laravel's global patterns apply.
+ * What the whole scan adds to a route its own file states: a Laravel project's loads and global
+ * patterns, or the base path a Slim project gives the application a typed `App` holds.
  */
+export type Project = 'laravel' | 'slim'
+
+/** A route entry of one file, before handler symbols name operations and before the project adds to it. */
 export interface PendingEndpoint {
   /** Undefined when the handler or the methods are not readable, which makes the entry a blocker. */
   handler: Handler | undefined
@@ -21,8 +23,7 @@ export interface PendingEndpoint {
   /** The route under the prefixes of its own file, as far as the source states it. */
   route: RouteText
   requirements: Requirements
-  laravel: boolean
-  order: NonNullable<ScanHttpEndpoint['order']>
+  project?: Project
   /** The operation that registers the route, which the endpoint names as a blocker. */
   registrar: string
 }
@@ -55,11 +56,6 @@ const restServerMethods = new Map([
   ['DELETABLE', ['DELETE']], ['ALLMETHODS', ['*']],
 ])
 
-/** The receiver of a member call, for reading a builder chain such as `Route::prefix('api')->group(...)`. */
-export function receiverOf(call: Fields): Fields | undefined {
-  return field(field(call, 'what')!, 'what')
-}
-
 /** `Foo::class`, `self::class` or `$this`, as the type whose method handles the request. */
 function handlerType(node: Fields | undefined, scope: FileScope): string | undefined {
   if (node?.kind === 'variable' && node.name === 'this') return scope.type
@@ -84,7 +80,7 @@ function arrayHandler(node: Fields, scope: FileScope): Handler | undefined {
 function laravelHandler(argument: Fields | undefined, scope: FileScope): Handler | undefined {
   const written = argument?.kind === 'string' || argument?.kind === 'nowdoc' ? literalText(argument, scope.constants) : undefined
   if (written === undefined) return handlerOf(argument, scope)
-  return scope.controller !== undefined && /^\w+$/.test(written) ? { symbol: symbolName('', written, scope.controller) } : undefined
+  return scope.controller === undefined ? undefined : { symbol: symbolName('', written, scope.controller) }
 }
 
 /**
@@ -104,24 +100,22 @@ export function handlerOf(argument: Fields | undefined, scope: FileScope): Handl
   return written === undefined || !/^\\?[\w\\]+(?:::\w+)?$/.test(written) ? undefined : { symbol: qualifiedName(written) }
 }
 
-/** Where a route entry is registered: its file, prefix and patterns, its router, and the operation that registers it. */
-export type Registration = Pick<FileScope, 'file' | 'prefix' | 'requirements'> & { registrar: string; router?: Router }
+/** Where a route entry is registered: its prefix and patterns, its project, and the operation that registers it. */
+type Registration = Pick<FileScope, 'prefix' | 'requirements'> & { registrar: string; project?: Project }
 
 export function registration(scope: FileScope): Registration {
-  return { file: scope.file, prefix: scope.prefix, requirements: scope.requirements, registrar: scope.operation ?? moduleOperationId(scope.file) }
+  return { prefix: scope.prefix, requirements: scope.requirements, registrar: scope.operation ?? moduleOperationId(scope.file) }
 }
 
 /**
  * Endpoints of one route entry, for every method unless the methods are not readable (undefined).
  * Every PHP router this scanner reads takes the first registered match, so an entry whose methods or
- * handler are not readable is still reported, as a blocker. The scanner proves neither the file that
- * creates the application nor the order files register their routes in, so the application is the
- * declaring file and every endpoint shares position 0: an unknown order.
+ * handler are not readable is still reported, as a blocker.
  */
 function endpointsFor(methods: string[] | undefined, route: RouteText, handler: Handler | undefined, at: Registration): PendingEndpoint[] {
   const entry = {
     handler: methods === undefined ? undefined : handler, route: joinRoutes(at.prefix, route), requirements: at.requirements,
-    laravel: at.router === 'laravel', order: { application: at.file, position: 0 }, registrar: at.registrar,
+    project: at.project, registrar: at.registrar,
   }
   return (methods ?? ['*']).map(method => ({ ...entry, method }))
 }
@@ -132,7 +126,7 @@ function endpointsFor(methods: string[] | undefined, route: RouteText, handler: 
  */
 function patterns(entries: [string | undefined, string | undefined][]): Map<string, string> {
   return new Map(entries.map(([name, pattern]) => name !== undefined ? [name, pattern ?? unreadablePattern]
-    : ['*', pattern !== undefined && staysWithinSegment(pattern) ? pattern : unreadablePattern]))
+    : ['*', pattern !== undefined && staysInSegment(pattern) ? pattern : unreadablePattern]))
 }
 
 /** `['id' => '\d+']` as patterns by parameter name. */
@@ -175,20 +169,21 @@ function methodList(node: Fields | undefined, constants: Constants): string[] | 
 /** What a builder chain such as `Route::prefix('api')->where([...])` states for the routes it registers. */
 interface Chain {
   prefix: RouteText
-  requirements: Requirements
+  requirements: Map<string, string>
   router: Router
+  project?: Project
   controller?: string
 }
 
 /** A chain call that states a prefix, a host, a controller or patterns for the routes the chain registers. */
-function chainModifier(call: Fields, chain: Omit<Chain, 'router'>, prefixes: RouteText[], scope: FileScope): void {
+function chainModifier(call: Fields, chain: Pick<Chain, 'requirements' | 'controller'>, prefixes: RouteText[], scope: FileScope): void {
   const member = memberOf(call)?.toLowerCase()
   const [argument] = list(call, 'arguments')
   if (member === 'prefix') prefixes.unshift(routeText(argument, scope.constants))
   // A route that answers only on one host cannot be told apart from the rest by its path.
   if (member === 'domain') prefixes.unshift(unresolvedRoute)
   if (member === 'controller') chain.controller = argument?.kind === 'staticlookup' ? typeName(field(argument, 'what'), scope) : undefined
-  for (const [name, pattern] of whereRequirements(call, scope.constants) ?? []) (chain.requirements as Map<string, string>).set(name, pattern)
+  for (const [name, pattern] of whereRequirements(call, scope.constants) ?? []) chain.requirements.set(name, pattern)
 }
 
 /**
@@ -198,7 +193,7 @@ function chainModifier(call: Fields, chain: Omit<Chain, 'router'>, prefixes: Rou
  */
 function routerChain(call: Fields, scope: FileScope): Chain | undefined {
   const prefixes: RouteText[] = []
-  const chain: Omit<Chain, 'router'> = { prefix: noRoute, requirements: new Map(scope.requirements), controller: scope.controller }
+  const chain = { requirements: new Map(scope.requirements), controller: scope.controller }
   let current = receiverOf(call)
   while (current?.kind === 'call') {
     chainModifier(current, chain, prefixes, scope)
@@ -206,14 +201,15 @@ function routerChain(call: Fields, scope: FileScope): Chain | undefined {
   }
   const receiver = proved(current, scope)
   if (receiver === undefined || receiver.role === 'client') return undefined
-  const base = receiver.role === 'laravel' ? scope.prefix : receiver.prefix ?? unresolvedRoute
-  return { ...chain, prefix: joinRoutes(base, ...prefixes), router: receiver.role }
+  if (receiver.role === 'laravel') return { ...chain, prefix: joinRoutes(scope.prefix, ...prefixes), router: 'laravel', project: 'laravel' }
+  const project = receiver.projectBase ? 'slim' : undefined
+  return { ...chain, prefix: joinRoutes(receiver.prefix, ...prefixes), router: 'slim', project }
 }
 
 /** The patterns Laravel's `Route::pattern('id', ...)` or `Route::patterns([...])` sets for every route. */
 export function globalPatterns(call: Fields, scope: FileScope): Map<string, string> | undefined {
   const member = memberOf(call)?.toLowerCase()
-  if ((member !== 'pattern' && member !== 'patterns') || routerChain(call, scope)?.router !== 'laravel') return undefined
+  if ((member !== 'pattern' && member !== 'patterns') || proved(receiverOf(call), scope)?.role !== 'laravel') return undefined
   const [names, value] = list(call, 'arguments')
   return member === 'patterns' ? patternMap(names, scope.constants) : patterns([[literalText(names, scope.constants), literalText(value, scope.constants)]])
 }
@@ -287,7 +283,7 @@ export function groupCall(call: Fields, scope: FileScope): Group | undefined {
   const requirements = where === undefined ? chain.requirements : new Map([...chain.requirements, ...patternMap(where, scope.constants)])
   const host = entryValue(options, 'domain', scope.constants) === undefined ? noRoute : unresolvedRoute
   const prefix = joinRoutes(chain.prefix, groupPrefix(options, scope.constants), host)
-  const member: Receiver = chain.router === 'laravel' ? { role: 'laravel' } : { role: 'slim', prefix }
+  const member: Receiver = chain.router === 'laravel' ? { role: 'laravel' } : { role: 'slim', prefix, projectBase: chain.project === 'slim' }
   return { ...chain, prefix, requirements, routes, member, loaded: routes === undefined ? last : undefined }
 }
 

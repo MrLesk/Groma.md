@@ -1,6 +1,7 @@
 <?php
 namespace App\Admin;
 
+use Slim\App;
 use Slim\Factory\AppFactory;
 use Slim\Routing\RouteCollectorProxy;
 
@@ -31,4 +32,9 @@ function cached_routes($cache): void
     $cache->get('/api/talks', function () {
         return [];
     });
+}
+
+function status_routes(App $app): void
+{
+    $app->get('/status', PurgeAction::class);
 }

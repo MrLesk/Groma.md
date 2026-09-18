@@ -28,16 +28,18 @@ rather than publish partial evidence.
 The scanner reports one repository source root, exact PHP paths, named functions,
 classes, interfaces, traits, enums, and methods. Implemented functions, methods,
 closures, and arrow functions produce operation evidence with UTF-16 source
-offsets. A file whose top-level code registers routes or sends HTTP requests
-gets one more operation, `(module)`, which those facts name and which declares
-no symbol. Calls and constructions within these operations remain unresolved.
+offsets. A file's top-level code is one more operation, `(module)`, which
+declares no symbol, when an HTTP fact below names it: a request sent there, or
+a blocker registered there. Calls and constructions within these operations
+remain unresolved.
 
 The repository source root is initial placement evidence, not a claim that every
 PHP file belongs to one C4 runtime boundary. Core owns architecture identity and
-curation. There is no Composer autoload resolution, include execution, WordPress
-hook matching, or dependency resolution; core joins the HTTP facts below into
-relationships. An import
-or include does not associate files into a component. Ordinary OKF Code links
+curation. There is no Composer autoload resolution, runtime execution of
+includes, WordPress hook matching, or dependency resolution. The HTTP facts
+below read which routes files a Laravel project loads from its source, and core
+joins them into relationships. An import or include does not associate files
+into a component. Ordinary OKF Code links
 expose file ownership without adding a new architecture level or stored graph.
 
 PHP edits and new files use the shared scanner watcher. Repeated scans preserve
@@ -99,7 +101,28 @@ are not compared.
 
 The scanner reports the [HTTP endpoints and requests](../evidence.md#http-endpoints-and-requests)
 a PHP file states, and core joins them into relationships. It answers the
-[producer checklist](../evidence.md#producer-checklist) as follows.
+[producer checklist](../evidence.md#producer-checklist) below.
+
+A member call such as `get` counts only on a receiver the scanner proves to
+hold a router or a client, because ordinary objects share the member names:
+`Cache::get('/talks', $callback)` and `$cache->get('/talks')` report nothing. A
+proved receiver is:
+
+- Laravel's `Route` facade, imported or through its global alias;
+- a property declared with a recognized type, including a promoted constructor
+  parameter;
+- a parameter declared with a recognized type that its function never assigns;
+- a variable every write of which in its own function or top-level code creates
+  a Slim application with `AppFactory::create()` or `new App(...)`;
+- a variable a closure imports by value from a proved one and never assigns;
+- the first parameter of the closure a proved router's `group` calls.
+
+The recognized types, resolved through the file's `use` aliases, are Guzzle's
+`Client` and `ClientInterface`, PSR's `ClientInterface` and Symfony's
+`HttpClientInterface` for clients, and `Slim\App`, Slim's `RouteCollectorProxy`
+and `RouteCollectorProxyInterface`, and Laravel's `Router` and `Registrar` for
+routers. Variables of enclosing code, including those an arrow function
+captures, are not visible.
 
 **Prefixes.** An endpoint path carries every prefix the source states: a Laravel
 `Route::prefix('api')->group(...)`, `Route::prefix('api')->get(...)` or
@@ -123,30 +146,26 @@ level of a loaded file or inside a group's closure, serves it under that code,
 as `routes/web.php` requires `routes/auth.php`. Loads compose: a file loaded
 under `api` that loads another under `v1` serves that one under `api/v1`. A
 group or `withRouting` in a file nothing loads, such as a route service
-provider, serves from the root. The Laravel routes of a file that no load
+provider, serves from the root, while a `require` there, as in a seeding script,
+serves nothing. The Laravel routes of a file that no load
 reaches, including one only an unrecognized loader such as `loadRoutesFrom` or
 `module_path` loads, and those under a prefix a loader computes, are blockers.
 
-A Slim route carries the prefix of the router it is registered on: an
-application from `AppFactory::create()` or typed `Slim\App` registers at the
-root, or under the base path `setBasePath` gives it, and a group's closure
-parameter under the group's prefix. A group object
+A Slim route carries the prefix of the router it is registered on. An
+application its code creates registers at the root, or under the base path the
+same code gives it with `setBasePath`. A typed `Slim\App` registers under the
+project's base path: the root when no scanned file calls `setBasePath`, the
+stated path when exactly one call states a literal path, and an unresolved
+prefix otherwise. A group's closure parameter registers under the group's
+prefix. A group object
 typed `RouteCollectorProxy` anywhere else, and every route inside a closure
 passed to `group` on a receiver the scanner cannot prove, have an unresolved
 prefix, so they are blockers.
 
 **Endpoints.** Only the handler a route names is an endpoint, and only a route
-registered on a proved router counts, because ordinary objects share the member
-names: `Cache::get('/talks', $callback)` and `$cache->get('/talks', $callback)`
-report nothing. A proved router is Laravel's `Route` facade, imported or through
-its global alias; a parameter or property typed `Slim\App`, Slim's
-`RouteCollectorProxy` or `RouteCollectorProxyInterface`, or Laravel's `Router`
-or `Registrar`; a variable every write of which in its own function or
-top-level code is `AppFactory::create()` or `new App(...)`, or which a closure
-imports from one by value; and the first
-parameter of the closure a proved router's `group` calls. The scanner reads
-`get`, `post`, `put`, `patch`, `delete`, `options`, `head`, `any`, `match` and
-`map` on such a router, Symfony `#[Route]` attributes on controller methods,
+registered on a proved router counts. The scanner reads `get`, `post`, `put`,
+`patch`, `delete`, `options`, `head`, `any`, `match` and `map` on such a
+router, Symfony `#[Route]` attributes on controller methods,
 the class-level `#[Route]` of an invokable controller whose methods declare
 none, which routes `__invoke`, and `register_rest_route` with the
 `WP_REST_Server` method constants. A handler is a closure written in place,
@@ -224,15 +243,10 @@ HTTP API (`wp_remote_get`, `wp_remote_post`, `wp_remote_head`,
 `curl_setopt` with `CURLOPT_URL`, `CURLOPT_CUSTOMREQUEST` or `CURLOPT_POST`, and
 `curl_setopt_array`). Further limits:
 
-- Client members are ordinary method names, so the receiver must be proved to
-  hold a client: a property typed `GuzzleHttp\Client`, `ClientInterface` or
-  Symfony's `HttpClientInterface`, including a promoted constructor parameter,
-  or a parameter of the calling function or method typed so and never assigned
-  in its body, with the type resolved through the file's `use` aliases.
-  `$cache->get('/talks')`, a route registration, another method's parameter, a
-  variable of the enclosing code, a client reached through an untyped value and
-  a client the code constructs with `new Client(...)`, whose own `base_uri` the
-  scanner does not read, report nothing.
+- A client call counts only on a proved client receiver, so a client reached
+  through an untyped value reports nothing, and so does a client the code
+  constructs with `new Client(...)`, whose own `base_uri` the scanner does not
+  read.
 - The scanner does not follow a cURL handle through other variables or
   functions, so an operation reports a request only when one `curl_init` result
   assigned to one handle is configured through that handle alone. Several

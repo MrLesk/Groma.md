@@ -15,7 +15,7 @@ Route::prefix('api')->middleware('auth')->group(function () {
     Route::get('/archive/latest', [TalkController::class, 'index']);
 });
 
-Route::group(['prefix' => 'internal'], function () {
+Route::group(['prefix' => 'internal', 'where' => ['id' => '[0-9]+']], function () {
     Route::delete('/talks/{id}', [TalkController::class, 'destroy']);
 });
 
@@ -45,7 +45,7 @@ Route::prefix('hosted')->group(function () {
     Route::get('/console', [TalkController::class, 'index'])->domain('admin.example.com');
 });
 
-Route::prefix('admin')->group(base_path('routes/admin.php'));
+Route::prefix('admin')->where(['id' => '[0-9]+'])->group(base_path('routes/admin.php'));
 
 Route::prefix('v2')->get('/talks', [TalkController::class, 'index']);
 

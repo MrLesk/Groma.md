@@ -1,8 +1,8 @@
 import path from 'node:path'
 import type { ScanHttpEndpoint } from '@groma/scanner'
 import { blockerPath, routeSegments, unreadablePattern, type Requirements } from './http-routes.ts'
-import { joinRoutes, literalText, noRoute, routeText, type Constants, type RouteText } from './http-url.ts'
-import { calledFunction, field, list, memberOf, typeName, type Fields, type NameScope } from './syntax.ts'
+import { joinRoutes, literalText, noRoute, routeText, unresolvedRoute, type Constants, type RouteText } from './http-url.ts'
+import { calledFunction, field, list, memberOf, receiverOf, typeName, type Fields, type NameScope } from './syntax.ts'
 
 /** A routes file this scanner reads, named from the file that loads it. */
 interface RoutesFile {
@@ -12,10 +12,10 @@ interface RoutesFile {
 }
 
 /**
- * A routes file that another file loads under a prefix and patterns, as Laravel's `withRouting` or a
- * route group given a file does. The routes of the loaded file are served under that prefix.
+ * A routes file that another file loads under a prefix and patterns: through Laravel's `withRouting`,
+ * a route group given a file, or a `require` or `include`.
  */
-export interface Mount {
+export interface Load {
   /** Undefined when the source does not say which file it loads. */
   target: RoutesFile | undefined
   prefix: RouteText
@@ -23,10 +23,7 @@ export interface Mount {
   /** The loading file and the operation that loads it, which a blocker names when the target is unknown. */
   file: string
   registrar: string
-  /**
-   * Set for a `require` or `include`, which serves the file under the loader's own routes. A group or
-   * `withRouting` that loads a file serves it from the root when no other file loads the loader.
-   */
+  /** Set for a `require` or `include`, which serves nothing when its own file is served nowhere. */
   include: boolean
 }
 
@@ -40,7 +37,7 @@ function fromDirectory(node: Fields | undefined, file: string, constants: Consta
 }
 
 /** The routes file an expression names: `base_path('routes/api.php')` or a path from `__DIR__`. */
-export function routesFile(node: Fields | undefined, file: string, constants: Constants): RoutesFile | undefined {
+function routesFile(node: Fields | undefined, file: string, constants: Constants): RoutesFile | undefined {
   if (node !== undefined && calledFunction(node) === 'base_path') {
     const written = literalText(list(node, 'arguments')[0], constants)
     return written === undefined ? undefined : { path: path.posix.normalize(written).replace(/^\.?\//, ''), fromRoot: true }
@@ -49,10 +46,25 @@ export function routesFile(node: Fields | undefined, file: string, constants: Co
   return written === undefined ? undefined : { path: path.posix.normalize(written), fromRoot: false }
 }
 
+/** Where the code that loads a routes file runs: its file, constants, prefix and patterns, and its operation. */
+export interface Loader {
+  file: string
+  constants: Constants
+  prefix: RouteText
+  requirements: Requirements
+  registrar: string
+}
+
+/** The load of the routes file an expression names, served under the loader's prefix and patterns. */
+export function loadOf(node: Fields | undefined, loader: Loader, include: boolean): Load {
+  const { file, prefix, requirements, registrar } = loader
+  return { target: routesFile(node, file, loader.constants), prefix, requirements, file, registrar, include }
+}
+
 /** The start of a chain such as `Application::configure(...)->withRouting(...)`. */
 function chainRoot(call: Fields): Fields | undefined {
-  let current = field(field(call, 'what')!, 'what')
-  while (current?.kind === 'call') current = field(field(current, 'what')!, 'what')
+  let current = receiverOf(call)
+  while (current?.kind === 'call') current = receiverOf(current)
   return current
 }
 
@@ -60,29 +72,33 @@ function chainRoot(call: Fields): Fields | undefined {
  * Routes files Laravel's `Application::configure(...)->withRouting(web: ..., api: ..., apiPrefix: ...)`
  * loads: web routes without a prefix, and API routes under `apiPrefix`, which defaults to `api`.
  */
-export function routingMounts(call: Fields, scope: NameScope & { file: string; constants: Constants }, registrar: string): Mount[] {
+export function routingLoads(call: Fields, scope: NameScope, loader: Loader): Load[] {
   if (memberOf(call)?.toLowerCase() !== 'withrouting' || typeName(chainRoot(call), scope) !== 'Illuminate\\Foundation\\Application') return []
   const named = (name: string) => {
     const argument = list(call, 'arguments').find(candidate => candidate.kind === 'namedargument' && candidate.name === name)
     return argument === undefined ? undefined : field(argument, 'value')
   }
   const apiPrefix = named('apiPrefix')
-  const mounts = (files: Fields | undefined, prefix: RouteText): Mount[] => (files?.kind === 'array' ? list(files, 'items').map(item => field(item, 'value')) : [files])
+  const loads = (files: Fields | undefined, prefix: RouteText): Load[] => (files?.kind === 'array' ? list(files, 'items').map(item => field(item, 'value')) : [files])
     .filter(value => value !== undefined)
-    .map(value => ({ target: routesFile(value, scope.file, scope.constants), prefix, requirements: new Map(), file: scope.file, registrar, include: false }))
+    .map(value => loadOf(value, { ...loader, prefix, requirements: new Map() }, false))
   return [
-    ...mounts(named('web'), noRoute),
-    ...mounts(named('api'), apiPrefix === undefined ? { text: 'api', resolved: true } : routeText(apiPrefix, scope.constants)),
+    ...loads(named('web'), noRoute),
+    ...loads(named('api'), apiPrefix === undefined ? { text: 'api', resolved: true } : routeText(apiPrefix, loader.constants)),
   ]
 }
 
-/** The scanned file a mount loads: the exact path, or the one `base_path` path under an ancestor of the loading file. */
-function mountedFile(mount: Mount, files: readonly string[]): string | undefined {
-  const target = mount.target
+/** Whether `candidate` is the file `name` in `file`'s own directory or one of its ancestors. */
+function inAncestor(candidate: string, name: string, file: string): boolean {
+  return (candidate === name || candidate.endsWith(`/${name}`)) && file.startsWith(candidate.slice(0, -name.length))
+}
+
+/** The scanned file a load names: the exact path, or the one `base_path` path under an ancestor of the loading file. */
+function loadedFile(load: Load, files: readonly string[]): string | undefined {
+  const target = load.target
   if (target === undefined) return undefined
   if (!target.fromRoot) return files.includes(target.path) ? target.path : undefined
-  const candidates = files.filter(file => (file === target.path || file.endsWith(`/${target.path}`))
-    && mount.file.startsWith(file.slice(0, file.length - target.path.length)))
+  const candidates = files.filter(file => inAncestor(file, target.path, load.file))
   return candidates.length === 1 ? candidates[0] : undefined
 }
 
@@ -92,10 +108,10 @@ export interface Base {
   requirements: Requirements
 }
 
-export const unmounted: Base = { prefix: noRoute, requirements: new Map() }
+export const rootBase: Base = { prefix: noRoute, requirements: new Map() }
 
-/** The base of a file whose loader the scan cannot see: its routes are served under an unknown prefix. */
-const unknownBase: Base = { prefix: { text: '', resolved: false }, requirements: new Map() }
+/** The base of a file no load reaches: its routes are served under an unknown prefix. */
+const unknownBase: Base = { prefix: unresolvedRoute, requirements: new Map() }
 
 /** Laravel's global patterns, which `Route::pattern` sets for every route; files that disagree on a name make it unreadable. */
 function mergedPatterns(declared: readonly Requirements[]): Requirements {
@@ -106,14 +122,8 @@ function mergedPatterns(declared: readonly Requirements[]): Requirements {
   return merged
 }
 
-function under(base: Base, mount: Mount): Base {
-  return { prefix: joinRoutes(base.prefix, mount.prefix), requirements: new Map([...base.requirements, ...mount.requirements]) }
-}
-
-/** The path among candidates named `name` whose directory is the nearest one holding `file`. */
-function nearest(file: string, candidates: readonly string[], name: string): string | undefined {
-  return candidates.filter(candidate => (candidate === name || candidate.endsWith(`/${name}`)) && file.startsWith(candidate.slice(0, -name.length)))
-    .sort((left, right) => right.length - left.length)[0]
+function under(base: Base, load: Load): Base {
+  return { prefix: joinRoutes(base.prefix, load.prefix), requirements: new Map([...base.requirements, ...load.requirements]) }
 }
 
 /**
@@ -122,37 +132,41 @@ function nearest(file: string, candidates: readonly string[], name: string): str
  * the declaring file.
  */
 export function laravelApplication(file: string, phpFiles: readonly string[], manifests: readonly string[]): string {
-  return nearest(file, phpFiles, 'bootstrap/app.php') ?? nearest(file, manifests, 'composer.json') ?? file
+  const nearest = (candidates: readonly string[], name: string) => candidates.filter(candidate => inAncestor(candidate, name, file))
+    .sort((left, right) => right.length - left.length)[0]
+  return nearest(phpFiles, 'bootstrap/app.php') ?? nearest(manifests, 'composer.json') ?? file
 }
 
 /**
- * How every Laravel route of a scan is served. Loads compose: a file loaded under `api` that loads
- * another under `v1` serves that file's routes under `api/v1`. A file no load reaches serves its
- * Laravel routes under an unknown prefix, and a load whose file the scan cannot read blocks its prefix;
- * a `require` in a file no load reaches blocks nothing, since that file serves no known routes.
+ * How every Laravel route of a scan is served. A load serves its target under each base of its
+ * loading file, so loads compose: a file loaded under `api` that loads another under `v1` serves that
+ * one under `api/v1`. A loading file with no base serves a group's or `withRouting`'s file from the
+ * root, and a `require`'s file nowhere. A file left with no base serves under an unknown prefix, and a
+ * load whose file the scan cannot read blocks its prefix under each base.
  */
-export function laravelRouting(files: readonly { file: string; mounts: Mount[]; patterns: Requirements }[], application: (file: string) => string) {
+export function laravelRouting(files: readonly { file: string; loads: Load[]; patterns: Requirements }[], application: (file: string) => string) {
   const paths = files.map(file => file.file)
-  const loads = files.flatMap(file => file.mounts).map(mount => ({ mount, target: mountedFile(mount, paths) }))
-  // The bases of a file that some load reaches, or undefined; a load cycle serves under an unknown prefix.
-  function basesOf(file: string, visiting: ReadonlySet<string>): Base[] | undefined {
-    const incoming = loads.filter(load => load.target === file)
-    return incoming.length === 0 ? undefined : incoming.flatMap(({ mount }) => loaderBases(mount, visiting).map(base => under(base, mount)))
+  const loads = files.flatMap(file => file.loads).map(load => ({ load, target: loadedFile(load, paths) }))
+  // A load cycle serves under an unknown prefix.
+  function basesOf(file: string, visiting: ReadonlySet<string>): Base[] {
+    return loads.filter(({ target }) => target === file).flatMap(({ load }) => loaderBases(load, visiting).map(base => under(base, load)))
   }
-  // A require serves under its loader's own routes; a group or `withRouting` of an unloaded file serves from the root.
-  function loaderBases(mount: Mount, visiting: ReadonlySet<string>): Base[] {
-    if (visiting.has(mount.file)) return [unknownBase]
-    return basesOf(mount.file, new Set([...visiting, mount.file])) ?? [mount.include ? unknownBase : unmounted]
+  function loaderBases(load: Load, visiting: ReadonlySet<string>): Base[] {
+    if (visiting.has(load.file)) return [unknownBase]
+    const bases = basesOf(load.file, new Set([...visiting, load.file]))
+    return bases.length > 0 || load.include ? bases : [rootBase]
   }
-  const blocked = loads.filter(load => load.target === undefined && (!load.mount.include || basesOf(load.mount.file, new Set()) !== undefined))
-  const blockers: ScanHttpEndpoint[] = blocked.flatMap(({ mount }) => loaderBases(mount, new Set())
-    .map(base => under(base, mount)).map(base => ({
-      operation: mount.registrar, method: '*', path: blockerPath(routeSegments(base.prefix.text, base.requirements)),
-      order: { application: application(mount.file), position: 0 },
+  const blockers: ScanHttpEndpoint[] = loads.filter(({ target }) => target === undefined).flatMap(({ load }) => loaderBases(load, new Set())
+    .map(base => under(base, load)).map(base => ({
+      operation: load.registrar, method: '*', path: blockerPath(routeSegments(base.prefix.text, base.requirements)),
+      order: { application: application(load.file), position: 0 },
     })))
   return {
     patterns: mergedPatterns(files.map(file => file.patterns)),
-    basesOf: (file: string) => basesOf(file, new Set([file])) ?? [unknownBase],
+    basesOf: (file: string) => {
+      const bases = basesOf(file, new Set([file]))
+      return bases.length > 0 ? bases : [unknownBase]
+    },
     blockers,
   }
 }

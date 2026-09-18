@@ -123,6 +123,9 @@ export interface RouteText {
 
 export const noRoute: RouteText = { text: '', resolved: true }
 
+/** A prefix nothing in the source states. */
+export const unresolvedRoute: RouteText = { text: '', resolved: false }
+
 /** The route text an expression states. */
 export function routeText(node: Fields | undefined, constants: Constants): RouteText {
   const parts = textParts(node, constants)

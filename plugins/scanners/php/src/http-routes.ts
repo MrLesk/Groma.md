@@ -58,15 +58,15 @@ function patternOf(piece: Placeholder, requirements: Requirements): string | und
 }
 
 /** A pattern that can match only text inside one path segment. */
-export function staysWithinSegment(pattern: string): boolean {
+export function staysInSegment(pattern: string): boolean {
   return withinSegment.test(pattern)
 }
 
 /** Literal text, or a placeholder whose pattern, if any, stays inside its segment. */
-function staysInSegment(piece: Piece, requirements: Requirements): boolean {
+function pieceInSegment(piece: Piece, requirements: Requirements): boolean {
   if (typeof piece === 'string') return pathSegment.test(piece)
   const pattern = isPlaceholder(piece) ? patternOf(piece, requirements) : unreadablePattern
-  return pattern === undefined || withinSegment.test(pattern)
+  return pattern === undefined || staysInSegment(pattern)
 }
 
 /** A segment that is one placeholder: a parameter, or a catch-all for `.*` or `.+` in the last segment. */
@@ -76,7 +76,7 @@ function placeholderSegment(piece: Placeholder, requirements: Requirements, last
   if (pattern === undefined) return { kind: 'parameter', name: piece.name, ...optional }
   if (last && pattern === '.*') return { kind: 'catch-all', name: piece.name, optional: true }
   if (last && pattern === '.+') return { kind: 'catch-all', name: piece.name }
-  return withinSegment.test(pattern) ? { kind: 'parameter', name: piece.name, ...optional, constrained: true } : undefined
+  return staysInSegment(pattern) ? { kind: 'parameter', name: piece.name, ...optional, constrained: true } : undefined
 }
 
 /**
@@ -89,7 +89,7 @@ function segmentOf(pieces: Piece[], requirements: Requirements, last: boolean): 
   if (pieces.length === 1 && isPlaceholder(only!)) return placeholderSegment(only, requirements, last)
   // Text mixed with placeholders, such as `photo-{size}`, is one constrained parameter.
   const [first] = pieces.filter(isPlaceholder)
-  const statable = first !== undefined && pieces.every(piece => staysInSegment(piece, requirements))
+  const statable = first !== undefined && pieces.every(piece => pieceInSegment(piece, requirements))
   return statable ? { kind: 'parameter', name: first.name, constrained: true } : undefined
 }
 
