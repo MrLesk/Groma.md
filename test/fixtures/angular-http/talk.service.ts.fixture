@@ -1,0 +1,120 @@
+import { Injectable, inject } from '@angular/core'
+import { HttpClient, HttpRequest } from '@angular/common/http'
+import { API_ROOT } from 'app-config'
+import { environment } from './environment'
+
+@Injectable({ providedIn: 'root' })
+export class TalkService {
+  private readonly base = '/api'
+  private mutableBase = '/api'
+  private readonly replaced: string = '/api'
+
+  constructor(private http: HttpClient) {
+    this.replaced = environment.apiUrl
+  }
+
+  list() {
+    return this.http.get('/api/talks')
+  }
+
+  create(talk: unknown) {
+    return this.http.post('/api/talks', talk)
+  }
+
+  replace(id: string, talk: unknown) {
+    return this.http.put(`/api/talks/${id}`, talk)
+  }
+
+  amend(id: string, patch: unknown) {
+    return this.http.patch(`/api/talks/${id}`, patch)
+  }
+
+  remove(id: string) {
+    return this.http.delete(`/api/talks/${id}`)
+  }
+
+  exists() {
+    return this.http.head('/api/talks')
+  }
+
+  allowed() {
+    return this.http.options('/api/talks')
+  }
+
+  purge(id: string) {
+    return this.http.request('DELETE', `/api/talks/${id}`)
+  }
+
+  byMethod(method: string) {
+    return this.http.request(method, '/api/talks')
+  }
+
+  packaged() {
+    return this.http.request(new HttpRequest('GET', '/api/talks'))
+  }
+
+  latest() {
+    return this.http.get(this.base + '/talks/latest')
+  }
+
+  mutable() {
+    return this.http.get(this.mutableBase + '/talks')
+  }
+
+  reassigned() {
+    return this.http.get(this.replaced + '/talks')
+  }
+
+  search(term: string) {
+    return this.http.get('/api/talks?term=' + term)
+  }
+
+  external() {
+    return this.http.get(`${environment.apiUrl}/talks`)
+  }
+
+  configured() {
+    return this.http.get(`${API_ROOT}/talks`)
+  }
+
+  partial(id: string) {
+    return this.http.get(`/api/talks/${id}-latest`)
+  }
+
+  fromBase(base: string) {
+    return this.http.get(base + '/talks')
+  }
+
+  viaHelper() {
+    return this.send('/api/talks')
+  }
+
+  private send(path: string) {
+    return this.http.get(path)
+  }
+}
+
+@Injectable({ providedIn: 'root' })
+export class SpeakerService {
+  private readonly http = inject(HttpClient)
+
+  one(id: string) {
+    return this.http.get(`/api/speakers/${id}`)
+  }
+}
+
+@Injectable({ providedIn: 'root' })
+export class DraftStore {
+  get(key: string): string {
+    return key
+  }
+}
+
+@Injectable({ providedIn: 'root' })
+export class DraftService {
+  constructor(private drafts: DraftStore) {}
+
+  read() {
+    return this.drafts.get('/api/talks')
+  }
+}

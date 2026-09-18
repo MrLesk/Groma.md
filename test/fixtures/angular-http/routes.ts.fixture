@@ -1,0 +1,8 @@
+import type { Routes } from '@angular/router'
+import type { HttpInterceptorFn } from '@angular/common/http'
+
+export const routes: Routes = [
+  { path: 'talks/:id', loadComponent: () => import('./talk.service') },
+]
+
+export const authInterceptor: HttpInterceptorFn = (request, next) => next(request)
