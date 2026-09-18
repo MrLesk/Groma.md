@@ -1,29 +1,40 @@
 import {
   isArrayTypeNode,
+  isAsExpression,
+  isAwaitExpression,
   isBinaryExpression,
   isBindingElement,
   isBlock,
   isCallExpression,
   isConditionalExpression,
   isConditionalTypeNode,
+  isDeleteExpression,
   isFunctionLikeDeclaration,
   isFunctionTypeNode,
   isHeritageClauseElement,
   isIdentifier,
+  isIfStatement,
   isLiteralTypeNode,
   isNewExpression,
+  isNonNullExpression,
   isNoSubstitutionTemplateLiteral,
   isNumericLiteral,
   isParameterDeclaration,
+  isParenthesizedExpression,
+  isPostfixUnaryExpression,
   isPrefixUnaryExpression,
   isPropertyAccessExpression,
   isPropertyAssignment,
   isReturnStatement,
+  isSatisfiesExpression,
   isShorthandPropertyAssignment,
   isStringLiteral,
   isTypeLiteralNode,
+  isTypeOfExpression,
   isTypeParameterDeclaration,
   isVariableDeclaration,
+  isVoidExpression,
+  isYieldExpression,
   SyntaxKind,
   type Node,
 } from 'typescript/unstable/ast'
@@ -155,6 +166,17 @@ export function tokenizeOperation(node: Node): string[] {
       walk(node.operand)
       return true
     }
+    if (isPostfixUnaryExpression(node)) {
+      walk(node.operand)
+      tokens.push(unaryOperator(node.operator))
+      return true
+    }
+    if (isParenthesizedExpression(node) && groupsOperator(node.expression)) {
+      tokens.push('(')
+      walk(node.expression)
+      tokens.push(')')
+      return true
+    }
     if (isConditionalExpression(node)) {
       walk(node.condition)
       tokens.push('?')
@@ -164,6 +186,19 @@ export function tokenizeOperation(node: Node): string[] {
       return true
     }
     return false
+  }
+
+  /** The children of an `if` carry no `else` keyword, so it is written before an else branch. */
+  function emitIf(node: Node): boolean {
+    if (!isIfStatement(node)) return false
+    tokens.push('if')
+    walk(node.expression)
+    walk(node.thenStatement)
+    if (node.elseStatement !== undefined) {
+      tokens.push('else')
+      walk(node.elseStatement)
+    }
+    return true
   }
 
   function emitStructure(node: Node): boolean {
@@ -193,8 +228,8 @@ export function tokenizeOperation(node: Node): string[] {
       tokens.push(identifierToken(node))
       return
     }
-    if (emitLiteral(node) || emitCall(node) || emitOperator(node)) return
-    const keyword = controlKeyword(node.kind)
+    if (emitLiteral(node) || emitCall(node) || emitOperator(node) || emitIf(node)) return
+    const keyword = KEYWORDS.get(node.kind)
     if (keyword) tokens.push(keyword)
     node.forEachChild(child => walk(child))
   }
@@ -217,16 +252,37 @@ function unaryOperator(kind: SyntaxKind): string {
   return SyntaxKind[kind]?.replace(/Token$|Keyword$/, '').toLowerCase() ?? 'op'
 }
 
-function controlKeyword(kind: SyntaxKind): string | undefined {
-  if (kind === SyntaxKind.IfKeyword || kind === SyntaxKind.IfStatement) return 'if'
-  if (kind === SyntaxKind.ElseKeyword) return 'else'
-  if (kind === SyntaxKind.ForStatement || kind === SyntaxKind.ForInStatement || kind === SyntaxKind.ForOfStatement) {
-    return 'for'
-  }
-  if (kind === SyntaxKind.WhileStatement) return 'while'
-  if (kind === SyntaxKind.ThrowStatement) return 'throw'
-  if (kind === SyntaxKind.TryStatement) return 'try'
-  if (kind === SyntaxKind.AwaitKeyword || kind === SyntaxKind.AwaitExpression) return 'await'
-  if (kind === SyntaxKind.YieldExpression) return 'yield'
-  return undefined
+/**
+ * Parentheses change the meaning only around an operator expression, also when a type-only `as`, `satisfies` or `!`
+ * wraps it, as in `(a + b as number) * c`; around a name, a call or an asserted name they do not.
+ */
+function groupsOperator(expression: Node): boolean {
+  let node = expression
+  while (isAsExpression(node) || isSatisfiesExpression(node) || isNonNullExpression(node)) node = node.expression
+  return isBinaryExpression(node) || isConditionalExpression(node)
+    || isPrefixUnaryExpression(node) || isPostfixUnaryExpression(node)
+    || isTypeOfExpression(node) || isVoidExpression(node) || isDeleteExpression(node)
+    || isAwaitExpression(node) || isYieldExpression(node)
 }
+
+/** Keywords that stay in the tokens, by the syntax that spells them. */
+const KEYWORDS = new Map<SyntaxKind, string>([
+  [SyntaxKind.ForStatement, 'for'],
+  [SyntaxKind.ForInStatement, 'for'],
+  [SyntaxKind.ForOfStatement, 'for'],
+  [SyntaxKind.WhileStatement, 'while'],
+  [SyntaxKind.DoStatement, 'do'],
+  [SyntaxKind.SwitchStatement, 'switch'],
+  [SyntaxKind.CaseClause, 'case'],
+  [SyntaxKind.DefaultClause, 'default'],
+  [SyntaxKind.BreakStatement, 'break'],
+  [SyntaxKind.ContinueStatement, 'continue'],
+  [SyntaxKind.ThrowStatement, 'throw'],
+  [SyntaxKind.TryStatement, 'try'],
+  [SyntaxKind.AwaitKeyword, 'await'],
+  [SyntaxKind.AwaitExpression, 'await'],
+  [SyntaxKind.YieldExpression, 'yield'],
+  [SyntaxKind.TypeOfExpression, 'typeof'],
+  [SyntaxKind.VoidExpression, 'void'],
+  [SyntaxKind.DeleteExpression, 'delete'],
+])

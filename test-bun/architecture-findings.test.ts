@@ -177,7 +177,19 @@ test.concurrent('callbacks written in an object passed to a call or constructor 
     expect(findings).toHaveLength(1)
     expect(findings[0]!.match).toBe('exact')
     expect(namesOf(findings[0]!)).toEqual(['next', 'reportOrder'])
-    expect(findings[0]!.instances.map(instance => instance.startLine)).toEqual([28, 34])
+    // The wrapped spellings, such as `subscribe(({ next }))` or `subscribe({ next } as Observer)`, are callbacks too.
+    expect(findings[0]!.instances.map(instance => instance.startLine)).toEqual([52, 58])
+  } finally {
+    await rm(root, { recursive: true, force: true })
+  }
+})
+
+test.concurrent('bodies that differ in one operator, grouping or keyword are not copies, while constructors are compared', async () => {
+  const root = await scannedFixture('distinct-bodies', 'src/bodies.ts')
+  try {
+    const findings = detectDuplicatedLogic([(await scanTypeScriptSource(root))!], new Map())
+    // Each function pair differs only in postfix ++ or --, parentheses, typeof, break or continue, or else.
+    expect(findings.map(finding => [finding.match, namesOf(finding)])).toEqual([['exact', ['constructor', 'constructor']]])
   } finally {
     await rm(root, { recursive: true, force: true })
   }
