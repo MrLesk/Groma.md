@@ -1,6 +1,5 @@
 import type { Command } from 'commander'
 
-import { commandWords } from './architecture-path.ts'
 import { writes } from './authoring.ts'
 import type { AddInput, RemoveInput } from './authoring.ts'
 import type { StructuralResult } from './curate.ts'
@@ -16,20 +15,20 @@ function printWriteResult(result: string | StructuralResult): void {
   }
   for (const id of result.affectedIds) console.log(`affected: ${id}`)
   for (const replacement of result.replacements) {
-    console.log(`replaced: ${replacement.absorbedId} -> ${replacement.survivingId}`)
+    console.log(`replaced: ${replacement.oldId} -> ${replacement.newId}`)
   }
 }
 
 /** `<verb> relation <a> <b>` names a relationship and `<verb> group <address> [ids...]` a group; every other id stands alone. Only remove reads the members. */
 function addressed(id: string, ids: string[]): RemoveInput {
-  if (id === commandWords.relation) {
+  if (id === 'relation') {
     const [source, target] = ids
     if (source === undefined || target === undefined || ids.length > 2) {
       throw new Error('relation takes a source endpoint and a target endpoint')
     }
     return { id: source, relation: target }
   }
-  if (id === commandWords.group) {
+  if (id === 'group') {
     const [address, ...members] = ids
     if (address === undefined || !isGroupAddress(address)) {
       throw new Error('group takes an address <container-id>/<group-kebab>')

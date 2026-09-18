@@ -5,8 +5,8 @@ import { freeId } from './architecture-model.ts'
 import { architectureElementPath } from './architecture-path.ts'
 import { readDocument, withGromaField } from './markdown-emitter.ts'
 import { RELATIONSHIPS_TYPE } from './okf-profile.ts'
-import { relocated, requireElement } from './curate-rewrites.ts'
-import type { CurationContext, DocumentWrite, Rewrite } from './curate-rewrites.ts'
+import { requireElement } from './curate-rewrites.ts'
+import type { CurationContext, DocumentWrite } from './curate-rewrites.ts'
 import type { ArchitectureElement } from './types.ts'
 
 /**
@@ -22,10 +22,6 @@ export interface RenamedTarget {
   id: string
   source: string
   destination: string
-  /** The element documents the rename moves. */
-  rewrites: Rewrite[]
-  /** The relationship and flow records whose links now name the new paths. */
-  links: DocumentWrite[]
 }
 
 /**
@@ -54,11 +50,14 @@ function withMovedLinks(
     })
 }
 
-/** The relationship record and the flows name element documents by link, so their links follow a move. */
-async function linkWrites(
+/** The relationship record and the flows name element documents by link, so their links follow a rename. */
+export async function linkWrites(
   context: CurationContext,
-  moves: ReadonlyMap<string, string>,
+  rewrites: readonly DocumentWrite[],
 ): Promise<DocumentWrite[]> {
+  const moves = new Map(rewrites
+    .filter(rewrite => rewrite.destinationFilename !== rewrite.sourceFilename)
+    .map(rewrite => [rewrite.sourceFilename, rewrite.destinationFilename]))
   const linked = [
     ...context.records.documents.filter(document => document.frontmatter.type === RELATIONSHIPS_TYPE),
     ...context.records.flows,
@@ -73,18 +72,15 @@ async function linkWrites(
   return writes
 }
 
-/**
- * A renamed record keeps its meaning, Code and children. Its document and everything stored under it
- * move to the paths of the new id, and the links that name those documents follow.
- */
-export async function renamedTarget(
+/** A renamed record keeps its meaning, Code and children, and its document moves to the path of the new id. */
+export function renamedTarget(
   context: CurationContext,
   target: ArchitectureElement,
   source: string,
   destination: string,
   newId: string | undefined,
-): Promise<RenamedTarget> {
-  if (newId === undefined) return { id: target.id, source, destination, rewrites: [], links: [] }
+): RenamedTarget {
+  if (newId === undefined) return { id: target.id, source, destination }
   if (target.kind === 'actor') throw new Error('--id renames systems, containers, and components')
   const id = freeId(context.records, context.model, newId)
   const renamed = architectureElementPath({
@@ -96,17 +92,5 @@ export async function renamedTarget(
       ? {}
       : { parentSourceFilename: requireElement(context.byId, target.parentId).sourceFilename }),
   })
-  const children = context.model.elements.filter(item => item.parentId === target.id)
-  const rewrites = (await Promise.all(children.map(child => relocated(context, child, renamed, id)))).flat()
-  const moves = new Map<string, string>([
-    [target.sourceFilename, renamed],
-    ...rewrites.map((rewrite): [string, string] => [rewrite.sourceFilename, rewrite.destinationFilename]),
-  ])
-  return {
-    id,
-    source: withGromaField(source, 'id', id),
-    destination: renamed,
-    rewrites,
-    links: await linkWrites(context, moves),
-  }
+  return { id, source: withGromaField(source, 'id', id), destination: renamed }
 }

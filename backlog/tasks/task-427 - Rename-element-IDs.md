@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@claude'
 created_date: '2026-09-16 20:42'
-updated_date: '2026-09-18 18:05'
+updated_date: '2026-09-18 23:07'
 labels: []
 dependencies: []
 references:
@@ -33,6 +33,7 @@ modified_files:
   - src/scan-reconciler.ts
   - docs/component-markdown.md
   - test-bun/system-curation.test.ts
+  - src/naming.ts
 type: feature
 ordinal: 500000
 ---
@@ -84,6 +85,11 @@ Review-fix round (external reviews at cf8e7975):
 15. One reserved-ID rule: isReservedId in src/architecture-path.ts (a reserved document name or a command word) is used by freeId and by scan ID allocation (availableId in src/scan-reconciler.ts for systems and containers, componentNames in src/scan-component-naming.ts for files), so a file group.ts or a project named Group gets a qualified ID. existingChild also looks up the qualified root-level ID availableId gives, so a project without files whose name is reserved is found again instead of created on every scan. Docs: structure.md names the command words among refused IDs; component-markdown.md names them in the allocation rule. Test in test-bun/scan-component-naming.test.ts.
 
 16. Cold review: src/curate-rename.ts states that the rewrite covers the common link forms and that requireLoadableResult refuses a rename that leaves any other link naming a moved document; availableId and existingChild share qualifiedId; commandWords is one exported constant that isReservedId and the CLI addressing in src/write-commands.ts both use; requireUnrelated stays because its refusal names the relationship's ends, which the loadability check cannot, and a test now covers it.
+
+Simplicity round (cold junior-maintainer review of the fix round):
+17. Children are relocated in one place: curateElement calls movedDescendants with the final destination and ID for a move and a rename alike, and renamedTarget no longer returns rewrites; the rename repoints links from the complete set of moved documents.
+18. isReservedId moves next to isGroupAddress in src/naming.ts and names group and relation directly; the commandWords constant is gone and the CLI addressing compares the words itself.
+19. StructuralResult.replacements uses { oldId, newId }; the curateElement docstring names rename; the requireSeparateEdits comment says why each pair is separate; rename.test.ts imports node:fs/promises once.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
@@ -103,6 +109,8 @@ Review-fix round (external reviews at cf8e7975):
 - requireUnrelated overlaps the loadability check but stays: its refusal names the relationship's ends, while the check reports an endpoint that names no concept. test-bun/system-curation.test.ts now covers it.
 - Follow-up (not fixed): existingChild also matches the qualified root-level ID, so a new project named X can match a system created earlier from a project named 'Source X' (id source-x).
 Verification: test-bun/rename.test.ts (indented and next-line definitions follow two renames and the world loads; a block-quote definition refuses the rename with nothing written; group and Relation refused), test-bun/scan-component-naming.test.ts (group.ts and relation.ts get qualified IDs; a project named Group without files is not recreated by a second scan), test-bun/system-curation.test.ts (the authored-row refusal names its ends); each fails with its fix reverted. bun run check in an isolated worktree at 7fdc0446 with only these changes passed: biome clean apart from existing diagnostics in other files, tsc clean, 16 node and 524 bun tests pass (35 skipped), 0 fail.
+
+Simplicity round (cold junior-maintainer review): curateElement relocates the children of a moved or renamed record in one movedDescendants call with the final destination and ID, and renamedTarget returns only the record's new id, source and path; a rename repoints links through linkWrites from all element rewrites whose path changed. isReservedId sits next to isGroupAddress in src/naming.ts and names group and relation directly; the commandWords constant is gone and the CLI addressing compares the words itself. StructuralResult.replacements now carries { oldId, newId }; the printed 'replaced:' line is unchanged. The curateElement docstring names rename, the requireSeparateEdits comment gives the reasons, and rename.test.ts imports node:fs/promises once. Verification: in an isolated worktree at fe407bc9 with only these changes, biome, tsc and the 16 node tests passed; the first bun run timed out three test-bun/large-world.test.ts tests at a load average near 130 from concurrent lanes, that file then passed alone (4 pass) and a second full bun run passed (590 pass, 35 skipped, 0 fail).
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
@@ -111,4 +119,6 @@ Verification: test-bun/rename.test.ts (indented and next-line definitions follow
 groma edit <id> --id <new-id> renames a system, container or component: its document and the documents stored under it move to the paths of the new id, children name the new parent, and the links of relationship rows and flow steps that name those documents are repointed by resolved target, so concept-addressed rows and flows keep resolving. The value is normalized to kebab-case, and a taken id, a reserved document name, an actor, a flow and a rename combined with another structural change are refused without writing. The result reports the new id, the created, changed and removed paths and replaced: <old-id> -> <new-id>, which the Backlog guide now tells agents to follow when updating references. Scans match elements through owned files, so two scans after a rename keep the new id and create nothing. Verified with test-bun/rename.test.ts (component and container renames, two following scans, concept row and flow step following, link spellings with './' and a title, an external rename, and every refusal), the real CLI on a scratch repository, and bun run check in an isolated worktree (16 node and 485 bun tests pass).
 
 Review-fix round: renames now rewrite indented and next-line reference definitions, and every structural write checks that the architecture it leaves still loads and its flows resolve, so a link the rewrite cannot repoint refuses the rename instead of breaking the world. The words group and relation, which the CLI reads as addresses, are reserved through one rule shared by renames, new records and scan ID allocation, and scans find a project with a reserved name again by its qualified ID. Verified with new rename, scan-naming and system-curation tests and bun run check in an isolated worktree.
+
+Simplicity round: children of a moved or renamed record are relocated in one place, the reserved-ID rule is one function beside the group-address check, and replacements read { oldId, newId }; verified with an isolated worktree check.
 <!-- SECTION:FINAL_SUMMARY:END -->

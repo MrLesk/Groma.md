@@ -4,7 +4,7 @@ import { architectureElementPath } from './architecture-path.ts'
 import { buildArchitectureModel, expectedParentKinds } from './architecture-model.ts'
 import { relocated, requireElement } from './curate-rewrites.ts'
 import type { CurationContext, DocumentWrite, Rewrite } from './curate-rewrites.ts'
-import { renamedTarget } from './curate-rename.ts'
+import { linkWrites, renamedTarget } from './curate-rename.ts'
 import { resolveFlows } from './flow-model.ts'
 import { moveBlocker } from './movable.ts'
 import { requireGromaMapping } from './okf-profile.ts'
@@ -46,7 +46,8 @@ export interface StructuralResult {
   changed: string[]
   removed: string[]
   affectedIds: string[]
-  replacements: Array<{ absorbedId: string; survivingId: string }>
+  /** Each ID that no longer exists and the ID that now stands for it: a renamed or an absorbed record. */
+  replacements: Array<{ oldId: string; newId: string }>
 }
 
 interface CurationChange {
@@ -166,7 +167,10 @@ async function applyRewrites(
   return { created, changed, removed }
 }
 
-/** Each of these rebuilds the target document from the stored element, so they cannot share one edit. */
+/**
+ * A combine rebuilds Code from the stored records, which would restore detached files, and places the
+ * absorbed children under the stored target path, which a move changes. A rename is always its own edit.
+ */
 function requireSeparateEdits(input: CurateInput): void {
   const combines = (input.combine?.length ?? 0) > 0
   const detaches = (input.detach?.length ?? 0) > 0
@@ -305,15 +309,17 @@ function movedTarget(
   }
 }
 
-/** A moved record takes everything stored under it to the new path. */
+/** A moved or renamed record takes everything stored under it to its new path; children name a new ID. */
 async function movedDescendants(
   context: CurationContext,
   target: ArchitectureElement,
   destination: string,
+  id: string,
 ): Promise<Rewrite[]> {
   if (destination === target.sourceFilename) return []
   const children = context.model.elements.filter(item => item.parentId === target.id)
-  const relocations = await Promise.all(children.map(child => relocated(context, child, destination)))
+  const parentId = id === target.id ? undefined : id
+  const relocations = await Promise.all(children.map(child => relocated(context, child, destination, parentId)))
   return relocations.flat()
 }
 
@@ -377,7 +383,7 @@ async function combineElements(
   }
 }
 
-/** Structural curation of one element: group, detach files, move, or fold empty scan records into it; each element keeps its own status. */
+/** Structural curation of one element: group, detach files, move, rename, or fold empty scan records into it; each element keeps its own status. */
 export async function curateElement(
   repositoryRoot: string,
   records: ArchitectureRecords,
@@ -394,18 +400,21 @@ export async function curateElement(
   const detached = detachedSource(target, grouped, input.detach)
   const moved = movedTarget(context, target, detached, input.parent)
   const combined = await combineElements(context, target, moved.source, input.combine)
-  const renamed = await renamedTarget(context, target, combined.targetSource, moved.destination, input.newId)
-  const targetSource = withMeaning(renamed.source, input)
-  const rewrites = [...combined.rewrites, ...renamed.rewrites]
-  rewrites.unshift({
-    id: renamed.id,
-    sourceFilename: target.sourceFilename,
-    destinationFilename: renamed.destination,
-    source: targetSource,
-  })
-  rewrites.push(...await movedDescendants(context, target, moved.destination))
+  const renamed = renamedTarget(context, target, combined.targetSource, moved.destination, input.newId)
+  const rewrites: Rewrite[] = [
+    {
+      id: renamed.id,
+      sourceFilename: target.sourceFilename,
+      destinationFilename: renamed.destination,
+      source: withMeaning(renamed.source, input),
+    },
+    ...combined.rewrites,
+    ...await movedDescendants(context, target, renamed.destination, renamed.id),
+  ]
   requireScanFindable(context, target, input.parent, rewrites, combined.removals)
-  const writes: DocumentWrite[] = [...rewrites, ...renamed.links]
+  // Only a rename repoints links; requireLoadableResult refuses a move or combine that would break one.
+  const links = input.newId === undefined ? [] : await linkWrites(context, rewrites)
+  const writes: DocumentWrite[] = [...rewrites, ...links]
   validateDestinations(filesystem, writes)
   const removals = combined.removals.map(element => element.sourceFilename)
   await requireLoadableResult(context, target, writes, removals)
@@ -415,8 +424,8 @@ export async function curateElement(
     ...paths,
     affectedIds: [...rewrites.map(rewrite => rewrite.id), ...combined.removals.map(element => element.id)],
     replacements: [
-      ...input.newId === undefined ? [] : [{ absorbedId: target.id, survivingId: renamed.id }],
-      ...combined.removals.map(element => ({ absorbedId: element.id, survivingId: target.id })),
+      ...input.newId === undefined ? [] : [{ oldId: target.id, newId: renamed.id }],
+      ...combined.removals.map(element => ({ oldId: element.id, newId: target.id })),
     ],
   }
 }

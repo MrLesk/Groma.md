@@ -40,11 +40,3 @@ export function isReservedDocument(filename: string): boolean {
   const basename = filename.slice(filename.lastIndexOf('/') + 1)
   return basename === 'index.md' || basename === 'log.md' || basename === 'project.md'
 }
-
-/** The words the CLI reads as a relation or group address, so an element with such an ID could not be edited. */
-export const commandWords = { relation: 'relation', group: 'group' } as const
-
-/** IDs no element may take: a reserved document name, or a word the CLI reads as an address. */
-export function isReservedId(id: string): boolean {
-  return isReservedDocument(`${id}.md`) || Object.values<string>(commandWords).includes(id)
-}

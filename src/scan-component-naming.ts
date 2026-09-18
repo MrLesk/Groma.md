@@ -1,8 +1,7 @@
 import { createHash } from 'node:crypto'
 import path from 'node:path'
 
-import { isReservedId } from './architecture-path.ts'
-import { displayName, kebabCase } from './naming.ts'
+import { displayName, isReservedId, kebabCase } from './naming.ts'
 
 interface ComponentSource {
   file: string
