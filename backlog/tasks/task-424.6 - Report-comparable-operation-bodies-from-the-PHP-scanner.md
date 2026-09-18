@@ -5,11 +5,12 @@ status: Done
 assignee:
   - '@claude'
 created_date: '2026-09-16 20:42'
-updated_date: '2026-09-17 06:45'
+updated_date: '2026-09-18 17:43'
 labels: []
 dependencies: []
 references:
   - evidence
+  - src-tokens
 modified_files:
   - plugins/scanners/php/src/syntax.ts
   - plugins/scanners/php/src/tokens.ts
@@ -21,6 +22,7 @@ modified_files:
   - test/fixtures/php-duplicates/callbacks.php
   - test-bun/php-scanner.test.ts
   - docs/scanners/php/index.md
+  - test/fixtures/php-duplicates/prices.php
 parent_task_id: TASK-424
 type: feature
 ordinal: 496000
@@ -58,6 +60,13 @@ groma lint cannot find duplicate logic in PHP because the PHP scanner reports op
 6. test-bun/php-scanner.test.ts: run groma lint on the fixture through the packaged scanner and assert exactly the two findings; assert a small named body still carries tokens and an arrow function carries none.
 7. docs/scanners/php/index.md: add a Compared operations section in the TypeScript page's shape.
 8. Run bun run check in an isolated worktree.
+
+Review round (external cold reviews at cf8e7975):
+9. Fix (Codex must-fix, tokens.ts:102): a variable the parser marks by reference, such as the value of foreach ($items as &$item), emits & before its slot, so reference iteration no longer matches value iteration.
+10. Fix (lane brief check, reproduced): grouping parentheses were dropped, so ($x + $y) * $z and $x + $y * $z had identical tokens; an expression the parser marks parenthesized is wrapped in ( and ) tokens.
+11. Verified unaffected: postfix ++ and -- already emit their operator after the operand.
+12. Fix (Grok-all docs finding): the PHP page no longer calls skipping assigned closures a PHP exception; it points at the shared language split.
+13. Regression tests: the php-duplicates lint fixture gains a by-reference/by-value foreach pair and a grouped/ungrouped expression pair that must not be reported.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
@@ -70,10 +79,16 @@ Verification: bun test test-bun/php-scanner.test.ts, 4 pass; the lint test repor
 
 Cold review applied: removed the selfreference, parentreference, staticreference and nullkeyword emitters (the default path emits the kind); renamed silent to wrappers, members to memberOperators, global to globalStatement, syntax to isSyntax, body to comparable; completed the nested-scope comment; rewrote the docs section as compared and not-compared lists naming closures and arrow functions as the PHP exception; callbacks.php now holds two identical closures assigned to variables. Dropped grouping parentheses and lost block boundaries were left unchanged as a cross-scanner follow-up shared with the TypeScript scanner.
 Re-verification: bun test test-bun/php-scanner.test.ts 4 pass; isolated bun run check exit 0 (tsc clean, node 16 pass, bun 375 pass, 20 skip, 0 fail; Biome findings only in untouched build.ts, vue-scanner.test.ts, iso-map.test.ts).
+
+Review round (external cold reviews at cf8e7975): reproduced with an operationTokens probe that foreach ($items as &$item) and the by-value loop gave identical tokens, and that ($x + $y) * $z and $x + $y * $z did too (php-parser marks the source group with parenthesizedExpression). The variable emitter now emits & before a variable the parser marks byref, and walk wraps a parenthesized expression in ( and ) tokens; syntactic parentheses of if, while and call arguments are not marked and emit nothing. Postfix ++ and -- already emitted their operator (verified, unchanged). Regression: test/fixtures/php-duplicates/prices.php holds a by-reference/by-value foreach pair and a grouped/ungrouped pair; without the fix groma lint reported both as identical, with it the exact finding list is unchanged. The PHP page no longer calls the closure rule a PHP exception and states that grouping parentheses and the foreach & remain. Verification: bun test test-bun/php-scanner.test.ts 5 pass; isolated bun run check exit 0 (tsc clean; node 16 pass; bun 513 pass, 32 skip, 0 fail; Biome findings only in untouched build.ts, vue-scanner.test.ts, iso-map.test.ts).
+
+Cold review of the review-round fix applied: closure use imports are now walked as variables in the enclosing scope before the closure's scope opens, so the variable emitter pushes & plus the slot and the imports map reads find(outer, name); use (&$a, $b) and use ($a, &$b) no longer tokenize alike (previously no import emitted any token). prices.php gained that pair (collectTotals, collectTaxes); without the change lint reported them identical. The PHP page says every source parenthesis around an expression stays and names the foreach and use &. Follow-ups recorded, not fixed: by-reference parameters (function f(array &$a) { $a[] = 1; } matches its by-value version, because no scanner compares signatures), and lost block boundaries (if ($x) { f(); } g(); matches if ($x) { f(); g(); }), a cross-scanner follow-up the coordinator records for the owner. Verification: bun test test-bun/php-scanner.test.ts 5 pass; isolated bun run check at d007cb75 exit 0 (tsc clean; node 16 pass; bun 516 pass, 32 skip, 0 fail; Biome findings only in untouched build.ts, vue-scanner.test.ts, iso-map.test.ts).
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
-The PHP scanner now reports startLine, endLine and binding-normalized body tokens for named functions and methods, constructors included, so groma lint finds duplicate PHP logic. Closures and arrow functions are never compared, as a documented PHP exception. Tokenization (plugins/scanners/php/src/tokens.ts) turns parameters and local variables into slots and keeps operators, literals, member names and unresolved names; core applies the size minimums. The PHP scanner page lists compared and excluded operations. Verified by a packaged-scanner groma lint test on test/fixtures/php-duplicates (one identical pair with renamed locals, one near-duplicate constructor, identical closures and arrow functions absent) and an isolated bun run check (exit 0).
+The PHP scanner now reports startLine, endLine and binding-normalized body tokens for named functions and methods, constructors included, so groma lint finds duplicate PHP logic. Closures and arrow functions are never compared: PHP is one of the languages whose scanner treats every closure and arrow function as an anonymous callback under the shared rule. Tokenization (plugins/scanners/php/src/tokens.ts) turns parameters and local variables into slots and keeps operators, literals, member names and unresolved names; core applies the size minimums. The PHP scanner page lists compared and excluded operations. Verified by a packaged-scanner groma lint test on test/fixtures/php-duplicates (one identical pair with renamed locals, one near-duplicate constructor, identical closures and arrow functions absent) and an isolated bun run check (exit 0).
+
+Review round: tokens now keep the & of a by-reference foreach variable and of a by-reference closure import (imports are emitted as slots in the enclosing scope), and every source parenthesis around an expression, so bodies that differ only there are no longer identical copies; postfix ++ and -- were already kept. The PHP page describes these tokens and no longer calls the closure rule an exception. test/fixtures/php-duplicates/prices.php holds the three pairs, which lint reported as identical before the change; verified by bun test test-bun/php-scanner.test.ts and an isolated bun run check (exit 0).
 <!-- SECTION:FINAL_SUMMARY:END -->

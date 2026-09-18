@@ -71,7 +71,9 @@ test.concurrent('lint finds identical and near-duplicate PHP functions and metho
       identical: !finding.includes('not identical'),
     })).sort((left, right) => left.at[0]!.localeCompare(right.at[0]!))
     // The method with renamed locals matches the function exactly; the constructor nearly matches the function.
-    // The identical closures assigned to variables and arrow functions in arrays are absent.
+    // The identical closures assigned to variables and arrow functions in arrays are absent, and so are the
+    // functions that differ only in a by-reference loop variable, in which closure import is by reference,
+    // or in grouping parentheses.
     expect(findings).toEqual([
       { at: ['invoice.php:4', 'quote.php:8'], identical: false },
       { at: ['readiness.php:4', 'scheduling.php:6'], identical: true },

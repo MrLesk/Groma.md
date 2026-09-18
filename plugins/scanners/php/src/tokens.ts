@@ -47,12 +47,15 @@ export function operationTokens(operation: Syntax): string[] {
   }
 
   // A nested named function, anonymous-class method or closure starts with an empty scope; a closure adds the
-  // variables it imports with `use`, which can allocate their slots in the enclosing scope. An arrow function
-  // sees the enclosing scope.
+  // variables it imports with `use`, which are emitted in the enclosing scope with their `&` and can allocate
+  // their slots there. An arrow function sees the enclosing scope.
   function nested(node: Fields): void {
     tokens.push('fn')
     const outer = scope
-    const imports = ((node.uses ?? []) as Fields[]).map(used => [String(used.name), variable(String(used.name))] as const)
+    const uses = (node.uses ?? []) as Fields[]
+    walk(uses)
+    // PHP rejects `$this` and superglobals as imports, so every imported name has a slot in the enclosing scope.
+    const imports = uses.map(used => [String(used.name), find(outer, String(used.name))!] as const)
     scope = { parent: node.kind === 'arrowfunc' ? outer : undefined, names: new Map(imports) }
     signatureAndBody(node)
     scope = outer
@@ -100,6 +103,8 @@ export function operationTokens(operation: Syntax): string[] {
 
   const emitters: Record<string, (node: Fields) => void> = {
     variable: node => {
+      // A variable bound by reference, such as `foreach ($items as &$item)` or `use (&$total)`, changes what it writes to.
+      if (node.byref) tokens.push('&')
       if (typeof node.name === 'string') tokens.push(variable(node.name))
       else { tokens.push('$$'); walk(node.name) }
     },
@@ -132,6 +137,16 @@ export function operationTokens(operation: Syntax): string[] {
     arrowfunc: nested,
   }
 
+  function emit(node: Fields): void {
+    const emitter = emitters[node.kind]
+    if (emitter) emitter(node)
+    else {
+      if (!wrappers.has(node.kind)) tokens.push(node.kind)
+      walk(children(node))
+    }
+  }
+
+  // Source grouping parentheses stay, so `($a + $b) * $c` differs from `$a + $b * $c`.
   function walk(value: unknown): void {
     if (Array.isArray(value)) {
       for (const item of value) walk(item)
@@ -139,12 +154,10 @@ export function operationTokens(operation: Syntax): string[] {
     }
     if (!isSyntax(value)) return
     const node = value as Fields
-    const emit = emitters[node.kind]
-    if (emit) emit(node)
-    else {
-      if (!wrappers.has(node.kind)) tokens.push(node.kind)
-      walk(children(node))
-    }
+    const grouped = node.parenthesizedExpression === true
+    if (grouped) tokens.push('(')
+    emit(node)
+    if (grouped) tokens.push(')')
   }
 
   signatureAndBody(operation as Fields)

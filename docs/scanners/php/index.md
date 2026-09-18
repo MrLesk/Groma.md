@@ -83,13 +83,14 @@ Parameters and local variables become slots from their first use, because PHP
 variables have function scope. `$this`, superglobals, names declared `global`,
 and static properties such as `self::$count` keep their names. A closure body
 sees only the variables it imports with `use`; an arrow function body sees the
-enclosing variables.
+enclosing variables. Every parenthesis the source writes around an expression
+remains, and so does the `&` of a variable bound by reference in `foreach` or
+in a closure's `use` list.
 
-These named operations are not compared:
-
-- closures and arrow functions, including those assigned to a variable or to an
-  array key. This is a PHP exception to the shared rule; the scanner treats every
-  closure and arrow function as an anonymous callback.
+Closures and arrow functions are not compared, including those assigned to a
+variable or to an array key: PHP is one of the languages whose scanner treats
+every closure and arrow function as an anonymous callback under the
+[shared rule](../../architecture-findings.md#compared-operations).
 
 Top-level code and property and constant initializers are not operations and
 are not compared.
