@@ -42,7 +42,7 @@ interface ViewerOptions {
   onRefresh?: () => void | Promise<void>
   /** The full record of one task, read when the details pane opens it. */
   readTask?: (id: string) => Promise<WorkItemDetails>
-  /** The declarations of a component's TypeScript files, read when its How tab shows. */
+  /** The source outline of a component's Code files, read when its How tab shows. */
   readStructure?: (elementId: string) => Promise<CodeFile[] | undefined>
   /** A component's source file, read when a declaration opens it. */
   readSource?: (elementId: string, file: string) => Promise<{ source: string } | undefined>

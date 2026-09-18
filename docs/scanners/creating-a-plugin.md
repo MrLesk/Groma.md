@@ -118,7 +118,8 @@ block, such as a C# `namespace`, a braced PHP namespace, a TypeScript
 `namespace` or `module`, or a Rust inline `mod`. A declaration inside another
 type or function is nested and is not listed. PHP also counts a function
 declared directly inside `if (!function_exists('name'))` as top-level when the
-guard names that function.
+guard names that function. C# top-level statements, with the local functions
+and lambdas they declare, form the program's entry point and are not listed.
 
 - `kind: 'function'` is a top-level function, or a function literal (arrow
   function, function expression, or lambda) assigned directly to a top-level
@@ -138,12 +139,14 @@ guard names that function.
   `__init__`, `__construct`, or the type name.
 - Fields, properties, property signatures (even with a function type),
   accessors, and nested types are not listed.
-- Methods declared apart from their type, as Go receiver methods and Rust
-  `impl` blocks are, belong to one entry for that type per file. When the file
-  declares the type, the entry is that declaration with the type's visibility.
+- Methods declared apart from their type, as Go receiver methods, Rust `impl`
+  blocks and Swift extensions are, belong to one entry for that type per file.
+  When the file declares the type, the entry is that declaration (in Swift, at
+  the first of the declaration and its extensions) with the type's visibility.
   Otherwise the entry has the line of the file's first such method or block,
-  and its visibility comes from the type name in Go and is `public` in every
-  other language.
+  and its visibility comes from the type name in Go, from the first
+  extension's access in Swift (`internal` when it states none), and is
+  `public` in every other language.
 
 Every declaration and member has `name`, `line` (the 1-based line of the
 name), `visibility`, and `entry`. `entry` is true when the reference's `symbols`

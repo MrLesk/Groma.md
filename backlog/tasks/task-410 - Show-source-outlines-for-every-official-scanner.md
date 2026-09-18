@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@claude'
 created_date: '2026-09-16 19:37'
-updated_date: '2026-09-18 06:24'
+updated_date: '2026-09-18 17:42'
 labels: []
 dependencies: []
 references:
@@ -16,6 +16,7 @@ references:
   - organisms-details
   - source-read
   - source-control
+  - src-view-host
 modified_files:
   - packages/scanner/src/index.ts
   - docs/scanners/creating-a-plugin.md
@@ -43,6 +44,8 @@ modified_files:
   - test/fixtures/typescript-outline/outline.ts
   - test/fixtures/typescript-outline/tsconfig.json
   - docs/viewers/web/index.md
+  - src/viewers/tui/navigation.ts
+  - src/viewers/tui/terminal-viewer.ts
 type: feature
 ordinal: 456000
 ---
@@ -81,6 +84,12 @@ Contract slice (AC #3, #4); the nine subtasks deliver each scanner's outline.
 6. Run bun run check (isolated when other work in progress breaks the shared tree); verify the web and terminal maps on the fixture; self-review specification and quality.
 
 7. Parent closeout: state the four rules the per-language reviews exposed (the entry symbol spelling, one scanner per owned file, PHP's function_exists guard, named function types) in the contract and the scanner types, then record outline evidence for every official scanner, building the opt-in Go, Rust and C# workers to run their outline tests.
+
+Review-fix round (external reviews of cf8e7975):
+8. Fix: terminal How cursor stops keyed by file:line collapse when declarations share a line (for example `interface Reader { read(): void }`), so Down never leaves the first one. Key each stop by its file and its position among the file's outline rows; Enter looks up the stop's line. Regression test in test-bun/tui-source.test.ts.
+9. Fix: the ViewerState.codeStructure and ViewerOptions.readStructure comments still say TypeScript files; describe the scanner-neutral outline.
+10. Fix: docs/scanners/creating-a-plugin.md states rules C# and Swift do not follow: C# top-level statements (and the local functions and lambdas they declare) are not listed, and a Swift extension of a type declared elsewhere takes the extension's access. State both on the shared page.
+11. Not in this lane: TypeScript outline findings (quoted method names, two TypeScript outline engines) belong to TASK-410.7; per-language outline findings (Java comment name lookup, Rust same-name types and cfg filter, PHP namespaced function_exists guard, C# argv request) belong to the scanner lanes.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
@@ -114,10 +123,20 @@ Verification: isolated worktree bun run check exit 0 (biome 1 warning and 2 info
 Non-blocking follow-ups on test coverage, not required by an acceptance criterion: csharp-outline.test.ts asserts only kind and entry, so C# members, lines, visibilities and the delegate rest on the recorded run; the Go fixture has no type X func(...) case; the TypeScript reference test omits line and entry.
 
 Cold review corrections to the contract wording: entry names the symbol in the spelling that scanner's Code links use, PHP members are Namespace\Type::method beside a top-level Namespace\name, the function_exists guard counts only the function it names, a file's outline goes to the lowest scanner id among its Code links (including a scanner without the hook, which then leaves the file without an outline), and a named function type has an empty members list. Re-verified in a detached worktree at fa5ac2d8 holding only this change: bun run check exit 0 (biome 1 warning and 2 infos in untouched files, tsc clean, node 16 pass, bun 457 pass 0 fail).
+
+Review-fix round (external reviews of cf8e7975).
+Fixed: terminal How cursor stops were keyed file:line, so declarations sharing a line (for example `interface Reader { read(): void }`) collapsed into one stop and Down never passed the first. panes/details.ts now exports outlineSymbols (each declaration followed by a type's members) and outlineRowKey (file plus the symbol's position among its file's outline rows); navigation-details.ts builds its stops (OutlineStop, outlineStopKeys) from the same list, and Enter opens the stop's own line. Regression test "declarations sharing a line are separate cursor stops" (test-bun/tui-source.test.ts) fails at cf8e7975 and passes now; tests that asserted the old key text now assert the line Enter opens.
+Fixed: the ViewerState.codeStructure and ViewerOptions.readStructure comments now describe the scanner-neutral outline.
+Fixed (docs): creating-a-plugin.md states that C# top-level statements, with their local functions and lambdas, are not listed, and that Swift extensions are methods declared apart from their type: the entry sits at the first of the declaration and its extensions, and for a type declared elsewhere takes the first extension's access (internal by default).
+Cold review: shared outlineSymbols between pane and navigation so the highlight and the stops cannot count rows differently, renamed to OutlineStop/outlineStopKeys, and added the Swift entry-line note.
+Verification: tui-test on a scratch copy of mixed-scanner-outline whose alpha outline has Reader and read on line 1 and next on line 2: Down x4 then Enter opens src/orders.alpha:2; Esc, Up, Enter opens :1; a pane probe showed the highlighted row follows each stop. Isolated worktree bun run check exit 0 (biome 1 warning and 2 infos in untouched files, tsc clean, node 16 pass, bun 516 pass 32 skip 0 fail).
+Out of lane, reported to the orchestrator: TypeScript outline findings (TASK-410.7), Java comment name lookup, Rust same-name types and cfg filter, PHP namespaced guard, C# argv request, Swift operation start line.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
 Every official scanner returns a source outline through readCodeStructure, and the plugin contract now states the rules the per-language reviews exposed: the entry symbol spelling each scanner writes, one scanner per owned file, PHP's function_exists guard, and named function types as memberless types. Verified in a detached worktree holding only this change: the unconditional outline tests pass and the opt-in Go, Rust and C# outline suites pass after building their workers, direct outline runs recorded the C#, Go and TypeScript fields those tests leave unasserted, probes confirmed the outline needs no installed project dependencies or project tool, and bun run check exits 0.
+
+Review-fix round: the terminal How cursor now keys each outline row by its position in the file, shared by the pane and navigation, so declarations sharing a line are separate stops and each opens its own line (regression test plus tui-test); outline comments are scanner-neutral; and the plugin contract states the C# top-level statement and Swift extension rules. Isolated bun run check exits 0.
 <!-- SECTION:FINAL_SUMMARY:END -->

@@ -20,7 +20,7 @@ import type {
   WorkItemDetails,
 } from '../../../types.ts'
 import type { TaskFileDiff } from '../../source/diff-lines.ts'
-import type { CodeDeclaration, CodeFile } from '../../source/structure.ts'
+import type { CodeDeclaration, CodeFile, CodeSymbol } from '../../source/structure.ts'
 import { accent, bold, chunk, dim, kindMark, plain, styleRow, wrap, type Line, type PaneLines } from './text.ts'
 
 export const DETAILS_TABS: readonly DetailsTab[] = ['what', 'how', 'tasks']
@@ -38,11 +38,22 @@ function technologyRows(theme: ViewerTheme, element: AnnotatedElement, width: nu
   return [[], heading(theme, 'Technology', width), [plain(theme, technology.join(' · '))]]
 }
 
+/** A file's outline rows as the How tab lists them: each declaration, followed by a type's members. */
+export function outlineSymbols(file: CodeFile): CodeSymbol[] {
+  return file.declarations.flatMap(declaration => [declaration, ...(declaration.kind === 'type' ? declaration.members : [])])
+}
+
+/** The details cursor key of an outline row; row: the symbol's position among its file's outline rows. */
+export function outlineRowKey(file: string, row: number): string {
+  return `${file}#${row}`
+}
+
 /** A function with its parentheses, a type, or a member: its line and what it is. */
 function declarationRows(
   theme: ViewerTheme,
   file: string,
   declaration: CodeDeclaration,
+  symbols: readonly CodeSymbol[],
   width: number,
   actionCursor: string | undefined,
   findings: readonly ArchitectureFinding[],
@@ -50,7 +61,7 @@ function declarationRows(
 ): PaneLines {
   const facts = [declaration.entry ? 'entry' : undefined, declaration.visibility, declaration.kind === 'type' ? 'type' : undefined, `line ${declaration.line}`].filter(fact => fact !== undefined).join(' · ')
   const name = declaration.kind === 'function' ? `${declaration.name}()` : declaration.name
-  const key = `${file}:${declaration.line}`
+  const key = outlineRowKey(file, symbols.indexOf(declaration))
   const lines: Line[] = [styleRow(theme, [plain(theme, `${indent}${name}`), dim(theme, ` · ${facts}`)], width, false, key === actionCursor)]
   let cursor = key === actionCursor ? 0 : undefined
   // A type declares no body, so only an operation row stands for a compared operation.
@@ -58,7 +69,7 @@ function declarationRows(
   lines.push(...copyLines(theme, own, width, `${indent}  `))
   if (declaration.kind === 'type') {
     for (const member of declaration.members) {
-      const memberKey = `${file}:${member.line}`
+      const memberKey = outlineRowKey(file, symbols.indexOf(member))
       if (memberKey === actionCursor) cursor = lines.length
       lines.push(styleRow(theme, [plain(theme, `${indent}  ${member.name}()`), dim(theme, ` · ${member.visibility} · line ${member.line}`)], width, false, memberKey === actionCursor))
       lines.push(...copyLines(theme, copiesOf(findings, file, member.line), width, `${indent}    `))
@@ -101,8 +112,10 @@ function codeRows(
     seen.add(reference.file)
     const count = reference.lines === undefined ? '' : ` · ${reference.lines} lines`
     lines.push([plain(theme, reference.file), dim(theme, count)])
-    for (const declaration of structure?.find(file => file.file === reference.file)?.declarations ?? []) {
-      const rows = declarationRows(theme, reference.file, declaration, width, actionCursor, findings, '  ')
+    const outline = structure?.find(file => file.file === reference.file)
+    const symbols = outline === undefined ? [] : outlineSymbols(outline)
+    for (const declaration of outline?.declarations ?? []) {
+      const rows = declarationRows(theme, reference.file, declaration, symbols, width, actionCursor, findings, '  ')
       if (rows.cursor !== undefined) cursor = lines.length + rows.cursor
       lines.push(...rows.lines)
     }

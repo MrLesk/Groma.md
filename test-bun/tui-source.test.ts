@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { test } from 'bun:test'
 
 import type { WorkSnapshot } from '../src/types.ts'
-import { declarationStops } from '../src/viewers/tui/navigation-details.ts'
+import { outlineStopKeys } from '../src/viewers/tui/navigation-details.ts'
 import { taskRecordView } from '../src/viewers/tui/panes/details.ts'
 import { viewerTheme } from '../src/viewers/tui/atoms/theme.ts'
 import { detailsContentWidth } from '../src/viewers/tui/layout.ts'
@@ -53,15 +53,16 @@ test.concurrent('details declarations open source at their exact line and Escape
     },
   }
 
-  assert.deepEqual(declarationStops(state), ['src/orders.ts:5', 'src/orders.ts:6'])
+  const stops = outlineStopKeys(state)
+  assert.equal(stops.length, 2)
   state = reduceViewer(model, state, 'down')
-  assert.equal(state.actionCursor, 'src/orders.ts:5')
+  assert.equal(state.actionCursor, stops[0])
   state = reduceViewer(model, state, 'enter')
   assert.deepEqual(state.sourceView, { file: 'src/orders.ts', line: 5, returnScroll: 0 })
   assert.equal(state.detailsScroll, 2)
   state = reduceViewer(model, state, 'dismiss')
   assert.equal(state.sourceView, undefined)
-  assert.equal(state.actionCursor, 'src/orders.ts:5')
+  assert.equal(state.actionCursor, stops[0])
   state = reduceViewer(model, state, 'down')
   for (let step = 0; step < 5; step++) state = reduceViewer(model, state, 'down')
   const before = state
@@ -71,6 +72,35 @@ test.concurrent('details declarations open source at their exact line and Escape
   assert.equal(state.detailsScroll, before.detailsScroll)
   assert.equal(state.actionCursor, before.actionCursor)
   assert.equal(detailsContentWidth(state), detailsContentWidth(before))
+})
+
+test.concurrent('declarations sharing a line are separate cursor stops', () => {
+  const model = navigationWorld()
+  let state: ViewerState = {
+    ...initialState(model),
+    currentId: 'observed:pleft',
+    focus: 'details',
+    detailsTab: 'how',
+    codeStructure: {
+      elementId: 'observed:pleft',
+      files: [{
+        file: 'src/reader.ts',
+        declarations: [
+          { kind: 'type', name: 'Reader', line: 1, visibility: 'public', entry: false, members: [{ name: 'read', line: 1, visibility: 'public', entry: false }] },
+          { kind: 'function', name: 'next', line: 2, visibility: 'public', entry: false },
+        ],
+      }],
+    },
+  }
+
+  const visited: (string | undefined)[] = []
+  for (let step = 0; step < 3; step++) {
+    state = reduceViewer(model, state, 'down')
+    visited.push(state.actionCursor)
+  }
+  assert.equal(new Set(visited).size, 3)
+  state = reduceViewer(model, state, 'enter')
+  assert.equal(state.sourceView?.line, 2)
 })
 
 test.concurrent('a task modified file opens its diff and Escape returns to the record', () => {
