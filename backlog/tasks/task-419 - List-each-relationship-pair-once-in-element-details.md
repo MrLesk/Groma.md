@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@claude'
 created_date: '2026-09-16 20:32'
-updated_date: '2026-09-18 17:54'
+updated_date: '2026-09-18 23:12'
 labels: []
 dependencies: []
 references:
@@ -89,6 +89,8 @@ Review-fix round (external reviews of cf8e7975):
 8. Skip (optional finding): storing one pair identity instead of activeActionId plus LitAction.relationshipIds would add selection-change rewriting rather than delete code.
 
 9. Cold review: the painter's navigation comment is deleted rather than reworded; docs/viewers/tui/index.md alone states the rule.
+
+10. Simplicity round: Enter follows the picked pair's own peerId instead of recomputing the promoted end, without a guard for a missing selection that a details command cannot have; the repeated Enter assertion in routes.test.ts is removed.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
@@ -118,6 +120,10 @@ Fixed: Enter on a relationship pair row followed the first relationship's exact 
 Tests: test-bun/routes.test.ts asserts that Enter on the lit Site pair selects backend, and the lit-pair identity test now asserts backend instead of "not site"; both fail with cf8e7975's navigation.ts.
 Skipped (optional): one stored pair identity instead of activeActionId plus LitAction.relationshipIds would rewrite activeActionId on every selection change, adding code rather than deleting it.
 Verification: tui-test on a scratch copy of test/fixtures/relationship-pairs: Api with its lit row follows to Pages, Site with its lit combined row follows to Backend. Cold review confirmed every pair in the fixture and a deeper-peer world select the row's peer. Isolated worktree bun run check exit 0 (biome 1 warning and 2 infos in untouched files, tsc clean, node 16 pass, bun 520 pass 34 skip 0 fail).
+
+Simplicity round (cold junior-maintainer review of the fix round).
+Simplified: followRelationship selects the peerId of the pair whose first relationship is the picked command, instead of recomputing the promoted end with promotedPeer, and no longer guards a missing selection, which a details command cannot have. The Enter assertion that repeated the lit-pair identity test's own Enter check was removed from the combined-pair test; the identity test now names that it selects the peer.
+Verification: focused routes and navigation tests pass; isolated worktree at a5c0f2cc with only this change, bun run check exit 0 (biome 1 warning and 2 infos in untouched files, tsc clean, node 16 pass, bun 593 pass 35 skip 0 fail).
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
@@ -134,4 +140,6 @@ Element details now list each ordered pair of visible endpoints once instead of 
   - The web pane was checked in Chrome on an exported fixture copy, and the terminal pane with tui-test.
 
 Review-fix round: terminal Enter on a relationship pair row now selects the peer the row names (the first relationship's end promoted to the selection's depth) instead of a component inside the selection; routes tests fail without the fix, tui-test confirms Api follows to Pages and Site to Backend, and an isolated bun run check exits 0.
+
+Simplicity round: Enter now follows the picked pair's own peer without recomputing it, with one test assertion covering that follow.
 <!-- SECTION:FINAL_SUMMARY:END -->
