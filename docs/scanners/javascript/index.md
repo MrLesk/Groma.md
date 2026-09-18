@@ -62,8 +62,8 @@ top-level calls keep an operation to belong to, without inventing a function.
 
 Calls remain unresolved. One parsed file proves no call target: an imported name,
 a `require` result and a method on a value are all decided elsewhere, so core
-derives no relationship from JavaScript calls. Declared HTTP facts are not read
-yet.
+derives no relationship from JavaScript calls. The HTTP facts below are the
+exception: they state a route or a URL, which core can compare across files.
 
 The repository source root is initial placement evidence, not a claim that every
 JavaScript file belongs to one C4 runtime boundary. Core owns architecture
@@ -125,12 +125,86 @@ These named operations are not compared, as in TypeScript:
   `[key]()`;
 - functions assigned to class fields, such as `onClick = () => {}`.
 
+## HTTP facts
+
+The scanner reports the [HTTP endpoints and requests](../evidence.md#http-endpoints-and-requests)
+a JavaScript file states, and core joins them into relationships. Each file is
+parsed alone, so a construct counts only when that file states it.
+
+| Construct | Reported |
+| --- | --- |
+| `fetch(url, init)`, including a `node-fetch` default import | Request; the method comes from a literal `method`, else `GET` |
+| `axios.get`, `.post`, `.put`, `.patch`, `.delete`, `.head`, `.options` | Request with that method |
+| `axios(config)`, `axios.request(config)` | Request from a literal `url` and `method`, else `GET` |
+| `axios.create({ baseURL })` instances | Request whose path follows that base |
+| `$.get`, `$.post`, `$.getJSON`, `$.getScript` | Request with that helper's method |
+| `$.ajax(settings)` and `$.ajax(url, settings)` | Request from the settings' `type` or `method`, else `GET`; settings the scanner cannot read state nothing |
+| `express()` and `express.Router()` | Endpoint per `get`, `post`, `put`, `patch`, `delete`, `head`, `options`, `all` call with a handler |
+| `Fastify()` | The same calls, and `route({ method, url, handler })`, including a method array |
+| `new Hono()` | The same calls |
+| `new Koa()` with `@koa/router` or `koa-router` | The same calls on a router `use` mounts, under its `new Router({ prefix })` or `router.prefix(...)` path |
+| `Bun.serve({ routes })` | Endpoint per route: a function serves every method, an object one per method key |
+
+A name is a client, application or router when this file imports or requires it
+and never assigns it again, so `import express from 'express'`,
+`const express = require('express')`, `const { Router } = require('express')` and
+`require('express')()` are all recognized. jQuery is the exception a browser
+script needs: a `$` or `jQuery` receiver counts when the file imports it or leaves
+it to the page, and not when the file declares that name itself. A member name
+alone is never enough: `cache.get('/talks')` reports nothing.
+`http.createServer`, Fastify's `register` prefixes, and any application, router or
+client an imported factory returns are not read yet.
+
+The six [producer decisions](../evidence.md#producer-checklist) for this
+ecosystem:
+
+1. **Prefixes.** An endpoint path carries every prefix this file states:
+   `app.use('/orders', router)`, Hono's `app.route('/api', api)` and a Koa
+   `app.use(router.routes())` prepend their literal prefix, and mounts nest. A Koa
+   router adds its own path from `new Router({ prefix })` or `router.prefix(...)`.
+   An application instance serves from the root. A router this file never mounts, a
+   mount under a computed prefix, a router whose second prefix statement replaces
+   the first, and a mount on a host the scanner does not recognize report nothing,
+   because the path the application serves is then unknown.
+2. **Endpoints.** Only a route registration with its own handler is an endpoint.
+   `app.use(express.json())` and `app.use('/static', express.static('public'))`
+   are middleware, `app.get('name')` with one argument reads a setting, and a
+   `Bun.serve` route key that is not a method, such as `middleware`, names no
+   handler. A route pattern is literal text, `:name`, `:name?`, or a trailing `*`,
+   `*name` or `(.*)`; another regular expression, an optional group, and a
+   catch-all that is not last report nothing, as does a route or method the source
+   computes. Where a router accepts `get(name, path, handler)`, the route name is
+   not a path segment, and the path that follows it is the endpoint.
+3. **Dynamic or unknown.** A value filling one whole segment is dynamic, as in
+   `` fetch(`/talks/${id}`) ``. A segment that mixes computed and literal text is
+   unknown, as in `` fetch(`/api/talks/${id}-${slug}`) ``, and so is a URL the
+   scanner cannot resolve, such as `fetch(buildUrl(id))`. Query strings and
+   fragments are ignored.
+4. **Local helpers.** Not supported. A request belongs to the operation that
+   calls a recognized client, so a wrapper function reports the request and its
+   callers report nothing.
+5. **The base.** `fetch('/api/talks')` has no base. A value this file cannot see
+   is configuration, so an imported or required constant, `process.env.API_URL`,
+   and an `axios.create({ baseURL })` built from one set `configured`. A `const`
+   this file declares resolves to its own literal text. A literal scheme and
+   host, and a base the file computes, become the leading unknown segment, which
+   derives nothing. Every name the file binds counts as computed, including a `let`,
+   a `var`, a parameter, a destructured name and a `for (const base of bases)`
+   variable: a name the scanner merely failed to resolve must never pass for a
+   configuration value, because core compares a configured path.
+6. **File-location routes.** These frameworks declare no route by file location,
+   so every endpoint names the handler its route states: the function written in
+   place, or the one this file declares under the name the route gives. When the
+   handler comes from another file, the endpoint names the operation that
+   registers the route.
+
 ## Validation
 
 Independent fixtures cover ECMAScript modules, CommonJS, JSX, browser scripts,
 minified files excluded by name and by line length, exact source positions,
 unresolved calls, the source outline with its visibility rules, one body that
-tokenizes identically in JavaScript and in TypeScript, and identical and
-near-duplicate bodies found by `groma lint`. The fresh-checkout package check
+tokenizes identically in JavaScript and in TypeScript, identical and
+near-duplicate bodies found by `groma lint`, and each supported HTTP client and
+router with every case that reports nothing. The fresh-checkout package check
 removes language tools from PATH and blocks JavaScript network access.
 See [local qualification](validation.md).
