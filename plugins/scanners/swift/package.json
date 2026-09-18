@@ -1,0 +1,39 @@
+{
+  "name": "@groma/scanner-swift",
+  "version": "0.1.0",
+  "private": false,
+  "type": "module",
+  "license": "MIT",
+  "description": "Swift source declarations, outlines and operation bodies without project dependencies.",
+  "os": [
+    "darwin"
+  ],
+  "groma": {
+    "scanner": {
+      "id": "swift",
+      "entry": "./src/index.ts",
+      "discovery": {
+        "technologies": [
+          "swift"
+        ],
+        "rules": [
+          {
+            "type": "file",
+            "files": [
+              "**/*.swift"
+            ],
+            "technology": "swift",
+            "kind": "language",
+            "declaration": "Swift source files"
+          }
+        ],
+        "compatibility": {
+          "groma": "^0.3.0"
+        }
+      }
+    }
+  },
+  "dependencies": {
+    "@groma/scanner": "workspace:*"
+  }
+}
