@@ -1,0 +1,12 @@
+import express from 'express'
+
+import { talksRouter } from './talks-router.ts'
+
+const app = express()
+
+app.use('/api', talksRouter)
+app.get('/health', () => 'ok')
+
+export function start(): void {
+  app.listen(3000)
+}

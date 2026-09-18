@@ -1,0 +1,14 @@
+import Fastify from 'fastify'
+
+const server = Fastify()
+
+server.get('/status', async () => ({ ok: true }))
+server.route({ method: ['GET', 'POST'], url: '/jobs/:id', handler: runJob })
+
+async function runJob(): Promise<void> {
+  await Promise.resolve()
+}
+
+export function listen(): void {
+  server.listen({ port: 3200 })
+}

@@ -1,0 +1,24 @@
+const server = Bun.serve({
+  port: 3100,
+  routes: {
+    '/uploads/*': serveUpload,
+    '/api/rooms/:id': { GET: showRoom, PUT: updateRoom },
+    '/spread': { ...handlers },
+  },
+})
+
+function serveUpload(): string {
+  return 'upload'
+}
+
+function showRoom(): string {
+  return 'room'
+}
+
+function updateRoom(): string {
+  return 'updated'
+}
+
+const handlers = { GET: showRoom }
+
+export const port = server.port

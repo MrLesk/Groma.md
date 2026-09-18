@@ -1,0 +1,19 @@
+import { Hono } from 'hono'
+
+const rooms = new Hono()
+const site = new Hono()
+
+rooms.get('/rooms/:room?', listRooms)
+site.route('/v1', rooms)
+site.route('/v2', rooms)
+site.all('/legacy/*', forward)
+
+function listRooms(): string {
+  return 'rooms'
+}
+
+function forward(): string {
+  return 'forwarded'
+}
+
+export default site

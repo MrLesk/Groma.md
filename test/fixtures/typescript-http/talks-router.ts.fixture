@@ -1,0 +1,14 @@
+import { Router } from 'express'
+
+export const talksRouter = Router()
+
+talksRouter.get('/talks/:id', showTalk)
+talksRouter.post('/talks', createTalk)
+
+function showTalk(): string {
+  return 'talk'
+}
+
+function createTalk(): string {
+  return 'created'
+}

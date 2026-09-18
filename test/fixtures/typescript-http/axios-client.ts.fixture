@@ -1,0 +1,37 @@
+import axios, { isAxiosError } from 'axios'
+
+const api = axios.create({ baseURL: process.env.API_URL })
+
+export async function listSpeakers(): Promise<unknown> {
+  return axios.get('/api/speakers')
+}
+
+export async function saveSpeaker(body: unknown): Promise<unknown> {
+  return api.post('/speakers', body)
+}
+
+export async function removeSpeaker(id: string): Promise<unknown> {
+  return api.request({ url: `/speakers/${id}`, method: 'delete' })
+}
+
+export async function patchSpeaker(id: string): Promise<unknown> {
+  return axios({ url: `/api/speakers/${id}`, method: 'patch' })
+}
+
+export async function sendSpeaker(method: string): Promise<unknown> {
+  return axios('/api/speakers', { method })
+}
+
+let mutable = axios.create({ baseURL: '/first' })
+
+export function reset(): void {
+  mutable = axios.create({ baseURL: '/second' })
+}
+
+export async function loadMutable(): Promise<unknown> {
+  return mutable.get('/speakers')
+}
+
+export function isFailure(error: unknown): boolean {
+  return isAxiosError(error)
+}

@@ -1,0 +1,37 @@
+const BASE = '/api'
+
+export async function loadTalks(): Promise<unknown> {
+  return fetch('/api/talks')
+}
+
+export async function loadTalk(id: string): Promise<unknown> {
+  return fetch(`/api/talks/${id}`)
+}
+
+export async function createTalk(body: string): Promise<unknown> {
+  return fetch(BASE + '/talks', { method: 'post', body })
+}
+
+export async function loadPage(page: number): Promise<unknown> {
+  return fetch(`/api/talks?page=${page}`)
+}
+
+export async function loadExternal(): Promise<unknown> {
+  return fetch('https://api.example.com/talks')
+}
+
+export async function loadPartial(target: string): Promise<unknown> {
+  return fetch(`/api/talks/${target}-latest`)
+}
+
+export async function loadComputed(url: string): Promise<unknown> {
+  return fetch(url)
+}
+
+export async function loadConfigured(): Promise<unknown> {
+  return fetch(`${process.env.API_URL}/talks`)
+}
+
+export async function sendChosen(method: string): Promise<unknown> {
+  return fetch('/api/talks', { method })
+}

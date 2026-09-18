@@ -8,8 +8,11 @@ import {
   type CallExpression, type Node, type SourceFile,
 } from 'typescript/unstable/ast'
 import { SymbolFlags, type Checker, type Symbol as CompilerSymbol } from 'typescript/unstable/async'
-import type { ScanInvocation, ScanOperation } from '@groma/scanner'
+import type { ScanHttpEndpoint, ScanHttpRequest, ScanInvocation, ScanOperation } from '@groma/scanner'
 
+import { httpEndpoints } from './http-endpoints.ts'
+import { httpRequests } from './http-requests.ts'
+import type { HttpContext } from './http-values.ts'
 import { tokenizeOperation } from './source-tokens.ts'
 
 interface Values {
@@ -240,7 +243,10 @@ function propertyValue(node: Node): Node | undefined {
 
 /** A supplied callback is tied to a concrete argument path, not a merged global target set. */
 export async function sourceOperations(root: string, sources: SourceFile[], checker: Checker): Promise<{
-  operations: ScanOperation[]; invocations: ScanInvocation[]
+  operations: ScanOperation[]
+  invocations: ScanInvocation[]
+  httpEndpoints: ScanHttpEndpoint[]
+  httpRequests: ScanHttpRequest[]
 }> {
   const resolver = new OperationResolver(root, checker)
   await resolver.prepare(sources)
@@ -286,5 +292,35 @@ export async function sourceOperations(root: string, sources: SourceFile[], chec
       })
     }))).flat())
   }
-  return { operations: [...operations.values()], invocations }
+  const facts = await sourceHttpFacts(root, sources, checker, resolver, owned, operation)
+  return { operations: [...operations.values()], invocations, ...facts }
+}
+
+/** HTTP facts name the operations already collected, so they are extracted before the map closes. */
+async function sourceHttpFacts(
+  root: string,
+  sources: SourceFile[],
+  checker: Checker,
+  resolver: OperationResolver,
+  owned: Set<string>,
+  operation: (node: Node) => string,
+): Promise<{ httpEndpoints: ScanHttpEndpoint[]; httpRequests: ScanHttpRequest[] }> {
+  const certainValues = async (node: Node): Promise<Node[] | undefined> => {
+    const values = await resolver.resolve(node, 0, false)
+    return values.some(value => value.unresolved) ? undefined : values.flatMap(value => value.nodes)
+  }
+  const context: HttpContext = {
+    checker,
+    values: certainValues,
+    callerOperation: node => operation(caller(node)),
+    async handlerOperation(handler, registration) {
+      const values = handler === undefined ? undefined : await certainValues(handler)
+      const handlers = (values ?? []).filter(node => executable(node) && owned.has(location(root, node).file))
+      return handlers.length === 1 ? operation(handlers[0]!) : operation(caller(registration))
+    },
+  }
+  return {
+    httpEndpoints: await httpEndpoints(sources, resolver.calls, context),
+    httpRequests: await httpRequests(resolver.calls, context),
+  }
 }
