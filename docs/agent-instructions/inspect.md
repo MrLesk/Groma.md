@@ -56,11 +56,13 @@ footer.
 | `--skip <n>` | leave out the first n items |
 | `--count` | print only the number of items, as in `grep -c` |
 
-`groma view --plain`, `groma view <id> --plain`, `groma view <source-file>`,
-`groma lint`, `groma scanner discover`, and `groma scanner list` page their
-items. One `groma view` page covers its sections in order, so a cut page prints
-only the sections whose items it reaches; a section with no items at all stays
-on every page. `groma scan` is not paged: its report counts
+`groma view --plain`, `groma view <id> --plain`, `groma view <draft-id>`,
+`groma view <source-file>`, `groma lint`, `groma scanner discover`, and
+`groma scanner list` page their items. A `groma view` page repeats the element,
+owner, or draft it describes, then prints its slice of the complete answer: the
+sections whose items it holds, an empty section as `none` on the page that
+holds the item after it, and the owner record command on the page that holds
+the last item, just above the footer. `groma scan` is not paged: its report counts
 findings and names `groma lint`. The complete Markdown record of
 `groma view <id>` and every `--json` result stay whole.
 
