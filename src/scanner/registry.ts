@@ -27,7 +27,10 @@ export interface ScannerRegistry {
   readonly scannerIds: readonly string[]
   collectObservations(repositoryRoot: string, changedFiles?: readonly string[]): Promise<ScanBatch>
   watchesFile(relativePath: string): boolean
+  /** The files each scanner that can list them would analyze now, after shared exclusions. */
+  sourceFiles(repositoryRoot: string): Promise<{ scanner: string; files: string[] }[]>
 }
+
 
 export interface ScanBatch {
   observations: ScanObservation[]
@@ -112,7 +115,9 @@ export async function loadScannerRegistry(
   const scanners = await Promise.all(found.filter(module => !blocked.has(module.id)).map(async module => {
     try {
       const scanner = await importScanner(module.entry, module.id)
-      return { ...scanner, scan: (root: string) => scanner.scan(root, module.settings) }
+      const { listSourceFiles } = scanner
+      return { ...scanner, scan: (root: string) => scanner.scan(root, module.settings),
+        ...(listSourceFiles === undefined ? {} : { listSourceFiles: (root: string) => listSourceFiles.call(scanner, root, module.settings) }) }
     } catch (error) {
       // Failed imports have no source subscription. Retry/settings reload the registry.
       return { id: module.id, watch: { include: [], exclude: [] }, async scan() { throw error } }
@@ -136,6 +141,13 @@ export function createScannerRegistry(
   const subscriptions = scanners.map(scanner => ({ scanner, matches: compileWatchPatterns(scanner.watch) }))
   return {
     scannerIds: scanners.map(scanner => scanner.id),
+    async sourceFiles(root) {
+      const listed = await Promise.all(scanners.map(async scanner => {
+        const files = await scanner.listSourceFiles?.(root)
+        return files === undefined ? undefined : { scanner: scanner.id, files: files.filter(file => !excluded(file)) }
+      }))
+      return listed.filter(entry => entry !== undefined)
+    },
     watchesFile(relativePath) {
       return !excluded(relativePath) && subscriptions.some(subscription => subscription.matches(relativePath))
     },

@@ -2,6 +2,7 @@ import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 
 import { combineObservations } from '../../observations.ts'
+import { projectFiles } from '../../projects.ts'
 import { parseScanObservation, type CodeFile, type ScanObservation, type ScannerPlugin, type ScannerSettings } from '@groma/scanner'
 import { execute, exists, readRustProject, rustProjects, type RustOptions } from './project.ts'
 
@@ -50,6 +51,13 @@ const scanner = {
     include: ['**/*.rs', '**/Cargo.toml', '**/Cargo.lock',
       '**/rust-toolchain', '**/rust-toolchain.toml', '**/.cargo/**'],
     exclude: ['**/target/**', '**/node_modules/**', '**/.git/**', '**/vendor/**', '**/dist/**'],
+  },
+  /** Every crate's own `src` tree; a module the crate root never declares stays unanalyzed. */
+  listSourceFiles: async root => {
+    const crates = (await projectFiles(root, file => path.posix.basename(file) === 'Cargo.toml'))
+      .map(file => path.posix.dirname(file))
+    return projectFiles(root, file => file.endsWith('.rs')
+      && crates.some(crate => file.startsWith(crate === '.' ? 'src/' : `${crate}/src/`)))
   },
   checkReadiness: async (root, settings = {}) => {
     const projects = await rustProjects(root, settings)

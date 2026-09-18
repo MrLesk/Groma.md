@@ -30,6 +30,16 @@ below the listed children.
 
 `groma view <target>` accepts only the targets above. `project`, `relation`,
 and group addresses are `groma edit` targets, not `groma view` targets.
+
+A target with no record exits non-zero and prints one reason, which separates a
+mistyped name from a coverage gap:
+
+| Reason | Meaning |
+| --- | --- |
+| `unknown target: <target>; not a repository file` | Neither a stored ID nor a tracked, unignored repository file: usually a typo. |
+| `no owner: <file>; excluded by scanners.json pattern <pattern>` | That configured pattern hides the file from every scanner. |
+| `no owner: <file>; no enabled scanner reads it` | No enabled scanner selects the file for analysis, so no scan can own it. |
+| `no owner: <file>; read by <scanners> and not scanned yet, so run groma scan` | Those scanners select the file, and the stored architecture predates it. |
 On a terminal, `groma view` without a target and `groma web` scan and open
 interactive maps for a human.
 

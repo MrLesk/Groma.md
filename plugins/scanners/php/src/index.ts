@@ -14,6 +14,7 @@ async function inventory(root: string) {
 export default {
   id: 'php',
   readCodeStructure,
+  listSourceFiles: inventory,
   watch: { include: ['**/*.php'], exclude: [] },
   async checkReadiness(root) {
     if (!(await inventory(root)).length) throw new Error('php: No PHP source files were found in the Git repository.')

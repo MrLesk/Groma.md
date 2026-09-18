@@ -186,6 +186,29 @@ change any declaration's visibility. Python visibility comes from names alone;
 whatever it contains. A Swift member of a protocol or an extension takes that
 declaration's access when it states none of its own.
 
+## Source file listing
+
+Every official scanner implements
+`listSourceFiles(repositoryRoot, settings)`. It returns the repository-relative
+files this scanner would analyze for these settings, selected the way `scan`
+selects them, without analyzing a file, starting a language server, or running a
+project tool such as Maven, Gradle, `dotnet`, `go` or `cargo`. Watch patterns are
+not that selection: they subscribe to changes, so they include configuration and
+test sources a scan never reads.
+
+Report the files whose analysis can give a component its Code, and leave out what
+the scan ignores: test sources, generated output, vendored code and build
+directories. A listing may still name a file the analysis then finds unreachable,
+such as a Rust module no crate root declares, because deciding that would mean
+analyzing it.
+
+Groma uses the listing to explain a file with no architecture owner. `groma view`
+on such a file exits non-zero with one reason: it is not a repository file, a
+named `scanners.json` pattern excludes it, no enabled scanner reads it, or the
+scanners that read it have not scanned it yet. A plugin without the hook
+contributes nothing to that answer, so a file only that plugin reads is reported
+as read by no enabled scanner.
+
 ## Discovery metadata
 
 Optional `groma.scanner.discovery` describes when a project may benefit from

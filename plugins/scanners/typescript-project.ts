@@ -1,0 +1,40 @@
+import path from 'node:path'
+
+import { frameworkProjects, projectFiles } from './projects.ts'
+
+/** Templates and stylesheets a component can declare as its own source. */
+const companions = ['.html', '.css', '.scss', '.sass', '.less', '.styl']
+
+export interface FrameworkSources {
+  root: string
+  /** The dependency that makes a package directory this framework's project. */
+  dependency: string
+  /** Extensions whose presence marks a project directory, as the scan's own project search uses. */
+  projects: readonly string[]
+  /** Extensions the scan reads inside a project. */
+  sources: readonly string[]
+  /** A further project-relative file the scan reads, such as a route that a file location declares. */
+  also?: (projectRelative: string) => boolean
+}
+
+/**
+ * The repository files a framework scan reads: every source of its kind inside a project directory,
+ * plus the templates and stylesheets a component can declare. No program, type checker or project
+ * tool runs, so which files a project's program resolves, and which companion a component declares,
+ * stays for the analysis to decide.
+ */
+export async function frameworkSourceFiles(options: FrameworkSources): Promise<string[]> {
+  const { root, dependency, projects, sources, also } = options
+  const directories = (await frameworkProjects(root, dependency, projects))
+    .map(directory => path.relative(root, directory).split(path.sep).join('/') || '.')
+  if (directories.length === 0) return []
+  const extensions = [...sources, ...companions]
+  const listed: string[] = []
+  for (const file of await projectFiles(root, candidate => !candidate.endsWith('.d.ts'))) {
+    const project = directories.find(directory => directory === '.' || file.startsWith(`${directory}/`))
+    if (project === undefined) continue
+    const local = project === '.' ? file : file.slice(project.length + 1)
+    if (extensions.some(extension => file.endsWith(extension)) || (also?.(local) ?? false)) listed.push(file)
+  }
+  return listed.sort()
+}

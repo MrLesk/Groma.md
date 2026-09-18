@@ -17,6 +17,8 @@ export default {
     include: ['**/*.js', '**/*.mjs', '**/*.cjs', '**/*.jsx'],
     exclude: ['**/*.min.js', '**/*.min.mjs', '**/*.min.cjs', '**/*.min.jsx'],
   },
+  /** The same authored selection `scan` makes, so a minified bundle is never listed. */
+  listSourceFiles: async root => (await javaScriptSources(root)).map(source => source.file),
   async checkReadiness(root) {
     if (!(await javaScriptSources(root)).length) {
       throw new Error('javascript: No authored JavaScript source files were found in the Git repository.')
