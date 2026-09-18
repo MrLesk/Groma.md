@@ -30,6 +30,9 @@ moved.MapGet("/items", () => "items");
 
 MapNotes(app);
 
+var status = WebApplication.Create(args);
+status.MapGet("/status", () => "up");
+
 app.MapControllers();
 app.Run();
 

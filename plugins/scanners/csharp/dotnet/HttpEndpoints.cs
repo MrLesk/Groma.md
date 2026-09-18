@@ -14,7 +14,7 @@ internal static class HttpEndpoints
     private static readonly Dictionary<string, string> ActionVerbs = new(StringComparer.Ordinal)
     {
         ["HttpGet"] = "GET", ["HttpPost"] = "POST", ["HttpPut"] = "PUT", ["HttpDelete"] = "DELETE",
-        ["HttpPatch"] = "PATCH", ["HttpHead"] = "HEAD", ["HttpOptions"] = "OPTIONS", ["Route"] = "*",
+        ["HttpPatch"] = "PATCH", ["HttpHead"] = "HEAD", ["HttpOptions"] = "OPTIONS",
     };
 
     private static readonly Dictionary<string, string> MapVerbs = new(StringComparer.Ordinal)
@@ -22,14 +22,15 @@ internal static class HttpEndpoints
         ["MapGet"] = "GET", ["MapPost"] = "POST", ["MapPut"] = "PUT", ["MapDelete"] = "DELETE", ["MapPatch"] = "PATCH",
     };
 
-    public static List<ScanHttpEndpoint> Of(SyntaxNode root, SemanticModel model, string file, string repositoryRoot, CancellationToken cancellationToken)
+    public static List<ScanHttpEndpoint> Of(SyntaxNode root, SemanticModel model, string file, string repositoryRoot,
+        bool keepsAsyncSuffix, CancellationToken cancellationToken)
     {
         List<ScanHttpEndpoint> endpoints = [];
         foreach (TypeDeclarationSyntax type in root.DescendantNodes().OfType<TypeDeclarationSyntax>())
         {
             cancellationToken.ThrowIfCancellationRequested();
             // A declarative client shares these attributes but sends requests, so only classes serve.
-            if (type is not InterfaceDeclarationSyntax) Controller(type, model, file, endpoints, cancellationToken);
+            if (type is not InterfaceDeclarationSyntax) Controller(type, model, file, keepsAsyncSuffix, endpoints, cancellationToken);
         }
         foreach (InvocationExpressionSyntax call in root.DescendantNodes().OfType<InvocationExpressionSyntax>())
         {
@@ -39,84 +40,159 @@ internal static class HttpEndpoints
         return endpoints;
     }
 
-    private static void Controller(TypeDeclarationSyntax type, SemanticModel model, string file,
+    private static void Controller(TypeDeclarationSyntax type, SemanticModel model, string file, bool keepsAsyncSuffix,
         List<ScanHttpEndpoint> endpoints, CancellationToken cancellationToken)
     {
-        // An abstract controller serves nothing of its own.
-        if (type.Modifiers.Any(SyntaxKind.AbstractKeyword)) return;
+        if (!IsController(type, model, cancellationToken)) return;
         List<string>? prefixes = Templates(type.AttributeLists, model, cancellationToken);
         if (prefixes is null) return;
-        // MVC inherits a class [Route], and a base this file does not declare may carry one.
-        if (prefixes.Count == 0 && !InheritsOnlyControllerBase(type)) return;
+        string name = type.Identifier.ValueText;
+        if (name.EndsWith("Controller", StringComparison.OrdinalIgnoreCase)) name = name[..^"Controller".Length];
         foreach (MethodDeclarationSyntax action in type.Members.OfType<MethodDeclarationSyntax>())
         {
-            if (action.Body is null && action.ExpressionBody is null) continue;
-            (List<string> methods, List<string> templates) = Routes(action, model, cancellationToken);
-            if (methods.Count == 0) continue;
+            if (!IsAction(action, model, cancellationToken) || Selectors(action, model, cancellationToken) is not { } selectors) continue;
             string operation = OperationId.Of(file, action);
+            string? actionName = ActionName(action, model, keepsAsyncSuffix, cancellationToken);
             foreach (string prefix in prefixes.Count == 0 ? [""] : prefixes)
             {
-                foreach (string template in templates.Count == 0 ? [""] : templates)
+                foreach (Selector selector in selectors)
                 {
                     // Without a class prefix, an action needs its own template to be routable.
-                    if (prefix.Length == 0 && template.Length == 0) continue;
-                    string? path = Tokens(HttpRoutes.Join(prefix, template), type, action);
+                    if (prefix.Length == 0 && selector.Template.Length == 0) continue;
+                    string? path = Tokens(HttpRoutes.Join(prefix, selector.Template), name, actionName);
                     if (path is null || HttpRoutes.Endpoint(path) is not ScanHttpSegment[] segments) continue;
-                    foreach (string method in methods) endpoints.Add(new ScanHttpEndpoint(operation, method, segments));
+                    foreach (string method in selector.Methods.Count == 0 ? ["*"] : selector.Methods)
+                        endpoints.Add(new ScanHttpEndpoint(operation, method, segments));
                 }
             }
         }
     }
 
-    /// <summary>Only the framework base types are known to carry no route prefix of their own.</summary>
-    private static bool InheritsOnlyControllerBase(TypeDeclarationSyntax type) => type.BaseList is null
-        || type.BaseList.Types.All(inherited => HttpSyntax.TypeName(inherited.Type) is "ControllerBase" or "Controller");
+    /// <summary>
+    /// ASP.NET Core's controller rule as far as source shows it: a public, top-level, non-generic, non-abstract class
+    /// declared in one place, named *Controller, marked [Controller] or deriving from ControllerBase or Controller, and
+    /// not [NonController], counting attributes its bases carry. A controller also serves its bases' public methods
+    /// and [Route] prefixes, so a base between it and ControllerBase that declares either, or that the source does not
+    /// declare, leaves its routes unknown and it reports nothing.
+    /// </summary>
+    private static bool IsController(TypeDeclarationSyntax type, SemanticModel model, CancellationToken cancellationToken)
+    {
+        if (model.GetDeclaredSymbol(type, cancellationToken) is not INamedTypeSymbol
+            {
+                TypeKind: TypeKind.Class, DeclaredAccessibility: Accessibility.Public, IsAbstract: false, IsGenericType: false,
+                ContainingType: null, DeclaringSyntaxReferences.Length: 1,
+            } symbol) return false;
+        List<string> attributes = [.. Attributes(type)];
+        bool framework = false;
+        for (INamedTypeSymbol? inherited = symbol.BaseType; inherited is { SpecialType: not SpecialType.System_Object }; inherited = inherited.BaseType)
+        {
+            if (inherited.Name is "ControllerBase" or "Controller")
+            {
+                framework = true;
+                break;
+            }
+            if (inherited.DeclaringSyntaxReferences.IsEmpty || inherited.GetMembers().OfType<IMethodSymbol>()
+                .Any(method => method is { MethodKind: MethodKind.Ordinary, DeclaredAccessibility: Accessibility.Public, IsStatic: false })) return false;
+            string[] declared = [.. inherited.DeclaringSyntaxReferences.Select(part => part.GetSyntax(cancellationToken))
+                .OfType<TypeDeclarationSyntax>().SelectMany(Attributes)];
+            if (declared.Contains("Route")) return false;
+            attributes.AddRange(declared);
+        }
+        if (attributes.Contains("NonController")) return false;
+        return framework || attributes.Contains("Controller") || symbol.Name.EndsWith("Controller", StringComparison.OrdinalIgnoreCase);
+    }
 
-    /// <summary>Class-level route prefixes, or null when one is computed and hides every action's path.</summary>
+    private static IEnumerable<string> Attributes(TypeDeclarationSyntax type) =>
+        type.AttributeLists.SelectMany(list => list.Attributes).Select(HttpSyntax.AttributeName);
+
+    /// <summary>ASP.NET Core's action rule: a public instance method with a body, not generic and not [NonAction].</summary>
+    private static bool IsAction(MethodDeclarationSyntax action, SemanticModel model, CancellationToken cancellationToken) =>
+        (action.Body is not null || action.ExpressionBody is not null)
+        && model.GetDeclaredSymbol(action, cancellationToken) is IMethodSymbol
+            { DeclaredAccessibility: Accessibility.Public, IsStatic: false, IsGenericMethod: false }
+        && !action.AttributeLists.SelectMany(list => list.Attributes).Any(attribute => HttpSyntax.AttributeName(attribute) == "NonAction");
+
+    /// <summary>
+    /// The name [action] stands for: a literal [ActionName], or else the method name without a trailing Async, which
+    /// ASP.NET Core drops by default. Null when [ActionName] is not a constant the compilation proves, or when the
+    /// source may keep the suffix and the name ends with Async.
+    /// </summary>
+    private static string? ActionName(MethodDeclarationSyntax action, SemanticModel model, bool keepsAsyncSuffix, CancellationToken cancellationToken)
+    {
+        AttributeSyntax? named = action.AttributeLists.SelectMany(list => list.Attributes)
+            .FirstOrDefault(attribute => HttpSyntax.AttributeName(attribute) == "ActionName");
+        if (named is not null) return HttpSyntax.Constant(model, HttpSyntax.Argument(named), cancellationToken);
+        string name = action.Identifier.ValueText;
+        if (!name.EndsWith("Async", StringComparison.Ordinal)) return name;
+        return keepsAsyncSuffix ? null : name[..^"Async".Length];
+    }
+
+    /// <summary>Whether this file may set SuppressAsyncSuffixInActionNames to anything but true.</summary>
+    public static bool KeepsAsyncSuffix(SyntaxNode root) => root.DescendantNodes().OfType<AssignmentExpressionSyntax>()
+        .Any(assignment => HttpSyntax.CallName(assignment.Left) == "SuppressAsyncSuffixInActionNames"
+            && !assignment.Right.IsKind(SyntaxKind.TrueLiteralExpression));
+
+    /// <summary>
+    /// Class-level route prefixes, or null when one is computed and hides every action's path. A prefix starting with
+    /// ~/ starts at the root, as an action template does.
+    /// </summary>
     private static List<string>? Templates(SyntaxList<AttributeListSyntax> lists, SemanticModel model, CancellationToken cancellationToken)
     {
         List<string> templates = [];
         foreach (AttributeSyntax attribute in lists.SelectMany(list => list.Attributes))
         {
             if (HttpSyntax.AttributeName(attribute) != "Route") continue;
-            if (HttpSyntax.Constant(model, HttpSyntax.Template(attribute), cancellationToken) is not string text) return null;
-            templates.Add(text);
+            if (HttpSyntax.Constant(model, HttpSyntax.Argument(attribute), cancellationToken) is not string text) return null;
+            templates.Add(text.StartsWith("~/", StringComparison.Ordinal) ? text[1..] : text);
         }
         return templates;
     }
 
+    /// <summary>One route of an action: the methods it allows, none meaning every method, on a template under the class prefix.</summary>
+    private sealed record Selector(IReadOnlyList<string> Methods, string Template);
+
     /// <summary>
-    /// The methods an action allows and the templates it declares. A verb attribute without a template only
-    /// constrains methods, so the union of the action's methods applies to every template it declares. An action
-    /// with a computed template reports nothing.
+    /// The routes ASP.NET Core builds from an action's attributes. Each [Route] and each verb attribute with a
+    /// template, Name or Order is one route: a verb attribute's route allows only its method, while a [Route] takes the
+    /// methods of the template-less verb attributes. Those form one more route on the class prefix unless a [Route]
+    /// took them. Null when a template is computed or [AcceptVerbs] states methods the scanner does not read.
     /// </summary>
-    private static (List<string> Methods, List<string> Templates) Routes(MethodDeclarationSyntax action,
-        SemanticModel model, CancellationToken cancellationToken)
+    private static List<Selector>? Selectors(MethodDeclarationSyntax action, SemanticModel model, CancellationToken cancellationToken)
     {
-        List<string> methods = [];
-        List<string> templates = [];
-        bool routed = false;
+        List<(string? Method, string Template)> routes = [];
+        List<string> silent = [];
         foreach (AttributeSyntax attribute in action.AttributeLists.SelectMany(list => list.Attributes))
         {
-            if (!ActionVerbs.TryGetValue(HttpSyntax.AttributeName(attribute), out string? method)) continue;
-            routed = true;
-            if (method != "*" && !methods.Contains(method)) methods.Add(method);
-            ExpressionSyntax? template = HttpSyntax.Template(attribute);
-            if (template is null) continue;
-            if (HttpSyntax.Constant(model, template, cancellationToken) is not string text) return ([], []);
-            templates.Add(text);
+            string name = HttpSyntax.AttributeName(attribute);
+            if (name == "AcceptVerbs") return null;
+            string? method = ActionVerbs.GetValueOrDefault(name);
+            if (method is null && name != "Route") continue;
+            ExpressionSyntax? template = HttpSyntax.Argument(attribute);
+            if (method is not null && template is null && !DefinesRoute(attribute))
+            {
+                if (!silent.Contains(method)) silent.Add(method);
+                continue;
+            }
+            if ((template is null ? "" : HttpSyntax.Constant(model, template, cancellationToken)) is not string text) return null;
+            routes.Add((method, text));
         }
-        if (!routed) return ([], []);
-        return (methods.Count == 0 ? ["*"] : methods, templates);
+        List<Selector> selectors = [.. routes.Select(route => new Selector(route.Method is null ? silent : [route.Method], route.Template))];
+        if (silent.Count > 0 && routes.All(route => route.Method is not null)) selectors.Add(new Selector(silent, ""));
+        return selectors;
     }
 
-    /// <summary>Replaces the route tokens ASP.NET Core fills in; any other token leaves the path unknown.</summary>
-    private static string? Tokens(string path, TypeDeclarationSyntax type, MethodDeclarationSyntax action)
+    /// <summary>A Name or Order makes a verb attribute define its own route even without a template.</summary>
+    private static bool DefinesRoute(AttributeSyntax attribute) => attribute.ArgumentList?.Arguments
+        .Any(argument => argument.NameEquals?.Name.Identifier.ValueText is "Name" or "Order") == true;
+
+    /// <summary>
+    /// Replaces the route tokens ASP.NET Core fills in. Any other token, or an [action] whose name the source does not
+    /// prove, leaves the path unknown.
+    /// </summary>
+    private static string? Tokens(string path, string controller, string? action)
     {
-        string name = type.Identifier.ValueText;
-        if (name.EndsWith("Controller", StringComparison.Ordinal)) name = name[..^"Controller".Length];
-        path = path.Replace("[controller]", name, StringComparison.OrdinalIgnoreCase);
-        path = path.Replace("[action]", action.Identifier.ValueText, StringComparison.OrdinalIgnoreCase);
+        path = path.Replace("[controller]", controller, StringComparison.OrdinalIgnoreCase);
+        if (action is not null) path = path.Replace("[action]", action, StringComparison.OrdinalIgnoreCase);
         return path.Contains('[') || path.Contains(']') ? null : path;
     }
 
@@ -176,8 +252,9 @@ internal static class HttpEndpoints
         if (builder is InvocationExpressionSyntax call)
         {
             string name = HttpSyntax.CallName(call.Expression);
-            // Building the application starts at its root; other fluent calls keep the same builder.
-            if (name == "Build") return "";
+            // Building or creating the application starts at its root; other fluent calls keep the same builder.
+            if (name == "Build" || (name == "Create" && HttpSyntax.Receiver(call) is ExpressionSyntax receiver
+                && HttpSyntax.CallName(receiver) == "WebApplication")) return "";
             if (name != "MapGroup") return Prefix(HttpSyntax.Receiver(call), model, depth + 1, cancellationToken);
             string? parent = Prefix(HttpSyntax.Receiver(call), model, depth + 1, cancellationToken);
             string? pattern = call.ArgumentList.Arguments.Count == 0 ? null
@@ -186,30 +263,11 @@ internal static class HttpEndpoints
         }
         if (builder is MemberAccessExpressionSyntax access) return Prefix(access.Name, model, depth + 1, cancellationToken);
         if (builder is not SimpleNameSyntax) return null;
+        // A name that holds one value carries that value's prefix.
+        if (HttpSyntax.SingleValue(model, builder, cancellationToken) is ExpressionSyntax value) return Prefix(value, model, depth + 1, cancellationToken);
+        // Otherwise only a WebApplication that is never assigned here, such as a parameter, is the application root.
         ISymbol? symbol = model.GetSymbolInfo(builder, cancellationToken).Symbol;
-        if (symbol is null || Reassigned(symbol, builder, model, cancellationToken)) return null;
-        // A name assigned once in this file carries its value; otherwise only a WebApplication is a known root.
-        if (HttpSyntax.Initializer(symbol) is ExpressionSyntax assigned)
-        {
-            return assigned.SyntaxTree == model.SyntaxTree ? Prefix(assigned, model, depth + 1, cancellationToken) : null;
-        }
-        return HttpSyntax.DeclaredTypeName(symbol) == "WebApplication" ? "" : null;
-    }
-
-    /// <summary>A builder assigned again, or passed by reference, no longer carries one known prefix.</summary>
-    private static bool Reassigned(ISymbol symbol, SyntaxNode node, SemanticModel model, CancellationToken cancellationToken)
-    {
-        foreach (SyntaxNode candidate in node.SyntaxTree.GetRoot(cancellationToken).DescendantNodes())
-        {
-            ExpressionSyntax? written = candidate switch
-            {
-                AssignmentExpressionSyntax assignment => assignment.Left,
-                ArgumentSyntax argument when !argument.RefKindKeyword.IsKind(SyntaxKind.None) => argument.Expression,
-                _ => null,
-            };
-            if (written is null) continue;
-            if (SymbolEqualityComparer.Default.Equals(model.GetSymbolInfo(written, cancellationToken).Symbol, symbol)) return true;
-        }
-        return false;
+        return symbol is not null && HttpSyntax.Initializer(symbol) is null && !HttpSyntax.Written(symbol, model, cancellationToken)
+            && HttpSyntax.DeclaredTypeName(symbol) == "WebApplication" ? "" : null;
     }
 }
