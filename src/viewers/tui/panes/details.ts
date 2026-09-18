@@ -1,6 +1,6 @@
 import { TextAttributes } from '@opentui/core'
 
-import { copiesOf, type OperationCopies } from '../../../architecture-findings.ts'
+import { copiesOfSymbol, type OperationCopies } from '../../../architecture-findings.ts'
 import { pairDescriptions, type RelationshipPair } from '../../relationship-text.ts'
 import { kindLabel } from '../../atoms/kind.ts'
 import type { ProjectProfile } from '../../../project-profile.ts'
@@ -64,15 +64,13 @@ function declarationRows(
   const key = outlineRowKey(file, symbols.indexOf(declaration))
   const lines: Line[] = [styleRow(theme, [plain(theme, `${indent}${name}`), dim(theme, ` · ${facts}`)], width, false, key === actionCursor)]
   let cursor = key === actionCursor ? 0 : undefined
-  // A type declares no body, so only an operation row stands for a compared operation.
-  const own = declaration.kind === 'function' ? copiesOf(findings, file, declaration.line, declaration.name) : undefined
-  lines.push(...copyLines(theme, own, width, `${indent}  `))
+  lines.push(...copyLines(theme, copiesOfSymbol(findings, file, declaration), width, `${indent}  `))
   if (declaration.kind === 'type') {
     for (const member of declaration.members) {
       const memberKey = outlineRowKey(file, symbols.indexOf(member))
       if (memberKey === actionCursor) cursor = lines.length
       lines.push(styleRow(theme, [plain(theme, `${indent}  ${member.name}()`), dim(theme, ` · ${member.visibility} · line ${member.line}`)], width, false, memberKey === actionCursor))
-      lines.push(...copyLines(theme, copiesOf(findings, file, member.line, member.name), width, `${indent}    `))
+      lines.push(...copyLines(theme, copiesOfSymbol(findings, file, member), width, `${indent}    `))
     }
   }
   return { lines, cursor }

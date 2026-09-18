@@ -457,7 +457,9 @@ duplication is a problem. The
 [compared operations rule](../architecture-findings.md#compared-operations)
 states which operations carry tokens, so a scanner tokenizes no anonymous
 callback and filters no body by size. Plugins that do not tokenize omit these
-fields.
+fields. The map shows an operation's copies under its outline row only when the
+operation's range holds the row's line and its `name` ends in the row's name,
+as `Shop\OrderService::store` ends in `store`.
 An invocation has its caller operation `source`, canonical operation `targets`,
 one-based call `line`, and an explicit `unresolved` boolean. A named member call
 also supplies `member`. When a concrete argument supplies the invoked value,
