@@ -4,7 +4,7 @@ use axum::routing::{any, get};
 /// The router this binary serves; `serve` puts it at the root.
 pub async fn run(listener: tokio::net::TcpListener) {
     let app = app();
-    axum::serve(listener, app).await.unwrap();
+    axum::serve(listener, app.into_make_service()).await.unwrap();
 }
 
 fn app() -> Router {
@@ -21,6 +21,10 @@ fn app() -> Router {
         .merge(with_prefix(docs))
         .merge(with_extra(Router::new()))
         .merge(reassigned())
+        .merge(collected())
+        .merge(twice())
+        // A `Router` parameter carries no prefix of its own.
+        .nest("/p", add(Router::new()))
         // A router passed to a method that is not a router registration is unreported too.
         .nest_service("/assets", Router::new().route("/logo", get(logo)))
 }
@@ -29,6 +33,27 @@ fn app() -> Router {
 fn with_extra(mut router: Router) -> Router {
     router = router.route("/extra", get(extra));
     Router::new().nest("/extended", router)
+}
+
+/// A router kept in an array and nested in a loop may be served under any prefix.
+fn collected() -> Router {
+    let routers = [Router::new().route("/listed", get(listed))];
+    let mut app = Router::new();
+    for router in routers {
+        app = app.nest("/v1", router);
+    }
+    app
+}
+
+/// A router used twice may be served under either prefix.
+fn twice() -> Router {
+    let shared = Router::new().route("/shared", get(shared_page));
+    let copy = shared.clone();
+    Router::new().nest("/a", shared).nest("/b", copy)
+}
+
+fn add(router: Router) -> Router {
+    router.route("/added", get(added))
 }
 
 fn reassigned() -> Router {
@@ -89,3 +114,6 @@ fn wrapped() {}
 fn extra() {}
 fn fresh() {}
 fn logo() {}
+fn listed() {}
+fn shared_page() {}
+fn added() {}

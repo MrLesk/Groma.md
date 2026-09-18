@@ -102,6 +102,7 @@ pub fn server() -> App<()> {
         // Entries this scan cannot read still take their place in the first-match order.
         .service(web::scope("/admin/assets").service(actix_files::Files::new("/", ".")))
         .service(web::resource("/health/ping").route(web::get().to(|| async { HttpResponse::Ok().finish() })))
+        .service(web::resource("/downloads/{tail:.*}").route(web::get().to(|| async { HttpResponse::Ok().finish() })))
         .service(web::scope("/legacy/api").service(add(web::scope("/v1"))))
         .service(legacy())
         .service(latest)

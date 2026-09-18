@@ -6,7 +6,9 @@ use ra_ap_syntax::ast::{self, HasArgList, HasName};
 use ra_ap_syntax::{AstNode, SyntaxKind, SyntaxNode, SyntaxToken, T};
 use serde_json::{Value, json};
 
-use crate::text::{bound_names, callee, first_argument, macro_arguments, string_value, token_string};
+use crate::text::{
+    bound_names, callee, first_argument, let_value, macro_arguments, path_character, string_value, token_string,
+};
 
 /// How much of a URL the source proves.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -145,10 +147,7 @@ fn resolved_value(sema: &Semantics<'_, RootDatabase>, path: &ast::PathExpr) -> O
     match sema.resolve_path(&path.path()?)? {
         PathResolution::Def(ModuleDef::Const(item)) => item.source(db)?.value.body(),
         PathResolution::Def(ModuleDef::Static(item)) if !item.is_mut(db) => item.source(db)?.value.body(),
-        PathResolution::Local(local) if !local.is_mut(db) => {
-            let pattern = local.primary_source(db).as_ident_pat()?.clone();
-            ast::LetStmt::cast(pattern.syntax().parent()?)?.initializer()
-        }
+        PathResolution::Local(local) => let_value(sema, local),
         _ => None,
     }
 }
@@ -248,12 +247,11 @@ fn placeholders(template: &str) -> Vec<Placeholder> {
     result
 }
 
-/// RFC 3986 path characters, which the observation contract requires of literal text.
+/// Literal text with every byte outside the RFC 3986 path characters percent-encoded.
 fn encoded(text: &str) -> String {
-    let allowed = |byte: u8| byte.is_ascii_alphanumeric() || b"-._~!$&'()*+,;=:@%".contains(&byte);
     let mut result = String::new();
     for byte in text.bytes() {
-        if allowed(byte) {
+        if path_character(byte) {
             result.push(char::from(byte));
         } else {
             result.push_str(&format!("%{byte:02X}"));
@@ -263,7 +261,7 @@ fn encoded(text: &str) -> String {
 }
 
 #[derive(PartialEq, Eq)]
-enum Base {
+enum Origin {
     None,
     Configured,
     Unknown,
@@ -271,23 +269,23 @@ enum Base {
 
 /// The request path a URL's parts describe, with `configured` set when it follows a setting.
 pub fn request_path(parts: &[Part]) -> Value {
-    let (base, rest) = base(parts);
-    let mut segments = if base == Base::Unknown { vec![json!({"kind": "unknown"})] } else { Vec::new() };
+    let (base, rest) = origin(parts);
+    let mut segments = if base == Origin::Unknown { vec![json!({"kind": "unknown"})] } else { Vec::new() };
     segments.extend(path_segments(rest));
     let mut fact = json!({"path": segments});
-    if base == Base::Configured {
+    if base == Origin::Configured {
         fact["configured"] = json!(true);
     }
     fact
 }
 
 /// What precedes the path: nothing, a setting, or a base the scanner cannot use.
-fn base(parts: &[Part]) -> (Base, &[Part]) {
+fn origin(parts: &[Part]) -> (Origin, &[Part]) {
     match parts.first() {
-        Some(Part::Text(text)) if authority(text) => (Base::Unknown, parts),
-        Some(Part::Setting) if follows_path(&parts[1..]) => (Base::Configured, &parts[1..]),
-        Some(Part::Setting | Part::Computed) => (Base::Unknown, &parts[1..]),
-        _ => (Base::None, parts),
+        Some(Part::Text(text)) if authority(text) => (Origin::Unknown, parts),
+        Some(Part::Setting) if follows_path(&parts[1..]) => (Origin::Configured, &parts[1..]),
+        Some(Part::Setting | Part::Computed) => (Origin::Unknown, &parts[1..]),
+        _ => (Origin::None, parts),
     }
 }
 

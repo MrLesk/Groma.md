@@ -86,9 +86,12 @@ pointer dispatch, deferred closure bodies, distinct chained calls at one source
 offset, the wrong-provider witness, shared-source identity, deterministic
 output, curated ownership across repeat scans, failed scan preservation,
 `groma lint` duplicate and near-duplicate findings, the source outline of a
-component that also holds a TypeScript file, and outline members of same-named
-types in different inline modules beside test-only `cfg` conditions. Each test owns its
-temporary fixture and runs concurrently. Native tests are opt-in because a
+component that also holds a TypeScript file, outline members of same-named types
+in different inline modules beside test-only `cfg` conditions, every HTTP
+endpoint and request fact of the axum, actix-web, Rocket and reqwest fixture
+with its constraints, order and blockers, and the HTTP rows a registered scan of
+that fixture derives. Each test owns its temporary fixture and runs
+concurrently. Native tests are opt-in because a
 general repository checkout need not contain a built Rust worker or project
 toolchain.
 

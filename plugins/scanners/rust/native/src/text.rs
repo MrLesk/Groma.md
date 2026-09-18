@@ -1,3 +1,5 @@
+use ra_ap_hir::{Local, Semantics};
+use ra_ap_ide_db::RootDatabase;
 use ra_ap_syntax::ast::{self, HasName};
 use ra_ap_syntax::{AstNode, SyntaxKind, SyntaxNode, SyntaxToken, T, TextSize};
 
@@ -104,4 +106,34 @@ pub fn callee(call: &ast::CallExpr) -> Vec<String> {
     let Some(ast::Expr::PathExpr(path)) = call.expr() else { return Vec::new() };
     let segments = path.path().into_iter().flat_map(|path| path.segments().collect::<Vec<_>>());
     segments.filter_map(|segment| Some(segment.name_ref()?.text().to_string())).collect()
+}
+
+/// The value an immutable `let` binds to a local; `None` for a `mut` local, a parameter, or a
+/// binding without a value.
+pub fn let_value(sema: &Semantics<'_, RootDatabase>, local: Local) -> Option<ast::Expr> {
+    if local.is_mut(sema.db) {
+        return None;
+    }
+    let pattern = local.primary_source(sema.db).as_ident_pat()?.clone();
+    ast::LetStmt::cast(pattern.syntax().parent()?)?.initializer()
+}
+
+/// The value a method chain starts from, such as `Client::builder()` in
+/// `Client::builder().timeout(t).build()`, seen through `await`, `?` and parentheses.
+pub fn receiver_start(call: &ast::MethodCallExpr) -> Option<ast::Expr> {
+    let mut current = call.receiver()?;
+    loop {
+        current = match &current {
+            ast::Expr::MethodCallExpr(inner) => inner.receiver()?,
+            ast::Expr::AwaitExpr(pending) => pending.expr()?,
+            ast::Expr::TryExpr(attempt) => attempt.expr()?,
+            ast::Expr::ParenExpr(paren) => paren.expr()?,
+            _ => return Some(current),
+        };
+    }
+}
+
+/// An RFC 3986 path character, which the observation contract requires of names and literals.
+pub fn path_character(byte: u8) -> bool {
+    byte.is_ascii_alphanumeric() || b"-._~!$&'()*+,;=:@%".contains(&byte)
 }

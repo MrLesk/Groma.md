@@ -1,12 +1,15 @@
 use serde_json::{Value, json};
 
+use crate::text::path_character;
+
 /// The segments of a route pattern, in the syntax of any supported Rust router:
 /// `:name`, `{name}` and `<name>` for one segment, `{*rest}` and `*rest` for the remainder,
-/// Rocket's `<rest..>` for any remainder, also none, and actix's `{name:regex}`. A regular expression restricts its parameter, which is
-/// then constrained; one that may match a slash, and a catch-all written before other segments,
-/// stand for the rest of the path as a constrained optional catch-all. `{name:.*}` is a plain
-/// optional catch-all and `{name:.+}` a plain catch-all. A pattern with a name or literal the
-/// fact format cannot state has no segments and is not reported.
+/// Rocket's `<rest..>` for any remainder, also none, and actix's `{name:regex}`. A regular
+/// expression restricts its parameter, which is then constrained; one that may match a slash,
+/// and a catch-all written before other segments, stand for the rest of the path as a
+/// constrained optional catch-all. `{name:.*}` is a plain optional catch-all and `{name:.+}` a
+/// plain catch-all. A pattern with a name or literal the fact format cannot state has no segments
+/// and is not reported.
 pub fn segments(pattern: &str) -> Option<Vec<Value>> {
     let pieces = split(pattern)?;
     let mut segments = Vec::new();
@@ -166,9 +169,8 @@ fn spans(regex: &str) -> bool {
     false
 }
 
-/// RFC 3986 path characters, which the observation contract requires of names and literals.
 fn allowed(text: &str) -> bool {
-    !text.is_empty() && text.bytes().all(|byte| byte.is_ascii_alphanumeric() || b"-._~!$&'()*+,;=:@%".contains(&byte))
+    !text.is_empty() && text.bytes().all(path_character)
 }
 
 fn placeholder(kind: &str, name: &str, flags: &[&str]) -> Option<Value> {
