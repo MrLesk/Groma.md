@@ -1,0 +1,43 @@
+import axios from 'axios'
+
+const api = axios.create({ baseURL: '/api' })
+let mutable = axios.create({ baseURL: '/api' })
+mutable = axios.create({ baseURL: '/other' })
+
+export const list = () => fetch('/api/talks')
+
+export const create = (talk: unknown) => fetch('/api/talks', { method: 'POST', body: String(talk) })
+
+export const byMethod = (method: string) => fetch('/api/talks', { method })
+
+export const one = (id: string) => fetch(`/api/talks/${id}`)
+
+export const partial = (id: string) => fetch(`/api/talks/${id}-latest`)
+
+export const search = (term: string) => fetch('/api/talks?term=' + term)
+
+export const configured = () => fetch(`${API_URL}/talks`)
+
+export const external = () => fetch('https://api.example.com/talks')
+
+export const fromBase = (base: string) => fetch(base + '/talks')
+
+export const listed = () => axios.get('/api/talks')
+
+export const added = (talk: unknown) => axios.post('/api/talks', talk)
+
+export const dropped = (id: string) => axios.delete(`/api/talks/${id}`)
+
+export const configuredCall = () => axios.request({ url: '/api/talks', method: 'put' })
+
+export const direct = () => axios({ url: '/api/talks', method: 'PATCH' })
+
+export const plain = () => axios('/api/talks')
+
+export const based = () => api.get('/talks')
+
+export const reassigned = () => mutable.get('/talks')
+
+export const unresolved = (options: object) => axios('/api/talks', options)
+
+export const Talks = () => <button type="button" onClick={() => void list()}>Talks</button>

@@ -6,12 +6,8 @@ import { environment } from './environment'
 @Injectable({ providedIn: 'root' })
 export class TalkService {
   private readonly base = '/api'
-  private mutableBase = '/api'
-  private readonly replaced: string = '/api'
 
-  constructor(private http: HttpClient) {
-    this.replaced = environment.apiUrl
-  }
+  constructor(private http: HttpClient) {}
 
   list() {
     return this.http.get('/api/talks')
@@ -55,14 +51,6 @@ export class TalkService {
 
   latest() {
     return this.http.get(this.base + '/talks/latest')
-  }
-
-  mutable() {
-    return this.http.get(this.mutableBase + '/talks')
-  }
-
-  reassigned() {
-    return this.http.get(this.replaced + '/talks')
   }
 
   search(term: string) {

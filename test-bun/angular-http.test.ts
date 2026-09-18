@@ -77,16 +77,13 @@ test.concurrent('the built Angular package reports HttpClient requests and serve
       // A base stating a host, and a base that is a parameter, are unknown.
       'external GET /<unknown>/talks',
       'fromBase GET /<unknown>/talks',
-      // A readonly base its class never replaces is literal text.
-      'latest GET /api/talks/latest',
+      // A class field is never a base, because a constructor can replace it.
+      'latest GET /<unknown>/talks/latest',
       'list GET /api/talks',
-      // A mutable field, and a readonly field the constructor replaces, are computed.
-      'mutable GET /<unknown>/talks',
       // One computed segment is dynamic; a partly computed segment is unknown.
       'one GET /api/speakers/<dynamic>',
       'partial GET /api/talks/<unknown>',
       'purge DELETE /api/talks/<dynamic>',
-      'reassigned GET /<unknown>/talks',
       'remove DELETE /api/talks/<dynamic>',
       'replace PUT /api/talks/<dynamic>',
       // The query is dropped, computed or not.

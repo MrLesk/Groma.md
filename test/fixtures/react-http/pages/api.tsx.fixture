@@ -1,0 +1,3 @@
+export const ApiPage = () => <span>api</span>
+
+export default ApiPage

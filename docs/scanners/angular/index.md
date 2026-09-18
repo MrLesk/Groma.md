@@ -122,16 +122,16 @@ ecosystem:
 4. **Local helpers.** Not supported: the URL is read at the client call, so a
    helper that forwards a path parameter reports unknown text, and its callers
    report nothing. Author those rows.
-5. **Bases.** A root-relative literal path has no base. A `const`, an
-   object-literal property, and a `readonly` field whose class never assigns
-   `this.<name>` again are literal text, so an environment object holding `/api`
-   reports `/api/talks`. A mutable field and a `readonly` field a constructor
-   replaces are computed. A value the scanner cannot see, such as a constant
-   imported from a package, sets `configured`. A base that states a host, a
-   parameter, and any other computed value report a leading unknown segment, and
-   core derives nothing from them. A literal environment base is the value in
-   the source file, which an Angular build's `fileReplacements` can swap for
-   another environment, so the reported path is the development one.
+5. **Bases.** A root-relative literal path has no base. A `const` and an
+   object-literal property assigned a literal are literal text, so an
+   environment object holding `/api` reports `/api/talks`. A class field is not,
+   because a constructor can replace it even when it is `readonly`. A value the
+   scanner cannot see, such as a constant imported from a package or declared
+   ambiently, sets `configured`. A base that states a host, a parameter, and any
+   other computed value report a leading unknown segment, and core derives
+   nothing from them. A literal environment base is the value in the source file,
+   which an Angular build's `fileReplacements` can swap for another environment,
+   so the reported path is the development one.
 6. **File-location routes.** None: every request names the function that runs
    the call, and a call outside any function reports nothing.
 

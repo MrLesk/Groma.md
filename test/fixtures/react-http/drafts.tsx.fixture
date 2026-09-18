@@ -1,0 +1,9 @@
+const store = { get: (key: string) => key }
+
+export const stored = () => store.get('/api/drafts')
+
+export const helper = (path: string) => fetch(path)
+
+export const viaHelper = () => helper('/api/drafts')
+
+export const Drafts = () => <span>{stored()}</span>

@@ -76,6 +76,62 @@ Core outlines each file once. For a source that the TypeScript scanner also
 owns, the scanner with the lowest id among the file's Code links outlines it,
 here React, with the symbols of all those links.
 
+## HTTP endpoints and requests
+
+The scanner reports [HTTP facts](../evidence.md#http-endpoints-and-requests) for
+the clients it recognizes in the TSX files it reads, and for the endpoints a
+Next.js project declares by file location. Besides the components, it reads
+`app/**/route.ts` and `.tsx` and `pages/api/**`, under the project root or `src`,
+which another scanner may read as well.
+
+| Construct | Reported |
+| --- | --- |
+| `fetch(url, init)` | Request; a literal `method` gives the method, no options means `GET`, and options the scanner cannot read leave it out |
+| `axios.get`, `.post`, `.put`, `.patch`, `.delete`, `.head`, `.options` | Request with that method |
+| `axios(config)`, `axios.request(config)` | Request from a literal `url`; a literal `method`, else `GET`, and a computed one leaves the method out |
+| `axios.create({ baseURL })` instances | Request whose path follows that base |
+| `app/**/route.ts` | Endpoint per exported `GET`, `POST`, `PUT`, `PATCH`, `DELETE`, `HEAD` or `OPTIONS` handler, at the route's directory path |
+| `pages/api/**` | Endpoint for the default export, which answers every method, so `*` |
+
+`fetch` counts only when the project does not declare it, and an `axios` client
+counts only when its name comes from the `axios` import or from a `const` holding
+`axios.create(...)`, so a `get` on any other object is never a request. A config
+object built elsewhere, or one with a spread, states nothing certain.
+
+The six [producer decisions](../evidence.md#producer-checklist) for this
+ecosystem:
+
+1. **Prefixes.** Only an `axios.create({ baseURL })` base, which precedes every
+   path that instance requests. The scanner reports no endpoint, so no route
+   prefix applies.
+2. **Endpoints.** Only the route files above. A page, a layout, `middleware.ts`,
+   and a component answer no request of their own, and `pages/api.tsx` is a page,
+   not a route. A route file whose path holds a parallel route `@modal` or an
+   intercepted route `(.)talks` reports nothing, because the served path is not
+   the file path there. A Pages Router route whose default export is not a
+   function in that file also reports nothing.
+3. **Dynamic or unknown.** `` `/talks/${id}` `` fills one whole segment, so it is
+   dynamic. `` `/talks/${id}-latest` ``, a path built from a parameter, and an
+   unresolvable value are unknown. The query and fragment are dropped, computed
+   or not.
+4. **Local helpers.** Not supported: the URL is read at the client call, so a
+   helper that forwards a path parameter reports unknown text, and its callers
+   report nothing. Author those rows.
+5. **Bases.** A root-relative literal path has no base. A `const` and an
+   object-literal property assigned a literal are literal text; a class field is
+   not, because a constructor can replace it. A value the scanner cannot see,
+   such as an ambient declaration, `process.env.API_URL`, `import.meta.env` or a
+   constant imported from a package, sets `configured`. A literal host, a
+   parameter, and any other computed value report a leading unknown segment.
+6. **File-location routes.** A route file's directory path is its served path,
+   with `[id]` a parameter, `[...rest]` a catch-all and `[[...rest]]` an optional
+   catch-all. A route group such as `(admin)` organizes files without serving a
+   segment, so `app/api/(admin)/audit/route.ts` serves `/api/audit`. A Pages
+   Router `index` file serves its directory, while a directory named `index` is an
+   ordinary segment. An App Router endpoint names the exported handler for its
+   method; a Pages Router endpoint names the function its default export
+   designates. Every request names the function that runs the call.
+
 ## Limits
 
 This revision qualifies the Backlog.md CleanupModal success callback. It does

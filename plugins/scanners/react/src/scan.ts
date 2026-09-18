@@ -4,6 +4,9 @@ import { createScanObservation, type ScanDiagnostic, type ScanInvocation, type S
 import ts from 'typescript'
 import { frameworkProjects, hasDependency } from '../../projects.ts'
 import { combineObservations } from '../../observations.ts'
+import { executable, type Operation } from './functions.ts'
+import { reactHttpRequests } from './http.ts'
+import { nextRouteEndpoints, routeLocation } from './routes.ts'
 
 function relative(root: string, file: string): string {
   return path.relative(root, file).split(path.sep).join('/')
@@ -26,22 +29,19 @@ function reactProject(root: string, repositoryRoot = root) {
     const parsed = ts.parseJsonConfigFileContent(config.config, ts.sys, root, undefined, configFile)
     failDiagnostics(parsed.errors)
     const program = ts.createProgram(parsed.fileNames, { ...parsed.options, noEmit: true })
-    const sources = program.getSourceFiles().filter(source => {
+    const owned = program.getSourceFiles().filter(source => {
       const file = relative(repositoryRoot, source.fileName)
-      return file.endsWith('.tsx') && !source.isDeclarationFile && !file.startsWith('../') && !file.includes('node_modules/')
+      return !source.isDeclarationFile && !file.startsWith('../') && !file.includes('node_modules/')
     })
+    const sources = owned.filter(source => source.fileName.endsWith('.tsx'))
     if (!sources.length) throw new Error('The project tsconfig.json must include React TSX source files.')
+    // Next.js declares endpoints by file location, so those files are read besides the components.
+    const routes = owned.filter(source => routeLocation(relative(root, source.fileName)) !== undefined)
     failDiagnostics(program.getSyntacticDiagnostics())
-    return { manifest, program, sources }
+    return { manifest, program, sources, routes }
   } catch (error) {
     throw new Error(`REACT_SOURCE_INVALID: Check the project tsconfig.json and TSX syntax. ${error}`)
   }
-}
-
-type Operation = ts.FunctionDeclaration | ts.FunctionExpression | ts.ArrowFunction
-
-function executable(node: ts.Node): node is Operation {
-  return ts.isArrowFunction(node) || ts.isFunctionExpression(node) || (ts.isFunctionDeclaration(node) && !!node.body)
 }
 
 function caller(node: ts.Node): Operation | undefined {
@@ -77,7 +77,8 @@ class Evidence {
     this.root = root; this.checker = checker; this.files = new Set(sources)
   }
 
-  private operation(node: Operation): string {
+  /** One operation per function, shared by callback and HTTP facts. */
+  operationId(node: Operation): string {
     const file = relative(this.root, node.getSourceFile().fileName)
     const position = node.getStart()
     const id = `${file}#${position}`
@@ -143,7 +144,7 @@ class Evidence {
     for (const call of calls) {
       const operation = caller(call)
       if (!operation) continue
-      this.invocations.push({ source: this.operation(operation), targets: [this.operation(target)], unresolved: false,
+      this.invocations.push({ source: this.operationId(operation), targets: [this.operationId(target)], unresolved: false,
         member: attribute.name.getText(), position: call.getStart(),
         line: call.getSourceFile().getLineAndCharacterOfPosition(call.getStart()).line + 1,
         binding: { file: relative(this.root, source.fileName), position: attribute.getStart(),
@@ -181,12 +182,19 @@ export async function scanReact(root: string) {
 async function scanReactProject(projectRoot: string, root: string) {
   const project = reactProject(projectRoot, root)
   if (!project) return undefined
-  const { manifest, program, sources } = project
+  const { manifest, program, sources, routes } = project
   const evidence = new Evidence(root, program.getTypeChecker(), sources)
   for (const source of sources) evidence.inspect(source)
-  const files = sources.map(source => ({ file: relative(root, source.fileName), symbols: [] }))
+  const httpRequests = reactHttpRequests(sources, program.getTypeChecker(), call => {
+    const operation = caller(call)
+    return operation === undefined ? undefined : evidence.operationId(operation)
+  })
+  const httpEndpoints = nextRouteEndpoints(routes, projectRoot, handler => evidence.operationId(handler))
+  const files = [...new Set([...sources, ...routes].map(source => relative(root, source.fileName)))]
+    .map(file => ({ file, symbols: [] }))
   return createScanObservation({ scanner: { id: 'react', technology: 'typescript/react', engine: 'typescript-sdk', engineVersion: ts.version },
     roots: [{ id: 'react-project', kind: 'package', name: manifest.name, file: relative(root, path.join(projectRoot, 'package.json')) }],
     files: files.map(file => ({ ...file, roots: ['react-project'] })),
-    operations: [...evidence.operations.values()], invocations: evidence.invocations, diagnostics: evidence.diagnostics })
+    operations: [...evidence.operations.values()], invocations: evidence.invocations, diagnostics: evidence.diagnostics,
+    ...(httpEndpoints.length ? { httpEndpoints } : {}), ...(httpRequests.length ? { httpRequests } : {}) })
 }
