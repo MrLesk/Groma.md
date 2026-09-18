@@ -5,12 +5,13 @@ status: Done
 assignee:
   - '@claude'
 created_date: '2026-09-16 19:38'
-updated_date: '2026-09-17 11:13'
+updated_date: '2026-09-18 17:30'
 labels: []
 dependencies: []
 references:
   - evidence
   - php-src-index
+  - src-outline
 modified_files:
   - plugins/scanners/php/src/syntax.ts
   - plugins/scanners/php/src/evidence.ts
@@ -61,6 +62,10 @@ PHP components show only files. The PHP scanner already parses declarations with
 5. test-bun/php-scanner.test.ts: build and add the PHP scanner and the TypeScript scanner, assert the scan reports the fixture's Code symbols, call core readCodeStructure, and assert every file in Code order and the PHP declarations, members, lines, visibility and entry.
 6. docs/scanners/php/index.md: Source outline section.
 7. Isolated bun run check; self specification and quality review.
+
+Review round (external cold reviews at cf8e7975):
+8. Fix (both reviewers): a function_exists guard names the function by its fully qualified name, as PHP resolves it. Compare the guard string, without a leading backslash, with the declaration's namespace-qualified symbol name; inside namespace App, 'App\helper' lists helper and a bare 'helper' does not. Regression fixture: a namespaced block in test/fixtures/php-outline/app/helpers.php with a qualified guard and a bare guard. Clarify docs/scanners/php/index.md.
+9. Skip: parse errors failing the whole outline request (grok-all, garbled section) is the documented design shared with the scan, not a wrong output.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
@@ -72,10 +77,16 @@ Verification: bun test test-bun/php-scanner.test.ts, 5 pass. The outline test ad
 
 Cold review applied (coordinator decisions): one naming rule and typeKinds set in syntax.ts used by evidence.ts and outline.ts; the outline test now asserts the scan reports the fixture's three Code symbols; a function declared directly inside if (!function_exists('name')) { ... } whose guard names it is listed (coordinator decision; contract table note routed by the coordinator), with a mismatched guard and a PHP_VERSION_ID condition as unlisted counterparts; closures get entry false; renamed declaration to declarationsOf and outline to symbol; lineOf takes Syntax and field reads are widened only in field and list; docs say trait use statements and describe the guard. The earlier note that conditional declarations are not listed is superseded.
 Re-verification: bun test test-bun/php-scanner.test.ts 5 pass; isolated bun run check exit 0 (tsc clean; node 16 pass; bun 379 pass, 23 skip, 0 fail; Biome findings only in untouched build.ts, vue-scanner.test.ts, iso-map.test.ts).
+
+Review round (external cold reviews at cf8e7975): a function_exists guard now names a function by its namespace-qualified symbol name with an optional leading backslash, as PHP resolves the string; guardedFunctions takes the outline scope. Previously the guard was compared with the bare declaration name, so inside namespace App a guard 'App\helper' omitted the function and a bare 'helper' (which PHP reads as the global \helper) admitted it; reproduced with a readCodeStructure probe. Regression: helpers.php gained namespace Shop\Labels with a qualified guard (listed) and a bare guard (not listed); the outline test failed without the fix (item_label listed instead of total_label). Docs clarify the qualified guard. Skipped: failing the whole outline request on a parse error is the documented design shared with the scan, not a wrong output. Verification: bun test test-bun/php-scanner.test.ts 5 pass; isolated bun run check exit 0 (tsc clean; node 16 pass; bun 513 pass, 32 skip, 0 fail; Biome findings only in untouched build.ts and iso-map.test.ts).
+
+Cold review of the review-round fix: no must-fix; the regression was confirmed (HEAD lists item_label at line 47). Applied the optional clarifications: the guardedFunctions comment, the test comment that a bare guard inside a namespace names a global function so item_label is absent, and the same half sentence on the PHP scanner page. Comment and documentation changes only; bun test test-bun/php-scanner.test.ts 5 pass, Biome clean on the changed files.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
 The PHP scanner now implements readCodeStructure, so PHP-owned files show their top-level functions (including function_exists-guarded ones and closures assigned to variables) and their classes, interfaces, traits and enums with every method, each with name, line, visibility and entry. Top-level namespace blocks are transparent; members follow private/protected, otherwise public. Scan evidence and the outline share one parser configuration and one symbol naming rule in syntax.ts, so entries match the scan's qualified names. The PHP scanner page documents the outline. Verified by a test that reads the outline through core for a component whose Code mixes two PHP files and a TypeScript file (files in Code order, exact PHP declarations, and the scan reporting the Code symbols), and by an isolated bun run check (exit 0).
+
+Review round: a function_exists guard now names a function by its namespace-qualified symbol name (leading backslash optional), as PHP resolves the string, so a qualified guard inside a namespace lists its function and a bare guard, which names a global function, does not. A namespaced fixture block covers both cases and fails without the fix; the PHP scanner page states the rule. Verified by bun test test-bun/php-scanner.test.ts and an isolated bun run check (exit 0).
 <!-- SECTION:FINAL_SUMMARY:END -->

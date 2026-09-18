@@ -54,7 +54,10 @@ parses the file with the bundled parser and lists what is declared directly in
 the file or in a braced or unbraced `namespace` block:
 
 - functions, including a function declared directly inside
-  `if (!function_exists('name')) { ... }` when the guard names that function;
+  `if (!function_exists('name')) { ... }` when the guard names that function
+  by its namespace-qualified name, such as `'Shop\format_total'` inside
+  `namespace Shop`; a bare guard name inside a namespace means the global
+  function, so the declared function is not listed;
 - closures and arrow functions assigned directly to a variable, listed under
   the variable name, such as `$format`;
 - classes, interfaces, traits, and enums, with every method as a member,
