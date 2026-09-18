@@ -46,6 +46,10 @@ test.concurrent('Java reports tokens and ranges for named bodies only, normalizi
     expect(named('Copy#othered').tokens).not.toEqual(named('Ready#helped').tokens!)
     // Array index operands keep bodies apart.
     expect(named('Copy#head').tokens).not.toEqual(named('Ready#tail').tokens!)
+    // After a loop variable's lifetime ends, a field of the same name is a field again.
+    expect(named('Copy#afterLoop').tokens).not.toEqual(named('Ready#afterLoop').tokens!)
+    // Grouping parentheses keep (a + b) * c apart from a + b * c.
+    expect(named('Copy#combine').tokens).not.toEqual(named('Ready#combine').tokens!)
   } finally { await rm(root, { recursive: true, force: true }) }
 }, 60000)
 

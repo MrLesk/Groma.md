@@ -50,4 +50,16 @@ public class Copy {
     public int other() {
         return 1;
     }
+
+    int right;
+
+    public int afterLoop() {
+        for (int right = 0; right < 2; right++) {
+        }
+        return right + 1;
+    }
+
+    public int combine(int a, int b, int c) {
+        return a + b * c;
+    }
 }
