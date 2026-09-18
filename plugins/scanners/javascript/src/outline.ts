@@ -2,7 +2,7 @@ import { readFile } from 'node:fs/promises'
 import path from 'node:path'
 import type { CodeFile, SourceReference } from '@groma/scanner'
 import ts from 'typescript'
-import { outlineDeclarations } from '../../typescript-outline.ts'
+import { outlineSource } from '../../typescript-outline.ts'
 import { topLevelDeclarations } from './declarations.ts'
 
 /** A `.mjs` or `.cjs` file is a module whatever it contains. */
@@ -72,11 +72,8 @@ export async function readJavaScriptOutline(
   for (const reference of references) {
     const fileName = path.join(repositoryRoot, reference.file)
     const text = await readFile(fileName, 'utf8')
-    // The shared outline parses the text itself; this parse only reads how the file publishes names.
     const source = ts.createSourceFile(fileName, text, ts.ScriptTarget.Latest, true)
-    const declarations = outlineDeclarations(ts, {
-      fileName, text, symbols: reference.symbols, exported: publishedNames(reference.file, source),
-    })
+    const declarations = outlineSource(ts, source, { symbols: reference.symbols, exported: publishedNames(reference.file, source) })
     if (declarations.length > 0) files.push({ file: reference.file, declarations })
   }
   return files

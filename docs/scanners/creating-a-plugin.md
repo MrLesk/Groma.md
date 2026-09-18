@@ -138,7 +138,8 @@ and lambdas they declare, form the program's entry point and are not listed.
   signatures. Constructors use their source name, such as `constructor`,
   `__init__`, `__construct`, or the type name.
 - Fields, properties, property signatures (even with a function type),
-  accessors, and nested types are not listed.
+  accessors, methods with a computed name such as `[key]()`, and nested types
+  are not listed.
 - Methods declared apart from their type, as Go receiver methods, Rust `impl`
   blocks and Swift extensions are, belong to one entry for that type per file.
   When the file declares the type, the entry is that declaration (in Swift, at

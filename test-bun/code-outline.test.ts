@@ -54,15 +54,24 @@ test.concurrent('the TypeScript outline applies the shared declaration and visib
     declaration.kind,
     declaration.name,
     declaration.visibility,
-    declaration.kind === 'type' ? declaration.members.map(member => member.name) : [],
+    declaration.kind === 'type' ? declaration.members.map(member => [member.name, member.visibility]) : [],
   ])
 
+  // Each overload is listed, an accessor is not, and a nested namespace is transparent.
   expect(summary).toEqual([
     ['function', 'hidden', 'private', []],
     ['function', 'listed', 'public', []],
-    ['type', 'Service', 'public', ['constructor', 'describe']],
-    ['type', 'Store', 'public', ['read']],
+    ['function', 'overloaded', 'private', []],
+    ['function', 'overloaded', 'private', []],
+    ['function', 'overloaded', 'private', []],
+    ['function', 'described', 'public', []],
+    // Methods named by a string or number literal keep that name.
+    ['type', 'Service', 'public', [
+      ['constructor', 'public'], ['describe', 'public'], ['save', 'public'], ['404', 'public'], ['reset', 'private'],
+    ]],
+    ['type', 'Store', 'public', [['read', 'public'], ['fetch', 'public']]],
     ['type', 'Mode', 'public', []],
     ['function', 'lookup', 'public', []],
+    ['function', 'trim', 'public', []],
   ])
 })
