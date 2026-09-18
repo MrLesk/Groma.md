@@ -1,8 +1,9 @@
 import { createScanObservation, type ScanObservation, type ScannerPlugin } from '@groma/scanner'
 import { VueEvidence } from './evidence.ts'
 import path from 'node:path'
-import { frameworkProjects } from '../../projects.ts'
+import { frameworkProjects, hasDependency } from '../../projects.ts'
 import { combineObservations } from '../../observations.ts'
+import { vueHttpFacts } from './http.ts'
 import { addComparedOperations } from './operations.ts'
 import { readVueOutline } from './outline.ts'
 import { relative, vueProject } from './project.ts'
@@ -25,6 +26,17 @@ async function scanVueProject(projectRoot: string, root: string): Promise<ScanOb
     const sfc = project.sfc(source.fileName)
     if (sfc) evidence.inspect(source.fileName, sfc)
   }
+  const { httpRequests, httpEndpoints } = vueHttpFacts({
+    project,
+    projectRoot,
+    nuxt: hasDependency(manifest, 'nuxt'),
+    operationId: node => evidence.operationId(node),
+    moduleOperation: file => {
+      const id = `${file}#module`
+      evidence.operations.set(id, { id, file, name: '(module)' })
+      return id
+    },
+  })
   addComparedOperations(project, evidence.operations)
   const files = project.files.map(source => ({ file: relative(root, source.fileName), symbols: [] }))
   const sourceUnits = project.files.flatMap(source => project.sourceUnit(source.fileName) ?? [])
@@ -37,6 +49,7 @@ async function scanVueProject(projectRoot: string, root: string): Promise<ScanOb
     files: files.map(file => ({ ...file, roots: ['vue-project'] })),
     sourceUnits,
     operations: [...evidence.operations.values()], invocations: evidence.invocations, diagnostics: evidence.diagnostics,
+    ...(httpEndpoints.length ? { httpEndpoints } : {}), ...(httpRequests.length ? { httpRequests } : {}),
   })
 }
 

@@ -1,0 +1,57 @@
+import axios from 'axios'
+import { API_ROOT } from 'app-config'
+
+const api = axios.create({ baseURL: '/api' })
+let mutable = axios.create({ baseURL: '/api' })
+mutable = axios.create({ baseURL: '/other' })
+const store = { get: (key: string) => key }
+
+export function listed() {
+  return axios.get('/api/talks')
+}
+
+export function removed(id: string) {
+  return axios.delete(`/api/talks/${id}`)
+}
+
+export function configuredCall() {
+  return axios.request({ url: '/api/talks', method: 'put' })
+}
+
+export function based() {
+  return api.get('/talks')
+}
+
+export function configured() {
+  return $fetch(`${API_ROOT}/talks`)
+}
+
+export function reassigned() {
+  return mutable.get('/talks')
+}
+
+export function unresolved(options: object) {
+  return $fetch('/api/talks', options)
+}
+
+export const options = {
+  methods: {
+    load() {
+      return axios.get('/api/talks')
+    },
+  },
+}
+
+export function stored() {
+  return store.get('/api/talks')
+}
+
+export function helper(path: string) {
+  return $fetch(path)
+}
+
+export function viaHelper() {
+  return helper('/api/talks')
+}
+
+export const eager = $fetch('/api/talks')

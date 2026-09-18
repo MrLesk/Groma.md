@@ -109,6 +109,70 @@ Core outlines each file once. For a script that the TypeScript scanner also
 owns, the scanner with the lowest id among the file's Code links outlines it,
 here TypeScript, with the symbols of all those links.
 
+## HTTP endpoints and requests
+
+The scanner reports [HTTP facts](../evidence.md#http-endpoints-and-requests) for
+the clients it recognizes in the files it reads, single-file component scripts
+included, and for the endpoints a Nuxt project declares by file location. A fact
+from a `.vue` file names an operation in that file, at the line the call occupies
+there.
+
+| Construct | Reported |
+| --- | --- |
+| `fetch(url, options)`, `$fetch(url, options)`, `useFetch(url, options)` | Request; a literal `method` gives the method, no options means `GET`, and options the scanner cannot read leave it out |
+| `axios.get`, `.post`, `.put`, `.patch`, `.delete`, `.head`, `.options` | Request with that method |
+| `axios(config)`, `axios.request(config)` | Request from a literal `url`; a literal `method`, else `GET`, and a computed one leaves the method out |
+| `axios.create({ baseURL })` instances | Request whose path follows that base |
+| `server/api/**` | Endpoint at `/api/...`, with the method its file name states |
+| `server/routes/**` | Endpoint at the path after `server/routes`, with the method its file name states |
+
+`fetch` counts unless the project declares a `fetch` of its own. `$fetch` and
+`useFetch` must resolve to a declaration outside the project source, such as an
+installed package's types, so a project's own `useFetch` composable, whose body
+decides the URL, is never read as Nuxt's; a project scanned without its
+dependencies installed therefore reports no `$fetch` or `useFetch` request. An
+`axios` client counts only when its name comes from the `axios` import or from a
+`const` holding `axios.create(...)`. A `get` on any other object is never a
+request, and an options object the scanner cannot read, one with a spread, or one
+whose property names are computed states nothing certain.
+
+The endpoints need the project to declare `nuxt`: another server that happens to
+live in `server/` serves paths of its own, which these locations would misstate.
+
+The six [producer decisions](../evidence.md#producer-checklist) for this
+ecosystem:
+
+1. **Prefixes.** A server route under `server/api` serves below `/api`, which its
+   endpoint path states; one under `server/routes` serves from the root. On the
+   client side, only an `axios.create({ baseURL })` base precedes a path.
+2. **Endpoints.** Only the server route files above, and only in a project that
+   declares `nuxt`. `server/middleware/**`,
+   `server/plugins/**`, a component, and a page answer no request of their own. A
+   route whose default export is not a function, including one wrapped by
+   something other than a single handler argument, reports nothing.
+3. **Dynamic or unknown.** `` `/talks/${id}` `` fills one whole segment, so it is
+   dynamic. `` `/talks/${id}-latest` ``, a path built from a parameter, and an
+   unresolvable value are unknown. The query and fragment are dropped, computed or
+   not. A method the scanner cannot read leaves the fact without one, rather than
+   claiming `GET`.
+4. **Local helpers.** Not supported: the URL is read at the client call, so a
+   helper that forwards a path parameter reports unknown text, and its callers
+   report nothing. Author those rows.
+5. **Bases.** A root-relative literal path has no base. A `const` and an
+   object-literal property assigned a literal are literal text; a class field is
+   not, because a constructor can replace it. A value the scanner cannot see, such
+   as an ambient declaration, `process.env`, `import.meta.env` or a constant
+   imported from a package, sets `configured`. A literal host, a parameter, and
+   any other computed value report a leading unknown segment.
+6. **File-location routes.** A route file's path after `server/` is its served
+   path, with `[id]` a parameter, `[...slug]` a catch-all and an `index` file its
+   directory. A `.get`, `.post`, `.put`, `.patch`, `.delete`, `.head` or
+   `.options` suffix in the file name gives the method, and a file without one
+   answers every method. The endpoint names the function the default export
+   designates, including the one `defineEventHandler` receives. A request in a
+   file's own top-level code, which is what `<script setup>` runs on setup, names
+   that file's module operation, so the row starts at the component.
+
 ## Compared operations
 
 `groma lint` and scan findings compare Vue operations under the

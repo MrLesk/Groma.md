@@ -1,0 +1,5 @@
+{
+  "name": "vue-http-fixture",
+  "private": true,
+  "dependencies": { "vue": "3.5.42", "nuxt": "3.14.1592", "axios": "1.7.9" }
+}

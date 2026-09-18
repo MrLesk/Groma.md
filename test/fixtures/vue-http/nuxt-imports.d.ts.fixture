@@ -1,0 +1,2 @@
+declare function $fetch(url: string, options?: object): Promise<unknown>
+declare function useFetch(url: string, options?: object): { data: unknown }
