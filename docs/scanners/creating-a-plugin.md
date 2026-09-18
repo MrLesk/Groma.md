@@ -408,7 +408,11 @@ It may also supply `startLine`, `endLine`, and `tokens`: a binding-normalized
 sequence of the operation body. Local names become slots; operators, literals,
 property names, and unresolved identifiers stay visible. Core compares those
 tokens to report architecture findings; the scanner does not decide that
-duplication is a problem. Plugins that do not tokenize omit these fields.
+duplication is a problem. The
+[compared operations rule](../architecture-findings.md#compared-operations)
+states which operations carry tokens, so a scanner tokenizes no anonymous
+callback and filters no body by size. Plugins that do not tokenize omit these
+fields.
 An invocation has its caller operation `source`, canonical operation `targets`,
 one-based call `line`, and an explicit `unresolved` boolean. A named member call
 also supplies `member`. When a concrete argument supplies the invoked value,

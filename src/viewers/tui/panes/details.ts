@@ -53,13 +53,15 @@ function declarationRows(
   const key = `${file}:${declaration.line}`
   const lines: Line[] = [styleRow(theme, [plain(theme, `${indent}${name}`), dim(theme, ` · ${facts}`)], width, false, key === actionCursor)]
   let cursor = key === actionCursor ? 0 : undefined
-  lines.push(...copyLines(theme, copiesOf(findings, file, declaration.name, declaration.line), width, `${indent}  `))
+  // A type declares no body, so only an operation row stands for a compared operation.
+  const own = declaration.kind === 'function' ? copiesOf(findings, file, declaration.line) : undefined
+  lines.push(...copyLines(theme, own, width, `${indent}  `))
   if (declaration.kind === 'type') {
     for (const member of declaration.members) {
       const memberKey = `${file}:${member.line}`
       if (memberKey === actionCursor) cursor = lines.length
       lines.push(styleRow(theme, [plain(theme, `${indent}  ${member.name}()`), dim(theme, ` · ${member.visibility} · line ${member.line}`)], width, false, memberKey === actionCursor))
-      lines.push(...copyLines(theme, copiesOf(findings, file, member.name, member.line), width, `${indent}    `))
+      lines.push(...copyLines(theme, copiesOf(findings, file, member.line), width, `${indent}    `))
     }
   }
   return { lines, cursor }

@@ -200,7 +200,7 @@ function memberItem(
   following: readonly boolean[],
   context: CopiesContext,
 ): HTMLElement {
-  const copies = copiesOf(context.findings, file, member.name, member.line)
+  const copies = copiesOf(context.findings, file, member.line)
   return codeEntry(
     file,
     member.name,
@@ -219,7 +219,8 @@ function declarationItem(
   follows: boolean,
   context: CopiesContext,
 ): HTMLElement {
-  const copies = copiesOf(context.findings, file, declaration.name, declaration.line)
+  // A type declares no body, so only an operation row stands for a compared operation.
+  const copies = declaration.kind === 'function' ? copiesOf(context.findings, file, declaration.line) : undefined
   const host = codeEntry(
     file,
     declaration.name,
