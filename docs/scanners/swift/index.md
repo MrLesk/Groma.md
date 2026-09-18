@@ -54,7 +54,8 @@ modifier or the internal default.
 Named operation bodies carry source ranges and tokens for `groma lint`.
 Lexically bound parameter and local variable names become numbered slots.
 Operators, member names, argument labels, literals and unresolved names remain
-distinct. Anonymous closures, property accessors and module initialization do
+distinct. Every parenthesis the source writes stays a token, so `(a + b) * c`
+and `a + b * c` differ. Anonymous closures, property accessors and module initialization do
 not carry comparable tokens.
 
 In OKF, the result remains ordinary Code links and readable Markdown.

@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@claude'
 created_date: '2026-09-16 20:42'
-updated_date: '2026-09-18 14:33'
+updated_date: '2026-09-18 19:52'
 labels: []
 dependencies: []
 references:
@@ -21,6 +21,7 @@ modified_files:
   - test-bun/architecture-findings.test.ts
   - docs/scanners/creating-a-plugin.md
   - packages/scanner/src/index.ts
+  - docs/scanners/swift/index.md
 type: feature
 ordinal: 490000
 ---
@@ -54,6 +55,14 @@ ordinal: 490000
 3. Cover the fix with a focused test whose fixture operations carry qualified names.
 4. Point scanner authors at the shared rule from docs/scanners/creating-a-plugin.md and from the ScanOperation tokens comment.
 5. Verify the change in a detached worktree with bun run check, plus the per-language duplicate suites.
+
+Review-fix round (external reviews of cf8e7975):
+6. Fix (Codex must-fix): copiesOf joined a code row to the innermost instance holding its line, so two operations on one line both took the first one's instance and the second listed itself as its own copy. copiesOf now also takes the row's name: among instances tied as innermost at that line, the one whose name ends in the row's name is the row's operation; when that still does not decide, the row shows no copies rather than wrong ones. The web code list and the terminal details pane pass the row name.
+7. Fix (Codex-all #2): the same physical operation observed by two scanners (for example a .ts file the TypeScript and Vue scanners both read) became an exact finding with itself. Core drops repeated candidates of one operation, keyed by file and source position (or line range and name when a scanner reports no position).
+8. Docs (Grok-all, coordinator): docs/architecture-findings.md states the minimum grouping rule (an operator expression used as an operand keeps its grouping, so (a + b) * c and a + b * c differ; each scanner page states the parentheses it keeps), states per language whether methods of an anonymous class are compared, and states that Angular and React operations carry tokens only through the TypeScript scanner. The constructor wording already matches: the TypeScript-family tokenizer now compares constructors with a body (TASK-424.7).
+9. Regression tests in test-bun/architecture-findings.test.ts.
+
+10. Cold review: copiesOf first narrows the ranges holding the row's line to the operations whose names end in the row's name, then takes the narrowest; not a single one means no copies. Copies are every other instance of the finding. The dedupe in step 7 was withdrawn (see notes). The grouping sentence covers binary, logical and comparison operands, and the Swift page states that it keeps every parenthesis.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
@@ -84,10 +93,20 @@ The dedupe key keeps the operation name, so two operations starting on one line,
 JavaScript and Swift are not in the covered list. Neither scanner exists in the committed repository: git ls-files reports nothing tracked under plugins/scanners/swift, plugins/scanners/javascript, docs/scanners/swift or docs/scanners/javascript, and the committed src/scanner/modules/official-catalog.ts lists ten official scanners without them. Both are uncommitted work in other lanes (TASK-431 and TASK-418), which own their pages and their own entry in this list.
 
 Verification of this round: detached worktree at 21e9e02c holding only this change, bun run check exited 0 (bun 462 pass, 30 skip, 0 fail). The php-duplicates probe still attaches copies to all four code rows, where the previous name join attached none.
+
+Review-fix round (external reviews of cf8e7975).
+Fixed (Codex must-fix): copiesOf joined a code row to the narrowest instance holding its line, so two operations starting on one line both took the first one's instance and the second listed itself as its own copy. copiesOf now also takes the row's name: when several ranges hold the line, because operations nest or share a line, only instances whose scanner name ends in the row's name as a whole identifier (after a trailing parameter list is dropped, as in Shop\OrderService::store or shop.Orders#store(int)) remain, and the narrowest of those is the row's operation; when that is not a single instance the row shows no copies rather than wrong ones. A single holder needs no name. Copies are every other instance of the finding; the old file:line:name key could drop a real second operation. The web code list and the terminal details pane pass the row name.
+Resolved without code (Codex-all #2, overlapping observations): no official pair of scanners puts tokens on the same file. Vue tokenizes only single-file components, TypeScript only .ts and .tsx, and Angular and React report no tokens, so the reported duplicate needs a synthetic observation. A first dedupe by file and position was withdrawn on the coordinator's decision.
+Docs: docs/architecture-findings.md states that a binary, logical or comparison expression used as an operand of another operator keeps its grouping (every tokenizer meets it: TS/JS/Vue around operator expressions, Go, Java, PHP and Swift every parenthesis, C# all but around a primary expression, Rust around operator expressions, Python structurally), that anonymous-class methods are compared in TypeScript, JavaScript, Vue and PHP and are anonymous callbacks in Java while the other languages cannot declare methods on an anonymous type (a probe confirmed class-expression methods are compared), and that Angular and React files are compared only through the TypeScript scanner. docs/scanners/swift/index.md states that every source parenthesis stays a token. The constructor wording (Grok-all) already matched after TASK-424.7.
+Tests: test-bun/architecture-findings.test.ts 'operations starting on one line each take the other as their copy' covers equal ranges, an undecidable name and a second operation ending on line 3; it fails at cf8e7975.
+Verification: isolated worktree at e53a717e with only this change, bun run check exit 0 (biome 2 warnings and 2 infos in untouched files, tsc clean, node 16 pass, bun 579 pass 35 skip 0 fail).
+Other lanes: the Swift evidence sets an operation's startLine from its body brace (Evidence.swift), so a signature split over lines can miss its copies; docs/scanners/php/index.md calls skipping assigned closures a PHP exception to the shared rule.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
 Every official language scanner (TypeScript, Vue, Java, C#, Go, Rust, Python, PHP) reports operation source ranges and binding-normalized tokens, and groma lint compares them through one core comparison; docs/architecture-findings.md now lists those languages with a link to each scanner page's Compared operations section and notes that comparing a function literal assigned to a name is a per-language decision. The parent also fixed the code listing: copies attached to a row by operation name, so a scanner that qualifies names (PHP's Launch\\isReady) showed none; copiesOf now joins by file and containing source range, with the web code list, the terminal details pane and a focused qualified-name test following. Verified in a detached worktree holding only this change: bun run check exited 0 (node 16 pass, bun 458 pass, 0 fail), the opt-in Go, Rust and C# suites passed after building their workers, and a probe over the php-duplicates fixture showed the old name join attaching copies to 0 rows where the range join attaches them to all 4.
+
+Review-fix round: a code row now finds its operation by line and, where ranges share or nest over that line, by its own name, so operations written on one line no longer list themselves as copies (regression test fails at cf8e7975). The shared compared-operations doc now states the grouping minimum, the per-language anonymous-class rule and that Angular and React files are compared through the TypeScript scanner; overlapping observations needed no code because no official scanner pair tokenizes the same file. Isolated bun run check exits 0.
 <!-- SECTION:FINAL_SUMMARY:END -->
