@@ -7,4 +7,7 @@ public interface ReviewsClient {
 
     @GetExchange(url = "/featured")
     String featured();
+
+    @GetExchange(ExternalRoutes.LATEST)
+    String latest();
 }

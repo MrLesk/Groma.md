@@ -9,4 +9,9 @@ public class ImportedMethodController {
     public String talks() {
         return "talks";
     }
+
+    @RequestMapping(value = "/audit", method = Verbs.METHOD)
+    public String audit() {
+        return "audit";
+    }
 }
