@@ -135,11 +135,9 @@ operation before opening a map.
      concept-addressed relationship rows and flow steps are repointed. Scans
      match elements through owned files, so a renamed ID survives them. These
      operations validate the whole change before writing.
-     `--detach <file...>` removes those files from the component's Code; the
-     next scan gives a detached file its own component, shared with the other
-     files of its scanner source unit, unless part of that unit still has an
-     owner. Relationship rows naming a file without an owner stay stored and
-     return to the map once a scan owns the file.
+     `--detach <file...>` removes those files from the component's Code.
+     Relationship rows naming a file without an owner stay stored and return to
+     the map once a scan owns the file.
    - A group is a name on each sibling component and is addressed as
      `<container-id>/<group-kebab>`: `groma add group <name> <ids...>` names
      it, `groma edit group <address> --title <text>` renames every member,

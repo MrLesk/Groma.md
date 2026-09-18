@@ -142,7 +142,7 @@ export function registerWriteCommands(program: Command): void {
     .option('--ungroup', 'remove this component from its group')
     .option('--parent <id>', 'move an empty scanned component to this container, or a container to this system')
     .option('--combine <ids...>', 'combine empty sibling systems, containers or components into this one; their containers, components or files move to it')
-    .option('--detach <files...>', 'remove these source files from the component; the next scan gives a detached file its own component, shared with the other files of its source unit, unless part of that unit still has an owner')
+    .option('--detach <files...>', 'detach these source files from the component')
     .option('--id <new-id>', 'rename this element; its document and the documents under it move with it')
     .addHelpText('after', '\nAgent guides: groma agent-instructions')
     .action(async (id: string, ids: string[], options) => {

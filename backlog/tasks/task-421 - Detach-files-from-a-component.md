@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@claude'
 created_date: '2026-09-16 20:42'
-updated_date: '2026-09-18 18:08'
+updated_date: '2026-09-18 23:09'
 labels: []
 dependencies: []
 references:
@@ -69,6 +69,8 @@ Curation can combine components and move empty ones, but it cannot take a file o
 8. Refuse a detach that would leave a flow step without its relationship: rebuild the model with the detached document and resolve each stored flow before writing, like relation removal refuses a relationship a flow uses.
 
 Review-fix round (external reviews at cf8e7975): Codex and Grok report no material finding for detach. One verified documentation finding (grok-all): the --detach help in src/write-commands.ts and the human overview in src/instructions.ts say the next scan gives detached files their own component, but a scan returns a detached file to the owner of the rest of its source unit (test-bun/detach.test.ts covers that). Both now say so. Skipped: repointing links for combine and move (declined by the orchestrator, recorded in TASK-426); the 'not scanned yet' explanation of a detached file belongs to TASK-413 in another lane.
+
+Simplicity round (cold junior-maintainer review): the source-unit clause of detach stays only in the structure guide's Splits section; the --detach help, the human overview and the product model say only that detach takes files out of a component.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
@@ -85,6 +87,8 @@ Accepted optional findings: relationship-markdown.ts no longer looks up file own
 Re-verification: bun run check in an isolated worktree at 9b574bc5 with only TASK-421 changes (docs/component-markdown.md limited to my hunk) passed: biome and tsc clean apart from existing warnings in other files, 16 node tests and 390 bun tests pass (24 skipped), 0 fail. The scratch-repository CLI flow still detaches, rescans into its own component, and recombines.
 
 Review-fix round (external reviews at cf8e7975): Codex and Grok reported no material finding for detach. Fixed one documentation finding (grok-all): the --detach help (src/write-commands.ts), the human overview (src/instructions.ts) and docs/product-model.md now all say that the next scan gives a detached file its own component, shared with the other files of its source unit, unless part of that unit still has an owner; test-bun/detach.test.ts already covers both outcomes, and the structure guide already said so. Skipped: repointing links on combine and move (declined by the orchestrator, recorded in TASK-426); the 'not scanned yet' explanation of a detached file belongs to TASK-413. Verification: wording only; biome clean on the changed source files, groma edit --help and groma instructions render the new text, test-bun/agent-instructions.test.ts and test-bun/detach.test.ts pass.
+
+Simplicity round (cold junior-maintainer review): the source-unit clause of detach stays only in the structure guide's Splits section; the --detach help, the human overview and docs/product-model.md now say only that detach takes files out of a component, so the rule has one home. Verification: bun run check in an isolated worktree at 3fdd5572 with only these changes passed: biome clean apart from existing diagnostics in other files, tsc clean, 16 node and 593 bun tests pass (35 skipped), 0 fail.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
@@ -93,4 +97,6 @@ Review-fix round (external reviews at cf8e7975): Codex and Grok reported no mate
 groma edit <component> --detach <file...> takes source files out of a component: it refuses files the component does not own, a detach that would leave a flow step without its relationship, and a combine in the same edit, writing nothing in each case, and otherwise reports the changed document and affected id. Relationship rows naming a file that lost its owner stay stored and off the map, so loading and the next scan keep working; the scan then gives each detached file its own component, which combine or move places, while a partly detached scanner source unit returns to its owner. The architecture write commands moved from src/cli.ts (498 lines) into src/write-commands.ts to make room. Verified with test-bun/detach.test.ts (detach, refusals, rescan, recombination, source units, flow safety), a scratch Git repository driven through the real CLI, and bun run check in an isolated worktree (16 node and 390 bun tests pass).
 
 Review-fix round: the --detach help, the human overview and the product model now agree with the scan: a detached file gets its own component, shared with the rest of its source unit, unless part of that unit still has an owner. Wording only; verified by rendering the help and guide and by the detach and agent-instructions tests.
+
+Simplicity round: the detach source-unit rule now lives only in the structure guide, and the help, overview and product model say only that detach takes files out of a component; verified with bun run check in an isolated worktree.
 <!-- SECTION:FINAL_SUMMARY:END -->
