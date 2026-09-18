@@ -79,40 +79,65 @@ function removablePrefix(prefix: Segment | undefined, next: Segment | undefined,
   return prefix?.kind === 'literal' && next?.kind === 'literal' && other?.kind === 'literal' && sameText(next.value, other.value)
 }
 
-/**
- * Routing precedence as a rank, lowest first: an exact path before one that needs a leading
- * segment removed, and a literal or parameter path before a catch-all.
- */
-function matchRank(
+/** How exactly an endpoint matched: an exact path first, then its segments from most specific. */
+interface Specificity {
+  exact: number
+  /** One score per declared segment: a literal is 0, a parameter 1, a catch-all 2. */
+  segments: number[]
+}
+
+function segmentScore(segment: HttpEndpointSegment): number {
+  if (segment.kind === 'literal') return 0
+  return segment.kind === 'parameter' ? 1 : 2
+}
+
+/** Routers resolve segment by segment, so the first position that differs decides. */
+function moreSpecific(left: Specificity, right: Specificity): number {
+  if (left.exact !== right.exact) return left.exact - right.exact
+  const length = Math.max(left.segments.length, right.segments.length)
+  for (let index = 0; index < length; index += 1) {
+    const difference = (left.segments[index] ?? 3) - (right.segments[index] ?? 3)
+    if (difference !== 0) return difference
+  }
+  return 0
+}
+
+function matchSpecificity(
   endpoint: readonly HttpEndpointSegment[],
   request: readonly KnownSegment[],
   dynamicFillsLiteral: boolean,
-): number | undefined {
-  const catchAll = endpoint.some(segment => segment.kind === 'catch-all') ? 1 : 0
-  if (matches(endpoint, request, dynamicFillsLiteral)) return catchAll
-  if (removablePrefix(request[0], request[1], endpoint[0]) && matches(endpoint, request.slice(1), dynamicFillsLiteral)) return 2 + catchAll
-  if (removablePrefix(endpoint[0], endpoint[1], request[0]) && matches(endpoint.slice(1), request, dynamicFillsLiteral)) return 2 + catchAll
+): Specificity | undefined {
+  const segments = endpoint.map(segmentScore)
+  if (matches(endpoint, request, dynamicFillsLiteral)) return { exact: 0, segments }
+  if (removablePrefix(request[0], request[1], endpoint[0]) && matches(endpoint, request.slice(1), dynamicFillsLiteral)) {
+    return { exact: 1, segments }
+  }
+  if (removablePrefix(endpoint[0], endpoint[1], request[0]) && matches(endpoint.slice(1), request, dynamicFillsLiteral)) {
+    return { exact: 1, segments: segments.slice(1) }
+  }
   return undefined
 }
 
 interface Match {
   endpoint: ServedEndpoint
-  rank: number
+  specificity: Specificity
   /** The request reaches this endpoint without a dynamic segment standing in for a literal. */
   certain: boolean
 }
 
-/** Only the endpoints a router would prefer stay; a more specific route hides a fallback. */
+/** Only the endpoints a router would prefer stay; a more specific route hides a looser one. */
 function preferredMatches(request: SentRequest, endpoints: readonly ServedEndpoint[]): Match[] {
   const found: Match[] = []
   for (const endpoint of endpoints) {
     if (endpoint.method !== '*' && endpoint.method !== request.method) continue
-    const rank = matchRank(endpoint.path, request.path, true)
-    if (rank === undefined) continue
-    found.push({ endpoint, rank, certain: matchRank(endpoint.path, request.path, false) === rank })
+    const specificity = matchSpecificity(endpoint.path, request.path, true)
+    if (specificity === undefined) continue
+    const certain = matchSpecificity(endpoint.path, request.path, false)
+    found.push({ endpoint, specificity, certain: certain !== undefined && moreSpecific(certain, specificity) === 0 })
   }
-  const best = Math.min(...found.map(match => match.rank))
-  return found.filter(match => match.rank === best)
+  const best = found.map(match => match.specificity)
+    .reduce<Specificity | undefined>((least, item) => least === undefined || moreSpecific(item, least) < 0 ? item : least, undefined)
+  return best === undefined ? [] : found.filter(match => moreSpecific(match.specificity, best) === 0)
 }
 
 /** Every preferred endpoint must be in one file, and at least one must be reached certainly. */

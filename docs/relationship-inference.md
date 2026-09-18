@@ -134,11 +134,14 @@ therefore derives a row only when all of these hold:
    also be equal after removing one leading literal segment that only one side
    states, such as `/api` or a deployment path, when both sides then continue
    with the same literal.
-4. Only the endpoints a router would prefer remain: an exact path hides one
-   that needed a leading segment removed, and a literal or parameter path hides
-   a catch-all. A fallback route therefore no longer blocks a specific route.
-   Exactness is compared first, so a request to `/api/talks` prefers another
-   file's exact `/api/:rest+` over a `/talks` that needs `/api` removed.
+4. Only the endpoints a router would prefer remain, in this order. An exact
+   path hides one that needed a leading segment removed, so a request to
+   `/api/talks` prefers another file's exact `/api/:rest+` over a `/talks` that
+   needs `/api` removed. Otherwise the paths are compared segment by segment,
+   where a literal is more specific than a parameter and a parameter more
+   specific than a catch-all, and the first position that differs decides. A
+   request to `/api/account` therefore prefers that exact route over a fallback
+   `/:first/:second`, and `/ratings/top` over a sibling `/ratings/:token`.
 5. Every remaining endpoint belongs to one file. Several endpoints in that file
    are allowed; endpoints in several files produce no row. A dynamic segment
    could equal a literal at runtime, so a literal path in another file also
