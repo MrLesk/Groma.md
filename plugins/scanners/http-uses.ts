@@ -1,7 +1,10 @@
+import { wrapper, type WrapperCompiler } from './http-syntax.ts'
+
 /*
- * How one reference uses a variable, read from syntax alone: the property path it reaches, and whether it
- * writes there, hands the value on or only reads it. Shared by the TypeScript-family scanners that bundle
- * the classic compiler.
+ * How the sources name and use variables, read from syntax alone: an index of names, imports and dynamic
+ * imports, and for one reference the property path it reaches and whether it writes there, hands the
+ * value on or only reads it. Shared by every TypeScript-family scanner: the classic compiler's and the
+ * native SDK's nodes have the same shape.
  */
 interface Node {
   kind: number
@@ -16,10 +19,14 @@ interface Unary extends Node { operator: number; operand: Node }
 interface Loop extends Node { initializer: Node }
 interface Named extends Node { name: Node }
 interface Initialized extends Node { initializer: Node }
+interface FunctionLike extends Node { parameters: readonly Named[] }
+interface Call extends Node { expression: Node; arguments: readonly Node[] }
+interface ImportDeclaration extends Node { moduleSpecifier: Node }
+interface ImportSpecifier extends Named { propertyName?: Identifier }
 interface Modified extends Node { modifiers?: readonly { kind: number }[] }
 export interface SourceFile extends Node { fileName: string }
 
-export interface UseCompiler {
+export interface UseCompiler extends WrapperCompiler {
   SyntaxKind: {
     FirstAssignment: number; LastAssignment: number; EqualsToken: number; PlusPlusToken: number
     MinusMinusToken: number; ExportKeyword: number
@@ -27,11 +34,6 @@ export interface UseCompiler {
   isIdentifier(node: Node): node is Identifier
   isPropertyAccessExpression(node: Node): node is Access
   isElementAccessExpression(node: Node): node is ElementAccess
-  isParenthesizedExpression(node: Node): node is Wrapped
-  isAsExpression(node: Node): node is Wrapped
-  isSatisfiesExpression(node: Node): node is Wrapped
-  isNonNullExpression(node: Node): node is Wrapped
-  isTypeAssertionExpression(node: Node): node is Wrapped
   isBinaryExpression(node: Node): node is Binary
   isPrefixUnaryExpression(node: Node): node is Unary
   isPostfixUnaryExpression(node: Node): node is Unary
@@ -74,11 +76,6 @@ export interface Use {
   value: Node
   /** What a plain `=` assignment writes at the path. */
   assigned?: Node
-}
-
-function wrapper(ts: UseCompiler, node: Node): node is Wrapped {
-  return ts.isParenthesizedExpression(node) || ts.isAsExpression(node) || ts.isSatisfiesExpression(node)
-    || ts.isNonNullExpression(node) || ts.isTypeAssertionExpression(node)
 }
 
 /** A part of a destructuring pattern, which an assignment above it writes to. */
@@ -194,4 +191,127 @@ export function scriptFile(ts: UseCompiler, source: SourceFile, names: ReadonlyM
   const exporting = ['module', 'exports'].some(name => (names.get(name) ?? [])
     .some(node => ts.isPropertyAccessExpression(node.parent) && node.parent.expression === node))
   return !required && !exporting
+}
+
+export interface IndexCompiler extends UseCompiler {
+  SyntaxKind: UseCompiler['SyntaxKind'] & { ImportKeyword: number }
+  forEachChild(node: Node, visit: (child: Node) => void): void
+  isVariableDeclaration(node: Node): node is Named
+  isParameter(node: Node): node is Named
+  isCallExpression(node: Node): node is Call
+  isAwaitExpression(node: Node): node is Wrapped
+  isArrowFunction(node: Node): node is FunctionLike
+  isFunctionExpression(node: Node): node is FunctionLike
+  isImportDeclaration(node: Node): node is ImportDeclaration
+  isImportSpecifier(node: Node): node is ImportSpecifier
+}
+
+/**
+ * The name a dynamic `import()` binds its module object to: `const m = await import(...)` or
+ * `.then(m => ...)`. Any other use, a promise held in a variable included, hands the module on.
+ */
+function dynamicBinding(ts: IndexCompiler, call: Call): Identifier | undefined {
+  let holder: Node = call
+  let awaited = false
+  while (ts.isAwaitExpression(holder.parent) || ts.isParenthesizedExpression(holder.parent)) {
+    awaited ||= ts.isAwaitExpression(holder.parent)
+    holder = holder.parent
+  }
+  const parent = holder.parent
+  if (ts.isVariableDeclaration(parent)) return awaited && ts.isIdentifier(parent.name) ? parent.name : undefined
+  const then = ts.isPropertyAccessExpression(parent) && parent.expression === holder && !awaited ? parent.parent : undefined
+  const callback = then !== undefined && ts.isCallExpression(then) ? then.arguments[0] : undefined
+  if (callback === undefined || (!ts.isArrowFunction(callback) && !ts.isFunctionExpression(callback))) return undefined
+  const [first] = callback.parameters
+  return first !== undefined && ts.isIdentifier(first.name) ? first.name : undefined
+}
+
+export interface DynamicImport {
+  call: Call
+  /** The name its module object is bound to, or undefined when the module is handed on otherwise. */
+  binding?: Identifier
+}
+
+export interface Index {
+  names: Map<string, Identifier[]>
+  /** Local names imports bind. */
+  imported: Set<string>
+  dynamic: DynamicImport[]
+  /** Default imports by module. */
+  defaults: Map<string, Node[]>
+}
+
+/** The module a default import names: `import http from 'm'` or `import { default as http } from 'm'`. */
+function defaultImport(ts: IndexCompiler, name: Identifier): { declaration: Node; module: string } | undefined {
+  const parent = name.parent
+  let statement: Node | undefined
+  if (ts.isImportClause(parent) && parent.name === name) statement = parent.parent
+  else if (ts.isImportSpecifier(parent) && parent.name === name && parent.propertyName?.text === 'default') {
+    statement = parent.parent.parent.parent
+  }
+  if (statement === undefined || !ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier)) return undefined
+  return { declaration: parent, module: statement.moduleSpecifier.text }
+}
+
+function indexName(ts: IndexCompiler, index: Index, node: Identifier): void {
+  const same = index.names.get(node.text)
+  if (same === undefined) index.names.set(node.text, [node])
+  else same.push(node)
+  if (importedName(ts, node)) index.imported.add(node.text)
+  const imported = defaultImport(ts, node)
+  if (imported !== undefined) index.defaults.set(imported.module, [...index.defaults.get(imported.module) ?? [], imported.declaration])
+}
+
+export function indexSources(ts: IndexCompiler, sources: readonly SourceFile[]): Index {
+  const index: Index = { names: new Map(), imported: new Set(), dynamic: [], defaults: new Map() }
+  const visit = (node: Node): void => {
+    if (ts.isIdentifier(node)) indexName(ts, index, node)
+    if (ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword) {
+      const binding = dynamicBinding(ts, node)
+      index.dynamic.push({ call: node, ...(binding === undefined ? {} : { binding }) })
+    }
+    ts.forEachChild(node, visit)
+  }
+  for (const source of sources) visit(source)
+  return index
+}
+
+export function startsWith(path: readonly string[], prefix: readonly string[]): boolean {
+  return prefix.length <= path.length && prefix.every((name, index) => path[index] === name)
+}
+
+/**
+ * The use a name that refers to a variable makes of it: `var` declaring it again assigns it, an export
+ * statement names it, and a module object reaches it as a property name, `ns.name`.
+ */
+export function useAt(ts: IndexCompiler, node: Identifier): Use {
+  const parent = node.parent
+  if (ts.isVariableDeclaration(parent) && parent.name === node) return { kind: 'write', path: [], reference: node, value: node }
+  if (exportStatement(ts, node)) return { kind: 'export', path: [], reference: node, value: node }
+  const accessed = ts.isPropertyAccessExpression(parent) && parent.name === node
+  return useOf(ts, accessed ? parent : node)
+}
+
+/** A use of a module object other than reading one export by name, `ns.name`, or declaring the name. */
+export function objectUse(ts: IndexCompiler, node: Identifier): boolean {
+  const parent = node.parent
+  const named = ts.isPropertyAccessExpression(parent) && parent.expression === node && ts.isIdentifier(parent.name)
+  const declaring = (ts.isVariableDeclaration(parent) || ts.isParameter(parent)) && parent.name === node
+  return !named && !declaring && !importedName(ts, node) && !typePosition(ts, node)
+}
+
+/**
+ * How one use bears on what the sources set below `path`: nothing, a plain assignment to one of `keys`,
+ * or a change unless the checker finds it only reads a primitive. Handing the variable itself on is not
+ * counted.
+ */
+export type SettingEffect = { kind: 'none' } | { kind: 'assigns'; key: string; value: Node } | { kind: 'changes' }
+
+export function settingEffect(use: Use, path: readonly string[], keys: readonly string[]): SettingEffect {
+  if (use.path.length === 0 || use.kind === 'export') return { kind: 'none' }
+  if (startsWith(path, use.path)) return { kind: 'changes' }
+  const key = startsWith(use.path, path) ? use.path[path.length] : undefined
+  if (key === undefined || !keys.includes(key)) return { kind: 'none' }
+  if (use.assigned !== undefined && use.path.length === path.length + 1) return { kind: 'assigns', key, value: use.assigned }
+  return { kind: 'changes' }
 }

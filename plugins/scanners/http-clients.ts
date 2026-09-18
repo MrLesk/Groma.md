@@ -1,4 +1,5 @@
 import type { ScanHttpRequest } from '@groma/scanner'
+import { holderOf, urlText } from './http-syntax.ts'
 import { computedPart, joinBase, requestUrl, type UrlPart } from './http-url.ts'
 import {
   declarationOf, heldAt, heldParts, importOrigin, methodName, urlParts, type UrlCompiler, type UrlContext,
@@ -57,11 +58,6 @@ export function optionsBase(context: ClientContext, config: Node | undefined, fa
 export function optionsMethod(context: ClientContext, options: Node | undefined): { method?: string } {
   const method = declaredMethod(context, options, 'GET')
   return method === undefined ? {} : { method }
-}
-
-function urlText(ts: ClientCompiler, node: Node): boolean {
-  if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node) || ts.isTemplateExpression(node)) return true
-  return ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.PlusToken
 }
 
 /**
@@ -148,15 +144,6 @@ export function axiosRequest(context: ClientContext, call: Call): RequestFact | 
   return sent(context, client, urlParts(context, first), undefined, second)
 }
 
-/** The variable whose initializer is the expression. */
-function holderOf(context: ClientContext, node: Node): Node | undefined {
-  const { ts } = context
-  let current = node
-  while (ts.isParenthesizedExpression(current.parent) || ts.isAsExpression(current.parent)
-    || ts.isSatisfiesExpression(current.parent) || ts.isNonNullExpression(current.parent)) current = current.parent
-  return ts.isVariableDeclaration(current.parent) ? current.parent : undefined
-}
-
 /** The axios default export; a named export such as `isAxiosError` or `post` is not a client. */
 function isAxios(context: ClientContext, node: Node): boolean {
   const origin = importOrigin(context, node)
@@ -180,7 +167,7 @@ function createdClient(context: ClientContext, node: Node): Client | undefined {
   const inherited: Client = { base: parent.base.length === 0 ? [] : [computedPart], method: parent.method === 'GET' ? 'GET' : undefined }
   const [config] = call.arguments
   const client = { base: optionsBase(context, config, inherited.base), method: declaredMethod(context, config, inherited.method) }
-  const holders = [declarationOf(context, node), holderOf(context, call)].filter(holder => holder !== undefined)
+  const holders = [declarationOf(context, node), holderOf<Node>(context.ts, call)].filter(holder => holder !== undefined)
   return withDefaults(context, client, [...new Set(holders)])
 }
 

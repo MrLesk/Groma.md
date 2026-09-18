@@ -41,3 +41,9 @@ export const reassigned = () => mutable.get('/talks')
 export const unresolved = (options: object) => axios('/api/talks', options)
 
 export const Talks = () => <button type="button" onClick={() => void list()}>Talks</button>
+
+declare global {
+  const API_ROOT: string
+}
+
+export const ambientGlobal = () => fetch(`${API_ROOT}/talks`)

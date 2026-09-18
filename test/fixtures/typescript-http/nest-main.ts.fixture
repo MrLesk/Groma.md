@@ -1,0 +1,5 @@
+import { NestFactory } from '@nestjs/core'
+
+export async function bootstrap(module: unknown): Promise<void> {
+  await NestFactory.create(module)
+}

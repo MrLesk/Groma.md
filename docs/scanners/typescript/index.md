@@ -73,37 +73,49 @@ These named operations are not compared yet:
 
 The scanner reports [HTTP facts](../evidence.md#http-endpoints-and-requests) for
 the clients and routers it recognizes by the module their names are imported
-from, in the file that uses them. A wrapper that re-exports a framework, a
-factory that returns an application, and a registrar received as a parameter,
-such as a Fastify plugin's `fastify`, are not recognized.
+from, in the file that uses them. The checker decides what a name means, so a
+parameter or local that shadows an import is not that import. A wrapper that
+re-exports a framework, a factory that returns an application, and a registrar
+received as a parameter, such as a Fastify plugin's `fastify`, are not
+recognized, and an application or router is one only while a `const` holds it.
 
 | Construct | Reported |
 | --- | --- |
-| `fetch(url, init)` | Request; the method comes from a literal `method`, else `GET` |
+| `fetch(url, init)` | Request; a literal `method` gives the method, no options means `GET`, and options the scanner cannot read leave it out |
 | `axios.get`, `.post`, `.put`, `.patch`, `.delete`, `.head`, `.options` | Request with that method |
-| `axios(config)`, `axios.request(config)` | Request from literal `url` and `method`, else `GET` |
-| `axios.create({ baseURL })` instances | Request whose path follows that base |
+| `axios(config)`, `axios.request(config)` | Request from the config's `url`; its `method`, else the client's, else `GET` |
+| `axios.create(config)` instances | Request whose path follows the config's `baseURL`, and whose method defaults to the config's |
 | `express()` and `express.Router()` | Endpoint per `get`, `post`, `put`, `patch`, `delete`, `head`, `options`, `all` call with a handler |
 | `Fastify()` | The same calls, and `route({ method, url, handler })`, including a method array |
 | `new Hono()` | The same calls |
 | `@Controller` classes | Endpoint per `@Get`, `@Post`, `@Put`, `@Patch`, `@Delete`, `@Head`, `@Options`, `@All` method from `@nestjs/common` |
 | `Bun.serve({ routes })` | Endpoint per route: a function serves every method, an object one endpoint per known method key |
 
-The six [producer decisions](../evidence.md#producer-checklist) for this
-ecosystem:
+Values and options follow the shared rules the framework scanners apply, as
+the [React scanner](../react/index.md#http-endpoints-and-requests) states them:
+a changed, duplicated or computed option is never taken for the literal it once
+held, options the scanner cannot read leave the method out and, for axios, the
+base unknown, and a `fetch` input that is not a URL, such as a `Request`, states
+no method. A request's own `baseURL` replaces the client's; a base joins a
+relative path with one slash, and an absolute URL replaces it. Exactly one
+assignment to `defaults.baseURL` or `defaults.method` on `axios` or on an
+instance sets it, and any other change to `defaults` hides both; interceptors
+and code a client is handed to are not read.
+
+The [producer decisions](../evidence.md#producer-checklist) for this ecosystem:
 
 1. **Prefixes.** A route's path includes its `@Controller` prefix and every
-   mount prefix, from `app.use('/api', router)` and `app.route('/v1', child)`.
-   A router mounted twice reports one endpoint per prefix. A router this scan
-   never sees mounted, a mount whose prefix is not literal, and a mount on a
-   host the scan does not recognize, such as `createApp().use('/api', router)`,
-   report nothing; an application instance without a mount serves from the root.
-   A Fastify plugin registered with a `prefix` reports nothing, because its
-   routes are registered on the plugin's parameter. A controller is the
-   exception: its endpoints are reported without seeing its module
-   registration, so a `setGlobalPrefix` path is missing from them, which core's
-   single leading segment tolerates.
-2. **Endpoints.** Only the route registrations above. `use` with one argument,
+   mount prefix, from `app.use('/api', router)`, `app.use(router)` and
+   `app.route('/v1', child)`. A router mounted twice reports one endpoint per
+   prefix. A router this scan never sees mounted, and a mount on a host the scan
+   does not recognize, such as `createApp().use('/api', router)`, report
+   nothing; an application instance without a mount serves from the root. A
+   Fastify plugin registered with a `prefix` reports nothing, because its routes
+   are registered on the plugin's parameter. A controller is the exception: its
+   endpoints are reported without seeing its module registration, so a
+   `setGlobalPrefix` path is missing from them, which core's single leading
+   segment tolerates.
+2. **Endpoints.** Only the route registrations above. `use` without a path,
    middleware, and a `Bun.serve` `fetch` handler are not endpoints, and
    `app.get('name')` without a handler reads a setting. A route value the scan
    cannot read, such as a spread of handlers, claims no method.
@@ -112,17 +124,60 @@ ecosystem:
    unresolvable value are unknown. A query string is dropped, computed or not.
 4. **Local helpers.** Not supported: the URL is read at the client call only, so
    a helper that forwards a parameter reports unknown text. Author those rows.
-5. **Bases.** A `const` assigned a literal once, an object-literal property, and
-   a template of those are literal text. `process.env.X` and
-   `import.meta.env.X` set `configured` whatever declares them, as does any
-   value whose root is declared outside project source, such as an imported
-   package constant. A literal scheme and host, and a value computed in project
-   source, report a leading unknown segment. An `axios.create` instance must be
-   a `const`, because a reassignable one can change its base.
+5. **Bases.** A variable with a literal initializer that the program never
+   assigns again, a property of an object literal it holds while nothing in the
+   program can change that property, and a template of those are literal text.
+   A value the scanner cannot see is configuration and sets `configured`:
+   `process.env.X`, `import.meta.env.X`, a name only a declaration file or a
+   `declare` statement states, an imported package constant, and a field read
+   through `this`, which holds the client's own base. Text that continues a
+   configured value's last segment instead of starting with `/`, a literal
+   scheme and host, also when literal pieces only state it together, a
+   parameter, a value a call returns, and any other computed value report a
+   leading unknown segment.
 6. **File-location routes.** None: TypeScript projects declare routes in code,
    so every endpoint names its resolved handler, or the registering operation
    when the handler is not certain.
-
-Supported route patterns are literal text, `:name`, `:name?`, and a trailing
-`*` or `*name`. A regular-expression parameter, an optional group, and a
-mid-path wildcard report nothing for that route.
+7. **Constrained segments.** Route patterns are literal text, `:name`, `:name?`,
+   Express 5's trailing optional group `{/:name}`, and a trailing `*`, `*name`,
+   `(.*)` or `:name(.*)` catch-all, which needs at least one segment because a
+   request path cannot tell `/files` from `/files/`; Hono's trailing `*` also
+   matches the path without it, so it is an optional catch-all. A pattern
+   parameter, such as `:id(\d+)` or Hono's `:id{[0-9]+}`, and text mixed with a
+   placeholder, such as `talk-:id`, are constrained parameters. A pattern that
+   may span segments or that the scanner cannot state, such as another optional
+   group or a mid-path wildcard, becomes a constrained optional catch-all in
+   place of itself and the rest of the route, so no route is omitted.
+8. **Registration order.** Express, Hono and NestJS behind Express take the
+   first registered match, so their endpoints carry `order`: the file that
+   creates the application, and a position. A registrar's entries are its
+   registrations and the references that hand it to other code, such as
+   `registerRoutes(app)`, in the file that creates it and in every file that
+   registers on it. A module's top-level statements all run when it is first
+   imported, so a file that only imports the registrar and hands it on runs
+   after every top-level registration of the file it imports it from, and what
+   it registers that late cannot capture a request those routes match; a
+   circular import is the accepted exception. Serving it, with `listen`, Node's
+   `createServer(app)`, an imported `serve(app)`, `export default app` or
+   `module.exports = app`, registers nothing. When every entry is a top-level
+   statement of one file, they run in source order, and the calls of a chain
+   such as `app.get('/a', list).post('/a', save)` in the order they are written;
+   a chain continues through Express's `set`, `enable`, `disable` and `engine`,
+   which return the application. A mounted router's routes take the mount's
+   place in that order, and routers one call mounts, as in
+   `app.use('/admin', users, audit)`, follow in the order it lists them.
+   Otherwise, as for an entry inside a function or an `if`, the registrar's
+   routes share one position, which the rest of its application shares too when
+   the registrar is the application, and every NestJS route shares one, because
+   the scan does not follow their order. An entry the scan sees but cannot read
+   still takes its place as its readable prefix followed by a constrained
+   optional catch-all, with method `*` unless the call states one, named by the
+   registering operation: a route with a computed path, a mount under a computed
+   prefix, a path mounted to something other than a recognized router, a route
+   builder such as `app.route('/reports')`, Hono's `on`, `mount` and `basePath`,
+   whose clone registers on the same routes, and a registrar handed to other
+   code, which blocks from its own root. Middleware takes no place: a handler
+   used without a path, `app.use(auth)`, and a handler next to a recognized
+   router in one call, such as `requireAuth` in
+   `app.use('/admin', requireAuth, admin)`. Fastify, Bun.serve and NestJS behind
+   a `FastifyAdapter` prefer the most specific route and carry no order.

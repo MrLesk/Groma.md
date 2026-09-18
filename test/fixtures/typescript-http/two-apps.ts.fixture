@@ -1,0 +1,22 @@
+import express from 'express'
+
+const main = express()
+const late = express()
+
+main.get('/first', first)
+main.get('/second', second)
+module.exports = main
+
+export { late }
+
+export function start(): void {
+  late.get('/late', first)
+}
+
+function first(): string {
+  return 'first'
+}
+
+function second(): string {
+  return 'second'
+}

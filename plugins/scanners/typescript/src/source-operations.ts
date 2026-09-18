@@ -9,6 +9,7 @@ import {
 import { SymbolFlags, type Checker, type Symbol as CompilerSymbol } from 'typescript/unstable/async'
 import type { ScanHttpEndpoint, ScanHttpRequest, ScanInvocation, ScanOperation } from '@groma/scanner'
 
+import { bindingUses } from './http-bindings.ts'
 import { httpEndpoints } from './http-endpoints.ts'
 import { httpRequests } from './http-requests.ts'
 import type { HttpContext } from './http-values.ts'
@@ -270,6 +271,8 @@ async function sourceHttpFacts(
   }
   const context: HttpContext = {
     checker,
+    bindings: bindingUses(checker, sources),
+    file: node => location(root, node).file,
     values: certainValues,
     callerOperation: node => operation(caller(node)),
     async handlerOperation(handler, registration) {

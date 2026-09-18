@@ -1,0 +1,12 @@
+import { hosted } from './hosted-app.ts'
+
+hosted.get('/one', one)
+hosted.get('/two', two)
+
+function one(): string {
+  return 'one'
+}
+
+function two(): string {
+  return 'two'
+}

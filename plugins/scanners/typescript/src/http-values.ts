@@ -1,26 +1,33 @@
 import {
-  isAsExpression, isBinaryExpression, isIdentifier, isImportDeclaration, isNamedImports,
-  isNamespaceImport, isNoSubstitutionTemplateLiteral, isNonNullExpression, isObjectLiteralExpression,
-  isParameterDeclaration, isParenthesizedExpression, isPropertyAccessExpression, isPropertyAssignment,
-  isMetaProperty, isShorthandPropertyAssignment, isSpreadAssignment, isStringLiteral, isTemplateExpression,
-  isVariableDeclaration, NodeFlags, SyntaxKind,
-  type Node, type ObjectLiteralExpression, type ObjectLiteralElementLike, type SourceFile,
+  isBinaryExpression, isFunctionDeclaration, isGetAccessorDeclaration, isIdentifier, isImportClause,
+  isImportDeclaration, isImportSpecifier, isMetaProperty, isNamespaceImport, isNoSubstitutionTemplateLiteral,
+  isObjectLiteralExpression, isPropertyAccessExpression, isPropertyAssignment, isSetAccessorDeclaration,
+  isStringLiteral, isTemplateExpression, isVariableDeclaration, NodeFlags, SyntaxKind,
+  type Node, type SourceFile, type VariableDeclaration,
 } from 'typescript/unstable/ast'
 import { SymbolFlags, type Checker } from 'typescript/unstable/async'
 
-import type { UrlPart } from './http-paths.ts'
+import { ownProperty, propertyKey, unwrapped, type Held as SyntaxHeld } from '../../http-syntax.ts'
+import { computedPart, configuredPart, type UrlPart } from '../../http-url.ts'
+import { syntax, type Bindings } from './http-bindings.ts'
 
-// The framework scanners share the same value rules in ../../http-values.ts, over the classic
-// compiler API; change both together, including the constant, ambient and environment rules.
+/*
+ * The value rules of ../../http-values.ts, which the framework scanners run over the classic compiler,
+ * asked of the native SDK's asynchronous checker. Change both together.
+ */
 
 export interface HttpContext {
   checker: Checker
+  /** How the program's sources use each variable, so a property is read only while nothing changes it. */
+  bindings: Bindings
   /** Certain values of an expression, such as object literals and functions; undefined when unresolved. */
   values(node: Node): Promise<Node[] | undefined>
   /** The operation serving a route: its resolved handler when certain, else the registering operation. */
   handlerOperation(handler: Node | undefined, registration: Node): Promise<string>
   /** The operation that runs this expression. */
   callerOperation(node: Node): string
+  /** The repository-relative path of the file that holds a node. */
+  file(node: Node): string
 }
 
 /** Where a local name comes from, for recognizing a framework without resolving its types. */
@@ -30,103 +37,123 @@ export interface ImportOrigin {
   name: string
 }
 
-const MAX_DEPTH = 8
-const computed: UrlPart = { kind: 'hole', configured: false }
+/** What an expression certainly holds, as ../../http-syntax.ts describes it. */
+export type Held = SyntaxHeld<Node>
 
-function importBinding(statement: Node, name: string): ImportOrigin | undefined {
-  if (!isImportDeclaration(statement) || !statement.importClause) return undefined
-  if (!isStringLiteral(statement.moduleSpecifier)) return undefined
-  const module = statement.moduleSpecifier.text
-  const clause = statement.importClause
-  if (clause.name?.text === name) return { module, name: 'default' }
-  const bindings = clause.namedBindings
-  if (bindings && isNamespaceImport(bindings)) return bindings.name.text === name ? { module, name: '*' } : undefined
-  if (bindings && isNamedImports(bindings)) {
-    const element = bindings.elements.find(entry => entry.name.text === name)
-    if (element) return { module, name: (element.propertyName ?? element.name).text }
-  }
-  return undefined
+const MAX_DEPTH = 8
+const methodToken = /^[A-Z][A-Z-]*$/
+
+/** An import in the name's own file binds the same spelling; the checker then tells whether it is that import. */
+function spelledImport(node: Node): boolean {
+  if (!isIdentifier(node)) return false
+  const source: SourceFile = node.getSourceFile()
+  return source.statements.some(statement => {
+    const clause = isImportDeclaration(statement) ? statement.importClause : undefined
+    if (clause === undefined) return false
+    const bindings = clause.namedBindings
+    const named = bindings !== undefined && !isNamespaceImport(bindings) && bindings.elements.some(entry => entry.name.text === node.text)
+    return clause.name?.text === node.text || (bindings !== undefined && isNamespaceImport(bindings) && bindings.name.text === node.text) || named
+  })
 }
 
-/** The import that introduced this identifier in its own file; re-exported wrappers are not followed. */
-export function importOrigin(node: Node): ImportOrigin | undefined {
-  if (!isIdentifier(node)) return undefined
-  const source: SourceFile = node.getSourceFile()
-  for (const statement of source.statements) {
-    const origin = importBinding(statement, node.text)
-    if (origin) return origin
-  }
-  return undefined
+/** The module an imported name comes from and the export it names; a shadowing name is not the import. */
+export async function importOrigin(node: Node, checker: Checker): Promise<ImportOrigin | undefined> {
+  if (!spelledImport(node)) return undefined
+  const [symbol] = await checker.getSymbolAtLocation([node])
+  const declaration = await symbol?.declarations[0]?.resolve()
+  if (declaration === undefined) return undefined
+  const imported = isImportClause(declaration) ? { clause: declaration, name: 'default' }
+    : isNamespaceImport(declaration) ? { clause: declaration.parent, name: '*' }
+      : isImportSpecifier(declaration)
+        ? { clause: declaration.parent.parent, name: (declaration.propertyName ?? declaration.name).text }
+        : undefined
+  const statement = imported?.clause.parent
+  const specifier = statement !== undefined && isImportDeclaration(statement) ? statement.moduleSpecifier : undefined
+  return specifier !== undefined && isStringLiteral(specifier) ? { module: specifier.text, name: imported!.name } : undefined
 }
 
 export async function declarationOf(node: Node, checker: Checker): Promise<Node | undefined> {
   const [symbol] = await checker.getSymbolAtLocation([node])
   if (!symbol) return undefined
   const canonical = symbol.flags & SymbolFlags.Alias ? await checker.getAliasedSymbol(symbol) : symbol
-  return canonical.valueDeclaration?.resolve()
+  return (canonical.valueDeclaration ?? canonical.declarations[0])?.resolve()
 }
 
-function constantDeclaration(declaration: Node): Node | undefined {
-  if (isPropertyAssignment(declaration)) return declaration.initializer
-  if (!isVariableDeclaration(declaration) || !declaration.initializer) return undefined
-  return declaration.parent.flags & NodeFlags.Const ? declaration.initializer : undefined
+/** A declaration in an ambient context, such as a `declare` statement or `declare global`, whose value lives outside the sources. */
+function ambient(declaration: Node): boolean {
+  return (declaration.flags & NodeFlags.Ambient) !== 0
 }
 
-function referenceRoot(node: Node): Node {
-  let current = node
-  while (isPropertyAccessExpression(current)) current = current.expression
-  return current
+/** A `const`, or a variable declared once that the sources never assign again, keeps its initializer. */
+async function unassigned(declaration: VariableDeclaration, context: HttpContext): Promise<boolean> {
+  if (declaration.parent.flags & NodeFlags.Const) return true
+  const [symbol] = await context.checker.getSymbolAtLocation([declaration.name])
+  return (symbol?.declarations.length ?? 0) === 1 && !await context.bindings.reassigned(declaration)
 }
 
-const configuration: UrlPart = { kind: 'hole', configured: true }
-
-/** `process.env.X` and `import.meta.env.X` read configuration, whatever ambient types declare them. */
-function environmentRead(node: Node): boolean {
-  if (!isPropertyAccessExpression(node) || !isPropertyAccessExpression(node.expression)) return false
-  const owner = node.expression
-  if (owner.name.text !== 'env') return false
-  return isMetaProperty(owner.expression) || (isIdentifier(owner.expression) && owner.expression.text === 'process')
+/** A variable holds its initializer; a property path through it holds only while no use can change it. */
+async function variableHeld(name: Node, path: readonly string[], context: HttpContext, depth: number): Promise<Held> {
+  const declaration = await declarationOf(name, context.checker)
+  if (declaration === undefined || declaration.getSourceFile().fileName.endsWith('.d.ts') || ambient(declaration)) return 'unseen'
+  // A function the name declares is the value it holds, such as a route's handler.
+  if (path.length === 0 && isFunctionDeclaration(declaration)) return { node: declaration }
+  if (!isVariableDeclaration(declaration) || declaration.initializer === undefined) return 'unknown'
+  if (!isIdentifier(declaration.name) || !await unassigned(declaration, context)) return 'unknown'
+  if (path.length > 0 && !await context.bindings.unchanged(declaration, path, name)) return 'unknown'
+  return held(declaration.initializer, path, context, depth + 1)
 }
 
-/** A value the scanner cannot see is configuration when its root is not project source. */
-async function unseenValue(node: Node, context: HttpContext): Promise<UrlPart> {
-  const root = referenceRoot(node)
-  const declaration = isIdentifier(root) ? await declarationOf(root, context.checker) : undefined
-  if (declaration === undefined) return configuration
-  return declaration.getSourceFile().fileName.endsWith('.d.ts') ? configuration : computed
-}
-
-async function referenceParts(node: Node, context: HttpContext, depth: number): Promise<UrlPart[]> {
-  if (environmentRead(node)) return [configuration]
-  const declaration = await declarationOf(node, context.checker)
-  // An ambient declaration has no value the scanner can read, so it is configuration, not computed.
-  if (declaration === undefined || declaration.getSourceFile().fileName.endsWith('.d.ts')) {
-    return [await unseenValue(node, context)]
+async function held(node: Node, path: readonly string[], context: HttpContext, depth: number): Promise<Held> {
+  if (depth > MAX_DEPTH) return 'unknown'
+  const value = unwrapped(syntax, node)
+  const [name, ...rest] = path
+  if (isObjectLiteralExpression(value) && name !== undefined) {
+    const property = ownProperty<Node>(syntax, value, name)
+    if (typeof property !== 'string') return held(property.node, rest, context, depth + 1)
+    return property === 'absent' && rest.length === 0 ? 'absent' : 'unknown'
   }
-  if (isParameterDeclaration(declaration)) return [computed]
-  const constant = constantDeclaration(declaration)
-  return constant === undefined ? [computed] : urlParts(constant, context, depth + 1)
+  if (isPropertyAccessExpression(value) && isIdentifier(value.name)) {
+    return held(value.expression, [value.name.text, ...path], context, depth + 1)
+  }
+  if (isIdentifier(value)) return variableHeld(value, path, context, depth)
+  if (name === undefined) return { node: value }
+  // `import.meta.env` is the runtime's configuration, and a field read through `this` holds the
+  // client's own setting, such as its base URL.
+  return isMetaProperty(value) || value.kind === SyntaxKind.ThisKeyword ? 'unseen' : 'unknown'
+}
+
+/**
+ * What an expression certainly holds, read through variables and object-literal properties: the
+ * expression itself without `path`, else the property at that path of the object it holds.
+ */
+export function heldAt(context: HttpContext, node: Node, ...path: string[]): Promise<Held> {
+  return held(node, path, context, 0)
+}
+
+/** A held value as URL text: a value outside the sources is configuration, anything else unknown is computed. */
+export async function heldParts(context: HttpContext, value: Held): Promise<UrlPart[]> {
+  if (value === 'unseen') return [configuredPart]
+  return typeof value === 'string' ? [computedPart] : urlParts(value.node, context)
 }
 
 /** Resolve a URL expression into literal text and the holes the source computes. */
 export async function urlParts(node: Node, context: HttpContext, depth = 0): Promise<UrlPart[]> {
-  if (depth > MAX_DEPTH) return [computed]
-  if (isStringLiteral(node) || isNoSubstitutionTemplateLiteral(node)) return [{ kind: 'text', text: node.text }]
-  if (isParenthesizedExpression(node) || isAsExpression(node) || isNonNullExpression(node)) {
-    return urlParts(node.expression, context, depth + 1)
-  }
-  if (isTemplateExpression(node)) {
-    const parts: UrlPart[] = [{ kind: 'text', text: node.head.text }]
-    for (const span of node.templateSpans) {
+  if (depth > MAX_DEPTH) return [computedPart]
+  const value = unwrapped(syntax, node)
+  if (isStringLiteral(value) || isNoSubstitutionTemplateLiteral(value)) return [{ kind: 'text', text: value.text }]
+  if (isTemplateExpression(value)) {
+    const parts: UrlPart[] = [{ kind: 'text', text: value.head.text }]
+    for (const span of value.templateSpans) {
       parts.push(...await urlParts(span.expression, context, depth + 1), { kind: 'text', text: span.literal.text })
     }
     return parts
   }
-  if (isBinaryExpression(node) && node.operatorToken.kind === SyntaxKind.PlusToken) {
-    return [...await urlParts(node.left, context, depth + 1), ...await urlParts(node.right, context, depth + 1)]
+  if (isBinaryExpression(value) && value.operatorToken.kind === SyntaxKind.PlusToken) {
+    return [...await urlParts(value.left, context, depth + 1), ...await urlParts(value.right, context, depth + 1)]
   }
-  if (isIdentifier(node) || isPropertyAccessExpression(node)) return referenceParts(node, context, depth)
-  return [computed]
+  if (!isIdentifier(value) && !isPropertyAccessExpression(value)) return [computedPart]
+  const resolved = await held(value, [], context, depth + 1)
+  return typeof resolved === 'string' ? heldParts(context, resolved) : urlParts(resolved.node, context, depth + 1)
 }
 
 /** Text a route or method needs; anything computed leaves the construct unsupported. */
@@ -137,42 +164,26 @@ export async function literalText(node: Node | undefined, context: HttpContext):
   return parts.length === 1 && first?.kind === 'text' ? first.text : undefined
 }
 
-const methodToken = /^[A-Z][A-Z-]*$/
-
 /** An uppercase method token the shared contract accepts. */
 export function methodName(text: string | undefined): string | undefined {
   const method = text?.toUpperCase()
   return method !== undefined && methodToken.test(method) ? method : undefined
 }
 
-/** The single object literal an expression certainly holds. */
-export async function objectValue(
-  node: Node | undefined, context: HttpContext,
-): Promise<ObjectLiteralExpression | undefined> {
+/**
+ * The properties of the object literal an expression certainly holds, by name, the last of a name
+ * winning; undefined when the literal has a key the scanner cannot read, such as a spread.
+ */
+export async function objectEntries(node: Node | undefined, context: HttpContext): Promise<Map<string, Node> | undefined> {
   if (node === undefined) return undefined
-  const object = isObjectLiteralExpression(node) ? node : await resolvedObject(node, context)
-  // A spread can override any property, so the literal states nothing certain.
-  return object?.properties.some(isSpreadAssignment) ? undefined : object
-}
-
-async function resolvedObject(node: Node, context: HttpContext): Promise<ObjectLiteralExpression | undefined> {
-  const values = await context.values(node)
-  const objects = (values ?? []).filter(isObjectLiteralExpression)
-  return objects.length === 1 ? objects[0] : undefined
-}
-
-/** A written property name; a computed name or a spread states no literal key. */
-export function propertyName(property: ObjectLiteralElementLike): string | undefined {
-  const name = 'name' in property ? property.name : undefined
-  return name !== undefined && 'text' in name ? name.text : undefined
-}
-
-export function propertyValue(object: ObjectLiteralExpression, name: string): Node | undefined {
-  for (const property of object.properties) {
-    if (propertyName(property) !== name) continue
-    if (isPropertyAssignment(property)) return property.initializer
-    // `{ method }` states a value the scanner must still resolve.
-    if (isShorthandPropertyAssignment(property)) return property.name
+  const value = await heldAt(context, node)
+  if (typeof value !== 'object' || !isObjectLiteralExpression(value.node)) return undefined
+  const entries = new Map<string, Node>()
+  for (const property of value.node.properties) {
+    const key = propertyKey(syntax, property)
+    if (key === undefined || isGetAccessorDeclaration(property) || isSetAccessorDeclaration(property)) return undefined
+    if (isPropertyAssignment(property)) entries.set(key, property.initializer)
+    else entries.delete(key)
   }
-  return undefined
+  return entries
 }
