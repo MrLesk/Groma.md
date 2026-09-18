@@ -254,6 +254,7 @@ rustTest('Rust HTTP facts cover axum, actix-web and Rocket endpoints, reqwest re
       'client.rs forwarded POST /api/talks',
       'client.rs from_environment GET /talks configured',
       'client.rs list_talks GET /api/talks',
+      'client.rs method_base GET /unknown/talks',
       'client.rs partial GET /api/talks/unknown',
       'client.rs remove_talk DELETE /api/talks/dynamic',
       'client.rs show_talk GET /api/talks/dynamic',

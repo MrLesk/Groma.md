@@ -1,7 +1,7 @@
 use ra_ap_hir::{Local, Semantics};
 use ra_ap_ide_db::RootDatabase;
 use ra_ap_syntax::ast::{self, HasName};
-use ra_ap_syntax::{AstNode, SyntaxKind, SyntaxNode, SyntaxToken, T, TextSize};
+use ra_ap_syntax::{AstNode, NodeOrToken, SyntaxKind, SyntaxNode, SyntaxToken, T, TextSize};
 
 /// Zero-based UTF-16 offset, the unit the observation contract counts.
 pub fn position(text: &str, offset: TextSize) -> usize {
@@ -51,17 +51,21 @@ pub fn first_string(tree: &ast::TokenTree) -> Option<String> {
     token_string(macro_arguments(tree.syntax()).first()?)
 }
 
-/// Comma-separated argument token groups of a macro call.
+/// Comma-separated argument token groups of a macro call. A nested group keeps its tokens,
+/// delimiters included, so `self.base()` still shows its call.
 pub fn macro_arguments(tree: &SyntaxNode) -> Vec<Vec<SyntaxToken>> {
     let mut arguments: Vec<Vec<SyntaxToken>> = vec![Vec::new()];
     for element in tree.children_with_tokens() {
         let group = arguments.last_mut().expect("one group is always open");
-        match element.into_token() {
+        match element {
             // The outer delimiters are this node's own tokens.
-            Some(token) if token.kind().is_trivia() || delimiter(token.kind()) => {}
-            Some(token) if token.kind() == T![,] => arguments.push(Vec::new()),
-            Some(token) => group.push(token),
-            None => {}
+            NodeOrToken::Token(token) if token.kind().is_trivia() || delimiter(token.kind()) => {}
+            NodeOrToken::Token(token) if token.kind() == T![,] => arguments.push(Vec::new()),
+            NodeOrToken::Token(token) => group.push(token),
+            NodeOrToken::Node(nested) => {
+                let tokens = nested.descendants_with_tokens().filter_map(|element| element.into_token());
+                group.extend(tokens.filter(|token| !token.kind().is_trivia()));
+            }
         }
     }
     arguments

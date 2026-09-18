@@ -6,6 +6,12 @@ pub struct Settings {
     pub base: String,
 }
 
+impl Settings {
+    pub fn base(&self) -> &str {
+        &self.base
+    }
+}
+
 pub async fn list_talks(client: &Client) -> reqwest::Result<String> {
     client.get(format!("{BASE}/talks")).send().await?.text().await
 }
@@ -24,6 +30,11 @@ pub async fn remove_talk(client: &Client, id: u32) -> reqwest::Result<String> {
 
 pub async fn speakers(client: &Client, settings: &Settings) -> reqwest::Result<String> {
     client.get(format!("{}/speakers", settings.base)).send().await?.text().await
+}
+
+/// A value a method returns is computed, not a setting read from a field.
+pub async fn method_base(client: &Client, settings: &Settings) -> reqwest::Result<String> {
+    client.get(format!("{}/talks", settings.base())).send().await?.text().await
 }
 
 pub async fn external(client: &Client) -> reqwest::Result<String> {
