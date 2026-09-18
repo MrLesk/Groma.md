@@ -1,0 +1,19 @@
+plugins {
+    id 'java'
+}
+
+allprojects {
+    sourceCompatibility = 17
+}
+
+if (project.hasProperty('generated')) {
+    sourceSets.main.java.srcDirs = ['generated']
+} else {
+    sourceSets.main.java.srcDirs = ['other']
+}
+
+def useGenerated() {
+    sourceSets.main.java.srcDirs = ['generated']
+}
+
+sourceSets.named(sourceSetName).java.srcDir 'other'

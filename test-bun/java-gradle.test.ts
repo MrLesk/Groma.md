@@ -63,6 +63,34 @@ test.concurrent('Gradle warnings reach the scan report when no project produced 
   } finally { await rm(root, { recursive: true, force: true }) }
 })
 
+test.concurrent('declarations under control flow, in a function or for an unreadable source set are reported, not applied', async () => {
+  const root = await repository('java-gradle-scopes')
+  try {
+    const found = await gradleProjects(root)
+    // allprojects applies to this project too and is reported for the other projects it configures.
+    expect(found.diagnostics.map(diagnostic => diagnostic.line)).toEqual([6, 10, 12, 16, 19])
+    expect(await input(root)).toMatchObject({ release: '17', files: ['src/main/java/scopes/Main.java'] })
+  } finally { await rm(root, { recursive: true, force: true }) }
+})
+
+test.concurrent('declarations in a function, for every source set or for other projects are reported, not applied', () => {
+  const scripts: [string, string][] = [
+    ['private def f() {\n  sourceCompatibility = 8\n}', 'build.gradle'],
+    ["void f() {\n  sourceSets.main.java.srcDirs = ['a']\n}", 'build.gradle'],
+    ["static def f() {\n  sourceSets.main.java.srcDirs = ['a']\n}", 'build.gradle'],
+    ['private fun f() {\n  sourceSets["main"].java.setSrcDirs(listOf("a"))\n}', 'build.gradle.kts'],
+    ["sourceSets.all { java.srcDir 'gen' }", 'build.gradle'],
+    ["sourceSets.configureEach { java.srcDirs = ['gen'] }", 'build.gradle'],
+    ["sourceSets { all { java.srcDir 'gen' } }", 'build.gradle'],
+    ["sourceSets.each { it.java.srcDir 'gen' }", 'build.gradle'],
+    ['configure(subprojects) { sourceCompatibility = 8 }', 'build.gradle'],
+  ]
+  for (const [source, file] of scripts) {
+    const script = readGradleScript(source, file)
+    expect([source, script.sourceRoots, script.release, script.diagnostics.length]).toEqual([source, ['src/main/java'], undefined, 1])
+  }
+})
+
 test.concurrent('only literal values become versions, source directories and included projects', () => {
   const versions: [string, string | undefined][] = [
     ['sourceCompatibility = 1.8', '8'],
