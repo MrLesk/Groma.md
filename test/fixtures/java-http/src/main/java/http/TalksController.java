@@ -25,7 +25,7 @@ public class TalksController {
         return "files";
     }
 
-    @GetMapping("/v{version}/talks")
+    @GetMapping("/v{version}/archive")
     public String versioned() {
         return "versioned";
     }

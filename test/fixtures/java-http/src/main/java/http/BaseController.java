@@ -1,5 +1,5 @@
 package http;
 
-@RequestMapping("/api/talks")
+@RequestMapping("/api/children")
 public class BaseController {
 }

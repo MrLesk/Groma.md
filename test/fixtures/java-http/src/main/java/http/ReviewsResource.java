@@ -18,4 +18,9 @@ public class ReviewsResource {
     public String add(String id) {
         return id;
     }
+
+    @Path("{id}/comments")
+    public Object comments(String id) {
+        return id;
+    }
 }

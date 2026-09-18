@@ -133,8 +133,13 @@ Endpoints, from classes only:
 - Spring MVC and WebFlux annotated controllers: `@RestController` or
   `@Controller` with `@GetMapping`, `@PostMapping`, `@PutMapping`,
   `@DeleteMapping`, `@PatchMapping`, or `@RequestMapping` with `method =`,
-  under the class-level `@RequestMapping` prefix. A mapping without a method
-  serves every method.
+  under each class-level `@RequestMapping` route. As in Spring, the class-level
+  mapping is the class's own, else the first one on its interfaces and then its
+  superclass. Only supertypes in the sources are searched, so a type-level
+  mapping on an interface from a dependency is missed, an accepted limit. A
+  mapping without a method serves every method, and `method =` is read from
+  `RequestMethod` constants. A class-level `method` joins each mapping's own,
+  as Spring serves both, and a side without a method adds no restriction.
 - JAX-RS resources: `@Path` on the class with `@GET`, `@POST`, `@PUT`,
   `@DELETE`, `@PATCH`, `@HEAD` or `@OPTIONS` on a method, under the class path
   and the method's own `@Path`.
@@ -159,25 +164,56 @@ Requests:
 An imperative client is recognized by the declared type name of its receiver in
 the same file, so a field, a local variable and `new RestTemplate()` all count,
 while a client another call returns does not. A name the file declares with two
-types is dropped, because the receiver is then unknown. Literal routes and URLs
-and constants the sources declare become facts, and a `{name}` placeholder in a
-client URL fills one whole segment.
+types is dropped, because the receiver is then unknown. Literal routes and URLs,
+constants the sources declare and concatenations of them become facts, as does
+a field or local that nothing assigns after its declaration, carries no
+annotation and has literal text as its initializer. A field Spring injects,
+such as one with `@Value`, keeps a configured value. A `{name}` placeholder in
+a client URL fills one whole segment.
+
+In a route, a Spring `{name}` or `*` segment is a parameter. A Spring
+`{name:regex}` parameter, and a segment mixing text with a placeholder or a
+wildcard, such as `v{version}` or `*.json`, is a constrained parameter. A
+trailing `{*name}` or `**` is a constrained optional catch-all: Spring ranks
+such a pattern after every other one rather than segment by segment, so core
+does not rank it against a route that conflicts with it. A JAX-RS `{name: regex}` may match a
+slash, so it and the rest of the route become a constrained optional
+catch-all, as do a Spring `{*name}` or `**` before the route's end and a
+segment outside URL path characters.
+
+A route the scanner sees but cannot read becomes a blocker: its readable prefix,
+then a constrained optional catch-all, for every method unless the methods are
+known. That covers a prefix or route whose constant the sources do not declare
+or that holds a `${...}` configuration placeholder, a class-level prefix
+holding a wildcard, which Spring joins with each route by its own rules, a
+`method` attribute that does not resolve, on the mapping or the class, an
+un-annotated `@Override` method of a controller that, directly or through a
+supertype in the sources, extends or implements a type that does not resolve,
+since that type may declare its mapping, and a JAX-RS sub-resource locator, a
+`@Path` method without an HTTP method annotation. A supertype that resolves,
+such as `java.io.Serializable`, or that is known to declare no mapping, such as
+Spring's `ErrorController`, adds no blocker. A blocker never takes a request
+certainly, and competes with the routes a request reaches as the
+[HTTP request rule](../../relationship-inference.md#http-requests) describes.
 
 Nothing is reported for a functional WebFlux `RouterFunction`, a JAX-RS `@Path`
-interface whose implementing class carries no annotation of its own, a prefix
-whose constant the sources do not declare, a controller or resource class that
-declares no prefix and extends another class, a mapping whose `method` attribute
-does not resolve, a builder chain whose `method(...)` value is not literal, a
-segment mixing text with a parameter such as `v{version}/talks`, and filters,
-interceptors and security matchers such as `/api/**`.
+interface whose implementing class carries no annotation of its own, a mapping
+a controller method inherits from an interface method in the sources, an
+un-annotated method without `@Override` that implements a method of a type that
+does not resolve, a builder chain whose `method(...)` value is not literal, and
+filters, interceptors and security matchers such as `/api/**`. A mapping's
+`params`, `headers`, `consumes` and `produces` conditions are not part of the
+fact: its endpoint serves the path and method whatever they require, as a
+client normally calls it.
 
 The [producer checklist](../evidence.md#producer-checklist) for Java:
 
-1. **Which prefixes belong in the path.** The class-level `@RequestMapping` or
-   `@Path` prefix, a Feign client's `path`, and an HTTP interface's
-   `@HttpExchange` value or `url`. A prefix the scanner cannot resolve reports
-   nothing for that class, and so does a class that declares no prefix and
-   extends another class, whose base may hold one.
+1. **Which prefixes belong in the path.** Each class-level `@RequestMapping`
+   route, found on the class or its supertypes in the sources as Spring does, a
+   JAX-RS class `@Path`, a Feign client's `path`, and an HTTP interface's
+   `@HttpExchange` value or `url`. A prefix the scanner cannot read and a Spring
+   prefix holding a wildcard make the class's routes blockers from that point;
+   a client prefix the scanner cannot read reports no requests.
 2. **Whether the construct is an endpoint.** Only a controller or resource
    class serves. An interface never does, so `@FeignClient` and `@HttpExchange`
    interfaces report requests even though they carry the same mapping
@@ -188,13 +224,24 @@ The [producer checklist](../evidence.md#producer-checklist) for Java:
 4. **The local helper.** Not supported. A request is reported where the client
    call is, so `getForObject(buildUrl(suffix), ...)` reports a leading unknown
    segment and `buildUrl` itself reports nothing.
-5. **The base.** Every supported client resolves a relative or root-relative
-   URL against the base it is configured with, so those requests set
-   `configured`, as does a path that follows an unresolved field such as an
-   injected base URL. `URI.create("https://api.example.com/api/talks")` and a
-   URL computed as a whole report a leading `unknown` segment.
+5. **The base.** Every supported client resolves a root-relative URL against
+   the base it is configured with, so those requests set `configured`, as
+   does a path that follows a field the scanner cannot resolve to text, such
+   as an injected base URL or one a constructor assigns. A URL stating a host,
+   such as `URI.create("https://api.example.com/api/talks")`, a
+   protocol-relative `//api.example.com/api/talks` or a field whose literal
+   initializer states one, a URL computed as a whole or taken from a
+   parameter, and text continuing a base without a slash, such as
+   `base + "talks"` or a relative `"talks"`, report a leading `unknown`
+   segment.
 6. **Which operation a file-location route names.** Java declares no routes by
    file location, so the scanner names no operation that way.
+7. **Which segments are constrained.** `@GetMapping("/talks/{id:\\d+}")`
+   reports `talks` and a constrained `id` parameter; `v{version}` and `*.json`
+   are constrained parameters. JAX-RS `@Path("{id: \\d+}/latest")` reports a
+   constrained optional catch-all named `id` in place of both segments.
+8. **Registration order.** Spring MVC, WebFlux and JAX-RS prefer the most
+   specific route, so endpoints carry no `order`.
 
 ## Compared operations
 
