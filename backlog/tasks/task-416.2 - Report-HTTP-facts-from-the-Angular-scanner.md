@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@claude'
 created_date: '2026-09-16 20:15'
-updated_date: '2026-09-18 14:30'
+updated_date: '2026-09-18 21:33'
 labels: []
 dependencies: []
 references:
@@ -58,6 +58,8 @@ Certain HTTP relationships need endpoint and request facts from every ecosystem.
 5. test-bun/angular-http.test.ts: the built package's requests for each supported API, each unresolved case, no endpoints, and one end-to-end derived row through core with a matching endpoint fixture observation.
 6. docs/scanners/angular/index.md: the supported clients, their limits and the six producer decisions in order.
 7. Isolated bun run check, Angular build, specification and quality self-review.
+
+Review-fix round: the reported defect (a const object's property read as its literal after the project assigns it again) is fixed in the shared reader Angular uses, plugins/scanners/http-values.ts with http-bindings.ts (TASK-416.3); this task adds the Angular regression fixture (a property assigned again is unknown, an unchanged one keeps its literal), reflows decision 5, and answers producer decisions 7 and 8 (no endpoints, so no constrained segments and no order).
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
@@ -71,10 +73,14 @@ Isolated worktree bun run check exit 0 (lint: existing warning in test-bun/iso-m
 Cold review corrections (coordinator decisions), applied: the hole marker is now a NUL escape, so a literal segment that is exactly one space is literal text instead of dynamic; a readonly field counts as assigned once only when its class never assigns this.<name> again, because TypeScript lets a constructor replace it, and the page's decision 5 states that and notes that an Angular build's fileReplacements can swap environment.ts, so a literal environment base is the development value. Also: the fixture's service classes are one file, since cross-file resolution is not the rule under test; two abstentions were added, a mutable field base and request(new HttpRequest(...)); and the reader's names are now isHttpClient and callerOperation, matching the reference.
 Verification after corrections: bun test --timeout 120000 test-bun/angular-http.test.ts 2 pass, with 19 requests now listed, including mutable and reassigned as /<unknown>/talks and no fact for packaged. Isolated worktree bun run check exit 0 (lint: existing warning in test-bun/iso-map.test.ts only; tsc clean; node 16 pass; bun 460 pass, 30 skip, 0 fail). bun plugins/scanners/angular/build.ts succeeded there.
 The shared extraction the review asked for (plugins/scanners/http-url.ts and http-values.ts, settling the four divergences) belongs to TASK-416.3.
+
+Review-fix round: the external review found that a const object's property kept its literal after the project assigned it again. The shared reader Angular uses (plugins/scanners/http-values.ts with http-bindings.ts, TASK-416.3) now folds a property only while nothing can change it. Added the Angular regression: talk.service.ts.fixture gains changed() (moved.url assigned again, reported /<unknown>) and routed() (an unchanged property, reported /api/talks); the test fails on the Angular code at 21e9e02c, which reported changed GET /api/talks. Docs: decision 5 reflowed, decisions 7 and 8 answered (no endpoints, so no route patterns and no order). Verification: isolated bun install --frozen-lockfile and bun run check exit 0 (583 pass, 35 skip, 0 fail). Cold review: no findings.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
 The Angular scanner now reports the HTTP requests an application sends with HttpClient, so core can derive client-to-server rows for Angular front ends. plugins/scanners/angular/src/http.ts recognizes get, post, put, patch, delete, head, options and request(method, url) only after resolving the receiver to an injected HttpClient, read from source through the generalized angularImport, and resolves each URL into literal, dynamic, unknown or configured parts following the reference's rules: constants assigned once are literal text, a host or computed base is a leading unknown segment, a value the scanner cannot see sets configured, and the query is dropped. Angular reports no endpoint, because its router routes, interceptors and guards answer no request. Verified with test/fixtures/angular-http and test-bun/angular-http.test.ts: the built package reports 19 requests covering every supported call and every abstention, no endpoints, and core derives exactly one row to the file serving GET /api/talks, POST /api/talks and DELETE /api/talks/:id. Isolated bun run check exit 0 and the Angular package build both passed. Documented in docs/scanners/angular/index.md, which answers the six producer decisions.
+
+The review-fix round confirmed that the Angular producer reads a property of a const object only while nothing in the project can change it, through the shared value reader, with a regression fixture proving a reassigned property is unknown and an unchanged one keeps its literal. The Angular page now answers producer decisions 7 and 8: the scanner reports no endpoints, so it reads no route pattern and reports no order.
 <!-- SECTION:FINAL_SUMMARY:END -->

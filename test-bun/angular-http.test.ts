@@ -70,6 +70,8 @@ test.concurrent('the built Angular package reports HttpClient requests and serve
       'amend PATCH /api/talks/<dynamic>',
       // A method the source computes leaves the fact without one, so core derives nothing.
       'byMethod no-method /api/talks',
+      // A property the project assigns again no longer holds its literal.
+      'changed GET /<unknown>',
       // A value the scanner cannot see is configuration; the base contributes no path text.
       'configured GET configured:/talks',
       'create POST /api/talks',
@@ -86,6 +88,8 @@ test.concurrent('the built Angular package reports HttpClient requests and serve
       'purge DELETE /api/talks/<dynamic>',
       'remove DELETE /api/talks/<dynamic>',
       'replace PUT /api/talks/<dynamic>',
+      // A property nothing changes holds its literal.
+      'routed GET /api/talks',
       // The query is dropped, computed or not.
       'search GET /api/talks',
       // A helper reads its path from a parameter, and its caller reports nothing.

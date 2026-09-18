@@ -3,6 +3,10 @@ import { HttpClient, HttpRequest } from '@angular/common/http'
 import { API_ROOT } from 'app-config'
 import { environment } from './environment'
 
+const routes = { talks: '/api/talks' }
+const moved = { url: '/api/talks' }
+moved.url = '/api/elsewhere'
+
 @Injectable({ providedIn: 'root' })
 export class TalkService {
   private readonly base = '/api'
@@ -67,6 +71,14 @@ export class TalkService {
 
   partial(id: string) {
     return this.http.get(`/api/talks/${id}-latest`)
+  }
+
+  routed() {
+    return this.http.get(routes.talks)
+  }
+
+  changed() {
+    return this.http.get(moved.url)
   }
 
   fromBase(base: string) {
