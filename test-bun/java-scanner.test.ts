@@ -3,10 +3,11 @@ import { cp, mkdtemp, rm, writeFile } from 'node:fs/promises'
 
 import os from 'node:os'
 import path from 'node:path'
-import { buildPackage, buildWorker } from '../plugins/scanners/java/build.ts'
+import { buildWorker } from '../plugins/scanners/java/build.ts'
+import { summarizeMissingTypes } from '../plugins/scanners/java/src/missing-types.ts'
 import { javaCommand, run } from '../plugins/scanners/java/src/process.ts'
 
-import { parseScanObservation, type ScannerPlugin, type ScanObservation } from '@groma/scanner'
+import { createScanObservation, parseScanObservation, type ScanObservation } from '@groma/scanner'
 
 async function fixture() {
   const root = await mkdtemp(path.join(os.tmpdir(), 'groma-java-test-'))
@@ -63,28 +64,34 @@ public class Caller {
     expect(evidence).toContainEqual(expect.objectContaining({ providers: ['sample.Provider#ship(int)'], unresolved: false }))
     expect(evidence.filter(call => call.member === 'ship' && call.unresolved)).toHaveLength(1)
     expect(evidence.find(call => call.member === 'work')).toMatchObject({ providers: [], unresolved: true })
-    // The worker labels each unresolved name; the plugin folds them into one summary.
-    const missing = observation.diagnostics.filter(item => item.code === 'JAVA_MISSING_EXTERNAL_TYPES')
-    expect(missing).toHaveLength(3)
-    expect(observation.diagnostics.some(item => item.code.startsWith('compiler.err.'))).toBeFalse()
+    // The worker reports javac's own codes; the plugin folds the unresolved names into one summary.
+    const summarized = summarizeMissingTypes(observation)!.diagnostics
+    const missing = summarized.filter(item => item.code === 'JAVA_MISSING_EXTERNAL_TYPES')
+    expect(missing).toHaveLength(1)
+    expect(missing[0]!.message).toStartWith('3 ')
+    expect(summarized.some(item => item.code.startsWith('compiler.err.'))).toBeFalse()
   } finally { await rm(root, { recursive: true, force: true }) }
 })
 
-test.concurrent('Java folds missing external types from every project into one summary', async () => {
-  const temporary = await mkdtemp(path.join(os.tmpdir(), 'groma-java-missing-'))
-  try {
-    const root = path.join(temporary, 'project')
-    const artifact = path.join(temporary, 'scanner')
-    await buildPackage(artifact)
-    await cp(path.resolve(import.meta.dir, '../test/fixtures/java-missing-types'), root, { recursive: true })
-    const git = Bun.spawn(['git', 'init', '--quiet', root], { stdout: 'ignore', stderr: 'pipe' })
-    expect(await git.exited, await new Response(git.stderr).text()).toBe(0)
-    const scanner: ScannerPlugin = (await import(path.join(artifact, 'src/index.js'))).default
-    const observation = await scanner.scan(root, {})
-    const missing = observation!.diagnostics.filter(item => item.code === 'JAVA_MISSING_EXTERNAL_TYPES')
-    // One import and one use are unresolved in the first project; two imports from one package and two uses in the second.
-    expect(missing).toHaveLength(1)
-    expect(missing[0]!.message).toStartWith('6 ')
-    expect(missing[0]!.message).toContain('packages: beta, alpha.')
-  } finally { await rm(temporary, { recursive: true, force: true }) }
-}, 120000)
+test.concurrent('Java folds missing external types from every project into one summary', () => {
+  const error = (file: string, line: number, code: string, message: string) => ({ severity: 'warning', code, message, file, line })
+  const observation = createScanObservation({
+    scanner: { id: 'java', technology: 'java', engine: 'javac-tree', engineVersion: '25' },
+    roots: [],
+    files: [],
+    diagnostics: [
+      error('one/src/A.java', 2, 'compiler.err.doesnt.exist', 'package alpha does not exist'),
+      error('one/src/A.java', 5, 'compiler.err.cant.resolve.location', 'cannot find symbol'),
+      error('two/src/B.java', 2, 'compiler.err.doesnt.exist', 'package beta does not exist'),
+      error('two/src/B.java', 3, 'compiler.err.doesnt.exist', 'package beta does not exist'),
+      error('two/src/B.java', 7, 'compiler.err.cant.resolve', 'cannot find symbol'),
+      error('two/src/B.java', 9, 'compiler.err.prob.found.req', 'incompatible types'),
+    ],
+  })
+  const diagnostics = summarizeMissingTypes(observation)!.diagnostics
+  const missing = diagnostics.filter(item => item.code === 'JAVA_MISSING_EXTERNAL_TYPES')
+  expect(missing).toHaveLength(1)
+  expect(missing[0]!.message).toStartWith('5 ')
+  expect(missing[0]!.message).toContain('packages: beta, alpha.')
+  expect(diagnostics.map(item => item.code).sort()).toEqual(['JAVA_MISSING_EXTERNAL_TYPES', 'compiler.err.prob.found.req'])
+})

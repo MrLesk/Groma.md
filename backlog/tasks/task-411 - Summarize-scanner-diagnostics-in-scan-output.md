@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@claude'
 created_date: '2026-09-16 19:38'
-updated_date: '2026-09-18 18:11'
+updated_date: '2026-09-18 23:09'
 labels: []
 dependencies: []
 references:
@@ -65,6 +65,8 @@ On callforpapers, `groma scan` printed 29,970 lines, so the two-line summary and
 Review-fix round (external reviews of cf8e7975):
 7. Fix: a repository with several Java projects runs one worker per project, and each worker emitted its own JAVA_MISSING_EXTERNAL_TYPES summary, so the report showed ×N and kept only the first project's count and packages (contradicting AC #2 and docs/scanners/java/index.md, which say the count is 1). The worker now labels each unresolved-name error JAVA_MISSING_EXTERNAL_TYPES (info, javac's own message) and MissingTypes.java is deleted; the Java plugin folds every project's labels into the one summary after combining projects (plugins/scanners/java/src/missing-types.ts), choosing the five most frequent packages after aggregation. Each project keeps its own compiler run.
 8. Regression test: a two-project Maven fixture scanned through the built Java package yields one summary whose count and packages cover both projects; the worker-level test asserts the per-error labels.
+
+9. Simplicity round: the worker emits every javac diagnostic with its own code, and missing-types.ts alone decides which codes are unresolved names and folds them into the summary (one language owns the rule). A unit test of summarizeMissingTypes on a synthetic two-project observation replaces the package-building test and its fixture; the worker test checks that its raw codes fold into one summary.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
@@ -96,6 +98,11 @@ End to end: groma scan with the built package on the fixture printed one line, J
 Cold review applied: plan step 3 and the final summary describe the plugin-side fold; the doc comment says first listed diagnostic; summarizeMissingTypes returns early for an undefined observation.
 Verification: isolated worktree at 83cc22fa with only this change, bun run check exit 0 (biome 1 warning and 2 infos in untouched files, tsc clean, node 16 pass, bun 525 pass 35 skip 0 fail).
 Live rescans: plugins/scanners/java/dist/worker.jar is gitignored and still holds the previous worker, whose per-project summaries the new fold would count as single unresolved names; rebuild it with bun plugins/scanners/java/build.ts before any live rescan of this repository or a sample.
+
+Simplicity round (cold junior-maintainer review of the fix round).
+One language owns the rule: the worker (Main.java) reports every javac diagnostic under its own code again, and missing-types.ts decides which codes are unresolved names (compiler.err.doesnt.exist and compiler.err.cant.resolve*) and folds them from every project into the JAVA_MISSING_EXTERNAL_TYPES info summary; other compiler errors stay warnings with their javac code.
+Tests: a unit test of summarizeMissingTypes on a synthetic two-project observation (five unresolved names, packages beta then alpha, one other compiler error kept) replaces the package-building test and its test/fixtures/java-missing-types fixture; the worker test now checks that the worker's raw codes fold into one summary of 3 references.
+Verification: isolated worktree at 6c9ec88b with only this change, bun run check exit 0 (biome 1 warning and 2 infos in untouched files, tsc clean, node 16 pass, bun 593 pass 35 skip 0 fail).
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
@@ -104,4 +111,6 @@ Live rescans: plugins/scanners/java/dist/worker.jar is gitignored and still hold
 groma scan now prints one line per scanner and diagnostic code (severity, ×N diagnostic count, first listed diagnostic as example) instead of every diagnostic, and the Java plugin folds the javac 'cannot find symbol' and 'package does not exist' errors of every Java project into one JAVA_MISSING_EXTERNAL_TYPES info diagnostic with the reference count, an example location and the five most frequently missing packages. Scanner failures, including every Java syntax error, are still printed in full. Scanner docs describe the summarized report. On the callforpapers sample the report dropped from 29,970 to 1,275 lines (scanner diagnostic lines from about 28,350 to 11). Verified with new assertions in test-bun/java-scanner.test.ts and test-bun/scanner-composition.test.ts, an end-to-end syntax-error scan on the sample clone, and bun run check in an isolated worktree.
 
 Review-fix round: a repository with several Java projects showed one JAVA_MISSING_EXTERNAL_TYPES summary per project, and the report kept only the first project's count and packages. The worker now labels each unresolved-name error and the Java plugin folds every project's labels into one summary, ranking packages across all projects; a two-project fixture test fails at cf8e7975 (2 diagnostics) and passes now (one summary, 6 references, packages beta then alpha), and an isolated bun run check exits 0.
+
+Simplicity round: the worker now reports raw javac codes and missing-types.ts alone classifies and folds unresolved names, tested by a fast unit test instead of a package build.
 <!-- SECTION:FINAL_SUMMARY:END -->
