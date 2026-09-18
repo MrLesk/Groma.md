@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@claude'
 created_date: '2026-09-16 20:32'
-updated_date: '2026-09-17 06:27'
+updated_date: '2026-09-18 17:54'
 labels: []
 dependencies: []
 references:
@@ -83,6 +83,12 @@ When an element is inspected, every underlying relationship becomes its own entr
    - inspect-details: Site's lifted ends, exact ends and distinct descriptions.
    - routes: one command per pair, full-pair lighting, and one pair identity after the selection moves up to a system.
 6. Run bun run check in isolation with only TASK-419 hunks. Verify the web pane in a browser and the terminal pane with tui-test on a scratch copy of the fixture.
+
+Review-fix round (external reviews of cf8e7975):
+7. Fix: terminal Enter on a relationship pair row follows the first relationship's raw source when the selection is not its exact endpoint, so from a system it selects a component inside the selection itself (Site follows to Speakers instead of Backend). Enter now selects the peer the row names: the first relationship's end promoted to the selection's depth, which is the pair's peer by construction. Regression assertions in test-bun/routes.test.ts; docs/viewers/tui/index.md and the relationship row comment state the rule.
+8. Skip (optional finding): storing one pair identity instead of activeActionId plus LitAction.relationshipIds would add selection-change rewriting rather than delete code.
+
+9. Cold review: the painter's navigation comment is deleted rather than reworded; docs/viewers/tui/index.md alone states the rule.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
@@ -102,10 +108,16 @@ Cold review applied:
 - Clarified the openPair comment.
 - Trimmed repeated tests to Site-only checks in inspect-details and routes.
 - Left actionTitle in view.ts as it was: it predates the task, and this task only simplified one line in it.
-- Out of scope, recorded by the coordinator: Enter on a lifted row selects the first relationship's exact endpoint rather than the lifted peer. This is pre-existing.
+- Corrected in the review-fix round below: Enter on a lifted row followed the first relationship's raw source rather than the lifted peer, so from a system it selected a component inside the selection itself.
 Verification after review:
 - bun run check in an isolated HEAD worktree with only TASK-419 hunks (TASK-410's two declaration hunks in panes/details.ts excluded): 368 pass, 0 fail.
 - tui-test on the fixture copy: after lighting Talks to Sessions and selecting Site, Enter from the map puts the cursor on the lit Site to Backend row (its background is the accent colour). Space clears the highlight, Space relights it, and Enter follows.
+
+Review-fix round (external reviews of cf8e7975).
+Fixed: Enter on a relationship pair row followed the first relationship's exact other end only when the selection was that relationship's exact endpoint and otherwise took its source, so from Site it selected Speakers (inside Site) and from Pages the same. followRelationship in src/viewers/tui/navigation.ts now selects promotedPeer of the pair's first relationship, which is the peer the row names, at every depth, matching the web rule. docs/viewers/tui/index.md states it in one sentence; the painter's navigation comment was removed.
+Tests: test-bun/routes.test.ts asserts that Enter on the lit Site pair selects backend, and the lit-pair identity test now asserts backend instead of "not site"; both fail with cf8e7975's navigation.ts.
+Skipped (optional): one stored pair identity instead of activeActionId plus LitAction.relationshipIds would rewrite activeActionId on every selection change, adding code rather than deleting it.
+Verification: tui-test on a scratch copy of test/fixtures/relationship-pairs: Api with its lit row follows to Pages, Site with its lit combined row follows to Backend. Cold review confirmed every pair in the fixture and a deeper-peer world select the row's peer. Isolated worktree bun run check exit 0 (biome 1 warning and 2 infos in untouched files, tsc clean, node 16 pass, bun 520 pass 34 skip 0 fail).
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
@@ -120,4 +132,6 @@ Element details now list each ordered pair of visible endpoints once instead of 
   - Focused tests on a new relationship-pairs fixture cover grouping at system, container and component level in both directions, the web pair data, terminal lighting and pair identity.
   - bun run check passed in an isolated worktree with only this task's changes (368 pass).
   - The web pane was checked in Chrome on an exported fixture copy, and the terminal pane with tui-test.
+
+Review-fix round: terminal Enter on a relationship pair row now selects the peer the row names (the first relationship's end promoted to the selection's depth) instead of a component inside the selection; routes tests fail without the fix, tui-test confirms Api follows to Pages and Site to Backend, and an isolated bun run check exits 0.
 <!-- SECTION:FINAL_SUMMARY:END -->

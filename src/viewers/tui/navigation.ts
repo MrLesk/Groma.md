@@ -1,6 +1,6 @@
 import type { TaskDiffPayload } from '../source/diff.ts'
 import { flowsThrough } from '../flows.ts'
-import { parentOfElements, relationshipPairs, type RelationshipPair } from '../relationship-text.ts'
+import { parentOfElements, promotedPeer, relationshipPairs, type RelationshipPair } from '../relationship-text.ts'
 import { reduceFlowReading } from './flow-navigation.ts'
 import type { PaneVisibility } from './layout.ts'
 import {
@@ -358,10 +358,10 @@ function toggleDetailsMode(current: ViewerState, mode: 'profile' | 'keys'): View
     : { ...current, [mode]: true, focus: 'details', panes: { ...current.panes, details: true }, detailsScroll: 0 }
 }
 
-/** The other end of a relationship becomes the selection, at its own level. */
+/** The peer a relationship row names, its other end at the selection's depth, becomes the selection at its own level. */
 function followRelationship(world: TerminalViewModel, current: ViewerState, relationship: AnnotatedRelationship): ViewerState {
-  const peerId = relationship.source === current.currentId ? relationship.target : relationship.source
-  const peer = elementsById(world).get(peerId)
+  const ends = current.currentId === undefined ? null : promotedPeer(relationship, current.currentId, parentOfElements(world.elements))
+  const peer = ends === null ? undefined : elementsById(world).get(ends.peerId)
   if (peer === undefined) return current
   return syncTree(world, { ...current, level: levelFor(peer), currentId: peer.representationId, actionCursor: undefined })
 }
