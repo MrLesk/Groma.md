@@ -4,7 +4,8 @@ import path from 'node:path'
 import { readCodeStructure as readReferenceOutline } from '../plugins/scanners/typescript/src/structure.ts'
 import { loadAnnotatedArchitecture } from '../src/core.ts'
 import { readCodeStructure, type CodeFile } from '../src/viewers/source/structure.ts'
-import { declarationStops } from '../src/viewers/tui/navigation-details.ts'
+import { outlineStopKeys } from '../src/viewers/tui/navigation-details.ts'
+import { outlineRowKey } from '../src/viewers/tui/panes/details.ts'
 import { createSourceControl } from '../src/viewers/web/source/control.ts'
 
 const mixedFixture = path.resolve(import.meta.dir, '../test/fixtures/mixed-scanner-outline')
@@ -23,8 +24,8 @@ test.concurrent('a component whose Code spans two scanners outlines every file i
   expect(files.map(file => [file.file, file.declarations[0]?.name]))
     .toEqual(component.code.map(reference => [reference.file, reference.scanner]))
   const codeStructure = { elementId: component.representationId, files }
-  expect(declarationStops({ currentId: component.representationId, detailsTab: 'how', codeStructure }))
-    .toEqual(component.code.map(reference => `${reference.file}:1`))
+  expect(outlineStopKeys({ currentId: component.representationId, detailsTab: 'how', codeStructure }))
+    .toEqual(component.code.map(reference => outlineRowKey(reference.file, 0)))
 })
 
 test.concurrent('the web details pane loads the outline of a component without TypeScript files', async () => {

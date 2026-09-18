@@ -71,7 +71,7 @@ export interface ViewerState {
   keys?: boolean
   /** The full record of one task is showing in the details pane; its details arrive from the work source. */
   taskRecord?: { id: string; row: number; details?: WorkItemDetails; diff?: TaskDiffPayload | null }
-  /** The declarations of the selected component's TypeScript files, read once per selection for the How tab. */
+  /** The source outline of the selected component's Code files, read once per selection for the How tab. */
   codeStructure?: CodeStructureState
   /** A source file open read-only in the details pane at one line; its text arrives from the reader. */
   sourceView?: SourceViewState

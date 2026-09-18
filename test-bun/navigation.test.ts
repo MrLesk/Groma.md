@@ -352,9 +352,10 @@ test.concurrent('How navigates declarations while What follows a selected relati
   }
   assert.deepEqual(detailsCommands(model, state), [])
   state = reduceViewer(model, state, 'down')
-  assert.equal(state.actionCursor, 'src/part.ts:8')
   state = reduceViewer(model, state, 'down')
-  assert.equal(state.actionCursor, 'src/part.ts:18')
+  state = reduceViewer(model, state, 'enter')
+  assert.equal(state.sourceView?.line, 18)
+  state = reduceViewer(model, state, 'dismiss')
   state = reduceViewer(model, state, 'up')
   state = reduceViewer(model, state, 'enter')
   assert.equal(state.sourceView?.line, 8)

@@ -3,7 +3,7 @@ import type { TerminalViewModel } from './model.ts'
 import type { ViewerAction, ViewerState } from './navigation.ts'
 import { viewerTheme } from './atoms/theme.ts'
 import { detailsContentWidth } from './layout.ts'
-import { taskRecordView } from './panes/details.ts'
+import { outlineRowKey, outlineSymbols, taskRecordView } from './panes/details.ts'
 
 export interface CodeStructureState {
   elementId: string
@@ -21,17 +21,27 @@ export interface DiffViewState {
   file: string
 }
 
-/** Declaration cursor stops as file:line, in authored order. */
-export function declarationStops(
-  state: Pick<ViewerState, 'currentId' | 'detailsTab' | 'profile' | 'keys' | 'codeStructure'>,
-): string[] {
+type OutlineState = Pick<ViewerState, 'currentId' | 'detailsTab' | 'profile' | 'keys' | 'codeStructure'>
+
+/** An outline row the details cursor can stop on, with the source line Enter opens. */
+interface OutlineStop {
+  key: string
+  file: string
+  line: number
+}
+
+/** Every outline row of the How tab, in the order the pane draws them. */
+function outlineStops(state: OutlineState): OutlineStop[] {
   const structure = state.codeStructure
   if (state.detailsTab !== 'how' || state.profile || state.keys || structure === undefined || structure.elementId !== state.currentId) return []
   // readCodeStructure returns files in the component's Code order, the order the pane draws them.
-  return structure.files.flatMap(file => file.declarations.flatMap(declaration => [
-    `${file.file}:${declaration.line}`,
-    ...(declaration.kind === 'type' ? declaration.members.map(member => `${file.file}:${member.line}`) : []),
-  ]))
+  return structure.files.flatMap(file => outlineSymbols(file)
+    .map((symbol, row) => ({ key: outlineRowKey(file.file, row), file: file.file, line: symbol.line })))
+}
+
+/** The details cursor keys of the How tab's outline rows, in authored order. */
+export function outlineStopKeys(state: OutlineState): string[] {
+  return outlineStops(state).map(stop => stop.key)
 }
 
 /** Cursor stops in the selected element's details. */
@@ -40,7 +50,7 @@ function detailsStops(
   commandIds: readonly string[],
 ): string[] {
   if (state.sourceView !== undefined || state.diffView !== undefined) return []
-  return [...declarationStops(state), ...commandIds]
+  return [...outlineStopKeys(state), ...commandIds]
 }
 
 /** Reads records, moves other details cursors, and opens sources, diffs or references. */
@@ -106,15 +116,11 @@ function moveDetailsCursor(current: ViewerState, stops: readonly string[], step:
 function openDetailsCursor(
   current: ViewerState,
 ): ViewerState | undefined {
-  if (current.actionCursor === undefined) return undefined
-  if (declarationStops(current).includes(current.actionCursor)) {
-    const separator = current.actionCursor.lastIndexOf(':')
-    const line = Number(current.actionCursor.slice(separator + 1))
-    return {
-      ...current,
-      sourceView: { file: current.actionCursor.slice(0, separator), line, returnScroll: current.detailsScroll },
-      detailsScroll: Math.max(0, line - 3),
-    }
+  const stop = outlineStops(current).find(candidate => candidate.key === current.actionCursor)
+  if (stop === undefined) return undefined
+  return {
+    ...current,
+    sourceView: { file: stop.file, line: stop.line, returnScroll: current.detailsScroll },
+    detailsScroll: Math.max(0, stop.line - 3),
   }
-  return undefined
 }
