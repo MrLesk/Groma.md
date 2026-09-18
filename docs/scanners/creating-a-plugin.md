@@ -106,14 +106,19 @@ architecture record. Build it by parsing source only: no project dependencies,
 builds, or project tools.
 
 Each reference holds one owned `file` and the `symbols` its Code links name.
-Return one `CodeFile` (`{ file, declarations }`) per reference; omit files
-without declarations. Groma orders the files by the component's Code. List
-`declarations` in source order.
+When a file has Code links from several configured scanners, the one with the
+lowest id outlines it, with the symbols of all those links. The lowest id wins
+among every configured scanner, so a file whose lowest one has no
+`readCodeStructure` gets no outline. Return one `CodeFile`
+(`{ file, declarations }`) per reference; omit files without declarations. Groma
+orders the files by the component's Code. List `declarations` in source order.
 
 Top-level means directly in the file or inside a namespace, package, or module
 block, such as a C# `namespace`, a braced PHP namespace, a TypeScript
 `namespace` or `module`, or a Rust inline `mod`. A declaration inside another
-type or function is nested and is not listed.
+type or function is nested and is not listed. PHP also counts a function
+declared directly inside `if (!function_exists('name'))` as top-level when the
+guard names that function.
 
 - `kind: 'function'` is a top-level function, or a function literal (arrow
   function, function expression, or lambda) assigned directly to a top-level
@@ -121,8 +126,10 @@ type or function is nested and is not listed.
   `partial(...)` are not listed.
 - `kind: 'type'` is a top-level class, interface, struct, record, enum, trait,
   or protocol, or a Go defined type such as `type X struct{}` or `type X int`.
-  Type aliases are never listed: TypeScript `type X = ...`, Go `type X = Y`,
-  and Rust `type X = ...`.
+  A named type whose form is a function, such as a C# `delegate` or a Go
+  `type X func(...)`, is a type with an empty `members` list. Type aliases are
+  never listed: TypeScript `type X = ...`, Go `type X = Y`, and Rust
+  `type X = ...`.
 - A type's `members` are the functions declared in its body or in an `impl`
   block for it: static or instance, with or without a body, including
   interface method signatures, abstract methods, and constructors. Each
@@ -139,8 +146,14 @@ type or function is nested and is not listed.
   other language.
 
 Every declaration and member has `name`, `line` (the 1-based line of the
-name), `visibility`, and `entry`. `entry` is true when the reference's
-`symbols` contain the name. `visibility` states who may use the name:
+name), `visibility`, and `entry`. `entry` is true when the reference's `symbols`
+name the symbol in the spelling that scanner's Code links use: a member
+qualified by its type, or its bare name. Members are `Type.member` in Java, C#,
+and Python, and `Namespace\Type::method` in PHP, beside a top-level
+`Namespace\name`; every other scanner matches bare names. A link naming a type
+never marks its members.
+
+`visibility` states who may use the name:
 
 | Value | Who may use it |
 | --- | --- |
