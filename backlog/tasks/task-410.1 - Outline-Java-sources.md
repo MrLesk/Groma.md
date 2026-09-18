@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@claude'
 created_date: '2026-09-16 19:37'
-updated_date: '2026-09-17 18:47'
+updated_date: '2026-09-18 17:39'
 labels: []
 dependencies: []
 references:
@@ -26,6 +26,7 @@ modified_files:
   - plugins/scanners/java/src/index.ts
   - test-bun/java-outline.test.ts
   - docs/scanners/java/index.md
+  - test/fixtures/java-outline/src/main/java/Greeting.java
 parent_task_id: TASK-410
 type: feature
 ordinal: 457000
@@ -60,6 +61,12 @@ Java components show only files. The Java worker already parses sources with jav
 3. Fixture test/fixtures/java-outline: a Groma world whose component Code holds a Java file (Java scanner) and a TypeScript file (TypeScript scanner); test-bun/java-outline.test.ts builds the Java package, adds both scanners and asserts the outline through core's readCodeStructure.
 4. docs/scanners/java/index.md: Source outline section.
 5. Rebuild the Java package, verify on the fixture and a real Java file, run bun run check in an isolated worktree.
+
+Review-fix round (external cold reviews of HEAD cf8e7975):
+6. Fix: the name lookup in Outline.java could match the name inside a comment (for example void /* run */ then run() on the next line), which put the type, method or constructor on the wrong line. Scan Java tokens after the modifiers, type parameters and return type, skipping comments, and take the name only where it is the next token (after a class, interface, enum or record keyword for types). The same comment skipping applies to the compact record constructor check, which a comment before the body defeated, and it keeps a compact source file's implicit type at its start (the file name in a string literal moved it). Regression cases go into test/fixtures/java-outline and test-bun/java-outline.test.ts.
+7. No other TASK-410.1 findings: the second reviewer reported none.
+
+8. Cold review of step 6: annotations written after a constructor's type parameters join the prefix the scan starts after; the docs place a compact source file's type at the line where its first field or method starts.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
@@ -76,10 +83,15 @@ Contract note (not edited): the shared rule says entry when the reference's symb
 Cold review fixes: documented the compact source file case (one internal type named after the file at line 1) and the real recovery limits (a syntax error drops the declarations after it; a file rejected at its first token, such as one with a byte order mark or binary content, outlines nothing, both reproduced with the worker); a compact record constructor without a modifier now takes the record's own access (JLS 8.10.4.1), verified by moving the record into test/fixtures/java-outline/src/main/java/shop/Receipt.java as a public record whose compact constructor is public while its non-canonical constructor stays package access; corrected the sourceFiles javadoc in Main.java; readJavaOutline now filters empty files before mapping.
 
 Re-verification: bun test test-bun/java-outline.test.ts 1 pass (two Java files plus the TypeScript file, all in Code order). Isolated worktree at 318ef749 with only this task's changes: bun run check passed (Biome: only the existing iso-map warning; tsc; node 16 pass; bun 434 pass, 0 fail).
+
+Review-fix round (external cold reviews of HEAD cf8e7975): the name lookup was a first identifier match of the name anywhere after the modifiers, type parameters and return type, so a comment such as void /* run */ put run on the comment's line, a comment before a compact constructor's body hid it (the record's access was lost), and a compact source file naming itself in a string moved its type to that line. Outline.java now scans Java tokens from that point, skipping whitespace and // and /* */ comments; the name counts only when it is the next token (after class, interface, enum or record for a type), otherwise the search start is kept. The compact-constructor check uses the same skipping. Cold review of this fix: annotations written after a constructor's type parameters (public <T> then @Deprecated then Gen(T t)) belong to the modifiers but lie after the modifiers' end, so they are now part of the scanned prefix; the unused @ branch was deleted, skipBlank renamed skipSpaceAndComments, and the docs now place a compact source file's type at the line where its first field or method starts (not line 1, which is wrong when the file has imports).
+Verification: test-bun/java-outline.test.ts covers a comment naming place after its return type, a commented compact constructor, a compact source file printing its own name, and an annotated generic constructor; each case fails on the HEAD worker (lines 20, internal, 2 and 15 instead of 21, public, 1 and 17). Isolated worktree at HEAD with only this task's changes: bun run check exit 0 (Biome: only existing warnings; tsc; node 16 pass; bun 515 pass, 32 env-gated skips, 0 fail).
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
 The Java scanner now outlines the files it owns. A new worker command parses each requested file with the bundled compiler's parser, without a classpath or type resolution, and returns top-level classes, interfaces, enums, records and annotation types with the methods and constructors in their bodies, each with name, line and visibility from the Java modifier rules (interface and annotation members public, a compact record constructor with the record's access, enum constructors private, other members and top-level types package access). Fields, initializers, nested and anonymous types and enum constant bodies are left out. The adapter marks entries from each Code link's symbols, naming a type by its simple name and a member as Type.member. Verified by test-bun/java-outline.test.ts, which builds the Java package, adds it beside the TypeScript scanner and reads test/fixtures/java-outline through core readCodeStructure; by outlining real mockito sources with the packaged scanner; and by bun run check in an isolated worktree. The Java scanner documentation describes the outline and its limits.
+
+Review-fix round: the outline no longer takes a declaration's name from a comment or string. It scans Java tokens after the modifiers (including annotations after type parameters), type parameters and return type, skipping comments, so comments before a name keep its line and a commented compact constructor keeps the record's access; a compact source file's type sits where its first field or method starts, as the docs now say. Verified by new cases in test-bun/java-outline.test.ts that fail on the previous worker, and bun run check in an isolated worktree.
 <!-- SECTION:FINAL_SUMMARY:END -->
