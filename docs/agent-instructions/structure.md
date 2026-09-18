@@ -25,8 +25,9 @@ the scanner cannot see.
 
 | Command | Targets |
 | --- | --- |
-| `groma edit <survivor> --combine <absorbed...>` | IDs of scanned containers or components with the same kind and parent |
+| `groma edit <survivor> --combine <absorbed...>` | IDs of scanned systems, containers, or components with the same kind and parent |
 | `groma edit <component> --parent <container>` | a scanned component ID and a container ID |
+| `groma edit <container> --parent <system>` | a scanned container ID and a system ID |
 | `groma edit <component> --detach <file...>` | a component ID and exact repository-relative files it owns |
 | `groma edit <component> --group <name>` or `--ungroup` | a component ID; the group name is free text |
 | `groma add group <name> <component...>` | sibling component IDs |
@@ -88,11 +89,13 @@ surviving component.
 
 Combined records must have the same kind and parent. Absorbed records cannot
 have body content, concept-addressed relationships, a group, or technology.
-Children moved by a container combine cannot have body content or
-concept-addressed relationships either. File connections follow their current
-owners and do not block these operations. The survivor may already have
-authored meaning. An individual component move likewise requires an empty body
-and no concept-addressed relationships touching that component.
+The children a combine absorbs directly cannot have body content either, so a
+system combine refuses a described container while a described component two
+levels down relocates with it. A move requires an empty body on the record that
+moves, not on its children. No record anywhere under a moved or absorbed record
+may hold a concept-addressed relationship, because its document changes path.
+File connections follow their current owners and do not block these operations.
+The survivor may already have authored meaning.
 
 ## Splits and single-file moves
 
@@ -124,6 +127,30 @@ its unit. Detach every file of the unit to give the unit one new component.
 
 Do not clear authored meaning or edit architecture files to bypass a refused
 combine or move.
+
+## One product, several scanned systems
+
+A scan creates one system per project it finds, so a repository with several
+languages or applications can start with several systems. Keep them when they
+describe separate products. When they describe one product, merge them:
+
+```sh
+groma edit shop --combine depot
+```
+
+Every container of `depot` moves under `shop` with its components, keeping its
+ID, Code references, and meaning, and the `depot` record is removed. Move a
+single container instead when only part of a system belongs elsewhere:
+
+```sh
+groma edit depot-warehouse --parent shop
+```
+
+A container carries its components to the new system. A system emptied this way
+stays until you combine it into the surviving system. Both operations refuse a
+container or system with authored meaning under the same rules as component
+moves and combines, refuse an external system as a destination, and refuse a
+change that would leave a flow step unresolvable.
 
 ## Skyscrapers
 

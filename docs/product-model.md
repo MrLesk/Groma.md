@@ -126,9 +126,11 @@ operation before opening a map.
      title, description, overview and technology in place and tags the element
      with a draft; every field posts the input `groma edit` takes.
    - Atomic scan evidence is curated with `groma edit`: combine empty scan
-     records, move an empty scanned component, detach files from a component,
-     and group or ungroup sibling components. These operations validate the
-     whole change before writing. `--detach <file...>` removes those files
+     records, including two systems into one product, move an empty scanned
+     component to another container or a container to another system, detach
+     files from a component, and group or ungroup sibling components. A moved
+     or absorbed record takes every document stored under it to its new path.
+     These operations validate the whole change before writing. `--detach <file...>` removes those files
      from the component's Code; the next scan gives each detached file its own
      component unless another file of its scanner source unit still has an
      owner. Relationship rows naming a file without an owner stay stored and
