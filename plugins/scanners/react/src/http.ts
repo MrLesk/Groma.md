@@ -1,20 +1,11 @@
 import type { ScanHttpRequest } from '@groma/scanner'
 import ts from 'typescript'
-import {
-  axiosRequest, createdClient, defaultClient, fetchMethod,
-  type Client, type ClientContext, type RequestFact,
-} from '../../http-clients.ts'
+import { axiosRequest, fetchMethod, type ClientContext, type RequestFact } from '../../http-clients.ts'
 import { requestUrl } from '../../http-url.ts'
-import { importOrigin, urlContext, urlParts } from '../../http-values.ts'
+import { urlContext, urlParts } from '../../http-values.ts'
 
 interface ReactContext extends ClientContext {
   checker: ts.TypeChecker
-}
-
-/** The axios default export; a named export such as `isAxiosError` or `post` is not a client. */
-function isAxios(node: ts.Node, context: ReactContext): boolean {
-  const origin = importOrigin(context, node)
-  return origin?.module === 'axios' && origin.name === 'default'
 }
 
 /** The runtime `fetch`: a name the project declares itself is a local function, not the client. */
@@ -22,13 +13,6 @@ function isRuntimeFetch(callee: ts.Expression, checker: ts.TypeChecker): boolean
   if (!ts.isIdentifier(callee) || callee.text !== 'fetch') return false
   const declaration = checker.getSymbolAtLocation(callee)?.valueDeclaration
   return declaration === undefined || declaration.getSourceFile().isDeclarationFile
-}
-
-/** `axios` itself, or an instance a name holds from `axios.create`, whose configuration starts every request. */
-function axiosClient(node: ts.Node, context: ReactContext): Client | undefined {
-  if (!ts.isIdentifier(node)) return undefined
-  if (isAxios(node, context)) return defaultClient(context)
-  return createdClient(context, node, receiver => isAxios(receiver as ts.Node, context))
 }
 
 function fetchRequest(call: ts.CallExpression, context: ReactContext): RequestFact | undefined {
@@ -52,7 +36,7 @@ export function reactHttpRequests(
   const requests: ScanHttpRequest[] = []
   const visit = (node: ts.Node): void => {
     if (ts.isCallExpression(node)) {
-      const request = fetchRequest(node, context) ?? axiosRequest(context, node, client => axiosClient(client as ts.Node, context))
+      const request = fetchRequest(node, context) ?? axiosRequest(context, node)
       const operation = request === undefined ? undefined : callerOperation(node)
       if (request !== undefined && operation !== undefined) requests.push({ operation, ...request })
     }

@@ -1,21 +1,14 @@
-import type { HttpEndpointSegment, ScanHttpEndpoint, ScanHttpRequest } from '@groma/scanner'
+import type { ScanHttpEndpoint, ScanHttpRequest } from '@groma/scanner'
 import ts from 'typescript'
-import {
-  axiosRequest, createdClient, defaultClient, fetchMethod,
-  type Client, type ClientContext, type RequestFact,
-} from '../../http-clients.ts'
-import { pathText, requestUrl } from '../../http-url.ts'
-import { declarationOf, urlContext, urlParts } from '../../http-values.ts'
+import { axiosRequest, fetchMethod, optionsBase, type ClientContext, type RequestFact } from '../../http-clients.ts'
+import { requestUrl, withBase } from '../../http-url.ts'
+import { declarationOf, heldAt, urlContext, urlParts } from '../../http-values.ts'
 import { enclosingOperation, type Operation } from './evidence.ts'
 import { relative, type VueProject } from './project.ts'
+import { serverRoute } from './server-routes.ts'
 
 /** Clients the runtime supplies: the platform's `fetch`, and the two Nuxt auto-imports. */
 const GLOBAL_CLIENTS = new Set(['fetch', '$fetch', 'useFetch'])
-
-/** A Nuxt server route's file name may end with the method it answers. */
-const SUFFIXES = new Set(['get', 'post', 'put', 'patch', 'delete', 'head', 'options'])
-
-const SERVER_ROUTE = /^server\/((?:api|routes)\/.+)\.[cm]?[jt]s$/
 
 interface VueContext extends ClientContext {
   checker: ts.TypeChecker
@@ -51,79 +44,18 @@ function isGlobalClient(callee: ts.Expression, context: VueContext, projectRoot:
   return callee.text === 'fetch' || declaration !== undefined
 }
 
-/** `axios` itself, or an instance a name holds from `axios.create`, whose configuration starts every request. */
-function axiosClient(node: ts.Node, context: VueContext): Client | undefined {
-  if (!ts.isIdentifier(node)) return undefined
-  if (isAxios(node, context)) return defaultClient(context)
-  return createdClient(context, node, receiver => isAxios(receiver as ts.Node, context))
-}
-
-/** A name the `axios` module's import binds. */
-function isAxios(node: ts.Node, context: VueContext): boolean {
-  const declaration = ts.isIdentifier(node) ? context.checker.getSymbolAtLocation(node)?.declarations?.[0] : undefined
-  return declaration !== undefined && importedModule(declaration) === 'axios'
-}
-
-/** The module an imported name comes from, so a client is recognized without resolving its type. */
-function importedModule(declaration: ts.Declaration): string | undefined {
-  const clause = ts.isImportSpecifier(declaration) ? declaration.parent.parent.parent
-    : ts.isImportClause(declaration) ? declaration.parent : undefined
-  if (clause === undefined || !ts.isImportDeclaration(clause) || !ts.isStringLiteral(clause.moduleSpecifier)) {
-    return undefined
-  }
-  return clause.moduleSpecifier.text
-}
-
-/** `fetch(url, options)`, `$fetch(url, options)` and `useFetch(url, options)` all read the URL first. */
+/**
+ * `fetch(url, options)`, `$fetch(url, options)` and `useFetch(url, options)` all read the URL first;
+ * Nuxt's two also read a `baseURL` option, which options the scanner cannot read may hold.
+ */
 function globalRequest(call: ts.CallExpression, context: VueContext, projectRoot: string): RequestFact | undefined {
   if (!isGlobalClient(call.expression, context, projectRoot)) return undefined
   const [url, options] = call.arguments
   if (url === undefined) return undefined
-  return { ...fetchMethod(context, url, options), ...requestUrl(urlParts(context, url)) }
-}
-
-function routeSegment(part: string, last: boolean): HttpEndpointSegment | undefined {
-  const rest = /^\[\.\.\.(.+)\]$/.exec(part)
-  if (rest) return last && pathText.test(rest[1]!) ? { kind: 'catch-all', name: rest[1]! } : undefined
-  const parameter = /^\[(.+)\]$/.exec(part)
-  if (parameter) return pathText.test(parameter[1]!) ? { kind: 'parameter', name: parameter[1]! } : undefined
-  if (part.includes('[') || part.includes(']')) return undefined
-  return pathText.test(part) ? { kind: 'literal', value: part } : undefined
-}
-
-/** The path a Nuxt server route serves, and the method its file name states. */
-function serverRoute(file: string): { method: string; path: HttpEndpointSegment[] } | undefined {
-  const match = SERVER_ROUTE.exec(file)
-  if (match === null) return undefined
-  const route = match[1]!
-  // `server/api` keeps its prefix; `server/routes` serves from the root.
-  const parts = (route.startsWith('routes/') ? route.slice('routes/'.length) : route).split('/')
-  const pieces = parts.pop()!.split('.')
-  // Only a known suffix names a method; any other dot belongs to the file's own name.
-  const suffix = pieces.length > 1 && SUFFIXES.has(pieces.at(-1)!) ? pieces.pop()! : undefined
-  const name = pieces.join('.')
-  const segments = name === 'index' ? parts : [...parts, name]
-  const path: HttpEndpointSegment[] = []
-  for (const [index, part] of segments.entries()) {
-    const segment = routeSegment(part, index === segments.length - 1)
-    if (segment === undefined) return undefined
-    path.push(segment)
-  }
-  return { method: suffix === undefined ? '*' : suffix.toUpperCase(), path }
-}
-
-/** The function a server route's default export designates, including the one `defineEventHandler` receives. */
-function routeHandler(source: ts.SourceFile): Operation | undefined {
-  for (const statement of source.statements) {
-    if (!ts.isExportAssignment(statement) || statement.isExportEquals === true) continue
-    const value = statement.expression
-    if (isOperation(value)) return value
-    if (ts.isCallExpression(value)) {
-      const argument = value.arguments[0]
-      if (argument !== undefined && isOperation(argument)) return argument
-    }
-  }
-  return undefined
+  const parts = urlParts(context, url)
+  const nuxt = (call.expression as ts.Identifier).text !== 'fetch'
+  const target = nuxt ? withBase(optionsBase(context, options, []), parts) : parts
+  return { ...fetchMethod(context, url, options), ...requestUrl(target) }
 }
 
 function isOperation(node: ts.Node): node is Operation {
@@ -131,11 +63,42 @@ function isOperation(node: ts.Node): node is Operation {
   return ts.isArrowFunction(node) || ts.isFunctionExpression(node)
 }
 
+/** A function written in place, or one this file declares under the name, as a function or held by a variable. */
+function localFunction(node: ts.Node, source: ts.SourceFile, context: VueContext): Operation | undefined {
+  if (isOperation(node)) return node
+  if (!ts.isIdentifier(node)) return undefined
+  const declaration = declarationOf<ts.Node>(context, node)
+  const held = heldAt(context, node)
+  const value = declaration !== undefined && ts.isFunctionDeclaration(declaration) ? declaration
+    : typeof held === 'object' ? held.node as ts.Node : undefined
+  return value !== undefined && isOperation(value) && value.getSourceFile() === source ? value : undefined
+}
+
+function isDefaultFunction(statement: ts.Statement): boolean {
+  if (!ts.isFunctionDeclaration(statement) || !ts.canHaveModifiers(statement)) return false
+  return (ts.getModifiers(statement) ?? []).some(modifier => modifier.kind === ts.SyntaxKind.DefaultKeyword)
+}
+
+/**
+ * The function a server route's default export designates: a default-exported function, or a function
+ * the default export names or passes to a handler wrapper such as `defineEventHandler`.
+ */
+function routeHandler(source: ts.SourceFile, context: VueContext): Operation | undefined {
+  for (const statement of source.statements) {
+    if (isDefaultFunction(statement)) return isOperation(statement) ? statement : undefined
+    if (!ts.isExportAssignment(statement) || statement.isExportEquals === true) continue
+    const value = statement.expression
+    const handler = ts.isCallExpression(value) ? value.arguments[0] : value
+    return handler === undefined ? undefined : localFunction(handler, source, context)
+  }
+  return undefined
+}
+
 function fileRequests(source: ts.SourceFile, file: string, input: VueHttpInput, context: VueContext): ScanHttpRequest[] {
   const requests: ScanHttpRequest[] = []
   const visit = (node: ts.Node): void => {
     const fact = ts.isCallExpression(node)
-      ? globalRequest(node, context, input.projectRoot) ?? axiosRequest(context, node, client => axiosClient(client as ts.Node, context))
+      ? globalRequest(node, context, input.projectRoot) ?? axiosRequest(context, node)
       : undefined
     if (fact !== undefined) {
       // A call in a component's own top-level code runs on setup, which the module operation names.
@@ -149,12 +112,16 @@ function fileRequests(source: ts.SourceFile, file: string, input: VueHttpInput, 
   return requests
 }
 
-function fileEndpoint(source: ts.SourceFile, file: string, input: VueHttpInput): ScanHttpEndpoint | undefined {
-  const route = input.nuxt ? serverRoute(file) : undefined
+/**
+ * Nuxt serves every file in `server/api` and `server/routes`, so a route reports its endpoint even when
+ * the scan cannot resolve the handler: the file's module operation then names it.
+ */
+function fileEndpoint(source: ts.SourceFile, files: { project: string; owned: string }, input: VueHttpInput, context: VueContext): ScanHttpEndpoint | undefined {
+  const route = input.nuxt ? serverRoute(files.project) : undefined
   if (route === undefined) return undefined
-  const handler = routeHandler(source)
-  const operation = handler === undefined ? undefined : input.operationId(handler)
-  return operation === undefined ? undefined : { operation, ...route }
+  const handler = routeHandler(source, context)
+  const operation = (handler === undefined ? undefined : input.operationId(handler)) ?? input.moduleOperation(files.owned)
+  return { operation, ...route }
 }
 
 /**
@@ -170,7 +137,7 @@ export function vueHttpFacts(input: VueHttpInput): {
   for (const source of input.project.files) {
     const owned = relative(input.project.root, source.fileName)
     httpRequests.push(...fileRequests(source, owned, input, context))
-    const endpoint = fileEndpoint(source, relative(input.projectRoot, source.fileName), input)
+    const endpoint = fileEndpoint(source, { project: relative(input.projectRoot, source.fileName), owned }, input, context)
     if (endpoint !== undefined) httpEndpoints.push(endpoint)
   }
   return { httpRequests, httpEndpoints }

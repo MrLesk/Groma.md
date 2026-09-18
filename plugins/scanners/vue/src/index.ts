@@ -60,7 +60,7 @@ export default {
   readCodeStructure: readVueOutline,
   /** Each Vue project's sources, including its `.vue` files and a Nuxt project's server routes. */
   listSourceFiles: root => frameworkSourceFiles({ root, dependency: 'vue', projects: ['.vue'],
-    sources: ['.vue', '.ts', '.js', '.html', '.css', '.scss', '.sass', '.less', '.styl'] }),
+    sources: ['.vue', '.ts', '.tsx', '.js', '.jsx', '.html', '.css', '.scss', '.sass', '.less', '.styl'] }),
   checkReadiness: async root => {
     const projects = await frameworkProjects(root, 'vue', ['.vue'])
     for (const project of projects) vueProject(project, root)

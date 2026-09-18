@@ -50,9 +50,14 @@ const listings: [ScannerPlugin, string, string[]][] = [
   // The Nuxt project sits below the repository root, so its server routes are listed project-relative.
   [vue, 'vue-http', [
     'web/Talks.vue', 'web/client.ts', 'web/composables/useFetch.ts', 'web/drafts.ts',
-    'web/server/api/drafts/index.get.ts', 'web/server/api/files/[...path].get.ts', 'web/server/api/settings.ts',
+    'web/server/api/(admin)/users.get.ts', 'web/server/api/[resource].get.ts',
+    'web/server/api/docs/[...file-path].get.ts', 'web/server/api/drafts/index.get.ts',
+    'web/server/api/files/[...path].get.ts', 'web/server/api/hello-[name].get.ts', 'web/server/api/imported.get.ts',
+    'web/server/api/optional/[[opt]].get.ts', 'web/server/api/settings.ts', 'web/server/api/speakers.get.prod.ts',
     'web/server/api/talks.get.ts', 'web/server/api/talks.post.ts', 'web/server/api/talks/[id].delete.ts',
-    'web/server/middleware/auth.ts', 'web/server/routes/health.ts',
+    'web/server/api/talks/[id].get.ts', 'web/server/api/talks/declared.get.ts', 'web/server/api/talks/named.get.ts',
+    'web/server/api/wild/[...].ts', 'web/server/handlers.ts', 'web/server/middleware/auth.ts',
+    'web/server/routes/feed.tsx', 'web/server/routes/health.ts',
   ]],
 ]
 

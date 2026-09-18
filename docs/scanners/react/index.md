@@ -142,17 +142,17 @@ The [producer decisions](../evidence.md#producer-checklist) for this ecosystem:
    literal initializer that the project never assigns again is literal text. So
    is a property of an object literal such a variable holds: the last property
    with its name, while the literal has no spread, computed key or accessor, and
-   no code in the project assigns or deletes that property or an object above it,
-   hands one of them to other code, or calls a method through them, and no
+   no code in the project assigns or deletes that property or an object above
+   it, hands one of them to other code, or calls a method through them, and no
    module object holding it, such as a namespace import, a re-exported namespace
-   or a dynamic import's result, is used other than to read one export by name. A value the scanner cannot
-   see, such as an ambient declaration, `process.env.API_URL`, `import.meta.env`
-   or a constant imported from a package, sets `configured`, and so does a field
-   read through `this`, which holds the client's own base setting. Text that
-   continues a configured value's last segment instead of starting with `/` is
-   unknown. A literal host, also when literal pieces only state it together, a
-   parameter, a value a call returns, and any other computed value report a
-   leading unknown segment.
+   or a dynamic import's result, is used other than to read one export by name.
+   A value the scanner cannot see, such as an ambient declaration,
+   `process.env.API_URL`, `import.meta.env` or a constant imported from a
+   package, sets `configured`, and so does a field read through `this`, which
+   holds the client's own base setting. Text that continues a configured value's
+   last segment instead of starting with `/` is unknown. A literal host, also
+   when literal pieces only state it together, a parameter, a value a call
+   returns, and any other computed value report a leading unknown segment.
 6. **File-location routes.** A route file's directory path is its served path,
    with `[id]` a parameter, `[...rest]` a catch-all and `[[...rest]]` an optional
    catch-all. A route group such as `(admin)` organizes files without serving a
