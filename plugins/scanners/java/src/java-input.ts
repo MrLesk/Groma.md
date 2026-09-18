@@ -1,6 +1,7 @@
-import { access, readdir, realpath } from 'node:fs/promises'
+import { access, readFile, readdir, realpath } from 'node:fs/promises'
 import path from 'node:path'
 import { readGradleProject } from './gradle.ts'
+import { mavenSourceRoots } from './maven.ts'
 import { run } from './process.ts'
 
 interface JavaProject {
@@ -37,13 +38,13 @@ async function collect(root: string, directory: string): Promise<string[]> {
   return files.sort()
 }
 
+/** The source root comes from maven.ts, which the listing shares; the worker reads the version, encoding and name. */
 async function mavenProject(root: string, java: string, worker: string): Promise<JavaProject | undefined> {
-  const model = JSON.parse(await run(java, ['-jar', worker, 'model', path.join(root, 'pom.xml')], root)) as {
-    aggregator?: boolean; release: string; encoding: string; sourceRoot: string; name: string
-  }
-  if (model.aggregator) return undefined
-  return { release: model.release, encoding: model.encoding, sourceRoots: [model.sourceRoot], name: model.name,
-    kind: 'maven-project', file: 'pom.xml' }
+  const pom = path.join(root, 'pom.xml')
+  const sourceRoots = mavenSourceRoots(root, await readFile(pom, 'utf8'))
+  if (sourceRoots.length === 0) return undefined
+  const model = JSON.parse(await run(java, ['-jar', worker, 'model', pom], root)) as { release: string; encoding: string; name: string }
+  return { release: model.release, encoding: model.encoding, sourceRoots, name: model.name, kind: 'maven-project', file: 'pom.xml' }
 }
 
 /** A directory with pom.xml is a Maven project; every other selected directory is a Gradle project. */

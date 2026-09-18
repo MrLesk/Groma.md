@@ -134,6 +134,13 @@ export async function readRustProject(root: string, settings: ScannerSettings): 
   return { root, manifest, name: model.package?.name ?? path.basename(path.dirname(manifest)), targets: crates.map(crate => crate.root_module).sort(), crates }
 }
 
+/** The root module of every target a scan analyzes for these settings. */
+export async function targetRoots(root: string, settings: ScannerSettings): Promise<string[]> {
+  const roots: string[] = []
+  for (const manifest of await rustProjects(root, settings)) roots.push(...(await readRustProject(root, { ...settings, manifest })).targets)
+  return roots
+}
+
 export async function rustProjects(root: string, settings: ScannerSettings): Promise<string[]> {
   if (settings.manifest !== undefined) return [manifestAt(root, settings)]
   const selected = new Set<string>()

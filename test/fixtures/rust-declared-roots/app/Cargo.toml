@@ -1,0 +1,9 @@
+[package]
+name = "app"
+
+[lib]
+path = "core/lib.rs"
+
+[[bin]]
+name = "cli"
+path = "tools/cli.rs"

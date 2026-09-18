@@ -210,7 +210,7 @@ scanner makes:
 
 | Scanner | Can also list |
 | --- | --- |
-| Rust | A module no crate root declares |
+| Rust | A `.rs` file under a target root module's directory that no crate root declares |
 | Go | A file its build constraints exclude, such as `_windows.go` or a `//go:build` tag the scan does not select |
 | C# | A file an MSBuild item glob excludes from the project |
 | Angular, Vue | A template or stylesheet no component declares |
@@ -220,8 +220,10 @@ file as read by no enabled scanner.
 
 Groma uses the listing to explain a file with no architecture owner. `groma view`
 on such a file exits non-zero with one reason: it is not a repository file, a
-named `scanners.json` pattern excludes it, no enabled scanner reads it, or the
-scanners that read it have not scanned it yet. A plugin without the hook
+named `scanners.json` pattern excludes it, no enabled scanner reads it, or it
+waits for a scan by the scanners that read it, because it is new or was
+detached. A listing that throws names its scanner with the error's first line,
+beside the other scanners' answer. A plugin without the hook
 contributes nothing to that answer, so a file only that plugin reads is reported
 as read by no enabled scanner.
 
