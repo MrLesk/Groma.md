@@ -2,6 +2,9 @@ import { parseFrontmatter, parseMarkdown } from 'comark'
 
 import { architectureElementPath } from './architecture-path.ts'
 import { buildArchitectureModel, expectedParentKinds } from './architecture-model.ts'
+import { relocated, requireElement } from './curate-rewrites.ts'
+import type { CurationContext, DocumentWrite, Rewrite } from './curate-rewrites.ts'
+import { renamedTarget } from './curate-rename.ts'
 import { resolveFlows } from './flow-model.ts'
 import { requireGromaMapping } from './okf-profile.ts'
 import { GromaFileSystem } from './groma-filesystem.ts'
@@ -30,6 +33,8 @@ export interface CurateInput extends MeaningChanges {
   combine?: string[]
   /** Source files whose Code references leave the component; the next scan gives them owners. */
   detach?: string[]
+  /** The new id of the target; its document and everything stored under it move to the matching paths. */
+  newId?: string
 }
 
 /** Facts from a completed structural write; paths are repository-relative. */
@@ -41,21 +46,6 @@ export interface StructuralResult {
   removed: string[]
   affectedIds: string[]
   replacements: Array<{ absorbedId: string; survivingId: string }>
-}
-
-interface Rewrite {
-  id: string
-  sourceFilename: string
-  destinationFilename: string
-  source: string
-}
-
-interface CurationContext {
-  filesystem: GromaFileSystem
-  repositoryRoot: string
-  records: ArchitectureRecords
-  model: ArchitectureModel
-  byId: Map<string, ArchitectureElement>
 }
 
 interface CurationChange {
@@ -110,7 +100,7 @@ function combinedCode(elements: ArchitectureElement[]): CodeReference[] {
 
 function validateDestinations(
   filesystem: GromaFileSystem,
-  rewrites: Rewrite[],
+  rewrites: readonly DocumentWrite[],
 ): void {
   const sources = new Set(rewrites.map(rewrite => rewrite.sourceFilename))
   const destinations = new Set<string>()
@@ -132,8 +122,8 @@ function validateDestinations(
 
 async function applyRewrites(
   repositoryRoot: string,
-  rewrites: Rewrite[],
-  removals: string[],
+  rewrites: readonly DocumentWrite[],
+  removals: readonly string[],
 ): Promise<Pick<StructuralResult, 'created' | 'changed' | 'removed'>> {
   const sources = new Set([...rewrites.map(rewrite => rewrite.sourceFilename), ...removals])
   const created: string[] = []
@@ -162,13 +152,19 @@ async function applyRewrites(
   return { created, changed, removed }
 }
 
-function requireElement(
-  byId: Map<string, ArchitectureElement>,
-  id: string,
-): ArchitectureElement {
-  const element = byId.get(id)
-  if (element === undefined) throw new Error(`unknown id "${id}"`)
-  return element
+/** Each of these rebuilds the target document from the stored element, so they cannot share one edit. */
+function requireSeparateEdits(input: CurateInput): void {
+  const combines = (input.combine?.length ?? 0) > 0
+  const detaches = (input.detach?.length ?? 0) > 0
+  if (input.parent !== undefined && combines) {
+    throw new Error('--parent and --combine must be separate edits')
+  }
+  if (detaches && combines) {
+    throw new Error('--detach and --combine must be separate edits')
+  }
+  if (input.newId !== undefined && (combines || detaches || input.parent !== undefined)) {
+    throw new Error('--id must be a separate edit')
+  }
 }
 
 function validateCurationInput(input: CurateInput): void {
@@ -178,12 +174,7 @@ function validateCurationInput(input: CurateInput): void {
   if (input.group !== undefined && input.group.trim() === '') {
     throw new Error('--group requires non-empty text')
   }
-  if (input.parent !== undefined && (input.combine?.length ?? 0) > 0) {
-    throw new Error('--parent and --combine must be separate edits')
-  }
-  if ((input.detach?.length ?? 0) > 0 && (input.combine?.length ?? 0) > 0) {
-    throw new Error('--detach and --combine must be separate edits')
-  }
+  requireSeparateEdits(input)
 }
 
 function groupedSource(
@@ -231,7 +222,7 @@ async function parsedDocument(sourceFilename: string, source: string): Promise<A
 async function requireResolvableFlows(
   context: CurationContext,
   target: ArchitectureElement,
-  rewrites: readonly Rewrite[],
+  rewrites: readonly DocumentWrite[],
   removals: readonly string[],
 ): Promise<void> {
   if (context.records.flows.length === 0) return
@@ -246,7 +237,11 @@ async function requireResolvableFlows(
       : await parsedDocument(rewrite.destinationFilename, rewrite.source))
   }
   const model = buildArchitectureModel(documents)
-  const broken = context.records.flows
+  const flows = await Promise.all(context.records.flows.map(async flow => {
+    const rewrite = written.get(flow.sourceFilename)
+    return rewrite === undefined ? flow : await parsedDocument(rewrite.destinationFilename, rewrite.source)
+  }))
+  const broken = flows
     .filter(flow => {
       try {
         resolveFlows([flow], model)
@@ -289,32 +284,6 @@ function movedTarget(
       parentSourceFilename: parent.sourceFilename,
     }),
   }
-}
-
-/** Moves one element's document under a new parent path, with every document stored beneath it. */
-async function relocated(
-  context: CurationContext,
-  element: ArchitectureElement,
-  parentSourceFilename: string,
-  newParentId?: string,
-): Promise<Rewrite[]> {
-  const destinationFilename = architectureElementPath({
-    root: context.filesystem.sourceFilename(),
-    kind: element.kind,
-    id: element.id,
-    parentSourceFilename,
-  })
-  const stored = await readDocument(context.repositoryRoot, element.sourceFilename)
-  const rewrites: Rewrite[] = [{
-    id: element.id,
-    sourceFilename: element.sourceFilename,
-    destinationFilename,
-    source: newParentId === undefined ? stored : withGromaField(stored, 'parent', newParentId),
-  }]
-  for (const child of context.model.elements.filter(item => item.parentId === element.id)) {
-    rewrites.push(...await relocated(context, child, destinationFilename))
-  }
-  return rewrites
 }
 
 /** A moved record takes everything stored under it to the new path. */
@@ -411,23 +380,28 @@ export async function curateElement(
   const detached = detachedSource(target, grouped, input.detach)
   const moved = movedTarget(context, target, detached, input.parent)
   const combined = await combineElements(context, target, moved.source, input.combine)
-  const targetSource = withMeaning(combined.targetSource, input)
-  const rewrites = [...combined.rewrites]
+  const renamed = await renamedTarget(context, target, combined.targetSource, moved.destination, input.newId)
+  const targetSource = withMeaning(renamed.source, input)
+  const rewrites = [...combined.rewrites, ...renamed.rewrites]
   rewrites.unshift({
-    id: target.id,
+    id: renamed.id,
     sourceFilename: target.sourceFilename,
-    destinationFilename: moved.destination,
+    destinationFilename: renamed.destination,
     source: targetSource,
   })
   rewrites.push(...await movedDescendants(context, target, moved.destination))
-  validateDestinations(filesystem, rewrites)
+  const writes: DocumentWrite[] = [...rewrites, ...renamed.links]
+  validateDestinations(filesystem, writes)
   const removals = combined.removals.map(element => element.sourceFilename)
-  await requireResolvableFlows(context, target, rewrites, removals)
-  const paths = await applyRewrites(repositoryRoot, rewrites, removals)
+  await requireResolvableFlows(context, target, writes, removals)
+  const paths = await applyRewrites(repositoryRoot, writes, removals)
   return {
-    id: target.id,
+    id: renamed.id,
     ...paths,
     affectedIds: [...rewrites.map(rewrite => rewrite.id), ...combined.removals.map(element => element.id)],
-    replacements: combined.removals.map(element => ({ absorbedId: element.id, survivingId: target.id })),
+    replacements: [
+      ...input.newId === undefined ? [] : [{ absorbedId: target.id, survivingId: renamed.id }],
+      ...combined.removals.map(element => ({ absorbedId: element.id, survivingId: target.id })),
+    ],
   }
 }

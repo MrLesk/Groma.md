@@ -46,7 +46,8 @@ completed writes:
   architecture path.
 - `affected:` names an element whose document was written or removed.
 - `replaced: <absorbed-id> -> <surviving-id>` means a combine removed the
-  absorbed element into the survivor.
+  absorbed element into the survivor, or a rename replaced the old ID with the
+  new one. Either way, remove the old reference and add the new one.
 
 Moves report both paths and keep the same ID. Group commands report member
 IDs. Groma does not save these results as ID aliases or operation history.

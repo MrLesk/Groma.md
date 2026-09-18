@@ -33,6 +33,8 @@ export interface EditArchitectureInput extends MeaningChanges {
   parent?: string
   combine?: string[]
   detach?: string[]
+  /** The new id of an element; its document and the documents under it move with it. */
+  newId?: string
   steps?: string
 }
 
@@ -47,6 +49,7 @@ function isStructural(input: EditArchitectureInput): boolean {
     || input.parent !== undefined
     || (input.combine?.length ?? 0) > 0
     || (input.detach?.length ?? 0) > 0
+    || input.newId !== undefined
 }
 
 /** The project record: its title, description and overview, merged into the current profile. */
@@ -127,7 +130,10 @@ export async function editArchitecture(
   if (input.id === 'project') return editProject(repositoryRoot, input)
   const records = await loadArchitecture(repositoryRoot)
   const flow = records.flows.find(document => requireGromaMapping(document.frontmatter, document.sourceFilename).id === input.id)
-  if (flow !== undefined) return editFlow(repositoryRoot, records, flow, input)
+  if (flow !== undefined) {
+    if (input.newId !== undefined) throw new Error('--id renames systems, containers, and components')
+    return editFlow(repositoryRoot, records, flow, input)
+  }
   const model = buildArchitectureModel(records.documents)
   const element = model.elements.find(candidate => candidate.id === input.id)
 
@@ -154,6 +160,7 @@ export async function editArchitecture(
       parent: optionalText(input.parent),
       combine: input.combine,
       detach: input.detach,
+      newId: input.newId,
     })
   }
 
