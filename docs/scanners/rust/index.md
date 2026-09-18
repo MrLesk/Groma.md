@@ -170,9 +170,16 @@ function that contains them. These functions are not compared:
 - functions under inactive `cfg` conditions, such as `#[cfg(test)]`;
 - functions in a file with several compilation contexts.
 
-Macro arguments are raw token trees. A name inside them takes the slot of the
-latest local binding with that name. Names inside format strings, such as
-`format!("{count}")`, stay text.
+Braces, brackets and separators are dropped. Parentheses stay where they group
+an operator expression, so `(a + b) * c` differs from `a + b * c` while `(a) + b`
+equals `a + b`; the parenthesis that opens an argument list becomes `call`.
+
+Macro arguments are raw token trees. Their nested parentheses stay, because raw
+tokens cannot tell a group from a call. A name inside them takes the slot of the
+latest local binding with that name that is visible at the macro call: a `let`
+binding after its statement, an `if let` binding in its first branch, and other
+bindings in their function, closure, block, match arm or loop. Names inside
+format strings, such as `format!("{count}")`, stay text.
 
 The standard library is not loaded, so rust-analyzer cannot tell an unresolved
 name in a pattern from a new binding. An identifier pattern that starts with an

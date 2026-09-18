@@ -95,9 +95,15 @@ rustTest('lint finds identical and near-duplicate Rust functions but never closu
       at: [...finding.matchAll(/\S+\.rs:\d+/g)].map(match => match[0]).sort(),
       identical: !finding.includes('not identical'),
     }))
-    // Renamed locals match exactly, also in an associated function and in macro ranges.
-    // Swapped enum arms, tiny copies and closures are absent.
+    // Renamed locals match exactly, also in an associated function, in macro ranges, and in a macro
+    // argument where a same-named binding is not visible: after an inner block, in an if-let else
+    // branch, in a let-else block and in the binding's own initializer. Swapped enum arms, tiny
+    // copies, closures and arithmetic that differs only in grouping, also inside a macro, are absent.
     expect(findings).toEqual([
+      { at: ['src/formulas.rs:15', 'src/formulas.rs:24'], identical: true },
+      { at: ['src/formulas.rs:43', 'src/formulas.rs:52'], identical: true },
+      { at: ['src/formulas.rs:61', 'src/formulas.rs:69'], identical: true },
+      { at: ['src/formulas.rs:77', 'src/formulas.rs:82'], identical: true },
       { at: ['src/invoice.rs:3', 'src/quote.rs:3'], identical: false },
       { at: ['src/labels.rs:1', 'src/labels.rs:6'], identical: true },
       { at: ['src/readiness.rs:3', 'src/scheduling.rs:6'], identical: true },
