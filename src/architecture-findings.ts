@@ -55,9 +55,8 @@ export interface OperationCopies {
 }
 
 /**
- * Whether this instance's source range holds the line. Names cannot join them: a scanner may
- * qualify an operation by its type, as in `Shop\OrderService::store`, while the code listing shows
- * the member's own name.
+ * Whether this instance's source range holds the line. The range joins a code row to its operation, because a
+ * scanner may qualify the name, as in `Shop\OrderService::store`, while the row shows `store`.
  */
 function holdsLine(instance: ArchitectureFindingInstance, file: string, line: number): boolean {
   return instance.file === file && instance.startLine <= line && line <= instance.endLine
@@ -72,39 +71,46 @@ interface FoundOperation {
   instance: ArchitectureFindingInstance
 }
 
-/** The operation written at the line: the innermost range holding it, since operations nest. */
+/**
+ * Whether a scanner's operation name ends in the row's own name, as `Shop\OrderService::store` and
+ * `shop.Orders#store(int)` end in `store`.
+ */
+function endsInName(instance: ArchitectureFindingInstance, name: string): boolean {
+  const bare = instance.name.replace(/\(.*\)$/, '')
+  return bare.endsWith(name) && !/[\p{L}\p{N}_$]/u.test(bare.charAt(bare.length - name.length - 1))
+}
+
+/**
+ * The operation written at the line. When several ranges hold it, because operations nest or share a line, the
+ * row's name selects the operations it can be and the narrowest of those is the row's; undefined when that is not
+ * a single operation.
+ */
 function operationAt(
   findings: readonly ArchitectureFinding[],
   file: string,
   line: number,
+  name: string,
 ): FoundOperation | undefined {
-  let found: FoundOperation | undefined
-  for (const finding of findings) {
-    for (const instance of finding.instances) {
-      if (!holdsLine(instance, file, line)) continue
-      if (found === undefined || span(instance) < span(found.instance)) found = { finding, instance }
-    }
-  }
-  return found
+  const holders = findings.flatMap(finding => finding.instances
+    .filter(instance => holdsLine(instance, file, line))
+    .map(instance => ({ finding, instance })))
+  if (holders.length <= 1) return holders[0]
+  const named = holders.filter(holder => endsInName(holder.instance, name))
+  const narrowest = Math.min(...named.map(holder => span(holder.instance)))
+  const innermost = named.filter(holder => span(holder.instance) === narrowest)
+  return innermost.length === 1 ? innermost[0] : undefined
 }
 
-/** Other locations that look like the operation at this line. Undefined when it has no copies. */
+/** Other locations that look like the operation named `name` at this line. Undefined when it has no copies. */
 export function copiesOf(
   findings: readonly ArchitectureFinding[],
   file: string,
   line: number,
+  name: string,
 ): OperationCopies | undefined {
-  const found = operationAt(findings, file, line)
+  const found = operationAt(findings, file, line, name)
   if (found === undefined) return undefined
-  const copies: ArchitectureFindingInstance[] = []
-  const seen = new Set<string>()
-  for (const instance of found.finding.instances) {
-    if (instance === found.instance) continue
-    const key = `${instance.file}:${instance.startLine}:${instance.name}`
-    if (seen.has(key)) continue
-    seen.add(key)
-    copies.push(instance)
-  }
+  const copies = found.finding.instances.filter(instance => instance !== found.instance)
   return copies.length === 0 ? undefined : { similar: found.finding.match === 'similar', copies }
 }
 

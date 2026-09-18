@@ -81,10 +81,10 @@ test.concurrent('renamed copies match exactly and keep owner identity', () => {
   expect(findings[0]!.instances.map(instance => instance.owner).sort()).toEqual(['ready-a', 'ready-b'])
   expect(findingsForOwner(findings, 'ready-a')).toEqual(findings)
   expect(findingsForOwner(findings, 'other')).toEqual([])
-  const copies = copiesOf(findings, 'src/a.ts', 1)
+  const copies = copiesOf(findings, 'src/a.ts', 1, 'canStart')
   expect(copies?.similar).toBe(false)
   expect(copies?.copies.map(instance => instance.name)).toEqual(['readyToRun'])
-  expect(copiesOf(findings, 'src/t.ts', 1)).toBeUndefined()
+  expect(copiesOf(findings, 'src/t.ts', 1, 'total')).toBeUndefined()
 })
 
 test.concurrent('a code row takes the copies of the operation whose range holds its line', () => {
@@ -92,11 +92,11 @@ test.concurrent('a code row takes the copies of the operation whose range holds 
     operation('src/Launch.php', 'Launch\\Schedule::canStart', ruleTokens, 10),
     operation('src/Orders.php', 'Shop\\OrderService::store', ruleTokens, 4),
   ])], new Map<string, string>())
-  // A row carries the member's own name, never the qualified one a scanner reports, so only the
-  // range joins them. The declared name sits on the operation's first line or below it.
-  expect(copiesOf(findings, 'src/Launch.php', 11)?.copies.map(instance => instance.name)).toEqual(['Shop\\OrderService::store'])
-  expect(copiesOf(findings, 'src/Orders.php', 4)?.copies.map(instance => instance.name)).toEqual(['Launch\\Schedule::canStart'])
-  expect(copiesOf(findings, 'src/Launch.php', 20)).toBeUndefined()
+  // A scanner qualifies the name the row shows, so the range joins a row to its operation. The declared
+  // name sits on the operation's first line or below it.
+  expect(copiesOf(findings, 'src/Launch.php', 11, 'canStart')?.copies.map(instance => instance.name)).toEqual(['Shop\\OrderService::store'])
+  expect(copiesOf(findings, 'src/Orders.php', 4, 'store')?.copies.map(instance => instance.name)).toEqual(['Launch\\Schedule::canStart'])
+  expect(copiesOf(findings, 'src/Launch.php', 20, 'canStart')).toBeUndefined()
 })
 
 test.concurrent('a row inside nested operations takes the copies of the innermost one only', () => {
@@ -113,12 +113,27 @@ test.concurrent('a row inside nested operations takes the copies of the innermos
     ranged('src/report.py', 'Report.render.price', 10, 20, priceTokens),
     ranged('src/price.py', 'estimate', 2, 12, priceTokens.filter(token => token !== '.count')),
   ])], new Map<string, string>())
-  const inner = copiesOf(findings, 'src/report.py', 12)
+  const inner = copiesOf(findings, 'src/report.py', 12, 'price')
   expect(inner?.copies.map(instance => instance.name)).toEqual(['estimate'])
   expect(inner?.similar).toBe(true)
-  const enclosing = copiesOf(findings, 'src/report.py', 5)
+  const enclosing = copiesOf(findings, 'src/report.py', 5, 'render')
   expect(enclosing?.copies.map(instance => instance.name)).toEqual(['Summary.render'])
   expect(enclosing?.similar).toBe(false)
+})
+
+test.concurrent('operations starting on one line each take the other as their copy', () => {
+  const starting = (name: string, endLine: number): ScanOperation => ({
+    id: `src/min.js#${name}`, file: 'src/min.js', name, startLine: 1, endLine, tokens: ruleTokens,
+  })
+  const copyNames = (findings: ArchitectureFinding[], name: string) => copiesOf(findings, 'src/min.js', 1, name)?.copies.map(instance => instance.name)
+  const oneLine = detectDuplicatedLogic([observation([starting('Rules.canStart', 1), starting('Rules.readyToRun', 1)])], new Map<string, string>())
+  expect(copyNames(oneLine, 'canStart')).toEqual(['Rules.readyToRun'])
+  expect(copyNames(oneLine, 'readyToRun')).toEqual(['Rules.canStart'])
+  // A row whose name neither operation ends in cannot tell which one it is.
+  expect(copyNames(oneLine, 'Start')).toBeUndefined()
+  // The second operation continues to line 3, so it is not the narrowest range holding line 1.
+  const longer = detectDuplicatedLogic([observation([starting('Rules.canStart', 1), starting('Rules.readyToRun', 3)])], new Map<string, string>())
+  expect(copyNames(longer, 'readyToRun')).toEqual(['Rules.canStart'])
 })
 
 test.concurrent('a missing predicate is a similar finding with a concrete difference', () => {

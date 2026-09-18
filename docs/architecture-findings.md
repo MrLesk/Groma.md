@@ -53,11 +53,13 @@ an architecture relationship or merges components.
 ## What the first rule claims
 
 Local names are slots that follow declarations, including nested scopes.
-Operators, literals, property names, and unresolved identifiers remain. Two
-bodies that match after that normalization are **structurally duplicated
-logic**. Near-matches add the tokens that are not shared. Neither claim
-proves that the operations implement one business rule or that they should
-share an implementation.
+Operators, literals, property names, and unresolved identifiers remain. A
+binary, logical or comparison expression used as an operand of another
+operator keeps its grouping, so `(a + b) * c` and `a + b * c` differ; each
+scanner page states which parentheses its tokens keep. Two bodies that match after that normalization
+are **structurally duplicated logic**. Near-matches add the tokens that are
+not shared. Neither claim proves that the operations implement one business
+rule or that they should share an implementation.
 
 ## Compared operations
 
@@ -88,7 +90,12 @@ rules under that heading. Each page lists the operations its scanner compares an
 its own exceptions, including whether a function literal assigned to a name is
 compared: TypeScript, JavaScript, Go, Vue and Swift compare those, while Java,
 C#, Rust, Python and PHP treat every closure and lambda as an anonymous
-callback.
+callback. The methods of an anonymous class, such as a TypeScript class
+expression, a PHP `new class` or a Java anonymous class body, are compared in
+TypeScript, JavaScript, Vue and PHP and are anonymous callbacks in Java; the
+other languages cannot declare methods on an anonymous type. The Angular and React scanners
+report no tokens, so their files are compared only when the TypeScript scanner
+also reads them.
 
 Core applies both minimum body sizes, counted in binding-normalized tokens, so
 scanners report every named body regardless of its size:
