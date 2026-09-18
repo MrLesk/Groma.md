@@ -39,16 +39,30 @@ attaches a source range and body tokens to:
 
 - function declarations and named function expressions;
 - methods with an identifier name and a body, in classes and object literals;
+- constructors with a body;
 - arrow functions and function expressions assigned to a `const`, `let`, or
   `var` variable, or to a property of an object literal.
 
 Functions written as properties or method shorthand of an object literal passed
 directly to a function call, `new`, or a decorator are anonymous callbacks, as
-are other unnamed arrow functions and function expressions.
+are other unnamed arrow functions and function expressions. The object literal
+may sit inside parentheses, `as`, `satisfies`, or `!`.
+
+Parameters and local names become slots. These stay in the tokens as written:
+
+- binary, assignment, conditional and prefix and postfix unary operators, and
+  `typeof`, `void`, `delete`, `await`, `yield` and `new`;
+- `if`, `else`, `for`, `while`, `do`, `switch`, `case`, `default`, `break`,
+  `continue`, `return`, `throw` and `try`;
+- string and number literals, `true`, `false` and `null`;
+- property names, the operation's own name and names declared elsewhere;
+- parentheses around an operator expression, so `(a + b) * c` and `a + b * c`
+  are different bodies. Parentheses around a name or a call do not change a
+  body, and neither do type annotations and assertions.
 
 These named operations are not compared yet:
 
-- constructors and `get` or `set` accessors;
+- `get` or `set` accessors;
 - methods whose name is not an identifier, such as `#run()`, `'run'()`, or
   `[key]()`;
 - functions assigned to class fields, such as `onClick = () => {}`.

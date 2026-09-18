@@ -1,10 +1,10 @@
 import path from 'node:path'
 import {
   isArrowFunction, isAsExpression, isBinaryExpression, isCallExpression, isConditionalExpression,
-  isFunctionDeclaration, isFunctionExpression, isIdentifier, isMethodDeclaration, isNewExpression,
-  isNonNullExpression, isObjectLiteralExpression, isParameterDeclaration, isParenthesizedExpression,
-  isPropertyAccessExpression, isPropertyAssignment, isShorthandPropertyAssignment,
-  isVariableDeclaration, isSpreadAssignment, NodeFlags, SyntaxKind,
+  isConstructorDeclaration, isFunctionDeclaration, isFunctionExpression, isIdentifier, isMethodDeclaration,
+  isNewExpression, isNonNullExpression, isObjectLiteralExpression, isParameterDeclaration,
+  isParenthesizedExpression, isPropertyAccessExpression, isPropertyAssignment, isSatisfiesExpression,
+  isShorthandPropertyAssignment, isVariableDeclaration, isSpreadAssignment, NodeFlags, SyntaxKind,
   type CallExpression, type Node, type SourceFile,
 } from 'typescript/unstable/ast'
 import { SymbolFlags, type Checker, type Symbol as CompilerSymbol } from 'typescript/unstable/async'
@@ -40,6 +40,7 @@ function executable(node: Node): boolean {
   return isArrowFunction(node) || isFunctionExpression(node)
     || (isFunctionDeclaration(node) && node.body !== undefined)
     || (isMethodDeclaration(node) && node.body !== undefined)
+    || (isConstructorDeclaration(node) && node.body !== undefined)
 }
 
 function location(root: string, node: Node): { file: string; line: number; position: number } {
@@ -51,20 +52,31 @@ function location(root: string, node: Node): { file: string; line: number; posit
   }
 }
 
+/** The outermost parentheses or type-only `as`, `satisfies` or `!` around a value, or the value itself. */
+function outermostWrapper(node: Node): Node {
+  let wrapper = node
+  while (isParenthesizedExpression(wrapper.parent) || isAsExpression(wrapper.parent)
+    || isSatisfiesExpression(wrapper.parent) || isNonNullExpression(wrapper.parent)) wrapper = wrapper.parent
+  return wrapper
+}
+
 /**
  * A function written as a property of an object literal argument, such as `subscribe({ next: value => ... })`.
- * The argument may belong to a function call, a `new` call, or a decorator, which is a call.
+ * The argument may belong to a function call, a `new` call, or a decorator, which is a call, and may be
+ * wrapped in parentheses or type-only expressions.
  */
 function callArgumentProperty(node: Node): boolean {
   const property = isPropertyAssignment(node.parent) ? node.parent : node
   if (!isPropertyAssignment(property) && !isMethodDeclaration(property)) return false
-  const invocation = property.parent.parent
-  return isObjectLiteralExpression(property.parent) && (isCallExpression(invocation) || isNewExpression(invocation))
+  if (!isObjectLiteralExpression(property.parent)) return false
+  const invocation = outermostWrapper(property.parent).parent
+  return isCallExpression(invocation) || isNewExpression(invocation)
 }
 
 /** Name of an operation core may compare; undefined for module code and anonymous callbacks. */
 function comparableName(node: Node): string | undefined {
   if (!node.parent || callArgumentProperty(node)) return undefined
+  if (isConstructorDeclaration(node)) return 'constructor'
   if ('name' in node && node.name && isIdentifier(node.name as Node)) return (node.name as { text: string }).text
   if (isPropertyAssignment(node.parent) || isVariableDeclaration(node.parent)) return node.parent.name.getText()
   return undefined

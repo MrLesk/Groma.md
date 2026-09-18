@@ -16,6 +16,30 @@ export function watch(orders: Feed, refunds: Feed): Subscriber {
       if (order.total <= 0) console.error('empty order', order.id)
     },
   })
+  orders.subscribe(({
+    next(order: Order) {
+      if (order.total > 100) console.warn('large order', order.id)
+      if (order.total <= 0) console.error('empty order', order.id)
+    },
+  }))
+  orders.subscribe({
+    next: (order: Order) => {
+      if (order.total > 100) console.warn('large order', order.id)
+      if (order.total <= 0) console.error('empty order', order.id)
+    },
+  } as Observer)
+  orders.subscribe({
+    next(order: Order) {
+      if (order.total > 100) console.warn('large order', order.id)
+      if (order.total <= 0) console.error('empty order', order.id)
+    },
+  } satisfies Observer)
+  refunds.subscribe({
+    next(order: Order) {
+      if (order.total > 100) console.warn('large order', order.id)
+      if (order.total <= 0) console.error('empty order', order.id)
+    },
+  }!)
   return new Subscriber({
     next(order: Order) {
       if (order.total > 100) console.warn('large order', order.id)
