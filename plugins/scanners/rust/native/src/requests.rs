@@ -8,7 +8,7 @@ use serde_json::{Value, json};
 
 use crate::client::is_client;
 use crate::scan::{Source, owned_nodes};
-use crate::text::{callee, first_argument, literal_string, path_tail};
+use crate::text::{callee, first_argument, literal_string, path_tail, receiver_start};
 use crate::url::{Constants, request_path, url_parts};
 
 /// Client calls that name their method, such as `client.get(url)` or `reqwest::get(url)`.
@@ -80,10 +80,10 @@ fn sends(call: &ast::MethodCallExpr) -> bool {
     chain(call).any(|outer| outer.name_ref().is_some_and(|name| name.text() == "send"))
 }
 
-/// A URI belongs to a request when a `Request::builder()` chain builds one.
+/// A URI belongs to a request when its chain starts at `Request::builder()`.
 fn builder(call: &ast::MethodCallExpr) -> bool {
-    let names: Vec<String> = receivers(call).collect();
-    names.iter().any(|name| name == "Request") && names.iter().any(|name| name == "builder")
+    let Some(ast::Expr::CallExpr(start)) = receiver_start(call) else { return false };
+    matches!(callee(&start).as_slice(), [.., request, builder] if request == "Request" && builder == "builder")
 }
 
 /// The method a `method(...)` call in the same chain states.
@@ -137,44 +137,6 @@ fn receiver_calls(call: &ast::MethodCallExpr) -> impl Iterator<Item = ast::Metho
                     return Some(inner);
                 }
                 ast::Expr::AwaitExpr(pending) => current = pending.expr(),
-                ast::Expr::TryExpr(attempt) => current = attempt.expr(),
-                ast::Expr::ParenExpr(paren) => current = paren.expr(),
-                _ => return None,
-            }
-        }
-    })
-}
-
-/// Names of the calls and paths the receiver chain is built from, such as `builder`.
-fn receivers(call: &ast::MethodCallExpr) -> impl Iterator<Item = String> {
-    let mut current = call.receiver();
-    let mut pending: Vec<String> = Vec::new();
-    std::iter::from_fn(move || {
-        loop {
-            if let Some(name) = pending.pop() {
-                return Some(name);
-            }
-            match current.take()? {
-                ast::Expr::MethodCallExpr(inner) => {
-                    let name = inner.name_ref().map(|name| name.text().to_string());
-                    current = inner.receiver();
-                    if let Some(name) = name {
-                        return Some(name);
-                    }
-                }
-                ast::Expr::CallExpr(inner) => {
-                    let names = inner.expr().and_then(|expression| match expression {
-                        ast::Expr::PathExpr(path) => path.path(),
-                        _ => None,
-                    });
-                    pending = names
-                        .into_iter()
-                        .flat_map(|path| path.syntax().descendants().filter_map(ast::NameRef::cast))
-                        .map(|part| part.text().to_string())
-                        .collect();
-                    current = None;
-                }
-                ast::Expr::AwaitExpr(pending_value) => current = pending_value.expr(),
                 ast::Expr::TryExpr(attempt) => current = attempt.expr(),
                 ast::Expr::ParenExpr(paren) => current = paren.expr(),
                 _ => return None,

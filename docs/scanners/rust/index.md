@@ -111,17 +111,21 @@ The eight [producer decisions](../evidence.md#producer-checklist) for Rust:
 1. **Prefixes.** Every literal prefix the source declares: an axum `nest` path, a
    Rocket `mount` base, an actix `web::scope` or `web::resource` path, and the
    route's own path. A router function another function nests carries that prefix,
-   however deep, and so does a router bound to a local that is nested once. A
-   prefix that is not literal reports nothing for the routes under it, and neither
-   does a route whose own path is not literal. So does a router passed to a call
-   other than `nest`, `mount`, `merge`, `service`, `configure` or `serve`, such as
-   a helper that nests it, and a router assigned to a variable. A route or service
-   is read only on a chain that starts at `App::new()`, `Router::new()`,
-   `rocket::build()`, `rocket::custom(..)`, `web::scope(..)`, `web::resource(..)`,
-   an immutable `let` bound to one of these, or a parameter typed `ServiceConfig`,
-   `Router` or `Rocket`, which carry no prefix of their own. Any other start, such
-   as a scope another function returns, a `Scope` parameter, a field or a `mut`
-   binding, may carry a prefix the scan cannot read.
+   however deep. A prefix that is not literal reports nothing for the routes under
+   it, and neither does a route whose own path is not literal. The scan follows a
+   router's value only while it passes along unchanged: as a method receiver, as
+   the argument of `nest`, `mount`, `merge`, `service`, `configure` or `serve`,
+   through a `let` used once, as a block's final value or a `return` value, and
+   through parentheses, `.await` and `?`. A router anywhere else, such as in
+   another call, an array, a tuple, a struct, a loop, an assignment or a discarded
+   statement, reports nothing. A route or service is read only on a chain that
+   starts at `App::new()`, `Router::new()`, `rocket::build()`,
+   `rocket::custom(..)`, `web::scope(..)`, `web::resource(..)`, an immutable `let`
+   bound to one of these, or a parameter typed `ServiceConfig` or `Router`, which
+   carry no prefix of their own; a call on a `ServiceConfig` registers into the
+   configuration its function receives. Any other start, such as a scope another
+   function returns, a `Scope` parameter, a field or a `mut` binding, may carry a
+   prefix the scan cannot read.
 2. **Endpoints.** Only route declarations that the source serves: `route` with a
    method router such as `get(handler).post(other)`, `route` with actix's
    `web::get().to(handler)`, and a handler whose attribute macro states a method

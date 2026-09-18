@@ -8,39 +8,29 @@ use serde_json::{Value, json};
 
 use crate::handlers::{attribute_routes, method_handlers, ranked, typed_parameters};
 use crate::patterns::segments;
-use crate::placement::{Placement, Root, Start, placement, start};
+use crate::placement::{Framework, Placement, RouterCall, Start, placement, router_call, start};
 use crate::scan::{Source, owned_nodes};
-use crate::text::{callee, macro_identifiers};
+use crate::text::{callee, let_value, macro_identifiers};
 use crate::url::{Constants, literal_path};
 
-/// Calls that register a nested router, a service or a handler without adding a path.
-const REGISTRATIONS: [&str; 3] = ["service", "configure", "merge"];
-
 /// One route a function body declares: its path under the function's placement, and its handler.
+/// A route without a handler is an entry this scan sees but cannot report, such as a service it
+/// cannot resolve. In an actix-web application it may capture requests registered after it, so
+/// it is reported as a blocker: its readable prefix followed by a constrained optional catch-all.
 struct Route {
     owner: Function,
-    root: Option<Root>,
+    framework: Option<Framework>,
     path: String,
     method: String,
-    handler: Function,
+    handler: Option<Function>,
 }
 
 /// One place a router function or handler is registered. A prefix the source does not state
 /// literally is `None`, which reports nothing for the routes under it.
 struct Registration {
     owner: Function,
-    root: Option<Root>,
+    framework: Option<Framework>,
     prefix: Option<String>,
-}
-
-/// An entry this scan sees but cannot report, such as a service it cannot resolve. In an actix-web
-/// application it may capture requests registered after it, so it is reported as its readable
-/// prefix followed by a constrained optional catch-all.
-struct Blocker {
-    owner: Function,
-    root: Option<Root>,
-    prefix: String,
-    method: String,
 }
 
 /// Methods and paths the attribute macros declare on one handler.
@@ -58,7 +48,6 @@ struct Routing {
     routes: Vec<Route>,
     registrations: HashMap<Function, Vec<Registration>>,
     attributes: Vec<Attributed>,
-    blockers: Vec<Blocker>,
     /// The file that declares each function.
     files: HashMap<Function, String>,
 }
@@ -71,22 +60,26 @@ pub fn endpoints(
     functions: &HashMap<Function, String>,
 ) -> Vec<Value> {
     let routing = routing(sema, names, sources);
-    let mut paths = Paths::default();
-    let ranked = ranked_roots(&routing, &mut paths);
+    let mut bases = Bases::default();
+    let ranked = ranked_applications(&routing, &mut bases);
     let mut facts = Facts { functions, files: &routing.files, ranked, seen: HashSet::new(), list: Vec::new() };
     let untyped = HashSet::new();
     for route in &routing.routes {
-        for base in served(&routing, route.owner, route.root, &mut paths) {
+        for base in served(&routing, route.owner, route.framework, &mut bases) {
             let path = format!("{}{}", base.prefix, route.path);
-            facts.endpoint(route.handler, &base, &route.method, &path, &untyped);
+            match route.handler {
+                Some(handler) => facts.endpoint(handler, &base, &route.method, &path, &untyped),
+                None if base.framework == Framework::Actix => facts.blocker(route.owner, &base, &route.method, &path),
+                None => {}
+            }
         }
     }
     // An attribute macro states the path; the registration states the prefix it is served under.
     for attributed in &routing.attributes {
         for site in routing.registrations.get(&attributed.handler).into_iter().flatten() {
             let Some(prefix) = &site.prefix else { continue };
-            for base in served(&routing, site.owner, site.root, &mut paths) {
-                let typed = if base.kind == Root::Rocket { &attributed.typed } else { &untyped };
+            for base in served(&routing, site.owner, site.framework, &mut bases) {
+                let typed = if base.framework == Framework::Rocket { &attributed.typed } else { &untyped };
                 for (method, pattern) in &attributed.routes {
                     let path = format!("{}{prefix}{pattern}", base.prefix);
                     facts.endpoint(attributed.handler, &base, method, &path, typed);
@@ -94,26 +87,22 @@ pub fn endpoints(
             }
         }
     }
-    for blocker in &routing.blockers {
-        for base in served(&routing, blocker.owner, blocker.root, &mut paths) {
-            if base.kind == Root::Actix {
-                facts.blocker(blocker.owner, &base, &blocker.method, &blocker.prefix);
-            }
-        }
-    }
     facts.list
 }
 
 /// Rocket applications with a route that states `rank`, which overrides the router's specificity.
-fn ranked_roots(routing: &Routing, paths: &mut Paths) -> HashSet<Function> {
-    let mut roots = HashSet::new();
+/// A registration whose prefix is unreadable still counts: its routes go unreported, but the rank
+/// still changes how the application orders the others.
+fn ranked_applications(routing: &Routing, bases: &mut Bases) -> HashSet<Function> {
+    let mut applications = HashSet::new();
     for attributed in routing.attributes.iter().filter(|attributed| attributed.ranked) {
         for site in routing.registrations.get(&attributed.handler).into_iter().flatten() {
-            let bases = served(routing, site.owner, site.root, paths);
-            roots.extend(bases.into_iter().filter(|base| base.kind == Root::Rocket).map(|base| base.root));
+            let served = served(routing, site.owner, site.framework, bases);
+            let rocket = served.into_iter().filter(|base| base.framework == Framework::Rocket);
+            applications.extend(rocket.map(|base| base.application));
         }
     }
-    roots
+    applications
 }
 
 struct Facts<'a> {
@@ -129,8 +118,9 @@ impl Facts<'_> {
     /// override specificity. The application is the file whose chain creates it. This scan does
     /// not prove registration order, so every position is 0.
     fn order(&self, base: &Base) -> Option<Value> {
-        let ordered = base.kind == Root::Actix || (base.kind == Root::Rocket && self.ranked.contains(&base.root));
-        let file = self.files.get(&base.root)?;
+        let ordered = base.framework == Framework::Actix
+            || (base.framework == Framework::Rocket && self.ranked.contains(&base.application));
+        let file = self.files.get(&base.application)?;
         ordered.then(|| json!({"application": file, "position": 0}))
     }
 
@@ -144,8 +134,10 @@ impl Facts<'_> {
         self.push(handler, method, segments, self.order(base));
     }
 
+    /// The readable prefix, then a constrained optional catch-all; a prefix that already ends in a
+    /// catch-all has that one constrained instead.
     fn blocker(&mut self, owner: Function, base: &Base, method: &str, prefix: &str) {
-        let mut segments = segments(&format!("{}{prefix}", base.prefix)).unwrap_or_default();
+        let mut segments = segments(prefix).unwrap_or_default();
         if segments.last().is_none_or(|last| last["kind"] != "catch-all") {
             segments.push(json!({"kind": "catch-all", "name": "rest"}));
         }
@@ -168,54 +160,56 @@ impl Facts<'_> {
     }
 }
 
-/// One prefix a function's routes are served under, and the function whose chain proves the root.
+/// One prefix a function's routes are served under, and the function whose chain creates the
+/// application.
 #[derive(Clone)]
 struct Base {
     prefix: String,
-    root: Function,
-    kind: Root,
+    application: Function,
+    framework: Framework,
 }
 
-/// The prefixes a function's routes are served under: the root when the source proves it, and
-/// none when nothing registers the function.
-fn served(routing: &Routing, function: Function, root: Option<Root>, paths: &mut Paths) -> Vec<Base> {
-    match root {
-        Some(kind) => vec![Base { prefix: String::new(), root: function, kind }],
-        None => resolve(routing, function, paths).0,
+/// The prefixes a function's routes are served under: none when nothing registers the function.
+fn served(routing: &Routing, owner: Function, framework: Option<Framework>, bases: &mut Bases) -> Vec<Base> {
+    site(routing, owner, framework, bases).0
+}
+
+/// A site the source proves is at the application root, or else the function's own registrations,
+/// with whether a cycle cut the answer short.
+fn site(routing: &Routing, owner: Function, framework: Option<Framework>, bases: &mut Bases) -> (Vec<Base>, bool) {
+    match framework {
+        Some(framework) => (vec![Base { prefix: String::new(), application: owner, framework }], false),
+        None => resolve(routing, owner, bases),
     }
 }
 
 #[derive(Default)]
-struct Paths {
+struct Bases {
     known: HashMap<Function, Vec<Base>>,
     /// Functions being resolved, so routers that register each other contribute no path.
     active: HashSet<Function>,
 }
 
-/// The prefixes, and whether a cycle cut the answer short. Only a complete answer is kept.
-fn resolve(routing: &Routing, function: Function, paths: &mut Paths) -> (Vec<Base>, bool) {
-    if let Some(known) = paths.known.get(&function) {
+/// The prefixes every registration of a function gives it. Only a complete answer is kept.
+fn resolve(routing: &Routing, function: Function, bases: &mut Bases) -> (Vec<Base>, bool) {
+    if let Some(known) = bases.known.get(&function) {
         return (known.clone(), false);
     }
     let Some(sites) = routing.registrations.get(&function) else { return (Vec::new(), false) };
-    if !paths.active.insert(function) {
+    if !bases.active.insert(function) {
         return (Vec::new(), true);
     }
     let mut result = Vec::new();
     let mut cycled = false;
-    for site in sites {
-        let Some(prefix) = &site.prefix else { continue };
-        if let Some(kind) = site.root {
-            result.push(Base { prefix: prefix.clone(), root: site.owner, kind });
-            continue;
-        }
-        let (bases, cut) = resolve(routing, site.owner, paths);
+    for registration in sites {
+        let Some(prefix) = &registration.prefix else { continue };
+        let (outer, cut) = site(routing, registration.owner, registration.framework, bases);
         cycled |= cut;
-        result.extend(bases.into_iter().map(|base| Base { prefix: format!("{}{prefix}", base.prefix), ..base }));
+        result.extend(outer.into_iter().map(|base| Base { prefix: format!("{}{prefix}", base.prefix), ..base }));
     }
-    paths.active.remove(&function);
+    bases.active.remove(&function);
     if !cycled {
-        paths.known.insert(function, result.clone());
+        bases.known.insert(function, result.clone());
     }
     (result, cycled)
 }
@@ -268,54 +262,36 @@ struct Reader<'a, 'db> {
     handlers: HashMap<String, Vec<Function>>,
 }
 
-/// Registrations that follow; nested levels are not a prefix of their own.
+/// How many called functions `handled` follows through their returned values.
 const DEPTH: usize = 8;
 
 impl Reader<'_, '_> {
     fn visit(&self, owner: Function, call: &ast::MethodCallExpr, routing: &mut Routing) {
-        let Some(name) = call.name_ref().map(|name| name.text().to_string()) else { return };
-        let registers = REGISTRATIONS.contains(&name.as_str());
-        // A handler for every method, or a default service, of a scope or resource.
-        let whole = matches!(name.as_str(), "to" | "to_async" | "default_service");
-        let relevant = match whole {
-            true => self.scoped(call),
-            false => registers || matches!(name.as_str(), "route" | "nest" | "mount" | "serve"),
-        };
-        if !relevant {
+        let Some(kind) = call.name_ref().and_then(|name| router_call(&name.text())) else { return };
+        if kind == RouterCall::Whole && !self.scoped(call) {
             return;
         }
         let arguments: Vec<ast::Expr> = call.arg_list().into_iter().flat_map(|list| list.args()).collect();
         let place = placement(self.sema, self.names, call.syntax());
-        let block = |routing: &mut Routing, prefix: &str, method: &str| {
-            let blocker = Blocker { owner, root: place.root, prefix: prefix.to_owned(), method: method.to_owned() };
-            routing.blockers.push(blocker);
-        };
-        if !place.complete || whole {
-            // What follows an unreadable prefix is unknown.
-            if name == "route" || registers || whole {
-                block(routing, &place.prefix, "*");
-            }
-            return;
+        let path = place.prefix.clone();
+        let blocker = Route { owner, framework: place.framework, path, method: "*".to_owned(), handler: None };
+        // What follows an unreadable prefix is unknown.
+        if !place.complete || kind == RouterCall::Whole {
+            return routing.routes.push(blocker);
         }
-        match name.as_str() {
-            "route" => self.routes(owner, &place, &arguments, routing, block),
-            "nest" | "mount" => {
-                let [path, target] = arguments.as_slice() else { return };
+        match (kind, arguments.as_slice()) {
+            (RouterCall::Route, _) => self.routes(owner, &place, &arguments, routing),
+            (RouterCall::Nest, [path, target]) => {
                 let nested = literal_path(self.sema, self.names, path).map(|path| format!("{}{path}", place.prefix));
-                self.register(target, owner, place.root, nested, routing);
+                self.register(target, owner, place.framework, nested, routing);
             }
-            "serve" => {
-                if let Some(target) = arguments.last() {
-                    self.register(target, owner, Some(Root::Axum), Some(String::new()), routing);
-                }
-            }
-            _ => {
-                let [target] = arguments.as_slice() else { return };
+            (RouterCall::Register, [target]) => {
                 if !self.handled(target, 0) {
-                    block(routing, &place.prefix, "*");
+                    routing.routes.push(blocker);
                 }
-                self.register(target, owner, place.root, Some(place.prefix.clone()), routing);
+                self.register(target, owner, place.framework, Some(place.prefix), routing);
             }
+            _ => {}
         }
     }
 
@@ -323,41 +299,32 @@ impl Reader<'_, '_> {
     fn serve(&self, owner: Function, call: &ast::CallExpr, routing: &mut Routing) {
         let named = callee(call).last().is_some_and(|name| name == "serve");
         if let (true, Some(target)) = (named, call.arg_list().and_then(|list| list.args().last())) {
-            self.register(&target, owner, Some(Root::Axum), Some(String::new()), routing);
+            self.register(&target, owner, Some(Framework::Axum), Some(String::new()), routing);
         }
     }
 
     /// `route(path, handlers)` states its own path; an actix resource route takes the receiver's.
-    fn routes(
-        &self,
-        owner: Function,
-        place: &Placement,
-        arguments: &[ast::Expr],
-        routing: &mut Routing,
-        block: impl Fn(&mut Routing, &str, &str),
-    ) {
+    /// A path, method router or handler the scan cannot read is a route without a handler.
+    fn routes(&self, owner: Function, place: &Placement, arguments: &[ast::Expr], routing: &mut Routing) {
+        let route = |path: String, method: String, handler: Option<Function>| {
+            Route { owner, framework: place.framework, path, method, handler }
+        };
         let (pattern, handlers) = match arguments {
             // An actix resource route takes its receiver's path, and reports nothing without one.
             [handlers] if !place.prefix.is_empty() => (String::new(), handlers),
             [path, handlers] => match literal_path(self.sema, self.names, path) {
                 Some(pattern) => (pattern, handlers),
-                None => return block(routing, &place.prefix, "*"),
+                None => return routing.routes.push(route(place.prefix.clone(), "*".to_owned(), None)),
             },
             _ => return,
         };
         let path = format!("{}{pattern}", place.prefix);
         let methods = method_handlers(handlers);
         if methods.is_empty() {
-            block(routing, &path, "*");
+            routing.routes.push(route(path.clone(), "*".to_owned(), None));
         }
         for (method, handler) in methods {
-            match target_function(self.sema, &handler) {
-                Some(function) => {
-                    let route = Route { owner, root: place.root, path: path.clone(), method, handler: function };
-                    routing.routes.push(route);
-                }
-                None => block(routing, &path, &method),
-            }
+            routing.routes.push(route(path.clone(), method, target_function(self.sema, &handler)));
         }
     }
 
@@ -365,12 +332,12 @@ impl Reader<'_, '_> {
         &self,
         target: &ast::Expr,
         owner: Function,
-        root: Option<Root>,
+        framework: Option<Framework>,
         prefix: Option<String>,
         routing: &mut Routing,
     ) {
         let mut registered = |function: Function| {
-            let site = Registration { owner, root, prefix: prefix.clone() };
+            let site = Registration { owner, framework, prefix: prefix.clone() };
             routing.registrations.entry(function).or_default().push(site);
         };
         // Rocket's `routes![show, create]` names its handlers by identifier.
@@ -402,8 +369,8 @@ impl Reader<'_, '_> {
             return false;
         }
         match start(self.sema, self.names, target) {
-            Start::Plain | Start::Scoped(_) => true,
-            Start::Root(_) => false,
+            Start::Plain | Start::Config | Start::Scoped(_) => true,
+            Start::Application(_) => false,
             Start::Other(ast::Expr::MacroExpr(_)) => true,
             Start::Other(ast::Expr::PathExpr(path)) => {
                 let resolved = path.path().and_then(|path| self.sema.resolve_path(&path));
@@ -425,16 +392,12 @@ impl Reader<'_, '_> {
 fn target_function(sema: &Semantics<'_, RootDatabase>, expression: &ast::Expr) -> Option<Function> {
     match expression {
         ast::Expr::CallExpr(call) => target_function(sema, &call.expr()?),
-        ast::Expr::RefExpr(reference) => target_function(sema, &reference.expr()?),
         ast::Expr::MethodCallExpr(call) if call.name_ref()?.text().starts_with("into_make_service") => {
             target_function(sema, &call.receiver()?)
         }
         ast::Expr::PathExpr(path) => match sema.resolve_path(&path.path()?)? {
             PathResolution::Def(ModuleDef::Function(function)) => Some(function),
-            PathResolution::Local(local) if !local.is_mut(sema.db) => {
-                let pattern = local.primary_source(sema.db).as_ident_pat()?.clone();
-                target_function(sema, &ast::LetStmt::cast(pattern.syntax().parent()?)?.initializer()?)
-            }
+            PathResolution::Local(local) => target_function(sema, &let_value(sema, local)?),
             _ => None,
         },
         _ => None,

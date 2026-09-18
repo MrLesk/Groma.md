@@ -3,7 +3,7 @@ use ra_ap_ide_db::RootDatabase;
 use ra_ap_syntax::ast::{self, HasModuleItem, HasName};
 use ra_ap_syntax::{AstNode, SyntaxNode};
 
-use crate::text::callee;
+use crate::text::{callee, receiver_start};
 
 /// Whether a call is made on a reqwest client: a value whose declared type is `reqwest::Client`,
 /// a `Client::new()` or `Client::default()`, a `Client::builder()` chain's `build()` with `?`,
@@ -39,11 +39,7 @@ pub fn is_client(sema: &Semantics<'_, RootDatabase>, value: &ast::Expr) -> bool 
 
 /// `Client::builder()` followed by builder settings and `build()`.
 fn built(call: &ast::MethodCallExpr) -> bool {
-    let mut current = call.receiver();
-    while let Some(ast::Expr::MethodCallExpr(setting)) = &current {
-        current = setting.receiver();
-    }
-    matches!(current, Some(ast::Expr::CallExpr(start)) if constructed(&start, &["builder"]))
+    matches!(receiver_start(call), Some(ast::Expr::CallExpr(start)) if constructed(&start, &["builder"]))
 }
 
 /// A call such as `Client::new()` on reqwest's client type.

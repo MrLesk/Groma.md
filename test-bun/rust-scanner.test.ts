@@ -195,8 +195,8 @@ rustTest('Rust HTTP facts cover axum, actix-web and Rocket endpoints, reqwest re
     }
     // The nested router, a router bound to a local, the scope, the service configuration and the
     // mount supply every prefix; `serve`, `App::new()` and `rocket::build()` prove the root. A
-    // non-literal route or prefix, a router nothing serves, a router passed to a helper or a
-    // `mut` binding, and a handler nobody registers are absent. actix-web takes the first
+    // non-literal route or prefix, a router nothing serves, a router passed to a helper, kept in
+    // an array, used twice or bound `mut`, and a handler nobody registers are absent. actix-web takes the first
     // registered match, so its endpoints carry their order, and the entries it cannot read are
     // blockers named after the registering function.
     const order = (fact: { order?: { application: string; position: number } }) =>
@@ -216,11 +216,13 @@ rustTest('Rust HTTP facts cover axum, actix-web and Rocket endpoints, reqwest re
       'actix_routes.rs server * /internal/*rest?! @actix_routes.rs:0',
       'actix_routes.rs server * /legacy/api/*rest?! @actix_routes.rs:0',
       'actix_routes.rs server * /relocation/*rest?! @actix_routes.rs:0',
+      'actix_routes.rs server GET /downloads/*tail?! @actix_routes.rs:0',
       'actix_routes.rs server GET /health/ping/*rest?! @actix_routes.rs:0',
       'actix_routes.rs show GET /api/sessions/:id @actix_routes.rs:0',
       'actix_routes.rs stats GET /stats @actix_routes.rs:0',
       'actix_routes.rs summary GET /local/summary @actix_routes.rs:0',
       'actix_routes.rs tag GET /tags/:id! @actix_routes.rs:0',
+      'axum_routes.rs added GET /p/added',
       'axum_routes.rs create_talk POST /api/talks',
       'axum_routes.rs health GET /health',
       'axum_routes.rs list_items GET /v2/items',
