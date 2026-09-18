@@ -1,6 +1,9 @@
+mod client;
 mod endpoints;
+mod handlers;
 mod outline;
 mod patterns;
+mod placement;
 mod requests;
 mod scan;
 mod text;

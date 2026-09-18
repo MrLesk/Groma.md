@@ -17,6 +17,12 @@ fn upload(id: u32, rest: std::path::PathBuf) -> &'static str {
     ""
 }
 
+#[get("/speakers/<slug>/bio")]
+fn bio(slug: &str) -> &'static str {
+    let _ = slug;
+    ""
+}
+
 pub fn build() -> Rocket<Build> {
-    rocket::build().mount("/v1", routes![index, detail, upload])
+    rocket::build().mount("/v1", routes![index, detail, upload, bio])
 }
