@@ -61,8 +61,9 @@ reads neither, and it needs no evidence from any other scanner.
 ## Evidence
 
 The scanner reports one repository source root, exact JavaScript paths, and the
-top-level functions and classes each file declares. Functions, function literals
-and methods with a body produce operation evidence with UTF-16 source offsets.
+top-level functions and classes each file declares. Functions, function literals,
+and methods and constructors with a body produce operation evidence with UTF-16
+source offsets.
 Code outside every function is the module's own work, so a browser script's
 top-level calls keep an operation to belong to, without inventing a function.
 

@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@claude'
 created_date: '2026-09-16 20:32'
-updated_date: '2026-09-18 18:25'
+updated_date: '2026-09-18 23:01'
 labels: []
 dependencies: []
 references:
@@ -112,6 +112,8 @@ Review round (Codex, Grok cold reviews at cf8e7975):
 Already resolved in TASK-424.7's commit: the third tokenizer copy (Codex u09 #3) now uses the shared plugins/scanners/typescript-operations.ts. Skipped: JSX in .js (Grok-all) does not reproduce, since the classic compiler parses .js with the JSX language variant (probe: no parse errors, a JsxElement node). HTTP findings (http-scope, http-reads, http-endpoints, http-requests) belong to the HTTP lane under TASK-416.11.
 
 12. Coordinator decision, replacing step 10: a file that does not parse contributes no evidence instead of failing the scan, because scanners do not see the scanners.json exclusions and a broken vendored or template script would otherwise stop the whole scan. The file keeps its inventory entry with no symbols, and one JAVASCRIPT_SOURCE_INVALID warning names each such file with its first parse error. Only parse errors count, so TypeScript-style type annotations, as in many Flow-typed files, keep their evidence.
+
+13. Simplicity round: the JavaScript page's Evidence section says constructors with a body produce operation evidence, as they do since TASK-424.7 moved the scanner to the shared rule.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
@@ -177,6 +179,8 @@ Review round (Codex and Grok cold reviews at cf8e7975). Verified with a probe: a
 Coordinator decision applied (replaces the scan failure above): plugins/scanners/javascript/src/index.ts reads each file's parse errors from the pinned compiler's source file (the public API reports them only through a program, mixed with checks that reject TypeScript-only syntax the parser still reads). A file with a parse error keeps its inventory entry with no symbols and contributes no operations, calls or HTTP facts; one warning diagnostic, JAVASCRIPT_SOURCE_INVALID, lists each such file with its first error line, and the rest of the scan proceeds. Probe: a .js file with a type annotation, a JSX .js file and a module using private fields and static blocks all keep their evidence; the broken file yields none. Test: test/fixtures/javascript-invalid holds broken.js and valid.js; the test asserts no evidence for broken.js, evidence for valid.js and the warning, and fails without the fix. docs/scanners/javascript/index.md describes it, and docs/scanners/index.md names the JavaScript scanner as the exception to 'Syntax errors remain scan failures'. Verification: bun run check in an isolated worktree at 996fb4e9 plus this task's files exit 0 (biome: pre-existing warning and infos only; tsc clean; bun 558 pass, 35 skip, 0 fail); bun plugins/scanners/javascript/build.ts succeeds there.
 
 Cold review of this round, applied: parse errors that only strict mode raises on octal literals and escapes (codes 1121, 1487, 1488, 1489, such as 0755 or '\033[31m') are ignored as a named set, because JavaScript outside strict mode accepts them; each file that does not parse gets its own JAVASCRIPT_SOURCE_INVALID warning with file and line, which the scan report groups; the page states that the source outline still lists the declarations the parser recovers from such a file, and the Validation list names the fixture. test/fixtures/javascript-invalid/src/valid.js is CommonJS with a legacy octal literal and a type annotation, so ignoring those codes or switching to program syntactic diagnostics fails the test. Re-verification: bun run check in an isolated worktree at 19b20fe4 plus this task's files exit 0 (biome: pre-existing warning and infos only; tsc clean; bun 564 pass, 35 skip, 0 fail); bun plugins/scanners/javascript/build.ts succeeds; the test fails with index.ts reverted.
+
+Simplicity round (cold junior-maintainer review of the fix round), applied: the Evidence section of docs/scanners/javascript/index.md says methods and constructors with a body produce operation evidence, matching the shared operation rule the scanner uses since TASK-424.7. Documentation only, so no code check was run (CLAUDE.md: standalone documentation edits do not require the code test suite).
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
@@ -187,4 +191,6 @@ Delivered the official JavaScript scanner as @groma/scanner-javascript. It bundl
 Verified with test-bun/javascript-scanner.test.ts (6 concurrent tests over the javascript-source, javascript-outline, javascript-parity and javascript-duplicates fixtures), the shared fresh-checkout package test with only Git on PATH and network access blocked, and a disposable tracked-source copy of wifi-densepose at 66392cb4 where discovery recommended the scanner, 47 authored files produced 1249 operations with 758 compared bodies and 4762 unresolved calls, a repeat scan was identical, a second fold created no elements and groma lint reported 32 findings. bun run check exits 0 in a detached worktree holding only this task's changes: 16 Node tests and 477 Bun tests pass.
 
 Review round: after external cold reviews, a JavaScript file that does not parse keeps its inventory entry but contributes no declarations, operations, calls, HTTP facts or tokens, and gets a JAVASCRIPT_SOURCE_INVALID warning at its first parse error while the rest of the scan proceeds (sloppy-mode octal literals and TypeScript-style annotations still parse); discovery documentation lists the JavaScript rule; the tokenizer copy was replaced by the shared TypeScript-family module in TASK-424.7. Verified by the javascript-invalid fixture test (fails without the fix), bun run check in an isolated worktree and the package build.
+
+Simplicity round: the JavaScript page now states that constructors with a body produce operation evidence.
 <!-- SECTION:FINAL_SUMMARY:END -->
