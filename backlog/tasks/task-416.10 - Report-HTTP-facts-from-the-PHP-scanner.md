@@ -5,12 +5,18 @@ status: Done
 assignee:
   - '@claude'
 created_date: '2026-09-16 20:15'
-updated_date: '2026-09-18 06:19'
+updated_date: '2026-09-18 20:02'
 labels: []
 dependencies: []
 references:
   - evidence
   - php-src-index
+  - src-syntax
+  - src-outline
+  - http-url
+  - http-endpoints
+  - http-clients
+  - php-src-http
 modified_files:
   - plugins/scanners/php/src/syntax.ts
   - plugins/scanners/php/src/evidence.ts
@@ -29,6 +35,25 @@ modified_files:
   - test/fixtures/php-http/plugin/client.php
   - test-bun/php-http.test.ts
   - docs/scanners/php/index.md
+  - plugins/scanners/php/src/receivers.ts
+  - plugins/scanners/php/src/http-curl.ts
+  - plugins/scanners/php/src/http-routes.ts
+  - plugins/scanners/php/src/http-laravel.ts
+  - test/fixtures/php-http/bootstrap/app.php
+  - test/fixtures/php-http/routes/mobile.php
+  - test/fixtures/php-http/routes/admin.php
+  - test/fixtures/php-http/routes/partners.php
+  - test/fixtures/php-http/app/Providers/RouteServiceProvider.php
+  - test/fixtures/php-http-patterns/routes.php
+  - test/fixtures/php-http/routes/web.php
+  - test/fixtures/php-http/routes/mobile-v1.php
+  - test/fixtures/php-http/app/helpers.php
+  - test/fixtures/php-http-patterns/bootstrap/app.php
+  - test/fixtures/php-http-routers/bootstrap/app.php
+  - test/fixtures/php-http-routers/web.php
+  - test/fixtures/php-http-routers/unloaded.php
+  - test/fixtures/php-http-routers/slim.php
+  - test/fixtures/php-http/routes/auth.php
 parent_task_id: TASK-416
 type: feature
 ordinal: 481000
@@ -70,6 +95,25 @@ Certain HTTP relationships need endpoint and request facts from every ecosystem.
 9. Isolated bun run check; self specification and quality review.
 
 10. Cold review: prove the client by receiver type instead of guessing from the URL argument; treat an unresolved group or class prefix as unknown and report no endpoints under it; accept a missing argument list; report one cURL request per operation; share list, callables, memberOf, symbolName and joinPath.
+
+Review round (external cold reviews at cf8e7975; every item reproduced with a scan-to-inferRelationships probe):
+11. Route receivers (Codex, Grok must-fix): a builder call or group counts only when its chain starts at a proved router: the Laravel Route facade (Illuminate\Support\Facades\Route or the global alias Route), a parameter or property typed as a Slim or Laravel router type, or the first parameter of a recognized group's closure. $cache->get('/talks', fn) and Cache::get('talks', fn) report nothing.
+12. Receiver scope (Codex must-fix): client and router names are proved per declaration: a type's typed and promoted properties, and a callable's own typed parameters, dropped when the body writes that variable. Names no longer leak across methods. A variable bound to new Client(...) no longer counts, because its base_uri is stated there and is not read (a literal host became a local row).
+13. Constants (Codex must-fix): keyed by their declaring namespace or type and resolved as PHP resolves the reference (self::, Type:: through use aliases, namespaced then global); static:: stays unresolved.
+14. cURL (Codex must-fix x2): an operation reports a cURL request only when it binds one curl_init result to one handle that every option call names, and every option it sets is readable; an unresolved CURLOPT_CUSTOMREQUEST or CURLOPT_POST value reports nothing.
+15. Direct fluent prefixes (Codex must-fix): Route::prefix('/api')->get(...) carries the chain's prefixes.
+16. Same-rule drift in this producer: a WordPress site-URL call without a path argument followed by text that does not start with / is a leading unknown (home_url() . 'api/talks' continues the host); a root-relative client path such as $client->get('/api/talks') stays configured, because the client's base_uri still supplies the host.
+17. Fold the repeated drop-one-leading-backslash step into one syntax.ts helper.
+18. Waiting on the core lane: route constraints and order-based routing; not implemented until the approved fact format is relayed.
+19. Regression fixtures in test/fixtures/php-http and assertions in test-bun/php-http.test.ts; docs/scanners/php/index.md updated.
+
+20. Approved fact format (core 3426fe50): constrained parameters and catch-alls for Symfony {id<re>} and requirements, Slim {id:re}, WordPress (?P<id>re), Laravel where/whereNumber/whereAlpha/whereAlphaNumeric/whereUuid/whereUlid/whereIn on the route, its chain or group options; mixed segments are one constrained parameter; a pattern that may match /, an unreadable pattern or name, and a Slim optional group become a constrained optional catch-all. Every endpoint reports order { application: declaring file, position 0 }. A route entry seen but not reportable (computed route, prefix or group, routes-file group, unreadable methods, unknown handler, view/redirect/resource routes) is a blocker named after the registering operation; the file's top-level code becomes a 'top-level code' operation so top-level registrations have one. Checklist decisions 7 and 8 answered on the PHP page.
+
+21. Laravel cross-file routing (coordinator decision): Route::pattern / Route::patterns in any scanned file constrain Laravel route parameters of that name that state no pattern of their own; an unreadable name constrains every Laravel parameter. A routes file loaded through bootstrap/app.php withRouting (apiPrefix, default api) or a group given base_path(...) or __DIR__ serves its routes under that prefix; under a computed prefix they are blockers, and a load whose file the scan cannot find blocks the loader's prefix (http-laravel.ts). Route paths are therefore finished in resolveEndpoints, after every file is read.
+
+22. Cold-review round: Slim receivers carry their own prefix (AppFactory::create() or new App bound once, or typed Slim\App: root; a proved group's closure parameter: the group's prefix; a RouteCollectorProxy elsewhere: unresolved), a closure passed to group on an unproved receiver runs under an unresolved prefix, and closures import proved receivers by value through use. Laravel string handlers name a Route::controller(...) group method or stay unknown; domain(...) routes are blockers. Loads compose transitively, a require/include inside a Laravel group's closure loads that file under the group, and Laravel routes of a file no load reaches are blockers. The class-level #[Route] of an invokable Symfony controller without method routes routes __invoke. Top-level requests belong to the file's (module) operation, which exists only when a route entry, load or request names it.
+
+23. Re-review round: a top-level require/include of a routes file in a loaded file is a load under that file's bases; every Laravel endpoint and blocker of one project shares one application (its bootstrap/app.php, else its nearest composer.json, else the declaring file); a group with a domain option and a route with ->domain(...) are blockers; Slim writes count only in the variable's own scope, base paths from setBasePath prefix an application's routes, and a Slim group given a callable variable blocks its prefix; unrecognized loaders leave their files unreached.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
@@ -88,10 +132,20 @@ Cold review applied (coordinator decisions):
 5. cURL reports one request per operation: an operation stating several URLs or several methods proves neither and reports nothing.
 6. memberOf, callables and list moved to syntax.ts; one joinPath in http-url.ts replaced both joined helpers; joinedName now reuses symbolName. One walk feeding both passes was not done: the HTTP pass skips a group call to visit its closure under a prefix, while the evidence pass must visit that call to record its invocation, so merging them would change evidence traversal and carry HTTP-only scope through it.
 Re-verification: bun test test-bun/php-http.test.ts test-bun/php-scanner.test.ts 8 pass; isolated bun run check exit 0 (tsc clean, node 16 pass, bun 447 pass 25 skip 0 fail; Biome findings only in untouched build.ts, vue-scanner.test.ts, iso-map.test.ts).
+
+Review round (external cold reviews at cf8e7975, each reproduced with a scan-to-inferRelationships probe): (1) route receivers: builder routes and groups count only on a proved router (Route facade or its global alias; parameters or properties typed Slim App/RouteCollectorProxy(Interface) or Laravel Router/Registrar; a proved group's closure's first parameter), so $cache->get('/talks', fn) and Cache::get(...) report nothing (receivers.ts). (2) client receivers are proved per declaration: typed and promoted properties of the type, and a callable's own typed parameters unless its body writes them (assignment, destructuring, foreach, by-reference use); new Client(...) no longer counts because its base_uri is not read (a literal host produced a local row). (3) constants are keyed by namespace or declaring type and resolved as PHP does (self::, Type:: through use aliases, namespaced before global; static:: unresolved). (4)+(6) cURL: one operation reports a request only for one curl_init result bound to one handle that every option names, with every URL and method option readable (http-curl.ts); CURLOPT_POST accepts true or 1. (5) Route::prefix('/api')->get(...) carries chain prefixes. Same-rule drift fixed: home_url() . 'api/talks' continues the site root's segment, so it is a leading unknown. Folded the leading-backslash step into syntax.ts qualifiedName/calledFunction; typeName moved to syntax.ts. Constraints, order and blockers per the approved format (http-routes.ts). Skipped: grok-all's optional root-relative-Guzzle-configured alignment (the core leading-segment drop matches with or without configured; not a wrong output here); Laravel global Route::pattern set in another file and Laravel's bootstrap api prefix are not read (documented limit / not reported). Verification: bun test test-bun/php-http.test.ts test-bun/php-scanner.test.ts 8 pass; the new expectations fail on HEAD scanner code (leaked/replaced/constructed clients, two-handle and unreadable-method cURL, foreign constants, cache endpoints, dropped constraints, specificity-picked /reports/daily, a blocked /api/archive/latest row); isolated bun run check at 58015031 exit 0 (tsc clean; node 16 pass; bun 557 pass, 35 skip, 0 fail; Biome findings only in untouched build.ts, vue-scanner.test.ts, iso-map.test.ts).
+
+Laravel cross-file routing: pending endpoints now carry their route text, patterns and a Laravel flag; resolveEndpoints joins the loading file's prefix, merges global patterns under group and route patterns, and turns unresolved paths or handlers into blockers. Receiver roles distinguish Laravel and Slim routers so global patterns and mounts apply only to Laravel routes. Red tests: without mounts and global patterns the fixture reports /sessions instead of /api/sessions, /talks/:id instead of /admin/talks/:id, a plain /deals instead of a /partners blocker and /api/sessions/:talk unconstrained, and the php-http-patterns fixture reports /talks/:id unconstrained. Isolated bun run check at ed695d75 exit 0 (tsc clean; node 16 pass; bun 565 pass, 35 skip, 0 fail; Biome findings only in untouched build.ts, vue-scanner.test.ts, iso-map.test.ts).
+
+Cold-review round applied (all reproduced with the reviewer's probes in rev41610 and fixed): (1) Slim prefixes per receiver; proxies outside a proved group, and closures of unproved group calls, give blockers. (2) Laravel plain string handlers resolve only as controller-group methods. (3) Transitive loads, require inside a Laravel group, blockers for unloaded Laravel route files; the main fixture's routes file is now routes/web.php, loaded through bootstrap/app.php withRouting(web:). (4) Plan item 16 reworded: root-relative client paths stay configured. (5) Top-level requests are named after the (module) operation. (6) (module) is declared only when a fact names it; evidence.ts is back to its HEAD form, so other top-level calls create no operation or invocation. (7) Invokable Symfony class routes and Laravel domain() blockers. Each fix was red-checked by disabling it: the endpoint, request or router test fails. Isolated bun run check at fabb8811 exit 0 (tsc clean; node 16 pass; bun 576 pass, 35 skip, 0 fail; Biome findings only in untouched build.ts, vue-scanner.test.ts, iso-map.test.ts).
+
+Re-review round applied (probes rr41610b p4 to p7 reproduced and fixed): Breeze layout (routes/web.php requiring routes/auth.php) now serves /login and, with the shared Laravel application, abstains instead of deriving a row to a root parameter route; Route::group(['domain' => ...]) and ->domain(...) give blockers; the Slim every-write rule, closure use imports, per-scope writes and setBasePath are covered in php-http-routers/slim.php. Each fix was red-checked by disabling it (the endpoint, row or router test fails). Isolated bun run check at 91b1e2b9 exit 0 (tsc clean; node 16 pass; bun 581 pass, 35 skip, 0 fail; Biome findings only in untouched build.ts, vue-scanner.test.ts, iso-map.test.ts, python-scanner.test.ts).
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
 The PHP scanner now reports HTTP endpoint and request facts, so core derives HTTP relationships for PHP. Endpoints come from Laravel and route-builder registrations with their group prefixes, Symfony #[Route] attributes with the class-level prefix, and WordPress register_rest_route; requests come from clients whose receiver is proved to hold a Guzzle-style client, the WordPress HTTP API and cURL. Handler symbols resolve to operations after every file is read, so a route file's endpoint names the controller method that serves it. Only literal routes and URLs become facts: a computed prefix or route reports nothing, one whole computed segment is dynamic, and any other computed text is unknown. The PHP page lists the supported APIs, their limits and the six producer-checklist answers. Verified by test-bun/php-http.test.ts (endpoint facts, request facts, and the rows inferRelationships derives from them, with each unresolved case asserted absent) and an isolated bun run check (exit 0).
+
+Review round: every reviewer finding is fixed with a red test. Only proved receivers register routes or send requests, scoped per declaration; constants resolve as PHP resolves them; cURL requests need one readable handle; fluent and composed Laravel prefixes apply, including files loaded through withRouting, group files and requires; route constraints are reported as constrained segments; every PHP endpoint states an unknown registration order, with one application per Laravel project; route entries the scanner cannot resolve (computed paths, unknown handlers, host-bound or conventional routes, unloaded Laravel files, unproved Slim prefixes) are blockers; and a file's top-level code is a (module) operation only when its routes or requests name it. Verified by test-bun/php-http.test.ts (main, patterns and routers fixtures) and an isolated bun run check (exit 0).
 <!-- SECTION:FINAL_SUMMARY:END -->

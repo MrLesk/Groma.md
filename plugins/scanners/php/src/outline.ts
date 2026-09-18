@@ -1,7 +1,9 @@
 import { readFile } from 'node:fs/promises'
 import path from 'node:path'
 import type { CodeDeclaration, CodeFile, CodeSymbol, CodeVisibility, SourceReference } from '@groma/scanner'
-import { field, list, nameOf, parsePhp, symbolName, typeKinds, type Fields, type Syntax } from './syntax.ts'
+import {
+  calledFunction, field, list, nameOf, parsePhp, qualifiedName, symbolName, typeKinds, type Fields, type Syntax,
+} from './syntax.ts'
 
 interface OutlineScope {
   /** Symbols the Code reference names, spelled as the scan names them. */
@@ -47,9 +49,9 @@ function closureVariable(statement: Fields): Fields | undefined {
 function guardedName(statement: Fields): string | undefined {
   const test = statement.kind === 'if' && field(statement, 'body')?.kind === 'block' ? field(statement, 'test') : undefined
   const call = test?.kind === 'unary' && test.type === '!' ? field(test, 'what') : undefined
-  if (call?.kind !== 'call' || nameOf(call.what)?.replace(/^\\/, '') !== 'function_exists') return undefined
+  if (call === undefined || calledFunction(call) !== 'function_exists') return undefined
   const [argument] = list(call, 'arguments')
-  return argument?.kind === 'string' ? String(argument.value).replace(/^\\/, '') : undefined
+  return argument?.kind === 'string' ? qualifiedName(String(argument.value)) : undefined
 }
 
 /** Inside such a guard, only the function the guard names by its namespace-qualified symbol name is top-level. */

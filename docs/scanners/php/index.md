@@ -28,9 +28,9 @@ rather than publish partial evidence.
 The scanner reports one repository source root, exact PHP paths, named functions,
 classes, interfaces, traits, enums, and methods. Implemented functions, methods,
 closures, and arrow functions produce operation evidence with UTF-16 source
-offsets. Calls and constructions within these operations remain unresolved.
-Top-level executable statements are inventoried as part of their source file;
-they do not create artificial functions.
+offsets. A file whose top-level code registers routes or sends HTTP requests
+gets one more operation, `(module)`, which those facts name and which declares
+no symbol. Calls and constructions within these operations remain unresolved.
 
 The repository source root is initial placement evidence, not a claim that every
 PHP file belongs to one C4 runtime boundary. Core owns architecture identity and
@@ -102,50 +102,119 @@ a PHP file states, and core joins them into relationships. It answers the
 [producer checklist](../evidence.md#producer-checklist) as follows.
 
 **Prefixes.** An endpoint path carries every prefix the source states: a Laravel
-`Route::prefix('api')->group(...)` or `Route::group(['prefix' => 'api'], ...)`, a
-route builder's `$app->group('/admin', ...)`, and a class-level Symfony
+`Route::prefix('api')->group(...)`, `Route::prefix('api')->get(...)` or
+`Route::group(['prefix' => 'api'], ...)`, a route builder's
+`$app->group('/admin', ...)`, and a class-level Symfony
 `#[Route('/api/speakers')]`. A WordPress route's namespace is its prefix, so
 `register_rest_route('shop/v1', '/orders')` serves `/shop/v1/orders`; the REST
 root the site prepends is not in the source. A prefix the source computes, such
-as `Route::prefix(config('api.prefix'))` or `#[Route(Paths::DRAFTS)]`, reports
-nothing for the routes under it: no literal path can stand for it. A group that
+as `Route::prefix('beta/' . config('api.prefix'))` or
+`#[Route('/drafts/' . Paths::DRAFTS)]`, makes each route under it a blocker (see
+**Registration order**) under the whole segments it states first. A group that
 states no prefix at all still reports its routes.
 
-**Endpoints.** Only the handler a route names is an endpoint. The scanner reads
-`Route::get`, `post`, `put`, `patch`, `delete`, `options`, `head`, `any` and
-`match`, the same members on an application or group object such as
-`$app->get(...)` and `$group->delete(...)` including `map`, Symfony `#[Route]`
-attributes on controller methods, and `register_rest_route` with the
-`WP_REST_Server` method constants. Middleware, `Route::view`, `Route::redirect`
-and `Route::resource` report nothing: they name no PHP handler, or their paths
-are framework conventions rather than source text. A handler is a closure written
-in place, `[Type::class, 'method']`, `[$this, 'method']`, `Type::class` for an
-invokable class, or a string naming a function or `Type::method`; the handler
-must be a function or method with a body in the scanned files.
+A Laravel routes file is served under the files that load it.
+`bootstrap/app.php` with `->withRouting(web: ..., api: __DIR__.'/../routes/api.php')`
+serves web routes from the root and API routes under its `apiPrefix`, `api`
+unless stated. A group given a file, such as
+`Route::prefix('api')->group(base_path('routes/api.php'))`, serves it under the
+group's prefix and patterns, and a `require` or `include` of a file, at the top
+level of a loaded file or inside a group's closure, serves it under that code,
+as `routes/web.php` requires `routes/auth.php`. Loads compose: a file loaded
+under `api` that loads another under `v1` serves that one under `api/v1`. A
+group or `withRouting` in a file nothing loads, such as a route service
+provider, serves from the root. The Laravel routes of a file that no load
+reaches, including one only an unrecognized loader such as `loadRoutesFrom` or
+`module_path` loads, and those under a prefix a loader computes, are blockers.
+
+A Slim route carries the prefix of the router it is registered on: an
+application from `AppFactory::create()` or typed `Slim\App` registers at the
+root, or under the base path `setBasePath` gives it, and a group's closure
+parameter under the group's prefix. A group object
+typed `RouteCollectorProxy` anywhere else, and every route inside a closure
+passed to `group` on a receiver the scanner cannot prove, have an unresolved
+prefix, so they are blockers.
+
+**Endpoints.** Only the handler a route names is an endpoint, and only a route
+registered on a proved router counts, because ordinary objects share the member
+names: `Cache::get('/talks', $callback)` and `$cache->get('/talks', $callback)`
+report nothing. A proved router is Laravel's `Route` facade, imported or through
+its global alias; a parameter or property typed `Slim\App`, Slim's
+`RouteCollectorProxy` or `RouteCollectorProxyInterface`, or Laravel's `Router`
+or `Registrar`; a variable every write of which in its own function or
+top-level code is `AppFactory::create()` or `new App(...)`, or which a closure
+imports from one by value; and the first
+parameter of the closure a proved router's `group` calls. The scanner reads
+`get`, `post`, `put`, `patch`, `delete`, `options`, `head`, `any`, `match` and
+`map` on such a router, Symfony `#[Route]` attributes on controller methods,
+the class-level `#[Route]` of an invokable controller whose methods declare
+none, which routes `__invoke`, and `register_rest_route` with the
+`WP_REST_Server` method constants. A handler is a closure written in place,
+`[Type::class, 'method']`, `[$this, 'method']`, `Type::class` for an invokable
+class, or a string naming a function or `Type::method`, and must be a function
+or method with a body in the scanned files. Laravel reads a plain string
+handler as a method of the controller its `Route::controller(...)` group names,
+and otherwise as a controller class, so outside such a group it is unknown.
+A Laravel route under `domain(...)`, or in a group whose options state a
+`domain`, answers only on that host, so it is a blocker. `view`, `redirect`,
+`permanentRedirect` and the resource and singleton members register routes
+whose handlers or paths are framework conventions, so they are blockers.
+Middleware reports nothing, and neither does `Route::fallback`, which the router
+tries only after every other route.
 
 **Dynamic or unknown.** `"/talks/$id"` fills one whole segment, so it is
 dynamic; PHP proves nothing about whether the value holds a slash.
 `"/talks/item-$id"`, any other segment mixing literal and computed text, and a
-URL the scanner cannot read are unknown. A route segment that is neither a whole
-literal nor a whole parameter, such as `/talks/item-{id}` or
-`(?P<id>\d+)/items-(?P<index>\d+)`, reports no endpoint at all, because the
-format cannot state the path the application serves. Catch-all segments are
-never reported, so a Laravel `->where('path', '.*')` route and an optional
-builder group such as `[/{page}]` report only what their literal text states.
+URL the scanner cannot read are unknown.
 
 **Local helpers.** Not supported. A request belongs to the operation that calls
-a recognized client, so a wrapper function reports the request and its callers
-report nothing.
+a recognized client, or to the file's top-level code, so a wrapper function
+reports the request and its callers report nothing.
 
 **The base.** `curl_setopt($handle, CURLOPT_URL, '/shop/v1/orders')` has no
 base. A client call such as `$client->get('/api/talks')` sets `configured`,
 because the client's own `base_uri` is not visible at the call, and so do the
 WordPress site-URL calls `rest_url`, `home_url`, `site_url` and `admin_url` with
-their literal path argument. A literal scheme or authority, and a URL the
-scanner cannot resolve, become the leading unknown segment.
+their literal path argument. Text right after such a call without a path
+argument, as in `home_url() . 'api/talks'`, continues the site root's last
+segment, so it is unknown. A literal scheme or authority, and a URL the scanner
+cannot resolve, become the leading unknown segment.
 
 **File-location routes.** PHP declares no routes by file location, so every
 endpoint names the handler its route states.
+
+**Constrained segments.** A parameter whose pattern the router checks is
+constrained: Symfony `{id<\d+>}` and `requirements`, Slim `{id:\d+}`,
+WordPress `(?P<id>\d+)`, and Laravel `where`, `whereNumber`, `whereAlpha`,
+`whereAlphaNumeric`, `whereUuid`, `whereUlid` and `whereIn`, written on the
+route or on the chain before a route or group. A segment that mixes text with a
+placeholder, such as `photo-{size}`, is one constrained parameter. A pattern of
+`.*` or `.+` on the last segment is a plain optional or required catch-all. A
+pattern that may match `/`, a pattern or parameter name the scanner cannot read,
+and a Slim optional group such as `[/{page}]` become a constrained optional
+catch-all that replaces the rest of the route. Laravel's global
+`Route::pattern` and `Route::patterns`, in any scanned file, constrain every
+Laravel route parameter of that name that states no pattern of its own; one
+whose parameter name the scanner cannot read constrains every such parameter.
+
+**Registration order.** Laravel, Symfony, Slim and WordPress take the first
+registered route that matches, so every endpoint reports `order`. The scanner
+does not prove the order in which files and functions register their routes, so
+every endpoint takes position 0: an unknown order. The routes and blockers of
+one Laravel project share one application, its `bootstrap/app.php`, else its
+nearest `composer.json`, so that they compete with each other; any other route's
+application is the file that declares it.
+
+A route entry the scanner sees but cannot report is still reported, as a
+blocker that could capture requests first: a computed route or prefix, a
+route whose prefix is not proved, a routes file loaded from a place the scan
+cannot find, a host-bound route, unreadable methods, a handler the scan cannot
+place, and the conventional routes above. A
+blocker states the whole literal segments the route states first and then a
+constrained optional catch-all, for its methods or `*` when they are not
+readable, and names the operation that registers it: the enclosing function,
+method or closure, or the file's top-level code. Core derives no row to a
+blocker.
 
 Requests come from Guzzle-style clients
 (`$client->get|post|put|patch|delete|head|options($url[, $options])` and
@@ -156,18 +225,25 @@ HTTP API (`wp_remote_get`, `wp_remote_post`, `wp_remote_head`,
 `curl_setopt_array`). Further limits:
 
 - Client members are ordinary method names, so the receiver must be proved to
-  hold a client: a parameter or property typed `GuzzleHttp\Client`,
-  `ClientInterface` or Symfony's `HttpClientInterface`, or a variable bound to
-  `new Client(...)` in the same file, with the type resolved through the file's
-  `use` aliases. `$cache->get('/talks')` and a route registration therefore
-  report nothing, and a client reached through an untyped value reports nothing
-  either.
-- The cURL options of one operation are not tied to their handle, so an
-  operation that states several URLs or several methods reports no request. A
-  cURL request without `CURLOPT_CUSTOMREQUEST` or `CURLOPT_POST` reports no
-  method, which derives no row.
-- Only a constant the same file declares once resolves to text: `const`, a class
-  constant, or `define`. A constant from another file leaves the path unknown.
+  hold a client: a property typed `GuzzleHttp\Client`, `ClientInterface` or
+  Symfony's `HttpClientInterface`, including a promoted constructor parameter,
+  or a parameter of the calling function or method typed so and never assigned
+  in its body, with the type resolved through the file's `use` aliases.
+  `$cache->get('/talks')`, a route registration, another method's parameter, a
+  variable of the enclosing code, a client reached through an untyped value and
+  a client the code constructs with `new Client(...)`, whose own `base_uri` the
+  scanner does not read, report nothing.
+- The scanner does not follow a cURL handle through other variables or
+  functions, so an operation reports a request only when one `curl_init` result
+  assigned to one handle is configured through that handle alone. Several
+  handles, several URLs, and an option or method the scanner cannot read report
+  no request. `CURLOPT_POST` states POST when set to `true` or `1`. A cURL
+  request without `CURLOPT_CUSTOMREQUEST` or `CURLOPT_POST` reports no method,
+  which derives no row.
+- Only a constant the same file declares once resolves to text: a namespace
+  `const`, which an unqualified name reaches before a global constant of that
+  name, a class constant named through `self::` or its class, and `define`.
+  `static::` and a constant from another file leave the path unknown.
 - Query strings and fragments are ignored, as the fact format requires.
 
 ## Validation
