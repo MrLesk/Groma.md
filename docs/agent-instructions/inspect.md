@@ -21,7 +21,7 @@ add descriptions, actors, flows, groups, or relationship rows.
 | | a draft ID | Prints the draft's outcome and the elements it touches. |
 | | an exact repository-relative source file | Prints the owning component's ID, kind, title, and parent, the file connections of map relationships split into incoming and outgoing, and the command for the owner's complete record. Rows between files of one component are not listed; `groma view <owner-id> --plain` lists relationships that name the owner element. |
 | `groma scanner list` | none | Lists the configured scanners and whether each is ready. |
-| `groma lint` | none | Reports possible duplicate logic from fresh scanner evidence. Findings are review questions: they are not relationships and do not merge components. |
+| `groma lint` | none | Pages possible duplicate logic from fresh scanner evidence. Findings are review questions: they are not relationships and do not merge components. |
 
 A relationship line reads `source -> target | description | technology`, with
 a trailing `| draft` on a draft relationship. The overview lifts each end to
@@ -32,6 +32,26 @@ below the listed children.
 and group addresses are `groma edit` targets, not `groma view` targets.
 On a terminal, `groma view` without a target and `groma web` scan and open
 interactive maps for a human.
+
+## Paging
+
+A plain list prints one page of 50 items and ends with the printed range, the
+total, and the exact command for the following items. Complete output has no
+footer.
+
+| Option | Effect |
+| --- | --- |
+| `--max-count <n>` | print at most n items, as in `git log` |
+| `--skip <n>` | leave out the first n items |
+| `--count` | print only the number of items, as in `grep -c` |
+
+`groma view --plain`, `groma view <id> --plain`, `groma view <source-file>`,
+`groma lint`, `groma scanner discover`, and `groma scanner list` page their
+items. One `groma view` page covers its sections in order, so a cut page prints
+only the sections whose items it reaches; a section with no items at all stays
+on every page. `groma scan` is not paged: its report counts
+findings and names `groma lint`. The complete Markdown record of
+`groma view <id>` and every `--json` result stay whole.
 
 ## Scanner coverage
 

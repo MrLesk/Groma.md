@@ -62,6 +62,11 @@ operation before opening a map.
    `groma view <element-id> --plain` goes one level down: the element, its
    direct children, and the relationships crossing its boundary, split into
    incoming and outgoing.
+   Every command whose plain output lists items prints one page of 50 items and
+   ends with the printed range, the total, and the command for the following
+   items; `--max-count <n>` and `--skip <n>` choose the window as in `git log`,
+   and `--count` prints only the number of items as in `grep -c`. A complete
+   list has no footer, and one `groma view` page spans its sections in order.
    `groma view <element-id|flow-id>` returns the exact complete authored
    Markdown, including metadata, every Code reference, and named sections.
    A flow record includes its ordered Steps table. An exact
@@ -96,10 +101,12 @@ operation before opening a map.
    snapshot, and exits. Run it again to publish updated data. Hosting and
    access control belong to the chosen static host, outside Groma.
 3. `groma scan`: scan this repo. Core folds structural scan evidence into Markdown
-   and reports architecture findings in the command summary. Findings are review
+   and counts architecture findings in the command summary, naming `groma lint`
+   to read them. Findings are review
    questions about similar implementations; they are not relationship rows.
    The command prints `ok` and a short summary. It does not print the
-   architecture. The scanner alone creates systems, containers, and
+   architecture. Scan is the one plain command without paging, because a second
+   page would scan again. The scanner alone creates systems, containers, and
    components; nothing writes them by hand.
 4. Change the architecture through Groma's commands; no viewer edits element
    or draft documents.

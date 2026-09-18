@@ -1,4 +1,4 @@
-import { architectureFindingsFor, formatArchitectureFindings } from './architecture-findings.ts'
+import { architectureFindingsFor } from './architecture-findings.ts'
 import { reconcileScanObservations } from './core.ts'
 import { loadScannerRegistry, type ScanBatch } from './scanner/registry.ts'
 import { watchObservations } from './scanner/source-watch.ts'
@@ -31,7 +31,9 @@ function formatScannerDiagnostics(diagnostics: ScannerDiagnostic[]): string[] {
 }
 
 export function formatScanReport(repositoryRoot: string, summary: ScanSummary): string {
-  const findings = formatArchitectureFindings(architectureFindingsFor(repositoryRoot))
+  // The report stays short: findings are counted here and read through groma lint, which pages them.
+  const found = architectureFindingsFor(repositoryRoot).length
+  const findings = found === 0 ? [] : ['Run groma lint to review the findings.']
   const conflicts = summary.evidenceConflicts?.map(conflict => `${conflict.code}: ${conflict.message}`) ?? []
   const diagnostics = formatScannerDiagnostics(summary.scannerDiagnostics ?? [])
   const failures = summary.scannerFailures?.map(failure => `${failure.message} (saved scanner data kept)`) ?? []
