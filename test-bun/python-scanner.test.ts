@@ -55,15 +55,17 @@ test.concurrent('Python keeps function ownership, nested projects and exact sour
   } finally { await rm(temporary, { recursive: true, force: true }) }
 })
 
-/** `:name`, `:name+` and `:name*` are parameters and catch-alls, `!` marks a constrained one; `{}` is dynamic and `?` unknown. */
+/** `:name` is a parameter and `:name+` or `:name*` a catch-all, `!` marks a constrained one; `{}` is dynamic and `?` unknown. */
+function segmentLabel(segment: HttpEndpointSegment | HttpRequestSegment): string {
+  if (segment.kind === 'literal') return segment.value
+  if (segment.kind === 'dynamic') return '{}'
+  if (segment.kind === 'unknown') return '?'
+  const suffix = segment.kind === 'catch-all' ? (segment.optional ? '*' : '+') : ''
+  return `:${segment.name}${suffix}${segment.constrained ? '!' : ''}`
+}
+
 function route(path: readonly (HttpEndpointSegment | HttpRequestSegment)[]): string {
-  return `/${path.map(segment => {
-    if (segment.kind === 'literal') return segment.value
-    if (segment.kind === 'dynamic') return '{}'
-    if (segment.kind === 'unknown') return '?'
-    const suffix = segment.kind === 'catch-all' ? (segment.optional ? '*' : '+') : (segment.optional ? '?' : '')
-    return `:${segment.name}${suffix}${segment.constrained ? '!' : ''}`
-  }).join('/')}`
+  return `/${path.map(segmentLabel).join('/')}`
 }
 
 test.concurrent('Python reports Flask, FastAPI and Django endpoints and requests, and nothing it cannot resolve', async () => {

@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@claude'
 created_date: '2026-09-16 20:42'
-updated_date: '2026-09-18 17:52'
+updated_date: '2026-09-18 22:57'
 labels: []
 dependencies: []
 references:
@@ -70,6 +70,8 @@ Review-fix round (Codex u05 findings, orchestrator grouping check):
 15. Subscript marker confirmed by the orchestrator: 'index', as the Java tokenizer writes for element access, so a[b] gives index $0 $1.
 
 16. Cold review replaced item 10: tokens stay infix, and an operand of a binary, unary, boolean or comparison operator that is itself a binary, boolean or comparison expression is wrapped in ( and ); chains such as a < b <= c stay one run. Item 13's subscript marker is 'index' (item 15).
+
+17. Simplicity round: extract segmentLabel(segment) from the test's route renderer and drop its unreachable optional-parameter branch (the Python scanner reports no optional parameter), so Biome reports no cognitive-complexity warning in test-bun/python-scanner.test.ts.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
@@ -86,6 +88,8 @@ Review-fix round (Codex u05 findings, orchestrator grouping check, cold review):
 Cold review: the first encoding (operators before operands) created new exact copies for chains and containers ([a, b] + [c] versus [a] + [b, c]); per the orchestrator's decision it was replaced by infix with parentheses around nested operator expressions. Unary operators are also parents so -a ** b stays different from (-a) ** b (pair negated_power / power_of_negated is red without that rule).
 Orchestrator decisions: else, dictionary ** and index were added (the TypeScript reference writes no else or element-access marker; relayed to the TypeScript lane). Call-argument boundaries (f(g(a), b) equals f(g(a, b)), also f(a) + b equals f(a + b)) stay unmarked: a cross-scanner follow-up the orchestrator records for the owner. Known remaining, also present before: a conditional, walrus, lambda or await operand is not wrapped, so (a if b else c) + d equals a if b else c + d.
 Verification: test/fixtures/python-duplicated-logic/distinct.py.fixture holds 15 pairs; the lint test failed with every pair reported before each code change and passes after; tokenizing all 66,761 CPython 3.14 standard-library functions raised no errors; bun test test-bun/python-scanner.test.ts 8 pass; isolated bun run check passed (Biome, typecheck, node 16 pass, bun 520 pass, 35 skip, 0 fail).
+
+Simplicity round: the test's route renderer moved its per-segment branches into segmentLabel(segment) and dropped the optional-parameter suffix, which the Python scanner never reports; Biome now reports no cognitive-complexity warning for test-bun/python-scanner.test.ts (repository warnings 2 to 1 at HEAD d58953d2). Isolated bun run check passed (node 16 pass, bun 589 pass, 35 skip, 0 fail).
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
@@ -94,4 +98,6 @@ Verification: test/fixtures/python-duplicated-logic/distinct.py.fixture holds 15
 The Python scanner now gives every def and async def operation a source range (def line to body end) and binding-normalized body tokens, so groma lint finds duplicate and near-duplicate Python logic through the shared core comparison. Parameters and bound names become slots; operators, literals, attribute and keyword names and unresolved identifiers stay; docstrings, decorators, defaults and annotations are left out. Lambdas and module or class-body code are never operations, so they are never compared; core applies the size minimums. docs/scanners/python/index.md gains a Compared operations section. Verified by a new lint test on test/fixtures/python-duplicated-logic (exact renamed pair, not-identical pair, no lambda or initializer findings), tokenizing the whole CPython 3.14 standard library without errors, and an isolated bun run check.
 
 Review-fix round: body tokens now keep structure that different logic used to share. A def, class, import, except or match name takes its slot where it is bound; a function-local import keeps the imported module and member; nested binary, boolean and comparison operands are wrapped in parentheses; slices, subscripts (index), dictionary unpacking (**) and else blocks keep their positions. Fifteen previously colliding pairs in test/fixtures/python-duplicated-logic/distinct.py.fixture are no longer reported by groma lint; call-argument boundaries remain a cross-scanner follow-up.
+
+Simplicity round: the Python test's segment renderer is a small segmentLabel helper, clearing its Biome complexity warning.
 <!-- SECTION:FINAL_SUMMARY:END -->
