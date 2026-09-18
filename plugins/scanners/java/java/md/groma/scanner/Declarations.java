@@ -124,7 +124,7 @@ final class Declarations extends TreePathScanner<Void, Void> {
     }
 
     String file(CompilationUnitTree unit) {
-        return root.relativize(Path.of(unit.getSourceFile().toUri())).toString().replace('\\', '/');
+        return Main.file(root, unit.getSourceFile());
     }
 
     List<Object> files() {
