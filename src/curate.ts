@@ -6,6 +6,7 @@ import { relocated, requireElement } from './curate-rewrites.ts'
 import type { CurationContext, DocumentWrite, Rewrite } from './curate-rewrites.ts'
 import { renamedTarget } from './curate-rename.ts'
 import { resolveFlows } from './flow-model.ts'
+import { moveBlocker } from './movable.ts'
 import { requireGromaMapping } from './okf-profile.ts'
 import { GromaFileSystem } from './groma-filesystem.ts'
 import {
@@ -60,30 +61,10 @@ function requiresEmptyMeaning(source: string, id: string): void {
   }
 }
 
-function requireUnrelated(
-  relationships: ArchitectureModel['relationships'],
-  ids: Set<string>,
-): void {
-  const relationship = relationships.find(entry => {
-    return entry.connections.some(connection => connection.authored
-      && (ids.has(connection.source) || ids.has(connection.target)))
-  })
-  if (relationship !== undefined) {
-    throw new Error(
-      `cannot structurally replace "${relationship.sourceId}" or "${relationship.targetId}" `
-      + 'while it owns an authored relationship',
-    )
-  }
-}
-
 /** Every element stored under this one, at any depth. */
 function descendants(model: ArchitectureModel, id: string): ArchitectureElement[] {
   const children = model.elements.filter(element => element.parentId === id)
   return [...children, ...children.flatMap(child => descendants(model, child.id))]
-}
-
-function subtreeIds(model: ArchitectureModel, id: string): string[] {
-  return [id, ...descendants(model, id).map(element => element.id)]
 }
 
 /** A scanned container that owns no files, which scans find through existingChild, not inferredContainer (scan-reconciler.ts). */
@@ -115,7 +96,7 @@ function requireScanFindable(
   const named = [...changed, ...staying].find(element => foundOnlyByName(context.model, element))
   if (named !== undefined) {
     throw new Error(`cannot change "${target.id}": container "${named.id}" owns no files, so scans find it only by `
-      + `its name in "${named.parentId}"; combine other systems into "${named.parentId}", or change the title instead of the ID`)
+      + `its name in "${named.parentId}", and it must keep its ID and system`)
   }
 }
 
@@ -310,9 +291,9 @@ function movedTarget(
     throw new Error(`${target.kind} requires a ${parentKind} parent, but "${parent.id}" has kind ${parent.kind}`)
   }
   if (parent.external) throw new Error(`"${parent.id}" is an external system and stores nothing`)
-  requiresEmptyMeaning(source, target.id)
-  // A relocated document changes path, so an authored concept row naming it anywhere below would break.
-  requireUnrelated(context.model.relationships, new Set(subtreeIds(context.model, target.id)))
+  const flows = resolveFlows(context.records.flows, context.model)
+  const blocker = moveBlocker(target, parseFrontmatter(source).content, context.model.relationships, flows)
+  if (blocker !== undefined) throw new Error(blocker)
   return {
     source: withGromaField(source, 'parent', parent.id),
     destination: architectureElementPath({
@@ -376,11 +357,6 @@ async function combineElements(
   const movedChildren = target.kind === 'component'
     ? []
     : context.model.elements.filter(element => sourceIds.includes(element.parentId ?? ''))
-  const replacedIds = new Set([
-    ...sourceIds,
-    ...movedChildren.flatMap(child => subtreeIds(context.model, child.id)),
-  ])
-  requireUnrelated(context.model.relationships, replacedIds)
   for (const element of [...sources, ...movedChildren]) {
     requiresEmptyMeaning(
       await readDocument(context.repositoryRoot, element.sourceFilename),
