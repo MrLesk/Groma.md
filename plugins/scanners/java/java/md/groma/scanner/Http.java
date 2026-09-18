@@ -117,32 +117,40 @@ final class Http extends TreePathScanner<Void, Void> {
         return super.visitClass(tree, unused);
     }
 
-    /**
-     * Spring MVC and WebFlux controllers and JAX-RS resource classes serve the paths they declare. A route the scanner
-     * sees but cannot read becomes a blocker from its unreadable part on.
-     */
+    /** Spring MVC and WebFlux controllers and JAX-RS resource classes serve the paths they declare. */
     private void endpointsOf(TreePath path, ClassTree tree) {
-        var spring = annotation(tree.getModifiers(), "RestController") != null
-            || annotation(tree.getModifiers(), "Controller") != null;
-        var jaxrs = annotation(tree.getModifiers(), "Path") != null;
-        if (!spring && !jaxrs) return;
-        // Spring finds the class-level mapping on the class or its supertypes; JAX-RS reads the class's own path.
-        var mapping = spring ? typeMapping(path, new HashSet<>()) : new TypeMapping(path, annotation(tree.getModifiers(), "Path"));
-        var prefixes = prefixes(mapping, spring);
-        // Spring adds a class-level `method` to every mapping of the class.
-        var classMethods = spring && mapping.annotation() != null ? verbs(mapping.type(), mapping.annotation(), "*") : List.of("*");
-        var unresolved = spring && unresolvedSupertype(path, new HashSet<>());
+        var modifiers = tree.getModifiers();
+        if (annotation(modifiers, "RestController") != null || annotation(modifiers, "Controller") != null) springEndpoints(path, tree);
+        // JAX-RS reads the class's own path.
+        var jaxrs = annotation(modifiers, "Path");
+        if (jaxrs == null) return;
+        var prefix = routes(path, jaxrs).get(0);
         for (var member : tree.getMembers()) {
-            if (!(member instanceof MethodTree method)) continue;
-            var operation = index.operationAt.get(method);
-            if (operation == null) continue;
+            var operation = index.operationAt.get(member);
+            if (member instanceof MethodTree method && operation != null) jaxrs(new TreePath(path, method), method, prefix, operation);
+        }
+    }
+
+    /**
+     * A Spring controller's mappings under each class-level route, which Spring finds on the class or its supertypes.
+     * A route the scanner sees but cannot read becomes a blocker from its unreadable part on, and so does an
+     * un-annotated override whose mapping a supertype the scanner cannot resolve may declare.
+     */
+    private void springEndpoints(TreePath path, ClassTree tree) {
+        var mapping = typeMapping(path, new HashSet<>());
+        var declared = mapping.annotation() != null;
+        var prefixes = declared ? routes(mapping.type(), mapping.annotation()).stream().map(Http::springPrefix).toList() : List.of("");
+        // Spring adds a class-level `method` to every mapping of the class.
+        var classVerbs = declared ? verbs(mapping.type(), mapping.annotation(), "*") : List.of("*");
+        var unresolved = unresolvedSupertype(path, new HashSet<>());
+        for (var member : tree.getMembers()) {
+            var operation = index.operationAt.get(member);
+            if (!(member instanceof MethodTree method) || operation == null) continue;
             var methodPath = new TreePath(path, method);
-            // An un-annotated override may take its mapping from a supertype the scanner cannot read.
-            var inheritsMapping = unresolved && annotation(method.getModifiers(), "Override") != null && !mapping(method);
+            var inheritsMapping = unresolved && annotation(method.getModifiers(), "Override") != null && !declaresMapping(method);
             for (var prefix : prefixes) {
                 if (inheritsMapping) endpoint(operation, "*", prefix + "/" + HttpPaths.UNREADABLE, false);
-                if (spring) mapped(methodPath, method, prefix, classMethods, (verb, route) -> endpoint(operation, verb, route, false));
-                if (jaxrs) jaxrs(methodPath, method, prefix, operation);
+                reportMappings(methodPath, method, prefix, classVerbs, (verb, route) -> endpoint(operation, verb, route, false));
             }
         }
     }
@@ -201,17 +209,8 @@ final class Http extends TreePathScanner<Void, Void> {
         return false;
     }
 
-    private static boolean mapping(MethodTree method) {
+    private static boolean declaresMapping(MethodTree method) {
         return method.getModifiers().getAnnotations().stream().anyMatch(annotation -> MAPPINGS.containsKey(typeName(annotation.getAnnotationType())));
-    }
-
-    /** Each class-level route. */
-    private List<String> prefixes(TypeMapping mapping, boolean spring) {
-        if (mapping.annotation() == null) return List.of("");
-        var routes = routes(mapping.type(), mapping.annotation());
-        if (routes == null) return List.of(HttpPaths.UNREADABLE);
-        if (routes.isEmpty()) return List.of("");
-        return spring ? routes.stream().map(Http::springPrefix).toList() : routes;
     }
 
     /** Spring joins a prefix holding a wildcard with a route by its own rules, so the route is unreadable from there. */
@@ -226,8 +225,7 @@ final class Http extends TreePathScanner<Void, Void> {
      */
     private void jaxrs(TreePath methodPath, MethodTree method, String prefix, String operation) {
         var own = annotation(method.getModifiers(), "Path");
-        var text = own == null ? "" : first(routes(methodPath, own));
-        var route = prefix + "/" + (text == null ? HttpPaths.UNREADABLE : text);
+        var route = prefix + "/" + (own == null ? "" : routes(methodPath, own).get(0));
         var verbs = JAXRS_METHODS.stream().filter(verb -> annotation(method.getModifiers(), verb) != null).toList();
         if (verbs.isEmpty() && own != null) endpoint(operation, "*", route + "/" + HttpPaths.UNREADABLE, true);
         for (var verb : verbs) endpoint(operation, verb, route, true);
@@ -238,13 +236,13 @@ final class Http extends TreePathScanner<Void, Void> {
         var feign = annotation(tree.getModifiers(), "FeignClient");
         var exchange = annotation(tree.getModifiers(), "HttpExchange");
         if (feign == null && exchange == null) return;
-        var prefix = feign == null ? first(routes(path, exchange)) : text(path, feign, "path");
+        var prefix = feign == null ? routes(path, exchange).get(0) : text(path, feign, "path");
         var host = feign == null ? "" : text(path, feign, "url");
         if (prefix == null || host == null) return;
         for (var member : tree.getMembers()) {
             if (!(member instanceof MethodTree method)) continue;
             var methodPath = new TreePath(path, method);
-            mapped(methodPath, method, prefix, List.of("*"), (verb, route) -> {
+            reportMappings(methodPath, method, prefix, List.of("*"), (verb, route) -> {
                 if (route.contains(HttpPaths.UNREADABLE)) return;
                 var parts = new ArrayList<HttpPaths.Part>();
                 // Without a literal URL the client resolves its base from configuration.
@@ -260,15 +258,13 @@ final class Http extends TreePathScanner<Void, Void> {
      * serves together with the class-level ones. A route or method the scanner cannot read makes the route unreadable
      * from there, and unknown methods report every method.
      */
-    private void mapped(TreePath methodPath, MethodTree method, String prefix, List<String> classMethods,
+    private void reportMappings(TreePath methodPath, MethodTree method, String prefix, List<String> classVerbs,
         BiConsumer<String, String> report) {
         for (var annotation : method.getModifiers().getAnnotations()) {
             var verb = MAPPINGS.get(typeName(annotation.getAnnotationType()));
             if (verb == null) continue;
             var routes = routes(methodPath, annotation);
-            if (routes == null) routes = List.of(HttpPaths.UNREADABLE);
-            if (routes.isEmpty()) routes = List.of("");
-            var verbs = combined(classMethods, verbs(methodPath, annotation, verb));
+            var verbs = combined(classVerbs, verbs(methodPath, annotation, verb));
             var unknown = verbs.isEmpty() ? "/" + HttpPaths.UNREADABLE : "";
             for (var declared : verbs.isEmpty() ? List.of("*") : verbs) {
                 for (var route : routes) report.accept(declared, prefix + "/" + route + unknown);
@@ -277,7 +273,7 @@ final class Http extends TreePathScanner<Void, Void> {
     }
 
     /** `@RequestMapping(method = RequestMethod.PUT)` and `@HttpExchange(method = "PUT")` name their methods. */
-    private List<String> verbs(TreePath methodPath, AnnotationTree annotation, String verb) {
+    private List<String> verbs(TreePath path, AnnotationTree annotation, String verb) {
         if (!verb.equals("*")) return List.of(verb);
         var stated = argument(annotation, "method");
         // Without a method attribute the mapping serves every method; an unresolved one proves nothing.
@@ -285,8 +281,8 @@ final class Http extends TreePathScanner<Void, Void> {
         var declared = new ArrayList<String>();
         for (var value : values(stated)) {
             var text = value instanceof MemberSelectTree ? constant(value, "RequestMethod")
-                : HttpPaths.literalText(new TreePath(methodPath, value), trees);
-            if (text != null && text.matches("[A-Z]+")) declared.add(text);
+                : HttpPaths.literalText(new TreePath(path, value), trees);
+            if (isVerb(text)) declared.add(text);
         }
         return declared.size() == values(stated).size() ? declared : List.of();
     }
@@ -295,11 +291,11 @@ final class Http extends TreePathScanner<Void, Void> {
      * Spring serves the union of class-level and method-level methods; a side without a method adds no restriction,
      * and an unresolved side leaves the methods unknown.
      */
-    private static List<String> combined(List<String> classMethods, List<String> own) {
-        if (classMethods.isEmpty() || own.isEmpty()) return List.of();
-        if (classMethods.contains("*")) return own;
-        if (own.contains("*")) return classMethods;
-        var union = new LinkedHashSet<>(classMethods);
+    private static List<String> combined(List<String> classVerbs, List<String> own) {
+        if (classVerbs.isEmpty() || own.isEmpty()) return List.of();
+        if (classVerbs.contains("*")) return own;
+        if (own.contains("*")) return classVerbs;
+        var union = new LinkedHashSet<>(classVerbs);
         union.addAll(own);
         return List.copyOf(union);
     }
@@ -334,7 +330,7 @@ final class Http extends TreePathScanner<Void, Void> {
         var name = select.getIdentifier().toString();
         var verb = name.equals("method") && !call.getArguments().isEmpty()
             ? constant(call.getArguments().get(0), "HttpMethod") : name.toUpperCase(Locale.ROOT);
-        if (verb == null || !verb.matches("[A-Z]+")) return;
+        if (!isVerb(verb)) return;
         request(operation(), verb, HttpPaths.urlParts(new TreePath(getCurrentPath(), tree.getArguments().get(0)), trees, assigned));
     }
 
@@ -361,7 +357,7 @@ final class Http extends TreePathScanner<Void, Void> {
             }
         }
         // A chain naming no method sends GET; one whose method the scanner cannot read proves nothing.
-        if (parts.isEmpty() || stated && (verb == null || !verb.matches("[A-Z]+"))) return;
+        if (parts.isEmpty() || stated && !isVerb(verb)) return;
         request(operation(), verb == null ? "GET" : verb, parts);
     }
 
@@ -404,29 +400,23 @@ final class Http extends TreePathScanner<Void, Void> {
     }
 
     /**
-     * Every literal route an annotation states in a path attribute: empty when it states none, null when
-     * the sources do not prove the text. `url` is the alias an HTTP exchange annotation may use.
+     * Every literal route an annotation states in a path attribute: `""` when it states none, and `UNREADABLE` when the
+     * sources do not prove the text. `url` is the alias an HTTP exchange annotation may use.
      */
     private List<String> routes(TreePath path, AnnotationTree annotation) {
-        var stated = argument(annotation, "value", "path", "url");
-        if (stated == null) return List.of();
         var routes = new ArrayList<String>();
-        for (var element : values(stated)) {
+        for (var element : values(argument(annotation, "value", "path", "url"))) {
             var route = HttpPaths.literalText(new TreePath(path, element), trees);
-            if (route == null) return null;
+            if (route == null) return List.of(HttpPaths.UNREADABLE);
             routes.add(route);
         }
-        return routes;
+        return routes.isEmpty() ? List.of("") : routes;
     }
 
     /** The literal text of one named attribute: empty when absent, null when unresolved. */
     private String text(TreePath path, AnnotationTree annotation, String name) {
         var stated = argument(annotation, name);
         return stated == null ? "" : HttpPaths.literalText(new TreePath(path, stated), trees);
-    }
-
-    private static String first(List<String> routes) {
-        return routes == null ? null : routes.isEmpty() ? "" : routes.get(0);
     }
 
     /** The expression an annotation gives one of these attributes, taking `value` from a bare argument. */
@@ -444,6 +434,10 @@ final class Http extends TreePathScanner<Void, Void> {
     private static List<? extends ExpressionTree> values(ExpressionTree value) {
         if (value == null) return List.of();
         return value instanceof NewArrayTree array ? array.getInitializers() : List.of(value);
+    }
+
+    private static boolean isVerb(String text) {
+        return text != null && text.matches("[A-Z]+");
     }
 
     /** A constant of the named type, such as `HttpMethod.POST`; null for anything else. */

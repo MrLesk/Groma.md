@@ -125,8 +125,8 @@ it with its type, such as `Orders.place`.
 ## HTTP endpoints and requests
 
 The scanner reports the [HTTP facts](../evidence.md#http-endpoints-and-requests)
-that core joins into derived relationships. It reads annotations and client calls
-from source, because project dependencies are never loaded.
+that core joins into derived relationships. It reads annotations and client
+calls from source, because project dependencies are never loaded.
 
 Endpoints, from classes only:
 
@@ -174,26 +174,31 @@ a client URL fills one whole segment.
 In a route, a Spring `{name}` or `*` segment is a parameter. A Spring
 `{name:regex}` parameter, and a segment mixing text with a placeholder or a
 wildcard, such as `v{version}` or `*.json`, is a constrained parameter. A
-trailing `{*name}` or `**` is a constrained optional catch-all: Spring ranks
-such a pattern after every other one rather than segment by segment, so core
-does not rank it against a route that conflicts with it. A JAX-RS `{name: regex}` may match a
-slash, so it and the rest of the route become a constrained optional
-catch-all, as do a Spring `{*name}` or `**` before the route's end and a
+segment that may span segments or that the fact format cannot state ends the
+route with a constrained optional catch-all. That covers a Spring `{*name}` or
+`**`, which Spring ranks after every other pattern rather than segment by
+segment, a JAX-RS `{name: regex}`, whose expression may match a slash, and a
 segment outside URL path characters.
 
 A route the scanner sees but cannot read becomes a blocker: its readable prefix,
 then a constrained optional catch-all, for every method unless the methods are
-known. That covers a prefix or route whose constant the sources do not declare
-or that holds a `${...}` configuration placeholder, a class-level prefix
-holding a wildcard, which Spring joins with each route by its own rules, a
-`method` attribute that does not resolve, on the mapping or the class, an
-un-annotated `@Override` method of a controller that, directly or through a
-supertype in the sources, extends or implements a type that does not resolve,
-since that type may declare its mapping, and a JAX-RS sub-resource locator, a
-`@Path` method without an HTTP method annotation. A supertype that resolves,
-such as `java.io.Serializable`, or that is known to declare no mapping, such as
-Spring's `ErrorController`, adds no blocker. A blocker never takes a request
-certainly, and competes with the routes a request reaches as the
+known. The causes are:
+
+- a prefix or route whose constant the sources do not declare, or that holds a
+  `${...}` configuration placeholder;
+- a class-level prefix holding a wildcard, which Spring joins with each route by
+  its own rules;
+- a `method` attribute that does not resolve, on the mapping or the class;
+- an un-annotated `@Override` method of a controller that, directly or through
+  a supertype in the sources, extends or implements a type that does not
+  resolve, since that type may declare its mapping. A supertype that resolves,
+  such as `java.io.Serializable`, or that is known to declare no mapping, such
+  as Spring's `ErrorController`, adds no blocker;
+- a JAX-RS sub-resource locator, a `@Path` method without an HTTP method
+  annotation.
+
+A blocker never takes a request certainly, and competes with the routes a
+request reaches as the
 [HTTP request rule](../../relationship-inference.md#http-requests) describes.
 
 Nothing is reported for a functional WebFlux `RouterFunction`, a JAX-RS `@Path`

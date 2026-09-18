@@ -9,7 +9,6 @@ import com.sun.source.tree.VariableTree;
 import com.sun.source.util.TreePath;
 import com.sun.source.util.Trees;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -25,8 +24,9 @@ final class HttpPaths {
     /** `{name}`, `{name:regex}` or `{*name}`, with the spaces a JAX-RS template allows. */
     private static final Pattern PLACEHOLDER = Pattern.compile("\\{\\s*(\\*?)([^}:\\s]*)\\s*(:.*)?}");
     /**
-     * Stands for route text the scanner sees but cannot read. From there the endpoint is a blocker: a constrained
-     * optional catch-all that only possibly takes the requests below its readable prefix.
+     * Stands for route text the scanner sees but cannot read. It travels through prefix and route concatenation, and
+     * since NUL is not URL path text, endpointSegments ends the route at its segment with a constrained optional
+     * catch-all: a blocker that only possibly takes the requests below its readable prefix.
      */
     static final String UNREADABLE = "\u0000";
     /** One computed expression inside a URL; a configured value is one the scanner cannot see. */
@@ -38,26 +38,27 @@ final class HttpPaths {
     private HttpPaths() {}
 
     /**
-     * Segments of a Spring path pattern, or of a JAX-RS template when `jaxrs` is set. A segment that ends the pattern
-     * early, because it may span segments or the format cannot state it, becomes a constrained optional catch-all.
+     * Segments of a Spring path pattern, or of a JAX-RS template when `jaxrs` is set. A segment that may span segments
+     * or that the format cannot state, including Spring's `{*name}` and `**`, ends the path with a constrained optional
+     * catch-all: it also matches no segment, and Spring ranks such a pattern after every other one, so core does not
+     * rank it segment by segment against a conflicting route.
      */
     static List<Object> endpointSegments(String pattern, boolean jaxrs) {
         var segments = new ArrayList<Object>();
-        var parts = Arrays.stream(pattern.split("/")).filter(part -> !part.isEmpty()).toList();
-        for (int index = 0; index < parts.size(); index++) {
-            var part = parts.get(index);
-            var segment = endpointSegment(part, index == parts.size() - 1, jaxrs);
-            if (segment != null) segments.add(segment);
-            else {
+        for (var part : pattern.split("/")) {
+            if (part.isEmpty()) continue;
+            var segment = endpointSegment(part, jaxrs);
+            if (segment == null) {
                 segments.add(Json.object("kind", "catch-all", "name", placeholderName(part), "optional", true, "constrained", true));
                 break;
             }
+            segments.add(segment);
         }
         return segments;
     }
 
     /** One segment, or null when it may span segments or the format cannot state it. */
-    private static Object endpointSegment(String part, boolean last, boolean jaxrs) {
+    private static Object endpointSegment(String part, boolean jaxrs) {
         // A `${...}` placeholder takes its text from configuration at startup.
         if (part.contains("${")) return null;
         var placeholder = PLACEHOLDER.matcher(part);
@@ -65,9 +66,9 @@ final class HttpPaths {
         var regex = part.matches(".*\\{[^}]*:.*");
         // A JAX-RS regular expression may match a slash, so it can take several segments.
         if (jaxrs && regex) return null;
-        if (whole && !placeholder.group(1).isEmpty()) return last ? catchAll(placeholderName(part)) : null;
+        // Spring's `{*name}` and `**` take the rest of the path.
+        if (whole && !placeholder.group(1).isEmpty() || !jaxrs && part.equals("**")) return null;
         if (whole) return parameter(placeholderName(part), regex);
-        if (!jaxrs && part.equals("**")) return last ? catchAll("*") : null;
         if (!jaxrs && part.equals("*")) return parameter("*", false);
         // Text mixed with a placeholder or a Spring wildcard accepts only some values of one segment.
         if (part.contains("{") || !jaxrs && (part.contains("*") || part.contains("?"))) return parameter(placeholderName(part), true);
@@ -78,14 +79,6 @@ final class HttpPaths {
         var segment = Json.object("kind", "parameter", "name", name);
         if (constrained) segment.put("constrained", true);
         return segment;
-    }
-
-    /**
-     * Spring's `{*name}` and a trailing `**` also match no segment. Spring ranks such a pattern after every other one
-     * rather than segment by segment, so it is constrained and core does not rank it against a conflicting route.
-     */
-    private static Object catchAll(String name) {
-        return Json.object("kind", "catch-all", "name", name, "optional", true, "constrained", true);
     }
 
     /** The first placeholder's name in a segment, or `*` for a wildcard or a name outside URL path characters. */

@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@claude'
 created_date: '2026-09-16 20:15'
-updated_date: '2026-09-18 20:06'
+updated_date: '2026-09-18 23:28'
 labels: []
 dependencies: []
 references:
@@ -41,6 +41,7 @@ modified_files:
   - test/fixtures/java-http/src/main/java/http/StatusController.java
   - test/fixtures/java-http/src/main/java/http/ArchiveBase.java
   - test/fixtures/java-http/src/main/java/http/ArchiveController.java
+  - test/fixtures/java-http/src/main/java/http/OrderController.java
 parent_task_id: TASK-416
 type: feature
 ordinal: 476000
@@ -91,6 +92,8 @@ Skipped: a root-relative URL keeps configured (documented Spring base resolution
 13. Second cold review: a supertype outside the sources no longer makes the class prefix unknown (a type-level mapping on a dependency's interface is an accepted limit); only a supertype that does not resolve, other than Spring's ErrorController, turns the class's un-annotated @Override methods into blockers at the class's readable prefix for every method. Spring {*name} and trailing ** catch-alls are constrained, because Spring ranks them after every other pattern. A mapping's method is read only from RequestMethod constants, and a RestTemplate or fluent method only from HttpMethod constants. A ${...} configuration placeholder makes a route unreadable from its segment.
 
 14. Last check: an unresolved supertype is also found through a supertype in the sources (a controller extending an in-source base that implements an unresolved interface), and a fluent method(...) reads only HttpMethod constants, pinned by a fixture.
+
+15. Simplicity review: endpointSegments ends the route with one constrained optional catch-all for every segment that may span segments or that the format cannot state, including Spring {*name} and **, so the last-segment flag goes away; routes() returns [""] when a mapping states no path and [UNREADABLE] when the sources do not prove one, which deletes first() and the per-caller branches; endpointsOf is split per method; one isVerb check; mapping, mapped, classMethods renamed declaresMapping, reportMappings, classVerbs. Fixtures protect the supertype order (interfaces before the superclass) and a compound assignment that reassigns a field. The docs list the blocker causes and explain the UNREADABLE marker.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
@@ -119,6 +122,8 @@ Verification: test-bun/java-http.test.ts over test/fixtures/java-http pins 35 en
 Follow-ups (not in scope): a method that implements an unresolved interface's method without @Override reports nothing; a mapping a controller method inherits from an interface method in the sources is not read; a functional WebFlux RouterFunction is not read.
 
 Correction to the verification line above: test-bun/java-http.test.ts pins 33 endpoints, not 35.
+
+Simplicity review round: endpointSegments now ends the route with one constrained optional catch-all for every segment that may span segments or that the format cannot state, Spring {*name} and ** included, so the last-segment flag and the separate catch-all builder are gone; routes() returns [""] when a mapping states no path and [UNREADABLE] when the sources do not prove one, which deleted first() and the null and empty branches in its callers; endpointsOf delegates Spring controllers to springEndpoints; one isVerb check replaces three copies; mapping, mapped and classMethods are declaresMapping, reportMappings and classVerbs; the UNREADABLE comment explains why NUL ends the route. New fixture OrderController (extends BaseController, implements TalksApi) pins that interfaces are searched before the superclass, and Clients.appendedBase pins that a compound assignment reassigns a field; the reviewer's mutations (superclass first, no compound-assignment visit) each change the fixture facts. The Java page lists the blocker causes, states the catch-all rule once and rewraps the long lines; the test comments that repeated the page are gone. Isolated worktree at 7ca1ecb9 with only this task's changes: bun run check exit 0 (Biome: only an existing warning; tsc; node 16 pass; bun 594 pass, 35 env-gated skips, 0 fail); a first full run hung in the bun suite and was stopped, then every test file passed alone and the full rerun passed. callforpapers still reports 433 endpoints and no blockers.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
@@ -127,4 +132,6 @@ Correction to the verification line above: test-bun/java-http.test.ts pins 33 en
 The Java scanner now reports HTTP facts. Endpoints come from classes only: Spring MVC and WebFlux annotated controllers with their class-level @RequestMapping prefix, and JAX-RS resources with their class and method @Path. Requests come from @FeignClient and Spring HTTP interfaces, whose bodyless methods declare their own operations, and from RestTemplate, RestClient, WebClient and java.net.http HttpRequest builder chains, recognized by the receiver's declared type name in the file. Literal routes, URLs and declared constants become facts; a URI template placeholder is one dynamic segment, partly known text and computed URLs are unknown, a literal host becomes a leading unknown segment, and every other client base is configured. The scanner abstains where a wrong row could follow: an inherited prefix, an unresolved mapping method, an unresolved builder method, an unresolved prefix constant, a segment mixing text with a parameter, a receiver name with two declared types, and security matchers, filters and interceptors. Verified by test-bun/java-http.test.ts over test/fixtures/java-http, which pins the 8 endpoints, 15 requests and the 5 rows core derives, and by the worker over the callforpapers clone (431 endpoints, 3 honest requests); bun run check passed in an isolated worktree. The Java scanner page lists the supported APIs, the limits and the six producer checklist answers.
 
 Review-fix round: the Java producer now follows the approved fact format and abstains where Spring or JAX-RS routing is not proved. Class-level methods combine with mapping methods as Spring does; pattern, mixed and wildcard segments are constrained, Spring catch-alls are constrained optional catch-alls, and a JAX-RS regular expression ends the path; class prefixes come from the class or its supertypes in the sources, each class route applies, and routes the scanner sees but cannot read are blockers (readable prefix plus a constrained optional catch-all). Protocol-relative URLs, text continuing a base and literal hosts held in unassigned fields or locals now lead with an unknown segment, while injected or reassigned fields stay configured. Verified by test-bun/java-http.test.ts, whose new expectations fail on the previous worker, by scratch builds removing each guard, by the worker on callforpapers (433 endpoints, all synthetic matches kept), and by bun run check in an isolated worktree.
+
+Simplicity round: segment parsing has one catch-all rule, route reading has one unreadable form instead of null and empty cases, and fixtures now protect the supertype search order and compound reassignment.
 <!-- SECTION:FINAL_SUMMARY:END -->

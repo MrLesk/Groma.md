@@ -17,6 +17,7 @@ public class Clients {
     @Value("${reviews.url}")
     private String injected = "https://outside.example";
     private String retargeted = "https://outside.example";
+    private String appended = "https://outside.example";
 
     public Clients(String base) {
         this.base = base;
@@ -121,6 +122,14 @@ public class Clients {
 
     public void retarget(String url) {
         retargeted = url;
+    }
+
+    public void extend() {
+        appended += "/v2";
+    }
+
+    public String appendedBase() {
+        return restTemplate.getForObject(appended + "/reviews", String.class);
     }
 
     public String injectedBase() {
