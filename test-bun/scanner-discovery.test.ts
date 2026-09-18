@@ -44,19 +44,6 @@ function evidence(report: string, technology: string): string[] {
   })
 }
 
-test.concurrent('a source-file technology reports one line with the file count and the first path', async () => {
-  const root = await repository(3)
-  try {
-    const discovery = await discoverScanners(root, {}, catalog)
-    expect(discovery.findings.filter(finding => finding.sourceFiles)).toHaveLength(3)
-    const [line, ...extra] = evidence(formatDiscovery(discovery), 'sourcelang')
-    expect(extra).toEqual([])
-    expect(line).toContain('3 files')
-    expect(line).toContain('page-0.example')
-    expect(line).not.toContain('page-1.example')
-  } finally { await rm(root, { recursive: true, force: true }) }
-})
-
 test.concurrent('a single source file needs no count, and exact project files keep one line each', async () => {
   const root = await repository(1)
   try {
@@ -68,7 +55,7 @@ test.concurrent('a single source file needs no count, and exact project files ke
   } finally { await rm(root, { recursive: true, force: true }) }
 })
 
-test.concurrent('a source-file technology counts each file once, whichever rules and scanners match it', async () => {
+test.concurrent('a source-file technology reports one line counting each file once, whichever rules and scanners match it', async () => {
   const rule = (files: string[], declaration: string) => ({
     type: 'file' as const, kind: 'language' as const, technology: 'sourcelang', files, declaration,
   })
@@ -80,7 +67,10 @@ test.concurrent('a source-file technology counts each file once, whichever rules
   const root = await repository(2)
   try {
     await writeFile(path.join(root, 'page.sample'), 'sample\n')
-    const [line, ...extra] = evidence(formatDiscovery(await discoverScanners(root, {}, overlapping)), 'sourcelang')
+    const discovery = await discoverScanners(root, {}, overlapping)
+    // The JSON findings stay complete: both scanners match each example file, and one rule matches the sample.
+    expect(discovery.findings.filter(finding => finding.sourceFiles)).toHaveLength(5)
+    const [line, ...extra] = evidence(formatDiscovery(discovery), 'sourcelang')
     expect(extra).toEqual([])
     expect(line).toContain('3 files; first page-0.example')
   } finally { await rm(root, { recursive: true, force: true }) }
