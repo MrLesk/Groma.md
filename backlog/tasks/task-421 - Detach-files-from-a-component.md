@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@claude'
 created_date: '2026-09-16 20:42'
-updated_date: '2026-09-17 18:34'
+updated_date: '2026-09-18 18:08'
 labels: []
 dependencies: []
 references:
@@ -15,6 +15,7 @@ references:
   - src-architecture-model
   - src-cli
   - instructions
+  - write-commands
 modified_files:
   - src/curate.ts
   - src/edit.ts
@@ -66,6 +67,8 @@ Curation can combine components and move empty ones, but it cannot take a file o
 7. Verify with bun run check in an isolated worktree and the CLI on a fixture copy.
 
 8. Refuse a detach that would leave a flow step without its relationship: rebuild the model with the detached document and resolve each stored flow before writing, like relation removal refuses a relationship a flow uses.
+
+Review-fix round (external reviews at cf8e7975): Codex and Grok report no material finding for detach. One verified documentation finding (grok-all): the --detach help in src/write-commands.ts and the human overview in src/instructions.ts say the next scan gives detached files their own component, but a scan returns a detached file to the owner of the rest of its source unit (test-bun/detach.test.ts covers that). Both now say so. Skipped: repointing links for combine and move (declined by the orchestrator, recorded in TASK-426); the 'not scanned yet' explanation of a detached file belongs to TASK-413 in another lane.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
@@ -80,10 +83,14 @@ Verification: test-bun/detach.test.ts (synthetic observations on test/fixtures/s
 Cold review applied. Must-fix: curateElement now takes the loaded records and, before writing a detach, rebuilds the model with the detached document and resolves each stored flow; a flow whose step loses its relationship refuses the edit with 'cannot detach <files>: used by flows <ids>' and nothing is written (new test on test/fixtures/flows, plus a CLI check on a copy: groma edit worker --detach src/worker.ts refused and the world still loaded). docs/component-markdown.md now says a stored row may name a file with no current owner, stays in relationships.md, stays off the map, and joins it again after a scan; only that hunk is staged, TASK-416's hunk in the same file stays uncommitted.
 Accepted optional findings: relationship-markdown.ts no longer looks up file owners (the fileOwners import and the owners map are gone) and its message says the link names no architecture concept, with the architecture root named; sourceRelationships skips a connection whose endpoint has no owner, so architecture-model.ts is unchanged; curate.ts calls the refused list unowned; structure.md says detaching every file leaves an empty component that keeps its id, to combine back or remove before scanning; the test suite also covers the refusal of --detach with --combine.
 Re-verification: bun run check in an isolated worktree at 9b574bc5 with only TASK-421 changes (docs/component-markdown.md limited to my hunk) passed: biome and tsc clean apart from existing warnings in other files, 16 node tests and 390 bun tests pass (24 skipped), 0 fail. The scratch-repository CLI flow still detaches, rescans into its own component, and recombines.
+
+Review-fix round (external reviews at cf8e7975): Codex and Grok reported no material finding for detach. Fixed one documentation finding (grok-all): the --detach help (src/write-commands.ts), the human overview (src/instructions.ts) and docs/product-model.md now all say that the next scan gives a detached file its own component, shared with the other files of its source unit, unless part of that unit still has an owner; test-bun/detach.test.ts already covers both outcomes, and the structure guide already said so. Skipped: repointing links on combine and move (declined by the orchestrator, recorded in TASK-426); the 'not scanned yet' explanation of a detached file belongs to TASK-413. Verification: wording only; biome clean on the changed source files, groma edit --help and groma instructions render the new text, test-bun/agent-instructions.test.ts and test-bun/detach.test.ts pass.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
 groma edit <component> --detach <file...> takes source files out of a component: it refuses files the component does not own, a detach that would leave a flow step without its relationship, and a combine in the same edit, writing nothing in each case, and otherwise reports the changed document and affected id. Relationship rows naming a file that lost its owner stay stored and off the map, so loading and the next scan keep working; the scan then gives each detached file its own component, which combine or move places, while a partly detached scanner source unit returns to its owner. The architecture write commands moved from src/cli.ts (498 lines) into src/write-commands.ts to make room. Verified with test-bun/detach.test.ts (detach, refusals, rescan, recombination, source units, flow safety), a scratch Git repository driven through the real CLI, and bun run check in an isolated worktree (16 node and 390 bun tests pass).
+
+Review-fix round: the --detach help, the human overview and the product model now agree with the scan: a detached file gets its own component, shared with the rest of its source unit, unless part of that unit still has an owner. Wording only; verified by rendering the help and guide and by the detach and agent-instructions tests.
 <!-- SECTION:FINAL_SUMMARY:END -->
