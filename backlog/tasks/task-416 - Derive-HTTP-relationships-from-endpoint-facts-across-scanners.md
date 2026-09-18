@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@claude'
 created_date: '2026-09-16 19:38'
-updated_date: '2026-09-18 06:23'
+updated_date: '2026-09-18 14:52'
 labels: []
 dependencies: []
 references:
@@ -117,4 +117,37 @@ Verification: focused tests 38 of 38; isolated bun run check exited 0 (Bun 434 p
 Follow-up: core compares literal path segments without regard to case, including the dropped-prefix comparison, because frameworks such as ASP.NET route case-insensitively and generate paths like /api/Talks from a controller name. A row keeps the endpoint's own spelling. Two endpoints differing only in case either share a file or already fall under the one-file abstention. Tests added for a case-differing match, a dropped prefix before a case-differing segment, and two files differing only in case (no row). Recorded in docs/relationship-inference.md and the evidence.md checklist. Isolated bun run check exited 0 (Bun 439 passed, 25 skipped, 0 failed; Node 16 passed).
 
 Follow-up: checklist decision 3 in docs/scanners/evidence.md now states that the segment a value is written in decides dynamic versus unknown, instead of asking whether a runtime value might contain a slash, which is what every producer implements.
+
+AC #6 verification run (not yet satisfied: one derived row is wrong, see the defect below).
+
+Setup. /Users/alex/projects/callforpapers was cloned to a scratch directory (its own working copy was never written to and Groma was never run there). The clone carries no committed groma/ folder, so the authored tree was copied read-only from the owner's working copy (it is untracked there) and kept aside for comparison. The clone was initialized fresh and given the four scanner packages the authored scanners.json selects (typescript, angular, java, php), built from this repository into the scratch directory. groma scan created 1227 elements.
+
+Facts reported: angular 205 requests, java 431 endpoints and 3 requests, php 12 requests, typescript none.
+
+Derived HTTP rows: 7, every one angular plus java.
+1. webapp/app/callforpaper/admin-exports/admin-export.service.ts -> web/rest/speaker/SpeakerResource.java, GET /api/speakers/download/:proposalState.
+2. webapp/app/callforpaper/admin-keyword-cloud/admin-keyword-cloud.service.ts -> web/rest/keyword/KeywordCloudResource.java, POST /api/keyword-cloud/upload.
+3. webapp/app/core/auth/account.service.ts -> web/rest/user/AccountResource.java, POST /api/account.
+4. webapp/app/entities/user-favourite/user-favourite.service.ts -> web/rest/user/UserFavouriteTalkResource.java, GET /api/favourites/talk/total.
+5. webapp/app/shared/auth/internal-account.service.ts -> web/rest/user/AccountResource.java, POST /api/account/reset-password/finish, POST /api/account/reset-password/init, POST /api/register.
+6. webapp/app/shared/proposal-state-button/proposal-state-button.component.ts -> web/rest/util/EmailPreviewResource.java, GET /api/email-preview/:action/:proposalId.
+7. webapp/app/top-talks/cfp-top-talks-home.component.ts -> web/rest/publicaccess/PublicUserRatingResource.java, GET /api/public/ratings/:token, GET /api/public/ratings/top.
+
+Authored HTTP rows: 69 (48 HTTP JSON, 10 HTTP JSON through getJSON, 4 HTTPS JSON, 2 HTTP JSON through Retrofit, and one each of HTTP, HTTP text, HTTPS PUT, HTTPS through LangChain4j, HTTPS with the Firebase SDK). None of them is derived, and none of the 7 derived rows was authored, so the two sets do not overlap.
+
+Why each authored row is not derived.
+- 38 rows: every request the source file reports has an unresolved base or a computed segment, such as GET /<unknown> and PUT /<unknown>/<dynamic>. These Angular services send through a resourceUrl field composed from appConfig, which the producer reports as unknown text rather than a configured base.
+- 10 rows: the source is a PHP WordPress shortcode that calls the public API with jQuery getJSON inside the JavaScript it prints, so the PHP producer reports no request.
+- 10 rows: the source or the target is an actor, container or external system (Firebase, OpenAI, Google Gemini, Devoxxians, Amazon S3, Devoxx Companion, another CFP instance, the media signing service, semantic search), not a repository file. The rule joins file to file only.
+- 8 rows: the Angular entity services for room, location, tenant, comment, compliment, tag, program-user-tracks and proposal-digest report no request at all. Each only sets resourceUrl and extends shared/crud/abstract-entity.service.ts, which owns every call, and that file's own path is unknown text.
+- 3 rows have a known request that reaches no endpoint in the authored target file: home-pod.service.ts asks GET /api/public/home-pods while HomePodResource serves /api/home-pods, and the extra public segment is interior, not leading, so the one-segment tolerance correctly abstains; user-favourite.service.ts -> UserFavouriteResource.java names a file that does not serve the only known request, GET /api/favourites/talk/total, which UserFavouriteTalkResource does (derived row 4); wishlist-entry.service.ts -> WishlistEntryResource.java has one known request, GET /api/speakers/<dynamic>, which belongs to SpeakerResource.
+
+Correctness of the derived rows. Rows 1 to 6 were each checked against the client call and the Spring mapping and are correct, including the class-level /api prefix and the configured base in front of a literal path. Row 7 names the right file, but its description is wrong: the component makes exactly one request, GET /api/public/ratings/top, and never calls the :token route.
+
+Defect. Core's preference ranking in src/http-relationships.ts (matchRank and preferredMatches) gives a literal endpoint segment and a parameter segment the same rank, so a sibling route in the same file is reported as reached. docs/relationship-inference.md rule 4 states that only the endpoints a router would prefer remain, and a router prefers the literal route, so the row text claims an endpoint the source does not call, permanently. The same cause also hides real rows when the looser route sits in another file: GET /api/account from account.service.ts matches both AccountResource's /api/account and the SPA fallback GET /:path1/:path2 in web/rest/ClientForwardController.java, so that request produces no row and only the POST label survives. The controller's own comment states that API routes take precedence.
+
+callforpapers verification fix: src/http-relationships.ts now ranks matching endpoints by segment specificity instead of one catch-all flag. A match carries its exactness and one score per declared segment (literal 0, parameter 1, catch-all 2); the first position that differs decides, exactness first. Only the most specific matches survive, then the existing rules apply (one providing file, at least one certain match, different owners).
+This removes the wrong label the verification found: a request to /ratings/top no longer also claims a sibling /ratings/:token in the same file. It also restores real rows that an SPA fallback hid: GET /api/account now beats another file's /:first/:second, so the row is derived instead of discarded by the one-file rule. One earlier abstention test became a match case for the same reason, which is the intended change.
+Tests: a literal sibling of a parameter route in one file (single label), a specific path before another file's fallback, and a literal path before another file's any-method parameter route. docs/relationship-inference.md rule 4 states the full ordering.
+Isolated bun run check from current HEAD exited 0 (Bun 479 passed, 32 skipped, 0 failed; Node 16 passed).
 <!-- SECTION:NOTES:END -->
