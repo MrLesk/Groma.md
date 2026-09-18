@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@claude'
 created_date: '2026-09-16 20:15'
-updated_date: '2026-09-18 18:16'
+updated_date: '2026-09-18 23:07'
 labels: []
 dependencies: []
 references:
@@ -32,6 +32,7 @@ modified_files:
   - plugins/scanners/go/worker/mounts.go
   - test/fixtures/go-http/config/config.go
   - test/fixtures/go-http/admin.go
+  - plugins/scanners/go/worker/values.go
 parent_task_id: TASK-416
 type: feature
 ordinal: 478000
@@ -80,6 +81,12 @@ Review-fix round (external reviews of cf8e7975), each verified with a probe modu
 14. Found while verifying 13: fmt.Sprintf("%s/talks", base) reported the base as a dynamic first path segment. Empty text parts are dropped before the base is read, so a leading computed value is a base as for concatenation.
 15. Waiting on the core fact format: route constraints (codex-all #5, chi {id:regex}) and order-based routing. Not committed until the orchestrator relays it.
 16. Fixture cases in test/fixtures/go-http, assertions in test-bun/go-scanner.test.ts, Go page updated; verify with GROMA_TEST_GO and the isolated bun run check.
+
+Simplicity round (cold junior-maintainer review of the fix round):
+17. Routers are read lazily like URL bases: namedRouter(object) reads the one value the source assigns a name (or its declared type or group closure), trackValues is gone, clients are marked where assignments are read, and the assignment pass shares one loop with declared types and mounts, so results no longer depend on file or walk order (red fixtures: a package router used in an earlier file, a declared ServeMux field assigned from build() in a later file, a mount receiver in a later file).
+18. Fixture lines for the self-reference guards (base = base + "/v2", a router mounted in itself), a router mounted twice, http.StripPrefix, a spanning chi regex followed by more segments, braces inside a chi regex, and a multi-value package declaration.
+19. Owner decision D2: a variable whose address a flag or pflag *Var function takes is configuration; its address passed anywhere else makes it a leading unknown segment (red fixture).
+20. Cleanups: isLocalValue folded into nameParts, mountUnder inlined, wildcard specialized to braces, one parameter constructor, majorVersion beside its user, the assignment pass and constantString moved to their own file, test explanations above each expectation array, Go page item 1 split with mount limits moved into it.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
@@ -116,6 +123,8 @@ Note: fmt.Sprintf("https://%s", host) + "/hosttalks" reports [unknown, dynamic, 
 Follow-up (pre-existing, not fixed): a *http.ServeMux parameter that its caller serves behind http.StripPrefix reports its own paths, such as /striptalks, because the StripPrefix call names the caller's value, not the parameter.
 
 Targeted re-review, applied: (1) withText joins adjacent text parts, so a URL written in pieces from resolved package variables (scheme + "://" + host + "/talks", "http://" + host + "/talks") reads as the text it spells and its host is a leading unknown segment; before, the first read /http:/localhost:8080/talks and core derived a row to a two-parameter route. (2) chi hands a regular expression the text up to the character after its placeholder, which can cross a slash (chi v5.3.2 serves /files/a/report.json with /files/{path:.+}.json), so a chi regular expression that may match / (checked on its parsed syntax; one that does not parse may) is a constrained optional catch-all that replaces the rest of the route; one that cannot stays a constrained parameter. (3) Red test for reading assignment counts over every file first: admin.go declares adminMux and registers /admintalks, server.go assigns it twice. (4) By the approved rule, a package variable declared without a value and assigned once, even conditionally, resolves to that one value. Red evidence in an isolated worktree on HEAD 996fb4e9 (core committed as 3426fe50): reverting the join gives /http:/localhost:8080/schemetalks and /?/localhost:8080/porttalks; reverting the spanning check gives /api/reports/:path!; interleaving counts with declared types adds * /admintalks. GROMA_TEST_GO bun run check passed there (Biome 1 warning and 2 infos in untouched files; node 16 pass; bun 565 pass, 27 skip, 0 fail); go vet passes.
+
+Simplicity round (cold junior-maintainer review): router names were tracked eagerly in walk order while mount receivers and URL bases were read lazily, so the one-assignment rule existed three times and results depended on file order (a package chi router used in an earlier file, a ServeMux field assigned from build() in a later file, and a mount receiver in a later file gave different facts). Routers are now read lazily too: namedRouter reads the one value the source assigns a name, including a chi group closure parameter, whose value is its Route or Group call; trackValues, the eager group closure path and the endpoint return value are gone; clients are marked where assignments are read; the assignment pass runs in one loop with declared types and mounts. The assignment pass, the flag rule and constantString moved to values.go. Owner decision D2: a package variable whose address a flag or pflag ...Var function takes is configured whatever its initializer, and any other address taken makes it unknown. The self-reference guards are needed by valid code (base = base + "/v2", wrapped = wrapped.With(...), a router mounted in itself) and now have fixture lines; so do a router mounted twice, http.StripPrefix, a spanning chi regex followed by more segments, braces inside a chi regex and a multi-value declaration. Cleanups: isLocalValue folded into nameParts, mountUnder inlined, wildcard specialized to braced, one parameter constructor, majorVersion beside packageName, test explanations above each sorted expectation, Go page item 1 split into a list with the mount limits moved into it and the repeated net/http sentence removed. Against the committed worker the new fixtures fail (firsttalks appears; earlytalks, mountedtalks and closuretalks are missing; defaulttalks and scannedtalks read /api); removing each guard overflows the stack and removing each other rule changes its expectation. Isolated worktree on HEAD fe407bc9: GROMA_TEST_GO bun run check passed (Biome 1 warning and 2 infos in untouched files; node 16 pass; bun 598 pass, 27 skip, 0 fail); go vet passes.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
@@ -124,4 +133,6 @@ Targeted re-review, applied: (1) withText joins adjacent text parts, so a URL wr
 The Go scanner now reports HTTP endpoint and request facts. The worker recognizes net/http, chi, gin and echo by import path and written type, tracks routers and clients as declarations, carries constant group and Mount prefixes, and names each endpoint's handler operation so a derived row points at the serving file. Requests come from the net/http client calls, with constant URLs folded through go/types, a whole computed segment as dynamic, partly known text as unknown, a configuration name as configured, and a host or local value as a leading unknown segment. Anything computed, a host pattern, a mixed segment and a route after a catch-all report nothing. docs/scanners/go/index.md answers the producer checklist and lists the supported APIs and limits. Verified with test/fixtures/go-http covering each API and each abstention case (8 Go tests), an end-to-end inferRelationships row from client.go to handlers.go, go vet, and an isolated GROMA_TEST_GO bun run check.
 
 Review round: fixed paths to wrong derived rows found by external and cold reviews. chi mounts now carry every prefix of their receiving router, and a mount on an unreadable or non-chi router, a router mounted twice and any router or group-closure name assigned more than once report nothing. Catch-alls require a remainder except at the root. Request bases: a package variable is the one value the source assigns it (literal hosts become a leading unknown segment, a variable nothing assigns stays configured), text continuing a setting's last segment and a leading fmt.Sprintf value are unknown, and URL text written in pieces is joined. Under the approved fact format, chi regular expressions and mixed chi, gin and echo segments are constrained parameters, a chi regular expression that may match / is a constrained optional catch-all, and no Go router reports order. The mount code moved to mounts.go. Verified with red fixture cases for each rule and an isolated GROMA_TEST_GO bun run check on HEAD with the committed core change.
+
+Simplicity round: router names are now read lazily from their one assigned value like URL bases, so results no longer depend on file order, flag-set variables are configured bases, and the assignment rules live in values.go with a fixture line for every guard.
 <!-- SECTION:FINAL_SUMMARY:END -->

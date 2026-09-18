@@ -25,6 +25,25 @@ func register(mux *http.ServeMux) {
 
 func route() string { return "/computed" }
 
+func buildMux() *http.ServeMux { return http.NewServeMux() }
+
+func NewAdmin() *Admin {
+	admin := &Admin{}
+	admin.mux = buildMux()
+	return admin
+}
+
+func (a *Admin) second() {
+	a.mux.HandleFunc("/secondtalks", ListTalks)
+}
+
+// A router behind http.StripPrefix serves a path this scan does not carry.
+func stripped() {
+	inner := http.NewServeMux()
+	inner.HandleFunc("/striptalks", ListTalks)
+	http.Handle("/strip/", http.StripPrefix("/strip", inner))
+}
+
 func useAdmin(replacement *http.ServeMux) {
 	adminMux = http.NewServeMux()
 	adminMux = replacement

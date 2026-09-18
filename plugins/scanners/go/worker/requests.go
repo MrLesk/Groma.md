@@ -85,19 +85,22 @@ func (e *evidence) urlParts(s *source, expression ast.Expr) []urlPart {
 }
 
 // nameParts reads a named value. A package-level variable is what the source assigns it. A local
-// value is computed here. A name from elsewhere, such as a field, is read like a setting.
+// variable or parameter is computed here, a value this scan declines to resolve. A name from
+// elsewhere, such as a field, is read like a setting.
 func (e *evidence) nameParts(s *source, name ast.Expr) []urlPart {
 	object := s.object(name)
 	if parts, ok := e.packageParts(object); ok {
 		return parts
 	}
-	return []urlPart{{computed: true, setting: !isLocalValue(object)}}
+	variable, ok := object.(*types.Var)
+	local := ok && variable.Parent() != nil
+	return []urlPart{{computed: true, setting: !local}}
 }
 
 // packageParts reads a package-level variable as the one value the source assigns it, in its
-// declaration or elsewhere. Nothing in the source assigns one that a flag or the linker sets, so
-// it is read like a setting; one assigned more than once, or a value the source does not write
-// out, is unknown.
+// declaration or elsewhere. One a command-line flag sets, or that nothing in the source assigns
+// (the linker can), is read like a setting; one assigned more than once, or given a value the
+// source does not write out, such as through a pointer, is unknown.
 func (e *evidence) packageParts(object types.Object) ([]urlPart, bool) {
 	variable, ok := object.(*types.Var)
 	if !ok || variable.Pkg() == nil || variable.Parent() != variable.Pkg().Scope() {
@@ -105,12 +108,13 @@ func (e *evidence) packageParts(object types.Object) ([]urlPart, bool) {
 	}
 	assigned, written := e.assignedValues[object]
 	switch {
-	case e.assignments[object] == 0:
+	case e.flags[object] || e.assignments[object] == 0:
 		return []urlPart{{computed: true, setting: true}}, true
 	case e.assignments[object] > 1 || !written:
 		return []urlPart{{computed: true}}, true
 	}
-	// Leaving the variable out while its value is read ends an initialization cycle.
+	// A value can read the variable itself, as in base = base + "/v2"; leaving the variable out
+	// while its value is read makes that read unknown instead of endless.
 	delete(e.assignedValues, object)
 	parts := e.urlParts(assigned.source, assigned.value)
 	e.assignedValues[object] = assigned
@@ -132,16 +136,6 @@ func callParts(s *source, call *ast.CallExpr) []urlPart {
 		return []urlPart{{computed: true, setting: true}}
 	}
 	return []urlPart{{computed: true}}
-}
-
-// isLocalValue reports a variable or parameter declared inside a function, whose value this
-// scan declined to resolve. A field and a name declared outside the scanned source are read.
-func isLocalValue(object types.Object) bool {
-	variable, ok := object.(*types.Var)
-	if !ok || variable.Parent() == nil || variable.Pkg() == nil {
-		return false
-	}
-	return variable.Parent() != variable.Pkg().Scope()
 }
 
 // formatParts turns a format string into text and one computed value per verb.

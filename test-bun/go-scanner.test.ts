@@ -216,32 +216,38 @@ goTest('Go reports HTTP endpoints from net/http, chi, gin and echo with their gr
     await buildWorker(worker, go)
     const { endpoints } = httpFacts(await scanGoSource(root, { worker }))
     // Each endpoint names the operation that answers it, so a handler in another file owns the fact.
-    // Only a catch-all at the root serves an empty remainder. A reassigned group reports nothing.
+    // Only a catch-all at the root serves an empty remainder. A chi regular expression and text beside
+    // a parameter in one segment constrain it; a chi regular expression that may match a slash stands
+    // for the rest of the route. A chi Mount carries every prefix of its receiver, and names read the
+    // same whichever file assigns, builds or mounts them. Nothing is reported for a reassigned router or
+    // group closure parameter, a ServeMux field assigned from a call, a router built for a mount
+    // elsewhere, mounted on a router this scan cannot read, mounted twice or inside itself, a mounted
+    // router that is not chi, or one behind http.StripPrefix.
     expect(endpoints).toEqual([
+      'echo.go GET /files/:path+',
       'echo.go PATCH /api/talks/:id',
       'echo.go POST /api/talks',
-      'echo.go GET /files/:path+',
       'gin.go * /api/health',
-      // A chi regular expression, and text beside a parameter in one segment, constrain it.
-      'gin.go GET /api/versions/:version!',
       'gin.go DELETE /talks/:id',
       'gin.go GET /api/talks/:id',
+      'gin.go GET /api/versions/:version!',
       'gin.go GET /files/:filepath+',
       'handlers.go * /:path*',
       'handlers.go * /files/:path+',
       'handlers.go * /health',
-      'handlers.go GET /api/files/:path+',
-      // A chi Mount carries its receiver's prefixes. A router built for a mount elsewhere, one mounted on
-      // a router this scan cannot read, a mounted router that is not chi, a reassigned group closure
-      // parameter and a ServeMux another file assigns twice report nothing.
-      'handlers.go GET /api/talks',
-      'handlers.go GET /api/v1/speakers',
       'handlers.go GET /admin/v2/reviews',
-      'handlers.go GET /api/talks/:id!',
+      'handlers.go GET /api/codes/:code!',
       'handlers.go GET /api/exports/:id!',
-      // A chi regular expression that may match a slash stands for the rest of the route.
+      'handlers.go GET /api/files/:path+',
+      'handlers.go GET /api/raws/:path*!',
       'handlers.go GET /api/reports/:path*!',
+      'handlers.go GET /api/talks',
+      'handlers.go GET /api/talks/:id!',
+      'handlers.go GET /api/v1/speakers',
+      'handlers.go GET /closure/v3/closuretalks',
+      'handlers.go GET /earlytalks',
       'handlers.go GET /health',
+      'handlers.go GET /root/mountedtalks',
       'handlers.go GET /talks',
       'handlers.go GET /talks/:id',
       'handlers.go GET /version',
@@ -256,39 +262,42 @@ goTest('Go reports what each net/http request proves and leaves the rest unknown
   try {
     await buildWorker(worker, go)
     const { requests } = httpFacts(await scanGoSource(root, { worker }))
+    // A formatted value fills one segment, a percent stays literal text and an unproven method is omitted.
+    // A setting, a field or a flag before a path is a configured base. A literal host, an unresolved value,
+    // partly known text, a local variable, a parameter and text that continues a setting's last segment
+    // cannot be compared. A package variable is the one value the source assigns it, in its package or
+    // another, even when that value reads the variable itself; one assigned more than once, from a call
+    // that returns several values, or through a pointer is unknown. Text written in pieces is read as the
+    // URL it spells.
     expect(requests).toEqual([
-      // A formatted value fills one segment; a setting or a field before the path is a configured base.
-      'GET /api/talks/{}',
-      'GET /health',
-      // A percent stays literal text, and an unproven method is omitted.
-      'GET /rate/100%',
       '- /talks',
+      'GET /?',
+      'GET /?/configtalks',
+      'GET /?/formattedtalks',
+      'GET /?/inittalks',
+      'GET /?/joinedtalks',
+      'GET /?/localtalks',
+      'GET /?/mirrortalks',
+      'GET /?/outsidetalks',
+      'GET /?/paramtalks',
+      'GET /?/porttalks',
+      'GET /?/scannedtalks',
+      'GET /?/schemetalks',
+      'GET /?/talks',
+      'GET /?/tupletalks',
+      'GET /?/v2/growntalks',
+      'GET /?/{}/hosttalks',
+      'GET /api/talks/{}',
+      'GET /api/v1/pathtalks',
+      'GET /health',
+      'GET /rate/100%',
+      'GET /talks/?',
+      'GET <base>/defaulttalks',
+      'GET <base>/flagtalks',
       'GET <base>/settingtalks',
       'GET <base>/talks',
       'POST <base>/talks',
       'PUT /talks/7',
-      // A literal host, an unresolved value and partly known text cannot be compared.
-      'GET /?',
-      'GET /?/talks',
-      'GET /talks/?',
-      // A local variable and a parameter are values this scan declined to resolve, not settings.
-      'GET /?/localtalks',
-      'GET /?/paramtalks',
-      'GET /?/formattedtalks',
-      // Text that continues a setting's last segment is not a path of its own.
-      'GET /?/joinedtalks',
-      // A package variable is the one value the source assigns it, in its package or another; one assigned
-      // more than once is unknown, and one only a flag sets is read by name.
-      'GET /?/outsidetalks',
-      'GET /?/mirrortalks',
-      'GET /?/configtalks',
-      'GET /api/v1/pathtalks',
-      'GET /?/inittalks',
-      'GET /?/{}/hosttalks',
-      'GET <base>/flagtalks',
-      // Text written in pieces is read as the URL it spells.
-      'GET /?/schemetalks',
-      'GET /?/porttalks',
     ].sort())
   } finally { await rm(root, { recursive: true, force: true }) }
 }, 60000)

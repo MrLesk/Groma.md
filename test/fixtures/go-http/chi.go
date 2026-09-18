@@ -18,6 +18,8 @@ func chiRoutes() http.Handler {
 		r.Get("/files/*", ServeFiles)
 		r.Get("/exports/{id}.json", ShowTalk)
 		r.Get("/reports/{path:.+}.json", ShowTalk)
+		r.Get("/raws/{path:.+}/raw", ShowTalk)
+		r.Get("/codes/{code:[a-z]{3}}", ShowTalk)
 	})
 	return router
 }
@@ -77,6 +79,45 @@ func reassignedGroup(legacy bool) http.Handler {
 		r.Get("/legacytalks", ListTalks)
 	})
 	return router
+}
+
+var sharedRouter = chi.NewRouter()
+
+var apiRoot = chi.NewRouter()
+
+func mountTalks() {
+	apiRoot.Mount("/root", talksRouter)
+}
+
+// A group closure parameter that receives a mount serves the mounted routes registered before it.
+func closureMount() http.Handler {
+	root := chi.NewRouter()
+	drafts := chi.NewRouter()
+	drafts.Get("/closuretalks", ListTalks)
+	root.Route("/closure", func(r chi.Router) {
+		r.Mount("/v3", drafts)
+	})
+	return root
+}
+
+var wrapped chi.Router
+
+// A router value that reads its own name is not one this scan can state.
+func wrap() {
+	wrapped = wrapped.With(middleware.Logger)
+	wrapped.Get("/wrappedtalks", ListTalks)
+}
+
+// A router mounted twice, or inside itself, serves under paths one fact cannot state.
+func unstatedMounts() {
+	root := chi.NewRouter()
+	twice := chi.NewRouter()
+	root.Mount("/one", twice)
+	root.Mount("/two", twice)
+	twice.Get("/twicetalks", ListTalks)
+	loop := chi.NewRouter()
+	loop.Mount("/loop", loop)
+	loop.Get("/looptalks", ListTalks)
 }
 
 func legacyRoutes() http.Handler {
