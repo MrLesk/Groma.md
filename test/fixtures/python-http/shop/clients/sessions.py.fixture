@@ -1,0 +1,12 @@
+import httpx
+from django.conf import settings
+
+session = httpx.Client(base_url=settings.API)
+
+
+def read_shared():
+    return session.get("/talks")
+
+
+def read_given(session):
+    return session.get("/talks")

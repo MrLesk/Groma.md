@@ -99,3 +99,27 @@ class Versioned:
 
     def load(self):
         return requests.get(self.base_url + "/talks")
+
+
+class Feed:
+    def load(self):
+        return requests.get(self.base_url + "/talks")
+
+
+class HostMixin:
+    base_url = "https://other.example.com"
+
+
+class PartnerFeed(Feed, HostMixin):
+    pass
+
+
+class Upstream:
+    base_url = "/upstream"
+
+    def load(self):
+        return requests.get(self.base_url + "/talks")
+
+
+class Downstream(Upstream):
+    base_url = "/downstream"

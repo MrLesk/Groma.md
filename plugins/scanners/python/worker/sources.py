@@ -1,5 +1,7 @@
-"""Read the declarations, constants and imports HTTP facts resolve across modules."""
+"""Read the declarations, constants and imports HTTP facts resolve across modules, and the scopes and bindings
+every Python worker rule counts."""
 import ast
+from collections import Counter
 import re
 
 METHODS = ("get", "post", "put", "patch", "delete", "head", "options", "trace")
@@ -10,6 +12,8 @@ DEPTH = 4
 COMPUTED = object()
 CONFIGURED = object()
 ENVIRONMENT = ("os.environ.get", "os.getenv")
+SCOPES = (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda, ast.ClassDef)
+FUNCTIONS = (ast.FunctionDef, ast.AsyncFunctionDef)
 
 
 def module_path(file):
@@ -33,10 +37,43 @@ def binding_names(node):
     return [item for item in (getattr(node, "name", None), getattr(node, "rest", None)) if isinstance(item, str)]
 
 
-NESTED_SCOPES = (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Lambda)
+def statements(scope):
+    """Code that runs in a scope; a docstring is documentation, like a comment."""
+    if isinstance(scope, ast.Lambda):
+        return [scope.body]
+    return scope.body[1:] if ast.get_docstring(scope, clean=False) is not None else scope.body
 
 
-def base_url_facts(tree):
+def parameters(scope):
+    if isinstance(scope, ast.ClassDef):
+        return []
+    args = scope.args
+    return [item.arg for item in [*args.posonlyargs, *args.args, args.vararg, *args.kwonlyargs, args.kwarg]
+            if item is not None]
+
+
+def scope_nodes(scope):
+    """Every node that runs in a scope: its statements and their contents, stopping at nested functions, lambdas
+    and classes, which run in their own scopes."""
+    nodes, pending = [], list(statements(scope))
+    while pending:
+        node = pending.pop()
+        nodes.append(node)
+        if not isinstance(node, SCOPES):
+            pending.extend(ast.iter_child_nodes(node))
+    return nodes
+
+
+def assigned_values(tree):
+    """The value each target of a plain assignment, annotated assignment or `with` item receives."""
+    assigned = {target: node.value for node in ast.walk(tree) if isinstance(node, (ast.Assign, ast.AnnAssign))
+                for target in (node.targets if isinstance(node, ast.Assign) else [node.target])}
+    assigned.update((node.optional_vars, node.context_expr) for node in ast.walk(tree)
+                    if isinstance(node, ast.withitem) and node.optional_vars is not None)
+    return assigned
+
+
+def base_url_facts(tree, assigned):
     """What a module says about base_url, which usually holds a client's own base address.
 
     `classes` maps each class to its base_url bindings: those in its body and its methods' `self.base_url` stores.
@@ -44,13 +81,11 @@ def base_url_facts(tree):
     `reads` maps each `self.base_url` a method reads to its class. A binding is its value for a plain assignment,
     otherwise None.
     """
-    plain = {target: node.value for node in ast.walk(tree) if isinstance(node, (ast.Assign, ast.AnnAssign))
-             for target in (node.targets if isinstance(node, ast.Assign) else [node.target])}
     classes, reads, claimed = {}, {}, set()
     for scope in (node for node in ast.walk(tree) if isinstance(node, ast.ClassDef)):
-        classes[scope] = [plain.get(node) for node in class_body_nodes(scope) if "base_url" in binding_names(node)]
+        classes[scope] = [assigned.get(node) for node in scope_nodes(scope) if "base_url" in binding_names(node)]
         for method in scope.body:
-            if not isinstance(method, (ast.FunctionDef, ast.AsyncFunctionDef)) or not method.args.args:
+            if not isinstance(method, FUNCTIONS) or not method.args.args:
                 continue
             receiver = method.args.args[0].arg
             for node in ast.walk(method):
@@ -59,22 +94,11 @@ def base_url_facts(tree):
                     if isinstance(node.ctx, ast.Load):
                         reads[node] = scope
                     else:
-                        classes[scope].append(plain.get(node))
+                        classes[scope].append(assigned.get(node))
                         claimed.add(node)
-    stores = [plain.get(node) for node in ast.walk(tree) if isinstance(node, ast.Attribute)
+    stores = [assigned.get(node) for node in ast.walk(tree) if isinstance(node, ast.Attribute)
               and node.attr == "base_url" and not isinstance(node.ctx, ast.Load) and node not in claimed]
     return {"classes": classes, "stores": stores, "reads": reads}
-
-
-def class_body_nodes(scope):
-    """Every node in a class body outside its methods and nested classes."""
-    nodes, pending = [], list(scope.body)
-    while pending:
-        node = pending.pop()
-        nodes.append(node)
-        if not isinstance(node, NESTED_SCOPES):
-            pending.extend(ast.iter_child_nodes(node))
-    return nodes
 
 
 def read_module(file, tree, identities, shadowed):
@@ -83,15 +107,14 @@ def read_module(file, tree, identities, shadowed):
     `shadowed` holds the Name nodes that read a function's own binding, such as a parameter, so they never
     resolve to the module name they share.
     """
+    assigned = assigned_values(tree)
     module = {"file": file, "path": module_path(file), "package": file.endswith("__init__.py"),
-              "identities": identities, "shadowed": shadowed, "base_url": base_url_facts(tree),
-              "definitions": {}, "values": {}, "imports": {}, "bindings": {},
+              "identities": identities, "shadowed": shadowed, "assigned": assigned,
+              "base_url": base_url_facts(tree, assigned), "definitions": {}, "values": {}, "imports": {},
+              "bindings": Counter(name for node in ast.walk(tree) for name in binding_names(node)),
               "calls": [node for node in ast.walk(tree) if isinstance(node, ast.Call)]}
-    for node in ast.walk(tree):
-        for name in binding_names(node):
-            module["bindings"][name] = module["bindings"].get(name, 0) + 1
     for node in tree.body:
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+        if isinstance(node, (*FUNCTIONS, ast.ClassDef)):
             module["definitions"][node.name] = node
         elif isinstance(node, (ast.Assign, ast.AnnAssign)) and node.value is not None:
             for target in (node.targets if isinstance(node, ast.Assign) else [node.target]):
@@ -136,14 +159,15 @@ class Sources:
     def class_base_url(self, module, node):
         """(module, value) of the one plain assignment to base_url that `self.base_url` reads, or None.
 
-        Every base_url binding of the class, its ancestors and its subclasses in the scanned source counts, and so
-        does every `.base_url` store outside a class's own methods, since it may set any client's base.
+        Every base_url binding of the class, its subclasses and every class they inherit from in the scanned source
+        counts, and so does every `.base_url` store outside a class's own methods, since it may set any client's base.
         """
         scope = module["base_url"]["reads"].get(node)
         if scope is None:
             return None
-        family = {scope, *self.ancestors(scope)}
-        family |= {other for other in self.classes if scope in self.ancestors(other)}
+        # The method runs on instances of the class and its subclasses, which inherit from all their bases.
+        instances = {scope} | {other for other in self.classes if scope in self.ancestors(other)}
+        family = instances | {ancestor for member in instances for ancestor in self.ancestors(member)}
         bindings = [(self.classes[member], value) for member in family
                     for value in self.classes[member]["base_url"]["classes"][member]]
         bindings += self.base_url_stores

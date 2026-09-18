@@ -1,0 +1,6 @@
+from .orphan import orphan
+
+
+@orphan.get("/items")
+async def orphan_items():
+    return []
