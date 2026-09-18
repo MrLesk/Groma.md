@@ -19,6 +19,8 @@ function observation(units: ScanSourceUnit[] = [unit], scanner = 'fixture') {
     files: paths.map(file => ({ file, roots: ['app'], symbols: [] })),
     sourceUnits: units,
     operations: paths.slice(0, 2).map(file => ({ id: file, file, name: file, position: 0 })),
+    httpEndpoints: [{ operation: 'handler.ts', method: 'GET', path: [{ kind: 'literal' as const, value: 'talks' }] }],
+    httpRequests: [{ operation: 'emitter.ts', method: 'GET', path: [{ kind: 'literal' as const, value: 'talks' }] }],
     invocations: [{ source: 'emitter.ts', targets: ['handler.ts'], unresolved: false, line: 2,
       member: 'saved', binding: { file: 'host.html', line: 1 } }],
     diagnostics: [],
@@ -47,6 +49,10 @@ test.concurrent('source units survive parsing, project relocation, and overlappi
   const combined = combineObservations([{ key: 'one', observation: shifted }, { key: 'two', observation: shifted }])!
   expect(combined.sourceUnits).toEqual(shifted.sourceUnits)
   expect(combined.files).toHaveLength(scan.files.length)
+  // Combining renames operations, so the HTTP facts of every context must follow them.
+  const operations = new Set(combined.operations!.map(operation => operation.id))
+  expect(combined.httpEndpoints).toHaveLength(2)
+  expect([...combined.httpEndpoints!, ...combined.httpRequests!].every(fact => operations.has(fact.operation))).toBe(true)
   expect(() => createScanObservation({ ...scan, sourceUnits: [{ primary: 'missing.ts', files: ['missing.ts'] }] }))
     .toThrow('unknown file')
   expect(() => parseScanObservation(JSON.stringify({ ...scan, sourceUnits: [{ primary: 'emitter.ts', files: ['host.html'] }] })))

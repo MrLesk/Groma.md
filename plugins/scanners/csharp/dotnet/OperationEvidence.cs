@@ -19,7 +19,8 @@ internal sealed class OperationEvidence(string repositoryRoot)
         return new ScanInvocation(pending.Source, targets, pending.Unresolved || targets.Length == 0, pending.Line, pending.Member);
     });
 
-    public void Extract(SyntaxNode root, SemanticModel model, string file, CancellationToken cancellationToken)
+    /// <summary>Extracts this file's operations and calls, and returns the operation each node belongs to.</summary>
+    public IReadOnlyDictionary<SyntaxNode, string> Extract(SyntaxNode root, SemanticModel model, string file, CancellationToken cancellationToken)
     {
         Dictionary<SyntaxNode, string> callers = new();
         foreach (SyntaxNode node in root.DescendantNodesAndSelf())
@@ -27,31 +28,32 @@ internal sealed class OperationEvidence(string repositoryRoot)
             cancellationToken.ThrowIfCancellationRequested();
             IMethodSymbol? method = ExecutableMethod(node, model, cancellationToken);
             if (method is null) continue;
-            string id = NodeId(file, node);
+            string id = OperationId.Of(file, node);
             operations.TryAdd(id, ScanOperationOf(id, file, node, method, model, cancellationToken));
             callers.Add(node, id);
         }
         if (root is CompilationUnitSyntax unit && unit.Members.OfType<GlobalStatementSyntax>().Any())
         {
-            string id = NodeId(file, root);
+            string id = OperationId.Of(file, root);
             operations.TryAdd(id, new ScanOperation(id, file, "<top-level>"));
             callers.Add(root, id);
         }
         foreach (SyntaxNode node in root.DescendantNodes().Where(IsExplicitCall))
         {
             cancellationToken.ThrowIfCancellationRequested();
-            string? caller = FindCaller(node, callers);
+            string? caller = Caller(node, callers);
             if (caller is null) continue;
             IOperation? operation = model.GetOperation(node, cancellationToken);
             if (operation is not (IInvocationOperation or IObjectCreationOperation or IDynamicInvocationOperation or IDynamicObjectCreationOperation or IFunctionPointerInvocationOperation or IInvalidOperation)) continue;
             (IMethodSymbol? target, bool unresolved) = Target(operation);
             if (model.GetDiagnostics(node.Span, cancellationToken).Any(diagnostic => diagnostic.Severity == DiagnosticSeverity.Error))
                 (target, unresolved) = (null, true);
-            string? targetId = ImplementationId(target);
+            string? targetId = OperationId.OfMethod(repositoryRoot, target);
             string? member = target?.Name ?? (node is InvocationExpressionSyntax call ? CallName(call.Expression) : null);
             invocations.Add(new PendingInvocation(caller, targetId, unresolved,
                 node.GetLocation().GetLineSpan().StartLinePosition.Line + 1, member));
         }
+        return callers;
     }
 
     /// <summary>Named operations carry the source range and tokens core compares; lambdas and anonymous methods do not.</summary>
@@ -84,7 +86,8 @@ internal sealed class OperationEvidence(string repositoryRoot)
     private static bool IsExplicitCall(SyntaxNode node) =>
         node is InvocationExpressionSyntax or BaseObjectCreationExpressionSyntax or ConstructorInitializerSyntax;
 
-    private static string? FindCaller(SyntaxNode node, Dictionary<SyntaxNode, string> callers)
+    /// <summary>The operation whose code contains this node; an initializer outside any operation has none.</summary>
+    internal static string? Caller(SyntaxNode node, IReadOnlyDictionary<SyntaxNode, string> callers)
     {
         foreach (SyntaxNode ancestor in node.Ancestors())
         {
@@ -104,27 +107,6 @@ internal sealed class OperationEvidence(string repositoryRoot)
         IObjectCreationOperation creation => (creation.Constructor, false),
         _ => (null, true),
     };
-
-    private string? ImplementationId(IMethodSymbol? method)
-    {
-        if (method is null || method.MethodKind == MethodKind.DelegateInvoke) return null;
-        method = (method.ReducedFrom ?? method).OriginalDefinition;
-        method = method.PartialImplementationPart ?? method;
-        foreach (SyntaxReference declaration in method.DeclaringSyntaxReferences)
-        {
-            SyntaxNode syntax = declaration.GetSyntax();
-            if (!Path.IsPathRooted(syntax.SyntaxTree.FilePath)) return null;
-            string file = SourcePath.Relative(repositoryRoot, syntax.SyntaxTree.FilePath);
-            string id = NodeId(file, syntax);
-            // Expression-bodied property getters point to the property declaration.
-            if (syntax is PropertyDeclarationSyntax { ExpressionBody: not null } property) id = NodeId(file, property.ExpressionBody);
-            if (syntax is IndexerDeclarationSyntax { ExpressionBody: not null } indexer) id = NodeId(file, indexer.ExpressionBody);
-            return id;
-        }
-        return null;
-    }
-
-    private static string NodeId(string file, SyntaxNode node) => $"operation:{file}:{node.SpanStart}:{node.RawKind}";
 
     private static string? CallName(ExpressionSyntax expression) => expression switch
     {

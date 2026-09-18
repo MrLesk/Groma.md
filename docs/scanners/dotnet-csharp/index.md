@@ -128,3 +128,69 @@ These named operations are not compared:
 
 Parameter and local names become slots. Their declared types remain tokens, so
 copies that differ only in those types are not identical.
+
+## HTTP endpoints and requests
+
+The scanner reports the [HTTP facts](../evidence.md#http-endpoints-and-requests)
+that core joins into derived relationships. It reads attributes and calls from
+syntax, because ASP.NET Core and client packages are never restored.
+
+Endpoints:
+
+- attribute-routed controllers: `[Route]` on the class with `[HttpGet]`,
+  `[HttpPost]`, `[HttpPut]`, `[HttpDelete]`, `[HttpPatch]`, `[HttpHead]`,
+  `[HttpOptions]` or `[Route]` on an action. Each template the action declares
+  serves every method its verb attributes allow, and an action with no template
+  serves the class prefix. An action that declares no verb attribute serves
+  every method. `[controller]` and `[action]` become the class name without its
+  `Controller` suffix and the method name.
+- minimal APIs: `MapGet`, `MapPost`, `MapPut`, `MapDelete`, `MapPatch`, and
+  `MapMethods` with literal methods, on the application or on a `MapGroup`
+  chain. The handler is a lambda or a method the call names.
+
+Requests:
+
+- `HttpClient` calls, recognized by the receiver's own type: the `GetAsync`,
+  `GetStringAsync`, `GetFromJsonAsync`, `PostAsync`, `PostAsJsonAsync`,
+  `PutAsync`, `PatchAsync` and `DeleteAsync` families, and `SendAsync` with a
+  `new HttpRequestMessage(HttpMethod.Get, url)`.
+- declarative client interfaces such as Refit: `[Get]`, `[Post]`, `[Put]`,
+  `[Delete]`, `[Patch]`, `[Head]` and `[Options]` on an interface method. Such
+  a method has no body, so its request declares the operation itself.
+
+Literal routes and URLs and values the compiler proves constant, such as a
+`const` field, become facts. A readonly field is not proof, because a
+constructor may assign it another value. These report nothing: conventional
+routing; an inherited class `[Route]`, so a controller without its own `[Route]`
+is skipped unless it derives straight from `ControllerBase` or `Controller`, and
+an abstract controller is skipped; `[area]` and other route tokens; a segment
+mixing text with a parameter such as `v{version}/talks`;
+`IApplicationBuilder.Map` middleware branches; framework constants such as
+`HttpMethods.Get`; and a route on a builder that is reassigned, carries a
+computed prefix, or arrives as a parameter. A verb attribute without a template
+only constrains methods, so `[HttpPost] [HttpPut("{id?}")]` serves POST and PUT
+on `{id?}` alone.
+
+The [producer checklist](../evidence.md#producer-checklist) for C#:
+
+1. **Which prefixes belong in the path.** The class `[Route]` prefix and every
+   `MapGroup` in the chain. A `~/` or leading `/` action template replaces the
+   class prefix, while a group prefix always stays. A group or prefix that is
+   not literal reports nothing.
+2. **Whether the construct is an endpoint.** Controller actions and mapped
+   handlers serve. Middleware branches, `MapControllers`, filters and
+   authorization policies do not, and a declarative client interface reports
+   requests instead.
+3. **Dynamic or unknown.** `$"/talks/{id}"` and `"/talks/" + id` fill one whole
+   segment, so they are dynamic. `$"/talks/find-{term}"` and a URL the source
+   computes as a whole are unknown.
+4. **The local helper.** Not supported. A request is reported at the operation
+   that calls the client, so a helper that receives the path reports an unknown
+   path and its callers report nothing.
+5. **The base.** A leading `/` has no base. A relative path such as
+   `"api/talks"`, which `HttpClient` resolves against its base address, and
+   every declarative template set `configured`.
+   `"https://api.example.com/talks"` and a computed URL report a leading
+   `unknown` segment.
+6. **Which operation a file-location route names.** C# declares no routes by
+   file location, so the scanner names no operation that way.

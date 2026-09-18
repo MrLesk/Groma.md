@@ -13,6 +13,12 @@ public sealed record ScanOperation(string Id, string File, string Name, int? Sta
 public sealed record ScanInvocation(string Source, IReadOnlyList<string> Targets, bool Unresolved, int Line, string? Member = null);
 public sealed record ScanDiagnostic(string Severity, string Code, string Message, string? File = null, int? Line = null);
 
+/// <summary>One path segment: an endpoint's literal, parameter or catch-all, or a request's literal, dynamic or unknown.</summary>
+public sealed record ScanHttpSegment(string Kind, string? Value = null, string? Name = null, bool? Optional = null);
+public sealed record ScanHttpEndpoint(string Operation, string Method, IReadOnlyList<ScanHttpSegment> Path);
+/// <summary>A request whose path follows a configured base sets <c>Configured</c>; an unresolvable base is a leading unknown segment.</summary>
+public sealed record ScanHttpRequest(string Operation, IReadOnlyList<ScanHttpSegment> Path, string? Method = null, bool? Configured = null);
+
 public sealed record ScanObservation(
     int SchemaVersion,
     ScannerIdentity Scanner,
@@ -21,7 +27,9 @@ public sealed record ScanObservation(
     IReadOnlyList<ScanDiagnostic> Diagnostics,
     IReadOnlyList<ScanOperation>? Operations = null,
     IReadOnlyList<ScanInvocation>? Invocations = null,
-    IReadOnlyList<ScanSourceUnit>? SourceUnits = null)
+    IReadOnlyList<ScanSourceUnit>? SourceUnits = null,
+    IReadOnlyList<ScanHttpEndpoint>? HttpEndpoints = null,
+    IReadOnlyList<ScanHttpRequest>? HttpRequests = null)
 {
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -37,7 +45,9 @@ public sealed record ScanObservation(
         IEnumerable<ScanDiagnostic> diagnostics,
         IEnumerable<ScanOperation>? operations = null,
         IEnumerable<ScanInvocation>? invocations = null,
-        IEnumerable<ScanSourceUnit>? sourceUnits = null)
+        IEnumerable<ScanSourceUnit>? sourceUnits = null,
+        IEnumerable<ScanHttpEndpoint>? httpEndpoints = null,
+        IEnumerable<ScanHttpRequest>? httpRequests = null)
     {
         ScanRoot[] orderedRoots = ValidateRoots(roots);
         ScanFile[] orderedFiles = UniqueBy(
@@ -84,6 +94,21 @@ public sealed record ScanObservation(
             }
         }
 
+        ScanHttpEndpoint[]? servedEndpoints = httpEndpoints?
+            .OrderBy(endpoint => endpoint.Operation, StringComparer.Ordinal)
+            .ThenBy(endpoint => endpoint.Method, StringComparer.Ordinal)
+            .ThenBy(endpoint => PathKey(endpoint.Path), StringComparer.Ordinal).ToArray();
+        ScanHttpRequest[]? sentRequests = httpRequests?
+            .OrderBy(request => request.Operation, StringComparer.Ordinal)
+            .ThenBy(request => request.Method, StringComparer.Ordinal)
+            .ThenBy(request => PathKey(request.Path), StringComparer.Ordinal).ToArray();
+        foreach (string factOperation in (servedEndpoints ?? []).Select(endpoint => endpoint.Operation)
+            .Concat((sentRequests ?? []).Select(request => request.Operation)))
+        {
+            Require(orderedOperations?.Any(operation => operation.Id == factOperation) == true,
+                $"HTTP fact references an unknown operation '{factOperation}'.");
+        }
+
         return new ScanObservation(
             SchemaVersion: 1,
             Scanner: scanner,
@@ -92,6 +117,8 @@ public sealed record ScanObservation(
             Operations: orderedOperations,
             Invocations: orderedInvocations,
             SourceUnits: ValidateUnits(sourceUnits, filePaths),
+            HttpEndpoints: servedEndpoints,
+            HttpRequests: sentRequests,
             Diagnostics: messages
                 .Distinct()
                 .OrderBy(diagnostic => diagnostic.Severity, StringComparer.Ordinal)
@@ -101,6 +128,9 @@ public sealed record ScanObservation(
                 .ThenBy(diagnostic => diagnostic.Line)
                 .ToArray());
     }
+
+    private static string PathKey(IReadOnlyList<ScanHttpSegment> path) =>
+        string.Join("/", path.Select(segment => $"{segment.Kind}:{segment.Value ?? segment.Name}:{segment.Optional}"));
 
     public string ToCanonicalJson() => JsonSerializer.Serialize(this, JsonOptions) + "\n";
 
