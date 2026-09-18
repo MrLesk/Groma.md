@@ -136,7 +136,8 @@ therefore derives a row only when all of these hold:
    catch-all is only ever possibly matched. The paths may also be equal after
    removing one leading literal segment that only one side states, such as
    `/api` or a deployment path, when both sides then continue with the same
-   literal.
+   literal, or the endpoint continues with a constrained catch-all under a
+   segment another match also removes.
 4. Only the endpoints a router would prefer remain. A match through a catch-all
    at the start of its path, such as a fallback or a route a scanner could not
    read at the root, speaks for its own application, as one scanner reports it:
@@ -182,17 +183,19 @@ therefore derives a row only when all of these hold:
    constrained segment therefore competes even when it ranks lower, unless the
    row's endpoint has a literal where their segments first differ and no
    constrained segment comes before that position; under registration order, one
-   registered after the row's endpoint does not compete. A route registered
-   earlier that a scanner could not read therefore blocks later matches of its
-   prefix in other files of its application. When a row endpoint has a
-   constrained segment, every endpoint the request reaches competes, because
+   registered after the row's endpoint does not compete. When a row endpoint has
+   a constrained segment, every endpoint the request reaches competes, because
    values the constraint rejects go elsewhere. The row's endpoints and every
    competing endpoint belong to one file; endpoints in several files produce no
-   row. A request to `/talks/` plus a dynamic segment therefore produces no row
-   when one file serves `/talks/:id` and another `/talks/archive`, or when one
-   file serves a constrained `/talks/:id` and another `/talks/:rest+`, and
-   reaches `/talks/:id` when one file serves `/talks/:id` and `/talks/archive`.
-   A request to `/files/a/report.json` produces no row when one file serves
+   row. A constrained catch-all may stand for routes whose handler files the
+   scanner could not tell, so a competing constrained catch-all produces no row,
+   even in the row's file. A route registered earlier that a scanner could not
+   read therefore blocks later matches of its prefix in its application. A
+   request to `/talks/` plus a dynamic segment produces no row when one file
+   serves `/talks/:id` and another `/talks/archive`, or when one file serves a
+   constrained `/talks/:id` and another `/talks/:rest+`, and reaches
+   `/talks/:id` when one file serves `/talks/:id` and `/talks/archive`. A
+   request to `/files/a/report.json` produces no row when one file serves
    `/files/:dir/:name` and another a constrained `/files/:path*`, while a
    request to `/api/account` reaches the file serving that exact route beside
    another file's constrained `/:path1/:path2`.
