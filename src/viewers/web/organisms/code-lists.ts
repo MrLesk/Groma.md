@@ -1,6 +1,6 @@
 import type { ArchitectureFinding, ArchitectureFindingInstance, CodeReference } from '../../../types.ts'
 import {
-  copiesOf,
+  copiesOfSymbol,
   type OperationCopies,
 } from '../../../architecture-findings.ts'
 import type { CodeDeclaration, CodeFile, CodeSymbol, CodeVisibility } from '../../source/structure.ts'
@@ -200,7 +200,7 @@ function memberItem(
   following: readonly boolean[],
   context: CopiesContext,
 ): HTMLElement {
-  const copies = copiesOf(context.findings, file, member.line, member.name)
+  const copies = copiesOfSymbol(context.findings, file, member)
   return codeEntry(
     file,
     member.name,
@@ -219,8 +219,7 @@ function declarationItem(
   follows: boolean,
   context: CopiesContext,
 ): HTMLElement {
-  // A type declares no body, so only an operation row stands for a compared operation.
-  const copies = declaration.kind === 'function' ? copiesOf(context.findings, file, declaration.line, declaration.name) : undefined
+  const copies = copiesOfSymbol(context.findings, file, declaration)
   const host = codeEntry(
     file,
     declaration.name,

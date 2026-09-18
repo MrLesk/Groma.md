@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@claude'
 created_date: '2026-09-16 20:42'
-updated_date: '2026-09-18 19:52'
+updated_date: '2026-09-18 22:57'
 labels: []
 dependencies: []
 references:
@@ -63,6 +63,8 @@ Review-fix round (external reviews of cf8e7975):
 9. Regression tests in test-bun/architecture-findings.test.ts.
 
 10. Cold review: copiesOf first narrows the ranges holding the row's line to the operations whose names end in the row's name, then takes the narrowest; not a single one means no copies. Copies are every other instance of the finding. The dedupe in step 7 was withdrawn (see notes). The grouping sentence covers binary, logical and comparison operands, and the Swift page states that it keeps every parenthesis.
+
+11. Simplicity round: always join a row to its operation by range and name (a single range holding the row's line still needs the name), return the one named holder or none, and drop the range-size step; one copiesOfSymbol helper decides that only function and member rows ask for copies, for the web code list and the terminal pane; the plugin contract states that an operation's name must end in its outline row's name.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
@@ -101,6 +103,11 @@ Docs: docs/architecture-findings.md states that a binary, logical or comparison 
 Tests: test-bun/architecture-findings.test.ts 'operations starting on one line each take the other as their copy' covers equal ranges, an undecidable name and a second operation ending on line 3; it fails at cf8e7975.
 Verification: isolated worktree at e53a717e with only this change, bun run check exit 0 (biome 2 warnings and 2 infos in untouched files, tsc clean, node 16 pass, bun 579 pass 35 skip 0 fail).
 Other lanes: the Swift evidence sets an operation's startLine from its body brace (Evidence.swift), so a signature split over lines can miss its copies; docs/scanners/php/index.md calls skipping assigned closures a PHP exception to the shared rule.
+
+Simplicity round (cold junior-maintainer review of the fix round).
+Fixed defect D1: a single range holding a row's line was taken without checking the name, so a row such as helper on the minified line of Rules.canStart showed readyToRun. operationAt now always keeps only instances whose range holds the line and whose name ends in the row's name, and returns the one match or none; the range-size step, span and the nested-row test are deleted (outline rows are never nested operations). New test 'a row that shares a line with a compared operation of another name has no copies' fails at 70fb5408.
+Simplified: copiesOfSymbol(findings, file, symbol) in src/architecture-findings.ts owns the rule that only function and member rows have copies; the web code list and the terminal details pane call it. docs/scanners/creating-a-plugin.md states that copies join an outline row only when the operation's range holds the row's line and its name ends in the row's name.
+Verification: isolated worktree at d58953d2 with only this change, bun run check exit 0 (biome 2 warnings and 2 infos in untouched files, tsc clean, node 16 pass, bun 589 pass 35 skip 0 fail).
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
@@ -109,4 +116,6 @@ Other lanes: the Swift evidence sets an operation's startLine from its body brac
 Every official language scanner (TypeScript, Vue, Java, C#, Go, Rust, Python, PHP) reports operation source ranges and binding-normalized tokens, and groma lint compares them through one core comparison; docs/architecture-findings.md now lists those languages with a link to each scanner page's Compared operations section and notes that comparing a function literal assigned to a name is a per-language decision. The parent also fixed the code listing: copies attached to a row by operation name, so a scanner that qualifies names (PHP's Launch\\isReady) showed none; copiesOf now joins by file and containing source range, with the web code list, the terminal details pane and a focused qualified-name test following. Verified in a detached worktree holding only this change: bun run check exited 0 (node 16 pass, bun 458 pass, 0 fail), the opt-in Go, Rust and C# suites passed after building their workers, and a probe over the php-duplicates fixture showed the old name join attaching copies to 0 rows where the range join attaches them to all 4.
 
 Review-fix round: a code row now finds its operation by line and, where ranges share or nest over that line, by its own name, so operations written on one line no longer list themselves as copies (regression test fails at cf8e7975). The shared compared-operations doc now states the grouping minimum, the per-language anonymous-class rule and that Angular and React files are compared through the TypeScript scanner; overlapping observations needed no code because no official scanner pair tokenizes the same file. Isolated bun run check exits 0.
+
+Simplicity round: a code row now joins its operation by range and name every time, so a function sharing a minified line with another compared operation no longer shows that operation's copies, and one copiesOfSymbol helper serves both viewers.
 <!-- SECTION:FINAL_SUMMARY:END -->

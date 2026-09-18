@@ -99,28 +99,6 @@ test.concurrent('a code row takes the copies of the operation whose range holds 
   expect(copiesOf(findings, 'src/Launch.php', 20, 'canStart')).toBeUndefined()
 })
 
-test.concurrent('a row inside nested operations takes the copies of the innermost one only', () => {
-  const priceTokens = [
-    'const', '$0', '=', '$1', '.items', '.map', 'call', 'fn', '$2', '$2', '.price', '*', '$2',
-    '.count', 'return', '$0', '.reduce', 'call', 'fn', '$3', '$4', '+', '$3', '$4', '0',
-  ]
-  const ranged = (file: string, name: string, startLine: number, endLine: number, tokens: string[]): ScanOperation => {
-    return { id: `${file}#${name}`, file, name, startLine, endLine, tokens }
-  }
-  const findings = detectDuplicatedLogic([observation([
-    ranged('src/report.py', 'Report.render', 1, 40, ruleTokens),
-    ranged('src/summary.py', 'Summary.render', 1, 40, ruleTokens),
-    ranged('src/report.py', 'Report.render.price', 10, 20, priceTokens),
-    ranged('src/price.py', 'estimate', 2, 12, priceTokens.filter(token => token !== '.count')),
-  ])], new Map<string, string>())
-  const inner = copiesOf(findings, 'src/report.py', 12, 'price')
-  expect(inner?.copies.map(instance => instance.name)).toEqual(['estimate'])
-  expect(inner?.similar).toBe(true)
-  const enclosing = copiesOf(findings, 'src/report.py', 5, 'render')
-  expect(enclosing?.copies.map(instance => instance.name)).toEqual(['Summary.render'])
-  expect(enclosing?.similar).toBe(false)
-})
-
 test.concurrent('operations starting on one line each take the other as their copy', () => {
   const starting = (name: string, endLine: number): ScanOperation => ({
     id: `src/min.js#${name}`, file: 'src/min.js', name, startLine: 1, endLine, tokens: ruleTokens,
@@ -131,9 +109,17 @@ test.concurrent('operations starting on one line each take the other as their co
   expect(copyNames(oneLine, 'readyToRun')).toEqual(['Rules.canStart'])
   // A row whose name neither operation ends in cannot tell which one it is.
   expect(copyNames(oneLine, 'Start')).toBeUndefined()
-  // The second operation continues to line 3, so it is not the narrowest range holding line 1.
   const longer = detectDuplicatedLogic([observation([starting('Rules.canStart', 1), starting('Rules.readyToRun', 3)])], new Map<string, string>())
   expect(copyNames(longer, 'readyToRun')).toEqual(['Rules.canStart'])
+})
+
+test.concurrent('a row that shares a line with a compared operation of another name has no copies', () => {
+  const findings = detectDuplicatedLogic([observation([
+    { id: 'src/min.js#canStart', file: 'src/min.js', name: 'Rules.canStart', startLine: 1, endLine: 1, tokens: ruleTokens },
+    operation('src/ready.js', 'readyToRun', ruleTokens, 5),
+  ])], new Map<string, string>())
+  expect(copiesOf(findings, 'src/min.js', 1, 'canStart')?.copies.map(instance => instance.name)).toEqual(['readyToRun'])
+  expect(copiesOf(findings, 'src/min.js', 1, 'helper')).toBeUndefined()
 })
 
 test.concurrent('a missing predicate is a similar finding with a concrete difference', () => {
@@ -203,7 +189,8 @@ test.concurrent('bodies that differ in one operator, grouping or keyword are not
   const root = await scannedFixture('distinct-bodies', 'src/bodies.ts')
   try {
     const findings = detectDuplicatedLogic([(await scanTypeScriptSource(root))!], new Map())
-    // Each function pair differs only in one operator, grouping, keyword, literal, `?.`, `...`, `this` or `index`.
+    // Each function pair differs only in one operator, grouping, keyword, literal, `?.`, `...`, `this`, `index`,
+    // a `#name` or a destructured property name.
     expect(findings.map(finding => [finding.match, namesOf(finding)])).toEqual([['exact', ['constructor', 'constructor']]])
   } finally {
     await rm(root, { recursive: true, force: true })

@@ -1,5 +1,5 @@
 import path from 'node:path'
-import type { ScanObservation, ScanOperation } from '@groma/scanner'
+import type { CodeDeclaration, CodeSymbol, ScanObservation, ScanOperation } from '@groma/scanner'
 
 import type { ArchitectureFinding, ArchitectureFindingInstance } from './types.ts'
 
@@ -54,16 +54,8 @@ export interface OperationCopies {
   copies: ArchitectureFindingInstance[]
 }
 
-/**
- * Whether this instance's source range holds the line. The range joins a code row to its operation, because a
- * scanner may qualify the name, as in `Shop\OrderService::store`, while the row shows `store`.
- */
 function holdsLine(instance: ArchitectureFindingInstance, file: string, line: number): boolean {
   return instance.file === file && instance.startLine <= line && line <= instance.endLine
-}
-
-function span(instance: ArchitectureFindingInstance): number {
-  return instance.endLine - instance.startLine
 }
 
 interface FoundOperation {
@@ -81,9 +73,8 @@ function endsInName(instance: ArchitectureFindingInstance, name: string): boolea
 }
 
 /**
- * The operation written at the line. When several ranges hold it, because operations nest or share a line, the
- * row's name selects the operations it can be and the narrowest of those is the row's; undefined when that is not
- * a single operation.
+ * The operation a code row shows: its range holds the row's line and its name ends in the row's name, since a
+ * scanner may qualify the name the row shows and several operations can share a line. Undefined unless exactly one.
  */
 function operationAt(
   findings: readonly ArchitectureFinding[],
@@ -91,14 +82,19 @@ function operationAt(
   line: number,
   name: string,
 ): FoundOperation | undefined {
-  const holders = findings.flatMap(finding => finding.instances
-    .filter(instance => holdsLine(instance, file, line))
+  const named = findings.flatMap(finding => finding.instances
+    .filter(instance => holdsLine(instance, file, line) && endsInName(instance, name))
     .map(instance => ({ finding, instance })))
-  if (holders.length <= 1) return holders[0]
-  const named = holders.filter(holder => endsInName(holder.instance, name))
-  const narrowest = Math.min(...named.map(holder => span(holder.instance)))
-  const innermost = named.filter(holder => span(holder.instance) === narrowest)
-  return innermost.length === 1 ? innermost[0] : undefined
+  return named.length === 1 ? named[0] : undefined
+}
+
+/** The copies of an outline row's operation. A type row declares no body, so only function and member rows have them. */
+export function copiesOfSymbol(
+  findings: readonly ArchitectureFinding[],
+  file: string,
+  symbol: CodeSymbol | CodeDeclaration,
+): OperationCopies | undefined {
+  return 'kind' in symbol && symbol.kind === 'type' ? undefined : copiesOf(findings, file, symbol.line, symbol.name)
 }
 
 /** Other locations that look like the operation named `name` at this line. Undefined when it has no copies. */
