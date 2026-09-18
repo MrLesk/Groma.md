@@ -67,16 +67,27 @@ file and in inline `mod` blocks:
   `impl` block for it in the file, including associated functions without
   `self`.
 
-An `impl` block for a type declared in another file adds one `public` entry for
-that type, at the type name in its first `impl` block. `impl` blocks for a
+An `impl` block's type path is read from the block's module: `self` and `super`
+step through the file's inline modules, and the rest of the path is looked up
+in that module and then in each enclosing module, so a module that imports its
+parent's names still reaches them. Same-named types in different modules keep
+their own members, and a type declared twice in one module, such as under
+different `cfg` conditions, is listed once. A path that names no type the file
+declares is a type declared elsewhere: each such path, without its `self` and
+`super` steps, adds one `public` entry at the type name in its first `impl`
+block. A `crate` path is never resolved to a type in the file, because a file
+parsed alone does not know its module path, so `impl crate::a::Item` gets its
+own entry even in a crate root that declares `a::Item`. `impl` blocks for a
 generic parameter, such as `impl<T> Store for T`, or for a type that is not a
 path, such as a reference or a tuple, are not listed. Functions nested in
 functions, other constants and statics, associated constants and types, type
-and trait aliases, and items inside macros are not listed either. An item is
-also left out when one of its `cfg` attributes mentions `test`, which covers an
-inline `#[cfg(test)] mod tests`, the code the scan leaves out as well. The
-condition is not evaluated, so `#[cfg(not(test))]` items are left out too,
-although the scan does read them. A declaration's line is its name's line.
+and trait aliases, and items inside macros are not listed either.
+
+Test code, which the scan leaves out as well, is not listed: an item or method
+whose `cfg` condition requires `test`, that is `test` itself or an `all(...)`
+with such an argument, as in `#[cfg(all(test, unix))]`. Other conditions, such
+as `#[cfg(not(test))]` or `#[cfg(any(test, feature = "tools"))]`, are listed.
+A declaration's line is its name's line.
 
 Visibility comes from the item's own `pub`; an enclosing module does not
 narrow it. Methods in a trait definition take the trait's visibility, and
