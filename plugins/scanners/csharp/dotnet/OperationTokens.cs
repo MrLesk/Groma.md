@@ -9,10 +9,11 @@ namespace Groma.CSharpScanner;
 /// query range variables, labels and local functions become slots numbered in order of appearance, so renamed
 /// copies match. The operation's own name stays text, like a method name, so different recursions stay different.
 /// Member names, argument labels, other identifiers (types included), keywords, literals and operators keep their text.
-/// Braces, parentheses, brackets, commas, semicolons and dots are dropped, so optional braces and layout do not
-/// change the tokens. Grouping is lost with them, as in the TypeScript tokenizer: <c>(a + b) * c</c> and
-/// <c>a + b * c</c> yield the same tokens. The parenthesis that opens an argument list becomes <c>call</c>, so
-/// <c>x.Count()</c> differs from <c>x.Count</c>.
+/// Braces, brackets, commas, semicolons and dots are dropped, so optional braces and layout do not change the tokens.
+/// Parentheses written for grouping stay unless they wrap a primary expression, so <c>(a + b) * c</c> differs from
+/// <c>a + b * c</c> while <c>(a) + b</c> equals <c>a + b</c>; other parentheses are dropped. The parenthesis that
+/// opens an argument list becomes <c>call</c>, so <c>x.Count()</c> differs from <c>x.Count</c>. Tokens without
+/// text, such as an omitted array size, are skipped.
 /// </summary>
 internal static class OperationTokens
 {
@@ -28,7 +29,7 @@ internal static class OperationTokens
                 string? text = token.IsKind(SyntaxKind.IdentifierToken)
                     ? NameToken(token, own, model, slots, cancellationToken)
                     : OtherToken(token);
-                if (text is not null) tokens.Add(text);
+                if (!string.IsNullOrEmpty(text)) tokens.Add(text);
             }
         }
         return [.. tokens];
@@ -40,8 +41,10 @@ internal static class OperationTokens
         ConstructorDeclarationSyntax constructor => [constructor.ParameterList, constructor.Initializer, constructor.Body, constructor.ExpressionBody],
         BaseMethodDeclarationSyntax method => [method.ParameterList, method.Body, method.ExpressionBody],
         LocalFunctionStatementSyntax local => [local.ParameterList, local.Body, local.ExpressionBody],
-        AccessorDeclarationSyntax accessor => [accessor.Body, accessor.ExpressionBody],
-        // Only an expression-bodied property or indexer getter remains: callers never tokenize lambdas.
+        // An indexer declares its accessors' parameters, so their slots follow its parameter list.
+        AccessorDeclarationSyntax accessor => [(accessor.Parent?.Parent as IndexerDeclarationSyntax)?.ParameterList, accessor.Body, accessor.ExpressionBody],
+        ArrowExpressionClauseSyntax { Parent: IndexerDeclarationSyntax indexer } getter => [indexer.ParameterList, getter],
+        // Only an expression-bodied property getter remains: callers never tokenize lambdas.
         _ => [operation],
     };
 
@@ -53,6 +56,11 @@ internal static class OperationTokens
         ISymbol? symbol = (parent is SimpleNameSyntax
             ? model.GetSymbolInfo(parent, cancellationToken).Symbol
             : model.GetDeclaredSymbol(parent, cancellationToken))?.OriginalDefinition;
+        // An accessor body binds an indexer's parameter names to the accessor's own parameters, while the indexer's
+        // parameter list declares the indexer's. The declaration maps to the accessor parameter at the same position,
+        // so both share one slot.
+        if (symbol is IParameterSymbol { ContainingSymbol: IPropertySymbol } indexerParameter)
+            symbol = own.Parameters[indexerParameter.Ordinal].OriginalDefinition;
         bool local = symbol is ILocalSymbol or IParameterSymbol or IRangeVariableSymbol or ILabelSymbol
             || symbol is IMethodSymbol { MethodKind: MethodKind.LocalFunction } && !SymbolEqualityComparer.Default.Equals(symbol, own);
         if (local)
@@ -66,9 +74,22 @@ internal static class OperationTokens
 
     private static string? OtherToken(SyntaxToken token) => token.Kind() switch
     {
-        SyntaxKind.OpenParenToken => token.Parent is ArgumentListSyntax ? "call" : null,
-        SyntaxKind.CloseParenToken or SyntaxKind.OpenBraceToken or SyntaxKind.CloseBraceToken or SyntaxKind.OpenBracketToken
-            or SyntaxKind.CloseBracketToken or SyntaxKind.CommaToken or SyntaxKind.SemicolonToken or SyntaxKind.DotToken => null,
+        SyntaxKind.OpenParenToken when token.Parent is ArgumentListSyntax => "call",
+        SyntaxKind.OpenParenToken or SyntaxKind.CloseParenToken => Groups(token.Parent) ? token.Text : null,
+        SyntaxKind.OpenBraceToken or SyntaxKind.CloseBraceToken or SyntaxKind.OpenBracketToken or SyntaxKind.CloseBracketToken
+            or SyntaxKind.CommaToken or SyntaxKind.SemicolonToken or SyntaxKind.DotToken => null,
         _ => token.Text,
+    };
+
+    /// <summary>
+    /// Parentheses written around an expression or a pattern can decide what it computes, so they stay unless they wrap a
+    /// primary expression, which they never change. Other parentheses belong to the syntax around them.
+    /// </summary>
+    private static bool Groups(SyntaxNode? parent) => parent switch
+    {
+        ParenthesizedExpressionSyntax group => group.Expression is not (SimpleNameSyntax or MemberAccessExpressionSyntax
+            or ElementAccessExpressionSyntax or InvocationExpressionSyntax or LiteralExpressionSyntax or ThisExpressionSyntax),
+        ParenthesizedPatternSyntax => true,
+        _ => false,
     };
 }

@@ -63,4 +63,35 @@ public sealed class ComparedOperationTests
         // Down calls itself; Across calls another local function.
         Assert.NotEqual(Tokens("Down"), Tokens("Across"));
     }
+
+    [Fact]
+    public async Task IndexerParametersTakeSlotsInDeclarationOrder()
+    {
+        using ScannerFixture fixture = new("csharp-tokens");
+        ScanObservation scan = await fixture.ScanAsync(Path.Combine(fixture.Root, "Tokens.csproj"));
+        IReadOnlyList<string> Tokens(string type) =>
+            Assert.Single(scan.Operations!, operation => operation.Name.StartsWith($"Tokens.{type}.this[", StringComparison.Ordinal)).Tokens!;
+        Assert.Equal(Tokens("RowMajor"), Tokens("RenamedRowMajor"));
+        // The same body with swapped parameters computes another value.
+        Assert.NotEqual(Tokens("RowMajor"), Tokens("ColumnMajor"));
+        Assert.NotEqual(Tokens("RowMajorBlock"), Tokens("ColumnMajorBlock"));
+    }
+
+    [Fact]
+    public async Task GroupingParenthesesAndPostfixOperatorsStay()
+    {
+        using ScannerFixture fixture = new("csharp-tokens");
+        ScanObservation scan = await fixture.ScanAsync(Path.Combine(fixture.Root, "Tokens.csproj"));
+        IReadOnlyList<string> Tokens(string name) =>
+            Assert.Single(scan.Operations!, operation => operation.Name.StartsWith($"Tokens.Arithmetic.{name}(", StringComparison.Ordinal)).Tokens!;
+        Assert.NotEqual(Tokens("Grouped"), Tokens("Ungrouped"));
+        Assert.NotEqual(Tokens("Banded"), Tokens("Unbanded"));
+        Assert.NotEqual(Tokens("Counted"), Tokens("CountedRows"));
+        Assert.NotEqual(Tokens("TrimmedLength"), Tokens("MaybeTrimmedLength"));
+        // Parentheses around a name do not change what the body computes.
+        Assert.Equal(Tokens("Ungrouped"), Tokens("Wrapped"));
+        Assert.NotEqual(Tokens("Increment"), Tokens("Decrement"));
+        // The omitted sizes of int[][] are not tokens.
+        Assert.DoesNotContain("", Tokens("Counted"));
+    }
 }

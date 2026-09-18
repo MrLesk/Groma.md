@@ -126,8 +126,14 @@ These named operations are not compared:
 - lambdas and anonymous methods assigned to a variable, field or property, or
   written in an object initializer.
 
-Parameter and local names become slots. Their declared types remain tokens, so
-copies that differ only in those types are not identical.
+Parameter and local names become slots. Parameters, an indexer's included, are
+numbered in declaration order, so an indexer that swaps its parameters is a
+different body. Declared types remain tokens, so copies that differ only in
+those types are not identical.
+Operators remain, including postfix `++` and `--`. Parentheses that group an
+expression or a pattern remain unless they wrap a name, member access, element
+access, call, literal or `this`, so `(a + b) * c` and `a + b * c` are different
+bodies while `(a) + b` and `a + b` are not.
 
 ## HTTP endpoints and requests
 
