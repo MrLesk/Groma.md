@@ -4,14 +4,16 @@ public static class ScannerCommand
 {
     public static async Task<int> RunAsync(
         string[] args,
+        TextReader standardInput,
         TextWriter standardOutput,
         TextWriter standardError,
         CancellationToken cancellationToken = default)
     {
         try
         {
-            if (args is ["--outline", string outline])
+            if (args is ["--outline"])
             {
+                string outline = await standardInput.ReadToEndAsync(cancellationToken);
                 await standardOutput.WriteAsync(SourceOutline.Run(outline, cancellationToken));
                 return 0;
             }
