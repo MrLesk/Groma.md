@@ -4,13 +4,15 @@ import { forEachElementNode, parseScriptSetupRanges, type VueVirtualCode } from 
 import ts from 'typescript'
 import { relative, vueTypeScript, type VueProject } from './project.ts'
 
-type Operation = ts.FunctionDeclaration | ts.FunctionExpression | ts.ArrowFunction
+/** A function or method whose source position an operation can name; the Options API declares methods. */
+export type Operation = ts.FunctionDeclaration | ts.FunctionExpression | ts.ArrowFunction | ts.MethodDeclaration
 
 function operation(node: ts.Node): node is Operation {
   return ts.isFunctionDeclaration(node) || ts.isFunctionExpression(node) || ts.isArrowFunction(node)
+    || ts.isMethodDeclaration(node)
 }
 
-function enclosingOperation(node: ts.Node): Operation | undefined {
+export function enclosingOperation(node: ts.Node): Operation | undefined {
   for (let current = node.parent; current; current = current.parent) {
     if (operation(current)) return current
   }
@@ -136,13 +138,15 @@ export class VueEvidence {
     return declared
   }
 
-  private addOperation(node: Operation): string | undefined {
+  /** One operation per function, shared by binding and HTTP facts; undefined when no source position maps. */
+  operationId(node: Operation): string | undefined {
     const position = this.project.position(node)
     if (position === undefined) return undefined
     const file = relative(this.project.root, node.getSourceFile().fileName)
     const id = `${file}#${position}`
-    const name = ts.isFunctionDeclaration(node) ? node.name?.text :
-      ts.isVariableDeclaration(node.parent) ? node.parent.name.getText() : undefined
+    const declared = ts.isFunctionDeclaration(node) || ts.isMethodDeclaration(node) ? node.name : undefined
+    const name = declared !== undefined && ts.isIdentifier(declared) ? declared.text
+      : ts.isVariableDeclaration(node.parent) ? node.parent.name.getText() : undefined
     this.operations.set(id, { id, file, position, name: name ?? `callback at ${this.project.line(node.getSourceFile().fileName, position)}` })
     return id
   }
@@ -165,8 +169,8 @@ export class VueEvidence {
       const caller = enclosingOperation(call)
       const position = this.project.position(call)
       if (!caller || position === undefined) continue
-      const source = this.addOperation(caller)
-      const targetId = this.addOperation(target)
+      const source = this.operationId(caller)
+      const targetId = this.operationId(target)
       if (!source || !targetId) continue
       this.invocations.push({ source, targets: [targetId], unresolved: false, member: event.arg.content,
         position, line: this.project.line(child.fileName, position),

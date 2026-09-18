@@ -1,0 +1,3 @@
+export function useFetch(path: string): { data: string } {
+  return { data: `/wrapped${path}` }
+}

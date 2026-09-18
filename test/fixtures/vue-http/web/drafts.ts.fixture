@@ -1,0 +1,5 @@
+import { useFetch } from './composables/useFetch'
+
+export function wrapped() {
+  return useFetch('/api/drafts')
+}
