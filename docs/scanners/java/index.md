@@ -114,6 +114,80 @@ A type is an entry when a Code link names it, such as `Orders`, the form the
 scan uses for a file's only type. A member is an entry when a Code link names
 it with its type, such as `Orders.place`.
 
+## HTTP endpoints and requests
+
+The scanner reports the [HTTP facts](../evidence.md#http-endpoints-and-requests)
+that core joins into derived relationships. It reads annotations and client calls
+from source, because project dependencies are never loaded.
+
+Endpoints, from classes only:
+
+- Spring MVC and WebFlux annotated controllers: `@RestController` or
+  `@Controller` with `@GetMapping`, `@PostMapping`, `@PutMapping`,
+  `@DeleteMapping`, `@PatchMapping`, or `@RequestMapping` with `method =`,
+  under the class-level `@RequestMapping` prefix. A mapping without a method
+  serves every method.
+- JAX-RS resources: `@Path` on the class with `@GET`, `@POST`, `@PUT`,
+  `@DELETE`, `@PATCH`, `@HEAD` or `@OPTIONS` on a method, under the class path
+  and the method's own `@Path`.
+
+Requests:
+
+- declarative clients: a `@FeignClient` interface, with its `path` and `url`
+  attributes, and a Spring HTTP interface with `@HttpExchange`, `@GetExchange`,
+  `@PostExchange`, `@PutExchange`, `@DeleteExchange` or `@PatchExchange`. Such
+  a method has no body, so its request declares the operation itself.
+- `RestTemplate`: `getForObject`, `getForEntity`, `postForObject`,
+  `postForEntity`, `postForLocation`, `put`, `delete`, `patchForObject`,
+  `headForHeaders`, `optionsForAllow`, and `exchange` or `execute` with an
+  `HttpMethod` argument.
+- `RestClient` and `WebClient`: the fluent `get()`, `post()`, `put()`,
+  `delete()`, `patch()`, `head()`, `options()` or `method(HttpMethod.X)`,
+  followed by `uri(...)`.
+- `java.net.http.HttpClient`: an `HttpRequest.newBuilder` chain with `uri(...)`
+  and `GET()`, `POST(...)`, `PUT(...)`, `DELETE()`, `HEAD()` or
+  `method("...")`. A chain that names no method sends GET, as the builder does.
+
+An imperative client is recognized by the declared type name of its receiver in
+the same file, so a field, a local variable and `new RestTemplate()` all count,
+while a client another call returns does not. A name the file declares with two
+types is dropped, because the receiver is then unknown. Literal routes and URLs
+and constants the sources declare become facts, and a `{name}` placeholder in a
+client URL fills one whole segment.
+
+Nothing is reported for a functional WebFlux `RouterFunction`, a JAX-RS `@Path`
+interface whose implementing class carries no annotation of its own, a prefix
+whose constant the sources do not declare, a controller or resource class that
+declares no prefix and extends another class, a mapping whose `method` attribute
+does not resolve, a builder chain whose `method(...)` value is not literal, a
+segment mixing text with a parameter such as `v{version}/talks`, and filters,
+interceptors and security matchers such as `/api/**`.
+
+The [producer checklist](../evidence.md#producer-checklist) for Java:
+
+1. **Which prefixes belong in the path.** The class-level `@RequestMapping` or
+   `@Path` prefix, a Feign client's `path`, and an HTTP interface's
+   `@HttpExchange` value or `url`. A prefix the scanner cannot resolve reports
+   nothing for that class, and so does a class that declares no prefix and
+   extends another class, whose base may hold one.
+2. **Whether the construct is an endpoint.** Only a controller or resource
+   class serves. An interface never does, so `@FeignClient` and `@HttpExchange`
+   interfaces report requests even though they carry the same mapping
+   annotations. A security matcher, filter or interceptor is not an endpoint.
+3. **Dynamic or unknown.** `TALKS + "/" + id` and a declarative `{id}` fill one
+   whole segment, so they are dynamic. `TALKS + "/find-" + term` is unknown, as
+   is a URL a call computes as a whole.
+4. **The local helper.** Not supported. A request is reported where the client
+   call is, so `getForObject(buildUrl(suffix), ...)` reports a leading unknown
+   segment and `buildUrl` itself reports nothing.
+5. **The base.** Every supported client resolves a relative or root-relative
+   URL against the base it is configured with, so those requests set
+   `configured`, as does a path that follows an unresolved field such as an
+   injected base URL. `URI.create("https://api.example.com/api/talks")` and a
+   URL computed as a whole report a leading `unknown` segment.
+6. **Which operation a file-location route names.** Java declares no routes by
+   file location, so the scanner names no operation that way.
+
 ## Compared operations
 
 `groma lint` and scan findings compare Java operations under the
