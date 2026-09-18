@@ -1,9 +1,12 @@
 import Fastify from 'fastify'
 
+import { jobRoutes } from './unsupported.ts'
+
 const server = Fastify()
 
 server.get('/status', async () => ({ ok: true }))
 server.route({ method: ['GET', 'POST'], url: '/jobs/:id', handler: runJob })
+server.register(jobRoutes, { prefix: '/plugins' })
 
 async function runJob(): Promise<void> {
   await Promise.resolve()

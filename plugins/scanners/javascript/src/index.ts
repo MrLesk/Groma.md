@@ -53,10 +53,10 @@ export default {
     // A file that does not parse keeps its place in the inventory but contributes no evidence.
     const readable = parsed.filter((_, index) => warnings[index] === undefined)
     // The HTTP facts name operations, so they are read before the observation collects them.
-    const scanned = readable.map(source => {
+    const scanned = await Promise.all(readable.map(async source => {
       const evidence = javaScriptEvidence(source.fileName, source)
-      return { file: source.fileName, evidence, facts: javaScriptHttpFacts(source, evidence) }
-    })
+      return { file: source.fileName, evidence, facts: await javaScriptHttpFacts(source, evidence) }
+    }))
     const symbols = new Map(scanned.map(({ file, evidence }) => [file, evidence.symbols]))
     return createScanObservation({
       scanner: { id: 'javascript', technology: 'javascript', engine: 'typescript-sdk', engineVersion: ts.version },

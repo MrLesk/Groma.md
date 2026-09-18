@@ -1,0 +1,7 @@
+export function requestLogger(request: unknown, response: unknown, next: () => void): void {
+  next()
+}
+
+export function requireAuth(request: unknown, response: unknown, next: () => void): void {
+  next()
+}

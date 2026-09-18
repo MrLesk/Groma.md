@@ -48,7 +48,8 @@ test.concurrent('every supported framework reports its served endpoints with the
       return `${endpoint.method} /${endpoint.path.map(endpointLabel).join('/')} ${owner(scan, endpoint.operation)}`
     })
     // Nothing from a spread route value, a router never mounted or mounted on an unrecognized host, a
-    // registrar a function receives, one the file assigns again, or a clone of one. A route builder whose
+    // registrar a function receives, one the file assigns again, a clone of one, or a route registered
+    // on a Hono child after its parent copied the child's routes. A route builder whose
     // handlers are not read, a mount of what the scan cannot see or under a computed prefix, a route with
     // a computed path, a registrar handed to other code and a registration member the scan does not read
     // occupy their place in the order as any remainder below their path, `:**!`. A pattern parameter and
@@ -63,6 +64,8 @@ test.concurrent('every supported framework reports its served endpoints with the
       '* /api/:**! hono-server.ts#(anonymous)',
       // Hono's trailing wildcard also matches the path without it.
       '* /legacy/:** hono-server.ts#forward',
+      // A Fastify plugin the scan does not read may serve anything below its prefix, without an order.
+      '* /plugins/:**! fastify-server.ts#(anonymous)',
       '* /reports/:**! ordered-server.ts#(anonymous)',
       '* /static/:**! ordered-server.ts#(anonymous)',
       '* /uploads/:*+ bun-server.ts#serveUpload',
@@ -70,6 +73,8 @@ test.concurrent('every supported framework reports its served endpoints with the
       'GET /:*+ ordered-server.ts#fallback',
       'GET /about ordered-server.ts#showAbout',
       'GET /admin/log ordered-server.ts#showLog',
+      // A router mounted next to middleware from the application's own module.
+      'GET /admin/users admin-router.ts#listUsers',
       'GET /admin/users/:id! ordered-server.ts#showTalkUser',
       'GET /admin/users/:id! ordered-server.ts#showUser',
       'GET /api/rooms/:id bun-server.ts#showRoom',
@@ -166,6 +171,7 @@ test.concurrent('routers that take the first registered match report the order o
       'express-server.ts@1 POST /api/talks',
       'express-server.ts@2 GET /health',
       'express-server.ts@3 GET /sessions/:id?',
+      'express-server.ts@4 GET /admin/users',
       'hono-server.ts@0 GET /v1/rooms/:room?',
       'hono-server.ts@1 GET /v2/rooms/:room?',
       'hono-server.ts@2 * /legacy/:**',
@@ -200,7 +206,8 @@ test.concurrent('routers that take the first registered match report the order o
       'shared-app.ts@0 GET /first',
       'shared-app.ts@1 * /:**!',
       'shared-app.ts@2 GET /second',
-      // An order unknown for one of an application's registrars leaves every route there unordered.
+      // An order unknown for one of an application's registrars leaves every route there unordered. A
+      // variable the program never assigns again holds its registrar, `let` included.
       'two-apps.ts@0 GET /first',
       'two-apps.ts@0 GET /late',
       'two-apps.ts@0 GET /second',

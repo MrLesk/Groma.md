@@ -5,10 +5,10 @@ import {
 } from 'typescript/unstable/ast'
 
 import { holderOf, urlText } from '../../http-syntax.ts'
-import { computedPart, joinBase, requestUrl, type UrlPart } from '../../http-url.ts'
+import { computedPart, joinBase, methodText, requestUrl, type UrlPart } from '../../http-url.ts'
 import { syntax } from './http-bindings.ts'
 import {
-  declarationOf, heldAt, heldParts, importOrigin, literalText, methodName, urlParts, type HttpContext,
+  declarationOf, heldAt, heldParts, importOrigin, literalText, urlParts, type HttpContext,
 } from './http-values.ts'
 
 /*
@@ -30,7 +30,7 @@ async function declaredMethod(context: HttpContext, options: Node | undefined, f
   if (options === undefined) return fallback
   const declared = await heldAt(context, options, 'method')
   if (declared === 'absent') return fallback
-  return typeof declared === 'string' ? undefined : methodName(await literalText(declared.node, context))
+  return typeof declared === 'string' ? undefined : methodText(await literalText(declared.node, context))
 }
 
 /** The base a configuration states, the fallback when it states none, and a hidden one as the value it is. */
@@ -66,7 +66,7 @@ async function withDefaults(context: HttpContext, client: Client, holders: reado
   if (found.some(settings => settings.changed) || bases.length > 1 || methods.length > 1) return { base: [computedPart], method: undefined }
   return {
     base: bases[0] === undefined ? client.base : await urlParts(bases[0], context),
-    method: methods[0] === undefined ? client.method : methodName(await literalText(methods[0], context)),
+    method: methods[0] === undefined ? client.method : methodText(await literalText(methods[0], context)),
   }
 }
 

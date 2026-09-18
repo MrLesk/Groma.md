@@ -37,6 +37,12 @@ export interface SyntaxCompiler extends WrapperCompiler {
   isVariableDeclaration(node: Node): boolean
 }
 
+/** Where a name comes from: a module, and the export it names, `default` and `*` included. */
+export interface ImportOrigin {
+  module: string
+  name: string
+}
+
 /**
  * What an expression certainly holds: the expression that states its value, `absent` for a property
  * a readable object literal does not have, `unseen` for a value outside the sources, such as

@@ -1,0 +1,9 @@
+import { Router } from 'express'
+
+export const adminRouter = Router()
+
+adminRouter.get('/users', listUsers)
+
+function listUsers(): string {
+  return 'users'
+}

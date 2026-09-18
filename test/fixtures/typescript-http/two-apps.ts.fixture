@@ -1,7 +1,7 @@
 import express from 'express'
 
 const main = express()
-const late = express()
+let late = express()
 
 main.get('/first', first)
 main.get('/second', second)

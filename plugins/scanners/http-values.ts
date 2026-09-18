@@ -1,6 +1,9 @@
 import { bindingUses, type BindingChecker, type BindingCompiler, type Bindings } from './http-bindings.ts'
-import { ownProperty, unwrapped, type Held as SyntaxHeld, type SyntaxCompiler } from './http-syntax.ts'
-import { computedPart, configuredPart, type UrlPart } from './http-url.ts'
+import {
+  ownProperty, propertyKey, unwrapped, type Held as SyntaxHeld, type ImportOrigin, type SyntaxCompiler,
+} from './http-syntax.ts'
+import { computedPart, configuredPart, methodText, type UrlPart } from './http-url.ts'
+import { requiredModule } from './http-uses.ts'
 
 /*
  * The compiler-dependent half of an HTTP request producer, shared by the framework scanners. Each of
@@ -24,6 +27,7 @@ interface Template extends Node {
 interface Binary extends Node { left: Node; right: Node; operatorToken: { kind: number } }
 interface ObjectLiteral extends Node { properties: readonly (Node & { name?: Node })[] }
 interface Variable extends Node { name: Node; initializer?: Node; parent: Node & { flags: number } }
+interface BindingElement extends Node { name: Node; propertyName?: Node; parent: Node & { parent: Node } }
 interface ImportDeclaration extends Node { moduleSpecifier: Node }
 interface ImportClause extends Node { parent: ImportDeclaration }
 interface NamespaceImport extends Node { name: Node; parent: ImportClause }
@@ -56,6 +60,7 @@ export interface UrlCompiler extends BindingCompiler, SyntaxCompiler {
   isImportClause(node: Node): node is ImportClause
   isNamespaceImport(node: Node): node is NamespaceImport
   isImportSpecifier(node: Node): node is ImportSpecifier
+  isBindingElement(node: Node): node is BindingElement
   isParenthesizedExpression(node: Node): node is Wrapped
   isAsExpression(node: Node): node is Wrapped
   isSatisfiesExpression(node: Node): node is Wrapped
@@ -86,7 +91,6 @@ export function urlContext<C extends UrlCompiler, K extends Checker>(
 export type Held = SyntaxHeld<Node>
 
 const MAX_DEPTH = 8
-const methodToken = /^[A-Z][A-Z-]*$/
 
 /**
  * The declaration a name resolves to, following an import alias to its target. A caller names its own
@@ -98,10 +102,18 @@ export function declarationOf<D extends Node = Node>({ ts, checker }: UrlContext
   return (symbol?.valueDeclaration ?? symbol?.declarations?.[0]) as D | undefined
 }
 
-/** The module an imported name comes from and the export it names, `default` and `*` included. */
-export function importOrigin({ ts, checker }: UrlContext, node: Node): { module: string; name: string } | undefined {
+/**
+ * The module an imported or required name comes from and the export it names. A `require('m')` call is
+ * the module's default export, and a CommonJS binding counts only while the sources never assign it
+ * again.
+ */
+export function importOrigin(context: UrlContext, node: Node): ImportOrigin | undefined {
+  const { ts, checker } = context
+  const required = requiredModule(ts, node)
+  if (required !== undefined) return { module: required, name: 'default' }
   const declaration = checker.getSymbolAtLocation(node)?.declarations?.[0]
   if (declaration === undefined) return undefined
+  if (ts.isVariableDeclaration(declaration) || ts.isBindingElement(declaration)) return requireOrigin(context, declaration)
   const imported = ts.isImportClause(declaration) ? { clause: declaration, name: 'default' }
     : ts.isNamespaceImport(declaration) ? { clause: declaration.parent, name: '*' }
       : ts.isImportSpecifier(declaration)
@@ -120,12 +132,38 @@ function ambient(ts: UrlCompiler, declaration: Node & { flags?: number }): boole
   return ((declaration.flags ?? 0) & flag) !== 0
 }
 
-/** A `const`, or a variable declared once that the sources never assign again, keeps its initializer. */
-function unassigned(context: UrlContext, declaration: Variable): boolean {
+/**
+ * A `const`, or a variable declared once that the sources never assign again, keeps its initializer.
+ * A destructured name counts by its own assignments and the declaration list that holds it.
+ */
+export function unassigned(context: UrlContext, declaration: Variable | BindingElement): boolean {
   const { ts, checker } = context
-  if ((declaration.parent.flags & ts.NodeFlags.Const) !== 0) return true
+  const list = ts.isVariableDeclaration(declaration) ? declaration.parent : declaration.parent.parent.parent as Node & { flags?: number }
+  if (((list.flags ?? 0) & ts.NodeFlags.Const) !== 0) return true
   const declarations = checker.getSymbolAtLocation(declaration.name)?.declarations ?? []
   return declarations.length === 1 && !context.bindings.reassigned(declaration)
+}
+
+/** The module export a CommonJS declaration binds, before asking whether the binding keeps it. */
+function requiredExport(ts: UrlCompiler, declaration: Variable | BindingElement): ImportOrigin | undefined {
+  if (ts.isBindingElement(declaration)) {
+    const variable = declaration.parent.parent
+    const module = ts.isVariableDeclaration(variable) ? requiredModule(ts, variable.initializer) : undefined
+    const key = declaration.propertyName ?? declaration.name
+    return module !== undefined && ts.isIdentifier(key) ? { module, name: key.text } : undefined
+  }
+  const value = declaration.initializer === undefined ? undefined : unwrapped(ts, declaration.initializer)
+  const direct = requiredModule(ts, value)
+  if (direct !== undefined) return { module: direct, name: 'default' }
+  if (value === undefined || !ts.isPropertyAccessExpression(value) || !ts.isIdentifier(value.name)) return undefined
+  const module = requiredModule(ts, unwrapped(ts, value.expression))
+  return module === undefined ? undefined : { module, name: value.name.text }
+}
+
+/** `const m = require('m')`, `const name = require('m').name` and `const { name } = require('m')`. */
+function requireOrigin(context: UrlContext, declaration: Variable | BindingElement): ImportOrigin | undefined {
+  const origin = requiredExport(context.ts, declaration)
+  return origin !== undefined && unassigned(context, declaration) ? origin : undefined
 }
 
 /** A variable holds its initializer; a property path through it holds only while no use can change it. */
@@ -198,11 +236,32 @@ export function urlParts(context: UrlContext, node: Node, depth = 0): UrlPart[] 
   return typeof resolved === 'string' ? heldParts(context, resolved) : urlParts(context, resolved.node, depth + 1)
 }
 
+/** Literal text an expression states; anything computed states none. */
+export function literalText(context: UrlContext, node: Node | undefined): string | undefined {
+  if (node === undefined) return undefined
+  const [first, ...rest] = urlParts(context, node)
+  return rest.length === 0 && first?.kind === 'text' ? first.text : undefined
+}
+
 /** Text a method needs; anything computed leaves the method out of the fact. */
 export function methodName(context: UrlContext, node: Node | undefined): string | undefined {
-  if (node === undefined) return undefined
-  const parts = urlParts(context, node)
-  const [first] = parts
-  const method = parts.length === 1 && first?.kind === 'text' ? first.text.toUpperCase() : undefined
-  return method !== undefined && methodToken.test(method) ? method : undefined
+  return methodText(literalText(context, node))
+}
+
+/**
+ * The properties of the object literal an expression certainly holds, by name, the last of a name
+ * winning; undefined when the literal has a key the scanner cannot read, such as a spread.
+ */
+export function objectEntries(context: UrlContext, node: Node | undefined): Map<string, Node> | undefined {
+  const { ts } = context
+  const value = node === undefined ? undefined : heldAt(context, node)
+  if (typeof value !== 'object' || !ts.isObjectLiteralExpression(value.node)) return undefined
+  const entries = new Map<string, Node>()
+  for (const property of value.node.properties) {
+    const key = propertyKey(ts, property)
+    if (key === undefined || ts.isGetAccessorDeclaration(property) || ts.isSetAccessorDeclaration(property)) return undefined
+    if (ts.isPropertyAssignment(property)) entries.set(key, property.initializer)
+    else entries.delete(key)
+  }
+  return entries
 }
