@@ -1,0 +1,33 @@
+import os
+
+from flask import Blueprint
+
+talks = Blueprint("talks", __name__, url_prefix="/talks")
+SECTION = os.environ["SECTION"]
+ARCHIVE = "/archive"
+ALLOWED = os.environ["ALLOWED"].split(",")
+
+
+@talks.route("/<int:talk_id>", methods=["GET", "PUT"])
+def talk(talk_id):
+    return talk_id
+
+
+@talks.post("/")
+def create():
+    return "created"
+
+
+@talks.get(f"/{SECTION}/summary")
+def summary():
+    return "summary"
+
+
+@talks.get(ARCHIVE)
+def archive():
+    return "archive"
+
+
+@talks.route("/bulk", methods=ALLOWED)
+def bulk():
+    return "bulk"

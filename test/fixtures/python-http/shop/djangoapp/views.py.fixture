@@ -1,0 +1,19 @@
+class BoardView:
+    def get(self, request):
+        return request
+
+
+def list_talks(request):
+    return request
+
+
+def talk_detail(request, pk):
+    return pk
+
+
+def legacy_talk(request, pk):
+    return pk
+
+
+def files(request, rest):
+    return rest

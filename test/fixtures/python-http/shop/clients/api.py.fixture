@@ -1,0 +1,50 @@
+import os
+
+import aiohttp
+import httpx
+from django.conf import settings
+
+BASE = settings.SPEAKERS
+PREFIX = "/speakers"
+VERSION = "/v1"
+VERSION += "/beta"
+LOCALE = "/en"
+if os.environ.get("GERMAN"):
+    LOCALE = "/de"
+
+
+def read_speaker(speaker_id):
+    client = httpx.Client(base_url=settings.API)
+    return client.get("/speakers")
+
+
+def drop_speaker(speaker_id):
+    return httpx.delete(f"/speakers/{speaker_id}")
+
+
+def read_speaker_file(speaker_id):
+    return httpx.get(f"/speakers/{speaker_id}.json")
+
+
+async def list_talks():
+    async with aiohttp.ClientSession(base_url=BASE) as session:
+        return await session.get("/talks")
+
+
+def read_featured():
+    return httpx.get(PREFIX + "/featured")
+
+
+def read_partner_speaker():
+    client = httpx.Client(base_url="https://partner.example.com")
+    partner = client.get("/speakers")
+    client = httpx.Client(base_url=settings.API)
+    return partner
+
+
+def read_version():
+    return httpx.get(VERSION + "/talks")
+
+
+def read_locale():
+    return httpx.get(LOCALE + "/talks")

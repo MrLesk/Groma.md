@@ -4,6 +4,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { loadPyodide } from 'pyodide'
 import type { SourceReference } from '@groma/scanner'
+import { workerModules } from './modules.ts'
 
 const runtime = fileURLToPath(new URL('../runtime/pyodide.mjs', import.meta.url))
 const { loadPyodide: load }: { loadPyodide: typeof loadPyodide } = await import(runtime)
@@ -20,7 +21,9 @@ for (const file of files) {
 }
 const globals = python.toPy({ __name__: 'groma_scanner', files, references })
 try {
-  python.runPython(await readFile(new URL('./scan.py', import.meta.url), 'utf8'), { globals })
+  for (const module of workerModules) {
+    python.runPython(await readFile(new URL(`./${module}`, import.meta.url), 'utf8'), { globals })
+  }
   const call = references === undefined ? 'scan(files)' : 'outline(references)'
   parentPort!.postMessage(python.runPython(`json.dumps(${call})`, { globals }))
 } finally { globals.destroy() }

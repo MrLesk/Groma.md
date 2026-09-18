@@ -1,0 +1,12 @@
+from django.urls import path, re_path
+
+from . import views
+from .views import BoardView
+
+urlpatterns = [
+    path("talks/", views.list_talks),
+    path("talks/<int:pk>/", views.talk_detail),
+    re_path(r"^legacy/(?P<pk>[0-9]+)/$", views.legacy_talk),
+    path("files/<path:rest>", views.files),
+    path("board/", BoardView.as_view()),
+]

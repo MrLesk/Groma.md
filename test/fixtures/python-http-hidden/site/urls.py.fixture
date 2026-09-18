@@ -1,0 +1,4 @@
+from django.conf.urls.static import static
+from django.urls import include, path
+
+urlpatterns = [path("api/", include("site.talks_urls"))] + static("/media", document_root=".")

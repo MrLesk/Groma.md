@@ -1,0 +1,11 @@
+from flask import Flask
+
+from .talks import talks
+
+app = Flask(__name__)
+app.register_blueprint(talks, url_prefix="/api")
+
+
+@app.route("/health")
+def health():
+    return "ok"

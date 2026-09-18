@@ -55,10 +55,10 @@ exact UTF-16 source positions. Calls in their bodies identify the owning
 operation, call position, line and member name when present. Every call target
 is unresolved: Python runtime binding is outside this parser's evidence.
 Decorators, defaults, annotations, module/class initialization, lambdas and
-lazy generator expressions do not provide invocation evidence. Imports,
-framework wiring and concrete callbacks are not analyzed. This version produces
-no derived call relationships. Every observation includes a `PYTHON_SYNTAX_ONLY`
-diagnostic.
+lazy generator expressions do not provide invocation evidence. Concrete
+callbacks are not analyzed and call evidence produces no derived call
+relationships; imports are followed only for the [HTTP facts](#http-facts)
+below. Every observation includes a `PYTHON_SYNTAX_ONLY` diagnostic.
 
 Source is parsed and compiled for syntax and scope validation, but the code
 object is never executed. Invalid source or project TOML fails the whole Python
@@ -113,6 +113,82 @@ Lambdas, including those in a dictionary passed to a call or decorator, are
 anonymous callbacks and are never compared. A function's tokens include the
 functions, lambdas, classes and generator expressions nested in it. Module and
 class-body code are initializers and are not compared.
+
+## HTTP facts
+
+The scanner reports the [HTTP endpoints and requests](../evidence.md#http-endpoints-and-requests)
+it recognizes in Python source. Supported declarations:
+
+| Construct | Reported as |
+| --- | --- |
+| `@app.route`, `@app.get` and the other method decorators on a `Flask`, `FastAPI` or `Starlette` application | One endpoint per method; a `route` without `methods` serves `GET` |
+| `Blueprint(url_prefix=...)` and `APIRouter(prefix=...)` | The router's own prefix |
+| `register_blueprint(..., url_prefix=...)` and `include_router(..., prefix=...)`, in any scanned module | The registering prefix, including nested registrations |
+| `urlpatterns` with `path()`, `re_path()` and `url()` | One endpoint for method `*`, since Django hands every method to the view |
+| `include("dotted.module")` | The prefix of the included module's patterns |
+| `requests`, `httpx` and `aiohttp` method calls, and `request("METHOD", url)` | One request |
+| `httpx.Client`, `httpx.AsyncClient`, `requests.Session` and `aiohttp.ClientSession`, including `base_url=` | One request per call on the session |
+| `urllib.request.urlopen` | `GET`, or `POST` with data; `Request(method=...)` states its own method |
+
+`<int:pk>`, `<name>`, `{name}` and `{name:int}` are parameters; `<path:rest>` and
+`{rest:path}` are catch-alls. A regular-expression route is read only when every
+segment is plain text or one whole named group, with `(?P<rest>.*)` or `.+` last
+as a catch-all.
+
+The scanner reports nothing for an application or router created inside a
+function, a class-based view through `as_view()`, a Starlette or FastAPI route
+table, a computed route, a segment that mixes text with a placeholder, a
+computed `methods` list, a view or router it cannot resolve, and a client call
+outside a function. A router nobody registers in the scanned source keeps only
+its own prefix, while a router registered on an application the scanner cannot
+resolve, such as one built inside a factory function, reports nothing.
+
+Django endpoints need the complete `include()` graph, so `urlpatterns` must be a
+literal list or tuple bound once. When any module builds its table by addition,
+binds it more than once, includes a computed module, or includes a dotted path
+that matches several scanned files, no Django endpoint is reported at all. An
+`include()` of a module outside the scan is safe.
+
+Only a name the module binds exactly once resolves to its value, in a module and
+in an operation alike, so a constant reassigned anywhere, `PREFIX += "/v2"`
+included, and a client session rebound in the same function, resolve to nothing.
+A client call counts only when the module imports that library, so a parameter
+named `requests` is not the library.
+
+Names resolve across modules by import: the scanner maps each scanned file to
+its dotted module path and follows `import`, `from ... import` and relative
+imports to one scanned module. A dotted path that matches several files, or
+none, resolves to nothing.
+
+The six [producer decisions](../evidence.md#producer-checklist) for Python:
+
+1. **Which prefixes belong in the path.** A blueprint's or router's own prefix,
+   every registering prefix, and every Django `include()` prefix above it.
+   Django endpoints are reported only from URL tables nobody includes, so each
+   path carries its prefixes. `APIRouter(prefix="/speakers")` included with
+   `prefix="/api"` reports `/api/speakers/{speaker_id}`.
+2. **Whether the construct is an endpoint.** Only a view or decorated handler.
+   Flask `before_request` hooks, WSGI or ASGI middleware, Django middleware and
+   permission classes, and `static()` helpers are not endpoints.
+3. **Dynamic or unknown.** `f"/talks/{talk_id}"` fills one whole segment, so it
+   is dynamic; Python cannot prove the value holds no slash. `f"/talks/{talk_id}.json"`
+   and a URL read from an unresolved value are unknown.
+4. **The local helper.** Only the call that names a recognized client reports a
+   request. A helper that takes the URL as a parameter and calls
+   `requests.get(url)` reports one request whose path is unknown, and its
+   callers report nothing.
+5. **The base.** `requests.get("/talks")` has no base.
+   `requests.post(f"{settings.API}/talks")`, and a session with
+   `base_url=settings.API`, set `configured`.
+   `requests.get("https://example.com/talks")` and `requests.get(url)` report a
+   leading `unknown` segment. A module-level name bound once resolves to its
+   text, so `API = "/api"` with `API + "/talks"` is `/api/talks`. Literal text
+   right after a configured base must start with `/`, since
+   `settings.API + "talks"` continues the base's last segment: that segment is
+   `unknown`.
+6. **Which operation a file-location route names.** Python has no
+   file-location routing, so every endpoint names the handler function a
+   decorator or URL pattern designates.
 
 ## Architecture meaning
 

@@ -2,6 +2,7 @@ import { cp, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { createRequire } from 'node:module'
 import { fileURLToPath } from 'node:url'
+import { workerModules } from './worker/modules.ts'
 
 const root = fileURLToPath(new URL('./', import.meta.url))
 
@@ -14,7 +15,9 @@ export async function buildPackage(destination: string): Promise<void> {
   const worker = await Bun.build({ entrypoints: [path.join(root, 'worker/runtime.ts')],
     outdir: path.join(destination, 'dist/worker'), target: 'bun', format: 'esm', naming: 'runtime.js' })
   if (!worker.success) throw new Error(worker.logs.join('\n'))
-  await cp(path.join(root, 'worker/scan.py'), path.join(destination, 'dist/worker/scan.py'))
+  for (const module of workerModules) {
+    await cp(path.join(root, `worker/${module}`), path.join(destination, `dist/worker/${module}`))
+  }
   const require = createRequire(import.meta.url)
   const runtime = path.dirname(require.resolve('pyodide/package.json'))
   await cp(runtime, path.join(destination, 'dist/runtime'), { recursive: true })
