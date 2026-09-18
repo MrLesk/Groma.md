@@ -224,16 +224,13 @@ framework-specific rule:
   leading `unknown` segment instead. Core then derives nothing, and the fact
   still records what the scanner saw.
 
-Core compares a request with endpoints only when no segment is unknown and a
-`configured` path starts with a literal segment; the
-[HTTP request rule](../relationship-inference.md#http-requests) states when a
-comparable request derives a row. Core assumes a configured base addresses a
-server in this repository, so a configuration value that points at a
-third-party service can produce a wrong row; that is an accepted limit.
+The [HTTP request rule](../relationship-inference.md#http-requests) states
+which requests core compares, when a comparable request derives a row, and the
+accepted limit of a configured base.
 
 The path ends before the query and fragment, which are ignored even when they
 are computed. Literal text uses URL path characters; percent-encode anything
-else. Core compares literal text without regard to case.
+else.
 
 A computed value that fills one whole segment is dynamic; other computed text is
 unknown, which covers a partly known segment and an unknown remainder. Literals
@@ -261,8 +258,11 @@ in this order, with its ecosystem's constructs:
    declares: a class-level or controller prefix, a mounted group's prefix, and a
    router's own path. A Spring `@RequestMapping("/api")` class with
    `@GetMapping("/talks")` reports `/api/talks`. When a group's prefix is not
-   literal, report nothing for its routes. Report the spelling the source uses,
-   including a name a template generates such as `/api/Talks`; core compares
+   literal, report one blocker in place of its routes: the prefix's readable
+   literal part followed by a constrained optional catch-all, with method `*`.
+   Report the spelling the source uses, including a name a template generates
+   such as `/api/Talks`; the
+   [HTTP request rule](../relationship-inference.md#http-requests) compares
    literal text without regard to case.
 2. **Whether the construct is an endpoint.** Only a handler that answers HTTP
    requests is. A client-side router route, middleware, an interceptor, a proxy

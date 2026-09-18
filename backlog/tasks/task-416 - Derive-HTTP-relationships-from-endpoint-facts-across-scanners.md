@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@claude'
 created_date: '2026-09-16 19:38'
-updated_date: '2026-09-18 22:44'
+updated_date: '2026-09-18 23:05'
 labels: []
 dependencies: []
 references:
@@ -98,6 +98,8 @@ Review-fix round (Codex and Grok cold reviews of cf8e7975), core slice:
 18. JavaScript last check: a blocker's catch-all stands for routes whose handler files the scanner cannot tell, so a competing match whose endpoint ends in a constrained catch-all never shares the chosen endpoint's file and makes core abstain.
 
 19. A configured request under a one-segment blocker: a removed endpoint literal may be followed by a constrained catch-all, but such a match counts only under a deployment another match assumes.
+
+20. Simplicity review: exactness becomes a filter like the other two (comparedAsWritten), ranks keep the compared endpoint segments instead of scores, one application key, simpler reach and root catch-all checks, tests for the lone root fallback and the optional catch-all refinement, and rules 3 to 6 rewritten as one hand-applicable model with an example table; evidence.md keeps one owner per rule.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
@@ -244,6 +246,8 @@ Targeted review of the unattributed rule applied. Accepted cost: a real constrai
 Configured requests under a one-segment blocker: removedPrefix now also accepts a constrained catch-all after the removed endpoint literal (only as a possible match), so /api/:rest*! at position 0 blocks configured GET /talks reaching /api/talks at position 1 (new no-row test). As first specified this made every one-literal blocker fit every request by removing its own literal, which at HEAD 868da30d dropped PHP rows GET /api/talks/:id and POST /shop/v1/orders/:id (blockers /beta/:path* and others, combined with the rule that a constrained chosen endpoint lets every reachable endpoint compete) and the JavaScript row POST /talks (the express.static blocker /static/:** under the deployment 'endpoint static'). Such a match shows no deployment of its own, so it now counts only under a deployment another match assumes (assumedDeployments). With that, the isolated bun run check at HEAD 868da30d exits 0 (Bun 589 passed, 35 skipped, 0 failed; Node 16 passed) with no producer expectation changed; the new test for the JavaScript layout fails without it. Awaiting orchestrator approval of that narrowing before commit.
 
 Orchestrator approved the narrowing (assumedDeployments). Follow-up, not done: when a chosen endpoint has a constrained segment, the rule that every reachable endpoint competes also reaches matches that exactness hides; limiting it to the chosen endpoint's exactness tier would follow rule 4. It loses rows, never produces wrong ones, and no producer expectation needs it now. Final check: isolated bun run check at HEAD 868da30d exited 0 (Bun 589 passed, 35 skipped, 0 failed; Node 16 passed), with the PHP and JavaScript core-rows expectations unchanged.
+
+Simplicity round (cold junior-maintainer review): exactness is now a filter (comparedAsWritten) like ownApplicationCatchAlls and assumedDeployments, so preference and rankKey no longer thread an exact flag, keys lose the exactness slot and the [1] sentinel, and constraintMayWin loses the key[0] check. Ranks keep the compared endpoint segments instead of scores, which deletes the shift arithmetic. One application() key remains; rootCatchAll and reaches are shorter. The one behavior change is what rule 4 already said: a constrained chosen endpoint no longer competes with matches that an exact path hides (/talks/:id! beside another file's /x/talks/:y for /talks/<dynamic> now gives the row; new test), which also settles the earlier follow-up. Tests: a lone root fallback and an exact path whose optional catch-all takes nothing gained match cases (each fails when its code is reverted); the other-file chi case, dominated by the same-file one, is gone. docs/relationship-inference.md rules 3 to 6 are one hand-applicable model (reach table, three filters, preference, row checklist, one example table, each example probed against the code); the provider list became P1 to P6. evidence.md links to the rule instead of restating rule 2, the configured-base limit and case-insensitive matching, and checklist item 1 reports a blocker for a non-literal prefix. Differential fuzzer (reviewer's fuzz.ts, 200000 cases each): against the committed core 152, 158 and 111 (length 5) differences, all gains of that one class; against the committed core with only the exactness-tier restriction added, 0 differences in four runs. Isolated bun run check at HEAD fe407bc9 exited 0 (Bun 592 passed, 35 skipped, 0 failed; Node 16 passed).
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
@@ -258,4 +262,6 @@ Go re-review round: routers rank constrained segments by their own rules, so a r
 Rust and Java lane rounds: a catch-all at the start of a path (a fallback or a root blocker) speaks only for its own application, so it no longer removes other applications' rows, and a literal segment beats a constrained one under specificity unless a constrained segment comes earlier, which restored callforpapers rows such as /api/account beside JHipster's constrained SPA forwards. Verified by 85 focused tests with mutation checks and an isolated bun run check (Bun 570 passed, 0 failed; Node 16 passed).
 
 Last core round: a competing constrained catch-all never shares the row's file, because it may stand for routes a scanner could not attribute, so the common Express layout with an unresolved mount and a later SPA fallback derives nothing instead of a wrong row; a configured request under a one-segment blocker is blocked when another match removes the same segment. Verified by 90 focused tests with mutation checks and an isolated bun run check at 868da30d (Bun 589 passed, 0 failed; Node 16 passed).
+
+Simplicity round: exactness became a filter like the other two, ranks keep compared segments, and the rules document now reads as one model (reach table, filters, preference, checklist, examples); the only behavior change lets an exact constrained route keep its row beside a route that needs a removed prefix, as rule 4 states, and a differential fuzzer confirms no other difference.
 <!-- SECTION:FINAL_SUMMARY:END -->

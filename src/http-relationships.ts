@@ -49,10 +49,9 @@ function httpFacts(observations: readonly ScanObservation[]): { endpoints: Serve
 }
 
 /**
- * How a request segment may reach an endpoint segment. `possibly` also counts what only some
- * runtime values reach: a dynamic segment equal to a literal, and text a constrained segment may
- * accept. `certainly` lets a dynamic segment fill a constrained parameter, since the source computes
- * it for that route.
+ * Rule 3 in docs/relationship-inference.md. `possibly` also counts what only some runtime values
+ * reach. A dynamic segment reaches a constrained parameter certainly, since the source computes it
+ * for that route.
  */
 type Reach = 'possibly' | 'certainly'
 
@@ -72,7 +71,7 @@ function sameText(left: string, right: string): boolean {
 
 function reaches(head: HttpEndpointSegment, segment: KnownSegment, reach: Reach): boolean {
   if (head.kind === 'literal') return segment.kind === 'literal' ? sameText(segment.value, head.value) : reach === 'possibly'
-  return !head.constrained || reach === 'possibly' || (reach === 'certainly' && segment.kind === 'dynamic')
+  return !head.constrained || reach === 'possibly' || segment.kind === 'dynamic'
 }
 
 /** A constrained catch-all accepts only some remainders and may stand for routes a scanner could not read. */
@@ -105,8 +104,8 @@ interface Rank {
   removed: string
   /** The match needs its catch-all to take part of the request. */
   throughCatchAll: boolean
-  /** One score per compared endpoint segment: a literal is 0, a parameter 1, a catch-all 2. */
-  segments: number[]
+  /** The endpoint segments compared with the request, after any removed endpoint prefix. */
+  compared: readonly HttpEndpointSegment[]
 }
 
 function segmentScore(segment: HttpEndpointSegment): number {
@@ -121,17 +120,16 @@ function throughCatchAll(endpoint: readonly HttpEndpointSegment[], request: read
 }
 
 function matchRank(endpoint: readonly HttpEndpointSegment[], request: readonly KnownSegment[], reach: Reach): Rank | undefined {
-  const segments = endpoint.map(segmentScore)
-  if (matches(endpoint, request, reach)) return { removed: '', throughCatchAll: throughCatchAll(endpoint, request, reach), segments }
+  if (matches(endpoint, request, reach)) return { removed: '', throughCatchAll: throughCatchAll(endpoint, request, reach), compared: endpoint }
   const fromRequest = removedPrefix('request', request[0], endpoint[0], request[1], reach)
   const shorter = request.slice(1)
   if (fromRequest !== undefined && matches(endpoint, shorter, reach)) {
-    return { removed: fromRequest, throughCatchAll: throughCatchAll(endpoint, shorter, reach), segments }
+    return { removed: fromRequest, throughCatchAll: throughCatchAll(endpoint, shorter, reach), compared: endpoint }
   }
   const fromEndpoint = removedPrefix('endpoint', endpoint[0], endpoint[1], request[0], reach)
   const rest = endpoint.slice(1)
   if (fromEndpoint !== undefined && matches(rest, request, reach)) {
-    return { removed: fromEndpoint, throughCatchAll: throughCatchAll(rest, request, reach), segments: segments.slice(1) }
+    return { removed: fromEndpoint, throughCatchAll: throughCatchAll(rest, request, reach), compared: rest }
   }
   return undefined
 }
@@ -163,40 +161,26 @@ function requestMatches(request: SentRequest, endpoints: readonly ServedEndpoint
   return found
 }
 
-/**
- * What decides between matches after exactness: segment specificity when every router prefers
- * the most specific route, registration position when every match is registered in one
- * first-match application, and nothing when routers, applications or removed segments differ.
- */
 type Preference = 'specificity' | 'position' | 'none'
 
-/** Positions are comparable only within one application as one scanner reports it. */
-function application(endpoint: ServedEndpoint): string | undefined {
-  return endpoint.order && `${endpoint.scanner}\0${endpoint.order.application}`
-}
-
-/**
- * The application an endpoint belongs to. Unlike `application`, which only ordered endpoints have
- * and which decides whether positions compare, it also groups a scanner's unordered endpoints.
- */
-function applicationKey(endpoint: ServedEndpoint): string {
+/** The application an endpoint belongs to, as one scanner reports it. */
+function application(endpoint: ServedEndpoint): string {
   return `${endpoint.scanner}\0${endpoint.order?.application ?? ''}`
 }
 
-/** A match through a catch-all at the start of the path, such as a fallback for every path. */
+/** An endpoint whose path is one catch-all, such as a fallback for every path. */
 function rootCatchAll(match: Match): boolean {
-  return match.possibleRank.throughCatchAll && match.endpoint.path[0]?.kind === 'catch-all'
+  return match.endpoint.path[0]?.kind === 'catch-all'
 }
 
 /**
- * A root catch-all, such as a fallback or a route a scanner could not read at the root, speaks for
- * its own application alone. It drops out when endpoints of other applications reach the request
- * without a catch-all and none of its own application's do.
+ * Rule 4.1. A root catch-all takes whatever its own application serves nowhere else, which says
+ * nothing about another application's routes.
  */
 function ownApplicationCatchAlls(found: readonly Match[]): readonly Match[] {
-  const direct = new Set(found.filter(match => !match.possibleRank.throughCatchAll).map(match => applicationKey(match.endpoint)))
+  const direct = new Set(found.filter(match => !match.possibleRank.throughCatchAll).map(match => application(match.endpoint)))
   if (direct.size === 0) return found
-  return found.filter(match => !rootCatchAll(match) || direct.has(applicationKey(match.endpoint)))
+  return found.filter(match => !rootCatchAll(match) || direct.has(application(match.endpoint)))
 }
 
 /** A match that removed the literal before a constrained catch-all, which accepts any remainder. */
@@ -204,35 +188,38 @@ function removedBeforeCatchAll(match: Match): boolean {
   return match.possibleRank.removed.startsWith('endpoint') && match.endpoint.path[1]?.kind === 'catch-all'
 }
 
-/**
- * Removing the literal before a constrained catch-all fits any request, so it shows no deployment
- * of its own. Such a match counts only under a deployment another match assumes.
- */
+/** Rule 4.2. Removing the literal before a constrained catch-all fits any request, so it shows no deployment. */
 function assumedDeployments(found: readonly Match[]): readonly Match[] {
   const assumed = new Set(found.filter(match => !removedBeforeCatchAll(match)).map(match => match.possibleRank.removed))
   return found.filter(match => !removedBeforeCatchAll(match) || assumed.has(match.possibleRank.removed))
 }
 
 /**
- * An exact path that needs no catch-all shows the paths are compared as written, so it hides every
- * match that removed a leading segment. Only the remaining matches choose the preference.
+ * Rule 4.3. An exact certain path that needs no catch-all shows the paths compare as written. A
+ * match that removed a segment drops out, and a certain match found only by removing one stays as
+ * a possible match.
  */
-function preference(found: readonly Match[], exact: boolean): Preference {
+function comparedAsWritten(found: readonly Match[]): readonly Match[] {
+  if (!found.some(({ certainRank }) => certainRank?.removed === '' && !certainRank.throughCatchAll)) return found
+  return found.filter(match => match.possibleRank.removed === '')
+    .map(match => match.certainRank?.removed === '' ? match : { ...match, certainRank: undefined })
+}
+
+/** Rule 5. Specificity and position rank only matches of one deployment and one kind of router. */
+function preference(found: readonly Match[]): Preference {
   const ranked = found.flatMap(match => [match.possibleRank, ...(match.certainRank ? [match.certainRank] : [])]
-    .filter(rank => !exact || rank.removed === '')
-    .map(rank => ({ rank, application: application(match.endpoint) })))
+    .map(rank => ({ rank, application: match.endpoint.order && application(match.endpoint) })))
   const removed = new Set(ranked.map(item => item.rank.removed))
   const applications = new Set(ranked.map(item => item.application))
   if (removed.size > 1 || applications.size > 1) return 'none'
   return applications.has(undefined) ? 'specificity' : 'position'
 }
 
-/** A comparison key, most preferred first: exactness, then what the preference compares. */
-function rankKey(endpoint: ServedEndpoint, rank: Rank, by: Preference, exact: boolean): number[] {
-  if (exact && rank.removed !== '') return [1]
-  if (by === 'specificity') return [0, ...rank.segments]
-  if (by === 'position' && endpoint.order) return [0, endpoint.order.position]
-  return [0]
+/** A comparison key under the preference; a smaller key is preferred. */
+function rankKey(endpoint: ServedEndpoint, rank: Rank, by: Preference): number[] {
+  if (by === 'specificity') return rank.compared.map(segmentScore)
+  if (by === 'position' && endpoint.order) return [endpoint.order.position]
+  return []
 }
 
 /** A key that has ended reads as -1, more specific than an optional parameter or catch-all it did not use. */
@@ -251,45 +238,31 @@ function compareKeys(left: readonly number[], right: readonly number[]): number 
 }
 
 /**
- * Routers rank constrained segments against plain parameters and catch-alls by their own rules,
- * but every one prefers a literal segment. Under specificity, a constrained match that ranks lower
- * therefore still competes, unless the best key has a literal where the two keys first differ and
- * no constrained segment comes before that position.
+ * Rule 6.2. Routers rank constrained segments against plain parameters and catch-alls by their own
+ * rules, but every one prefers a literal segment.
  */
 function constraintMayWin(match: Match, key: readonly number[], best: readonly number[]): boolean {
   const difference = firstDifference(key, best)
-  // Key position 0 is exactness, and a removed endpoint prefix is not in the key.
-  const shift = match.possibleRank.removed.startsWith('endpoint') ? 0 : 1
-  const constrainedAt = match.endpoint.path.findIndex(constrainedSegment) + shift
-  return key[0] === best[0] && (best[difference] !== 0 || constrainedAt < difference)
+  return best[difference] !== 0 || match.possibleRank.compared.findIndex(constrainedSegment) < difference
 }
 
 function bestKey(keys: readonly number[][]): number[] | undefined {
   return keys.reduce<number[] | undefined>((least, key) => least === undefined || compareKeys(key, least) < 0 ? key : least, undefined)
 }
 
-/**
- * A constrained catch-all may stand for routes a scanner saw without knowing their handler files,
- * so its own file does not show where the request is served.
- */
+/** Rule 6.4. A constrained catch-all may stand for routes whose handler files the scanner could not tell. */
 function unattributed(match: Match): boolean {
   return constrainedCatchAll(match.endpoint.path.at(-1))
 }
 
 /**
- * A router sends a value that equals no literal to the best certain match. Any endpoint another
- * value could reach at least as well also competes, and so may an endpoint with a constrained
- * segment that ranks lower. When a chosen endpoint has a constrained segment, every reachable
- * endpoint competes, because values the constraint rejects go elsewhere. Every competing endpoint
- * must be in the chosen endpoints' file, which a constrained catch-all never proves. Unless
- * specificity decides, the router's choice between several certain endpoints is unknown, so
- * exactly one must remain.
+ * Rules 3 to 6. A derived row is permanent, so every endpoint a runtime value could reach instead
+ * of the chosen one must be in the chosen file.
  */
 function provider(request: SentRequest, endpoints: readonly ServedEndpoint[]): ServedEndpoint[] {
-  const found = assumedDeployments(ownApplicationCatchAlls(requestMatches(request, endpoints)))
-  const exact = found.some(({ certainRank }) => certainRank?.removed === '' && !certainRank.throughCatchAll)
-  const by = preference(found, exact)
-  const key = (endpoint: ServedEndpoint, rank: Rank) => rankKey(endpoint, rank, by, exact)
+  const found = comparedAsWritten(assumedDeployments(ownApplicationCatchAlls(requestMatches(request, endpoints))))
+  const by = preference(found)
+  const key = (endpoint: ServedEndpoint, rank: Rank) => rankKey(endpoint, rank, by)
   const best = bestKey(found.flatMap(({ endpoint, certainRank }) => certainRank ? [key(endpoint, certainRank)] : []))
   if (best === undefined) return []
   const chosen = found.filter(({ endpoint, certainRank }) => certainRank !== undefined && compareKeys(key(endpoint, certainRank), best) === 0)

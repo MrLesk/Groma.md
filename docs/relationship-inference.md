@@ -128,84 +128,94 @@ therefore derives a row only when all of these hold:
    follows a configured base starts with a literal segment. A base stating a
    host, an unresolvable base, and partly known text arrive as unknown
    segments, which produce no row.
-3. The paths are equal. A literal matches the same literal or a parameter. A
-   dynamic segment matches a parameter or a catch-all. An optional parameter
-   may be absent, and a catch-all takes the remaining segments. A constrained
-   parameter accepts only some text, so a literal only possibly matches it,
-   while a dynamic segment matches it like any parameter; a constrained
-   catch-all is only ever possibly matched. The paths may also be equal after
-   removing one leading literal segment that only one side states, such as
-   `/api` or a deployment path, when both sides then continue with the same
-   literal, or the endpoint continues with a constrained catch-all under a
-   segment another match also removes.
-4. Only the endpoints a router would prefer remain. A match through a catch-all
-   at the start of its path, such as a fallback or a route a scanner could not
-   read at the root, speaks for its own application, as one scanner reports it:
-   it drops out when endpoints of other applications reach the request without a
-   catch-all and none of its own application's do. An exact path that needs no
-   catch-all to take part of the request shows that the paths compare as
-   written, so it hides every match that needed a leading segment removed: a
-   request to `/api/talks` prefers another file's exact `/api/:section` over a
-   `/talks` that needs `/api` removed. Otherwise each removed segment, and
-   removing none, assumes a different deployment, and nothing ranks matches of
-   different deployments against each other: a request to `/api/talks` produces
-   no row when one application serves an exact fallback `/:rest*` in one file
-   and `/talks` in another. Past that, the preference depends on the routers:
-   - When no endpoint carries a registration order, the router prefers the
-     most specific route. The paths are compared segment by segment, where a
-     literal is more specific than a parameter and a parameter more specific
-     than a catch-all, and the first position that differs decides. A path
-     that has ended is more specific than one continuing with an optional
-     parameter or catch-all the request does not use. A request to
-     `/api/account` therefore prefers that exact route over a fallback
-     `/:first/:second`, `/ratings/top` over a sibling `/ratings/:token`, and
-     `/talks` over `/talks/:page?`.
-   - When every endpoint carries a registration order in one application, as
-     one scanner reports it, the router takes the first registered match,
-     whatever its specificity: a Django `<name>/` registered before `talks/`
-     receives `/talks/`, and a fallback registered after the API routes
-     receives none of their requests. Equal positions have an unknown order.
-   - When endpoints of different applications, or ordered and unordered
-     endpoints, match together, nothing is preferred beyond exactness.
-5. The row's endpoints are the preferred ones among the endpoints every runtime
-   value reaches, where a dynamic segment fills only parameters and catch-alls
-   and no match is only possible. At least one must exist. Unless specificity
-   decided, the router's choice among several such endpoints is unknown, so
-   exactly one distinct endpoint must remain. An endpoint with a constrained
-   segment still provides the row, but rule 6 then lets every reachable
-   endpoint compete with it.
-6. A dynamic segment could also equal a literal at runtime, including the
-   literal that follows a removed leading segment, and a constrained segment may
-   accept a literal. An endpoint that such a value possibly reaches, at least as
-   preferred as the row's endpoints, competes with them. Routers rank
-   constrained segments against plain parameters and catch-alls by their own
-   rules, but every one prefers a literal segment. A reachable endpoint with a
-   constrained segment therefore competes even when it ranks lower, unless the
-   row's endpoint has a literal where their segments first differ and no
-   constrained segment comes before that position; under registration order, one
-   registered after the row's endpoint does not compete. When a row endpoint has
-   a constrained segment, every endpoint the request reaches competes, because
-   values the constraint rejects go elsewhere. The row's endpoints and every
-   competing endpoint belong to one file; endpoints in several files produce no
-   row. A constrained catch-all may stand for routes whose handler files the
-   scanner could not tell, so a competing constrained catch-all produces no row,
-   even in the row's file. A route registered earlier that a scanner could not
-   read therefore blocks later matches of its prefix in its application. A
-   request to `/talks/` plus a dynamic segment produces no row when one file
-   serves `/talks/:id` and another `/talks/archive`, or when one file serves a
-   constrained `/talks/:id` and another `/talks/:rest+`, and reaches
-   `/talks/:id` when one file serves `/talks/:id` and `/talks/archive`. A
-   request to `/files/a/report.json` produces no row when one file serves
-   `/files/:dir/:name` and another a constrained `/files/:path*`, while a
-   request to `/api/account` reaches the file serving that exact route beside
-   another file's constrained `/:path1/:path2`.
+3. The request reaches the endpoint. Each request segment reaches the endpoint
+   segment in its position as the table shows. A request that reaches every
+   segment certainly reaches the endpoint certainly; one that reaches some
+   segment only possibly reaches the endpoint possibly. An optional parameter
+   may be absent. A catch-all takes the remaining segments, at least one unless
+   it is optional.
+
+   | Endpoint segment | Request literal | Request dynamic segment |
+   | --- | --- | --- |
+   | Literal | Certainly when the text is equal, ignoring case | Possibly |
+   | Parameter | Certainly | Certainly |
+   | Constrained parameter | Possibly | Certainly |
+   | Catch-all | Certainly | Certainly |
+   | Constrained catch-all | Possibly | Possibly |
+
+   The request may also reach the endpoint after one leading literal that only
+   one side states, such as `/api` or a deployment path, is removed. The
+   endpoint must then continue with a literal that the request's next segment
+   reaches, or with a constrained catch-all, which is reached only possibly.
+   Removing no segment, and removing each segment, assume different
+   deployments.
+4. Three filters then remove matches that cannot decide the row:
+   1. An endpoint whose path is one catch-all, such as a fallback or a route a
+      scanner could not read at the root, speaks for its own application only,
+      that is its scanner and its registration application. It drops out when
+      endpoints of other applications reach the request without their
+      catch-all taking part of it, and none of its own application's do.
+   2. A match that removed the literal before a constrained catch-all fits any
+      request, so it counts only when another match removes the same segment.
+   3. An endpoint reached certainly without removing a segment, and without its
+      catch-all taking part of the request, shows that the paths compare as
+      written. Every match that needed a segment removed then drops out, and
+      one reached certainly only by removing a segment counts as possibly
+      reached.
+5. One preference ranks what remains:
+   - Specificity, when no endpoint carries a registration order and every match
+     assumes the same deployment. The paths are compared segment by segment: a
+     literal before a parameter before a catch-all, a path that has ended before
+     one continuing with an optional parameter or catch-all it does not use,
+     and the first position that differs decides.
+   - Registration position, when every endpoint carries a registration order in
+     one application as one scanner reports it and every match assumes the same
+     deployment. The smaller position wins, whatever the specificity; equal
+     positions have an unknown order.
+   - None, in every other case: every remaining endpoint ranks the same.
+6. The row follows this checklist:
+   1. The chosen endpoints are those reached certainly with the best rank. At
+      least one must exist.
+   2. An endpoint competes with them when it is reached, possibly or certainly,
+      with a rank at least as good. Under specificity, an endpoint with a
+      constrained segment also competes when it ranks lower, because routers
+      rank constraints against parameters by their own rules, unless the chosen
+      endpoint has a literal where their segments first differ and no
+      constrained segment comes before that position: every router prefers a
+      literal.
+   3. When a chosen endpoint has a constrained segment, every remaining
+      endpoint competes, because values the constraint rejects go elsewhere.
+   4. No competing endpoint ends in a constrained catch-all, which may stand
+      for routes whose handler files the scanner could not tell.
+   5. The chosen and competing endpoints belong to one file.
+   6. Unless specificity ranked them, exactly one distinct endpoint is chosen,
+      because the router's choice among several is unknown.
 7. The requesting and providing files have different owners.
 
 The row runs from the requesting file to the providing file. Its statement
-lists each reached endpoint with the request method, such as
+lists each chosen endpoint with the request method, such as
 `Calls HTTP endpoint: GET /talks/:id`. `:id?` marks an optional parameter;
 `:path+` and `:path*` mark catch-alls that require or allow a remainder.
 The mechanism lists the contributing scanners, as for other derived rows.
+
+`{}` is a dynamic request segment, `!` marks a constrained segment, and a
+number is a registration position in one application. Files are A and B.
+
+| Request | Endpoints | Result |
+| --- | --- | --- |
+| `GET /api/talks` | A `/api/:section`, B `/talks` | A: the exact path hides `/talks` |
+| `GET /api/talks` | A `/:rest*`, B `/talks`, one application | No row: two deployments |
+| `GET /api/account` | A `/api/account`, B `/:first/:second` | A: a literal is more specific |
+| `GET /talks` | A `/talks`, B `/talks/:page?` | A: a path that has ended is more specific |
+| `GET /talks/` | A `<name>/` at 0, B `talks/` at 1 | A: registered first |
+| `GET /api/talks/{}` | A `/api/talks/:id` at 0, B `/:rest*` at 1 | A: the fallback is registered later |
+| `GET /talks/{}` | A `/talks/:id`, B `/talks/archive` | No row: `archive` may reach B |
+| `GET /talks/{}` | A `/talks/:id` and `/talks/archive` | A, `GET /talks/:id` |
+| `GET /talks/{}` | A `/talks/:id!`, B `/talks/:rest+` | No row: rejected values reach B |
+| `GET /files/a/report.json` | A `/files/:dir/:name`, B `/files/:path*!` | No row: B's router may rank it first |
+| `GET /api/account` | A `/api/account`, B `/:path1!/:path2!` | A: every router prefers the literal |
+| `GET /api/talks` | A `/api/:rest*!` at 0 and `/:rest*` at 1 | No row: A's first route stands for unknown files |
+| Configured `GET /talks` | A `/api/:rest*!` at 0, B `/api/talks` at 1 | No row: A is registered first |
 
 Tolerating one leading segment is an accepted trade-off that is expected to be
 right in most repositories. Requiring a shared literal after the removed
@@ -213,39 +223,39 @@ segment keeps a prefix from pairing with an unrelated parameter. The rule does
 not model hosts, ports, or deployments beyond one removed segment. A configured
 base is assumed to address a server in this repository, so a configuration
 value that points at a third-party service can produce a wrong row; that is an
-accepted limit. Scanners decide what a base is from what they
-can see, as [scanner evidence](scanners/evidence.md#http-endpoints-and-requests)
-describes. Literal text is compared without regard to case, because some
-frameworks route case-insensitively and generate a path from a class or
-controller name. Where two endpoints differ only in case, they either share a
-file or the one-file rule already abstains. A row keeps the endpoint's own
-spelling.
+accepted limit. Scanners decide what a base is from what they can see, as
+[scanner evidence](scanners/evidence.md#http-endpoints-and-requests) describes.
+Literal text is compared without regard to case, because some frameworks route
+case-insensitively and generate a path from a class or controller name. Where
+two endpoints differ only in case, they either share a file or the one-file
+check already abstains. A row keeps the endpoint's own spelling.
 
 ## Provider rules and later candidates
 
-Rules 1–3 are implemented for the supported extraction below. Rule 4 is
-implemented for HTTP requests. Rule 5 is enabled only for concretely supplied
-named callbacks. Rule 6 remains a proposal.
+Provider rules P1 to P3 are implemented for the supported extraction below. P4
+is implemented for HTTP requests. P5 is enabled only for concretely supplied
+named callbacks. P6 remains a proposal.
 
-1. Resolve identity-preserving aliases and re-exports to their canonical
-   operation before applying ownership. A call whose caller and provider share
-   an owner produces no cross-component relationship.
-2. Preserve active intermediaries. If A calls B and B calls C, retain those
-   operation edges. Even a small forwarding function is executable behavior,
-   not a symbol alias. Do not invent a direct A-to-C collaboration.
-3. For a call with several possible targets, an owner-level claim is possible
-   only if all supported alternatives have that owner and none are unresolved.
-   Do not name one implementation when only the owner is established.
-4. Match protocol interactions using protocol, method, and endpoint
-   information. Scanners recognize source constructs; core joins the reported
-   facts. Without application identity, equal routes in several providing
-   files and requests to a literal host produce no row.
-5. For callbacks, require a concrete binding and an invocation or supported
-   dispatch contract. Registration and dispatch have different directions.
-   Passing a function does not by itself establish that it is called.
-6. Trial service-operation selection separately. State access, resource use,
-   orchestration, and participation in an entry operation may help, but none
-   independently distinguishes domain work from supporting functionality.
+- **P1.** Resolve identity-preserving aliases and re-exports to their canonical
+  operation before applying ownership. A call whose caller and provider share
+  an owner produces no cross-component relationship.
+- **P2.** Preserve active intermediaries. If A calls B and B calls C, retain
+  those operation edges. Even a small forwarding function is executable
+  behavior, not a symbol alias. Do not invent a direct A-to-C collaboration.
+- **P3.** For a call with several possible targets, an owner-level claim is
+  possible only if all supported alternatives have that owner and none are
+  unresolved. Do not name one implementation when only the owner is
+  established.
+- **P4.** Match protocol interactions using protocol, method, and endpoint
+  information. Scanners recognize source constructs; core joins the reported
+  facts, as [HTTP requests](#http-requests) describes.
+- **P5.** For callbacks, require a concrete binding and an invocation or
+  supported dispatch contract. Registration and dispatch have different
+  directions. Passing a function does not by itself establish that it is
+  called.
+- **P6.** Trial service-operation selection separately. State access, resource
+  use, orchestration, and participation in an entry operation may help, but
+  none independently distinguishes domain work from supporting functionality.
 
 Every emitted description must stay within the established evidence. Resolving
 an operation does not authorize inventing its business purpose. The main open
