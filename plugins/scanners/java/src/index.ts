@@ -5,6 +5,7 @@ import { projectScanner } from '../../project-scanner.ts'
 import type { ScannerPlugin } from '@groma/scanner'
 import { checkJavaReadiness, readJavaOutline, scanJavaSource } from './adapter.ts'
 import { buildScripts, gradleProjects, readGradleProject, settingsScripts, withGradleDiagnostics } from './gradle.ts'
+import { summarizeMissingTypes } from './missing-types.ts'
 
 const scanner = {
   id: 'java',
@@ -50,6 +51,6 @@ export default {
   scan: async (root, settings) => {
     const projects = await javaProjects(root)
     const observation = await projectScanner(scanner, async () => projects.directories).scan(root, settings)
-    return withGradleDiagnostics(observation, projects.diagnostics)
+    return withGradleDiagnostics(summarizeMissingTypes(observation), projects.diagnostics)
   },
 } satisfies ScannerPlugin
