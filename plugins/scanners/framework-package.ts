@@ -2,8 +2,12 @@ import { cp, mkdir, readFile, readdir, writeFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import path from 'node:path'
 
-/** Build the three TypeScript-backed framework packages with their own pinned compiler. */
-export async function buildFrameworkPackage(root: string, destination: string): Promise<string> {
+/**
+ * Build a package that carries its own pinned TypeScript compiler. Only a scanner that creates compiler
+ * programs reads the compiler's declaration libraries; a scanner that parses single files leaves them out.
+ */
+export async function buildFrameworkPackage(root: string, destination: string,
+  { declarationLibraries = true } = {}): Promise<string> {
   const manifestFile = path.join(root, 'package.json')
   const manifest = JSON.parse(await readFile(manifestFile, 'utf8'))
   const id: string = manifest.groma.scanner.id
@@ -20,8 +24,10 @@ export async function buildFrameworkPackage(root: string, destination: string): 
   if (!result.success) throw new Error(result.logs.join('\n'))
   // Keep the compiler beside its libraries so its own filename resolves at runtime.
   await cp(typescript, path.join(output, 'typescript.cjs'))
-  for (const file of await readdir(declarations)) {
-    if (file.startsWith('lib.') && file.endsWith('.d.ts')) await cp(path.join(declarations, file), path.join(output, file))
+  if (declarationLibraries) {
+    for (const file of await readdir(declarations)) {
+      if (file.startsWith('lib.') && file.endsWith('.d.ts')) await cp(path.join(declarations, file), path.join(output, file))
+    }
   }
   await writeFile(path.join(destination, 'package.json'), `${JSON.stringify({
     name: manifest.name, version: manifest.version, description: manifest.description, private: manifest.private, type: 'module', license: 'MIT',

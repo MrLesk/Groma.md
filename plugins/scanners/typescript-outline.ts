@@ -65,6 +65,8 @@ export interface OutlineBlock {
   fileName: string
   text: string
   symbols: readonly string[]
+  /** Local names the block publishes outside an export list, such as a CommonJS `module.exports`. */
+  exported?: readonly string[]
   /** Nothing in the block can be imported, as in a Vue `<script setup>` block. */
   topLevelPrivate?: boolean
 }
@@ -159,7 +161,7 @@ function declarationsIn(scope: OutlineScope, statements: readonly Node[]): CodeD
 /** Outline one block of source text by parsing it alone. */
 export function outlineDeclarations(ts: OutlineCompiler, block: OutlineBlock): CodeDeclaration[] {
   const source = ts.createSourceFile(block.fileName, block.text, ts.ScriptTarget.Latest, true)
-  const exported = new Set(source.statements.flatMap(statement => listedExports(ts, statement)))
+  const exported = new Set([...source.statements.flatMap(statement => listedExports(ts, statement)), ...block.exported ?? []])
   const scope = { ts, source, symbols: block.symbols, exported, topLevelPrivate: block.topLevelPrivate ?? false }
   return declarationsIn(scope, source.statements)
 }
