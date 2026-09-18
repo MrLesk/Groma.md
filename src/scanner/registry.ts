@@ -27,8 +27,8 @@ export interface ScannerRegistry {
   readonly scannerIds: readonly string[]
   collectObservations(repositoryRoot: string, changedFiles?: readonly string[]): Promise<ScanBatch>
   watchesFile(relativePath: string): boolean
-  /** The files each scanner that can list them would analyze now, after shared exclusions. */
-  sourceFiles(repositoryRoot: string): Promise<{ scanner: string; files: string[] }[]>
+  /** The scanners that would analyze this file now, among those that can list their files. */
+  readersOfFile(repositoryRoot: string, file: string): Promise<string[]>
 }
 
 
@@ -141,12 +141,13 @@ export function createScannerRegistry(
   const subscriptions = scanners.map(scanner => ({ scanner, matches: compileWatchPatterns(scanner.watch) }))
   return {
     scannerIds: scanners.map(scanner => scanner.id),
-    async sourceFiles(root) {
-      const listed = await Promise.all(scanners.map(async scanner => {
+    async readersOfFile(root, file) {
+      if (excluded(file)) return []
+      const readers = await Promise.all(scanners.map(async scanner => {
         const files = await scanner.listSourceFiles?.(root)
-        return files === undefined ? undefined : { scanner: scanner.id, files: files.filter(file => !excluded(file)) }
+        return files?.includes(file) === true ? scanner.id : undefined
       }))
-      return listed.filter(entry => entry !== undefined)
+      return readers.filter(id => id !== undefined).sort()
     },
     watchesFile(relativePath) {
       return !excluded(relativePath) && subscriptions.some(subscription => subscription.matches(relativePath))

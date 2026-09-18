@@ -11,7 +11,7 @@ import { readScannerConfig, writeScannerConfig } from '../src/scanner/modules/co
 import { addScanner } from '../src/scanner/modules/inventory.ts'
 
 const window = parseListWindow({}, [])
-const sources = ['src/kept.ts', 'src/notes.txt', 'scripts/hidden.ts']
+const sources = ['src/kept.ts', 'src/notes.txt', 'scripts/hidden.ts', 'src/keep.generated.ts']
 
 async function write(root: string, file: string, content: string): Promise<void> {
   await mkdir(path.dirname(path.join(root, file)), { recursive: true })
@@ -38,7 +38,8 @@ async function repository(): Promise<string> {
   for (const file of sources) await write(root, file, 'export const value = 1\n')
   const child = Bun.spawn(['git', 'init', '--quiet'], { cwd: root, stdout: 'ignore', stderr: 'pipe' })
   expect(await child.exited, await new Response(child.stderr).text()).toBe(0)
-  for (const id of ['first', 'second']) await addScanner(root, await plugin(root, id, ['src/kept.ts', 'scripts/hidden.ts']))
+  const listed = ['src/kept.ts', 'scripts/hidden.ts', 'src/keep.generated.ts']
+  for (const id of ['first', 'second']) await addScanner(root, await plugin(root, id, listed))
   return root
 }
 
@@ -62,6 +63,19 @@ test.concurrent('an excluded file names the configured pattern that hides it', a
     const config = await readScannerConfig(root)
     await writeScannerConfig(root, { ...config, exclude: ['**/*.md', '/scripts/'] })
     expect(await reason(root, 'scripts/hidden.ts')).toBe('no owner: scripts/hidden.ts; excluded by scanners.json pattern /scripts/')
+  } finally { await rm(root, { recursive: true, force: true }) }
+})
+
+test.concurrent('a pattern decides with the whole list, so a later negation restores its file', async () => {
+  const root = await repository()
+  try {
+    const config = await readScannerConfig(root)
+    await writeScannerConfig(root, { ...config, exclude: ['**/*.generated.ts'] })
+    expect(await reason(root, 'src/keep.generated.ts'))
+      .toBe('no owner: src/keep.generated.ts; excluded by scanners.json pattern **/*.generated.ts')
+    await writeScannerConfig(root, { ...config, exclude: ['**/*.generated.ts', '!src/keep.generated.ts'] })
+    expect(await reason(root, 'src/keep.generated.ts'))
+      .toBe('no owner: src/keep.generated.ts; read by first, second and not scanned yet, so run groma scan')
   } finally { await rm(root, { recursive: true, force: true }) }
 })
 

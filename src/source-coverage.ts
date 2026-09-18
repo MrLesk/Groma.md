@@ -17,9 +17,14 @@ async function repositoryFiles(repositoryRoot: string): Promise<Set<string>> {
   return new Set(stdout.split('\0').filter(Boolean))
 }
 
-/** Each pattern is matched alone, so the answer can name the one that hides the file. */
+/**
+ * The combined list decides, because a later negation can restore a file an earlier pattern hid.
+ * The answer then names the last pattern that selected it, which is the one a reader must change.
+ */
 function excludingPattern(patterns: readonly string[], file: string): string | undefined {
-  return patterns.find(pattern => ignore({ ignorecase: false }).add(pattern).ignores(file))
+  if (!ignore({ ignorecase: false }).add([...patterns]).ignores(file)) return undefined
+  return [...patterns].reverse().find(pattern => !pattern.startsWith('!')
+    && ignore({ ignorecase: false }).add(pattern).ignores(file))
 }
 
 /**
@@ -31,8 +36,7 @@ export async function missingOwnerReason(repositoryRoot: string, file: string): 
   const excluded = excludingPattern((await readScannerConfig(repositoryRoot)).exclude ?? [], file)
   if (excluded !== undefined) return `no owner: ${file}; excluded by scanners.json pattern ${excluded}`
   const registry = await loadScannerRegistry(repositoryRoot)
-  const readers = (await registry.sourceFiles(repositoryRoot))
-    .filter(entry => entry.files.includes(file)).map(entry => entry.scanner).sort()
+  const readers = await registry.readersOfFile(repositoryRoot, file)
   if (readers.length === 0) return `no owner: ${file}; no enabled scanner reads it`
   return `no owner: ${file}; read by ${readers.join(', ')} and not scanned yet, so run groma scan`
 }
