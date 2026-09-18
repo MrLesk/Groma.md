@@ -149,13 +149,12 @@ segment, with `(?P<rest>.*)` or `.+` last as a catch-all; a dot in its text is
 literal only when escaped.
 
 The scanner reports no endpoint for an application or router created inside a
-function, a Starlette or FastAPI route table, a computed route, a computed
-`methods` list, or a view or router it cannot resolve, and no request for a
-client call outside a function. A router nobody registers in the scanned source
-keeps only its own prefix, while a router registered on an application the
-scanner cannot resolve, such as one passed to a function, reports no endpoint.
-For Django, FastAPI and Starlette, which take the first match, an entry the
-scanner recognizes but cannot report is a blocker instead (see decision 8).
+function or a Starlette or FastAPI route table, and no request for a client call
+outside a function. A Flask route whose path or methods are computed, or whose
+blueprint the scanner cannot resolve or finds registered on an application it
+cannot resolve, such as one passed to a function, reports nothing; Django,
+FastAPI and Starlette report such entries as blockers (decision 8). A router
+nobody registers in the scanned source keeps only its own prefix.
 
 Django endpoints need the complete `include()` graph, so `urlpatterns` must be a
 literal list or tuple bound once. When any module builds its table by addition,
@@ -202,10 +201,10 @@ The eight [producer decisions](../evidence.md#producer-checklist) for Python:
    `self.base_url`, directly or through a module-level name bound once to one.
    So do `requests.post(f"{settings.API}/talks")` and a session with
    `base_url=settings.API`. `self.base_url` is instead the value of its one
-   assignment when the class, its ancestors and its subclasses in the scanned
-   source assign `base_url` exactly once, by a plain assignment in a class body
-   or through `self.base_url = ...`, and no code sets `base_url` on another
-   object, such as `client.base_url = url`. So
+   assignment when the class, its subclasses and every class they inherit from
+   in the scanned source assign `base_url` exactly once, by a plain assignment
+   in a class body or through `self.base_url = ...`, and no code sets
+   `base_url` on another object, such as `client.base_url = url`. So
    `base_url = "https://api.github.com"` leads with an `unknown` segment and
    `base_url = f"{settings.API}/v1"` sets `configured` before `v1`. A base class
    outside the scanned source is not counted.
@@ -236,8 +235,10 @@ The eight [producer decisions](../evidence.md#producer-checklist) for Python:
    position follows that table with each `include()` expanded where it stands.
    FastAPI and Starlette add routes as modules import, an order the scanner
    does not prove, so every endpoint of one application shares position `0`.
-   The application is the file that creates it, or the router's own file when
-   the scanner finds no registration. A route entry these routers register but
+   The application is the file that creates it; when the scanner cannot find
+   that file, such as for a router nobody registers or one registered on an
+   application it cannot resolve, it is the file where the route is written.
+   A route entry these routers register but
    the scanner cannot report keeps its position as a blocker: its literal prefix
    followed by a constrained optional catch-all, so core derives no row to it
    and none for a request it could take first. Django blockers are a
@@ -251,9 +252,8 @@ The eight [producer decisions](../evidence.md#producer-checklist) for Python:
    FastAPI and Starlette blockers are a route with a computed path or methods,
    an `add_api_route()` or `add_route()` whose handler the scanner cannot
    resolve, a route on a router registered on an application the scanner
-   cannot resolve (a bare catch-all, with the router's own file as the
-   application), `include_router()` or `mount()` of a router or application
-   the scanner cannot resolve, and every `host()`.
+   cannot resolve (a bare catch-all), `include_router()` or `mount()` of a
+   router or application the scanner cannot resolve, and every `host()`.
 
 ## Architecture meaning
 

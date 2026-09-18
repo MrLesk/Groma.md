@@ -59,23 +59,7 @@ NODE_TOKENS = {ast.Add: "+", ast.Sub: "-", ast.Mult: "*", ast.MatMult: "@", ast.
                ast.Assign: "=", ast.AugAssign: "=", ast.AnnAssign: "=", ast.NamedExpr: ":=", ast.Delete: "del",
                ast.Assert: "assert", ast.Break: "break", ast.Continue: "continue", ast.Call: "call",
                ast.Starred: "*", ast.Subscript: "index"}
-SCOPES = (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda, ast.ClassDef)
 GROUPED = (ast.BinOp, ast.BoolOp, ast.Compare)
-
-
-def statements(scope):
-    """Code that runs in a scope; a docstring is documentation, like a comment."""
-    if isinstance(scope, ast.Lambda):
-        return [scope.body]
-    return scope.body[1:] if ast.get_docstring(scope, clean=False) is not None else scope.body
-
-
-def parameters(scope):
-    if isinstance(scope, ast.ClassDef):
-        return []
-    args = scope.args
-    return [item.arg for item in [*args.posonlyargs, *args.args, args.vararg, *args.kwonlyargs, args.kwarg]
-            if item is not None]
 
 
 def operator_expression(node):
@@ -127,17 +111,9 @@ def local_names(scope):
     A function does not bind names it declares `global` or `nonlocal`. Known simplifications: comprehension
     variables share the function's scope, and names bound in a class body are visible to methods nested in it.
     """
-    names = set(parameters(scope))
-    declared = set()
-    pending = list(statements(scope))
-    while pending:
-        node = pending.pop()
-        if isinstance(node, (ast.Global, ast.Nonlocal)):
-            declared.update(node.names)
-        names.update(binding_names(node))
-        if not isinstance(node, SCOPES):
-            pending.extend(children(node))
-    return names - declared
+    nodes = scope_nodes(scope)
+    declared = {name for node in nodes if isinstance(node, (ast.Global, ast.Nonlocal)) for name in node.names}
+    return {*parameters(scope), *(name for node in nodes for name in binding_names(node))} - declared
 
 
 def local_references(tree):
@@ -334,9 +310,6 @@ def scan(files):
                                      for file in memberships if module_operation(file) in registering)
     observation["httpRequests"] = sent_requests(sources)
     return observation
-
-
-FUNCTIONS = (ast.FunctionDef, ast.AsyncFunctionDef)
 
 
 def visibility(name, member):

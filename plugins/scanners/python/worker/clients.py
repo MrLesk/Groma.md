@@ -3,6 +3,7 @@
 Runs after sources.py, whose module reading and name resolution it uses.
 """
 import ast
+from collections import Counter
 import re
 
 CLIENTS = ("requests", "httpx", "aiohttp")
@@ -23,45 +24,23 @@ def session_parts(sources, module, value):
     return [] if base is None else text_parts(sources, module, base)
 
 
-def client_names(sources, module, operation):
-    """Client sessions by name: the module's constants, and the names this operation binds once to a session."""
-    constants = {name: parts for name, value in module["values"].items()
-                 if (parts := session_parts(sources, module, value)) is not None}
-    bindings = operation_bindings(operation)
-    counts = {}
-    for name, _ in bindings:
-        counts[name] = counts.get(name, 0) + 1
-    # A name this operation binds more than once, or binds to anything else, holds no known session.
-    own = {name: parts for name, value in bindings
-           if counts[name] == 1 and value is not None and (parts := session_parts(sources, module, value)) is not None}
-    return constants, own
+def module_sessions(sources, module):
+    """Client sessions the module binds once, by name."""
+    return {name: parts for name, value in module["values"].items()
+            if (parts := session_parts(sources, module, value)) is not None}
 
 
-def operation_bindings(operation):
-    """(name, value) for every binding in one operation: its parameters and each name its body binds, with the
-    value known only for a plain assignment or with item."""
-    args = operation.args
-    parameters = [*args.posonlyargs, *args.args, args.vararg, *args.kwonlyargs, args.kwarg]
-    bindings = [(item.arg, None) for item in parameters if item is not None]
-    values = {}
-    pending = list(operation.body)
-    while pending:
-        node = pending.pop()
-        # A parent is visited before its targets, so their values are known when they are counted.
-        values.update(bound_values(node))
-        bindings.extend((name, values.get(node)) for name in binding_names(node))
-        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            pending.extend(ast.iter_child_nodes(node))
-    return bindings
+def operation_sessions(sources, module, operation):
+    """Client sessions an operation binds: names it binds exactly once, to a recognized session constructor.
 
-
-def bound_values(node):
-    """The value a plain assignment or with item gives each Name it binds."""
-    if isinstance(node, ast.Assign):
-        return {target: node.value for target in node.targets if isinstance(target, ast.Name)}
-    if isinstance(node, ast.withitem) and isinstance(node.optional_vars, ast.Name):
-        return {node.optional_vars: node.context_expr}
-    return {}
+    A parameter or any other binding also counts, so a name bound twice holds no known session.
+    """
+    bindings = [*((name, None) for name in parameters(operation)),
+                *((name, module["assigned"].get(node)) for node in scope_nodes(operation)
+                  for name in binding_names(node))]
+    counts = Counter(name for name, _ in bindings)
+    return {name: parts for name, value in bindings
+            if counts[name] == 1 and value is not None and (parts := session_parts(sources, module, value)) is not None}
 
 
 def merged(parts):
@@ -186,21 +165,15 @@ def urlopen_request(sources, module, operation, call):
 
 
 def operation_calls(operation):
-    """Every call in one operation's body; a nested operation owns its own calls."""
-    calls = []
-    pending = list(operation.body)
-    while pending:
-        node = pending.pop()
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            continue
-        if isinstance(node, ast.Call):
-            calls.append(node)
-        pending.extend(ast.iter_child_nodes(node))
-    return calls
+    """Every call in one operation's body; a nested function, lambda or class owns its own calls."""
+    return [node for node in scope_nodes(operation) if isinstance(node, ast.Call)]
 
 
 def sent_request(sources, module, sessions, operation, call):
-    """The request one call sends, or None when it is not a recognized client call."""
+    """The request one call sends, or None when it is not a recognized client call.
+
+    `sessions` holds the module's sessions and the operation's own ones.
+    """
     chain = imported_chain(module, call.func)
     if chain == URLOPEN:
         return urlopen_request(sources, module, operation, call)
@@ -225,10 +198,9 @@ def sent_requests(sources):
     """Every request these modules send through a recognized client."""
     requests = []
     for module in sources.modules.values():
+        constants = module_sessions(sources, module)
         for node, operation in module["identities"].items():
-            sessions = client_names(sources, module, node)
-            for call in operation_calls(node):
-                fact = sent_request(sources, module, sessions, operation, call)
-                if fact is not None:
-                    requests.append(fact)
+            sessions = (constants, operation_sessions(sources, module, node))
+            requests.extend(fact for call in operation_calls(node)
+                            if (fact := sent_request(sources, module, sessions, operation, call)) is not None)
     return requests

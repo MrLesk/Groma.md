@@ -167,11 +167,12 @@ def collect_routers(sources):
             kind = constructor(value)
             if kind in APPS:
                 routers[(module["file"], name)] = {"prefix": [], "registrations": [], "unknown": [],
-                                                   "ordered": kind in ORDERED}
+                                                   "ordered": kind in ORDERED, "application": module["file"]}
             elif kind in ROUTERS:
+                # A router's application is the one that registers it.
                 routers[(module["file"], name)] = {
                     "prefix": prefix_segments(sources, module, keyword_value(value, ROUTERS[kind])),
-                    "registrations": [], "unknown": [], "ordered": kind in ORDERED,
+                    "registrations": [], "unknown": [], "ordered": kind in ORDERED, "application": None,
                 }
     for module in sources.modules.values():
         for call in module["calls"]:
@@ -187,7 +188,7 @@ def collect_routers(sources):
                 })
             elif parent in routers:
                 # A router or application the scanner cannot resolve still serves somewhere under this prefix.
-                routers[parent]["unknown"].append((module["file"], prefix_segments(sources, module, prefix) or []))
+                routers[parent]["unknown"].append((module["file"], prefix_segments(sources, module, prefix)))
     return routers
 
 
@@ -207,13 +208,13 @@ def registration(call):
 def router_prefixes(routers, key, seen=()):
     """(application file, complete prefix) for every place a router serves, or None when one prefix is computed.
 
-    A router nobody registers serves under its own prefix, and its own file stands for the application.
+    A router nobody registers serves under its own prefix, and its application file is unknown (None).
     """
     router = routers[key]
     if router["prefix"] is None or key in seen:
         return None
     if not router["registrations"]:
-        return [(key[0], router["prefix"])]
+        return [(router["application"], router["prefix"])]
     prefixes = []
     for registration in router["registrations"]:
         parent = registration["parent"]
@@ -258,19 +259,22 @@ def ordered_fact(router, application, fact):
 
 
 def route_facts(routers, key, file, handler, segments, methods):
-    """Endpoints of one route on a known router. For an ordered router, a route whose handler, path, methods or
-    prefix the scanner cannot read is a blocker instead."""
+    """Endpoints of one route written in `file` on a known router. For an ordered router, a route whose handler,
+    path, methods or prefix the scanner cannot read is a blocker instead.
+
+    When the scanner cannot find the file that creates the application, the route's own file stands for it.
+    """
     router = routers[key]
     prefixes = router_prefixes(routers, key)
     if handler is not None and segments is not None and methods is not None and prefixes is not None:
-        return [ordered_fact(router, application, served(handler, method, [*prefix, *segments]))
+        return [ordered_fact(router, application or file, served(handler, method, [*prefix, *segments]))
                 for application, prefix in prefixes for method in methods]
     if not router["ordered"]:
         return []
-    # Without a known prefix, neither the path nor the application is known, so the route's own file stands for it.
-    places = [(application, [*prefix, *(segments or [])]) for application, prefix in prefixes or []]
-    return [ordered_fact(router, application, blocker(handler or module_operation(file), method, path))
-            for application, path in places or [(file, [])] for method in methods or ["*"]]
+    # Without the router's prefix, no text of the path is known.
+    places = [(application, [*prefix, *(segments or [])]) for application, prefix in prefixes or []] or [(None, [])]
+    return [ordered_fact(router, application or file, blocker(handler or module_operation(file), method, path))
+            for application, path in places for method in methods or ["*"]]
 
 
 def method_name(node):
@@ -321,16 +325,8 @@ def call_endpoints(sources, routers):
 
 def unknown_registrations(routers):
     """Blockers for the routers an ordered application registers but the scanner cannot resolve."""
-    blockers = []
-    for key, router in routers.items():
-        if not router["ordered"]:
-            continue
-        for file, prefix in router["unknown"]:
-            # Without the application's own prefix, the path is unknown and the registering file stands for it.
-            places = [(application, [*above, *prefix]) for application, above in router_prefixes(routers, key) or []]
-            blockers.extend(ordered_fact(router, application, blocker(module_operation(file), "*", path))
-                            for application, path in places or [(file, [])])
-    return blockers
+    return [fact for key, router in routers.items() for file, prefix in router["unknown"]
+            for fact in route_facts(routers, key, file, None, prefix, None)]
 
 
 def include_target(sources, module, view):
@@ -347,40 +343,40 @@ def include_target(sources, module, view):
 
 
 def url_entries(sources, module, patterns):
-    """(segments, view) for each urlpatterns entry; None segments when the route is not expressible, and no view
-    for an element that is not a path(), re_path() or url() call."""
+    """(segments, view, include target) for each urlpatterns entry: None segments when the route is not
+    expressible or the element is not a path(), re_path() or url() call, and no target unless the view is an
+    include()."""
     entries = []
     for element in patterns.elts:
         kind = constructor(element)
         if kind not in ("path", "re_path", "url") or len(element.args) < 2:
-            entries.append((None, None))
+            entries.append((None, None, None))
             continue
         route = literal_text(sources, module, element.args[0])
+        target = include_target(sources, module, element.args[1])
         segments = None
         if route is not None:
-            endpoint = constructor(element.args[1]) != "include"
-            segments = route_segments(route) if kind == "path" else regex_segments(route, endpoint)
-            if segments and not endpoint and not route.endswith("/"):
+            segments = route_segments(route) if kind == "path" else regex_segments(route, target is None)
+            if segments and target is not None and not route.endswith("/"):
                 # include() joins its route and the included routes with no separator, so its last segment runs
                 # into theirs: `path("v", include(...))` with `path("posts/")` serves `/vposts/`.
                 segments = [*segments[:-1], catch_rest("rest", constrained=True)]
-        entries.append((segments, element.args[1]))
+        entries.append((segments, element.args[1], target))
     return entries
 
 
 def walk_patterns(sources, tables, module, prefix, seen):
     """Endpoints of one urlpatterns table in resolution order, following include() into other modules."""
-    return [endpoint for segments, view in tables[module["file"]]
-            for endpoint in entry_endpoints(sources, tables, module, prefix, seen, segments, view)]
+    return [endpoint for entry in tables[module["file"]]
+            for endpoint in entry_endpoints(sources, tables, module, prefix, seen, *entry)]
 
 
-def entry_endpoints(sources, tables, module, prefix, seen, segments, view):
+def entry_endpoints(sources, tables, module, prefix, seen, segments, view, target):
     """The endpoints one urlpatterns entry adds; an entry the scanner cannot report is a blocker."""
     registered = module_operation(module["file"])
-    if segments is None or view is None:
+    if segments is None:
         return [blocker(registered, "*", prefix)]
     path = [*prefix, *segments]
-    target = include_target(sources, module, view)
     if target is not None:
         nested = target[1]
         if nested is None or nested["file"] not in tables or nested["file"] in seen:
@@ -416,14 +412,11 @@ def django_endpoints(sources):
     """
     tables, hidden = url_tables(sources)
     included = set()
-    for file, entries in tables.items():
-        for _, view in entries:
-            target = include_target(sources, sources.modules[file], view)
-            if target is None:
-                continue
-            if target[0] == "uncertain":
+    for entries in tables.values():
+        for _, _, target in entries:
+            if target is not None and target[0] == "uncertain":
                 hidden = True
-            elif target[0] == "module":
+            elif target is not None and target[0] == "module":
                 included.add(target[1]["file"])
     if hidden:
         # Without the complete include graph, a table's own path could be missing a prefix.
