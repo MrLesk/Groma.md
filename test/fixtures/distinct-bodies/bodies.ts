@@ -162,3 +162,28 @@ export function recordThenRetry(value: number, limit: number): number {
   }
   return limit
 }
+
+export class Queue {
+  #items: number[] = []
+  #pending: number[] = []
+  #jobs: number[] = []
+  #timers: number[] = []
+
+  isEmpty(): boolean {
+    return this.#items.length === 0 && this.#pending.length === 0
+  }
+
+  isIdle(): boolean {
+    return this.#jobs.length === 0 && this.#timers.length === 0
+  }
+}
+
+export function priceMeasure(props: { price: { amount: number; currency: string } }): number {
+  const { price: { amount, currency } } = props
+  return measure(amount, currency) * 2 + 10
+}
+
+export function weightMeasure(props: { weight: { grams: number; unit: string } }): number {
+  const { weight: { grams, unit } } = props
+  return measure(grams, unit) * 2 + 10
+}

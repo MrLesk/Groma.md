@@ -13,7 +13,7 @@ export interface FileEvidence {
   operationAt(node: ts.Node): string
 }
 
-const { executable, comparedOperation } = typeScriptOperations(ts)
+const { executable, operationFields } = typeScriptOperations(ts)
 
 /** Every operation and call of one parsed file. Calls stay unresolved: source alone proves no target. */
 export function javaScriptEvidence(file: string, source: ts.SourceFile): FileEvidence {
@@ -26,8 +26,7 @@ export function javaScriptEvidence(file: string, source: ts.SourceFile): FileEvi
 
   function operation(node: ts.Node): ScanOperation {
     const position = node.getStart(source)
-    // Only named operations carry the range and tokens core compares as possible duplicate logic.
-    const recorded = { id: `${file}#${position}`, file, name: '(anonymous)', position, ...comparedOperation(node) }
+    const recorded = { id: `${file}#${position}`, file, position, ...operationFields(node) }
     operations.push(recorded)
     owners.set(node, recorded.id)
     return recorded

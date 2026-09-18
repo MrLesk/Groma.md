@@ -4,7 +4,7 @@ import { typeScriptOperations } from '../../typescript-operations.ts'
 import { relative, type VueProject } from './project.ts'
 import { sfcScripts } from './sfc.ts'
 
-const { comparedOperation } = typeScriptOperations(ts)
+const { operationFields } = typeScriptOperations(ts)
 
 /**
  * Every named operation in the single-file component's scripts, with the lines it occupies in the `.vue`
@@ -15,10 +15,10 @@ function comparedOperations(file: string, text: string): ScanOperation[] {
   for (const script of sfcScripts(file, text)) {
     const source = ts.createSourceFile(script.fileName, script.text, ts.ScriptTarget.Latest, true)
     const visit = (node: ts.Node): void => {
-      const compared = comparedOperation(node)
-      if (compared !== undefined) {
+      const fields = operationFields(node)
+      if (fields.tokens !== undefined) {
         const position = node.getStart(source)
-        operations.push({ id: `${file}#${position}`, file, position, ...compared })
+        operations.push({ id: `${file}#${position}`, file, position, ...fields })
       }
       node.forEachChild(visit)
     }

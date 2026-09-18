@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@claude'
 created_date: '2026-09-16 20:42'
-updated_date: '2026-09-18 18:05'
+updated_date: '2026-09-18 23:00'
 labels: []
 dependencies: []
 references:
@@ -50,6 +50,7 @@ modified_files:
   - test-bun/javascript-scanner.test.ts
   - docs/scanners/typescript/index.md
   - docs/scanners/javascript/index.md
+  - plugins/scanners/vue/src/evidence.ts
 parent_task_id: TASK-424
 type: feature
 ordinal: 497000
@@ -95,6 +96,12 @@ Review round (Codex, Grok cold reviews at cf8e7975):
 12. Vue and TypeScript pages updated; isolated bun run check and the Vue package build.
 
 13. Extends step 10 (coordinator): try bodies also write catch and finally, with a red catch/finally pair in distinct-bodies.
+
+Simplicity round (cold junior-maintainer review of the fix round):
+14. Tokens: a #name stays as written like any undeclared name, so this.#a and this.#b differ; a destructured property name stays as written (k.name) and only the bound name becomes a slot, so the key of { a: { b } } is never a slot. Red pairs in distinct-bodies.
+15. Vue: VueEvidence.operationId keeps an existing entry for the same id, so the compared operation and the binding evidence no longer depend on call order; test it.
+16. Delete dead code (the operation !== root check for nested functions, the unary 'op' fallback), rename OperationCompiler to OperationSyntax, export only what other modules import, and let the shared module name every operation, (anonymous) for those it does not compare.
+17. Vue page: keep the Vue-specific compared-operation parts and link the TypeScript page for the rest; delete the redundant Vue recursion/index token test.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
@@ -119,6 +126,8 @@ Coordinator addition: try bodies write catch and finally (CatchClause kind, and 
 Cold review of this round, applied: the module header states that kind numbers differ between compilers, so kinds are looked up by name in the SyntaxKind the caller passes and a scanner must pass the compiler that parsed its nodes; docs/scanners/javascript/index.md replaces its copied compared and not-compared lists with the pointer to the TypeScript page the Vue page uses; the two Vue paragraphs are reflowed. Behavior note: a JavaScript constructor is now an operation, so it owns the calls and HTTP requests inside it (they belonged to the module operation before); no derived relationship row changes, because core joins operations to components by file.
 
 Re-verification after the cold review: bun run check in an isolated worktree at 7fdc0446 plus this task's files exit 0 (biome: pre-existing warning and infos only; tsc clean; node 16 pass; bun 520 pass, 35 skip, 0 fail); the Vue and JavaScript packages build there.
+
+Simplicity round (cold junior-maintainer review of the fix round), applied: a #name is a token like any other name, so this.#items and this.#jobs no longer compare alike; an object destructuring pattern writes each property name it reads (k.name, as an object literal key) and binds only the bound names, so const { amount, currency } = props no longer equals const { grams, unit } = props and the key of { a: { b } } is never a slot; VueEvidence.operationId keeps an entry already recorded for the same function, so the compared body survives whichever of addComparedOperations and the binding evidence runs first; the nested-function check against the root and the unary 'op' fallback, both unreachable, are gone; OperationCompiler is renamed OperationSyntax and nothing the other modules do not import is exported; operationFields names every operation, (anonymous) for those not compared, so the TypeScript and JavaScript scanners no longer repeat that default; the Vue page keeps its component-specific rules and points at the TypeScript page for the rest; the Vue recursion and index token test, now covered by the shared tokenizer's tests, is deleted. Red tests: a #name pair and a nested destructuring pair in distinct-bodies, and a Vue test that records compared bodies before the template bindings; both fail at 903e1b2f without the source change. The comment update in test-bun/architecture-findings.test.ts landed in 903e1b2f with another lane's edit of that file. Verification: the cross-compiler probe still gives identical compared operations (2414 on 314 files); bun run check in an isolated worktree at 903e1b2f plus this round's files exit 0 (biome: pre-existing items only; tsc clean; bun 588 pass, 35 skip, 0 fail); the Vue and JavaScript packages build.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
@@ -127,4 +136,6 @@ Re-verification after the cold review: bun run check in an isolated worktree at 
 groma lint now finds duplicate logic in Vue single-file components. The Vue scanner parses each component's script blocks with the parser @vue/language-core exports (plugins/scanners/vue/src/sfc.ts, shared with the outline), reports every named operation with the lines it occupies in the .vue file (plugins/scanners/vue/src/operations.ts), and tokenizes its body with a classic-compiler port of the reference tokenizer (plugins/scanners/vue/src/tokens.ts), so local names become slots while operators, literals, property names and undeclared names, including a recursive call's own name and index bounds, stay as written. Anonymous callbacks, functions on an object literal passed directly to a call, and initializer code get no tokens, and no body is filtered by size. Verified with test/fixtures/vue-duplicates and test-bun/vue-lint.test.ts: groma lint with the built package reports the renamed-locals pair as identical copies and the threshold-changed pair as not identical, and reports nothing for callbacks, small bodies, the recursive pair or the indexed pair; one body's tokens, including an 'as' assertion, equal the TypeScript scanner's tokens for the same body in a module. Isolated bun run check exit 0 and the Vue package build both passed. Documented in docs/scanners/vue/index.md.
 
 Review round: after external cold reviews, the TypeScript, Vue and JavaScript scanners share one compared-operation rule and tokenizer, plugins/scanners/typescript-operations.ts, which each scanner calls with the compiler that parsed its nodes; the three tokenizer copies and rule copies are gone. Through it, Vue no longer compares callbacks on an object literal wrapped in parentheses, as, satisfies or ! before a call, compares constructors, and keeps postfix operators, grouping, typeof, else, catch, finally, index, template text, regular expressions, ?., spread, this and super in body tokens, so such bodies are no longer reported as identical copies. Verified by red tests on the distinct-bodies, vue-duplicates and javascript fixtures, a probe showing identical compared operations across the native SDK, TypeScript 5.9.3 and 6.0.3 on the repository's own sources, bun run check in an isolated worktree, and the Vue and JavaScript package builds.
+
+Simplicity round: #name members and destructured property names now stay in body tokens, the Vue compared body no longer depends on evidence order, and dead code, duplicated defaults and unused exports are gone, verified by new red tests and an isolated bun run check.
 <!-- SECTION:FINAL_SUMMARY:END -->

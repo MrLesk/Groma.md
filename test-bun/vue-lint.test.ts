@@ -1,10 +1,13 @@
 import { expect, test } from 'bun:test'
 import type { ScanOperation } from '@groma/scanner'
-import { cp, mkdtemp, rm } from 'node:fs/promises'
+import { cp, mkdtemp, readFile, rename, rm } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { buildPackage } from '../plugins/scanners/vue/build.ts'
+import { VueEvidence } from '../plugins/scanners/vue/src/evidence.ts'
 import { scanVue } from '../plugins/scanners/vue/src/index.ts'
+import { addComparedOperations } from '../plugins/scanners/vue/src/operations.ts'
+import { vueProject } from '../plugins/scanners/vue/src/project.ts'
 import { scanTypeScriptSource } from '../plugins/scanners/typescript/src/scan.ts'
 import { addScanner } from '../src/scanner/modules/inventory.ts'
 
@@ -69,16 +72,26 @@ test.concurrent('the Vue scanner and the TypeScript scanner report the same toke
   } finally { await rm(temporary, { recursive: true, force: true }) }
 }, 120000)
 
-test.concurrent('a recursive call keeps the called name and an index keeps its bounds', async () => {
-  const { temporary, root } = await fixture()
+test.concurrent('a template binding keeps the compared body of the function it names, whichever is recorded first', async () => {
+  const temporary = await mkdtemp(path.join(os.tmpdir(), 'groma-vue-order-'))
+  const root = path.join(temporary, 'project')
   try {
-    const vue = (await scanVue(root))!
-    const tokens = (file: string) => vue.operations!.find(operation => operation.file === file)!.tokens
-
-    // Two recursive bodies differ by the name they call; two indexed bodies differ by their bounds.
-    expect(tokens('Depth.vue')).toContain('depth')
-    expect(tokens('Depth.vue')).not.toEqual(tokens('Height.vue'))
-    expect(tokens('Head.vue')).toEqual(expect.arrayContaining(['0', '2']))
-    expect(tokens('Head.vue')).not.toEqual(tokens('Tail.vue'))
+    await cp(path.resolve(import.meta.dir, '../test/fixtures/vue-output'), root, { recursive: true })
+    await rename(path.join(root, 'receiver.ts.fixture'), path.join(root, 'receiver.ts'))
+    await rename(path.join(root, 'logic.ts.fixture'), path.join(root, 'logic.ts'))
+    const git = Bun.spawn(['git', 'init', '--quiet'], { cwd: root, stdout: 'ignore', stderr: 'pipe' })
+    expect(await git.exited, await new Response(git.stderr).text()).toBe(0)
+    const { project } = vueProject(root)!
+    const evidence = new VueEvidence(project)
+    // The compared bodies are recorded before the template bindings name the same functions.
+    addComparedOperations(project, evidence.operations)
+    for (const source of project.files) {
+      const sfc = project.sfc(source.fileName)
+      if (sfc) evidence.inspect(source.fileName, sfc)
+    }
+    const host = await readFile(path.join(root, 'Host.vue'), 'utf8')
+    const handler = `Host.vue#${host.indexOf('(value: string) =>')}`
+    expect(evidence.invocations.some(invocation => invocation.targets.includes(handler))).toBe(true)
+    expect(evidence.operations.get(handler)?.tokens).toBeDefined()
   } finally { await rm(temporary, { recursive: true, force: true }) }
-}, 120000)
+})

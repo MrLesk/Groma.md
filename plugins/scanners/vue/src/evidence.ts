@@ -138,12 +138,16 @@ export class VueEvidence {
     return declared
   }
 
-  /** One operation per function, shared by binding and HTTP facts; undefined when no source position maps. */
+  /**
+   * One operation per function, shared by binding and HTTP facts; undefined when no source position maps. An entry
+   * already recorded for the function, such as its compared body, is kept.
+   */
   operationId(node: Operation): string | undefined {
     const position = this.project.position(node)
     if (position === undefined) return undefined
     const file = relative(this.project.root, node.getSourceFile().fileName)
     const id = `${file}#${position}`
+    if (this.operations.has(id)) return id
     const declared = ts.isFunctionDeclaration(node) || ts.isMethodDeclaration(node) ? node.name : undefined
     const name = declared !== undefined && ts.isIdentifier(declared) ? declared.text
       : ts.isVariableDeclaration(node.parent) ? node.parent.name.getText() : undefined

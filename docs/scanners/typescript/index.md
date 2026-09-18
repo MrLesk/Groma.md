@@ -57,7 +57,9 @@ Parameters and local names become slots. These stay in the tokens as written:
   an element access such as `items[key]`;
 - string, template text, number, bigint and regular expression literals, `true`,
   `false`, `null`, `this` and `super`;
-- property names, the operation's own name and names declared elsewhere;
+- property names, including `#name` members and the property names a
+  destructuring pattern reads, the operation's own name and names declared
+  elsewhere;
 - parentheses around an operator expression, so `(a + b) * c` and `a + b * c`
   are different bodies. Parentheses around a name or a call do not change a
   body, and neither do type annotations and assertions.
