@@ -6,8 +6,9 @@ use ra_ap_syntax::ast::{self, HasArgList};
 use ra_ap_syntax::{AstNode, SyntaxNode};
 use serde_json::{Value, json};
 
+use crate::client::is_client;
 use crate::scan::{Source, owned_nodes};
-use crate::text::{literal_string, path_tail};
+use crate::text::{callee, first_argument, literal_string, path_tail};
 use crate::url::{Constants, request_path, url_parts};
 
 /// Client calls that name their method, such as `client.get(url)` or `reqwest::get(url)`.
@@ -26,7 +27,7 @@ pub fn requests(
             let (Some(function), Some(body)) = (sema.to_def(&syntax), syntax.body()) else { continue };
             let Some(operation) = functions.get(&function) else { continue };
             for node in owned_nodes(body.syntax()) {
-                if let Some((method, url)) = client_call(&node) {
+                if let Some((method, url)) = client_call(sema, &node) {
                     let mut fact = request_path(&url_parts(sema, names, &url));
                     fact["operation"] = json!(operation);
                     if let Some(method) = method {
@@ -41,7 +42,7 @@ pub fn requests(
 }
 
 /// The method and URL of one recognized client call.
-fn client_call(node: &SyntaxNode) -> Option<(Option<String>, ast::Expr)> {
+fn client_call(sema: &Semantics<'_, RootDatabase>, node: &SyntaxNode) -> Option<(Option<String>, ast::Expr)> {
     if let Some(call) = ast::CallExpr::cast(node.clone()) {
         return client_function(&call);
     }
@@ -53,7 +54,7 @@ fn client_call(node: &SyntaxNode) -> Option<(Option<String>, ast::Expr)> {
         let url = arguments.next()?;
         return builder(&call).then(|| (chain_method(&call), url));
     }
-    if !sends(&call) {
+    if !sends(&call) || !is_client(sema, &call.receiver()?) {
         return None;
     }
     if name == "request" {
@@ -66,14 +67,12 @@ fn client_call(node: &SyntaxNode) -> Option<(Option<String>, ast::Expr)> {
 
 /// `reqwest::get(url)` and `reqwest::blocking::get(url)` name both the client and the method.
 fn client_function(call: &ast::CallExpr) -> Option<(Option<String>, ast::Expr)> {
-    let ast::Expr::PathExpr(path) = call.expr()? else { return None };
-    let path = path.path()?;
-    let name = path.segment()?.name_ref()?.text().to_string();
-    let reqwest = path.syntax().descendants().filter_map(ast::NameRef::cast).any(|part| part.text() == "reqwest");
-    if !reqwest || !METHODS.contains(&name.as_str()) {
+    let path = callee(call);
+    let name = path.last()?;
+    if !path.iter().any(|part| part == "reqwest") || !METHODS.contains(&name.as_str()) {
         return None;
     }
-    Some((Some(name.to_uppercase()), call.arg_list()?.args().next()?))
+    Some((Some(name.to_uppercase()), first_argument(call.arg_list())?))
 }
 
 /// A request is sent when its builder chain reaches `send`.
@@ -92,7 +91,7 @@ fn chain_method(call: &ast::MethodCallExpr) -> Option<String> {
     let calls = chain(call).chain(receiver_calls(call));
     calls
         .filter(|other| other.name_ref().is_some_and(|name| name.text() == "method"))
-        .find_map(|other| method_name(&other.arg_list()?.args().next()?))
+        .find_map(|other| method_name(&first_argument(other.arg_list())?))
 }
 
 /// An uppercase method from `Method::GET` or from a literal such as `"GET"`.

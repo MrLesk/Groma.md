@@ -106,22 +106,34 @@ macros with `service`, `configure`, `web::scope` and `web::resource`, Rocket's
 route attribute macros with `mount` and `routes!`, and the reqwest and hyper
 calls listed below.
 
-Answers to the [producer checklist](../evidence.md#producer-checklist):
+The eight [producer decisions](../evidence.md#producer-checklist) for Rust:
 
 1. **Prefixes.** Every literal prefix the source declares: an axum `nest` path, a
    Rocket `mount` base, an actix `web::scope` or `web::resource` path, and the
    route's own path. A router function another function nests carries that prefix,
-   however deep. A prefix that is not literal reports nothing for the routes under
-   it, and neither does a route whose own path is not literal.
-2. **Endpoints.** Only route declarations: `route` with a method router such as
-   `get(handler).post(other)`, `route` with actix's `web::get().to(handler)`, and a
-   handler whose attribute macro states a method and a path, once something
-   registers it. `any` reports the `*` method. `layer`, `with_state` and other
-   wrapping calls keep the routes they wrap. `fallback`, `route_service`,
-   `nest_service`, `wrap` middleware, `on(MethodFilter::GET, handler)`, and a
-   handler this scan cannot resolve to a function report nothing. So does an
-   attribute handler nothing registers, because the prefix it is served under is
-   unknown, and an actix resource route with no path of its own.
+   however deep, and so does a router bound to a local that is nested once. A
+   prefix that is not literal reports nothing for the routes under it, and neither
+   does a route whose own path is not literal. So does a router passed to a call
+   other than `nest`, `mount`, `merge`, `service`, `configure` or `serve`, such as
+   a helper that nests it, and a router assigned to a variable. A route or service
+   is read only on a chain that starts at `App::new()`, `Router::new()`,
+   `rocket::build()`, `rocket::custom(..)`, `web::scope(..)`, `web::resource(..)`,
+   an immutable `let` bound to one of these, or a parameter typed `ServiceConfig`,
+   `Router` or `Rocket`, which carry no prefix of their own. Any other start, such
+   as a scope another function returns, a `Scope` parameter, a field or a `mut`
+   binding, may carry a prefix the scan cannot read.
+2. **Endpoints.** Only route declarations that the source serves: `route` with a
+   method router such as `get(handler).post(other)`, `route` with actix's
+   `web::get().to(handler)`, and a handler whose attribute macro states a method
+   and a path, once something registers it. The root is proved by a chain built on
+   `App::new()`, `rocket::build()` or `rocket::custom(..)`, and by an axum router
+   passed to `serve`, such as `axum::serve(listener, app())`; a router function
+   nothing registers or serves reports nothing. `any` reports the `*` method.
+   `layer`, `with_state` and other wrapping calls keep the routes they wrap.
+   `fallback`, `route_service`, `nest_service`, `wrap` middleware,
+   `on(MethodFilter::GET, handler)`, and a handler this scan cannot resolve to a
+   function report nothing, and neither does an actix resource route with no path
+   of its own.
 3. **Dynamic or unknown.** A `format!` placeholder written between two slashes, or
    between a slash and the end of the path, is dynamic: `format!("/talks/{id}")`.
    A placeholder that shares its segment with other text is unknown:
@@ -133,25 +145,58 @@ Answers to the [producer checklist](../evidence.md#producer-checklist):
 5. **The base.** `client.get("/api/talks")` has no base. A `const` or `static`
    with a literal value, and a `let` bound once to one, read as their text, so
    `format!("{BASE}/talks")` is a literal path; a name the enclosing function binds
-   itself is not read as a crate constant. A name the scan cannot read before the
-   path, such as `self.base` or a setting, sets `configured`. A literal scheme and
-   host, and any other computed base, become a leading unknown segment.
+   itself is not read as a crate constant. A field such as `self.base` or
+   `settings.base`, `std::env::var(..)` and `env!(..)` are settings and set
+   `configured`. A literal scheme and host, a parameter, a mutable or unresolved
+   name, and any other computed base become a leading unknown segment.
 6. **File-location routes.** Rust has none, so every endpoint names its handler
    function.
+7. **Constrained segments.** An actix `{name:regex}` parameter is constrained, such
+   as `{id:\d+}`; one whose regular expression may match `/`, and a catch-all
+   followed by more route text, become a constrained optional catch-all that
+   replaces the rest of the route. `{name:.*}` is a plain optional catch-all and
+   `{name:.+}` a plain catch-all. A segment that mixes text with a placeholder,
+   such as `v{version}`, is a constrained parameter named after its first
+   placeholder. Rocket's `<rest..>` is an optional catch-all, since it also
+   matches no segment. A Rocket parameter whose handler argument is not `&str` or
+   `String`, such as `<id>` with `id: u32` or `<rest..>` with a `PathBuf`, is
+   constrained, because Rocket rejects values the type does not parse before the
+   route matches. axum and actix extractors such as `Path<u32>` check the value
+   after the route matched and constrain nothing.
+8. **Registration order.** actix-web takes the first route that matches, and so
+   does a Rocket application in which any route states `rank`, since ranks
+   override specificity; both report `order`. axum and other Rocket applications
+   prefer the most specific route and report none. The application is the file
+   whose `App::new()` or `rocket::build()` chain serves the endpoint. This scan
+   does not follow registration order, so every position is `0`. An actix-web
+   entry the scan sees but cannot report is a blocker: its readable literal
+   prefix followed by a constrained optional catch-all, with the method when it
+   is known and `*` otherwise, named after the function that registers it, so
+   core derives no row to it and none for a request it could take first.
+   Blockers are a route whose path or handler the scan cannot read, a route or
+   service whose prefix is not readable, `to` or `default_service` on a
+   `web::scope` or `web::resource`, and a `service` or `configure` argument that
+   is not a function, `routes!`, a `web::scope` or `web::resource` chain, or a
+   call to a function that returns one of these.
 
-Route syntax is read in each supported form: `:name` and `{name}` for one segment,
-`{*rest}` and `*rest` for the remainder, actix's `{name:.*}` tail, and Rocket's
-`<name>` and `<rest..>`. A query string is dropped. An actix regular expression, a
-segment that mixes literal text with a parameter, and a catch-all that is not last
-report nothing.
+Route syntax is read in each supported form: `:name`, `{name}` and `<name>` for
+one segment, `{*rest}`, `*rest` and `<rest..>` for the remainder, and actix's
+`{name:regex}`. A query string is dropped. A name or literal outside the path
+characters the fact format allows reports nothing.
 
 Requests come from `reqwest::get` and from the client methods `get`, `post`,
 `put`, `patch`, `delete`, `head` and `options`, as well as
-`request(Method::DELETE, url)`, each when its own value flows into `send`. A URL
-inside such a chain that is only an argument, such as a header value read from a
-map, is not a request. A hyper or http `Request::builder().uri(url)` chain
-reports the method its `method` call states. A request the source splits across statements, a warp filter, and routes
-another crate registers are outside this scan.
+`request(Method::DELETE, url)`, each when its own value flows into `send` and it
+is called on a reqwest client. External crates stay unresolved, so the client is
+read from its declaration: a parameter, `let`, static or struct field typed
+`reqwest::Client`, `reqwest::blocking::Client` or a `Client` its module imports
+from reqwest, `Client::new()` or `Client::default()`, the `build()` of a
+`Client::builder()` chain with `?`, `unwrap()` or `expect(..)`, or a `clone()` of
+a client. A URL inside such a
+chain that is only an argument, such as a header value read from a map, is not a
+request. A hyper or http `Request::builder().uri(url)` chain reports the method
+its `method` call states. A request the source splits across statements, a warp
+filter, and routes another crate registers are outside this scan.
 
 ## Compared operations
 

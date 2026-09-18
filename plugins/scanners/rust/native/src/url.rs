@@ -6,16 +6,16 @@ use ra_ap_syntax::ast::{self, HasArgList, HasName};
 use ra_ap_syntax::{AstNode, SyntaxKind, SyntaxNode, SyntaxToken, T};
 use serde_json::{Value, json};
 
-use crate::text::{bound_names, macro_arguments, string_value, token_string};
+use crate::text::{bound_names, callee, first_argument, macro_arguments, string_value, token_string};
 
 /// How much of a URL the source proves.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Part {
     /// Text the source states, or that the scanner resolves to a literal.
     Text(String),
-    /// A named value the scanner cannot see, such as a setting or a constant declared elsewhere.
-    Named,
-    /// A value the source computes.
+    /// A value read from configuration: a field such as `self.base`, or an environment variable.
+    Setting,
+    /// A value the source computes, or one the scanner cannot resolve, such as a parameter.
     Computed,
 }
 
@@ -84,11 +84,11 @@ fn parts(sema: &Semantics<'_, RootDatabase>, names: &Constants, expression: &ast
         ast::Expr::AwaitExpr(pending) => nested(pending.expr()),
         ast::Expr::BinExpr(binary) => concatenation(sema, names, binary, depth),
         ast::Expr::MethodCallExpr(call) => nested(pass_through(call)),
-        ast::Expr::CallExpr(call) => nested(conversion(call)),
+        ast::Expr::CallExpr(call) => call_parts(sema, names, call, depth),
         ast::Expr::MacroExpr(call) => call.macro_call().map_or_else(computed, |call| template(names, &call)),
         ast::Expr::PathExpr(path) => named_value(sema, names, path, depth),
-        // A field read is a named value, such as `self.base`.
-        ast::Expr::FieldExpr(_) => vec![Part::Named],
+        // A field holds a setting, such as `self.base`.
+        ast::Expr::FieldExpr(_) => vec![Part::Setting],
         _ => computed(),
     }
 }
@@ -109,7 +109,8 @@ fn concatenation(sema: &Semantics<'_, RootDatabase>, names: &Constants, binary: 
     }
 }
 
-const PASS_THROUGH: [&str; 7] = ["to_string", "to_owned", "into", "as_str", "as_ref", "clone", "to_str"];
+const PASS_THROUGH: [&str; 10] =
+    ["to_string", "to_owned", "into", "as_str", "as_ref", "clone", "to_str", "unwrap", "expect", "unwrap_or_default"];
 
 /// The receiver of a call that keeps the text, such as `url.to_string()`.
 fn pass_through(call: &ast::MethodCallExpr) -> Option<ast::Expr> {
@@ -117,19 +118,25 @@ fn pass_through(call: &ast::MethodCallExpr) -> Option<ast::Expr> {
     PASS_THROUGH.contains(&name.text().as_str()).then(|| call.receiver())?
 }
 
-/// The argument of a conversion that keeps the text, such as `String::from(url)`.
-fn conversion(call: &ast::CallExpr) -> Option<ast::Expr> {
-    let ast::Expr::PathExpr(path) = call.expr()? else { return None };
-    let name = path.path()?.segment()?.name_ref()?;
-    (name.text() == "from").then_some(())?;
-    call.arg_list()?.args().next()
+/// A call that keeps its argument's text, such as `String::from(url)`, or reads the environment.
+fn call_parts(sema: &Semantics<'_, RootDatabase>, names: &Constants, call: &ast::CallExpr, depth: usize) -> Vec<Part> {
+    match callee(call).as_slice() {
+        // `std::env::var("API")` and `env::var("API")`.
+        [.., env, var] if env == "env" && var == "var" => vec![Part::Setting],
+        [.., from] if from == "from" => match first_argument(call.arg_list()) {
+            Some(argument) => parts(sema, names, &argument, depth + 1),
+            None => computed(),
+        },
+        _ => computed(),
+    }
 }
 
-/// A path that resolves to a constant, a static or a `let` bound once reads as its literal text.
+/// A path that resolves to a constant, a static or a `let` bound once reads as its value; a
+/// parameter or any other name the scanner cannot resolve is computed.
 fn named_value(sema: &Semantics<'_, RootDatabase>, names: &Constants, path: &ast::PathExpr, depth: usize) -> Vec<Part> {
     match resolved_value(sema, path) {
         Some(value) => parts(sema, names, &value, depth + 1),
-        None => vec![Part::Named],
+        None => computed(),
     }
 }
 
@@ -146,11 +153,13 @@ fn resolved_value(sema: &Semantics<'_, RootDatabase>, path: &ast::PathExpr) -> O
     }
 }
 
-/// `format!` contributes its template text, with one part per placeholder.
+/// `format!` contributes its template text, with one part per placeholder; `env!` reads a setting.
 fn template(names: &Constants, call: &ast::MacroCall) -> Vec<Part> {
     let macro_name = call.path().and_then(|path| path.segment()).and_then(|segment| segment.name_ref());
-    if macro_name.is_none_or(|name| name.text() != "format") {
-        return computed();
+    match macro_name.as_ref().map(|name| name.text().to_string()).as_deref() {
+        Some("format") => {}
+        Some("env") => return vec![Part::Setting],
+        _ => return computed(),
     }
     let Some(tree) = call.token_tree() else { return computed() };
     let arguments = macro_arguments(tree.syntax());
@@ -162,7 +171,7 @@ fn template(names: &Constants, call: &ast::MacroCall) -> Vec<Part> {
     placeholders(&first).into_iter().map(|part| fill(part, names, &shadowed, &mut positional)).collect()
 }
 
-/// A placeholder reads as a constant's text when the source names one, and stays a value otherwise.
+/// A placeholder reads as a constant's text when the source names one, and is computed otherwise.
 fn fill<'a>(
     part: Placeholder,
     names: &Constants,
@@ -171,10 +180,10 @@ fn fill<'a>(
 ) -> Part {
     match part {
         Placeholder::Text(text) => Part::Text(text),
-        Placeholder::Named(name) => constant(&name, names, shadowed).map_or(Part::Named, Part::Text),
+        Placeholder::Named(name) => constant(&name, names, shadowed).map_or(Part::Computed, Part::Text),
         Placeholder::Positional => match positional.next().map(|tokens| argument_part(tokens, names, shadowed)) {
             Some(part) => part,
-            None => Part::Named,
+            None => Part::Computed,
         },
     }
 }
@@ -187,7 +196,8 @@ fn constant(name: &str, names: &Constants, shadowed: &HashSet<String>) -> Option
     names.get(name)?.clone()
 }
 
-/// A positional argument reads as a constant's text, a plain name, or a computed value.
+/// A positional argument reads as a constant's text, a field holding a setting such as
+/// `self.base`, or a computed value.
 fn argument_part(tokens: &[SyntaxToken], names: &Constants, shadowed: &HashSet<String>) -> Part {
     if let [single] = tokens
         && single.kind() == SyntaxKind::IDENT
@@ -195,10 +205,9 @@ fn argument_part(tokens: &[SyntaxToken], names: &Constants, shadowed: &HashSet<S
     {
         return Part::Text(text);
     }
-    let plain = tokens
-        .iter()
-        .all(|token| matches!(token.kind(), SyntaxKind::IDENT | T![.] | T![::] | T![self] | T![&] | T![*]));
-    if plain { Part::Named } else { Part::Computed }
+    let field = tokens.iter().any(|token| token.kind() == T![.])
+        && tokens.iter().all(|token| matches!(token.kind(), SyntaxKind::IDENT | T![.] | T![self] | T![&] | T![*]));
+    if field { Part::Setting } else { Part::Computed }
 }
 
 enum Placeholder {
@@ -272,12 +281,12 @@ pub fn request_path(parts: &[Part]) -> Value {
     fact
 }
 
-/// What precedes the path: nothing, a setting the scanner cannot see, or a base it cannot use.
+/// What precedes the path: nothing, a setting, or a base the scanner cannot use.
 fn base(parts: &[Part]) -> (Base, &[Part]) {
     match parts.first() {
         Some(Part::Text(text)) if authority(text) => (Base::Unknown, parts),
-        Some(Part::Named) if follows_path(&parts[1..]) => (Base::Configured, &parts[1..]),
-        Some(Part::Named | Part::Computed) => (Base::Unknown, &parts[1..]),
+        Some(Part::Setting) if follows_path(&parts[1..]) => (Base::Configured, &parts[1..]),
+        Some(Part::Setting | Part::Computed) => (Base::Unknown, &parts[1..]),
         _ => (Base::None, parts),
     }
 }
@@ -337,7 +346,7 @@ fn flush(segments: &mut Vec<Value>, pieces: &mut Vec<Part>) {
     let taken = std::mem::take(pieces);
     match taken.as_slice() {
         [] => {}
-        [Part::Named | Part::Computed] => segments.push(json!({"kind": "dynamic"})),
+        [Part::Setting | Part::Computed] => segments.push(json!({"kind": "dynamic"})),
         parts if parts.iter().all(|part| matches!(part, Part::Text(_))) => {
             let text: String = parts.iter().filter_map(|part| match part {
                 Part::Text(text) => Some(text.as_str()),

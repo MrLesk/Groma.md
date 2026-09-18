@@ -93,3 +93,15 @@ pub fn bound_names(node: &SyntaxNode) -> std::collections::HashSet<String> {
         .map(|name| name.text().to_string())
         .collect()
 }
+
+/// The first argument of a call.
+pub fn first_argument(arguments: Option<ast::ArgList>) -> Option<ast::Expr> {
+    arguments?.args().next()
+}
+
+/// The segment names of the path a call names, such as `["web", "scope"]` for `web::scope(..)`.
+pub fn callee(call: &ast::CallExpr) -> Vec<String> {
+    let Some(ast::Expr::PathExpr(path)) = call.expr() else { return Vec::new() };
+    let segments = path.path().into_iter().flat_map(|path| path.segments().collect::<Vec<_>>());
+    segments.filter_map(|segment| Some(segment.name_ref()?.text().to_string())).collect()
+}

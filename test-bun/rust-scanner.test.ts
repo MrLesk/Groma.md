@@ -174,12 +174,13 @@ rustTest('a Rust impl joins the type its module path names, and only code that c
   })
 }, 60000)
 
-/** One fact as `file name METHOD /path`, with the request's configuration base marked. */
-function segments(path: { kind: string; name?: string; value?: string }[]): string {
+/** A path as `/talks/:id`, with `?` after an optional and `!` after a constrained segment. */
+function segments(path: { kind: string; name?: string; value?: string; optional?: boolean; constrained?: boolean }[]): string {
   return path.map(segment => {
+    const flags = `${segment.optional ? '?' : ''}${segment.constrained ? '!' : ''}`
     if (segment.kind === 'literal') return segment.value
-    if (segment.kind === 'parameter') return `:${segment.name}`
-    if (segment.kind === 'catch-all') return `*${segment.name}`
+    if (segment.kind === 'parameter') return `:${segment.name}${flags}`
+    if (segment.kind === 'catch-all') return `*${segment.name}${flags}`
     return segment.kind
   }).join('/')
 }
@@ -192,32 +193,64 @@ rustTest('Rust HTTP facts cover axum, actix-web and Rocket endpoints, reqwest re
       const operation = operations.get(id)!
       return `${operation.file.replace('src/', '')} ${operation.name}`
     }
-    // The nested router, the scope, the service configuration and the mount supply every prefix.
-    // A non-literal route or prefix and a handler nobody registers are absent.
-    expect(observation.httpEndpoints!.map(fact => `${where(fact.operation)} ${fact.method} /${segments(fact.path)}`).sort()).toEqual([
-      'actix_routes.rs create POST /api/sessions',
-      'actix_routes.rs list GET /api/sessions',
-      'actix_routes.rs show GET /api/sessions/:id',
-      'actix_routes.rs stats GET /stats',
+    // The nested router, a router bound to a local, the scope, the service configuration and the
+    // mount supply every prefix; `serve`, `App::new()` and `rocket::build()` prove the root. A
+    // non-literal route or prefix, a router nothing serves, a router passed to a helper or a
+    // `mut` binding, and a handler nobody registers are absent. actix-web takes the first
+    // registered match, so its endpoints carry their order, and the entries it cannot read are
+    // blockers named after the registering function.
+    const order = (fact: { order?: { application: string; position: number } }) =>
+      fact.order ? ` @${fact.order.application.replace('src/', '')}:${fact.order.position}` : ''
+    expect(observation.httpEndpoints!.map(fact => `${where(fact.operation)} ${fact.method} /${segments(fact.path)}${order(fact)}`).sort()).toEqual([
+      // The file whose App::new() chain serves a route is its application.
+      'actix_reports.rs reports GET /reports @actix_routes.rs:0',
+      // A resource that takes every method, and a scope a helper receives, are blockers.
+      'actix_routes.rs add * /legacy/api/*rest?! @actix_routes.rs:0',
+      'actix_routes.rs create POST /api/sessions @actix_routes.rs:0',
+      'actix_routes.rs files GET /files/*tail? @actix_routes.rs:0',
+      'actix_routes.rs info GET /:version!/info @actix_routes.rs:0',
+      'actix_routes.rs latest GET /archive/latest @actix_routes.rs:0',
+      'actix_routes.rs legacy * /archive/:id/*rest?! @actix_routes.rs:0',
+      'actix_routes.rs list GET /api/sessions @actix_routes.rs:0',
+      'actix_routes.rs server * /admin/assets/*rest?! @actix_routes.rs:0',
+      'actix_routes.rs server * /internal/*rest?! @actix_routes.rs:0',
+      'actix_routes.rs server * /legacy/api/*rest?! @actix_routes.rs:0',
+      'actix_routes.rs server * /relocation/*rest?! @actix_routes.rs:0',
+      'actix_routes.rs server GET /health/ping/*rest?! @actix_routes.rs:0',
+      'actix_routes.rs show GET /api/sessions/:id @actix_routes.rs:0',
+      'actix_routes.rs stats GET /stats @actix_routes.rs:0',
+      'actix_routes.rs summary GET /local/summary @actix_routes.rs:0',
+      'actix_routes.rs tag GET /tags/:id! @actix_routes.rs:0',
       'axum_routes.rs create_talk POST /api/talks',
       'axum_routes.rs health GET /health',
+      'axum_routes.rs list_items GET /v2/items',
       'axum_routes.rs list_talks GET /api/talks',
       'axum_routes.rs proxy * /admin/*path',
       'axum_routes.rs show_talk GET /api/talks/:id',
-      'rocket_routes.rs detail GET /v1/speakers/:id',
+      // A rank overrides Rocket's specificity, so that application's order is unknown.
+      'rocket_ranked.rs by_id GET /ranked/:id! @rocket_ranked.rs:0',
+      'rocket_ranked.rs by_name GET /ranked/:name @rocket_ranked.rs:0',
+      // Rocket checks a parameter whose argument is not a string before the route matches.
+      'rocket_routes.rs bio GET /v1/speakers/:slug/bio',
+      'rocket_routes.rs detail GET /v1/speakers/:id!',
       'rocket_routes.rs index GET /v1/speakers',
-      'rocket_routes.rs upload POST /v1/speakers/:id/photos/*rest',
+      'rocket_routes.rs upload POST /v1/speakers/:id!/photos/*rest?!',
     ])
-    // A constant resolves to its text, one computed segment is dynamic, partly known text and a
-    // host are unknown, and a setting sets configured. A map lookup is not a request, not even
-    // as an argument inside a chain that sends one.
+    // A constant resolves to its text, one computed segment is dynamic, partly known text, a host
+    // and a parameter base are unknown, and a field or environment setting sets configured. A map
+    // lookup is not a request, not even as an argument inside a chain that sends one, and neither
+    // is a `get(..).send()` chain on something other than a reqwest client: a local type, a value a
+    // client method returns, or a module's own `Client`.
     expect(observation.httpRequests!.map(fact => {
       return `${where(fact.operation)} ${fact.method} /${segments(fact.path)}${fact.configured ? ' configured' : ''}`
     }).sort()).toEqual([
+      'client.rs based GET /unknown/talks',
       'client.rs built PUT /api/talks/42',
+      'client.rs built_client GET /api/talks',
       'client.rs create_talk POST /api/talks',
       'client.rs external GET /unknown/talks',
       'client.rs forwarded POST /api/talks',
+      'client.rs from_environment GET /talks configured',
       'client.rs list_talks GET /api/talks',
       'client.rs partial GET /api/talks/unknown',
       'client.rs remove_talk DELETE /api/talks/dynamic',
