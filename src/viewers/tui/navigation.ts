@@ -1,6 +1,6 @@
 import type { TaskDiffPayload } from '../source/diff.ts'
 import { flowsThrough } from '../flows.ts'
-import { parentOfElements, promotedPeer, relationshipPairs, type RelationshipPair } from '../relationship-text.ts'
+import { parentOfElements, relationshipPairs, type RelationshipPair } from '../relationship-text.ts'
 import { reduceFlowReading } from './flow-navigation.ts'
 import type { PaneVisibility } from './layout.ts'
 import {
@@ -358,11 +358,13 @@ function toggleDetailsMode(current: ViewerState, mode: 'profile' | 'keys'): View
     : { ...current, [mode]: true, focus: 'details', panes: { ...current.panes, details: true }, detailsScroll: 0 }
 }
 
-/** The peer a relationship row names, its other end at the selection's depth, becomes the selection at its own level. */
+/**
+ * The peer a relationship row names becomes the selection at its own level. A details command exists only while an
+ * element is selected, and a relationship command is its pair's first relationship.
+ */
 function followRelationship(world: TerminalViewModel, current: ViewerState, relationship: AnnotatedRelationship): ViewerState {
-  const ends = current.currentId === undefined ? null : promotedPeer(relationship, current.currentId, parentOfElements(world.elements))
-  const peer = ends === null ? undefined : elementsById(world).get(ends.peerId)
-  if (peer === undefined) return current
+  const pair = selectionPairs(world, current.currentId!).find(candidate => candidate.relationships[0]!.id === relationship.id)!
+  const peer = elementsById(world).get(pair.peerId)!
   return syncTree(world, { ...current, level: levelFor(peer), currentId: peer.representationId, actionCursor: undefined })
 }
 
