@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@claude'
 created_date: '2026-09-16 19:38'
-updated_date: '2026-09-17 22:43'
+updated_date: '2026-09-18 06:23'
 labels: []
 dependencies: []
 references:
@@ -115,4 +115,6 @@ Full-context complexity review applied (behavior identical apart from the fact s
 Verification: focused tests 38 of 38; isolated bun run check exited 0 (Bun 434 passed, 25 skipped, 0 failed; Node 16 passed).
 
 Follow-up: core compares literal path segments without regard to case, including the dropped-prefix comparison, because frameworks such as ASP.NET route case-insensitively and generate paths like /api/Talks from a controller name. A row keeps the endpoint's own spelling. Two endpoints differing only in case either share a file or already fall under the one-file abstention. Tests added for a case-differing match, a dropped prefix before a case-differing segment, and two files differing only in case (no row). Recorded in docs/relationship-inference.md and the evidence.md checklist. Isolated bun run check exited 0 (Bun 439 passed, 25 skipped, 0 failed; Node 16 passed).
+
+Follow-up: checklist decision 3 in docs/scanners/evidence.md now states that the segment a value is written in decides dynamic versus unknown, instead of asking whether a runtime value might contain a slash, which is what every producer implements.
 <!-- SECTION:NOTES:END -->
