@@ -64,5 +64,13 @@ export declare namespace Tools.Text {
   export function trim(value: string): string
 }
 
+// The file's export list names `listed`, but not this namespace member.
+export namespace Shapes {
+  interface listed {
+    area(): number
+  }
+  export type Area = listed
+}
+
 export { listed }
 export default described

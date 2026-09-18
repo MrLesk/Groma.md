@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@claude'
 created_date: '2026-09-16 19:38'
-updated_date: '2026-09-18 19:31'
+updated_date: '2026-09-18 23:03'
 labels: []
 dependencies: []
 references:
@@ -78,6 +78,8 @@ Review round (Codex, Grok cold reviews at cf8e7975):
 8. Methods named by a string or numeric literal, such as "save"() {}, are listed under their literal name (Codex u04 TASK-410.7, 410.8, 410.9); computed names stay unlisted.
 9. Red tests: the TypeScript outline fixture gains quoted and numeric method names, checked through the TypeScript scanner and the Angular package; a JavaScript outline fixture member with a JSDoc @private tag stays public.
 Not in this task: Codex u04 TASK-410 #1 (terminal navigation on declarations sharing a line) belongs to the viewer lane.
+
+10. Simplicity round: the outline fixture gains a namespace member named like the file's export list entry, which stays private, so the rule that export lists do not reach into a namespace is tested; typescript-outline.ts exports only what other modules import.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
@@ -98,6 +100,8 @@ Verification: bun run check in an isolated worktree at ed695d75 plus this task's
 Not in this lane: Codex u04 TASK-410 #1 (terminal navigation stuck on declarations sharing a line) is a viewer finding.
 
 Cold review of this round, applied: test/fixtures/typescript-outline/outline.ts gains overloads, a private method, an accessor, a function expression published by export default, and a nested Tools.Text namespace, and test-bun/code-outline.test.ts expects member visibility too, so the TypeScript scanner, Angular and parity tests cover the kind-name reading; typescript-outline.ts declares type Kinds and drops the casts after boolean aliases (typeMembers returns a type's members); docs/scanners/creating-a-plugin.md lists methods with a computed name among the declarations not listed (only this hunk is committed; the file also holds another lane's edits). Re-verification: bun run check in an isolated worktree at bec16796 plus this task's files exit 0 (tsc clean; bun 570 pass, 35 skip, 0 fail); the Angular, React, Vue and JavaScript packages build there. Its two new lint warnings were in the fixture (a function expression and an unused private method); the fixture now uses the method and states why the function expression stays, biome reports nothing for it, and the outline, Angular and parity tests pass (11 pass).
+
+Simplicity round (cold junior-maintainer review of the fix round), applied: test/fixtures/typescript-outline/outline.ts gains a namespace member named like the file's export list entry (listed), which the outline keeps private because a file's export list does not reach into a namespace; test-bun/code-outline.test.ts expects it, and the test fails when the namespace scope keeps the file's export list. typescript-outline.ts no longer exports OutlineSyntax, OutlineCompiler, OutlineContext, OutlineBlock or SourceFile, which no other module imports. Verification: bun run check in an isolated worktree at fe407bc9 plus these files exit 0 (biome: pre-existing items only; tsc clean; bun 590 pass, 35 skip, 0 fail); the Angular, React, Vue and JavaScript packages build.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
@@ -106,4 +110,6 @@ Cold review of this round, applied: test/fixtures/typescript-outline/outline.ts 
 Angular-owned TypeScript files now show their source outline. New plugins/scanners/typescript-outline.ts applies the documented TypeScript outline rules by parsing each file with the classic compiler a framework scanner passes in (typed structurally, since the root typescript package is the 7.x SDK); the Angular scanner passes its pinned 5.9.3 compiler and outlines only .ts files. Core now outlines each Code file once, with the lowest configured scanner id among its links and the symbols of all its links, fixing duplicated outlines and terminal stops for files Angular and TypeScript both own. Verified with test/fixtures/angular-outline and test-bun/angular-scanner.test.ts (outline rules and lines through the built package, parity with the TypeScript reference on both outline fixtures, one outline with the entry mark for a co-owned file), an isolated bun run check (exit 0), the Angular package build, and tui-test on a scanned fixture copy. Documented in docs/scanners/angular/index.md.
 
 Review round: after external cold reviews, the TypeScript scanner and the Angular, React, Vue and JavaScript scanners share one outline engine, plugins/scanners/typescript-outline.ts, which reads a parsed source by syntax kind so each scanner passes the compiler that parsed it; visibility comes from the modifiers written in the source, and methods named by a string or number literal, such as "save"() {}, are listed. Verified by the extended typescript-outline and javascript-outline fixtures (failing without the fix), the Angular parity tests, bun run check in an isolated worktree and the four package builds.
+
+Simplicity round: a fixture namespace member named like an export list entry now guards the rule that export lists do not reach into a namespace, and the outline module exports only its three functions.
 <!-- SECTION:FINAL_SUMMARY:END -->
