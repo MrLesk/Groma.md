@@ -40,8 +40,9 @@ export async function scanCSharpSource(repositoryRoot: string, settings: Scanner
 export async function readCSharpOutline(repositoryRoot: string, references: readonly SourceReference[], settings: ScannerSettings = {}): Promise<CodeFile[]> {
   await requireWorker()
   const root = path.resolve(repositoryRoot)
-  const { stdout } = await run(workerExecutable, ['--outline', JSON.stringify({ root, references })], {
-    cwd: root, timeoutSeconds: parseCSharpSettings(settings).timeoutSeconds,
+  // The request travels on standard input: many Code files would exceed the command-line length limit.
+  const { stdout } = await run(workerExecutable, ['--outline'], {
+    cwd: root, timeoutSeconds: parseCSharpSettings(settings).timeoutSeconds, input: JSON.stringify({ root, references }),
   })
   return JSON.parse(stdout) as CodeFile[]
 }

@@ -5,6 +5,8 @@ export interface RunOptions {
   timeoutSeconds?: number
   maxOutputBytes?: number
   env?: NodeJS.ProcessEnv
+  /** The command's complete standard input; without it, standard input is empty. */
+  input?: string
 }
 
 function stopTree(child: ChildProcess): void {
@@ -25,7 +27,7 @@ export function run(command: string, args: readonly string[], options: RunOption
     const child = spawn(script ? process.execPath : command, script ? [command, ...args] : [...args], {
       cwd: options.cwd,
       env: { ...process.env, DOTNET_CLI_TELEMETRY_OPTOUT: '1', DOTNET_CLI_WORKLOAD_UPDATE_NOTIFY_DISABLE: '1', ...options.env },
-      stdio: ['ignore', 'pipe', 'pipe'], detached: process.platform !== 'win32', windowsHide: true,
+      stdio: ['pipe', 'pipe', 'pipe'], detached: process.platform !== 'win32', windowsHide: true,
     })
     let stdout = ''
     let stderr = ''
@@ -49,6 +51,8 @@ export function run(command: string, args: readonly string[], options: RunOption
       else stderr += chunk
     })
     child.on('error', error => { clearTimeout(timer); reject(error) })
+    child.stdin.on('error', () => { /* A worker that exits before reading its input is reported on close. */ })
+    child.stdin.end(options.input)
     child.on('close', code => {
       clearTimeout(timer)
       if (failure) reject(failure)
