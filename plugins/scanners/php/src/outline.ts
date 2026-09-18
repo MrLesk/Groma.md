@@ -1,24 +1,12 @@
 import { readFile } from 'node:fs/promises'
 import path from 'node:path'
 import type { CodeDeclaration, CodeFile, CodeSymbol, CodeVisibility, SourceReference } from '@groma/scanner'
-import { nameOf, parsePhp, symbolName, typeKinds, type Syntax } from './syntax.ts'
-
-/** A php-parser node whose fields are read by name. */
-type Fields = Syntax & Record<string, unknown>
+import { field, list, nameOf, parsePhp, symbolName, typeKinds, type Fields, type Syntax } from './syntax.ts'
 
 interface OutlineScope {
   /** Symbols the Code reference names, spelled as the scan names them. */
   symbols: readonly string[]
   namespace: string
-}
-
-/** The one place this file widens php-parser nodes to read a child node or list by field name. */
-function field(node: Syntax, key: string): Fields | undefined {
-  return (node as Fields)[key] as Fields | undefined
-}
-
-function list(node: Syntax, key: string): Fields[] {
-  return (node as Fields)[key] as Fields[]
 }
 
 function lineOf(node: Syntax): number {
