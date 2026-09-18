@@ -1,3 +1,5 @@
+import { isReservedDocument } from './architecture-path.ts'
+
 export function kebabCase(name: string): string {
   return name
     .trim()
@@ -27,4 +29,9 @@ export function groupAddress(container: string, name: string): string {
 /** The slash of a group address tells it apart from an element id. */
 export function isGroupAddress(id: string): boolean {
   return id.includes('/')
+}
+
+/** IDs no element may take: a reserved document name, or a word the CLI reads as a relation or group address. */
+export function isReservedId(id: string): boolean {
+  return isReservedDocument(`${id}.md`) || id === 'relation' || id === 'group'
 }

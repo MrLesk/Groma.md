@@ -3,7 +3,6 @@ import path from 'node:path'
 import { isDeepStrictEqual } from 'node:util'
 
 import { detectDuplicatedLogic, rememberArchitectureFindings } from './architecture-findings.ts'
-import { isReservedId } from './architecture-path.ts'
 import { buildArchitectureModel } from './architecture-model.ts'
 import { storedConnections } from './relationship-markdown.ts'
 import { loadArchitecture } from './architecture-reader.ts'
@@ -14,7 +13,7 @@ import {
   upsertCode,
   writeDocument,
 } from './markdown-emitter.ts'
-import { kebabCase } from './naming.ts'
+import { isReservedId, kebabCase } from './naming.ts'
 import { componentNames, sourceStem } from './scan-component-naming.ts'
 import { sourceUnitGroups } from './scan-source-units.ts'
 import { c4Kind, requireGromaMapping } from './okf-profile.ts'

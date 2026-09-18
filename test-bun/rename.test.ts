@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { cp, mkdtemp, rm } from 'node:fs/promises'
+import { cp, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { createScanObservation } from '@groma/scanner'
@@ -9,7 +9,6 @@ import { loadAnnotatedArchitecture, reconcileScanObservations } from '../src/cor
 import type { StructuralResult } from '../src/curate.ts'
 import { editArchitecture } from '../src/edit.ts'
 import { addFlow } from '../src/flow-authoring.ts'
-import { readFile, writeFile } from 'node:fs/promises'
 import { RELATIONSHIPS_TYPE, requireGromaMapping } from '../src/okf-profile.ts'
 import { addRelation } from '../src/relation.ts'
 import type { AnnotatedArchitectureModel } from '../src/types.ts'
@@ -53,7 +52,7 @@ test.concurrent('a renamed component keeps its Code at the new document, and lat
     const result = await editArchitecture(root, { id: 'a', newId: 'order-entry' }) as StructuralResult
 
     expect(result.id).toBe('order-entry')
-    expect(result.replacements).toEqual([{ absorbedId: 'a', survivingId: 'order-entry' }])
+    expect(result.replacements).toEqual([{ oldId: 'a', newId: 'order-entry' }])
     expect(result.created).toEqual([await documentOf(root, 'order-entry') ?? ''])
     expect(result.removed).toHaveLength(1)
 

@@ -82,7 +82,7 @@ test.concurrent('combining two systems moves their containers and components, an
     const [absorbed, survivor] = ids(before, 'system')
     const result = await editArchitecture(root, { id: survivor!, combine: [absorbed!] }) as StructuralResult
 
-    expect(result.replacements).toEqual([{ absorbedId: absorbed!, survivingId: survivor! }])
+    expect(result.replacements).toEqual([{ oldId: absorbed!, newId: survivor! }])
     // The absorbed container and its component are written under the survivor and removed from the old system.
     expect(result.created).toHaveLength(2)
     expect(result.removed).toHaveLength(3)
