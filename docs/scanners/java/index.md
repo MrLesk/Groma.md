@@ -81,15 +81,15 @@ keeps only its literal entries.
 Declarations under control flow (`if`, `else`, `when`, `switch`, loops and
 `try`), inside a function, for a source set the scanner cannot name, such as
 `named(name)` or every source set in `all { }`, or inside `subprojects`,
-`configure(...)` or `project(...)` blocks produce the warning and are not
-applied, even with literal values. Settings that assign `projectDir` or
-`buildFileName` also produce it; those projects keep Gradle's default directory
-and build script name. A declaration inside `allprojects` applies to the
-project whose script holds it and produces the warning for the other projects
-it configures. A project left without Java sources supplies no observation,
-but its warnings still reach the scan report. The scanner does not read
-convention plugins, `buildSrc` logic, `gradle.properties` or declared source
-encodings.
+`rootProject`, `configure(...)` or `project(...)` blocks produce the warning
+and are not applied, even with literal values. Settings that assign
+`projectDir` or `buildFileName` also produce it; those projects keep Gradle's
+default directory and build script name. A declaration inside `allprojects`
+applies to the project whose script holds it and produces the warning for the
+other projects it configures. A project left without Java sources supplies no
+observation, but its warnings still reach the scan report. The scanner does
+not read convention plugins, `buildSrc` logic, `gradle.properties` or declared
+source encodings.
 
 ## Source outline
 

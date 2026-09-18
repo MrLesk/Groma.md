@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@claude'
 created_date: '2026-09-16 20:15'
-updated_date: '2026-09-18 18:14'
+updated_date: '2026-09-18 23:00'
 labels: []
 dependencies: []
 references:
@@ -96,6 +96,8 @@ Review-fix round (external cold reviews of HEAD cf8e7975):
 Not in this task: Java source listing versus the scan (plugins/scanners/java/src/index.ts, owned by the TASK-413 lane).
 
 14. Cold review of steps 10-13: a function is recognized by its shape, a name after the chain before the block (def f() {, void f() {, private fun f() {), which adds a function marker to the path instead of listing def and fun as control flow; all, configureEach, each and forEach blocks configure every source set, so a source directory under them is treated like one under an unreadable selector; configure(...) and project(...) with a non-literal argument count as configuration for other projects.
+
+15. Simplicity review: a project(...) or configure(...) selector is replaced in the path by one marker for other projects where the call is still visible (chain and blockScope), so project('app') { } warns like project(':app') { }; rootProject { } counts as another project. reasonFor becomes a plain conditional(path, settings) check with the reader called inline. The script table keeps one Groovy and one Kotlin function row and gains else, catch and finally rows and project('app') and rootProject rows.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
@@ -121,6 +123,8 @@ Review-fix round (external cold reviews of HEAD cf8e7975): readBlock read every 
 Verification: test-bun/java-gradle.test.ts adds test/fixtures/java-gradle-scopes (allprojects release 17 applied with its warning; if/else, a def function and named(sourceSetName) reported on lines 10, 12, 16 and 19 and not applied, so only src/main/java is scanned) and a table of nine scripts (four function forms, four every-source-set forms, configure(subprojects)); every case fails on the HEAD reader. The reviewer's 32 probe scripts behave as expected; real builds (junit, rxjava, mockito, commons-cli clones) keep their HEAD results except two new mockito warnings for the includes inside its if (ANDROID_HOME ...) block, which HEAD skipped silently. Isolated worktree at HEAD with only this task's changes: bun run check exit 0 (Biome: only existing warnings; tsc; node 16 pass; bun 557 pass, 35 env-gated skips, 0 fail).
 
 Correction to the line above: the fourth build set named cli is the local fixture repository from the original verification, not a commons-cli clone.
+
+Simplicity review round: project('app') { sourceCompatibility = 8 } applied release 8 to the declaring project without a warning, because only a selector starting with ':' or an unreadable one was recognized and the call form was lost by the time the path was checked. chain and blockScope now replace the selector of project(...) and configure(...) with one marker for other projects while the call is visible, and rootProject { } counts as another project; reasonFor became a plain conditional(path, settings) check with the reader called inline in readGradleScript. The script table in test-bun/java-gradle.test.ts keeps one Groovy and one Kotlin function row and adds else, catch and finally on their own lines plus project('app') and rootProject rows; the project and rootProject rows fail on the previous reader, and removing else, catch and finally from the control-flow set, the marker check or the rootProject check each fails a row. Isolated worktree at 142c6e81 with only this task's changes: bun run check exit 0 (Biome: only an existing warning; tsc; node 16 pass; bun 588 pass, 35 env-gated skips, 0 fail).
 <!-- SECTION:NOTES:END -->
 
 ## Comments
@@ -139,4 +143,6 @@ Coordination from TASK-431 (@codex): I am adding the Swift workspace entry to bu
 The Java scanner now scans Gradle projects without running Gradle. Settings and build scripts (Groovy and Kotlin) are read with the bundled MIT-licensed good-enough-parser: literal includes select projects at Gradle's default directories, literal main source sets add to or replace src/main/java, and the Java version comes from options.release, sourceCompatibility or the toolchain. Declarations only a Gradle run could resolve produce JAVA_GRADLE_UNRESOLVED warnings with script and line, which reach the scan report even when no project produced evidence. Build and settings edits trigger watch rescans. The package bundles the parser and ships THIRD-PARTY-NOTICES.txt; discovery, the Java docs and the README describe Gradle support and its limits. Verified with test-bun/java-gradle.test.ts and three Gradle fixtures, offline packaged scans (only git on PATH, network disabled), groma scan and groma scan --watch runs, real repositories (mockito selects exactly its three Java projects), and bun run check in an isolated worktree.
 
 Review-fix round: Gradle declarations the scanner cannot place on this project are now reported and never applied: those under control flow or inside a function, source directories for a source set it cannot name (a computed selector such as named(name), or every source set through all, configureEach, each or forEach), and configuration for other projects (subprojects, configure(...), project(...)). A literal allprojects declaration applies to the project that declares it and still warns for the others. Verified by the java-gradle-scopes fixture and a script table in test-bun/java-gradle.test.ts that fail on the previous reader, by real Gradle builds keeping their results, and by bun run check in an isolated worktree.
+
+Simplicity round: project(...) with any selector and rootProject { } now count as configuration for other projects, the reason check is one plain predicate, and the script table protects each control-flow word and project form.
 <!-- SECTION:FINAL_SUMMARY:END -->

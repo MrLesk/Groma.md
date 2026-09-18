@@ -24,6 +24,9 @@ const controlFlow = new Set(['if', 'else', 'when', 'switch', 'for', 'while', 'do
 const functionBody = '<function>'
 /** Stands in the path for a selector the scanner cannot read, such as `named(name)`. */
 const unreadable = '?'
+/** Stands in the path for the selector of `project(...)` or `configure(...)`, which name other projects. */
+const otherProjects = '<other projects>'
+const projectSelectors = new Set(['project', 'configure'])
 /** Blocks that configure every element of a collection, such as every source set. */
 const everyElement = new Set(['all', 'configureEach', 'each', 'forEach'])
 
@@ -97,6 +100,11 @@ function selected(node: Node): string[] {
   return [value ?? unreadable]
 }
 
+/** The names a selector after `name` adds to the path. */
+function selector(name: string | undefined, node: Node): string[] {
+  return name !== undefined && projectSelectors.has(name) ? [otherProjects] : selected(node)
+}
+
 /** `sourceSets["main"].java` and `getByName("main").java` name the element they select. */
 function chain(nodes: Node[]): { names: string[]; rest: Node[] } {
   const names: string[] = []
@@ -105,7 +113,7 @@ function chain(nodes: Node[]): { names: string[]; rest: Node[] } {
     names.push(node.value)
     index += 1
     while (isTree(nodes[index], '[') || (isTree(nodes[index], '(') && isOperator(nodes[index + 1], '.'))) {
-      names.push(...selected(nodes[index]!))
+      names.push(...selector(names.at(-1), nodes[index]!))
       index += 1
     }
     if (!isOperator(nodes[index], '.')) break
@@ -130,7 +138,7 @@ function statementOf(path: string[], rest: Node[], line: number): Statement {
  */
 function blockScope(path: string[], rest: Node[]): string[] {
   const body = rest[0]?.type === 'symbol' ? [functionBody] : []
-  return [...path, ...body, ...rest.filter(node => isTree(node, '(')).flatMap(selected)]
+  return [...path, ...body, ...rest.filter(node => isTree(node, '(')).flatMap(node => selector(path.at(-1), node))]
 }
 
 function readBlock(children: Node[], scope: string[], visit: (statement: Statement) => void): void {
@@ -260,17 +268,13 @@ const buildReaders: Readers = [
   [path => path.at(-1) === 'languageVersion' && path.includes('toolchain'), versionReader('toolchain')],
 ]
 
-/** Build configuration for other projects, such as `subprojects`, `configure(...)` or `project(...)`, is resolved only by a Gradle run. */
-function injected(path: string[]): boolean {
-  return path.some((name, index) => name === 'subprojects' || (name === 'configure' && path[index + 1] === unreadable)
-    || (name === 'project' && (path[index + 1]?.startsWith(':') === true || path[index + 1] === unreadable)))
-}
-
-/** Why a declaration was not fully applied to this project, or undefined; `read` applies it. */
-function reasonFor(path: string[], settings: boolean, read: () => string | undefined): string | undefined {
-  if (path.some(name => controlFlow.has(name) || name === functionBody) || (!settings && injected(path))) return unresolved
-  // `allprojects` also configures the project whose script declares it.
-  return read() ?? (!settings && path.includes('allprojects') ? configuresOthers : undefined)
+/**
+ * A declaration under control flow or in a function applies only when a Gradle run takes that path, and a build
+ * declaration for other projects, such as in `subprojects`, `rootProject` or `project(...)`, only in their runs.
+ */
+function conditional(path: string[], settings: boolean): boolean {
+  const others = !settings && path.some(name => name === otherProjects || name === 'subprojects' || name === 'rootProject')
+  return others || path.some(name => controlFlow.has(name) || name === functionBody)
 }
 
 export function readGradleScript(source: string, file: string): GradleScript {
@@ -281,7 +285,9 @@ export function readGradleScript(source: string, file: string): GradleScript {
   readBlock((groovy.parse(source).node as parser.RootTree).children, [], statement => {
     const reader = readers.find(([matches]) => matches(statement.path))?.[1]
     if (reader === undefined) return
-    const reason = reasonFor(statement.path, settings, () => reader(script, versions, statement))
+    // `allprojects` also configures the project whose script declares it.
+    const others = !settings && statement.path.includes('allprojects') ? configuresOthers : undefined
+    const reason = conditional(statement.path, settings) ? unresolved : (reader(script, versions, statement) ?? others)
     if (reason === undefined) return
     script.diagnostics.push({
       severity: 'warning', code: 'JAVA_GRADLE_UNRESOLVED', file, line: statement.line,

@@ -73,17 +73,20 @@ test.concurrent('declarations under control flow, in a function or for an unread
   } finally { await rm(root, { recursive: true, force: true }) }
 })
 
-test.concurrent('declarations in a function, for every source set or for other projects are reported, not applied', () => {
+test.concurrent('declarations under control flow, in a function, for every source set or for other projects are reported, not applied', () => {
   const scripts: [string, string][] = [
+    ['if (x) {\n}\nelse {\n  sourceCompatibility = 8\n}', 'build.gradle'],
+    ['try {\n}\ncatch (Exception e) {\n  sourceCompatibility = 8\n}', 'build.gradle'],
+    ["try {\n}\nfinally {\n  sourceSets.main.java.srcDirs = ['a']\n}", 'build.gradle'],
     ['private def f() {\n  sourceCompatibility = 8\n}', 'build.gradle'],
-    ["void f() {\n  sourceSets.main.java.srcDirs = ['a']\n}", 'build.gradle'],
-    ["static def f() {\n  sourceSets.main.java.srcDirs = ['a']\n}", 'build.gradle'],
     ['private fun f() {\n  sourceSets["main"].java.setSrcDirs(listOf("a"))\n}', 'build.gradle.kts'],
     ["sourceSets.all { java.srcDir 'gen' }", 'build.gradle'],
     ["sourceSets.configureEach { java.srcDirs = ['gen'] }", 'build.gradle'],
     ["sourceSets { all { java.srcDir 'gen' } }", 'build.gradle'],
     ["sourceSets.each { it.java.srcDir 'gen' }", 'build.gradle'],
     ['configure(subprojects) { sourceCompatibility = 8 }', 'build.gradle'],
+    ["project('app') { sourceCompatibility = 8 }", 'build.gradle'],
+    ['rootProject { sourceCompatibility = 8 }', 'build.gradle'],
   ]
   for (const [source, file] of scripts) {
     const script = readGradleScript(source, file)
