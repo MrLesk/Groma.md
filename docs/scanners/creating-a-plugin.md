@@ -170,6 +170,7 @@ follows; a dash means the language has no such case.
 | Language | `public` | `protected` | `internal` | `private` |
 | --- | --- | --- | --- | --- |
 | TypeScript, Angular, React | Top-level `export`, or a name in the file's own `export { name }` list, `export default name`, or `export = name`; members without `private` or `protected` | `protected` | - | Other top-level declarations; `private` and `#name` members |
+| JavaScript | Top-level `export`, a name in the file's own `export { name }` list or `export default name`, a name a CommonJS `module.exports` or `exports.name` assignment publishes, and every top-level declaration of a file that states no `import`, `export` or CommonJS export, because those names are globals; members without a `#` name | - | - | Other top-level declarations; `#name` members |
 | Vue | As TypeScript in `<script>` | As TypeScript | - | As TypeScript; every `<script setup>` top-level declaration |
 | Java | `public`; interface members without a modifier | `protected` | No modifier elsewhere (package access) | `private` |
 | C# | `public`; interface members without a modifier | `protected`, `protected internal`, `private protected` | `internal`; top-level types without a modifier | `private`; other members without a modifier |
@@ -177,10 +178,13 @@ follows; a dash means the language has no such case.
 | Rust | `pub`. Methods in a trait definition take the trait's visibility, and methods in a trait `impl` are `public` | - | `pub(crate)`, `pub(super)`, `pub(in path)` | No `pub`, `pub(self)` |
 | Python | Other names, including `__init__` and other `__dunder__` names | Members named `_name` | - | Members named `__name`; top-level names starting with `_` |
 | PHP | `public`; members without a modifier; top-level functions and types | `protected` | - | `private` |
+| Swift | `open`, `public` | - | `package`, `internal`; no modifier elsewhere | `fileprivate`, `private` |
 
 TypeScript re-exports from other files (`export { name } from '...'`) do not
 change any declaration's visibility. Python visibility comes from names alone;
-`__all__` does not change it.
+`__all__` does not change it. A JavaScript `.mjs` or `.cjs` file is a module
+whatever it contains. A Swift member of a protocol or an extension takes that
+declaration's access when it states none of its own.
 
 ## Discovery metadata
 
