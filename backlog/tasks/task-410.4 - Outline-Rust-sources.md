@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@claude'
 created_date: '2026-09-16 19:38'
-updated_date: '2026-09-18 17:48'
+updated_date: '2026-09-18 23:08'
 labels: []
 dependencies: []
 references:
@@ -127,6 +127,8 @@ Cold review of the fix, applied:
 - The cfg rule is now two-valued (requires_test): test itself, or all(...) with such an argument. The three-valued decided_by logic is gone; not(test) and any(test, ...) items are still listed.
 - The fixture gained the Handle pair and impl Ext beside impl self::Ext.
 Re-verification: cargo clippy --locked -D warnings clean; focused Rust suite 9 pass, 34 expects; isolated worktree at HEAD d0abfc0e plus this diff with GROMA_TEST_RUST: bun run check exit 0 (Node 16/16; Bun 528 pass, 26 skip, 0 fail); Biome's one warning is outside this task.
+
+Simplicity round: the review's item 12 (fold outline.rs arguments into text.rs macro_arguments) is not applied: the outline's cfg reader keeps nested token trees for all(..) and drops empty groups, while macro_arguments drops nested groups, so they are different rules. No outline change.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
