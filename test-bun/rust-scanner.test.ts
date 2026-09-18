@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test'
 import { cp, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import { scanRustSource } from '../plugins/scanners/rust/src/index.ts'
+import rustScanner, { scanRustSource } from '../plugins/scanners/rust/src/index.ts'
 
 import { execute } from '../plugins/scanners/rust/src/project.ts'
 import { loadAnnotatedArchitecture } from '../src/core.ts'
@@ -141,6 +141,29 @@ rustTest('a component outlines its Rust file beside a TypeScript file under the 
       ['type', 'Invoice', 75, 'public', false, [['total', 76, 'public', false], ['discount', 98, 'private', false]]],
       // Its impl block comes first; members still join the declaration.
       ['type', 'Printer', 89, 'private', false, [['print', 86, 'private', false]]],
+    ])
+  })
+}, 60000)
+
+rustTest('a Rust impl joins the type its module path names, and only code that cannot build outside tests is left out', async () => {
+  await fixture('rust-outline', async root => {
+    const [file] = await rustScanner.readCodeStructure(root, [{ file: 'src/scopes.rs', symbols: [] }])
+    expect(file!.declarations.map(declaration => [
+      declaration.name, declaration.line, declaration.kind === 'type' ? declaration.members.map(member => member.name) : [],
+    ])).toEqual([
+      ['Item', 2, ['from_a', 'explicit']],
+      ['Item', 10, ['from_b', 'from_inner', 'from_super']],
+      // Types declared elsewhere stay apart by their written path.
+      ['Remote', 33, ['left']],
+      ['Remote', 37, ['right']],
+      ['Widget', 41, ['draw']],
+      ['Shape', 50, ['area']],
+      ['run', 58, []],
+      ['tool', 61, []],
+      // Declared once per cfg condition, listed once.
+      ['Handle', 67, ['open']],
+      // A self step does not make another type.
+      ['Ext', 76, ['plain', 'stepped']],
     ])
   })
 }, 60000)
