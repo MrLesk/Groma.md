@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@claude'
 created_date: '2026-09-16 19:38'
-updated_date: '2026-09-18 19:34'
+updated_date: '2026-09-18 23:06'
 labels: []
 dependencies: []
 references:
@@ -23,6 +23,7 @@ references:
   - php-src-index
   - typescript-src-index
   - scanners-projects
+  - modules-discovery
 modified_files:
   - src/scanner/registry.ts
   - src/source-coverage.ts
@@ -74,6 +75,13 @@ modified_files:
   - test/fixtures/java-declared-roots/cdata/src/cd/D.java
   - test/fixtures/java-root-source/pom.xml
   - test/fixtures/java-root-source/Root.java
+  - plugins/scanners/java/src/adapter.ts
+  - plugins/scanners/java/java/md/groma/scanner/Main.java
+  - test/fixtures/java-declared-roots/whole/pom.xml
+  - test/fixtures/java-declared-roots/whole/W.java
+  - src/repository-listing.ts
+  - src/scanner/modules/discovery.ts
+  - test-bun/java-gradle.test.ts
 type: enhancement
 ordinal: 468000
 ---
@@ -120,6 +128,8 @@ Review-fix round (external reviews of cf8e7975):
 13. Tests: a new listing test writes minimal Maven and Cargo repositories and asserts the selected files.
 
 14. Cold review: maven.ts became the only owner of the Maven source root and aggregator rules; the scan (java-input.ts mavenProject) takes its roots from it and MavenModel.java keeps only release, encoding and name. maven.ts decodes XML entities and CDATA. Java and Rust share isUnder from projects.ts, so a root at the repository directory lists its files. targetRoots reuses readRustProject per selected manifest. The approved listing-failure explanation replaces step 12: a scanner whose listing throws is named with its error's first line beside the other scanners' answer.
+
+15. Simplicity round: maven.ts becomes the only POM reader (source roots, release, encoding and name, with ${basedir} resolved before property substitution); MavenModel.java, the worker's model command and the JVM start in mavenProject are deleted. java-input.ts exports one readJavaProject (the Maven-or-Gradle decision) that the scan and the listing share. registry.readersOfFile lists the scanners in id order once and drops the unreachable exclusion check; missingOwnerReason builds one list of reasons; repositoryFileSet and discovery share one git listing (src/repository-listing.ts). Coverage tests assert the reason's key facts.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
@@ -163,6 +173,11 @@ Tests: test-bun/declared-source-listing.test.ts with fixtures java-declared-root
 Live check: groma view on the Java fixture with the source Java scanner added answered 'waiting for a scan' for the basedir, property and build-root files and 'no enabled scanner reads it' for the aggregator's file. Re-review confirmed readJavaInput output is identical to cf8e7975 on 27 projects including callforpapers.
 Verification: isolated worktree at 9574e0a1 with only this change, bun run check exit 0 (biome 1 warning and 2 infos in untouched files, tsc clean, node 16 pass, bun 574 pass 35 skip 0 fail). plugins/scanners/java/dist/worker.jar is gitignored and still the previous build; rebuild it before a live rescan uses the trimmed model.
 Not in this lane: Grok-all's cut file answer ending on the paging footer belongs to TASK-425/TASK-420.
+
+Simplicity round (cold junior-maintainer review of the fix round).
+Fixed defect D2: a sourceDirectory of exactly ${basedir} or ${project.basedir} went through the property loop first, found no such property and fell back to src/main/java. maven.ts now resolves basedir before and during property substitution; fixture java-declared-roots/whole lists whole/W.java, which fails at 70fb5408.
+Simplified: maven.ts (readMavenProject) is the only POM reader. It reads the source root, the language version and encoding (maven-compiler-plugin configuration, then maven.compiler.release, java.version, maven.compiler.source and project.build.sourceEncoding) and the artifactId from a small element tree, so MavenModel.java, the worker's model command and the JVM start in mavenProject are deleted, and readJavaInput needs no worker. java-input.ts exports readJavaProject, the one Maven-or-Gradle decision the scan and the listing share. registry.readersOfFile lists the scanners once in id order and drops an exclusion check its only caller makes first. missingOwnerReason builds one list of reasons. src/repository-listing.ts is the one git listing that source coverage and scanner discovery share. Coverage tests assert the reason's key facts (pattern, scanner ids, the failure line) instead of whole sentences; a readMavenProject test covers the version, encoding and name.
+Verification: isolated worktree at fe407bc9 with only this change, bun run check exit 0 (biome 1 warning and 2 infos in untouched files, tsc clean, node 16 pass, bun 591 pass 35 skip 0 fail), including the Java suites that scan Maven fixtures through the built package.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
@@ -171,4 +186,6 @@ Not in this lane: Grok-all's cut file answer ending on the paging footer belongs
 groma view <file> now explains why a file has no architecture owner instead of answering 'unknown target'. src/source-coverage.ts asks four questions in order and returns exactly one reason: the file is not in the repository listing (tracked and unignored, the boundary every scan selects from), a named scanners.json pattern excludes it, no enabled scanner reads it, or the scanners that read it have not scanned it yet. src/plain-world.ts consults it only when no element owns the file, so element, flow, draft and owned-file answers are unchanged. The evidence comes from a new ScannerPlugin hook, listSourceFiles, which every official scanner implements from the selection its own scan uses, without analyzing a file or running Maven, Gradle, dotnet, go or cargo: TypeScript, PHP, Python, Go, Java, Rust, C#, JavaScript, and Angular, React and Vue through a shared framework-project helper. src/scanner/registry.ts exposes those listings with each scanner's configured settings and the shared exclusions applied. Verified by test-bun/source-coverage.test.ts (all four messages, a mistyped id, a mistyped path, and an owned file after a scan) and test-bun/scanner-source-listing.test.ts (one exact listing per official scanner against its existing fixture, with no worker or project tool running), plus an isolated bun run check at current HEAD: exit 0, Bun 510 passed, Node 16 passed. The plugin contract and the inspect guide document the listing rule, its limits and the four messages.
 
 Review-fix round: the Java and Rust listings now select exactly what their scans read. maven.ts is the single owner of the Maven source root (basedir, properties, entities, CDATA, aggregators) for scan and listing, declared roots inside build directories are listed, and the Rust listing follows the configured manifest to every target's root module. A detached file is described as waiting for a scan, and a scanner whose listing throws is named with its error instead of crashing groma view. New fixture tests fail at cf8e7975 and pass now, and an isolated bun run check exits 0.
+
+Simplicity round: maven.ts is now the only POM reader (source root, version, encoding and name, with an exact ${basedir} source root no longer falling back to src/main/java), the Java worker lost its model command, and source coverage and scanner discovery share one git listing.
 <!-- SECTION:FINAL_SUMMARY:END -->

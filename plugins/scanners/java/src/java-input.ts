@@ -1,8 +1,7 @@
 import { access, readFile, readdir, realpath } from 'node:fs/promises'
 import path from 'node:path'
 import { readGradleProject } from './gradle.ts'
-import { mavenSourceRoots } from './maven.ts'
-import { run } from './process.ts'
+import { readMavenProject } from './maven.ts'
 
 interface JavaProject {
   /** An empty release selects the bundled compiler's language version. */
@@ -38,21 +37,20 @@ async function collect(root: string, directory: string): Promise<string[]> {
   return files.sort()
 }
 
-/** The source root comes from maven.ts, which the listing shares; the worker reads the version, encoding and name. */
-async function mavenProject(root: string, java: string, worker: string): Promise<JavaProject | undefined> {
-  const pom = path.join(root, 'pom.xml')
-  const sourceRoots = mavenSourceRoots(root, await readFile(pom, 'utf8'))
-  if (sourceRoots.length === 0) return undefined
-  const model = JSON.parse(await run(java, ['-jar', worker, 'model', pom], root)) as { release: string; encoding: string; name: string }
-  return { release: model.release, encoding: model.encoding, sourceRoots, name: model.name, kind: 'maven-project', file: 'pom.xml' }
+/**
+ * A directory with pom.xml is a Maven project and every other selected directory a Gradle project; the scan and
+ * the source listing both read its declarations here. Undefined for a Maven aggregator.
+ */
+export async function readJavaProject(directory: string): Promise<JavaProject | undefined> {
+  const pom = path.join(directory, 'pom.xml')
+  if (!await exists(pom)) return { release: '', ...await readGradleProject(directory), encoding: 'UTF-8', kind: 'gradle-project' }
+  const maven = readMavenProject(directory, await readFile(pom, 'utf8'))
+  return maven && { ...maven, kind: 'maven-project', file: 'pom.xml' }
 }
 
-/** A directory with pom.xml is a Maven project; every other selected directory is a Gradle project. */
-export async function readJavaInput(repositoryRoot: string, java: string, worker: string): Promise<JavaInput | undefined> {
+export async function readJavaInput(repositoryRoot: string): Promise<JavaInput | undefined> {
   const root = await realpath(repositoryRoot)
-  const project = await exists(path.join(root, 'pom.xml'))
-    ? await mavenProject(root, java, worker)
-    : { release: '', ...await readGradleProject(root), encoding: 'UTF-8', kind: 'gradle-project' as const }
+  const project = await readJavaProject(root)
   if (!project) return undefined
   const { sourceRoots, ...input } = project
   const found = await Promise.all(sourceRoots.map(async sourceRoot => {

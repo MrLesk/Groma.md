@@ -3,10 +3,9 @@ import { cp, mkdtemp, readdir, rm } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 
-import { buildWorker } from '../plugins/scanners/java/build.ts'
 import java from '../plugins/scanners/java/src/index.ts'
 import { readJavaInput } from '../plugins/scanners/java/src/java-input.ts'
-import { javaCommand } from '../plugins/scanners/java/src/process.ts'
+import { readMavenProject } from '../plugins/scanners/java/src/maven.ts'
 import rust from '../plugins/scanners/rust/src/index.ts'
 
 async function repository(fixture: string): Promise<string> {
@@ -20,31 +19,39 @@ async function repository(fixture: string): Promise<string> {
 test.concurrent('the Java listing reads each Maven source root the way the scan does', async () => {
   const [root, top] = await Promise.all([repository('java-declared-roots'), repository('java-root-source')])
   try {
-    // basedir, property, entity and CDATA roots and a root inside a build directory are read; an aggregator has none.
+    // basedir, property, entity and CDATA roots, the project directory itself and a root inside a build directory
+    // are read; an aggregator has none.
     expect(await java.listSourceFiles(root)).toEqual([
       'basedir/source/A.java', 'cdata/src/cd/D.java', 'entity/src/a&b/E.java', 'gen/build/generated/java/G.java',
-      'property/code/B.java',
+      'property/code/B.java', 'whole/W.java',
     ])
     expect(await java.listSourceFiles(top)).toEqual(['Root.java'])
   } finally { await Promise.all([root, top].map(directory => rm(directory, { recursive: true, force: true }))) }
 })
 
 test.concurrent('the Java scan reads the files its listing names', async () => {
-  const [root, build] = await Promise.all([
-    repository('java-declared-roots'), mkdtemp(path.join(os.tmpdir(), 'groma-declared-worker-')),
-  ])
+  const root = await repository('java-declared-roots')
   try {
-    const worker = path.join(build, 'worker.jar')
-    await buildWorker(worker)
     const scanned: string[] = []
     for (const project of await readdir(root)) {
       if (project === '.git') continue
-      const input = await readJavaInput(path.join(root, project), javaCommand(), worker)
+      const input = await readJavaInput(path.join(root, project))
       scanned.push(...(input?.files ?? []).map(file => `${project}/${file}`))
     }
     expect(scanned.sort()).toEqual(await java.listSourceFiles(root))
-  } finally { await Promise.all([root, build].map(directory => rm(directory, { recursive: true, force: true }))) }
-}, 60000)
+  } finally { await rm(root, { recursive: true, force: true }) }
+})
+
+test.concurrent('a Maven POM supplies its language version, encoding and name without Maven', () => {
+  const compiler = '<build><plugins><plugin><artifactId>maven-surefire-plugin</artifactId></plugin>'
+    + '<plugin><artifactId>maven-compiler-plugin</artifactId><configuration><release>17</release>'
+    + '<encoding>ISO-8859-1</encoding></configuration></plugin></plugins></build>'
+  expect(readMavenProject('/app', `<project><artifactId>shop</artifactId>${compiler}</project>`))
+    .toEqual({ release: '17', encoding: 'ISO-8859-1', name: 'shop', sourceRoots: ['src/main/java'] })
+  const properties = '<properties><maven.compiler.source>1.8</maven.compiler.source></properties>'
+  expect(readMavenProject('/app', `<project><artifactId>legacy</artifactId>${properties}</project>`))
+    .toEqual({ release: '8', encoding: 'UTF-8', name: 'legacy', sourceRoots: ['src/main/java'] })
+})
 
 test.concurrent('the Rust listing follows the selected manifest to every target root module', async () => {
   const root = await repository('rust-declared-roots')

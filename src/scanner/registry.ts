@@ -27,7 +27,7 @@ export interface ScannerRegistry {
   readonly scannerIds: readonly string[]
   collectObservations(repositoryRoot: string, changedFiles?: readonly string[]): Promise<ScanBatch>
   watchesFile(relativePath: string): boolean
-  /** The scanners that would analyze this file now, among those that can list their files, and those whose listing failed. */
+  /** In scanner id order, the scanners that would analyze this file now and those whose listing failed; the caller excludes configured patterns first. */
   readersOfFile(repositoryRoot: string, file: string): Promise<FileReaders>
 }
 
@@ -153,16 +153,13 @@ export function createScannerRegistry(
     scannerIds: scanners.map(scanner => scanner.id),
     async readersOfFile(root, file) {
       const answer: FileReaders = { readers: [], failures: [] }
-      if (excluded(file)) return answer
-      const listings = await Promise.allSettled(scanners.map(async scanner => await scanner.listSourceFiles?.(root)))
+      const byId = [...scanners].sort((left, right) => (left.id < right.id ? -1 : 1))
+      const listings = await Promise.allSettled(byId.map(async scanner => await scanner.listSourceFiles?.(root)))
       for (const [index, listing] of listings.entries()) {
-        const scanner = scanners[index]!.id
+        const scanner = byId[index]!.id
         if (listing.status === 'rejected') answer.failures.push({ scanner, message: firstLine(listing.reason) })
         else if (listing.value?.includes(file)) answer.readers.push(scanner)
       }
-      // Scanner ids are compared by code unit in both lists.
-      answer.readers.sort()
-      answer.failures.sort((left, right) => (left.scanner < right.scanner ? -1 : 1))
       return answer
     },
     watchesFile(relativePath) {
