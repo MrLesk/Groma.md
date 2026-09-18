@@ -1,5 +1,6 @@
 import type { Command } from 'commander'
-import { discoverScanners, formatDiscovery } from './modules/discovery.ts'
+import { parseListWindow, printListPage, withListWindowOptions, type ListWindowInput } from '../list-window.ts'
+import { discoverScanners, discoveryItems, discoveryNote } from './modules/discovery.ts'
 import { createClackInitUi } from '../init-command-ui.ts'
 import { setupScanners } from './modules/setup.ts'
 import { checkScannerReadiness, formatReadiness, requireScannerReadiness } from './modules/readiness.ts'
@@ -58,14 +59,19 @@ export function registerScannerCommands(program: Command): void {
       })
     })
 
-  scanner
+  withListWindowOptions(scanner
     .command('discover')
     .description('Find project declarations and recommend official scanners')
-    .option('--json', 'Print the discovery result as JSON')
-    .action(async (options: { json?: boolean }) => {
+    .option('--json', 'Print the discovery result as JSON'))
+    .action(async (options: ListWindowInput & { json?: boolean }) => {
       await runScannerCommand(async () => {
+        const window = parseListWindow(options, process.argv.slice(2))
         const result = await discoverScanners(process.cwd())
-        console.log(options.json ? JSON.stringify(result, null, 2) : formatDiscovery(result))
+        if (options.json) {
+          console.log(JSON.stringify(result, null, 2))
+          return
+        }
+        printListPage(discoveryItems(result), window, [discoveryNote])
       })
     })
 
@@ -103,14 +109,13 @@ export function registerScannerCommands(program: Command): void {
       })
     })
 
-  scanner
+  withListWindowOptions(scanner
     .command('list')
-    .description('List configured scanner readiness')
-    .action(async () => {
+    .description('List configured scanner readiness'))
+    .action(async options => {
       await runScannerCommand(async () => {
-        for (const item of await scannerInventory(process.cwd())) {
-          console.log(scannerLine(item))
-        }
+        const inventory = await scannerInventory(process.cwd())
+        printListPage(inventory.map(scannerLine), parseListWindow(options, process.argv.slice(2)))
       })
     })
 

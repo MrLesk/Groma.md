@@ -167,7 +167,11 @@ function findingLine({ finding, fileCount }: FindingGroup): string {
   return `${finding.technology}\t${version}\t${finding.file} (${finding.declaration}; ${clue}${resolved})`
 }
 
-export function formatDiscovery(discovery: ScannerDiscovery): string {
+/** The closing note of every discovery report; it is not a listed item. */
+export const discoveryNote = 'Discovery covers supported project declarations, not every technology or runtime interaction.'
+
+/** One item per summarized finding, recommendation, configured scanner, and coverage limit, in that order. */
+export function discoveryItems(discovery: ScannerDiscovery): string[] {
   const lines = findingGroups(discovery.findings).map(findingLine)
   for (const recommendation of discovery.recommendations) {
     lines.push(`${recommendation.id}\t${recommendation.status}\t${recommendation.installSource ?? recommendation.package}\t${recommendation.reason}`)
@@ -178,6 +182,9 @@ export function formatDiscovery(discovery: ScannerDiscovery): string {
     }
   }
   lines.push(...discovery.limits.map(limit => `coverage limit\t${limit}`))
-  lines.push('Discovery covers supported project declarations, not every technology or runtime interaction.')
-  return lines.join('\n')
+  return lines
+}
+
+export function formatDiscovery(discovery: ScannerDiscovery): string {
+  return [...discoveryItems(discovery), discoveryNote].join('\n')
 }

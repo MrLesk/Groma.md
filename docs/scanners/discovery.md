@@ -7,6 +7,10 @@ groma scanner discover
 groma scanner discover --json
 ```
 
+Discovery prints one page of its findings, recommendations, configured
+scanners, and coverage limits, with `--max-count`, `--skip`, and `--count` as in
+the other plain commands; `--json` stays complete.
+
 Discovery reads project declarations, preserves their repository-relative
 evidence paths, and matches rules from official plugin manifests and selected
 installed third-party plugin manifests. It

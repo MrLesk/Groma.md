@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test'
 import path from 'node:path'
 import { annotateArchitecture } from '../src/core.ts'
 import { loadArchitecture } from '../src/architecture-reader.ts'
+import { parseListWindow } from '../src/list-window.ts'
 import { boundaryRelationships, fileConnections, renderPlainRecord, rootRelationships } from '../src/plain-world.ts'
 import type { PlainRelationship } from '../src/plain-world.ts'
 
@@ -39,7 +40,7 @@ test.concurrent('a file lists only the rows whose endpoint is that file, not the
 })
 
 test.concurrent('a file without relationship rows still answers with its owner and the owner record command', async () => {
-  const answer = await renderPlainRecord(plainViewFixture, 'src/routes/orders.ts', false)
+  const answer = await renderPlainRecord(plainViewFixture, 'src/routes/orders.ts', false, parseListWindow({}, []))
   expect(answer.ok).toBe(true)
   expect(answer.ok ? answer.text.trimEnd() : '').toEndWith('groma view orders')
 })

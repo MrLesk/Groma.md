@@ -82,7 +82,8 @@ export function copiesOf(
   return copies.length === 0 ? undefined : { similar, copies }
 }
 
-export function formatArchitectureFindings(findings: readonly ArchitectureFinding[]): string[] {
+/** One item per reportable finding: its first instance, the possible duplicates, and whether they differ. */
+export function architectureFindingItems(findings: readonly ArchitectureFinding[]): string[] {
   return findings.flatMap(finding => {
     const [first, ...rest] = finding.instances
     if (first === undefined || rest.length === 0) return []
@@ -92,7 +93,7 @@ export function formatArchitectureFindings(findings: readonly ArchitectureFindin
       ...rest.map(instance => `    ${instance.name}  ${instance.file}:${instance.startLine}`),
     ]
     if (finding.match === 'similar') lines.push('  not identical')
-    return lines
+    return [lines.join('\n')]
   })
 }
 

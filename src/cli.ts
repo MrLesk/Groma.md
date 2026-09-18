@@ -10,6 +10,7 @@ import packageJson from '../package.json' with { type: 'json' }
 import { agentGuideNames, readAgentGuide } from './agent-instructions.ts'
 import { ensureInitialized, runInitCommand } from './init-command.ts'
 import { humanInstructionGuide } from './instructions.ts'
+import { listWindowRequested, parseListWindow, withListWindowOptions, type ListWindow } from './list-window.ts'
 import { registerLintCommand } from './lint-command.ts'
 import { registerScannerCommands } from './scanner/cli.ts'
 import { formatScanReport, scanRepository, watchScan } from './scanner.ts'
@@ -85,11 +86,11 @@ async function continueWhenReady(interactive: boolean): Promise<boolean> {
   return door === 'ready'
 }
 
-async function openTerminalView(target: string | undefined, plain: boolean): Promise<void> {
+async function openTerminalView(target: string | undefined, plain: boolean, window: ListWindow): Promise<void> {
   if (!await continueWhenReady(interactiveTerminal() && target === undefined && !plain)) return
   if (target) {
     const { renderPlainRecord } = await import('./plain-world.ts')
-    const result = await renderPlainRecord(process.cwd(), target, plain)
+    const result = await renderPlainRecord(process.cwd(), target, plain, window)
     if (!result.ok) {
       console.error(result.message)
       process.exitCode = 1
@@ -98,7 +99,7 @@ async function openTerminalView(target: string | undefined, plain: boolean): Pro
     process.stdout.write(result.text)
   } else if (plain || !process.stdout.isTTY) {
     const { renderPlainWorld } = await import('./plain-world.ts')
-    console.log(await renderPlainWorld(process.cwd()))
+    console.log(await renderPlainWorld(process.cwd(), window))
   } else {
     await openTerminalMap()
   }
@@ -246,14 +247,17 @@ program
     await exportWeb(directory)
   })
 
-program
+withListWindowOptions(program
   .command('view')
   .description('Scan this repo and open the terminal map')
   .argument('[target]', 'element or flow id for complete Markdown, draft id, or exact source file for its owner and file relationships')
-  .option('--plain', 'print actors, systems, their relationships and flows; with an element id, that element, its children, and its incoming and outgoing relationships')
+  .option('--plain', 'print actors, systems, their relationships and flows; with an element id, that element, its children, and its incoming and outgoing relationships'))
   .action(async (target: string | undefined, options) => {
     try {
-      await openTerminalView(target, Boolean(program.opts().plain || options.plain))
+      // A window pages the plain answers; with a record target, --plain alone chooses them over its Markdown.
+      const plain = Boolean(program.opts().plain || options.plain)
+        || (target === undefined && listWindowRequested(options))
+      await openTerminalView(target, plain, parseListWindow(options, process.argv.slice(2)))
     } catch (error) {
       console.error(error instanceof Error ? error.message : String(error))
       process.exitCode = 1
