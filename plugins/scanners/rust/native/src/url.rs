@@ -196,7 +196,7 @@ fn constant(name: &str, names: &Constants, shadowed: &HashSet<String>) -> Option
 }
 
 /// A positional argument reads as a constant's text, a field holding a setting such as
-/// `self.base`, or a computed value.
+/// `self.base`, or a computed value, which includes a call such as `self.base()`.
 fn argument_part(tokens: &[SyntaxToken], names: &Constants, shadowed: &HashSet<String>) -> Part {
     if let [single] = tokens
         && single.kind() == SyntaxKind::IDENT

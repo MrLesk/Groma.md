@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@claude'
 created_date: '2026-09-16 20:15'
-updated_date: '2026-09-18 23:08'
+updated_date: '2026-09-18 23:12'
 labels: []
 dependencies: []
 references:
@@ -87,6 +87,8 @@ Review-fix round (Codex and Grok cold reviews at cf8e7975, plus the approved con
 15. Final approach after the cold reviews: placement.rs reads where a router is served (the prefix walk, the shared chain-start reader start(), the application root kind: actix App::new(), axum serve, Rocket build/custom); endpoints.rs resolves registrations to prefixes and roots and emits endpoints, order (actix-web, and Rocket applications with a rank: position 0 in the root's file) and actix blockers; handlers.rs reads method routers, attribute routes, Rocket typed parameters and rank; client.rs reads the reqwest client receiver; text.rs holds the shared call helpers.
 
 16. Simplicity round (cold junior-maintainer review): the placement walk continues outward only through parents that pass the router value along (method receiver, router-call argument, single-use let, block tail or return, parentheses, await, ?); anything else is unreadable, which also covers assignment. A ServiceConfig receiver registers into the function's own configuration. One RouterCall kind per method name; blockers are routes without a handler; one site-root match for served and resolve; shared let_value, path_character and receiver_start helpers; the method-call serve path, the RefExpr handler arm and the unused Rocket parameter case are removed; Root is renamed Framework and Paths Bases.
+
+17. Follow-up: a format! argument that ends in a call, such as self.base(), is a computed value, not a field read: macro_arguments keeps a nested group's tokens so the field check sees the call.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
@@ -157,6 +159,8 @@ Simplicity round (cold junior-maintainer review, applied under this task):
 - Removed as unreachable: the RefExpr handler arm and the Rocket parameter case (a Rocket parameter chain has no registration to follow). New fixture lines: a router used twice, a Router parameter nested at /p, into_make_service in run(), and a blocker whose prefix ends in a catch-all (/downloads/*tail); each fails with its rule reverted. validation.md lists the HTTP coverage.
 - Not applied, item 12 (TASK-410.4): the outline's cfg arguments keep nested token trees for all(..), while text.rs macro_arguments drops them, so they are not the same rule.
 Verification: cargo clippy --locked -D warnings clean; focused Rust suite 9 pass; the reviewer's fx1 output and the rust-http endpoint output are unchanged, fx2 reports nothing; isolated worktree at HEAD a9b8dff2 plus this diff with GROMA_TEST_RUST: bun run check exit 0 (Node 16/16; Bun 601 pass, 26 skip, 0 fail); Biome's warning is outside this task.
+
+Follow-up, applied: a format! argument that ends in a call, such as settings.base(), is computed, so a leading one is unknown instead of configured. text.rs macro_arguments now keeps a nested group's tokens, delimiters included, so the field check in url.rs argument_part sees the call. Fixture method_base reports GET /unknown/talks; before the fix it reported GET /talks configured. Verification: cargo clippy --locked -D warnings clean; focused Rust suite 9 pass; isolated worktree at HEAD a5c0f2cc plus this diff with GROMA_TEST_RUST: bun run check exit 0 (Node 16/16; Bun 602 pass, 26 skip, 0 fail).
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
@@ -173,4 +177,6 @@ Verified by two tests on test/fixtures/rust-http, which covers each supported AP
 Review round (Codex and Grok, then two cold reviews): requests count only on a reqwest client read from its declaration; a router stored in a local keeps its prefix, and a router nothing serves, one passed to a helper, one on an unrecognized chain start or one behind a mut binding reports nothing; actix regex, mixed-text and Rocket typed parameters are constrained, Rocket <rest..> is optional; actix-web endpoints, and Rocket applications with a rank, report order with position 0 in the file that creates the application; actix entries the scan cannot read are blockers; only a field or environment read sets configured. Each fix is pinned by a fixture case that fails with the fix reverted; verified with Clippy, the Rust suite and an isolated bun run check.
 
 Simplicity round: the placement walk now follows a router's value only through parents that pass it along, which fixes a lost prefix for routers kept in arrays, tuples or loops, and the endpoint reader was consolidated (one router-call kind, blockers as routes without a handler, shared helpers, the dead method serve path removed) without changing any other output; verified by fixtures that fail with each rule reverted and an isolated bun run check.
+
+A format! base that ends in a call, such as settings.base(), is now a leading unknown segment rather than a configured setting.
 <!-- SECTION:FINAL_SUMMARY:END -->
