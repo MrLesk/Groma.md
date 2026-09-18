@@ -21,7 +21,13 @@ func (hooks *Hooks) Install(target *Hooks) {
 	normalize := func(name string) string { return name }
 	defaults := Hooks{Start: func() error { return nil }}
 	Apply(Hooks{Start: func() error { return nil }})
+	Apply((Hooks{Start: func() error { return nil }}))
 	target.Merge(&Hooks{Start: func() error { return nil }})
+	target.Merge(&(Hooks{Start: func() error { return nil }}))
+	stop := (func() error { return nil })
+	target.Start = stop
+	keyed := Hooks{Start: (func() error { return nil })}
+	Apply(keyed)
 	func() { normalize("install") }()
 	*hooks = defaults
 }
@@ -67,3 +73,7 @@ func Factorial(n int) int {
 func Head(items []string, count int) []string { return items[:count] }
 
 func Tail(items []string, count int) []string { return items[count:] }
+
+func Scaled(base, extra, factor int) int { return (base + extra) * factor }
+
+func Offset(base, extra, factor int) int { return base + extra*factor }

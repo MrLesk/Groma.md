@@ -156,17 +156,19 @@ func namedLiterals(file *ast.File) map[*ast.FuncLit]string {
 	return names
 }
 
-// argumentLiteral returns a composite literal passed as the argument itself, alone or behind &.
+// argumentLiteral returns a composite literal passed as the argument itself, alone or behind &,
+// in or out of parentheses.
 func argumentLiteral(argument ast.Expr) *ast.CompositeLit {
+	argument = ast.Unparen(argument)
 	if address, ok := argument.(*ast.UnaryExpr); ok && address.Op == token.AND {
-		argument = address.X
+		argument = ast.Unparen(address.X)
 	}
 	composite, _ := argument.(*ast.CompositeLit)
 	return composite
 }
 
 func nameLiteral(names map[*ast.FuncLit]string, target ast.Expr, value ast.Expr) {
-	literal, isLiteral := value.(*ast.FuncLit)
+	literal, isLiteral := ast.Unparen(value).(*ast.FuncLit)
 	variable, isVariable := target.(*ast.Ident)
 	if isLiteral && isVariable && variable.Name != "_" {
 		names[literal] = variable.Name
@@ -179,7 +181,7 @@ func nameElements(names map[*ast.FuncLit]string, composite *ast.CompositeLit) {
 		if !isField {
 			continue
 		}
-		if literal, isLiteral := field.Value.(*ast.FuncLit); isLiteral {
+		if literal, isLiteral := ast.Unparen(field.Value).(*ast.FuncLit); isLiteral {
 			names[literal] = types.ExprString(field.Key)
 		}
 	}

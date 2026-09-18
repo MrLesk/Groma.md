@@ -144,4 +144,4 @@ are initializer code. Go has no constructors.
 Receivers and named results are bound with the parameters in declaration
 order. Every other name declared inside the operation becomes a slot in order
 of first use. Package-level names, including the operation's own name, stay as
-written.
+written. Parentheses stay in the tokens, so `(a + b) * c` and `a + b*c` differ.

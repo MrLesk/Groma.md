@@ -97,6 +97,11 @@ func (t *tokenizer) walk(node ast.Node) {
 		t.call(node)
 	case *ast.BinaryExpr:
 		t.infix(node.X, node.Op, node.Y)
+	case *ast.ParenExpr:
+		// Grouping changes evaluation, so (a+b)*c and a+b*c stay apart.
+		t.emit("(")
+		t.walk(node.X)
+		t.emit(")")
 	case *ast.KeyValueExpr:
 		t.infix(node.Key, token.COLON, node.Value)
 	case *ast.SendStmt:

@@ -82,12 +82,13 @@ goTest('Go attaches source ranges and binding-normalized tokens only to named op
     await buildWorker(worker, go)
     const operations = (await scanGoSource(root, { worker })).operations!
     const named = (name: string) => operations.find(operation => operation.name.endsWith(name))!
-    // Anonymous literals, including fields of a literal passed as a call argument, and initializer code.
+    // Anonymous literals, including fields of a literal passed as a call argument in or out of parentheses,
+    // and initializer code.
     expect(operations.filter(operation => !operation.tokens).map(operation => operation.name).sort())
-      .toEqual(['closure', 'closure', 'closure', 'example.test/duplicates.init', 'initializer'])
+      .toEqual(['closure', 'closure', 'closure', 'closure', 'closure', 'example.test/duplicates.init', 'initializer'])
     // Literals assigned to a variable or keyed in a literal that is not an argument take that name.
     expect(operations.filter(operation => operation.tokens).map(operation => operation.name))
-      .toEqual(expect.arrayContaining(['validate', 'normalize', 'Start']))
+      .toEqual(expect.arrayContaining(['validate', 'normalize', 'Start', 'stop']))
     const source = await readFile(path.join(root, 'forms.go'), 'utf8')
     expect(named('.Install')).toMatchObject({
       startLine: lineOf(source, 'func (hooks *Hooks) Install'), endLine: lineOf(source, '}\n\nfunc Apply'),
@@ -99,6 +100,8 @@ goTest('Go attaches source ranges and binding-normalized tokens only to named op
     // Package-level names, including the operation's own name, and slice bounds keep bodies apart.
     expect(named('.Factorial').tokens).not.toEqual(named('.Fact').tokens!)
     expect(named('.Tail').tokens).not.toEqual(named('.Head').tokens!)
+    // Grouping parentheses change evaluation order.
+    expect(named('.Scaled').tokens).not.toEqual(named('.Offset').tokens!)
   } finally { await rm(root, { recursive: true, force: true }) }
 }, 60000)
 
