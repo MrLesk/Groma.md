@@ -104,6 +104,7 @@ The architecture lives in a `groma/` folder as an [Open Knowledge Format 0.2](ht
 | Language or framework | Status |
 | --- | --- |
 | [TypeScript](docs/scanners/typescript/index.md) | ✅ Available |
+| [JavaScript](docs/scanners/javascript/index.md) | ✅ Available |
 | [Angular](docs/scanners/angular/index.md) | ✅ Available |
 | [React](docs/scanners/react/index.md) | ✅ Available |
 | [Vue](docs/scanners/vue/index.md) | ✅ Available |

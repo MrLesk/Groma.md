@@ -1,0 +1,40 @@
+{
+  "name": "@groma/scanner-javascript",
+  "version": "0.1.0",
+  "private": false,
+  "type": "module",
+  "license": "MIT",
+  "description": "JavaScript source declarations, outlines and operation bodies without project dependencies.",
+  "groma": {
+    "scanner": {
+      "id": "javascript",
+      "entry": "./dist/package/dist/index.js",
+      "discovery": {
+        "technologies": [
+          "javascript"
+        ],
+        "rules": [
+          {
+            "type": "file",
+            "files": [
+              "**/*.js",
+              "**/*.mjs",
+              "**/*.cjs",
+              "**/*.jsx"
+            ],
+            "technology": "javascript",
+            "kind": "language",
+            "declaration": "JavaScript source files"
+          }
+        ],
+        "compatibility": {
+          "groma": "^0.3.0"
+        }
+      }
+    }
+  },
+  "dependencies": {
+    "@groma/scanner": "workspace:*",
+    "typescript": "6.0.3"
+  }
+}

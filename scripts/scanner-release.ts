@@ -1,9 +1,10 @@
 import { chmod, cp, mkdir, readFile, readdir, writeFile } from 'node:fs/promises'
+import { existsSync } from 'node:fs'
 import path from 'node:path'
 import { readPublishedScanners } from '../src/scanner/modules/published.ts'
 
 const repository = { type: 'git', url: 'https://github.com/MrLesk/Groma.md.git' }
-const scannerIds = ['java', 'go', 'rust', 'csharp', 'angular', 'vue', 'react', 'typescript', 'python', 'php']
+const scannerIds = ['java', 'go', 'rust', 'csharp', 'angular', 'vue', 'react', 'typescript', 'python', 'php', 'swift', 'javascript']
 
 async function manifest(directory: string) {
   return JSON.parse(await readFile(path.join(directory, 'package.json'), 'utf8'))
@@ -44,12 +45,16 @@ async function stage(output: string) {
     angular: (await import('../plugins/scanners/angular/build.ts')).buildPackage,
     vue: (await import('../plugins/scanners/vue/build.ts')).buildPackage,
     react: (await import('../plugins/scanners/react/build.ts')).buildPackage,
+    javascript: (await import('../plugins/scanners/javascript/build.ts')).buildPackage,
   }
   await completeTogether([
     ...Object.entries(builders).map(([id, build]) => build(path.join(output, id))),
     run([process.execPath, 'scripts/package-csharp-scanner.ts', path.join(output, 'csharp')]),
+    ...(process.platform === 'darwin'
+      ? [(await import('../plugins/scanners/swift/build.ts')).buildPackage(path.join(output, 'swift'))] : []),
   ])
   for (const id of scannerIds) {
+    if (id === 'swift' && process.platform !== 'darwin') continue
     const directory = path.join(output, id)
     await writeManifest(directory, { ...await manifest(directory), repository, publishConfig: { access: 'public' } })
   }
@@ -61,11 +66,14 @@ async function assemble(input: string, output: string) {
   if (hosts.length === 0) throw new Error('No scanner build artifacts')
   await cp(path.join(input, hosts[0]!), output, { recursive: true })
   for (const host of hosts.slice(1)) {
+    const swift = path.join(input, host, 'swift')
+    if (existsSync(swift)) await cp(swift, path.join(output, 'swift'), { recursive: true })
     for (const id of ['go', 'rust', 'typescript', 'java', 'csharp']) {
       await cp(path.join(input, host, id, 'dist'), path.join(output, id, 'dist'), { recursive: true })
     }
   }
-  for (const [id, worker] of Object.entries({ go: 'worker', rust: 'groma-rust-scanner', typescript: 'tsc', java: 'runtime/bin/java', csharp: 'worker/Groma.CSharpScanner' })) {
+  if (!existsSync(path.join(output, 'swift'))) throw new Error('Swift scanner requires a macOS build artifact')
+  for (const [id, worker] of Object.entries({ go: 'worker', rust: 'groma-rust-scanner', typescript: 'tsc', java: 'runtime/bin/java', csharp: 'worker/Groma.CSharpScanner', swift: 'worker' })) {
     await prepareWorkers(path.join(output, id), id === 'rust' ? 'dist/bin' : 'dist', worker)
   }
 }
