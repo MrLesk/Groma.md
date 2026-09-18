@@ -75,17 +75,20 @@ operations that carry tokens. A scanner attaches none to:
 
 The covered languages are
 [TypeScript](scanners/typescript/index.md#compared-operations),
+[JavaScript](scanners/javascript/index.md#compared-operations),
 [Vue](scanners/vue/index.md#compared-operations),
 [Java](scanners/java/index.md#compared-operations),
 [C#](scanners/dotnet-csharp/index.md#compared-operations),
 [Go](scanners/go/index.md#compared-operations),
 [Rust](scanners/rust/index.md#compared-operations),
-[Python](scanners/python/index.md#compared-operations) and
-[PHP](scanners/php/index.md#compared-operations). Each page lists the operations
-its scanner compares and its own exceptions, including whether a function
-literal assigned to a name is compared: TypeScript, Go and Vue compare those,
-while Java, C#, Rust, Python and PHP treat every closure and lambda as an
-anonymous callback.
+[Python](scanners/python/index.md#compared-operations),
+[PHP](scanners/php/index.md#compared-operations) and
+[Swift](scanners/swift/index.md#evidence-and-outlines), whose page states these
+rules under that heading. Each page lists the operations its scanner compares and
+its own exceptions, including whether a function literal assigned to a name is
+compared: TypeScript, JavaScript, Go, Vue and Swift compare those, while Java,
+C#, Rust, Python and PHP treat every closure and lambda as an anonymous
+callback.
 
 Core applies both minimum body sizes, counted in binding-normalized tokens, so
 scanners report every named body regardless of its size:
