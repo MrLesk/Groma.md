@@ -41,6 +41,31 @@ public sealed class TalkClient(HttpClient client, LocalCache cache)
         if (all) url = "/api/talks";
         return client.GetAsync(url);
     }
+
+    public Task<HttpResponseMessage> Swapped()
+    {
+        string url = "/api/talks/swapped";
+        string other = "/api/talks";
+        (url, other) = (other, url);
+        return client.GetAsync(url);
+    }
+
+    public Task<HttpResponseMessage> Referenced()
+    {
+        string url = "/api/talks/referenced";
+        Rewrite(ref url);
+        return client.GetAsync(url);
+    }
+
+    public Task<HttpResponseMessage> Aliased()
+    {
+        string url = "/api/talks/aliased";
+        ref string alias = ref url;
+        alias = "/api/talks";
+        return client.GetAsync(url);
+    }
+
+    private static void Rewrite(ref string url) => url = "/api/talks";
 }
 
 public sealed class ArchiveClient

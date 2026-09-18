@@ -6,7 +6,7 @@ namespace Groma.CSharpScanner;
 /// The HTTP facts of one scan: the endpoints ASP.NET Core serves and the requests the source sends. A fact survives
 /// only when the observation declares its operation, so no fact names an operation core cannot resolve to a file.
 /// </summary>
-internal sealed class HttpEvidence(string repositoryRoot, bool keepsAsyncSuffix)
+internal sealed class HttpEvidence(string repositoryRoot, HttpEndpoints.TokenConventions conventions)
 {
     private readonly List<ScanHttpEndpoint> endpoints = [];
     private readonly List<ScanHttpRequest> requests = [];
@@ -23,7 +23,7 @@ internal sealed class HttpEvidence(string repositoryRoot, bool keepsAsyncSuffix)
     public void Extract(SyntaxNode root, SemanticModel model, string file,
         IReadOnlyDictionary<SyntaxNode, string> callers, CancellationToken cancellationToken)
     {
-        endpoints.AddRange(HttpEndpoints.Of(root, model, file, repositoryRoot, keepsAsyncSuffix, cancellationToken));
+        endpoints.AddRange(HttpEndpoints.Of(root, model, file, repositoryRoot, conventions, cancellationToken));
         (List<ScanHttpRequest> sent, List<ScanOperation> declared) = HttpRequests.Of(root, model, file, callers, cancellationToken);
         requests.AddRange(sent);
         foreach (ScanOperation operation in declared) declarations.TryAdd(operation.Id, operation);

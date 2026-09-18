@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Routing;
 
 var builder = WebApplication.CreateBuilder(args);
+builder.Services.AddControllers(options => options.SuppressAsyncSuffixInActionNames = true);
 var app = builder.Build();
 
 app.MapGet("/health", () => "ok");

@@ -13,8 +13,8 @@ public static class ScannerCommand
         {
             if (args is ["--outline"])
             {
-                string outline = await standardInput.ReadToEndAsync(cancellationToken);
-                await standardOutput.WriteAsync(SourceOutline.Run(outline, cancellationToken));
+                string outlineRequest = await standardInput.ReadToEndAsync(cancellationToken);
+                await standardOutput.WriteAsync(SourceOutline.Run(outlineRequest, cancellationToken));
                 return 0;
             }
             ScanRequest request = ScanRequest.Parse(args);
