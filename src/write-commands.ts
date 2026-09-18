@@ -140,8 +140,8 @@ export function registerWriteCommands(program: Command): void {
     .option('--draft <draft-id>', 'tag this element with the draft that touches it')
     .option('--group <name>', 'assign this component to a sibling group')
     .option('--ungroup', 'remove this component from its group')
-    .option('--parent <id>', 'move an empty scanned component to this container')
-    .option('--combine <ids...>', 'combine empty siblings; container children move to the survivor')
+    .option('--parent <id>', 'move an empty scanned component to this container, or a container to this system')
+    .option('--combine <ids...>', 'combine empty siblings; the absorbed containers or components move to the survivor')
     .option('--detach <files...>', 'remove these source files from the component; the next scan gives them their own component')
     .addHelpText('after', '\nAgent guides: groma agent-instructions')
     .action(async (id: string, ids: string[], options) => {

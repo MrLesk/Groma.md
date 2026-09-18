@@ -5,10 +5,10 @@ import { architectureFindingsFor } from './architecture-findings.ts'
 import { buildArchitectureModel, draftRecordOf } from './architecture-model.ts'
 import { loadArchitecture } from './architecture-reader.ts'
 import { resolveFlows } from './flow-model.ts'
-import { moveBlocker } from './move.ts'
 import type {
   AnnotatedArchitectureModel,
   AnnotatedElement,
+  ArchitectureElement,
   ArchitectureRecords,
   ArchitectureRelationship,
   ElementStatus,
@@ -59,6 +59,17 @@ function connectionCounts(relationships: readonly ArchitectureRelationship[]): M
   }]))
 }
 
+/** The web pane offers a new parent only for an empty component that owns no authored relationship. */
+function isMovable(
+  element: ArchitectureElement,
+  authored: readonly ArchitectureRelationship[],
+  body: string,
+): boolean {
+  if (element.kind !== 'component' || body.trim() !== '') return false
+  return !authored.some(relationship => relationship.connections.some(connection => connection.authored
+    && (connection.source === element.id || connection.target === element.id)))
+}
+
 export function annotateArchitecture(
   records: ArchitectureRecords,
 ): AnnotatedArchitectureModel {
@@ -81,7 +92,7 @@ export function annotateArchitecture(
     ...(element.group === undefined ? {} : { group: element.group }),
     ...(element.technology === undefined ? {} : { technology: element.technology }),
     code: element.code.map(reference => ({ ...reference, ...(counts.get(reference.file) ?? { dependencies: 0, dependents: 0 }) })),
-    movable: moveBlocker(element, authored, documents.get(element.sourceFilename)!.body) === undefined,
+    movable: isMovable(element, authored, documents.get(element.sourceFilename)!.body),
     origin: originOf(element.status),
     ...(element.draft === undefined ? {} : { draft: element.draft }),
   }))
