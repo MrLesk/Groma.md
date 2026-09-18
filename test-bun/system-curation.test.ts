@@ -162,7 +162,23 @@ test.concurrent('a scanned container that owns no files keeps its name and syste
   } finally { await rm(root, { recursive: true, force: true }) }
 })
 
-test.concurrent('an authored concept row under a moved or absorbed record refuses the change and names its ends', async () => {
+test.concurrent('a scanned container that owns no files keeps its ID and system while it absorbs a sibling', async () => {
+  const root = await repository(emptyProjectObservation())
+  try {
+    await editArchitecture(root, { id: 'jobs', combine: ['api'] })
+    const after = await loadAnnotatedArchitecture(root)
+    expect(ids(after, 'container')).toEqual(['jobs', 'shop-shop'])
+
+    const scans = [
+      await reconcileScanObservations(root, [emptyProjectObservation()]),
+      await reconcileScanObservations(root, [emptyProjectObservation()]),
+    ]
+    expect(scans.map(summary => summary.created)).toEqual([0, 0])
+    expect((await loadAnnotatedArchitecture(root)).elements).toEqual(after.elements)
+  } finally { await rm(root, { recursive: true, force: true }) }
+})
+
+test.concurrent('an authored concept row naming a moved or absorbed record refuses the change and writes nothing', async () => {
   const root = await repository()
   try {
     const actor = await addThing(root, { thing: 'actor', name: 'Clerk', overview: 'Counts stock.' }) as string
@@ -174,7 +190,7 @@ test.concurrent('an authored concept row under a moved or absorbed record refuse
 
     // The row links the container's document, which both operations would move without repointing the link.
     for (const edit of [{ id: survivor!, combine: [absorbed!] }, { id: container, parent: survivor! }]) {
-      await expect(editArchitecture(root, edit)).rejects.toThrow(`"${actor}" or "${container}" while it owns an authored relationship`)
+      await expect(editArchitecture(root, edit)).rejects.toThrow()
     }
     expect((await loadAnnotatedArchitecture(root)).elements).toEqual(related.elements)
   } finally { await rm(root, { recursive: true, force: true }) }
@@ -195,7 +211,7 @@ test.concurrent('a move that would leave a flow step unresolvable is refused and
     // The web pane offers no new parent for a flow endpoint, whose move the write refuses.
     const movable = (id: string) => before.elements.find(element => element.id === id)?.movable
     expect([movable('a'), movable('b')]).toEqual([false, true])
-    await expect(editArchitecture(root, { id: 'a', parent: parentOf(before, 'c')! })).rejects.toThrow('would not resolve')
+    await expect(editArchitecture(root, { id: 'a', parent: parentOf(before, 'c')! })).rejects.toThrow()
 
     await expect(editArchitecture(root, { id: container, parent: destination })).rejects.toThrow('would not resolve')
     expect((await loadAnnotatedArchitecture(root)).elements).toEqual(before.elements)

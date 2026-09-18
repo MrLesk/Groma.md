@@ -130,8 +130,7 @@ its own edit, separate from a combine, move or detach. The result prints
 `groma agent-instructions backlog` explains.
 
 Scans find elements through the files they own, not through their IDs, so the
-new ID survives every later scan. A scanned container that owns no files keeps
-its ID.
+new ID survives every later scan.
 
 ## Splits and single-file moves
 
@@ -185,10 +184,8 @@ groma edit depot-warehouse --parent shop
 A container carries its components to the new system. A system emptied this way
 stays until you combine it into the surviving system. Both operations refuse a
 container or system with authored meaning under the same rules as component
-moves and combines, refuse an external system as a destination, refuse to move
-or remove a scanned container that owns no files, or to move a container out of
-the system such a container stays in, and refuse a change that would leave a
-flow step unresolvable.
+moves and combines, refuse an external system as a destination, and refuse a
+change that would leave a flow step unresolvable.
 
 ## Skyscrapers
 

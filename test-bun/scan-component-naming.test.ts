@@ -5,6 +5,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { createScanObservation } from '@groma/scanner'
 
+import { addThing } from '../src/add.ts'
 import { loadArchitecture } from '../src/architecture-reader.ts'
 import { editArchitecture } from '../src/edit.ts'
 import { draftElement } from '../src/draft.ts'
@@ -199,5 +200,27 @@ test.concurrent('scanned IDs never take a word the CLI reads as an address, and 
       .map(document => (document.frontmatter.groma as { id?: string } | undefined)?.id)
     expect(ids).not.toContain('group')
     expect((await reconcileScanObservations(root, [scan])).created).toBe(0)
+  } finally { await rm(root, { recursive: true, force: true }) }
+})
+
+test.concurrent('a numbered ID of a project without files is found again by later scans', async () => {
+  const root = await repository()
+  // The plain and the qualified ID of the empty project are taken, so the scan numbers its container.
+  await addThing(root, { thing: 'actor', name: 'Jobs', overview: 'Runs jobs.' })
+  await addThing(root, { thing: 'actor', name: 'Depot Jobs', overview: 'Runs depot jobs.' })
+  const scan = createScanObservation({
+    scanner: { id: 'fixture', technology: 'fixture', engine: 'fixture', engineVersion: '1' },
+    roots: [
+      { id: 'depot', kind: 'solution', name: 'Depot' },
+      { id: 'api', kind: 'project', parent: 'depot', name: 'Api' },
+      { id: 'jobs', kind: 'project', parent: 'depot', name: 'Jobs' },
+    ],
+    files: [{ file: 'api/a.cs', roots: ['api'], symbols: [] }],
+    diagnostics: [],
+  })
+  try {
+    const created = []
+    for (let scans = 0; scans < 3; scans += 1) created.push((await reconcileScanObservations(root, [scan])).created)
+    expect(created).toEqual([4, 0, 0])
   } finally { await rm(root, { recursive: true, force: true }) }
 })

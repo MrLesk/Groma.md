@@ -133,11 +133,7 @@ operation before opening a map.
      `--id <new-id>` renames an element: its document and the documents under it
      move to the paths of the new ID, children name the new parent, and
      concept-addressed relationship rows and flow steps are repointed. Scans
-     match elements through owned files, so a renamed ID survives them. A
-     container is matched through the files of its own project that it or its
-     components own, and otherwise only by its scanned name and system, so
-     these operations refuse to move, rename or remove a scanned container that
-     owns no files, or to move another container out of its system. These
+     match elements through owned files, so a renamed ID survives them. These
      operations validate the whole change before writing.
      `--detach <file...>` removes those files from the component's Code; the
      next scan gives a detached file its own component, shared with the other

@@ -91,20 +91,23 @@ function indexWorld(records: ArchitectureRecords): World {
   return world
 }
 
-/** The ID a record of this name takes when its plain ID is taken or reserved. */
-function qualifiedId(base: string, parent?: WorldRecord): string {
-  return `${parent?.id ?? 'source'}-${base}`
+/** The IDs a record of this name may take, in order: plain, qualified by its parent, then numbered. */
+function candidateId(name: string, parent: WorldRecord | undefined, index: number): string {
+  const base = kebabCase(name) || 'source'
+  if (index === 0) return base
+  const qualified = `${parent?.id ?? 'source'}-${base}`
+  return index === 1 ? qualified : `${qualified}-${index}`
 }
 
+function isFree(world: World, id: string): boolean {
+  return !world.byId.has(id) && !isReservedId(id)
+}
+
+/** The first candidate ID no record holds. */
 function availableId(world: World, name: string, parent?: WorldRecord): string {
-  const base = kebabCase(name) || 'source'
-  const existing = world.byId.get(base)
-  if (existing === undefined && !isReservedId(base)) return base
-  const qualified = qualifiedId(base, parent)
-  if (!world.byId.has(qualified)) return qualified
-  let suffix = 2
-  while (world.byId.has(`${qualified}-${suffix}`)) suffix += 1
-  return `${qualified}-${suffix}`
+  let index = 0
+  while (!isFree(world, candidateId(name, parent, index))) index += 1
+  return candidateId(name, parent, index)
 }
 
 async function createRecord(
@@ -239,17 +242,22 @@ function systemFor(world: World, container?: WorldRecord): WorldRecord | undefin
   return system?.kind === 'system' ? system : undefined
 }
 
+/**
+ * The record availableId named for this name and parent: its candidates up to the first free one.
+ * requireScanFindable in curate.ts refuses curation that would hide a container from this lookup.
+ */
 function existingChild(
   world: World,
   kind: C4Kind,
   name: string,
   parent?: WorldRecord,
 ): WorldRecord | undefined {
-  const base = kebabCase(name)
-  const ids = [base, qualifiedId(base, parent)]
-  return ids.map(id => world.byId.get(id)).find(record => {
-    return record?.kind === kind && record.parent === parent?.id
-  })
+  for (let index = 0; ; index += 1) {
+    const id = candidateId(name, parent, index)
+    if (isFree(world, id)) return undefined
+    const record = world.byId.get(id)
+    if (record?.kind === kind && record.parent === parent?.id) return record
+  }
 }
 
 async function attachReference(
