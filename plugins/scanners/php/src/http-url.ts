@@ -1,5 +1,5 @@
-import type { HttpEndpointSegment, HttpRequestSegment } from '@groma/scanner'
-import { field, list, nameOf, type Fields } from './syntax.ts'
+import type { HttpRequestSegment } from '@groma/scanner'
+import { calledFunction, field, list, type Fields } from './syntax.ts'
 
 /**
  * Text the source proves, a computed value it does not, or a base the application reads from
@@ -7,28 +7,27 @@ import { field, list, nameOf, type Fields } from './syntax.ts'
  */
 export type TextPart = { kind: 'literal'; value: string } | { kind: 'computed' } | { kind: 'base' }
 
-/** Constant values declared once in the file being read, by their bare name. */
-export type Constants = ReadonlyMap<string, string | undefined>
-
-/** A constant referenced as `NAME`, `self::NAME` or `Type::NAME`; a name declared twice proves nothing. */
-function constantText(node: Fields, constants: Constants): string | undefined {
-  const name = node.kind === 'name' ? String(node.name)
-    : node.kind === 'staticlookup' ? nameOf(field(node, 'offset')) : undefined
-  return name === undefined ? undefined : constants.get(name.replace(/^\\/, ''))
-}
+/**
+ * The literal value a constant reference such as `NAME`, `self::NAME` or `Type::NAME` names, when the
+ * file being read declares that constant once; undefined for any other expression.
+ */
+export type Constants = (reference: Fields) => string | undefined
 
 /** Calls that answer with this site's own root, which the scanner cannot resolve to text. */
 const baseCalls = new Set([
   'rest_url', 'get_rest_url', 'home_url', 'get_home_url', 'site_url', 'get_site_url', 'admin_url', 'get_admin_url',
 ])
 
-/** A site-root call contributes a configured base followed by its own literal path argument. */
+/**
+ * A site-root call contributes a configured base. WordPress joins the call's path argument to the
+ * root with a slash, so the argument starts a new segment.
+ */
 function baseCallParts(node: Fields, constants: Constants): TextPart[] | undefined {
-  if (node.kind !== 'call') return undefined
-  const name = nameOf(field(node, 'what'))?.replace(/^\\/, '')
+  const name = calledFunction(node)
   if (name === undefined || !baseCalls.has(name)) return undefined
   const [argument] = list(node, 'arguments')
-  return [{ kind: 'base' }, ...(argument === undefined ? [] : textParts(argument, constants))]
+  if (argument === undefined) return [{ kind: 'base' }]
+  return [{ kind: 'base' }, { kind: 'literal', value: '/' }, ...textParts(argument, constants)]
 }
 
 /** The text of a URL or route expression, part by part. Concatenation and interpolation keep their order. */
@@ -41,7 +40,7 @@ export function textParts(node: Fields | undefined, constants: Constants): TextP
   }
   const base = baseCallParts(node, constants)
   if (base !== undefined) return base
-  const constant = constantText(node, constants)
+  const constant = constants(node)
   return constant === undefined ? [{ kind: 'computed' }] : [{ kind: 'literal', value: constant }]
 }
 
@@ -98,9 +97,13 @@ function segmentsOf(parts: readonly TextPart[]): HttpRequestSegment[] {
  */
 export function requestUrl(node: Fields | undefined, constants: Constants, configuredBase: boolean): RequestUrl {
   const [head, ...rest] = textParts(node, constants)
-  if (head?.kind === 'base') return { configured: true, path: segmentsOf(rest) }
+  const [next] = rest
+  // Text that does not start a new segment after the base continues the base's own last segment.
+  if (head?.kind === 'base' && (rest.length === 0 || (next?.kind === 'literal' && next.value.startsWith('/')))) {
+    return { configured: true, path: segmentsOf(rest) }
+  }
   // A base the scanner cannot resolve, or one that states a host, is the leading unknown segment.
-  if (head === undefined || head.kind === 'computed') return { path: [{ kind: 'unknown' }, ...segmentsOf(rest)] }
+  if (head === undefined || head.kind !== 'literal') return { path: [{ kind: 'unknown' }, ...segmentsOf(rest)] }
   if (authority.test(head.value)) {
     const start = head.value.indexOf('/', head.value.indexOf('//') + 2)
     const remainder: TextPart[] = start < 0 ? [] : [{ kind: 'literal', value: head.value.slice(start) }, ...rest]
@@ -110,35 +113,31 @@ export function requestUrl(node: Fields | undefined, constants: Constants, confi
 }
 
 /**
- * One path from parts that must all be known. An unresolved part, such as a group prefix the source
- * computes, leaves the whole path unknown, because no literal path can stand for it.
+ * A route, or a route prefix, as far as the source states it. An unresolved one, such as a group
+ * prefix the source computes, keeps the whole segments its literal text states before that part.
  */
-export function joinPath(...parts: (string | undefined)[]): string | undefined {
-  return parts.some(part => part === undefined) ? undefined : parts.filter(part => part !== '').join('/')
+export interface RouteText {
+  text: string
+  resolved: boolean
 }
 
-/** A route parameter written as `{id}`, `{id?}`, `{id<regex>}`, `{id:regex}` or `(?P<id>regex)`. */
-const routeParameter = /^(?:\{(\w+)(\?)?(?:[<:][^{}]*)?\}|\(\?P<(\w+)>.*\))$/
+export const noRoute: RouteText = { text: '', resolved: true }
 
-/**
- * The segments of a literal route, or undefined when a segment is neither a whole literal nor a
- * whole parameter, such as `/talks/item-{id}`. Reporting such a route would claim a path the
- * application does not serve.
- */
-export function routeSegments(route: string): HttpEndpointSegment[] | undefined {
-  const segments: HttpEndpointSegment[] = []
-  for (const part of route.split('/')) {
-    if (part === '') continue
-    const parameter = routeParameter.exec(part)
-    if (parameter) {
-      segments.push({ kind: 'parameter', name: parameter[1] ?? parameter[3]!, ...(parameter[2] ? { optional: true } : {}) })
-      continue
-    }
-    if (/[{}()<>[\]]/.test(part) || !pathSegment.test(part)) return undefined
-    segments.push({ kind: 'literal', value: part })
-  }
-  return segments
+/** The route text an expression states. */
+export function routeText(node: Fields | undefined, constants: Constants): RouteText {
+  const parts = textParts(node, constants)
+  const unresolved = parts.findIndex(part => part.kind !== 'literal')
+  const literal = parts.slice(0, unresolved < 0 ? parts.length : unresolved)
+    .map(part => (part as { value: string }).value).join('')
+  return unresolved < 0 ? { text: literal, resolved: true } : { text: literal.slice(0, literal.lastIndexOf('/') + 1), resolved: false }
+}
+
+/** One route from its parts in order; the first unresolved part ends it. */
+export function joinRoutes(...parts: RouteText[]): RouteText {
+  const end = parts.findIndex(part => !part.resolved)
+  const stated = end < 0 ? parts : parts.slice(0, end + 1)
+  return { text: stated.map(part => part.text).filter(text => text !== '').join('/'), resolved: end < 0 }
 }
 
 /** Characters the fact format accepts in literal text; other text cannot be reported as a literal. */
-const pathSegment = /^[A-Za-z0-9\-._~!$&'()*+,;=:@%]+$/
+export const pathSegment = /^[A-Za-z0-9\-._~!$&'()*+,;=:@%]+$/

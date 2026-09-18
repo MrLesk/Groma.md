@@ -1,32 +1,48 @@
-import type { HttpEndpointSegment } from '@groma/scanner'
-import { joinPath, literalText, routeSegments, type Constants } from './http-url.ts'
-import { field, list, memberOf, nameOf, operationId, symbolName, type Fields } from './syntax.ts'
+import type { ScanHttpEndpoint } from '@groma/scanner'
+import { staysWithinSegment, unreadablePattern, type Requirements } from './http-routes.ts'
+import { joinRoutes, literalText, noRoute, routeText, type Constants, type RouteText } from './http-url.ts'
+import { proved, unresolvedRoute, type Receiver, type Receivers, type Router } from './receivers.ts'
+import {
+  calledFunction, field, list, memberOf, moduleOperationId, nameOf, operationId, qualifiedName, symbolName, typeName,
+  type Fields, type NameScope,
+} from './syntax.ts'
 
 /** The handler that answers the endpoint: an operation in this file, or a scan symbol name to resolve. */
 export type Handler = { operation: string } | { symbol: string }
 
-/** An endpoint whose handler is not resolved to an operation id yet. */
+/**
+ * A route entry of one file, before handler symbols name operations and before the file that loads a
+ * Laravel routes file adds its prefix and Laravel's global patterns apply.
+ */
 export interface PendingEndpoint {
-  handler: Handler
+  /** Undefined when the handler or the methods are not readable, which makes the entry a blocker. */
+  handler: Handler | undefined
   method: string
-  path: HttpEndpointSegment[]
+  /** The route under the prefixes of its own file, as far as the source states it. */
+  route: RouteText
+  requirements: Requirements
+  laravel: boolean
+  order: NonNullable<ScanHttpEndpoint['order']>
+  /** The operation that registers the route, which the endpoint names as a blocker. */
+  registrar: string
 }
 
-/** What the file being read says about names: its namespace, its `use` aliases and its constants. */
-export interface FileScope {
+/** What the code being read can prove: its names, constants, route prefix and receivers. */
+export interface FileScope extends NameScope {
   file: string
-  namespace: string
   /** Operation the code being read belongs to; top-level code has none. */
   operation?: string
-  /** Alias or last name segment to its fully qualified name. */
-  imports: ReadonlyMap<string, string>
   constants: Constants
-  /** Fully qualified name of the enclosing type, for a `[$this, 'method']` handler. */
-  type?: string
-  /** Route prefix the enclosing groups declare; undefined when one of them is not literal. */
-  prefix: string | undefined
-  /** Names bound to a recognized HTTP client: `$client` and `$this->http`. */
-  clients: ReadonlySet<string>
+  /** Route prefix the enclosing groups and class attribute declare, as far as the source states it. */
+  prefix: RouteText
+  /** Parameter patterns the enclosing group, class attribute or route modifiers state. */
+  requirements: Requirements
+  /** Receivers proved to hold an HTTP client or a router. */
+  receivers: Receivers
+  /** The controller a Laravel `Route::controller(...)` group names for the method names its routes state. */
+  controller?: string
+  /** Set inside the closure of a Laravel route group, where a required routes file is served under the group. */
+  grouped?: boolean
 }
 
 const routeMethods = new Map([
@@ -40,20 +56,8 @@ const restServerMethods = new Map([
 ])
 
 /** The receiver of a member call, for reading a builder chain such as `Route::prefix('api')->group(...)`. */
-function receiverOf(call: Fields): Fields | undefined {
+export function receiverOf(call: Fields): Fields | undefined {
   return field(field(call, 'what')!, 'what')
-}
-
-/** The fully qualified name a class reference states, through the file's `use` aliases. */
-export function typeName(node: Fields | undefined, scope: Pick<FileScope, 'namespace' | 'imports' | 'type'>): string | undefined {
-  if (node?.kind === 'selfreference' || node?.kind === 'staticreference') return scope.type
-  if (node?.kind !== 'name') return undefined
-  const written = String(node.name)
-  if (written.startsWith('\\')) return written.slice(1)
-  const [head, ...rest] = written.split('\\')
-  const imported = scope.imports.get(head!)
-  if (imported !== undefined) return [imported, ...rest].join('\\')
-  return scope.namespace ? `${scope.namespace}\\${written}` : written
 }
 
 /** `Foo::class`, `self::class` or `$this`, as the type whose method handles the request. */
@@ -73,6 +77,17 @@ function arrayHandler(node: Fields, scope: FileScope): Handler | undefined {
 }
 
 /**
+ * The handler a Laravel route argument names. Laravel reads a plain string as a method of the
+ * controller its `Route::controller(...)` group names, or otherwise as a controller class, never as a
+ * function, so a string outside such a group leaves the handler unknown.
+ */
+function laravelHandler(argument: Fields | undefined, scope: FileScope): Handler | undefined {
+  const written = argument?.kind === 'string' || argument?.kind === 'nowdoc' ? literalText(argument, scope.constants) : undefined
+  if (written === undefined) return handlerOf(argument, scope)
+  return scope.controller !== undefined && /^\w+$/.test(written) ? { symbol: symbolName('', written, scope.controller) } : undefined
+}
+
+/**
  * The handler an argument names: a function literal written in place, an array callable, an
  * invokable class, or a symbol name a string states. Anything else leaves the endpoint unreported.
  */
@@ -86,17 +101,65 @@ export function handlerOf(argument: Fields | undefined, scope: FileScope): Handl
   if (invokable !== undefined) return { symbol: symbolName('', '__invoke', invokable) }
   const written = literalText(argument, scope.constants)
   // A string names a function or a `Type::method`, already fully qualified as PHP resolves it.
-  return written === undefined || !/^\\?[\w\\]+(?:::\w+)?$/.test(written) ? undefined : { symbol: written.replace(/^\\/, '') }
+  return written === undefined || !/^\\?[\w\\]+(?:::\w+)?$/.test(written) ? undefined : { symbol: qualifiedName(written) }
 }
 
-/** An unresolved prefix or route, or an unresolved handler, reports no endpoint. */
-function endpointsFor(
-  methods: string[], route: string | undefined, handler: Handler | undefined, prefix: string | undefined,
-): PendingEndpoint[] {
-  if (handler === undefined) return []
-  const written = joinPath(prefix, route)
-  const path = written === undefined ? undefined : routeSegments(written)
-  return path === undefined ? [] : methods.map(method => ({ handler, method, path }))
+/** Where a route entry is registered: its file, prefix and patterns, its router, and the operation that registers it. */
+export type Registration = Pick<FileScope, 'file' | 'prefix' | 'requirements'> & { registrar: string; router?: Router }
+
+export function registration(scope: FileScope): Registration {
+  return { file: scope.file, prefix: scope.prefix, requirements: scope.requirements, registrar: scope.operation ?? moduleOperationId(scope.file) }
+}
+
+/**
+ * Endpoints of one route entry, for every method unless the methods are not readable (undefined).
+ * Every PHP router this scanner reads takes the first registered match, so an entry whose methods or
+ * handler are not readable is still reported, as a blocker. The scanner proves neither the file that
+ * creates the application nor the order files register their routes in, so the application is the
+ * declaring file and every endpoint shares position 0: an unknown order.
+ */
+function endpointsFor(methods: string[] | undefined, route: RouteText, handler: Handler | undefined, at: Registration): PendingEndpoint[] {
+  const entry = {
+    handler: methods === undefined ? undefined : handler, route: joinRoutes(at.prefix, route), requirements: at.requirements,
+    laravel: at.router === 'laravel', order: { application: at.file, position: 0 }, registrar: at.registrar,
+  }
+  return (methods ?? ['*']).map(method => ({ ...entry, method }))
+}
+
+/**
+ * Patterns by parameter name. A name the scanner cannot read may name any parameter, so every
+ * parameter becomes constrained (`*`), by the stated pattern only when it stays inside one segment.
+ */
+function patterns(entries: [string | undefined, string | undefined][]): Map<string, string> {
+  return new Map(entries.map(([name, pattern]) => name !== undefined ? [name, pattern ?? unreadablePattern]
+    : ['*', pattern !== undefined && staysWithinSegment(pattern) ? pattern : unreadablePattern]))
+}
+
+/** `['id' => '\d+']` as patterns by parameter name. */
+function patternMap(node: Fields | undefined, constants: Constants): Map<string, string> {
+  if (node?.kind !== 'array') return patterns([[undefined, undefined]])
+  return patterns(list(node, 'items').map(item => [literalText(field(item, 'key'), constants), literalText(field(item, 'value'), constants)]))
+}
+
+/** Laravel's named `where` helpers, whose patterns stay inside one segment. */
+const whereHelpers = new Map([
+  ['wherenumber', '[0-9]+'], ['wherealpha', '[a-zA-Z]+'], ['wherealphanumeric', '[a-zA-Z0-9]+'],
+  ['whereuuid', '[\\da-fA-F-]+'], ['whereulid', '[0-9a-zA-Z]+'],
+])
+
+/** The patterns a Laravel `where`, `whereNumber`, `whereIn` or similar call states, or undefined for any other call. */
+export function whereRequirements(call: Fields, constants: Constants): Map<string, string> | undefined {
+  const member = memberOf(call)?.toLowerCase()
+  const [names, value] = list(call, 'arguments')
+  if (member === 'where' && names?.kind === 'array') return patternMap(names, constants)
+  const values = member === 'wherein' && value?.kind === 'array'
+    ? list(value, 'items').map(item => literalText(field(item, 'value'), constants)) : [undefined]
+  const pattern = member === 'where' ? literalText(value, constants) ?? unreadablePattern
+    : member === 'wherein' ? (values.includes(undefined) ? unreadablePattern : values.join('|'))
+      : whereHelpers.get(member ?? '')
+  if (pattern === undefined) return undefined
+  const written = names?.kind === 'array' ? list(names, 'items').map(item => field(item, 'value')) : [names]
+  return patterns(written.map(name => [literalText(name, constants), pattern]))
 }
 
 /** The literal method names an argument lists, such as `['get', 'head']` or `'GET, POST'`. */
@@ -109,22 +172,79 @@ function methodList(node: Fields | undefined, constants: Constants): string[] | 
   return methods.every(name => /^[A-Z][A-Z-]*$/.test(name)) ? methods : undefined
 }
 
+/** What a builder chain such as `Route::prefix('api')->where([...])` states for the routes it registers. */
+interface Chain {
+  prefix: RouteText
+  requirements: Requirements
+  router: Router
+  controller?: string
+}
+
+/** A chain call that states a prefix, a host, a controller or patterns for the routes the chain registers. */
+function chainModifier(call: Fields, chain: Omit<Chain, 'router'>, prefixes: RouteText[], scope: FileScope): void {
+  const member = memberOf(call)?.toLowerCase()
+  const [argument] = list(call, 'arguments')
+  if (member === 'prefix') prefixes.unshift(routeText(argument, scope.constants))
+  // A route that answers only on one host cannot be told apart from the rest by its path.
+  if (member === 'domain') prefixes.unshift(unresolvedRoute)
+  if (member === 'controller') chain.controller = argument?.kind === 'staticlookup' ? typeName(field(argument, 'what'), scope) : undefined
+  for (const [name, pattern] of whereRequirements(call, scope.constants) ?? []) (chain.requirements as Map<string, string>).set(name, pattern)
+}
+
 /**
- * A route registered on a builder, either statically as `Route::get('/talks', $handler)` or on an
- * application or group object as `$app->get('/talks', $handler)`. `match` and `map` list their methods.
+ * The prefix, controller and parameter patterns a builder chain declares, when the chain starts at a
+ * proved router; undefined when it does not. A Laravel chain continues the group the code runs in; a
+ * Slim chain continues its receiver's own prefix. A computed prefix is unresolved.
+ */
+function routerChain(call: Fields, scope: FileScope): Chain | undefined {
+  const prefixes: RouteText[] = []
+  const chain: Omit<Chain, 'router'> = { prefix: noRoute, requirements: new Map(scope.requirements), controller: scope.controller }
+  let current = receiverOf(call)
+  while (current?.kind === 'call') {
+    chainModifier(current, chain, prefixes, scope)
+    current = receiverOf(current)
+  }
+  const receiver = proved(current, scope)
+  if (receiver === undefined || receiver.role === 'client') return undefined
+  const base = receiver.role === 'laravel' ? scope.prefix : receiver.prefix ?? unresolvedRoute
+  return { ...chain, prefix: joinRoutes(base, ...prefixes), router: receiver.role }
+}
+
+/** The patterns Laravel's `Route::pattern('id', ...)` or `Route::patterns([...])` sets for every route. */
+export function globalPatterns(call: Fields, scope: FileScope): Map<string, string> | undefined {
+  const member = memberOf(call)?.toLowerCase()
+  if ((member !== 'pattern' && member !== 'patterns') || routerChain(call, scope)?.router !== 'laravel') return undefined
+  const [names, value] = list(call, 'arguments')
+  return member === 'patterns' ? patternMap(names, scope.constants) : patterns([[literalText(names, scope.constants), literalText(value, scope.constants)]])
+}
+
+/** Members that register routes this scanner does not report: views, redirects and resource controllers. */
+const unreadRoutes = new Set([
+  'view', 'redirect', 'permanentredirect', 'resource', 'resources', 'apiresource', 'apiresources', 'singleton', 'apisingleton',
+])
+
+/** The methods a builder member registers, undefined when not readable, and the position of its route argument. */
+function builderRoute(member: string | undefined, args: Fields[], constants: Constants): { methods: string[] | undefined; at: number } | undefined {
+  if (member === 'match' || member === 'map') return { methods: methodList(args[0], constants), at: 1 }
+  if (unreadRoutes.has(member ?? '')) return { methods: undefined, at: 0 }
+  const method = member === undefined ? undefined : routeMethods.get(member)
+  return method === undefined ? undefined : { methods: [method], at: 0 }
+}
+
+/**
+ * A route registered on a proved router, either statically as `Route::get('/talks', $handler)`,
+ * after fluent prefixes as `Route::prefix('api')->get(...)`, or on an application or group object
+ * as `$app->get('/talks', $handler)`. `match` and `map` list their methods.
  */
 export function builderEndpoints(call: Fields, scope: FileScope): PendingEndpoint[] {
-  const member = memberOf(call)?.toLowerCase()
   const args = list(call, 'arguments')
-  if (member === 'match' || member === 'map') {
-    if (args.length !== 3) return []
-    const methods = methodList(args[0], scope.constants)
-    return methods === undefined ? [] : endpointsFor(methods, literalText(args[1], scope.constants), handlerOf(args[2], scope), scope.prefix)
-  }
-  const method = member === undefined ? undefined : routeMethods.get(member)
-  // Two arguments, a route and a handler: any other shape is some other call that shares the name.
-  if (method === undefined || args.length !== 2) return []
-  return endpointsFor([method], literalText(args[0], scope.constants), handlerOf(args[1], scope), scope.prefix)
+  const route = builderRoute(memberOf(call)?.toLowerCase(), args, scope.constants)
+  const chain = route === undefined ? undefined : routerChain(call, scope)
+  if (route === undefined || chain === undefined) return []
+  const at = { ...registration(scope), ...chain }
+  const handler = chain.router === 'laravel' ? laravelHandler(args[route.at + 1], { ...scope, controller: chain.controller })
+    : handlerOf(args[route.at + 1], scope)
+  return endpointsFor(route.methods, routeText(args[route.at], scope.constants), handler, at)
 }
 
 /** The value of an array entry with the given literal key. */
@@ -134,52 +254,62 @@ function entryValue(node: Fields | undefined, key: string, constants: Constants)
   return entry === undefined ? undefined : field(entry, 'value')
 }
 
-/**
- * Prefixes a builder chain declares, such as `Route::prefix('api')->middleware('auth')->group(...)`.
- * A prefix the source computes leaves the chain unresolved.
- */
-function chainPrefix(call: Fields, constants: Constants): string | undefined {
-  const prefixes: (string | undefined)[] = []
-  let current: Fields | undefined = receiverOf(call)
-  while (current?.kind === 'call') {
-    if (memberOf(current)?.toLowerCase() === 'prefix') {
-      prefixes.unshift(literalText(list(current, 'arguments')[0], constants))
-    }
-    current = receiverOf(current)
-  }
-  return joinPath(...prefixes)
-}
-
 /** The prefix a group states as its first argument, either as a path or as a `prefix` option. */
-function groupPrefix(argument: Fields | undefined, constants: Constants): string | undefined {
-  if (argument === undefined) return ''
+function groupPrefix(argument: Fields | undefined, constants: Constants): RouteText {
+  if (argument === undefined) return noRoute
   const option = argument.kind === 'array' ? entryValue(argument, 'prefix', constants) : undefined
   // A group array without a prefix option states no prefix; any other unresolved value states one.
-  if (argument.kind === 'array' && option === undefined) return ''
-  return literalText(option ?? argument, constants)
+  if (argument.kind === 'array' && option === undefined) return noRoute
+  return routeText(option ?? argument, constants)
 }
 
-/** A route group whose closure declares routes under a shared prefix. */
-export function groupCall(call: Fields, constants: Constants): { prefix: string | undefined; routes: Fields } | undefined {
-  if (memberOf(call)?.toLowerCase() !== 'group') return undefined
+/**
+ * A route group on a proved router: its options, then either the closure that declares its routes,
+ * with the receiver the router passes that closure first, or what names the routes it loads from
+ * elsewhere, such as a Laravel routes file.
+ */
+export interface Group extends Chain {
+  routes: Fields | undefined
+  member: Receiver
+  loaded: Fields | undefined
+}
+
+/** A route group on a proved router, whose routes share its prefix and patterns. */
+export function groupCall(call: Fields, scope: FileScope): Group | undefined {
+  const chain = memberOf(call)?.toLowerCase() === 'group' ? routerChain(call, scope) : undefined
+  if (chain === undefined) return undefined
   const args = list(call, 'arguments')
-  const routes = args.find(argument => argument.kind === 'closure' || argument.kind === 'arrowfunc')
-  if (routes === undefined) return undefined
-  const stated = groupPrefix(args[0] === routes ? undefined : args[0], constants)
-  return { prefix: joinPath(chainPrefix(call, constants), stated), routes }
+  const last = args.at(-1)
+  const routes = last?.kind === 'closure' || last?.kind === 'arrowfunc' ? last : undefined
+  const options = args.length > 1 ? args[0] : undefined
+  // Laravel's group options may also state patterns, and a host that makes every route inside a blocker.
+  const where = entryValue(options, 'where', scope.constants)
+  const requirements = where === undefined ? chain.requirements : new Map([...chain.requirements, ...patternMap(where, scope.constants)])
+  const host = entryValue(options, 'domain', scope.constants) === undefined ? noRoute : unresolvedRoute
+  const prefix = joinRoutes(chain.prefix, groupPrefix(options, scope.constants), host)
+  const member: Receiver = chain.router === 'laravel' ? { role: 'laravel' } : { role: 'slim', prefix }
+  return { ...chain, prefix, requirements, routes, member, loaded: routes === undefined ? last : undefined }
 }
 
-/** The path and methods a `#[Route]` attribute states; a computed path leaves the route unreported. */
-function attributeRoute(attribute: Fields, constants: Constants): { route: string | undefined; methods: string[] } {
+/** What a `#[Route]` attribute states; methods are undefined when not readable. */
+interface AttributeRoute {
+  route: RouteText
+  methods: string[] | undefined
+  requirements: Requirements
+}
+
+function attributeRoute(attribute: Fields, constants: Constants): AttributeRoute {
   const args = list(attribute, 'args')
   const positional = args.find(argument => argument.kind !== 'namedargument')
   const named = (name: string) => args.find(argument => argument.kind === 'namedargument' && argument.name === name)
   const path = named('path') ?? positional
   const methods = named('methods')
+  const requirements = named('requirements')
   return {
     // A named argument wraps its value; a positional argument is the value.
-    route: path === undefined ? '' : literalText(path.kind === 'namedargument' ? field(path, 'value') : path, constants),
-    methods: methods === undefined ? ['*'] : methodList(field(methods, 'value'), constants) ?? [],
+    route: path === undefined ? noRoute : routeText(path.kind === 'namedargument' ? field(path, 'value') : path, constants),
+    methods: methods === undefined ? ['*'] : methodList(field(methods, 'value'), constants),
+    requirements: requirements === undefined ? new Map() : patternMap(field(requirements, 'value'), constants),
   }
 }
 
@@ -190,21 +320,44 @@ export function routeAttributes(node: Fields): Fields[] {
 }
 
 /**
- * The prefix a class-level `#[Route]` attribute states for every route in the class. A class with no
- * such attribute states no prefix; one whose attribute path is not literal leaves it unresolved.
+ * The prefix and parameter patterns a class-level `#[Route]` attribute states for every route in the
+ * class. A class with no such attribute states neither; a path that is not literal leaves the prefix
+ * unresolved.
  */
-export function attributePrefix(node: Fields, constants: Constants): string | undefined {
-  return joinPath(...routeAttributes(node).map(attribute => attributeRoute(attribute, constants).route))
+export function attributeScope(node: Fields, constants: Constants): Pick<FileScope, 'prefix' | 'requirements'> {
+  const routes = routeAttributes(node).map(attribute => attributeRoute(attribute, constants))
+  return { prefix: joinRoutes(...routes.map(route => route.route)), requirements: new Map(routes.flatMap(route => [...route.requirements])) }
 }
 
-/** Endpoints a controller method's own `#[Route]` attributes declare, under the class prefix. */
-export function attributeEndpoints(method: Fields, scope: FileScope): PendingEndpoint[] {
-  if (field(method, 'body') === undefined) return []
-  const handler: Handler = { operation: operationId(scope.file, method) }
-  return routeAttributes(method).flatMap(attribute => {
-    const { route, methods } = attributeRoute(attribute, scope.constants)
-    return endpointsFor(methods, route, handler, scope.prefix)
+/** A Slim group whose routes come from a callable the scanner does not follow blocks its prefix. */
+export function groupBlocker(group: Group, scope: FileScope): PendingEndpoint[] {
+  return endpointsFor(undefined, unresolvedRoute, undefined, { ...registration(scope), ...group })
+}
+
+/** Endpoints `#[Route]` attributes declare for one method with a body, which also registers them. */
+function routedMethod(attributes: Fields[], method: Fields, scope: FileScope): PendingEndpoint[] {
+  const handler = { operation: operationId(scope.file, method) }
+  return attributes.flatMap(attribute => {
+    const { route, methods, requirements } = attributeRoute(attribute, scope.constants)
+    const at = { ...scope, requirements: new Map([...scope.requirements, ...requirements]), registrar: handler.operation }
+    return endpointsFor(methods, route, handler, at)
   })
+}
+
+/** Endpoints a controller method's own `#[Route]` attributes declare, under the class prefix and patterns. */
+export function attributeEndpoints(method: Fields, scope: FileScope): PendingEndpoint[] {
+  return field(method, 'body') === undefined ? [] : routedMethod(routeAttributes(method), method, scope)
+}
+
+/**
+ * Symfony reads the class-level `#[Route]` of an invokable controller whose methods declare no route
+ * as the route of `__invoke`, not as a prefix. The scope is the one the class is declared in.
+ */
+export function invokableEndpoints(type: Fields, scope: FileScope): PendingEndpoint[] {
+  const methods = list(type, 'body').filter(member => member.kind === 'method')
+  const invoke = methods.find(method => nameOf(method.name)?.toLowerCase() === '__invoke' && field(method, 'body') !== undefined)
+  if (invoke === undefined || methods.some(method => routeAttributes(method).length > 0)) return []
+  return routedMethod(routeAttributes(type), invoke, scope)
 }
 
 /**
@@ -212,19 +365,18 @@ export function attributeEndpoints(method: Fields, scope: FileScope): PendingEnd
  * namespace and route the source states; the REST root the site adds is not part of the source.
  */
 export function restRouteEndpoints(call: Fields, scope: FileScope): PendingEndpoint[] {
-  if (nameOf(field(call, 'what'))?.replace(/^\\/, '') !== 'register_rest_route') return []
+  if (calledFunction(call) !== 'register_rest_route') return []
   const [namespace, route, args] = list(call, 'arguments')
-  const declared = literalText(namespace, scope.constants)
-  const written = literalText(route, scope.constants)
-  if (declared === undefined || written === undefined) return []
-  const path = joinPath(declared, written)
+  const path = joinRoutes(routeText(namespace, scope.constants), routeText(route, scope.constants))
   const configurations = entryValue(args, 'methods', scope.constants) === undefined
     ? list(args, 'items').map(item => field(item, 'value')).filter(value => value?.kind === 'array')
     : [args]
+  // Arguments that state no readable configuration still register the route.
+  if (configurations.length === 0) return endpointsFor(undefined, path, undefined, registration(scope))
   return configurations.flatMap(configuration => {
     const methods = restMethods(entryValue(configuration, 'methods', scope.constants), scope.constants)
     const handler = handlerOf(entryValue(configuration, 'callback', scope.constants), scope)
-    return methods === undefined ? [] : endpointsFor(methods, path, handler, scope.prefix)
+    return endpointsFor(methods, path, handler, registration(scope))
   })
 }
 

@@ -44,6 +44,11 @@ export function operationId(file: string, node: Syntax): string {
   return `${file}#${node.loc!.start.offset}`
 }
 
+/** The operation of the code outside every function, class and method: the file's own top-level code. */
+export function moduleOperationId(file: string): string {
+  return `${file}#module`
+}
+
 /** PHP syntax through 8.4; parser errors throw instead of producing a partial tree. */
 export function parsePhp(file: string, source: string): Program {
   const parser = new Engine({ parser: { version: '8.4', suppressErrors: false },
@@ -58,6 +63,38 @@ export function isSyntax(value: unknown): value is Syntax {
 export function nameOf(value: unknown): string | undefined {
   if (typeof value === 'string') return value
   return isSyntax(value) && typeof value.name === 'string' ? value.name : undefined
+}
+
+/** A name as PHP reads a fully qualified spelling such as `\foo`: without its one leading backslash. */
+export function qualifiedName(written: string): string {
+  return written.replace(/^\\/, '')
+}
+
+/** The plain function a call names, such as `curl_init` in `\curl_init(...)`. */
+export function calledFunction(call: Fields): string | undefined {
+  const what = field(call, 'what')
+  return call.kind === 'call' && what?.kind === 'name' ? qualifiedName(String(what.name)) : undefined
+}
+
+/** What a file says about names at one point: its namespace, its `use` aliases and the enclosing type. */
+export interface NameScope {
+  namespace: string
+  /** Alias or last name segment to its fully qualified name. */
+  imports: ReadonlyMap<string, string>
+  /** Fully qualified name of the enclosing type. */
+  type?: string
+}
+
+/** The fully qualified name a class reference states, through the file's `use` aliases. */
+export function typeName(node: Fields | undefined, scope: NameScope): string | undefined {
+  if (node?.kind === 'selfreference' || node?.kind === 'staticreference') return scope.type
+  if (node?.kind !== 'name') return undefined
+  const written = String(node.name)
+  if (written.startsWith('\\')) return qualifiedName(written)
+  const [head, ...rest] = written.split('\\')
+  const imported = scope.imports.get(head!)
+  if (imported !== undefined) return [imported, ...rest].join('\\')
+  return symbolName(scope.namespace, written)
 }
 
 export function children(node: Syntax): Syntax[] {
