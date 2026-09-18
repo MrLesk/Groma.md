@@ -123,10 +123,11 @@ nothing else needs editing. An external system renames the same way, into
 `externals/<new-id>.md`.
 
 The value is normalized to kebab-case, so the ID the result prints is the
-authoritative one. A taken ID, a reserved document name, and an actor or flow ID
-are refused, and the rename is its own edit, separate from a combine, move or
-detach. The result prints `replaced: <old-id> -> <new-id>`; record it in the
-Backlog task as `groma agent-instructions backlog` explains.
+authoritative one. A taken ID, a reserved document name, a command word
+(`group`, `relation`), and an actor or flow ID are refused, and the rename is
+its own edit, separate from a combine, move or detach. The result prints
+`replaced: <old-id> -> <new-id>`; record it in the Backlog task as
+`groma agent-instructions backlog` explains.
 
 Scans find elements through the files they own, not through their IDs, so the
 new ID survives every later scan. A scanned container that owns no files keeps

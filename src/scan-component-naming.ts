@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto'
 import path from 'node:path'
 
-import { isReservedDocument } from './architecture-path.ts'
+import { isReservedId } from './architecture-path.ts'
 import { displayName, kebabCase } from './naming.ts'
 
 interface ComponentSource {
@@ -53,7 +53,7 @@ export function componentNames(
     }
     const collisions = candidates.filter(candidate => {
       const id = idFor(candidate)
-      return occupied.has(id) || isReservedDocument(`${id}.md`) || counts.get(id)! > 1
+      return occupied.has(id) || isReservedId(id) || counts.get(id)! > 1
     })
     if (collisions.length === 0) break
     for (const candidate of collisions) advance(candidate)

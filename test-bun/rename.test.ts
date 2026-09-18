@@ -122,6 +122,48 @@ test.concurrent('links follow the rename whatever spelling they use', async () =
   } finally { await rm(root, { recursive: true, force: true }) }
 })
 
+/** Rewrites the buyer's rows to reference links; the definitions follow the table as the given text. */
+async function referenceRows(root: string, definitions: (link: (id: string) => string) => string): Promise<void> {
+  const record = path.join(root, 'groma/relationships.md')
+  const stored = await readFile(record, 'utf8')
+  const documents = new Map([['a', (await documentOf(root, 'a'))!], ['b', (await documentOf(root, 'b'))!]])
+  const link = (id: string) => documents.get(id)!.split('/').slice(1).join('/')
+  const rows = stored.replace(`(${link('a')})`, '[a]').replace(`(${link('b')})`, '[b]')
+  await writeFile(record, `${rows}\n${definitions(link)}\n`)
+}
+
+test.concurrent('indented and next-line reference definitions follow the rename, and the world still loads', async () => {
+  const root = await repository()
+  try {
+    await addThing(root, { thing: 'actor', name: 'Buyer', overview: 'Buys goods.' })
+    await addRelation(root, { source: 'buyer', target: 'a', description: 'Places an order', technology: 'Browser' })
+    await addRelation(root, { source: 'buyer', target: 'b', description: 'Checks stock', technology: 'Browser' })
+    // The reader accepts a definition indented by up to three spaces and a destination on the next line.
+    await referenceRows(root, link => `   [a]: ${link('a')}\n[b]:\n  ${link('b')}`)
+    expect((await loadAnnotatedArchitecture(root)).relationships.map(item => item.target).toSorted()).toEqual(['a', 'b'])
+
+    await editArchitecture(root, { id: 'a', newId: 'order-entry' })
+    await editArchitecture(root, { id: 'b', newId: 'stock' })
+    const after = await loadAnnotatedArchitecture(root)
+    expect(after.relationships.map(item => item.target).toSorted()).toEqual(['order-entry', 'stock'])
+  } finally { await rm(root, { recursive: true, force: true }) }
+})
+
+test.concurrent('a rename that would leave a link naming the old document is refused and writes nothing', async () => {
+  const root = await repository()
+  try {
+    await addThing(root, { thing: 'actor', name: 'Buyer', overview: 'Buys goods.' })
+    await addRelation(root, { source: 'buyer', target: 'a', description: 'Places an order', technology: 'Browser' })
+    await addRelation(root, { source: 'buyer', target: 'b', description: 'Checks stock', technology: 'Browser' })
+    // The reader resolves a definition inside a block quote; the rename does not repoint it.
+    await referenceRows(root, link => `> [a]: ${link('a')}\n\n[b]: ${link('b')}`)
+    const before = await loadAnnotatedArchitecture(root)
+
+    await expect(editArchitecture(root, { id: 'a', newId: 'order-entry' })).rejects.toThrow('cannot change')
+    expect(await loadAnnotatedArchitecture(root)).toEqual(before)
+  } finally { await rm(root, { recursive: true, force: true }) }
+})
+
 test.concurrent('an external system renames, and an actor and a flow are refused', async () => {
   const root = await repository()
   try {
@@ -149,7 +191,10 @@ test.concurrent('a taken or reserved id is refused and nothing is written', asyn
   try {
     const before = await loadAnnotatedArchitecture(root)
     await expect(editArchitecture(root, { id: 'a', newId: 'b' })).rejects.toThrow('already exists')
-    await expect(editArchitecture(root, { id: 'a', newId: 'index' })).rejects.toThrow('reserved document name')
+    await expect(editArchitecture(root, { id: 'a', newId: 'index' })).rejects.toThrow('is reserved')
+    // The CLI reads these words as a relation or group address, so it could not reach an element named so.
+    await expect(editArchitecture(root, { id: 'a', newId: 'group' })).rejects.toThrow('is reserved')
+    await expect(editArchitecture(root, { id: 'a', newId: 'Relation' })).rejects.toThrow('is reserved')
     await expect(editArchitecture(root, { id: 'a', newId: 'later', combine: ['b'] })).rejects.toThrow('separate edit')
     expect((await loadAnnotatedArchitecture(root)).elements).toEqual(before.elements)
   } finally { await rm(root, { recursive: true, force: true }) }

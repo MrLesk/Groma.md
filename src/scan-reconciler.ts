@@ -3,7 +3,7 @@ import path from 'node:path'
 import { isDeepStrictEqual } from 'node:util'
 
 import { detectDuplicatedLogic, rememberArchitectureFindings } from './architecture-findings.ts'
-import { isReservedDocument } from './architecture-path.ts'
+import { isReservedId } from './architecture-path.ts'
 import { buildArchitectureModel } from './architecture-model.ts'
 import { storedConnections } from './relationship-markdown.ts'
 import { loadArchitecture } from './architecture-reader.ts'
@@ -91,11 +91,16 @@ function indexWorld(records: ArchitectureRecords): World {
   return world
 }
 
+/** The ID a record of this name takes when its plain ID is taken or reserved. */
+function qualifiedId(base: string, parent?: WorldRecord): string {
+  return `${parent?.id ?? 'source'}-${base}`
+}
+
 function availableId(world: World, name: string, parent?: WorldRecord): string {
   const base = kebabCase(name) || 'source'
   const existing = world.byId.get(base)
-  if (existing === undefined && !isReservedDocument(`${base}.md`)) return base
-  const qualified = `${parent?.id ?? 'source'}-${base}`
+  if (existing === undefined && !isReservedId(base)) return base
+  const qualified = qualifiedId(base, parent)
   if (!world.byId.has(qualified)) return qualified
   let suffix = 2
   while (world.byId.has(`${qualified}-${suffix}`)) suffix += 1
@@ -241,7 +246,7 @@ function existingChild(
   parent?: WorldRecord,
 ): WorldRecord | undefined {
   const base = kebabCase(name)
-  const ids = parent === undefined ? [base] : [base, `${parent.id}-${base}`]
+  const ids = [base, qualifiedId(base, parent)]
   return ids.map(id => world.byId.get(id)).find(record => {
     return record?.kind === kind && record.parent === parent?.id
   })

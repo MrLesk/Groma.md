@@ -249,16 +249,16 @@ async function parsedDocument(sourceFilename: string, source: string): Promise<A
 }
 
 /**
- * Flow steps name their endpoints by document and need their relationship, so a detached file, a
- * removed record, or a relocated document can leave a flow unresolvable. The write is refused first.
+ * Relationship rows and flow steps name their endpoints by document, and a flow step needs its
+ * relationship, so a detached file, a removed record, or a relocated document can leave the
+ * architecture unloadable or a flow unresolvable. The write is refused first.
  */
-async function requireResolvableFlows(
+async function requireLoadableResult(
   context: CurationContext,
   target: ArchitectureElement,
   rewrites: readonly DocumentWrite[],
   removals: readonly string[],
 ): Promise<void> {
-  if (context.records.flows.length === 0) return
   const written = new Map(rewrites.map(rewrite => [rewrite.sourceFilename, rewrite]))
   const gone = new Set(removals)
   const documents: ArchitectureDocument[] = []
@@ -269,7 +269,12 @@ async function requireResolvableFlows(
       ? document
       : await parsedDocument(rewrite.destinationFilename, rewrite.source))
   }
-  const model = buildArchitectureModel(documents)
+  let model: ArchitectureModel
+  try {
+    model = buildArchitectureModel(documents)
+  } catch (error) {
+    throw new Error(`cannot change "${target.id}": ${error instanceof Error ? error.message : String(error)}`)
+  }
   const flows = await Promise.all(context.records.flows.map(async flow => {
     const rewrite = written.get(flow.sourceFilename)
     return rewrite === undefined ? flow : await parsedDocument(rewrite.destinationFilename, rewrite.source)
@@ -427,7 +432,7 @@ export async function curateElement(
   const writes: DocumentWrite[] = [...rewrites, ...renamed.links]
   validateDestinations(filesystem, writes)
   const removals = combined.removals.map(element => element.sourceFilename)
-  await requireResolvableFlows(context, target, writes, removals)
+  await requireLoadableResult(context, target, writes, removals)
   const paths = await applyRewrites(repositoryRoot, writes, removals)
   return {
     id: renamed.id,
