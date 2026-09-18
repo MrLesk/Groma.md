@@ -48,7 +48,9 @@ test.concurrent('PHP routing declarations report the endpoints their handlers se
     // Routes on receivers not proved to be routers report nothing. Pattern-restricted and partly literal
     // segments are constrained, and so are Laravel parameters a global pattern restricts. A Laravel
     // routes file that another file loads, through `withRouting`, a group or a `require`, serves its
-    // routes under every prefix on the way, and under an unresolved prefix they are blockers.
+    // routes under every prefix and pattern on the way, and under an unresolved prefix they are blockers;
+    // a `require` in a file nothing loads adds nothing. A typed Slim application serves at the root
+    // when the project sets no base path.
     // A Laravel string handler names a method of its controller group, never a function. An invokable
     // Symfony class's own attribute routes `__invoke`. A route entry the scanner sees but cannot resolve,
     // such as a computed route, prefix or group, a host-bound group, an unknown handler or a redirect, is
@@ -58,8 +60,8 @@ test.concurrent('PHP routing declarations report the endpoints their handlers se
     expect(endpoints).toEqual([
       ['*', '/old/talks/:path*~', 'routes/web.php', order('bootstrap/app.php')],
       ['*', '/shop/v1/health/:path*~', 'plugin/rest.php', order('plugin/rest.php')],
-      ['DELETE', '/admin/talks/:id', 'app/TalkController.php', order('bootstrap/app.php')],
-      ['DELETE', '/internal/talks/:id', 'app/TalkController.php', order('bootstrap/app.php')],
+      ['DELETE', '/admin/talks/:id~', 'app/TalkController.php', order('bootstrap/app.php')],
+      ['DELETE', '/internal/talks/:id~', 'app/TalkController.php', order('bootstrap/app.php')],
       ['GET', '/api/archive/:path*~', 'routes/web.php', order('bootstrap/app.php')],
       ['GET', '/api/archive/latest', 'app/TalkController.php', order('bootstrap/app.php')],
       ['GET', '/api/health', 'routes/web.php', order('bootstrap/app.php')],
@@ -83,8 +85,10 @@ test.concurrent('PHP routing declarations report the endpoints their handlers se
       ['GET', '/ratings/:id', 'app/SpeakerController.php', order('app/SpeakerController.php')],
       ['GET', '/reports/:name', 'routes/web.php', order('bootstrap/app.php')],
       ['GET', '/reports/daily', 'routes/web.php', order('bootstrap/app.php')],
+      ['GET', '/reviews/:id', 'app/SpeakerController.php', order('app/SpeakerController.php')],
       ['GET', '/shop/v1/orders', 'plugin/rest.php', order('plugin/rest.php')],
       ['GET', '/shop/v1/orders/:id~/:index~', 'plugin/rest.php', order('plugin/rest.php')],
+      ['GET', '/status', 'app/AdminRoutes.php', order('app/AdminRoutes.php')],
       ['GET', '/tenant/:path*~', 'routes/web.php', order('bootstrap/app.php')],
       ['GET', '/v2/talks', 'app/TalkController.php', order('bootstrap/app.php')],
       ['HEAD', '/api/talks/:id~', 'app/TalkController.php', order('bootstrap/app.php')],
@@ -136,12 +140,9 @@ test.concurrent('PHP client calls report the method and the path parts the sourc
       ['POST', 'configured /shop/v1/orders', 'plugin/client.php'],
       ['PUT', 'configured /shop/v1/orders/{}', 'plugin/client.php'],
     ])
-    // Top-level code is an operation only in files whose top-level code registers routes or sends requests.
+    // Top-level code is an operation only in files where a request or a blocker names it.
     const modules = scan.operations!.filter(operation => operation.name === '(module)').map(operation => operation.file).sort()
-    expect(modules).toEqual([
-      'bootstrap/app.php', 'plugin/client.php', 'routes/admin.php', 'routes/auth.php', 'routes/mobile-v1.php',
-      'routes/mobile.php', 'routes/partners.php', 'routes/web.php',
-    ])
+    expect(modules).toEqual(['plugin/client.php', 'routes/partners.php', 'routes/web.php'])
   } finally { await rm(temporary, { recursive: true, force: true }) }
 })
 
@@ -167,8 +168,9 @@ test.concurrent('a Laravel global pattern whose parameter name is unreadable con
   const { temporary, scan } = await scanFixture('php-http-patterns')
   try {
     const endpoints = scan.httpEndpoints!.map(endpoint => [endpoint.method, endpointPath(endpoint.path)]).sort()
-    // A route's own pattern still decides its parameter.
-    expect(endpoints).toEqual([['GET', '/files/:path*'], ['GET', '/talks/:id~']])
+    // A route's own pattern still decides its parameter, and files that disagree on a name's pattern
+    // leave it unreadable, as does a route pattern whose parameter name the scanner cannot read.
+    expect(endpoints).toEqual([['GET', '/downloads/:file*~'], ['GET', '/files/:path*'], ['GET', '/posts/:slug*~'], ['GET', '/talks/:id~']])
   } finally { await rm(temporary, { recursive: true, force: true }) }
 })
 
@@ -177,17 +179,46 @@ test.concurrent('routes on a receiver whose prefix is not proved, or in a file n
   try {
     const endpoints = scan.httpEndpoints!.map(endpoint => [endpoint.method, endpointPath(endpoint.path), fileOf(scan, endpoint.operation)]).sort()
     // A Slim group object outside the group whose closure receives it, a closure passed to `group` on an
-    // unproved receiver, and a Laravel routes file that no loader reaches state no prefix. A Slim
-    // application a closure imports keeps its root, one the code may replace proves nothing, a local
-    // application of another function leaves the file's own one proved, and a base path prefixes routes.
+    // unproved receiver, a Laravel routes file that no loader reaches, and a `base_path` load with two
+    // candidate files state no prefix. A Slim application a closure imports keeps its root, while one
+    // the code may replace, or a closure reassigns or imports by reference, proves nothing; a local
+    // application of another function leaves the file's own one proved, and a closure sees it only
+    // through an import; one base path prefixes routes and two leave the prefix unresolved; and a typed
+    // application serves under an unresolved prefix when the project sets several base paths.
+    // Routes files that load each other in a cycle also serve under an unknown prefix.
     expect(endpoints).toEqual([
+      ['*', '/shop/:path*~', 'packages/shop/Provider.php'],
+      ['GET', '/:path*~', 'loop.php'],
+      ['GET', '/:path*~', 'packages/shop/routes/shop.php'],
+      ['GET', '/:path*~', 'routes/shop.php'],
+      ['GET', '/:path*~', 'slim.php'],
+      ['GET', '/:path*~', 'slim.php'],
       ['GET', '/:path*~', 'slim.php'],
       ['GET', '/:path*~', 'unloaded.php'],
       ['GET', '/:path*~', 'web.php'],
+      ['GET', '/:path*~', 'web.php'],
+      ['GET', '/:path*~', 'web.php'],
+      ['GET', '/admin/users', 'slim.php'],
       ['GET', '/api/talks', 'slim.php'],
+      ['GET', '/constructed', 'slim.php'],
+      ['GET', '/loop/ring', 'loop.php'],
       ['GET', '/status', 'slim.php'],
       ['GET', '/sub/based', 'slim.php'],
       ['GET', '/talks', 'web.php'],
+    ])
+  } finally { await rm(temporary, { recursive: true, force: true }) }
+})
+
+test.concurrent('a typed Slim application serves under the project base path, and a Laravel package under its manifest', async () => {
+  const { temporary, scan } = await scanFixture('php-http-projects')
+  try {
+    const endpoints = scan.httpEndpoints!.map(endpoint => [endpoint.method, endpointPath(endpoint.path), endpoint.order!.application]).sort()
+    // The one `setBasePath` call prefixes every route a typed application registers. A Laravel project
+    // without `bootstrap/app.php` shares the application of its nearest `composer.json`.
+    expect(endpoints).toEqual([
+      ['GET', '/myapp/api/sessions', 'slim/app/routes.php'],
+      ['GET', '/myapp/talks', 'slim/app/routes.php'],
+      ['GET', '/shop/cart', 'package/composer.json'],
     ])
   } finally { await rm(temporary, { recursive: true, force: true }) }
 })

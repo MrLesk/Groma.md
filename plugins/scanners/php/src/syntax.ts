@@ -32,6 +32,11 @@ export function list(node: Syntax | undefined, key: string): Fields[] {
 /** Declarations that hold executable code. */
 export const callables = new Set(['function', 'method', 'closure', 'arrowfunc'])
 
+/** The receiver of a member call, such as `Route` in `Route::get(...)` or `$app` in `$app->get(...)`. */
+export function receiverOf(call: Fields): Fields | undefined {
+  return field(field(call, 'what')!, 'what')
+}
+
 /** The member a call names, such as `get` in `Route::get(...)` or `$app->get(...)`. */
 export function memberOf(call: Fields): string | undefined {
   const what = field(call, 'what')

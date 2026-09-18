@@ -14,9 +14,14 @@ final class TalkClient
 {
     private object $cache;
 
-    public function __construct(private Client $http)
+    public function __construct(private Client $http, Client $backup)
     {
         $this->cache = new Cache();
+    }
+
+    public function backup(): array
+    {
+        return $this->backup->get('/api/backup');
     }
 
     public function list(): array

@@ -44,3 +44,18 @@ final class RateSpeaker
         return [$id];
     }
 }
+
+#[Route('/reviews')]
+final class ReviewController
+{
+    #[Route('/{id}', methods: ['GET'])]
+    public function show(int $id): array
+    {
+        return [$id];
+    }
+
+    public function __invoke(): array
+    {
+        return [];
+    }
+}

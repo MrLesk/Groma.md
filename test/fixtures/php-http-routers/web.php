@@ -10,3 +10,5 @@ $this->app['router']->group(['prefix' => 'packages'], function () {
         return 'package talks';
     });
 });
+
+Route::prefix('loop')->group(base_path('loop.php'));

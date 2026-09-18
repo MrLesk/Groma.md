@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@claude'
 created_date: '2026-09-16 20:15'
-updated_date: '2026-09-18 20:02'
+updated_date: '2026-09-18 23:11'
 labels: []
 dependencies: []
 references:
@@ -54,6 +54,17 @@ modified_files:
   - test/fixtures/php-http-routers/unloaded.php
   - test/fixtures/php-http-routers/slim.php
   - test/fixtures/php-http/routes/auth.php
+  - test/fixtures/php-http/tools/seed.php
+  - test/fixtures/php-http-routers/routes/shop.php
+  - test/fixtures/php-http-routers/packages/shop/routes/shop.php
+  - test/fixtures/php-http-routers/packages/shop/Provider.php
+  - test/fixtures/php-http-patterns/provider.php
+  - test/fixtures/php-http-projects/slim/public/index.php
+  - test/fixtures/php-http-projects/slim/app/routes.php
+  - test/fixtures/php-http-projects/package/composer.json
+  - test/fixtures/php-http-projects/package/src/ShopServiceProvider.php
+  - test/fixtures/php-http-projects/package/routes/shop.php
+  - test/fixtures/php-http-routers/loop.php
 parent_task_id: TASK-416
 type: feature
 ordinal: 481000
@@ -114,6 +125,8 @@ Review round (external cold reviews at cf8e7975; every item reproduced with a sc
 22. Cold-review round: Slim receivers carry their own prefix (AppFactory::create() or new App bound once, or typed Slim\App: root; a proved group's closure parameter: the group's prefix; a RouteCollectorProxy elsewhere: unresolved), a closure passed to group on an unproved receiver runs under an unresolved prefix, and closures import proved receivers by value through use. Laravel string handlers name a Route::controller(...) group method or stay unknown; domain(...) routes are blockers. Loads compose transitively, a require/include inside a Laravel group's closure loads that file under the group, and Laravel routes of a file no load reaches are blockers. The class-level #[Route] of an invokable Symfony controller without method routes routes __invoke. Top-level requests belong to the file's (module) operation, which exists only when a route entry, load or request names it.
 
 23. Re-review round: a top-level require/include of a routes file in a loaded file is a load under that file's bases; every Laravel endpoint and blocker of one project shares one application (its bootstrap/app.php, else its nearest composer.json, else the declaring file); a group with a domain option and a route with ->domain(...) are blockers; Slim writes count only in the variable's own scope, base paths from setBasePath prefix an application's routes, and a Slim group given a callable variable blocks its prefix; unrecognized loaders leave their files unreached.
+
+24. Simplicity round (cold junior-maintainer review): one load rule (a load serves its target under each base of its loading file; with no base, a group or withRouting serves from the root and a require serves nothing; a file left with no base serves under an unknown prefix), removing a spurious root blocker for a require in an unloaded file; red fixture lines for the load rule, a unique base_path candidate, conflicting global patterns, the composer.json application, a loading group's patterns and by-reference or assigned closure imports, plus the other uncaught rule mutations; write counting reads closure uses in one loop over a body's own nodes; one receiverOf in syntax.ts and one nearest-ancestor helper; unresolvedRoute next to noRoute; PendingEndpoint.order deleted (served computes the application); load naming throughout (Load, rootBase, one segment-check name); Receiver as a union where only Slim receivers carry a prefix, and globalPatterns proves its receiver directly; the PHP page states the receiver rule once and no longer says includes are not executed; tokens.ts reuses Fields from syntax.ts; a typed Slim App serves under the project's single literal setBasePath, at the root when none is called, and otherwise its routes are blockers.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
@@ -140,6 +153,8 @@ Laravel cross-file routing: pending endpoints now carry their route text, patter
 Cold-review round applied (all reproduced with the reviewer's probes in rev41610 and fixed): (1) Slim prefixes per receiver; proxies outside a proved group, and closures of unproved group calls, give blockers. (2) Laravel plain string handlers resolve only as controller-group methods. (3) Transitive loads, require inside a Laravel group, blockers for unloaded Laravel route files; the main fixture's routes file is now routes/web.php, loaded through bootstrap/app.php withRouting(web:). (4) Plan item 16 reworded: root-relative client paths stay configured. (5) Top-level requests are named after the (module) operation. (6) (module) is declared only when a fact names it; evidence.ts is back to its HEAD form, so other top-level calls create no operation or invocation. (7) Invokable Symfony class routes and Laravel domain() blockers. Each fix was red-checked by disabling it: the endpoint, request or router test fails. Isolated bun run check at fabb8811 exit 0 (tsc clean; node 16 pass; bun 576 pass, 35 skip, 0 fail; Biome findings only in untouched build.ts, vue-scanner.test.ts, iso-map.test.ts).
 
 Re-review round applied (probes rr41610b p4 to p7 reproduced and fixed): Breeze layout (routes/web.php requiring routes/auth.php) now serves /login and, with the shared Laravel application, abstains instead of deriving a row to a root parameter route; Route::group(['domain' => ...]) and ->domain(...) give blockers; the Slim every-write rule, closure use imports, per-scope writes and setBasePath are covered in php-http-routers/slim.php. Each fix was red-checked by disabling it (the endpoint, row or router test fails). Isolated bun run check at 91b1e2b9 exit 0 (tsc clean; node 16 pass; bun 581 pass, 35 skip, 0 fail; Biome findings only in untouched build.ts, vue-scanner.test.ts, iso-map.test.ts, python-scanner.test.ts).
+
+Simplicity round (cold junior-maintainer review): one load rule in http-laravel.ts (a load serves its target under each base of its loading file; with no base a group or withRouting serves from the root and a require serves nothing; a file left with no base serves under an unknown prefix), which removes the spurious root blocker a require in an unloaded file such as tools/seed.php caused. Naming is load throughout (Load, loadOf, routingLoads, loadedFile, rootBase) and staysInSegment is the one segment check; receiverOf lives in syntax.ts, unresolvedRoute next to noRoute, one inAncestor helper serves base_path candidates and the application lookup, and loadOf builds every load. PendingEndpoint.order and the laravel flag became one project marker; served computes the application. Receiver is a union where only Slim receivers carry a prefix; globalPatterns proves its receiver directly; write counting reads closure uses in the same loop over a body's own nodes, and the redundant by-reference-variable, by-reference-import and controller-string checks are gone. A typed Slim App now serves under the project's single literal setBasePath, at the root when none is called, and otherwise its routes are blockers. The (module) operation is reported only when a final endpoint or request names it (index.ts). New fixture lines (tools/seed.php, a group where option and a loading group's where, a promoted-only constructor client, an invokable controller with method routes, the routers fixture's load cycle, ambiguous base_path, alias Route, conflicting and unreadable-name patterns, Slim destructuring, foreach, two base paths, new App, closure visibility, by-reference and reassigned imports, and the php-http-projects fixture for the Slim project base and the composer.json application) catch all 34 rule mutations the review listed or that remained (each disabled rule makes test-bun/php-http.test.ts fail). The PHP page states the receiver rule once and no longer says includes are not read. Isolated bun run check at a5c0f2cc exit 0 (tsc clean; node 16 pass; bun 594 pass, 35 skip, 0 fail; Biome findings only in untouched build.ts, vue-scanner.test.ts, iso-map.test.ts).
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
@@ -148,4 +163,6 @@ Re-review round applied (probes rr41610b p4 to p7 reproduced and fixed): Breeze 
 The PHP scanner now reports HTTP endpoint and request facts, so core derives HTTP relationships for PHP. Endpoints come from Laravel and route-builder registrations with their group prefixes, Symfony #[Route] attributes with the class-level prefix, and WordPress register_rest_route; requests come from clients whose receiver is proved to hold a Guzzle-style client, the WordPress HTTP API and cURL. Handler symbols resolve to operations after every file is read, so a route file's endpoint names the controller method that serves it. Only literal routes and URLs become facts: a computed prefix or route reports nothing, one whole computed segment is dynamic, and any other computed text is unknown. The PHP page lists the supported APIs, their limits and the six producer-checklist answers. Verified by test-bun/php-http.test.ts (endpoint facts, request facts, and the rows inferRelationships derives from them, with each unresolved case asserted absent) and an isolated bun run check (exit 0).
 
 Review round: every reviewer finding is fixed with a red test. Only proved receivers register routes or send requests, scoped per declaration; constants resolve as PHP resolves them; cURL requests need one readable handle; fluent and composed Laravel prefixes apply, including files loaded through withRouting, group files and requires; route constraints are reported as constrained segments; every PHP endpoint states an unknown registration order, with one application per Laravel project; route entries the scanner cannot resolve (computed paths, unknown handlers, host-bound or conventional routes, unloaded Laravel files, unproved Slim prefixes) are blockers; and a file's top-level code is a (module) operation only when its routes or requests name it. Verified by test-bun/php-http.test.ts (main, patterns and routers fixtures) and an isolated bun run check (exit 0).
+
+Simplicity round: one load rule, load naming and shared helpers replace the copied load and receiver logic, a typed Slim App follows the project's base path, and every PHP HTTP rule the review mutated is now pinned by a fixture line.
 <!-- SECTION:FINAL_SUMMARY:END -->

@@ -3,30 +3,30 @@ import { clientRequests } from './http-clients.ts'
 import { curlRequests } from './http-curl.ts'
 import {
   attributeEndpoints, attributeScope, builderEndpoints, globalPatterns, groupBlocker, groupCall, invokableEndpoints, registration,
-  restRouteEndpoints, whereRequirements, type FileScope, type PendingEndpoint,
+  restRouteEndpoints, whereRequirements, type FileScope, type Handler, type PendingEndpoint,
 } from './http-endpoints.ts'
-import { laravelApplication, laravelRouting, routesFile, routingMounts, unmounted, type Base, type Mount } from './http-laravel.ts'
+import { laravelApplication, laravelRouting, loadOf, rootBase, routingLoads, type Base, type Load, type Loader } from './http-laravel.ts'
 import { blockerPath, routeSegments, type Requirements } from './http-routes.ts'
-import { joinRoutes, literalText, noRoute, type Constants } from './http-url.ts'
-import { boundReceivers, callableReceivers, typeReceivers, type Receiver } from './receivers.ts'
+import { joinRoutes, literalText, noRoute, routeText, unresolvedRoute, type Constants, type RouteText } from './http-url.ts'
+import { boundReceivers, callableReceivers, proved, setsBasePath, typeReceivers, type Receiver } from './receivers.ts'
 import {
-  calledFunction, callables, children, field, list, memberOf, moduleOperationId, nameOf, operationId, qualifiedName, symbolName,
-  typeKinds, typeName, type Fields, type NameScope, type Syntax,
+  calledFunction, callables, children, field, list, memberOf, moduleOperationId, nameOf, operationId, qualifiedName, receiverOf,
+  symbolName, typeKinds, typeName, type Fields, type NameScope, type Syntax,
 } from './syntax.ts'
 
 /**
- * HTTP facts of one file. Endpoint handlers are resolved to operations, and Laravel routes placed
- * under the files that load them and Laravel's global patterns, once every file is read.
+ * HTTP facts of one file. Endpoint handlers are resolved to operations, and routes placed under what
+ * the project adds to them, once every file is read.
  */
 export interface PhpHttpFacts {
   endpoints: PendingEndpoint[]
   requests: ScanHttpRequest[]
   /** Routes files this file loads, such as through Laravel's `withRouting` or a route group given a file. */
-  mounts: Mount[]
+  loads: Load[]
   /** Laravel's global parameter patterns this file sets. */
   patterns: Requirements
-  /** The file's top-level code, when a fact above names it as the operation that registers or requests. */
-  operations: ScanOperation[]
+  /** The base paths this file gives Slim applications with `setBasePath`. */
+  basePaths: RouteText[]
 }
 
 /** Literal constant values by the name PHP gives them: `Ns\NAME` and `Ns\Type::NAME`. */
@@ -109,15 +109,17 @@ function constantsIn(table: ConstantTable, scope: NameScope): Constants {
 export function phpHttpFacts(file: string, tree: Syntax): PhpHttpFacts {
   const endpoints: PendingEndpoint[] = []
   const requests: ScanHttpRequest[] = []
-  const mounts: Mount[] = []
+  const loads: Load[] = []
   const patterns = new Map<string, string>()
+  const basePaths: RouteText[] = []
   const curl = curlRequests()
   const table = collectConstants(tree)
 
   function callFacts(node: Fields, scope: FileScope): void {
     endpoints.push(...builderEndpoints(node, scope), ...restRouteEndpoints(node, scope))
-    mounts.push(...routingMounts(node, scope, registration(scope).registrar))
+    loads.push(...routingLoads(node, scope, loaderOf(scope)))
     for (const [name, pattern] of globalPatterns(node, scope) ?? []) patterns.set(name, pattern)
+    if (setsBasePath(node) && proved(receiverOf(node), scope)?.role === 'slim') basePaths.push(routeText(list(node, 'arguments')[0], scope.constants))
     // A request belongs to the operation that supplies its URL, which is the file's top-level code outside every function.
     const operation = registration(scope).registrar
     for (const request of clientRequests(node, scope)) requests.push({ operation, ...request })
@@ -152,10 +154,9 @@ export function phpHttpFacts(file: string, tree: Syntax): PhpHttpFacts {
     return { ...scope, operation: operationId(file, node), receivers }
   }
 
-  /** A routes file loaded by a group, or required inside a Laravel group's closure, is served under that group. */
-  function load(loaded: Fields | undefined, at: Pick<FileScope, 'prefix' | 'requirements'>, scope: FileScope, include: boolean): void {
-    const target = routesFile(loaded, scope.file, scope.constants)
-    mounts.push({ target, prefix: at.prefix, requirements: at.requirements, file: scope.file, registrar: registration(scope).registrar, include })
+  /** Code that loads a routes file, with the prefix and patterns the loaded routes are served under. */
+  function loaderOf(scope: FileScope, at: Pick<FileScope, 'prefix' | 'requirements'> = scope): Loader {
+    return { file, constants: scope.constants, prefix: at.prefix, requirements: at.requirements, registrar: registration(scope).registrar }
   }
 
   /**
@@ -168,7 +169,7 @@ export function phpHttpFacts(file: string, tree: Syntax): PhpHttpFacts {
     if (group === undefined) return false
     const laravel = group.router === 'laravel'
     const inner = laravel ? { ...scope, prefix: group.prefix, requirements: group.requirements, controller: group.controller, grouped: true } : scope
-    if (group.routes === undefined && laravel) load(group.loaded, group, scope, false)
+    if (group.routes === undefined && laravel) loads.push(loadOf(group.loaded, loaderOf(scope, group), false))
     else if (group.routes === undefined) endpoints.push(...groupBlocker(group, scope))
     else visitChildren(group.routes, declared(group.routes, inner, group.member)!)
     return true
@@ -181,7 +182,7 @@ export function phpHttpFacts(file: string, tree: Syntax): PhpHttpFacts {
    */
   function modified(node: Fields, scope: FileScope): FileScope {
     const member = node.kind === 'call' ? memberOf(node)?.toLowerCase() : undefined
-    if (member === 'group' || member === 'domain') return { ...scope, prefix: { text: scope.prefix.text, resolved: false } }
+    if (member === 'group' || member === 'domain') return { ...scope, prefix: joinRoutes(scope.prefix, unresolvedRoute) }
     const where = node.kind === 'call' ? whereRequirements(node, scope.constants) : undefined
     return where === undefined ? scope : { ...scope, requirements: new Map([...scope.requirements, ...where]) }
   }
@@ -196,7 +197,7 @@ export function phpHttpFacts(file: string, tree: Syntax): PhpHttpFacts {
   function statementFacts(node: Fields, scope: FileScope): void {
     if (node.kind === 'call') callFacts(node, scope)
     // A routes file required at the top level, or inside a Laravel group's closure, is served under that code.
-    if (node.kind === 'include' && (scope.grouped || scope.operation === undefined)) load(field(node, 'target'), scope, scope, true)
+    if (node.kind === 'include' && (scope.grouped || scope.operation === undefined)) loads.push(loadOf(field(node, 'target'), loaderOf(scope), true))
     curl.record(registration(scope).registrar, node, scope.constants)
   }
 
@@ -215,15 +216,19 @@ export function phpHttpFacts(file: string, tree: Syntax): PhpHttpFacts {
   }
   const named = renamed(top, {})
   visit(tree as Fields, { ...named, receivers: boundReceivers(tree as Fields, named) })
-  const allRequests = [...requests, ...curl.requests()]
-  // The file's top-level code is an operation only when a fact names it.
-  const module = moduleOperationId(file)
-  const used = [...endpoints, ...mounts].some(fact => fact.registrar === module) || allRequests.some(request => request.operation === module)
-  return { endpoints, requests: allRequests, mounts, patterns, operations: used ? [{ id: module, file, name: '(module)', position: 0 }] : [] }
+  return { endpoints, requests: [...requests, ...curl.requests()], loads, patterns, basePaths }
+}
+
+/**
+ * The operation of a file's top-level code, which route entries, loads and requests there name. The
+ * scan reports it only when a final HTTP fact names it.
+ */
+export function moduleOperation(file: string): ScanOperation {
+  return { id: moduleOperationId(file), file, name: '(module)', position: 0 }
 }
 
 /** One file's facts as the scan collects them, before handler symbols name operations. */
-export interface FileFacts extends Pick<PhpHttpFacts, 'endpoints' | 'mounts' | 'patterns'> {
+export interface FileFacts extends Pick<PhpHttpFacts, 'endpoints' | 'loads' | 'patterns' | 'basePaths'> {
   file: string
   symbols: ScanSymbol[]
 }
@@ -238,23 +243,37 @@ function operationsByName(files: readonly FileFacts[], declared: ReadonlySet<str
 }
 
 /**
+ * The one base path the project's Slim applications are given: the root when no file calls
+ * `setBasePath`, the stated path when exactly one call states it, and unresolved otherwise.
+ */
+function slimBase(files: readonly FileFacts[]): RouteText {
+  const paths = files.flatMap(file => file.basePaths)
+  if (paths.length === 0) return noRoute
+  return paths.length === 1 && paths[0]!.resolved ? paths[0]! : unresolvedRoute
+}
+
+/**
  * The endpoint a route entry reports under one base. An entry whose path is unresolved, or whose
  * handler names no declared operation, is a blocker named after the operation that registers it.
+ * Every PHP router this scanner reads takes the first registered match, and the scanner does not
+ * prove the order files register their routes in, so every endpoint takes position 0 in its
+ * application: the Laravel project's, or else the declaring file.
  */
-function served(entry: PendingEndpoint, operation: string | undefined, base: Base, laravel: { patterns: Requirements; application: string }): ScanHttpEndpoint {
+function served(entry: PendingEndpoint, operation: string | undefined, base: Base, context: { patterns: Requirements; application: string }): ScanHttpEndpoint {
   const path = joinRoutes(base.prefix, entry.route)
   // A Laravel route's own patterns, then those of the group that loads its file, override the global ones.
-  const requirements = entry.laravel ? new Map([...laravel.patterns, ...base.requirements, ...entry.requirements]) : entry.requirements
+  const requirements = entry.project === 'laravel' ? new Map([...context.patterns, ...base.requirements, ...entry.requirements]) : entry.requirements
   const segments = routeSegments(path.text, requirements)
   const known = operation !== undefined && path.resolved
-  const order = entry.laravel ? { application: laravel.application, position: 0 } : entry.order
+  const order = { application: context.application, position: 0 }
   return { operation: known ? operation : entry.registrar, method: entry.method, path: known ? segments : blockerPath(segments), order }
 }
 
 /**
  * Endpoints of every file's route entries. A handler the scan cannot place, such as a controller
  * method with no body or a function name several files declare, leaves its entry a blocker. A Laravel
- * route is served under each prefix a file that loads its file states, with Laravel's global patterns.
+ * route is served under each prefix a file that loads its file states, with Laravel's global patterns,
+ * and a route a typed Slim application registers under the project's Slim base path.
  */
 export function resolveEndpoints(
   files: readonly FileFacts[], operations: readonly ScanOperation[], manifests: readonly string[],
@@ -264,11 +283,16 @@ export function resolveEndpoints(
   const paths = files.map(file => file.file)
   const application = (file: string) => laravelApplication(file, paths, manifests)
   const laravel = laravelRouting(files, application)
-  const endpoints = files.flatMap(file => file.endpoints.flatMap(entry => {
-    const found = entry.handler === undefined ? undefined : 'operation' in entry.handler ? entry.handler.operation : byName.get(entry.handler.symbol)
-    const operation = found !== undefined && declared.has(found) ? found : undefined
-    const context = { patterns: laravel.patterns, application: application(file.file) }
-    return (entry.laravel ? laravel.basesOf(file.file) : [unmounted]).map(base => served(entry, operation, base, context))
+  const slim: Base = { prefix: slimBase(files), requirements: new Map() }
+  const operationOf = (handler: Handler | undefined) => {
+    const found = handler === undefined ? undefined : 'operation' in handler ? handler.operation : byName.get(handler.symbol)
+    return found !== undefined && declared.has(found) ? found : undefined
+  }
+  const endpoints = files.flatMap(({ file, endpoints }) => endpoints.flatMap(entry => {
+    const laravelRoute = entry.project === 'laravel'
+    const context = { patterns: laravel.patterns, application: laravelRoute ? application(file) : file }
+    const bases = laravelRoute ? laravel.basesOf(file) : [entry.project === 'slim' ? slim : rootBase]
+    return bases.map(base => served(entry, operationOf(entry.handler), base, context))
   }))
   return [...endpoints, ...laravel.blockers]
 }

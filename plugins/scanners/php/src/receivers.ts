@@ -1,27 +1,25 @@
-import { noRoute, routeText, type RouteText } from './http-url.ts'
+import { noRoute, routeText, unresolvedRoute, type RouteText } from './http-url.ts'
 import {
-  callables, children, field, list, memberOf, nameOf, typeKinds, typeName, type Fields, type NameScope, type Syntax,
+  callables, children, field, list, memberOf, nameOf, receiverOf, typeKinds, typeName, type Fields, type NameScope, type Syntax,
 } from './syntax.ts'
 
-/** What a receiver is proved to hold: an HTTP client, or a Laravel or Slim router that registers endpoints. */
-export type Role = 'client' | Router
-export type Router = 'laravel' | 'slim'
-
 /**
- * A proved receiver. A Slim router registers routes under its own prefix: the application's root, a
- * group's prefix, or an unresolved one for a group object whose group the scanner cannot see. A
- * Laravel router registers under the group the code runs in, so it carries no prefix.
+ * A proved receiver: an HTTP client, or a Laravel or Slim router that registers endpoints. A Laravel
+ * router registers under the group the code runs in. A Slim router registers under its own prefix: a
+ * group's prefix, a created application's base path, or an unresolved one for a group object whose
+ * group the scanner cannot see. A typed Slim application serves under the project's base path, which
+ * only the whole scan shows.
  */
-export interface Receiver {
-  role: Role
-  prefix?: RouteText
-}
+export type Receiver =
+  | { role: 'client' }
+  | { role: 'laravel' }
+  | { role: 'slim'; prefix: RouteText; projectBase: boolean }
+
+export type Role = Receiver['role']
+export type Router = 'laravel' | 'slim'
 
 /** Receivers as the source spells them, `$client` or `$this->http`. */
 export type Receivers = ReadonlyMap<string, Receiver>
-
-/** A prefix nothing in the source states. */
-export const unresolvedRoute: RouteText = { text: '', resolved: false }
 
 /**
  * Types whose values this scanner recognizes. Ordinary objects share their member names, such as
@@ -31,9 +29,9 @@ const receivers = new Map<string, Receiver>([
   ['GuzzleHttp\\Client', { role: 'client' }], ['GuzzleHttp\\ClientInterface', { role: 'client' }],
   ['Psr\\Http\\Client\\ClientInterface', { role: 'client' }],
   ['Symfony\\Contracts\\HttpClient\\HttpClientInterface', { role: 'client' }],
-  ['Slim\\App', { role: 'slim', prefix: noRoute }],
-  ['Slim\\Routing\\RouteCollectorProxy', { role: 'slim', prefix: unresolvedRoute }],
-  ['Slim\\Interfaces\\RouteCollectorProxyInterface', { role: 'slim', prefix: unresolvedRoute }],
+  ['Slim\\App', { role: 'slim', prefix: noRoute, projectBase: true }],
+  ['Slim\\Routing\\RouteCollectorProxy', { role: 'slim', prefix: unresolvedRoute, projectBase: false }],
+  ['Slim\\Interfaces\\RouteCollectorProxyInterface', { role: 'slim', prefix: unresolvedRoute, projectBase: false }],
   ['Illuminate\\Routing\\Router', { role: 'laravel' }], ['Illuminate\\Contracts\\Routing\\Registrar', { role: 'laravel' }],
 ])
 
@@ -83,21 +81,15 @@ function ownScope(node: Fields): boolean {
   return callables.has(node.kind) || typeKinds.has(node.kind)
 }
 
-/** Nodes of a body outside the functions and classes it declares. */
+/** Nodes of a body, including the functions and classes it declares but not what is inside them. */
 function ownNodes(body: Fields | undefined): Fields[] {
   const nodes: Fields[] = []
   function visit(node: Syntax): void {
-    if (node !== body && ownScope(node as Fields)) return
     nodes.push(node as Fields)
-    for (const child of children(node)) visit(child)
+    if (node === body || !ownScope(node as Fields)) for (const child of children(node)) visit(child)
   }
   if (body !== undefined) visit(body)
   return nodes
-}
-
-/** The functions, closures and classes a body declares directly. */
-function nestedScopes(body: Fields | undefined): Fields[] {
-  return ownNodes(body).flatMap(node => children(node) as Fields[]).filter(child => ownScope(child))
 }
 
 /**
@@ -114,22 +106,25 @@ function writesIn(body: Fields | undefined): Map<string, number> {
   for (const node of ownNodes(body)) {
     if (node.kind === 'assign' || node.kind === 'assignref') target(field(node, 'left'))
     if (node.kind === 'foreach') [field(node, 'key'), field(node, 'value')].forEach(target)
-    if (node.kind === 'variable' && node.byref === true) target(node)
+    // A nested closure can assign an enclosing variable only through an import by reference.
+    if (node !== body && node.kind === 'closure') list(node, 'uses').filter(used => used.byref === true).forEach(target)
   }
-  // A nested closure can assign an enclosing variable only through an import by reference.
-  for (const closure of nestedScopes(body)) for (const used of list(closure, 'uses')) if (used.byref === true) target(used)
   return writes
 }
 
 /** Whether a value is a Slim application the statement creates: `AppFactory::create()` or `new App(...)`. */
 function createdApplication(value: Fields | undefined, scope: NameScope): boolean {
-  const factory = value?.kind === 'call' && field(field(value, 'what')!, 'what')?.kind === 'name'
-    && typeName(field(field(value, 'what')!, 'what'), scope) === 'Slim\\Factory\\AppFactory'
+  const factory = value?.kind === 'call' && receiverOf(value)?.kind === 'name'
+    && typeName(receiverOf(value), scope) === 'Slim\\Factory\\AppFactory'
     && memberOf(value)?.toLowerCase().startsWith('create') === true
   const constructed = value?.kind === 'new' && typeName(field(value, 'what'), scope) === 'Slim\\App'
   return factory || constructed
 }
 
+/** Whether a call sets a Slim application's base path: `$app->setBasePath('/myapp')`. */
+export function setsBasePath(call: Fields): boolean {
+  return call.kind === 'call' && memberOf(call)?.toLowerCase() === 'setbasepath'
+}
 
 /**
  * The base paths a body gives its Slim applications with `$app->setBasePath(...)`: the stated one, or
@@ -137,12 +132,11 @@ function createdApplication(value: Fields | undefined, scope: NameScope): boolea
  */
 function basePaths(nodes: readonly Fields[]): Map<string, RouteText> {
   const paths = new Map<string, RouteText>()
-  for (const call of nodes.filter(node => node.kind === 'call' && memberOf(node)?.toLowerCase() === 'setbasepath')) {
-    const target = field(field(call, 'what')!, 'what')
-    const name = target?.kind === 'variable' && typeof target.name === 'string' ? `$${target.name}` : undefined
+  for (const call of nodes.filter(setsBasePath)) {
+    const name = receiverName(receiverOf(call))
     if (name === undefined) continue
     const path = routeText(list(call, 'arguments')[0], () => undefined)
-    paths.set(name, paths.has(name) ? { text: '', resolved: false } : path)
+    paths.set(name, paths.has(name) ? unresolvedRoute : path)
   }
   return paths
 }
@@ -162,7 +156,7 @@ export function boundReceivers(body: Fields | undefined, scope: NameScope): Map<
   }
   const bases = basePaths(nodes)
   return new Map([...bindings].filter(([name, count]) => writes.get(name) === count)
-    .map(([name]) => [`$${name}`, { role: 'slim', prefix: bases.get(`$${name}`) ?? noRoute }]))
+    .map(([name]) => [`$${name}`, { role: 'slim', prefix: bases.get(`$${name}`) ?? noRoute, projectBase: false }]))
 }
 
 /**
@@ -177,7 +171,8 @@ export function callableReceivers(callable: Fields, scope: NameScope & { receive
   const found = boundReceivers(field(callable, 'body'), scope)
   for (const used of list(callable, 'uses')) {
     const outer = scope.receivers.get(`$${used.name}`)
-    if (outer !== undefined && used.byref !== true && !writes.has(String(used.name))) found.set(`$${used.name}`, outer)
+    // An import by reference also assigns the enclosing variable, which then proves nothing already.
+    if (outer !== undefined && !writes.has(String(used.name))) found.set(`$${used.name}`, outer)
   }
   for (const [index, parameter] of list(callable, 'arguments').entries()) {
     const name = nameOf(parameter.name)!

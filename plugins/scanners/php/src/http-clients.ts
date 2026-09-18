@@ -1,8 +1,8 @@
 import type { ScanHttpRequest } from '@groma/scanner'
-import { receiverOf, type FileScope } from './http-endpoints.ts'
+import type { FileScope } from './http-endpoints.ts'
 import { literalText, requestUrl, type Constants } from './http-url.ts'
 import { proved } from './receivers.ts'
-import { calledFunction, field, list, memberOf, type Fields } from './syntax.ts'
+import { calledFunction, field, list, memberOf, receiverOf, type Fields } from './syntax.ts'
 
 /** A request without the operation that sends it, which the file walk supplies. */
 export type SentRequest = Omit<ScanHttpRequest, 'operation'>
