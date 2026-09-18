@@ -307,8 +307,8 @@ in this order, with its ecosystem's constructs:
    unknown handler or an unresolved include or mount, is reported at its
    position as its readable literal prefix followed by a constrained optional
    catch-all, with method `*`, so no later route of that prefix in another file
-   derives a row. A router that prefers the most specific route, such as Spring
-   or ASP.NET Core, omits `order`.
+   of that application derives a row. A router that prefers the most specific
+   route, such as Spring or ASP.NET Core, omits `order`.
 
 ## Completion, precision, and uncertainty
 

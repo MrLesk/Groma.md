@@ -110,6 +110,15 @@ const matches: [string, ScanHttpEndpoint[], ScanHttpRequest, string][] = [
   ['a parameter route whose literal sibling is in the same file',
     [endpoint(talks, 'GET', '/talks/:id'), endpoint(talks, 'GET', '/talks/archive')], request('GET', '/talks/{}'), 'GET /talks/:id'],
   ['a dynamic value in a constrained parameter', [endpoint(talks, 'GET', '/talks/:id!')], request('GET', '/talks/{}'), 'GET /talks/:id'],
+  ['an exact route beside another application\'s fallback in one repository',
+    [registered(endpoint(talks, 'GET', '/api/talks'), 3, 'api/server.ts'), registered(endpoint(archive, 'GET', '/:rest*'), 0, 'web/server.ts')],
+    request('GET', '/api/talks'), 'GET /api/talks'],
+  ['a literal route beside a constrained parameter in another file',
+    [endpoint(talks, 'GET', '/talks/archive'), endpoint(archive, 'GET', '/talks/:id!')], request('GET', '/talks/archive'),
+    'GET /talks/archive'],
+  ['a literal path before another file\'s constrained fallback route',
+    [endpoint(talks, 'GET', '/api/account'), endpoint(archive, 'GET', '/:path1!/:path2!')], request('GET', '/api/account'),
+    'GET /api/account'],
   ['a parameter route beside a constrained catch-all in the same file',
     [endpoint(talks, 'GET', '/files/:dir/:name'), endpoint(talks, 'GET', '/files/:path*!')], request('GET', '/files/a/report.json'),
     'GET /files/:dir/:name'],
@@ -192,10 +201,13 @@ const abstentions: [string, ScanHttpEndpoint[], ScanHttpRequest][] = [
     [endpoint(talks, 'GET', '/blog/:slug'), endpoint(archive, 'GET', '/blog/:year?!/:slug?')], request('GET', '/blog/{}')],
   ['a literal that an optional constrained parameter in another file may accept',
     [endpoint(talks, 'GET', '/blog/:slug'), endpoint(archive, 'GET', '/blog/:year?!/:slug?')], request('GET', '/blog/2024')],
+  ['a constrained parameter in another file that its router may rank first before a shared literal',
+    [endpoint(talks, 'GET', '/api/:x/talks'), endpoint(archive, 'GET', '/api/:y!/:z')], request('GET', '/api/v/talks')],
+  ['an unreadable route under a prefix beside another application\'s parameter route',
+    [registered(endpoint(archive, '*', '/api/:rest*!'), 0, 'src/main.rs'), endpoint(talks, 'GET', '/:category/:slug')],
+    request('GET', '/api/talks')],
   ['a constrained catch-all in another file that its router may try first',
     [endpoint(talks, 'GET', '/files/:dir/:name'), endpoint(archive, 'GET', '/files/:path*!')], request('GET', '/files/a/report.json')],
-  ['a constrained parameter in another file beside the reached literal route',
-    [endpoint(talks, 'GET', '/talks/archive'), endpoint(archive, 'GET', '/talks/:id!')], request('GET', '/talks/archive')],
   ['an unreadable route registered earlier in another file',
     [registered(endpoint(archive, '*', '/api/:rest*!'), 0), registered(endpoint(talks, 'GET', '/api/talks'), 1)], request('GET', '/api/talks')],
   ['a constrained parameter beside a catch-all in another file',
@@ -204,10 +216,12 @@ const abstentions: [string, ScanHttpEndpoint[], ScanHttpRequest][] = [
     [registered(endpoint(talks, 'GET', '/talks/:id!'), 0), registered(endpoint(archive, 'GET', '/talks/:slug'), 1)],
     request('GET', '/talks/{}')],
   ['routes of two applications in one repository',
-    [registered(endpoint(talks, 'GET', '/api/talks'), 3, 'api/server.ts'), registered(endpoint(archive, 'GET', '/:rest*'), 0, 'web/server.ts')],
+    [registered(endpoint(talks, 'GET', '/api/talks'), 3, 'api/server.ts'), registered(endpoint(archive, 'GET', '/api/:section'), 0, 'web/server.ts')],
     request('GET', '/api/talks')],
   ['a first-match route beside a most-specific route',
-    [endpoint(talks, 'GET', '/api/talks'), registered(endpoint(archive, 'GET', '/:rest*'), 0)], request('GET', '/api/talks')],
+    [endpoint(talks, 'GET', '/api/talks'), registered(endpoint(archive, 'GET', '/api/:section'), 0)], request('GET', '/api/talks')],
+  ['a route registered after an unreadable root route of its application',
+    [registered(endpoint(archive, '*', '/:rest*!'), 0), registered(endpoint(talks, 'GET', '/api/talks'), 1)], request('GET', '/api/talks')],
   ['a literal in another file that a dynamic segment could reach after a dropped prefix',
     [endpoint(talks, 'GET', '/api/talks/:id/:section'), endpoint(archive, 'GET', '/archive/details')], request('GET', '/talks/{}/details')],
 ]
@@ -249,11 +263,24 @@ test.concurrent('an optional catch-all beside a controller\'s routes takes no re
 
 test.concurrent('registration positions from different scanners are not compared', () => {
   const rows = inferRelationships([
-    scan('javascript', { httpEndpoints: [registered(endpoint(archive, 'GET', '/:rest*'), 0)] }),
+    scan('javascript', { httpEndpoints: [registered(endpoint(archive, 'GET', '/api/:section'), 0)] }),
     scan('typescript', { httpEndpoints: [registered(endpoint(talks, 'GET', '/api/talks'), 1)] }),
     scan('client', { httpRequests: [request('GET', '/api/talks')] }),
   ], separateOwners)
   expect(rows).toEqual([])
+})
+
+test.concurrent('a catch-all of one application takes no request another application\'s route reaches directly', () => {
+  const client = scan('client', { httpRequests: [request('GET', '/api/talks')] })
+  const api = [registered(endpoint(talks, 'GET', '/api/talks'), 3, 'src/server.ts')]
+  const blocker = scan('rust', { httpEndpoints: [registered(endpoint(archive, '*', '/:rest*!'), 0, 'src/main.rs')] })
+  const page = scan('react', { httpEndpoints: [endpoint(archive, 'GET', '/:slug+')] })
+  for (const other of [blocker, page]) {
+    const rows = inferRelationships([other, scan('typescript', { httpEndpoints: api }), client], separateOwners)
+    expect(rows).toEqual([expect.objectContaining({ target: talks, description: 'Calls HTTP endpoint: GET /api/talks' })])
+  }
+  const spring = scan('java', { httpEndpoints: [endpoint(talks, 'GET', '/api/talks')] })
+  expect(inferRelationships([blocker, spring, client], separateOwners)).toEqual([expect.objectContaining({ target: talks })])
 })
 
 test.concurrent('a callback and an HTTP request between the same files share one derived row', () => {

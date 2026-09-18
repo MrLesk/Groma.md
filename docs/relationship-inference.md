@@ -137,15 +137,19 @@ therefore derives a row only when all of these hold:
    removing one leading literal segment that only one side states, such as
    `/api` or a deployment path, when both sides then continue with the same
    literal.
-4. Only the endpoints a router would prefer remain. An exact path that needs
-   no catch-all to take part of the request shows that the paths compare as
+4. Only the endpoints a router would prefer remain. A match through a catch-all
+   at the start of its path, such as a fallback or a route a scanner could not
+   read at the root, speaks for its own application, as one scanner reports it:
+   it drops out when endpoints of other applications reach the request without a
+   catch-all and none of its own application's do. An exact path that needs no
+   catch-all to take part of the request shows that the paths compare as
    written, so it hides every match that needed a leading segment removed: a
    request to `/api/talks` prefers another file's exact `/api/:section` over a
    `/talks` that needs `/api` removed. Otherwise each removed segment, and
    removing none, assumes a different deployment, and nothing ranks matches of
-   different deployments against each other: a request to `/api/talks`
-   produces no row when one file serves an exact fallback `/:rest*` and another
-   `/talks`. Past that, the preference depends on the routers:
+   different deployments against each other: a request to `/api/talks` produces
+   no row when one application serves an exact fallback `/:rest*` in one file
+   and `/talks` in another. Past that, the preference depends on the routers:
    - When no endpoint carries a registration order, the router prefers the
      most specific route. The paths are compared segment by segment, where a
      literal is more specific than a parameter and a parameter more specific
@@ -166,27 +170,32 @@ therefore derives a row only when all of these hold:
    value reaches, where a dynamic segment fills only parameters and catch-alls
    and no match is only possible. At least one must exist. Unless specificity
    decided, the router's choice among several such endpoints is unknown, so
-   exactly one distinct endpoint must remain. An endpoint that a dynamic
-   segment reaches only by satisfying a constraint still provides the row, but
-   rule 6 then lets every reachable endpoint compete with it.
+   exactly one distinct endpoint must remain. An endpoint with a constrained
+   segment still provides the row, but rule 6 then lets every reachable
+   endpoint compete with it.
 6. A dynamic segment could also equal a literal at runtime, including the
-   literal that follows a removed leading segment, and a constrained segment
-   may accept a literal. An endpoint that such a value possibly reaches, at
-   least as preferred as the row's endpoints, competes with them. Routers rank
-   constrained segments by their own rules, so a reachable endpoint with a
-   constrained segment competes whatever its specificity; only a constrained
-   endpoint registered after the row's endpoint does not compete. A route
-   registered earlier that a scanner could not read therefore blocks later
-   matches of its prefix in other files. When a row endpoint has a constrained
-   segment, every endpoint the request reaches competes, because values the
-   constraint rejects go elsewhere. The row's endpoints and every competing
-   endpoint belong to one file; endpoints in several files produce no row. A
-   request to `/talks/` plus a dynamic segment therefore produces no row when
-   one file serves `/talks/:id` and another `/talks/archive`, or when one file
-   serves a constrained `/talks/:id` and another `/talks/:rest+`, and reaches
-   `/talks/:id` when one file serves `/talks/:id` and `/talks/archive`. A
-   request to `/files/a/report.json` produces no row when one file serves
-   `/files/:dir/:name` and another a constrained `/files/:path*`.
+   literal that follows a removed leading segment, and a constrained segment may
+   accept a literal. An endpoint that such a value possibly reaches, at least as
+   preferred as the row's endpoints, competes with them. Routers rank
+   constrained segments against plain parameters and catch-alls by their own
+   rules, but every one prefers a literal segment. A reachable endpoint with a
+   constrained segment therefore competes even when it ranks lower, unless the
+   row's endpoint has a literal where their segments first differ and no
+   constrained segment comes before that position; under registration order, one
+   registered after the row's endpoint does not compete. A route registered
+   earlier that a scanner could not read therefore blocks later matches of its
+   prefix in other files of its application. When a row endpoint has a
+   constrained segment, every endpoint the request reaches competes, because
+   values the constraint rejects go elsewhere. The row's endpoints and every
+   competing endpoint belong to one file; endpoints in several files produce no
+   row. A request to `/talks/` plus a dynamic segment therefore produces no row
+   when one file serves `/talks/:id` and another `/talks/archive`, or when one
+   file serves a constrained `/talks/:id` and another `/talks/:rest+`, and
+   reaches `/talks/:id` when one file serves `/talks/:id` and `/talks/archive`.
+   A request to `/files/a/report.json` produces no row when one file serves
+   `/files/:dir/:name` and another a constrained `/files/:path*`, while a
+   request to `/api/account` reaches the file serving that exact route beside
+   another file's constrained `/:path1/:path2`.
 7. The requesting and providing files have different owners.
 
 The row runs from the requesting file to the providing file. Its statement
