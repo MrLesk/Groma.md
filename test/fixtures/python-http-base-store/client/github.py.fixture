@@ -1,0 +1,8 @@
+import requests
+
+
+class GitHub:
+    base_url = "https://api.github.com"
+
+    def repos(self):
+        return requests.get(self.base_url + "/repos")

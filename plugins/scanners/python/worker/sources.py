@@ -6,7 +6,10 @@ METHODS = ("get", "post", "put", "patch", "delete", "head", "options", "trace")
 METHOD_TOKEN = re.compile(r"^[A-Z][A-Z-]*$")
 PATH_TEXT = re.compile(r"^[A-Za-z0-9\-._~!$&'()*+,;=:@%]+$")
 DEPTH = 4
+# Text the source computes, and a value it reads from configuration, such as an environment variable.
 COMPUTED = object()
+CONFIGURED = object()
+ENVIRONMENT = ("os.environ.get", "os.getenv")
 
 
 def module_path(file):
@@ -17,22 +20,75 @@ def module_path(file):
     return ".".join(parts)
 
 
-def assigned_names(node):
-    """Names one statement binds by assignment, including an augmented one."""
-    if isinstance(node, ast.Assign):
-        return [target.id for target in node.targets if isinstance(target, ast.Name)]
-    if isinstance(node, (ast.AnnAssign, ast.AugAssign)):
-        return [node.target.id] if isinstance(node.target, ast.Name) else []
-    return []
+def binding_names(node):
+    """Names one node binds: a Name it stores to or deletes, which covers assignment, augmented assignment, `for`,
+    `with`, walrus and unpacking targets, and a def or class name, an import alias, or an except or match capture.
+
+    The Python worker's scope and constant rules all count bindings through this one function.
+    """
+    if isinstance(node, ast.Name):
+        return [] if isinstance(node.ctx, ast.Load) else [node.id]
+    if isinstance(node, ast.alias):
+        return [(node.asname or node.name).split(".")[0]]
+    return [item for item in (getattr(node, "name", None), getattr(node, "rest", None)) if isinstance(item, str)]
 
 
-def read_module(file, tree, identities):
-    """Everything HTTP facts need from one module: its declarations, constants, imports and calls."""
+NESTED_SCOPES = (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Lambda)
+
+
+def base_url_facts(tree):
+    """What a module says about base_url, which usually holds a client's own base address.
+
+    `classes` maps each class to its base_url bindings: those in its body and its methods' `self.base_url` stores.
+    `stores` lists every other `.base_url` store, such as `client.base_url = ...`, which may set any client's base.
+    `reads` maps each `self.base_url` a method reads to its class. A binding is its value for a plain assignment,
+    otherwise None.
+    """
+    plain = {target: node.value for node in ast.walk(tree) if isinstance(node, (ast.Assign, ast.AnnAssign))
+             for target in (node.targets if isinstance(node, ast.Assign) else [node.target])}
+    classes, reads, claimed = {}, {}, set()
+    for scope in (node for node in ast.walk(tree) if isinstance(node, ast.ClassDef)):
+        classes[scope] = [plain.get(node) for node in class_body_nodes(scope) if "base_url" in binding_names(node)]
+        for method in scope.body:
+            if not isinstance(method, (ast.FunctionDef, ast.AsyncFunctionDef)) or not method.args.args:
+                continue
+            receiver = method.args.args[0].arg
+            for node in ast.walk(method):
+                if (isinstance(node, ast.Attribute) and node.attr == "base_url"
+                        and isinstance(node.value, ast.Name) and node.value.id == receiver):
+                    if isinstance(node.ctx, ast.Load):
+                        reads[node] = scope
+                    else:
+                        classes[scope].append(plain.get(node))
+                        claimed.add(node)
+    stores = [plain.get(node) for node in ast.walk(tree) if isinstance(node, ast.Attribute)
+              and node.attr == "base_url" and not isinstance(node.ctx, ast.Load) and node not in claimed]
+    return {"classes": classes, "stores": stores, "reads": reads}
+
+
+def class_body_nodes(scope):
+    """Every node in a class body outside its methods and nested classes."""
+    nodes, pending = [], list(scope.body)
+    while pending:
+        node = pending.pop()
+        nodes.append(node)
+        if not isinstance(node, NESTED_SCOPES):
+            pending.extend(ast.iter_child_nodes(node))
+    return nodes
+
+
+def read_module(file, tree, identities, shadowed):
+    """Everything HTTP facts need from one module: its declarations, constants, imports and calls.
+
+    `shadowed` holds the Name nodes that read a function's own binding, such as a parameter, so they never
+    resolve to the module name they share.
+    """
     module = {"file": file, "path": module_path(file), "package": file.endswith("__init__.py"),
-              "identities": identities, "definitions": {}, "values": {}, "imports": {}, "bindings": {},
+              "identities": identities, "shadowed": shadowed, "base_url": base_url_facts(tree),
+              "definitions": {}, "values": {}, "imports": {}, "bindings": {},
               "calls": [node for node in ast.walk(tree) if isinstance(node, ast.Call)]}
     for node in ast.walk(tree):
-        for name in assigned_names(node):
+        for name in binding_names(node):
             module["bindings"][name] = module["bindings"].get(name, 0) + 1
     for node in tree.body:
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
@@ -63,6 +119,35 @@ class Sources:
         self.paths = {}
         for module in modules.values():
             self.paths.setdefault(module["path"], []).append(module)
+        self.classes = {scope: module for module in modules.values() for scope in module["base_url"]["classes"]}
+        self.base_url_stores = [(module, value) for module in modules.values()
+                                for value in module["base_url"]["stores"]]
+
+    def ancestors(self, scope, seen=()):
+        """The classes in the scanned source that a class inherits from."""
+        found = set()
+        for base in scope.bases:
+            resolved = resolve(self, self.classes[scope], base)
+            parent = resolved[2] if resolved is not None and resolved[0] == "class" else None
+            if parent in self.classes and parent not in seen:
+                found |= {parent, *self.ancestors(parent, (*seen, scope))}
+        return found
+
+    def class_base_url(self, module, node):
+        """(module, value) of the one plain assignment to base_url that `self.base_url` reads, or None.
+
+        Every base_url binding of the class, its ancestors and its subclasses in the scanned source counts, and so
+        does every `.base_url` store outside a class's own methods, since it may set any client's base.
+        """
+        scope = module["base_url"]["reads"].get(node)
+        if scope is None:
+            return None
+        family = {scope, *self.ancestors(scope)}
+        family |= {other for other in self.classes if scope in self.ancestors(other)}
+        bindings = [(self.classes[member], value) for member in family
+                    for value in self.classes[member]["base_url"]["classes"][member]]
+        bindings += self.base_url_stores
+        return bindings[0] if len(bindings) == 1 and bindings[0][1] is not None else None
 
     def candidates(self, path):
         """Every scanned module with this dotted path, or whose path ends with it."""
@@ -94,7 +179,7 @@ def resolve(sources, module, node, depth=0):
     if depth > DEPTH:
         return None
     if isinstance(node, ast.Name):
-        return resolve_name(sources, module, node.id, depth)
+        return None if node in module["shadowed"] else resolve_name(sources, module, node.id, depth)
     if not isinstance(node, ast.Attribute):
         return None
     owner = resolve(sources, module, node.value, depth + 1)
@@ -144,7 +229,7 @@ def imported_chain(module, node):
     while isinstance(node, ast.Attribute):
         parts.append(node.attr)
         node = node.value
-    if not isinstance(node, ast.Name):
+    if not isinstance(node, ast.Name) or node in module["shadowed"]:
         return None
     imported = module["imports"].get(node.id)
     if imported is None:
@@ -180,21 +265,42 @@ def argument(call, index, name):
     return keyword_value(call, name)
 
 
+def configuration_read(module, node):
+    """Whether an expression reads configuration: an environment variable, a Django setting or a base_url attribute."""
+    if isinstance(node, ast.Subscript):
+        return imported_chain(module, node.value) == "os.environ"
+    if isinstance(node, ast.Call):
+        return imported_chain(module, node.func) in ENVIRONMENT
+    if isinstance(node, ast.Attribute):
+        return node.attr == "base_url" or imported_chain(module, node.value) == "django.conf.settings"
+    return False
+
+
 def text_parts(sources, module, node, depth=0):
-    """A string expression as literal text pieces and computed marks."""
+    """A string expression as literal text pieces, configuration reads and computed marks."""
     if depth > DEPTH:
         return [COMPUTED]
     if isinstance(node, ast.Constant):
         return [node.value] if isinstance(node.value, str) else [COMPUTED]
     if isinstance(node, ast.JoinedStr):
         return [part for value in node.values for part in text_parts(sources, module, value, depth + 1)]
+    if isinstance(node, ast.FormattedValue) and node.conversion == -1 and node.format_spec is None:
+        # `f"{name}"` is the text of name.
+        return text_parts(sources, module, node.value, depth + 1)
     if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
         return [*text_parts(sources, module, node.left, depth + 1),
                 *text_parts(sources, module, node.right, depth + 1)]
     if isinstance(node, (ast.Name, ast.Attribute)):
         found = resolve(sources, module, node)
-        return text_parts(sources, found[1], found[3], depth + 1) if found is not None and found[0] == "value" else [COMPUTED]
-    return [COMPUTED]
+        if found is not None and found[0] == "value":
+            return text_parts(sources, found[1], found[3], depth + 1)
+    assigned = sources.class_base_url(module, node) if isinstance(node, ast.Attribute) else None
+    if assigned is not None:
+        # A client's own base_url assigned exactly once: its text, a host included, or a configuration read.
+        parts = text_parts(sources, assigned[0], assigned[1], depth + 1)
+        if COMPUTED not in parts:
+            return parts
+    return [CONFIGURED] if configuration_read(module, node) else [COMPUTED]
 
 
 def literal_text(sources, module, node):

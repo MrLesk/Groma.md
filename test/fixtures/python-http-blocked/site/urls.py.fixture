@@ -1,0 +1,10 @@
+from django.urls import path
+
+from . import views
+from .views import BoardView
+
+urlpatterns = [
+    path("boards/<slug>/", BoardView.as_view()),
+    path("boards/archive/", views.archive),
+    path("talks/", views.list_talks),
+]

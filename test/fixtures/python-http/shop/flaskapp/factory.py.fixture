@@ -2,8 +2,9 @@ from flask import Flask
 
 from .reports import reports
 
+app = Flask(__name__)
 
-def create_app():
-    app = Flask(__name__)
+
+def init_app(app):
     app.register_blueprint(reports, url_prefix="/admin")
     return app

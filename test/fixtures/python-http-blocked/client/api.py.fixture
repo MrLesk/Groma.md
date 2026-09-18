@@ -1,0 +1,9 @@
+import requests
+
+
+def load_archive():
+    return requests.get("/boards/archive/")
+
+
+def load_talks():
+    return requests.get("/talks/")

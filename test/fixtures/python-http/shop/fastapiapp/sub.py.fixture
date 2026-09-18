@@ -1,0 +1,8 @@
+from fastapi import FastAPI
+
+subapp = FastAPI()
+
+
+@subapp.get("/items")
+async def sub_items():
+    return []

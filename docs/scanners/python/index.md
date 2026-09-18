@@ -131,27 +131,31 @@ it recognizes in Python source. Supported declarations:
 
 | Construct | Reported as |
 | --- | --- |
-| `@app.route`, `@app.get` and the other method decorators on a `Flask`, `FastAPI` or `Starlette` application | One endpoint per method; a `route` without `methods` serves `GET` |
+| `@app.route`, `@app.api_route`, `@app.get` and the other method decorators on a `Flask`, `FastAPI` or `Starlette` application | One endpoint per method; a `route` or `api_route` without `methods` serves `GET` |
+| `add_api_route(path, endpoint, methods=...)` and `add_route(...)` on a `FastAPI` or `Starlette` application or router | Read like `route` |
+| `mount(path, app)` on a `FastAPI` or `Starlette` application or router | The mounted application's routes under the mount path; a blocker for everything under that path when the scanner cannot resolve the mounted application |
+| `host(...)` on a `FastAPI` or `Starlette` application or router | A blocker for the whole application |
 | `Blueprint(url_prefix=...)` and `APIRouter(prefix=...)` | The router's own prefix |
-| `register_blueprint(..., url_prefix=...)` and `include_router(..., prefix=...)`, in any scanned module | The registering prefix, including nested registrations |
+| `register_blueprint(..., url_prefix=...)` and `include_router(..., prefix=...)`, in any scanned module | The registering prefix, including nested registrations; Flask's replaces the blueprint's own prefix, FastAPI's goes before the router's |
 | `urlpatterns` with `path()`, `re_path()` and `url()` | One endpoint for method `*`, since Django hands every method to the view |
 | `include("dotted.module")` | The prefix of the included module's patterns |
 | `requests`, `httpx` and `aiohttp` method calls, and `request("METHOD", url)` | One request |
 | `httpx.Client`, `httpx.AsyncClient`, `requests.Session` and `aiohttp.ClientSession`, including `base_url=` | One request per call on the session |
 | `urllib.request.urlopen` | `GET`, or `POST` with data; `Request(method=...)` states its own method |
 
-`<int:pk>`, `<name>`, `{name}` and `{name:int}` are parameters; `<path:rest>` and
-`{rest:path}` are catch-alls. A regular-expression route is read only when every
-segment is plain text or one whole named group, with `(?P<rest>.*)` or `.+` last
-as a catch-all.
+`<name>`, `<str:name>`, `{name}` and `{name:str}` are parameters; `<path:rest>` and
+`{rest:path}` are catch-alls. A regular-expression route is read segment by
+segment, with `(?P<rest>.*)` or `.+` last as a catch-all; a dot in its text is
+literal only when escaped.
 
-The scanner reports nothing for an application or router created inside a
-function, a class-based view through `as_view()`, a Starlette or FastAPI route
-table, a computed route, a segment that mixes text with a placeholder, a
-computed `methods` list, a view or router it cannot resolve, and a client call
-outside a function. A router nobody registers in the scanned source keeps only
-its own prefix, while a router registered on an application the scanner cannot
-resolve, such as one built inside a factory function, reports nothing.
+The scanner reports no endpoint for an application or router created inside a
+function, a Starlette or FastAPI route table, a computed route, a computed
+`methods` list, or a view or router it cannot resolve, and no request for a
+client call outside a function. A router nobody registers in the scanned source
+keeps only its own prefix, while a router registered on an application the
+scanner cannot resolve, such as one passed to a function, reports no endpoint.
+For Django, FastAPI and Starlette, which take the first match, an entry the
+scanner recognizes but cannot report is a blocker instead (see decision 8).
 
 Django endpoints need the complete `include()` graph, so `urlpatterns` must be a
 literal list or tuple bound once. When any module builds its table by addition,
@@ -160,23 +164,28 @@ that matches several scanned files, no Django endpoint is reported at all. An
 `include()` of a module outside the scan is safe.
 
 Only a name the module binds exactly once resolves to its value, in a module and
-in an operation alike, so a constant reassigned anywhere, `PREFIX += "/v2"`
-included, and a client session rebound in the same function, resolve to nothing.
-A client call counts only when the module imports that library, so a parameter
-named `requests` is not the library.
+in an operation alike, so a constant reassigned anywhere, `PREFIX += "/v2"` and
+a `for PREFIX in ...` loop included, and a client session rebound in the same
+function, resolve to nothing.
+A client call counts only when the module imports that library. A name that a
+function binds, such as a parameter named `requests` or `BASE`, never resolves
+to the module's import or constant of the same name.
 
 Names resolve across modules by import: the scanner maps each scanned file to
 its dotted module path and follows `import`, `from ... import` and relative
 imports to one scanned module. A dotted path that matches several files, or
 none, resolves to nothing.
 
-The six [producer decisions](../evidence.md#producer-checklist) for Python:
+The eight [producer decisions](../evidence.md#producer-checklist) for Python:
 
 1. **Which prefixes belong in the path.** A blueprint's or router's own prefix,
    every registering prefix, and every Django `include()` prefix above it.
    Django endpoints are reported only from URL tables nobody includes, so each
    path carries its prefixes. `APIRouter(prefix="/speakers")` included with
-   `prefix="/api"` reports `/api/speakers/{speaker_id}`.
+   `prefix="/api"` reports `/api/speakers/{speaker_id}`. Flask's
+   `register_blueprint(talks, url_prefix="/api")` replaces the blueprint's own
+   `url_prefix`, so its `/<int:talk_id>` route reports `/api/<talk_id>`; a
+   nested blueprint's prefix follows its parent's.
 2. **Whether the construct is an endpoint.** Only a view or decorated handler.
    Flask `before_request` hooks, WSGI or ASGI middleware, Django middleware and
    permission classes, and `static()` helpers are not endpoints.
@@ -187,18 +196,64 @@ The six [producer decisions](../evidence.md#producer-checklist) for Python:
    request. A helper that takes the URL as a parameter and calls
    `requests.get(url)` reports one request whose path is unknown, and its
    callers report nothing.
-5. **The base.** `requests.get("/talks")` has no base.
-   `requests.post(f"{settings.API}/talks")`, and a session with
-   `base_url=settings.API`, set `configured`.
-   `requests.get("https://example.com/talks")` and `requests.get(url)` report a
-   leading `unknown` segment. A module-level name bound once resolves to its
-   text, so `API = "/api"` with `API + "/talks"` is `/api/talks`. Literal text
-   right after a configured base must start with `/`, since
-   `settings.API + "talks"` continues the base's last segment: that segment is
-   `unknown`.
+5. **The base.** `requests.get("/talks")` has no base. A value read from
+   configuration sets `configured`: `os.environ["API"]`, `os.environ.get(...)`,
+   `os.getenv(...)`, a Django `settings.API`, and a `base_url` attribute such as
+   `self.base_url`, directly or through a module-level name bound once to one.
+   So do `requests.post(f"{settings.API}/talks")` and a session with
+   `base_url=settings.API`. `self.base_url` is instead the value of its one
+   assignment when the class, its ancestors and its subclasses in the scanned
+   source assign `base_url` exactly once, by a plain assignment in a class body
+   or through `self.base_url = ...`, and no code sets `base_url` on another
+   object, such as `client.base_url = url`. So
+   `base_url = "https://api.github.com"` leads with an `unknown` segment and
+   `base_url = f"{settings.API}/v1"` sets `configured` before `v1`. A base class
+   outside the scanned source is not counted.
+   `requests.get("https://example.com/talks")`, and a base the scanner can
+   neither resolve nor trace to configuration, such as
+   `requests.get(url)` with a parameter, `build_url() + "/talks"` or a name bound
+   more than once, report a leading `unknown` segment. A module-level name bound
+   once resolves to its text, so `API = "/api"` with `API + "/talks"` is
+   `/api/talks`. Literal text right after a configured base must start with `/`,
+   since `settings.API + "talks"` continues the base's last segment: that
+   segment is `unknown`.
 6. **Which operation a file-location route names.** Python has no
    file-location routing, so every endpoint names the handler function a
    decorator or URL pattern designates.
+7. **Which segments are constrained.** A converter other than `str` or
+   `string`, such as `<int:pk>`, `<slug:s>` or `{id:int}`, and a segment that
+   mixes text with a placeholder, such as `photo-{id}`, are constrained
+   parameters. In a regular-expression route, a named group limited to one
+   segment, such as `(?P<pk>[0-9]+)`, is a constrained parameter and
+   `(?P<slug>[^/]+)` a plain one. A group that may match a slash, such as
+   `(?P<path>[a-z/]+)`, or text the format cannot state, becomes a constrained
+   optional catch-all that replaces the rest of the route, and so does a
+   catch-all followed by more route text. A regular expression without `$`
+   also matches any continuation, so `^feed/` ends with an optional catch-all.
+8. **Registration order.** Django, FastAPI and Starlette take the first route
+   that matches; Flask prefers the most specific one and reports no `order`.
+   A Django endpoint's `order` names the URL table nobody includes, and its
+   position follows that table with each `include()` expanded where it stands.
+   FastAPI and Starlette add routes as modules import, an order the scanner
+   does not prove, so every endpoint of one application shares position `0`.
+   The application is the file that creates it, or the router's own file when
+   the scanner finds no registration. A route entry these routers register but
+   the scanner cannot report keeps its position as a blocker: its literal prefix
+   followed by a constrained optional catch-all, so core derives no row to it
+   and none for a request it could take first. Django blockers are a
+   class-based view through `as_view()`, a view it cannot resolve such as
+   `admin.site.urls`, an `include()` of a module outside the scan, an
+   unreadable route, and a list element that is not `path()`, `re_path()` or
+   `url()`; each names its URL module's code as the `(module)` operation. An
+   `include()` whose route does not end in `/`, such as `path("v", include(...))`,
+   joins it to the included routes with no separator, so each included route
+   is reported in blocker form after the text before that last segment.
+   FastAPI and Starlette blockers are a route with a computed path or methods,
+   an `add_api_route()` or `add_route()` whose handler the scanner cannot
+   resolve, a route on a router registered on an application the scanner
+   cannot resolve (a bare catch-all, with the router's own file as the
+   application), `include_router()` or `mount()` of a router or application
+   the scanner cannot resolve, and every `host()`.
 
 ## Architecture meaning
 

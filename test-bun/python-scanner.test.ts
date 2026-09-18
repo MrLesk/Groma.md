@@ -3,8 +3,9 @@ import { cp, mkdir, mkdtemp, readdir, readFile, rename, rm, writeFile } from 'no
 import os from 'node:os'
 import path from 'node:path'
 import { buildPackage } from '../plugins/scanners/python/build.ts'
-import type { CodeSymbol, HttpEndpointSegment, HttpRequestSegment, ScannerPlugin } from '@groma/scanner'
+import type { CodeSymbol, HttpEndpointSegment, HttpRequestSegment, ScanHttpEndpoint, ScannerPlugin } from '@groma/scanner'
 import { loadAnnotatedArchitecture } from '../src/core.ts'
+import { httpRelationships } from '../src/http-relationships.ts'
 import { addScanner } from '../src/scanner/modules/inventory.ts'
 import { compileWatchPatterns } from '../src/scanner/watch-patterns.ts'
 import { readCodeStructure } from '../src/viewers/source/structure.ts'
@@ -54,14 +55,14 @@ test.concurrent('Python keeps function ownership, nested projects and exact sour
   } finally { await rm(temporary, { recursive: true, force: true }) }
 })
 
-/** `:name`, `:name+` and `:name*` are parameters and catch-alls; `{}` is dynamic and `?` unknown. */
+/** `:name`, `:name+` and `:name*` are parameters and catch-alls, `!` marks a constrained one; `{}` is dynamic and `?` unknown. */
 function route(path: readonly (HttpEndpointSegment | HttpRequestSegment)[]): string {
   return `/${path.map(segment => {
     if (segment.kind === 'literal') return segment.value
     if (segment.kind === 'dynamic') return '{}'
     if (segment.kind === 'unknown') return '?'
     const suffix = segment.kind === 'catch-all' ? (segment.optional ? '*' : '+') : (segment.optional ? '?' : '')
-    return `:${segment.name}${suffix}`
+    return `:${segment.name}${suffix}${segment.constrained ? '!' : ''}`
   }).join('/')}`
 }
 
@@ -74,41 +75,84 @@ test.concurrent('Python reports Flask, FastAPI and Django endpoints and requests
       const found = operations.get(operation)!
       return `${found.file.replace('shop/', '')}#${found.name}`
     }
-    const endpoints = observation.httpEndpoints!.map(fact => `${fact.method} ${route(fact.path)} ${at(fact.operation)}`)
-    // Absent: a computed route or methods list, a segment mixing text with a placeholder, an
-    // unresolved view, and a blueprint registered on an application built inside a factory.
+    const order = (fact: ScanHttpEndpoint) => fact.order ? ` @${fact.order.application.replace('shop/', '')}:${fact.order.position}` : ''
+    const endpoints = observation.httpEndpoints!.map(fact => `${fact.method} ${route(fact.path)} ${at(fact.operation)}${order(fact)}`)
+    // Absent: a Flask route with a computed path or methods list, and a blueprint registered on an application
+    // passed in as a parameter, even when the module binds an application of the same name. Flask's registering
+    // prefix replaces the blueprint's own. Django lists endpoints in resolution order; an entry of an ordered
+    // router the scanner cannot report is a blocker (a constrained optional catch-all after its literal prefix).
     expect(endpoints.sort()).toEqual([
-      '* /api/files/:rest+ djangoapp/views.py#files',
-      '* /api/legacy/:pk djangoapp/views.py#legacy_talk',
-      '* /api/talks djangoapp/views.py#list_talks',
-      '* /api/talks/:pk djangoapp/views.py#talk_detail',
-      'DELETE /api/speakers/:speaker_id/talks/:rest+ fastapiapp/speakers.py#drop_talks',
-      'GET /api/speakers/:speaker_id fastapiapp/speakers.py#read_speaker',
-      'GET /api/talks/:talk_id flaskapp/talks.py#talk',
-      'GET /api/talks/archive flaskapp/talks.py#archive',
-      'GET /health fastapiapp/main.py#health',
+      '* /:rest*! fastapiapp/main.py#(module) @fastapiapp/main.py:0',
+      '* /admin/:rest*! djangoapp/urls.py#(module) @djangoapp/urls.py:13',
+      '* /admin/:rest*! fastapiapp/main.py#(module) @fastapiapp/main.py:0',
+      '* /api/:rest*! djangoapp/views.py#list_talks @djangoapp/urls.py:10',
+      '* /api/:rest*! djangoapp/views.py#list_talks @djangoapp/urls.py:12',
+      '* /api/:rest*! djangoapp/views.py#list_talks @djangoapp/urls.py:8',
+      '* /api/board/:rest*! djangoapp/talks_urls.py#(module) @djangoapp/urls.py:4',
+      '* /api/code/:code*! djangoapp/views.py#talk_detail @djangoapp/urls.py:9',
+      '* /api/feed/:rest* djangoapp/views.py#list_talks @djangoapp/urls.py:7',
+      '* /api/files/:rest+ djangoapp/views.py#files @djangoapp/urls.py:3',
+      '* /api/legacy/:pk! djangoapp/views.py#legacy_talk @djangoapp/urls.py:2',
+      '* /api/raw/:path*! djangoapp/views.py#files @djangoapp/urls.py:5',
+      '* /api/sitemap.xml djangoapp/views.py#list_talks @djangoapp/urls.py:11',
+      '* /api/slug/:slug djangoapp/views.py#talk_detail @djangoapp/urls.py:6',
+      '* /api/talks djangoapp/views.py#list_talks @djangoapp/urls.py:0',
+      '* /api/talks/:pk! djangoapp/views.py#talk_detail @djangoapp/urls.py:1',
+      '* /static/:rest*! fastapiapp/main.py#(module) @fastapiapp/main.py:0',
+      'DELETE /api/speakers/:speaker_id/talks/:rest+ fastapiapp/speakers.py#drop_talks @fastapiapp/main.py:0',
+      'GET /:rest*! fastapiapp/extra.py#items @fastapiapp/extra.py:0',
+      'GET /api/:talk_id! flaskapp/talks.py#talk',
+      'GET /api/archive flaskapp/talks.py#archive',
+      'GET /api/files/:name*! flaskapp/talks.py#raw_file',
+      'GET /api/notes/latest flaskapp/talks.py#latest',
+      'GET /api/speakers/:rest*! fastapiapp/speakers.py#section @fastapiapp/main.py:0',
+      'GET /api/speakers/:speaker_id fastapiapp/speakers.py#read_speaker @fastapiapp/main.py:0',
+      'GET /api/speakers/:speaker_id! fastapiapp/speakers.py#photo @fastapiapp/main.py:0',
+      'GET /health fastapiapp/main.py#health @fastapiapp/main.py:0',
       'GET /health flaskapp/app.py#health',
-      'POST /api/talks flaskapp/talks.py#create',
-      'PUT /api/talks/:talk_id flaskapp/talks.py#talk',
+      'GET /legacy/:rest*! fastapiapp/main.py#(module) @fastapiapp/main.py:0',
+      'GET /ping fastapiapp/main.py#ping @fastapiapp/main.py:0',
+      'GET /status fastapiapp/main.py#status @fastapiapp/main.py:0',
+      'GET /v1/items fastapiapp/sub.py#sub_items @fastapiapp/main.py:0',
+      'GET /version fastapiapp/main.py#version @fastapiapp/main.py:0',
+      'HEAD /status fastapiapp/main.py#status @fastapiapp/main.py:0',
+      'POST /api flaskapp/talks.py#create',
+      'PUT /api/:talk_id! flaskapp/talks.py#talk',
     ])
     const requests = observation.httpRequests!.map(fact => [
       fact.method ?? '', `${fact.configured ? '<base>' : ''}${route(fact.path)}`, at(fact.operation),
     ].join(' '))
-    // Absent: a call outside an operation, a rebound client, and a parameter named like the library.
-    // A host and an unresolved URL lead with an unknown segment; a name bound twice is a configured base.
+    // Absent: a call outside an operation, a client rebound by assignment or a for loop, and a parameter named
+    // like the library. self.base_url resolves to text only when the class, its ancestors and its subclasses
+    // assign base_url exactly once, by a plain assignment; otherwise it is a configured base.
+    // Only a configuration read or a base_url attribute is a configured base; a host, a parameter, a call
+    // and a name bound twice lead with an unknown segment.
     expect(requests.sort()).toEqual([
       'DELETE /speakers/{} clients/api.py#drop_speaker',
       'GET /? clients/calls.py#fetch',
+      'GET /?/repos clients/proxy.py#GitHub.repos',
+      'GET /?/talks clients/api.py#read_locale',
+      'GET /?/talks clients/api.py#read_region',
+      'GET /?/talks clients/api.py#read_version',
       'GET /?/talks clients/calls.py#read_partner',
+      'GET /?/talks clients/proxy.py#joined',
+      'GET /?/talks clients/proxy.py#load_base',
+      'GET /?/talks clients/proxy.py#with_call',
       'GET /health clients/calls.py#check_health',
+      'GET /internal/talks clients/proxy.py#Internal.load',
       'GET /speakers/? clients/api.py#read_speaker_file',
       'GET /speakers/featured clients/api.py#read_featured',
       'GET /talks clients/calls.py#read_talks',
       'GET <base>/? clients/calls.py#read_joined',
+      'GET <base>/?/talks clients/proxy.py#env_joined',
+      'GET <base>/invoices clients/proxy.py#Billing.load',
       'GET <base>/speakers clients/api.py#read_speaker',
       'GET <base>/talks clients/api.py#list_talks',
-      'GET <base>/talks clients/api.py#read_locale',
-      'GET <base>/talks clients/api.py#read_version',
+      'GET <base>/talks clients/proxy.py#Api.load',
+      'GET <base>/talks clients/proxy.py#Mirror.load',
+      'GET <base>/talks clients/proxy.py#Rotating.load',
+      'GET <base>/talks clients/proxy.py#Tokened.load',
+      'GET <base>/v1/talks clients/proxy.py#Versioned.load',
       'HEAD /health clients/calls.py#head_health',
       'PATCH /talks/7 clients/calls.py#patch_talk',
       'POST /imports clients/calls.py#send_import',
@@ -123,6 +167,26 @@ test.concurrent('a Django URL table the scanner cannot read keeps every Django e
   try {
     // The root table is built by addition, so the prefix above the included table is unknown.
     expect((await scanner.scan(root))!.httpEndpoints).toEqual([])
+  } finally { await rm(temporary, { recursive: true, force: true }) }
+})
+
+test.concurrent('a request that an earlier Django entry the scanner cannot read could capture derives no row', async () => {
+  const { root, temporary, scanner } = await fixture('python-http-blocked')
+  try {
+    const scan = (await scanner.scan(root))!
+    const owners = new Map(scan.files.map(file => [file.file, file.file]))
+    // Django tries boards/<slug>/ first, and its class-based view is unknown, so only /talks/ derives a row.
+    expect(httpRelationships([scan], owners).map(row => [row.source, row.target, row.description])).toEqual([
+      ['client/api.py', 'site/views.py', 'Calls HTTP endpoint: GET /talks'],
+    ])
+  } finally { await rm(temporary, { recursive: true, force: true }) }
+})
+
+test.concurrent('a base_url set on any client outside a class leaves every class base_url configured', async () => {
+  const { root, temporary, scanner } = await fixture('python-http-base-store')
+  try {
+    const scan = (await scanner.scan(root))!
+    expect(scan.httpRequests!.map(fact => [fact.configured ?? false, route(fact.path)])).toEqual([[true, '/repos']])
   } finally { await rm(temporary, { recursive: true, force: true }) }
 })
 

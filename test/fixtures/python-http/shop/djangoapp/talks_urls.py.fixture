@@ -1,4 +1,4 @@
-from django.urls import path, re_path
+from django.urls import include, path, re_path
 
 from . import views
 from .views import BoardView
@@ -9,4 +9,12 @@ urlpatterns = [
     re_path(r"^legacy/(?P<pk>[0-9]+)/$", views.legacy_talk),
     path("files/<path:rest>", views.files),
     path("board/", BoardView.as_view()),
+    re_path(r"^raw/(?P<path>[a-z/]+)/view$", views.files),
+    re_path(r"^slug/(?P<slug>[^/]+)/$", views.talk_detail),
+    re_path(r"^feed/", views.list_talks),
+    re_path(r"^news", views.list_talks),
+    re_path(r"^code/(?P<code>[!-~]+)/$", views.talk_detail),
+    re_path(r"^robots.txt$", views.list_talks),
+    re_path(r"^sitemap\.xml$", views.list_talks),
+    path("v", include("djangoapp.posts_urls")),
 ]
