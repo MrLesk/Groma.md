@@ -3,10 +3,10 @@ import { cp, mkdtemp, rm, writeFile } from 'node:fs/promises'
 
 import os from 'node:os'
 import path from 'node:path'
-import { buildWorker } from '../plugins/scanners/java/build.ts'
+import { buildPackage, buildWorker } from '../plugins/scanners/java/build.ts'
 import { javaCommand, run } from '../plugins/scanners/java/src/process.ts'
 
-import { parseScanObservation, type ScanObservation } from '@groma/scanner'
+import { parseScanObservation, type ScannerPlugin, type ScanObservation } from '@groma/scanner'
 
 async function fixture() {
   const root = await mkdtemp(path.join(os.tmpdir(), 'groma-java-test-'))
@@ -49,7 +49,7 @@ test.concurrent('Java compiler resolves overloads and preserves wrappers while v
   } finally { await rm(root, { recursive: true, force: true }) }
 })
 
-test.concurrent('Java retains proven local calls while missing external types and unresolved names leave calls unresolved in one summary diagnostic', async () => {
+test.concurrent('Java retains proven local calls while missing external types and unresolved names leave calls unresolved', async () => {
   const { root, worker } = await fixture()
   try {
     await writeFile(path.join(root, 'src/main/java/Caller.java'), `package entry;
@@ -63,10 +63,28 @@ public class Caller {
     expect(evidence).toContainEqual(expect.objectContaining({ providers: ['sample.Provider#ship(int)'], unresolved: false }))
     expect(evidence.filter(call => call.member === 'ship' && call.unresolved)).toHaveLength(1)
     expect(evidence.find(call => call.member === 'work')).toMatchObject({ providers: [], unresolved: true })
+    // The worker labels each unresolved name; the plugin folds them into one summary.
     const missing = observation.diagnostics.filter(item => item.code === 'JAVA_MISSING_EXTERNAL_TYPES')
-    expect(missing).toHaveLength(1)
-    expect(missing[0]!.message).toStartWith('3 ')
-    expect(missing[0]!.message).toContain('unavailable')
+    expect(missing).toHaveLength(3)
     expect(observation.diagnostics.some(item => item.code.startsWith('compiler.err.'))).toBeFalse()
   } finally { await rm(root, { recursive: true, force: true }) }
 })
+
+test.concurrent('Java folds missing external types from every project into one summary', async () => {
+  const temporary = await mkdtemp(path.join(os.tmpdir(), 'groma-java-missing-'))
+  try {
+    const root = path.join(temporary, 'project')
+    const artifact = path.join(temporary, 'scanner')
+    await buildPackage(artifact)
+    await cp(path.resolve(import.meta.dir, '../test/fixtures/java-missing-types'), root, { recursive: true })
+    const git = Bun.spawn(['git', 'init', '--quiet', root], { stdout: 'ignore', stderr: 'pipe' })
+    expect(await git.exited, await new Response(git.stderr).text()).toBe(0)
+    const scanner: ScannerPlugin = (await import(path.join(artifact, 'src/index.js'))).default
+    const observation = await scanner.scan(root, {})
+    const missing = observation!.diagnostics.filter(item => item.code === 'JAVA_MISSING_EXTERNAL_TYPES')
+    // One import and one use are unresolved in the first project; two imports from one package and two uses in the second.
+    expect(missing).toHaveLength(1)
+    expect(missing[0]!.message).toStartWith('6 ')
+    expect(missing[0]!.message).toContain('packages: beta, alpha.')
+  } finally { await rm(temporary, { recursive: true, force: true }) }
+}, 120000)

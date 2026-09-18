@@ -5,11 +5,12 @@ status: Done
 assignee:
   - '@claude'
 created_date: '2026-09-16 19:38'
-updated_date: '2026-09-17 06:11'
+updated_date: '2026-09-18 18:11'
 labels: []
 dependencies: []
 references:
   - src-scanner
+  - java-src-index
 modified_files:
   - src/scanner.ts
   - plugins/scanners/java/java/md/groma/scanner/Main.java
@@ -19,6 +20,12 @@ modified_files:
   - docs/scanners/index.md
   - docs/scanners/java/index.md
   - docs/scanners/fresh-checkout-validation.md
+  - plugins/scanners/java/src/missing-types.ts
+  - plugins/scanners/java/src/index.ts
+  - test/fixtures/java-missing-types/one/pom.xml
+  - test/fixtures/java-missing-types/one/src/main/java/one/Reader.java
+  - test/fixtures/java-missing-types/two/pom.xml
+  - test/fixtures/java-missing-types/two/src/main/java/two/Writer.java
 type: enhancement
 ordinal: 466000
 ---
@@ -50,10 +57,14 @@ On callforpapers, `groma scan` printed 29,970 lines, so the two-line summary and
 <!-- SECTION:PLAN:BEGIN -->
 1. Baseline: clone callforpapers into a task-specific temp dir, copy its groma/ config, run bun src/cli.ts scan and count report lines (29,970).
 2. src/scanner.ts: formatScanReport groups scanner diagnostics by scanner ID and code and prints one line per group with severity, diagnostic count (×N), and the first listed diagnostic's location and first message line as the example. Scanner failures stay printed in full, unchanged.
-3. Java worker: new MissingTypes.java absorbs javac unresolved-symbol errors (compiler.err.cant.resolve*) and missing-package errors (compiler.err.doesnt.exist) and returns one info diagnostic JAVA_MISSING_EXTERNAL_TYPES with the reference count, the first location, and the five most frequently missing packages (parsed from the Locale.ROOT 'package X does not exist' text). Main.java appends it; other javac attribution errors stay individual warnings; syntax errors still fail the scan with every error listed.
+3. Replaced in the review-fix round (see step 7): the Java worker labels each javac unresolved-symbol error (compiler.err.cant.resolve*) and missing-package error (compiler.err.doesnt.exist) JAVA_MISSING_EXTERNAL_TYPES, and the Java plugin folds every project's labels into one info diagnostic JAVA_MISSING_EXTERNAL_TYPES with the reference count, the first listed location, and the five most frequently missing packages (parsed from the Locale.ROOT 'package X does not exist' text). Other javac attribution errors stay individual warnings; syntax errors still fail the scan with every error listed. (Originally a worker-side MissingTypes.java summarized each project separately.)
 4. Tests: extend the missing-external-type case in test-bun/java-scanner.test.ts to assert the single summary diagnostic; add a scan-report test in test-bun/scanner-composition.test.ts asserting one line per scanner and code with count and first example while failures stay separate.
 5. Docs: docs/scanners/index.md (summarized report), docs/scanners/java/index.md (missing external types diagnostic and its honest cause), docs/scanners/fresh-checkout-validation.md wording.
 6. Rebuild the Java worker with bun plugins/scanners/java/build.ts, rerun the clone scan, compare line counts, run bun run check in an isolated worktree.
+
+Review-fix round (external reviews of cf8e7975):
+7. Fix: a repository with several Java projects runs one worker per project, and each worker emitted its own JAVA_MISSING_EXTERNAL_TYPES summary, so the report showed ×N and kept only the first project's count and packages (contradicting AC #2 and docs/scanners/java/index.md, which say the count is 1). The worker now labels each unresolved-name error JAVA_MISSING_EXTERNAL_TYPES (info, javac's own message) and MissingTypes.java is deleted; the Java plugin folds every project's labels into the one summary after combining projects (plugins/scanners/java/src/missing-types.ts), choosing the five most frequent packages after aggregation. Each project keeps its own compiler run.
+8. Regression test: a two-project Maven fixture scanned through the built Java package yields one summary whose count and packages cover both projects; the worker-level test asserts the per-error labels.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
@@ -73,10 +84,24 @@ Cold review (no required fixes) applied: MissingTypes owns the finished diagnost
 Re-verification: focused tests pass (9 pass). Java worker rebuilt (build script again stops at its final copy with the pre-existing EEXIST on jlink legal symlinks; dist/package complete, runtime identical, worker.jar synced). Clone rescan: still 1,275 lines, Java summary line shows the new wording with 11235 references. Isolated worktree at HEAD 37a8a7c1 plus only this task's diff: bun run check passed (Biome, tsc, node 16 pass, bun 361 pass, 0 fail); worktree removed and pruned.
 
 Non-blocking follow-ups: plugins/scanners/java/build.ts fails copying into an existing plugin dist (EEXIST on symlinks); architecture findings (~1,197 lines) and evidence conflicts (65 lines) still dominate the sample report and are outside this task (findings owned by TASK-423).
+
+Non-blocking follow-up (predates this task, from TASK-326.4 in 14181be7): the Uses.java per-project summaries JAVA_UNRESOLVED_CALLS and JAVA_METHOD_REFERENCES have the same multi-project shape. Identical per-project messages collapse in createScanObservation (two projects with one unresolved call each report '1 calls'), and different counts would show ×2 with only the first message. Folding them the way summarizeMissingTypes folds missing types would fix it.
+
+Count nuance: createScanObservation keeps one of several diagnostics identical in message, file and line, so identical javac unresolved-name errors on one line count once in the folded JAVA_MISSING_EXTERNAL_TYPES count. docs/scanners/java/index.md keeps 'number of unresolved references' (coordinator decision: accurate enough).
+
+Review-fix round (external reviews of cf8e7975).
+Fixed: each Java project's worker emitted its own JAVA_MISSING_EXTERNAL_TYPES summary, so a repository with several Java projects reported ×N and kept only the first project's count and packages (Codex, AC #2). Main.java now labels each compiler.err.cant.resolve* and compiler.err.doesnt.exist error JAVA_MISSING_EXTERNAL_TYPES (info, javac's Locale.ROOT message); MissingTypes.java is deleted and Main.message is private again. plugins/scanners/java/src/missing-types.ts (summarizeMissingTypes) runs in the plugin's repository scan after projects are combined and emits one summary: the count, the first listed diagnostic (observation sort order) as the example, and the five most frequent packages across all projects. Each project keeps its own compiler run. src/scanner.ts needed no change.
+Tests: test/fixtures/java-missing-types holds two Maven projects; "Java folds missing external types from every project into one summary" (test-bun/java-scanner.test.ts) builds the package and scans it: one summary starting '6 ' with 'packages: beta, alpha.'. At cf8e7975 it receives 2 diagnostics. The worker-level test now expects 3 labeled diagnostics and no compiler.err codes.
+End to end: groma scan with the built package on the fixture printed one line, JAVA_MISSING_EXTERNAL_TYPES ×1 with 6 references and packages beta, alpha.
+Cold review applied: plan step 3 and the final summary describe the plugin-side fold; the doc comment says first listed diagnostic; summarizeMissingTypes returns early for an undefined observation.
+Verification: isolated worktree at 83cc22fa with only this change, bun run check exit 0 (biome 1 warning and 2 infos in untouched files, tsc clean, node 16 pass, bun 525 pass 35 skip 0 fail).
+Live rescans: plugins/scanners/java/dist/worker.jar is gitignored and still holds the previous worker, whose per-project summaries the new fold would count as single unresolved names; rebuild it with bun plugins/scanners/java/build.ts before any live rescan of this repository or a sample.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
-groma scan now prints one line per scanner and diagnostic code (severity, ×N diagnostic count, first listed diagnostic as example) instead of every diagnostic, and the Java worker folds javac 'cannot find symbol' and 'package does not exist' errors into one JAVA_MISSING_EXTERNAL_TYPES info diagnostic with the reference count, an example location and the five most frequently missing packages. Scanner failures, including every Java syntax error, are still printed in full. Scanner docs describe the summarized report. On the callforpapers sample the report dropped from 29,970 to 1,275 lines (scanner diagnostic lines from about 28,350 to 11). Verified with new assertions in test-bun/java-scanner.test.ts and test-bun/scanner-composition.test.ts, an end-to-end syntax-error scan on the sample clone, and bun run check in an isolated worktree.
+groma scan now prints one line per scanner and diagnostic code (severity, ×N diagnostic count, first listed diagnostic as example) instead of every diagnostic, and the Java plugin folds the javac 'cannot find symbol' and 'package does not exist' errors of every Java project into one JAVA_MISSING_EXTERNAL_TYPES info diagnostic with the reference count, an example location and the five most frequently missing packages. Scanner failures, including every Java syntax error, are still printed in full. Scanner docs describe the summarized report. On the callforpapers sample the report dropped from 29,970 to 1,275 lines (scanner diagnostic lines from about 28,350 to 11). Verified with new assertions in test-bun/java-scanner.test.ts and test-bun/scanner-composition.test.ts, an end-to-end syntax-error scan on the sample clone, and bun run check in an isolated worktree.
+
+Review-fix round: a repository with several Java projects showed one JAVA_MISSING_EXTERNAL_TYPES summary per project, and the report kept only the first project's count and packages. The worker now labels each unresolved-name error and the Java plugin folds every project's labels into one summary, ranking packages across all projects; a two-project fixture test fails at cf8e7975 (2 diagnostics) and passes now (one summary, 6 references, packages beta then alpha), and an isolated bun run check exits 0.
 <!-- SECTION:FINAL_SUMMARY:END -->
