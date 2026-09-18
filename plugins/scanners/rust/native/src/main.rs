@@ -1,6 +1,10 @@
+mod endpoints;
 mod outline;
+mod patterns;
+mod requests;
 mod scan;
 mod text;
+mod url;
 mod tokens;
 
 use std::io::Read;

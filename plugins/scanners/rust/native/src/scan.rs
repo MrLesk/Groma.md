@@ -10,6 +10,8 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 
 use crate::text::{line, position};
+use crate::url;
+use crate::{endpoints, requests};
 use crate::tokens::operation_tokens;
 
 #[derive(Deserialize)]
@@ -21,10 +23,10 @@ pub struct Input {
     pub crates: Vec<Value>,
 }
 
-struct Source {
-    file: String,
-    text: String,
-    syntax: ast::SourceFile,
+pub(crate) struct Source {
+    pub(crate) file: String,
+    pub(crate) text: String,
+    pub(crate) syntax: ast::SourceFile,
 }
 
 pub fn scan(input: Input) -> anyhow::Result<Value> {
@@ -106,6 +108,9 @@ pub fn scan(input: Input) -> anyhow::Result<Value> {
         );
     }
     let invocations = calls(&sources, &sema, &db, &functions);
+    let constants = url::constants(sources.iter().map(|source| source.syntax.syntax().clone()));
+    let http_endpoints = endpoints::endpoints(&sema, &constants, &sources, &functions);
+    let http_requests = requests::requests(&sema, &constants, &sources, &functions);
     let scope = Path::new(&input.manifest)
         .strip_prefix(&input.root)
         .context("manifest is outside the repository")?
@@ -119,7 +124,9 @@ pub fn scan(input: Input) -> anyhow::Result<Value> {
         "scanner": {"id": "rust", "technology": "rust", "engine": "rust-analyzer-hir", "engineVersion": "0.0.301"},
         "roots": [{"id": scope, "kind": "cargo", "name": input.name, "file": scope}],
         "files": files,
-        "operations": operations, "invocations": invocations, "diagnostics": diagnostics,
+        "operations": operations, "invocations": invocations,
+        "httpEndpoints": http_endpoints, "httpRequests": http_requests,
+        "diagnostics": diagnostics,
     }))
 }
 
@@ -233,6 +240,24 @@ fn calls(
     invocations
 }
 
+/// Nodes of one function body, including its closures and async blocks: their code is part of
+/// this function. Nested `fn` items are their own operations and are left out.
+pub(crate) fn owned_nodes(body: &SyntaxNode) -> Vec<SyntaxNode> {
+    let mut nodes = Vec::new();
+    let mut walk = body.preorder();
+    while let Some(event) = walk.next() {
+        let WalkEvent::Enter(node) = event else { continue };
+        if &node != body && ast::Fn::can_cast(node.kind()) {
+            walk.skip_subtree();
+            continue;
+        }
+        nodes.push(node);
+    }
+    nodes
+}
+
+/// Call nodes of one function body. Unlike the nodes the body owns, a closure or async block
+/// is skipped here: this scan does not extract the calls those deferred bodies make.
 fn call_nodes(body: &SyntaxNode) -> Vec<SyntaxNode> {
     let mut nodes = Vec::new();
     let mut walk = body.preorder();

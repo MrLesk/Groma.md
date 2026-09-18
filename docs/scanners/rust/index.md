@@ -85,6 +85,63 @@ methods in a trait `impl` are `public`.
 A declaration is an entry when a Code link names it by its bare name, such as
 `place_order` or `load`, the form the scan uses for functions and methods.
 
+## HTTP facts
+
+The worker reports the endpoints these crates serve and the requests they send as
+[HTTP facts](../evidence.md#http-endpoints-and-requests). External crates stay
+unresolved in a source-only scan, so routers and clients are recognized by the
+shape of the call: axum's `route`, `nest` and `merge`, actix-web's route attribute
+macros with `service`, `configure`, `web::scope` and `web::resource`, Rocket's
+route attribute macros with `mount` and `routes!`, and the reqwest and hyper
+calls listed below.
+
+Answers to the [producer checklist](../evidence.md#producer-checklist):
+
+1. **Prefixes.** Every literal prefix the source declares: an axum `nest` path, a
+   Rocket `mount` base, an actix `web::scope` or `web::resource` path, and the
+   route's own path. A router function another function nests carries that prefix,
+   however deep. A prefix that is not literal reports nothing for the routes under
+   it, and neither does a route whose own path is not literal.
+2. **Endpoints.** Only route declarations: `route` with a method router such as
+   `get(handler).post(other)`, `route` with actix's `web::get().to(handler)`, and a
+   handler whose attribute macro states a method and a path, once something
+   registers it. `any` reports the `*` method. `layer`, `with_state` and other
+   wrapping calls keep the routes they wrap. `fallback`, `route_service`,
+   `nest_service`, `wrap` middleware, `on(MethodFilter::GET, handler)`, and a
+   handler this scan cannot resolve to a function report nothing. So does an
+   attribute handler nothing registers, because the prefix it is served under is
+   unknown, and an actix resource route with no path of its own.
+3. **Dynamic or unknown.** A `format!` placeholder written between two slashes, or
+   between a slash and the end of the path, is dynamic: `format!("/talks/{id}")`.
+   A placeholder that shares its segment with other text is unknown:
+   `format!("/talks/{slug}-latest")`, and `format!("{BASE}{path}")`, where the
+   placeholder follows the text of `BASE` with no slash between them.
+4. **The local helper.** Nothing: this scanner does not propagate arguments, so a
+   URL that arrives as a parameter stays unknown and is reported where the client
+   call is.
+5. **The base.** `client.get("/api/talks")` has no base. A `const` or `static`
+   with a literal value, and a `let` bound once to one, read as their text, so
+   `format!("{BASE}/talks")` is a literal path; a name the enclosing function binds
+   itself is not read as a crate constant. A name the scan cannot read before the
+   path, such as `self.base` or a setting, sets `configured`. A literal scheme and
+   host, and any other computed base, become a leading unknown segment.
+6. **File-location routes.** Rust has none, so every endpoint names its handler
+   function.
+
+Route syntax is read in each supported form: `:name` and `{name}` for one segment,
+`{*rest}` and `*rest` for the remainder, actix's `{name:.*}` tail, and Rocket's
+`<name>` and `<rest..>`. A query string is dropped. An actix regular expression, a
+segment that mixes literal text with a parameter, and a catch-all that is not last
+report nothing.
+
+Requests come from `reqwest::get` and from the client methods `get`, `post`,
+`put`, `patch`, `delete`, `head` and `options`, as well as
+`request(Method::DELETE, url)`, each when its own value flows into `send`. A URL
+inside such a chain that is only an argument, such as a header value read from a
+map, is not a request. A hyper or http `Request::builder().uri(url)` chain
+reports the method its `method` call states. A request the source splits across statements, a warp filter, and routes
+another crate registers are outside this scan.
+
 ## Compared operations
 
 `groma lint` and scan findings compare Rust operations under the
