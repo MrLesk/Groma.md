@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@claude'
 created_date: '2026-09-16 19:38'
-updated_date: '2026-09-18 15:47'
+updated_date: '2026-09-18 19:34'
 labels: []
 dependencies: []
 references:
@@ -22,6 +22,7 @@ references:
   - go-src-index
   - php-src-index
   - typescript-src-index
+  - scanners-projects
 modified_files:
   - src/scanner/registry.ts
   - src/source-coverage.ts
@@ -45,6 +46,34 @@ modified_files:
   - plugins/scanners/react/src/index.ts
   - plugins/scanners/vue/src/index.ts
   - plugins/scanners/swift/src/index.ts
+  - plugins/scanners/projects.ts
+  - plugins/scanners/java/src/maven.ts
+  - plugins/scanners/rust/src/project.ts
+  - test-bun/declared-source-listing.test.ts
+  - test/fixtures/java-declared-roots/aggregate/pom.xml
+  - test/fixtures/java-declared-roots/aggregate/src/main/java/C.java
+  - test/fixtures/java-declared-roots/basedir/pom.xml
+  - test/fixtures/java-declared-roots/basedir/source/A.java
+  - test/fixtures/java-declared-roots/basedir/src/main/java/Unread.java
+  - test/fixtures/java-declared-roots/gen/build/generated/java/G.java
+  - test/fixtures/java-declared-roots/gen/pom.xml
+  - test/fixtures/java-declared-roots/property/code/B.java
+  - test/fixtures/java-declared-roots/property/pom.xml
+  - test/fixtures/rust-declared-roots/app/Cargo.toml
+  - test/fixtures/rust-declared-roots/app/core/lib.rs
+  - test/fixtures/rust-declared-roots/app/core/model.rs
+  - test/fixtures/rust-declared-roots/app/src/bin/extra.rs
+  - test/fixtures/rust-declared-roots/app/tools/cli.rs
+  - test/fixtures/rust-declared-roots/worker/Cargo.toml
+  - test/fixtures/rust-declared-roots/worker/src/lib.rs
+  - plugins/scanners/java/java/md/groma/scanner/MavenModel.java
+  - plugins/scanners/java/src/java-input.ts
+  - test/fixtures/java-declared-roots/entity/pom.xml
+  - test/fixtures/java-declared-roots/entity/src/a&b/E.java
+  - test/fixtures/java-declared-roots/cdata/pom.xml
+  - test/fixtures/java-declared-roots/cdata/src/cd/D.java
+  - test/fixtures/java-root-source/pom.xml
+  - test/fixtures/java-root-source/Root.java
 type: enhancement
 ordinal: 468000
 ---
@@ -82,6 +111,15 @@ ordinal: 468000
 6. Tests: the four messages with generated plugins, an owned file after a scan, and one exact listing per official scanner against its existing fixture.
 7. Docs: the plugin contract describes the listing and the four reasons; the inspect guide documents the messages.
 8. Run focused tests, then bun run check in an isolated worktree.
+
+Review-fix round (external reviews of cf8e7975):
+9. Java listing (Codex, Grok): the listing read Maven's sourceDirectory with a regex that expanded only a leading ${project.basedir}/, so ${basedir}, a ${property} value and an aggregator (packaging pom) disagreed with the worker's MavenModel; and it filtered through projectFiles, whose discovery exclusions (build, generated, target, dist...) dropped files the scan reads under a declared root. The listing now applies MavenModel's rules in TypeScript (the worker needs a JVM, and a listing must answer groma view without one) and keeps every tracked, unignored .java file under a declared root. A new repositoryFiles helper in plugins/scanners/projects.ts lists files without the discovery exclusions; projectFiles builds on it.
+10. Rust listing (Codex): it ignored settings.manifest and listed only each Cargo.toml's src tree, missing an explicit [lib] path, [[bin]] paths and, through the same exclusions (bin), src/bin files. It now lists .rs files under the root-module directory of every target the scan analyzes for the settings (rustProjects, members and targets from project.ts).
+11. Wording (Grok): a detached file is read by a scanner and waits for the next scan, but the fourth reason said "not scanned yet". The message and docs now say the file waits for a scan.
+12. Ask, not implemented: a listing that throws makes groma view fail (Grok); catching it is fallback behavior that needs the owner's decision.
+13. Tests: a new listing test writes minimal Maven and Cargo repositories and asserts the selected files.
+
+14. Cold review: maven.ts became the only owner of the Maven source root and aggregator rules; the scan (java-input.ts mavenProject) takes its roots from it and MavenModel.java keeps only release, encoding and name. maven.ts decodes XML entities and CDATA. Java and Rust share isUnder from projects.ts, so a root at the repository directory lists its files. targetRoots reuses readRustProject per selected manifest. The approved listing-failure explanation replaces step 12: a scanner whose listing throws is named with its error's first line beside the other scanners' answer.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
@@ -115,10 +153,22 @@ Cold review applied; AC 1 now covers twelve official scanners, not eleven.
 7. Verified live through the CLI in this repository after rebuilding the bundled framework packages, because a packaged scanner loads from dist and its hook only takes effect after a rebuild: 'unknown target: src/source-coverag.ts; not a repository file'; 'no owner: test-bun/source-coverage.test.ts; excluded by scanners.json pattern /test-bun/'; 'no owner: README.md; no enabled scanner reads it'; 'no owner: plugins/scanners/typescript-project.ts; read by typescript and not scanned yet, so run groma scan'. The rebuilt bundles are ignored build output and are not part of this commit.
 Follow-up recorded, not implemented: a scanner whose listSourceFiles throws makes groma view fail instead of answering, and a fallback needs the owner's decision.
 Isolated bun run check exited 0 (Bun 513 passed, 32 skipped, 0 failed; Node 16 passed).
+
+Review-fix round (external reviews of cf8e7975).
+Fixed, Java listing (Codex u09, Codex-all #13, Grok u09): the listing read Maven's sourceDirectory with its own regex (only a leading ${project.basedir}/ expanded) and filtered through projectFiles, whose discovery exclusions (build, generated, target...) dropped files under declared roots. plugins/scanners/java/src/maven.ts is now the only owner of the source root and aggregator rules: mavenSourceRoots reads project/build/sourceDirectory (or src/main/java) with whole-value ${property} substitution, ${basedir} and ${project.basedir}, XML entities and CDATA, and returns none for packaging pom. The scan's mavenProject (java-input.ts) takes its roots from it and skips the JVM for an aggregator; MavenModel.java keeps release, encoding and name only. The listing keeps every tracked, unignored .java file under a declared root (new repositoryFiles in plugins/scanners/projects.ts; projectFiles builds on it).
+Fixed, Rust listing (Codex u09, Codex-all #13): it ignored settings.manifest and listed only each Cargo.toml's src tree, missing [lib] and [[bin]] paths and src/bin (dropped by the bin exclusion). It now lists .rs files under the directory of each target root module that readRustProject returns for every selected manifest (targetRoots in project.ts). A manifest without targets is a listing failure, as it is a scan failure. Java and Rust share isUnder, which treats the repository root as containing every file.
+Fixed, wording (Grok-all): the fourth reason now says the file is waiting for a scan, which is also true of a detached file.
+Fixed, approved by the coordinator (Grok-all): a scanner whose listSourceFiles throws no longer makes groma view fail. registry.readersOfFile returns { readers, failures } and the reason names each failed scanner with its error's first line ('<scanner> could not list its sources: <message>'), after the waiting-for-a-scan reason when other scanners read the file.
+Tests: test-bun/declared-source-listing.test.ts with fixtures java-declared-roots (basedir, property, entity, CDATA, build-directory root, aggregator), java-root-source and rust-declared-roots; a scan-side test builds the worker and checks readJavaInput reads exactly the listed files. test-bun/source-coverage.test.ts gained the listing-failure case. All fail at cf8e7975 and pass now.
+Live check: groma view on the Java fixture with the source Java scanner added answered 'waiting for a scan' for the basedir, property and build-root files and 'no enabled scanner reads it' for the aggregator's file. Re-review confirmed readJavaInput output is identical to cf8e7975 on 27 projects including callforpapers.
+Verification: isolated worktree at 9574e0a1 with only this change, bun run check exit 0 (biome 1 warning and 2 infos in untouched files, tsc clean, node 16 pass, bun 574 pass 35 skip 0 fail). plugins/scanners/java/dist/worker.jar is gitignored and still the previous build; rebuild it before a live rescan uses the trimmed model.
+Not in this lane: Grok-all's cut file answer ending on the paging footer belongs to TASK-425/TASK-420.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
 groma view <file> now explains why a file has no architecture owner instead of answering 'unknown target'. src/source-coverage.ts asks four questions in order and returns exactly one reason: the file is not in the repository listing (tracked and unignored, the boundary every scan selects from), a named scanners.json pattern excludes it, no enabled scanner reads it, or the scanners that read it have not scanned it yet. src/plain-world.ts consults it only when no element owns the file, so element, flow, draft and owned-file answers are unchanged. The evidence comes from a new ScannerPlugin hook, listSourceFiles, which every official scanner implements from the selection its own scan uses, without analyzing a file or running Maven, Gradle, dotnet, go or cargo: TypeScript, PHP, Python, Go, Java, Rust, C#, JavaScript, and Angular, React and Vue through a shared framework-project helper. src/scanner/registry.ts exposes those listings with each scanner's configured settings and the shared exclusions applied. Verified by test-bun/source-coverage.test.ts (all four messages, a mistyped id, a mistyped path, and an owned file after a scan) and test-bun/scanner-source-listing.test.ts (one exact listing per official scanner against its existing fixture, with no worker or project tool running), plus an isolated bun run check at current HEAD: exit 0, Bun 510 passed, Node 16 passed. The plugin contract and the inspect guide document the listing rule, its limits and the four messages.
+
+Review-fix round: the Java and Rust listings now select exactly what their scans read. maven.ts is the single owner of the Maven source root (basedir, properties, entities, CDATA, aggregators) for scan and listing, declared roots inside build directories are listed, and the Rust listing follows the configured manifest to every target's root module. A detached file is described as waiting for a scan, and a scanner whose listing throws is named with its error instead of crashing groma view. New fixture tests fail at cf8e7975 and pass now, and an isolated bun run check exits 0.
 <!-- SECTION:FINAL_SUMMARY:END -->

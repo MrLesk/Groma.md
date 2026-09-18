@@ -2,9 +2,9 @@ import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 
 import { combineObservations } from '../../observations.ts'
-import { projectFiles } from '../../projects.ts'
+import { isUnder, repositoryFiles } from '../../projects.ts'
 import { parseScanObservation, type CodeFile, type ScanObservation, type ScannerPlugin, type ScannerSettings } from '@groma/scanner'
-import { execute, exists, readRustProject, rustProjects, type RustOptions } from './project.ts'
+import { execute, exists, readRustProject, rustProjects, targetRoots, type RustOptions } from './project.ts'
 
 const executable = fileURLToPath(new URL(
   `../dist/bin/${process.platform}-${process.arch}/groma-rust-scanner${process.platform === 'win32' ? '.exe' : ''}`,
@@ -52,12 +52,10 @@ const scanner = {
       '**/rust-toolchain', '**/rust-toolchain.toml', '**/.cargo/**'],
     exclude: ['**/target/**', '**/node_modules/**', '**/.git/**', '**/vendor/**', '**/dist/**'],
   },
-  /** Every crate's own `src` tree; a module the crate root never declares stays unanalyzed. */
-  listSourceFiles: async root => {
-    const crates = (await projectFiles(root, file => path.posix.basename(file) === 'Cargo.toml'))
-      .map(file => path.posix.dirname(file))
-    return projectFiles(root, file => file.endsWith('.rs')
-      && crates.some(crate => file.startsWith(crate === '.' ? 'src/' : `${crate}/src/`)))
+  /** Every file under the directory of a target's root module; a module the crate root never declares stays unanalyzed. */
+  listSourceFiles: async (root, settings = {}) => {
+    const directories = (await targetRoots(root, settings)).map(file => path.relative(root, path.dirname(file)).split(path.sep).join('/'))
+    return repositoryFiles(root, file => file.endsWith('.rs') && directories.some(directory => isUnder(file, directory)))
   },
   checkReadiness: async (root, settings = {}) => {
     const projects = await rustProjects(root, settings)

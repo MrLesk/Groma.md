@@ -1,0 +1,6 @@
+<project>
+  <modelVersion>4.0.0</modelVersion>
+  <build>
+    <sourceDirectory>build/generated/java</sourceDirectory>
+  </build>
+</project>

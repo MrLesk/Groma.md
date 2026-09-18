@@ -27,8 +27,14 @@ export interface ScannerRegistry {
   readonly scannerIds: readonly string[]
   collectObservations(repositoryRoot: string, changedFiles?: readonly string[]): Promise<ScanBatch>
   watchesFile(relativePath: string): boolean
-  /** The scanners that would analyze this file now, among those that can list their files. */
-  readersOfFile(repositoryRoot: string, file: string): Promise<string[]>
+  /** The scanners that would analyze this file now, among those that can list their files, and those whose listing failed. */
+  readersOfFile(repositoryRoot: string, file: string): Promise<FileReaders>
+}
+
+export interface FileReaders {
+  readers: string[]
+  /** Each scanner whose listing threw, with the first line of its error. */
+  failures: { scanner: string; message: string }[]
 }
 
 
@@ -131,6 +137,10 @@ export async function loadScannerRegistry(
   return { ...registry, watchesFile: file => registry.watchesFile(file) || (!excluded(file) && discovery(file)) }
 }
 
+function firstLine(error: unknown): string {
+  return (error instanceof Error ? error.message : String(error)).split('\n')[0]!
+}
+
 /** One source session retains complete evidence between selective rescans. */
 export function createScannerRegistry(
   scanners: readonly ScannerPlugin[],
@@ -142,12 +152,18 @@ export function createScannerRegistry(
   return {
     scannerIds: scanners.map(scanner => scanner.id),
     async readersOfFile(root, file) {
-      if (excluded(file)) return []
-      const readers = await Promise.all(scanners.map(async scanner => {
-        const files = await scanner.listSourceFiles?.(root)
-        return files?.includes(file) === true ? scanner.id : undefined
-      }))
-      return readers.filter(id => id !== undefined).sort()
+      const answer: FileReaders = { readers: [], failures: [] }
+      if (excluded(file)) return answer
+      const listings = await Promise.allSettled(scanners.map(async scanner => await scanner.listSourceFiles?.(root)))
+      for (const [index, listing] of listings.entries()) {
+        const scanner = scanners[index]!.id
+        if (listing.status === 'rejected') answer.failures.push({ scanner, message: firstLine(listing.reason) })
+        else if (listing.value?.includes(file)) answer.readers.push(scanner)
+      }
+      // Scanner ids are compared by code unit in both lists.
+      answer.readers.sort()
+      answer.failures.sort((left, right) => (left.scanner < right.scanner ? -1 : 1))
+      return answer
     },
     watchesFile(relativePath) {
       return !excluded(relativePath) && subscriptions.some(subscription => subscription.matches(relativePath))

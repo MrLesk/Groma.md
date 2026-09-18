@@ -8,12 +8,21 @@ const execute = promisify(execFile)
 const excluded = new Set(['.git', 'node_modules', 'vendor', 'target', 'dist', 'build', 'bin', 'obj',
   '.gradle', '.angular', 'coverage', 'generated', 'groma', '.groma'])
 
-/** Project selection uses the same tracked/unignored declaration boundary as discovery. */
-export async function projectFiles(root: string, matches: (file: string) => boolean): Promise<string[]> {
+/** The tracked and unignored files that match and exist, in any directory. */
+export async function repositoryFiles(root: string, matches: (file: string) => boolean): Promise<string[]> {
   const { stdout } = await execute('git', ['-C', root, 'ls-files', '-z', '--cached', '--others', '--exclude-standard'],
     { maxBuffer: 64 * 1024 * 1024 })
-  return [...new Set(stdout.split('\0').filter(file => file && matches(file)
-    && !file.split('/').some(part => excluded.has(part)) && existsSync(path.join(root, file))))].sort()
+  return [...new Set(stdout.split('\0').filter(file => file && matches(file) && existsSync(path.join(root, file))))].sort()
+}
+
+/** A repository-relative file inside a repository-relative directory; the empty directory is the repository root. */
+export function isUnder(file: string, directory: string): boolean {
+  return directory === '' || file.startsWith(`${directory}/`)
+}
+
+/** Project selection uses the same tracked/unignored declaration boundary as discovery, outside dependency and build directories. */
+export function projectFiles(root: string, matches: (file: string) => boolean): Promise<string[]> {
+  return repositoryFiles(root, file => matches(file) && !file.split('/').some(part => excluded.has(part)))
 }
 
 export function hasDependency(manifest: Record<string, Record<string, unknown> | undefined>, dependency: string): boolean {

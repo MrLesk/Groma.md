@@ -1,0 +1,9 @@
+<project>
+  <modelVersion>4.0.0</modelVersion>
+  <properties>
+    <src.dir>code</src.dir>
+  </properties>
+  <build>
+    <sourceDirectory>${src.dir}</sourceDirectory>
+  </build>
+</project>

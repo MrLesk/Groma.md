@@ -18,15 +18,15 @@ async function write(root: string, file: string, content: string): Promise<void>
   await writeFile(path.join(root, file), content)
 }
 
-/** A generated plugin lists the files it would analyze, as official scanners do. */
-async function plugin(root: string, id: string, files: readonly string[]): Promise<string> {
+/** A generated plugin whose listing runs `listing`, as official scanners list the files they would analyze. */
+async function plugin(root: string, id: string, listing: string): Promise<string> {
   const source = `./plugins/${id}`
   await write(root, `${source}/package.json`, JSON.stringify({
     name: `fixture-${id}`, version: '1.0.0', type: 'module', groma: { scanner: { id, entry: './index.js' } },
   }))
   await write(root, `${source}/index.js`, `export default {
     id: ${JSON.stringify(id)}, watch: { include: ['**/*'], exclude: [] },
-    async listSourceFiles() { return ${JSON.stringify(files)} },
+    async listSourceFiles() { ${listing} },
     async scan() { return undefined },
   }`)
   return source
@@ -39,7 +39,7 @@ async function repository(): Promise<string> {
   const child = Bun.spawn(['git', 'init', '--quiet'], { cwd: root, stdout: 'ignore', stderr: 'pipe' })
   expect(await child.exited, await new Response(child.stderr).text()).toBe(0)
   const listed = ['src/kept.ts', 'scripts/hidden.ts', 'src/keep.generated.ts']
-  for (const id of ['first', 'second']) await addScanner(root, await plugin(root, id, listed))
+  for (const id of ['first', 'second']) await addScanner(root, await plugin(root, id, `return ${JSON.stringify(listed)}`))
   return root
 }
 
@@ -75,7 +75,7 @@ test.concurrent('a pattern decides with the whole list, so a later negation rest
       .toBe('no owner: src/keep.generated.ts; excluded by scanners.json pattern **/*.generated.ts')
     await writeScannerConfig(root, { ...config, exclude: ['**/*.generated.ts', '!src/keep.generated.ts'] })
     expect(await reason(root, 'src/keep.generated.ts'))
-      .toBe('no owner: src/keep.generated.ts; read by first, second and not scanned yet, so run groma scan')
+      .toBe('no owner: src/keep.generated.ts; read by first, second and waiting for a scan, so run groma scan')
   } finally { await rm(root, { recursive: true, force: true }) }
 })
 
@@ -84,7 +84,17 @@ test.concurrent('a repository file no scanner selects is separated from one wait
   try {
     expect(await reason(root, 'src/notes.txt')).toBe('no owner: src/notes.txt; no enabled scanner reads it')
     expect(await reason(root, 'src/kept.ts'))
-      .toBe('no owner: src/kept.ts; read by first, second and not scanned yet, so run groma scan')
+      .toBe('no owner: src/kept.ts; read by first, second and waiting for a scan, so run groma scan')
+  } finally { await rm(root, { recursive: true, force: true }) }
+})
+
+test.concurrent('a scanner whose listing fails is named beside the other scanners\' answer', async () => {
+  const root = await repository()
+  try {
+    await addScanner(root, await plugin(root, 'broken', "throw new Error('Cargo.toml is unreadable\\nat line 2')"))
+    expect(await reason(root, 'src/kept.ts')).toBe('no owner: src/kept.ts; read by first, second and waiting for a scan, '
+      + 'so run groma scan; broken could not list its sources: Cargo.toml is unreadable')
+    expect(await reason(root, 'src/notes.txt')).toBe('no owner: src/notes.txt; broken could not list its sources: Cargo.toml is unreadable')
   } finally { await rm(root, { recursive: true, force: true }) }
 })
 
