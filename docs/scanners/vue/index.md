@@ -224,35 +224,21 @@ The [producer decisions](../evidence.md#producer-checklist) for this ecosystem:
 
 ## Compared operations
 
-`groma lint` and scan findings compare Vue operations under the
-[shared rule](../../architecture-findings.md#compared-operations). In the
-`<script>` and `<script setup>` blocks of a single-file component, the scanner
-attaches a source range, in the `.vue` file's own lines, and body tokens to:
+`groma lint` and scan findings compare the functions in the `<script>` and
+`<script setup>` blocks of a single-file component under the
+[shared rule](../../architecture-findings.md#compared-operations). The Vue,
+JavaScript and TypeScript scanners share one rule and one tokenizer, so the
+operations the [TypeScript scanner](../typescript/index.md#compared-operations)
+compares, those it does not compare yet, and the tokens it keeps apply here too,
+and one body compares equal in a component script and in a module.
 
-- function declarations and named function expressions, including the functions
-  a `<script setup>` block exposes to its template;
-- methods with an identifier name and a body, in classes and in object
-  literals, such as the `methods` of an exported options object;
-- constructors with a body;
-- arrow functions and function expressions assigned to a variable or to a
-  property of an object literal.
-
-Unnamed arrow functions and function expressions are anonymous callbacks, as
-are functions written directly on an object literal passed to a call, `new`, or
-a decorator, also inside parentheses, `as`, `satisfies` or `!`: `setup()` on the
-argument of `defineComponent({ ... })` is not compared, while the methods nested
-under its `methods` property are. Top-level statements of a block are
-initializer code, and template expressions are not operations. The scanner
-reports every named body whatever its size, because core applies the minimum
-body sizes.
-
-The Vue, JavaScript and TypeScript scanners share one rule and one tokenizer, so
-the named operations the [TypeScript scanner](../typescript/index.md#compared-operations)
-lists as not compared yet, such as accessors and methods whose name is not an
-identifier, are not compared here either, and the tokens that page lists stay
-here too. One body therefore compares equal in a single-file component script
-and in a module. Scripts the component keeps in a separate file are TypeScript
-modules, which the TypeScript scanner compares.
+In a component, the source range is in the `.vue` file's own lines. The
+functions a `<script setup>` block exposes to its template are compared.
+`setup()` on the argument of `defineComponent({ ... })` is an anonymous callback,
+while the methods under its `methods` property are compared. Top-level statements
+of a block are initializer code, and template expressions are not operations.
+Scripts the component keeps in a separate file are TypeScript modules, which the
+TypeScript scanner compares.
 
 ## Nested projects
 

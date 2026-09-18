@@ -36,7 +36,7 @@ function valueReference(node: Node): boolean {
     || isAsExpression(parent) || isNonNullExpression(parent)
 }
 
-const { executable, comparedOperation } = typeScriptOperations({ SyntaxKind })
+const { executable, operationFields } = typeScriptOperations({ SyntaxKind })
 
 function location(root: string, node: Node): { file: string; line: number; position: number } {
   const source = node.getSourceFile()
@@ -223,8 +223,7 @@ export async function sourceOperations(root: string, sources: SourceFile[], chec
     const { file } = location(root, node)
     const id = `${file}#${node.parent ? node.getStart() : 'module'}`
     if (!operations.has(id)) {
-      // Only named operations carry the range and tokens core compares as possible duplicate logic.
-      operations.set(id, { id, file, name: '(anonymous)', position: node.getStart(), ...comparedOperation(node) })
+      operations.set(id, { id, file, position: node.getStart(), ...operationFields(node) })
     }
     return id
   }

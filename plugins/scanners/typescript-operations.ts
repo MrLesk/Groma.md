@@ -9,7 +9,8 @@ import type { ScanOperation } from '@groma/scanner'
  */
 
 type KindName =
-  | 'Identifier' | 'Parameter' | 'VariableDeclaration' | 'BindingElement' | 'Block' | 'ReturnStatement'
+  | 'Identifier' | 'PrivateIdentifier' | 'Parameter' | 'VariableDeclaration' | 'BindingElement' | 'ObjectBindingPattern'
+  | 'Block' | 'ReturnStatement'
   | 'CallExpression' | 'NewExpression' | 'PropertyAccessExpression' | 'ElementAccessExpression' | 'PropertyAssignment'
   | 'ShorthandPropertyAssignment' | 'ObjectLiteralExpression'
   | 'ArrowFunction' | 'FunctionExpression' | 'FunctionDeclaration' | 'MethodDeclaration' | 'Constructor'
@@ -28,11 +29,11 @@ type KindName =
   | 'TypeParameter' | 'ArrayType' | 'FunctionType' | 'LiteralType' | 'TypeLiteral'
   | 'ExpressionWithTypeArguments' | 'TypeReference' | 'ConditionalType'
 
-/** The compiler a scanner parses with; only its syntax kinds are read. */
-export interface OperationCompiler {
+/** The syntax kinds of the compiler a scanner parses with. */
+interface OperationSyntax {
   SyntaxKind: Readonly<Record<KindName, number>>
 }
-type Kinds = OperationCompiler['SyntaxKind']
+type Kinds = OperationSyntax['SyntaxKind']
 
 interface Node {
   readonly kind: number
@@ -46,6 +47,7 @@ interface Node {
 interface Text extends Node { readonly text: string }
 interface Named extends Node { readonly name?: Node }
 interface Declaration extends Node { readonly name: Node; readonly initializer?: Node }
+interface BindingElement extends Declaration { readonly propertyName?: Node }
 interface FunctionLike extends Node { readonly parameters: readonly Node[]; readonly body?: Node }
 interface Wrapper extends Node { readonly expression: Node }
 interface Call extends Node { readonly expression: Node; readonly questionDotToken?: Node; readonly arguments?: readonly Node[] }
@@ -114,17 +116,20 @@ function vocabularyOf(k: Kinds): Vocabulary {
   }
 }
 
-type ComparedOperation = Pick<ScanOperation, 'name' | 'startLine' | 'endLine' | 'tokens'>
+type OperationFields = Pick<ScanOperation, 'name' | 'startLine' | 'endLine' | 'tokens'>
 
 /** The operation rules of one compiler. */
-export interface TypeScriptOperations {
+interface TypeScriptOperations {
   /** A function whose body runs as its own operation: function literals, and declarations, methods and constructors with a body. */
   executable(node: Node): boolean
-  /** The name, inclusive source range and body tokens of an operation core may compare; undefined for any other node. */
-  comparedOperation(node: Node): ComparedOperation | undefined
+  /**
+   * The name of an operation, with the inclusive source range and body tokens core compares; only `(anonymous)`
+   * for module code, anonymous callbacks and any other node.
+   */
+  operationFields(node: Node): OperationFields
 }
 
-export function typeScriptOperations(ts: OperationCompiler): TypeScriptOperations {
+export function typeScriptOperations(ts: OperationSyntax): TypeScriptOperations {
   const k = ts.SyntaxKind
   const words = vocabularyOf(k)
 
@@ -161,15 +166,15 @@ export function typeScriptOperations(ts: OperationCompiler): TypeScriptOperation
     return undefined
   }
 
-  function comparedOperation(node: Node): ComparedOperation | undefined {
+  function operationFields(node: Node): OperationFields {
     const name = comparableName(node)
-    if (name === undefined) return undefined
+    if (name === undefined) return { name: '(anonymous)' }
     const source = node.getSourceFile()
     const line = (position: number) => source.getLineAndCharacterOfPosition(position).line + 1
     return { name, startLine: line(node.getStart()), endLine: line(node.end), tokens: tokenize(k, words, node as FunctionLike) }
   }
 
-  return { executable, comparedOperation }
+  return { executable, operationFields }
 }
 
 interface Scope {
@@ -196,12 +201,17 @@ function tokenize(k: Kinds, words: Vocabulary, operation: FunctionLike): string[
       scope.slots.set(part.text, next++)
       return
     }
-    if (is<Declaration>(part, k.BindingElement) && is<Text>(part.name, k.Identifier)) {
-      scope.slots.set(part.name.text, next++)
-      walk(part.initializer)
-      return
-    }
-    part.forEachChild(child => bindPattern(child))
+    if (is<BindingElement>(part, k.BindingElement)) bindElement(part)
+    else part.forEachChild(child => bindPattern(child))
+  }
+
+  /** An object pattern element keeps its property name, as an object literal key does; only the bound name is a slot. */
+  function bindElement(element: BindingElement): void {
+    const key = element.propertyName ?? (is(element.parent, k.ObjectBindingPattern) ? element.name : undefined)
+    if (is<Text>(key, k.Identifier) || is<Text>(key, k.StringLiteral) || is<Text>(key, k.NumericLiteral)) tokens.push(`k.${key.text}`)
+    else walk(key)
+    bindPattern(element.name)
+    walk(element.initializer)
   }
 
   function inScope(run: () => void): void {
@@ -259,11 +269,11 @@ function tokenize(k: Kinds, words: Vocabulary, operation: FunctionLike): string[
       tokens.push(node.operatorToken.getText())
       walk(node.right)
     } else if (is<Unary>(node, k.PrefixUnaryExpression)) {
-      tokens.push(words.unary.get(node.operator) ?? 'op')
+      tokens.push(words.unary.get(node.operator)!)
       walk(node.operand)
     } else if (is<Unary>(node, k.PostfixUnaryExpression)) {
       walk(node.operand)
-      tokens.push(words.unary.get(node.operator) ?? 'op')
+      tokens.push(words.unary.get(node.operator)!)
     } else if (is<Conditional>(node, k.ConditionalExpression)) {
       walk(node.condition)
       tokens.push('?')
@@ -303,7 +313,7 @@ function tokenize(k: Kinds, words: Vocabulary, operation: FunctionLike): string[
   function emitStructure(node: Node): boolean {
     if (node.kind === k.Block) inScope(() => node.forEachChild(child => walk(child)))
     else if (is<Declaration>(node, k.VariableDeclaration) || is<Declaration>(node, k.Parameter)) declare(node)
-    else if (words.functions.has(node.kind) && node !== operation) {
+    else if (words.functions.has(node.kind)) {
       tokens.push('fn')
       inScope(() => {
         declareParameters(node as FunctionLike)
@@ -315,7 +325,7 @@ function tokenize(k: Kinds, words: Vocabulary, operation: FunctionLike): string[
 
   function walk(node: Node | undefined): void {
     if (node === undefined || words.types.has(node.kind) || emitStructure(node)) return
-    if (is<Text>(node, k.Identifier)) {
+    if (is<Text>(node, k.Identifier) || is<Text>(node, k.PrivateIdentifier)) {
       tokens.push(identifierToken(node))
       return
     }
