@@ -96,17 +96,18 @@ serves nothing.
 | `pages/api/**` | Endpoint for the default export, which answers every method, so `*` |
 
 `fetch` counts only when the project does not declare it, and an `axios` client
-counts only when its name is the `axios` default import or a variable holding
-`axios.create(...)` called on it that the project never assigns again, so
-`isAxiosError`, a named `post` import and a `get` on any other object are never
-requests. Options are read as values are, as decision 5 describes, so a changed,
-duplicated or computed option is never taken for the literal it once held. An
-option object the scanner cannot read leaves the method out instead of claiming
-`GET`, and for axios leaves the base unknown too. A `fetch` input that is not a
-URL, such as a `Request`, carries a method of its own, so the fact states none.
-A request's own `baseURL`, in its config or in the configuration argument of a
-shorthand, which a `post`, `put` or `patch` takes third, replaces the client's.
-A base joins a relative path with one slash, and an absolute URL replaces it.
+counts only when its name is the `axios` default import, or a variable the
+project never assigns again holding `require('axios')` or `axios.create(...)`
+called on it, so `isAxiosError`, a named `post` import and a `get` on any other
+object are never requests. Options are read as values are, as decision 5
+describes, so a changed, duplicated or computed option is never taken for the
+literal it once held. An option object the scanner cannot read leaves the method
+out instead of claiming `GET`, and for axios leaves the base unknown too. A
+`fetch` input that is not a URL, such as a `Request`, carries a method of its
+own, so the fact states none. A request's own `baseURL`, in its config or in the
+configuration argument of a shorthand, which a `post`, `put` or `patch` takes
+third, replaces the client's. A base joins a relative path with one slash, and
+an absolute URL replaces it.
 
 A client's `defaults` count too: exactly one assignment to `defaults.baseURL` or
 `defaults.method` anywhere in the project sets it, and more than one, or any other

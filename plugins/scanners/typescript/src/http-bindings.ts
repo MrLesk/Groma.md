@@ -6,6 +6,7 @@ import {
   importedName, indexSources, objectUse, settingEffect, startsWith, typePosition, useAt,
   type DynamicImport, type Index, type IndexCompiler, type Use,
 } from '../../http-uses.ts'
+import type { RouterCompiler } from '../../http-routers.ts'
 import type { SyntaxCompiler } from '../../http-syntax.ts'
 
 /*
@@ -16,10 +17,12 @@ import type { SyntaxCompiler } from '../../http-syntax.ts'
  */
 
 /** The native SDK's syntax, which has the classic compiler's node shapes. */
-export const syntax: IndexCompiler & SyntaxCompiler = {
+export const syntax: IndexCompiler & SyntaxCompiler & RouterCompiler = {
   ...ast,
   isTypeAssertionExpression: ast.isTypeAssertion,
   isParameter: ast.isParameterDeclaration,
+  isFunctionLike: ast.isFunctionLikeDeclaration,
+  isClassLike: ast.isClassLikeDeclaration,
   // A program scan never asks whether a file is a script.
   isExternalModule: () => true,
   forEachChild: (node, visit) => { (node as Node).forEachChild(child => { visit(child) }) },

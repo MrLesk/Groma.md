@@ -13,6 +13,11 @@ site.basePath('/api').get('/hidden', forward)
 serve(site)
 site.use('*', forward)
 
+// `route` copies the routes the child has when it runs, so a later route is not under it.
+const late = new Hono()
+site.route('/late', late)
+late.get('/talks', forward)
+
 function listRooms(): string {
   return 'rooms'
 }

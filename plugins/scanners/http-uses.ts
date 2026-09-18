@@ -196,7 +196,7 @@ export function scriptFile(ts: UseCompiler, source: SourceFile, names: ReadonlyM
 export interface IndexCompiler extends UseCompiler {
   SyntaxKind: UseCompiler['SyntaxKind'] & { ImportKeyword: number }
   forEachChild(node: Node, visit: (child: Node) => void): void
-  isVariableDeclaration(node: Node): node is Named
+  isVariableDeclaration(node: Node): node is Named & { initializer?: Node }
   isParameter(node: Node): node is Named
   isCallExpression(node: Node): node is Call
   isAwaitExpression(node: Node): node is Wrapped
@@ -241,9 +241,31 @@ export interface Index {
   defaults: Map<string, Node[]>
 }
 
-/** The module a default import names: `import http from 'm'` or `import { default as http } from 'm'`. */
+/** The module a `require('m')` call loads. */
+export function requiredModule(ts: IndexCompiler, node: Node | undefined): string | undefined {
+  if (node === undefined || !ts.isCallExpression(node) || !ts.isIdentifier(node.expression) || node.expression.text !== 'require') return undefined
+  const [specifier] = node.arguments
+  return specifier !== undefined && ts.isStringLiteral(specifier) ? specifier.text : undefined
+}
+
+/** `const http = require('m')` or `const http = require('m').default`, which name the default export. */
+function defaultRequire(ts: IndexCompiler, declaration: { initializer?: Node }): string | undefined {
+  const value = declaration.initializer
+  const direct = requiredModule(ts, value)
+  if (direct !== undefined || value === undefined || !ts.isPropertyAccessExpression(value)) return direct
+  return ts.isIdentifier(value.name) && value.name.text === 'default' ? requiredModule(ts, value.expression) : undefined
+}
+
+/**
+ * The module a default import names: `import http from 'm'`, `import { default as http } from 'm'`, or
+ * the CommonJS `const http = require('m')`.
+ */
 function defaultImport(ts: IndexCompiler, name: Identifier): { declaration: Node; module: string } | undefined {
   const parent = name.parent
+  if (ts.isVariableDeclaration(parent) && parent.name === name) {
+    const module = defaultRequire(ts, parent)
+    return module === undefined ? undefined : { declaration: parent, module }
+  }
   let statement: Node | undefined
   if (ts.isImportClause(parent) && parent.name === name) statement = parent.parent
   else if (ts.isImportSpecifier(parent) && parent.name === name && parent.propertyName?.text === 'default') {

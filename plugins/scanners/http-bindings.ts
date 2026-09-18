@@ -55,6 +55,8 @@ export interface Bindings {
   settings(declaration: Node, path: readonly string[], keys: readonly string[]): Settings
   /** The declarations that import a module's default export in the sources. */
   defaultImports(module: string): Node[]
+  /** The names that stand for the variable, directly or through an import, outside types. */
+  references(declaration: Node): Node[]
 }
 
 interface BindingContext { ts: BindingCompiler; checker: BindingChecker }
@@ -176,5 +178,6 @@ export function bindingUses(
       return settings
     },
     defaultImports: module => indexed().defaults.get(module) ?? [],
+    references: declaration => usesOf(declaration).map(use => use.reference),
   }
 }

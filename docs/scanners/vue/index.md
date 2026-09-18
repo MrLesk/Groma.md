@@ -132,21 +132,22 @@ there.
 installed package's types, so a project's own `useFetch` composable, whose body
 decides the URL, is never read as Nuxt's; a project scanned without its
 dependencies installed therefore reports no `$fetch` or `useFetch` request. An
-`axios` client counts only when its name is the `axios` default import or a
-variable holding `axios.create(...)` called on it that the project never assigns
-again, so `isAxiosError`, a named `post` import and a `get` on any other object
-are never requests. Options are read as values are, as decision 5 describes, so
-a changed, duplicated or computed option is never taken for the literal it once
-held. An option object the scanner cannot read leaves the method out instead of
-claiming `GET`, and for axios leaves the base unknown too. A `fetch`, `$fetch`
-or `useFetch` input that is not a URL, such as a `Request`, carries a method of
-its own, so the fact states none. A request's own `baseURL`, in its config or in
-the configuration argument of a shorthand, which a `post`, `put` or `patch`
-takes third, replaces the client's. A base joins a relative path with one slash,
-and an absolute URL replaces it. `$fetch` and `useFetch` read their `baseURL`
-option the same way, except that, as ofetch does, they keep a URL whose text
-already starts with a literal base followed by `/`, `?` or its end; where that
-boundary falls on a computed part, the path starts unknown.
+`axios` client counts only when its name is the `axios` default import, or a
+variable the project never assigns again holding `require('axios')` or
+`axios.create(...)` called on it, so `isAxiosError`, a named `post` import and a
+`get` on any other object are never requests. Options are read as values are, as
+decision 5 describes, so a changed, duplicated or computed option is never taken
+for the literal it once held. An option object the scanner cannot read leaves
+the method out instead of claiming `GET`, and for axios leaves the base unknown
+too. A `fetch`, `$fetch` or `useFetch` input that is not a URL, such as a
+`Request`, carries a method of its own, so the fact states none. A request's own
+`baseURL`, in its config or in the configuration argument of a shorthand, which
+a `post`, `put` or `patch` takes third, replaces the client's. A base joins a
+relative path with one slash, and an absolute URL replaces it. `$fetch` and
+`useFetch` read their `baseURL` option the same way, except that, as ofetch
+does, they keep a URL whose text already starts with a literal base followed by
+`/`, `?` or its end; where that boundary falls on a computed part, the path
+starts unknown.
 
 A client's `defaults` count too: exactly one assignment to `defaults.baseURL` or
 `defaults.method` anywhere in the project sets it, and more than one, or any other

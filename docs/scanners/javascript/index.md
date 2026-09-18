@@ -116,58 +116,65 @@ equal.
 
 ## HTTP facts
 
-The scanner reports the [HTTP endpoints and requests](../evidence.md#http-endpoints-and-requests)
-a JavaScript file states, and core joins them into relationships. Each file is
-parsed alone, so a construct counts only when that file states it.
+The scanner reports the [HTTP endpoints and
+requests](../evidence.md#http-endpoints-and-requests) a JavaScript file states,
+and core joins them into relationships. Each file is parsed alone, and the
+compiler resolves its names over that one file, so a construct counts only when
+that file states it and a value from another file is one the scanner cannot see.
 
 | Construct | Reported |
 | --- | --- |
-| `fetch(url, init)`, including a `node-fetch` default import | Request; the method comes from a literal `method`, else `GET` |
+| `fetch(url, init)`, including a `node-fetch` default import | Request; a literal `method` gives the method, no options means `GET`, and options the scanner cannot read, or an input that is not a URL, such as a `Request`, leave it out |
 | `axios.get`, `.post`, `.put`, `.patch`, `.delete`, `.head`, `.options` | Request with that method |
-| `axios(config)`, `axios.request(config)` | Request from a literal `url` and `method`, else `GET` |
-| `axios.create({ baseURL })` instances | Request whose path follows that base |
+| `axios(config)`, `axios.request(config)` | Request from the config's `url`; its `method`, else the client's, else `GET` |
+| `axios.create(config)` instances | Request whose path follows the config's `baseURL`, and whose method defaults to the config's |
 | `$.get`, `$.post`, `$.getJSON`, `$.getScript` | Request with that helper's method |
-| `$.ajax(settings)` and `$.ajax(url, settings)` | Request from the settings' `type` or `method`, else `GET`; settings the scanner cannot read state nothing |
+| `$.ajax(settings)` and `$.ajax(url, settings)` | Request from the settings' `method`, else `type`, else `GET`; settings the scanner cannot read leave the method out |
 | `express()` and `express.Router()` | Endpoint per `get`, `post`, `put`, `patch`, `delete`, `head`, `options`, `all` call with a handler |
-| `Fastify()` | The same calls, and `route({ method, url, handler })`, including a method array |
+| `Fastify()` | The same calls, and `route({ method, url, handler })`, including a method array; `register(plugin, { prefix })` blocks its prefix |
 | `new Hono()` | The same calls |
-| `new Koa()` with `@koa/router` or `koa-router` | The same calls on a router `use` mounts, under its `new Router({ prefix })` or `router.prefix(...)` path |
+| `new Koa()` with `@koa/router` or `koa-router` | The same calls, `del` and `redirect(source, destination)` on a router `use` mounts through `routes()`, under its `new Router({ prefix })` or `router.prefix(...)` path |
 | `Bun.serve({ routes })` | Endpoint per route: a function serves every method, an object one per method key |
 
 A name is a client, application or router when this file imports or requires it
 and never assigns it again, so `import express from 'express'`,
-`const express = require('express')`, `const { Router } = require('express')` and
-`require('express')()` are all recognized. jQuery is the exception a browser
-script needs: a `$` or `jQuery` receiver counts when the file imports it or leaves
-it to the page, and not when the file declares that name itself. A member name
-alone is never enough: `cache.get('/talks')` reports nothing.
-`http.createServer`, Fastify's `register` prefixes, and any application, router or
-client an imported factory returns are not read yet.
+`const express = require('express')`, `const { Router } = require('express')`
+and `require('express')()` are all recognized, and a parameter, local or loop
+variable that shadows the import is not. jQuery and `fetch` are the exceptions a
+browser script needs: a `$`, `jQuery` or `fetch` counts when the file imports it
+or leaves it to the runtime, and not when the file declares that name itself. A
+member name alone is never enough: `cache.get('/talks')` reports nothing. Values
+and options follow the shared rules the framework scanners apply, as the [React
+scanner](../react/index.md#http-endpoints-and-requests) states them, and the
+routers follow the same reader as the [TypeScript
+scanner](../typescript/index.md#http-endpoints-and-requests). A request's own
+`baseURL` replaces the client's, and exactly one assignment in the file to
+`defaults.baseURL` or `defaults.method` on `axios` or on an instance sets it,
+while any other change to `defaults` hides both. Any application, router or
+client an imported factory returns is not read.
 
-The six [producer decisions](../evidence.md#producer-checklist) for this
-ecosystem:
+The [producer decisions](../evidence.md#producer-checklist) for this ecosystem:
 
 1. **Prefixes.** An endpoint path carries every prefix this file states:
    `app.use('/orders', router)`, Hono's `app.route('/api', api)` and a Koa
-   `app.use(router.routes())` prepend their literal prefix, and mounts nest. A Koa
-   router adds its own path from `new Router({ prefix })` or `router.prefix(...)`.
-   An application instance serves from the root. A router this file never mounts, a
-   mount under a computed prefix, a router whose second prefix statement replaces
-   the first, and a mount on a host the scanner does not recognize report nothing,
-   because the path the application serves is then unknown.
+   `app.use(router.routes())` prepend their literal prefix, and mounts nest. A
+   Koa router adds its own path from `new Router({ prefix })` or
+   `router.prefix(...)`. An application instance serves from the root. A router
+   this file never mounts, and a mount on a host the scanner does not recognize,
+   report nothing; a mount under a computed prefix, a router whose own path is
+   computed, or stated twice, a router from another file, and a Fastify plugin
+   block their place, as decision 8 describes.
 2. **Endpoints.** Only a route registration with its own handler is an endpoint.
-   `app.use(express.json())` and `app.use('/static', express.static('public'))`
-   are middleware, `app.get('name')` with one argument reads a setting, and a
-   `Bun.serve` route key that is not a method, such as `middleware`, names no
-   handler. A route pattern is literal text, `:name`, `:name?`, or a trailing `*`,
-   `*name` or `(.*)`; another regular expression, an optional group, and a
-   catch-all that is not last report nothing, as does a route or method the source
-   computes. Where a router accepts `get(name, path, handler)`, the route name is
-   not a path segment, and the path that follows it is the endpoint.
+   `app.use(express.json())` is middleware, `app.get('name')` with one argument
+   reads a setting, and a `Bun.serve` route key that is not a method, such as
+   `middleware`, names no handler. A `Bun.serve` route value serves every method
+   only when the file proves it is a function; an imported value or a parameter
+   claims none. Where a Koa router takes `get(name, path, handler)`, the route
+   name is not a path segment, and the path that follows it is the endpoint.
 3. **Dynamic or unknown.** A value filling one whole segment is dynamic, as in
-   `` fetch(`/talks/${id}`) ``. A segment that mixes computed and literal text is
-   unknown, as in `` fetch(`/api/talks/${id}-${slug}`) ``, and so is a URL the
-   scanner cannot resolve, such as `fetch(buildUrl(id))`. Query strings and
+   `` fetch(`/talks/${id}`) ``. A segment that mixes computed and literal text
+   is unknown, as in `` fetch(`/api/talks/${id}-${slug}`) ``, and so is a URL
+   the scanner cannot resolve, such as `fetch(buildUrl(id))`. Query strings and
    fragments are ignored.
 4. **Local helpers.** Not supported. A request belongs to the operation that
    calls a recognized client, so a wrapper function reports the request and its
@@ -179,24 +186,71 @@ ecosystem:
    variable with a literal initializer that this file never assigns again
    resolves to its own literal text, unless a script, a file with no import,
    export, `require` or `exports`, declares it at the top level with `let` or
-   `var`: another script can assign those globals. So does a property of an object literal
-   such a variable holds: the last property with its name, while the literal has
-   no spread, computed key or accessor, the file neither exports the variable nor
-   is a script declaring it at the top level, and nothing in the file assigns or
-   deletes that property or an object above it, hands one of them to other code,
-   or calls a method through them. A literal scheme and host, also
-   when literal pieces only state it together, text that continues a configured
-   value's last segment instead of starting with `/`, and a base the file
-   computes become the leading unknown segment, which derives nothing. Every
-   other name the file binds counts as computed, including a parameter, a
-   destructured name and a `for (const base of bases)` variable: a name the
-   scanner merely failed to resolve must never pass for a configuration value,
-   because core compares a configured path.
+   `var`: another script can assign those globals. So does a property of an
+   object literal such a variable holds: the last property with its name, while
+   the literal has no spread, computed key or accessor, the file neither exports
+   the variable nor is a script declaring it at the top level, and nothing in
+   the file assigns or deletes that property or an object above it, hands one of
+   them to other code, or calls a method through them. A literal scheme and
+   host, also when literal pieces only state it together, text that continues a
+   configured value's last segment instead of starting with `/`, a base the file
+   computes, and an `axios.create` configuration the scanner cannot read become
+   the leading unknown segment, which derives nothing. Every other name the file
+   binds counts as computed, including a parameter, a destructured name and a
+   `for (const base of bases)` variable.
 6. **File-location routes.** These frameworks declare no route by file location,
    so every endpoint names the handler its route states: the function written in
    place, or the one this file declares under the name the route gives. When the
    handler comes from another file, the endpoint names the operation that
    registers the route.
+7. **Constrained segments.** Route patterns are literal text, `:name`, `:name?`,
+   Express 5's trailing optional group `{/:name}`, and a trailing `*`, `*name`,
+   `(.*)` or `:name(.*)` catch-all, which needs at least one segment because a
+   request path cannot tell `/files` from `/files/`; Hono's trailing `*` also
+   matches the path without it. A pattern parameter, such as `:id(\d+)`, and
+   text mixed with a placeholder, such as `talk-:id`, are constrained
+   parameters. A pattern that may span segments or that the scanner cannot
+   state, such as a regular expression, another optional group or a catch-all
+   that is not last, becomes a constrained optional catch-all in place of itself
+   and the rest of the route, so no route is omitted.
+8. **Registration order.** Express, Hono and Koa routers take the first
+   registered match, so their endpoints carry `order`: the file that creates the
+   application, and a position. A registrar's entries are its registrations and
+   the references that hand it to other code, such as `registerRoutes(app)`. The
+   scanner never sees the files that import this one, and they run after it and
+   may add any route after all of its own, a circular require being the accepted
+   exception, so an export, `export default app`, `export const app`, or an
+   assignment to `module.exports` or `exports`, hands the registrar on too, at
+   the end of the order. When every entry is a top-level statement, they run in
+   source order, and the calls of a chain such as
+   `router.get('/a', list).post('/a', save)` in the order they are written. A
+   mounted router's routes take the mount's place in that order, and routers one
+   call mounts follow in the order it lists them. Hono's `route(path, child)`
+   and a Koa router's `use` copy the routes the child has when they run, so a
+   route registered later is not under them, and one whose order against the
+   copy the scan cannot prove only blocks its path; `app.use(router.routes())`
+   serves a Koa router's routes as they change. Otherwise, as for an entry
+   inside a function or an `if`, the registrar's routes share one position. An
+   entry the scan sees but cannot read still takes its place as its readable
+   prefix followed by a constrained optional catch-all, with method `*` unless
+   the call states one, named by the registering operation: a route with a
+   computed path, a mount under a computed prefix, a path mounted to something
+   other than a recognized router, such as
+   `app.use('/static', express.static('public'))`, a router the scan cannot
+   follow, mounted with or without a path, such as
+   `app.use(require('./routes'))` or the `routes()` of a Koa router from another
+   file, and, since the scanner cannot see another file, also a function
+   imported from one, such as `app.use(requestLogger)`, which costs the routes
+   after it their rows, a route builder such as `app.route('/reports')`, Hono's
+   `on`, `mount` and `basePath`, a Koa router whose own path is computed, a Koa
+   `redirect` whose source is a route name, and a registrar handed to other
+   code, which blocks from its own root. Serving it, with `listen`, Node's
+   `createServer(app)` or an imported `serve(app)`, registers nothing.
+   Middleware takes no place: a package's handler, such as `express.json()`,
+   used without a path, and any handler next to a recognized router in one call,
+   such as `requireAuth` in `app.use('/admin', requireAuth, admin)`. Fastify and
+   Bun.serve prefer the most specific route and carry no order; a Fastify
+   plugin, whose routes the scan does not read, blocks its prefix without one.
 
 ## Validation
 

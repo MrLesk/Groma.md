@@ -40,8 +40,9 @@ tokenizes identically under this scanner and the TypeScript scanner;
 `groma lint` reports and the callbacks and recursive namesakes it does not;
 `javascript-http` verifies each supported client and router, including the jQuery
 ajax helpers and a Koa router's own and nested prefixes, the configured, dynamic
-and unknown request paths, every construct that reports nothing, and the rows core
-derives from those facts. The packaged check runs with
+and unknown request paths, names that shadow an import, every construct that
+reports nothing, the order of first-match routers with the entries that block
+it, and the rows core derives from those facts. The packaged check runs with
 only Git on PATH and with JavaScript network access blocked. The repository check
 passes.
 

@@ -1,8 +1,8 @@
 import type { ScanHttpEndpoint } from '@groma/scanner'
 
 /*
- * The registration order of routers that take the first registered match, numbered without a compiler.
- * The TypeScript scanner orders its routes with it.
+ * The registration order of routers that take the first registered match, numbered without a compiler
+ * for the shared router reader in ./http-routes.ts and the TypeScript scanner's NestJS controllers.
  */
 
 /** Where a registrar's routes join an application, and how far their registration order is known. */

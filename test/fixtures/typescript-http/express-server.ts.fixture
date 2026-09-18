@@ -1,14 +1,19 @@
 import express from 'express'
 import http from 'node:http'
 
+import { adminRouter } from './admin-router.ts'
+import { requestLogger, requireAuth } from './middleware.ts'
 import { talksRouter } from './talks-router.ts'
 
 export const app = express()
 
+// A function from the application's own module is middleware, next to a router or alone.
+app.use(requestLogger)
 app.use('/api', talksRouter)
 app.get('/health', () => 'ok')
 app.get('/sessions{/:id}', () => 'session')
 export const server = http.createServer(app)
+app.use('/admin', requireAuth, adminRouter)
 
 export function start(): void {
   app.listen(3000)

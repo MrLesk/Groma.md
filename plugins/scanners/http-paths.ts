@@ -2,8 +2,8 @@ import type { HttpEndpointSegment } from '@groma/scanner'
 import { pathText, type UrlPart } from './http-url.ts'
 
 /*
- * The route patterns the TypeScript-family routers declare, read without a compiler. The TypeScript
- * scanner reads its routes with them.
+ * The route patterns the TypeScript-family routers declare, read without a compiler for the shared
+ * router reader in ./http-routes.ts and the scanners' own route forms.
  */
 
 /** A placeholder written alone in a segment: `:id`, `:id?`, `:id(\d+)` or `:id{[0-9]+}`. */

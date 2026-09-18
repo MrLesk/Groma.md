@@ -5,35 +5,68 @@ status: Done
 assignee:
   - '@claude'
 created_date: '2026-09-16 20:32'
-updated_date: '2026-09-18 15:19'
+updated_date: '2026-09-18 22:33'
 labels: []
 dependencies:
   - TASK-418
 references:
   - javascript-src-index
 modified_files:
-  - '''plugins/scanners/javascript/src/http-scope.ts'''
-  - '''plugins/scanners/javascript/src/http-paths.ts'''
-  - '''plugins/scanners/javascript/src/http-reads.ts'''
-  - '''plugins/scanners/javascript/src/http-requests.ts'''
-  - '''plugins/scanners/javascript/src/http-endpoints.ts'''
-  - '''plugins/scanners/javascript/src/http.ts'''
-  - '''plugins/scanners/javascript/src/evidence.ts'''
-  - '''plugins/scanners/javascript/src/index.ts'''
-  - '''test/fixtures/javascript-http/server/express.mjs'''
-  - '''test/fixtures/javascript-http/server/router.cjs'''
-  - '''test/fixtures/javascript-http/server/fastify.js'''
-  - '''test/fixtures/javascript-http/server/hono.mjs'''
-  - '''test/fixtures/javascript-http/server/serve.js'''
-  - '''test/fixtures/javascript-http/client/fetch.mjs'''
-  - '''test/fixtures/javascript-http/client/axios.mjs'''
-  - '''test/fixtures/javascript-http/client/settings.mjs'''
-  - '''test/fixtures/javascript-http/client/legacy.js'''
-  - '''test-bun/javascript-http.test.ts'''
-  - '''docs/scanners/javascript/index.md'''
-  - '''docs/scanners/javascript/validation.md'''
-  - '''test/fixtures/javascript-http/client/jquery.js'''
-  - '''test/fixtures/javascript-http/server/koa.js'''
+  - plugins/scanners/javascript/src/http-scope.ts
+  - plugins/scanners/javascript/src/http-paths.ts
+  - plugins/scanners/javascript/src/http-reads.ts
+  - plugins/scanners/javascript/src/http-requests.ts
+  - plugins/scanners/javascript/src/http-endpoints.ts
+  - plugins/scanners/javascript/src/http.ts
+  - plugins/scanners/javascript/src/evidence.ts
+  - plugins/scanners/javascript/src/index.ts
+  - test/fixtures/javascript-http/server/express.mjs
+  - test/fixtures/javascript-http/server/router.cjs
+  - test/fixtures/javascript-http/server/fastify.js
+  - test/fixtures/javascript-http/server/hono.mjs
+  - test/fixtures/javascript-http/server/serve.js
+  - test/fixtures/javascript-http/client/fetch.mjs
+  - test/fixtures/javascript-http/client/axios.mjs
+  - test/fixtures/javascript-http/client/settings.mjs
+  - test/fixtures/javascript-http/client/legacy.js
+  - test-bun/javascript-http.test.ts
+  - docs/scanners/javascript/index.md
+  - docs/scanners/javascript/validation.md
+  - test/fixtures/javascript-http/client/jquery.js
+  - test/fixtures/javascript-http/server/koa.js
+  - plugins/scanners/http-url.ts
+  - plugins/scanners/http-values.ts
+  - plugins/scanners/typescript/src/http-values.ts
+  - plugins/scanners/http-uses.ts
+  - plugins/scanners/http-bindings.ts
+  - plugins/scanners/http-routers.ts
+  - plugins/scanners/http-routes.ts
+  - plugins/scanners/typescript/src/http-endpoints.ts
+  - plugins/scanners/typescript/src/http-bindings.ts
+  - test/fixtures/javascript-http/client/shadowing.mjs
+  - test/fixtures/javascript-http/client/commonjs.js
+  - test/fixtures/javascript-http/client/options.mjs
+  - test/fixtures/javascript-http/server/shadowing.mjs
+  - test/fixtures/javascript-http/server/reassigned.cjs
+  - docs/scanners/typescript/index.md
+  - test/fixtures/typescript-http/two-apps.ts.fixture
+  - test-bun/typescript-http.test.ts
+  - docs/scanners/react/index.md
+  - docs/scanners/vue/index.md
+  - plugins/scanners/http-paths.ts
+  - plugins/scanners/http-order.ts
+  - plugins/scanners/typescript/src/http-requests.ts
+  - plugins/scanners/http-syntax.ts
+  - plugins/scanners/typescript/src/source-operations.ts
+  - test/fixtures/javascript-http/server/site.js
+  - test/fixtures/javascript-http/server/spa.js
+  - test/fixtures/javascript-http/server/koa-api.js
+  - test/fixtures/typescript-http/fastify-server.ts.fixture
+  - test/fixtures/typescript-http/hono-server.ts.fixture
+  - test/fixtures/typescript-http/express-server.ts.fixture
+  - test/fixtures/typescript-http/middleware.ts.fixture
+  - test/fixtures/typescript-http/admin-router.ts.fixture
+  - test/fixtures/javascript-http/server/exported.mjs
 parent_task_id: TASK-416
 type: feature
 ordinal: 484000
@@ -75,6 +108,8 @@ Certain HTTP relationships need endpoint and request facts from every ecosystem.
 8. Extend the producer with jQuery requests (`$.ajax({ url, type|method })`, `$.get`, `$.post`, `$.getJSON`, `$.getScript` through a `$` or `jQuery` receiver, global or imported) and Koa endpoints (`new Koa()` with `@koa/router` or `koa-router`: verb methods, `router.routes()` mounted through `use`, a `new Router({ prefix })` option, `router.prefix(...)`, and nested router mounts), keeping every existing abstention rule.
 9. Map a Koa `(.*)` segment to a catch-all, only when it is last, and read the named-route form `get(name, path, handler)` so a route name never becomes a path segment.
 10. Add fixtures for each new API and its abstentions, extend the supported-API table, drop jQuery and Koa from the unsupported list, and state that a name a loop binds is computed rather than configured.
+
+Review-fix round. Replace the per-file scope with the compiler's own resolution over the one parsed file: names resolve through the shared value reader (plugins/scanners/http-values.ts), whose importOrigin also reads CommonJS require forms and whose bindings see reassignment and destructuring, so a shadowing parameter or loop binding is never an import or an outer constant. Requests go through the shared plugins/scanners/http-clients.ts (fetch method rules, axios shorthands, config, instances, request baseURL and defaults); jQuery keeps its own reader with method over type. Routers go through one shared router reader for the TypeScript family (Express, Fastify, Hono and Koa), which the TypeScript scanner also uses: registrations, chains, hand-offs, mounts, blockers and order through plugins/scanners/http-order.ts, with route patterns from plugins/scanners/http-paths.ts (the JavaScript copy is deleted). Bun.serve claims every method only for a value proven to be a function. Docs answer decisions 7 and 8. Red fixtures for each review finding.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
@@ -115,6 +150,8 @@ Koa endpoints: `new Koa()` is an application, and a `@koa/router` or `koa-router
 The page's supported-API table now lists both, neither appears in the unsupported list, and decision 5 states the loop-binding rule: every name the file binds, including a `for (const base of bases)` variable, is computed, because a name the scanner merely failed to resolve must never pass for a configuration value.
 
 Verification after the extension: test/fixtures/javascript-http holds 11 files, the four tests assert 18 endpoints, 21 requests and 8 derived rows, Biome reports nothing for the plugin, and bun run check exits 0 in a detached worktree holding HEAD plus only this task's changes (16 Node tests, 492 Bun tests, 0 failures).
+
+Review-fix round. The external reviews found that uncertainty became certain facts: a parameter, local or loop binding that shadowed an import was taken for it, a reassigned or destructured CommonJS binding stayed a client or registrar, an unresolved Bun.serve route value claimed every method, jQuery's type beat method, a computed option key claimed GET, a request's own baseURL and an unreadable axios.create config were ignored, a reassigned property kept its literal, and axios defaults were never read. The per-file scope, reads and path copies are deleted: names resolve through the classic compiler over the one file and the shared value reader, whose importOrigin now reads require forms and whose index records required axios defaults; requests go through the shared plugins/scanners/http-clients.ts; routers go through a new shared reader for the TypeScript family, plugins/scanners/http-routers.ts and http-routes.ts, which the TypeScript scanner now uses too (its http-endpoints.ts is an adapter plus NestJS), with shared route patterns and order. Decided in cold review and applied: pathless mounts of routers the scan cannot follow block from their place (package middleware, a function the scan sees, and any handler beside a recognized router stay middleware); Hono route and a Koa router's use copy the child's routes when they run; in this one-file scan exports hand the registrar on, placed last (a circular require is the accepted exception); Fastify register blocks its prefix without order; Koa del and redirect are read; Bun.serve is one shared rule. Side effects accepted: TypeScript registrars include a never-reassigned let or var, React and Vue recognize a required axios, and a fetch input that is not URL text states no method. Verification: red fixtures in test/fixtures/javascript-http and typescript-http, each rule mutation-checked; isolated bun install --frozen-lockfile and bun run check exit 0 (584 pass, 35 skip, 0 fail).
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
@@ -125,4 +162,6 @@ The JavaScript scanner now reports HTTP facts. Requests come from fetch, includi
 Because the scanner parses one file alone, a new file scope resolves names inside that file and serves as the checker the shared plugins/scanners/http-url.ts and http-values.ts expect, so no program or type checker is involved. A client, application or router is recognized through its receiver's declaration or its import and must never be reassigned. Only literal routes, prefixes, methods and URLs become facts: a computed route, prefix or method reports nothing, a router this file never mounts reports nothing, and every name the file binds, including a loop variable, is computed rather than configured, so core never compares a path the application may not serve.
 
 Verified with test-bun/javascript-http.test.ts over test/fixtures/javascript-http, whose four tests assert the 18 endpoints, 21 requests and 8 derived rows the 11 fixture files produce, including each unsupported construct that reports nothing and the operation each endpoint names. The packaged scanner also reported all three fetch calls in the authored JavaScript of a wifi-densepose checkout. bun run check exits 0 in a detached worktree holding HEAD plus only this task's changes: 16 Node tests and 492 Bun tests pass, and Biome reports nothing for the plugin.
+
+The review-fix round replaced the JavaScript scanner's own name resolution and value readers with the compiler over the one file and the shared readers, so shadowing names, reassigned or destructured bindings, computed or duplicated options, request-level bases, reassigned properties and axios defaults are read as the other TypeScript-family scanners read them. Routers now go through one shared reader for Express, Fastify, Hono and Koa, used by the TypeScript scanner too, which reports constrained route patterns, registration order and blockers for entries the scan cannot read, including routers from other files, exports, copying mounts and Fastify plugins. The JavaScript page answers producer decisions 7 and 8.
 <!-- SECTION:FINAL_SUMMARY:END -->

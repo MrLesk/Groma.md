@@ -17,6 +17,14 @@ export type UrlPart = { kind: 'text'; text: string } | { kind: 'hole'; configure
 export const computedPart: UrlPart = { kind: 'hole', configured: false }
 export const configuredPart: UrlPart = { kind: 'hole', configured: true }
 
+const methodToken = /^[A-Z][A-Z-]*$/
+
+/** The method literal text states, as an uppercase token; anything else states none. */
+export function methodText(text: string | undefined): string | undefined {
+  const method = text?.toUpperCase()
+  return method !== undefined && methodToken.test(method) ? method : undefined
+}
+
 function requestSegment(part: string): HttpRequestSegment {
   if (part === HOLE) return { kind: 'dynamic' }
   if (part.includes(HOLE) || !pathText.test(part)) return { kind: 'unknown' }

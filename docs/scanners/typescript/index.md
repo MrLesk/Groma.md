@@ -77,7 +77,9 @@ from, in the file that uses them. The checker decides what a name means, so a
 parameter or local that shadows an import is not that import. A wrapper that
 re-exports a framework, a factory that returns an application, and a registrar
 received as a parameter, such as a Fastify plugin's `fastify`, are not
-recognized, and an application or router is one only while a `const` holds it.
+recognized, and an application or router is one only while a variable the
+program never assigns again holds it. The routers are read by the reader the
+[JavaScript scanner](../javascript/index.md#http-facts) shares.
 
 | Construct | Reported |
 | --- | --- |
@@ -110,8 +112,9 @@ The [producer decisions](../evidence.md#producer-checklist) for this ecosystem:
    prefix. A router this scan never sees mounted, and a mount on a host the scan
    does not recognize, such as `createApp().use('/api', router)`, report
    nothing; an application instance without a mount serves from the root. A
-   Fastify plugin registered with a `prefix` reports nothing, because its routes
-   are registered on the plugin's parameter. A controller is the exception: its
+   Fastify plugin's routes are registered on the plugin's parameter, which the
+   scan does not read, so `register(plugin, { prefix })` blocks its prefix, as
+   decision 8 describes, without an order. A controller is the exception: its
    endpoints are reported without seeing its module registration, so a
    `setGlobalPrefix` path is missing from them, which core's single leading
    segment tolerates.
@@ -158,26 +161,32 @@ The [producer decisions](../evidence.md#producer-checklist) for this ecosystem:
    after every top-level registration of the file it imports it from, and what
    it registers that late cannot capture a request those routes match; a
    circular import is the accepted exception. Serving it, with `listen`, Node's
-   `createServer(app)`, an imported `serve(app)`, `export default app` or
-   `module.exports = app`, registers nothing. When every entry is a top-level
-   statement of one file, they run in source order, and the calls of a chain
-   such as `app.get('/a', list).post('/a', save)` in the order they are written;
-   a chain continues through Express's `set`, `enable`, `disable` and `engine`,
-   which return the application. A mounted router's routes take the mount's
-   place in that order, and routers one call mounts, as in
-   `app.use('/admin', users, audit)`, follow in the order it lists them.
-   Otherwise, as for an entry inside a function or an `if`, the registrar's
-   routes share one position, which the rest of its application shares too when
-   the registrar is the application, and every NestJS route shares one, because
-   the scan does not follow their order. An entry the scan sees but cannot read
-   still takes its place as its readable prefix followed by a constrained
-   optional catch-all, with method `*` unless the call states one, named by the
-   registering operation: a route with a computed path, a mount under a computed
-   prefix, a path mounted to something other than a recognized router, a route
-   builder such as `app.route('/reports')`, Hono's `on`, `mount` and `basePath`,
-   whose clone registers on the same routes, and a registrar handed to other
-   code, which blocks from its own root. Middleware takes no place: a handler
-   used without a path, `app.use(auth)`, and a handler next to a recognized
-   router in one call, such as `requireAuth` in
-   `app.use('/admin', requireAuth, admin)`. Fastify, Bun.serve and NestJS behind
-   a `FastifyAdapter` prefer the most specific route and carry no order.
+   `createServer(app)`, an imported `serve(app)`, an export or an assignment to
+   `module.exports` or `exports`, registers nothing. When every entry is a
+   top-level statement of one file, they run in source order, and the calls of a
+   chain such as `app.get('/a', list).post('/a', save)` in the order they are
+   written; a chain continues through Express's `set`, `enable`, `disable` and
+   `engine`, which return the application. A mounted router's routes take the
+   mount's place in that order, and routers one call mounts, as in
+   `app.use('/admin', users, audit)`, follow in the order it lists them. Hono's
+   `route(path, child)` copies the routes the child has when it runs, so a route
+   registered later is not under it, and one whose order against the copy the
+   scan cannot prove only blocks its path. Otherwise, as for an entry inside a
+   function or an `if`, the registrar's routes share one position, which the
+   rest of its application shares too when the registrar is the application, and
+   every NestJS route shares one, because the scan does not follow their order.
+   An entry the scan sees but cannot read still takes its place as its readable
+   prefix followed by a constrained optional catch-all, with method `*` unless
+   the call states one, named by the registering operation: a route with a
+   computed path, a mount under a computed prefix, a path mounted to something
+   other than a recognized router, a value loaded from a relative module that
+   the scan recognizes neither as a router nor as a function, mounted with or
+   without a path, a route builder such as `app.route('/reports')`, Hono's `on`,
+   `mount` and `basePath`, whose clone registers on the same routes, and a
+   registrar handed to other code, which blocks from its own root. Middleware
+   takes no place: a package's handler or a function used without a path, such
+   as `app.use(requestLogger)`, and any handler next to a recognized router in
+   one call, such as `requireAuth` in `app.use('/admin', requireAuth, admin)`.
+   Fastify, Bun.serve and NestJS behind a `FastifyAdapter` prefer the most
+   specific route and carry no order; a Fastify plugin's block carries none
+   either.

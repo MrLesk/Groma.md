@@ -273,7 +273,6 @@ async function sourceHttpFacts(
     checker,
     bindings: bindingUses(checker, sources),
     file: node => location(root, node).file,
-    values: certainValues,
     callerOperation: node => operation(caller(node)),
     async handlerOperation(handler, registration) {
       const values = handler === undefined ? undefined : await certainValues(handler)

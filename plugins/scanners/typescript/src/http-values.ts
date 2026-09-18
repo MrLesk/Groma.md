@@ -7,7 +7,7 @@ import {
 } from 'typescript/unstable/ast'
 import { SymbolFlags, type Checker } from 'typescript/unstable/async'
 
-import { ownProperty, propertyKey, unwrapped, type Held as SyntaxHeld } from '../../http-syntax.ts'
+import { ownProperty, propertyKey, unwrapped, type Held as SyntaxHeld, type ImportOrigin } from '../../http-syntax.ts'
 import { computedPart, configuredPart, type UrlPart } from '../../http-url.ts'
 import { syntax, type Bindings } from './http-bindings.ts'
 
@@ -20,8 +20,6 @@ export interface HttpContext {
   checker: Checker
   /** How the program's sources use each variable, so a property is read only while nothing changes it. */
   bindings: Bindings
-  /** Certain values of an expression, such as object literals and functions; undefined when unresolved. */
-  values(node: Node): Promise<Node[] | undefined>
   /** The operation serving a route: its resolved handler when certain, else the registering operation. */
   handlerOperation(handler: Node | undefined, registration: Node): Promise<string>
   /** The operation that runs this expression. */
@@ -30,18 +28,10 @@ export interface HttpContext {
   file(node: Node): string
 }
 
-/** Where a local name comes from, for recognizing a framework without resolving its types. */
-export interface ImportOrigin {
-  module: string
-  /** The imported name: `default`, `*`, or the exported name. */
-  name: string
-}
-
 /** What an expression certainly holds, as ../../http-syntax.ts describes it. */
 export type Held = SyntaxHeld<Node>
 
 const MAX_DEPTH = 8
-const methodToken = /^[A-Z][A-Z-]*$/
 
 /** An import in the name's own file binds the same spelling; the checker then tells whether it is that import. */
 function spelledImport(node: Node): boolean {
@@ -84,8 +74,8 @@ function ambient(declaration: Node): boolean {
   return (declaration.flags & NodeFlags.Ambient) !== 0
 }
 
-/** A `const`, or a variable declared once that the sources never assign again, keeps its initializer. */
-async function unassigned(declaration: VariableDeclaration, context: HttpContext): Promise<boolean> {
+/** A `const`, or a variable declared once that the program never assigns again, keeps its initializer. */
+export async function unassigned(declaration: VariableDeclaration, context: HttpContext): Promise<boolean> {
   if (declaration.parent.flags & NodeFlags.Const) return true
   const [symbol] = await context.checker.getSymbolAtLocation([declaration.name])
   return (symbol?.declarations.length ?? 0) === 1 && !await context.bindings.reassigned(declaration)
@@ -162,12 +152,6 @@ export async function literalText(node: Node | undefined, context: HttpContext):
   const parts = await urlParts(node, context)
   const [first] = parts
   return parts.length === 1 && first?.kind === 'text' ? first.text : undefined
-}
-
-/** An uppercase method token the shared contract accepts. */
-export function methodName(text: string | undefined): string | undefined {
-  const method = text?.toUpperCase()
-  return method !== undefined && methodToken.test(method) ? method : undefined
 }
 
 /**
