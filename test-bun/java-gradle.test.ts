@@ -18,8 +18,7 @@ async function repository(fixture: string): Promise<string> {
   return root
 }
 
-// Gradle projects are read without Java; only Maven projects ask the worker for their model.
-const input = (directory: string) => readJavaInput(directory, 'unused-java', 'unused-worker')
+const input = (directory: string) => readJavaInput(directory)
 
 test.concurrent('Groovy settings include projects whose literal source sets and Java versions are read without Gradle', async () => {
   const root = await repository('java-gradle-groovy')

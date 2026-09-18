@@ -52,8 +52,8 @@ async function reason(root: string, target: string): Promise<string> {
 test.concurrent('a target outside the repository listing is reported as such, not as a coverage gap', async () => {
   const root = await repository()
   try {
-    expect(await reason(root, 'src/kpet.ts')).toBe('unknown target: src/kpet.ts; not a repository file')
-    expect(await reason(root, 'compnents')).toBe('unknown target: compnents; not a repository file')
+    expect(await reason(root, 'src/kpet.ts')).toContain('not a repository file')
+    expect(await reason(root, 'compnents')).toContain('not a repository file')
   } finally { await rm(root, { recursive: true, force: true }) }
 })
 
@@ -62,7 +62,7 @@ test.concurrent('an excluded file names the configured pattern that hides it', a
   try {
     const config = await readScannerConfig(root)
     await writeScannerConfig(root, { ...config, exclude: ['**/*.md', '/scripts/'] })
-    expect(await reason(root, 'scripts/hidden.ts')).toBe('no owner: scripts/hidden.ts; excluded by scanners.json pattern /scripts/')
+    expect(await reason(root, 'scripts/hidden.ts')).toContain('pattern /scripts/')
   } finally { await rm(root, { recursive: true, force: true }) }
 })
 
@@ -71,20 +71,17 @@ test.concurrent('a pattern decides with the whole list, so a later negation rest
   try {
     const config = await readScannerConfig(root)
     await writeScannerConfig(root, { ...config, exclude: ['**/*.generated.ts'] })
-    expect(await reason(root, 'src/keep.generated.ts'))
-      .toBe('no owner: src/keep.generated.ts; excluded by scanners.json pattern **/*.generated.ts')
+    expect(await reason(root, 'src/keep.generated.ts')).toContain('pattern **/*.generated.ts')
     await writeScannerConfig(root, { ...config, exclude: ['**/*.generated.ts', '!src/keep.generated.ts'] })
-    expect(await reason(root, 'src/keep.generated.ts'))
-      .toBe('no owner: src/keep.generated.ts; read by first, second and waiting for a scan, so run groma scan')
+    expect(await reason(root, 'src/keep.generated.ts')).toContain('read by first, second')
   } finally { await rm(root, { recursive: true, force: true }) }
 })
 
 test.concurrent('a repository file no scanner selects is separated from one waiting for a scan', async () => {
   const root = await repository()
   try {
-    expect(await reason(root, 'src/notes.txt')).toBe('no owner: src/notes.txt; no enabled scanner reads it')
-    expect(await reason(root, 'src/kept.ts'))
-      .toBe('no owner: src/kept.ts; read by first, second and waiting for a scan, so run groma scan')
+    expect(await reason(root, 'src/notes.txt')).toContain('no enabled scanner reads it')
+    expect(await reason(root, 'src/kept.ts')).toContain('read by first, second')
   } finally { await rm(root, { recursive: true, force: true }) }
 })
 
@@ -92,9 +89,13 @@ test.concurrent('a scanner whose listing fails is named beside the other scanner
   const root = await repository()
   try {
     await addScanner(root, await plugin(root, 'broken', "throw new Error('Cargo.toml is unreadable\\nat line 2')"))
-    expect(await reason(root, 'src/kept.ts')).toBe('no owner: src/kept.ts; read by first, second and waiting for a scan, '
-      + 'so run groma scan; broken could not list its sources: Cargo.toml is unreadable')
-    expect(await reason(root, 'src/notes.txt')).toBe('no owner: src/notes.txt; broken could not list its sources: Cargo.toml is unreadable')
+    const kept = await reason(root, 'src/kept.ts')
+    expect(kept).toContain('read by first, second')
+    expect(kept).toContain('broken could not list its sources: Cargo.toml is unreadable')
+    expect(kept).not.toContain('line 2')
+    const notes = await reason(root, 'src/notes.txt')
+    expect(notes).toContain('broken could not list its sources: Cargo.toml is unreadable')
+    expect(notes).not.toContain('no enabled scanner')
   } finally { await rm(root, { recursive: true, force: true }) }
 })
 

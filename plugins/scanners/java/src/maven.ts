@@ -14,36 +14,69 @@ function markup(pom: string): string {
   ))
 }
 
-/** The text of each element path in a POM, such as `project/build/sourceDirectory`, first occurrence only. */
-function pomValues(pom: string): Map<string, string> {
-  const values = new Map<string, string>()
-  const open: string[] = []
+interface PomElement {
+  name: string
+  /** The character data that opens the element, which is all of a leaf's text. */
+  text: string
+  children: PomElement[]
+}
+
+/** The POM's elements as a tree under an unnamed document root. */
+function pomTree(pom: string): PomElement {
+  const document: PomElement = { name: '', text: '', children: [] }
+  const open = [document]
   for (const [, closing, name, attributes, text] of markup(pom).matchAll(/<(\/?)([A-Za-z_][\w.:-]*)([^>]*)>([^<]*)/g)) {
-    if (closing) open.pop()
-    else if (!attributes!.endsWith('/')) {
-      open.push(name!)
-      const key = open.join('/')
-      if (!values.has(key)) values.set(key, decoded(text!).trim())
+    if (closing) {
+      if (open.length > 1) open.pop()
+      continue
     }
+    const empty = attributes!.endsWith('/')
+    const element = { name: name!, text: empty ? '' : decoded(text!).trim(), children: [] }
+    open.at(-1)!.children.push(element)
+    if (!empty) open.push(element)
   }
-  return values
+  return document
+}
+
+/** The first element down this path of child names. */
+function at(element: PomElement | undefined, ...names: string[]): PomElement | undefined {
+  return names.reduce<PomElement | undefined>((current, name) => current?.children.find(child => child.name === name), element)
+}
+
+export interface MavenProject {
+  /** Empty when the POM declares none; the bundled compiler's version then applies. */
+  release: string
+  encoding: string
+  name: string
+  sourceRoots: string[]
 }
 
 /**
- * The source roots a Maven project's scan and listing read, without starting a JVM: none for an aggregator
- * (packaging pom); otherwise project/build/sourceDirectory or src/main/java, where a value that is one `${name}`
- * takes project/properties/name, and `${project.basedir}` or `${basedir}` is the project directory.
+ * A Maven project's declared settings, read without Maven: its source root (project/build/sourceDirectory or
+ * src/main/java), language version and encoding (the maven-compiler-plugin configuration, then the conventional
+ * properties) and artifactId. `${basedir}` and `${project.basedir}` are the project directory, and a value that is
+ * one `${name}` takes project/properties/name. Undefined for an aggregator (packaging pom), which has no sources.
  */
-export function mavenSourceRoots(directory: string, pom: string): string[] {
-  const values = pomValues(pom)
-  const text = (key: string) => {
-    let value = values.get(key) ?? ''
-    for (let count = 0; count < 20 && value.startsWith('${') && value.endsWith('}'); count++) {
-      value = values.get(`project/properties/${value.slice(2, -1)}`) ?? ''
+export function readMavenProject(directory: string, pom: string): MavenProject | undefined {
+  const project = at(pomTree(pom), 'project')
+  const value = (element: PomElement | undefined) => {
+    const resolve = (text: string) => text.replaceAll(/\$\{(?:project\.)?basedir\}/g, () => directory)
+    let text = resolve(element?.text ?? '')
+    for (let count = 0; count < 20 && text.startsWith('${') && text.endsWith('}'); count++) {
+      text = resolve(at(project, 'properties', text.slice(2, -1))?.text ?? '')
     }
-    return value
+    return text
   }
-  if (text('project/packaging') === 'pom') return []
-  const source = text('project/build/sourceDirectory') || 'src/main/java'
-  return [source.replaceAll(/\$\{(?:project\.)?basedir\}/g, () => directory)]
+  const first = (...elements: (PomElement | undefined)[]) => elements.map(value).find(text => text !== '') ?? ''
+  if (value(at(project, 'packaging')) === 'pom') return undefined
+  const compiler = at(at(project, 'build', 'plugins')?.children
+    .find(plugin => plugin.name === 'plugin' && at(plugin, 'artifactId')?.text === 'maven-compiler-plugin'), 'configuration')
+  const property = (name: string) => at(project, 'properties', name)
+  const release = first(at(compiler, 'release'), property('maven.compiler.release'), property('java.version'), property('maven.compiler.source'))
+  return {
+    release: release.startsWith('1.') ? release.slice(2) : release,
+    encoding: first(at(compiler, 'encoding'), property('project.build.sourceEncoding')) || 'UTF-8',
+    name: value(at(project, 'artifactId')),
+    sourceRoots: [value(at(project, 'build', 'sourceDirectory')) || 'src/main/java'],
+  }
 }

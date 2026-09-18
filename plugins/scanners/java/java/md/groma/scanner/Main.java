@@ -29,10 +29,6 @@ public final class Main {
 
     public static void main(String[] args) {
         try {
-            if (args.length == 2 && args[0].equals("model")) {
-                System.out.println(Json.encode(MavenModel.read(Path.of(args[1]))));
-                return;
-            }
             if (args.length == 2 && args[0].equals("outline")) {
                 var root = Path.of(args[1]).toRealPath();
                 System.out.println(Json.encode(Outline.read(root, sourceFiles(root))));

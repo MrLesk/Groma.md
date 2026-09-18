@@ -8,6 +8,7 @@ import { discoveryRuleFindings } from './discovery-rules.ts'
 
 import packageJson from '../../../package.json'
 import { GromaFileSystem } from '../../groma-filesystem.ts'
+import { repositoryListing } from '../../repository-listing.ts'
 import { officialScannerCatalog, recommendScanners } from './catalog.ts'
 import type { TechnologyFinding, ScannerRecommendation, OfficialScanner } from './catalog.ts'
 import { scannerInventory, configuredScannerModules } from './inventory.ts'
@@ -36,14 +37,7 @@ function declarationFile(file: string, rules: CompiledRule[]): boolean {
 }
 
 async function projectDeclarations(repositoryRoot: string, rules: CompiledRule[]): Promise<string[]> {
-  const child = Bun.spawn([
-    'git', '-C', repositoryRoot, 'ls-files', '-z', '--cached', '--others', '--exclude-standard',
-  ], { stdout: 'pipe', stderr: 'pipe' })
-  const [code, stdout, stderr] = await Promise.all([
-    child.exited, new Response(child.stdout).text(), new Response(child.stderr).text(),
-  ])
-  if (code !== 0) throw new Error(stderr.trim() || `git ls-files exited ${code}`)
-  return [...new Set(stdout.split('\0').filter(Boolean).filter(file => declarationFile(file, rules)))].sort()
+  return [...new Set((await repositoryListing(repositoryRoot)).filter(file => declarationFile(file, rules)))].sort()
 }
 
 async function resolveDependencyVersion(

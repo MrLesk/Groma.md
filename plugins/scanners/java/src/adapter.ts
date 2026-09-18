@@ -22,7 +22,7 @@ export async function checkJavaReadiness(repositoryRoot: string, options: JavaSc
     if (!modules.includes('jdk.compiler@')) throw new Error('The selected runtime has no Java compiler module.')
   }
   catch (error) { throw new Error(`JAVA_RUNTIME_MISSING: Reinstall the Java scanner with its bundled compiler runtime. ${error}`) }
-  const input = await readJavaInput(repositoryRoot, command, jar)
+  const input = await readJavaInput(repositoryRoot)
   return { input, command, jar }
 }
 
