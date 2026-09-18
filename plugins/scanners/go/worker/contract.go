@@ -49,13 +49,15 @@ type diagnostic struct {
 	Message  string `json:"message"`
 }
 type observation struct {
-	SchemaVersion int          `json:"schemaVersion"`
-	Roots         []root       `json:"roots"`
-	Scanner       identity     `json:"scanner"`
-	Files         []sourceFile `json:"files"`
-	Operations    []operation  `json:"operations"`
-	Invocations   []invocation `json:"invocations"`
-	Diagnostics   []diagnostic `json:"diagnostics"`
+	SchemaVersion int            `json:"schemaVersion"`
+	Roots         []root         `json:"roots"`
+	Scanner       identity       `json:"scanner"`
+	Files         []sourceFile   `json:"files"`
+	Operations    []operation    `json:"operations"`
+	Invocations   []invocation   `json:"invocations"`
+	HTTPEndpoints []httpEndpoint `json:"httpEndpoints"`
+	HTTPRequests  []httpRequest  `json:"httpRequests"`
+	Diagnostics   []diagnostic   `json:"diagnostics"`
 }
 
 // Source outline: a Groma SourceReference in, a CodeFile out.
@@ -78,4 +80,29 @@ type codeDeclaration struct {
 type codeFile struct {
 	File         string            `json:"file"`
 	Declarations []codeDeclaration `json:"declarations"`
+}
+
+// HTTP facts: what this application serves and requests.
+type endpointSegment struct {
+	Kind     string `json:"kind"`
+	Value    string `json:"value,omitzero"`
+	Name     string `json:"name,omitzero"`
+	Optional bool   `json:"optional,omitzero"`
+}
+type httpEndpoint struct {
+	Operation string            `json:"operation"`
+	Method    string            `json:"method"`
+	Path      []endpointSegment `json:"path"`
+}
+
+type requestSegment struct {
+	Kind  string `json:"kind"`
+	Value string `json:"value,omitzero"`
+}
+type httpRequest struct {
+	Operation string `json:"operation"`
+	Method    string `json:"method,omitzero"`
+	// The path follows a configuration value this scan cannot read.
+	Configured bool             `json:"configured,omitzero"`
+	Path       []requestSegment `json:"path"`
 }

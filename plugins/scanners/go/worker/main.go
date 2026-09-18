@@ -52,6 +52,7 @@ func scan(directory string) (*observation, error) {
 		Scanner:       identity{"go", "go", "go/parser + go/types", runtime.Version() + " / x/tools v0.49.0"},
 		Roots:         []root{}, Files: []sourceFile{},
 		Operations: []operation{}, Invocations: []invocation{},
+		HTTPEndpoints: []httpEndpoint{}, HTTPRequests: []httpRequest{},
 		Diagnostics: []diagnostic{{Severity: "info", Code: "GO_ANALYSIS_SCOPE",
 			Message: "Root module active host build context; tests and nested modules are excluded. Dynamic dispatch and providers outside this module remain unresolved. No callback binding propagation."}},
 	}
@@ -69,6 +70,7 @@ func scan(directory string) (*observation, error) {
 	module := loaded[0].Module
 	result.Roots = append(result.Roots, root{ID: "module:" + module.Path, Kind: "module", Name: module.Path, File: "go.mod"})
 	analyzer.calls()
+	analyzer.httpFacts()
 	return result, nil
 }
 
@@ -86,7 +88,8 @@ func (e *evidence) addPackage(directory string, pkg *packages.Package) error {
 		if err != nil {
 			return err
 		}
-		file := &source{pkg: pkg, syntax: syntax, file: filepath.ToSlash(relative), text: data}
+		file := &source{pkg: pkg, syntax: syntax, file: filepath.ToSlash(relative), text: data, imports: importPaths(syntax)}
+		e.sources = append(e.sources, file)
 		e.result.Files = append(e.result.Files, sourceFile{Roots: []string{pkg.PkgPath}, File: file.file, Symbols: file.symbols()})
 		e.declarations(file)
 	}

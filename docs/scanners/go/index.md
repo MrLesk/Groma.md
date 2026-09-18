@@ -65,6 +65,65 @@ files.
 - Exported names are `public`; other names are `internal`. Blank `_` names are
   not listed.
 
+## HTTP facts
+
+The worker reports the endpoints this module serves and the requests it sends as
+[HTTP facts](../evidence.md#http-endpoints-and-requests). External packages stay
+unresolved in a source-only scan, so frameworks are recognized by import path and
+written type: `net/http`, `github.com/go-chi/chi`, `github.com/gin-gonic/gin` and
+`github.com/labstack/echo`. A router is a value built by `http.NewServeMux`,
+`chi.NewRouter`, `chi.NewMux`, `gin.New`, `gin.Default` or `echo.New`, the default
+`ServeMux` behind `http.Handle` and `http.HandleFunc`, or a parameter, struct field
+or variable written as `*http.ServeMux`. A chi, gin or echo router that arrives as a
+parameter or field may already carry a group prefix this scan cannot see, so its
+routes are not reported.
+
+Answers to the [producer checklist](../evidence.md#producer-checklist):
+
+1. **Prefixes.** Every constant prefix the source declares: a chi `Route` or
+   `Mount` prefix, a gin or echo `Group` prefix, nested groups, and the route's
+   own path. A group or mount whose prefix is not constant reports nothing for its
+   routes.
+2. **Endpoints.** Only route registrations: net/http `Handle` and `HandleFunc`,
+   chi `Get` through `Trace` with `Handle`, `HandleFunc`, `Method` and
+   `MethodFunc`, gin `GET` through `OPTIONS` with `Any` and `Handle`, and echo
+   `GET` through `CONNECT` with `Any` and `Add`. `Use` middleware, echo `Static`
+   and `File`, and a handler this scan cannot resolve to an operation report
+   nothing.
+3. **Dynamic or unknown.** A `fmt.Sprintf` verb that fills a whole segment, as in
+   `/talks/%d`, is dynamic. A verb that shares a segment with text, as in
+   `/talks/%s-%s`, and every other computed value are unknown.
+4. **The local helper.** Nothing: this scanner does not propagate arguments, so a
+   URL that arrives as a parameter stays unknown, reported where the client call
+   is.
+5. **The base.** `http.Get("/talks")` has no base. A value read by name before
+   the path, such as a struct field, a package-level variable or
+   `os.Getenv("TALKS_URL")`, sets `configured`. A literal scheme and host, a local
+   variable, a parameter, and every other computed value are a leading unknown
+   segment.
+6. **File-location routes.** Go has none, so every endpoint names its handler: a
+   function, a method value, an `http.HandlerFunc` conversion, or a function
+   literal.
+
+Route syntax follows each framework: net/http method patterns such as
+`"GET /talks/{id}"`, `{name}`, `{name...}`, the `{$}` anchor and a
+trailing-slash subtree, including the bare `/`, which is reported as an optional
+catch-all so core prefers a more specific route over it; chi `{name}`,
+`{name:regex}` and `*`; gin `:name` and `*name`; echo `:name` and `*`.
+
+Requests come from `http.Get`, `Head`, `Post` and `PostForm`, the same
+methods on a tracked `*http.Client` or `http.DefaultClient`, and
+`http.NewRequest` and `http.NewRequestWithContext`; `Do` states no URL of its
+own.
+
+A route or method that is not constant, a net/http pattern with a host, a segment
+that mixes literal text with a wildcard, and a route that continues after a
+catch-all report nothing. A router built by a function whose result is mounted, and
+one passed to `http.StripPrefix`, report nothing either, because the mount path
+belongs to other source. A router mounted by any other mechanism, such as a
+third-party helper, is still reported without that prefix. Routes another module
+registers are outside this scan.
+
 ## Compared operations
 
 `groma lint` and scan findings compare Go operations under the

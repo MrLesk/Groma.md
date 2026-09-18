@@ -181,3 +181,81 @@ goTest('a component with Go and TypeScript files outlines every file in Code ord
     expect(files.every(file => file.declarations.length > 0)).toBeTrue()
   } finally { await rm(root, { recursive: true, force: true }) }
 }, 60000)
+
+/** `:name` is a parameter, `:name*` a catch-all, `{}` a dynamic segment and `?` unknown text. */
+function httpPath(path: { kind: string; value?: string; name?: string; optional?: boolean }[]): string {
+  return `/${path.map(segment => {
+    if (segment.kind === 'literal') return segment.value
+    if (segment.kind === 'dynamic') return '{}'
+    if (segment.kind === 'unknown') return '?'
+    return `:${segment.name}${segment.optional ? '*' : ''}`
+  }).join('/')}`
+}
+
+function httpFacts(observation: ScanObservation) {
+  const files = new Map(observation.operations!.map(operation => [operation.id, operation.file]))
+  return {
+    endpoints: observation.httpEndpoints!
+      .map(fact => `${files.get(fact.operation)} ${fact.method} ${httpPath(fact.path)}`).sort(),
+    requests: observation.httpRequests!
+      .map(fact => `${fact.method ?? '-'} ${fact.configured ? '<base>' : ''}${httpPath(fact.path)}`).sort(),
+  }
+}
+
+goTest('Go reports HTTP endpoints from net/http, chi, gin and echo with their group prefixes', async () => {
+  const { root, worker } = await fixture('go-http')
+  try {
+    await buildWorker(worker, go)
+    const { endpoints } = httpFacts(await scanGoSource(root, { worker }))
+    // Each endpoint names the operation that answers it, so a handler in another file owns the fact.
+    expect(endpoints).toEqual([
+      'echo.go PATCH /api/talks/:id',
+      'echo.go POST /api/talks',
+      'echo.go GET /files/:path*',
+      'gin.go * /api/health',
+      'gin.go DELETE /talks/:id',
+      'gin.go GET /api/talks/:id',
+      'gin.go GET /files/:filepath*',
+      'handlers.go * /:path*',
+      'handlers.go * /files/:path*',
+      'handlers.go * /health',
+      'handlers.go GET /api/files/:path*',
+      // A chi Mount carries its prefix; a router built for a mount elsewhere reports nothing.
+      'handlers.go GET /api/talks',
+      'handlers.go GET /api/talks/:id',
+      'handlers.go GET /health',
+      'handlers.go GET /talks',
+      'handlers.go GET /talks/:id',
+      'handlers.go GET /version',
+      'handlers.go POST /talks',
+      'handlers.go PUT /api/talks',
+    ].sort())
+  } finally { await rm(root, { recursive: true, force: true }) }
+}, 60000)
+
+goTest('Go reports what each net/http request proves and leaves the rest unknown', async () => {
+  const { root, worker } = await fixture('go-http')
+  try {
+    await buildWorker(worker, go)
+    const { requests } = httpFacts(await scanGoSource(root, { worker }))
+    expect(requests).toEqual([
+      // A formatted value fills one segment; a setting or a field before the path is a configured base.
+      'GET /api/talks/{}',
+      'GET /health',
+      // A percent stays literal text, and an unproven method is omitted.
+      'GET /rate/100%',
+      '- /talks',
+      'GET <base>/settingtalks',
+      'GET <base>/talks',
+      'POST <base>/talks',
+      'PUT /talks/7',
+      // A literal host, an unresolved value and partly known text cannot be compared.
+      'GET /?',
+      'GET /?/talks',
+      'GET /talks/?',
+      // A local variable and a parameter are values this scan declined to resolve, not settings.
+      'GET /?/localtalks',
+      'GET /?/paramtalks',
+    ].sort())
+  } finally { await rm(root, { recursive: true, force: true }) }
+}, 60000)
