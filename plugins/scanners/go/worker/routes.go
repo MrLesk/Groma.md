@@ -6,6 +6,8 @@ import (
 	"go/token"
 	"net/url"
 	"regexp"
+	"regexp/syntax"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -127,10 +129,14 @@ func routeSegments(library string, text string) ([]endpointSegment, bool) {
 		if segment.Kind != "" {
 			path = append(path, segment)
 		}
+		// A pattern that may span segments stands for the rest of the route.
+		if segment.Kind == "catch-all" && segment.Constrained {
+			break
+		}
 	}
 	// A net/http pattern ending in `/` serves every path below it.
 	if library == netHTTP && strings.HasSuffix(text, "/") {
-		path = append(path, endpointSegment{Kind: "catch-all", Name: "path", Optional: true})
+		path = append(path, endpointSegment{Kind: "catch-all", Name: "path"})
 	}
 	// A catch-all takes the remaining segments, so a route cannot continue after one.
 	for index, segment := range path {
@@ -141,8 +147,7 @@ func routeSegments(library string, text string) ([]endpointSegment, bool) {
 	return path, true
 }
 
-// pathSegment reads one route segment in the framework's own syntax. A segment that mixes
-// literal text with a wildcard has no equivalent fact, so its route is not reported.
+// pathSegment reads one route segment in the framework's own syntax.
 func pathSegment(library string, part string) (endpointSegment, bool) {
 	switch library {
 	case netHTTP:
@@ -164,28 +169,95 @@ func goSegment(part string) (endpointSegment, bool) {
 		}
 		return parameter(name)
 	}
+	// net/http rejects a wildcard that shares its segment with text, so no such route is served.
 	if strings.ContainsAny(part, "{}") {
 		return endpointSegment{}, false
 	}
 	return literalSegment(part)
 }
 
+// chiSegment reads `{name}`, `{name:regex}` and `*`. A regular expression, or literal text beside
+// a placeholder as in `{id}.json`, restricts what chi accepts. chi hands a regular expression the
+// text up to the character after its placeholder, which can cross a `/`, so a pattern that may match
+// `/` is read as spanning segments: a constrained optional catch-all that stands for the rest.
 func chiSegment(part string) (endpointSegment, bool) {
 	if part == "*" {
 		return catchAll("")
 	}
-	if name, ok := wildcard(part, "{", "}"); ok {
-		// A regular expression constrains the text but still matches one segment.
-		pattern, _, _ := strings.Cut(name, ":")
-		return parameter(pattern)
-	}
-	if strings.ContainsAny(part, "{}*") {
+	placeholders, whole, closed := chiPlaceholders(part)
+	if !closed || (len(placeholders) == 0 && strings.ContainsAny(part, "{}*")) {
 		return endpointSegment{}, false
 	}
-	return literalSegment(part)
+	if len(placeholders) == 0 {
+		return literalSegment(part)
+	}
+	name, ok := segmentName(placeholders[0].name)
+	for _, placeholder := range placeholders {
+		if placeholder.pattern != "" && matchesSlash(placeholder.pattern) {
+			return endpointSegment{Kind: "catch-all", Name: name, Optional: true, Constrained: true}, ok
+		}
+	}
+	constrained := !whole || placeholders[0].pattern != ""
+	return endpointSegment{Kind: "parameter", Name: name, Constrained: constrained}, ok
+}
+
+type chiPlaceholder struct {
+	name    string
+	pattern string
+}
+
+// chiPlaceholders reads each `{name}` or `{name:regex}` in a segment, whose regular expression may
+// hold braces, and whether one placeholder is the whole segment. It reports whether every brace closes.
+func chiPlaceholders(part string) (placeholders []chiPlaceholder, whole bool, closed bool) {
+	depth, start := 0, 0
+	for index := 0; index < len(part); index++ {
+		switch part[index] {
+		case '{':
+			if depth == 0 {
+				start = index
+			}
+			depth++
+		case '}':
+			depth--
+			if depth < 0 {
+				return nil, false, false
+			}
+			if depth == 0 {
+				name, pattern, _ := strings.Cut(part[start+1:index], ":")
+				placeholders = append(placeholders, chiPlaceholder{name: name, pattern: pattern})
+				whole = start == 0 && index == len(part)-1
+			}
+		}
+	}
+	return placeholders, whole, depth == 0
+}
+
+// matchesSlash reports whether a regular expression may match text holding `/`. One that does not
+// parse may.
+func matchesSlash(pattern string) bool {
+	expression, err := syntax.Parse(pattern, syntax.Perl)
+	return err != nil || slashIn(expression)
+}
+
+func slashIn(expression *syntax.Regexp) bool {
+	switch expression.Op {
+	case syntax.OpAnyChar, syntax.OpAnyCharNotNL:
+		return true
+	case syntax.OpLiteral:
+		return slices.Contains(expression.Rune, '/')
+	case syntax.OpCharClass:
+		for index := 0; index+1 < len(expression.Rune); index += 2 {
+			if expression.Rune[index] <= '/' && '/' <= expression.Rune[index+1] {
+				return true
+			}
+		}
+		return false
+	}
+	return slices.ContainsFunc(expression.Sub, slashIn)
 }
 
 // colonSegment reads the gin and echo syntax: `:name` for one segment, `*` or `*name` for the rest.
+// Literal text before `:name`, as in `v:version`, restricts what the router accepts in the segment.
 func colonSegment(part string) (endpointSegment, bool) {
 	if strings.HasPrefix(part, ":") {
 		return parameter(strings.TrimPrefix(part, ":"))
@@ -193,7 +265,10 @@ func colonSegment(part string) (endpointSegment, bool) {
 	if strings.HasPrefix(part, "*") {
 		return catchAll(strings.TrimPrefix(part, "*"))
 	}
-	if strings.ContainsAny(part, ":*") {
+	if before, name, found := strings.Cut(part, ":"); found && !strings.Contains(before, "*") {
+		return constrainedParameter(name, true)
+	}
+	if strings.Contains(part, "*") {
 		return endpointSegment{}, false
 	}
 	return literalSegment(part)
@@ -207,13 +282,28 @@ func wildcard(part string, open string, close string) (string, bool) {
 }
 
 func parameter(name string) (endpointSegment, bool) {
+	return constrainedParameter(name, false)
+}
+
+func constrainedParameter(name string, constrained bool) (endpointSegment, bool) {
 	name, ok := segmentName(name)
-	return endpointSegment{Kind: "parameter", Name: name}, ok
+	return endpointSegment{Kind: "parameter", Name: name, Constrained: constrained}, ok
 }
 
 func catchAll(name string) (endpointSegment, bool) {
 	name, ok := segmentName(name)
-	return endpointSegment{Kind: "catch-all", Name: name, Optional: true}, ok
+	return endpointSegment{Kind: "catch-all", Name: name}, ok
+}
+
+// servedPath joins a router's prefix and a route. A catch-all serves an empty remainder only
+// after a trailing slash, as in /files/, which request paths do not keep, so it requires a
+// remainder. A catch-all at the root is the exception: every request path starts with that slash.
+func servedPath(prefix []endpointSegment, route []endpointSegment) []endpointSegment {
+	path := joinSegments(prefix, route)
+	if len(path) == 1 && path[0].Kind == "catch-all" {
+		path[0].Optional = true
+	}
+	return path
 }
 
 // segmentName keeps the route's own name; an unnamed wildcard is reported as `path`.

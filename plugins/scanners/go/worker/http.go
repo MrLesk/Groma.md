@@ -48,13 +48,6 @@ type router struct {
 	prefix    []endpointSegment
 }
 
-// mount is the path a router is mounted under. An unresolved prefix silences its routes,
-// because their served path is longer than the source states here.
-type mount struct {
-	prefix  []endpointSegment
-	unknown bool
-}
-
 // importPaths maps each local package alias in a file to its import path.
 func importPaths(syntax *ast.File) map[string]string {
 	result := map[string]string{}
@@ -131,7 +124,8 @@ func (e *evidence) declaredNames(s *source, names []*ast.Ident, written ast.Expr
 	}
 	for _, declared := range names {
 		object := s.pkg.TypesInfo.Defs[declared]
-		if object == nil {
+		// A name assigned more than once may hold another value by the time a route or request uses it.
+		if object == nil || e.assignments[object] > 1 {
 			continue
 		}
 		if name == "ServeMux" {
@@ -151,60 +145,6 @@ func (s *source) object(expression ast.Expr) types.Object {
 		return s.pkg.TypesInfo.ObjectOf(node.Sel)
 	}
 	return nil
-}
-
-// mounts reads every router mounted under a path, before any route is read.
-func (e *evidence) mounts(s *source) {
-	ast.Inspect(s.syntax, func(node ast.Node) bool {
-		call, ok := node.(*ast.CallExpr)
-		if !ok || len(call.Args) != 2 {
-			return true
-		}
-		if selector, ok := ast.Unparen(call.Fun).(*ast.SelectorExpr); ok && selector.Sel.Name == "Mount" {
-			e.mountUnder(s, call.Args[0], call.Args[1])
-		}
-		// A router behind http.StripPrefix serves a path this scan does not carry.
-		if library, name, ok := s.packageFramework(call.Fun); ok && library == netHTTP && name == "StripPrefix" {
-			e.mountRouter(s, call.Args[1], mount{unknown: true})
-		}
-		return true
-	})
-}
-
-func (e *evidence) mountUnder(s *source, at ast.Expr, mounted ast.Expr) {
-	prefix, ok := routePath(s, chi, at)
-	e.mountRouter(s, mounted, mount{prefix: prefix, unknown: !ok})
-}
-
-// mountRouter records the mount on a named router, or silences the function that builds one.
-func (e *evidence) mountRouter(s *source, mounted ast.Expr, under mount) {
-	if call, ok := ast.Unparen(mounted).(*ast.CallExpr); ok {
-		// The routes belong to a router this call builds, so the source here cannot carry the prefix.
-		if function, ok := s.object(call.Fun).(*types.Func); ok {
-			e.silenced[e.operationByFunctionPosition[functionKey(s.pkg, function.Pos())]] = true
-		}
-		return
-	}
-	object := s.object(mounted)
-	if object == nil {
-		return
-	}
-	if known, mounted := e.mounted[object]; mounted && !sameSegments(known.prefix, under.prefix) {
-		under = mount{unknown: true}
-	}
-	e.mounted[object] = under
-}
-
-func sameSegments(left []endpointSegment, right []endpointSegment) bool {
-	if len(left) != len(right) {
-		return false
-	}
-	for index, segment := range left {
-		if segment != right[index] {
-			return false
-		}
-	}
-	return true
 }
 
 // routerOf reads a router from a name, a constructor call, a group call or a middleware chain.
@@ -230,18 +170,6 @@ func (e *evidence) routerOf(s *source, expression ast.Expr) (router, bool) {
 		return router{}, false
 	}
 	return groupRouter(s, parent, selector.Sel.Name, call)
-}
-
-// mountedRouter puts the mount path in front of the router's own prefix.
-func (e *evidence) mountedRouter(object types.Object, known router) (router, bool) {
-	under, mounted := e.mounted[object]
-	if !mounted {
-		return known, true
-	}
-	if under.unknown {
-		return router{}, false
-	}
-	return router{framework: known.framework, prefix: joinSegments(under.prefix, known.prefix)}, true
 }
 
 func joinSegments(prefix []endpointSegment, path []endpointSegment) []endpointSegment {
@@ -274,12 +202,13 @@ type scope struct {
 	silenced bool
 }
 
-// httpFacts registers declared values and mounts from every file, then reads each file's calls.
+// httpFacts registers assignments, declared values and mounts from every file, then reads each file's calls.
 func (e *evidence) httpFacts() {
 	for _, file := range e.sources {
-		e.declared(file)
+		e.readAssignments(file)
 	}
 	for _, file := range e.sources {
+		e.declared(file)
 		e.mounts(file)
 	}
 	for _, file := range e.sources {
@@ -331,7 +260,63 @@ func identifiers(names []*ast.Ident) []ast.Expr {
 	return values
 }
 
-// trackValues remembers routers and clients bound to a name.
+// assignedValue is a value the source assigns a name, and the file that assigns it.
+type assignedValue struct {
+	source *source
+	value  ast.Expr
+}
+
+// readAssignments counts the values assigned to each name, wherever the assignment is. A parameter
+// receives its argument, which is one assignment.
+func (e *evidence) readAssignments(s *source) {
+	ast.Inspect(s.syntax, func(node ast.Node) bool {
+		switch node := node.(type) {
+		case *ast.FuncType:
+			for _, field := range node.Params.List {
+				for _, name := range field.Names {
+					e.assign(s, name, nil)
+				}
+			}
+		case *ast.AssignStmt:
+			for index, target := range node.Lhs {
+				e.assign(s, target, assignedAt(node, index))
+			}
+		case *ast.ValueSpec:
+			for index, name := range node.Names {
+				if len(node.Values) == len(node.Names) {
+					e.assign(s, name, node.Values[index])
+				} else if len(node.Values) > 0 {
+					e.assign(s, name, nil)
+				}
+			}
+		}
+		return true
+	})
+}
+
+// assignedAt is the value one target of an assignment receives, or nil when the source does not
+// write it out, as when one call returns every value or an operator combines it with the old one.
+func assignedAt(node *ast.AssignStmt, index int) ast.Expr {
+	if len(node.Rhs) != len(node.Lhs) || (node.Tok != token.ASSIGN && node.Tok != token.DEFINE) {
+		return nil
+	}
+	return node.Rhs[index]
+}
+
+func (e *evidence) assign(s *source, target ast.Expr, value ast.Expr) {
+	object := s.object(target)
+	if object == nil {
+		return
+	}
+	e.assignments[object]++
+	if value != nil {
+		e.assignedValues[object] = assignedValue{source: s, value: value}
+	}
+}
+
+// trackValues remembers routers and clients bound to a name. A name assigned more than once may
+// register routes on either value, whatever the order this walk reads them in, so it is no router;
+// neither is a name assigned a value that is not a readable router.
 func (e *evidence) trackValues(s *source, targets []ast.Expr, values []ast.Expr) {
 	for index, value := range values {
 		if index >= len(targets) {
@@ -341,8 +326,10 @@ func (e *evidence) trackValues(s *source, targets []ast.Expr, values []ast.Expr)
 		if object == nil {
 			continue
 		}
-		if known, ok := e.routerOf(s, value); ok {
+		if known, ok := e.routerOf(s, value); ok && e.assignments[object] == 1 {
 			e.routers[object] = known
+		} else {
+			delete(e.routers, object)
 		}
 		if isClient(s, value) {
 			e.clients[object] = true
@@ -433,7 +420,7 @@ func (e *evidence) endpointFact(s *source, known router, route registration, cal
 	if !ok || !(method == "*" || methodToken.MatchString(method)) {
 		return httpEndpoint{}, false
 	}
-	return httpEndpoint{Operation: operation, Method: method, Path: joinSegments(known.prefix, path)}, true
+	return httpEndpoint{Operation: operation, Method: method, Path: servedPath(known.prefix, path)}, true
 }
 
 // handlerOperation resolves the operation that answers the requests.
@@ -474,7 +461,8 @@ func (e *evidence) groupClosure(s *source, parent router, name string, call *ast
 	if len(names) == 0 {
 		return
 	}
-	if object := s.pkg.TypesInfo.Defs[names[0]]; object != nil {
+	// The router is the closure's argument, unless the closure assigns the parameter again.
+	if object := s.pkg.TypesInfo.Defs[names[0]]; object != nil && e.assignments[object] == 1 {
 		e.routers[object] = nested
 	}
 }

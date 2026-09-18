@@ -84,10 +84,11 @@ type codeFile struct {
 
 // HTTP facts: what this application serves and requests.
 type endpointSegment struct {
-	Kind     string `json:"kind"`
-	Value    string `json:"value,omitzero"`
-	Name     string `json:"name,omitzero"`
-	Optional bool   `json:"optional,omitzero"`
+	Kind        string `json:"kind"`
+	Value       string `json:"value,omitzero"`
+	Name        string `json:"name,omitzero"`
+	Optional    bool   `json:"optional,omitzero"`
+	Constrained bool   `json:"constrained,omitzero"`
 }
 type httpEndpoint struct {
 	Operation string            `json:"operation"`

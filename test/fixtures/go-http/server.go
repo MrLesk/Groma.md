@@ -24,3 +24,8 @@ func register(mux *http.ServeMux) {
 }
 
 func route() string { return "/computed" }
+
+func useAdmin(replacement *http.ServeMux) {
+	adminMux = http.NewServeMux()
+	adminMux = replacement
+}

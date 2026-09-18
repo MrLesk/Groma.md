@@ -82,8 +82,14 @@ Answers to the [producer checklist](../evidence.md#producer-checklist):
 
 1. **Prefixes.** Every constant prefix the source declares: a chi `Route` or
    `Mount` prefix, a gin or echo `Group` prefix, nested groups, and the route's
-   own path. A group or mount whose prefix is not constant reports nothing for its
-   routes.
+   own path. A chi router mounted with `Mount` serves below every prefix of the
+   router it is mounted on. A group or mount whose prefix is not constant, a
+   mount on a router this scan cannot read or has not yet read where the mounted
+   router's routes are registered, a router mounted twice, and a mounted router
+   that is not chi, which still routes on the full URL, report nothing for their
+   routes. So does a router name, including a group closure's parameter, assigned
+   more than once or assigned a value that is not a readable router, because its
+   routes could register on either value.
 2. **Endpoints.** Only route registrations: net/http `Handle` and `HandleFunc`,
    chi `Get` through `Trace` with `Handle`, `HandleFunc`, `Method` and
    `MethodFunc`, gin `GET` through `OPTIONS` with `Any` and `Handle`, and echo
@@ -96,29 +102,46 @@ Answers to the [producer checklist](../evidence.md#producer-checklist):
 4. **The local helper.** Nothing: this scanner does not propagate arguments, so a
    URL that arrives as a parameter stays unknown, reported where the client call
    is.
-5. **The base.** `http.Get("/talks")` has no base. A value read by name before
-   the path, such as a struct field, a package-level variable or
-   `os.Getenv("TALKS_URL")`, sets `configured`. A literal scheme and host, a local
-   variable, a parameter, and every other computed value are a leading unknown
-   segment.
+5. **The base.** `http.Get("/talks")` has no base. A package-level variable,
+   in this package or another, is the one value the source assigns it in its
+   declaration or elsewhere, so one holding a literal host is a leading unknown
+   segment and one set from `os.Getenv` is a setting. A package-level variable
+   assigned more than once is a leading unknown segment; one nothing in the
+   source assigns, which a flag or the linker sets, is a setting. A setting, such
+   as a struct field or `os.Getenv("TALKS_URL")`, before a path that starts with
+   `/` sets `configured`. A literal scheme and host, a local variable, a parameter,
+   text that continues the value's own last segment, and every other computed
+   value are a leading unknown segment.
 6. **File-location routes.** Go has none, so every endpoint names its handler: a
    function, a method value, an `http.HandlerFunc` conversion, or a function
    literal.
+7. **Constrained segments.** A chi `{name:regex}` parameter, and a chi, gin or
+   echo segment that mixes literal text with a parameter, such as `{id}.json` or
+   `v:version`, is a constrained parameter named after that parameter. chi hands
+   a regular expression the text up to the character after its placeholder,
+   which can cross a `/`, so a regular expression that may match `/`, such as
+   `{path:.+}`, is a constrained optional catch-all that replaces the rest of the
+   route. net/http rejects a wildcard that shares its segment with text, so no
+   such route is served.
+8. **Registration order.** net/http, chi, gin and echo prefer the most specific
+   route over the first one registered, so no endpoint reports `order`.
 
 Route syntax follows each framework: net/http method patterns such as
 `"GET /talks/{id}"`, `{name}`, `{name...}`, the `{$}` anchor and a
-trailing-slash subtree, including the bare `/`, which is reported as an optional
-catch-all so core prefers a more specific route over it; chi `{name}`,
-`{name:regex}` and `*`; gin `:name` and `*name`; echo `:name` and `*`.
+trailing-slash subtree; chi `{name}`, `{name:regex}` and `*`; gin `:name` and
+`*name`; echo `:name` and `*`. A catch-all serves an empty remainder only after
+a trailing slash, which request paths do not keep, so it requires at least one
+segment. A catch-all at the root, such as the bare `/` subtree, is optional.
 
 Requests come from `http.Get`, `Head`, `Post` and `PostForm`, the same
 methods on a tracked `*http.Client` or `http.DefaultClient`, and
 `http.NewRequest` and `http.NewRequestWithContext`; `Do` states no URL of its
 own.
 
-A route or method that is not constant, a net/http pattern with a host, a segment
-that mixes literal text with a wildcard, and a route that continues after a
-catch-all report nothing. A router built by a function whose result is mounted, and
+A route or method that is not constant, a net/http pattern with a host, a
+net/http segment that mixes literal text with a wildcard, a catch-all that shares
+its segment with text, and a route that continues after a catch-all report
+nothing. A router built by a function whose result is mounted, and
 one passed to `http.StripPrefix`, report nothing either, because the mount path
 belongs to other source. A router mounted by any other mechanism, such as a
 third-party helper, is still reported without that prefix. Routes another module

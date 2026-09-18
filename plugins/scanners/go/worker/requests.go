@@ -41,7 +41,7 @@ func (e *evidence) request(s *source, name string, call *ast.CallExpr, owner str
 	if recognized.methodArg >= 0 {
 		method = requestMethod(s, call.Args[recognized.methodArg])
 	}
-	configured, path := requestPath(urlParts(s, call.Args[recognized.url]))
+	configured, path := requestPath(e.urlParts(s, call.Args[recognized.url]))
 	e.result.HTTPRequests = append(e.result.HTTPRequests, httpRequest{
 		Operation: owner, Method: method, Configured: configured, Path: path,
 	})
@@ -69,22 +69,52 @@ type urlPart struct {
 }
 
 // urlParts reads a URL expression as constant text, concatenations and formatted values.
-func urlParts(s *source, expression ast.Expr) []urlPart {
+func (e *evidence) urlParts(s *source, expression ast.Expr) []urlPart {
 	if text, ok := constantString(s, expression); ok {
 		return []urlPart{{text: text}}
 	}
 	switch node := ast.Unparen(expression).(type) {
-	case *ast.Ident:
-		// A local value is computed here; a name from elsewhere is read, like a setting.
-		return []urlPart{{computed: true, setting: !isLocalValue(s.object(node))}}
-	case *ast.SelectorExpr:
-		return []urlPart{{computed: true, setting: true}}
+	case *ast.Ident, *ast.SelectorExpr:
+		return e.nameParts(s, node)
 	case *ast.BinaryExpr:
-		return append(urlParts(s, node.X), urlParts(s, node.Y)...)
+		return append(e.urlParts(s, node.X), e.urlParts(s, node.Y)...)
 	case *ast.CallExpr:
 		return callParts(s, node)
 	}
 	return []urlPart{{computed: true}}
+}
+
+// nameParts reads a named value. A package-level variable is what the source assigns it. A local
+// value is computed here. A name from elsewhere, such as a field, is read like a setting.
+func (e *evidence) nameParts(s *source, name ast.Expr) []urlPart {
+	object := s.object(name)
+	if parts, ok := e.packageParts(object); ok {
+		return parts
+	}
+	return []urlPart{{computed: true, setting: !isLocalValue(object)}}
+}
+
+// packageParts reads a package-level variable as the one value the source assigns it, in its
+// declaration or elsewhere. Nothing in the source assigns one that a flag or the linker sets, so
+// it is read like a setting; one assigned more than once, or a value the source does not write
+// out, is unknown.
+func (e *evidence) packageParts(object types.Object) ([]urlPart, bool) {
+	variable, ok := object.(*types.Var)
+	if !ok || variable.Pkg() == nil || variable.Parent() != variable.Pkg().Scope() {
+		return nil, false
+	}
+	assigned, written := e.assignedValues[object]
+	switch {
+	case e.assignments[object] == 0:
+		return []urlPart{{computed: true, setting: true}}, true
+	case e.assignments[object] > 1 || !written:
+		return []urlPart{{computed: true}}, true
+	}
+	// Leaving the variable out while its value is read ends an initialization cycle.
+	delete(e.assignedValues, object)
+	parts := e.urlParts(assigned.source, assigned.value)
+	e.assignedValues[object] = assigned
+	return parts, true
 }
 
 // callParts reads a formatted URL, or an environment setting the application reads by name.
@@ -105,7 +135,7 @@ func callParts(s *source, call *ast.CallExpr) []urlPart {
 }
 
 // isLocalValue reports a variable or parameter declared inside a function, whose value this
-// scan declined to resolve. A field, a package-level name and a name declared outside are read.
+// scan declined to resolve. A field and a name declared outside the scanned source are read.
 func isLocalValue(object types.Object) bool {
 	variable, ok := object.(*types.Var)
 	if !ok || variable.Parent() == nil || variable.Pkg() == nil {
@@ -151,18 +181,20 @@ func verbEnd(format string, start int) int {
 }
 
 // requestPath states what precedes the path and the segments the source proves.
-// A computed leading value is a configured base; a literal host cannot be compared at all.
+// A setting that a new path segment follows is a configured base; a literal host, and any
+// other leading value, cannot be compared at all.
 func requestPath(parts []urlPart) (bool, []requestSegment) {
-	parts = beforeQuery(parts)
+	parts = withText(beforeQuery(parts))
 	if len(parts) == 0 {
 		return false, []requestSegment{}
 	}
 	if parts[0].computed {
-		// A base the scanner cannot resolve at all stays in the path as unknown text.
-		if !parts[0].setting {
-			return false, append([]requestSegment{{Kind: "unknown"}}, requestSegments(parts[1:])...)
+		// Text that continues the setting's own last segment, as in base + "talks", is not a path of its own.
+		if parts[0].setting && len(parts) > 1 && strings.HasPrefix(parts[1].text, "/") {
+			return true, requestSegments(parts[1:])
 		}
-		return true, requestSegments(parts[1:])
+		// A base the scanner cannot resolve at all stays in the path as unknown text.
+		return false, append([]requestSegment{{Kind: "unknown"}}, requestSegments(parts[1:])...)
 	}
 	if rest, host := afterAuthority(parts[0].text); host {
 		remainder := append([]urlPart{{text: rest}}, parts[1:]...)
@@ -182,6 +214,26 @@ func afterAuthority(text string) (string, bool) {
 		return rest[slash:], true
 	}
 	return "", true
+}
+
+// withText joins adjacent text and drops empty text, so a URL written in pieces, such as
+// scheme + "://" + host, reads as the text it spells, and the value that starts a URL such as
+// fmt.Sprintf("%s/talks", base) is read as its base.
+func withText(parts []urlPart) []urlPart {
+	kept := []urlPart{}
+	for _, part := range parts {
+		last := len(kept) - 1
+		switch {
+		case part.computed:
+			kept = append(kept, part)
+		case part.text == "":
+		case last >= 0 && !kept[last].computed:
+			kept[last].text += part.text
+		default:
+			kept = append(kept, part)
+		}
+	}
+	return kept
 }
 
 // beforeQuery drops the query and fragment, which Groma ignores.

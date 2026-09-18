@@ -36,6 +36,10 @@ type evidence struct {
 	routers map[types.Object]router
 	clients map[types.Object]bool
 	mounted map[types.Object]mount
+	// How many values each name is assigned anywhere in the scanned source, a parameter's argument
+	// included, and the value a name is assigned when the source writes it out.
+	assignments    map[types.Object]int
+	assignedValues map[types.Object]assignedValue
 	// Operations whose routers are built for a mount, so their served paths are longer.
 	silenced map[string]bool
 }
@@ -43,7 +47,8 @@ type evidence struct {
 func newEvidence(result *observation) *evidence {
 	return &evidence{result: result, operationByFunctionPosition: map[string]string{}, literals: map[*ast.FuncLit]string{},
 		recorded: map[string]bool{}, routers: map[types.Object]router{}, clients: map[types.Object]bool{},
-		mounted: map[types.Object]mount{}, silenced: map[string]bool{}}
+		mounted: map[types.Object]mount{}, assignments: map[types.Object]int{}, assignedValues: map[types.Object]assignedValue{},
+		silenced: map[string]bool{}}
 }
 
 func (s *source) offset(pos token.Pos) int {

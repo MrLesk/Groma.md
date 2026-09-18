@@ -7,6 +7,7 @@ func ginRoutes() *gin.Engine {
 	api := engine.Group("/api")
 	api.GET("/talks/:id", authorize, ginShowTalk)
 	api.Any("/health", ginHealth)
+	api.GET("/versions/v:version", ginShowTalk)
 	engine.Handle("DELETE", "/talks/:id", ginDeleteTalk)
 	engine.GET("/files/*filepath", ginFiles)
 	return engine
@@ -22,4 +23,17 @@ func ginComputed(prefix string) {
 	engine := gin.New()
 	group := engine.Group(prefix)
 	group.GET("/talks", ginShowTalk)
+}
+
+// A group name assigned again may register on either value.
+func ginReassigned(prefix string, admin bool) {
+	engine := gin.New()
+	group := engine.Group("/v1")
+	group = engine.Group(prefix)
+	group.GET("/reassigned", ginShowTalk)
+	scoped := engine.Group("/public")
+	if admin {
+		scoped = engine.Group("/private")
+	}
+	scoped.GET("/scoped", ginShowTalk)
 }
