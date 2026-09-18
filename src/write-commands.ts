@@ -143,6 +143,7 @@ export function registerWriteCommands(program: Command): void {
     .option('--parent <id>', 'move an empty scanned component to this container, or a container to this system')
     .option('--combine <ids...>', 'combine empty siblings; the absorbed containers or components move to the survivor')
     .option('--detach <files...>', 'remove these source files from the component; the next scan gives them their own component')
+    .option('--id <new-id>', 'rename this element; its document and the documents under it move with it')
     .addHelpText('after', '\nAgent guides: groma agent-instructions')
     .action(async (id: string, ids: string[], options) => {
       try {
@@ -161,6 +162,7 @@ export function registerWriteCommands(program: Command): void {
           parent: options.parent,
           combine: options.combine,
           detach: options.detach,
+          newId: options.id,
         })
         printWriteResult(edited)
       } catch (error) {

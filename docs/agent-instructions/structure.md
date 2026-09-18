@@ -28,6 +28,7 @@ the scanner cannot see.
 | `groma edit <survivor> --combine <absorbed...>` | IDs of scanned systems, containers, or components with the same kind and parent |
 | `groma edit <component> --parent <container>` | a scanned component ID and a container ID |
 | `groma edit <container> --parent <system>` | a scanned container ID and a system ID |
+| `groma edit <id> --id <new-id>` | a system, container, or component ID and the kebab-case ID it should keep |
 | `groma edit <component> --detach <file...>` | a component ID and exact repository-relative files it owns |
 | `groma edit <component> --group <name>` or `--ungroup` | a component ID; the group name is free text |
 | `groma add group <name> <component...>` | sibling component IDs |
@@ -93,9 +94,34 @@ The children a combine absorbs directly cannot have body content either, so a
 system combine refuses a described container while a described component two
 levels down relocates with it. A move requires an empty body on the record that
 moves, not on its children. No record anywhere under a moved or absorbed record
-may hold a concept-addressed relationship, because its document changes path.
+may hold a concept-addressed relationship, because its document changes path and
+these operations do not repoint links; a rename does.
 File connections follow their current owners and do not block these operations.
 The survivor may already have authored meaning.
+
+## Renaming an ID
+
+A scanned ID comes from a file or project name, so it can stop describing what
+the element became. Rename it once the responsibility is settled:
+
+```sh
+groma edit playwright-config --id development-support
+```
+
+The record keeps its title, meaning and Code, its document moves to the path of
+the new ID, and the documents stored under it follow. Children name the new
+parent, and concept-addressed relationship rows and flow steps are repointed, so
+nothing else needs editing. An external system renames the same way, into
+`externals/<new-id>.md`.
+
+The value is normalized to kebab-case, so the ID the result prints is the
+authoritative one. A taken ID, a reserved document name, and an actor or flow ID
+are refused, and the rename is its own edit, separate from a combine, move or
+detach. The result prints `replaced: <old-id> -> <new-id>`; record it in the
+Backlog task as `groma agent-instructions backlog` explains.
+
+Scans find elements through the files they own, not through their IDs, so the
+new ID survives every later scan.
 
 ## Splits and single-file moves
 

@@ -130,7 +130,11 @@ operation before opening a map.
      component to another container or a container to another system, detach
      files from a component, and group or ungroup sibling components. A moved
      or absorbed record takes every document stored under it to its new path.
-     These operations validate the whole change before writing. `--detach <file...>` removes those files
+     `--id <new-id>` renames an element: its document and the documents under it
+     move to the paths of the new ID, children name the new parent, and
+     concept-addressed relationship rows and flow steps are repointed. Scans
+     match elements through owned files, so a renamed ID survives them. These
+     operations validate the whole change before writing. `--detach <file...>` removes those files
      from the component's Code; the next scan gives each detached file its own
      component unless another file of its scanner source unit still has an
      owner. Relationship rows naming a file without an owner stay stored and

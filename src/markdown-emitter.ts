@@ -75,7 +75,7 @@ export function withGromaCode(source: string, code: CodeReference[]): string {
 
 export function withGromaField(
   source: string,
-  field: 'group' | 'parent' | 'draft' | 'technology',
+  field: 'id' | 'group' | 'parent' | 'draft' | 'technology',
   value: string | undefined,
 ): string {
   return withGromaChange(source, groma => {
