@@ -57,7 +57,11 @@ export interface ScanOperation {
   /** Inclusive 1-based lines; required when tokens are present. */
   startLine?: number
   endLine?: number
-  /** Binding-normalized tokens for this operation body. Fingerprinting belongs to core. */
+  /**
+   * Binding-normalized tokens for this operation body. Fingerprinting belongs to core.
+   * The compared operations rule in `docs/architecture-findings.md#compared-operations` states which
+   * operations carry tokens, so a scanner tokenizes no anonymous callback and filters no body by size.
+   */
   tokens?: string[]
 }
 

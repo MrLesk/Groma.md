@@ -81,10 +81,44 @@ test.concurrent('renamed copies match exactly and keep owner identity', () => {
   expect(findings[0]!.instances.map(instance => instance.owner).sort()).toEqual(['ready-a', 'ready-b'])
   expect(findingsForOwner(findings, 'ready-a')).toEqual(findings)
   expect(findingsForOwner(findings, 'other')).toEqual([])
-  const copies = copiesOf(findings, 'src/a.ts', 'canStart', 1)
+  const copies = copiesOf(findings, 'src/a.ts', 1)
   expect(copies?.similar).toBe(false)
   expect(copies?.copies.map(instance => instance.name)).toEqual(['readyToRun'])
-  expect(copiesOf(findings, 'src/t.ts', 'total', 1)).toBeUndefined()
+  expect(copiesOf(findings, 'src/t.ts', 1)).toBeUndefined()
+})
+
+test.concurrent('a code row takes the copies of the operation whose range holds its line', () => {
+  const findings = detectDuplicatedLogic([observation([
+    operation('src/Launch.php', 'Launch\\Schedule::canStart', ruleTokens, 10),
+    operation('src/Orders.php', 'Shop\\OrderService::store', ruleTokens, 4),
+  ])], new Map<string, string>())
+  // A row carries the member's own name, never the qualified one a scanner reports, so only the
+  // range joins them. The declared name sits on the operation's first line or below it.
+  expect(copiesOf(findings, 'src/Launch.php', 11)?.copies.map(instance => instance.name)).toEqual(['Shop\\OrderService::store'])
+  expect(copiesOf(findings, 'src/Orders.php', 4)?.copies.map(instance => instance.name)).toEqual(['Launch\\Schedule::canStart'])
+  expect(copiesOf(findings, 'src/Launch.php', 20)).toBeUndefined()
+})
+
+test.concurrent('a row inside nested operations takes the copies of the innermost one only', () => {
+  const priceTokens = [
+    'const', '$0', '=', '$1', '.items', '.map', 'call', 'fn', '$2', '$2', '.price', '*', '$2',
+    '.count', 'return', '$0', '.reduce', 'call', 'fn', '$3', '$4', '+', '$3', '$4', '0',
+  ]
+  const ranged = (file: string, name: string, startLine: number, endLine: number, tokens: string[]): ScanOperation => {
+    return { id: `${file}#${name}`, file, name, startLine, endLine, tokens }
+  }
+  const findings = detectDuplicatedLogic([observation([
+    ranged('src/report.py', 'Report.render', 1, 40, ruleTokens),
+    ranged('src/summary.py', 'Summary.render', 1, 40, ruleTokens),
+    ranged('src/report.py', 'Report.render.price', 10, 20, priceTokens),
+    ranged('src/price.py', 'estimate', 2, 12, priceTokens.filter(token => token !== '.count')),
+  ])], new Map<string, string>())
+  const inner = copiesOf(findings, 'src/report.py', 12)
+  expect(inner?.copies.map(instance => instance.name)).toEqual(['estimate'])
+  expect(inner?.similar).toBe(true)
+  const enclosing = copiesOf(findings, 'src/report.py', 5)
+  expect(enclosing?.copies.map(instance => instance.name)).toEqual(['Summary.render'])
+  expect(enclosing?.similar).toBe(false)
 })
 
 test.concurrent('a missing predicate is a similar finding with a concrete difference', () => {

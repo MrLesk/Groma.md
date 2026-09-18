@@ -54,32 +54,58 @@ export interface OperationCopies {
   copies: ArchitectureFindingInstance[]
 }
 
-function sameInstance(instance: ArchitectureFindingInstance, file: string, name: string, line: number): boolean {
-  return instance.file === file && instance.name === name && instance.startLine === line
+/**
+ * Whether this instance's source range holds the line. Names cannot join them: a scanner may
+ * qualify an operation by its type, as in `Shop\OrderService::store`, while the code listing shows
+ * the member's own name.
+ */
+function holdsLine(instance: ArchitectureFindingInstance, file: string, line: number): boolean {
+  return instance.file === file && instance.startLine <= line && line <= instance.endLine
 }
 
-/** Other locations that look like this operation. Undefined when it has no copies. */
+function span(instance: ArchitectureFindingInstance): number {
+  return instance.endLine - instance.startLine
+}
+
+interface FoundOperation {
+  finding: ArchitectureFinding
+  instance: ArchitectureFindingInstance
+}
+
+/** The operation written at the line: the innermost range holding it, since operations nest. */
+function operationAt(
+  findings: readonly ArchitectureFinding[],
+  file: string,
+  line: number,
+): FoundOperation | undefined {
+  let found: FoundOperation | undefined
+  for (const finding of findings) {
+    for (const instance of finding.instances) {
+      if (!holdsLine(instance, file, line)) continue
+      if (found === undefined || span(instance) < span(found.instance)) found = { finding, instance }
+    }
+  }
+  return found
+}
+
+/** Other locations that look like the operation at this line. Undefined when it has no copies. */
 export function copiesOf(
   findings: readonly ArchitectureFinding[],
   file: string,
-  name: string,
   line: number,
 ): OperationCopies | undefined {
+  const found = operationAt(findings, file, line)
+  if (found === undefined) return undefined
   const copies: ArchitectureFindingInstance[] = []
   const seen = new Set<string>()
-  let similar = false
-  for (const finding of findings) {
-    if (!finding.instances.some(instance => sameInstance(instance, file, name, line))) continue
-    if (finding.match === 'similar') similar = true
-    for (const instance of finding.instances) {
-      if (sameInstance(instance, file, name, line)) continue
-      const key = `${instance.file}:${instance.startLine}:${instance.name}`
-      if (seen.has(key)) continue
-      seen.add(key)
-      copies.push(instance)
-    }
+  for (const instance of found.finding.instances) {
+    if (instance === found.instance) continue
+    const key = `${instance.file}:${instance.startLine}:${instance.name}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    copies.push(instance)
   }
-  return copies.length === 0 ? undefined : { similar, copies }
+  return copies.length === 0 ? undefined : { similar: found.finding.match === 'similar', copies }
 }
 
 /** One item per reportable finding: its first instance, the possible duplicates, and whether they differ. */
