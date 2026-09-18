@@ -15,6 +15,11 @@ project build were installed or run.
   47 files.
 - `groma lint` reported 32 findings in that project's JavaScript, including a
   JSON helper copied between two `.cjs` files.
+- All three `fetch` calls in its authored JavaScript were reported: a URL a local
+  variable computes as unknown, a literal `/api/v1/status`, and a configured
+  `/health/live` following `API_CONFIG.BASE_URL`. Its other calls go through a
+  local helper, which is unsupported, and its JavaScript declares no endpoint, so
+  no HTTP row was derived there.
 - Each scan of the whole project finished in under a second.
 
 The minified rules were measured against 137 authored candidate files in four
@@ -32,10 +37,16 @@ script visibility rules, including a CommonJS file that publishes a function val
 and keeps its own helpers private; `javascript-parity` verifies that one body
 tokenizes identically under this scanner and the TypeScript scanner;
 `javascript-duplicates` verifies the identical and near-duplicate bodies
-`groma lint` reports and the callbacks and recursive namesakes it does not. The packaged check runs with only Git on PATH and with
-JavaScript network access blocked. The repository check passes.
+`groma lint` reports and the callbacks and recursive namesakes it does not;
+`javascript-http` verifies each supported client and router, including the jQuery
+ajax helpers and a Koa router's own and nested prefixes, the configured, dynamic
+and unknown request paths, every construct that reports nothing, and the rows core
+derives from those facts. The packaged check runs with
+only Git on PATH and with JavaScript network access blocked. The repository check
+passes.
 
 Module loading, dynamic dispatch, external symbols and framework wiring remain
-unresolved, and declared HTTP facts are not read yet. Their names alone do not
-establish C4 collaborations or shared component ownership. See
+unresolved, and the HTTP facts cover the clients and routers
+[the scanner page lists](index.md#http-facts). Names alone do not establish C4
+collaborations or shared component ownership. See
 [supported evidence](index.md).

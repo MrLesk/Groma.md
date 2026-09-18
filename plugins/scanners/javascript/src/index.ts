@@ -2,6 +2,7 @@ import path from 'node:path'
 import { createScanObservation, type ScannerPlugin } from '@groma/scanner'
 import ts from 'typescript'
 import { javaScriptEvidence } from './evidence.ts'
+import { javaScriptHttpFacts } from './http.ts'
 import { readJavaScriptOutline } from './outline.ts'
 import { javaScriptSources, type JavaScriptSource } from './sources.ts'
 
@@ -24,13 +25,20 @@ export default {
   async scan(root) {
     const sources = await javaScriptSources(root)
     if (!sources.length) return undefined
-    const evidence = sources.map(source => ({ file: source.file, ...javaScriptEvidence(source.file, parse(source)) }))
+    // The HTTP facts name operations, so they are read before the observation collects them.
+    const scanned = sources.map(source => {
+      const parsed = parse(source)
+      const evidence = javaScriptEvidence(source.file, parsed)
+      return { file: source.file, evidence, facts: javaScriptHttpFacts(parsed, evidence) }
+    })
     return createScanObservation({
       scanner: { id: 'javascript', technology: 'javascript', engine: 'typescript-sdk', engineVersion: ts.version },
       roots: [{ id: 'javascript-source', kind: 'source-group', name: path.basename(root) }],
-      files: evidence.map(file => ({ file: file.file, symbols: file.symbols, roots: ['javascript-source'] })),
-      operations: evidence.flatMap(file => file.operations),
-      invocations: evidence.flatMap(file => file.invocations),
+      files: scanned.map(({ file, evidence }) => ({ file, symbols: evidence.symbols, roots: ['javascript-source'] })),
+      operations: scanned.flatMap(({ evidence }) => evidence.operations),
+      invocations: scanned.flatMap(({ evidence }) => evidence.invocations),
+      httpEndpoints: scanned.flatMap(({ facts }) => facts.httpEndpoints),
+      httpRequests: scanned.flatMap(({ facts }) => facts.httpRequests),
       diagnostics: [{ severity: 'info', code: 'JAVASCRIPT_SOURCE_SCOPE',
         message: 'Source syntax only. Module loading, dynamic dispatch, framework wiring and external symbols remain unresolved.' }],
     })

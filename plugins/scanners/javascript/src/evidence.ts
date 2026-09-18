@@ -10,6 +10,10 @@ export interface FileEvidence {
   symbols: ScanSymbol[]
   operations: ScanOperation[]
   invocations: ScanInvocation[]
+  /** Every call this file makes, in source order, for the producers that read call arguments. */
+  calls: ts.CallExpression[]
+  /** The operation that runs a node: the nearest enclosing function, else the module itself. */
+  operationAt(node: ts.Node): string
 }
 
 /** Functions, function literals and methods with a body. Constructors and accessors carry no evidence. */
@@ -44,6 +48,8 @@ function comparableName(node: ts.Node): string | undefined {
 export function javaScriptEvidence(file: string, source: ts.SourceFile): FileEvidence {
   const operations: ScanOperation[] = []
   const invocations: ScanInvocation[] = []
+  const calls: ts.CallExpression[] = []
+  const owners = new Map<ts.Node, string>()
   const lineOf = (position: number) => source.getLineAndCharacterOfPosition(position).line + 1
   let moduleCode: ScanOperation | undefined
 
@@ -55,6 +61,7 @@ export function javaScriptEvidence(file: string, source: ts.SourceFile): FileEvi
       : { startLine: lineOf(position), endLine: lineOf(node.end), tokens: tokenizeOperation(node) }
     const recorded = { id: `${file}#${position}`, file, name: name ?? '(anonymous)', position, ...body }
     operations.push(recorded)
+    owners.set(node, recorded.id)
     return recorded
   }
 
@@ -77,13 +84,24 @@ export function javaScriptEvidence(file: string, source: ts.SourceFile): FileEvi
 
   function visit(node: ts.Node, owner: ScanOperation | undefined): void {
     const inside = executable(node) ? operation(node) : owner
-    if (ts.isCallExpression(node)) invocation(node, inside ?? moduleOperation())
+    if (ts.isCallExpression(node)) {
+      calls.push(node)
+      invocation(node, inside ?? moduleOperation())
+    }
     node.forEachChild(child => visit(child, inside))
+  }
+
+  function operationAt(node: ts.Node): string {
+    for (let current: ts.Node | undefined = node; current; current = current.parent) {
+      const id = owners.get(current)
+      if (id !== undefined) return id
+    }
+    return moduleOperation().id
   }
 
   source.forEachChild(child => visit(child, undefined))
   // A Code reference names a declaration, so each name is one symbol even when the file repeats it.
   const symbols = new Map(topLevelDeclarations(source)
     .map(declaration => [`${file}#${declaration.name}`, { id: `${file}#${declaration.name}`, ...declaration }] as const))
-  return { symbols: [...symbols.values()], operations, invocations }
+  return { symbols: [...symbols.values()], operations, invocations, calls, operationAt }
 }
