@@ -188,7 +188,7 @@ async function scanReactProject(projectRoot: string, root: string) {
   const { manifest, program, owned, sources, routes, routers } = project
   const evidence = new Evidence(root, program.getTypeChecker(), sources)
   for (const source of sources) evidence.inspect(source)
-  const httpRequests = reactHttpRequests(sources, owned, program.getTypeChecker(), call => {
+  const httpRequests = await reactHttpRequests(sources, owned, program.getTypeChecker(), call => {
     const operation = caller(call)
     return operation === undefined ? undefined : evidence.operationId(operation)
   })

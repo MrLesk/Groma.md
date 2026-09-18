@@ -1,0 +1,6 @@
+import { fetch } from 'undici'
+
+// A `fetch` imported from a package is that package's function, not the runtime's client.
+export function viaUndici() {
+  return fetch('/api/undici')
+}

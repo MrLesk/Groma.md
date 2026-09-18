@@ -54,6 +54,10 @@ test.concurrent('the built Vue package reports Nuxt and axios requests, includin
   try {
     const observation = (await scanner.scan(root))!
 
+    // A `get` on another object, a reassigned axios instance, a helper's caller, a project's own
+    // `useFetch` composable, a `fetch` imported from a package, and the named axios exports
+    // `isAxiosError` and `post` report nothing, so `stored`, `reassigned`, `viaHelper`, `wrapped`,
+    // `viaUndici`, `checked` and `named` send nothing.
     expect(requests(observation)).toEqual([
       // A single-file component's script block reports its own file and lines.
       // A component's own setup code runs the request its module operation names.
@@ -98,9 +102,6 @@ test.concurrent('the built Vue package reports Nuxt and axios requests, includin
       // Options the scanner cannot read leave the method out instead of claiming GET, and may hold a base.
       'web/client.ts#unresolved no-method /<unknown>/api/talks',
     ])
-    // A `get` on another object, a reassigned axios instance, a helper's caller, a project's own
-    // `useFetch` composable, and the named axios exports `isAxiosError` and `post` report nothing.
-    expect(requests(observation).some(request => /#(stored|reassigned|viaHelper|wrapped|checked|named) /.test(request))).toBe(false)
   } finally { await rm(temporary, { recursive: true, force: true }) }
 }, 120000)
 

@@ -88,26 +88,27 @@ serves nothing.
 
 | Construct | Reported |
 | --- | --- |
-| `fetch(url, init)` | Request; a literal `method` gives the method, no options means `GET`, and options the scanner cannot read leave it out |
+| `fetch(url, init)`, including a `node-fetch` default import | Request; a literal `method` gives the method, no options means `GET`, and options the scanner cannot read leave it out |
 | `axios.get`, `.post`, `.put`, `.patch`, `.delete`, `.head`, `.options` | Request with that method |
 | `axios(config)`, `axios.request(config)` | Request from the config's `url`; its `method`, else the client's, else `GET` |
 | `axios.create(config)` instances | Request whose path follows the config's `baseURL`, and whose method defaults to the config's |
 | `app/**/route.ts` | Endpoint per exported `GET`, `POST`, `PUT`, `PATCH`, `DELETE`, `HEAD` or `OPTIONS` handler, at the route's directory path |
 | `pages/api/**` | Endpoint for the default export, which answers every method, so `*` |
 
-`fetch` counts only when the project does not declare it, and an `axios` client
-counts only when its name is the `axios` default import, or a variable the
-project never assigns again holding `require('axios')` or `axios.create(...)`
-called on it, so `isAxiosError`, a named `post` import and a `get` on any other
-object are never requests. Options are read as values are, as decision 5
-describes, so a changed, duplicated or computed option is never taken for the
-literal it once held. An option object the scanner cannot read leaves the method
-out instead of claiming `GET`, and for axios leaves the base unknown too. A
-`fetch` input that is not a URL, such as a `Request`, carries a method of its
-own, so the fact states none. A request's own `baseURL`, in its config or in the
-configuration argument of a shorthand, which a `post`, `put` or `patch` takes
-third, replaces the client's. A base joins a relative path with one slash, and
-an absolute URL replaces it.
+`fetch` counts when it is the runtime's, which the project neither declares nor
+imports, or the default export of `node-fetch`, so a `fetch` the project exports
+from its own module is that function. An `axios` client counts only when its
+name is the `axios` default import, or a variable the project never assigns
+again holding `require('axios')` or `axios.create(...)` called on it, so
+`isAxiosError`, a named `post` import and a `get` on any other object are never
+requests. Options are read as values are, as decision 5 describes, so a changed,
+duplicated or computed option is never taken for the literal it once held. An
+option object the scanner cannot read leaves the method out instead of claiming
+`GET`, and for axios leaves the base unknown too. A `fetch` input that is not a
+URL, such as a `Request`, carries a method of its own, so the fact states none.
+A request's own `baseURL`, in its config or in the configuration argument of a
+shorthand, which a `post`, `put` or `patch` takes third, replaces the client's.
+A base joins a relative path with one slash, and an absolute URL replaces it.
 
 A client's `defaults` count too: exactly one assignment to `defaults.baseURL` or
 `defaults.method` anywhere in the project sets it, and more than one, or any other

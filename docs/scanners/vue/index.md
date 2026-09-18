@@ -127,38 +127,18 @@ there.
 | `server/api/**` | Endpoint at `/api/...`, with the method its file name states |
 | `server/routes/**` | Endpoint at the path after `server/routes`, with the method its file name states |
 
-`fetch` counts unless the project declares a `fetch` of its own. `$fetch` and
-`useFetch` must resolve to a declaration outside the project source, such as an
-installed package's types, so a project's own `useFetch` composable, whose body
-decides the URL, is never read as Nuxt's; a project scanned without its
-dependencies installed therefore reports no `$fetch` or `useFetch` request. An
-`axios` client counts only when its name is the `axios` default import, or a
-variable the project never assigns again holding `require('axios')` or
-`axios.create(...)` called on it, so `isAxiosError`, a named `post` import and a
-`get` on any other object are never requests. Options are read as values are, as
-decision 5 describes, so a changed, duplicated or computed option is never taken
-for the literal it once held. An option object the scanner cannot read leaves
-the method out instead of claiming `GET`, and for axios leaves the base unknown
-too. A `fetch`, `$fetch` or `useFetch` input that is not a URL, such as a
-`Request`, carries a method of its own, so the fact states none. A request's own
-`baseURL`, in its config or in the configuration argument of a shorthand, which
-a `post`, `put` or `patch` takes third, replaces the client's. A base joins a
-relative path with one slash, and an absolute URL replaces it. `$fetch` and
-`useFetch` read their `baseURL` option the same way, except that, as ofetch
-does, they keep a URL whose text already starts with a literal base followed by
-`/`, `?` or its end; where that boundary falls on a computed part, the path
-starts unknown.
-
-A client's `defaults` count too: exactly one assignment to `defaults.baseURL` or
-`defaults.method` anywhere in the project sets it, and more than one, or any other
-change to `defaults` itself or to those two properties, hides both. An instance
-without a base of its own copies the default client's when it is created, which
-the scan cannot order, so a base assigned to `axios.defaults` leaves the
-instance's unknown. These are accepted risks: the one assignment is taken to run
-before every request, although a test file or a function that runs only
-sometimes may make it, and interceptors, code a client is handed to, a re-exported
-default client, an alias such as `const alias = api`, and a destructured
-`defaults` are not read.
+`fetch` counts when it is the runtime's or the default export of `node-fetch`,
+as on the React page. `$fetch` and `useFetch` must resolve to a declaration
+outside the project source, such as an installed package's types, so a project's
+own `useFetch` composable, whose body decides the URL, is never read as Nuxt's;
+a project scanned without its dependencies installed therefore reports no
+`$fetch` or `useFetch` request. They read their `baseURL` option as axios reads
+a request's own, except that, as ofetch does, they keep a URL whose text already
+starts with a literal base followed by `/`, `?` or its end; where that boundary
+falls on a computed part, the path starts unknown. Everything else, from the
+axios clients and their `defaults` to the options, the `fetch` inputs and the
+bases, follows the rules of the [React
+scanner](../react/index.md#http-endpoints-and-requests).
 
 The endpoints need the project to declare `nuxt`: another server that happens to
 live in `server/` serves paths of its own, which these locations would misstate.
@@ -181,21 +161,9 @@ The [producer decisions](../evidence.md#producer-checklist) for this ecosystem:
 4. **Local helpers.** Not supported: the URL is read at the client call, so a
    helper that forwards a path parameter reports unknown text, and its callers
    report nothing. Author those rows.
-5. **Bases.** A root-relative literal path has no base. A variable with a
-   literal initializer that the project never assigns again is literal text. So
-   is a property of an object literal such a variable holds: the last property
-   with its name, while the literal has no spread, computed key or accessor, and
-   no code in the project assigns or deletes that property or an object above
-   it, hands one of them to other code, or calls a method through them, and no
-   module object holding it, such as a namespace import, a re-exported namespace
-   or a dynamic import's result, is used other than to read one export by name.
-   A value the scanner cannot see, such as an ambient declaration,
-   `process.env`, `import.meta.env` or a constant imported from a package, sets
-   `configured`, and so does a field read through `this`, which holds the
-   client's own base setting. Text that continues a configured value's last
-   segment instead of starting with `/` is unknown. A literal host, also when
-   literal pieces only state it together, a parameter, a value a call returns,
-   and any other computed value report a leading unknown segment.
+5. **Bases.** The [React
+   scanner's](../react/index.md#http-endpoints-and-requests) decision 5 holds
+   unchanged.
 6. **File-location routes.** A route file's path after `server/` is its served
    path, read as Nitro names its routes: a route group directory such as
    `(admin)` serves no segment, an environment suffix such as `.prod` and then a

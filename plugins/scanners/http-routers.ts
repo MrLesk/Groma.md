@@ -1,26 +1,18 @@
-import type { Held, ImportOrigin } from './http-syntax.ts'
-import type { UrlPart } from './http-url.ts'
+import type { Node, TextNode } from './http-syntax.ts'
+import { declarationOf, heldAt, importOrigin, literalText, unassigned, type UrlCompiler, type UrlContext } from './http-values.ts'
 
 /*
  * The routers of the TypeScript family, read the same way under every compiler: the Express, Fastify,
  * Hono and Koa instances the sources create, the calls that register routes on them, the references
  * that hand them to code the scan does not read, and the order all of those run in. The TypeScript
- * scanner answers RouterContext with the native SDK's asynchronous checker over the program, and the
- * JavaScript scanner with the classic compiler over one file. ./http-routes.ts turns them into
- * endpoints.
+ * scanner reads them with the native SDK over the program, and the JavaScript scanner with the classic
+ * compiler over one file. ./http-routes.ts turns them into endpoints.
  */
 
-export interface Node {
-  kind: number
-  parent: Node
-  getStart(): number
-  getSourceFile(): object
-}
-interface TextNode extends Node { text: string }
 export interface Call extends Node { expression: Node; arguments: readonly Node[] }
 interface Construction extends Node { expression: Node; arguments?: readonly Node[] }
 interface Access extends Node { expression: Node; name: TextNode }
-interface Variable extends Node { name: Node; initializer?: Node; parent: Node & { parent: Node & { modifiers?: readonly { kind: number }[] } } }
+interface Variable extends Node { name: Node; initializer?: Node; parent: Node & { flags: number; parent: Node & { modifiers?: readonly { kind: number }[] } } }
 interface Binary extends Node { left: Node; right: Node; operatorToken: { kind: number } }
 interface ArrayLiteral extends Node { elements: readonly Node[] }
 
@@ -46,9 +38,9 @@ export interface RouterCompiler {
 
 export type Framework = 'express' | 'fastify' | 'hono' | 'koa'
 
-/** What a scanner answers about its sources. */
-export interface RouterContext {
-  ts: RouterCompiler
+/** What a scanner's router reading needs beyond its readers' shared context. */
+export interface RouterContext extends UrlContext {
+  ts: UrlCompiler & RouterCompiler
   /** The frameworks the scanner recognizes. */
   frameworks: ReadonlySet<Framework>
   /**
@@ -56,19 +48,6 @@ export interface RouterContext {
    * never sees the files that import it.
    */
   exportsEscape: boolean
-  declarationOf(node: Node): Promise<Node | undefined>
-  /** Whether nothing in the sources declares a name, so the runtime provides it. */
-  global(node: Node): Promise<boolean>
-  importOrigin(node: Node): Promise<ImportOrigin | undefined>
-  /** Whether a variable keeps its initializer: a `const`, or one declared once and never assigned again. */
-  unassigned(declaration: Node): Promise<boolean>
-  /** The names that stand for a variable, directly or through an import. */
-  references(declaration: Node): Promise<Node[]>
-  heldAt(node: Node, ...path: string[]): Promise<Held<Node>>
-  /** The properties of the object literal an expression certainly holds; undefined when it states a key the scan cannot read. */
-  objectEntries(node: Node): Promise<Map<string, Node> | undefined>
-  urlParts(node: Node): Promise<UrlPart[]>
-  literalText(node: Node | undefined): Promise<string | undefined>
   /** The operation serving a route: its resolved handler when certain, else the registering operation. */
   handlerOperation(handler: Node | undefined, registration: Node): Promise<string>
   /** The operation that runs this node. */
@@ -143,9 +122,9 @@ const constructors = new Map<string, Record<string, Built>>([
 async function routerPrefix(initializer: Construction, context: RouterContext): Promise<string | undefined> {
   const [options] = initializer.arguments ?? []
   if (options === undefined) return ''
-  const prefix = await context.heldAt(options, 'prefix')
+  const prefix = await heldAt(context, options, 'prefix')
   if (prefix === 'absent') return ''
-  return typeof prefix === 'object' ? context.literalText(prefix.node) : undefined
+  return typeof prefix === 'object' ? literalText(context, prefix.node) : undefined
 }
 
 async function built(found: Built | undefined, initializer: Construction, context: RouterContext): Promise<Registrar | undefined> {
@@ -159,11 +138,11 @@ async function registrarOf(initializer: Node, context: RouterContext): Promise<R
   if (!ts.isCallExpression(initializer) && !ts.isNewExpression(initializer)) return undefined
   const callee = initializer.expression
   if (ts.isPropertyAccessExpression(callee)) {
-    const holder = await context.importOrigin(callee.expression)
+    const holder = await importOrigin(context, callee.expression)
     const router = holder?.module === 'express' && callee.name.text === 'Router'
     return built(router ? constructors.get('express')!.Router : undefined, initializer, context)
   }
-  const origin = await context.importOrigin(callee)
+  const origin = await importOrigin(context, callee)
   return built(origin === undefined ? undefined : constructors.get(origin.module)?.[origin.name], initializer, context)
 }
 
@@ -184,7 +163,7 @@ async function collectRegistrars(sources: readonly Node[], context: RouterContex
   const registrars = new Map<Node, Registrar>()
   for (const declaration of declarations) {
     const registrar = await registrarOf(declaration.initializer!, context)
-    if (registrar !== undefined && await context.unassigned(declaration)) registrars.set(declaration, registrar)
+    if (registrar !== undefined && await unassigned(context, declaration)) registrars.set(declaration, registrar)
   }
   return registrars
 }
@@ -231,7 +210,7 @@ async function receiverDeclaration(
     return returnsRegistrar(receiver, member, registrars.get(declaration)!.framework) ? declaration : undefined
   }
   if (receiver === undefined || !ts.isIdentifier(receiver)) return undefined
-  const declaration = await context.declarationOf(receiver)
+  const declaration = await declarationOf(context, receiver)
   return declaration !== undefined && registrars.has(declaration) ? declaration : undefined
 }
 
@@ -260,7 +239,7 @@ async function applyPrefixes(calls: readonly Call[], registrars: Map<Node, Regis
     const declaration = await receiverDeclaration(call, registrars, context)
     const registrar = declaration === undefined ? undefined : registrars.get(declaration)
     if (registrar?.framework !== 'koa' || registrar.kind !== 'router') continue
-    const stated = await context.literalText(call.arguments[0])
+    const stated = await literalText(context, call.arguments[0])
     registrars.set(declaration!, { ...registrar, own: registrar.own === '' ? stated : undefined })
   }
 }
@@ -327,10 +306,10 @@ async function serving(reference: Node, context: RouterContext): Promise<boolean
   if (!ts.isCallExpression(parent) || !parent.arguments.some(argument => argument === reference)) return false
   const callee = parent.expression
   if (ts.isPropertyAccessExpression(callee)) {
-    const holder = await context.importOrigin(callee.expression)
+    const holder = await importOrigin(context, callee.expression)
     return callee.name.text === 'createServer' && httpModules.has(holder?.module ?? '')
   }
-  const origin = await context.importOrigin(callee)
+  const origin = await importOrigin(context, callee)
   if (origin === undefined) return false
   return origin.name === 'serve' || (origin.name === 'createServer' && httpModules.has(origin.module))
 }
@@ -372,7 +351,7 @@ async function collectEscapes(
   for (const declaration of registrars.keys()) {
     if (context.exportsEscape && exportedDeclaration(context.ts, declaration)) escapes.push({ reference: declaration, declaration, last: true })
     const files = registeringFiles(declaration, registrations)
-    for (const reference of await context.references(declaration)) {
+    for (const reference of await context.bindings.references(declaration)) {
       const found = files.has(reference.getSourceFile()) ? await escapeAt(reference, declaration, mounts, context) : undefined
       if (found !== undefined) escapes.push(found)
     }
@@ -419,7 +398,7 @@ export interface Registrations {
 
 /** The registrars the sources create, what the calls register on them, and in what order. */
 export async function routerRegistrations(
-  sources: readonly Node[], calls: readonly Call[], context: RouterContext,
+  context: RouterContext, sources: readonly Node[], calls: readonly Call[],
 ): Promise<Registrations> {
   const registrars = await collectRegistrars(sources, context)
   await applyPrefixes(calls, registrars, context)

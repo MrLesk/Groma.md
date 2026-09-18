@@ -157,7 +157,7 @@ async function scanAngularProject(projectRoot: string, root: string): Promise<Sc
   const components = sources.flatMap(source => source.statements.filter(ts.isClassDeclaration)
     .flatMap(node => sourceComponent(node, checker) ?? []))
   for (const component of components) inspectTemplate(root, component, components, checker, evidence)
-  const httpRequests = angularHttpRequests(sources, checker, call => {
+  const httpRequests = await angularHttpRequests(sources, checker, call => {
     const caller = enclosingOperation(call)
     return caller === undefined ? undefined : evidence.operationId(caller)
   })

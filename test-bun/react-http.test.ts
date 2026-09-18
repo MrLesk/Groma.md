@@ -49,6 +49,10 @@ test.concurrent('the built React package reports fetch and axios requests', asyn
   try {
     const observation = (await scanner.scan(root))!
 
+    // A project-declared `fetch`, one the project imports from its own module or a package other than
+    // `node-fetch`, a `get` on any other object, a reassigned axios instance, and the named axios exports
+    // `isAxiosError` and `post` are not clients, so `shadowed`, `wrapped`, `required`, `stored`,
+    // `reassigned`, `checked` and `named` send nothing.
     expect(requests(observation)).toEqual([
       // A URL that replaces a base stating a host is its own URL, and a host is never path text.
       'absoluteOverBase GET /<unknown>/talks',
@@ -125,9 +129,6 @@ test.concurrent('the built React package reports fetch and axios requests', asyn
       'viaOtherFile no-method /<unknown>',
       'viaReexport no-method /<unknown>',
     ])
-    // A project-declared `fetch`, a `get` on any other object, a reassigned axios instance, and the
-    // named axios exports `isAxiosError` and `post` are not clients.
-    expect(requests(observation).some(request => /^(shadowed|stored|reassigned|checked|named) /.test(request))).toBe(false)
   } finally { await rm(temporary, { recursive: true, force: true }) }
 }, 120000)
 
@@ -213,6 +214,8 @@ test.concurrent('an axios client is configured by what the project sets on its d
       // and one in another file sets its base.
       'sharedCall GET /<unknown>/talks',
       'statedCall GET /api/talks',
+      // Two assignments to one setting leave it unknown.
+      'twiceCall GET /<unknown>/talks',
     ])
   } finally { await rm(temporary, { recursive: true, force: true }) }
 }, 120000)

@@ -1,0 +1,4 @@
+import fetch = require('undici')
+
+// A `fetch` loaded from a package other than `node-fetch` is that package's function.
+export const required = () => fetch('/api/required')
