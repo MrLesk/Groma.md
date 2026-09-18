@@ -75,9 +75,15 @@ function reaches(head: HttpEndpointSegment, segment: KnownSegment, reach: Reach)
   return !head.constrained || reach === 'possibly' || (reach === 'certainly' && segment.kind === 'dynamic')
 }
 
+/** A constrained catch-all accepts only some remainders and may stand for routes a scanner could not read. */
+function constrainedCatchAll(segment: HttpEndpointSegment | undefined): boolean {
+  return segment?.kind === 'catch-all' && segment.constrained === true
+}
+
 /**
  * A leading literal only one side states is removable when both sides then continue with the same
- * literal. The result names the side and the removed text, since each is a different deployment.
+ * literal, or when the endpoint possibly continues with a constrained catch-all. The result names
+ * the side and the removed text, since each is a different deployment.
  */
 function removedPrefix(
   side: 'request' | 'endpoint',
@@ -86,8 +92,11 @@ function removedPrefix(
   requestNext: KnownSegment | undefined,
   reach: Reach,
 ): string | undefined {
-  if (prefix?.kind !== 'literal' || endpointNext?.kind !== 'literal' || requestNext === undefined) return undefined
-  return reaches(endpointNext, requestNext, reach) ? `${side} ${prefix.value.toLowerCase()}` : undefined
+  if (prefix?.kind !== 'literal' || requestNext === undefined) return undefined
+  const continues = endpointNext?.kind === 'literal'
+    ? reaches(endpointNext, requestNext, reach)
+    : reach === 'possibly' && constrainedCatchAll(endpointNext)
+  return continues ? `${side} ${prefix.value.toLowerCase()}` : undefined
 }
 
 /** How an endpoint matched a request. */
@@ -190,6 +199,20 @@ function ownApplicationCatchAlls(found: readonly Match[]): readonly Match[] {
   return found.filter(match => !rootCatchAll(match) || direct.has(applicationKey(match.endpoint)))
 }
 
+/** A match that removed the literal before a constrained catch-all, which accepts any remainder. */
+function removedBeforeCatchAll(match: Match): boolean {
+  return match.possibleRank.removed.startsWith('endpoint') && match.endpoint.path[1]?.kind === 'catch-all'
+}
+
+/**
+ * Removing the literal before a constrained catch-all fits any request, so it shows no deployment
+ * of its own. Such a match counts only under a deployment another match assumes.
+ */
+function assumedDeployments(found: readonly Match[]): readonly Match[] {
+  const assumed = new Set(found.filter(match => !removedBeforeCatchAll(match)).map(match => match.possibleRank.removed))
+  return found.filter(match => !removedBeforeCatchAll(match) || assumed.has(match.possibleRank.removed))
+}
+
 /**
  * An exact path that needs no catch-all shows the paths are compared as written, so it hides every
  * match that removed a leading segment. Only the remaining matches choose the preference.
@@ -246,15 +269,24 @@ function bestKey(keys: readonly number[][]): number[] | undefined {
 }
 
 /**
+ * A constrained catch-all may stand for routes a scanner saw without knowing their handler files,
+ * so its own file does not show where the request is served.
+ */
+function unattributed(match: Match): boolean {
+  return constrainedCatchAll(match.endpoint.path.at(-1))
+}
+
+/**
  * A router sends a value that equals no literal to the best certain match. Any endpoint another
  * value could reach at least as well also competes, and so may an endpoint with a constrained
  * segment that ranks lower. When a chosen endpoint has a constrained segment, every reachable
  * endpoint competes, because values the constraint rejects go elsewhere. Every competing endpoint
- * must be in the chosen endpoints' file. Unless specificity decides, the router's choice between
- * several certain endpoints is unknown, so exactly one must remain.
+ * must be in the chosen endpoints' file, which a constrained catch-all never proves. Unless
+ * specificity decides, the router's choice between several certain endpoints is unknown, so
+ * exactly one must remain.
  */
 function provider(request: SentRequest, endpoints: readonly ServedEndpoint[]): ServedEndpoint[] {
-  const found = ownApplicationCatchAlls(requestMatches(request, endpoints))
+  const found = assumedDeployments(ownApplicationCatchAlls(requestMatches(request, endpoints)))
   const exact = found.some(({ certainRank }) => certainRank?.removed === '' && !certainRank.throughCatchAll)
   const by = preference(found, exact)
   const key = (endpoint: ServedEndpoint, rank: Rank) => rankKey(endpoint, rank, by, exact)
@@ -266,6 +298,7 @@ function provider(request: SentRequest, endpoints: readonly ServedEndpoint[]): S
     return compareKeys(rank, best) <= 0 || (match.constrained && by === 'specificity' && constraintMayWin(match, rank, best))
   }
   const competing = chosen.some(match => match.constrained) ? found : found.filter(competes)
+  if (competing.some(unattributed)) return []
   const files = new Set([...chosen, ...competing].map(match => match.endpoint.file))
   const labels = new Set(chosen.map(match => pathLabel(match.endpoint)))
   return files.size === 1 && (by === 'specificity' || labels.size === 1) ? chosen.map(match => match.endpoint) : []

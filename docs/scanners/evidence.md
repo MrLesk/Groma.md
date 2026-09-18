@@ -306,9 +306,10 @@ in this order, with its ecosystem's constructs:
    position. A route the scanner sees but cannot read, such as one with an
    unknown handler or an unresolved include or mount, is reported at its
    position as its readable literal prefix followed by a constrained optional
-   catch-all, with method `*`, so no later route of that prefix in another file
-   of that application derives a row. A router that prefers the most specific
-   route, such as Spring or ASP.NET Core, omits `order`.
+   catch-all, with method `*`, so no request under that prefix derives a row
+   to a route registered at or after it in that application. A router that
+   prefers the most specific route, such as Spring or ASP.NET Core, omits
+   `order`.
 
 ## Completion, precision, and uncertainty
 

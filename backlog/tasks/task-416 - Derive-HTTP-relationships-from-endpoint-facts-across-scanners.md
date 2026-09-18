@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@claude'
 created_date: '2026-09-16 19:38'
-updated_date: '2026-09-18 19:29'
+updated_date: '2026-09-18 22:44'
 labels: []
 dependencies: []
 references:
@@ -94,6 +94,10 @@ Review-fix round (Codex and Grok cold reviews of cf8e7975), core slice:
 16. Rust lane finding: a match that reaches the request only through a catch-all (a fallback, a Next.js catch-all page, or a blocker for an unreadable route) speaks only for its own application, keyed by scanner and order application. It is ignored when endpoints of other applications reach the request without a catch-all and none of its own application's do; within one application every rule stays.
 
 17. Java lane evidence: every modeled router prefers a literal segment to any parameter, constrained or not, so under specificity a constrained match that ranks lower competes unless the chosen endpoint has a literal where their segments first differ.
+
+18. JavaScript last check: a blocker's catch-all stands for routes whose handler files the scanner cannot tell, so a competing match whose endpoint ends in a constrained catch-all never shares the chosen endpoint's file and makes core abstain.
+
+19. A configured request under a one-segment blocker: a removed endpoint literal may be followed by a constrained catch-all, but such a match counts only under a deployment another match assumes.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
@@ -233,6 +237,13 @@ Java lane evidence: JHipster's constrained SPA forwards /{path1:[^.]*}/{path2:[^
 Mutation checks: removing the application scoping, dropping every catch-all once a direct match exists, letting constrained matches always compete, or never letting them compete each turn at least one test red. Rules 4 to 6 in docs/relationship-inference.md and evidence.md decision 8 updated. Isolated bun run check exited 0 (Bun 568 passed, 35 skipped, 0 failed; Node 16 passed).
 
 Targeted re-review applied: (1) only a catch-all at the start of the endpoint path drops out across applications (rootCatchAll), because a more specific catch-all such as a /api/:rest*! blocker or a /api/:rest+ proxy dropped beside another scanner's /:category/:slug and gave /api/talks a wrong row; (2) a constrained match also competes when its first constrained segment comes before the first differing key position, because constrained and plain parameters share one score: /api/v/talks with /api/:x/talks in one file and a constrained /api/:y/:z in another gave a wrong row where ASP.NET picks the constrained route; (3) scope renamed applicationKey with a comment on how it differs from application(). Two no-row tests added; mutation check turns each red when its fix is reverted. Rules 4 and 6 reworded. Isolated bun run check exited 0 (Bun 570 passed, 35 skipped, 0 failed; Node 16 passed).
+
+JavaScript last check (reopened): a blocker stands for routes whose handler files the scanner cannot tell, yet core counted it in the file of its registering operation, so app.use('/api', require('./routes/api')) plus app.get('*', spa) in app.js derived a row from the client to app.js for GET /api/talks. A competing match whose endpoint ends in a constrained catch-all (unattributed) now always makes core abstain; it never shares the chosen file. Accepted cost: a real constrained catch-all in the winner's own handler file costs that row (the same-file /files/:dir/:name case moved to the no-row list). Tests: the Express layout derives nothing; a blocker registered after the route in the same file and a blocker beaten by a literal at the first difference still leave the row. Mutation: removing the rule, or applying it to every reachable match, turns tests red. Rule 6 and evidence.md decision 8 say a blocker blocks later routes of its prefix in its application. Isolated bun run check exited 0 (Bun 586 passed, 35 skipped, 0 failed; Node 16 passed).
+
+Targeted review of the unattributed rule applied. Accepted cost: a real constrained catch-all beside the winner in its own handler file, such as a Spring /** beside /api/{id} in one controller, now costs that row. Rule 6 moves the blocker sentence after the sentence that makes it true; evidence.md decision 8 says no request under a blocker's prefix derives a row to a route registered at or after it in that application.
+Configured requests under a one-segment blocker: removedPrefix now also accepts a constrained catch-all after the removed endpoint literal (only as a possible match), so /api/:rest*! at position 0 blocks configured GET /talks reaching /api/talks at position 1 (new no-row test). As first specified this made every one-literal blocker fit every request by removing its own literal, which at HEAD 868da30d dropped PHP rows GET /api/talks/:id and POST /shop/v1/orders/:id (blockers /beta/:path* and others, combined with the rule that a constrained chosen endpoint lets every reachable endpoint compete) and the JavaScript row POST /talks (the express.static blocker /static/:** under the deployment 'endpoint static'). Such a match shows no deployment of its own, so it now counts only under a deployment another match assumes (assumedDeployments). With that, the isolated bun run check at HEAD 868da30d exits 0 (Bun 589 passed, 35 skipped, 0 failed; Node 16 passed) with no producer expectation changed; the new test for the JavaScript layout fails without it. Awaiting orchestrator approval of that narrowing before commit.
+
+Orchestrator approved the narrowing (assumedDeployments). Follow-up, not done: when a chosen endpoint has a constrained segment, the rule that every reachable endpoint competes also reaches matches that exactness hides; limiting it to the chosen endpoint's exactness tier would follow rule 4. It loses rows, never produces wrong ones, and no producer expectation needs it now. Final check: isolated bun run check at HEAD 868da30d exited 0 (Bun 589 passed, 35 skipped, 0 failed; Node 16 passed), with the PHP and JavaScript core-rows expectations unchanged.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
@@ -245,4 +256,6 @@ Review-fix round: two external reviews found paths to wrong permanent rows, all 
 Go re-review round: routers rank constrained segments by their own rules, so a reachable endpoint whose template declares a constraint now competes with the chosen endpoint whatever its specificity, unless registration order puts it after the chosen one; unreadable routes reported as constrained catch-alls at their position block later routes of their prefix. Verified by 79 focused tests and an isolated bun run check (Bun 563 passed, 0 failed; Node 16 passed).
 
 Rust and Java lane rounds: a catch-all at the start of a path (a fallback or a root blocker) speaks only for its own application, so it no longer removes other applications' rows, and a literal segment beats a constrained one under specificity unless a constrained segment comes earlier, which restored callforpapers rows such as /api/account beside JHipster's constrained SPA forwards. Verified by 85 focused tests with mutation checks and an isolated bun run check (Bun 570 passed, 0 failed; Node 16 passed).
+
+Last core round: a competing constrained catch-all never shares the row's file, because it may stand for routes a scanner could not attribute, so the common Express layout with an unresolved mount and a later SPA fallback derives nothing instead of a wrong row; a configured request under a one-segment blocker is blocked when another match removes the same segment. Verified by 90 focused tests with mutation checks and an isolated bun run check at 868da30d (Bun 589 passed, 0 failed; Node 16 passed).
 <!-- SECTION:FINAL_SUMMARY:END -->
