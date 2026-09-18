@@ -241,10 +241,12 @@ this order, with its ecosystem's constructs:
    requests is. A client-side router route, middleware, an interceptor, a proxy
    rule, and a security matcher such as `/api/**` are not. A declarative client
    that shares the server's annotations reports requests.
-3. **Dynamic or unknown.** `` `/talks/${id}` `` fills one whole segment, so it
-   is dynamic. `` `/talks/${id}-${slug}` `` and `` `/talks/${rest}` `` where the
-   value may contain a slash are unknown, as is a path built from an unknown
-   value.
+3. **Dynamic or unknown.** A value that stands between two slashes, or between
+   a slash and the end of the path, is dynamic: `` `/talks/${id}` ``. A value
+   sharing its segment with other text is unknown:
+   `` `/talks/${id}-${slug}` ``, as is a path built from a value the scanner
+   cannot resolve. Do not ask whether a dynamic value could contain a slash at
+   runtime; the segment it is written in decides.
 4. **The local helper.** `get('/talks')` calling a local
    `get(path) { return fetch(base + path) }` reports one request at the caller,
    because the URL and method reach the client unchanged. A helper that edits
