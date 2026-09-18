@@ -52,9 +52,9 @@ function httpFacts(observations: readonly ScanObservation[]): { endpoints: Serve
  * How a request segment may reach an endpoint segment. `possibly` also counts what only some
  * runtime values reach: a dynamic segment equal to a literal, and text a constrained segment may
  * accept. `certainly` lets a dynamic segment fill a constrained parameter, since the source computes
- * it for that route; `freely` does not, which shows whether a certain match depends on a constraint.
+ * it for that route.
  */
-type Reach = 'possibly' | 'certainly' | 'freely'
+type Reach = 'possibly' | 'certainly'
 
 function matches(endpoint: readonly HttpEndpointSegment[], request: readonly KnownSegment[], reach: Reach): boolean {
   const [head, ...rest] = endpoint
@@ -127,7 +127,7 @@ interface Match {
   possibleRank: Rank
   /** How every runtime value reaches it; absent when only some values do. */
   certainRank: Rank | undefined
-  /** The certain match needs a dynamic segment to satisfy a constraint. */
+  /** The endpoint declares a constrained segment, which its router may rank by its own rules. */
   constrained: boolean
 }
 
@@ -138,7 +138,7 @@ function requestMatches(request: SentRequest, endpoints: readonly ServedEndpoint
     const possibleRank = matchRank(endpoint.path, request.path, 'possibly')
     if (possibleRank === undefined) continue
     const certainRank = matchRank(endpoint.path, request.path, 'certainly')
-    const constrained = certainRank !== undefined && matchRank(endpoint.path, request.path, 'freely')?.removed !== certainRank.removed
+    const constrained = endpoint.path.some(segment => segment.kind !== 'literal' && segment.constrained === true)
     found.push({ endpoint, possibleRank, certainRank, constrained })
   }
   return found
@@ -197,8 +197,10 @@ function bestKey(keys: readonly number[][]): number[] | undefined {
 
 /**
  * A router sends a value that equals no literal to the best certain match. Any endpoint another
- * value could reach at least as well also competes, and when that match relies on a constraint,
- * every reachable endpoint does, because values the constraint rejects go elsewhere. Every
+ * value could reach at least as well also competes. Routers rank constraints by their own rules,
+ * so an endpoint with a constrained segment competes whatever its specificity; only a later
+ * registration position rules it out. When a chosen endpoint has a constrained segment, every
+ * reachable endpoint competes, because values the constraint rejects go elsewhere. Every
  * competing endpoint must be in the chosen endpoints' file. Unless specificity decides, the
  * router's choice between several certain endpoints is unknown, so exactly one must remain.
  */
@@ -210,9 +212,11 @@ function provider(request: SentRequest, endpoints: readonly ServedEndpoint[]): S
   const best = bestKey(found.flatMap(({ endpoint, certainRank }) => certainRank ? [key(endpoint, certainRank)] : []))
   if (best === undefined) return []
   const chosen = found.filter(({ endpoint, certainRank }) => certainRank !== undefined && compareKeys(key(endpoint, certainRank), best) === 0)
-  const competing = chosen.some(match => match.constrained)
-    ? found
-    : found.filter(({ endpoint, possibleRank }) => compareKeys(key(endpoint, possibleRank), best) <= 0)
+  const competes = ({ endpoint, possibleRank, constrained }: Match) => {
+    const rank = key(endpoint, possibleRank)
+    return compareKeys(constrained && by === 'specificity' ? rank.slice(0, 1) : rank, best) <= 0
+  }
+  const competing = chosen.some(match => match.constrained) ? found : found.filter(competes)
   const files = new Set([...chosen, ...competing].map(match => match.endpoint.file))
   const labels = new Set(chosen.map(match => pathLabel(match.endpoint)))
   return files.size === 1 && (by === 'specificity' || labels.size === 1) ? chosen.map(match => match.endpoint) : []
