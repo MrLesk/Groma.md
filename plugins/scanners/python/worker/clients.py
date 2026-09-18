@@ -24,48 +24,44 @@ def session_parts(sources, module, value):
 
 
 def client_names(sources, module, operation):
-    """Names that hold a client session here: module constants, then what this operation binds once."""
-    sessions = {}
-    for name, value in module["values"].items():
-        parts = session_parts(sources, module, value)
-        if parts is not None:
-            sessions[name] = parts
+    """Client sessions by name: the module's constants, and the names this operation binds once to a session."""
+    constants = {name: parts for name, value in module["values"].items()
+                 if (parts := session_parts(sources, module, value)) is not None}
     bindings = operation_bindings(operation)
     counts = {}
     for name, _ in bindings:
         counts[name] = counts.get(name, 0) + 1
-    for name, value in bindings:
-        # A name this operation binds more than once, or binds to anything else, holds no known session.
-        parts = session_parts(sources, module, value) if counts[name] == 1 and value is not None else None
-        if parts is None:
-            sessions.pop(name, None)
-        else:
-            sessions[name] = parts
-    return sessions
+    # A name this operation binds more than once, or binds to anything else, holds no known session.
+    own = {name: parts for name, value in bindings
+           if counts[name] == 1 and value is not None and (parts := session_parts(sources, module, value)) is not None}
+    return constants, own
 
 
 def operation_bindings(operation):
-    """What one operation binds: its parameters, and the values its assignments and with items supply."""
+    """(name, value) for every binding in one operation: its parameters and each name its body binds, with the
+    value known only for a plain assignment or with item."""
     args = operation.args
     parameters = [*args.posonlyargs, *args.args, args.vararg, *args.kwonlyargs, args.kwarg]
     bindings = [(item.arg, None) for item in parameters if item is not None]
+    values = {}
     pending = list(operation.body)
     while pending:
         node = pending.pop()
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            continue
-        bindings.extend(bound_values(node))
-        pending.extend(ast.iter_child_nodes(node))
+        # A parent is visited before its targets, so their values are known when they are counted.
+        values.update(bound_values(node))
+        bindings.extend((name, values.get(node)) for name in binding_names(node))
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            pending.extend(ast.iter_child_nodes(node))
     return bindings
 
 
 def bound_values(node):
-    """(name, value) pairs an assignment or with item binds."""
+    """The value a plain assignment or with item gives each Name it binds."""
     if isinstance(node, ast.Assign):
-        return [(target.id, node.value) for target in node.targets if isinstance(target, ast.Name)]
+        return {target: node.value for target in node.targets if isinstance(target, ast.Name)}
     if isinstance(node, ast.withitem) and isinstance(node.optional_vars, ast.Name):
-        return [(node.optional_vars.id, node.context_expr)]
-    return []
+        return {node.optional_vars: node.context_expr}
+    return {}
 
 
 def merged(parts):
@@ -98,7 +94,7 @@ def path_segments(tokens):
     segments = []
     pieces = []
     for token in tokens:
-        if token is COMPUTED:
+        if not isinstance(token, str):
             pieces.append(COMPUTED)
             continue
         text = re.split(r"[?#]", token)
@@ -115,30 +111,41 @@ def path_segments(tokens):
     return segments
 
 
+def from_slash(tokens):
+    """The URL tokens from the first slash on; anything before it continues a base value's last segment."""
+    for index, token in enumerate(tokens):
+        if isinstance(token, str) and "/" in token:
+            return [token[token.index("/"):], *tokens[index + 1:]]
+    return []
+
+
 def request_path(parts):
-    """(configured, segments) of a request URL: an unresolved base becomes a leading unknown segment."""
+    """(configured, segments) of a request URL.
+
+    Only a value read from configuration is a configured base. A host, or a base the scanner can neither resolve
+    nor trace to configuration, such as a parameter, a call or a rebound name, is a leading unknown segment.
+    """
     tokens = merged(parts)
     if not tokens:
         return False, []
-    if tokens[0] is COMPUTED:
-        # A value the scanner cannot see is a configured base only when literal path text follows it.
-        if len(tokens) == 1:
-            return False, [UNKNOWN]
-        head, slash, tail = tokens[1].partition("/")
-        if not head:
-            return True, path_segments(tokens[1:])
+    head, rest = tokens[0], tokens[1:]
+    if head is CONFIGURED and rest:
+        path = path_segments(from_slash(rest))
+        if isinstance(rest[0], str) and rest[0].startswith("/"):
+            return True, path
         # Text right after the base continues the base's last segment, so that segment is unknown.
-        rest = path_segments([tail, *tokens[2:]]) if slash else []
-        return True, [UNKNOWN, *rest]
-    authority = AUTHORITY.match(tokens[0])
+        return True, [UNKNOWN, *path]
+    if not isinstance(head, str):
+        return False, [UNKNOWN, *path_segments(from_slash(rest))]
+    authority = AUTHORITY.match(head)
     if authority is None:
         return False, path_segments(tokens)
     # The request leaves this application's root.
-    return False, [UNKNOWN, *path_segments([tokens[0][authority.end():], *tokens[1:]])]
+    return False, [UNKNOWN, *path_segments([head[authority.end():], *rest])]
 
 
 def request_fact(operation, parts, method):
-    """One request fact; a configured base states that literal path text follows a value we cannot see."""
+    """One request fact; a configured base states that the path follows a configuration value."""
     configured, path = request_path(parts)
     return {"operation": operation, **({"method": method} if method else {}),
             **({"configured": True} if configured else {}), "path": path}
@@ -206,9 +213,12 @@ def sent_request(sources, module, sessions, operation, call):
     if chain is not None and chain.rpartition(".")[0] in CLIENTS:
         return client_request(sources, module, operation, call, verb, [])
     receiver = call.func.value
-    if not isinstance(receiver, ast.Name) or receiver.id not in sessions:
+    if not isinstance(receiver, ast.Name):
         return None
-    return client_request(sources, module, operation, call, verb, sessions[receiver.id])
+    # A name some function binds holds only the session this operation binds; any other is a module constant.
+    constants, own = sessions
+    found = (own if receiver in module["shadowed"] else constants).get(receiver.id)
+    return None if found is None else client_request(sources, module, operation, call, verb, found)
 
 
 def sent_requests(sources):

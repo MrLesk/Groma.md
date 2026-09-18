@@ -1,2 +1,101 @@
+import os
+
+import requests
+from django.conf import settings
+
+BASE = "/api"
+
+
 def forward(requests):
     return requests.get("/talks")
+
+
+def load_base(BASE):
+    return requests.get(BASE + "/talks")
+
+
+def with_call():
+    return requests.get(build_url() + "/talks")
+
+
+def joined(first, second):
+    return requests.get(first + second + "/talks")
+
+
+def env_joined(second):
+    return requests.get(os.getenv("API") + second + "/talks")
+
+
+class Api:
+    def load(self):
+        return requests.get(self.base_url + "/talks")
+
+
+class Client:
+    def headers(self):
+        return {}
+
+
+class GitHub(Client):
+    base_url = "https://api.github.com"
+
+    def repos(self):
+        return requests.get(self.base_url + "/repos")
+
+
+class Internal:
+    def __init__(self):
+        self.base_url = "/internal"
+
+    def load(self):
+        return requests.get(self.base_url + "/talks")
+
+
+class Tokened:
+    base_url = "https://api.example.com"
+
+    def __init__(self, url, token):
+        self.base_url, self.token = url, token
+
+    def load(self):
+        return requests.get(self.base_url + "/talks")
+
+
+class Rotating:
+    base_url = "/primary"
+
+    def rotate(self, urls):
+        for self.base_url in urls:
+            pass
+
+    def load(self):
+        return requests.get(self.base_url + "/talks")
+
+
+class Mirror:
+    base_url = "https://mirror.example.com"
+
+    def __init__(self, base_url):
+        self.base_url = base_url
+
+    def load(self):
+        return requests.get(self.base_url + "/talks")
+
+
+class Service:
+    def __init__(self, base_url):
+        self.base_url = base_url
+
+
+class Billing(Service):
+    base_url = "/billing"
+
+    def load(self):
+        return requests.get(self.base_url + "/invoices")
+
+
+class Versioned:
+    base_url = f"{settings.API}/v1"
+
+    def load(self):
+        return requests.get(self.base_url + "/talks")

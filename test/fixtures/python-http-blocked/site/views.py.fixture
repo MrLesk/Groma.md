@@ -1,0 +1,11 @@
+class BoardView:
+    def get(self, request, slug):
+        return slug
+
+
+def archive(request):
+    return request
+
+
+def list_talks(request):
+    return request

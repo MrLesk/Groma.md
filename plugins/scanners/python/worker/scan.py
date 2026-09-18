@@ -121,13 +121,6 @@ def children(node):
     return (part for part in parts(node) if isinstance(part, ast.AST))
 
 
-def bound_names(node):
-    """Names a node binds without a Name node: a def or class name, an import alias, an except or match capture."""
-    if isinstance(node, ast.alias):
-        return [(node.asname or node.name).split(".")[0]]
-    return [item for item in (getattr(node, "name", None), getattr(node, "rest", None)) if isinstance(item, str)]
-
-
 def local_names(scope):
     """Names a scope binds: parameters and every binding outside nested scopes.
 
@@ -141,13 +134,27 @@ def local_names(scope):
         node = pending.pop()
         if isinstance(node, (ast.Global, ast.Nonlocal)):
             declared.update(node.names)
-        elif isinstance(node, ast.Name) and not isinstance(node.ctx, ast.Load):
-            names.add(node.id)
-        else:
-            names.update(bound_names(node))
+        names.update(binding_names(node))
         if not isinstance(node, SCOPES):
             pending.extend(children(node))
     return names - declared
+
+
+def local_references(tree):
+    """Name nodes that read a binding of an enclosing function, lambda or class rather than a module name.
+
+    Decorators, defaults and annotations run in the enclosing scope, so only a scope's statements see its names.
+    """
+    found = set()
+    pending = [(tree, frozenset())]
+    while pending:
+        node, shadowed = pending.pop()
+        if isinstance(node, ast.Name) and node.id in shadowed:
+            found.add(node)
+        body = statements(node) if isinstance(node, SCOPES) else []
+        inner = shadowed | local_names(node) if body else shadowed
+        pending.extend((child, inner if child in body else shadowed) for child in ast.iter_child_nodes(node))
+    return found
 
 
 def imported(statement, alias):
@@ -198,7 +205,7 @@ class BodyTokens:
 
     def walk(self, node):
         # A def, class, import, except or match name takes its slot where it is bound, not where it is first used.
-        for name in bound_names(node):
+        for name in binding_names(node):
             self.slot(name)
         if isinstance(node, SCOPES):
             self.tokens.append("class" if isinstance(node, ast.ClassDef) else "fn")
@@ -318,9 +325,13 @@ def scan(files):
         observation["files"].append({"file": file, "roots": [owner], "symbols": evidence.symbols})
         observation["operations"].extend(evidence.operations)
         observation["invocations"].extend(evidence.invocations)
-        modules[file] = read_module(file, tree, evidence.identities)
+        modules[file] = read_module(file, tree, evidence.identities, local_references(tree))
     sources = Sources(modules)
     observation["httpEndpoints"] = served_endpoints(sources)
+    # A route entry the scanner cannot report is registered by its module's own code.
+    registering = {fact["operation"] for fact in observation["httpEndpoints"]}
+    observation["operations"].extend({"id": module_operation(file), "file": file, "name": "(module)"}
+                                     for file in memberships if module_operation(file) in registering)
     observation["httpRequests"] = sent_requests(sources)
     return observation
 

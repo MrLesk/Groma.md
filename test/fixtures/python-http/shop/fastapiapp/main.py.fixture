@@ -1,11 +1,37 @@
 from fastapi import FastAPI
+from plugins.admin import admin_router, legacy_handler, partner_site
 
 from .speakers import router
+from .sub import subapp
 
 app = FastAPI()
 app.include_router(router, prefix="/api")
+app.include_router(admin_router, prefix="/admin")
 
 
 @app.get("/health")
 async def health():
     return {"ok": True}
+
+
+@app.api_route("/status", methods=["GET", "HEAD"])
+async def status():
+    return {"ok": True}
+
+
+async def version():
+    return "1"
+
+
+app.add_api_route("/version", version)
+app.mount("/static", static_files)
+app.mount("/v1", subapp)
+app.host("partner.example.com", partner_site)
+
+
+async def ping():
+    return "pong"
+
+
+app.add_route("/ping", ping)
+app.add_api_route("/legacy", legacy_handler)

@@ -1,6 +1,9 @@
+import os
+
 from fastapi import APIRouter
 
 router = APIRouter(prefix="/speakers")
+SECTION = os.environ["SECTION"]
 
 
 @router.get("/{speaker_id}")
@@ -16,3 +19,8 @@ async def drop_talks(speaker_id: int, rest: str):
 @router.get("/photo-{speaker_id}")
 async def photo(speaker_id: int):
     return speaker_id
+
+
+@router.get(f"/{SECTION}")
+async def section():
+    return SECTION

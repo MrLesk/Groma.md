@@ -3,6 +3,8 @@ import os
 from flask import Blueprint
 
 talks = Blueprint("talks", __name__, url_prefix="/talks")
+comments = Blueprint("comments", __name__, url_prefix="/comments")
+talks.register_blueprint(comments, url_prefix="/notes")
 SECTION = os.environ["SECTION"]
 ARCHIVE = "/archive"
 ALLOWED = os.environ["ALLOWED"].split(",")
@@ -31,3 +33,13 @@ def archive():
 @talks.route("/bulk", methods=ALLOWED)
 def bulk():
     return "bulk"
+
+
+@talks.get("/files/<path:name>/raw")
+def raw_file(name):
+    return name
+
+
+@comments.get("/latest")
+def latest():
+    return "latest"

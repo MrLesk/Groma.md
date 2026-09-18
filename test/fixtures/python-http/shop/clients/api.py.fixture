@@ -11,6 +11,9 @@ VERSION += "/beta"
 LOCALE = "/en"
 if os.environ.get("GERMAN"):
     LOCALE = "/de"
+REGION = "/eu"
+for REGION in ("/eu", "/us"):
+    pass
 
 
 def read_speaker(speaker_id):
@@ -48,3 +51,13 @@ def read_version():
 
 def read_locale():
     return httpx.get(LOCALE + "/talks")
+
+
+def read_region():
+    return httpx.get(REGION + "/talks")
+
+
+def read_each(clients):
+    client = httpx.Client(base_url=settings.API)
+    for client in clients:
+        client.get("/talks")

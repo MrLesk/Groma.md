@@ -1,0 +1,12 @@
+from fastapi import APIRouter
+
+router = APIRouter(prefix="/extra")
+
+
+@router.get("/items")
+async def items():
+    return []
+
+
+def setup(app):
+    app.include_router(router)
