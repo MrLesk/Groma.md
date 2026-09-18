@@ -49,9 +49,9 @@ function plainBlock(title: string, lines: readonly string[]): string {
 /**
  * A page is its slice of the complete answer, so consecutive pages print every item, empty section and
  * tail once, in order. The head prints on every page. The sections share one window over their items in
- * order: a section prints on the pages that hold its items, an empty section prints `none` on the page
- * that holds the item after it, and the tail prints on the page that holds the last item. A cut page
- * ends with the footer naming the following items.
+ * order: a section prints on the pages holding its first position or any of its items, so an empty
+ * section prints `none` on the page holding the item after it, and the tail prints on the page holding
+ * the last item. A cut page ends with the footer naming the following items.
  */
 function pagedAnswer(
   answer: { head?: readonly string[]; sections: readonly PlainSection[]; tail?: readonly string[] },
@@ -71,7 +71,7 @@ function pagedAnswer(
     const start = position
     position += section.items.length
     const items = page.items.filter(entry => entry.index === index).map(entry => entry.item)
-    const shown = items.length > 0 || (section.items.length === 0 && holds(start))
+    const shown = items.length > 0 || holds(start)
     return shown ? [plainBlock(section.title, items)] : []
   })
   const tail = holds(page.total) ? answer.tail ?? [] : []
