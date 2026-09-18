@@ -42,8 +42,7 @@ final class Outline {
             var positions = Trees.instance(task).getSourcePositions();
             var result = new ArrayList<Object>();
             for (var unit : task.parse()) {
-                var file = root.relativize(Path.of(unit.getSourceFile().toUri())).toString().replace('\\', '/');
-                result.add(Json.object("file", file, "declarations", new Outline(unit, positions).types()));
+                result.add(Json.object("file", Main.file(root, unit.getSourceFile()), "declarations", new Outline(unit, positions).types()));
             }
             return result;
         }

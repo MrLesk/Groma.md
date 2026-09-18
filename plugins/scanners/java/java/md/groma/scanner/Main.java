@@ -104,18 +104,19 @@ public final class Main {
     }
 
     private static String diagnostic(Path root, Diagnostic<? extends JavaFileObject> item) {
-        String location = item.getSource() == null ? "compiler" : file(root, item);
+        String location = item.getSource() == null ? "compiler" : file(root, item.getSource());
         return location + ":" + item.getLineNumber() + ": " + item.getCode() + ": " + item.getMessage(Locale.ROOT);
     }
 
     private static Map<String, Object> message(Path root, Diagnostic<? extends JavaFileObject> item, String severity, String code, String text) {
         var message = Json.object("severity", severity, "code", code, "message", text);
-        if (item.getSource() != null) message.put("file", file(root, item));
+        if (item.getSource() != null) message.put("file", file(root, item.getSource()));
         if (item.getLineNumber() > 0) message.put("line", item.getLineNumber());
         return message;
     }
 
-    private static String file(Path root, Diagnostic<? extends JavaFileObject> item) {
-        return root.relativize(Path.of(item.getSource().toUri())).toString().replace('\\', '/');
+    /** A source file's repository-relative path with forward slashes, as every fact names it. */
+    static String file(Path root, JavaFileObject source) {
+        return root.relativize(Path.of(source.toUri())).toString().replace('\\', '/');
     }
 }
