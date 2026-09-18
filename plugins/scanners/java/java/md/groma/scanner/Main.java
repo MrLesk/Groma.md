@@ -88,10 +88,9 @@ public final class Main {
             var http = new Http(index, Trees.instance(task));
             units.forEach(unit -> http.scan(unit, null));
             var messages = new ArrayList<Object>();
+            // The plugin folds the unresolved-name errors among these into one summary.
             for (var item : diagnostics.getDiagnostics()) {
-                var missing = unresolvedName(item.getCode());
-                messages.add(message(root, item, missing ? "info" : "warning", missing ? "JAVA_MISSING_EXTERNAL_TYPES" : item.getCode(),
-                    item.getMessage(Locale.ROOT)));
+                messages.add(message(root, item, "warning", item.getCode(), item.getMessage(Locale.ROOT)));
             }
             messages.addAll(uses.diagnostics());
             return Json.object(
@@ -107,16 +106,6 @@ public final class Main {
     private static String diagnostic(Path root, Diagnostic<? extends JavaFileObject> item) {
         String location = item.getSource() == null ? "compiler" : file(root, item);
         return location + ":" + item.getLineNumber() + ": " + item.getCode() + ": " + item.getMessage(Locale.ROOT);
-    }
-
-    /**
-     * javac's "cannot find symbol" and "package does not exist" errors. The scanner leaves project dependencies and
-     * generated sources out on purpose, so they are an expected limitation, not a project defect, and the plugin folds
-     * them from every project into one summary. javac cannot tell a missing dependency from any other unresolved name,
-     * so typos are among them.
-     */
-    private static boolean unresolvedName(String code) {
-        return code.equals("compiler.err.doesnt.exist") || code.startsWith("compiler.err.cant.resolve");
     }
 
     private static Map<String, Object> message(Path root, Diagnostic<? extends JavaFileObject> item, String severity, String code, String text) {
