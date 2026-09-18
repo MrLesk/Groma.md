@@ -1,20 +1,18 @@
 import type { ScanInvocation, ScanOperation, ScanSymbol } from '@groma/scanner'
-import { children, nameOf, parsePhp, symbolName, typeKinds, type Syntax } from './syntax.ts'
+import { callables, children, nameOf, operationId, symbolName, typeKinds, type Syntax } from './syntax.ts'
 import { operationTokens } from './tokens.ts'
 
 interface Scope { namespace: string; type?: string; operation?: string }
-const callables = new Set(['function', 'method', 'closure', 'arrowfunc'])
 
 /** PHP syntax facts only: declarations do not establish runtime loading or call targets. */
-export function phpEvidence(file: string, source: string) {
-  const tree = parsePhp(file, source)
+export function phpEvidence(file: string, tree: Syntax) {
   const symbols: ScanSymbol[] = []
   const operations: ScanOperation[] = []
   const invocations: ScanInvocation[] = []
 
   function declaration(node: Syntax, scope: Scope): Scope {
     const position = node.loc!.start.offset
-    const id = `${file}#${position}`
+    const id = operationId(file, node)
     const local = nameOf(node.name)
     const type = node.kind === 'method' ? scope.type : undefined
     const name = local ? symbolName(scope.namespace, local, type) : `callback at ${node.loc!.start.line}`
