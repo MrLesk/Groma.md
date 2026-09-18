@@ -114,6 +114,7 @@ export function listWindowFooter(page: ListPage<unknown>, command: readonly stri
 export function printListPage(
   items: readonly string[],
   window: ListWindow,
+  /** Prints on every page, unlike an answer's tail. */
   closing: readonly string[] = [],
 ): void {
   const page = listPage(items, window)

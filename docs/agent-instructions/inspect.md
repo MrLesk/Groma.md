@@ -60,10 +60,8 @@ footer.
 `groma view --plain`, `groma view <id> --plain`, `groma view <draft-id>`,
 `groma view <source-file>`, `groma lint`, `groma scanner discover`, and
 `groma scanner list` page their items. A `groma view` page repeats the element,
-owner, or draft it describes, then prints its slice of the complete answer: the
-sections whose items it holds, an empty section as `none` on the page that
-holds the item after it, and the owner record command on the page that holds
-the last item, just above the footer. `groma scan` is not paged: its report counts
+owner, or draft it describes; consecutive pages, read in order, print the
+complete answer once. `groma scan` is not paged: its report counts
 findings and names `groma lint`. The complete Markdown record of
 `groma view <id>` and every `--json` result stay whole.
 
