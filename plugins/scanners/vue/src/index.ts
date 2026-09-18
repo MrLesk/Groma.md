@@ -2,6 +2,7 @@ import { createScanObservation, type ScanObservation, type ScannerPlugin } from 
 import { VueEvidence } from './evidence.ts'
 import path from 'node:path'
 import { frameworkProjects, hasDependency } from '../../projects.ts'
+import { frameworkSourceFiles } from '../../typescript-project.ts'
 import { combineObservations } from '../../observations.ts'
 import { vueHttpFacts } from './http.ts'
 import { addComparedOperations } from './operations.ts'
@@ -57,6 +58,9 @@ export default {
   id: 'vue',
   watch: { include: ['**/*.vue', '**/*.ts', '**/*.js', '**/*.html', '**/*.css', '**/*.scss', '**/*.sass', '**/*.less', '**/*.styl', '**/tsconfig*.json', '**/package.json'], exclude: [] },
   readCodeStructure: readVueOutline,
+  /** Each Vue project's sources, including its `.vue` files and a Nuxt project's server routes. */
+  listSourceFiles: root => frameworkSourceFiles({ root, dependency: 'vue', projects: ['.vue'],
+    sources: ['.vue', '.ts', '.js'] }),
   checkReadiness: async root => {
     const projects = await frameworkProjects(root, 'vue', ['.vue'])
     for (const project of projects) vueProject(project, root)

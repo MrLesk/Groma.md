@@ -4,6 +4,7 @@ import { loadArchitecture } from './architecture-reader.ts'
 import { emptyWorldLines, isEmptyWorld } from './empty-world.ts'
 import { loadProjectProfile } from './project-profile.ts'
 import { readDocument } from './markdown-emitter.ts'
+import { missingOwnerReason } from './source-coverage.ts'
 import { listPage, listWindowFooter, type ListWindow } from './list-window.ts'
 import { RELATIONSHIPS_TYPE, requireGromaMapping } from './okf-profile.ts'
 import { ancestorIds, parentOfElements, showsRelationshipText } from './viewers/relationship-text.ts'
@@ -242,9 +243,14 @@ export function fileConnections(
  * Answers every target no earlier branch resolved, including mistyped ids: a source file answers with its owning
  * component, the file's connections, and the command for the owner's record.
  */
-function fileAnswer(world: ArchitectureGraph, file: string, window: ListWindow): PlainRecordResult {
+async function fileAnswer(
+  repositoryRoot: string,
+  world: ArchitectureGraph,
+  file: string,
+  window: ListWindow,
+): Promise<PlainRecordResult> {
   const owner = world.elements.find(element => element.code.some(reference => reference.file === file))
-  if (owner === undefined) return { ok: false, message: `unknown target: ${file}` }
+  if (owner === undefined) return { ok: false, message: await missingOwnerReason(repositoryRoot, file) }
   const { incoming, outgoing } = fileConnections(world, file)
   const text = pagedAnswer({
     head: [plainBlock('Owner', [`${owner.id}  ${owner.kind}  ${owner.title}`, `parent: ${owner.parent}`])],
@@ -282,5 +288,5 @@ export async function renderPlainRecord(
   if (draft !== undefined) {
     return { ok: true, text: `${formatDraftRecord(draft, draftItems(draft, model.elements))}\n` }
   }
-  return fileAnswer(model, target, window)
+  return fileAnswer(repositoryRoot, model, target, window)
 }

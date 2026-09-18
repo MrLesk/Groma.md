@@ -146,6 +146,12 @@ export interface ScannerPlugin {
   checkReadiness?(repositoryRoot: string, settings?: ScannerSettings): Promise<void>
   /** Source outline for Code references, required of official scanners; this data is never architecture persistence. */
   readCodeStructure?(repositoryRoot: string, references: readonly SourceReference[], settings?: ScannerSettings): Promise<CodeFile[]>
+  /**
+   * Repository-relative files this scanner would analyze for these settings, required of official
+   * scanners. It selects files the way `scan` does, without analyzing them or running project tools,
+   * so Groma can explain why a file has no architecture owner.
+   */
+  listSourceFiles?(repositoryRoot: string, settings?: ScannerSettings): Promise<string[]>
   scan(repositoryRoot: string, settings?: ScannerSettings): Promise<ScanObservation | undefined>
 }
 

@@ -15,6 +15,11 @@ async function inventory(root: string) {
     && !globs.some(glob => glob.match(file)))
 }
 
+/** The analyzed sources; the declaration files in the inventory describe projects, not source. */
+async function sources(root: string): Promise<string[]> {
+  return (await inventory(root)).filter(file => file.endsWith('.py'))
+}
+
 /** Scans the files, or outlines them when references are given. */
 function run(workerData: { root: string; files?: string[]; references?: readonly SourceReference[] }): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -29,6 +34,7 @@ function run(workerData: { root: string; files?: string[]; references?: readonly
 export default {
   id: 'python',
   watch: { include: ['**/*.py', '**/pyproject.toml', '**/setup.cfg', '**/requirements.txt'], exclude: excluded },
+  listSourceFiles: sources,
   async checkReadiness(root) {
     if (!(await inventory(root)).some(file => file.endsWith('.py'))) {
       throw new Error('python: No supported Python source files were found in the Git repository.')
