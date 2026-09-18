@@ -5,6 +5,8 @@ import type { ListWindowInput } from '../src/list-window.ts'
 import { renderPlainRecord, renderPlainWorld } from '../src/plain-world.ts'
 
 const fixture = path.resolve(import.meta.dir, '../test/fixtures/viewer-view')
+const plainView = path.resolve(import.meta.dir, '../test/fixtures/plain-view')
+const flows = path.resolve(import.meta.dir, '../test/fixtures/flows')
 
 function window(input: ListWindowInput, command: string[] = []) {
   return parseListWindow(input, command)
@@ -49,39 +51,74 @@ test.concurrent('--count reports the whole list instead of one page', () => {
   expect(listPage(items, window({ count: true, maxCount: '3' })).items).toHaveLength(3)
 })
 
+type Render = (input: ListWindowInput) => Promise<string>
+
 function overview(input: ListWindowInput): Promise<string> {
   return renderPlainWorld(fixture, window(input, ['view', '--plain']))
 }
 
-async function drillDown(target: string, input: ListWindowInput): Promise<string> {
-  const result = await renderPlainRecord(fixture, target, true, window(input, ['view', target, '--plain']))
-  expect(result.ok).toBe(true)
-  return result.ok ? result.text : ''
+function record(root: string, target: string, plain: boolean): Render {
+  return async input => {
+    const result = await renderPlainRecord(root, target, plain, window(input, ['view', target, '--plain']))
+    expect(result.ok).toBe(true)
+    return result.ok ? result.text.trimEnd() : ''
+  }
 }
 
-/** Content lines, without blank lines and without the footer. */
-function lines(text: string): string[] {
-  return [...new Set(text.split('\n').filter(line => line !== '' && !line.startsWith('Showing ')))].toSorted()
+/** The printed blocks, without the footer. */
+function blocks(text: string): string[] {
+  return text.split('\n\n').filter(block => block !== '' && !block.startsWith('Showing '))
 }
 
-test.concurrent('consecutive pages show the same sections and items as the complete answer', async () => {
+/**
+ * A page of `size` items and the page after it both repeat the head, which a page past the end prints alone,
+ * and their remaining blocks, joined in order, are exactly the complete answer. `size` must end a section so no
+ * section title repeats, and the remaining items must fit in one default page.
+ */
+async function expectPagesRejoin(render: Render, size: number): Promise<void> {
+  const complete = blocks(await render({}))
+  const total = await render({ count: true })
+  const head = blocks(await render({ skip: total }))
+  const first = blocks(await render({ maxCount: String(size) }))
+  const second = blocks(await render({ skip: String(size) }))
+  expect(first.slice(0, head.length)).toEqual(head)
+  expect(second.slice(0, head.length)).toEqual(head)
+  expect([...first, ...second.slice(head.length)]).toEqual(complete)
+}
+
+test.concurrent('consecutive overview pages print the complete answer once, in order', async () => {
   const complete = await overview({})
   const total = Number(await overview({ count: true }))
   expect(total).toBeGreaterThan(2)
-  const first = await overview({ maxCount: '2' })
-  const second = await overview({ maxCount: String(total), skip: '2' })
-  expect(lines(`${first}\n${second}`)).toEqual(lines(complete))
-  // An index that holds no item at all stays visible on every page.
-  expect(first).toContain('Flows\n-----\nnone')
-  expect(first).toContain(`Showing 1-2 of ${total} items.`)
-  expect(second).not.toContain('Next:')
+  await expectPagesRejoin(overview, 2)
+  expect(await overview({ maxCount: '2' })).toContain(`Showing 1-2 of ${total} items.`)
+  expect(await overview({ skip: '2' })).not.toContain('Next:')
   expect(complete).not.toContain('Showing')
   expect(await overview({ skip: String(total) })).toContain(`Showing 0 of ${total} items.`)
 })
 
+test.concurrent('an empty section and the closing command print on the page that reaches their place', async () => {
+  // The overview's empty Flows index sits between two pages, the drill-down ends with an empty section,
+  // and the file answer ends with the owner record command.
+  await expectPagesRejoin(page => renderPlainWorld(plainView, window(page, ['view', '--plain'])), 4)
+  await expectPagesRejoin(record(plainView, 'shop', true), 2)
+  await expectPagesRejoin(record(flows, 'src/entry.ts', false), 1)
+})
+
+test.concurrent('a draft summary pages the elements it touches', async () => {
+  const draft = record(plainView, 'next', false)
+  const complete = blocks(await draft({}))
+  const total = Number(await draft({ count: true }))
+  expect(total).toBe(1)
+  const pastEnd = await draft({ skip: '1' })
+  expect(pastEnd).toContain('Showing 0 of 1 items.')
+  expect(blocks(pastEnd)).toEqual(complete.slice(0, -1))
+})
+
 test.concurrent('a drill-down pages its children and keeps the element it describes', async () => {
-  const total = Number(await drillDown('shop', { count: true }))
-  const page = await drillDown('shop', { maxCount: '2' })
+  const drillDown = record(fixture, 'shop', true)
+  const total = Number(await drillDown({ count: true }))
+  const page = await drillDown({ maxCount: '2' })
   expect(page).toContain('shop  system  Shop')
   expect(page).toContain(`Showing 1-2 of ${total} items. Next: groma view shop --plain --skip 2`)
 })

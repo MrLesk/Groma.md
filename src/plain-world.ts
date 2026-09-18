@@ -47,10 +47,11 @@ function plainBlock(title: string, lines: readonly string[]): string {
 }
 
 /**
- * Head and tail blocks always print. The sections share one window over their items in order, so a
- * cut page prints only the sections whose items it reaches, and ends with the footer naming the
- * following items. A section without items anywhere stays on every page, so paged reading shows the
- * same sections as the complete answer.
+ * A page is its slice of the complete answer, so consecutive pages print every item, empty section and
+ * tail once, in order. The head prints on every page. The sections share one window over their items in
+ * order: a section prints on the pages that hold its items, an empty section prints `none` on the page
+ * that holds the item after it, and the tail prints on the page that holds the last item. A cut page
+ * ends with the footer naming the following items.
  */
 function pagedAnswer(
   answer: { head?: readonly string[]; sections: readonly PlainSection[]; tail?: readonly string[] },
@@ -59,14 +60,23 @@ function pagedAnswer(
   const numbered = answer.sections.flatMap((section, index) => section.items.map(item => ({ index, item })))
   const page = listPage(numbered, window)
   if (window.count) return String(page.items.length)
-  const complete = page.items.length === page.total
+  const end = page.skip + page.items.length
+  // Whether the page holds the item at this position; a position after the last item belongs with the last item.
+  const holds = (position: number) => {
+    const anchor = Math.min(position, page.total - 1)
+    return page.total === 0 || (page.skip <= anchor && anchor < end)
+  }
+  let position = 0
   const blocks = answer.sections.flatMap((section, index) => {
+    const start = position
+    position += section.items.length
     const items = page.items.filter(entry => entry.index === index).map(entry => entry.item)
-    const elsewhere = items.length === 0 && !complete && section.items.length > 0
-    return elsewhere ? [] : [plainBlock(section.title, items)]
+    const shown = items.length > 0 || (section.items.length === 0 && holds(start))
+    return shown ? [plainBlock(section.title, items)] : []
   })
+  const tail = holds(page.total) ? answer.tail ?? [] : []
   const footer = listWindowFooter(page, window.command)
-  return [...answer.head ?? [], ...blocks, ...answer.tail ?? [], ...footer === undefined ? [] : [footer]].join('\n\n')
+  return [...answer.head ?? [], ...blocks, ...tail, ...footer === undefined ? [] : [footer]].join('\n\n')
 }
 
 function relationshipLine(relationship: PlainRelationship): string {
@@ -213,12 +223,12 @@ function itemLine(element: AnnotatedElement): string {
 function formatDraftRecord(
   draft: DraftOutcome,
   items: readonly AnnotatedElement[],
+  window: ListWindow,
 ): string {
-  const sections = [`${draft.id}\nkind: draft`]
-  if (draft.outcome !== '') sections.push(draft.outcome)
-  if (!items.some(item => item.origin === 'draft')) sections.push('complete')
-  if (items.length > 0) sections.push(['items', ...items.map(itemLine)].join('\n'))
-  return sections.join('\n\n')
+  const head = [`${draft.id}\nkind: draft`]
+  if (draft.outcome !== '') head.push(draft.outcome)
+  if (!items.some(item => item.origin === 'draft')) head.push('complete')
+  return pagedAnswer({ head, sections: [{ title: 'Items', items: items.map(itemLine) }] }, window)
 }
 
 /**
@@ -286,7 +296,7 @@ export async function renderPlainRecord(
   }
   const draft = draftOutcomes(records).find(item => item.id === target)
   if (draft !== undefined) {
-    return { ok: true, text: `${formatDraftRecord(draft, draftItems(draft, model.elements))}\n` }
+    return { ok: true, text: `${formatDraftRecord(draft, draftItems(draft, model.elements), window)}\n` }
   }
   return fileAnswer(repositoryRoot, model, target, window)
 }
