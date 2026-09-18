@@ -149,7 +149,6 @@ function relationshipLines(theme: ViewerTheme, row: RelationshipPair, byId: Elem
   const rest = detail === '' ? '' : ` · ${detail}`
   const peerMark: Line = row.outgoing || peer === undefined ? [] : [kindMark(theme, peer.kind, peer.external), plain(theme, ' ')]
   const markWidth = peerMark.length === 0 ? 0 : 2
-  // Enter on the lit row follows its first relationship there.
   const ends = lit ? exactLines(theme, row, byId, width) : []
   if (arrow.length + markWidth + title.length + rest.length <= width) {
     return [styleRow(theme, [dim(theme, arrow), ...peerMark, plain(theme, title), dim(theme, rest)], width, lit, atCursor), ...ends]

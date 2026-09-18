@@ -30,7 +30,7 @@ test.concurrent('browsing leaves a relationship inactive, Enter lights it and En
   assert.equal(state.currentId, 'observed:b')
 })
 
-test.concurrent('a combined relationship pair is one details command and lights every relationship it summarizes', async () => {
+test.concurrent('a combined relationship pair is one details command, lights every relationship it summarizes and Enter selects its peer', async () => {
   const model = await terminalModel(relationshipPairsFixtureRoot)
   let state: ViewerState = { ...initialState(model), currentId: 'site', focus: 'details' }
   assert.equal(detailsCommands(model, state).length, 2)
@@ -38,6 +38,7 @@ test.concurrent('a combined relationship pair is one details command and lights 
   state = reduceViewer(model, state, 'enter')
   const lit = litLegs(model, litAction(model, state)).map(leg => `${leg.source}>${leg.target}`).sort()
   assert.deepEqual(lit, ['speakers>people', 'talks>people', 'talks>sessions'])
+  assert.equal(reduceViewer(model, state, 'enter').currentId, 'backend')
 })
 
 test.concurrent('a lit pair keeps one identity after the selection moves up to a system', async () => {
@@ -52,7 +53,7 @@ test.concurrent('a lit pair keeps one identity after the selection moves up to a
   assert.notEqual(sitePair!.id, talksToSessions)
   assert.equal(state.actionCursor, sitePair!.id)
   assert.equal(reduceViewer(model, state, 'toggle-selection').activeActionId, undefined)
-  assert.notEqual(reduceViewer(model, state, 'enter').currentId, 'site')
+  assert.equal(reduceViewer(model, state, 'enter').currentId, 'backend')
 })
 
 test.concurrent('routes keep their cells while the selection stays on its island', () => {

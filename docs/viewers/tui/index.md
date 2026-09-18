@@ -180,10 +180,8 @@ source to target while its cells stay fixed. The details pane lists each
 ordered pair of the selection and a peer at its depth once, with the distinct
 descriptions of every relationship it combines. A highlighted row lists each
 of those relationships beneath it with its exact ends and lights all of them
-on the map. Enter on a relationship row in the details pane selects the other
-end of the already highlighted row's first relationship.
-Browsing a relationship row moves only its cursor. Space toggles its highlight;
-Enter first highlights it and then follows it.
+on the map. Browsing a relationship row moves only its cursor. Space toggles
+its highlight; Enter first highlights it, then selects the peer the row names.
 
 ## Keys
 
