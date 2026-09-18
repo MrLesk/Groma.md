@@ -86,7 +86,9 @@ scanning itself does not download or execute project tools.
 Missing external types and generated code can limit individual call targets.
 The scanner still reports source declarations and proven local interactions,
 with unresolved facts left uncertain. This does not promise full application
-compilation or every framework behavior. Syntax errors remain scan failures.
+compilation or every framework behavior. Syntax errors remain scan failures,
+except in the [JavaScript scanner](javascript/index.md), which leaves a file it
+cannot parse out of its evidence and warns.
 
 This changes scanner execution, not the architecture model. In OKF, readers
 still see ordinary Markdown, Code links and relationship rows. In C4, parsers

@@ -1,5 +1,5 @@
 import path from 'node:path'
-import { createScanObservation, type ScannerPlugin } from '@groma/scanner'
+import { createScanObservation, type ScanDiagnostic, type ScannerPlugin } from '@groma/scanner'
 import ts from 'typescript'
 import { javaScriptEvidence } from './evidence.ts'
 import { javaScriptHttpFacts } from './http.ts'
@@ -9,6 +9,27 @@ import { javaScriptSources, type JavaScriptSource } from './sources.ts'
 /** Each file is parsed alone, so no project configuration, dependency or build tool is needed. */
 function parse(source: JavaScriptSource): ts.SourceFile {
   return ts.createSourceFile(source.file, source.text, ts.ScriptTarget.Latest, true)
+}
+
+/** Strict-mode errors on octal literals and escapes, such as `0755` or `'\033'`, which scripts outside strict mode accept. */
+const SLOPPY_MODE_ONLY = new Set([1121, 1487, 1488, 1489])
+
+/**
+ * A warning at the first parse error of a file; undefined when the file parses. The public API reports parse errors
+ * only through a program, together with checks that reject TypeScript-only syntax the parser still reads, such as a
+ * Flow type annotation, so the parse errors are read from the pinned compiler's source file.
+ */
+function parseWarning(source: ts.SourceFile): ScanDiagnostic | undefined {
+  const { parseDiagnostics } = source as ts.SourceFile & { parseDiagnostics: readonly ts.DiagnosticWithLocation[] }
+  const first = parseDiagnostics.find(diagnostic => !SLOPPY_MODE_ONLY.has(diagnostic.code))
+  if (first === undefined) return undefined
+  return {
+    severity: 'warning',
+    code: 'JAVASCRIPT_SOURCE_INVALID',
+    file: source.fileName,
+    line: source.getLineAndCharacterOfPosition(first.start).line + 1,
+    message: `The file does not parse, so it contributes no evidence: ${ts.flattenDiagnosticMessageText(first.messageText, ' ')}`,
+  }
 }
 
 export default {
@@ -27,22 +48,27 @@ export default {
   async scan(root) {
     const sources = await javaScriptSources(root)
     if (!sources.length) return undefined
+    const parsed = sources.map(parse)
+    const warnings = parsed.map(parseWarning)
+    // A file that does not parse keeps its place in the inventory but contributes no evidence.
+    const readable = parsed.filter((_, index) => warnings[index] === undefined)
     // The HTTP facts name operations, so they are read before the observation collects them.
-    const scanned = sources.map(source => {
-      const parsed = parse(source)
-      const evidence = javaScriptEvidence(source.file, parsed)
-      return { file: source.file, evidence, facts: javaScriptHttpFacts(parsed, evidence) }
+    const scanned = readable.map(source => {
+      const evidence = javaScriptEvidence(source.fileName, source)
+      return { file: source.fileName, evidence, facts: javaScriptHttpFacts(source, evidence) }
     })
+    const symbols = new Map(scanned.map(({ file, evidence }) => [file, evidence.symbols]))
     return createScanObservation({
       scanner: { id: 'javascript', technology: 'javascript', engine: 'typescript-sdk', engineVersion: ts.version },
       roots: [{ id: 'javascript-source', kind: 'source-group', name: path.basename(root) }],
-      files: scanned.map(({ file, evidence }) => ({ file, symbols: evidence.symbols, roots: ['javascript-source'] })),
+      files: parsed.map(({ fileName: file }) => ({ file, symbols: symbols.get(file) ?? [], roots: ['javascript-source'] })),
       operations: scanned.flatMap(({ evidence }) => evidence.operations),
       invocations: scanned.flatMap(({ evidence }) => evidence.invocations),
       httpEndpoints: scanned.flatMap(({ facts }) => facts.httpEndpoints),
       httpRequests: scanned.flatMap(({ facts }) => facts.httpRequests),
       diagnostics: [{ severity: 'info', code: 'JAVASCRIPT_SOURCE_SCOPE',
-        message: 'Source syntax only. Module loading, dynamic dispatch, framework wiring and external symbols remain unresolved.' }],
+        message: 'Source syntax only. Module loading, dynamic dispatch, framework wiring and external symbols remain unresolved.' },
+      ...warnings.filter(warning => warning !== undefined)],
     })
   },
   // Every file this scanner owns is a JavaScript source, so no reference is filtered out here.

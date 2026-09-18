@@ -55,6 +55,20 @@ test.concurrent('packaged JavaScript reads every module format without project t
   } finally { await rm(temporary, { recursive: true, force: true }) }
 })
 
+test.concurrent('a JavaScript file that does not parse contributes no evidence while the rest of the scan proceeds', async () => {
+  const { temporary, root, scanner } = await setup('javascript-invalid')
+  try {
+    const scan = (await scanner.scan(root))!
+    // Parsing alone would recover and report the broken function as an ordinary operation.
+    expect(scan.operations!.filter(operation => operation.file === 'src/broken.js')).toEqual([])
+    expect(scan.files.find(file => file.file === 'src/broken.js')?.symbols).toEqual([])
+    // A legacy octal literal and a type annotation leave the other file's evidence in place.
+    expect(scan.operations!.some(operation => operation.file === 'src/valid.js')).toBe(true)
+    const warnings = scan.diagnostics.filter(diagnostic => diagnostic.code === 'JAVASCRIPT_SOURCE_INVALID')
+    expect(warnings).toEqual([expect.objectContaining({ severity: 'warning', file: 'src/broken.js', line: expect.any(Number) })])
+  } finally { await rm(temporary, { recursive: true, force: true }) }
+})
+
 test.concurrent('a JavaScript scan keeps one owner per file across a rescan of curated architecture', async () => {
   const { temporary, root, scanner } = await setup()
   try {
