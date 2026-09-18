@@ -17,6 +17,8 @@ groma:
     - scanner: java
       file: src/main/java/shop/Receipt.java
       symbol: Receipt
+    - scanner: java
+      file: src/main/java/Greeting.java
 ---
 
 Records orders.

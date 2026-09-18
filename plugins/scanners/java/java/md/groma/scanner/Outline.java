@@ -13,7 +13,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
-import java.util.regex.Pattern;
+import java.util.Set;
 import javax.lang.model.element.Modifier;
 import javax.tools.DiagnosticCollector;
 import javax.tools.JavaFileObject;
@@ -21,6 +21,7 @@ import javax.tools.ToolProvider;
 
 /** Top-level types with their methods and constructors, from a parse without a classpath or attribution. */
 final class Outline {
+    private static final Set<String> TYPE_KEYWORDS = Set.of("class", "interface", "enum", "record");
     private final CompilationUnitTree unit;
     private final SourcePositions positions;
     private final String source;
@@ -66,10 +67,12 @@ final class Outline {
         var name = constructor ? type.getSimpleName().toString() : method.getName().toString();
         var before = new ArrayList<Tree>(method.getTypeParameters());
         before.add(method.getModifiers());
+        // Annotations written after the type parameters belong to the modifiers but lie beyond the modifiers' end.
+        before.addAll(method.getModifiers().getAnnotations());
         if (method.getReturnType() != null) before.add(method.getReturnType());
         var position = namePosition(name, method, before);
         // A record's compact constructor is followed by its body, not by a parameter list.
-        var compact = constructor && next(position + name.length()) == '{';
+        var compact = constructor && source.startsWith("{", skipSpaceAndComments((int) position + name.length()));
         return Json.object("name", name, "line", lineOf(position), "visibility", visibility(type, method, compact));
     }
 
@@ -90,23 +93,41 @@ final class Outline {
         return kind == Tree.Kind.ENUM && method.getName().contentEquals("<init>") ? "private" : "internal";
     }
 
-    /** The name's first occurrence after the modifiers, type parameters and return type. */
+    /**
+     * The name after the modifiers, type parameters and return type, where only comments and, for a type, its keyword
+     * may come first. Without it there, such as for a compact source file's class, the position is where the search began.
+     */
     private long namePosition(String name, Tree declaration, List<? extends Tree> before) {
         long from = positions.getStartPosition(unit, declaration);
         for (var tree : before) from = Math.max(from, positions.getEndPosition(unit, tree));
-        var matcher = Pattern.compile("(?<!\\p{javaJavaIdentifierPart})" + Pattern.quote(name) + "(?!\\p{javaJavaIdentifierPart})")
-            .matcher(source);
-        return matcher.find((int) from) ? matcher.start() : from;
+        for (int index = skipSpaceAndComments((int) from); index < source.length(); index = skipSpaceAndComments(index)) {
+            int end = index;
+            while (end < source.length() && Character.isJavaIdentifierPart(source.charAt(end))) end++;
+            var word = source.substring(index, end);
+            if (word.equals(name)) return index;
+            if (!TYPE_KEYWORDS.contains(word)) break;
+            index = end;
+        }
+        return from;
+    }
+
+    /** The first position at or after the index that is not whitespace or a comment. */
+    private int skipSpaceAndComments(int index) {
+        while (index < source.length()) {
+            if (Character.isWhitespace(source.charAt(index))) index++;
+            else if (source.startsWith("//", index)) index = after(source.indexOf('\n', index), 1);
+            else if (source.startsWith("/*", index)) index = after(source.indexOf("*/", index + 2), 2);
+            else break;
+        }
+        return index;
+    }
+
+    /** The position after a comment's terminator, or the end of the source when the comment is not closed. */
+    private int after(int terminator, int length) {
+        return terminator < 0 ? source.length() : terminator + length;
     }
 
     private long lineOf(long position) {
         return unit.getLineMap().getLineNumber(position);
-    }
-
-    private char next(long position) {
-        for (int index = (int) position; index < source.length(); index++) {
-            if (!Character.isWhitespace(source.charAt(index))) return source.charAt(index);
-        }
-        return 0;
     }
 }

@@ -1,7 +1,7 @@
 package shop;
 
 public record Receipt(String id, long total) {
-    Receipt {
+    Receipt /* compact */ {
     }
 
     Receipt(String id) {
@@ -10,5 +10,11 @@ public record Receipt(String id, long total) {
 
     public String label() {
         return id;
+    }
+
+    public <T>
+    @Deprecated
+    Receipt(T source, int copies) {
+        this(String.valueOf(source), copies);
     }
 }

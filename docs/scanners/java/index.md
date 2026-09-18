@@ -96,7 +96,8 @@ starting with a byte order mark or holding binary content, outlines nothing.
 - Top-level classes, interfaces, enums, records and annotation types are
   types. Package declarations are transparent. Java has no top-level functions:
   a compact source file of top-level methods outlines as one `internal` type
-  named after the file, at line 1, holding those methods.
+  named after the file, at the line where its first field or method starts,
+  holding those methods.
 - A type's members are the methods and constructors in its body: static,
   abstract, default and private interface methods, interface and annotation
   element signatures, and compact record constructors. Each overload is listed

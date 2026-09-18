@@ -17,7 +17,7 @@ public class Orders {
     Orders(String first) {
     }
 
-    public List<String>
+    public List<String> /* place */
         place(String line) {
         return lines;
     }

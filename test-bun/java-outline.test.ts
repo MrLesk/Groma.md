@@ -29,6 +29,7 @@ test.concurrent('a component outlines its Java file beside a TypeScript file und
     ])
     // Fields, initializers, nested and anonymous types, and enum constant bodies are absent.
     // Code links name the type as Orders and a method as Orders.place; constructors share the type's name.
+    // The first place has a comment naming it after its return type; the name's own line still counts.
     expect(outline('Orders.java')).toEqual([
       ['type', 'Orders', 7, 'public', true, [
         ['Orders', 14, 'public', false],
@@ -49,13 +50,17 @@ test.concurrent('a component outlines its Java file beside a TypeScript file und
       ['type', 'Audited', 81, 'internal', false, [['value', 82, 'public', false]]],
       ['type', 'Base', 85, 'internal', false, [['apply', 86, 'internal', false]]],
     ])
-    // Without a modifier the compact constructor takes the record's access; the other one keeps package access.
+    // Without a modifier the compact constructor, commented before its body, takes the record's access; the other one keeps package access.
+    // The last constructor's name follows an annotation written after its type parameters.
     expect(outline('Receipt.java')).toEqual([
       ['type', 'Receipt', 3, 'public', true, [
         ['Receipt', 4, 'public', false],
         ['Receipt', 7, 'internal', false],
         ['label', 11, 'public', false],
+        ['Receipt', 17, 'public', false],
       ]],
     ])
+    // A compact source file's class has no name in the source, so it stays at its start even where the file name appears.
+    expect(outline('Greeting.java')).toEqual([['type', 'Greeting', 1, 'internal', false, [['main', 1, 'internal', false]]]])
   } finally { await rm(temporary, { recursive: true, force: true }) }
 }, 60000)
