@@ -5,59 +5,64 @@ status: Done
 assignee:
   - '@claude'
 created_date: '2026-09-16 20:32'
-updated_date: '2026-09-18 14:41'
+updated_date: '2026-09-18 18:25'
 labels: []
 dependencies: []
 references:
   - scanners-typescript-outline
   - framework-package
   - modules-discovery
+  - javascript-src-index
 modified_files:
-  - '''plugins/scanners/javascript/package.json'''
-  - '''plugins/scanners/javascript/.gitignore'''
-  - '''plugins/scanners/javascript/src/sources.ts'''
-  - '''plugins/scanners/javascript/src/tokens.ts'''
-  - '''plugins/scanners/javascript/src/evidence.ts'''
-  - '''plugins/scanners/javascript/src/index.ts'''
-  - '''plugins/scanners/framework-package.ts'''
-  - '''plugins/scanners/javascript/build.ts'''
-  - '''bun.lock'''
-  - '''test/fixtures/javascript-source/src/cart.mjs'''
-  - '''test/fixtures/javascript-source/src/totals.cjs'''
-  - '''test/fixtures/javascript-source/src/panel.jsx'''
-  - '''test/fixtures/javascript-source/public/legacy.js'''
-  - '''test/fixtures/javascript-source/public/bundle.js'''
-  - '''test/fixtures/javascript-source/public/vendor.min.js'''
-  - '''plugins/scanners/javascript/src/declarations.ts'''
-  - '''plugins/scanners/javascript/src/outline.ts'''
-  - '''plugins/scanners/typescript-outline.ts'''
-  - '''test/fixtures/javascript-outline/app/checkout.mjs'''
-  - '''test/fixtures/javascript-outline/app/totals.cjs'''
-  - '''test/fixtures/javascript-outline/app/legacy.js'''
-  - '''test/fixtures/javascript-outline/groma/systems/shop/system.md'''
+  - plugins/scanners/javascript/package.json
+  - plugins/scanners/javascript/.gitignore
+  - plugins/scanners/javascript/src/sources.ts
+  - plugins/scanners/javascript/src/tokens.ts
+  - plugins/scanners/javascript/src/evidence.ts
+  - plugins/scanners/javascript/src/index.ts
+  - plugins/scanners/framework-package.ts
+  - plugins/scanners/javascript/build.ts
+  - bun.lock
+  - test/fixtures/javascript-source/src/cart.mjs
+  - test/fixtures/javascript-source/src/totals.cjs
+  - test/fixtures/javascript-source/src/panel.jsx
+  - test/fixtures/javascript-source/public/legacy.js
+  - test/fixtures/javascript-source/public/bundle.js
+  - test/fixtures/javascript-source/public/vendor.min.js
+  - plugins/scanners/javascript/src/declarations.ts
+  - plugins/scanners/javascript/src/outline.ts
+  - plugins/scanners/typescript-outline.ts
+  - test/fixtures/javascript-outline/app/checkout.mjs
+  - test/fixtures/javascript-outline/app/totals.cjs
+  - test/fixtures/javascript-outline/app/legacy.js
+  - test/fixtures/javascript-outline/groma/systems/shop/system.md
   - >-
-    'test/fixtures/javascript-outline/groma/systems/shop/containers/api/container.md'
+    test/fixtures/javascript-outline/groma/systems/shop/containers/api/container.md
   - >-
-    'test/fixtures/javascript-outline/groma/systems/shop/containers/api/components/orders.md'
-  - '''test/fixtures/javascript-duplicates/readiness.js'''
-  - '''test/fixtures/javascript-duplicates/scheduling.js'''
-  - '''test/fixtures/javascript-duplicates/invoice.js'''
-  - '''test/fixtures/javascript-duplicates/quote.js'''
-  - '''test/fixtures/javascript-duplicates/callbacks.js'''
-  - '''test/fixtures/javascript-duplicates/countdown.js'''
-  - '''test/fixtures/javascript-duplicates/descend.js'''
-  - '''docs/scanners/javascript/index.md'''
-  - '''docs/scanners/javascript/validation.md'''
-  - '''src/scanner/modules/official-catalog.ts'''
-  - '''scripts/scanner-release.ts'''
-  - '''README.md'''
-  - '''test-bun/scanner-fresh-checkout.test.ts'''
-  - '''test/fixtures/javascript-source/src/label.ts'''
-  - '''test-bun/javascript-scanner.test.ts'''
-  - '''test-bun/scanner-installation.test.ts'''
-  - '''test/fixtures/javascript-outline/app/report.js'''
-  - '''test/fixtures/javascript-parity/pick.js'''
-  - '''test/fixtures/javascript-parity/pick.ts'''
+    test/fixtures/javascript-outline/groma/systems/shop/containers/api/components/orders.md
+  - test/fixtures/javascript-duplicates/readiness.js
+  - test/fixtures/javascript-duplicates/scheduling.js
+  - test/fixtures/javascript-duplicates/invoice.js
+  - test/fixtures/javascript-duplicates/quote.js
+  - test/fixtures/javascript-duplicates/callbacks.js
+  - test/fixtures/javascript-duplicates/countdown.js
+  - test/fixtures/javascript-duplicates/descend.js
+  - docs/scanners/javascript/index.md
+  - docs/scanners/javascript/validation.md
+  - src/scanner/modules/official-catalog.ts
+  - scripts/scanner-release.ts
+  - README.md
+  - test-bun/scanner-fresh-checkout.test.ts
+  - test/fixtures/javascript-source/src/label.ts
+  - test-bun/javascript-scanner.test.ts
+  - test-bun/scanner-installation.test.ts
+  - test/fixtures/javascript-outline/app/report.js
+  - test/fixtures/javascript-parity/pick.js
+  - test/fixtures/javascript-parity/pick.ts
+  - test/fixtures/javascript-invalid/src/broken.js
+  - docs/scanners/discovery.md
+  - test/fixtures/javascript-invalid/src/valid.js
+  - docs/scanners/index.md
 type: feature
 ordinal: 483000
 ---
@@ -100,6 +105,13 @@ The official TypeScript and React scanners read only `.ts` and `.tsx` files, so 
 
 8. Report outline visibility from how a file publishes a name: an ECMAScript export, a CommonJS `module.exports`/`exports.name` assignment, or, in a file that states no module boundary, every top-level declaration, because those names are globals.
 9. Guard the token spellings against the TypeScript scanner with a fixture holding the same body in both languages.
+
+Review round (Codex, Grok cold reviews at cf8e7975):
+10. Invalid syntax fails the scan (Codex u09 #2): parsing alone recovers from errors, so the scanner asks the classic compiler for the syntactic diagnostics of the files it parsed and fails with JAVASCRIPT_SOURCE_INVALID naming each file, line and error, as the documented scanner contract and the React, Vue and Angular scanners do. Red test with an invalid fixture file.
+11. docs/scanners/discovery.md gains the JavaScript file-presence row (Grok u09 #1).
+Already resolved in TASK-424.7's commit: the third tokenizer copy (Codex u09 #3) now uses the shared plugins/scanners/typescript-operations.ts. Skipped: JSX in .js (Grok-all) does not reproduce, since the classic compiler parses .js with the JSX language variant (probe: no parse errors, a JsxElement node). HTTP findings (http-scope, http-reads, http-endpoints, http-requests) belong to the HTTP lane under TASK-416.11.
+
+12. Coordinator decision, replacing step 10: a file that does not parse contributes no evidence instead of failing the scan, because scanners do not see the scanners.json exclusions and a broken vendored or template script would otherwise stop the whole scan. The file keeps its inventory entry with no symbols, and one JAVASCRIPT_SOURCE_INVALID warning names each such file with its first parse error. Only parse errors count, so TypeScript-style type annotations, as in many Flow-typed files, keep their evidence.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
@@ -159,6 +171,12 @@ TASK-431 (Swift) was committed first, but four registration edits could not be s
 The README language table was separable, so the Swift row is in the Swift commit and the JavaScript row is here.
 
 The working tree also holds an uncommitted repository-wide rescan from another session, over sixty new element documents plus a modified groma/relationships.md, including the Swift and JavaScript scanner elements. Committing the Swift or JavaScript fragment of it would have added a new shared `groma-md-build` container and left the relationships that reference the new elements uncommitted, so no groma/ document is in either commit. That batch belongs to the session that produced it.
+
+Review round (Codex and Grok cold reviews at cf8e7975). Verified with a probe: a file holding export function broken( { ... } produced a successful observation with a broken operation (Codex u09 #2), and docs/scanners/discovery.md had no JavaScript row (Grok u09 #1). Fixed: plugins/scanners/javascript/src/index.ts parses every source, then asks the classic compiler for the syntactic diagnostics of those parsed files through a program that reads no other file (noLib, noResolve), and fails with JAVASCRIPT_SOURCE_INVALID naming each file, line and error, like the React, Vue and Angular scanners; TypeScript-only syntax such as a type annotation in a .js file fails too, as the compiler reports it. docs/scanners/javascript/index.md states the failure; docs/scanners/discovery.md lists the JavaScript file-presence rule. Test: test/fixtures/javascript-invalid holds one broken file; the new test fails without the fix. Resolved in TASK-424.7's commit 83cc22fa: the third tokenizer copy (Codex u09 #3), now plugins/scanners/typescript-operations.ts. Skipped: JSX in .js (Grok-all) does not reproduce; the classic compiler parses .js with the JSX language variant, and the probe found a JsxElement and no parse error. HTTP findings belong to TASK-416.11. The modified-file list was re-recorded without the literal quotes the earlier entries carried. Verification: bun run check in an isolated worktree at 2452ec73 plus this task's files exit 0 (biome: pre-existing warning and infos only; tsc clean; node 16 pass; bun 525 pass, 35 skip, 0 fail); bun plugins/scanners/javascript/build.ts succeeds there.
+
+Coordinator decision applied (replaces the scan failure above): plugins/scanners/javascript/src/index.ts reads each file's parse errors from the pinned compiler's source file (the public API reports them only through a program, mixed with checks that reject TypeScript-only syntax the parser still reads). A file with a parse error keeps its inventory entry with no symbols and contributes no operations, calls or HTTP facts; one warning diagnostic, JAVASCRIPT_SOURCE_INVALID, lists each such file with its first error line, and the rest of the scan proceeds. Probe: a .js file with a type annotation, a JSX .js file and a module using private fields and static blocks all keep their evidence; the broken file yields none. Test: test/fixtures/javascript-invalid holds broken.js and valid.js; the test asserts no evidence for broken.js, evidence for valid.js and the warning, and fails without the fix. docs/scanners/javascript/index.md describes it, and docs/scanners/index.md names the JavaScript scanner as the exception to 'Syntax errors remain scan failures'. Verification: bun run check in an isolated worktree at 996fb4e9 plus this task's files exit 0 (biome: pre-existing warning and infos only; tsc clean; bun 558 pass, 35 skip, 0 fail); bun plugins/scanners/javascript/build.ts succeeds there.
+
+Cold review of this round, applied: parse errors that only strict mode raises on octal literals and escapes (codes 1121, 1487, 1488, 1489, such as 0755 or '\033[31m') are ignored as a named set, because JavaScript outside strict mode accepts them; each file that does not parse gets its own JAVASCRIPT_SOURCE_INVALID warning with file and line, which the scan report groups; the page states that the source outline still lists the declarations the parser recovers from such a file, and the Validation list names the fixture. test/fixtures/javascript-invalid/src/valid.js is CommonJS with a legacy octal literal and a type annotation, so ignoring those codes or switching to program syntactic diagnostics fails the test. Re-verification: bun run check in an isolated worktree at 19b20fe4 plus this task's files exit 0 (biome: pre-existing warning and infos only; tsc clean; bun 564 pass, 35 skip, 0 fail); bun plugins/scanners/javascript/build.ts succeeds; the test fails with index.ts reverted.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
@@ -167,4 +185,6 @@ The working tree also holds an uncommitted repository-wide rescan from another s
 Delivered the official JavaScript scanner as @groma/scanner-javascript. It bundles the pinned classic TypeScript 6.0.3 compiler and parses each authored .js, .mjs, .cjs and .jsx file alone, so ECMAScript modules, CommonJS and browser scripts are read without a tsconfig, a program, project dependencies or project tools. Minified output is excluded by a .min.js style name and by an average line length of 500 characters or more, and core applies the configured scanners.json exclusions. The scan reports one source root, top-level functions and classes as symbols, operations for functions, function literals and methods with a body, unresolved calls, and a module operation that owns a script's top-level work. Source ranges and binding-normalized tokens are attached only to named operations, with the TypeScript scanner's token spellings, so groma lint compares JavaScript. The source outline reuses the shared TypeScript outline module and reports visibility from how a file publishes a name. Registered in the official catalog, the shared release staging, the README language table and docs/scanners/javascript.
 
 Verified with test-bun/javascript-scanner.test.ts (6 concurrent tests over the javascript-source, javascript-outline, javascript-parity and javascript-duplicates fixtures), the shared fresh-checkout package test with only Git on PATH and network access blocked, and a disposable tracked-source copy of wifi-densepose at 66392cb4 where discovery recommended the scanner, 47 authored files produced 1249 operations with 758 compared bodies and 4762 unresolved calls, a repeat scan was identical, a second fold created no elements and groma lint reported 32 findings. bun run check exits 0 in a detached worktree holding only this task's changes: 16 Node tests and 477 Bun tests pass.
+
+Review round: after external cold reviews, a JavaScript file that does not parse keeps its inventory entry but contributes no declarations, operations, calls, HTTP facts or tokens, and gets a JAVASCRIPT_SOURCE_INVALID warning at its first parse error while the rest of the scan proceeds (sloppy-mode octal literals and TypeScript-style annotations still parse); discovery documentation lists the JavaScript rule; the tokenizer copy was replaced by the shared TypeScript-family module in TASK-424.7. Verified by the javascript-invalid fixture test (fails without the fix), bun run check in an isolated worktree and the package build.
 <!-- SECTION:FINAL_SUMMARY:END -->

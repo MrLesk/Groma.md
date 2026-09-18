@@ -34,6 +34,7 @@ depth. These rules are declared by the current official plugins:
 | `setup.py`, `setup.cfg`, `requirements.txt` | Python project or dependency declaration |
 | `*.php` | PHP source; no Composer manifest is required |
 | `*.swift` | Swift source; no package manifest is required |
+| `*.js`, `*.mjs`, `*.cjs`, `*.jsx` | JavaScript source; no package manifest is required |
 | `go.mod` | Go module and its `go` version directive |
 | `Cargo.toml` | Cargo package or workspace, with a literal package `rust-version` when present |
 
