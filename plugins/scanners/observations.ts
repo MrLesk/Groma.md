@@ -26,6 +26,8 @@ export function combineObservations(parts: { key: string; observation: ScanObser
   const invocations: NonNullable<ScanObservation['invocations']> = []
   const diagnostics: ScanObservation['diagnostics'] = []
   const sourceUnits: NonNullable<ScanObservation['sourceUnits']> = []
+  const httpEndpoints: NonNullable<ScanObservation['httpEndpoints']> = []
+  const httpRequests: NonNullable<ScanObservation['httpRequests']> = []
   for (const { key, observation } of parts) {
     const id = (value: string) => JSON.stringify([key, value])
     roots.push(...observation.roots.map(root => ({ ...root, id: id(root.id), ...(root.parent ? { parent: id(root.parent) } : {}) })))
@@ -37,11 +39,15 @@ export function combineObservations(parts: { key: string; observation: ScanObser
     }
     operations.push(...(observation.operations ?? []).map(operation => ({ ...operation, id: id(operation.id) })))
     invocations.push(...(observation.invocations ?? []).map(call => ({ ...call, source: id(call.source), targets: call.targets.map(id) })))
+    httpEndpoints.push(...(observation.httpEndpoints ?? []).map(endpoint => ({ ...endpoint, operation: id(endpoint.operation) })))
+    httpRequests.push(...(observation.httpRequests ?? []).map(request => ({ ...request, operation: id(request.operation) })))
     diagnostics.push(...observation.diagnostics)
     sourceUnits.push(...observation.sourceUnits ?? [])
   }
   return createScanObservation({ scanner: parts[0]!.observation.scanner, roots, files: [...files.values()],
     operations, invocations, diagnostics,
     ...(parts.some(part => part.observation.sourceUnits !== undefined) ? { sourceUnits } : {}),
+    ...(parts.some(part => part.observation.httpEndpoints !== undefined) ? { httpEndpoints } : {}),
+    ...(parts.some(part => part.observation.httpRequests !== undefined) ? { httpRequests } : {}),
   })
 }

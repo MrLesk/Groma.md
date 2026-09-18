@@ -21,6 +21,7 @@ public sealed class RoslynScanner
         List<ScanSourceUnit> sourceUnits = [];
         List<ScanDiagnostic> diagnostics = [];
         OperationEvidence evidence = new(request.RepositoryRoot);
+        HttpEvidence http = new(request.RepositoryRoot);
 
         foreach (Project project in projects)
         {
@@ -38,7 +39,7 @@ public sealed class RoslynScanner
                 SemanticModel model = compilation.GetSemanticModel(tree);
                 SyntaxNode root = await tree.GetRootAsync(cancellationToken);
                 files.Add(new ScanFile(file, [rootIds[project.Id]], DeclaredSymbols(root, model, cancellationToken)));
-                evidence.Extract(root, model, file, cancellationToken);
+                http.Extract(root, model, file, evidence.Extract(root, model, file, cancellationToken), cancellationToken);
             }
             foreach (ProjectReference reference in project.ProjectReferences)
             {
@@ -54,9 +55,11 @@ public sealed class RoslynScanner
             SourcePath.Relative(request.RepositoryRoot, project.FilePath!), solutionId)).ToList();
         if (solutionId is not null)
             roots.Add(new ScanRoot(solutionId, "solution", Path.GetFileNameWithoutExtension(request.Input), inputFile));
+        ScanOperation[] operations = [.. evidence.Operations, .. http.Operations];
+        var (served, sent) = http.Facts(operations.Select(operation => operation.Id).ToHashSet(StringComparer.Ordinal));
         return ScanObservation.Create(
             new ScannerIdentity("csharp", "c#/.NET", "roslyn", typeof(CSharpCompilation).Assembly.GetName().Version!.ToString()),
-            roots, files, diagnostics, evidence.Operations, evidence.Invocations, sourceUnits);
+            roots, files, diagnostics, operations, evidence.Invocations, sourceUnits, served, sent);
     }
 
     private static void CheckCompilation(Compilation compilation, Project project, string root, List<ScanDiagnostic> diagnostics, CancellationToken token)
