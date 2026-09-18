@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto'
+import path from 'node:path'
 
 import { isReservedDocument } from './architecture-path.ts'
 import { displayName, kebabCase } from './naming.ts'
@@ -9,7 +10,7 @@ interface ComponentSource {
 }
 
 export function sourceStem(file: string): string {
-  return kebabCase(file.split('/').at(-1)?.replace(/\.[^.]+$/, '') ?? file) || 'source'
+  return kebabCase(path.posix.parse(file).name) || 'source'
 }
 
 function readableNames(source: ComponentSource): string[] {
@@ -59,6 +60,6 @@ export function componentNames(
   }
   return new Map(candidates.map(candidate => [candidate.file, {
     id: idFor(candidate),
-    name: displayName(candidate.file.split('/').at(-1)!.replace(/\.[^.]+$/, '').replace(/[_.]/g, '-')),
+    name: displayName(path.posix.parse(candidate.file).name.replace(/[_.]/g, '-')),
   }]))
 }

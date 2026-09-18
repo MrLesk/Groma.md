@@ -134,6 +134,20 @@ test.concurrent('matching a draft keeps its identity and draft status', async ()
   } finally { await rm(root, { recursive: true, force: true }) }
 })
 
+test.concurrent('extension-only source filenames produce readable records that survive repeat scans', async () => {
+  const root = await repository()
+  try {
+    const scan = observation(['source/.swift'])
+    await reconcileScanObservations(root, [scan])
+    const before = await components(root)
+    expect(before).toHaveLength(1)
+    expect(String(before[0]!.title).trim().length).toBeGreaterThan(0)
+    expect(before[0]!.code?.[0]?.file).toBe('source/.swift')
+    expect((await reconcileScanObservations(root, [scan])).created).toBe(0)
+    expect(await components(root)).toEqual(before)
+  } finally { await rm(root, { recursive: true, force: true }) }
+})
+
 test.concurrent('overlapping fresh roots reuse their pending container and an existing ID wins over new collisions', async () => {
   const root = await repository()
   try {
