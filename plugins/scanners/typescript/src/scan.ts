@@ -142,6 +142,8 @@ export async function scanTypeScriptSource(
     files: graph.files.map(node => ({ file: node.file, roots: [scopeId(placements.get(node.file)!)], symbols: node.symbols })),
     operations: graph.operations,
     invocations: graph.invocations,
+    httpEndpoints: graph.httpEndpoints,
+    httpRequests: graph.httpRequests,
     diagnostics: [],
   })
 }

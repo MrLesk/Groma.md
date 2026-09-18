@@ -5,7 +5,7 @@ import {
   isInterfaceDeclaration, isTypeAliasDeclaration, isVariableStatement,
   NodeFlags, SyntaxKind, type SourceFile, type VariableDeclarationList,
 } from 'typescript/unstable/ast'
-import type { ScanSymbol, ScanOperation, ScanInvocation } from '@groma/scanner'
+import type { ScanHttpEndpoint, ScanHttpRequest, ScanSymbol, ScanOperation, ScanInvocation } from '@groma/scanner'
 
 import { usedImportSpecifiers } from './source-usage.ts'
 import { typescriptProjects, type TypeScriptProject } from './projects.ts'
@@ -22,6 +22,8 @@ type SourceEvidence = {
   files: SourceAnalysis[]
   operations: ScanOperation[]
   invocations: ScanInvocation[]
+  httpEndpoints: ScanHttpEndpoint[]
+  httpRequests: ScanHttpRequest[]
 }
 
 const declarationKinds: Partial<Record<SyntaxKind, string>> = {
@@ -52,12 +54,16 @@ function exportSymbols(file: string, source: SourceFile): ScanSymbol[] {
   })
 }
 
+function unique<Fact>(facts: Fact[]): Fact[] {
+  return [...new Map(facts.map(fact => [JSON.stringify(fact), fact])).values()]
+}
+
 /** Each compiler project resolves its own aliases; only selected repository source becomes evidence. */
 export async function analyzeSourceFiles(repositoryRoot: string, paths: string[]): Promise<SourceEvidence> {
-  if (paths.length === 0) return { files: [], operations: [], invocations: [] }
+  if (paths.length === 0) return { files: [], operations: [], invocations: [], httpEndpoints: [], httpRequests: [] }
   const api = new API({ cwd: repositoryRoot })
   try {
-    const result: SourceEvidence = { files: [], operations: [], invocations: [] }
+    const result: SourceEvidence = { files: [], operations: [], invocations: [], httpEndpoints: [], httpRequests: [] }
     for (const project of await typescriptProjects(api, repositoryRoot, paths)) {
       if (!project.config) {
         const analyzed = new Set(result.files.map(file => path.resolve(repositoryRoot, file.file)))
@@ -68,8 +74,13 @@ export async function analyzeSourceFiles(repositoryRoot: string, paths: string[]
       result.files.push(...evidence.files)
       result.operations.push(...evidence.operations)
       result.invocations.push(...evidence.invocations)
+      result.httpEndpoints.push(...evidence.httpEndpoints)
+      result.httpRequests.push(...evidence.httpRequests)
     }
     result.operations = [...new Map(result.operations.map(operation => [operation.id, operation])).values()]
+    // A file shared by two projects states the same facts twice.
+    result.httpEndpoints = unique(result.httpEndpoints)
+    result.httpRequests = unique(result.httpRequests)
     return result
   } finally {
     await api.close()

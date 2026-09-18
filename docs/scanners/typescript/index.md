@@ -52,3 +52,61 @@ These named operations are not compared yet:
 - methods whose name is not an identifier, such as `#run()`, `'run'()`, or
   `[key]()`;
 - functions assigned to class fields, such as `onClick = () => {}`.
+
+## HTTP endpoints and requests
+
+The scanner reports [HTTP facts](../evidence.md#http-endpoints-and-requests) for
+the clients and routers it recognizes by the module their names are imported
+from, in the file that uses them. A wrapper that re-exports a framework, a
+factory that returns an application, and a registrar received as a parameter,
+such as a Fastify plugin's `fastify`, are not recognized.
+
+| Construct | Reported |
+| --- | --- |
+| `fetch(url, init)` | Request; the method comes from a literal `method`, else `GET` |
+| `axios.get`, `.post`, `.put`, `.patch`, `.delete`, `.head`, `.options` | Request with that method |
+| `axios(config)`, `axios.request(config)` | Request from literal `url` and `method`, else `GET` |
+| `axios.create({ baseURL })` instances | Request whose path follows that base |
+| `express()` and `express.Router()` | Endpoint per `get`, `post`, `put`, `patch`, `delete`, `head`, `options`, `all` call with a handler |
+| `Fastify()` | The same calls, and `route({ method, url, handler })`, including a method array |
+| `new Hono()` | The same calls |
+| `@Controller` classes | Endpoint per `@Get`, `@Post`, `@Put`, `@Patch`, `@Delete`, `@Head`, `@Options`, `@All` method from `@nestjs/common` |
+| `Bun.serve({ routes })` | Endpoint per route: a function serves every method, an object one endpoint per known method key |
+
+The six [producer decisions](../evidence.md#producer-checklist) for this
+ecosystem:
+
+1. **Prefixes.** A route's path includes its `@Controller` prefix and every
+   mount prefix, from `app.use('/api', router)` and `app.route('/v1', child)`.
+   A router mounted twice reports one endpoint per prefix. A router this scan
+   never sees mounted, a mount whose prefix is not literal, and a mount on a
+   host the scan does not recognize, such as `createApp().use('/api', router)`,
+   report nothing; an application instance without a mount serves from the root.
+   A Fastify plugin registered with a `prefix` reports nothing, because its
+   routes are registered on the plugin's parameter. A controller is the
+   exception: its endpoints are reported without seeing its module
+   registration, so a `setGlobalPrefix` path is missing from them, which core's
+   single leading segment tolerates.
+2. **Endpoints.** Only the route registrations above. `use` with one argument,
+   middleware, and a `Bun.serve` `fetch` handler are not endpoints, and
+   `app.get('name')` without a handler reads a setting. A route value the scan
+   cannot read, such as a spread of handlers, claims no method.
+3. **Dynamic or unknown.** `` `/talks/${id}` `` is dynamic;
+   `` `/talks/${id}-latest` ``, a path built from a parameter, and an
+   unresolvable value are unknown. A query string is dropped, computed or not.
+4. **Local helpers.** Not supported: the URL is read at the client call only, so
+   a helper that forwards a parameter reports unknown text. Author those rows.
+5. **Bases.** A `const` assigned a literal once, an object-literal property, and
+   a template of those are literal text. `process.env.X` and
+   `import.meta.env.X` set `configured` whatever declares them, as does any
+   value whose root is declared outside project source, such as an imported
+   package constant. A literal scheme and host, and a value computed in project
+   source, report a leading unknown segment. An `axios.create` instance must be
+   a `const`, because a reassignable one can change its base.
+6. **File-location routes.** None: TypeScript projects declare routes in code,
+   so every endpoint names its resolved handler, or the registering operation
+   when the handler is not certain.
+
+Supported route patterns are literal text, `:name`, `:name?`, and a trailing
+`*` or `*name`. A regular-expression parameter, an optional group, and a
+mid-path wildcard report nothing for that route.

@@ -1,0 +1,38 @@
+import express, { Router } from 'express'
+
+const orphan = Router()
+const patterns = express()
+const hidden = Router()
+
+orphan.get('/orphan', handle)
+patterns.get(routeFor('talks'), handle)
+patterns.get('/files/:id(\\d+)', handle)
+patterns.get('setting')
+patterns.use(prefixFor(), hidden)
+hidden.get('/hidden', handle)
+
+function routeFor(name: string): string {
+  return `/${name}`
+}
+
+function prefixFor(): string {
+  return '/x'
+}
+
+function handle(): string {
+  return 'handled'
+}
+
+export async function jobRoutes(fastify: { get(path: string, handler: () => string): void }): Promise<void> {
+  fastify.get('/plugin-route', handle)
+  await Promise.resolve()
+}
+
+const hosted = Router()
+
+hosted.get('/hosted', handle)
+createApp().use('/api', hosted)
+
+function createApp(): ReturnType<typeof express> {
+  return express()
+}
