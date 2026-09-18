@@ -158,12 +158,18 @@ ecosystem:
 4. **Local helpers.** Not supported: the URL is read at the client call, so a
    helper that forwards a path parameter reports unknown text, and its callers
    report nothing. Author those rows.
-5. **Bases.** A root-relative literal path has no base. A `const` and an
-   object-literal property assigned a literal are literal text; a class field is
-   not, because a constructor can replace it. A value the scanner cannot see, such
-   as an ambient declaration, `process.env`, `import.meta.env` or a constant
-   imported from a package, sets `configured`. A literal host, a parameter, and
-   any other computed value report a leading unknown segment.
+5. **Bases.** A root-relative literal path has no base. A variable with a
+   literal initializer that the project never assigns again is literal text. So
+   is a property of an object literal such a variable holds, while no code in the
+   project assigns or deletes that property or an object above it, hands one of
+   them to other code, or calls a method through them. A value the scanner cannot
+   see, such as an ambient declaration, `process.env`, `import.meta.env` or a
+   constant imported from a package, sets `configured`, and so does a field read
+   through `this`, which holds the client's own base setting. Text that continues
+   a configured value's last segment instead of starting with `/` is unknown. A
+   literal host, also when literal pieces only state it together, a parameter, a
+   value a call returns, and any other computed value report a leading unknown
+   segment.
 6. **File-location routes.** A route file's path after `server/` is its served
    path, with `[id]` a parameter, `[...slug]` a catch-all and an `index` file its
    directory. A `.get`, `.post`, `.put`, `.patch`, `.delete`, `.head` or
@@ -184,28 +190,26 @@ attaches a source range, in the `.vue` file's own lines, and body tokens to:
   a `<script setup>` block exposes to its template;
 - methods with an identifier name and a body, in classes and in object
   literals, such as the `methods` of an exported options object;
+- constructors with a body;
 - arrow functions and function expressions assigned to a variable or to a
   property of an object literal.
 
 Unnamed arrow functions and function expressions are anonymous callbacks, as
 are functions written directly on an object literal passed to a call, `new`, or
-a decorator: `setup()` on the argument of `defineComponent({ ... })` is not
-compared, while the methods nested under its `methods` property are. Top-level
-statements of a block are initializer code, and template expressions are not
-operations. The scanner reports every named body whatever its size, because core
-applies the minimum body sizes.
+a decorator, also inside parentheses, `as`, `satisfies` or `!`: `setup()` on the
+argument of `defineComponent({ ... })` is not compared, while the methods nested
+under its `methods` property are. Top-level statements of a block are
+initializer code, and template expressions are not operations. The scanner
+reports every named body whatever its size, because core applies the minimum
+body sizes.
 
-The named operations the [TypeScript scanner](../typescript/index.md#compared-operations)
-lists as not compared yet, such as constructors, accessors, and methods whose
-name is not an identifier, are not compared here either.
-
-Local names become slots in order of appearance, while operators, literals,
-property names, and names the block does not declare stay as written, so a
-recursive call keeps the name it calls. The token spellings are the
-[TypeScript scanner's](../typescript/index.md#compared-operations), so one body
-compares equal in a single-file component script and in a module. Scripts the
-component keeps in a separate file are TypeScript modules, which the TypeScript
-scanner compares.
+The Vue, JavaScript and TypeScript scanners share one rule and one tokenizer, so
+the named operations the [TypeScript scanner](../typescript/index.md#compared-operations)
+lists as not compared yet, such as accessors and methods whose name is not an
+identifier, are not compared here either, and the tokens that page lists stay
+here too. One body therefore compares equal in a single-file component script
+and in a module. Scripts the component keeps in a separate file are TypeScript
+modules, which the TypeScript scanner compares.
 
 ## Nested projects
 

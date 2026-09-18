@@ -188,7 +188,7 @@ test.concurrent('bodies that differ in one operator, grouping or keyword are not
   const root = await scannedFixture('distinct-bodies', 'src/bodies.ts')
   try {
     const findings = detectDuplicatedLogic([(await scanTypeScriptSource(root))!], new Map())
-    // Each function pair differs only in postfix ++ or --, parentheses, typeof, break or continue, or else.
+    // Each function pair differs only in one operator, grouping, keyword, literal, `?.`, `...`, `this` or `index`.
     expect(findings.map(finding => [finding.match, namesOf(finding)])).toEqual([['exact', ['constructor', 'constructor']]])
   } finally {
     await rm(root, { recursive: true, force: true })

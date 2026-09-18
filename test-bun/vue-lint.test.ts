@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test'
+import type { ScanOperation } from '@groma/scanner'
 import { cp, mkdtemp, rm } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
@@ -54,13 +55,17 @@ test.concurrent('the Vue scanner and the TypeScript scanner report the same toke
   try {
     const vue = (await scanVue(root))!
     const typescript = (await scanTypeScriptSource(root))!
-    const component = vue.operations!.find(operation => operation.file === 'Totals.vue')!
-    const module = typescript.operations!.find(operation => operation.file === 'totals.ts' && operation.tokens)!
+    const compared = (operations: ScanOperation[], file: string) => operations
+      .filter(operation => operation.file === file && operation.tokens)
+      .sort((left, right) => left.startLine! - right.startLine!)
 
-    // The fixture repeats one body, including an `as` type assertion, in a script and in a module.
-    expect(component.tokens).toEqual(module.tokens)
-    expect(component.startLine).toBe(4)
-    expect(component.endLine).toBe(10)
+    // The fixture repeats a function and a constructor in a script and in a module. The bodies use an `as`
+    // assertion, postfix `++`, parentheses, `typeof`, `else` and an index.
+    const component = compared(vue.operations!, 'Totals.vue')
+    expect(component.map(operation => operation.tokens)).toEqual(compared(typescript.operations!, 'totals.ts').map(operation => operation.tokens))
+    expect(component.map(operation => operation.name)).toEqual(['total', 'constructor'])
+    expect(component[0]!.startLine).toBe(4)
+    expect(component[0]!.endLine).toBe(16)
   } finally { await rm(temporary, { recursive: true, force: true }) }
 }, 120000)
 

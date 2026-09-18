@@ -1,10 +1,7 @@
 import type { ScanInvocation, ScanOperation, ScanSymbol } from '@groma/scanner'
 import ts from 'typescript'
+import { typeScriptOperations } from '../../typescript-operations.ts'
 import { topLevelDeclarations } from './declarations.ts'
-import { tokenizeOperation } from './tokens.ts'
-
-// The operation and named-operation rules follow the reference ../../typescript/src/source-operations.ts
-// and docs/architecture-findings.md; change both together.
 
 export interface FileEvidence {
   symbols: ScanSymbol[]
@@ -16,33 +13,7 @@ export interface FileEvidence {
   operationAt(node: ts.Node): string
 }
 
-/** Functions, function literals and methods with a body. Constructors and accessors carry no evidence. */
-function executable(node: ts.Node): boolean {
-  return ts.isArrowFunction(node) || ts.isFunctionExpression(node)
-    || ((ts.isFunctionDeclaration(node) || ts.isMethodDeclaration(node)) && node.body !== undefined)
-}
-
-/**
- * A function written as a property of an object literal argument, such as `subscribe({ next: value => ... })`.
- * The argument may belong to a function call or a `new` call.
- */
-function callArgumentProperty(node: ts.Node): boolean {
-  const property = ts.isPropertyAssignment(node.parent) ? node.parent : node
-  if (!ts.isPropertyAssignment(property) && !ts.isMethodDeclaration(property)) return false
-  const invocation = property.parent.parent
-  return ts.isObjectLiteralExpression(property.parent)
-    && (ts.isCallExpression(invocation) || ts.isNewExpression(invocation))
-}
-
-/** Name of an operation core may compare; undefined for module code and anonymous callbacks. */
-function comparableName(node: ts.Node): string | undefined {
-  if (callArgumentProperty(node)) return undefined
-  const named = node as ts.NamedDeclaration
-  if (named.name && ts.isIdentifier(named.name)) return named.name.text
-  const parent = node.parent
-  if (ts.isPropertyAssignment(parent) || ts.isVariableDeclaration(parent)) return parent.name.getText()
-  return undefined
-}
+const { executable, comparedOperation } = typeScriptOperations(ts)
 
 /** Every operation and call of one parsed file. Calls stay unresolved: source alone proves no target. */
 export function javaScriptEvidence(file: string, source: ts.SourceFile): FileEvidence {
@@ -55,11 +26,8 @@ export function javaScriptEvidence(file: string, source: ts.SourceFile): FileEvi
 
   function operation(node: ts.Node): ScanOperation {
     const position = node.getStart(source)
-    const name = comparableName(node)
-    // Only named operations are compared as possible duplicate logic.
-    const body = name === undefined ? {}
-      : { startLine: lineOf(position), endLine: lineOf(node.end), tokens: tokenizeOperation(node) }
-    const recorded = { id: `${file}#${position}`, file, name: name ?? '(anonymous)', position, ...body }
+    // Only named operations carry the range and tokens core compares as possible duplicate logic.
+    const recorded = { id: `${file}#${position}`, file, name: '(anonymous)', position, ...comparedOperation(node) }
     operations.push(recorded)
     owners.set(node, recorded.id)
     return recorded

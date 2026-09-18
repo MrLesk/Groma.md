@@ -101,29 +101,12 @@ their name is private.
 ## Compared operations
 
 `groma lint` and scan findings compare JavaScript operations under the
-[shared rule](../../architecture-findings.md#compared-operations). The scanner
-attaches a source range and body tokens to:
-
-- function declarations and named function expressions;
-- methods with an identifier name and a body, in classes and object literals;
-- arrow functions and function expressions assigned to a `const`, `let` or `var`
-  variable, or to a property of an object literal.
-
-Token spellings match the [TypeScript scanner](../typescript/index.md#compared-operations),
-so the same body in a `.js` file and in a `.ts` file compares equal. An
-operation's own name stays visible in its body, so two recursive functions with
-different names are not identical copies.
-
-Functions written as properties or method shorthand of an object literal passed
-directly to a function call or `new` are anonymous callbacks, as are other
-unnamed arrow functions and function expressions. Module code is not compared.
-
-These named operations are not compared, as in TypeScript:
-
-- constructors and `get` or `set` accessors;
-- methods whose name is not an identifier, such as `#run()`, `'run'()` or
-  `[key]()`;
-- functions assigned to class fields, such as `onClick = () => {}`.
+[shared rule](../../architecture-findings.md#compared-operations). The
+JavaScript, Vue and TypeScript scanners share one rule and one tokenizer, so the
+operations the [TypeScript scanner](../typescript/index.md#compared-operations)
+compares, those it does not compare yet, and the tokens that page lists apply
+here too. The same body in a `.js` file and in a `.ts` file therefore compares
+equal.
 
 ## HTTP facts
 
@@ -185,13 +168,20 @@ ecosystem:
    callers report nothing.
 5. **The base.** `fetch('/api/talks')` has no base. A value this file cannot see
    is configuration, so an imported or required constant, `process.env.API_URL`,
-   and an `axios.create({ baseURL })` built from one set `configured`. A `const`
-   this file declares resolves to its own literal text. A literal scheme and
-   host, and a base the file computes, become the leading unknown segment, which
-   derives nothing. Every name the file binds counts as computed, including a `let`,
-   a `var`, a parameter, a destructured name and a `for (const base of bases)`
-   variable: a name the scanner merely failed to resolve must never pass for a
-   configuration value, because core compares a configured path.
+   and an `axios.create({ baseURL })` built from one set `configured`, as does a
+   field read through `this`, which holds the client's own base setting. A
+   variable with a literal initializer that this file never assigns again
+   resolves to its own literal text. So does a property of an object literal such
+   a variable holds, while the file does not export the variable and nothing in
+   it assigns or deletes that property or an object above it, hands one of them
+   to other code, or calls a method through them. A literal scheme and host, also
+   when literal pieces only state it together, text that continues a configured
+   value's last segment instead of starting with `/`, and a base the file
+   computes become the leading unknown segment, which derives nothing. Every
+   other name the file binds counts as computed, including a parameter, a
+   destructured name and a `for (const base of bases)` variable: a name the
+   scanner merely failed to resolve must never pass for a configuration value,
+   because core compares a configured path.
 6. **File-location routes.** These frameworks declare no route by file location,
    so every endpoint names the handler its route states: the function written in
    place, or the one this file declares under the name the route gives. When the
