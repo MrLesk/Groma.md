@@ -146,7 +146,8 @@ container ID and stem. Collisions add source parent directories, nearest
 first, before the container ID and stem. For example, repeated build files
 under a `scanner` container can become `vue-scanner-build` and
 `react-scanner-build`. Remaining collisions climb further source parents.
-Reserved document names follow the same qualification rule.
+Reserved document names and the command words `group` and `relation`, which the
+CLI reads as addresses, follow the same qualification rule.
 
 If all readable context still collides after lowercase kebab normalization,
 core appends the first eight hexadecimal digits of SHA-256 of the exact

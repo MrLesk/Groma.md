@@ -181,3 +181,23 @@ test.concurrent('authored titles do not force identity qualifiers into new displ
     expect(new Set(after.map(item => item.id)).size).toBe(after.length)
   } finally { await rm(root, { recursive: true, force: true }) }
 })
+
+test.concurrent('scanned IDs never take a word the CLI reads as an address, and later scans keep them', async () => {
+  expect([...names(['src/group.ts', 'src/relation.ts']).values()].map(value => value.id)).toEqual(['src-group', 'src-relation'])
+
+  const root = await repository()
+  // A project without files is found again only through the ID the first scan gave it.
+  const scan = createScanObservation({
+    scanner: { id: 'fixture', technology: 'fixture', engine: 'fixture', engineVersion: '1' },
+    roots: [{ id: 'root', kind: 'project', name: 'Group' }],
+    files: [],
+    diagnostics: [],
+  })
+  try {
+    expect((await reconcileScanObservations(root, [scan])).created).toBe(2)
+    const ids = (await loadArchitecture(root)).documents
+      .map(document => (document.frontmatter.groma as { id?: string } | undefined)?.id)
+    expect(ids).not.toContain('group')
+    expect((await reconcileScanObservations(root, [scan])).created).toBe(0)
+  } finally { await rm(root, { recursive: true, force: true }) }
+})

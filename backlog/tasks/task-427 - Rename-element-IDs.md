@@ -5,13 +5,16 @@ status: Done
 assignee:
   - '@claude'
 created_date: '2026-09-16 20:42'
-updated_date: '2026-09-18 14:54'
+updated_date: '2026-09-18 18:05'
 labels: []
 dependencies: []
 references:
   - curate
   - src-authoring
   - src-cli
+  - src-architecture-model
+  - src-scanner
+  - write-commands
 modified_files:
   - src/markdown-emitter.ts
   - src/curate.ts
@@ -23,6 +26,13 @@ modified_files:
   - docs/product-model.md
   - src/curate-rewrites.ts
   - src/curate-rename.ts
+  - src/architecture-model.ts
+  - test-bun/scan-component-naming.test.ts
+  - src/architecture-path.ts
+  - src/scan-component-naming.ts
+  - src/scan-reconciler.ts
+  - docs/component-markdown.md
+  - test-bun/system-curation.test.ts
 type: feature
 ordinal: 500000
 ---
@@ -62,6 +72,18 @@ Scanned element IDs come from file and project names and survive curation, so a 
 8. Verify with bun run check in an isolated worktree and the CLI on a scratch repository.
 
 9. Split the rename out of src/curate.ts, which passed the 500-line limit: src/curate-rewrites.ts holds the document write shapes, the curation context, requireElement and relocated, and src/curate-rename.ts holds the rename and its link repointing.
+
+Review-fix round (external reviews at cf8e7975):
+10. Fix: a reference definition indented by up to three spaces, or with its destination on the next line, is a link the Markdown reader resolves, but the rename left it pointing at the removed document, so the rename was refused when a flow used it and otherwise wrote a world that no longer loads (reproduced). src/curate-rename.ts matches the definition syntax the reader accepts, and src/curate.ts validates the architecture the write would leave (relationships and flows) before every structural write, not only when flows exist.
+11. Fix: the CLI reads the words group and relation as addresses, so an element renamed to either could not be edited again (reproduced). freeId refuses both, which covers rename and the other commands that name new records.
+12. Already fixed under TASK-426 (5b5a7d1b): renaming a scanned container that owns no files is refused, because the next scan would recreate it; the human guides and the product model Identity section describe --id.
+13. Tests in test-bun/rename.test.ts: an indented and a next-line definition follow a rename and the world still loads; renaming to group or relation is refused through the CLI parser.
+
+14. The command-word refusal lives in freeId, so its test calls editArchitecture, which the CLI calls, rather than the CLI parser. A rename that would leave a link naming the old document (for example a definition inside a block quote, which the reader resolves but the rewrite does not match) is refused with nothing written.
+
+15. One reserved-ID rule: isReservedId in src/architecture-path.ts (a reserved document name or a command word) is used by freeId and by scan ID allocation (availableId in src/scan-reconciler.ts for systems and containers, componentNames in src/scan-component-naming.ts for files), so a file group.ts or a project named Group gets a qualified ID. existingChild also looks up the qualified root-level ID availableId gives, so a project without files whose name is reserved is found again instead of created on every scan. Docs: structure.md names the command words among refused IDs; component-markdown.md names them in the allocation rule. Test in test-bun/scan-component-naming.test.ts.
+
+16. Cold review: src/curate-rename.ts states that the rewrite covers the common link forms and that requireLoadableResult refuses a rename that leaves any other link naming a moved document; availableId and existingChild share qualifiedId; commandWords is one exported constant that isReservedId and the CLI addressing in src/write-commands.ts both use; requireUnrelated stays because its refusal names the relationship's ends, which the loadability check cannot, and a test now covers it.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
@@ -73,10 +95,20 @@ Verification: test-bun/rename.test.ts (synthetic observations) covers a componen
 Cold review applied. Must-fix: link repointing now resolves each parsed link with relationshipTargetFilename and compares it with the moved paths, so a './' prefix, a link title or an angle-bracketed target are repointed too instead of leaving a stale row that refuses to load (a new test writes a './' plus titled row and fails against the old raw-text matching); groma edit <flow-id> --id now throws '--id renames systems, containers, and components' before editFlow instead of silently ignoring the option; and src/curate.ts is back to 407 lines because the rename moved into src/curate-rename.ts with the shared write shapes, context, requireElement and relocated in src/curate-rewrites.ts.
 Accepted optional findings: Rewrite keeps a required id and the link writes use the new DocumentWrite shape, so affectedIds maps the element rewrites and the rename replacement comes from input.newId; the redundant flow-type filter is gone; tests cover renaming an external system into externals/<new-id>.md and refusing an actor and a flow; the structure guide states that only a rename repoints concept-addressed links, that an external renames the same way, and that the value is normalized to kebab-case with the printed id authoritative.
 Re-verification: focused tests pass (6 rename, plus system-curation, detach, editing and flows). bun run check in an isolated worktree at 0b4c137e with only TASK-427 changes passed: biome and tsc clean apart from existing warnings in other files, 16 node tests and 485 bun tests pass (32 skipped), 0 fail.
+
+Review-fix round (external reviews at cf8e7975):
+- Indented reference definitions (Codex must-fix, reproduced: after the rename the world failed to load with 'names no architecture concept'). src/curate-rename.ts rewrites the common link forms: an inline target, optionally titled, and a reference definition indented by up to three spaces with its target on the same or the next line. Other forms the reader accepts (a definition in a block quote or list item, an angle-bracketed target with spaces) are not rewritten. requireLoadableResult in src/curate.ts (formerly requireResolvableFlows) now builds the architecture the write would leave before every structural write, not only when flows exist, so such a rename is refused with nothing written (about 2 ms per write, measured by the cold review).
+- Command words (Codex should-fix, reproduced: an element renamed to group could not be edited through the CLI). isReservedId in src/architecture-path.ts (a reserved document name or one of the exported commandWords that the CLI addressing reads) is the single rule behind freeId and scan ID allocation (availableId for systems and containers, componentNames for files), so a file group.ts or a project named Group gets a qualified ID. existingChild looks up the same qualifiedId as availableId, so a project without files whose name is reserved is found again instead of recreated on every scan.
+- Already fixed under TASK-426 (5b5a7d1b): renaming a scanned container that owns no files is refused; the human guides and the product model Identity section describe --id.
+- requireUnrelated overlaps the loadability check but stays: its refusal names the relationship's ends, while the check reports an endpoint that names no concept. test-bun/system-curation.test.ts now covers it.
+- Follow-up (not fixed): existingChild also matches the qualified root-level ID, so a new project named X can match a system created earlier from a project named 'Source X' (id source-x).
+Verification: test-bun/rename.test.ts (indented and next-line definitions follow two renames and the world loads; a block-quote definition refuses the rename with nothing written; group and Relation refused), test-bun/scan-component-naming.test.ts (group.ts and relation.ts get qualified IDs; a project named Group without files is not recreated by a second scan), test-bun/system-curation.test.ts (the authored-row refusal names its ends); each fails with its fix reverted. bun run check in an isolated worktree at 7fdc0446 with only these changes passed: biome clean apart from existing diagnostics in other files, tsc clean, 16 node and 524 bun tests pass (35 skipped), 0 fail.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
 groma edit <id> --id <new-id> renames a system, container or component: its document and the documents stored under it move to the paths of the new id, children name the new parent, and the links of relationship rows and flow steps that name those documents are repointed by resolved target, so concept-addressed rows and flows keep resolving. The value is normalized to kebab-case, and a taken id, a reserved document name, an actor, a flow and a rename combined with another structural change are refused without writing. The result reports the new id, the created, changed and removed paths and replaced: <old-id> -> <new-id>, which the Backlog guide now tells agents to follow when updating references. Scans match elements through owned files, so two scans after a rename keep the new id and create nothing. Verified with test-bun/rename.test.ts (component and container renames, two following scans, concept row and flow step following, link spellings with './' and a title, an external rename, and every refusal), the real CLI on a scratch repository, and bun run check in an isolated worktree (16 node and 485 bun tests pass).
+
+Review-fix round: renames now rewrite indented and next-line reference definitions, and every structural write checks that the architecture it leaves still loads and its flows resolve, so a link the rewrite cannot repoint refuses the rename instead of breaking the world. The words group and relation, which the CLI reads as addresses, are reserved through one rule shared by renames, new records and scan ID allocation, and scans find a project with a reserved name again by its qualified ID. Verified with new rename, scan-naming and system-curation tests and bun run check in an isolated worktree.
 <!-- SECTION:FINAL_SUMMARY:END -->

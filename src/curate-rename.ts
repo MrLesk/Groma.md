@@ -9,9 +9,14 @@ import { relocated, requireElement } from './curate-rewrites.ts'
 import type { CurationContext, DocumentWrite, Rewrite } from './curate-rewrites.ts'
 import type { ArchitectureElement } from './types.ts'
 
-/** The two link shapes of a Markdown document: an inline target, optionally titled, and a reference definition. */
+/**
+ * The common link forms of a Markdown document: an inline target, optionally titled, and a reference
+ * definition, indented by up to three spaces and with its target on the same or the next line. Other
+ * forms the reader accepts, such as a definition in a block quote or list item or an angle-bracketed
+ * target with spaces, are not rewritten; requireLoadableResult in curate.ts then refuses the rename.
+ */
 const inlineLink = /\]\(\s*<?([^()\s<>]+)>?((?:\s+(?:"[^"]*"|'[^']*'|\([^()]*\)))?)\s*\)/g
-const linkDefinition = /^(\[[^\]]+\]:[ \t]*)<?([^\s<>]+)>?/gm
+const linkDefinition = /^( {0,3}\[(?:\\.|[^\\\]])+\]:[ \t]*(?:\r?\n[ \t]*)?)<?([^\s<>]+)>?/gm
 
 export interface RenamedTarget {
   id: string

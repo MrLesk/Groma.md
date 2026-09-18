@@ -1,5 +1,5 @@
 import { elementOverview } from './architecture-markdown.ts'
-import { isExternalPath, isReservedDocument } from './architecture-path.ts'
+import { isExternalPath, isReservedId } from './architecture-path.ts'
 import { codeReferencesOf } from './code-reference.ts'
 import { kebabCase } from './naming.ts'
 import { DRAFT_TYPE, RELATIONSHIPS_TYPE, c4Kind, requireGromaMapping } from './okf-profile.ts'
@@ -310,7 +310,7 @@ export function requireDraftRecord(records: ArchitectureRecords, draft: string):
   return draft
 }
 
-/** The kebab id a new name gets, provided no element or draft record holds it and it is not a reserved document name. */
+/** The kebab id a new name gets, provided no element or draft record holds it and it is not reserved. */
 export function freeId(records: ArchitectureRecords, model: ArchitectureModel, name: string): string {
   const id = kebabCase(name)
   if (id === '') throw new Error('name must contain a letter or a digit')
@@ -321,6 +321,6 @@ export function freeId(records: ArchitectureRecords, model: ArchitectureModel, n
   if (records.drafts.some(document => draftRecordOf(document).id === id)) {
     throw new Error(`id "${id}" already names a draft`)
   }
-  if (isReservedDocument(`${id}.md`)) throw new Error(`"${id}" is a reserved document name`)
+  if (isReservedId(id)) throw new Error(`"${id}" is reserved for a Groma document or command`)
   return id
 }

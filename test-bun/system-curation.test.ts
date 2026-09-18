@@ -162,6 +162,24 @@ test.concurrent('a scanned container that owns no files keeps its name and syste
   } finally { await rm(root, { recursive: true, force: true }) }
 })
 
+test.concurrent('an authored concept row under a moved or absorbed record refuses the change and names its ends', async () => {
+  const root = await repository()
+  try {
+    const actor = await addThing(root, { thing: 'actor', name: 'Clerk', overview: 'Counts stock.' }) as string
+    const before = await loadAnnotatedArchitecture(root)
+    const [absorbed, survivor] = ids(before, 'system')
+    const container = ids(before, 'container').find(id => parentOf(before, id) === absorbed)!
+    await addRelation(root, { source: actor, target: container, description: 'Counts stock', technology: 'Browser' })
+    const related = await loadAnnotatedArchitecture(root)
+
+    // The row links the container's document, which both operations would move without repointing the link.
+    for (const edit of [{ id: survivor!, combine: [absorbed!] }, { id: container, parent: survivor! }]) {
+      await expect(editArchitecture(root, edit)).rejects.toThrow(`"${actor}" or "${container}" while it owns an authored relationship`)
+    }
+    expect((await loadAnnotatedArchitecture(root)).elements).toEqual(related.elements)
+  } finally { await rm(root, { recursive: true, force: true }) }
+})
+
 test.concurrent('a move that would leave a flow step unresolvable is refused and writes nothing', async () => {
   const root = await repository()
   try {
