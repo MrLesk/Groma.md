@@ -27,10 +27,28 @@ function observation() {
   })
 }
 
-async function repository(): Promise<string> {
+/** A project with a file beside a solution whose second project has none, so one scanned container owns nothing. */
+function emptyProjectObservation() {
+  return createScanObservation({
+    scanner: { id: 'fixture', technology: 'fixture', engine: 'fixture', engineVersion: '1' },
+    roots: [
+      { id: 'shop', kind: 'project', name: 'Shop' },
+      { id: 'depot', kind: 'solution', name: 'Depot' },
+      { id: 'api', kind: 'project', parent: 'depot', name: 'Api' },
+      { id: 'jobs', kind: 'project', parent: 'depot', name: 'Jobs' },
+    ],
+    files: [
+      { file: 'shop/a.ts', roots: ['shop'], symbols: [] },
+      { file: 'depot/api/b.cs', roots: ['api'], symbols: [] },
+    ],
+    diagnostics: [],
+  })
+}
+
+async function repository(scanned = observation()): Promise<string> {
   const root = await mkdtemp(path.join(os.tmpdir(), 'groma-systems-'))
   await cp(path.resolve(import.meta.dir, '../test/fixtures/empty-project'), root, { recursive: true })
-  await reconcileScanObservations(root, [observation()])
+  await reconcileScanObservations(root, [scanned])
   return root
 }
 
@@ -122,6 +140,28 @@ test.concurrent('an external system is no destination, and a container needs a s
   } finally { await rm(root, { recursive: true, force: true }) }
 })
 
+test.concurrent('a scanned container that owns no files keeps its name and system, and so does the system it stays in', async () => {
+  const root = await repository(emptyProjectObservation())
+  try {
+    const before = await loadAnnotatedArchitecture(root)
+    expect(parentOf(before, 'jobs')).toBe('depot')
+    expect(before.elements.filter(element => element.parent === 'jobs')).toEqual([])
+
+    const edits = [
+      { id: 'jobs', newId: 'workers' },
+      { id: 'jobs', parent: 'shop' },
+      { id: 'api', combine: ['jobs'] },
+      // The conservative rule also refuses these two, although a scan could still find "jobs" by its unqualified ID.
+      { id: 'depot', newId: 'warehouse' },
+      { id: 'shop', combine: ['depot'] },
+      // The next scan would place the solution through the moved container and look for the empty one there.
+      { id: 'api', parent: 'shop' },
+    ]
+    for (const edit of edits) await expect(editArchitecture(root, edit)).rejects.toThrow('owns no files')
+    expect((await loadAnnotatedArchitecture(root)).elements).toEqual(before.elements)
+  } finally { await rm(root, { recursive: true, force: true }) }
+})
+
 test.concurrent('a move that would leave a flow step unresolvable is refused and writes nothing', async () => {
   const root = await repository()
   try {
@@ -134,6 +174,10 @@ test.concurrent('a move that would leave a flow step unresolvable is refused and
     const before = await loadAnnotatedArchitecture(root)
     const container = parentOf(before, 'a')!
     const destination = ids(before, 'system').find(id => id !== parentOf(before, container))!
+    // The web pane offers no new parent for a flow endpoint, whose move the write refuses.
+    const movable = (id: string) => before.elements.find(element => element.id === id)?.movable
+    expect([movable('a'), movable('b')]).toEqual([false, true])
+    await expect(editArchitecture(root, { id: 'a', parent: parentOf(before, 'c')! })).rejects.toThrow('would not resolve')
 
     await expect(editArchitecture(root, { id: container, parent: destination })).rejects.toThrow('would not resolve')
     expect((await loadAnnotatedArchitecture(root)).elements).toEqual(before.elements)

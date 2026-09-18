@@ -141,7 +141,7 @@ export function registerWriteCommands(program: Command): void {
     .option('--group <name>', 'assign this component to a sibling group')
     .option('--ungroup', 'remove this component from its group')
     .option('--parent <id>', 'move an empty scanned component to this container, or a container to this system')
-    .option('--combine <ids...>', 'combine empty siblings; the absorbed containers or components move to the survivor')
+    .option('--combine <ids...>', 'combine empty sibling systems, containers or components into this one; their containers, components or files move to it')
     .option('--detach <files...>', 'remove these source files from the component; the next scan gives them their own component')
     .option('--id <new-id>', 'rename this element; its document and the documents under it move with it')
     .addHelpText('after', '\nAgent guides: groma agent-instructions')

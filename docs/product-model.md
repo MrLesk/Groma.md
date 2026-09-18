@@ -133,12 +133,17 @@ operation before opening a map.
      `--id <new-id>` renames an element: its document and the documents under it
      move to the paths of the new ID, children name the new parent, and
      concept-addressed relationship rows and flow steps are repointed. Scans
-     match elements through owned files, so a renamed ID survives them. These
-     operations validate the whole change before writing. `--detach <file...>` removes those files
-     from the component's Code; the next scan gives each detached file its own
-     component unless another file of its scanner source unit still has an
-     owner. Relationship rows naming a file without an owner stay stored and
-     return to the map once a scan owns the file.
+     match elements through owned files, so a renamed ID survives them. A
+     container is matched through the files of its own project that it or its
+     components own, and otherwise only by its scanned name and system, so
+     these operations refuse to move, rename or remove a scanned container that
+     owns no files, or to move another container out of its system. These
+     operations validate the whole change before writing.
+     `--detach <file...>` removes those files from the component's Code; the
+     next scan gives each detached file its own component unless another file
+     of its scanner source unit still has an owner. Relationship rows naming a
+     file without an owner stay stored and return to the map once a scan owns
+     the file.
    - A group is a name on each sibling component and is addressed as
      `<container-id>/<group-kebab>`: `groma add group <name> <ids...>` names
      it, `groma edit group <address> --title <text>` renames every member,
@@ -182,11 +187,13 @@ An expert or agent uses the same commands, including from an empty world.
 
 ## Identity
 
-An architecture ID is a stable lowercase kebab-case name in Markdown. Groma
-does not put architecture IDs in application source.
+An architecture ID is a lowercase kebab-case name in Markdown that stays until
+`groma edit <id> --id <new-id>` renames it. Groma does not put architecture IDs
+in application source.
 
-Every element has one file for its whole life, and every ID is unique in the
-tree. `groma view <id>` resolves exactly one element.
+Every element has one file, and every ID is unique in the tree. The file moves
+with its element when a move, combine or rename changes the element's parent or
+ID. `groma view <id>` resolves exactly one element.
 
 - A drafted element receives its ID when Groma drafts it. That is the ID it
   keeps when accepted, in the same file.
