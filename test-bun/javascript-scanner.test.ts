@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test'
 import { cp, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import type { CodeSymbol, ScannerPlugin } from '@groma/scanner'
+import type { CodeSymbol, ScannerPlugin, ScanOperation } from '@groma/scanner'
 import { buildPackage } from '../plugins/scanners/javascript/build.ts'
 import { scanTypeScriptSource } from '../plugins/scanners/typescript/src/scan.ts'
 import { discoverScanners } from '../src/scanner/modules/discovery.ts'
@@ -92,12 +92,15 @@ test.concurrent('configured exclusions and watch patterns decide which JavaScrip
 test.concurrent('one body carries the same tokens whether it is written in JavaScript or in TypeScript', async () => {
   const { temporary, root, scanner } = await setup('javascript-parity')
   try {
-    const javascript = (await scanner.scan(root))!.operations!.find(operation => operation.file.endsWith('.js'))!
-    const typescript = (await scanTypeScriptSource(root))!.operations!.find(operation => operation.name === 'pick')!
-    expect(javascript.name).toBe('pick')
-    expect(javascript.tokens?.length).toBeGreaterThan(0)
+    const compared = (operations: ScanOperation[], file: string) => operations
+      .filter(operation => operation.file === file && operation.tokens)
+      .sort((left, right) => left.startLine! - right.startLine!)
+    const javascript = compared((await scanner.scan(root))!.operations!, 'pick.js')
+    const typescript = compared((await scanTypeScriptSource(root))!.operations!, 'pick.ts')
+    // The bodies use postfix `++`, parentheses, `typeof`, `else`, an index and a constructor.
+    expect(javascript.map(operation => operation.name)).toEqual(['pick', 'constructor'])
     // The two scanners tokenize with different compilers, so core can only compare bodies that agree.
-    expect(javascript.tokens).toEqual(typescript.tokens)
+    expect(javascript.map(operation => operation.tokens)).toEqual(typescript.map(operation => operation.tokens))
   } finally { await rm(temporary, { recursive: true, force: true }) }
 })
 

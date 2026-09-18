@@ -50,11 +50,13 @@ may sit inside parentheses, `as`, `satisfies`, or `!`.
 
 Parameters and local names become slots. These stay in the tokens as written:
 
-- binary, assignment, conditional and prefix and postfix unary operators, and
-  `typeof`, `void`, `delete`, `await`, `yield` and `new`;
+- binary, assignment, conditional and prefix and postfix unary operators,
+  `typeof`, `void`, `delete`, `await`, `yield`, `new`, `?.` and the spread `...`;
 - `if`, `else`, `for`, `while`, `do`, `switch`, `case`, `default`, `break`,
-  `continue`, `return`, `throw` and `try`;
-- string and number literals, `true`, `false` and `null`;
+  `continue`, `return`, `throw`, `try`, `catch` and `finally`, and `index` before
+  an element access such as `items[key]`;
+- string, template text, number, bigint and regular expression literals, `true`,
+  `false`, `null`, `this` and `super`;
 - property names, the operation's own name and names declared elsewhere;
 - parentheses around an operator expression, so `(a + b) * c` and `a + b * c`
   are different bodies. Parentheses around a name or a call do not change a

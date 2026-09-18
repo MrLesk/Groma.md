@@ -1,10 +1,9 @@
 import path from 'node:path'
 import {
-  isArrowFunction, isAsExpression, isBinaryExpression, isCallExpression, isConditionalExpression,
-  isConstructorDeclaration, isFunctionDeclaration, isFunctionExpression, isIdentifier, isMethodDeclaration,
-  isNewExpression, isNonNullExpression, isObjectLiteralExpression, isParameterDeclaration,
-  isParenthesizedExpression, isPropertyAccessExpression, isPropertyAssignment, isSatisfiesExpression,
-  isShorthandPropertyAssignment, isVariableDeclaration, isSpreadAssignment, NodeFlags, SyntaxKind,
+  isAsExpression, isBinaryExpression, isCallExpression, isConditionalExpression, isIdentifier,
+  isMethodDeclaration, isNonNullExpression, isObjectLiteralExpression, isParameterDeclaration,
+  isParenthesizedExpression, isPropertyAccessExpression, isPropertyAssignment, isShorthandPropertyAssignment,
+  isVariableDeclaration, isSpreadAssignment, NodeFlags, SyntaxKind,
   type CallExpression, type Node, type SourceFile,
 } from 'typescript/unstable/ast'
 import { SymbolFlags, type Checker, type Symbol as CompilerSymbol } from 'typescript/unstable/async'
@@ -13,7 +12,7 @@ import type { ScanHttpEndpoint, ScanHttpRequest, ScanInvocation, ScanOperation }
 import { httpEndpoints } from './http-endpoints.ts'
 import { httpRequests } from './http-requests.ts'
 import type { HttpContext } from './http-values.ts'
-import { tokenizeOperation } from './source-tokens.ts'
+import { typeScriptOperations } from '../../typescript-operations.ts'
 
 interface Values {
   nodes: Node[]
@@ -36,12 +35,7 @@ function valueReference(node: Node): boolean {
     || isAsExpression(parent) || isNonNullExpression(parent)
 }
 
-function executable(node: Node): boolean {
-  return isArrowFunction(node) || isFunctionExpression(node)
-    || (isFunctionDeclaration(node) && node.body !== undefined)
-    || (isMethodDeclaration(node) && node.body !== undefined)
-    || (isConstructorDeclaration(node) && node.body !== undefined)
-}
+const { executable, comparedOperation } = typeScriptOperations({ SyntaxKind })
 
 function location(root: string, node: Node): { file: string; line: number; position: number } {
   const source = node.getSourceFile()
@@ -49,46 +43,6 @@ function location(root: string, node: Node): { file: string; line: number; posit
     file: path.relative(root, source.fileName).split(path.sep).join('/'),
     line: source.getLineAndCharacterOfPosition(node.getStart()).line + 1,
     position: node.getStart(),
-  }
-}
-
-/** The outermost parentheses or type-only `as`, `satisfies` or `!` around a value, or the value itself. */
-function outermostWrapper(node: Node): Node {
-  let wrapper = node
-  while (isParenthesizedExpression(wrapper.parent) || isAsExpression(wrapper.parent)
-    || isSatisfiesExpression(wrapper.parent) || isNonNullExpression(wrapper.parent)) wrapper = wrapper.parent
-  return wrapper
-}
-
-/**
- * A function written as a property of an object literal argument, such as `subscribe({ next: value => ... })`.
- * The argument may belong to a function call, a `new` call, or a decorator, which is a call, and may be
- * wrapped in parentheses or type-only expressions.
- */
-function callArgumentProperty(node: Node): boolean {
-  const property = isPropertyAssignment(node.parent) ? node.parent : node
-  if (!isPropertyAssignment(property) && !isMethodDeclaration(property)) return false
-  if (!isObjectLiteralExpression(property.parent)) return false
-  const invocation = outermostWrapper(property.parent).parent
-  return isCallExpression(invocation) || isNewExpression(invocation)
-}
-
-/** Name of an operation core may compare; undefined for module code and anonymous callbacks. */
-function comparableName(node: Node): string | undefined {
-  if (!node.parent || callArgumentProperty(node)) return undefined
-  if (isConstructorDeclaration(node)) return 'constructor'
-  if ('name' in node && node.name && isIdentifier(node.name as Node)) return (node.name as { text: string }).text
-  if (isPropertyAssignment(node.parent) || isVariableDeclaration(node.parent)) return node.parent.name.getText()
-  return undefined
-}
-
-/** Binding-normalized body tokens with their inclusive source range. */
-function comparableBody(node: Node): Pick<ScanOperation, 'startLine' | 'endLine' | 'tokens'> {
-  const source = node.getSourceFile()
-  return {
-    startLine: source.getLineAndCharacterOfPosition(node.getStart()).line + 1,
-    endLine: source.getLineAndCharacterOfPosition(node.end).line + 1,
-    tokens: tokenizeOperation(node),
   }
 }
 
@@ -268,15 +222,8 @@ export async function sourceOperations(root: string, sources: SourceFile[], chec
     const { file } = location(root, node)
     const id = `${file}#${node.parent ? node.getStart() : 'module'}`
     if (!operations.has(id)) {
-      const name = comparableName(node)
-      operations.set(id, {
-        id,
-        file,
-        name: name ?? '(anonymous)',
-        position: node.getStart(),
-        // Only named operations are compared as possible duplicate logic.
-        ...(name === undefined ? {} : comparableBody(node)),
-      })
+      // Only named operations carry the range and tokens core compares as possible duplicate logic.
+      operations.set(id, { id, file, name: '(anonymous)', position: node.getStart(), ...comparedOperation(node) })
     }
     return id
   }

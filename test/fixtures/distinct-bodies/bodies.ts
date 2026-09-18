@@ -84,3 +84,81 @@ export function chooseAfter(flag: boolean, base: number): number {
   total = base * 3
   return total
 }
+
+declare function measure(...values: unknown[]): number
+
+export function talkPath(id: string, page: number): number {
+  return `/talks/${id}?page=${page + 1}`.length + page * 2
+}
+
+export function speakerPath(id: string, page: number): number {
+  return `/speakers/${id}?page=${page + 1}`.length + page * 2
+}
+
+export function isWord(value: string, limit: number): boolean {
+  return /^[a-z]+$/.test(value) && value.length > limit
+}
+
+export function isNumber(value: string, limit: number): boolean {
+  return /^[0-9]+$/.test(value) && value.length > limit
+}
+
+export function optionalTotal(order: { total: number }, fee: number): number {
+  return order?.total * 2 + fee + 10
+}
+
+export function requiredTotal(order: { total: number }, fee: number): number {
+  return order.total * 2 + fee + 10
+}
+
+export function spreadMeasure(values: number[], limit: number): number {
+  return measure(...values) + limit * 2 + 10
+}
+
+export function listMeasure(values: number[], limit: number): number {
+  return measure(values) + limit * 2 + 10
+}
+
+export function entryMeasure(table: Record<string, number>, key: string): number {
+  return measure(table[key]) * 2 + 10
+}
+
+export function pairMeasure(table: Record<string, number>, key: string): number {
+  return measure(table, key) * 2 + 10
+}
+
+class Tariff {
+  base(amount: number): number {
+    return amount
+  }
+}
+
+export class Fee extends Tariff {
+  charge(amount: number): number {
+    return this.base(amount) * 3 + 10
+  }
+}
+
+export class Levy extends Tariff {
+  charge(amount: number): number {
+    return super.base(amount) * 3 + 10
+  }
+}
+
+export function recordOrRetry(value: number, limit: number): number {
+  try {
+    measure(value, limit)
+  } catch {
+    measure(limit, value)
+  }
+  return limit
+}
+
+export function recordThenRetry(value: number, limit: number): number {
+  try {
+    measure(value, limit)
+  } finally {
+    measure(limit, value)
+  }
+  return limit
+}
