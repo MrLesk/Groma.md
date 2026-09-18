@@ -40,6 +40,7 @@ mistyped name from a coverage gap:
 | `no owner: <file>; excluded by scanners.json pattern <pattern>` | That configured pattern hides the file from every scanner. |
 | `no owner: <file>; no enabled scanner reads it` | No enabled scanner selects the file for analysis, so no scan can own it. |
 | `no owner: <file>; read by <scanners> and not scanned yet, so run groma scan` | Those scanners select the file, and the stored architecture predates it. |
+
 On a terminal, `groma view` without a target and `groma web` scan and open
 interactive maps for a human.
 

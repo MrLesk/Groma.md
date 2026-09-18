@@ -198,9 +198,21 @@ test sources a scan never reads.
 
 Report the files whose analysis can give a component its Code, and leave out what
 the scan ignores: test sources, generated output, vendored code and build
-directories. A listing may still name a file the analysis then finds unreachable,
-such as a Rust module no crate root declares, because deciding that would mean
-analyzing it.
+directories.
+
+A listing may name a file the analysis then leaves out, because deciding that
+would mean analyzing it or running a build. Each approximation an official
+scanner makes:
+
+| Scanner | Can also list |
+| --- | --- |
+| Rust | A module no crate root declares |
+| Go | A file its build constraints exclude, such as `_windows.go` or a `//go:build` tag the scan does not select |
+| C# | A file an MSBuild item glob excludes from the project |
+| Angular, Vue | A template or stylesheet no component declares |
+
+A listing must never leave out a file the scan does read: that would report the
+file as read by no enabled scanner.
 
 Groma uses the listing to explain a file with no architecture owner. `groma view`
 on such a file exits non-zero with one reason: it is not a repository file, a

@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { cp, mkdtemp, readdir, rename, rm } from 'node:fs/promises'
+import { cp, mkdtemp, readdir, rename, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import type { ScannerPlugin } from '@groma/scanner'
@@ -13,6 +13,7 @@ import php from '../plugins/scanners/php/src/index.ts'
 import python from '../plugins/scanners/python/src/index.ts'
 import react from '../plugins/scanners/react/src/index.ts'
 import rust from '../plugins/scanners/rust/src/index.ts'
+import swift from '../plugins/scanners/swift/src/index.ts'
 import typescript from '../plugins/scanners/typescript/src/index.ts'
 import vue from '../plugins/scanners/vue/src/index.ts'
 
@@ -44,6 +45,8 @@ const listings: [ScannerPlugin, string, string[]][] = [
     'pages/api.tsx', 'pages/api/drafts/index.ts', 'pages/api/health.ts', 'pages/api/index/list.ts',
     'pages/api/speakers/[id].ts', 'shadow.tsx', 'src/app/api/status/route.ts', 'talks.tsx',
   ]],
+  // A package manifest is not analyzed source.
+  [swift, 'swift-source', ['Ledger.swift', 'Other.swift']],
   // The Nuxt project sits below the repository root, so its server routes are listed project-relative.
   [vue, 'vue-http', [
     'web/Talks.vue', 'web/client.ts', 'web/composables/useFetch.ts', 'web/drafts.ts',
@@ -73,3 +76,14 @@ for (const [scanner, fixture, expected] of listings) {
     } finally { await rm(root, { recursive: true, force: true }) }
   })
 }
+
+test.concurrent('a stylesheet is listed only by a scanner that reads component styles', async () => {
+  const [angularRoot, reactRoot] = await Promise.all([repository('angular-output'), repository('react-http')])
+  try {
+    await writeFile(path.join(reactRoot, 'globals.css'), 'body { color: black }\n')
+    expect(await angular.listSourceFiles?.(angularRoot)).toContain('emitter.css')
+    expect(await react.listSourceFiles?.(reactRoot)).not.toContain('globals.css')
+  } finally {
+    await Promise.all([angularRoot, reactRoot].map(root => rm(root, { recursive: true, force: true })))
+  }
+})

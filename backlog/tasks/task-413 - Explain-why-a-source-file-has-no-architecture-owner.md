@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@claude'
 created_date: '2026-09-16 19:38'
-updated_date: '2026-09-18 15:32'
+updated_date: '2026-09-18 15:47'
 labels: []
 dependencies: []
 references:
@@ -44,6 +44,7 @@ modified_files:
   - plugins/scanners/angular/src/index.ts
   - plugins/scanners/react/src/index.ts
   - plugins/scanners/vue/src/index.ts
+  - plugins/scanners/swift/src/index.ts
 type: enhancement
 ordinal: 468000
 ---
@@ -103,6 +104,17 @@ JavaScript scanner lists its files with the same authored selection scan uses (j
 
 Angular, React and Vue list per framework project through plugins/scanners/typescript-project.ts: every source of the scanner's kind inside a project directory plus companion templates and stylesheets, with a project-relative rule for extras. React adds the Next.js files whose location declares a route (app/**/route.ts|tsx and pages/api/**), so middleware and declaration files stay out. Vue lists .vue, .ts and .js, which covers a Nuxt project's server/api and server/routes below the repository root. A first attempt read each tsconfig instead and missed an imported component, so the listing selects by extension inside the project and leaves program resolution to the analysis, matching the limit the contract already states.
 Eleven official scanners now list their files; test-bun/scanner-source-listing.test.ts asserts one exact listing each. Final isolated bun run check from current HEAD with a frozen install exited 0 (Bun 510 passed, 32 skipped, 0 failed; Node 16 passed; Biome findings only in untouched files). Live check in this repository: groma view plugins/scanners/typescript-project.ts answers 'no owner: ...; read by typescript and not scanned yet, so run groma scan'.
+
+Cold review applied; AC 1 now covers twelve official scanners, not eleven.
+1. Swift lists its files with its own files(root) selection, which excludes Package.swift and the .build, Pods and Carthage directories. Its fixture row asserts the two Swift sources.
+2. The shared framework helper no longer adds companion extensions. Angular and Vue name them in their own sources, so React lists only its TSX components and Next.js route files; a test writes globals.css into a React project and asserts it is absent while an Angular stylesheet is present.
+3. Exclusion is decided with the combined pattern list, so a documented negation restores its file, and the answer then names the last matching non-negated pattern. A test covers both directions with **/*.generated.ts and !src/keep.generated.ts. A negation cannot restore a file inside an excluded directory, which is Git's own rule and what the scanners apply.
+4. The contract now tables every approximation: Rust modules no crate root declares, Go files its build constraints exclude, C# files an MSBuild item glob excludes, and Angular and Vue templates or stylesheets no component declares. It also states the rule that a listing must never leave out a file the scan reads.
+5. docs/agent-instructions/inspect.md has the blank line the reason table needs.
+6. The registry member is now readersOfFile(root, file), returning the scanner ids that read that file, which removed the tuple type, the filter and the caller's includes.
+7. Verified live through the CLI in this repository after rebuilding the bundled framework packages, because a packaged scanner loads from dist and its hook only takes effect after a rebuild: 'unknown target: src/source-coverag.ts; not a repository file'; 'no owner: test-bun/source-coverage.test.ts; excluded by scanners.json pattern /test-bun/'; 'no owner: README.md; no enabled scanner reads it'; 'no owner: plugins/scanners/typescript-project.ts; read by typescript and not scanned yet, so run groma scan'. The rebuilt bundles are ignored build output and are not part of this commit.
+Follow-up recorded, not implemented: a scanner whose listSourceFiles throws makes groma view fail instead of answering, and a fallback needs the owner's decision.
+Isolated bun run check exited 0 (Bun 513 passed, 32 skipped, 0 failed; Node 16 passed).
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary

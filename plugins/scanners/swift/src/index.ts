@@ -50,6 +50,7 @@ function outline(file: FileEvidence, symbols: string[]): CodeFile {
 export default {
   id: 'swift',
   watch: { include: ['**/*.swift'], exclude },
+  listSourceFiles: files,
   async checkReadiness(root) {
     if (!(await files(root)).length) throw new Error('swift: No Swift source files were found in the Git repository.')
     await access(worker)

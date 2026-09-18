@@ -19,7 +19,7 @@ test.concurrent('an edit during the initial scan is collected after the initial 
     watcher = await watchObservations(root, {
       scannerIds: ['fixture'],
       watchesFile: file => file === 'source.fixture',
-      sourceFiles: async () => [],
+      readersOfFile: async () => [],
       async collectObservations(_root, files) {
         // The next scan must wait until the previous batch has been applied.
         expect(scans).toBe(folded)
