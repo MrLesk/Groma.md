@@ -118,3 +118,29 @@ func splitHosts() {
 	http.Get(scheme + "://" + localHost + "/schemetalks")
 	http.Get("http://" + localHost + "/porttalks")
 }
+
+var grownBase string
+
+func grow() {
+	grownBase = grownBase + "/v2"
+}
+
+var tupleBase, tupleErr = splitBase()
+
+func splitBase() (string, error) { return "/api", nil }
+
+var defaultBase = "/api"
+
+var scannedBase = "/api"
+
+func readBases(input string) {
+	flag.StringVar(&defaultBase, "default", "/api", "talks service base")
+	fmt.Sscan(input, &scannedBase)
+}
+
+func moreBases() {
+	http.Get(grownBase + "/growntalks")
+	http.Get(tupleBase + "/tupletalks")
+	http.Get(defaultBase + "/defaulttalks")
+	http.Get(scannedBase + "/scannedtalks")
+}

@@ -21,8 +21,10 @@ func (e *evidence) mounts(s *source) {
 		if !ok || len(call.Args) != 2 {
 			return true
 		}
+		// A chi Mount is read with the mounted router's routes, below its receiving router.
 		if selector, ok := ast.Unparen(call.Fun).(*ast.SelectorExpr); ok && selector.Sel.Name == "Mount" {
-			e.mountUnder(s, selector.X, call.Args[0], call.Args[1])
+			prefix, ok := routePath(s, chi, call.Args[0])
+			e.mountRouter(s, call.Args[1], mount{source: s, receiver: selector.X, prefix: prefix, unknown: !ok})
 		}
 		// A router behind http.StripPrefix serves a path this scan does not carry.
 		if library, name, ok := s.packageFramework(call.Fun); ok && library == netHTTP && name == "StripPrefix" {
@@ -30,12 +32,6 @@ func (e *evidence) mounts(s *source) {
 		}
 		return true
 	})
-}
-
-// mountUnder records a mount on a receiving router, which is read with the mounted router's routes.
-func (e *evidence) mountUnder(s *source, receiver ast.Expr, at ast.Expr, mounted ast.Expr) {
-	prefix, ok := routePath(s, chi, at)
-	e.mountRouter(s, mounted, mount{source: s, receiver: receiver, prefix: prefix, unknown: !ok})
 }
 
 // mountRouter records the mount on a named router, or silences the function that builds one.

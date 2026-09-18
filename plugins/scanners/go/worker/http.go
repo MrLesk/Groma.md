@@ -4,6 +4,7 @@ import (
 	"go/ast"
 	"go/token"
 	"go/types"
+	"regexp"
 	"strings"
 )
 
@@ -62,6 +63,8 @@ func importPaths(syntax *ast.File) map[string]string {
 	return result
 }
 
+var majorVersion = regexp.MustCompile(`^v[0-9]+$`)
+
 // packageName is the name an import path introduces, skipping a major version suffix such as /v5.
 func packageName(path string) string {
 	parts := strings.Split(path, "/")
@@ -96,9 +99,9 @@ func (s *source) packageFramework(expression ast.Expr) (string, string, bool) {
 	return library, name, library != ""
 }
 
-// declared registers parameters, struct fields and variables written as a net/http type.
-// A group-capable router reaches this scan with a prefix it cannot see, so only the
-// constructors, mounts and groups in this source establish one.
+// declared registers parameters, struct fields and variables written as a net/http type, and the
+// router a chi group closure receives. A group-capable router reaches this scan with a prefix it
+// cannot see, so only the constructors, mounts and groups in this source establish one.
 func (e *evidence) declared(s *source) {
 	ast.Inspect(s.syntax, func(node ast.Node) bool {
 		switch node := node.(type) {
@@ -106,6 +109,8 @@ func (e *evidence) declared(s *source) {
 			e.declaredNames(s, node.Names, node.Type)
 		case *ast.ValueSpec:
 			e.declaredNames(s, node.Names, node.Type)
+		case *ast.CallExpr:
+			e.groupClosure(s, node)
 		}
 		return true
 	})
@@ -124,8 +129,7 @@ func (e *evidence) declaredNames(s *source, names []*ast.Ident, written ast.Expr
 	}
 	for _, declared := range names {
 		object := s.pkg.TypesInfo.Defs[declared]
-		// A name assigned more than once may hold another value by the time a route or request uses it.
-		if object == nil || e.assignments[object] > 1 {
+		if object == nil {
 			continue
 		}
 		if name == "ServeMux" {
@@ -150,9 +154,11 @@ func (s *source) object(expression ast.Expr) types.Object {
 // routerOf reads a router from a name, a constructor call, a group call or a middleware chain.
 func (e *evidence) routerOf(s *source, expression ast.Expr) (router, bool) {
 	if object := s.object(expression); object != nil {
-		if known, ok := e.routers[object]; ok {
-			return e.mountedRouter(object, known)
+		known, ok := e.namedRouter(object)
+		if !ok {
+			return router{}, false
 		}
+		return e.mountedRouter(object, known)
 	}
 	call, ok := ast.Unparen(expression).(*ast.CallExpr)
 	if !ok {
@@ -170,6 +176,24 @@ func (e *evidence) routerOf(s *source, expression ast.Expr) (router, bool) {
 		return router{}, false
 	}
 	return groupRouter(s, parent, selector.Sel.Name, call)
+}
+
+// namedRouter reads a name as the one value the source assigns it, or as the router its declared
+// type gives it. A name assigned more than once may register routes on either value.
+func (e *evidence) namedRouter(object types.Object) (router, bool) {
+	if e.assignments[object] > 1 {
+		return router{}, false
+	}
+	assigned, written := e.assignedValues[object]
+	if !written {
+		known, ok := e.routers[object]
+		return known, ok
+	}
+	// Leaving the name out while its value is read ends a value that reads the name itself.
+	delete(e.assignedValues, object)
+	known, ok := e.routerOf(assigned.source, assigned.value)
+	e.assignedValues[object] = assigned
+	return known, ok
 }
 
 func joinSegments(prefix []endpointSegment, path []endpointSegment) []endpointSegment {
@@ -206,8 +230,6 @@ type scope struct {
 func (e *evidence) httpFacts() {
 	for _, file := range e.sources {
 		e.readAssignments(file)
-	}
-	for _, file := range e.sources {
 		e.declared(file)
 		e.mounts(file)
 	}
@@ -232,10 +254,7 @@ func (e *evidence) httpFile(s *source) {
 		case *ast.FuncLit:
 			current.owner = e.literals[node]
 		case *ast.ValueSpec:
-			e.trackValues(s, identifiers(node.Names), node.Values)
 			current.owner = e.bodyOwner(s, node, current.owner)
-		case *ast.AssignStmt:
-			e.trackValues(s, node.Lhs, node.Rhs)
 		case *ast.CallExpr:
 			e.httpCall(s, node, current)
 		}
@@ -250,91 +269,6 @@ func (e *evidence) bodyOwner(s *source, node ast.Node, owner string) string {
 		return id
 	}
 	return owner
-}
-
-func identifiers(names []*ast.Ident) []ast.Expr {
-	values := make([]ast.Expr, len(names))
-	for index, name := range names {
-		values[index] = name
-	}
-	return values
-}
-
-// assignedValue is a value the source assigns a name, and the file that assigns it.
-type assignedValue struct {
-	source *source
-	value  ast.Expr
-}
-
-// readAssignments counts the values assigned to each name, wherever the assignment is. A parameter
-// receives its argument, which is one assignment.
-func (e *evidence) readAssignments(s *source) {
-	ast.Inspect(s.syntax, func(node ast.Node) bool {
-		switch node := node.(type) {
-		case *ast.FuncType:
-			for _, field := range node.Params.List {
-				for _, name := range field.Names {
-					e.assign(s, name, nil)
-				}
-			}
-		case *ast.AssignStmt:
-			for index, target := range node.Lhs {
-				e.assign(s, target, assignedAt(node, index))
-			}
-		case *ast.ValueSpec:
-			for index, name := range node.Names {
-				if len(node.Values) == len(node.Names) {
-					e.assign(s, name, node.Values[index])
-				} else if len(node.Values) > 0 {
-					e.assign(s, name, nil)
-				}
-			}
-		}
-		return true
-	})
-}
-
-// assignedAt is the value one target of an assignment receives, or nil when the source does not
-// write it out, as when one call returns every value or an operator combines it with the old one.
-func assignedAt(node *ast.AssignStmt, index int) ast.Expr {
-	if len(node.Rhs) != len(node.Lhs) || (node.Tok != token.ASSIGN && node.Tok != token.DEFINE) {
-		return nil
-	}
-	return node.Rhs[index]
-}
-
-func (e *evidence) assign(s *source, target ast.Expr, value ast.Expr) {
-	object := s.object(target)
-	if object == nil {
-		return
-	}
-	e.assignments[object]++
-	if value != nil {
-		e.assignedValues[object] = assignedValue{source: s, value: value}
-	}
-}
-
-// trackValues remembers routers and clients bound to a name. A name assigned more than once may
-// register routes on either value, whatever the order this walk reads them in, so it is no router;
-// neither is a name assigned a value that is not a readable router.
-func (e *evidence) trackValues(s *source, targets []ast.Expr, values []ast.Expr) {
-	for index, value := range values {
-		if index >= len(targets) {
-			return
-		}
-		object := s.object(targets[index])
-		if object == nil {
-			continue
-		}
-		if known, ok := e.routerOf(s, value); ok && e.assignments[object] == 1 {
-			e.routers[object] = known
-		} else {
-			delete(e.routers, object)
-		}
-		if isClient(s, value) {
-			e.clients[object] = true
-		}
-	}
 }
 
 // isClient recognizes the net/http client values a request can be sent through.
@@ -369,9 +303,7 @@ func (e *evidence) httpCall(s *source, call *ast.CallExpr, current scope) {
 		return
 	}
 	if known, ok := e.routerOf(s, selector.X); ok {
-		if !e.endpoint(s, known, selector.Sel.Name, call, current) {
-			e.groupClosure(s, known, selector.Sel.Name, call)
-		}
+		e.endpoint(s, known, selector.Sel.Name, call, current)
 		return
 	}
 	if object := s.object(selector.X); object != nil && e.clients[object] {
@@ -379,17 +311,16 @@ func (e *evidence) httpCall(s *source, call *ast.CallExpr, current scope) {
 	}
 }
 
-// endpoint reports one route registration. It returns whether the call is a route method at all.
-func (e *evidence) endpoint(s *source, known router, name string, call *ast.CallExpr, current scope) bool {
+// endpoint reports one route registration.
+func (e *evidence) endpoint(s *source, known router, name string, call *ast.CallExpr, current scope) {
 	route, ok := registrationOf(known.framework, name)
 	if !ok {
-		return false
+		return
 	}
 	fact, ok := e.endpointFact(s, known, route, call)
 	if ok && !current.silenced {
 		e.result.HTTPEndpoints = append(e.result.HTTPEndpoints, fact)
 	}
-	return true
 }
 
 // endpointFact builds the fact, or reports that the route, method or handler is not proven.
@@ -444,25 +375,22 @@ func (e *evidence) handlerOperation(s *source, expression ast.Expr) (string, boo
 	return id, ok
 }
 
-// groupClosure registers the router a chi group passes to its closure.
-func (e *evidence) groupClosure(s *source, parent router, name string, call *ast.CallExpr) {
-	if name != "Route" && name != "Group" || len(call.Args) == 0 {
+// groupClosure gives a chi group closure's parameter the router its group call builds, as in
+// router.Route("/api", func(api chi.Router) {...}), read like any other assigned value.
+func (e *evidence) groupClosure(s *source, call *ast.CallExpr) {
+	selector, ok := ast.Unparen(call.Fun).(*ast.SelectorExpr)
+	if !ok || (selector.Sel.Name != "Route" && selector.Sel.Name != "Group") || len(call.Args) == 0 {
 		return
 	}
 	literal, ok := ast.Unparen(call.Args[len(call.Args)-1]).(*ast.FuncLit)
-	if !ok {
+	if !ok || len(literal.Type.Params.List) == 0 {
 		return
 	}
-	nested, ok := groupRouter(s, parent, name, call)
-	if !ok || literal.Type.Params == nil || len(literal.Type.Params.List) == 0 {
+	parameter := literal.Type.Params.List[0]
+	if library, _, ok := s.packageFramework(parameter.Type); !ok || library != chi || len(parameter.Names) == 0 {
 		return
 	}
-	names := literal.Type.Params.List[0].Names
-	if len(names) == 0 {
-		return
-	}
-	// The router is the closure's argument, unless the closure assigns the parameter again.
-	if object := s.pkg.TypesInfo.Defs[names[0]]; object != nil && e.assignments[object] == 1 {
-		e.routers[object] = nested
+	if object := s.pkg.TypesInfo.Defs[parameter.Names[0]]; object != nil {
+		e.assignedValues[object] = assignedValue{source: s, value: call}
 	}
 }

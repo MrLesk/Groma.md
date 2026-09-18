@@ -2,20 +2,16 @@ package main
 
 import (
 	"go/ast"
-	"go/constant"
-	"go/token"
 	"net/url"
 	"regexp"
 	"regexp/syntax"
 	"slices"
-	"strconv"
 	"strings"
 )
 
 // Groma compares path text exactly, so literal text keeps RFC 3986 path characters.
 var pathText = regexp.MustCompile(`^[A-Za-z0-9\-._~!$&'()*+,;=:@%]+$`)
 var methodToken = regexp.MustCompile(`^[A-Z][A-Z-]*$`)
-var majorVersion = regexp.MustCompile(`^v[0-9]+$`)
 var httpMethods = map[string]bool{
 	"GET": true, "POST": true, "PUT": true, "PATCH": true, "DELETE": true,
 	"HEAD": true, "OPTIONS": true, "CONNECT": true, "TRACE": true,
@@ -163,11 +159,11 @@ func goSegment(part string) (endpointSegment, bool) {
 	if part == "{$}" {
 		return endpointSegment{}, true
 	}
-	if name, ok := wildcard(part, "{", "}"); ok {
+	if name, ok := braced(part); ok {
 		if remainder := strings.TrimSuffix(name, "..."); remainder != name {
 			return catchAll(remainder)
 		}
-		return parameter(name)
+		return parameter(name, false)
 	}
 	// net/http rejects a wildcard that shares its segment with text, so no such route is served.
 	if strings.ContainsAny(part, "{}") {
@@ -191,14 +187,15 @@ func chiSegment(part string) (endpointSegment, bool) {
 	if len(placeholders) == 0 {
 		return literalSegment(part)
 	}
-	name, ok := segmentName(placeholders[0].name)
+	first := placeholders[0]
 	for _, placeholder := range placeholders {
 		if placeholder.pattern != "" && matchesSlash(placeholder.pattern) {
-			return endpointSegment{Kind: "catch-all", Name: name, Optional: true, Constrained: true}, ok
+			segment, ok := catchAll(first.name)
+			segment.Optional, segment.Constrained = true, true
+			return segment, ok
 		}
 	}
-	constrained := !whole || placeholders[0].pattern != ""
-	return endpointSegment{Kind: "parameter", Name: name, Constrained: constrained}, ok
+	return parameter(first.name, !whole || first.pattern != "")
 }
 
 type chiPlaceholder struct {
@@ -260,13 +257,13 @@ func slashIn(expression *syntax.Regexp) bool {
 // Literal text before `:name`, as in `v:version`, restricts what the router accepts in the segment.
 func colonSegment(part string) (endpointSegment, bool) {
 	if strings.HasPrefix(part, ":") {
-		return parameter(strings.TrimPrefix(part, ":"))
+		return parameter(strings.TrimPrefix(part, ":"), false)
 	}
 	if strings.HasPrefix(part, "*") {
 		return catchAll(strings.TrimPrefix(part, "*"))
 	}
 	if before, name, found := strings.Cut(part, ":"); found && !strings.Contains(before, "*") {
-		return constrainedParameter(name, true)
+		return parameter(name, true)
 	}
 	if strings.Contains(part, "*") {
 		return endpointSegment{}, false
@@ -274,18 +271,15 @@ func colonSegment(part string) (endpointSegment, bool) {
 	return literalSegment(part)
 }
 
-func wildcard(part string, open string, close string) (string, bool) {
-	if !strings.HasPrefix(part, open) || !strings.HasSuffix(part, close) {
+// braced reads a net/http wildcard: the name inside braces that make up the whole segment.
+func braced(part string) (string, bool) {
+	if !strings.HasPrefix(part, "{") || !strings.HasSuffix(part, "}") {
 		return "", false
 	}
-	return part[len(open) : len(part)-len(close)], true
+	return part[1 : len(part)-1], true
 }
 
-func parameter(name string) (endpointSegment, bool) {
-	return constrainedParameter(name, false)
-}
-
-func constrainedParameter(name string, constrained bool) (endpointSegment, bool) {
+func parameter(name string, constrained bool) (endpointSegment, bool) {
 	name, ok := segmentName(name)
 	return endpointSegment{Kind: "parameter", Name: name, Constrained: constrained}, ok
 }
@@ -319,28 +313,4 @@ func literalSegment(part string) (endpointSegment, bool) {
 		part = url.PathEscape(part)
 	}
 	return endpointSegment{Kind: "literal", Value: part}, pathText.MatchString(part)
-}
-
-// constantString reads text the source proves constant, including a constant declared once
-// and a concatenation of constants.
-func constantString(s *source, expression ast.Expr) (string, bool) {
-	if value := s.pkg.TypesInfo.Types[expression].Value; value != nil && value.Kind() == constant.String {
-		return constant.StringVal(value), true
-	}
-	switch node := ast.Unparen(expression).(type) {
-	case *ast.BasicLit:
-		if node.Kind != token.STRING {
-			return "", false
-		}
-		text, err := strconv.Unquote(node.Value)
-		return text, err == nil
-	case *ast.BinaryExpr:
-		if node.Op != token.ADD {
-			return "", false
-		}
-		left, leftKnown := constantString(s, node.X)
-		right, rightKnown := constantString(s, node.Y)
-		return left + right, leftKnown && rightKnown
-	}
-	return "", false
 }

@@ -32,14 +32,15 @@ type evidence struct {
 	literals                    map[*ast.FuncLit]string
 	// Operation IDs this observation declares; a fact may only reference one of them.
 	recorded map[string]bool
-	// Values that carry routes or send requests, and the mount each router serves under.
+	// Names whose declared type makes them a ServeMux, names that hold a net/http client, and the
+	// mount each router serves under. Any other router name is read from its assigned value.
 	routers map[types.Object]router
 	clients map[types.Object]bool
 	mounted map[types.Object]mount
-	// How many values each name is assigned anywhere in the scanned source, a parameter's argument
-	// included, and the value a name is assigned when the source writes it out.
+	// What the source proves each name holds: see values.go.
 	assignments    map[types.Object]int
 	assignedValues map[types.Object]assignedValue
+	flags          map[types.Object]bool
 	// Operations whose routers are built for a mount, so their served paths are longer.
 	silenced map[string]bool
 }
@@ -48,6 +49,7 @@ func newEvidence(result *observation) *evidence {
 	return &evidence{result: result, operationByFunctionPosition: map[string]string{}, literals: map[*ast.FuncLit]string{},
 		recorded: map[string]bool{}, routers: map[types.Object]router{}, clients: map[types.Object]bool{},
 		mounted: map[types.Object]mount{}, assignments: map[types.Object]int{}, assignedValues: map[types.Object]assignedValue{},
+		flags:    map[types.Object]bool{},
 		silenced: map[string]bool{}}
 }
 

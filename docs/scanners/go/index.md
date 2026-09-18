@@ -83,13 +83,24 @@ Answers to the [producer checklist](../evidence.md#producer-checklist):
 1. **Prefixes.** Every constant prefix the source declares: a chi `Route` or
    `Mount` prefix, a gin or echo `Group` prefix, nested groups, and the route's
    own path. A chi router mounted with `Mount` serves below every prefix of the
-   router it is mounted on. A group or mount whose prefix is not constant, a
-   mount on a router this scan cannot read or has not yet read where the mounted
-   router's routes are registered, a router mounted twice, and a mounted router
-   that is not chi, which still routes on the full URL, report nothing for their
-   routes. So does a router name, including a group closure's parameter, assigned
-   more than once or assigned a value that is not a readable router, because its
-   routes could register on either value.
+   router it is mounted on. A router whose served path is longer than this
+   source can state reports nothing for its routes:
+
+   - a router under a group or mount whose prefix is not constant;
+   - a router mounted on a router this scan cannot read;
+   - a router mounted twice, or inside itself;
+   - a ServeMux, gin or echo router mounted with chi `Mount`, because it still
+     routes on the full URL;
+   - a router built by a function whose result is mounted, and one passed to
+     `http.StripPrefix`, because the mount path belongs to other source.
+
+   A router mounted by any other mechanism, such as a third-party helper, is
+   still reported without that prefix. A router name, including a chi group
+   closure's parameter, is the one value the source assigns it, wherever the
+   assignment is. A name assigned more than once reports nothing, because its
+   routes could register on either value. So does a name whose one value is not a
+   router this scan reads, such as the result of a function, because that router
+   may already serve below a prefix this scan cannot see.
 2. **Endpoints.** Only route registrations: net/http `Handle` and `HandleFunc`,
    chi `Get` through `Trace` with `Handle`, `HandleFunc`, `Method` and
    `MethodFunc`, gin `GET` through `OPTIONS` with `Any` and `Handle`, and echo
@@ -102,16 +113,19 @@ Answers to the [producer checklist](../evidence.md#producer-checklist):
 4. **The local helper.** Nothing: this scanner does not propagate arguments, so a
    URL that arrives as a parameter stays unknown, reported where the client call
    is.
-5. **The base.** `http.Get("/talks")` has no base. A package-level variable,
-   in this package or another, is the one value the source assigns it in its
-   declaration or elsewhere, so one holding a literal host is a leading unknown
-   segment and one set from `os.Getenv` is a setting. A package-level variable
-   assigned more than once is a leading unknown segment; one nothing in the
-   source assigns, which a flag or the linker sets, is a setting. A setting, such
-   as a struct field or `os.Getenv("TALKS_URL")`, before a path that starts with
-   `/` sets `configured`. A literal scheme and host, a local variable, a parameter,
+5. **The base.** `http.Get("/talks")` has no base. A setting before a path that
+   starts with `/` sets `configured`. Settings are a struct field,
+   `os.Getenv("TALKS_URL")`, a package-level variable whose address a `flag` or
+   `pflag` `...Var` function takes, whatever its declaration holds, and one that
+   nothing in the source assigns, which the linker can set. Any other
+   package-level variable, in this package or another, is the one value the
+   source assigns it, in its declaration or elsewhere: a literal host is a
+   leading unknown segment, and `os.Getenv` is a setting. A package-level
+   variable assigned more than once, or whose address the source takes for
+   anything but a flag, since a pointer can write it, is a leading unknown
+   segment. So are a literal scheme and host, a local variable, a parameter,
    text that continues the value's own last segment, and every other computed
-   value are a leading unknown segment.
+   value.
 6. **File-location routes.** Go has none, so every endpoint names its handler: a
    function, a method value, an `http.HandlerFunc` conversion, or a function
    literal.
@@ -139,13 +153,8 @@ methods on a tracked `*http.Client` or `http.DefaultClient`, and
 own.
 
 A route or method that is not constant, a net/http pattern with a host, a
-net/http segment that mixes literal text with a wildcard, a catch-all that shares
-its segment with text, and a route that continues after a catch-all report
-nothing. A router built by a function whose result is mounted, and
-one passed to `http.StripPrefix`, report nothing either, because the mount path
-belongs to other source. A router mounted by any other mechanism, such as a
-third-party helper, is still reported without that prefix. Routes another module
-registers are outside this scan.
+catch-all that shares its segment with text, and a route that continues after a
+catch-all report nothing. Routes another module registers are outside this scan.
 
 ## Compared operations
 
