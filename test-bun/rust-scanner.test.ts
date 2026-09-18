@@ -145,6 +145,77 @@ rustTest('a component outlines its Rust file beside a TypeScript file under the 
   })
 }, 60000)
 
+/** One fact as `file name METHOD /path`, with the request's configuration base marked. */
+function segments(path: { kind: string; name?: string; value?: string }[]): string {
+  return path.map(segment => {
+    if (segment.kind === 'literal') return segment.value
+    if (segment.kind === 'parameter') return `:${segment.name}`
+    if (segment.kind === 'catch-all') return `*${segment.name}`
+    return segment.kind
+  }).join('/')
+}
+
+rustTest('Rust HTTP facts cover axum, actix-web and Rocket endpoints, reqwest requests and the unresolved cases', async () => {
+  await fixture('rust-http', async root => {
+    const observation = await scanRustSource(root, {}, { worker })
+    const operations = new Map(observation.operations!.map(operation => [operation.id, operation]))
+    const where = (id: string) => {
+      const operation = operations.get(id)!
+      return `${operation.file.replace('src/', '')} ${operation.name}`
+    }
+    // The nested router, the scope, the service configuration and the mount supply every prefix.
+    // A non-literal route or prefix and a handler nobody registers are absent.
+    expect(observation.httpEndpoints!.map(fact => `${where(fact.operation)} ${fact.method} /${segments(fact.path)}`).sort()).toEqual([
+      'actix_routes.rs create POST /api/sessions',
+      'actix_routes.rs list GET /api/sessions',
+      'actix_routes.rs show GET /api/sessions/:id',
+      'actix_routes.rs stats GET /stats',
+      'axum_routes.rs create_talk POST /api/talks',
+      'axum_routes.rs health GET /health',
+      'axum_routes.rs list_talks GET /api/talks',
+      'axum_routes.rs proxy * /admin/*path',
+      'axum_routes.rs show_talk GET /api/talks/:id',
+      'rocket_routes.rs detail GET /v1/speakers/:id',
+      'rocket_routes.rs index GET /v1/speakers',
+      'rocket_routes.rs upload POST /v1/speakers/:id/photos/*rest',
+    ])
+    // A constant resolves to its text, one computed segment is dynamic, partly known text and a
+    // host are unknown, and a setting sets configured. A map lookup is not a request, not even
+    // as an argument inside a chain that sends one.
+    expect(observation.httpRequests!.map(fact => {
+      return `${where(fact.operation)} ${fact.method} /${segments(fact.path)}${fact.configured ? ' configured' : ''}`
+    }).sort()).toEqual([
+      'client.rs built PUT /api/talks/42',
+      'client.rs create_talk POST /api/talks',
+      'client.rs external GET /unknown/talks',
+      'client.rs forwarded POST /api/talks',
+      'client.rs list_talks GET /api/talks',
+      'client.rs partial GET /api/talks/unknown',
+      'client.rs remove_talk DELETE /api/talks/dynamic',
+      'client.rs show_talk GET /api/talks/dynamic',
+      'client.rs speakers GET /speakers configured',
+      'client.rs through_helper GET /unknown',
+    ])
+  })
+}, 60000)
+
+rustTest('a Rust scan derives HTTP rows from the requesting file to the file that serves the endpoints', async () => {
+  await fixture('rust-http', async root => {
+    await cp(path.resolve(import.meta.dir, '../test/fixtures/empty-project'), root, { recursive: true })
+    await execute('git', ['init', '--quiet'], { cwd: root })
+    await addScanner(root, packagePath)
+    await scanRepository(root)
+    const world = await loadAnnotatedArchitecture(root)
+    const files = (id: string) => world.elements.find(element => element.id === id)!.code.map(code => code.file)
+    const rows = world.relationships.filter(row => row.description?.startsWith('Calls HTTP endpoint'))
+    expect(rows.map(row => `${files(row.source)} -> ${files(row.target)}: ${row.description}`).sort()).toEqual([
+      // The configured base tolerates the one leading segment only the server states.
+      'src/client.rs -> src/rocket_routes.rs: Calls HTTP endpoint: GET /v1/speakers',
+      'src/client.rs -> src/axum_routes.rs: Calls HTTP endpoints: GET /api/talks, GET /api/talks/:id, POST /api/talks',
+    ].sort())
+  })
+}, 60000)
+
 rustTest('registered Rust scans preserve curated ownership and a failed scan preserves the prior architecture', async () => {
   await fixture('rust-semantic', async root => {
     await execute('git', ['init', '--quiet'], { cwd: root })
