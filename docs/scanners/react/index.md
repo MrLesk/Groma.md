@@ -80,36 +80,57 @@ here React, with the symbols of all those links.
 
 The scanner reports [HTTP facts](../evidence.md#http-endpoints-and-requests) for
 the clients it recognizes in the TSX files it reads, and for the endpoints a
-Next.js project declares by file location. Besides the components, it reads
-`app/**/route.ts` and `.tsx` and `pages/api/**`, under the project root or `src`,
-which another scanner may read as well.
+Next.js project declares by file location. In a project that declares `next`, it
+also reads `app/**/route.ts` and `.tsx` and `pages/api/**`, which another scanner
+may read as well. Next.js reads each of `app` and `pages` from the project root,
+or from `src` only when the root has none, so a `src/app` beside a root `app`
+serves nothing.
 
 | Construct | Reported |
 | --- | --- |
 | `fetch(url, init)` | Request; a literal `method` gives the method, no options means `GET`, and options the scanner cannot read leave it out |
 | `axios.get`, `.post`, `.put`, `.patch`, `.delete`, `.head`, `.options` | Request with that method |
-| `axios(config)`, `axios.request(config)` | Request from a literal `url`; a literal `method`, else `GET`, and a computed one leaves the method out |
-| `axios.create({ baseURL })` instances | Request whose path follows that base |
+| `axios(config)`, `axios.request(config)` | Request from the config's `url`; its `method`, else the client's, else `GET` |
+| `axios.create(config)` instances | Request whose path follows the config's `baseURL`, and whose method defaults to the config's |
 | `app/**/route.ts` | Endpoint per exported `GET`, `POST`, `PUT`, `PATCH`, `DELETE`, `HEAD` or `OPTIONS` handler, at the route's directory path |
 | `pages/api/**` | Endpoint for the default export, which answers every method, so `*` |
 
 `fetch` counts only when the project does not declare it, and an `axios` client
-counts only when its name comes from the `axios` import or from a `const` holding
-`axios.create(...)`, so a `get` on any other object is never a request. A config
-object built elsewhere, or one with a spread, states nothing certain.
+counts only when its name is the `axios` default import or a variable holding
+`axios.create(...)` called on it that the project never assigns again, so
+`isAxiosError`, a named `post` import and a `get` on any other object are never
+requests. Options are read as values are, as decision 5 describes, so a changed,
+duplicated or computed option is never taken for the literal it once held. An
+option object the scanner cannot read leaves the method out instead of claiming
+`GET`, and for axios leaves the base unknown too. A `fetch` input that is not a
+URL, such as a `Request`, carries a method of its own, so the fact states none.
+A request's own `baseURL`, in its config or in the configuration argument of a
+shorthand, which a `post`, `put` or `patch` takes third, replaces the client's.
+A base joins a relative path with one slash, and an absolute URL replaces it.
 
-The six [producer decisions](../evidence.md#producer-checklist) for this
-ecosystem:
+A client's `defaults` count too: exactly one assignment to `defaults.baseURL` or
+`defaults.method` anywhere in the project sets it, and more than one, or any other
+change to `defaults` itself or to those two properties, hides both. An instance
+without a base of its own copies the default client's when it is created, which
+the scan cannot order, so a base assigned to `axios.defaults` leaves the
+instance's unknown. These are accepted risks: the one assignment is taken to run
+before every request, although a test file or a function that runs only
+sometimes may make it, and interceptors, code a client is handed to, a re-exported
+default client, an alias such as `const alias = api`, and a destructured
+`defaults` are not read.
 
-1. **Prefixes.** Only an `axios.create({ baseURL })` base, which precedes every
-   path that instance requests. The scanner reports no endpoint, so no route
-   prefix applies.
-2. **Endpoints.** Only the route files above. A page, a layout, `middleware.ts`,
-   and a component answer no request of their own, and `pages/api.tsx` is a page,
-   not a route. A route file whose path holds a parallel route `@modal` or an
-   intercepted route `(.)talks` reports nothing, because the served path is not
-   the file path there. A Pages Router route whose default export is not a
-   function in that file also reports nothing.
+The [producer decisions](../evidence.md#producer-checklist) for this ecosystem:
+
+1. **Prefixes.** An endpoint's path is its route file's directory path, as
+   decision 6 describes; no other prefix applies. On the client side, only an
+   `axios.create({ baseURL })` base precedes a path.
+2. **Endpoints.** Only the route files above, and only in a project that
+   declares `next`. A page, a layout, `middleware.ts`, and a component answer no
+   request of their own, and `pages/api.tsx` is a page, not a route. A route file
+   whose path holds a parallel route `@modal` or an intercepted route `(.)talks`
+   reports nothing, because the served path is not the file path there. A Pages
+   Router route whose default export is not a function in that file also reports
+   nothing.
 3. **Dynamic or unknown.** `` `/talks/${id}` `` fills one whole segment, so it is
    dynamic. `` `/talks/${id}-latest` ``, a path built from a parameter, and an
    unresolvable value are unknown. The query and fragment are dropped, computed
@@ -117,12 +138,21 @@ ecosystem:
 4. **Local helpers.** Not supported: the URL is read at the client call, so a
    helper that forwards a path parameter reports unknown text, and its callers
    report nothing. Author those rows.
-5. **Bases.** A root-relative literal path has no base. A `const` and an
-   object-literal property assigned a literal are literal text; a class field is
-   not, because a constructor can replace it. A value the scanner cannot see,
-   such as an ambient declaration, `process.env.API_URL`, `import.meta.env` or a
-   constant imported from a package, sets `configured`. A literal host, a
-   parameter, and any other computed value report a leading unknown segment.
+5. **Bases.** A root-relative literal path has no base. A variable with a
+   literal initializer that the project never assigns again is literal text. So
+   is a property of an object literal such a variable holds: the last property
+   with its name, while the literal has no spread, computed key or accessor, and
+   no code in the project assigns or deletes that property or an object above it,
+   hands one of them to other code, or calls a method through them, and no
+   module object holding it, such as a namespace import, a re-exported namespace
+   or a dynamic import's result, is used other than to read one export by name. A value the scanner cannot
+   see, such as an ambient declaration, `process.env.API_URL`, `import.meta.env`
+   or a constant imported from a package, sets `configured`, and so does a field
+   read through `this`, which holds the client's own base setting. Text that
+   continues a configured value's last segment instead of starting with `/` is
+   unknown. A literal host, also when literal pieces only state it together, a
+   parameter, a value a call returns, and any other computed value report a
+   leading unknown segment.
 6. **File-location routes.** A route file's directory path is its served path,
    with `[id]` a parameter, `[...rest]` a catch-all and `[[...rest]]` an optional
    catch-all. A route group such as `(admin)` organizes files without serving a
@@ -131,6 +161,10 @@ ecosystem:
    ordinary segment. An App Router endpoint names the exported handler for its
    method; a Pages Router endpoint names the function its default export
    designates. Every request names the function that runs the call.
+7. **Constrained segments.** None: `[id]`, `[...rest]` and `[[...rest]]` accept
+   any text.
+8. **Registration order.** None: Next.js prefers the most specific route,
+   whatever order its files are in.
 
 ## Limits
 

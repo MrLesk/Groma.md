@@ -1,11 +1,11 @@
 import type { HttpEndpointSegment, ScanHttpEndpoint, ScanHttpRequest } from '@groma/scanner'
 import ts from 'typescript'
 import {
-  axiosRequest, createdBase, optionsMethod,
+  axiosRequest, createdClient, defaultClient, fetchMethod,
   type Client, type ClientContext, type RequestFact,
 } from '../../http-clients.ts'
 import { pathText, requestUrl } from '../../http-url.ts'
-import { constantOf, declarationOf, urlParts } from '../../http-values.ts'
+import { declarationOf, urlContext, urlParts } from '../../http-values.ts'
 import { enclosingOperation, type Operation } from './evidence.ts'
 import { relative, type VueProject } from './project.ts'
 
@@ -51,21 +51,17 @@ function isGlobalClient(callee: ts.Expression, context: VueContext, projectRoot:
   return callee.text === 'fetch' || declaration !== undefined
 }
 
-/** `axios` itself, or an instance assigned once from `axios.create`, whose base starts every path. */
+/** `axios` itself, or an instance a name holds from `axios.create`, whose configuration starts every request. */
 function axiosClient(node: ts.Node, context: VueContext): Client | undefined {
   if (!ts.isIdentifier(node)) return undefined
-  const declaration = context.checker.getSymbolAtLocation(node)?.declarations?.[0]
-  if (declaration === undefined) return undefined
-  const imported = importedModule(declaration)
-  if (imported !== undefined) return imported === 'axios' ? { base: [] } : undefined
-  // Only a value assigned once: a reassigned instance could carry another base at runtime.
-  const created = constantOf<ts.Expression>(context, node)
-  if (created === undefined || !ts.isCallExpression(created)) return undefined
-  const callee = created.expression
-  if (!ts.isPropertyAccessExpression(callee) || callee.name.text !== 'create') return undefined
-  // Only `axios` has `create`; an instance does not, so the receiver must be the imported client.
-  if (axiosClient(callee.expression, context)?.base.length !== 0) return undefined
-  return { base: createdBase(context, created) }
+  if (isAxios(node, context)) return defaultClient(context)
+  return createdClient(context, node, receiver => isAxios(receiver as ts.Node, context))
+}
+
+/** A name the `axios` module's import binds. */
+function isAxios(node: ts.Node, context: VueContext): boolean {
+  const declaration = ts.isIdentifier(node) ? context.checker.getSymbolAtLocation(node)?.declarations?.[0] : undefined
+  return declaration !== undefined && importedModule(declaration) === 'axios'
 }
 
 /** The module an imported name comes from, so a client is recognized without resolving its type. */
@@ -83,7 +79,7 @@ function globalRequest(call: ts.CallExpression, context: VueContext, projectRoot
   if (!isGlobalClient(call.expression, context, projectRoot)) return undefined
   const [url, options] = call.arguments
   if (url === undefined) return undefined
-  return { ...optionsMethod(context, options), ...requestUrl(urlParts(context, url)) }
+  return { ...fetchMethod(context, url, options), ...requestUrl(urlParts(context, url)) }
 }
 
 function routeSegment(part: string, last: boolean): HttpEndpointSegment | undefined {
@@ -168,7 +164,7 @@ function fileEndpoint(source: ts.SourceFile, file: string, input: VueHttpInput):
 export function vueHttpFacts(input: VueHttpInput): {
   httpRequests: ScanHttpRequest[]; httpEndpoints: ScanHttpEndpoint[]
 } {
-  const context: VueContext = { ts, checker: input.project.checker }
+  const context: VueContext = urlContext(ts, input.project.checker, input.project.files)
   const httpRequests: ScanHttpRequest[] = []
   const httpEndpoints: ScanHttpEndpoint[] = []
   for (const source of input.project.files) {

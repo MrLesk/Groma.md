@@ -2,5 +2,5 @@
   "name": "react-http-fixture",
   "private": true,
   "type": "module",
-  "dependencies": { "react": "19.2.7", "axios": "1.7.9" }
+  "dependencies": { "react": "19.2.7", "next": "16.0.0", "axios": "1.7.9" }
 }

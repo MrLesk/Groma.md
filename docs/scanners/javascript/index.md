@@ -177,10 +177,14 @@ ecosystem:
    and an `axios.create({ baseURL })` built from one set `configured`, as does a
    field read through `this`, which holds the client's own base setting. A
    variable with a literal initializer that this file never assigns again
-   resolves to its own literal text. So does a property of an object literal such
-   a variable holds, while the file does not export the variable and nothing in
-   it assigns or deletes that property or an object above it, hands one of them
-   to other code, or calls a method through them. A literal scheme and host, also
+   resolves to its own literal text, unless a script, a file with no import,
+   export, `require` or `exports`, declares it at the top level with `let` or
+   `var`: another script can assign those globals. So does a property of an object literal
+   such a variable holds: the last property with its name, while the literal has
+   no spread, computed key or accessor, the file neither exports the variable nor
+   is a script declaring it at the top level, and nothing in the file assigns or
+   deletes that property or an object above it, hands one of them to other code,
+   or calls a method through them. A literal scheme and host, also
    when literal pieces only state it together, text that continues a configured
    value's last segment instead of starting with `/`, and a base the file
    computes become the leading unknown segment, which derives nothing. Every

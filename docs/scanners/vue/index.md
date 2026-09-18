@@ -121,8 +121,8 @@ there.
 | --- | --- |
 | `fetch(url, options)`, `$fetch(url, options)`, `useFetch(url, options)` | Request; a literal `method` gives the method, no options means `GET`, and options the scanner cannot read leave it out |
 | `axios.get`, `.post`, `.put`, `.patch`, `.delete`, `.head`, `.options` | Request with that method |
-| `axios(config)`, `axios.request(config)` | Request from a literal `url`; a literal `method`, else `GET`, and a computed one leaves the method out |
-| `axios.create({ baseURL })` instances | Request whose path follows that base |
+| `axios(config)`, `axios.request(config)` | Request from the config's `url`; its `method`, else the client's, else `GET` |
+| `axios.create(config)` instances | Request whose path follows the config's `baseURL`, and whose method defaults to the config's |
 | `server/api/**` | Endpoint at `/api/...`, with the method its file name states |
 | `server/routes/**` | Endpoint at the path after `server/routes`, with the method its file name states |
 
@@ -132,9 +132,27 @@ installed package's types, so a project's own `useFetch` composable, whose body
 decides the URL, is never read as Nuxt's; a project scanned without its
 dependencies installed therefore reports no `$fetch` or `useFetch` request. An
 `axios` client counts only when its name comes from the `axios` import or from a
-`const` holding `axios.create(...)`. A `get` on any other object is never a
-request, and an options object the scanner cannot read, one with a spread, or one
-whose property names are computed states nothing certain.
+variable holding `axios.create(...)` that the project never assigns again. A
+`get` on any other object is never a request. Options are read as values are, as
+decision 5 describes, so a changed, duplicated or computed option is never taken
+for the literal it once held. An option object the scanner cannot read leaves
+the method out instead of claiming `GET`, and for axios leaves the base unknown
+too. A `fetch`, `$fetch` or `useFetch` input that is not a URL, such as a
+`Request`, carries a method of its own, so the fact states none. A request's own
+`baseURL`, in its config or in the configuration argument of a shorthand, which
+a `post`, `put` or `patch` takes third, replaces the client's. A base joins a
+relative path with one slash, and an absolute URL replaces it.
+
+A client's `defaults` count too: exactly one assignment to `defaults.baseURL` or
+`defaults.method` anywhere in the project sets it, and more than one, or any other
+change to `defaults` itself or to those two properties, hides both. An instance
+without a base of its own copies the default client's when it is created, which
+the scan cannot order, so a base assigned to `axios.defaults` leaves the
+instance's unknown. These are accepted risks: the one assignment is taken to run
+before every request, although a test file or a function that runs only
+sometimes may make it, and interceptors, code a client is handed to, a re-exported
+default client, an alias such as `const alias = api`, and a destructured
+`defaults` are not read.
 
 The endpoints need the project to declare `nuxt`: another server that happens to
 live in `server/` serves paths of its own, which these locations would misstate.
@@ -160,9 +178,12 @@ ecosystem:
    report nothing. Author those rows.
 5. **Bases.** A root-relative literal path has no base. A variable with a
    literal initializer that the project never assigns again is literal text. So
-   is a property of an object literal such a variable holds, while no code in the
-   project assigns or deletes that property or an object above it, hands one of
-   them to other code, or calls a method through them. A value the scanner cannot
+   is a property of an object literal such a variable holds: the last property
+   with its name, while the literal has no spread, computed key or accessor, and
+   no code in the project assigns or deletes that property or an object above it,
+   hands one of them to other code, or calls a method through them, and no
+   module object holding it, such as a namespace import, a re-exported namespace
+   or a dynamic import's result, is used other than to read one export by name. A value the scanner cannot
    see, such as an ambient declaration, `process.env`, `import.meta.env` or a
    constant imported from a package, sets `configured`, and so does a field read
    through `this`, which holds the client's own base setting. Text that continues

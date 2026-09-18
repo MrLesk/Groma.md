@@ -1,0 +1,1 @@
+export const handedRoutes = { talks: '/api/talks' }

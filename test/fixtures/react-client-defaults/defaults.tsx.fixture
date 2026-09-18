@@ -1,0 +1,23 @@
+import axios from 'axios'
+
+export const shared = axios.create({ baseURL: '/api' })
+const merged = axios.create({ baseURL: '/api' })
+Object.assign(merged.defaults, { baseURL: 'https://api.example.com' })
+const posting = axios.create({ baseURL: '/api', method: 'post' })
+posting.defaults.method = 'get'
+const inherits = axios.create({ method: 'put' })
+const stated = axios.create({ baseURL: '/api' })
+
+export const sharedCall = () => shared.get('/talks')
+
+export const mergedCall = () => merged.get('/talks')
+
+export const postingCall = () => posting('talks')
+
+export const defaultCall = () => axios.get('/talks')
+
+export const inheritedCall = () => inherits('/talks')
+
+export const statedCall = () => stated.get('/talks')
+
+export const Defaults = () => <span>{String(sharedCall())}</span>

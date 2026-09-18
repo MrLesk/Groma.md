@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs'
 import path from 'node:path'
 import type { HttpEndpointSegment, ScanHttpEndpoint } from '@groma/scanner'
 import ts from 'typescript'
@@ -7,16 +8,37 @@ import { executable, type Operation } from './functions.ts'
 /** The methods an App Router route file exports one handler per. */
 const METHODS = new Set(['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'])
 
-const APP_ROUTE = /^(?:src\/)?app\/(?:(.+)\/)?route\.tsx?$/
-const PAGES_API = /^(?:src\/)?pages\/(api\/.+)\.tsx?$/
+const APP_ROUTE = /^(?:(.+)\/)?route\.tsx?$/
+const PAGES_API = /^(api\/.+)\.tsx?$/
 
 const OPTIONAL_CATCH_ALL = /^\[\[\.\.\.(.+)\]\]$/
 const CATCH_ALL = /^\[\.\.\.(.+)\]$/
 const PARAMETER = /^\[(.+)\]$/
 
-export function routeLocation(file: string): 'app' | 'pages' | undefined {
-  if (APP_ROUTE.test(file)) return 'app'
-  return PAGES_API.test(file) ? 'pages' : undefined
+/** The directories Next.js serves routes from, relative to the project root. */
+export interface Routers {
+  app: string
+  pages: string
+}
+
+/** Next.js reads `app` and `pages` from the project root, each from `src` only when the root has none. */
+export function nextRouters(projectRoot: string): Routers {
+  const active = (name: string): string => existsSync(path.join(projectRoot, name)) ? name : `src/${name}`
+  return { app: active('app'), pages: active('pages') }
+}
+
+/** The route a file declares by its location under an active router, or undefined for any other file. */
+export function routeLocation(file: string, routers: Routers): { router: 'app' | 'pages'; directory?: string } | undefined {
+  const within = (directory: string): string | undefined => file.startsWith(`${directory}/`) ? file.slice(directory.length + 1) : undefined
+  const app = APP_ROUTE.exec(within(routers.app) ?? '')
+  if (app) return { router: 'app', ...(app[1] === undefined ? {} : { directory: app[1] }) }
+  const pages = PAGES_API.exec(within(routers.pages) ?? '')
+  return pages ? { router: 'pages', directory: pages[1]! } : undefined
+}
+
+/** Whether a file sits where a Next.js project may declare a route, under its root or `src`. */
+export function routeCandidate(file: string): boolean {
+  return ['', 'src/'].some(prefix => routeLocation(file, { app: `${prefix}app`, pages: `${prefix}pages` }) !== undefined)
 }
 
 /** A fully parenthesized name organizes files without serving a segment, unless it marks an intercept. */
@@ -123,16 +145,15 @@ function pagesHandler(source: ts.SourceFile): Operation | undefined {
 export function nextRouteEndpoints(
   sources: readonly ts.SourceFile[],
   projectRoot: string,
+  routers: Routers,
   operationId: (node: Operation) => string,
 ): ScanHttpEndpoint[] {
   const endpoints: ScanHttpEndpoint[] = []
   for (const source of sources) {
-    const file = path.relative(projectRoot, source.fileName).split(path.sep).join('/')
-    const app = APP_ROUTE.exec(file)
-    const pages = PAGES_API.exec(file)
-    const segments = routePath((app ?? pages)?.[1], pages !== null)
-    if (segments === undefined) continue
-    if (app) {
+    const location = routeLocation(path.relative(projectRoot, source.fileName).split(path.sep).join('/'), routers)
+    const segments = location === undefined ? undefined : routePath(location.directory, location.router === 'pages')
+    if (location === undefined || segments === undefined) continue
+    if (location.router === 'app') {
       for (const [method, handler] of appHandlers(source)) {
         endpoints.push({ operation: operationId(handler), method, path: segments })
       }

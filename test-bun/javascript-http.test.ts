@@ -95,18 +95,27 @@ test.concurrent('JavaScript client calls report the method and the path parts th
     // A reassignable instance or router, another object's `get`, a `$` this file declares, a URL
     // passed to another function, `$.ajax` settings the scanner cannot read and a local function
     // named `fetch` send nothing. A host, an unresolved URL, a base a loop variable computes, a partly computed
-    // segment and a computed method are reported as the source states them.
+    // segment and a computed method are reported as the source states them. A variable this file never
+    // assigns again and a property of an object only this file holds are literal; an exported object,
+    // which another file can change, a script's top-level names, which are globals, and a reassigned
+    // variable are not.
     expect(requests).toEqual([
       ['-', '/api/rooms', 'client/jquery.js'],
       ['-', '/status', 'client/fetch.mjs'],
       ['DELETE', '/status', 'client/axios.mjs'],
       ['DELETE', '/status', 'client/jquery.js'],
       ['GET', '/?', 'client/fetch.mjs'],
+      ['GET', '/?', 'client/globals.js'],
       ['GET', '/?', 'client/jquery.js'],
+      ['GET', '/?', 'client/values.mjs'],
       ['GET', '/?/rooms', 'client/fetch.mjs'],
       ['GET', '/?/talks', 'client/fetch.mjs'],
+      ['GET', '/?/talks', 'client/globals.js'],
+      ['GET', '/?/talks', 'client/values.mjs'],
       ['GET', '/api/default', 'client/jquery.js'],
       ['GET', '/api/talks', 'client/fetch.mjs'],
+      ['GET', '/api/talks', 'client/values.mjs'],
+      ['GET', '/api/talks', 'client/values.mjs'],
       ['GET', '/api/talks/?', 'client/fetch.mjs'],
       ['GET', '/files', 'client/jquery.js'],
       ['GET', '/missing', 'client/axios.mjs'],
@@ -139,6 +148,7 @@ test.concurrent('core derives rows from the JavaScript facts of one scan', async
       ['client/jquery.js', 'server/express.mjs', 'Calls HTTP endpoints: GET /talks/:id, POST /talks'],
       ['client/jquery.js', 'server/fastify.js', 'Calls HTTP endpoint: POST /submissions'],
       ['client/jquery.js', 'server/serve.js', 'Calls HTTP endpoints: DELETE /status, GET /files'],
+      ['client/values.mjs', 'server/hono.mjs', 'Calls HTTP endpoint: GET /api/talks'],
     ])
   } finally { await rm(temporary, { recursive: true, force: true }) }
 })

@@ -1,0 +1,1 @@
+export const exposed = { talks: '/api/talks' }

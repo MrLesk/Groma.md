@@ -1,0 +1,66 @@
+import { isAxiosError, post } from 'axios'
+import { reexported } from './cfg'
+import { exposed } from './exposed'
+import { handedRoutes } from './handed'
+import { lazyRoutes } from './lazy'
+import { shared } from './shared'
+
+const routes = { talks: '/api/talks' }
+const moved = { talks: '/api/talks' }
+moved.talks = 'https://api.example.com/talks'
+const defaults = { url: '/api/talks' }
+
+const aliased = { talks: '/api/talks' }
+const alias = aliased
+alias.talks = 'https://api.example.com/talks'
+
+const handed = { talks: '/api/talks' }
+relocate(handed)
+
+const behaved = { talks: '/api/talks', move() { this.talks = 'https://api.example.com/talks' } }
+behaved.move()
+
+const guarded = { talks: '/api/talks', set base(value: string) { this.talks = `${value}/talks` } }
+guarded.base = 'https://api.example.com'
+
+function relocate(value: { talks: string }): void {
+  value.talks = 'https://api.example.com/talks'
+}
+
+export const routed = () => fetch(routes.talks)
+
+export const reassignedProperty = () => fetch(moved.talks)
+
+export const typedParameter = (config: typeof defaults) => fetch(config.url)
+
+export const returned = (stored: string) => fetch(JSON.parse(stored).apiUrl + '/talks')
+
+export const joinedHost = () => fetch('/' + '/api.example.com/talks')
+
+export const continued = () => fetch(API_URL + 'talks')
+
+export const viaAlias = () => fetch(aliased.talks)
+
+export const viaArgument = () => fetch(handed.talks)
+
+export const viaMethod = () => fetch(behaved.talks)
+
+export const viaAccessor = () => fetch(guarded.talks)
+
+export const viaOtherFile = () => fetch(shared.talks)
+
+export const viaNamespace = () => fetch(exposed.talks)
+
+export const viaReexport = () => fetch(reexported.talks)
+
+export const viaDynamicImport = () => fetch(lazyRoutes.talks)
+
+export const viaHandedImport = () => fetch(handedRoutes.talks)
+
+export const requested = () => fetch(new Request('/api/talks', { method: 'POST' }))
+
+export const checked = (error: unknown) => isAxiosError(error)
+
+export const named = () => post('/api/talks', {})
+
+export const Uncertain = () => <span>{String(routed())}</span>

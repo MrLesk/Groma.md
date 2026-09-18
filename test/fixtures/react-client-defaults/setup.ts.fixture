@@ -1,0 +1,5 @@
+import { default as client } from 'axios'
+import { shared } from './defaults'
+
+client.defaults.baseURL = process.env.API_URL
+shared.defaults.baseURL = 'https://api.example.com'
