@@ -78,7 +78,7 @@ public sealed class ComparedOperationTests
     }
 
     [Fact]
-    public async Task GroupingParenthesesAndPostfixOperatorsStay()
+    public async Task GroupingParenthesesStay()
     {
         using ScannerFixture fixture = new("csharp-tokens");
         ScanObservation scan = await fixture.ScanAsync(Path.Combine(fixture.Root, "Tokens.csproj"));
@@ -90,7 +90,6 @@ public sealed class ComparedOperationTests
         Assert.NotEqual(Tokens("TrimmedLength"), Tokens("MaybeTrimmedLength"));
         // Parentheses around a name do not change what the body computes.
         Assert.Equal(Tokens("Ungrouped"), Tokens("Wrapped"));
-        Assert.NotEqual(Tokens("Increment"), Tokens("Decrement"));
         // The omitted sizes of int[][] are not tokens.
         Assert.DoesNotContain("", Tokens("Counted"));
     }

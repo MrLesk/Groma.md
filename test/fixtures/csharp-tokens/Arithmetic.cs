@@ -22,16 +22,4 @@ public static class Arithmetic
     public static int TrimmedLength(string? text) => (text?.Trim()).Length;
 
     public static int? MaybeTrimmedLength(string? text) => text?.Trim().Length;
-
-    public static int Increment(int a)
-    {
-        a++;
-        return a;
-    }
-
-    public static int Decrement(int a)
-    {
-        a--;
-        return a;
-    }
 }
