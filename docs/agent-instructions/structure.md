@@ -36,7 +36,7 @@ the scanner cannot see.
 | `groma remove group <address> [component...]` | a group address, and the IDs of the members that leave; without members the group dissolves |
 | `groma add actor <name> --overview <markdown>` | the name of a new person |
 | `groma add external <name> --overview <markdown>` | the name of a new outside system; `--technology` is optional |
-| `groma draft <system\|container\|component> <name> --parent <id>` | a new name and its parent element ID |
+| `groma draft <system\|container\|component> <name> --overview <markdown>` | a new name; containers and components also take `--parent <id>`, which a system refuses |
 | `groma accept <id>` | a ghost element ID; scans first when no scan has matched it yet |
 | `groma remove <id>` | an actor, external system, ghost, or unused draft ID, or a scanned component without Code references |
 
