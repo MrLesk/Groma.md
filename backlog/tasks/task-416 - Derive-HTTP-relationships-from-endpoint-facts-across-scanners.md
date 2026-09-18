@@ -1,11 +1,11 @@
 ---
 id: TASK-416
 title: Derive certain HTTP relationships from scanner endpoint facts
-status: In Progress
+status: Done
 assignee:
   - '@claude'
 created_date: '2026-09-16 19:38'
-updated_date: '2026-09-18 14:52'
+updated_date: '2026-09-18 14:58'
 labels: []
 dependencies: []
 references:
@@ -52,14 +52,14 @@ Paths may differ by one leading segment, such as an `/api` prefix or a deploymen
 - [x] #3 A request made through a local helper function counts only when its URL and method provably reach a recognized client unchanged.
 - [x] #4 Authored rows for the same file pair keep precedence, and independent fixtures cover matches and every no-row case.
 - [x] #5 Relationship inference and scanner evidence documentation describe the rule, the fact format and their limits.
-- [ ] #6 Once the Angular and Java producers exist, callforpapers is scanned from scratch with its existing Groma folder moved aside, and every difference between derived and authored HTTP rows is recorded.
+- [x] #6 Once the Angular and Java producers exist, callforpapers is scanned from scratch with its existing Groma folder moved aside, and every difference between derived and authored HTTP rows is recorded.
 - [x] #7 Core derives a row from the requesting file to the providing file only when the methods match, the known request path equals the endpoint path either completely or after removing the first path segment from one side, and every endpoint the request can match belongs to that one file.
 - [x] #8 Requests whose path is only partly known (beyond whole segments that match path parameters), requests to a literal host, and requests that match endpoints in several files produce no row; a configured base value followed by a literal path counts as a known path, and query strings are ignored.
 <!-- AC:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 Acceptance criteria have objective verification evidence.
+- [x] #1 Acceptance criteria have objective verification evidence.
 - [x] #2 Relevant checks pass and changes remain task-scoped.
 - [x] #3 Public contracts or documentation are updated when behavior changes.
 - [x] #4 Implementation Plan reflects the final approach; correction history and verification are recorded in Implementation Notes.
@@ -150,4 +150,41 @@ callforpapers verification fix: src/http-relationships.ts now ranks matching end
 This removes the wrong label the verification found: a request to /ratings/top no longer also claims a sibling /ratings/:token in the same file. It also restores real rows that an SPA fallback hid: GET /api/account now beats another file's /:first/:second, so the row is derived instead of discarded by the one-file rule. One earlier abstention test became a match case for the same reason, which is the intended change.
 Tests: a literal sibling of a parameter route in one file (single label), a specific path before another file's fallback, and a literal path before another file's any-method parameter route. docs/relationship-inference.md rule 4 states the full ordering.
 Isolated bun run check from current HEAD exited 0 (Bun 479 passed, 32 skipped, 0 failed; Node 16 passed).
+
+AC #6 rerun after the specificity ranking (0b4c137e): clean, nothing derived is wrong.
+
+Setup. A fresh clone of /Users/alex/projects/callforpapers (at 1cb6783f3) was scanned in a scratch directory; the owner's working copy was never written to and Groma was never run there. The baseline for authored rows is that working copy's groma/ folder, which is untracked there, copied read-only at verification time; its 69 HTTP rows are identical to the copy taken during the first run. The clone carries no groma/ folder of its own, so it was initialized fresh. Everything ran from a detached worktree pinned at 0b4c137e, including the four scanner packages the authored scanners.json selects (typescript, angular, java, php), built from that commit. groma scan created 1229 elements. Facts: angular 205 requests, java 431 endpoints and 3 requests, php 12 requests, typescript none. The first run's packages came from the shared working tree while the HTTP producers were still in flight, which is why two requests that were unresolved then resolve now; this rerun used committed code only.
+
+Derived HTTP rows: 14, every one angular plus java. Each was checked against the client call and the Spring mapping, and each is correct.
+1. admin-exports/admin-export.service.ts -> speaker/SpeakerResource.java, GET /api/speakers/download/:proposalState.
+2. admin-exports/admin-export.service.ts -> proposal/ProposalRatingResource.java, GET /api/proposals/ratings.
+3. admin-keyword-cloud/admin-keyword-cloud.service.ts -> keyword/KeywordCloudResource.java, POST /api/keyword-cloud/upload.
+4. admin-schedule/admin-schedule-copy.service.ts -> schedule/ScheduleCopyResource.java, POST /api/admin/schedule-copy/apply and POST /api/admin/schedule-copy/preflight.
+5. admin-schedule/admin-schedule.service.ts -> proposal/ProposalResource.java, GET /api/proposals/unscheduled-by-type and GET /api/proposals/unscheduled-count.
+6. admin-ticket-allocation/admin-ticket-allocation.service.ts -> speaker/SpeakerResource.java, GET /api/speakers/ticket-allocation.
+7. core/auth/account.service.ts -> user/AccountResource.java, GET /api/account and POST /api/account.
+8. dev/dev-auth-callback.component.ts -> user/AccountResource.java, GET /api/account.
+9. entities/event/event.service.ts -> publicaccess/PublicResource.java, GET /api/public/event.
+10. entities/home-pod/home-pod.service.ts -> publicaccess/PublicResource.java, GET /api/public/home-pods.
+11. entities/user-favourite/user-favourite.service.ts -> user/UserFavouriteTalkResource.java, GET /api/favourites/talk/total.
+12. shared/auth/internal-account.service.ts -> user/AccountResource.java, GET /api/activate, POST /api/account/reset-password/finish, POST /api/account/reset-password/init and POST /api/register.
+13. shared/proposal-state-button/proposal-state-button.component.ts -> util/EmailPreviewResource.java, GET /api/email-preview/:action/:proposalId.
+14. top-talks/cfp-top-talks-home.component.ts -> publicaccess/PublicUserRatingResource.java, GET /api/public/ratings/top.
+
+Both defects the first run exposed are gone. Row 14 no longer claims GET /api/public/ratings/:token, which the component never calls; the literal route now wins over its sibling parameter route in the same file. GET /api/account is a label again, because ClientForwardController's SPA fallback GET /:path1/:path2 now loses to the literal route in another file, exactly as that controller's own comment describes. Seven rows and two labels that the earlier ranking hid are now reported: the ratings export, the schedule copy pair, the two unscheduled counts, the ticket allocation, the dev auth callback, the public event and the public home pods.
+
+Authored HTTP rows: 69 (48 HTTP JSON, 10 HTTP JSON through getJSON, 4 HTTPS JSON, 2 HTTP JSON through Retrofit, and one each of HTTP, HTTP text, HTTPS PUT, HTTPS through LangChain4j, HTTPS with the Firebase SDK). One of them, admin-schedule-copy.service.ts -> ScheduleCopyResource.java, is now also derived. The other 68 are not derived, for these reasons.
+- 36 rows: every request the source file reports has an unresolved base or a computed segment, such as GET /<unknown> or PUT /<unknown>/<dynamic>. These Angular services send through a resourceUrl field composed from appConfig, which the producer reports as unknown text.
+- 10 rows: the source is a PHP WordPress shortcode that calls the public API with jQuery getJSON inside the JavaScript it prints, so the PHP producer reports no request.
+- 10 rows: the source or target is an actor, container or external system (Firebase, OpenAI, Google Gemini, Devoxxians, Amazon S3, Devoxx Companion, another CFP instance, the media signing service, semantic search), not a repository file. The rule joins file to file.
+- 8 rows: the entity services for room, location, tenant, comment, compliment, tag, program-user-tracks and proposal-digest report no request at all. Each only sets resourceUrl and inherits every call from shared/crud/abstract-entity.service.ts. This is a real limit of the rule rather than a miss: the request is written once in the shared base file, whose own path is an unknown field read, so no file-level client exists to attribute the call to. Naming the calling file would require resolving an inherited field per subclass, which the fact format does not express.
+- 4 rows: the source file's own proven request is served by a file other than the authored target, and the scan derived a row to that file instead: entities/event/event.service.ts and entities/home-pod/home-pod.service.ts read the public API from PublicResource (rows 9 and 10), and entities/user-favourite/user-favourite.service.ts reads from UserFavouriteTalkResource (row 11). Their authored rows name the CRUD resource they also use through AbstractDateEntityService or AbstractEntityService, which is the inherited-call limit above. The fourth, entities/wishlist-entry/wishlist-entry.service.ts -> WishlistEntryResource.java, has one proven request, GET /api/speakers/<dynamic>, which belongs to SpeakerResource, while its three other requests have unresolved bases.
+
+Nothing derived is wrong, no authored row is contradicted, and every authored row that stays hand-written has a stated reason.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Scanners report HTTP endpoints and requests as language-neutral facts, and core joins them into a derived relationship only when the match is certain: equal methods, a fully known request path that equals the endpoint path or differs by one leading segment, the most specific matching endpoints, and every match in one file with a different owner. Verified on callforpapers, scanned from scratch in a fresh clone at 0b4c137e with its authored groma folder kept aside as the baseline: 14 derived rows, each checked against the client call and the Spring mapping and each correct, against 69 authored HTTP rows of which one is now also derived. Every authored row that stays hand-written has a recorded reason: 36 have only unresolved or computed paths, 10 are PHP shortcodes calling through jQuery getJSON, 10 join an actor or external system rather than two files, 8 inherit their calls from a shared CRUD base service (a stated limit of the rule), and 4 name a different file than the one that serves the proven request. The first verification found a derived row claiming an endpoint the source never calls and rows hidden by an SPA fallback route; both came from ranking a literal segment like a parameter, were fixed in core by segment specificity, and are confirmed gone.
+<!-- SECTION:FINAL_SUMMARY:END -->
