@@ -89,6 +89,8 @@ public final class Main {
             units.forEach(unit -> index.scan(unit, null));
             var uses = new Uses(index, diagnostics.getDiagnostics());
             units.forEach(unit -> uses.scan(unit, null));
+            var http = new Http(index, Trees.instance(task));
+            units.forEach(unit -> http.scan(unit, null));
             var missing = new MissingTypes();
             var messages = new ArrayList<Object>();
             for (var item : diagnostics.getDiagnostics()) {
@@ -102,7 +104,8 @@ public final class Main {
                 "scanner", Json.object("id", "java", "technology", "java", "engine", "javac-tree", "engineVersion", Runtime.version().toString()),
                 "roots", List.of(Json.object("id", "java:source-set", "kind", "java-project", "name", root.getFileName().toString())),
                 "files", index.files(), "operations", index.operations,
-                "invocations", uses.invocations, "diagnostics", messages);
+                "invocations", uses.invocations, "httpEndpoints", http.endpoints,
+                "httpRequests", http.requests, "diagnostics", messages);
         }
     }
 
