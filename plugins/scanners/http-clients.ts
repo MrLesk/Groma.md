@@ -1,13 +1,15 @@
 import type { ScanHttpRequest } from '@groma/scanner'
 import { computedPart, joinBase, requestUrl, type UrlPart } from './http-url.ts'
-import { declarationOf, heldAt, heldParts, methodName, urlParts, type UrlCompiler, type UrlContext } from './http-values.ts'
+import {
+  declarationOf, heldAt, heldParts, importOrigin, methodName, urlParts, type UrlCompiler, type UrlContext,
+} from './http-values.ts'
 
 /*
- * The client forms the framework scanners read the same way: an options object's method, and the
- * axios call shapes. Every option is read through the shared value reader, so a changed, duplicated
- * or unreadable property is never taken for the literal it once held. Each scanner keeps only the
- * recognition its ecosystem needs, such as which name is a runtime client. The TypeScript scanner
- * has its own copy over the native SDK; change both together.
+ * The client forms the framework scanners read the same way: an options object's method and base, and
+ * the axios clients and call shapes. Every option is read through the shared value reader, so a
+ * changed, duplicated or unreadable property is never taken for the literal it once held. Each scanner
+ * keeps only the recognition its ecosystem needs, such as which name is its runtime `fetch`. The
+ * TypeScript scanner has its own copy over the native SDK; change both together.
  */
 interface Node {
   kind: number
@@ -45,7 +47,7 @@ function declaredMethod(context: ClientContext, options: Node | undefined, fallb
 }
 
 /** The base a configuration states, the fallback when it states none, and a hidden one as the value it is. */
-function declaredBase(context: ClientContext, config: Node | undefined, fallback: UrlPart[]): UrlPart[] {
+export function optionsBase(context: ClientContext, config: Node | undefined, fallback: UrlPart[]): UrlPart[] {
   if (config === undefined) return fallback
   const base = heldAt(context, config, 'baseURL')
   return base === 'absent' ? fallback : heldParts(context, base)
@@ -90,7 +92,7 @@ function withDefaults(context: ClientContext, client: Client, holders: readonly 
 }
 
 /** `axios` itself, as the `axios.defaults` assignments in the sources leave it. */
-export function defaultClient(context: ClientContext): Client {
+function defaultClient(context: ClientContext): Client {
   return withDefaults(context, { base: [], method: 'GET' }, context.bindings.defaultImports('axios') as Node[])
 }
 
@@ -102,7 +104,7 @@ function sent(
   context: ClientContext, client: Client, url: UrlPart[], method: string | undefined, config: Node | undefined,
 ): RequestFact {
   const effective = method ?? declaredMethod(context, config, client.method)
-  const base = declaredBase(context, config, client.base)
+  const base = optionsBase(context, config, client.base)
   return { ...(effective === undefined ? {} : { method: effective }), ...requestUrl(joinBase(base, url)) }
 }
 
@@ -125,18 +127,13 @@ const SHORTHAND = new Map([
 /** The shorthands whose second argument is the request body, which moves the configuration to the third. */
 const WITH_BODY = new Set(['post', 'put', 'patch'])
 
-/**
- * The request an axios call sends. `resolveClient` decides which names hold a client, because that is
- * where the ecosystems differ.
- */
-export function axiosRequest(
-  context: ClientContext, call: Call, resolveClient: (node: Node) => Client | undefined,
-): RequestFact | undefined {
+/** The request an axios call sends, through the client `axiosClient` recognizes. */
+export function axiosRequest(context: ClientContext, call: Call): RequestFact | undefined {
   const { ts } = context
   const callee = call.expression
   const [first, second, third] = call.arguments
   if (ts.isPropertyAccessExpression(callee)) {
-    const client = resolveClient(callee.expression)
+    const client = axiosClient(context, callee.expression)
     if (client === undefined) return undefined
     const member = callee.name.text
     const method = SHORTHAND.get(member)
@@ -145,7 +142,7 @@ export function axiosRequest(
     }
     return member === 'request' ? configRequest(context, client, first) : undefined
   }
-  const client = resolveClient(callee)
+  const client = axiosClient(context, callee)
   if (client === undefined || first === undefined) return undefined
   if (holdsObject(context, first)) return configRequest(context, client, first)
   return sent(context, client, urlParts(context, first), undefined, second)
@@ -160,23 +157,35 @@ function holderOf(context: ClientContext, node: Node): Node | undefined {
   return ts.isVariableDeclaration(current.parent) ? current.parent : undefined
 }
 
+/** The axios default export; a named export such as `isAxiosError` or `post` is not a client. */
+function isAxios(context: ClientContext, node: Node): boolean {
+  const origin = importOrigin(context, node)
+  return origin?.module === 'axios' && origin.name === 'default'
+}
+
 /**
  * The instance `axios.create(config)` makes, when a name certainly holds one: the base and default method
  * its configuration states, else those of `axios` when nothing sets them there, and then its own
- * `defaults`. `isAxios` recognizes the default client, which is where the ecosystems differ.
+ * `defaults`.
  */
-export function createdClient(context: ClientContext, node: Node, isAxios: (node: Node) => boolean): Client | undefined {
+function createdClient(context: ClientContext, node: Node): Client | undefined {
   const { ts } = context
   const created = heldAt(context, node)
   const call = typeof created === 'object' && ts.isCallExpression(created.node) ? created.node : undefined
   const callee = call?.expression
   if (call === undefined || callee === undefined || !ts.isPropertyAccessExpression(callee)) return undefined
-  if (callee.name.text !== 'create' || !isAxios(callee.expression)) return undefined
+  if (callee.name.text !== 'create' || !isAxios(context, callee.expression)) return undefined
   // `axios.create` copies what `axios.defaults` hold when it runs, which the scan cannot order.
   const parent = defaultClient(context)
   const inherited: Client = { base: parent.base.length === 0 ? [] : [computedPart], method: parent.method === 'GET' ? 'GET' : undefined }
   const [config] = call.arguments
-  const client = { base: declaredBase(context, config, inherited.base), method: declaredMethod(context, config, inherited.method) }
+  const client = { base: optionsBase(context, config, inherited.base), method: declaredMethod(context, config, inherited.method) }
   const holders = [declarationOf(context, node), holderOf(context, call)].filter(holder => holder !== undefined)
   return withDefaults(context, client, [...new Set(holders)])
+}
+
+/** `axios` itself, or an instance a name holds from `axios.create`, whose configuration starts every request. */
+function axiosClient(context: ClientContext, node: Node): Client | undefined {
+  if (!context.ts.isIdentifier(node)) return undefined
+  return isAxios(context, node) ? defaultClient(context) : createdClient(context, node)
 }

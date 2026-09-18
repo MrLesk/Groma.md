@@ -1,0 +1,3 @@
+import { handler } from '../handlers'
+
+export default defineEventHandler(handler)

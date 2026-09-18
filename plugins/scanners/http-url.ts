@@ -82,3 +82,25 @@ export function joinBase(base: readonly UrlPart[], url: readonly UrlPart[]): Url
   if (first.kind === 'hole') return [computedPart, ...path.slice(1)]
   return absolute.test(first.text) ? path : [...stated, { kind: 'text', text: '/' }, ...path]
 }
+
+/**
+ * The URL `$fetch` and `useFetch` request, as ofetch reads a `baseURL`: a URL that already starts with a
+ * literal base, followed by `/`, `?` or its end, is kept, and a base joins any other one. Where that
+ * boundary falls on a computed part, the URL starts unknown.
+ */
+export function withBase(base: readonly UrlPart[], url: readonly UrlPart[]): UrlPart[] {
+  const stated = joinedText(base)
+  const path = joinedText(url)
+  const [only] = stated
+  const [first, ...rest] = path
+  if (stated.length !== 1 || only?.kind !== 'text' || first?.kind !== 'text' || absolute.test(first.text)) {
+    return joinBase(stated, path)
+  }
+  const prefix = only.text.replace(/\/$/, '')
+  if (first.text.startsWith(prefix)) {
+    const next = first.text[prefix.length]
+    if (next === undefined) return rest.length === 0 ? path : [computedPart, ...rest]
+    return next === '/' || next === '?' ? path : joinBase(stated, path)
+  }
+  return prefix.startsWith(first.text) && rest.length > 0 ? [computedPart, ...rest] : joinBase(stated, path)
+}

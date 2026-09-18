@@ -120,6 +120,7 @@ there.
 | Construct | Reported |
 | --- | --- |
 | `fetch(url, options)`, `$fetch(url, options)`, `useFetch(url, options)` | Request; a literal `method` gives the method, no options means `GET`, and options the scanner cannot read leave it out |
+| `$fetch` and `useFetch` with a `baseURL` option | Request whose path follows that base |
 | `axios.get`, `.post`, `.put`, `.patch`, `.delete`, `.head`, `.options` | Request with that method |
 | `axios(config)`, `axios.request(config)` | Request from the config's `url`; its `method`, else the client's, else `GET` |
 | `axios.create(config)` instances | Request whose path follows the config's `baseURL`, and whose method defaults to the config's |
@@ -131,17 +132,21 @@ there.
 installed package's types, so a project's own `useFetch` composable, whose body
 decides the URL, is never read as Nuxt's; a project scanned without its
 dependencies installed therefore reports no `$fetch` or `useFetch` request. An
-`axios` client counts only when its name comes from the `axios` import or from a
-variable holding `axios.create(...)` that the project never assigns again. A
-`get` on any other object is never a request. Options are read as values are, as
-decision 5 describes, so a changed, duplicated or computed option is never taken
-for the literal it once held. An option object the scanner cannot read leaves
-the method out instead of claiming `GET`, and for axios leaves the base unknown
-too. A `fetch`, `$fetch` or `useFetch` input that is not a URL, such as a
-`Request`, carries a method of its own, so the fact states none. A request's own
-`baseURL`, in its config or in the configuration argument of a shorthand, which
-a `post`, `put` or `patch` takes third, replaces the client's. A base joins a
-relative path with one slash, and an absolute URL replaces it.
+`axios` client counts only when its name is the `axios` default import or a
+variable holding `axios.create(...)` called on it that the project never assigns
+again, so `isAxiosError`, a named `post` import and a `get` on any other object
+are never requests. Options are read as values are, as decision 5 describes, so
+a changed, duplicated or computed option is never taken for the literal it once
+held. An option object the scanner cannot read leaves the method out instead of
+claiming `GET`, and for axios leaves the base unknown too. A `fetch`, `$fetch`
+or `useFetch` input that is not a URL, such as a `Request`, carries a method of
+its own, so the fact states none. A request's own `baseURL`, in its config or in
+the configuration argument of a shorthand, which a `post`, `put` or `patch`
+takes third, replaces the client's. A base joins a relative path with one slash,
+and an absolute URL replaces it. `$fetch` and `useFetch` read their `baseURL`
+option the same way, except that, as ofetch does, they keep a URL whose text
+already starts with a literal base followed by `/`, `?` or its end; where that
+boundary falls on a computed part, the path starts unknown.
 
 A client's `defaults` count too: exactly one assignment to `defaults.baseURL` or
 `defaults.method` anywhere in the project sets it, and more than one, or any other
@@ -157,17 +162,16 @@ default client, an alias such as `const alias = api`, and a destructured
 The endpoints need the project to declare `nuxt`: another server that happens to
 live in `server/` serves paths of its own, which these locations would misstate.
 
-The six [producer decisions](../evidence.md#producer-checklist) for this
-ecosystem:
+The [producer decisions](../evidence.md#producer-checklist) for this ecosystem:
 
 1. **Prefixes.** A server route under `server/api` serves below `/api`, which its
    endpoint path states; one under `server/routes` serves from the root. On the
-   client side, only an `axios.create({ baseURL })` base precedes a path.
+   client side, only a `baseURL`, as the options and axios clients above state it,
+   precedes a path.
 2. **Endpoints.** Only the server route files above, and only in a project that
-   declares `nuxt`. `server/middleware/**`,
-   `server/plugins/**`, a component, and a page answer no request of their own. A
-   route whose default export is not a function, including one wrapped by
-   something other than a single handler argument, reports nothing.
+   declares `nuxt`. `server/middleware/**`, `server/plugins/**`, a component, and
+   a page answer no request of their own. Nuxt serves every route file, so each
+   reports its endpoint, whatever its default export is.
 3. **Dynamic or unknown.** `` `/talks/${id}` `` fills one whole segment, so it is
    dynamic. `` `/talks/${id}-latest` ``, a path built from a parameter, and an
    unresolvable value are unknown. The query and fragment are dropped, computed or
@@ -180,25 +184,42 @@ ecosystem:
    literal initializer that the project never assigns again is literal text. So
    is a property of an object literal such a variable holds: the last property
    with its name, while the literal has no spread, computed key or accessor, and
-   no code in the project assigns or deletes that property or an object above it,
-   hands one of them to other code, or calls a method through them, and no
+   no code in the project assigns or deletes that property or an object above
+   it, hands one of them to other code, or calls a method through them, and no
    module object holding it, such as a namespace import, a re-exported namespace
-   or a dynamic import's result, is used other than to read one export by name. A value the scanner cannot
-   see, such as an ambient declaration, `process.env`, `import.meta.env` or a
-   constant imported from a package, sets `configured`, and so does a field read
-   through `this`, which holds the client's own base setting. Text that continues
-   a configured value's last segment instead of starting with `/` is unknown. A
-   literal host, also when literal pieces only state it together, a parameter, a
-   value a call returns, and any other computed value report a leading unknown
-   segment.
+   or a dynamic import's result, is used other than to read one export by name.
+   A value the scanner cannot see, such as an ambient declaration,
+   `process.env`, `import.meta.env` or a constant imported from a package, sets
+   `configured`, and so does a field read through `this`, which holds the
+   client's own base setting. Text that continues a configured value's last
+   segment instead of starting with `/` is unknown. A literal host, also when
+   literal pieces only state it together, a parameter, a value a call returns,
+   and any other computed value report a leading unknown segment.
 6. **File-location routes.** A route file's path after `server/` is its served
-   path, with `[id]` a parameter, `[...slug]` a catch-all and an `index` file its
-   directory. A `.get`, `.post`, `.put`, `.patch`, `.delete`, `.head` or
-   `.options` suffix in the file name gives the method, and a file without one
-   answers every method. The endpoint names the function the default export
-   designates, including the one `defineEventHandler` receives. A request in a
-   file's own top-level code, which is what `<script setup>` runs on setup, names
-   that file's module operation, so the row starts at the component.
+   path, read as Nitro names its routes: a route group directory such as
+   `(admin)` serves no segment, an environment suffix such as `.prod` and then a
+   `.get`, `.post`, `.put`, `.patch`, `.delete`, `.head`, `.options`, `.connect`
+   or `.trace` method suffix leave the path, a final `index` serves its
+   directory, and placeholders read as decision 7 describes. A file without a
+   method suffix answers every method. `.js`, `.ts`, `.jsx` and `.tsx` route
+   files count. The endpoint names the function the default export designates: a
+   default-exported function, or a function the file declares, as a function or
+   a variable holding one, that the default export names or passes to a wrapper
+   such as `defineEventHandler`. When it designates no such function, the
+   endpoint names the file's module operation. A request in a file's own
+   top-level code, which is what `<script setup>` runs on setup, names that
+   file's module operation, so the row starts at the component.
+7. **Constrained segments.** Nitro constrains no segment, and segments follow
+   the names it registers. A segment that starts with a placeholder, such as
+   `[id]` or `[id]-latest`, is a parameter that accepts any text, named `*` when
+   no name can spell it. Text before a placeholder makes the whole segment
+   literal, so `hello-[name]` serves only `/hello-:name`. `[...]` and
+   `[...slug]`, whose name is word characters, are catch-alls, while
+   `[...file-path]` is a parameter. A segment the scanner cannot state, such as
+   a catch-all before the last segment, becomes a constrained optional catch-all
+   in place of itself and the rest of the path.
+8. **Registration order.** None: Nuxt prefers the most specific route, whatever
+   order its files are in.
 
 ## Compared operations
 

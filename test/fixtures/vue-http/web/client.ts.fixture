@@ -1,6 +1,8 @@
-import axios from 'axios'
+import axios, { isAxiosError, post } from 'axios'
 import { API_ROOT } from 'app-config'
 
+const API = '/api'
+const ROOT = '/v1'
 const api = axios.create({ baseURL: '/api' })
 let mutable = axios.create({ baseURL: '/api' })
 mutable = axios.create({ baseURL: '/other' })
@@ -52,6 +54,62 @@ export function helper(path: string) {
 
 export function viaHelper() {
   return helper('/api/talks')
+}
+
+export function checked(error: unknown) {
+  return isAxiosError(error)
+}
+
+export function named() {
+  return post('/api/talks', {})
+}
+
+export function hosted() {
+  return $fetch('/talks', { baseURL: 'https://api.example.com' })
+}
+
+export function prefixed() {
+  return useFetch('/talks', { baseURL: '/api' })
+}
+
+export function kept() {
+  return $fetch('/api/talks', { baseURL: '/api' })
+}
+
+export function templated() {
+  return $fetch(`${API}/talks`, { baseURL: API })
+}
+
+export function joinedBase() {
+  return $fetch('/v1/api/talks', { baseURL: ROOT + '/api' })
+}
+
+export function prefixMismatch() {
+  return $fetch('/apix/talks', { baseURL: '/api' })
+}
+
+export function computedBoundary(rest: string) {
+  return $fetch(`/api${rest}`, { baseURL: '/api' })
+}
+
+export function slashed(rest: string) {
+  return $fetch(`/${rest}`, { baseURL: '/api' })
+}
+
+export function anyResource(name: string) {
+  return $fetch(`/api/${name}`)
+}
+
+export function listUsers() {
+  return $fetch('/api/users')
+}
+
+export function listSpeakers() {
+  return $fetch('/api/speakers')
+}
+
+export function fetchNamed() {
+  return $fetch('/api/talks/named')
 }
 
 export const eager = $fetch('/api/talks')

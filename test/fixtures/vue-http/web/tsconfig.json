@@ -1,1 +1,1 @@
-{"compilerOptions":{"target":"ESNext","module":"ESNext","moduleResolution":"Bundler","strict":true,"skipLibCheck":true},"include":["**/*.ts","**/*.vue","../nuxt-imports.d.ts"]}
+{"compilerOptions":{"target":"ESNext","module":"ESNext","moduleResolution":"Bundler","strict":true,"skipLibCheck":true,"jsx":"preserve"},"include":["**/*.ts","**/*.tsx","**/*.vue","../nuxt-imports.d.ts"]}
