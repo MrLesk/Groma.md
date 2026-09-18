@@ -3,7 +3,7 @@ import { cp, mkdir, mkdtemp, readdir, readFile, rename, rm, writeFile } from 'no
 import os from 'node:os'
 import path from 'node:path'
 import { buildPackage } from '../plugins/scanners/python/build.ts'
-import type { CodeSymbol, ScannerPlugin } from '@groma/scanner'
+import type { CodeSymbol, HttpEndpointSegment, HttpRequestSegment, ScannerPlugin } from '@groma/scanner'
 import { loadAnnotatedArchitecture } from '../src/core.ts'
 import { addScanner } from '../src/scanner/modules/inventory.ts'
 import { compileWatchPatterns } from '../src/scanner/watch-patterns.ts'
@@ -51,6 +51,78 @@ test.concurrent('Python keeps function ownership, nested projects and exact sour
     for (const text of ['factory()', 'default()', 'anonymous()', 'deferred()', 'class_body()']) expect(at(text)).toBeUndefined()
     expect(first.invocations!.every(call => call.unresolved && call.targets.length === 0 && !call.binding)).toBe(true)
     expect(first.diagnostics.some(item => item.code === 'PYTHON_SYNTAX_ONLY')).toBe(true)
+  } finally { await rm(temporary, { recursive: true, force: true }) }
+})
+
+/** `:name`, `:name+` and `:name*` are parameters and catch-alls; `{}` is dynamic and `?` unknown. */
+function route(path: readonly (HttpEndpointSegment | HttpRequestSegment)[]): string {
+  return `/${path.map(segment => {
+    if (segment.kind === 'literal') return segment.value
+    if (segment.kind === 'dynamic') return '{}'
+    if (segment.kind === 'unknown') return '?'
+    const suffix = segment.kind === 'catch-all' ? (segment.optional ? '*' : '+') : (segment.optional ? '?' : '')
+    return `:${segment.name}${suffix}`
+  }).join('/')}`
+}
+
+test.concurrent('Python reports Flask, FastAPI and Django endpoints and requests, and nothing it cannot resolve', async () => {
+  const { root, temporary, scanner } = await fixture('python-http')
+  try {
+    const observation = (await scanner.scan(root))!
+    const operations = new Map(observation.operations!.map(operation => [operation.id, operation]))
+    const at = (operation: string) => {
+      const found = operations.get(operation)!
+      return `${found.file.replace('shop/', '')}#${found.name}`
+    }
+    const endpoints = observation.httpEndpoints!.map(fact => `${fact.method} ${route(fact.path)} ${at(fact.operation)}`)
+    // Absent: a computed route or methods list, a segment mixing text with a placeholder, an
+    // unresolved view, and a blueprint registered on an application built inside a factory.
+    expect(endpoints.sort()).toEqual([
+      '* /api/files/:rest+ djangoapp/views.py#files',
+      '* /api/legacy/:pk djangoapp/views.py#legacy_talk',
+      '* /api/talks djangoapp/views.py#list_talks',
+      '* /api/talks/:pk djangoapp/views.py#talk_detail',
+      'DELETE /api/speakers/:speaker_id/talks/:rest+ fastapiapp/speakers.py#drop_talks',
+      'GET /api/speakers/:speaker_id fastapiapp/speakers.py#read_speaker',
+      'GET /api/talks/:talk_id flaskapp/talks.py#talk',
+      'GET /api/talks/archive flaskapp/talks.py#archive',
+      'GET /health fastapiapp/main.py#health',
+      'GET /health flaskapp/app.py#health',
+      'POST /api/talks flaskapp/talks.py#create',
+      'PUT /api/talks/:talk_id flaskapp/talks.py#talk',
+    ])
+    const requests = observation.httpRequests!.map(fact => [
+      fact.method ?? '', `${fact.configured ? '<base>' : ''}${route(fact.path)}`, at(fact.operation),
+    ].join(' '))
+    // Absent: a call outside an operation, a rebound client, and a parameter named like the library.
+    // A host and an unresolved URL lead with an unknown segment; a name bound twice is a configured base.
+    expect(requests.sort()).toEqual([
+      'DELETE /speakers/{} clients/api.py#drop_speaker',
+      'GET /? clients/calls.py#fetch',
+      'GET /?/talks clients/calls.py#read_partner',
+      'GET /health clients/calls.py#check_health',
+      'GET /speakers/? clients/api.py#read_speaker_file',
+      'GET /speakers/featured clients/api.py#read_featured',
+      'GET /talks clients/calls.py#read_talks',
+      'GET <base>/? clients/calls.py#read_joined',
+      'GET <base>/speakers clients/api.py#read_speaker',
+      'GET <base>/talks clients/api.py#list_talks',
+      'GET <base>/talks clients/api.py#read_locale',
+      'GET <base>/talks clients/api.py#read_version',
+      'HEAD /health clients/calls.py#head_health',
+      'PATCH /talks/7 clients/calls.py#patch_talk',
+      'POST /imports clients/calls.py#send_import',
+      'POST <base>/talks clients/calls.py#create_talk',
+      'PUT <base>/talks/{} clients/calls.py#replace_talk',
+    ])
+  } finally { await rm(temporary, { recursive: true, force: true }) }
+})
+
+test.concurrent('a Django URL table the scanner cannot read keeps every Django endpoint unreported', async () => {
+  const { root, temporary, scanner } = await fixture('python-http-hidden')
+  try {
+    // The root table is built by addition, so the prefix above the included table is unknown.
+    expect((await scanner.scan(root))!.httpEndpoints).toEqual([])
   } finally { await rm(temporary, { recursive: true, force: true }) }
 })
 

@@ -181,6 +181,7 @@ class Evidence(ast.NodeVisitor):
         self.scope = []
         self.caller = None
         self.symbols = []
+        self.identities = {}
         self.operations = []
         self.invocations = []
 
@@ -215,6 +216,7 @@ class Evidence(ast.NodeVisitor):
         self.operations.append({"id": identity, "file": self.file, "name": name,
                                 "position": self.position(node), "startLine": node.lineno,
                                 "endLine": node.end_lineno, "tokens": body_tokens(node)})
+        self.identities[node] = identity
         # Decorators, annotations and defaults execute outside this function body.
         self.body(node, identity)
 
@@ -251,8 +253,10 @@ def scan(files):
                    "scanner": {"id": "python", "technology": "python", "engine": "python-ast",
                                "engineVersion": sys.version.split()[0]},
                    "roots": roots, "files": [], "operations": [], "invocations": [],
+                   "httpEndpoints": [], "httpRequests": [],
                    "diagnostics": [{"severity": "info", "code": "PYTHON_SYNTAX_ONLY",
-                                    "message": "Python syntax evidence only: call targets, imports, decorators and framework wiring are not resolved."}]}
+                                    "message": "Python syntax evidence only: call targets are unresolved, and imports are read only for HTTP facts."}]}
+    modules = {}
     for file, owner in memberships.items():
         source = read_source(file)
         tree = ast.parse(source, filename=file)
@@ -263,6 +267,10 @@ def scan(files):
         observation["files"].append({"file": file, "roots": [owner], "symbols": evidence.symbols})
         observation["operations"].extend(evidence.operations)
         observation["invocations"].extend(evidence.invocations)
+        modules[file] = read_module(file, tree, evidence.identities)
+    sources = Sources(modules)
+    observation["httpEndpoints"] = served_endpoints(sources)
+    observation["httpRequests"] = sent_requests(sources)
     return observation
 
 

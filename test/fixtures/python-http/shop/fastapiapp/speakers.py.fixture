@@ -1,0 +1,18 @@
+from fastapi import APIRouter
+
+router = APIRouter(prefix="/speakers")
+
+
+@router.get("/{speaker_id}")
+async def read_speaker(speaker_id: int):
+    return speaker_id
+
+
+@router.delete("/{speaker_id}/talks/{rest:path}")
+async def drop_talks(speaker_id: int, rest: str):
+    return rest
+
+
+@router.get("/photo-{speaker_id}")
+async def photo(speaker_id: int):
+    return speaker_id

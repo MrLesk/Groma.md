@@ -1,0 +1,49 @@
+import os
+from urllib.request import Request, urlopen
+
+import requests
+from django.conf import settings
+
+API = os.environ["API_URL"]
+
+requests.get("/warmup")
+
+
+def read_talks():
+    return requests.get("/talks?page=2")
+
+
+def create_talk(payload):
+    return requests.post(f"{settings.API}/talks", json=payload)
+
+
+def replace_talk(talk_id, payload):
+    return requests.put(API + "/talks/" + str(talk_id), json=payload)
+
+
+def patch_talk():
+    return requests.request("PATCH", "/talks/7")
+
+
+def fetch(url):
+    return requests.get(url)
+
+
+def read_partner():
+    return requests.get("https://example.com/talks")
+
+
+def check_health():
+    return urlopen("/health")
+
+
+def head_health():
+    return urlopen(Request("/health", method="HEAD"))
+
+
+def send_import(payload):
+    return urlopen("/imports", data=payload)
+
+
+def read_joined():
+    return requests.get(settings.API + "talks")
