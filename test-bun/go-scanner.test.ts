@@ -185,13 +185,18 @@ goTest('a component with Go and TypeScript files outlines every file in Code ord
   } finally { await rm(root, { recursive: true, force: true }) }
 }, 60000)
 
-/** `:name` is a parameter, `:name*` a catch-all, `{}` a dynamic segment and `?` unknown text. */
-function httpPath(path: { kind: string; value?: string; name?: string; optional?: boolean }[]): string {
+/**
+ * `:name` is a parameter, `:name+` a catch-all, `:name*` an optional one and a trailing `!` a constrained one;
+ * `{}` is a dynamic segment and `?` unknown text.
+ */
+function httpPath(path: { kind: string; value?: string; name?: string; optional?: boolean; constrained?: boolean }[]): string {
   return `/${path.map(segment => {
     if (segment.kind === 'literal') return segment.value
     if (segment.kind === 'dynamic') return '{}'
     if (segment.kind === 'unknown') return '?'
-    return `:${segment.name}${segment.optional ? '*' : ''}`
+    const constrained = segment.constrained ? '!' : ''
+    if (segment.kind === 'catch-all') return `:${segment.name}${segment.optional ? '*' : '+'}${constrained}`
+    return `:${segment.name}${constrained}`
   }).join('/')}`
 }
 
@@ -211,21 +216,31 @@ goTest('Go reports HTTP endpoints from net/http, chi, gin and echo with their gr
     await buildWorker(worker, go)
     const { endpoints } = httpFacts(await scanGoSource(root, { worker }))
     // Each endpoint names the operation that answers it, so a handler in another file owns the fact.
+    // Only a catch-all at the root serves an empty remainder. A reassigned group reports nothing.
     expect(endpoints).toEqual([
       'echo.go PATCH /api/talks/:id',
       'echo.go POST /api/talks',
-      'echo.go GET /files/:path*',
+      'echo.go GET /files/:path+',
       'gin.go * /api/health',
+      // A chi regular expression, and text beside a parameter in one segment, constrain it.
+      'gin.go GET /api/versions/:version!',
       'gin.go DELETE /talks/:id',
       'gin.go GET /api/talks/:id',
-      'gin.go GET /files/:filepath*',
+      'gin.go GET /files/:filepath+',
       'handlers.go * /:path*',
-      'handlers.go * /files/:path*',
+      'handlers.go * /files/:path+',
       'handlers.go * /health',
-      'handlers.go GET /api/files/:path*',
-      // A chi Mount carries its prefix; a router built for a mount elsewhere reports nothing.
+      'handlers.go GET /api/files/:path+',
+      // A chi Mount carries its receiver's prefixes. A router built for a mount elsewhere, one mounted on
+      // a router this scan cannot read, a mounted router that is not chi, a reassigned group closure
+      // parameter and a ServeMux another file assigns twice report nothing.
       'handlers.go GET /api/talks',
-      'handlers.go GET /api/talks/:id',
+      'handlers.go GET /api/v1/speakers',
+      'handlers.go GET /admin/v2/reviews',
+      'handlers.go GET /api/talks/:id!',
+      'handlers.go GET /api/exports/:id!',
+      // A chi regular expression that may match a slash stands for the rest of the route.
+      'handlers.go GET /api/reports/:path*!',
       'handlers.go GET /health',
       'handlers.go GET /talks',
       'handlers.go GET /talks/:id',
@@ -259,6 +274,21 @@ goTest('Go reports what each net/http request proves and leaves the rest unknown
       // A local variable and a parameter are values this scan declined to resolve, not settings.
       'GET /?/localtalks',
       'GET /?/paramtalks',
+      'GET /?/formattedtalks',
+      // Text that continues a setting's last segment is not a path of its own.
+      'GET /?/joinedtalks',
+      // A package variable is the one value the source assigns it, in its package or another; one assigned
+      // more than once is unknown, and one only a flag sets is read by name.
+      'GET /?/outsidetalks',
+      'GET /?/mirrortalks',
+      'GET /?/configtalks',
+      'GET /api/v1/pathtalks',
+      'GET /?/inittalks',
+      'GET /?/{}/hosttalks',
+      'GET <base>/flagtalks',
+      // Text written in pieces is read as the URL it spells.
+      'GET /?/schemetalks',
+      'GET /?/porttalks',
     ].sort())
   } finally { await rm(root, { recursive: true, force: true }) }
 }, 60000)

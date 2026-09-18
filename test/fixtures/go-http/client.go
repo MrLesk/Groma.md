@@ -1,9 +1,12 @@
 package httpfixture
 
 import (
+	"flag"
 	"fmt"
 	"net/http"
 	"os"
+
+	"example.test/httpfixture/config"
 )
 
 var apiBase = os.Getenv("API_BASE")
@@ -65,4 +68,53 @@ func localBase() {
 
 func parameterBase(base string) {
 	http.Get(base + "/paramtalks")
+}
+
+func joinedBase() {
+	http.Get(apiBase + "joinedtalks")
+}
+
+func formattedBase(base string) {
+	http.Get(fmt.Sprintf("%s/formattedtalks", base))
+}
+
+var outsideBase = "https://api.example.com"
+
+var mirrorBase = "https://mirror.example.com"
+
+func useMirror() {
+	mirrorBase = os.Getenv("MIRROR_URL")
+}
+
+var initBase string
+
+func init() {
+	initBase = "https://init.example.com"
+}
+
+var formattedHost = fmt.Sprintf("https://%s", os.Getenv("TALKS_HOST"))
+
+var flagBase string
+
+func readFlags() {
+	flag.StringVar(&flagBase, "talks", "", "talks service URL")
+}
+
+func literalBases() {
+	http.Get(outsideBase + "/outsidetalks")
+	http.Get(mirrorBase + "/mirrortalks")
+	http.Get(config.APIBase + "/configtalks")
+	http.Get(config.PathBase + "/pathtalks")
+	http.Get(initBase + "/inittalks")
+	http.Get(formattedHost + "/hosttalks")
+	http.Get(flagBase + "/flagtalks")
+}
+
+var scheme = "http"
+
+var localHost = "localhost:8080"
+
+func splitHosts() {
+	http.Get(scheme + "://" + localHost + "/schemetalks")
+	http.Get("http://" + localHost + "/porttalks")
 }
