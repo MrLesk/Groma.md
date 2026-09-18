@@ -73,5 +73,6 @@ test.concurrent('the TypeScript outline applies the shared declaration and visib
     ['type', 'Mode', 'public', []],
     ['function', 'lookup', 'public', []],
     ['function', 'trim', 'public', []],
+    ['type', 'listed', 'private', [['area', 'public']]],
   ])
 })

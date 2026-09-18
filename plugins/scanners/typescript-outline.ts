@@ -18,14 +18,14 @@ type KindName =
   | 'ExportKeyword' | 'PrivateKeyword' | 'ProtectedKeyword'
 
 /** The syntax kinds of the compiler that parsed the source. */
-export interface OutlineSyntax {
+interface OutlineSyntax {
   SyntaxKind: Readonly<Record<KindName, number>>
 }
 
 type Kinds = OutlineSyntax['SyntaxKind']
 
 /** A classic compiler, which parses each file's text alone. */
-export interface OutlineCompiler extends OutlineSyntax {
+interface OutlineCompiler extends OutlineSyntax {
   ScriptTarget: { Latest: number }
   createSourceFile(fileName: string, text: string, target: number, setParentNodes: boolean): SourceFile
 }
@@ -46,14 +46,14 @@ interface Statements extends Node { readonly statements: readonly Node[] }
 interface ExportAssignment extends Node { readonly expression: Node }
 interface ExportDeclaration extends Node { readonly moduleSpecifier?: Node; readonly exportClause?: Node }
 interface NamedExports extends Node { readonly elements: readonly { readonly name: Text; readonly propertyName?: Text }[] }
-export interface SourceFile extends Statements { getLineAndCharacterOfPosition(position: number): { line: number } }
+interface SourceFile extends Statements { getLineAndCharacterOfPosition(position: number): { line: number } }
 
 function is<T extends Node>(node: Node | undefined, kind: number): node is T {
   return node !== undefined && node.kind === kind
 }
 
 /** What the caller knows about a source beyond its syntax. */
-export interface OutlineContext {
+interface OutlineContext {
   /** Symbols the Code reference names. */
   symbols: readonly string[]
   /** Local names the source publishes outside an export list, such as a CommonJS `module.exports`. */
@@ -62,7 +62,7 @@ export interface OutlineContext {
   topLevelPrivate?: boolean
 }
 
-export interface OutlineBlock extends OutlineContext {
+interface OutlineBlock extends OutlineContext {
   /** Name whose extension selects the dialect, such as `.ts` or `.tsx`. */
   fileName: string
   text: string
