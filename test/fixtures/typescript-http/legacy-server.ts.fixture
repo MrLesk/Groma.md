@@ -1,0 +1,16 @@
+import express from 'express'
+import { mountLegacy } from 'legacy-routes'
+
+const app = express()
+
+app.get('/talks', listTalks)
+if (process.env.LEGACY) mountLegacy(app)
+app.disable('x-powered-by').get('/rooms', listRooms)
+
+function listTalks(): string {
+  return 'talks'
+}
+
+function listRooms(): string {
+  return 'rooms'
+}

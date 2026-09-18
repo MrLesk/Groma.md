@@ -1,0 +1,5 @@
+import { attach } from 'express-extras'
+
+import { app } from './express-server.ts'
+
+attach(app)

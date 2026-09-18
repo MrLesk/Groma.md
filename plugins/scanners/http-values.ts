@@ -1,4 +1,5 @@
 import { bindingUses, type BindingChecker, type BindingCompiler, type Bindings } from './http-bindings.ts'
+import { ownProperty, unwrapped, type Held as SyntaxHeld, type SyntaxCompiler } from './http-syntax.ts'
 import { computedPart, configuredPart, type UrlPart } from './http-url.ts'
 
 /*
@@ -21,8 +22,7 @@ interface Template extends Node {
   templateSpans: readonly { expression: Node; literal: { text: string } }[]
 }
 interface Binary extends Node { left: Node; right: Node; operatorToken: { kind: number } }
-interface Property extends Node { name?: Node }
-interface ObjectLiteral extends Node { properties: readonly Property[] }
+interface ObjectLiteral extends Node { properties: readonly (Node & { name?: Node })[] }
 interface Variable extends Node { name: Node; initializer?: Node; parent: Node & { flags: number } }
 interface ImportDeclaration extends Node { moduleSpecifier: Node }
 interface ImportClause extends Node { parent: ImportDeclaration }
@@ -38,8 +38,8 @@ interface Checker extends BindingChecker {
   getAliasedSymbol(symbol: CompilerSymbol): CompilerSymbol
 }
 
-export interface UrlCompiler extends BindingCompiler {
-  SyntaxKind: BindingCompiler['SyntaxKind'] & { PlusToken: number; ThisKeyword: number }
+export interface UrlCompiler extends BindingCompiler, SyntaxCompiler {
+  SyntaxKind: BindingCompiler['SyntaxKind'] & SyntaxCompiler['SyntaxKind'] & { ThisKeyword: number }
   NodeFlags: { Const: number }
   isStringLiteral(node: Node): node is TextNode
   isNumericLiteral(node: Node): node is TextNode
@@ -52,6 +52,7 @@ export interface UrlCompiler extends BindingCompiler {
   isPropertyAssignment(node: Node): node is Node & { initializer: Node }
   isVariableDeclaration(node: Node): node is Variable
   isMetaProperty(node: Node): boolean
+  isFunctionDeclaration(node: Node): boolean
   isImportClause(node: Node): node is ImportClause
   isNamespaceImport(node: Node): node is NamespaceImport
   isImportSpecifier(node: Node): node is ImportSpecifier
@@ -81,12 +82,8 @@ export function urlContext<C extends UrlCompiler, K extends Checker>(
   return { ts, checker, bindings: bindingUses({ ts, checker }, sources, { fileAlone }) }
 }
 
-/**
- * What an expression certainly holds: the expression that states its value, `absent` for a property
- * a readable object literal does not have, `unseen` for a value outside the sources, such as
- * configuration, and `unknown` for anything computed, reassignable or changed.
- */
-export type Held = { node: Node } | 'absent' | 'unseen' | 'unknown'
+/** What an expression certainly holds, as ./http-syntax.ts describes it. */
+export type Held = SyntaxHeld<Node>
 
 const MAX_DEPTH = 8
 const methodToken = /^[A-Z][A-Z-]*$/
@@ -114,32 +111,13 @@ export function importOrigin({ ts, checker }: UrlContext, node: Node): { module:
   return specifier !== undefined && ts.isStringLiteral(specifier) ? { module: specifier.text, name: imported!.name } : undefined
 }
 
-function unwrapped(ts: UrlCompiler, node: Node): Node {
-  let current = node
-  while (ts.isParenthesizedExpression(current) || ts.isAsExpression(current) || ts.isSatisfiesExpression(current)
-    || ts.isNonNullExpression(current) || ts.isTypeAssertionExpression(current)) current = current.expression
-  return current
-}
-
-function keyOf(ts: UrlCompiler, property: Property): string | undefined {
-  const name = property.name
-  if (name === undefined) return undefined
-  return ts.isIdentifier(name) || ts.isStringLiteral(name) || ts.isNumericLiteral(name) ? name.text : undefined
-}
-
 /**
- * The value an object literal gives one property. The last property with the name wins; a spread or a
- * computed name could be that property, a method or shorthand states no literal value, and an
- * accessor can change any property of its object.
+ * A declaration in an ambient context, such as a `declare` statement or `declare global`, whose value
+ * lives outside the sources. The classic compilers keep the flag out of their public types.
  */
-function ownProperty(ts: UrlCompiler, object: ObjectLiteral, name: string): Held {
-  let found: Held = 'absent'
-  for (const property of object.properties) {
-    const key = keyOf(ts, property)
-    if (key === undefined || ts.isGetAccessorDeclaration(property) || ts.isSetAccessorDeclaration(property)) return 'unknown'
-    if (key === name) found = ts.isPropertyAssignment(property) ? { node: property.initializer } : 'unknown'
-  }
-  return found
+function ambient(ts: UrlCompiler, declaration: Node & { flags?: number }): boolean {
+  const flag = (ts.NodeFlags as { Ambient?: number }).Ambient ?? 0
+  return ((declaration.flags ?? 0) & flag) !== 0
 }
 
 /** A `const`, or a variable declared once that the sources never assign again, keeps its initializer. */
@@ -154,7 +132,11 @@ function unassigned(context: UrlContext, declaration: Variable): boolean {
 function variableHeld(context: UrlContext, name: Node, path: readonly string[], depth: number): Held {
   const { ts } = context
   const declaration = declarationOf(context, name)
+  // A name only a declaration file or a `declare` statement states has no value the scanner can see.
   if (declaration === undefined || declaration.getSourceFile().isDeclarationFile) return 'unseen'
+  if (ambient(ts, declaration)) return 'unseen'
+  // A function the name declares is the value it holds, such as a route's handler.
+  if (path.length === 0 && ts.isFunctionDeclaration(declaration)) return { node: declaration }
   if (!ts.isVariableDeclaration(declaration) || declaration.initializer === undefined) return 'unknown'
   if (!ts.isIdentifier(declaration.name) || !unassigned(context, declaration)) return 'unknown'
   if (path.length > 0 && !context.bindings.unchanged(declaration, path, name)) return 'unknown'
@@ -167,7 +149,7 @@ function held(context: UrlContext, node: Node, path: readonly string[], depth: n
   const value = unwrapped(ts, node)
   const [name, ...rest] = path
   if (ts.isObjectLiteralExpression(value) && name !== undefined) {
-    const property = ownProperty(ts, value, name)
+    const property = ownProperty<Node>(ts, value, name)
     if (typeof property !== 'string') return held(context, property.node, rest, depth + 1)
     return property === 'absent' && rest.length === 0 ? 'absent' : 'unknown'
   }

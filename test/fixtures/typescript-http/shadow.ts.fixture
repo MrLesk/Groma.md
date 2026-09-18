@@ -1,0 +1,17 @@
+import axios from 'axios'
+import express from 'express'
+
+export async function loadThrough(axios: { get(path: string): Promise<unknown> }): Promise<unknown> {
+  return axios.get('/api/talks')
+}
+
+export function mountPlugin(express: () => { get(path: string, handler: () => string): void }): void {
+  const app = express()
+  app.get('/plugin', () => 'plugin')
+}
+
+let replaced = express()
+replaced = express()
+replaced.get('/replaced', () => 'replaced')
+
+export const client = axios

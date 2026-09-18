@@ -1,0 +1,56 @@
+import express, { Router } from 'express'
+import { createServer } from 'node:http'
+
+const app = express()
+const admin = Router()
+const audit = Router()
+
+admin.get('/users/:id(\\d+)', showUser)
+admin.get('/users/talk-:id', showTalkUser)
+app.use('/admin', admin, audit)
+app.use('/static', express.static('public'))
+app.route('/reports').get(listReports)
+app.get('/about', showAbout).post('/about', saveAbout)
+registerExtras(app)
+export const server = createServer(app)
+app.get('*', fallback)
+
+export function registerAudit(): void {
+  audit.get('/log', showLog)
+}
+
+function registerExtras(target: typeof app): void {
+  target.get('/extra', fallback)
+}
+
+function showUser(): string {
+  return 'user'
+}
+
+function showTalkUser(): string {
+  return 'talk user'
+}
+
+function showLog(): string {
+  return 'log'
+}
+
+function listReports(): string {
+  return 'reports'
+}
+
+function showAbout(): string {
+  return 'about'
+}
+
+function saveAbout(): string {
+  return 'saved'
+}
+
+function fallback(): string {
+  return 'fallback'
+}
+
+export function start(): void {
+  app.listen(3300)
+}

@@ -1,0 +1,5 @@
+import axios from 'axios'
+
+export async function talks(): Promise<unknown> {
+  return axios.get('/talks')
+}

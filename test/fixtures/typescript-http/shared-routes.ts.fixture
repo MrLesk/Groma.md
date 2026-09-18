@@ -1,0 +1,15 @@
+import { mountLegacy } from 'legacy-routes'
+
+import { shared } from './shared-app.ts'
+
+shared.get('/first', first)
+mountLegacy(shared)
+shared.get('/second', second)
+
+function first(): string {
+  return 'first'
+}
+
+function second(): string {
+  return 'second'
+}

@@ -6,9 +6,9 @@ import type { HttpEndpointSegment, HttpRequestSegment, ScanObservation } from '@
 
 import { scanTypeScriptSource } from '../plugins/scanners/typescript/src/scan.ts'
 
-async function scanFixture(): Promise<{ scan: ScanObservation; clean: () => Promise<void> }> {
+async function scanFixture(fixture = 'typescript-http'): Promise<{ scan: ScanObservation; clean: () => Promise<void> }> {
   const root = await mkdtemp(path.join(os.tmpdir(), 'groma-ts-http-'))
-  await cp(path.resolve(import.meta.dir, '../test/fixtures/typescript-http'), root, { recursive: true })
+  await cp(path.resolve(import.meta.dir, '../test/fixtures', fixture), root, { recursive: true })
   // The fixture ships framework imports this repository does not install, so its sources stay unbuilt.
   for (const name of await readdir(root)) {
     await rename(path.join(root, name), path.join(root, name.replace(/\.fixture$/, '')))
@@ -22,10 +22,12 @@ async function scanFixture(): Promise<{ scan: ScanObservation; clean: () => Prom
   return { scan: scan!, clean: () => rm(root, { recursive: true, force: true }) }
 }
 
+/** `?`, `*` and `+` mark an optional parameter and a catch-all; `!` marks a constrained segment. */
 function endpointLabel(segment: HttpEndpointSegment): string {
   if (segment.kind === 'literal') return segment.value
-  if (segment.kind === 'parameter') return `:${segment.name}${segment.optional ? '?' : ''}`
-  return `:${segment.name}${segment.optional ? '*' : '+'}`
+  const constrained = segment.constrained ? '!' : ''
+  if (segment.kind === 'parameter') return `:${segment.name}${segment.optional ? '?' : ''}${constrained}`
+  return `:${segment.name}${segment.optional ? '*' : '+'}${constrained}`
 }
 
 function requestLabel(segment: HttpRequestSegment): string {
@@ -45,21 +47,57 @@ test.concurrent('every supported framework reports its served endpoints with the
     const endpoints = (scan.httpEndpoints ?? []).map(endpoint => {
       return `${endpoint.method} /${endpoint.path.map(endpointLabel).join('/')} ${owner(scan, endpoint.operation)}`
     })
-    // Nothing from unsupported.ts, the spread route value, or a router mounted on an unrecognized host.
+    // Nothing from a spread route value, a router never mounted or mounted on an unrecognized host, a
+    // registrar a function receives, one the file assigns again, or a clone of one. A route builder whose
+    // handlers are not read, a mount of what the scan cannot see or under a computed prefix, a route with
+    // a computed path, a registrar handed to other code and a registration member the scan does not read
+    // occupy their place in the order as any remainder below their path, `:**!`. A pattern parameter and
+    // text mixed with a placeholder accept only some segments, `:id!`.
     expect(endpoints.sort()).toEqual([
-      '* /legacy/:*+ hono-server.ts#forward',
+      '* /:**! hono-server.ts#(anonymous)',
+      '* /:**! hosted-app.ts#(anonymous)',
+      '* /:**! legacy-server.ts#(anonymous)',
+      '* /:**! ordered-server.ts#(anonymous)',
+      '* /:**! shared-routes.ts#(anonymous)',
+      '* /:**! unsupported.ts#(anonymous)',
+      '* /api/:**! hono-server.ts#(anonymous)',
+      // Hono's trailing wildcard also matches the path without it.
+      '* /legacy/:** hono-server.ts#forward',
+      '* /reports/:**! ordered-server.ts#(anonymous)',
+      '* /static/:**! ordered-server.ts#(anonymous)',
       '* /uploads/:*+ bun-server.ts#serveUpload',
+      'GET /:**! unsupported.ts#(anonymous)',
+      'GET /:*+ ordered-server.ts#fallback',
+      'GET /about ordered-server.ts#showAbout',
+      'GET /admin/log ordered-server.ts#showLog',
+      'GET /admin/users/:id! ordered-server.ts#showTalkUser',
+      'GET /admin/users/:id! ordered-server.ts#showUser',
       'GET /api/rooms/:id bun-server.ts#showRoom',
       'GET /api/talks/:id talks-router.ts#showTalk',
+      'GET /files/:id! unsupported.ts#handle',
+      'GET /first shared-routes.ts#first',
+      'GET /first two-apps.ts#first',
       'GET /health express-server.ts#(anonymous)',
       'GET /jobs/:id fastify-server.ts#runJob',
+      'GET /late two-apps.ts#first',
+      'GET /one hosted-routes.ts#one',
+      // A chain through an Express settings call registers on the application.
+      'GET /rooms legacy-server.ts#listRooms',
+      'GET /second shared-routes.ts#second',
+      'GET /second two-apps.ts#second',
+      // An optional group of one parameter is an optional parameter.
+      'GET /sessions/:id? express-server.ts#(anonymous)',
       'GET /speakers/:id nest-controller.ts#find',
       'GET /status fastify-server.ts#(anonymous)',
+      'GET /talks legacy-server.ts#listTalks',
+      'GET /two hosted-routes.ts#two',
       'GET /v1/rooms/:room? hono-server.ts#listRooms',
       'GET /v2/rooms/:room? hono-server.ts#listRooms',
+      'POST /about ordered-server.ts#saveAbout',
       'POST /api/talks talks-router.ts#createTalk',
       'POST /jobs/:id fastify-server.ts#runJob',
       'POST /speakers nest-controller.ts#create',
+      'PURGE /cache/:**! hono-server.ts#(anonymous)',
       'PUT /api/rooms/:id bun-server.ts#updateRoom',
     ])
   } finally { await clean() }
@@ -72,22 +110,117 @@ test.concurrent('fetch and axios requests keep every proven part and mark the re
       const url = `${request.configured ? '<base>' : ''}/${request.path.map(requestLabel).join('/')}`
       return `${request.method ?? '(unknown)'} ${url} ${owner(scan, request.operation)}`
     })
-    // Nothing from a reassignable axios instance or from a named axios import such as isAxiosError.
+    // Nothing from a reassignable axios instance, a named axios import such as isAxiosError, or a name
+    // that shadows the axios import.
     expect(requests.sort()).toEqual([
+      '(unknown) /? client.ts#loadComputed',
+      // A changed property is no longer its literal, and an input that is not a URL may carry a method.
+      '(unknown) /? values.ts#changed',
+      '(unknown) /? values.ts#requested',
       '(unknown) /api/speakers axios-client.ts#sendSpeaker',
       '(unknown) /api/talks client.ts#sendChosen',
+      // An option name the scanner cannot read could be the method.
+      '(unknown) /api/talks values.ts#computedKey',
       'DELETE <base>/speakers/{} axios-client.ts#removeSpeaker',
-      'GET /? client.ts#loadComputed',
+      // A request's own baseURL replaces the client's, and a host is never path text.
+      'GET /?/api/talks values.ts#requestBase',
       'GET /?/talks client.ts#loadExternal',
+      // Text that continues a configured value, and literal pieces that state a host, are unknown.
+      'GET /?/talks values.ts#continued',
+      'GET /?/talks values.ts#joinedHost',
+      // An instance configured by a call has an unknown base.
+      'GET /?/talks values.ts#readBase',
       'GET /api/speakers axios-client.ts#listSpeakers',
       'GET /api/talks client.ts#loadPage',
       'GET /api/talks client.ts#loadTalks',
+      // The last of two properties with one name is the value the object holds.
+      'GET /api/talks values.ts#duplicated',
+      // A variable the program never assigns again holds its initializer.
+      'GET /api/talks values.ts#fromRoot',
       'GET /api/talks/? client.ts#loadPartial',
       'GET /api/talks/{} client.ts#loadTalk',
       'GET <base>/talks client.ts#loadConfigured',
+      // A global the program only declares, `declare global`, is configuration.
+      'GET <base>/talks values.ts#ambientRoot',
+      // A field read through `this` holds the client's own base, which is configuration.
+      'GET <base>/talks/latest values.ts#latest',
       'PATCH /api/speakers/{} axios-client.ts#patchSpeaker',
       'POST /api/talks client.ts#createTalk',
+      // One assignment to an instance's defaults sets its method.
+      'POST /api/talks values.ts#tunedCall',
       'POST <base>/speakers axios-client.ts#saveSpeaker',
     ])
+  } finally { await clean() }
+})
+
+test.concurrent('routers that take the first registered match report the order of their routes', async () => {
+  const { scan, clean } = await scanFixture()
+  try {
+    const ordered = (scan.httpEndpoints ?? []).flatMap(endpoint => endpoint.order === undefined ? [] : [
+      `${endpoint.order.application}@${endpoint.order.position} ${endpoint.method} /${endpoint.path.map(endpointLabel).join('/')}`,
+    ])
+    expect(ordered.sort()).toEqual([
+      // A mounted router's routes take the mount's place, in the order its own file registers them. A file
+      // that imports the application and hands it on runs after them, and serving it registers nothing.
+      'express-server.ts@0 GET /api/talks/:id',
+      'express-server.ts@1 POST /api/talks',
+      'express-server.ts@2 GET /health',
+      'express-server.ts@3 GET /sessions/:id?',
+      'hono-server.ts@0 GET /v1/rooms/:room?',
+      'hono-server.ts@1 GET /v2/rooms/:room?',
+      'hono-server.ts@2 * /legacy/:**',
+      // `on`, `basePath` and middleware under `*` block what they may serve, a trailing wildcard included.
+      'hono-server.ts@3 PURGE /cache/:**!',
+      'hono-server.ts@4 * /api/:**!',
+      'hono-server.ts@5 * /:**!',
+      // A hand-off in the file that creates the application, before routes another file registers, or
+      // inside any statement but a top-level one, runs at a place the scan cannot order.
+      'hosted-app.ts@0 * /:**!',
+      'hosted-app.ts@0 GET /one',
+      'hosted-app.ts@0 GET /two',
+      'legacy-server.ts@0 * /:**!',
+      'legacy-server.ts@0 GET /rooms',
+      'legacy-server.ts@0 GET /talks',
+      // NestJS behind Express registers its routes in an order the scan does not follow, so they share one.
+      'nest-main.ts@0 GET /speakers/:id',
+      'nest-main.ts@0 POST /speakers',
+      // Routers one call mounts are tried in the order it lists them, whether or not their own order is known.
+      'ordered-server.ts@0 GET /admin/users/:id!',
+      'ordered-server.ts@1 GET /admin/users/:id!',
+      'ordered-server.ts@2 GET /admin/log',
+      'ordered-server.ts@3 * /static/:**!',
+      'ordered-server.ts@4 * /reports/:**!',
+      // Chained registrations run in the order they are written.
+      'ordered-server.ts@5 GET /about',
+      'ordered-server.ts@6 POST /about',
+      // The application handed to other code may gain any route there.
+      'ordered-server.ts@7 * /:**!',
+      'ordered-server.ts@8 GET /:*+',
+      // A hand-off in a file that registers on an application takes its place there.
+      'shared-app.ts@0 GET /first',
+      'shared-app.ts@1 * /:**!',
+      'shared-app.ts@2 GET /second',
+      // An order unknown for one of an application's registrars leaves every route there unordered.
+      'two-apps.ts@0 GET /first',
+      'two-apps.ts@0 GET /late',
+      'two-apps.ts@0 GET /second',
+      'unsupported.ts@0 GET /:**!',
+      'unsupported.ts@1 GET /files/:id!',
+      'unsupported.ts@2 * /:**!',
+    ])
+    // Fastify and Bun.serve prefer the most specific route, so their endpoints carry no order.
+    const unordered = (scan.httpEndpoints ?? []).filter(endpoint => /^(fastify|bun)-server/.test(owner(scan, endpoint.operation)))
+    expect(unordered.length).toBeGreaterThan(0)
+    expect(unordered.some(endpoint => endpoint.order !== undefined)).toBe(false)
+  } finally { await clean() }
+})
+
+test.concurrent('an assignment to the axios defaults in another file sets the base of every request', async () => {
+  const { scan, clean } = await scanFixture('typescript-axios-defaults')
+  try {
+    const requests = (scan.httpRequests ?? []).map(request => (
+      `${request.method} ${request.configured ? '<base>' : ''}/${request.path.map(requestLabel).join('/')}`
+    ))
+    expect(requests).toEqual(['GET <base>/talks'])
   } finally { await clean() }
 })

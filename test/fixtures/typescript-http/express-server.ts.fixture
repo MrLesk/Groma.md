@@ -1,11 +1,14 @@
 import express from 'express'
+import http from 'node:http'
 
 import { talksRouter } from './talks-router.ts'
 
-const app = express()
+export const app = express()
 
 app.use('/api', talksRouter)
 app.get('/health', () => 'ok')
+app.get('/sessions{/:id}', () => 'session')
+export const server = http.createServer(app)
 
 export function start(): void {
   app.listen(3000)

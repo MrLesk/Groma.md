@@ -1,3 +1,4 @@
+import { serve } from '@hono/node-server'
 import { Hono } from 'hono'
 
 const rooms = new Hono()
@@ -7,6 +8,10 @@ rooms.get('/rooms/:room?', listRooms)
 site.route('/v1', rooms)
 site.route('/v2', rooms)
 site.all('/legacy/*', forward)
+site.on('PURGE', '/cache/*', forward)
+site.basePath('/api').get('/hidden', forward)
+serve(site)
+site.use('*', forward)
 
 function listRooms(): string {
   return 'rooms'

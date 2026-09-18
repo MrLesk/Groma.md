@@ -1,0 +1,69 @@
+import axios from 'axios'
+
+const key = 'method'
+const moved = { url: '/api/talks' }
+moved.url = 'https://api.example.com/talks'
+const loaded = axios.create(readConfig())
+const tuned = axios.create({ baseURL: '/api' })
+tuned.defaults.method = 'post'
+let root = '/api'
+
+function readConfig(): { baseURL: string } {
+  return { baseURL: '/api' }
+}
+
+export class TalksClient {
+  base = '/api'
+
+  latest(): Promise<unknown> {
+    return fetch(this.base + '/talks/latest')
+  }
+}
+
+export async function computedKey(): Promise<unknown> {
+  return fetch('/api/talks', { [key]: 'POST' })
+}
+
+export async function duplicated(): Promise<unknown> {
+  return axios({ url: '/api/first', url: '/api/talks' })
+}
+
+export async function changed(): Promise<unknown> {
+  return fetch(moved.url)
+}
+
+export async function requestBase(): Promise<unknown> {
+  return axios.get('/api/talks', { baseURL: 'https://api.example.com' })
+}
+
+export async function readBase(): Promise<unknown> {
+  return loaded.get('/talks')
+}
+
+export async function tunedCall(): Promise<unknown> {
+  return tuned('talks')
+}
+
+export async function fromRoot(): Promise<unknown> {
+  return fetch(root + '/talks')
+}
+
+export async function continued(): Promise<unknown> {
+  return fetch(process.env.API_URL + 'talks')
+}
+
+export async function joinedHost(): Promise<unknown> {
+  return fetch('/' + '/api.example.com/talks')
+}
+
+export async function requested(): Promise<unknown> {
+  return fetch(new Request('/api/talks', { method: 'POST' }))
+}
+
+declare global {
+  const API_ROOT: string
+}
+
+export async function ambientRoot(): Promise<unknown> {
+  return fetch(`${API_ROOT}/talks`)
+}

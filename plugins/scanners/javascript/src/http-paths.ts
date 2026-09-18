@@ -1,7 +1,7 @@
 import type { HttpEndpointSegment } from '@groma/scanner'
 import { pathText } from '../../http-url.ts'
 
-// The route patterns match the reference ../../typescript/src/http-paths.ts; change both together.
+// The route patterns match the reference ../../http-paths.ts; change both together.
 // Request paths come from the shared ../../http-url.ts, which both producers already use.
 
 const splat = /^\*([A-Za-z_]\w*)?$/

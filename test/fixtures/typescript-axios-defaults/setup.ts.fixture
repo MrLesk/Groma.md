@@ -1,0 +1,3 @@
+import { default as http } from 'axios'
+
+http.defaults.baseURL = process.env.API_URL

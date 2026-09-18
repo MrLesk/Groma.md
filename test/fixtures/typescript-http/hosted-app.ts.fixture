@@ -1,0 +1,6 @@
+import express from 'express'
+import { mountLegacy } from 'legacy-routes'
+
+export const hosted = express()
+
+mountLegacy(hosted)

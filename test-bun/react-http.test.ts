@@ -53,6 +53,8 @@ test.concurrent('the built React package reports fetch and axios requests', asyn
       // A URL that replaces a base stating a host is its own URL, and a host is never path text.
       'absoluteOverBase GET /<unknown>/talks',
       'added POST /api/talks',
+      // A global the program only declares, `declare global`, is configuration.
+      'ambientGlobal GET configured:/talks',
       // An axios instance's baseURL starts the path.
       'based GET /api/talks',
       // A post, put or patch takes its configuration third, and its baseURL joins the path.
