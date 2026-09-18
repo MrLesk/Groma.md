@@ -1,0 +1,7 @@
+export async function GET(): Promise<Response> {
+  return new Response('talks')
+}
+
+export const POST = async (): Promise<Response> => new Response('created')
+
+export const revalidate = 0

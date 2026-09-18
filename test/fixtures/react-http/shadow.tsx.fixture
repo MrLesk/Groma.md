@@ -1,0 +1,7 @@
+function fetch(url: string): string {
+  return url
+}
+
+export const shadowed = () => fetch('/api/drafts')
+
+export const Shadow = () => <span>{shadowed()}</span>

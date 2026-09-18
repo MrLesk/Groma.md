@@ -1,0 +1,3 @@
+const settings = { runtime: "edge" }
+
+export default settings

@@ -1,0 +1,5 @@
+function handler(): string {
+  return 'speaker'
+}
+
+export default handler

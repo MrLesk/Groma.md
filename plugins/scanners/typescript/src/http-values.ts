@@ -10,6 +10,9 @@ import { SymbolFlags, type Checker } from 'typescript/unstable/async'
 
 import type { UrlPart } from './http-paths.ts'
 
+// The framework scanners share the same value rules in ../../http-values.ts, over the classic
+// compiler API; change both together, including the constant, ambient and environment rules.
+
 export interface HttpContext {
   checker: Checker
   /** Certain values of an expression, such as object literals and functions; undefined when unresolved. */
@@ -96,7 +99,10 @@ async function unseenValue(node: Node, context: HttpContext): Promise<UrlPart> {
 async function referenceParts(node: Node, context: HttpContext, depth: number): Promise<UrlPart[]> {
   if (environmentRead(node)) return [configuration]
   const declaration = await declarationOf(node, context.checker)
-  if (declaration === undefined) return [await unseenValue(node, context)]
+  // An ambient declaration has no value the scanner can read, so it is configuration, not computed.
+  if (declaration === undefined || declaration.getSourceFile().fileName.endsWith('.d.ts')) {
+    return [await unseenValue(node, context)]
+  }
   if (isParameterDeclaration(declaration)) return [computed]
   const constant = constantDeclaration(declaration)
   return constant === undefined ? [computed] : urlParts(constant, context, depth + 1)
