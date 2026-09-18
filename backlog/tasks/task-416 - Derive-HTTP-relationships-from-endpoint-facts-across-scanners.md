@@ -5,13 +5,15 @@ status: Done
 assignee:
   - '@claude'
 created_date: '2026-09-16 19:38'
-updated_date: '2026-09-18 14:58'
+updated_date: '2026-09-18 18:10'
 labels: []
 dependencies: []
 references:
   - scanner-src-index
   - scan-evidence
   - scanner-registry
+  - src-http-relationships
+  - src-http
 documentation:
   - docs/relationship-inference.md
   - docs/scanners/evidence.md
@@ -76,6 +78,16 @@ Core slice (ACs 1-5, 7, 8). AC 6 waits for the Angular and Java producers.
 5. Tests: hand-built observations cover every match and no-row case, plus contract validation; a reconcile test covers authored precedence and a stored row; the exclusion test gets one new assertion.
 6. Docs: relationship-inference.md (HTTP rule, rule 4), scanners/evidence.md (fact semantics, local helper rule, limits), scanners/creating-a-plugin.md (fields and example), component-markdown.md (derived rule coverage).
 7. Run focused tests, then bun run check in an isolated worktree.
+
+Review-fix round (Codex and Grok cold reviews of cf8e7975), core slice:
+8. Fix: a declared path that ends is more specific than one that continues with an unused optional parameter or optional catch-all (moreSpecific padded a missing segment as least specific).
+9. Fix: during the ambiguity check a dynamic request segment may stand for the shared literal after a dropped prefix, so a possible literal sibling in another file makes the request ambiguous.
+10. Fix: rank the certain matches first; an endpoint that some runtime value could reach at least as specifically is a contender, and every contender must be in the certain match's file. A same-file literal sibling no longer suppresses the row.
+11. Fix: docs/scanners/evidence.md states the comparability checks as preconditions, not as the whole rule.
+12. Propose, before implementing, the fact format and core rule for constrained parameters and order-based routers.
+
+13. Owner decision (constrained segments): parameter and catch-all segments take constrained: true; a literal reaches a constrained parameter only possibly, a dynamic segment like any parameter, and a constrained catch-all is only ever possibly reached.
+14. Owner decision (registration order): endpoints of first-match routers carry order { application, position }. Exactness ranks first; then position when every reachable endpoint shares one application, segment specificity when none is ordered, and nothing else for any other mix. Unless specificity decides, exactly one distinct certain endpoint may remain.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
@@ -181,10 +193,34 @@ Authored HTTP rows: 69 (48 HTTP JSON, 10 HTTP JSON through getJSON, 4 HTTPS JSON
 - 4 rows: the source file's own proven request is served by a file other than the authored target, and the scan derived a row to that file instead: entities/event/event.service.ts and entities/home-pod/home-pod.service.ts read the public API from PublicResource (rows 9 and 10), and entities/user-favourite/user-favourite.service.ts reads from UserFavouriteTalkResource (row 11). Their authored rows name the CRUD resource they also use through AbstractDateEntityService or AbstractEntityService, which is the inherited-call limit above. The fourth, entities/wishlist-entry/wishlist-entry.service.ts -> WishlistEntryResource.java, has one proven request, GET /api/speakers/<dynamic>, which belongs to SpeakerResource, while its three other requests have unresolved bases.
 
 Nothing derived is wrong, no authored row is contradicted, and every authored row that stays hand-written has a stated reason.
+
+Review-fix round, matcher fixes (all reproduced with in-memory probes first):
+- moreSpecific padded a missing declared segment as least specific, so /talks/:id? beat /talks and /:rest* beat / (wrong file or label). A path that has ended now ranks most specific. This also restores the C# controller case (GET /api/Talks, GET /api/Talks/:id, POST /api/Talks/:id? beside GET /api/Talks/:slug*), which the packaged csharp-http test expects.
+- removablePrefix required a literal request segment even in the ambiguity check, so /talks/<dynamic>/details missed another file's /archive/details. A dynamic request segment may now stand for the endpoint's literal after a dropped prefix when checking what a runtime value could reach.
+- provider now ranks certain matches first and treats every endpoint a runtime value could reach at least as specifically as competing; all chosen and competing endpoints must share one file. A same-file literal sibling (/talks/archive beside /talks/:id) no longer suppresses the row.
+- docs/scanners/evidence.md states the comparability checks as preconditions; docs/relationship-inference.md rules 4 to 6 describe the new ranking and competition.
+Tests: 6 new cases in test-bun/http-relationships.test.ts; all 6 fail on HEAD code and pass with the fix. Isolated bun run check exited 0 (Bun 519 passed, 32 skipped, 0 failed; Node 16 passed; Biome findings only in untouched files).
+Constrained parameters and order-based routers: design proposed to the orchestrator, not implemented yet.
+
+Constrained segments (owner-approved): ScanHttpEndpoint parameter and catch-all segments accept constrained: true. Core: a literal request segment reaches a constrained parameter only possibly, a dynamic segment reaches it like any parameter, and a constrained catch-all is only ever possibly reached, so such an endpoint can block another file's row but never provides one for a literal. The matcher's dynamicFillsLiteral flag became possible and covers both cases; literalFilled folded into reaches. Contract validation, evidence.md (segment definition and checklist decision 7), relationship-inference.md rules 3, 5 and 6, and creating-a-plugin.md updated. 5 new tests (3 fail on HEAD) plus contract round-trip and rejection. Isolated bun run check exited 0 (Bun 527 passed, 32 skipped, 0 failed; Node 16 passed).
+Registration order: the approved position rule has two flaws (prefix-dropped matches and positions compared across applications); an amended format was sent to the orchestrator before implementing.
+
+Registration order (owner-approved amendment): ScanHttpEndpoint.order { application, position } for routers that take the first registered match; the contract validates a nonempty application and a nonnegative integer position. Core ranks exactness first, then position when every reachable endpoint shares one application, segment specificity when none is ordered, and exactness alone for any other mix; the competition and one-file rules are unchanged, and unless specificity decides exactly one distinct certain endpoint may remain. Ranking helpers renamed to Rank, compareRanks, bestRank and matchRank. Tests: Django first match, parameter registered before a literal sibling, route registered before a fallback, exact before an earlier prefixed route, earlier of two routes in one file, and no row for unknown order (across files and within one file), an earlier possible literal in another file, two applications, and a first-match route beside a most-specific route; contract round-trip and rejections. Docs: relationship-inference.md rules 4 and 5, evidence.md order definition and checklist decision 8, creating-a-plugin.md. On HEAD code 16 of the 64 HTTP tests fail; isolated bun run check exited 0 (Bun 541 passed, 35 skipped, 0 failed; Node 16 passed). The packaged C# HTTP test was not run here (needs GROMA_TEST_CSHARP_PACKAGE); its expected rows follow the optional-tail fix, and its lane reruns it.
+
+Cold review and full-context complexity review applied:
+1. Matches that removed different leading segments, or none, assume different deployments. Each rank records its removed segment (side and lowercase text); when the remaining matches differ in it, nothing but exactness ranks them. Before, positions and specificity compared /v1/talks/:id with /v2/talks/:id for a configured /talks/<dynamic>, and /talks with /v1/api/talks for /api/talks.
+2. Tests pin that a possible match at an equal position competes, and one order test now disagrees with specificity (/users/:id at 0 beats /users/me at 1).
+3. An exact path that needs its catch-all to take part of the request no longer hides prefix-dropped matches, so /api/talks with an exact /:rest* in one file and /talks in another derives nothing. When a chosen endpoint needs a dynamic segment to satisfy a constraint (the match fails when constrained parameters accept nothing), every reachable endpoint competes, so /talks/<dynamic> with a constrained /talks/:id and another file's /talks/:rest+ or later /talks/:slug derives nothing, while the constrained route alone keeps its row.
+4. Registration positions are compared only within one application as one scanner reports it (scanner plus application).
+5. One comparison key per rank once the preference is chosen: [tier, position], [tier, ...segments] or [tier]; compareKeys pads with -1. Names: Preference, possibleRank, certainRank, Reach (possibly, certainly, freely), removedPrefix, rankKey, compareKeys, bestKey. The position default is gone.
+6. docs/scanners/evidence.md links to the rule instead of restating it, and decision 8 names the route's own file as application when the application file cannot be identified (also in the contract comment and creating-a-plugin.md). relationship-inference.md rules 4 to 6 document the deployment, catch-all and constraint rules.
+Mutation check: each of these rules (strict competition, removed segments, catch-all exactness, constraint competition, scanner-keyed application) turns at least one new test red. Isolated bun run check exited 0 (Bun 554 passed, 35 skipped, 0 failed; Node 16 passed). The callforpapers run behind AC #6 predates this round; the changes only make core abstain in more cases or correct which file wins for unused optional tails, and producers will add constraint and order facts in their own tasks.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
 Scanners report HTTP endpoints and requests as language-neutral facts, and core joins them into a derived relationship only when the match is certain: equal methods, a fully known request path that equals the endpoint path or differs by one leading segment, the most specific matching endpoints, and every match in one file with a different owner. Verified on callforpapers, scanned from scratch in a fresh clone at 0b4c137e with its authored groma folder kept aside as the baseline: 14 derived rows, each checked against the client call and the Spring mapping and each correct, against 69 authored HTTP rows of which one is now also derived. Every authored row that stays hand-written has a recorded reason: 36 have only unresolved or computed paths, 10 are PHP shortcodes calling through jQuery getJSON, 10 join an actor or external system rather than two files, 8 inherit their calls from a shared CRUD base service (a stated limit of the rule), and 4 name a different file than the one that serves the proven request. The first verification found a derived row claiming an endpoint the source never calls and rows hidden by an SPA fallback route; both came from ranking a literal segment like a parameter, were fixed in core by segment specificity, and are confirmed gone.
+
+Review-fix round: two external reviews found paths to wrong permanent rows, all fixed in core with regression tests. Unused optional tails no longer outrank a route that ends, a dropped-prefix literal sibling in another file now blocks the row, and a same-file literal sibling no longer suppresses it. The fact format gained constrained parameter and catch-all segments (a literal only possibly reaches them) and a registration order { application, position } for routers that take the first registered match; core ranks exactness first, then position within one application, segment specificity when no endpoint is ordered, and nothing across deployments, applications or router kinds, and abstains unless exactly one certain endpoint remains. An exact catch-all no longer hides prefix-dropped matches, and a match that relies on a constraint competes with every reachable endpoint. Verified by 73 focused tests with a mutation check and an isolated bun run check (Bun 554 passed, 0 failed; Node 16 passed).
 <!-- SECTION:FINAL_SUMMARY:END -->

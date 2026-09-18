@@ -1,5 +1,5 @@
 // A derived row is permanent: the next scan restores it, so core abstains whenever a match is uncertain.
-import type { HttpEndpointSegment, HttpRequestSegment, ScanHttpRequest, ScanObservation } from '@groma/scanner'
+import type { HttpEndpointSegment, HttpRequestSegment, ScanHttpEndpoint, ScanHttpRequest, ScanObservation } from '@groma/scanner'
 
 import type { RelationshipConnection } from './types.ts'
 
@@ -10,6 +10,7 @@ interface ServedEndpoint {
   scanner: string
   method: string
   path: HttpEndpointSegment[]
+  order: ScanHttpEndpoint['order']
 }
 
 interface SentRequest {
@@ -35,9 +36,9 @@ function httpFacts(observations: readonly ScanObservation[]): { endpoints: Serve
   for (const observation of observations) {
     const files = new Map(observation.operations?.map(operation => [operation.id, operation.file]))
     const scanner = observation.scanner.id
-    for (const { operation, method, path } of observation.httpEndpoints ?? []) {
+    for (const { operation, method, path, order } of observation.httpEndpoints ?? []) {
       const file = files.get(operation)
-      if (file !== undefined) endpoints.push({ file, scanner, method, path })
+      if (file !== undefined) endpoints.push({ file, scanner, method, path, order })
     }
     for (const request of observation.httpRequests ?? []) {
       const file = files.get(request.operation)
@@ -48,19 +49,20 @@ function httpFacts(observations: readonly ScanObservation[]): { endpoints: Serve
 }
 
 /**
- * A dynamic segment fills a parameter or catch-all position. It could also equal a literal at
- * runtime: `dynamicFillsLiteral` treats that as a match, which keeps a literal route in another
- * file uncertain.
+ * How a request segment may reach an endpoint segment. `possibly` also counts what only some
+ * runtime values reach: a dynamic segment equal to a literal, and text a constrained segment may
+ * accept. `certainly` lets a dynamic segment fill a constrained parameter, since the source computes
+ * it for that route; `freely` does not, which shows whether a certain match depends on a constraint.
  */
-function matches(endpoint: readonly HttpEndpointSegment[], request: readonly KnownSegment[], dynamicFillsLiteral: boolean): boolean {
+type Reach = 'possibly' | 'certainly' | 'freely'
+
+function matches(endpoint: readonly HttpEndpointSegment[], request: readonly KnownSegment[], reach: Reach): boolean {
   const [head, ...rest] = endpoint
   if (head === undefined) return request.length === 0
-  if (head.kind === 'catch-all') return request.length >= (head.optional ? 0 : 1)
-  if (head.kind === 'parameter' && head.optional && matches(rest, request, dynamicFillsLiteral)) return true
+  if (head.kind === 'catch-all') return request.length >= (head.optional ? 0 : 1) && (reach === 'possibly' || !head.constrained)
+  if (head.kind === 'parameter' && head.optional && matches(rest, request, reach)) return true
   const [segment, ...remaining] = request
-  if (segment === undefined) return false
-  if (head.kind === 'literal' && !literalFilled(head.value, segment, dynamicFillsLiteral)) return false
-  return matches(rest, remaining, dynamicFillsLiteral)
+  return segment !== undefined && reaches(head, segment, reach) && matches(rest, remaining, reach)
 }
 
 /** Some frameworks route case-insensitively, and template-generated paths differ only in case. */
@@ -68,21 +70,33 @@ function sameText(left: string, right: string): boolean {
   return left.toLowerCase() === right.toLowerCase()
 }
 
-function literalFilled(value: string, segment: KnownSegment, dynamicFillsLiteral: boolean): boolean {
-  return segment.kind === 'literal' ? sameText(segment.value, value) : dynamicFillsLiteral
+function reaches(head: HttpEndpointSegment, segment: KnownSegment, reach: Reach): boolean {
+  if (head.kind === 'literal') return segment.kind === 'literal' ? sameText(segment.value, head.value) : reach === 'possibly'
+  return !head.constrained || reach === 'possibly' || (reach === 'certainly' && segment.kind === 'dynamic')
 }
 
-type Segment = HttpEndpointSegment | KnownSegment
-
-/** A leading literal only one side states is removable when both sides then continue with the same literal. */
-function removablePrefix(prefix: Segment | undefined, next: Segment | undefined, other: Segment | undefined): boolean {
-  return prefix?.kind === 'literal' && next?.kind === 'literal' && other?.kind === 'literal' && sameText(next.value, other.value)
+/**
+ * A leading literal only one side states is removable when both sides then continue with the same
+ * literal. The result names the side and the removed text, since each is a different deployment.
+ */
+function removedPrefix(
+  side: 'request' | 'endpoint',
+  prefix: HttpEndpointSegment | KnownSegment | undefined,
+  endpointNext: HttpEndpointSegment | undefined,
+  requestNext: KnownSegment | undefined,
+  reach: Reach,
+): string | undefined {
+  if (prefix?.kind !== 'literal' || endpointNext?.kind !== 'literal' || requestNext === undefined) return undefined
+  return reaches(endpointNext, requestNext, reach) ? `${side} ${prefix.value.toLowerCase()}` : undefined
 }
 
-/** How exactly an endpoint matched: an exact path first, then its segments from most specific. */
-interface Specificity {
-  exact: number
-  /** One score per declared segment: a literal is 0, a parameter 1, a catch-all 2. */
+/** How an endpoint matched a request. */
+interface Rank {
+  /** The removed leading segment, as its side and lowercase text; empty for an exact path. */
+  removed: string
+  /** An exact path that needs its catch-all to take part of the request. */
+  throughCatchAll: boolean
+  /** One score per compared endpoint segment: a literal is 0, a parameter 1, a catch-all 2. */
   segments: number[]
 }
 
@@ -91,61 +105,117 @@ function segmentScore(segment: HttpEndpointSegment): number {
   return segment.kind === 'parameter' ? 1 : 2
 }
 
-/** Routers resolve segment by segment, so the first position that differs decides. */
-function moreSpecific(left: Specificity, right: Specificity): number {
-  if (left.exact !== right.exact) return left.exact - right.exact
-  const length = Math.max(left.segments.length, right.segments.length)
-  for (let index = 0; index < length; index += 1) {
-    const difference = (left.segments[index] ?? 3) - (right.segments[index] ?? 3)
-    if (difference !== 0) return difference
-  }
-  return 0
-}
-
-function matchSpecificity(
-  endpoint: readonly HttpEndpointSegment[],
-  request: readonly KnownSegment[],
-  dynamicFillsLiteral: boolean,
-): Specificity | undefined {
+function matchRank(endpoint: readonly HttpEndpointSegment[], request: readonly KnownSegment[], reach: Reach): Rank | undefined {
   const segments = endpoint.map(segmentScore)
-  if (matches(endpoint, request, dynamicFillsLiteral)) return { exact: 0, segments }
-  if (removablePrefix(request[0], request[1], endpoint[0]) && matches(endpoint, request.slice(1), dynamicFillsLiteral)) {
-    return { exact: 1, segments }
+  if (matches(endpoint, request, reach)) {
+    const last = endpoint.at(-1)
+    const throughCatchAll = last?.kind === 'catch-all' && (!last.optional || !matches(endpoint.slice(0, -1), request, reach))
+    return { removed: '', throughCatchAll, segments }
   }
-  if (removablePrefix(endpoint[0], endpoint[1], request[0]) && matches(endpoint.slice(1), request, dynamicFillsLiteral)) {
-    return { exact: 1, segments: segments.slice(1) }
+  const fromRequest = removedPrefix('request', request[0], endpoint[0], request[1], reach)
+  if (fromRequest !== undefined && matches(endpoint, request.slice(1), reach)) return { removed: fromRequest, throughCatchAll: false, segments }
+  const fromEndpoint = removedPrefix('endpoint', endpoint[0], endpoint[1], request[0], reach)
+  if (fromEndpoint !== undefined && matches(endpoint.slice(1), request, reach)) {
+    return { removed: fromEndpoint, throughCatchAll: false, segments: segments.slice(1) }
   }
   return undefined
 }
 
 interface Match {
   endpoint: ServedEndpoint
-  specificity: Specificity
-  /** The request reaches this endpoint without a dynamic segment standing in for a literal. */
-  certain: boolean
+  /** How some runtime value reaches the endpoint. */
+  possibleRank: Rank
+  /** How every runtime value reaches it; absent when only some values do. */
+  certainRank: Rank | undefined
+  /** The certain match needs a dynamic segment to satisfy a constraint. */
+  constrained: boolean
 }
 
-/** Only the endpoints a router would prefer stay; a more specific route hides a looser one. */
-function preferredMatches(request: SentRequest, endpoints: readonly ServedEndpoint[]): Match[] {
+function requestMatches(request: SentRequest, endpoints: readonly ServedEndpoint[]): Match[] {
   const found: Match[] = []
   for (const endpoint of endpoints) {
     if (endpoint.method !== '*' && endpoint.method !== request.method) continue
-    const specificity = matchSpecificity(endpoint.path, request.path, true)
-    if (specificity === undefined) continue
-    const certain = matchSpecificity(endpoint.path, request.path, false)
-    found.push({ endpoint, specificity, certain: certain !== undefined && moreSpecific(certain, specificity) === 0 })
+    const possibleRank = matchRank(endpoint.path, request.path, 'possibly')
+    if (possibleRank === undefined) continue
+    const certainRank = matchRank(endpoint.path, request.path, 'certainly')
+    const constrained = certainRank !== undefined && matchRank(endpoint.path, request.path, 'freely')?.removed !== certainRank.removed
+    found.push({ endpoint, possibleRank, certainRank, constrained })
   }
-  const best = found.map(match => match.specificity)
-    .reduce<Specificity | undefined>((least, item) => least === undefined || moreSpecific(item, least) < 0 ? item : least, undefined)
-  return best === undefined ? [] : found.filter(match => moreSpecific(match.specificity, best) === 0)
+  return found
 }
 
-/** Every preferred endpoint must be in one file, and at least one must be reached certainly. */
+/**
+ * What decides between matches after exactness: segment specificity when every router prefers
+ * the most specific route, registration position when every match is registered in one
+ * first-match application, and nothing when routers, applications or removed segments differ.
+ */
+type Preference = 'specificity' | 'position' | 'none'
+
+/** Positions are comparable only within one application as one scanner reports it. */
+function application(endpoint: ServedEndpoint): string | undefined {
+  return endpoint.order && `${endpoint.scanner}\0${endpoint.order.application}`
+}
+
+/**
+ * An exact path that needs no catch-all shows the paths are compared as written, so it hides every
+ * match that removed a leading segment. Only the remaining matches choose the preference.
+ */
+function preference(found: readonly Match[], exact: boolean): Preference {
+  const ranked = found.flatMap(match => [match.possibleRank, ...(match.certainRank ? [match.certainRank] : [])]
+    .filter(rank => !exact || rank.removed === '')
+    .map(rank => ({ rank, application: application(match.endpoint) })))
+  const removed = new Set(ranked.map(item => item.rank.removed))
+  const applications = new Set(ranked.map(item => item.application))
+  if (removed.size > 1 || applications.size > 1) return 'none'
+  return applications.has(undefined) ? 'specificity' : 'position'
+}
+
+/** A comparison key, most preferred first: exactness, then what the preference compares. */
+function rankKey(endpoint: ServedEndpoint, rank: Rank, by: Preference, exact: boolean): number[] {
+  if (exact && rank.removed !== '') return [1]
+  if (by === 'specificity') return [0, ...rank.segments]
+  if (by === 'position' && endpoint.order) return [0, endpoint.order.position]
+  return [0]
+}
+
+/**
+ * The first position that differs decides. A path that has ended is more specific than one
+ * continuing with an optional parameter or catch-all it did not use.
+ */
+function compareKeys(left: readonly number[], right: readonly number[]): number {
+  const length = Math.max(left.length, right.length)
+  for (let index = 0; index < length; index += 1) {
+    const difference = (left[index] ?? -1) - (right[index] ?? -1)
+    if (difference !== 0) return difference
+  }
+  return 0
+}
+
+function bestKey(keys: readonly number[][]): number[] | undefined {
+  return keys.reduce<number[] | undefined>((least, key) => least === undefined || compareKeys(key, least) < 0 ? key : least, undefined)
+}
+
+/**
+ * A router sends a value that equals no literal to the best certain match. Any endpoint another
+ * value could reach at least as well also competes, and when that match relies on a constraint,
+ * every reachable endpoint does, because values the constraint rejects go elsewhere. Every
+ * competing endpoint must be in the chosen endpoints' file. Unless specificity decides, the
+ * router's choice between several certain endpoints is unknown, so exactly one must remain.
+ */
 function provider(request: SentRequest, endpoints: readonly ServedEndpoint[]): ServedEndpoint[] {
-  const preferred = preferredMatches(request, endpoints)
-  const certain = preferred.filter(match => match.certain)
-  const files = new Set(preferred.map(match => match.endpoint.file))
-  return files.size === 1 && certain.length > 0 ? certain.map(match => match.endpoint) : []
+  const found = requestMatches(request, endpoints)
+  const exact = found.some(({ certainRank }) => certainRank?.removed === '' && !certainRank.throughCatchAll)
+  const by = preference(found, exact)
+  const key = (endpoint: ServedEndpoint, rank: Rank) => rankKey(endpoint, rank, by, exact)
+  const best = bestKey(found.flatMap(({ endpoint, certainRank }) => certainRank ? [key(endpoint, certainRank)] : []))
+  if (best === undefined) return []
+  const chosen = found.filter(({ endpoint, certainRank }) => certainRank !== undefined && compareKeys(key(endpoint, certainRank), best) === 0)
+  const competing = chosen.some(match => match.constrained)
+    ? found
+    : found.filter(({ endpoint, possibleRank }) => compareKeys(key(endpoint, possibleRank), best) <= 0)
+  const files = new Set([...chosen, ...competing].map(match => match.endpoint.file))
+  const labels = new Set(chosen.map(match => pathLabel(match.endpoint)))
+  return files.size === 1 && (by === 'specificity' || labels.size === 1) ? chosen.map(match => match.endpoint) : []
 }
 
 /** Markdown emphasis would consume these characters inside a stored path. */
@@ -158,6 +228,10 @@ function segmentLabel(segment: HttpEndpointSegment): string {
   if (segment.kind === 'literal') return escapeLabel(segment.value)
   if (segment.kind === 'parameter') return `:${escapeLabel(segment.name)}${segment.optional ? '?' : ''}`
   return `:${escapeLabel(segment.name)}${segment.optional ? '*' : '+'}`
+}
+
+function pathLabel(endpoint: ServedEndpoint): string {
+  return `/${endpoint.path.map(segmentLabel).join('/')}`
 }
 
 /** Derive a row from the requesting file to the one providing file when both have different owners. */
@@ -177,7 +251,7 @@ export function httpRelationships(
     const pair = pairs.get(key) ?? { source: request.file, target, labels: new Set<string>(), scanners: new Set<string>() }
     pair.scanners.add(request.scanner)
     for (const endpoint of reached) {
-      pair.labels.add(`${request.method} /${endpoint.path.map(segmentLabel).join('/')}`)
+      pair.labels.add(`${request.method} ${pathLabel(endpoint)}`)
       pair.scanners.add(endpoint.scanner)
     }
     pairs.set(key, pair)

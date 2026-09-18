@@ -130,25 +130,57 @@ therefore derives a row only when all of these hold:
    segments, which produce no row.
 3. The paths are equal. A literal matches the same literal or a parameter. A
    dynamic segment matches a parameter or a catch-all. An optional parameter
-   may be absent, and a catch-all takes the remaining segments. The paths may
-   also be equal after removing one leading literal segment that only one side
-   states, such as `/api` or a deployment path, when both sides then continue
-   with the same literal.
-4. Only the endpoints a router would prefer remain, in this order. An exact
-   path hides one that needed a leading segment removed, so a request to
-   `/api/talks` prefers another file's exact `/api/:rest+` over a `/talks` that
-   needs `/api` removed. Otherwise the paths are compared segment by segment,
-   where a literal is more specific than a parameter and a parameter more
-   specific than a catch-all, and the first position that differs decides. A
-   request to `/api/account` therefore prefers that exact route over a fallback
-   `/:first/:second`, and `/ratings/top` over a sibling `/ratings/:token`.
-5. Every remaining endpoint belongs to one file. Several endpoints in that file
-   are allowed; endpoints in several files produce no row. A dynamic segment
-   could equal a literal at runtime, so a literal path in another file also
-   makes a request ambiguous: a request to `/talks/` plus a dynamic segment
-   produces no row when one file serves `/talks/:id` and another `/talks/archive`.
-6. At least one remaining endpoint is reached without a dynamic segment
-   standing in for a literal. Those endpoints provide the row.
+   may be absent, and a catch-all takes the remaining segments. A constrained
+   parameter accepts only some text, so a literal only possibly matches it,
+   while a dynamic segment matches it like any parameter; a constrained
+   catch-all is only ever possibly matched. The paths may also be equal after
+   removing one leading literal segment that only one side states, such as
+   `/api` or a deployment path, when both sides then continue with the same
+   literal.
+4. Only the endpoints a router would prefer remain. An exact path that needs
+   no catch-all to take part of the request shows that the paths compare as
+   written, so it hides every match that needed a leading segment removed: a
+   request to `/api/talks` prefers another file's exact `/api/:section` over a
+   `/talks` that needs `/api` removed. Otherwise each removed segment, and
+   removing none, assumes a different deployment, and nothing ranks matches of
+   different deployments against each other: a request to `/api/talks`
+   produces no row when one file serves an exact fallback `/:rest*` and another
+   `/talks`. Past that, the preference depends on the routers:
+   - When no endpoint carries a registration order, the router prefers the
+     most specific route. The paths are compared segment by segment, where a
+     literal is more specific than a parameter and a parameter more specific
+     than a catch-all, and the first position that differs decides. A path
+     that has ended is more specific than one continuing with an optional
+     parameter or catch-all the request does not use. A request to
+     `/api/account` therefore prefers that exact route over a fallback
+     `/:first/:second`, `/ratings/top` over a sibling `/ratings/:token`, and
+     `/talks` over `/talks/:page?`.
+   - When every endpoint carries a registration order in one application, as
+     one scanner reports it, the router takes the first registered match,
+     whatever its specificity: a Django `<name>/` registered before `talks/`
+     receives `/talks/`, and a fallback registered after the API routes
+     receives none of their requests. Equal positions have an unknown order.
+   - When endpoints of different applications, or ordered and unordered
+     endpoints, match together, nothing is preferred beyond exactness.
+5. The row's endpoints are the preferred ones among the endpoints every runtime
+   value reaches, where a dynamic segment fills only parameters and catch-alls
+   and no match is only possible. At least one must exist. Unless specificity
+   decided, the router's choice among several such endpoints is unknown, so
+   exactly one distinct endpoint must remain. An endpoint that a dynamic
+   segment reaches only by satisfying a constraint still provides the row, but
+   rule 6 then lets every reachable endpoint compete with it.
+6. A dynamic segment could also equal a literal at runtime, including the
+   literal that follows a removed leading segment, and a constrained segment
+   may accept a literal. An endpoint that such a value possibly reaches, at
+   least as preferred as the row's endpoints, competes with them. When a row
+   endpoint needs a dynamic segment to satisfy a constraint, every endpoint the
+   request reaches competes, because values the constraint rejects go
+   elsewhere. The row's endpoints and every competing endpoint belong to one
+   file; endpoints in several files produce no row. A request to `/talks/` plus
+   a dynamic segment therefore produces no row when one file serves
+   `/talks/:id` and another `/talks/archive`, or when one file serves a
+   constrained `/talks/:id` and another `/talks/:rest+`, and reaches
+   `/talks/:id` when one file serves `/talks/:id` and `/talks/archive`.
 7. The requesting and providing files have different owners.
 
 The row runs from the requesting file to the providing file. Its statement
@@ -160,10 +192,10 @@ The mechanism lists the contributing scanners, as for other derived rows.
 Tolerating one leading segment is an accepted trade-off that is expected to be
 right in most repositories. Requiring a shared literal after the removed
 segment keeps a prefix from pairing with an unrelated parameter. The rule does
-not model hosts, ports, deployments, or routers that resolve by registration
-order. A configured base is assumed to address a server in this repository, so
-a configuration value that points at a third-party service can produce a wrong
-row; that is an accepted limit. Scanners decide what a base is from what they
+not model hosts, ports, or deployments beyond one removed segment. A configured
+base is assumed to address a server in this repository, so a configuration
+value that points at a third-party service can produce a wrong row; that is an
+accepted limit. Scanners decide what a base is from what they
 can see, as [scanner evidence](scanners/evidence.md#http-endpoints-and-requests)
 describes. Literal text is compared without regard to case, because some
 frameworks route case-insensitively and generate a path from a class or
