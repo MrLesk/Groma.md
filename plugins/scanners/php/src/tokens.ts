@@ -1,6 +1,4 @@
-import { children, isSyntax, nameOf, type Syntax } from './syntax.ts'
-
-type Fields = Syntax & Record<string, unknown>
+import { children, isSyntax, nameOf, type Fields, type Syntax } from './syntax.ts'
 
 interface Scope {
   parent?: Scope
