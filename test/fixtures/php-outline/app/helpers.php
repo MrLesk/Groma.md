@@ -34,3 +34,19 @@ namespace {
         }
     }
 }
+
+namespace Shop\Labels {
+    if (!function_exists('Shop\Labels\total_label')) {
+        function total_label(float $total): string
+        {
+            return number_format($total, 2);
+        }
+    }
+
+    if (!function_exists('item_label')) {
+        function item_label(string $item): string
+        {
+            return trim($item);
+        }
+    }
+}

@@ -40,24 +40,28 @@ function closureVariable(statement: Fields): Fields | undefined {
   return variable.kind === 'variable' && typeof variable.name === 'string' ? variable : undefined
 }
 
-/** The name guarded by `if (!function_exists('name')) { ... }`, the PHP idiom for declaring a top-level function once. */
+/**
+ * The name guarded by `if (!function_exists('name')) { ... }`, the PHP idiom for declaring a top-level function once.
+ * PHP reads the string as a fully qualified name, so the leading backslash is optional.
+ */
 function guardedName(statement: Fields): string | undefined {
   const test = statement.kind === 'if' && field(statement, 'body')?.kind === 'block' ? field(statement, 'test') : undefined
   const call = test?.kind === 'unary' && test.type === '!' ? field(test, 'what') : undefined
   if (call?.kind !== 'call' || nameOf(call.what)?.replace(/^\\/, '') !== 'function_exists') return undefined
   const [argument] = list(call, 'arguments')
-  return argument?.kind === 'string' ? String(argument.value) : undefined
+  return argument?.kind === 'string' ? String(argument.value).replace(/^\\/, '') : undefined
 }
 
-/** Inside such a guard, only the function it names is top-level. */
-function guardedFunctions(statement: Fields): Fields[] {
+/** Inside such a guard, only the function the guard names by its namespace-qualified symbol name is top-level. */
+function guardedFunctions(scope: OutlineScope, statement: Fields): Fields[] {
   const name = guardedName(statement)
   if (name === undefined) return []
-  return list(field(statement, 'body')!, 'children').filter(child => child.kind === 'function' && nameOf(child.name) === name)
+  return list(field(statement, 'body')!, 'children')
+    .filter(child => child.kind === 'function' && symbolName(scope.namespace, nameOf(child.name)!) === name)
 }
 
 function declarationsOf(scope: OutlineScope, statement: Fields): CodeDeclaration[] {
-  if (statement.kind === 'if') return guardedFunctions(statement).flatMap(guarded => declarationsOf(scope, guarded))
+  if (statement.kind === 'if') return guardedFunctions(scope, statement).flatMap(guarded => declarationsOf(scope, guarded))
   const variable = closureVariable(statement)
   // A closure has no scan symbol, so no Code reference can name it.
   if (variable) return [{ kind: 'function', name: `$${variable.name}`, line: lineOf(variable), visibility: 'public', entry: false }]

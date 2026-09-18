@@ -98,12 +98,14 @@ test.concurrent('a component outlines its PHP files beside a TypeScript file und
       declaration.kind, ...symbol(declaration), declaration.kind === 'type' ? declaration.members.map(symbol) : [],
     ]))
     // Nested closures, closures in arrays, functions under other conditions, constants, properties
-    // and enum cases are absent; the function named by its function_exists guard is listed.
+    // and enum cases are absent; a function its function_exists guard names by its qualified name is listed.
+    // A bare guard name inside a namespace names a global function, so item_label is absent.
     expect(php).toEqual([
       [
         ['function', 'place_order', 3, 'public', true, []],
         ['function', '$formatOrder', 13, 'public', false, []],
         ['function', 'order_label', 17, 'public', false, []],
+        ['function', 'total_label', 40, 'public', false, []],
       ],
       [
         ['type', 'Priced', 6, 'public', false, [['total', 8, 'public', false]]],
