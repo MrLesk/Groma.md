@@ -3,7 +3,7 @@ import { pathToFileURL } from 'node:url'
 
 import ignore from 'ignore'
 
-import type { ScannerPlugin, ScanObservation } from '@groma/scanner'
+import type { ScannerPlugin, ScannerSettings, ScanObservation } from '@groma/scanner'
 
 import { readScannerConfig } from './modules/config.ts'
 import { configuredScannerModules } from './modules/inventory.ts'
@@ -66,6 +66,14 @@ export async function importScanner(entry: string, id: string): Promise<ScannerP
   const module: unknown = await import(pathToFileURL(entry).href)
   const exported = module as { default?: unknown }
   return scannerPlugin(exported.default, id)
+}
+
+/** Skip analysis only when a nonempty source listing is fully outside the configured scope. */
+export async function scannerSourcesExcluded(
+  scanner: ScannerPlugin, root: string, excluded: (file: string) => boolean, settings?: ScannerSettings,
+): Promise<boolean> {
+  const files = await scanner.listSourceFiles?.(root, settings)
+  return files !== undefined && files.length > 0 && files.every(excluded)
 }
 
 function excludeEvidence(
@@ -173,7 +181,7 @@ export function createScannerRegistry(
       const selected = [...pending]
       // Every scanner finishes before a failure surfaces, so none keeps a child process in the repository.
       const results = await Promise.allSettled(selected.map(async scanner => {
-        const result = await scanner.scan(root)
+        const result = await scannerSourcesExcluded(scanner, root, excluded) ? undefined : await scanner.scan(root)
         const observation = result && excludeEvidence(result, excluded)
         if (observation) observations.set(scanner, observation)
         else observations.delete(scanner)

@@ -12,26 +12,23 @@ export const scannerSettingsCss = `
   #scanner-settings button { white-space: nowrap; }
   #scanner-settings button:disabled { opacity: .5; cursor: not-allowed; }
   #scanner-settings [data-action="install"], #scanner-settings [data-action="restore"], #scanner-settings [data-action="update"], #scanner-settings [data-group] { color: var(--accent-text); }
-  #scanner-settings .scanner-group { display: grid; gap: 12px; margin-bottom: 24px; }
+  #scanner-settings .scanner-group { display: grid; gap: 8px; margin-bottom: 20px; }
   #scanner-settings .scanner-group:last-child { margin-bottom: 0; }
   #scanner-settings .scanner-group-heading { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
   #scanner-settings h2 { flex: 1; margin: 0; font-size: 12px; }
   #scanner-settings .scanner-count { color: var(--muted); font-weight: 400; margin-left: 8px; }
-  #scanner-settings .scanner-row { min-width: 0; border: 1px solid var(--hairline); border-radius: 12px; overflow: hidden; }
-  #scanner-settings .scanner-header { display: flex; align-items: center; flex-wrap: wrap; gap: 14px; padding: 20px; }
-  #scanner-settings .scanner-heading { display: grid; gap: 4px; flex: 1; min-width: 120px; overflow-wrap: anywhere; }
-  #scanner-settings .scanner-heading strong { font-size: 16px; font-weight: 600; }
-  #scanner-settings .scanner-version, #scanner-settings .scanner-origin { color: var(--muted); font-size: 11px; }
-  #scanner-settings .scanner-status { font-size: 10px; color: var(--accent-text); background: var(--hover); padding: 4px 8px; border-radius: 5px; }
+  #scanner-settings .scanner-row { min-width: 0; border: 1px solid var(--hairline); border-radius: var(--control-radius); overflow: hidden; }
+  #scanner-settings .scanner-header { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; padding: 10px 14px; }
+  #scanner-settings .scanner-heading { display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px 12px; flex: 1; min-width: 120px; overflow-wrap: anywhere; }
+  #scanner-settings .scanner-heading strong { font-size: 14px; font-weight: 600; }
+  #scanner-settings .scanner-version { color: var(--muted); font-size: 11px; }
+  #scanner-settings .scanner-status { font-size: 11px; color: var(--muted); }
   #scanner-settings .scanner-status.attention { color: var(--syntax-number); }
   #scanner-settings .scanner-primary:has(button) { display: flex; }
   #scanner-settings .scanner-primary button { border-color: color-mix(in srgb, var(--accent) 45%, var(--hairline)); background: var(--hover); color: var(--accent-text); }
-  #scanner-settings .scanner-match { color: var(--muted); margin: 0 20px 16px; overflow-wrap: anywhere; font-size: 12px; }
-  #scanner-settings .scanner-row details { border-top: 1px solid var(--hairline); }
-  #scanner-settings summary { padding: 12px 20px; cursor: pointer; color: var(--muted); font-size: 11px; }
+  #scanner-settings summary { padding: 0 14px 10px; cursor: pointer; color: var(--muted); font-size: 12px; }
   #scanner-settings summary:hover { color: var(--ink); }
-  #scanner-settings summary .scanner-count { float: right; }
-  #scanner-settings .scanner-body { padding: 4px 20px 16px; display: grid; gap: 12px; }
+  #scanner-settings .scanner-body { padding: 12px 14px; border-top: 1px solid var(--hairline); display: grid; gap: 12px; }
   #scanner-settings .scanner-body p, #scanner-settings pre { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; margin: 0; }
   #scanner-settings .scanner-package { overflow-wrap: anywhere; color: var(--muted); font: inherit; font-size: 11px; }
   #scanner-settings .scanner-evidence { list-style: none; margin: 0; padding: 0; max-height: 240px; overflow: auto; }
@@ -47,10 +44,10 @@ export const scannerSettingsCss = `
   #scanner-settings .scanner-error summary { color: inherit; }
   #scanner-settings [hidden] { display: none; }
   @media (max-width: 640px) {
-    #scanner-settings .scanner-header { padding: 14px; gap: 10px; }
-    #scanner-settings summary { padding: 12px 14px; }
-    #scanner-settings .scanner-body { padding: 4px 14px 14px; }
-    #scanner-settings .scanner-match { margin: 0 14px 14px; }
+    #scanner-settings .scanner-header { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 10px; }
+    #scanner-settings .scanner-heading { grid-column: 1; grid-row: 1; min-width: 0; }
+    #scanner-settings .scanner-status { grid-column: 1; grid-row: 2; }
+    #scanner-settings .scanner-primary { grid-column: 2; grid-row: 1 / span 2; }
     #scanner-settings form label { flex-basis: 100%; }
   }
 `
@@ -77,15 +74,18 @@ function settingRow(scanner: ScannerSetting, upgrades: ScannerSettings['upgrades
   const { primary, more } = rowActions(scanner, upgrades)
   const upgrade = scanner.source ? upgrades?.[scanner.source] : undefined
   const attention = scanner.status === 'blocked' || scanner.status === 'missing'
-  const status = { blocked: 'Needs attention', missing: 'Needs attention', ready: 'Installed', unchecked: 'Installed', available: 'Not installed' }[scanner.status]
-  const reason = scanner.source && scanner.match !== 'none' ? '' : `<p class="scanner-match">${escaped(scannerMatchReason(scanner))}</p>`
+  const status = { blocked: 'Needs attention', missing: 'Needs attention', ready: 'Installed', unchecked: 'Installed', available: '' }[scanner.status]
+  const badge = status ? `<span class="scanner-status${attention ? ' attention' : ''}">${status}</span>` : ''
+  const reason = scanner.match === 'matched' ? '' : `<p>${escaped(scannerMatchReason(scanner))}</p>`
   const version = [scanner.version, upgrade?.version].filter(Boolean).join(' → ')
   const metadata = [version, scanner.official ? 'Official' : 'Third-party'].filter(Boolean).join(' · ')
   const updateError = upgrade?.error ? `<p>Could not check for updates. ${escaped(upgrade.error)}</p>` : ''
-  const count = scanner.matches.length ? `<span class="scanner-count">${scanner.matches.length} ${scanner.matches.length === 1 ? 'path' : 'paths'}</span>` : ''
-  return `<section class="scanner-row" data-scanner-id="${escaped(scanner.id)}"><div class="scanner-header"><div class="scanner-heading"><strong>${escaped(scannerName(scanner.id))}</strong><span class="scanner-version">${escaped(metadata)}</span></div><span class="scanner-status${attention ? ' attention' : ''}">${status}</span><div class="scanner-primary">${primary}</div></div>${reason}`
-    + `<details><summary>${attention ? 'Scanner details' : 'Detection details'}${count}</summary><div class="scanner-body"><code class="scanner-package">${escaped(scanner.source ?? scanner.installSource ?? scanner.name)}</code>`
-    + `${scanner.message ? `<p>${escaped(scanner.message)}</p>` : ''}${detectionDetails(scanner)}${updateError}<div class="scanner-actions">${more}</div></div></details></section>`
+  const count = scanner.matches.length
+  const matchingFiles = `${count} matching ${count === 1 ? 'file' : 'files'}`
+  const details = attention || !count ? 'Scanner details' : matchingFiles
+  return `<section class="scanner-row" data-scanner-id="${escaped(scanner.id)}"><div class="scanner-header"><div class="scanner-heading"><strong>${escaped(scannerName(scanner.id))}</strong><span class="scanner-version">${escaped(metadata)}</span></div>${badge}<div class="scanner-primary">${primary}</div></div>`
+    + `<details><summary>${details}</summary><div class="scanner-body"><code class="scanner-package">${escaped(scanner.source ?? scanner.installSource ?? scanner.name)}</code>`
+    + `${reason}${scanner.message ? `<p>${escaped(scanner.message)}</p>` : ''}${detectionDetails(scanner)}${updateError}<div class="scanner-actions">${more}</div></div></details></section>`
 }
 
 function filterEvidence(input: HTMLInputElement): void {
@@ -101,8 +101,8 @@ function settingGroup(group: ReturnType<typeof scannerGroups>[number], showBulk:
   const recommended = group.scanners.every(scanner => !scanner.source)
   const title = missing ? 'Set up for this project' : group.title
   const action = missing ? 'install-missing' : recommended ? 'install-recommended' : undefined
-  const installable = group.scanners.some(scanner => scanner.status === 'missing' || scanner.installSource)
-  const bulk = showBulk && action && installable ? `<button class="chrome-button" type="button" data-group="${action}">${missing ? 'Install missing' : 'Install recommended'}</button>` : ''
+  const installable = group.scanners.filter(scanner => scanner.status === 'missing' || scanner.installSource).length
+  const bulk = showBulk && action && installable > 1 ? `<button class="chrome-button" type="button" data-group="${action}">${missing ? 'Install missing' : 'Install all'}</button>` : ''
   return `<section class="scanner-group"><div class="scanner-group-heading"><h2>${title}<span class="scanner-count">${group.scanners.length}</span></h2>${bulk}</div>${group.scanners.map(scanner => settingRow(scanner, upgrades)).join('')}</section>`
 }
 
