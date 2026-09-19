@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@codex'
 created_date: '2026-09-19 21:17'
-updated_date: '2026-09-19 21:21'
+updated_date: '2026-09-19 21:25'
 labels: []
 dependencies: []
 references:
@@ -28,6 +28,8 @@ modified_files:
   - plugins/scanners/php/package.json
   - plugins/scanners/swift/package.json
   - bun.lock
+  - .github/workflows/release.yml
+  - docs/scanners/rust/validation.md
 type: bug
 ordinal: 517000
 ---
@@ -40,10 +42,10 @@ Scanning Codex with the published Rust package fails on offline Cargo dependenci
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Rust loads valid repository-local shared module paths and preserves one physical file identity.
-- [ ] #2 Implicit path-dependency workspace members retain inherited edition and local dependencies without duplicate standalone scans.
-- [ ] #3 The complete Codex repository scans with the corrected Rust package without source edits or application dependency installation.
-- [ ] #4 Focused regression tests and bun run check pass; documentation records the supported behavior and verification.
+- [x] #1 Rust loads valid repository-local shared module paths and preserves one physical file identity.
+- [x] #2 Implicit path-dependency workspace members retain inherited edition and local dependencies without duplicate standalone scans.
+- [x] #3 The complete Codex repository scans with the corrected Rust package without source edits or application dependency installation.
+- [x] #4 Focused regression tests and bun run check pass; documentation records the supported behavior and verification.
 - [ ] #5 Updated scanner packages, including JavaScript, are published through the existing release process and verified from npm.
 <!-- AC:END -->
 
@@ -69,4 +71,10 @@ Both regression tests failed before the fix and pass afterwards. The full Codex 
 Release versions are prepared in the isolated codex/rust-workspace-scanner-release worktree, preserving other agents unfinished changes. Full bun run check passed: 16 Node tests, 609 Bun tests, 36 skipped, zero failures. Focused native Rust checks passed separately.
 
 Specification and quality review traced scan -> rustProjects -> members -> implicit dependency closure -> sourceCrates -> native analysis -> combined observation. Shared file identity and existing uncertainty behavior remain intact. No new C4 elements, OKF fields, runtime dependencies or fallback paths. The fix is bounded within the existing Rust adapter. All changed functions pass the complexity limit. Release branch bumps the contract and every previously published scanner because their committed source has changed since publication; JavaScript remains its initial 0.1.0 release.
+
+Release commit 97353f42 is isolated on codex/rust-workspace-scanner-release; draft PR https://github.com/MrLesk/Groma.md/pull/108. Five-platform Release workflow 35470188287 started with publication enabled. The local npm login is expired; browser login is pending for first publication of JavaScript. JavaScript 0.1.0 package built and read four Codex JavaScript files (the two bin entrypoints remain excluded by its existing source selection). Rust 0.1.2 local package built.
+
+Release job 105969611090 failed before scanner builds: Temurin has no JDK 25 for Windows ARM64. The isolated release workflow now selects Microsoft JDK 25 for that one platform, whose official download page lists Windows ARM64 support. Other platforms retain Temurin. This is a reproduced publication blocker under acceptance criterion 5.
+
+The actual Rust 0.1.2 package passes readiness and scans the entire Codex repository: 2586 files, 25502 operations, 2 roots. Replacement release workflow 35470306741 uses Microsoft JDK 25 only on Windows ARM64. Publication remains pending.
 <!-- SECTION:NOTES:END -->
