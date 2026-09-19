@@ -77,8 +77,11 @@ export async function startWebViewer(
     if (proposal === undefined) return new Response('No scanner proposal to review.', { status: 400 })
     try {
       const input = await request.formData()
-      await installSelectedScanners(repositoryRoot, proposal, input.getAll('scanner').map(String))
-      proposal = await discoverScanners(repositoryRoot)
+      try {
+        await installSelectedScanners(repositoryRoot, proposal, input.getAll('scanner').map(String))
+      } finally {
+        proposal = await discoverScanners(repositoryRoot)
+      }
       await openMap(true)
       if (error !== undefined) return setupResponse(400)
       proposal = undefined

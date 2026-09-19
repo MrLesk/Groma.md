@@ -83,6 +83,9 @@ project declarations, evidence locations, package availability, and coverage
 gaps, then offers the installable packages in one selection. The browser saves
 project settings first, then shows the same proposal with package checkboxes
 before scanning. Existing scanner selections are retained. Clear a new package selection to decline it.
+If an installation fails, setup keeps successful installations and refreshes
+the browser selection. Submit the remaining selection again to retry; scanners
+already saved in the project keep their pinned versions and are not reinstalled.
 
 Run the journey again after project technologies change:
 
