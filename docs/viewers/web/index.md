@@ -580,7 +580,7 @@ the map refits to the remaining active work; clearing the final task leaves the 
 an element keeps the tasks active. Opening a task loads that task's full
 Backlog record on demand. The details pane shows the task's id,
 status and assignees over its title, then its description, acceptance criteria,
-Definition of Done, references, modified files, implementation plan,
+Definition of Done, implementation plan, references, modified files,
 implementation notes, and comments. Empty sections are omitted. Updates to the same
 task keep the current details visible while loading. Changed checks, fields, and
 rows animate in place; unchanged rows keep focus and the panel keeps its scroll
