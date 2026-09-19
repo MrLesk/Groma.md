@@ -1,3 +1,5 @@
+import type { LoadedComparison } from '../../comparison/read.ts'
+import type { WorkItem } from '../../types.ts'
 import type { GromaRevision } from '../../history/revisions.ts'
 import type { SheetScene } from '../../sheet/types.ts'
 import type { ProjectProfile } from '../../project-profile.ts'
@@ -24,7 +26,6 @@ export interface WebMapPayload {
   generation: number
   project: ProjectProfile | null
   revision: WebRevision | null
-  revisions: WebRevision[]
   world: AnnotatedArchitectureModel
   sheet: SheetScene
   timings: WebMapTimings
@@ -38,8 +39,14 @@ export interface WebWorkPayload {
   pins: WorkPin[]
 }
 
+export interface WebComparison extends LoadedComparison {
+  id: string
+  task?: WorkItem
+  scenes: { before: SheetScene; after: SheetScene }
+}
+
 /** What the server ships on boot, on `/world.json` and on every SSE `world` event. */
-export type WebPayload = WebMapPayload & WebWorkPayload
+export type WebPayload = WebMapPayload & WebWorkPayload & { comparison?: WebComparison }
 
 /** Repository-backed reads materialized before a static Web view is published. */
 export interface PublishedReads {

@@ -218,5 +218,16 @@ export const mapCss = `
   }
   #map :is(.island, .slab):is(.selected, .touched, .lit, .context) > .surface-label .text { fill: var(--highlight); }
   #map :is(.island, .slab):is(.selected, .touched, .lit, .context) > .surface-label .label-leader { stroke: var(--highlight); }
+  #map [data-change="added"] { --change: var(--change-added); }
+  #map [data-change="edited"] { --change: var(--change-edited); }
+  #map [data-change="removed"] { --change: var(--change-removed); }
+  #map :is(.building, .slab, .island)[data-change] { --top-fill: color-mix(in srgb, var(--change) 22%, var(--paper)); --left-fill: color-mix(in srgb, var(--change) 32%, var(--paper)); --right-fill: color-mix(in srgb, var(--change) 40%, var(--paper)); }
+  #map .ghost[data-change] .face.top, #map .ghost[data-change] > .ground { fill: var(--top-fill); }
+  #map .ghost[data-change] .face.left { fill: var(--left-fill); }
+  #map .ghost[data-change] .face.right { fill: var(--right-fill); }
+  #map .route.ghost.draft[data-change] .line { stroke-dasharray: 4 3; }
+  #map .route[data-change] .line { stroke: var(--change); opacity: 1; }
+  #map .route[data-change] .arrow { fill: var(--change); }
+  #map .route[data-change]:is(.selected, .endpoint, .touched, .lit) .line { filter: drop-shadow(0 0 2px var(--highlight)); stroke-width: calc(var(--stroke) * var(--emphasis, 1) * var(--weight, 1) + 1px); }
   ${layerCss}
 `

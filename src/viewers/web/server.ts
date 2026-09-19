@@ -1,4 +1,6 @@
 import path from 'node:path'
+import type { RevisionSource } from '@groma/revision-source'
+import { createRevisionSources } from '../../revision-sources.ts'
 import type { WorkSource } from '@groma/work-source'
 
 import {
@@ -20,6 +22,7 @@ export async function startWebViewer(
   options: {
     port?: number
     workSource?: WorkSource
+    revisionSources?: RevisionSource[]
     scan?: boolean
     onListening?: (url: string) => void
     initDependencies?: Partial<RepositoryInitDependencies>
@@ -35,7 +38,7 @@ export async function startWebViewer(
   function openMap(scan: boolean): Promise<void> {
     error = undefined
     preparing = (async () => {
-      map = await createWebMapSession(repositoryRoot, { ...options, scan })
+      map = await createWebMapSession(repositoryRoot, { ...options, scan, revisionSources: options.revisionSources ?? createRevisionSources(repositoryRoot) })
     })().catch(failed)
     return preparing
   }

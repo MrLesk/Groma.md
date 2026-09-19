@@ -44,6 +44,14 @@ export function touchedElements(item: WorkItem, world: Pick<ArchitectureGraph, '
   return [...new Set(ids.filter((id): id is string => id !== undefined))]
 }
 
+/** Shared paths associate active tasks; they do not establish authorship. */
+export function sharedFiles(item: WorkItem, work: WorkSnapshot): Set<string> {
+  const terminal = work.statuses.at(-1)
+  if (item.status === terminal) return new Set()
+  const otherActive = work.items.filter(candidate => candidate.id !== item.id && candidate.status !== terminal)
+  return new Set(otherActive.flatMap(candidate => candidate.modifiedFiles))
+}
+
 export type WorkStage = 'todo' | 'progress' | 'done'
 
 export interface ElementWorkGroup {

@@ -58,6 +58,7 @@ export interface IsoMap {
   paint(scene: LayeredScene): void
   /** Unions the existing selected-element and selected-route treatments across an ordered selection. */
   select(ids: readonly string[]): void
+  changes(statuses: Readonly<Record<string, 'added' | 'edited' | 'removed'>>): void
   /** Outlines the elements the active tasks touch and uniformly accents the routes leaving them; an empty set clears both. */
   mark(ids: ReadonlySet<string>): void
   /** Lights route ids and direct endpoints; contextual ancestors stay neutral while everything off the path dims. */
@@ -270,6 +271,17 @@ export function createMap(host: HTMLElement): IsoMap {
       for (const node of new Set(routes.values())) {
         node.group.classList.toggle('selected', node.ids.some(id => selectedRoutes.has(id)))
         node.group.classList.toggle('endpoint', directItems.has(node.source) || directItems.has(node.target))
+      }
+    },
+    changes(statuses) {
+      for (const [id, node] of items) {
+        if (statuses[id]) node.setAttribute('data-change', statuses[id])
+        else node.removeAttribute('data-change')
+      }
+      for (const route of new Set(routes.values())) {
+        const status = route.ids.map(id => statuses[id]).find(Boolean)
+        if (status) route.group.dataset.change = status
+        else delete route.group.dataset.change
       }
     },
     mark(ids) {

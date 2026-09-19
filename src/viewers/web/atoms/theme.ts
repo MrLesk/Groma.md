@@ -24,6 +24,9 @@ export interface Palette {
   syntaxNumber: string
   syntaxString: string
   syntaxType: string
+  changeAdded: string
+  changeEdited: string
+  changeRemoved: string
   diffAdded: string
   diffRemoved: string
 }
@@ -36,6 +39,7 @@ export const themeModes: readonly WebThemeMode[] = ['auto', 'light', 'dark', 'bl
 export const palettes: Record<WebTheme, Palette> = {
   light: {
     paper: '#FFFFFF',
+    changeAdded: '#1D4ED8', changeEdited: '#925500', changeRemoved: '#B42318',
     ink: '#22262E',
     muted: '#585B62',
     accentText: GROMA_ACCENT_ON_LIGHT,
@@ -56,6 +60,7 @@ export const palettes: Record<WebTheme, Palette> = {
   },
   dark: {
     paper: '#111315',
+    changeAdded: '#79C0FF', changeEdited: '#F2C14E', changeRemoved: '#FF8E86',
     ink: '#E6E8EB',
     muted: '#9AA0A8',
     accentText: GROMA_ACCENT,
@@ -76,6 +81,7 @@ export const palettes: Record<WebTheme, Palette> = {
   },
   blueprint: {
     paper: '#04182B',
+    changeAdded: '#92BFFF', changeEdited: '#FFD166', changeRemoved: '#FF8FAB',
     ink: '#D8F3FF',
     muted: '#79A9BD',
     accentText: GROMA_ACCENT,
@@ -136,6 +142,9 @@ export function cssBlock(palette: Palette): string {
   --syntax-number: ${palette.syntaxNumber};
   --syntax-string: ${palette.syntaxString};
   --syntax-type: ${palette.syntaxType};
+  --change-added: ${palette.changeAdded};
+  --change-edited: ${palette.changeEdited};
+  --change-removed: ${palette.changeRemoved};
   --diff-added: ${palette.diffAdded};
   --diff-removed: ${palette.diffRemoved};
   --map-grid: color-mix(in srgb, var(--paper) 88%, var(--map-line));

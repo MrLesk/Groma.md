@@ -1,65 +1,40 @@
-import { readFile } from 'node:fs/promises'
-import path from 'node:path'
-
-import {
-  currentGitRevision,
-  findGitCommitBySubject,
-  parentGitRevision,
-  readGitText,
-} from '../../history/revisions.ts'
+import { currentGitRevision, findGitCommitBySubject, parentGitRevision } from '../../history/revisions.ts'
+import { readStateText, readGitChanges, type GitRange } from '../../history/git-state.ts'
 import type { WorkItem, WorkSnapshot } from '../../types.ts'
-import { projectTaskFileDiff, type TaskFileDiff } from './diff-lines.ts'
+import { projectFileDiff, type FileDiff } from './diff-lines.ts'
 
 export interface TaskDiffPayload {
   taskId: string
-  source: {
-    kind: 'commit' | 'working-tree'
-    base: string
-    revision: string
-  }
-  files: TaskFileDiff[]
+  source: { kind: 'commit' | 'working-tree'; base: string; revision: string }
+  files: FileDiff[]
 }
 
-async function workingText(repositoryRoot: string, filename: string): Promise<string | undefined> {
-  try {
-    return await readFile(path.join(repositoryRoot, filename), 'utf8')
-  } catch {
-    return undefined
-  }
+import { sharedFiles } from '../../work/pins.ts'
+
+/** Task policy chooses versions and scope; comparison owns what those versions changed. */
+export async function taskRange(root: string, item: WorkItem, work: WorkSnapshot): Promise<GitRange> {
+  if (item.status !== work.statuses.at(-1)) return { base: await currentGitRevision(root), target: { kind: 'working-tree' } }
+  const sha = await findGitCommitBySubject(root, item.id + ' - ' + item.title)
+  if (sha === undefined) throw new Error('Commit not found for ' + item.id)
+  return { base: await parentGitRevision(root, sha), target: { kind: 'commit', sha } }
 }
 
-function sharedFiles(item: WorkItem, work: WorkSnapshot): Set<string> {
-  const terminal = work.statuses.at(-1)
-  const otherActive = work.items.filter(candidate => (
-    candidate.id !== item.id && candidate.status !== terminal
-  ))
-  return new Set(otherActive.flatMap(candidate => candidate.modifiedFiles))
-}
-
-/** Reads the selected task against one honest Git source without adding data to the boot payload. */
-export async function readTaskDiff(
-  repositoryRoot: string,
-  item: WorkItem,
-  work: WorkSnapshot,
-): Promise<TaskDiffPayload> {
-  const terminal = work.statuses.at(-1)
-  const completed = item.status === terminal
-  const revision = completed
-    ? await findGitCommitBySubject(repositoryRoot, `${item.id} - ${item.title}`)
-    : await currentGitRevision(repositoryRoot)
-  if (revision === undefined) throw new Error(`Commit not found for ${item.id}`)
-  const base = completed ? await parentGitRevision(repositoryRoot, revision) : revision
-  const shared = completed ? new Set<string>() : sharedFiles(item, work)
-  const files = await Promise.all(item.modifiedFiles.map(async file => {
-    const before = await readGitText(repositoryRoot, base, file)
-    const after = completed
-      ? await readGitText(repositoryRoot, revision, file)
-      : await workingText(repositoryRoot, file)
-    return projectTaskFileDiff(file, before, after, shared.has(file))
-  }))
-  return {
-    taskId: item.id,
-    source: { kind: completed ? 'commit' : 'working-tree', base, revision },
-    files,
+export async function readTaskDiff(root: string, item: WorkItem, work: WorkSnapshot, selectedRange?: GitRange): Promise<TaskDiffPayload> {
+  const range = selectedRange ?? await taskRange(root, item, work)
+  const shared = sharedFiles(item, work)
+  const changed = await readGitChanges(root, range)
+  const files: FileDiff[] = []
+  for (const recorded of item.modifiedFiles) {
+    const change = changed.find(file => file.file === recorded || file.previousFile === recorded)
+    const file = change?.file ?? recorded
+    if (files.some(value => value.file === file)) continue
+    const before = await readStateText(root, { kind: 'commit', sha: range.base }, change?.previousFile ?? file)
+    const after = await readStateText(root, range.target, file)
+    files.push({ ...projectFileDiff(file, before, after, shared.has(file) || shared.has(recorded)),
+      ...(change?.previousFile ? { previousFile: change.previousFile } : {}) })
   }
+  return { taskId: item.id, source: {
+    kind: range.target.kind, base: range.base,
+    revision: range.target.kind === 'commit' ? range.target.sha : range.base,
+  }, files }
 }

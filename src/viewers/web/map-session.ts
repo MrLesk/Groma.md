@@ -1,3 +1,9 @@
+import type { RevisionSource } from '@groma/revision-source'
+import { localRevisionSource } from '../../history/local-source.ts'
+import { resolveCommit } from '../../history/git-state.ts'
+import { watchGitState } from '../../history/watch.ts'
+import { createComparisonSession } from './comparison/session.ts'
+import { revisionSourceRoutes } from './revision/sources.ts'
 import { EMPTY_WORK_SNAPSHOT } from '@groma/work-source'
 import type { WorkSource } from '@groma/work-source'
 import { backlogPlugin } from '@groma/work-source-backlog'
@@ -8,7 +14,7 @@ import type { StructuralResult } from '../../curate.ts'
 import { createScannerSession } from '../../scanner/session.ts'
 import { parseScannerSettingsAction, withScannerUpgrades } from '../../scanner/modules/settings.ts'
 import { pinsOf } from '../../work/pins.ts'
-import { listGromaRevisions, withGitRevision } from '../../history/revisions.ts'
+import { withGitRevision } from '../../history/revisions.ts'
 import { renderPage } from './page.ts'
 import type { WebMapPayload, WebPayload, WebRevision, WebWorkPayload } from './payload.ts'
 import { bundleRenderer, loadMapRoot } from './runtime.ts'
@@ -48,29 +54,32 @@ async function sourceResponse(
   }
 }
 
-async function loadMap(
-  repositoryRoot: string,
-  revisions: WebRevision[],
-  revision: WebRevision | null,
-): Promise<Omit<WebMapPayload, 'generation'>> {
-  const snapshot = revision === null
-    ? await loadMapRoot(repositoryRoot)
-    : await withGitRevision(repositoryRoot, revision.id, loadMapRoot)
-  return { ...snapshot, revision, revisions }
+async function loadMap(repositoryRoot: string, revision: WebRevision | null): Promise<Omit<WebMapPayload, 'generation'>> {
+  if (revision === null) return { ...await loadMapRoot(repositoryRoot), revision }
+  try {
+    const snapshot = await withGitRevision(repositoryRoot, revision.id, async root => {
+      const loaded = await loadMapRoot(root)
+      if (loaded.project === null) throw new Error('Missing project profile')
+      return loaded
+    })
+    return { ...snapshot, revision }
+  } catch (error) {
+    throw new Error('Architecture snapshot unavailable at ' + revision.shortId + ': ' + (error instanceof Error ? error.message : String(error)))
+  }
 }
 
 /** Owns the ready map, its request handlers, and its live subscriptions. */
 export async function createWebMapSession(
   repositoryRoot: string,
-  options: { workSource?: WorkSource; scan?: boolean } = {},
+  options: { workSource?: WorkSource; scan?: boolean; revisionSources?: RevisionSource[] } = {},
 ): Promise<{ fetch: (request: Request) => Promise<Response>; close: () => Promise<void> }> {
   const renderer = await bundleRenderer()
+  const sources = options.revisionSources ?? [localRevisionSource(repositoryRoot)]
+  const sourceRoutes = revisionSourceRoutes(sources)
   const workSource = options.workSource ?? backlogPlugin.create(repositoryRoot)
-  let revisions: WebRevision[] = []
-  let revisionRead: Promise<WebRevision[]> | undefined
   let map: WebMapPayload = {
     generation: 1,
-    ...(await loadMap(repositoryRoot, revisions, null)),
+    ...(await loadMap(repositoryRoot, null)),
   }
   let workState: Omit<WebWorkPayload, 'pins'> = {
     workGeneration: 0,
@@ -92,29 +101,26 @@ export async function createWebMapSession(
     return { ...map, ...workPayload() }
   }
 
-  /** History is read once when requested; opening the current map does not need snapshots. */
-  function readRevisions(): Promise<WebRevision[]> {
-    revisionRead ??= listGromaRevisions(repositoryRoot).then(next => {
-      revisions = next
-      map = { ...map, revisions }
-      currentPage = undefined
-      return revisions
-    })
-    return revisionRead
-  }
+  const comparison = createComparisonSession(repositoryRoot, payload, () => workState.work)
 
   async function payloadAt(revisionId: string | null): Promise<WebPayload | Response> {
     if (revisionId === null) return payload()
-    const revision = (await readRevisions()).find(candidate => candidate.id === revisionId)
-    if (revision === undefined) return new Response('Unknown Groma revision', { status: 404 })
-    if (!revision.compatible) return new Response('Unsupported Groma revision', { status: 422 })
+    const sha = await resolveCommit(repositoryRoot, revisionId)
+    const revision = { id: sha, shortId: sha.slice(0, 8), subject: '', body: '', date: '', compatible: true }
     return {
       generation: map.generation,
-      ...(await loadMap(repositoryRoot, revisions, revision)),
+      ...(await loadMap(repositoryRoot, revision)),
       workGeneration: workState.workGeneration,
       work: EMPTY_WORK_SNAPSHOT,
       pins: [],
     }
+  }
+
+  async function selectionAt(url: URL): Promise<WebPayload | Response> {
+    const base = url.searchParams.get('base')
+    if (base === null) return payloadAt(url.searchParams.get('revision'))
+    const sha = url.searchParams.get('revision')
+    return comparison.read({ base, target: sha === null ? { kind: 'working-tree' } : { kind: 'commit', sha } }, url.searchParams.get('scope') ?? undefined)
   }
 
   async function sourceSelection(url: URL): Promise<Response> {
@@ -148,13 +154,14 @@ export async function createWebMapSession(
   let worldChain = Promise.resolve()
   async function reloadWorld(): Promise<void> {
     if (closed) return
-    const next = await loadMap(repositoryRoot, revisions, null)
+    const next = await loadMap(repositoryRoot, null)
     if (closed) return
     map = {
       generation: map.generation + 1,
       ...next,
     }
     currentPage = undefined
+    comparison.invalidate()
     broadcast(worldEvent())
   }
 
@@ -191,6 +198,11 @@ export async function createWebMapSession(
     void publishWork()
   })
 
+  const gitWatch = await watchGitState(repositoryRoot, () => {
+    comparison.invalidate()
+    broadcast(encoder.encode('event: git\ndata: {}\n\n'))
+  })
+
   type Route = (request: Request, url: URL) => Response | Promise<Response>
 
   function rendererResponse(): Response {
@@ -203,7 +215,7 @@ export async function createWebMapSession(
   }
 
   async function worldResponse(_request: Request, url: URL): Promise<Response> {
-    const selected = await payloadAt(url.searchParams.get('revision'))
+    const selected = await selectionAt(url)
     return selected instanceof Response ? selected : Response.json(selected)
   }
 
@@ -275,11 +287,11 @@ export async function createWebMapSession(
 
   async function pageResponse(url: URL): Promise<Response> {
     const revision = url.searchParams.get('revision')
-    if (revision === null) {
+    if (revision === null && !url.searchParams.has('base')) {
       currentPage ??= new Blob([renderPage({ ...payload(), delivery: { kind: 'live' } })], { type: 'text/html; charset=utf-8' })
       return new Response(currentPage, { headers: { 'Cache-Control': 'no-store' } })
     }
-    const selected = await payloadAt(revision)
+    const selected = await selectionAt(url)
     if (selected instanceof Response) return selected
     return new Response(renderPage({ ...selected, delivery: { kind: 'live' } }), {
       headers: {
@@ -295,8 +307,10 @@ export async function createWebMapSession(
       return Response.json(url.searchParams.has('updates') ? await withScannerUpgrades(settings) : settings)
     }],
     ['/render.js', rendererResponse],
-    ['/revisions.json', async () => Response.json(await readRevisions())],
     ['/world.json', worldResponse],
+    ['/comparison-task.json', async (_request, url) => Response.json(await comparison.taskDiff(url.searchParams.get('id') ?? '', url.searchParams.get('task') ?? ''))],
+    ['/task-review.json', async (_request, url) => Response.json(await comparison.taskReview(url.searchParams.get('task') ?? ''))],
+    ['/comparison-file.json', async (_request, url) => Response.json(await comparison.file(url.searchParams.get('id') ?? '', url.searchParams.get('file') ?? ''))],
     ['/code.json', selectedSourceResponse],
     ['/source.json', selectedSourceResponse],
     ['/task.json', taskResponse],
@@ -319,10 +333,16 @@ export async function createWebMapSession(
 
   async function responseFor(request: Request): Promise<Response> {
     const url = new URL(request.url)
-    const write = request.method === 'POST' ? writeRoutes.get(url.pathname) : undefined
-    if (write !== undefined) return write(request)
-    const route = routes.get(url.pathname)
-    return route === undefined ? pageResponse(url) : route(request, url)
+    try {
+      const sourced = await sourceRoutes(request, url)
+      if (sourced !== undefined) return sourced
+      const write = request.method === 'POST' ? writeRoutes.get(url.pathname) : undefined
+      if (write !== undefined) return await write(request)
+      const route = routes.get(url.pathname)
+      return await (route === undefined ? pageResponse(url) : route(request, url))
+    } catch (error) {
+      return new Response(error instanceof Error ? error.message : String(error), { status: 422 })
+    }
   }
 
   publishWork()
@@ -331,6 +351,7 @@ export async function createWebMapSession(
     fetch: responseFor,
     async close() {
       closed = true
+      comparison.close()
       for (const client of clients) {
         try {
           client.close()
@@ -341,11 +362,12 @@ export async function createWebMapSession(
       clients.clear()
       await Promise.all([
         workWatch.close(),
+        gitWatch.close(),
+        ...sources.map(source => source.close()),
         scannerSession?.close(),
         architectureWatch.close(),
         worldChain,
         workChain,
-        revisionRead,
       ])
     },
   }

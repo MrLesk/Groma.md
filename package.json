@@ -32,7 +32,8 @@
   "workspaces": [
     "packages/*",
     "plugins/scanners/*",
-    "plugins/work-sources/*"
+    "plugins/work-sources/*",
+    "plugins/revision-sources/*"
   ],
   "bin": {
     "groma": "src/cli.ts"
@@ -58,6 +59,8 @@
     "@comark/html": "0.6.2",
     "@groma/scanner": "workspace:*",
     "@groma/work-source": "workspace:*",
+    "@groma/revision-source": "workspace:*",
+    "@groma/revision-source-github": "workspace:*",
     "@groma/work-source-backlog": "workspace:*",
     "@opentui/core": "0.5.10",
     "@parcel/watcher": "2.6.0",

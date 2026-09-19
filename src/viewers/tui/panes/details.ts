@@ -19,7 +19,7 @@ import type {
   WorkItem,
   WorkItemDetails,
 } from '../../../types.ts'
-import type { TaskFileDiff } from '../../source/diff-lines.ts'
+import type { FileDiff } from '../../source/diff-lines.ts'
 import type { CodeDeclaration, CodeFile, CodeSymbol } from '../../source/structure.ts'
 import { accent, bold, chunk, dim, kindMark, plain, styleRow, wrap, type Line, type PaneLines } from './text.ts'
 
@@ -257,7 +257,7 @@ export function taskLines(theme: ViewerTheme, item: WorkItem, width: number): Li
   return [...lines, ...taskExecutionLines(theme, item, width).lines]
 }
 
-function taskExecutionLines(theme: ViewerTheme, item: WorkItem, width: number, details?: WorkItemDetails, files?: TaskFileDiff[]): PaneLines {
+function taskExecutionLines(theme: ViewerTheme, item: WorkItem, width: number, details?: WorkItemDetails, files?: FileDiff[]): PaneLines {
   const lines: Line[] = [[], heading(theme, 'Execution', width), [accent(theme, [item.status, ...item.assignees].join(' · '))]]
   lines.push(...prose(theme, 'Plan', details?.implementationPlan ?? '', width))
   const ids: (string | undefined)[] = lines.map(() => undefined)
@@ -305,7 +305,7 @@ function prose(theme: ViewerTheme, title: string, value: string, width: number):
 }
 
 /** Task definition precedes execution, files, notes and comments in both opening paths. */
-function taskRecordContent(theme: ViewerTheme, item: WorkItem, details: WorkItemDetails | undefined, width: number, files?: TaskFileDiff[]): PaneLines {
+function taskRecordContent(theme: ViewerTheme, item: WorkItem, details: WorkItemDetails | undefined, width: number, files?: FileDiff[]): PaneLines {
   const lines: Line[] = wrap(item.title, width).map(row => [bold(theme, row)])
   if (details === undefined) return { lines }
   const definition = [
@@ -324,7 +324,7 @@ function taskRecordContent(theme: ViewerTheme, item: WorkItem, details: WorkItem
 }
 
 /** The visible reading cursor moves through prose and links without skipping either. */
-export function taskRecordView(theme: ViewerTheme, item: WorkItem, details: WorkItemDetails | undefined, width: number, row: number | undefined, files?: TaskFileDiff[]): PaneLines {
+export function taskRecordView(theme: ViewerTheme, item: WorkItem, details: WorkItemDetails | undefined, width: number, row: number | undefined, files?: FileDiff[]): PaneLines {
   const content = taskRecordContent(theme, item, details, width, files)
   return { ...content, cursor: row, lines: content.lines.map((line, index) => index === row
     ? styleRow(theme, line, width, false, true) : line) }

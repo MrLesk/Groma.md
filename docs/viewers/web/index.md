@@ -119,7 +119,8 @@ A permanent Search field sits between that context and the view controls:
 Fit, `-`, zoom readout, `+`, Settings, Help, and Info. Controls share one
 height, and opening search leaves them in place. Header popups float with
 a clear gap below the bar. At narrower widths the
-counts and the Revision and Fit text give way to the controls.
+counts and ordinary Revision and Fit text give way to the controls. An active
+comparison keeps its endpoint label visible in place of the project name.
 Iso, 2D and Layers are icon-and-label tabs in a floating bar at the top of the
 map, centered between the side panels. It shares the bottom tasks bar rounded
 surface. One selection pill slides and resizes between tabs; reduced motion
@@ -127,7 +128,7 @@ switches it immediately. Click a tab or use Left/Right, Home and End while focus
 F2 still toggles Layers, and F1 hides the bar with the other map controls.
 Popup triggers share a pointer cursor. Clicking outside dismisses Help, Info,
 Settings, Theme, Revision, and Search through the same popup behavior. Search cancellation
-restores its saved view; the revision tooltip remains part of its popup.
+restores its saved view.
 Help explains the map shapes, drafts, relationships, and how source-file counts,
 lines of code, and dependencies determine building sizes relative to the project.
 It also explains Markdown curation and keeps the grouped Map, Search, View, and
@@ -156,18 +157,14 @@ Enter or a result click opens the existing architecture or task details;
 opening an active task keeps it active. Escape or a click outside search
 restores the selection and camera from before the search.
 
-The revision menu starts at Current revision, the live selected Groma working
-tree. It lists the current branch's commits that changed the selected `groma/`
-or `.groma/` directory, newest first. Each
-two-line row shows the subject, then an exact tag when present, short hash, and
-the commit date and time in the browser's locale. A row with a commit body
-shows that body on hover without repeating its subject. A selected commit
-opens the complete architecture and source measurements from that same Git
-snapshot. Historical views are read-only,
-carry no current Backlog work, and keep their full commit id in the URL.
-Commits without the required OKF v0.2 Groma project profile remain visible but
-are marked Unsupported and cannot be selected. Returning to Current revision
-resumes live architecture and work updates.
+The revision menu starts at Working tree. Its local source lists branches and
+commit history, including commits that only change source code. Selecting a
+commit opens its saved architecture and source measurements with comparison
+off. Historical views are read-only, carry no current Backlog work, and keep
+their full commit identity in the URL. A missing or incompatible architecture
+snapshot produces an error while preserving the current map. Returning to
+Working tree resumes live architecture and work updates. Explicit comparison
+and task review share the flow described in [Review Git changes](git-comparison.md).
 
 The floating icon bar beside the hierarchy toggles Actors, Systems, Containers,
 and Components on the map. Its icons follow the existing ● ■ ▱ ▪ marks with
@@ -622,6 +619,13 @@ browser refresh. An architecture Markdown change does the same
 without scanning. Selection stays if that box still exists, else the
 first internal system is selected; a camera you have moved stays
 where you left it, an untouched one refits to the new sheet.
+
+## Git comparison
+
+The existing revision control browses the working tree, branches and commits,
+and starts an explicit comparison. The map and existing Details pane share
+change review with Backlog. An optional GitHub source adds branches and PRs
+inside that selector. See [Review Git changes](git-comparison.md).
 
 ## Saved architecture without scanners
 

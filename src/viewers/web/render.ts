@@ -17,19 +17,20 @@ import { paintHeaderSummary } from './chrome/stats.ts'
 import { createWebDataSource } from './data.ts'
 import { createFlowList } from './flow/list.ts'
 import { flowFocus, flowHighlight, flowSelection, retainFlows, toggleFlowActivation, type WebFlowRef } from './flow/state.ts'
-import { paintFlowReturn, paintFlowDetails } from './flow/reader.ts'
 import { fitArchitecture, fitHighlights, fitCamera, pan, wheelAction, zoomAbout, zoomLimits, zoomReadout, type Camera } from './iso/camera.ts'
 import { createMap } from './iso/map.ts'
 import { createCameraAnimator } from './iso/motion.ts'
 import { bindMapPointer } from './iso/pointer.ts'
 import { presentScene, createMapAnimator, createMapMotion } from './iso/presentation.ts'
-import { paintRelationship } from './organisms/relationship-details.ts'
-import { detailsTabAfterSelection, detailsTabAfterWork, type DetailsTab, inspectDetails, paintDetails } from './organisms/details.ts'
+import { detailsTabAfterSelection, detailsTabAfterWork, type DetailsTab } from './organisms/details.ts'
 import { paintHierarchy } from './organisms/hierarchy.ts'
 import { createPins } from './work/pins.ts'
 import { createTip } from './organisms/tip.ts'
 import { createProjectEditor } from './project/editor.ts'
 import { createAuthoring } from './authoring.ts'
+import { createComparisonControl } from './comparison/control.ts'
+import { changePaint } from '../../comparison/project.ts'
+import { paintSelectionDetails } from './organisms/selection-details.ts'
 import { createRevisionControl } from './revision/control.ts'
 import { createSearchSession } from './search/session.ts'
 import { createWorkIsland } from './work/island.ts'
@@ -48,11 +49,12 @@ let sheet = boot.sheet
 let project: ProjectProfile | undefined = boot.project ?? undefined
 let currentPins = boot.pins
 let mapMeta = { generation: boot.generation, timings: boot.timings }
+let comparison: ReturnType<typeof createComparisonControl> | undefined
 const mapMotion = createMapMotion()
 const filterC4 = bindC4Filter(document.getElementById('c4-filter')!, () => repaintScene(false))
 const debug = createMapDebugPanel(document.body, () => ({ ...mapMeta, world, sheet }))
 function projectedScene() {
-  return debug.project(() => filterC4(presentScene(sheet, project, mapMotion.pose)))
+  return debug.project(() => filterC4(presentScene(comparison?.sheet() ?? sheet, comparison?.profile() ?? project, mapMotion.pose)))
 }
 let scene = projectedScene()
 const host = document.getElementById('map')!
@@ -79,7 +81,7 @@ const tip = createTip(host)
 const pins = createPins(host, id => map.anchorOf(id), id => toggleTask(id, false), tip)
 const island = createWorkIsland(host, id => toggleTask(id), pins.show, tip)
 let tree = initialTree()
-const opened = readView(location.search, world, work.items, boot.revisions, readSavedTheme(localStorage))
+const opened = readView(location.search, world, work.items, readSavedTheme(localStorage))
 const themeControl = bindThemeControl(document.getElementById('theme') as HTMLDetailsElement, opened.theme, syncUrl)
 let hudVisible = opened.hudVisible
 shell.setHud(hudVisible)
@@ -97,22 +99,30 @@ const revisionControl = createRevisionControl({
   applyRevision: payload => applyWorld(payload, true), applyWorld, applyWork,
 })
 const authoring = createAuthoring(host, map, data, {
-  live: () => revisionControl.selected === undefined,
+  live: () => revisionControl.selected === undefined && !comparison?.active,
   world: () => world,
   repaint: () => paintViewState(),
 })
+comparison = createComparisonControl({
+  details: detailsHost, tree: treeHost, data, boot: boot.comparison, world: () => world, work: () => work,
+  select,
+  repaint: paintViewState, project: () => { source.clear(); repaintScene(false) },
+  scope: id => { revisionControl.setScope(id); taskDiff.invalidate() },
+  expose: () => { detailsHost.inert = false; detailsDock.hidden = false },
+})
 const source = createSourceControl({
   host: detailsHost, initialFile: opened.file, initialLine: opened.line,
-  element: () => worldElement(primarySelection(selection)), readCode: data.readCode, readSource: data.readSource,
-  revision: () => revisionControl.selected, repaint: paintViewState,
+  element: () => comparison?.active ? comparison.detailWorld(primarySelection(selection)).elements.find(element => element.representationId === primarySelection(selection)) : worldElement(primarySelection(selection)), readCode: data.readCode, readSource: data.readSource,
+  revision: () => comparison?.active ? comparison.revision(primarySelection(selection)) : revisionControl.selected, repaint: paintViewState,
 })
 createProjectSettings(data)
 const review = createProjectReview({ world: () => world, revision: () => revisionControl.selected, readSource: data.readSource,
   navigate(id, file, line) { select(id); if (file !== undefined) source.open(file, line) },
 })
 const taskDiff = createTaskDiffControl({
-  host: detailsHost, world: () => world, readDetails: data.readTask, readDiff: data.readTaskDiff,
-  repaint: paintViewState, select,
+  host: detailsHost, world: () => world, readDetails: data.readTask,
+  readDiff: id => comparison?.id && data.readComparisonTask ? data.readComparisonTask(comparison.id, id) : data.readTaskDiff(id),
+  repaint: paintViewState, select, review: data.readTaskReview ? id => { void revisionControl.reviewTask(id) } : undefined,
 })
 /** The full-screen grid surrounds a safe camera frame between the floating chrome. */
 function viewport(): MapFrame {
@@ -173,13 +183,18 @@ function syncUrl(): void {
     theme: themeControl.mode,
     hudVisible,
   }, world, work.items)
-  history.replaceState(null, '', `${location.pathname}${query}`)
+  const params = new URLSearchParams(query)
+  if (revisionControl.base) params.set('base', revisionControl.base)
+  if (comparison?.active && comparison.presentation !== 'changes') params.set('presentation', comparison.presentation)
+  if (revisionControl.scope) params.set('scope', revisionControl.scope)
+  history.replaceState(null, '', location.pathname + (params.size ? '?' + params : ''))
 }
 
 function paintMapState(task: WorkItem | undefined, activeTaskItems: WorkItem[]): void {
   const selectedIds = selectedArchitecture(selection)
   const { routes: litIds, focusedRoute } = flowHighlight(activeFlows, world)
   map.select(selectedIds)
+  map.changes(comparison?.changes() ? changePaint(comparison.changes()!) : {})
   map.mark(new Set(activeTaskItems.flatMap(item => touchedElements(item, world))))
   pins.activate(activeTaskIds, task?.id)
   island.activate(activeTaskIds, task?.id)
@@ -195,50 +210,23 @@ function paintViewState(commitUrl = true): void {
   paintFlows(flowsHost, world, activeFlows, toggleFlow, {
     title: 'Actors', selectedIds: selectedArchitecture(selection), onSelectActor: select,
   })
-  paintHeaderSummary(statsHost, world, project)
+  paintHeaderSummary(statsHost, world, comparison?.profile() ?? project)
   paintDetailsState(task)
   shell.paint(selection)
+  if (comparison?.file) { detailsHost.inert = false; document.body.classList.remove('details-hidden'); detailsHost.setAttribute('aria-hidden', 'false') }
 }
 
 function paintDetailsState(task: WorkItem | undefined): void {
-  const activeFlow = activeFlows.at(-1)
-  const selectedId = primarySelection(selection)
-  const selected = worldElement(selectedId)
-  const relationship = worldRelationship(selectedId)
-  const paintedReader = source.paint(selected) || taskDiff.paint(task)
-  paintFlowReturn(
-    detailsHost, activeFlow, selection.kind === 'flow', world, select, showFlows,
-    source.file !== undefined,
-  )
-  if (paintedReader) return
-  const flow = world.flows.find(item => item.id === selectedId)
-  if (selection.kind === 'flow' && flow !== undefined && activeFlow !== undefined) {
-    paintFlowDetails(detailsHost, flow, activeFlow, world, selectFlowStep, select)
-    return
-  }
-  if (relationship !== undefined) {
-    paintRelationship(detailsHost, relationship, world, select, authoring.relationWrites)
-  } else if (selected !== undefined) {
-    paintDetails(detailsHost, inspectDetails(selected, world), {
-      world,
-      onSelect: select,
-      onToggleFlow: flow => toggleFlow(flow, selected.representationId),
-      activeFlows,
-      tab: detailsTab,
-      onTab: tab => {
-        detailsTab = tab
-        paintViewState()
-      },
-      code: detailsTab === 'how' ? source.code() : [],
-      onSource: source.open,
-      workGroups: selected.kind === 'component' ? elementWorkGroups(work, selected.representationId, world) : [],
-      onTask: toggleTask,
-      ...authoring.paneWrites(selected.id, selectedArchitecture(selection)),
-    })
-  }
+  paintSelectionDetails({
+    host: detailsHost, world, work, task, selection, selectedIds: selectedArchitecture(selection),
+    activeFlows, tab: detailsTab, source, taskDiff, comparison, authoring,
+    select, showFlows, selectFlowStep, toggleFlow, toggleTask,
+    onTab: tab => { detailsTab = tab; paintViewState() },
+  })
 }
 
 function paintTree(): void {
+  if (comparison?.paintTree()) return
   paintHierarchy(
     treeHost,
     semanticTreeRows(world, selectedArchitecture(selection), tree).filter(row => row.kind !== 'actor'),
@@ -256,6 +244,7 @@ function toggleRow(row: TreeRow): void {
 function select(id: string, additive = false, focus = true): void {
   if (worldElement(id) === undefined && worldRelationship(id) === undefined) return
   source.clear()
+  comparison?.clearFile()
   const next = selectArchitecture(selection, id, additive)
   detailsTab = detailsTabAfterSelection(detailsTab, primarySelection(selection), primarySelection(next))
   selection = next
@@ -289,6 +278,7 @@ function applyTaskSelection(next: ReturnType<typeof toggleWorkSelection>, focus 
   activeTaskIds = next.active
   source.clear()
   selection = next.selected === undefined ? noSelection : selectTask(next.selected)
+  comparison?.focus(workItem(next.selected))
   touched = true
   if (!focus) camera.move(camera.current, false)
   paintViewState()
@@ -303,6 +293,7 @@ function deselect(): void {
   authoring.cancel()
   source.clear()
   selection = noSelection
+  comparison?.focus()
   activeTaskIds = []
   activeFlows = []
   paintViewState()
@@ -439,6 +430,7 @@ resizeObserver.observe(host)
 
 function applyWorld(payload: WebPayload, reset = false): void {
   mapMeta = { generation: payload.generation, timings: payload.timings }
+  comparison?.set(payload.comparison)
   world = payload.world
   work = payload.work
   sheet = payload.sheet
@@ -452,7 +444,7 @@ function applyWorld(payload: WebPayload, reset = false): void {
     tree = initialTree()
     activeTaskIds = []
     activeFlows = []
-    selection = noSelection
+    selection = payload.comparison?.task ? selectTask(payload.comparison.task.id) : noSelection
     detailsTab = 'what'
     camera.move(fitted)
     touched = false
@@ -471,6 +463,7 @@ function applyWorld(payload: WebPayload, reset = false): void {
 function applyWork(payload: WebWorkPayload): void {
   work = payload.work
   currentPins = payload.pins
+  if (comparison?.task) comparison.focus(workItem(comparison.task.id))
   const selected = worldElement(primarySelection(selection))
   const hasTasks = selected?.kind === 'component'
     && elementWorkGroups(work, selected.representationId, world).length > 0
@@ -494,6 +487,7 @@ function paintWorld(): void {
   paintViewState()
   source.restore()
 }
+scene = projectedScene()
 paintWorld()
 if (selection.kind === 'task') focusActiveTasks()
 else if (opened.selection.kind === 'architecture') focusArchitecture(selectedArchitecture(selection))

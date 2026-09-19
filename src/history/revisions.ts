@@ -8,7 +8,7 @@ import { annotateArchitecture } from '../core.ts'
 import { GromaFileSystem } from '../groma-filesystem.ts'
 import { loadProjectProfile } from '../project-profile.ts'
 
-/** One current-branch revision that changed the selected Groma tree. */
+/** One commit on the current branch, including source-only changes. */
 export interface GitRevision {
   id: string
   shortId: string
@@ -22,10 +22,11 @@ export interface GromaRevision extends GitRevision {
   compatible: boolean
 }
 
-function runGit(arguments_: string[], repositoryRoot: string): Promise<string> {
+export function runGit(arguments_: string[], repositoryRoot: string): Promise<string> {
   return new Promise((resolve, reject) => {
     const child = spawn('git', arguments_, {
       cwd: repositoryRoot,
+      env: { ...process.env, GIT_OPTIONAL_LOCKS: '0' },
       stdio: ['ignore', 'pipe', 'pipe'],
     })
     const stdout: Buffer[] = []
@@ -69,35 +70,19 @@ export async function findGitCommitBySubject(
   return undefined
 }
 
-/** Reads one text file at an exact Git revision, or reports that it did not exist. */
-export async function readGitText(
-  repositoryRoot: string,
-  revisionId: string,
-  filename: string,
-): Promise<string | undefined> {
-  try {
-    return await runGit(['show', `${revisionId}:${filename}`], repositoryRoot)
-  } catch {
-    return undefined
-  }
-}
-
 /** A repository whose branch has no commit yet has no history to offer. */
 function hasCommits(repositoryRoot: string): Promise<boolean> {
   return runGit(['rev-parse', '--verify', '--quiet', 'HEAD'], repositoryRoot)
     .then(() => true, () => false)
 }
 
-/** Current-branch commits whose selected Groma tree changed, newest first. */
-export async function listGitRevisions(repositoryRoot: string): Promise<GitRevision[]> {
-  const filesystem = GromaFileSystem.open(repositoryRoot)
+/** Current-branch history, newest first. Architecture is validated when opened. */
+export async function listGitRevisions(repositoryRoot: string, all = false): Promise<GitRevision[]> {
   if (!await hasCommits(repositoryRoot)) return []
   const output = await runGit([
-    'log',
+    'log', ...(all ? ['--all'] : []),
     '--decorate-refs=refs/tags/*',
     '--format=%H%x00%h%x00%cI%x00%s%x00%b%x00%(decorate:prefix=,suffix=,separator=%x1f,tag=)%x00',
-    '--',
-    filesystem.directory,
   ], repositoryRoot)
   const fields = output.split('\0')
   const revisions: GitRevision[] = []
@@ -133,7 +118,7 @@ export async function listGromaRevisions(repositoryRoot: string): Promise<GromaR
         } catch {
           return false
         }
-      }),
+      }).catch(() => false),
     }))))
   }
   return result
@@ -151,6 +136,7 @@ function extractArchive(
       'archive', '--format=tar', revisionId, ...paths,
     ], {
       cwd: repositoryRoot,
+      env: { ...process.env, GIT_OPTIONAL_LOCKS: '0' },
       stdio: ['ignore', 'pipe', 'pipe'],
     })
     const extract = spawn('tar', ['-x', '-C', destination], {

@@ -1,7 +1,8 @@
 import type { WebDataSource } from '../data.ts'
 import { bindPopover } from '../atoms/popover.ts'
 import type { WebBootPayload, WebPayload, WebWorkPayload } from '../payload.ts'
-import { revisionOptions } from './view.ts'
+import { createRevisionSession } from './session.ts'
+import { createRevisionPicker, type PickerView } from './picker.ts'
 
 interface RevisionControlOptions {
   control: HTMLDetailsElement
@@ -13,140 +14,100 @@ interface RevisionControlOptions {
   applyWork: (payload: WebWorkPayload) => void
 }
 
-function localizeDates(control: ParentNode): void {
-  const format = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' })
-  for (const time of control.querySelectorAll<HTMLTimeElement>('time[datetime]')) {
-    time.textContent = format.format(new Date(time.dateTime))
-  }
-}
-
-function revisionTooltip(control: HTMLElement) {
-  const tooltip = document.createElement('div')
-  tooltip.className = 'revision-tooltip'
-  tooltip.setAttribute('role', 'tooltip')
-  tooltip.hidden = true
-  document.body.append(tooltip)
-
-  const hide = (): void => {
-    tooltip.hidden = true
-  }
-  control.addEventListener('mouseover', event => {
-    const option = event.target instanceof Element
-      ? event.target.closest<HTMLElement>('[data-body]')
-      : null
-    if (option === null) return
-    tooltip.textContent = option.dataset.body ?? ''
-    tooltip.hidden = false
-    const optionBox = option.getBoundingClientRect()
-    const tooltipBox = tooltip.getBoundingClientRect()
-    const top = Math.max(12, Math.min(
-      window.innerHeight - tooltipBox.height - 12,
-      optionBox.top + optionBox.height / 2 - tooltipBox.height / 2,
-    ))
-    tooltip.style.left = `${Math.max(12, optionBox.left - tooltipBox.width + 2)}px`
-    tooltip.style.top = `${top}px`
-  })
-  control.addEventListener('mouseout', event => {
-    const option = event.target instanceof Element
-      ? event.target.closest<HTMLElement>('[data-body]')
-      : null
-    const next = event.relatedTarget
-    if (option === null || (next instanceof Node && (option.contains(next) || tooltip.contains(next)))) return
-    hide()
-  })
-  tooltip.addEventListener('mouseleave', hide)
-  control.addEventListener('toggle', () => {
-    if (!control.hasAttribute('open')) hide()
-  })
-  return { element: tooltip, hide }
-}
-
-/** Owns the compact revision selector and applies live or published snapshots. */
 export function createRevisionControl(options: RevisionControlOptions) {
   const { control, body, boot, data, applyRevision, applyWorld, applyWork } = options
   const label = control.querySelector<HTMLElement>('.revision-current')!
-  const liveLabel = control.querySelector<HTMLElement>('[data-revision=""]')!.textContent!
-  const { element: tooltip, hide: hideTooltip } = revisionTooltip(control)
-  let selected: string | undefined
-  let loading = false
-  let historyLoaded = boot.delivery.kind === 'published' || boot.revisions.length > 0
+  let payload: WebPayload = boot
+  const session = createRevisionSession()
+  let scope = boot.comparison?.task?.id
   let appliedWorld = boot.generation
   let appliedWork = boot.workGeneration
-
-  bindPopover(control, { companion: tooltip })
-
-  const show = (payload: WebPayload): void => {
-    selected = payload.revision?.id
-    label.textContent = payload.revision?.shortId ?? liveLabel
-    for (const option of control.querySelectorAll<HTMLElement>('.revision-option[data-revision]')) {
-      option.setAttribute('aria-current', String(option.dataset.revision === (selected ?? '')))
-    }
-    body.toggleAttribute('data-revision', selected !== undefined)
+  let labels: PickerView | undefined
+  let refreshing = false
+  let refreshAgain = false
+  function current(): PickerView {
+    const target = payload.revision ? { sha: payload.revision.id, label: payload.revision.shortId } : { label: 'Working tree' }
+    const base = payload.comparison?.range.base
+    return labels ?? { target, ...(base ? { base: { sha: base, label: base.slice(0, 8) } } : {}) }
   }
-
-  control.addEventListener('toggle', async () => {
-    if (!control.open || historyLoaded || loading) return
-    loading = true
+  function show(next: WebPayload) {
+    payload = next
+    appliedWorld = next.generation
+    appliedWork = next.workGeneration
+    const view = current()
+    label.textContent = (view.base ? view.base.label + ' → ' : '') + view.target.label
+    label.title = (view.base ? view.base.sha + ' → ' : '') + (view.target.sha ?? 'Working tree')
+    control.querySelector('summary')!.setAttribute('aria-label', 'Revision: ' + label.textContent)
+    body.toggleAttribute('data-revision', next.revision !== null || next.comparison !== undefined)
+    body.toggleAttribute('data-comparison', next.comparison !== undefined)
+  }
+  async function load(read: () => Promise<WebPayload>, reset: boolean, nextLabels?: PickerView) {
     control.setAttribute('aria-busy', 'true')
     try {
-      const revisions = await data.readRevisions()
-      control.querySelector('.revision-menu')!.insertAdjacentHTML('beforeend', revisionOptions(revisions, selected))
-      localizeDates(control)
-      historyLoaded = true
-    } finally {
-      loading = false
-      control.removeAttribute('aria-busy')
-    }
+      const next = await session.load(read, reset)
+      if (!next) return
+      labels = nextLabels
+      scope = next.comparison?.task?.id
+      show(next)
+      if (reset) { control.open = false; applyRevision(next) }
+      else applyWorld(next)
+    } catch (error) {
+      control.open = true; picker.error(error)
+    } finally { if (!session.pending) control.removeAttribute('aria-busy') }
+  }
+  const picker = createRevisionPicker({
+    menu: control.querySelector<HTMLElement>('.revision-menu')!, data, current,
+    begin: () => { session.begin(); control.setAttribute('aria-busy', 'true') }, cancel: () => { session.cancel(); control.removeAttribute('aria-busy') },
+    refresh: () => { void load(() => data.readWorld(payload.revision?.id, payload.comparison?.range.base, scope), false, labels) },
+    apply(view) { scope = undefined; void load(() => data.readWorld(view.target.sha, view.base?.sha), true, view) },
   })
-
-  control.addEventListener('click', async event => {
-    const option = event.target instanceof Element
-      ? event.target.closest<HTMLButtonElement>('.revision-option[data-revision]')
-      : null
-    if (option === null || !control.contains(option) || loading) return
-    loading = true
-    hideTooltip()
-    control.removeAttribute('open')
-    control.setAttribute('aria-busy', 'true')
-    option.blur()
-    const revisionId = option.dataset.revision
-    try {
-      const payload = await data.readWorld(revisionId === '' ? undefined : revisionId)
-      appliedWorld = payload.generation
-      appliedWork = payload.workGeneration
-      show(payload)
-      applyRevision(payload)
-    } finally {
-      loading = false
-      control.removeAttribute('aria-busy')
-    }
+  bindPopover(control, { dismiss() { control.open = false; picker.cancel() } })
+  control.addEventListener('toggle', () => {
+    if (control.open && data.readRevisionSources) void picker.open()
+    if (!control.open) picker.cancel()
   })
-
-  data.subscribe({
-    world(payload) {
-      if (selected !== undefined || payload.generation <= appliedWorld) return
-      appliedWorld = payload.generation
-      appliedWork = Math.max(appliedWork, payload.workGeneration)
-      applyWorld(payload)
+  control.addEventListener('keydown', event => {
+    event.stopPropagation()
+    if (event.key === 'Escape') { event.preventDefault(); picker.cancel(); control.open = false; control.querySelector('summary')!.focus() }
+    if (!['ArrowDown', 'ArrowUp'].includes(event.key)) return
+    const buttons = [...control.querySelectorAll<HTMLElement>('button:not(:disabled), input, select, a')].filter(element => !element.hidden)
+    const index = buttons.indexOf(document.activeElement as HTMLElement)
+    event.preventDefault()
+    buttons[(index + (event.key === 'ArrowDown' ? 1 : -1) + buttons.length) % buttons.length]?.focus()
+  })
+  async function refresh() {
+    if (!payload.comparison || payload.revision !== null) return
+    if (refreshing) { refreshAgain = true; return }
+    refreshing = true
+    const range = payload.comparison.range
+    try { await load(() => data.readWorld(undefined, range.base, scope), false, labels) }
+    finally { refreshing = false; if (refreshAgain) { refreshAgain = false; void refresh() } }
+  }
+  const subscription = data.subscribe({
+    git() { void refresh() },
+    world(next) {
+      if (payload.comparison) { void refresh(); return }
+      if (payload.revision !== null || next.generation <= appliedWorld) return
+      show(next); applyWorld(next)
     },
-    work(payload) {
-      if (selected !== undefined || payload.workGeneration <= appliedWork) return
-      appliedWork = payload.workGeneration
-      applyWork(payload)
+    work(next) {
+      if (payload.revision !== null && !payload.comparison || next.workGeneration <= appliedWork) return
+      appliedWork = next.workGeneration
+      applyWork(payload.comparison && payload.revision !== null ? { ...next, pins: [] } : next)
     },
   })
-
-  localizeDates(control)
+  window.addEventListener('pagehide', () => { session.cancel(); picker.cancel(); subscription.close() }, { once: true })
   show(boot)
   return {
-    get selected() {
-      return selected
+    get selected() { return payload.revision?.id },
+    get base() { return payload.comparison?.range.base },
+    get scope() { return scope },
+    setScope(id?: string) { scope = id },
+    async reviewTask(id: string) {
+      if (data.readTaskReview) await load(() => data.readTaskReview!(id), true)
     },
     paintProjectEdit(root: ParentNode) {
-      root.querySelector('[data-project-edit]')?.toggleAttribute(
-        'hidden',
-        selected !== undefined || data.edit === undefined,
-      )
+      root.querySelector('[data-project-edit]')?.toggleAttribute('hidden', payload.revision !== null || payload.comparison !== undefined || data.edit === undefined)
     },
   }
 }

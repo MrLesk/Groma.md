@@ -1,8 +1,10 @@
+import type { RevisionSourceState, RevisionSourceSettings, RevisionQuery, RevisionPage, RevisionSelection } from '@groma/revision-source'
+import type { FileDiff } from '../source/diff-lines.ts'
 import type { ScannerSettings, ScannerSettingsAction } from '../../scanner/modules/settings-model.ts'
 import type { AcceptInput, AddInput, DraftInput, EditArchitectureInput, RemoveInput } from '../../authoring.ts'
 import type { WorkItemDetails } from '../../types.ts'
 import { PUBLISHED_EVENT, PUBLISHED_VERSION_EVENT } from './payload.ts'
-import type { WebBootPayload, WebPayload, WebRevision, WebWorkPayload } from './payload.ts'
+import type { WebBootPayload, WebPayload, WebWorkPayload } from './payload.ts'
 import type { SourcePayload } from '../source/read.ts'
 import type { CodeFile } from '../source/structure.ts'
 import type { TaskDiffPayload } from '../source/diff.ts'
@@ -11,8 +13,14 @@ export interface WebDataSource {
   readScanners?(checkUpdates?: boolean): Promise<ScannerSettings>
   changeScanners?(action: ScannerSettingsAction): Promise<ScannerSettings>
   onScanners?: (state: ScannerSettings) => void
-  readWorld(revision?: string): Promise<WebPayload>
-  readRevisions(): Promise<WebRevision[]>
+  readWorld(revision?: string, base?: string, scope?: string): Promise<WebPayload>
+  readRevisionSources?(): Promise<RevisionSourceState[]>
+  readRevisionEntries?(source: string, query: RevisionQuery): Promise<RevisionPage>
+  resolveRevision?(source: string, id: string): Promise<RevisionSelection>
+  changeRevisionSource?(source: string, settings: RevisionSourceSettings): Promise<RevisionSourceState>
+  readComparisonTask?(comparison: string, task: string): Promise<TaskDiffPayload>
+  readTaskReview?(id: string): Promise<WebPayload>
+  readChangeFile?(id: string, file: string): Promise<FileDiff>
   readCode(element: string, revision?: string): Promise<readonly CodeFile[]>
   readSource(element: string, file: string, revision?: string): Promise<SourcePayload>
   readTask(id: string): Promise<WorkItemDetails>
@@ -24,6 +32,7 @@ export interface WebDataSource {
   edit?(input: EditArchitectureInput): Promise<void>
   accept?(input: AcceptInput): Promise<void>
   subscribe(handlers: {
+    git?(): void
     world(payload: WebPayload): void
     work(payload: WebWorkPayload): void
   }): { close(): void }
@@ -60,12 +69,20 @@ function liveDataSource(): WebDataSource {
       if (!response.ok) throw new Error(await response.text())
       return response.json() as Promise<ScannerSettings>
     },
-    readRevisions() {
-      return responseJson('/revisions.json')
+    readWorld(revision, base, scope) {
+      return responseJson(selected('/world.json', { revision, base, scope }))
     },
-    readWorld(revision) {
-      return responseJson(revision === undefined ? '/world.json' : `/world.json?revision=${revision}`)
+    readRevisionSources: () => responseJson('/revision-sources'),
+    readRevisionEntries: (source, query) => responseJson(selected('/revision-entries', { source, ...query })),
+    resolveRevision: (source, id) => responseJson(selected('/revision-resolve', { source, id })),
+    async changeRevisionSource(source, settings) {
+      const response = await fetch(selected('/revision-settings', { source }), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(settings) })
+      if (!response.ok) throw new Error(await response.text())
+      return response.json() as Promise<RevisionSourceState>
     },
+    readComparisonTask: (id, task) => responseJson(selected('/comparison-task.json', { id, task })),
+    readTaskReview: task => responseJson(selected('/task-review.json', { task })),
+    readChangeFile: (id, file) => responseJson(selected('/comparison-file.json', { id, file })),
     readCode(element, revision) {
       return responseJson(selected('/code.json', { element, revision }))
     },
@@ -85,6 +102,7 @@ function liveDataSource(): WebDataSource {
     accept: input => send('/accept', input),
     subscribe(handlers) {
       const events = new EventSource('/events')
+      events.addEventListener('git', () => handlers.git?.())
       events.addEventListener('scanners', event => this.onScanners?.(JSON.parse(event.data) as ScannerSettings))
       events.addEventListener('world', event => {
         handlers.world(JSON.parse(event.data) as WebPayload)
@@ -106,9 +124,6 @@ function publishedDataSource(boot: WebBootPayload): WebDataSource {
   }
 
   return {
-    async readRevisions() {
-      return snapshot.revisions
-    },
     async readWorld() {
       return snapshot
     },

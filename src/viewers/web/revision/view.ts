@@ -1,4 +1,3 @@
-import { escaped } from '../atoms/escape.ts'
 import type { WebPayload } from '../payload.ts'
 
 export const revisionCss = `
@@ -12,7 +11,7 @@ export const revisionCss = `
   #revision summary::-webkit-details-marker { display: none; }
   #revision summary:hover { color: var(--ink); background: var(--hover); }
   #revision summary:focus-visible { outline: 2px solid var(--highlight); outline-offset: -1px; }
-  #revision .revision-current { width: 16ch; flex: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #revision .revision-current { max-width: 42ch; flex: 0 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   #revision .revision-loading { display: none; width: 16ch; flex: none; white-space: nowrap; }
   #revision .revision-dots { width: 3ch; flex: none; display: inline-flex; }
   #revision .revision-dots span { width: 1ch; opacity: 0.25; animation: revision-dot 900ms ease-in-out infinite; }
@@ -23,7 +22,21 @@ export const revisionCss = `
   #revision[aria-busy="true"] .revision-loading { display: flex; }
   #revision[aria-busy="true"] .revision-history { display: none; }
   #revision[aria-busy="true"] .revision-loader { display: block; }
-  #revision[aria-busy="true"] summary { pointer-events: none; }
+  .revision-context { padding: 8px 9px; color: var(--muted); font-size: 10px; }
+  .revision-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; padding: 8px; border-block: 1px solid var(--hairline); }
+  .revision-actions button, .revision-range button { background: var(--paper); color: var(--ink); border: 1px solid var(--hairline); border-radius: var(--control-radius); padding: 7px 9px; font: inherit; cursor: pointer; }
+  .revision-actions button:disabled { opacity: .45; cursor: default; }
+  .revision-actions strong { margin-right: auto; }
+  .revision-range { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 8px; padding: 8px; }
+  .revision-range button { overflow: hidden; text-align: left; overflow-wrap: anywhere; }
+  .revision-range button span { display: block; color: var(--muted); font-size: 9px; text-transform: uppercase; margin-bottom: 5px; }
+  .revision-range code { display: block; font-size: 9px; margin-top: 5px; color: var(--muted); overflow-wrap: anywhere; }
+  .revision-search { display: flex; gap: 6px; padding: 8px; }
+  .revision-search :is(input, select) { min-width: 0; width: 50%; background: var(--paper); color: var(--ink); border: 1px solid var(--hairline); border-radius: var(--control-radius); padding: 7px; font: inherit; }
+  .revision-error { padding: 10px; color: var(--change-removed); white-space: pre-wrap; }
+  .revision-result { display: flex; align-items: center; }
+  .revision-result > button { min-width: 0; }
+  .revision-external { color: var(--muted); padding: 10px; }
   #revision .chevron { width: 8px; height: 8px; flex: none; margin-left: 3px; border-right: 1px solid currentColor; border-bottom: 1px solid currentColor; transform: translateY(-2px) rotate(45deg); transform-origin: center; transition: transform 160ms ease; }
   #revision[open] .chevron { transform: translateY(2px) rotate(225deg); }
   body[data-revision] #revision summary { border-color: var(--highlight); color: var(--ink); }
@@ -38,27 +51,6 @@ export const revisionCss = `
   .revision-meta { min-width: 0; display: flex; align-items: center; overflow: hidden; font-size: 10px; letter-spacing: 0.04em; white-space: nowrap; }
   .revision-meta > * { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
   .revision-meta > * + *::before { content: '·'; margin: 0 6px; color: var(--muted); }
-  .revision-tag { flex: none; color: var(--highlight-text); }
-  .revision-option:disabled { cursor: default; opacity: 0.48; }
-  .revision-option:disabled:hover { background: transparent; color: var(--muted); }
-  .revision-option .unsupported { flex: none; font-size: 9px; letter-spacing: 0.1em; text-transform: uppercase; }
-  .revision-tooltip {
-    position: fixed;
-    z-index: 100;
-    max-width: min(420px, calc(100vw - 24px));
-    max-height: min(420px, calc(100vh - 24px));
-    overflow: auto;
-    padding: 8px 10px;
-    border: 1px solid color-mix(in srgb, var(--ink) 16%, transparent);
-    border-radius: 8px;
-    background: color-mix(in srgb, var(--paper) 78%, transparent);
-    backdrop-filter: blur(18px);
-    box-shadow: 0 10px 28px color-mix(in srgb, var(--ink) 18%, transparent);
-    color: var(--ink);
-    font: 11px/1.45 'SF Mono', ui-monospace, Menlo, monospace;
-    white-space: pre-wrap;
-    pointer-events: auto;
-  }
   @media (prefers-reduced-motion: reduce) {
     #revision .revision-loader { animation: none; }
     #revision .revision-dots span { animation: none; opacity: 1; }
@@ -67,24 +59,11 @@ export const revisionCss = `
 `
 
 
-function revisionOption(revision: WebPayload['revisions'][number], selected: boolean): string {
-  const unsupported = revision.compatible ? '' : ' disabled'
-  const status = revision.compatible ? '' : '<span class="unsupported">Unsupported</span>'
-  const tag = revision.tag === undefined ? '' : `<span class="revision-tag">${escaped(revision.tag)}</span>`
-  const body = revision.body === '' ? '' : ` data-body="${escaped(revision.body)}"`
-  return `<button class="anchored-option revision-option" type="button" data-revision="${revision.id}"${body} aria-current="${selected}"${unsupported}><span class="revision-subject">${escaped(revision.subject)}</span><span class="revision-meta">${tag}<code>${revision.shortId}</code><time datetime="${revision.date}">${revision.date}</time>${status}</span></button>`
-}
-
-export function revisionOptions(revisions: WebPayload['revisions'], selected?: string): string {
-  return revisions.map(revision => revisionOption(revision, revision.id === selected)).join('')
-}
-
 export function revisionControl(
   payload: WebPayload,
   icons: { history: string, loader: string },
 ): string {
-  const liveLabel = 'Current revision'
-  const options = revisionOptions(payload.revisions, payload.revision?.id)
+  const liveLabel = 'Working tree'
   const current = payload.revision?.shortId ?? liveLabel
-  return `<details id="revision"><summary class="chrome-button" aria-label="Groma revision">${icons.history}${icons.loader}<span class="revision-current">${current}</span><span class="revision-loading">Loading<span class="revision-dots" aria-hidden="true"><span>.</span><span>.</span><span>.</span></span></span><span class="chevron"></span></summary><div class="anchored-popover revision-menu"><button class="anchored-option revision-option current" type="button" data-revision="" aria-current="${String(payload.revision === null)}"><span class="revision-subject">${liveLabel}</span></button>${options}</div></details>`
+  return `<details id="revision"><summary class="chrome-button" aria-label="Groma revision">${icons.history}${icons.loader}<span class="revision-current">${current}</span><span class="revision-loading">Loading<span class="revision-dots" aria-hidden="true"><span>.</span><span>.</span><span>.</span></span></span><span class="chevron"></span></summary><div class="anchored-popover revision-menu"></div></details>`
 }

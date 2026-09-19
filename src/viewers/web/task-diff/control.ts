@@ -1,6 +1,7 @@
 import type { ArchitectureGraph, WorkItem, WorkItemDetails } from '../../../types.ts'
 import type { TaskDiffPayload } from '../../source/diff.ts'
-import { leaveTaskDiff, paintTaskFile, paintTaskSummary } from './view.ts'
+import { paintTaskSummary } from './view.ts'
+import { leaveChangeFile, paintChangeFile } from '../changes/view.ts'
 
 export interface TaskDiffControl {
   invalidate(): void
@@ -14,6 +15,7 @@ interface TaskDiffControlOptions {
   readDiff(id: string): Promise<TaskDiffPayload>
   repaint(): void
   select(id: string, additive: boolean): void
+  review?(id: string): void
 }
 
 function diffKey(item: WorkItem): string {
@@ -111,6 +113,7 @@ export function createTaskDiffControl(options: TaskDiffControlOptions): TaskDiff
 
   return {
     invalidate() {
+      payload = undefined
       error = undefined
       if (item !== undefined) void loadDiff(item, ++diffRequest)
     },
@@ -126,13 +129,13 @@ export function createTaskDiffControl(options: TaskDiffControlOptions): TaskDiff
         payload = undefined
         error = undefined
         file = undefined
-        leaveTaskDiff(options.host)
+        leaveChangeFile(options.host)
         return false
       }
       refresh(nextItem)
       const selected = payload?.files.find(candidate => candidate.file === file)
       if (payload !== undefined && selected !== undefined) {
-        paintTaskFile(options.host, nextItem, payload, selected, back)
+        paintChangeFile(options.host, nextItem.id, payload.source, selected, back)
       } else {
         paintTaskSummary(
           options.host,
@@ -144,6 +147,7 @@ export function createTaskDiffControl(options: TaskDiffControlOptions): TaskDiff
           error,
           options.select,
           open,
+          options.review === undefined ? undefined : () => options.review!(nextItem.id),
         )
       }
       return true

@@ -77,7 +77,6 @@ async function publishedSnapshot(
     generation,
     ...map,
     revision: null,
-    revisions: [],
     workGeneration: generation,
     work,
     pins: pinsOf(work.items, map.world, work.statuses.at(-1)),

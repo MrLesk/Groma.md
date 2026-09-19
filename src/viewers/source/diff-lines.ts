@@ -1,30 +1,34 @@
 import { structuredPatch } from 'diff'
 
-export type TaskFileStatus = 'added' | 'deleted' | 'modified' | 'unchanged'
-export type TaskDiffLineKind = 'added' | 'context' | 'removed'
+export type FileStatus = 'added' | 'deleted' | 'modified' | 'unchanged'
+export type DiffLineKind = 'added' | 'context' | 'removed'
 
-export interface TaskDiffLine {
-  kind: TaskDiffLineKind
+export interface DiffLine {
+  kind: DiffLineKind
   oldLine?: number
   newLine?: number
   text: string
 }
 
-export interface TaskDiffHunk {
+export interface DiffHunk {
   header: string
-  lines: TaskDiffLine[]
+  lines: DiffLine[]
 }
 
-export interface TaskFileDiff {
+export interface FileDiff {
   file: string
-  status: TaskFileStatus
+  status: FileStatus
   shared: boolean
+  before?: string
+  after?: string
+  previousFile?: string
+  binary?: boolean
   additions: number
   deletions: number
-  hunks: TaskDiffHunk[]
+  hunks: DiffHunk[]
 }
 
-function statusOf(before: string | undefined, after: string | undefined): TaskFileStatus {
+function statusOf(before: string | undefined, after: string | undefined): FileStatus {
   if (before === undefined) return after === undefined ? 'unchanged' : 'added'
   if (after === undefined) return 'deleted'
   return before === after ? 'unchanged' : 'modified'
@@ -36,10 +40,10 @@ function projectHunk(hunk: {
   newStart: number
   newLines: number
   lines: string[]
-}): TaskDiffHunk {
+}): DiffHunk {
   let oldLine = hunk.oldStart
   let newLine = hunk.newStart
-  const lines: TaskDiffLine[] = []
+  const lines: DiffLine[] = []
   for (const raw of hunk.lines) {
     const marker = raw[0]
     if (marker === '+') {
@@ -61,13 +65,15 @@ function projectHunk(hunk: {
 }
 
 /** Projects two file versions into the small unified-diff shape the browser needs. */
-export function projectTaskFileDiff(
+export function projectFileDiff(
   file: string,
   before: string | undefined,
   after: string | undefined,
   shared: boolean,
-): TaskFileDiff {
+): FileDiff {
   const status = statusOf(before, after)
+  const binary = before?.includes('\0') === true || after?.includes('\0') === true
+  if (binary) return { file, status, shared, binary, additions: 0, deletions: 0, hunks: [] }
   const patch = structuredPatch(file, file, before ?? '', after ?? '', undefined, undefined, {
     context: 3,
     stripTrailingCr: true,
@@ -76,6 +82,8 @@ export function projectTaskFileDiff(
   const lines = hunks.flatMap(hunk => hunk.lines)
   return {
     file,
+    before,
+    after,
     status,
     shared,
     additions: lines.filter(line => line.kind === 'added').length,

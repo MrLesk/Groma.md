@@ -1,4 +1,3 @@
-import type { GitRevision } from '../../history/revisions.ts'
 import type { AnnotatedElement, AnnotatedRelationship, ArchitectureGraph, C4Kind, WorkItem } from '../../types.ts'
 import type { FlowRef } from '../flows.ts'
 import { isThemeMode, type WebThemeMode } from './atoms/theme.ts'
@@ -105,11 +104,10 @@ export function readView(
   search: string,
   world: ArchitectureGraph,
   work: readonly WorkItem[],
-  revisions: readonly GitRevision[] = [],
   defaultTheme: WebThemeMode = 'auto',
 ): ViewState {
   const params = new URLSearchParams(search)
-  const revision = revisions.find(candidate => candidate.id === params.get('revision'))?.id
+  const revision = params.get('revision') ?? undefined
   const selectedTheme = params.get('theme')
   const byId = new Map(world.elements.map(element => [element.id, element]))
   const architecture = architectureSelection(params, byId, world)

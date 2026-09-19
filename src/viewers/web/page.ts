@@ -35,6 +35,7 @@ import { revisionControl, revisionCss } from './revision/view.ts'
 import { searchControl, searchCss } from './search/view.ts'
 import { highlightCss } from './source/highlight.ts'
 import { sourceCss } from './source/view.ts'
+import { comparisonCss } from './comparison/view.ts'
 import { taskDiffCss } from './task-diff/view.ts'
 import { backlogMarkCss } from './work/backlog-mark.ts'
 import { workBadgeCss } from './work/badge.ts'
@@ -200,6 +201,8 @@ const style = `
     #fit > span { display: none; }
     #header #revision summary { min-width: 0; }
     #header #revision .revision-current, #header #revision .revision-loading { display: none; }
+    body[data-comparison] #header #revision:not([aria-busy]) .revision-current { display: block; max-width: 24ch; }
+    body[data-comparison] #stats { display: none; }
   }
   #hierarchy { position: absolute; top: 74px; bottom: 12px; min-width: 0; min-height: 0; z-index: 5; }
   #hierarchy {
@@ -343,7 +346,7 @@ const style = `
   @media (prefers-reduced-motion: reduce) {
     #hierarchy, #hierarchy-toggle .hierarchy-chevron, #hierarchy-content, #hierarchy-title .pane-label, #details, body.details-hidden #details, body #work, body #map-view { transition: none; }
   }
-${floatingBarCss}${chromeCss}${anchoredPopoverCss}${creditsCss}${motionCss}${revisionCss}${searchCss}${highlightCss}${sourceCss}${taskDiffCss}${backlogMarkCss}${workBadgeCss}${workDetailsCss}${flowRowCss}${mapCss}${pinsCss}${workCss}${tipCss}${projectEditorCss}
+${floatingBarCss}${chromeCss}${anchoredPopoverCss}${creditsCss}${motionCss}${revisionCss}${searchCss}${highlightCss}${sourceCss}${taskDiffCss}${comparisonCss}${backlogMarkCss}${workBadgeCss}${workDetailsCss}${flowRowCss}${mapCss}${pinsCss}${workCss}${tipCss}${projectEditorCss}
 ${emptyStateCss}
 ${addDialogCss}${editorCss}
 ${relationshipCardCss}${removeCss}${editableCss}${mapDebugCss}${detailsPanelCss}${mapViewCss}${c4FilterCss}`

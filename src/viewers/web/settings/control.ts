@@ -1,3 +1,4 @@
+import { revisionSettings, revisionSettingsCss } from './revisions.ts'
 import type { WebDataSource } from '../data.ts'
 import { createSettingsDialog } from '../atoms/settings-dialog.ts'
 import { bindScannerSettings } from '../scanners/settings.ts'
@@ -7,7 +8,7 @@ import { scannerWarning } from './model.ts'
 export const settingsControl = (theme: string) => '<button id="scanner-warning" class="chrome-button" type="button" aria-label="Scanning needs attention" title="Scanning needs attention" aria-haspopup="dialog" aria-expanded="false" aria-controls="project-settings" hidden><svg class="control-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 3 10 18H2L12 3Z"/><path d="M12 9v5m0 3h.01"/></svg></button>'
   + '<details id="settings-menu"><summary id="settings-toggle" class="chrome-button" aria-label="Settings" title="Settings" aria-controls="settings-options"><svg class="control-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M4 17h16"/><circle cx="9" cy="7" r="3" fill="var(--paper)"/><circle cx="15" cy="17" r="3" fill="var(--paper)"/></svg></summary><div id="settings-options" class="anchored-popover"><button id="plugins-settings" class="anchored-option" type="button" aria-haspopup="dialog" aria-controls="project-settings" hidden>Plugins</button>' + theme + '</div></details>'
 
-export const settingsCss = `
+export const settingsCss = revisionSettingsCss + `
   #plugins-settings[hidden], #scanner-warning[hidden] { display: none; }
   #settings-menu { position: relative; --popover-width: 190px; }
   #settings-menu::details-content, #settings-menu #theme::details-content {
@@ -56,7 +57,8 @@ export function createProjectSettings(data: WebDataSource) {
   const warning = document.getElementById('scanner-warning')!
   plugins.hidden = false
   let target: ReturnType<typeof scannerWarning>
-  const popup = createSettingsDialog('project-settings', 'Settings', '<h2 id="plugins-title">Plugins</h2><section id="scanner-settings" aria-labelledby="plugins-title"></section>')
+  const popup = createSettingsDialog('project-settings', 'Settings', '<h2 id="plugins-title">Plugins</h2><section id="scanner-settings" aria-labelledby="plugins-title"></section><section id="revision-settings"></section>')
+  const revisions = revisionSettings(data, popup.dialog.querySelector<HTMLElement>('#revision-settings')!)
   const settings = bindScannerSettings(data, popup.dialog.querySelector<HTMLElement>('#scanner-settings')!, state => {
     target = scannerWarning(state)
     warning.hidden = !target
@@ -64,6 +66,6 @@ export function createProjectSettings(data: WebDataSource) {
     warning.title = label
     warning.setAttribute('aria-label', label)
   })
-  plugins.addEventListener('click', () => { dismiss(); popup.open(toggle); settings.focus(); void settings.refresh() })
-  warning.addEventListener('click', () => { dismiss(); popup.open(warning); settings.focus(target?.scannerId); void settings.refresh() })
+  plugins.addEventListener('click', () => { dismiss(); popup.open(toggle); settings.focus(); void settings.refresh(); void revisions.refresh() })
+  warning.addEventListener('click', () => { dismiss(); popup.open(warning); settings.focus(target?.scannerId); void settings.refresh(); void revisions.refresh() })
 }

@@ -1,13 +1,8 @@
 import type { ArchitectureGraph, C4Kind, WorkItem, WorkItemDetails } from '../../../types.ts'
-import { chromeButton } from '../atoms/button.ts'
 import { updateTaskSummary, updateTaskText } from './updates.ts'
 import { kindGlyph } from '../../atoms/kind.ts'
-import { highlightedLine } from '../source/highlight.ts'
-import type { TaskFileDiff } from '../../source/diff-lines.ts'
+import { fileRow, sourceIdentity, leaveChangeFile } from '../changes/view.ts'
 import type { TaskDiffPayload } from '../../source/diff.ts'
-
-const statusMark = { added: 'A', deleted: 'D', modified: 'M', unchanged: '·' } as const
-const statusLabel = { added: 'Added', deleted: 'Removed', modified: 'Modified', unchanged: 'Unchanged' } as const
 
 function heading(label: string): HTMLElement {
   const row = document.createElement('h2')
@@ -23,53 +18,6 @@ function marked(kind: C4Kind, external: boolean, text: string): HTMLElement {
   mark.textContent = kindGlyph(kind)
   if (external) mark.classList.add('ghost')
   row.append(mark, ' ', text)
-  return row
-}
-
-function sourceIdentity(payload: TaskDiffPayload): HTMLElement {
-  const source = document.createElement('div')
-  source.className = 'task-diff-source'
-  source.dataset.taskKey = 'source'
-  const kind = document.createElement('span')
-  kind.textContent = payload.source.kind === 'commit' ? 'Commit' : 'Working tree from HEAD'
-  const revision = document.createElement('code')
-  revision.textContent = payload.source.revision
-  const base = document.createElement('code')
-  base.textContent = `base ${payload.source.base}`
-  source.append(kind, revision, base)
-  return source
-}
-
-function fileRow(file: TaskFileDiff, onOpen: (file: string) => void): HTMLElement {
-  const row = document.createElement('li')
-  row.dataset.taskKey = file.file
-  const button = document.createElement('button')
-  button.type = 'button'
-  button.className = 'task-file-row'
-  button.onclick = () => onOpen(file.file)
-  const mark = document.createElement('span')
-  mark.className = `task-file-status ${file.status}`
-  mark.textContent = statusMark[file.status]
-  mark.title = statusLabel[file.status]
-  const name = document.createElement('span')
-  name.className = 'task-file-name'
-  name.textContent = file.file
-  const facts = document.createElement('span')
-  facts.className = 'task-file-facts'
-  if (file.shared) {
-    const shared = document.createElement('span')
-    shared.className = 'task-file-shared'
-    shared.textContent = 'Shared'
-    facts.append(shared)
-  }
-  if (file.additions > 0) facts.append(Object.assign(document.createElement('span'), {
-    className: 'task-file-additions', textContent: `+${file.additions}`,
-  }))
-  if (file.deletions > 0) facts.append(Object.assign(document.createElement('span'), {
-    className: 'task-file-deletions', textContent: `−${file.deletions}`,
-  }))
-  button.append(mark, name, facts)
-  row.append(button)
   return row
 }
 
@@ -147,8 +95,9 @@ export function paintTaskSummary(
   error: string | undefined,
   onSelect: (id: string, additive: boolean) => void,
   onOpen: (file: string) => void,
+  onReview?: () => void,
 ): void {
-  leaveTaskDiff(host)
+  leaveChangeFile(host)
   const byId = new Map(world.elements.map(element => [element.id, element]))
   const continuing = host.querySelector<HTMLElement>('.task-summary')?.dataset.taskId === item.id
   updateTaskText(host.querySelector('h1')!, item.title, continuing)
@@ -198,11 +147,20 @@ export function paintTaskSummary(
     return row
   }))
   const fileRows = item.modifiedFiles.map(file => {
-    const loaded = payload?.files.find(candidate => candidate.file === file)
+    const loaded = payload?.files.find(candidate => candidate.file === file || candidate.previousFile === file)
     return loaded === undefined ? pendingFileRow(file, error !== undefined) : fileRow(loaded, onOpen)
   })
   section(body, 'files', 'Modified files', fileRows)
-  if (payload !== undefined) body.append(sourceIdentity(payload))
+  if (onReview !== undefined && item.modifiedFiles.length > 0) {
+    const review = document.createElement('button')
+    review.type = 'button'
+    review.className = 'chrome-button'
+    review.dataset.taskKey = 'review-changes'
+    review.textContent = 'Review changes'
+    review.onclick = onReview
+    body.append(review)
+  }
+  if (payload !== undefined) body.append(sourceIdentity(payload.source))
   else if (error !== undefined) {
     const status = document.createElement('p')
     status.className = 'task-diff-status'
@@ -226,81 +184,20 @@ export function paintTaskSummary(
   updateTaskSummary(host, body)
 }
 
-function diffRow(line: TaskFileDiff['hunks'][number]['lines'][number]): HTMLElement {
-  const row = document.createElement('div')
-  row.className = `task-diff-line ${line.kind}`
-  const oldLine = document.createElement('span')
-  oldLine.className = 'task-diff-number'
-  oldLine.textContent = line.oldLine === undefined ? '' : String(line.oldLine)
-  const newLine = document.createElement('span')
-  newLine.className = 'task-diff-number'
-  newLine.textContent = line.newLine === undefined ? '' : String(line.newLine)
-  const sign = document.createElement('span')
-  sign.className = 'task-diff-sign'
-  sign.textContent = line.kind === 'added' ? '+' : line.kind === 'removed' ? '−' : ' '
-  const code = document.createElement('code')
-  code.append(highlightedLine(line.text))
-  row.append(oldLine, newLine, sign, code)
-  return row
-}
-
-/** Paints one file without changing the selected task underneath it. */
-export function paintTaskFile(
-  host: HTMLElement,
-  item: WorkItem,
-  payload: TaskDiffPayload,
-  file: TaskFileDiff,
-  onBack: () => void,
-): void {
-  host.classList.add('file-open', 'task-diff-open')
-  host.querySelector('h1')!.textContent = file.file
-  const toolbar = host.querySelector<HTMLElement>('.tabs')!
-  toolbar.hidden = false
-  toolbar.classList.remove('controls')
-  toolbar.classList.add('file-toolbar', 'task-diff-toolbar')
-  const back = chromeButton('Back', { glyph: '←' })
-  back.addEventListener('click', onBack)
-  const context = document.createElement('span')
-  context.className = 'file-context'
-  context.textContent = `${item.id} · ${statusLabel[file.status]}${file.shared ? ' · Shared' : ''}`
-  const facts = document.createElement('span')
-  facts.className = 'file-facts'
-  facts.textContent = `+${file.additions} −${file.deletions}`
-  toolbar.replaceChildren(back, context, facts)
-  const body = host.querySelector<HTMLElement>('.body')!
-  const content = document.createElement('div')
-  content.className = 'task-diff-code'
-  content.append(sourceIdentity(payload))
-  for (const hunk of file.hunks) {
-    const header = document.createElement('div')
-    header.className = 'task-diff-hunk'
-    header.textContent = hunk.header
-    content.append(header, ...hunk.lines.map(diffRow))
-  }
-  if (file.hunks.length === 0) {
-    const unchanged = document.createElement('p')
-    unchanged.className = 'task-diff-status'
-    unchanged.textContent = 'No changes'
-    content.append(unchanged)
-  }
-  body.replaceChildren(content)
-}
-
-export function leaveTaskDiff(host: HTMLElement): void {
-  host.classList.remove('file-open', 'task-diff-open')
-  host.querySelector('.tabs')!.classList.remove('file-toolbar', 'task-diff-toolbar')
-  host.querySelector('.tabs')!.classList.add('controls')
-}
-
 export const taskDiffCss = `
+  #details .task-diff-toolbar { display: flex; flex-wrap: wrap; gap: 8px; }
+  #details .task-diff-toolbar .file-context { flex: 1; min-width: 10ch; }
+  #details .task-diff-views { display: flex; gap: 4px; }
+  #details .task-diff-views button { min-width: 0; padding: 5px 9px; }
+  #details .task-diff-views [aria-pressed="true"] { background: var(--hover); border-color: var(--ink); }
   #details .criterion-mark { display: inline-block; }
   #details .task-file-row { align-items: center; background: transparent; border: 0; border-bottom: 1px solid var(--hairline); color: inherit; display: grid; font: inherit; gap: 10px; grid-template-columns: 20px minmax(0, 1fr) auto; padding: 9px 0; text-align: left; width: 100%; }
   #details .task-file-row:hover { background: var(--hover); }
   #details .task-file-row:disabled { background: transparent; color: var(--muted); }
   #details .task-file-status { border: 1px solid var(--hairline); border-radius: 4px; font-size: 9px; font-weight: 800; line-height: 18px; text-align: center; }
-  #details .task-file-status.added { border-color: color-mix(in srgb, var(--diff-added) 45%, transparent); color: var(--diff-added); }
-  #details .task-file-status.deleted { border-color: color-mix(in srgb, var(--diff-removed) 45%, transparent); color: var(--diff-removed); }
-  #details .task-file-status.modified { color: var(--syntax-type); }
+  #details .task-file-status.added { border-color: color-mix(in srgb, var(--change-added) 45%, transparent); color: var(--change-added); }
+  #details .task-file-status.deleted { border-color: color-mix(in srgb, var(--change-removed) 45%, transparent); color: var(--change-removed); }
+  #details .task-file-status.modified { border-color: var(--change-edited); color: var(--change-edited); }
   #details .task-file-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   #details .task-file-facts { align-items: center; display: flex; font-size: 9px; gap: 7px; }
   #details .task-file-shared { border: 1px solid var(--hairline); border-radius: 9px; color: var(--muted); padding: 1px 6px; text-transform: uppercase; }

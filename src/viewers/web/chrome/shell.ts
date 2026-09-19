@@ -140,6 +140,7 @@ export const detailsPanelCss = `
   }
   body.details-expanded #details { --details-width: min(calc(640px + 48px + 2px), calc(100vw - 24px)); }
   body.details-expanded #details.file-open { --details-width: var(--details-file-width); }
+  body:has(#details.file-open) #details-dock { z-index: 8; }
   /* Layout uses the final width while the frame animates, so text never rewraps mid-motion. */
   #details > :is(.meta, h1, .tabs, .body) { width: calc(var(--details-width) - 50px); }
   #details > .flow-back { max-width: calc(var(--details-width) - 50px); }

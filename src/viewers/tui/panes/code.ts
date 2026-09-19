@@ -1,7 +1,7 @@
 import { TextAttributes } from '@opentui/core'
 
 import { codeTokens } from '../../source/highlight.ts'
-import type { TaskDiffLine, TaskFileDiff } from '../../source/diff-lines.ts'
+import type { DiffLine, FileDiff } from '../../source/diff-lines.ts'
 import type { ViewerTheme } from '../atoms/theme.ts'
 import { chunk, dim, plain, wrap, type Line } from './text.ts'
 
@@ -13,7 +13,7 @@ function codeLine(theme: ViewerTheme, source: string): Line {
       : token.kind === 'keyword' || token.kind === 'type' || token.kind === 'function' ? TextAttributes.BOLD : 0))
 }
 
-export function fileFacts(theme: ViewerTheme, file: TaskFileDiff): Line {
+export function fileFacts(theme: ViewerTheme, file: FileDiff): Line {
   return [
     ...(file.additions === 0 ? [] : [chunk(`+${file.additions}`, theme.added)]),
     ...(file.additions > 0 && file.deletions > 0 ? [plain(theme, ' ')] : []),
@@ -23,7 +23,7 @@ export function fileFacts(theme: ViewerTheme, file: TaskFileDiff): Line {
 }
 
 /** Exact paths remain selectable on every wrapped row, including their line counts. */
-export function taskFileRows(theme: ViewerTheme, path: string, file: TaskFileDiff | undefined, width: number): Line[] {
+export function taskFileRows(theme: ViewerTheme, path: string, file: FileDiff | undefined, width: number): Line[] {
   const marks = { added: 'A', deleted: 'D', modified: 'M', unchanged: '·' }
   const colors = { added: theme.added, deleted: theme.removed, modified: theme.modified, unchanged: theme.quiet }
   const rows: Line[] = wrap(path, width - 2).map((part, index) => [
@@ -51,7 +51,7 @@ export function sourceLines(theme: ViewerTheme, view: { file: string; line: numb
 }
 
 /** Old/new line numbers and a colored gutter separate changes without replacing the terminal background. */
-export function diffLines(theme: ViewerTheme, view: { file: string; diff?: TaskFileDiff }, width: number): Line[] {
+export function diffLines(theme: ViewerTheme, view: { file: string; diff?: FileDiff }, width: number): Line[] {
   const diff = view.diff
   if (diff === undefined) return [[dim(theme, view.file)]]
   const labels = { added: 'Added', deleted: 'Removed', modified: 'Modified', unchanged: 'Unchanged' }
@@ -65,7 +65,7 @@ export function diffLines(theme: ViewerTheme, view: { file: string; diff?: TaskF
   return lines
 }
 
-function diffRow(theme: ViewerTheme, row: TaskDiffLine, digits: number, width: number): Line {
+function diffRow(theme: ViewerTheme, row: DiffLine, digits: number, width: number): Line {
   const signs = { added: '+', removed: '−', context: ' ' }
   const gutter = `${String(row.oldLine ?? '').padStart(digits)} ${String(row.newLine ?? '').padStart(digits)} ${signs[row.kind]} `
   const color = row.kind === 'added' ? theme.added : theme.removed

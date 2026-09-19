@@ -1,0 +1,7 @@
+{
+  "name": "@groma/revision-source-github",
+  "version": "0.1.0",
+  "type": "module",
+  "exports": "./src/index.ts",
+  "dependencies": { "@groma/revision-source": "workspace:*" }
+}
