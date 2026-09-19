@@ -7,10 +7,13 @@ screen; without a terminal it prints the shared settings snapshot as JSON.
 
 The same screen groups **Installed**, **Missing on this computer**, then
 **Recommended** scanners. Empty groups are hidden. Search filters the list by
-scanner name, package or technology. Recommendations give a short reason;
-**Details** reveals the source, matching files and diagnostics inline.
-The web labels the missing group **Set up for this project** and puts bulk
-installation beside each group. Settings is always available in live web.
+scanner name, package or technology. Web rows keep the scanner name, version,
+origin and available action together. **Matching files** expands the source
+detection evidence; **Scanner details** reveals diagnostics for failures.
+The web labels the missing group **Set up for this project** and offers bulk
+installation only when the group has multiple installable scanners. A single
+recommendation has one **Install** button; multiple recommendations also offer
+**Install all**. Settings is always available in live web.
 A warning appears only when scanning needs attention and opens the affected
 plugin in Settings. Potential duplicates belong to the separate Project review.
 
