@@ -12,3 +12,22 @@ export class SpeakersController {
     return 'created'
   }
 }
+
+const area = process.env.AREA
+
+// A controller path the source computes blocks every route below it, and a computed route blocks its own.
+@Controller(`${area}/rooms`)
+export class RoomsController {
+  @Get('list')
+  list(): string {
+    return 'rooms'
+  }
+}
+
+@Controller('talks')
+export class TalksController {
+  @Get(`${area}`)
+  find(): string {
+    return 'talk'
+  }
+}

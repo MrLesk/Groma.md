@@ -10,6 +10,11 @@ patterns.get('/files/:id(\\d+)', handle)
 patterns.get('setting')
 patterns.use(prefixFor(), hidden)
 hidden.get('/hidden', handle)
+// A computed segment blocks from the last whole segment before it, a remainder pattern is a catch-all,
+// and a pattern that may span segments blocks from its place.
+patterns.get(`/versions/v-${routeFor('latest')}`, handle)
+patterns.get('/assets/:rest(.*)', handle)
+patterns.get('/archives/:name(.*\\.zip)', handle)
 
 function routeFor(name: string): string {
   return `/${name}`
