@@ -16,7 +16,7 @@ async function writeManifest(directory: string, value: unknown) {
 }
 
 async function run(command: string[]) {
-  const child = Bun.spawn(command, { stdout: 'inherit', stderr: 'inherit' })
+  const child = Bun.spawn(command, { stdin: 'inherit', stdout: 'inherit', stderr: 'inherit' })
   if (await child.exited !== 0) throw new Error(`Failed: ${command.join(' ')}`)
 }
 
