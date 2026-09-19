@@ -1,5 +1,6 @@
 import type { ArchitectureGraph, C4Kind, WorkItem, WorkItemDetails } from '../../../types.ts'
 import { chromeButton } from '../atoms/button.ts'
+import { updateTaskSummary, updateTaskText } from './updates.ts'
 import { kindGlyph } from '../../atoms/kind.ts'
 import { highlightedLine } from '../source/highlight.ts'
 import type { TaskFileDiff } from '../../source/diff-lines.ts'
@@ -28,6 +29,7 @@ function marked(kind: C4Kind, external: boolean, text: string): HTMLElement {
 function sourceIdentity(payload: TaskDiffPayload): HTMLElement {
   const source = document.createElement('div')
   source.className = 'task-diff-source'
+  source.dataset.taskKey = 'source'
   const kind = document.createElement('span')
   kind.textContent = payload.source.kind === 'commit' ? 'Commit' : 'Working tree from HEAD'
   const revision = document.createElement('code')
@@ -40,10 +42,11 @@ function sourceIdentity(payload: TaskDiffPayload): HTMLElement {
 
 function fileRow(file: TaskFileDiff, onOpen: (file: string) => void): HTMLElement {
   const row = document.createElement('li')
+  row.dataset.taskKey = file.file
   const button = document.createElement('button')
   button.type = 'button'
   button.className = 'task-file-row'
-  button.addEventListener('click', () => onOpen(file.file))
+  button.onclick = () => onOpen(file.file)
   const mark = document.createElement('span')
   mark.className = `task-file-status ${file.status}`
   mark.textContent = statusMark[file.status]
@@ -72,6 +75,7 @@ function fileRow(file: TaskFileDiff, onOpen: (file: string) => void): HTMLElemen
 
 function pendingFileRow(file: string, failed: boolean): HTMLElement {
   const row = document.createElement('li')
+  row.dataset.taskKey = file
   const button = document.createElement('button')
   button.type = 'button'
   button.className = 'task-file-row'
@@ -88,26 +92,35 @@ function pendingFileRow(file: string, failed: boolean): HTMLElement {
   return row
 }
 
-function section(body: Element, label: string, rows: HTMLElement[]): void {
+function section(body: Element, key: string, label: string, rows: HTMLElement[]): void {
   if (rows.length === 0) return
+  const title = heading(label)
+  title.dataset.taskKey = `${key}-heading`
   const list = document.createElement('ul')
+  list.dataset.taskKey = key
+  const occurrences = new Map<string, number>()
+  for (const row of rows) {
+    const identity = row.dataset.taskKey!
+    const occurrence = occurrences.get(identity) ?? 0
+    occurrences.set(identity, occurrence + 1)
+    row.dataset.taskKey = `${identity}:${occurrence}`
+  }
   list.append(...rows)
-  body.append(heading(label), list)
+  body.append(title, list)
 }
 
 function checklistRows(items: readonly { text: string; checked: boolean }[]): HTMLElement[] {
   return items.map(item => {
     const row = document.createElement('li')
-    if (!item.checked) row.textContent = `○ ${item.text}`
-    else {
-      const check = document.createElement('span')
-      check.className = 'criterion-check'
-      check.textContent = '✓'
-      const text = document.createElement('span')
-      text.className = 'ghost'
-      text.textContent = ` ${item.text}`
-      row.append(check, text)
-    }
+    row.dataset.taskKey = item.text
+    row.dataset.checked = String(item.checked)
+    const check = document.createElement('span')
+    check.className = `criterion-mark${item.checked ? ' criterion-check' : ''}`
+    check.textContent = item.checked ? '✓' : '○'
+    const text = document.createElement('span')
+    text.className = item.checked ? 'ghost' : ''
+    text.textContent = ` ${item.text}`
+    row.append(check, text)
     return row
   })
 }
@@ -117,7 +130,10 @@ function textSection(body: Element, label: string, text: string): void {
   const content = document.createElement('p')
   content.className = 'task-text'
   content.textContent = text
-  body.append(heading(label), content)
+  const title = heading(label)
+  title.dataset.taskKey = `${label}-heading`
+  content.dataset.taskKey = label
+  body.append(title, content)
 }
 
 /** Paints a task summary and its on-demand file status rows. */
@@ -134,35 +150,40 @@ export function paintTaskSummary(
 ): void {
   leaveTaskDiff(host)
   const byId = new Map(world.elements.map(element => [element.id, element]))
-  host.querySelector('h1')!.textContent = item.title
-  host.querySelector('.meta')!.textContent = [item.id, item.status, ...item.assignees].join(' · ')
+  const continuing = host.querySelector<HTMLElement>('.task-summary')?.dataset.taskId === item.id
+  updateTaskText(host.querySelector('h1')!, item.title, continuing)
+  updateTaskText(host.querySelector('.meta')!, [item.id, item.status, ...item.assignees].join(' · '), continuing)
   host.querySelector('.tabs')!.replaceChildren()
-  const body = host.querySelector('.body')!
-  body.replaceChildren()
-  if (details === undefined && detailsError !== undefined) {
+  const body = document.createElement('div')
+  body.className = 'task-summary'
+  body.dataset.taskId = item.id
+  if (detailsError !== undefined) {
     const status = document.createElement('p')
     status.className = 'task-diff-status'
+    status.dataset.taskKey = 'details-error'
     status.textContent = detailsError
     body.append(status)
-    return
   }
   if (details !== undefined && details.description !== '') {
     const paragraph = document.createElement('p')
     paragraph.className = 'description'
+    paragraph.dataset.taskKey = 'description'
     paragraph.textContent = details.description
     body.append(paragraph)
   }
   if (details !== undefined) {
     section(
       body,
-      `Acceptance criteria · ${item.acceptanceCriteriaCompleted} of ${item.acceptanceCriteriaCount}`,
+      'acceptance',
+      `Acceptance criteria · ${details.acceptanceCriteria.filter(criterion => criterion.checked).length} of ${details.acceptanceCriteria.length}`,
       checklistRows(details.acceptanceCriteria),
     )
     const done = details.definitionOfDone.filter(criterion => criterion.checked).length
-    section(body, `Definition of Done · ${done} of ${details.definitionOfDone.length}`, checklistRows(details.definitionOfDone))
+    section(body, 'done', `Definition of Done · ${done} of ${details.definitionOfDone.length}`, checklistRows(details.definitionOfDone))
   }
-  section(body, 'References', item.references.map(reference => {
+  section(body, 'references', 'References', item.references.map(reference => {
     const row = document.createElement('li')
+    row.dataset.taskKey = reference
     const element = byId.get(reference)
     if (element === undefined) row.textContent = reference
     else {
@@ -170,27 +191,30 @@ export function paintTaskSummary(
       link.type = 'button'
       link.className = 'link'
       link.append(marked(element.kind, element.external, element.title))
-      link.addEventListener('click', event => onSelect(element.representationId, event.shiftKey))
+      link.onclick = event => onSelect(element.representationId, event.shiftKey)
       row.append(link)
     }
     return row
   }))
-  const fileRows = payload === undefined
-    ? item.modifiedFiles.map(file => pendingFileRow(file, error !== undefined))
-    : payload.files.map(file => fileRow(file, onOpen))
-  section(body, 'Modified files', fileRows)
+  const fileRows = item.modifiedFiles.map(file => {
+    const loaded = payload?.files.find(candidate => candidate.file === file)
+    return loaded === undefined ? pendingFileRow(file, error !== undefined) : fileRow(loaded, onOpen)
+  })
+  section(body, 'files', 'Modified files', fileRows)
   if (payload !== undefined) body.append(sourceIdentity(payload))
   else if (error !== undefined) {
     const status = document.createElement('p')
     status.className = 'task-diff-status'
+    status.dataset.taskKey = 'diff-error'
     status.textContent = error
     body.append(status)
   }
   textSection(body, 'Implementation plan', details?.implementationPlan ?? '')
   textSection(body, 'Implementation notes', details?.implementationNotes ?? '')
-  section(body, 'Comments', (details?.comments ?? []).map(comment => {
+  section(body, 'comments', 'Comments', (details?.comments ?? []).map(comment => {
     const row = document.createElement('li')
     row.className = 'task-comment'
+    row.dataset.taskKey = `${comment.author}:${comment.createdAt}`
     const meta = document.createElement('div')
     meta.className = 'ghost'
     meta.textContent = `${comment.author} · ${comment.createdAt}`
@@ -199,6 +223,7 @@ export function paintTaskSummary(
     row.append(meta, text)
     return row
   }))
+  updateTaskSummary(host, body)
 }
 
 function diffRow(line: TaskFileDiff['hunks'][number]['lines'][number]): HTMLElement {
@@ -268,6 +293,7 @@ export function leaveTaskDiff(host: HTMLElement): void {
 }
 
 export const taskDiffCss = `
+  #details .criterion-mark { display: inline-block; }
   #details .task-file-row { align-items: center; background: transparent; border: 0; border-bottom: 1px solid var(--hairline); color: inherit; display: grid; font: inherit; gap: 10px; grid-template-columns: 20px minmax(0, 1fr) auto; padding: 9px 0; text-align: left; width: 100%; }
   #details .task-file-row:hover { background: var(--hover); }
   #details .task-file-row:disabled { background: transparent; color: var(--muted); }

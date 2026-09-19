@@ -201,8 +201,8 @@ export const mapCss = `
   }
   #map .camera[data-tracing] .route-base,
   #map .camera[data-tracing] .route:not(.lit) { display: none; }
-  #map .camera[data-tracing] .building:not(.onpath):not(.selected),
-  #map .camera[data-tracing] .slab:not(.onpath):not(.selected) { opacity: 0.3; }
+  #map .camera[data-tracing] .building:not(.onpath):not(.selected):not(.touched),
+  #map .camera[data-tracing] .slab:not(.onpath):not(.selected):not(.touched) { opacity: 0.3; }
   #map:where(:not([data-camera-moving])) .building:not(.selected):hover, #map:where(:not([data-camera-moving])) .slab:not(.selected):not(.context):hover,
   #map:where(:not([data-camera-moving])) .island.system:not(.selected):not(.context):hover, #map .context { --emphasis: ${emphasis(0.5)}; }
   #map:where(:not([data-camera-moving])) .building:not(.selected):hover .face, #map:where(:not([data-camera-moving])) .slab:not(.selected):not(.context):hover .face,
