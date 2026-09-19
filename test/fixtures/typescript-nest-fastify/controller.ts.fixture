@@ -1,0 +1,9 @@
+import { Controller, Get } from '@nestjs/common'
+
+@Controller('speakers')
+export class SpeakersController {
+  @Get(':id')
+  find(): string {
+    return 'speaker'
+  }
+}

@@ -41,70 +41,110 @@ function owner(scan: ScanObservation, id: string): string {
   return `${operation.file}#${operation.name}`
 }
 
-test.concurrent('every supported framework reports its served endpoints with the prefixes its source declares', async () => {
+/**
+ * Each endpoint as `application@position method path owner`, ordered by application and position; an
+ * endpoint of a router that states no order has no `application@position`.
+ */
+function endpointTable(scan: ScanObservation): string[] {
+  const rows = (scan.httpEndpoints ?? []).map(endpoint => ({
+    application: endpoint.order?.application ?? '',
+    position: endpoint.order?.position ?? -1,
+    line: `${endpoint.order === undefined ? '' : `${endpoint.order.application}@${endpoint.order.position} `}`
+      + `${endpoint.method} /${endpoint.path.map(endpointLabel).join('/')} ${owner(scan, endpoint.operation)}`,
+  }))
+  rows.sort((left, right) => left.application.localeCompare(right.application) || left.position - right.position
+    || left.line.localeCompare(right.line))
+  return rows.map(row => row.line)
+}
+
+test.concurrent('every supported framework reports its served endpoints in the order its router tries them', async () => {
   const { scan, clean } = await scanFixture()
   try {
-    const endpoints = (scan.httpEndpoints ?? []).map(endpoint => {
-      return `${endpoint.method} /${endpoint.path.map(endpointLabel).join('/')} ${owner(scan, endpoint.operation)}`
-    })
     // Nothing from a spread route value, a router never mounted or mounted on an unrecognized host, a
     // registrar a function receives, one the file assigns again, a clone of one, or a route registered
-    // on a Hono child after its parent copied the child's routes. A route builder whose
-    // handlers are not read, a mount of what the scan cannot see or under a computed prefix, a route with
-    // a computed path, a registrar handed to other code and a registration member the scan does not read
-    // occupy their place in the order as any remainder below their path, `:**!`. A pattern parameter and
-    // text mixed with a placeholder accept only some segments, `:id!`.
-    expect(endpoints.sort()).toEqual([
-      '* /:**! hono-server.ts#(anonymous)',
-      '* /:**! hosted-app.ts#(anonymous)',
-      '* /:**! legacy-server.ts#(anonymous)',
-      '* /:**! ordered-server.ts#(anonymous)',
-      '* /:**! shared-routes.ts#(anonymous)',
-      '* /:**! unsupported.ts#(anonymous)',
-      '* /api/:**! hono-server.ts#(anonymous)',
-      // Hono's trailing wildcard also matches the path without it.
-      '* /legacy/:** hono-server.ts#forward',
-      // A Fastify plugin the scan does not read may serve anything below its prefix, without an order.
+    // on a Hono child after its parent copied the child's routes. A route builder whose handlers are not
+    // read, a mount of what the scan cannot see or under a computed prefix, a route with a computed path,
+    // a registrar handed to other code and a registration member the scan does not read occupy their
+    // place in the order as any remainder below their path, `:**!`. A pattern parameter and text mixed
+    // with a placeholder accept only some segments, `:id!`.
+    expect(endpointTable(scan)).toEqual([
+      // Fastify and Bun.serve prefer the most specific route, so their endpoints, and a Fastify plugin's
+      // block below its prefix, carry no order.
       '* /plugins/:**! fastify-server.ts#(anonymous)',
-      '* /reports/:**! ordered-server.ts#(anonymous)',
-      '* /static/:**! ordered-server.ts#(anonymous)',
       '* /uploads/:*+ bun-server.ts#serveUpload',
-      'GET /:**! unsupported.ts#(anonymous)',
-      'GET /:*+ ordered-server.ts#fallback',
-      'GET /about ordered-server.ts#showAbout',
-      'GET /admin/log ordered-server.ts#showLog',
-      // A router mounted next to middleware from the application's own module.
-      'GET /admin/users admin-router.ts#listUsers',
-      'GET /admin/users/:id! ordered-server.ts#showTalkUser',
-      'GET /admin/users/:id! ordered-server.ts#showUser',
       'GET /api/rooms/:id bun-server.ts#showRoom',
-      'GET /api/talks/:id talks-router.ts#showTalk',
-      'GET /files/:id! unsupported.ts#handle',
-      'GET /first shared-routes.ts#first',
-      'GET /first two-apps.ts#first',
-      'GET /health express-server.ts#(anonymous)',
       'GET /jobs/:id fastify-server.ts#runJob',
-      'GET /late two-apps.ts#first',
-      'GET /one hosted-routes.ts#one',
-      // A chain through an Express settings call registers on the application.
-      'GET /rooms legacy-server.ts#listRooms',
-      'GET /second shared-routes.ts#second',
-      'GET /second two-apps.ts#second',
-      // An optional group of one parameter is an optional parameter.
-      'GET /sessions/:id? express-server.ts#(anonymous)',
-      'GET /speakers/:id nest-controller.ts#find',
       'GET /status fastify-server.ts#(anonymous)',
-      'GET /talks legacy-server.ts#listTalks',
-      'GET /two hosted-routes.ts#two',
-      'GET /v1/rooms/:room? hono-server.ts#listRooms',
-      'GET /v2/rooms/:room? hono-server.ts#listRooms',
-      'POST /about ordered-server.ts#saveAbout',
-      'POST /api/talks talks-router.ts#createTalk',
       'POST /jobs/:id fastify-server.ts#runJob',
-      'POST /speakers nest-controller.ts#create',
-      'PURGE /cache/:**! hono-server.ts#(anonymous)',
       'PUT /api/rooms/:id bun-server.ts#updateRoom',
+      // An application is its file and the variable that holds it. A mounted router's routes take the
+      // mount's place, in the order its own file registers them, and a function from the application's
+      // own module is middleware, beside a router or alone. A file that imports the application and hands
+      // it on runs after them, and serving it registers nothing. An optional group of one parameter is
+      // an optional parameter.
+      'express-server.ts#app@0 GET /api/talks/:id talks-router.ts#showTalk',
+      'express-server.ts#app@1 POST /api/talks talks-router.ts#createTalk',
+      'express-server.ts#app@2 GET /health express-server.ts#(anonymous)',
+      'express-server.ts#app@3 GET /sessions/:id? express-server.ts#(anonymous)',
+      'express-server.ts#app@4 GET /admin/users admin-router.ts#listUsers',
+      // Hono's trailing wildcard also matches the path without it; `on`, `basePath` and middleware under
+      // `*` block what they may serve.
+      'hono-server.ts#site@0 GET /v1/rooms/:room? hono-server.ts#listRooms',
+      'hono-server.ts#site@1 GET /v2/rooms/:room? hono-server.ts#listRooms',
+      'hono-server.ts#site@2 * /legacy/:** hono-server.ts#forward',
+      'hono-server.ts#site@3 PURGE /cache/:**! hono-server.ts#(anonymous)',
+      'hono-server.ts#site@4 * /api/:**! hono-server.ts#(anonymous)',
+      'hono-server.ts#site@5 * /:**! hono-server.ts#(anonymous)',
+      // A hand-off in the file that creates the application, before routes another file registers, or
+      // inside any statement but a top-level one, runs at a place the scan cannot order.
+      'hosted-app.ts#hosted@0 * /:**! hosted-app.ts#(anonymous)',
+      'hosted-app.ts#hosted@0 GET /one hosted-routes.ts#one',
+      'hosted-app.ts#hosted@0 GET /two hosted-routes.ts#two',
+      'legacy-server.ts#app@0 * /:**! legacy-server.ts#(anonymous)',
+      'legacy-server.ts#app@0 GET /rooms legacy-server.ts#listRooms',
+      'legacy-server.ts#app@0 GET /talks legacy-server.ts#listTalks',
+      // NestJS behind Express registers its routes in an order the scan does not follow, so they share
+      // one; a computed controller path blocks every route below it, and a computed route its own.
+      'nest-main.ts@0 GET /:**! nest-controller.ts#list',
+      'nest-main.ts@0 GET /speakers/:id nest-controller.ts#find',
+      'nest-main.ts@0 GET /talks/:**! nest-controller.ts#find',
+      'nest-main.ts@0 POST /speakers nest-controller.ts#create',
+      // Routers one call mounts are tried in the order it lists them, chained registrations in the order
+      // they are written, and an application handed to other code may gain any route there.
+      'ordered-server.ts#app@0 GET /admin/users/:id! ordered-server.ts#showUser',
+      'ordered-server.ts#app@1 GET /admin/users/:id! ordered-server.ts#showTalkUser',
+      'ordered-server.ts#app@2 GET /admin/log ordered-server.ts#showLog',
+      'ordered-server.ts#app@3 * /static/:**! ordered-server.ts#(anonymous)',
+      'ordered-server.ts#app@4 * /reports/:**! ordered-server.ts#(anonymous)',
+      'ordered-server.ts#app@5 GET /about ordered-server.ts#showAbout',
+      'ordered-server.ts#app@6 POST /about ordered-server.ts#saveAbout',
+      'ordered-server.ts#app@7 * /:**! ordered-server.ts#(anonymous)',
+      'ordered-server.ts#app@8 GET /:*+ ordered-server.ts#fallback',
+      // A hand-off in a file that registers on an application takes its place there.
+      'shared-app.ts#shared@0 GET /first shared-routes.ts#first',
+      'shared-app.ts#shared@1 * /:**! shared-routes.ts#(anonymous)',
+      'shared-app.ts#shared@2 GET /second shared-routes.ts#second',
+      // Two applications of one file keep their own orders; a registration inside a function leaves its
+      // application's order unknown, and a `let` the program never assigns again holds its registrar.
+      'two-apps.ts#late@0 GET /late two-apps.ts#first',
+      'two-apps.ts#main@0 GET /first two-apps.ts#first',
+      'two-apps.ts#main@1 GET /second two-apps.ts#second',
+      // A computed segment blocks from the last whole segment before it, a remainder pattern is a
+      // catch-all, and a pattern that may span segments blocks from its place.
+      'unsupported.ts#patterns@0 GET /:**! unsupported.ts#(anonymous)',
+      'unsupported.ts#patterns@1 GET /files/:id! unsupported.ts#handle',
+      'unsupported.ts#patterns@2 * /:**! unsupported.ts#(anonymous)',
+      'unsupported.ts#patterns@3 GET /versions/:**! unsupported.ts#(anonymous)',
+      'unsupported.ts#patterns@4 GET /assets/:rest+ unsupported.ts#handle',
+      'unsupported.ts#patterns@5 GET /archives/:name*! unsupported.ts#handle',
     ])
+  } finally { await clean() }
+})
+
+test.concurrent('NestJS behind a FastifyAdapter prefers the most specific route and states no order', async () => {
+  const { scan, clean } = await scanFixture('typescript-nest-fastify')
+  try {
+    expect(endpointTable(scan)).toEqual(['GET /speakers/:id controller.ts#find'])
   } finally { await clean() }
 })
 
@@ -157,70 +197,6 @@ test.concurrent('fetch and axios requests keep every proven part and mark the re
       'POST /api/talks values.ts#tunedCall',
       'POST <base>/speakers axios-client.ts#saveSpeaker',
     ])
-  } finally { await clean() }
-})
-
-test.concurrent('routers that take the first registered match report the order of their routes', async () => {
-  const { scan, clean } = await scanFixture()
-  try {
-    const ordered = (scan.httpEndpoints ?? []).flatMap(endpoint => endpoint.order === undefined ? [] : [
-      `${endpoint.order.application}@${endpoint.order.position} ${endpoint.method} /${endpoint.path.map(endpointLabel).join('/')}`,
-    ])
-    expect(ordered.sort()).toEqual([
-      // A mounted router's routes take the mount's place, in the order its own file registers them. A file
-      // that imports the application and hands it on runs after them, and serving it registers nothing.
-      'express-server.ts@0 GET /api/talks/:id',
-      'express-server.ts@1 POST /api/talks',
-      'express-server.ts@2 GET /health',
-      'express-server.ts@3 GET /sessions/:id?',
-      'express-server.ts@4 GET /admin/users',
-      'hono-server.ts@0 GET /v1/rooms/:room?',
-      'hono-server.ts@1 GET /v2/rooms/:room?',
-      'hono-server.ts@2 * /legacy/:**',
-      // `on`, `basePath` and middleware under `*` block what they may serve, a trailing wildcard included.
-      'hono-server.ts@3 PURGE /cache/:**!',
-      'hono-server.ts@4 * /api/:**!',
-      'hono-server.ts@5 * /:**!',
-      // A hand-off in the file that creates the application, before routes another file registers, or
-      // inside any statement but a top-level one, runs at a place the scan cannot order.
-      'hosted-app.ts@0 * /:**!',
-      'hosted-app.ts@0 GET /one',
-      'hosted-app.ts@0 GET /two',
-      'legacy-server.ts@0 * /:**!',
-      'legacy-server.ts@0 GET /rooms',
-      'legacy-server.ts@0 GET /talks',
-      // NestJS behind Express registers its routes in an order the scan does not follow, so they share one.
-      'nest-main.ts@0 GET /speakers/:id',
-      'nest-main.ts@0 POST /speakers',
-      // Routers one call mounts are tried in the order it lists them, whether or not their own order is known.
-      'ordered-server.ts@0 GET /admin/users/:id!',
-      'ordered-server.ts@1 GET /admin/users/:id!',
-      'ordered-server.ts@2 GET /admin/log',
-      'ordered-server.ts@3 * /static/:**!',
-      'ordered-server.ts@4 * /reports/:**!',
-      // Chained registrations run in the order they are written.
-      'ordered-server.ts@5 GET /about',
-      'ordered-server.ts@6 POST /about',
-      // The application handed to other code may gain any route there.
-      'ordered-server.ts@7 * /:**!',
-      'ordered-server.ts@8 GET /:*+',
-      // A hand-off in a file that registers on an application takes its place there.
-      'shared-app.ts@0 GET /first',
-      'shared-app.ts@1 * /:**!',
-      'shared-app.ts@2 GET /second',
-      // An order unknown for one of an application's registrars leaves every route there unordered. A
-      // variable the program never assigns again holds its registrar, `let` included.
-      'two-apps.ts@0 GET /first',
-      'two-apps.ts@0 GET /late',
-      'two-apps.ts@0 GET /second',
-      'unsupported.ts@0 GET /:**!',
-      'unsupported.ts@1 GET /files/:id!',
-      'unsupported.ts@2 * /:**!',
-    ])
-    // Fastify and Bun.serve prefer the most specific route, so their endpoints carry no order.
-    const unordered = (scan.httpEndpoints ?? []).filter(endpoint => /^(fastify|bun)-server/.test(owner(scan, endpoint.operation)))
-    expect(unordered.length).toBeGreaterThan(0)
-    expect(unordered.some(endpoint => endpoint.order !== undefined)).toBe(false)
   } finally { await clean() }
 })
 

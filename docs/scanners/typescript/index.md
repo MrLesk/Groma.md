@@ -154,41 +154,18 @@ The [producer decisions](../evidence.md#producer-checklist) for this ecosystem:
    group or a mid-path wildcard, becomes a constrained optional catch-all in
    place of itself and the rest of the route, so no route is omitted.
 8. **Registration order.** Express, Hono and NestJS behind Express take the
-   first registered match, so their endpoints carry `order`: the file that
-   creates the application, and a position. A registrar's entries are its
-   registrations and the references that hand it to other code, such as
-   `registerRoutes(app)`, in the file that creates it and in every file that
-   registers on it. A module's top-level statements all run when it is first
-   imported, so a file that only imports the registrar and hands it on runs
-   after every top-level registration of the file it imports it from, and what
-   it registers that late cannot capture a request those routes match; a
-   circular import is the accepted exception. Serving it, with `listen`, Node's
-   `createServer(app)`, an imported `serve(app)`, an export or an assignment to
-   `module.exports` or `exports`, registers nothing. When every entry is a
-   top-level statement of one file, they run in source order, and the calls of a
-   chain such as `app.get('/a', list).post('/a', save)` in the order they are
-   written; a chain continues through Express's `set`, `enable`, `disable` and
-   `engine`, which return the application. A mounted router's routes take the
-   mount's place in that order, and routers one call mounts, as in
-   `app.use('/admin', users, audit)`, follow in the order it lists them. Hono's
-   `route(path, child)` copies the routes the child has when it runs, so a route
-   registered later is not under it, and one whose order against the copy the
-   scan cannot prove only blocks its path. Otherwise, as for an entry inside a
-   function or an `if`, the registrar's routes share one position, which the
-   rest of its application shares too when the registrar is the application, and
-   every NestJS route shares one, because the scan does not follow their order.
-   An entry the scan sees but cannot read still takes its place as its readable
-   prefix followed by a constrained optional catch-all, with method `*` unless
-   the call states one, named by the registering operation: a route with a
-   computed path, a mount under a computed prefix, a path mounted to something
-   other than a recognized router, a value loaded from a relative module that
-   the scan recognizes neither as a router nor as a function, mounted with or
-   without a path, a route builder such as `app.route('/reports')`, Hono's `on`,
-   `mount` and `basePath`, whose clone registers on the same routes, and a
-   registrar handed to other code, which blocks from its own root. Middleware
-   takes no place: a package's handler or a function used without a path, such
-   as `app.use(requestLogger)`, and any handler next to a recognized router in
-   one call, such as `requireAuth` in `app.use('/admin', requireAuth, admin)`.
-   Fastify, Bun.serve and NestJS behind a `FastifyAdapter` prefer the most
-   specific route and carry no order; a Fastify plugin's block carries none
-   either.
+   first registered match, so their endpoints carry `order`, ranked by the
+   [JavaScript scanner's routing model](../javascript/index.md#http-facts) with
+   these differences. The program holds every file that imports a registrar, so
+   an export registers nothing, and a hand-off counts in the file that creates
+   the registrar and in every file that registers on it; a file that only
+   imports it and hands it on runs after that file's top-level registrations, a
+   circular import being the accepted exception. A function from the
+   application's own module is middleware, because the checker sees it, and a
+   value loaded from one that is neither a router nor a function blocks as a
+   router the scan cannot follow. Koa is not read. NestJS behind Express
+   registers its routes in an order the scan does not follow, so every route of
+   its application, named by the file that calls `NestFactory.create`, shares
+   one position; a computed `@Controller` path blocks every route below it, and
+   a computed route its own. NestJS behind a `FastifyAdapter` prefers the most
+   specific route and carries no order.
