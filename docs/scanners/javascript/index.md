@@ -215,43 +215,48 @@ The [producer decisions](../evidence.md#producer-checklist) for this ecosystem:
    that is not last, becomes a constrained optional catch-all in place of itself
    and the rest of the route, so no route is omitted.
 8. **Registration order.** Express, Hono and Koa routers take the first
-   registered match, so their endpoints carry `order`: the file that creates the
-   application, and a position. A registrar's entries are its registrations and
-   the references that hand it to other code, such as `registerRoutes(app)`. The
-   scanner never sees the files that import this one, and they run after it and
-   may add any route after all of its own, a circular require being the accepted
-   exception, so an export, `export default app`, `export const app`, or an
-   assignment to `module.exports` or `exports`, hands the registrar on too, at
-   the end of the order. When every entry is a top-level statement, they run in
-   source order, and the calls of a chain such as
-   `router.get('/a', list).post('/a', save)` in the order they are written. A
-   mounted router's routes take the mount's place in that order, and routers one
-   call mounts follow in the order it lists them. Hono's `route(path, child)`
-   and a Koa router's `use` copy the routes the child has when they run, so a
-   route registered later is not under them, and one whose order against the
-   copy the scan cannot prove only blocks its path; `app.use(router.routes())`
-   serves a Koa router's routes as they change. Otherwise, as for an entry
-   inside a function or an `if`, the registrar's routes share one position. An
-   entry the scan sees but cannot read still takes its place as its readable
-   prefix followed by a constrained optional catch-all, with method `*` unless
-   the call states one, named by the registering operation: a route with a
-   computed path, a mount under a computed prefix, a path mounted to something
-   other than a recognized router, such as
-   `app.use('/static', express.static('public'))`, a router the scan cannot
-   follow, mounted with or without a path, such as
-   `app.use(require('./routes'))` or the `routes()` of a Koa router from another
-   file, and, since the scanner cannot see another file, also a function
-   imported from one, such as `app.use(requestLogger)`, which costs the routes
-   after it their rows, a route builder such as `app.route('/reports')`, Hono's
-   `on`, `mount` and `basePath`, a Koa router whose own path is computed, a Koa
-   `redirect` whose source is a route name, and a registrar handed to other
-   code, which blocks from its own root. Serving it, with `listen`, Node's
-   `createServer(app)` or an imported `serve(app)`, registers nothing.
-   Middleware takes no place: a package's handler, such as `express.json()`,
-   used without a path, and any handler next to a recognized router in one call,
-   such as `requireAuth` in `app.use('/admin', requireAuth, admin)`. Fastify and
-   Bun.serve prefer the most specific route and carry no order; a Fastify
-   plugin, whose routes the scan does not read, blocks its prefix without one.
+   registered match, so their endpoints carry `order`: the application, named by
+   the file that creates it and the variable that holds it, such as
+   `server/app.js#app`, and a position. The routing model has six rules:
+   1. A registrar's entries are its registrations and the references that hand
+      it off to other code, such as `registerRoutes(app)`. Serving it with
+      `listen`, Node's `createServer(app)` or an imported `serve(app)` registers
+      nothing. The scanner never sees the files that import this one, which run
+      after all of it and may add any route, so an export, `export default app`,
+      `export const app` or an assignment to `module.exports` or `exports`,
+      hands the registrar off at the end of its order; a circular require is the
+      accepted exception.
+   2. Entries that are all top-level statements run in source order, and the
+      calls of a chain such as `router.get('/a', list).post('/a', save)` in the
+      order they are written, a chain continuing through Express's `set`,
+      `enable`, `disable` and `engine`. Otherwise, as for an entry inside a
+      function or an `if`, the registrar's routes share one position.
+   3. A mounted router's routes take the mount's place, and routers one call
+      mounts, as in `app.use('/admin', users, audit)`, follow in the order it
+      lists them. Hono's `route(path, child)` and a Koa router's `use` copy the
+      routes the child has when they run, so a route registered later is not
+      under them, and one whose order against the copy the scan cannot prove
+      only blocks its path; `app.use(router.routes())` serves a Koa router's
+      routes as they change.
+   4. An entry the scan sees but cannot read takes its place as its readable
+      prefix followed by a constrained optional catch-all, with method `*`
+      unless the call states one, named by the registering operation: a route
+      with a computed path, a mount under a computed prefix, a path mounted to
+      something other than a recognized router, such as
+      `app.use('/static', express.static('public'))`, a router the scan cannot
+      follow, mounted with or without a path, such as
+      `app.use(require('./routes'))`, a Koa router's `routes()` from another
+      file, or a function imported from one, which the scanner cannot see, a
+      route builder such as `app.route('/reports')`, Hono's `on`, `mount` and
+      `basePath`, a Koa router whose own path is computed, a Koa `redirect`
+      whose source is a route name, and a hand-off, which blocks from its
+      registrar's root.
+   5. Middleware takes no place: a package's handler, such as `express.json()`,
+      and any handler before or beside a recognized router in one call, as in
+      `app.use(requireAuth, api)`, which then states no path.
+   6. Fastify and Bun.serve prefer the most specific route and carry no order; a
+      Fastify plugin, whose routes the scan does not read, blocks its prefix
+      without one.
 
 ## Validation
 

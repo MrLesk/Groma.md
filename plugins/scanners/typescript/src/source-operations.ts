@@ -275,7 +275,7 @@ async function sourceHttpFacts(
     ...urlContext(syntax, nativeChecker(checker), sources),
     frameworks: new Set(['express', 'fastify', 'hono']),
     // The program holds every file that imports a registrar.
-    exportsEscape: false,
+    exportsHandOff: false,
     file: node => location(root, native(node)).file,
     callerOperation: node => operation(caller(native(node))),
     async handlerOperation(handler, registration) {

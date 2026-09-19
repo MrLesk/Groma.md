@@ -9,7 +9,7 @@ import type { ScanHttpEndpoint } from '@groma/scanner'
 export interface Placement {
   /** The path the registrar's routes start with. */
   prefix: string
-  /** The file that creates the application. */
+  /** The application: the file that creates it, and the variable that holds it where the scan names one. */
   application: string
   /** Registration indices from the application down to the registrar, as far as the source proves them. */
   rank: readonly number[]
@@ -17,15 +17,20 @@ export interface Placement {
   known: boolean
   /** Whether the application takes the first registered match, and so reports its order. */
   ordered: boolean
+  /** False when the routes may not be there, such as routes a copy may have missed, which then only block. */
+  certain: boolean
 }
 
-/** The placement of a registration made at `index` of its registrar, below `prefix`. */
-export function below(placement: Placement, index: number | undefined, prefix: string): Placement {
-  const known = placement.known && index !== undefined
+/**
+ * The placement below `prefix` of a registration made at `indices` of its registrar: its index, then its
+ * place among the registrars one call mounts. The rank grows only while every index is known.
+ */
+export function below(placement: Placement, prefix: string, ...indices: readonly (number | undefined)[]): Placement {
+  const known = placement.known && indices.every(index => index !== undefined)
   return {
     ...placement,
     prefix: `${placement.prefix}/${prefix}`,
-    rank: known ? [...placement.rank, index!] : placement.rank,
+    rank: known ? [...placement.rank, ...indices as number[]] : placement.rank,
     known,
   }
 }
@@ -36,12 +41,12 @@ export interface Placed {
   placement: Placement
 }
 
-/** Ranks compare index by index, and a shorter rank first. */
+/** Ranks compare index by index; once cut, no rank begins another. */
 function compare(left: readonly number[], right: readonly number[]): number {
   for (let index = 0; index < Math.min(left.length, right.length); index++) {
     if (left[index] !== right[index]) return left[index]! - right[index]!
   }
-  return left.length - right.length
+  return 0
 }
 
 function begins(rank: readonly number[], start: readonly number[]): boolean {

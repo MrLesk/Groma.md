@@ -43,7 +43,7 @@ function fileContext(source: ts.SourceFile, evidence: FileEvidence): RouterConte
   return {
     ...context,
     frameworks: new Set(['express', 'fastify', 'hono', 'koa']),
-    exportsEscape: true,
+    exportsHandOff: true,
     async handlerOperation(handler, registration) {
       const held = handler === undefined ? undefined : await heldAt(context, handler)
       return typeof held === 'object' && ts.isFunctionLike(classic(held.node)) ? operationAt(held.node) : operationAt(registration)

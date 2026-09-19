@@ -44,10 +44,10 @@ export interface RouterContext extends UrlContext {
   /** The frameworks the scanner recognizes. */
   frameworks: ReadonlySet<Framework>
   /**
-   * Whether exporting a registrar hands it to code the scan does not read: a scan of one file alone
+   * Whether exporting a registrar hands it off to code the scan does not read: a scan of one file alone
    * never sees the files that import it.
    */
-  exportsEscape: boolean
+  exportsHandOff: boolean
   /** The operation serving a route: its resolved handler when certain, else the registering operation. */
   handlerOperation(handler: Node | undefined, registration: Node): Promise<string>
   /** The operation that runs this node. */
@@ -60,8 +60,10 @@ export interface RouterContext extends UrlContext {
 export interface Registrar {
   kind: 'app' | 'router'
   framework: Framework
+  /** The variable that holds the instance, which names an application beside its file. */
+  variable: string
   /** The path a Koa router adds before its routes; undefined when the source states one the scan cannot read. */
-  own: string | undefined
+  prefix: string | undefined
 }
 
 export interface Registration {
@@ -72,7 +74,7 @@ export interface Registration {
 }
 
 /** A reference that hands a registrar to code the scan does not read, such as `registerRoutes(app)`. */
-export interface Escape {
+export interface HandOff {
   reference: Node
   declaration: Node
   /** An export at the top of its file, which importers receive only after the whole file has run. */
@@ -96,13 +98,13 @@ export function routeMethod(member: string, framework: Framework): string | unde
 /** Hono members that register routes the scan does not read; `basePath` returns a clone sharing its routes. */
 export const unreadHonoMembers = new Set(['on', 'basePath', 'mount'])
 
-/** Express settings members that return the application; `set` with only a name reads a setting. */
+/** Express settings members that return the application. */
 const expressSettings = new Set(['set', 'enable', 'disable', 'engine'])
 
 /** Express, Hono and Koa routers try routes in registration order; Fastify prefers the most specific route. */
-export const ORDERED = new Set<Framework>(['express', 'hono', 'koa'])
+export const orderedFrameworks = new Set<Framework>(['express', 'hono', 'koa'])
 
-type Built = Omit<Registrar, 'own'>
+type Built = Pick<Registrar, 'kind' | 'framework'>
 const expressApp: Built = { kind: 'app', framework: 'express' }
 const fastifyApp: Built = { kind: 'app', framework: 'fastify' }
 const koaApp: Built = { kind: 'app', framework: 'koa' }
@@ -119,7 +121,7 @@ const constructors = new Map<string, Record<string, Built>>([
 ])
 
 /** A Koa router's `prefix` option; an option the scan cannot read leaves its path unknown. */
-async function routerPrefix(initializer: Construction, context: RouterContext): Promise<string | undefined> {
+async function routerPrefix(context: RouterContext, initializer: Construction): Promise<string | undefined> {
   const [options] = initializer.arguments ?? []
   if (options === undefined) return ''
   const prefix = await heldAt(context, options, 'prefix')
@@ -127,23 +129,25 @@ async function routerPrefix(initializer: Construction, context: RouterContext): 
   return typeof prefix === 'object' ? literalText(context, prefix.node) : undefined
 }
 
-async function built(found: Built | undefined, initializer: Construction, context: RouterContext): Promise<Registrar | undefined> {
+async function built(
+  context: RouterContext, found: Built | undefined, initializer: Construction, variable: string,
+): Promise<Registrar | undefined> {
   if (found === undefined || !context.frameworks.has(found.framework)) return undefined
-  return { ...found, own: found === koaRouter ? await routerPrefix(initializer, context) : '' }
+  return { ...found, variable, prefix: found === koaRouter ? await routerPrefix(context, initializer) : '' }
 }
 
 /** Recognize an instance by the module its constructor comes from, not by its type or its members. */
-async function registrarOf(initializer: Node, context: RouterContext): Promise<Registrar | undefined> {
+async function registrarOf(context: RouterContext, initializer: Node, variable: string): Promise<Registrar | undefined> {
   const { ts } = context
   if (!ts.isCallExpression(initializer) && !ts.isNewExpression(initializer)) return undefined
   const callee = initializer.expression
   if (ts.isPropertyAccessExpression(callee)) {
     const holder = await importOrigin(context, callee.expression)
     const router = holder?.module === 'express' && callee.name.text === 'Router'
-    return built(router ? constructors.get('express')!.Router : undefined, initializer, context)
+    return built(context, router ? constructors.get('express')!.Router : undefined, initializer, variable)
   }
   const origin = await importOrigin(context, callee)
-  return built(origin === undefined ? undefined : constructors.get(origin.module)?.[origin.name], initializer, context)
+  return built(context, origin === undefined ? undefined : constructors.get(origin.module)?.[origin.name], initializer, variable)
 }
 
 function walk(ts: RouterCompiler, node: Node, visitor: (node: Node) => void): void {
@@ -152,17 +156,19 @@ function walk(ts: RouterCompiler, node: Node, visitor: (node: Node) => void): vo
 }
 
 /** A variable another value could replace is not the instance it was created as. */
-async function collectRegistrars(sources: readonly Node[], context: RouterContext): Promise<Map<Node, Registrar>> {
+async function collectRegistrars(context: RouterContext, sources: readonly Node[]): Promise<Map<Node, Registrar>> {
   const { ts } = context
-  const declarations: Variable[] = []
+  const declarations: (Variable & { name: TextNode; initializer: Node })[] = []
   for (const source of sources) {
     walk(ts, source, node => {
-      if (ts.isVariableDeclaration(node) && node.initializer !== undefined && ts.isIdentifier(node.name)) declarations.push(node)
+      if (ts.isVariableDeclaration(node) && node.initializer !== undefined && ts.isIdentifier(node.name)) {
+        declarations.push(node as Variable & { name: TextNode; initializer: Node })
+      }
     })
   }
   const registrars = new Map<Node, Registrar>()
   for (const declaration of declarations) {
-    const registrar = await registrarOf(declaration.initializer!, context)
+    const registrar = await registrarOf(context, declaration.initializer, declaration.name.text)
     if (registrar !== undefined && await unassigned(context, declaration)) registrars.set(declaration, registrar)
   }
   return registrars
@@ -190,8 +196,8 @@ export function registers(member: string, framework: Framework): boolean {
  * Express's `route(path)` returns a route builder and Hono's `basePath` a clone, whose calls the scan
  * does not read.
  */
-function returnsRegistrar(call: Call, member: string, framework: Framework): boolean {
-  if (framework === 'express' && expressSettings.has(member)) return member !== 'set' || call.arguments.length > 1
+function returnsRegistrar(member: string, framework: Framework): boolean {
+  if (framework === 'express' && expressSettings.has(member)) return true
   if (framework === 'koa' && member === 'prefix') return true
   const builder = (member === 'route' && framework === 'express') || member === 'basePath'
   return registers(member, framework) && !builder
@@ -199,15 +205,15 @@ function returnsRegistrar(call: Call, member: string, framework: Framework): boo
 
 /** The registrar a call is made on, when the scan knows it; a call chained on another is made on what it returns. */
 async function receiverDeclaration(
-  call: Call, registrars: Map<Node, Registrar>, context: RouterContext,
+  context: RouterContext, call: Call, registrars: Map<Node, Registrar>,
 ): Promise<Node | undefined> {
   const { ts } = context
   const receiver = ts.isPropertyAccessExpression(call.expression) ? call.expression.expression : undefined
   if (receiver !== undefined && ts.isCallExpression(receiver)) {
     const member = memberOf(ts, receiver)
-    const declaration = member === undefined ? undefined : await receiverDeclaration(receiver, registrars, context)
+    const declaration = member === undefined ? undefined : await receiverDeclaration(context, receiver, registrars)
     if (member === undefined || declaration === undefined) return undefined
-    return returnsRegistrar(receiver, member, registrars.get(declaration)!.framework) ? declaration : undefined
+    return returnsRegistrar(member, registrars.get(declaration)!.framework) ? declaration : undefined
   }
   if (receiver === undefined || !ts.isIdentifier(receiver)) return undefined
   const declaration = await declarationOf(context, receiver)
@@ -215,13 +221,13 @@ async function receiverDeclaration(
 }
 
 async function collectRegistrations(
-  calls: readonly Call[], registrars: Map<Node, Registrar>, context: RouterContext,
+  context: RouterContext, calls: readonly Call[], registrars: Map<Node, Registrar>,
 ): Promise<Registration[]> {
   const registrations: Registration[] = []
   for (const call of calls) {
     const member = memberOf(context.ts, call)
     if (member === undefined || !candidate(member)) continue
-    const declaration = await receiverDeclaration(call, registrars, context)
+    const declaration = await receiverDeclaration(context, call, registrars)
     if (declaration !== undefined && registers(member, registrars.get(declaration)!.framework)) {
       registrations.push({ call, declaration, member })
     }
@@ -233,14 +239,14 @@ async function collectRegistrations(
  * `router.prefix('/api')` states a Koa router's own path for all its routes. A second one replaces the
  * first at runtime, in an order the scan does not follow, so the path becomes unknown.
  */
-async function applyPrefixes(calls: readonly Call[], registrars: Map<Node, Registrar>, context: RouterContext): Promise<void> {
+async function applyPrefixes(context: RouterContext, calls: readonly Call[], registrars: Map<Node, Registrar>): Promise<void> {
   for (const call of calls) {
     if (memberOf(context.ts, call) !== 'prefix') continue
-    const declaration = await receiverDeclaration(call, registrars, context)
+    const declaration = await receiverDeclaration(context, call, registrars)
     const registrar = declaration === undefined ? undefined : registrars.get(declaration)
     if (registrar?.framework !== 'koa' || registrar.kind !== 'router') continue
     const stated = await literalText(context, call.arguments[0])
-    registrars.set(declaration!, { ...registrar, own: registrar.own === '' ? stated : undefined })
+    registrars.set(declaration!, { ...registrar, prefix: registrar.prefix === '' ? stated : undefined })
   }
 }
 
@@ -300,7 +306,7 @@ function commonJsExport(ts: RouterCompiler, node: Node): boolean {
 }
 
 /** Serving an application registers nothing: Node's `createServer(app)` and an imported `serve(app)`. */
-async function serving(reference: Node, context: RouterContext): Promise<boolean> {
+async function serving(context: RouterContext, reference: Node): Promise<boolean> {
   const { ts } = context
   const parent = reference.parent
   if (!ts.isCallExpression(parent) || !parent.arguments.some(argument => argument === reference)) return false
@@ -328,35 +334,37 @@ function registeringFiles(declaration: Node, registrations: readonly Registratio
 }
 
 /**
- * How one reference hands a registrar on, if it does. An export reaches code the scan does not read only
- * when the scan never sees the files that import it; they run after the whole file.
+ * How one reference hands a registrar off, if it does. An export reaches code the scan does not read
+ * only when the scan never sees the files that import it; they run after the whole file.
  */
-async function escapeAt(reference: Node, declaration: Node, mounts: ReadonlySet<Node>, context: RouterContext): Promise<Escape | undefined> {
+async function handOffAt(
+  context: RouterContext, reference: Node, declaration: Node, mounts: ReadonlySet<Node>,
+): Promise<HandOff | undefined> {
   const { ts } = context
   const exported = exportOf(ts, reference)
-  if (exported !== undefined) return context.exportsEscape ? { reference, declaration, last: exported === 'last' } : undefined
-  if (!handedOn(ts, reference, mounts) || await serving(reference, context)) return undefined
+  if (exported !== undefined) return context.exportsHandOff ? { reference, declaration, last: exported === 'last' } : undefined
+  if (!handedOn(ts, reference, mounts) || await serving(context, reference)) return undefined
   return { reference, declaration, last: false }
 }
 
 /**
- * The references that hand a registrar on, which may register routes where they run. One outside the
+ * The references that hand a registrar off, which may register routes where they run. One outside the
  * top level of its file runs at a time the scan does not know, which leaves its registrar's order unknown.
  */
-async function collectEscapes(
-  registrars: Map<Node, Registrar>, registrations: readonly Registration[], context: RouterContext,
-): Promise<Escape[]> {
+async function collectHandOffs(
+  context: RouterContext, registrars: Map<Node, Registrar>, registrations: readonly Registration[],
+): Promise<HandOff[]> {
   const mounts = new Set<Node>(registrations.filter(mounting).map(({ call }) => call))
-  const escapes: Escape[] = []
+  const handOffs: HandOff[] = []
   for (const declaration of registrars.keys()) {
-    if (context.exportsEscape && exportedDeclaration(context.ts, declaration)) escapes.push({ reference: declaration, declaration, last: true })
+    if (context.exportsHandOff && exportedDeclaration(context.ts, declaration)) handOffs.push({ reference: declaration, declaration, last: true })
     const files = registeringFiles(declaration, registrations)
     for (const reference of await context.bindings.references(declaration)) {
-      const found = files.has(reference.getSourceFile()) ? await escapeAt(reference, declaration, mounts, context) : undefined
-      if (found !== undefined) escapes.push(found)
+      const found = files.has(reference.getSourceFile()) ? await handOffAt(context, reference, declaration, mounts) : undefined
+      if (found !== undefined) handOffs.push(found)
     }
   }
-  return escapes
+  return handOffs
 }
 
 /** Where an entry runs among its file's statements: a chained call at its member name. */
@@ -365,14 +373,14 @@ export function entryStart(ts: RouterCompiler, node: Node): number {
 }
 
 /**
- * A registrar's registrations and escapes are in a proven order when every one is at the top level of
+ * A registrar's registrations and hand-offs are in a proven order when every one is at the top level of
  * one file, where chained calls run in the order their member names are written; otherwise their order
  * is unknown and they share one index.
  */
-function orderIndices(ts: RouterCompiler, registrations: readonly Registration[], escapes: readonly Escape[]): Map<Node, number> {
+function orderIndices(ts: RouterCompiler, registrations: readonly Registration[], handOffs: readonly HandOff[]): Map<Node, number> {
   const entries = [
     ...registrations.map(({ call, declaration }) => ({ node: call as Node, declaration, start: entryStart(ts, call), last: false })),
-    ...escapes.map(({ reference, declaration, last }) => ({
+    ...handOffs.map(({ reference, declaration, last }) => ({
       node: reference, declaration, start: last ? Number.POSITIVE_INFINITY : reference.getStart(), last,
     })),
   ]
@@ -391,8 +399,8 @@ function orderIndices(ts: RouterCompiler, registrations: readonly Registration[]
 export interface Registrations {
   registrars: Map<Node, Registrar>
   registrations: Registration[]
-  escapes: Escape[]
-  /** Each registration's and escape's index among its registrar's, when the source proves their order. */
+  handOffs: HandOff[]
+  /** Each registration's and hand-off's index among its registrar's, when the source proves their order. */
   indices: Map<Node, number>
 }
 
@@ -400,9 +408,9 @@ export interface Registrations {
 export async function routerRegistrations(
   context: RouterContext, sources: readonly Node[], calls: readonly Call[],
 ): Promise<Registrations> {
-  const registrars = await collectRegistrars(sources, context)
-  await applyPrefixes(calls, registrars, context)
-  const registrations = await collectRegistrations(calls, registrars, context)
-  const escapes = await collectEscapes(registrars, registrations, context)
-  return { registrars, registrations, escapes, indices: orderIndices(context.ts, registrations, escapes) }
+  const registrars = await collectRegistrars(context, sources)
+  await applyPrefixes(context, calls, registrars)
+  const registrations = await collectRegistrations(context, calls, registrars)
+  const handOffs = await collectHandOffs(context, registrars, registrations)
+  return { registrars, registrations, handOffs, indices: orderIndices(context.ts, registrations, handOffs) }
 }

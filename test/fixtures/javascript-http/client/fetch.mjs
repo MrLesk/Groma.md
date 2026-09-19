@@ -2,6 +2,7 @@ import { API_URL } from './settings.mjs'
 
 export async function loadTalks(id, method) {
   await fetch('/api/talks')
+  await fetch('/dual/items')
   await fetch(`/talks/${id}`)
   await fetch(API_URL + '/votes/' + id)
   await fetch('https://speakers.example.com/talks')

@@ -39,12 +39,29 @@ function fileOf(scan: ScanObservation, operation: string): string {
   return scan.operations!.find(candidate => candidate.id === operation)!.file
 }
 
-test.concurrent('JavaScript routers report the endpoints their handlers serve, with every mounted prefix', async () => {
+/**
+ * Each endpoint as `application@position method path owner`, ordered by application and position; an
+ * endpoint of a router that states no order has no `application@position`.
+ */
+function endpointTable(scan: ScanObservation): string[] {
+  const operations = new Map(scan.operations!.map(operation => [operation.id, operation]))
+  const rows = scan.httpEndpoints!.map(endpoint => {
+    const operation = operations.get(endpoint.operation)!
+    return {
+      application: endpoint.order?.application ?? '',
+      position: endpoint.order?.position ?? -1,
+      line: `${endpoint.order === undefined ? '' : `${endpoint.order.application}@${endpoint.order.position} `}`
+        + `${endpoint.method} ${endpointPath(endpoint.path)} ${operation.file}#${operation.name}`,
+    }
+  })
+  rows.sort((left, right) => left.application.localeCompare(right.application) || left.position - right.position
+    || left.line.localeCompare(right.line))
+  return rows.map(row => row.line)
+}
+
+test.concurrent('JavaScript routers report the endpoints their handlers serve, in the order they are tried', async () => {
   const { temporary, scan } = await scanFixture()
   try {
-    const endpoints = scan.httpEndpoints!.map(endpoint => (
-      [endpoint.method, endpointPath(endpoint.path), fileOf(scan, endpoint.operation)]
-    )).sort()
     // Package middleware, a computed method on Fastify, a route object a spread fills, a value the scan
     // cannot prove to be a handler, a key that is not a method, a router this file never mounts, a route
     // registered on a Hono or Koa child after its parent copied the child's routes, and a router whose
@@ -54,105 +71,72 @@ test.concurrent('JavaScript routers report the endpoints their handlers serve, w
     // route, a regular expression, a catch-all that is not last, a mount under a computed prefix, a
     // router with a computed prefix or from another file, a route a child may or may not have when its
     // parent copied it, and a registrar handed to other code or exported occupy their place as any
-    // remainder below the path they state, `:**!`; so does a Fastify plugin, without a place.
-    expect(endpoints).toEqual([
-      ['*', '/:**!', 'server/exported.mjs'],
-      ['*', '/:**!', 'server/hono.mjs'],
-      ['*', '/:**!', 'server/koa-api.js'],
-      ['*', '/:**!', 'server/router.cjs'],
-      ['*', '/:**!', 'server/router.cjs'],
-      ['*', '/:**!', 'server/site.js'],
-      ['*', '/:**!', 'server/spa.js'],
-      ['*', '/health', 'server/express.mjs'],
-      ['*', '/plugins/:**!', 'server/fastify.js'],
-      ['*', '/rooms/:**!', 'server/koa.js'],
-      ['*', '/rooms/:**!', 'server/koa.js'],
-      ['*', '/rooms/old', 'server/koa.js'],
-      ['*', '/rooms/shifting/:**!', 'server/koa.js'],
-      ['*', '/static/:**!', 'server/express.mjs'],
-      ['*', '/status', 'server/serve.js'],
-      ['DELETE', '/rooms/:id', 'server/koa.js'],
-      ['GET', '/:**!', 'server/router.cjs'],
-      ['GET', '/:*+', 'server/spa.js'],
-      ['GET', '/admin/users', 'server/express.mjs'],
-      ['GET', '/api/talks', 'server/hono.mjs'],
-      ['GET', '/downloads/:**!', 'server/express.mjs'],
-      ['GET', '/exported/items', 'server/exported.mjs'],
-      ['GET', '/files', 'server/serve.js'],
-      ['GET', '/lazy/items/:**!', 'server/hono.mjs'],
-      ['GET', '/mixed', 'server/serve.js'],
-      ['GET', '/multi', 'server/fastify.js'],
-      ['GET', '/orders/:id', 'server/router.cjs'],
-      ['GET', '/pages/:name', 'server/site.js'],
-      ['GET', '/reports/:**!', 'server/express.mjs'],
-      ['GET', '/rooms', 'server/koa.js'],
-      ['GET', '/rooms/details/:id', 'server/koa.js'],
-      ['GET', '/rooms/files/:**!', 'server/koa.js'],
-      ['GET', '/rooms/files/:*+', 'server/koa.js'],
-      ['GET', '/rooms/named/:id', 'server/koa.js'],
-      ['GET', '/talks/:id', 'server/express.mjs'],
-      ['GET', '/votes/:id', 'server/fastify.js'],
-      ['POST', '/files', 'server/serve.js'],
-      ['POST', '/multi', 'server/fastify.js'],
-      ['POST', '/rooms', 'server/koa.js'],
-      ['POST', '/submissions', 'server/fastify.js'],
-      ['POST', '/talks', 'server/express.mjs'],
-    ])
-  } finally { await rm(temporary, { recursive: true, force: true }) }
-})
-
-test.concurrent('Express, Hono and Koa routers report the order their routes are tried in', async () => {
-  const { temporary, scan } = await scanFixture()
-  try {
-    const ordered = scan.httpEndpoints!.flatMap(endpoint => endpoint.order === undefined ? [] : [
-      `${endpoint.order.application}@${endpoint.order.position} ${endpoint.method} ${endpointPath(endpoint.path)}`,
-    ]).sort()
-    expect(ordered).toEqual([
+    // remainder below the path they state, `:**!`.
+    expect(endpointTable(scan)).toEqual([
+      // Fastify and Bun.serve prefer the most specific route, so their endpoints, and a Fastify plugin's
+      // block below its prefix, carry no order.
+      '* /plugins/:**! server/fastify.js#(anonymous)',
+      '* /status server/serve.js#ready',
+      'GET /files server/serve.js#list',
+      'GET /mixed server/serve.js#list',
+      'GET /multi server/fastify.js#both',
+      'GET /votes/:id server/fastify.js#read',
+      'POST /files server/serve.js#store',
+      'POST /multi server/fastify.js#both',
+      'POST /submissions server/fastify.js#submit',
+      // An application is its file and the variable that holds it, so a router `b` cannot follow blocks
+      // only `b`.
+      'server/dual.js#a@0 GET /dual/items server/dual.js#dualItems',
+      'server/dual.js#b@0 * /:**! server/dual.js#(anonymous)',
       // An exported application may gain any route in the files that import it, after all of its own,
       // wherever the export is written.
-      'server/exported.mjs@0 GET /exported/items',
-      'server/exported.mjs@1 * /:**!',
-      'server/express.mjs@0 * /static/:**!',
-      'server/express.mjs@1 GET /talks/:id',
-      'server/express.mjs@2 POST /talks',
-      'server/express.mjs@3 * /health',
-      'server/express.mjs@4 GET /reports/:**!',
-      'server/express.mjs@5 GET /downloads/:**!',
+      'server/exported.mjs#app@0 GET /exported/items server/exported.mjs#(anonymous)',
+      'server/exported.mjs#app@1 * /:**! server/exported.mjs#(anonymous)',
       // A handler next to a recognized router is middleware, wherever it comes from.
-      'server/express.mjs@6 GET /admin/users',
-      'server/hono.mjs@0 GET /api/talks',
-      'server/hono.mjs@1 GET /lazy/items/:**!',
-      'server/hono.mjs@2 * /:**!',
-      'server/koa-api.js@0 * /:**!',
+      'server/express.mjs#app@0 * /static/:**! server/express.mjs#(anonymous)',
+      'server/express.mjs#app@1 GET /talks/:id server/express.mjs#(anonymous)',
+      'server/express.mjs#app@2 POST /talks server/express.mjs#(anonymous)',
+      'server/express.mjs#app@3 * /health server/express.mjs#(anonymous)',
+      'server/express.mjs#app@4 GET /reports/:**! server/express.mjs#(anonymous)',
+      'server/express.mjs#app@5 GET /downloads/:**! server/express.mjs#(anonymous)',
+      'server/express.mjs#app@6 GET /admin/users server/express.mjs#(anonymous)',
+      // A handler before a router, from the application's own module or a package, leaves the call
+      // without a path.
+      'server/guarded.js#app@0 GET /guarded/items server/guarded.js#guardedItems',
+      'server/guarded.js#app@1 GET /open/items server/guarded.js#openItems',
+      'server/hono.mjs#app@0 GET /api/talks server/hono.mjs#(anonymous)',
+      'server/hono.mjs#app@1 GET /lazy/items/:**! server/hono.mjs#addLazy',
+      'server/hono.mjs#app@2 * /:**! server/hono.mjs#(anonymous)',
+      'server/koa-api.js#app@0 * /:**! server/koa-api.js#(anonymous)',
       // A router's routes take its mount's place, a nested router's take theirs inside it, and a router
-      // handed on blocks from there on.
-      'server/koa.js@0 GET /rooms',
-      'server/koa.js@1 POST /rooms',
-      // A redirect from a route name answers at a path the scan cannot read.
-      'server/koa.js@10 * /rooms/:**!',
-      'server/koa.js@2 GET /rooms/named/:id',
-      'server/koa.js@3 GET /rooms/files/:*+',
-      'server/koa.js@4 GET /rooms/files/:**!',
-      'server/koa.js@5 GET /rooms/details/:id',
-      'server/koa.js@6 * /rooms/shifting/:**!',
-      'server/koa.js@7 * /rooms/:**!',
-      'server/koa.js@8 DELETE /rooms/:id',
-      'server/koa.js@9 * /rooms/old',
-      'server/router.cjs@0 GET /orders/:id',
-      'server/router.cjs@1 * /:**!',
-      'server/router.cjs@2 GET /:**!',
-      'server/router.cjs@3 * /:**!',
+      // handed on blocks from there on; `del` is `delete`, a redirect answers every method at its source,
+      // and a redirect from a route name answers at a path the scan cannot read.
+      'server/koa.js#app@0 GET /rooms server/koa.js#list',
+      'server/koa.js#app@1 POST /rooms server/koa.js#store',
+      'server/koa.js#app@2 GET /rooms/named/:id server/koa.js#read',
+      'server/koa.js#app@3 GET /rooms/files/:*+ server/koa.js#list',
+      'server/koa.js#app@4 GET /rooms/files/:**! server/koa.js#list',
+      'server/koa.js#app@5 GET /rooms/details/:id server/koa.js#read',
+      'server/koa.js#app@6 * /rooms/shifting/:**! server/koa.js#(anonymous)',
+      'server/koa.js#app@7 * /rooms/:**! server/koa.js#(anonymous)',
+      'server/koa.js#app@8 DELETE /rooms/:id server/koa.js#store',
+      'server/koa.js#app@9 * /rooms/old server/koa.js#(anonymous)',
+      'server/koa.js#app@10 * /rooms/:**! server/koa.js#(anonymous)',
+      'server/router.cjs#app@0 GET /orders/:id server/router.cjs#readOrder',
+      'server/router.cjs#app@1 * /:**! server/router.cjs#(anonymous)',
+      'server/router.cjs#app@2 GET /:**! server/router.cjs#(anonymous)',
+      'server/router.cjs#app@3 * /:**! server/router.cjs#(anonymous)',
+      // Mounts inside a function run in an unknown order, so every router they list shares one position.
+      'server/setup.js#app@0 GET /left/first server/setup.js#one',
+      'server/setup.js#app@0 GET /left/second server/setup.js#two',
+      'server/setup.js#app@0 GET /right/fourth server/setup.js#four',
+      'server/setup.js#app@0 GET /right/third server/setup.js#three',
       // A router from another file, mounted without a path, may serve any path from its place on.
-      'server/site.js@0 * /:**!',
-      'server/site.js@1 GET /pages/:name',
-      'server/spa.js@0 * /:**!',
-      'server/spa.js@1 GET /:*+',
+      'server/site.js#site@0 * /:**! server/site.js#(anonymous)',
+      'server/site.js#site@1 GET /pages/:name server/site.js#page',
+      'server/spa.js#app@0 * /:**! server/spa.js#(anonymous)',
+      'server/spa.js#app@1 GET /:*+ server/spa.js#spa',
     ])
-    // Fastify and Bun.serve prefer the most specific route, so their endpoints, and a Fastify plugin's
-    // block, carry no order.
-    const unordered = scan.httpEndpoints!.filter(endpoint => /server\/(fastify|serve)\.js$/.test(fileOf(scan, endpoint.operation)))
-    expect(unordered.length).toBeGreaterThan(0)
-    expect(unordered.some(endpoint => endpoint.order !== undefined)).toBe(false)
   } finally { await rm(temporary, { recursive: true, force: true }) }
 })
 
@@ -213,6 +197,7 @@ test.concurrent('JavaScript client calls report the method and the path parts th
       ['GET', '/api/talks', 'client/values.mjs'],
       ['GET', '/api/talks', 'client/values.mjs'],
       ['GET', '/api/talks/?', 'client/fetch.mjs'],
+      ['GET', '/dual/items', 'client/fetch.mjs'],
       ['GET', '/files', 'client/jquery.js'],
       ['GET', '/missing', 'client/axios.mjs'],
       ['GET', '/scripts/app.js', 'client/jquery.js'],
@@ -242,6 +227,8 @@ test.concurrent('core derives rows from the JavaScript facts of one scan', async
     expect(rows).toEqual([
       ['client/axios.mjs', 'server/fastify.js', 'Calls HTTP endpoint: POST /submissions'],
       ['client/axios.mjs', 'server/serve.js', 'Calls HTTP endpoints: DELETE /status, GET /files'],
+      // A router another application of the same file cannot follow blocks only that application.
+      ['client/fetch.mjs', 'server/dual.js', 'Calls HTTP endpoint: GET /dual/items'],
       ['client/fetch.mjs', 'server/express.mjs', 'Calls HTTP endpoint: GET /talks/:id'],
       ['client/fetch.mjs', 'server/fastify.js', 'Calls HTTP endpoint: GET /votes/:id'],
       ['client/fetch.mjs', 'server/hono.mjs', 'Calls HTTP endpoint: GET /api/talks'],
