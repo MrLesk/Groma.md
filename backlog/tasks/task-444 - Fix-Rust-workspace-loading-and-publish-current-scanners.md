@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@codex'
 created_date: '2026-09-19 21:17'
-updated_date: '2026-09-19 21:31'
+updated_date: '2026-09-19 21:35'
 labels: []
 dependencies: []
 references:
@@ -31,6 +31,7 @@ modified_files:
   - .github/workflows/release.yml
   - docs/scanners/rust/validation.md
   - package.json
+  - test-bun/scanner-fresh-checkout.test.ts
 type: bug
 ordinal: 517000
 ---
@@ -82,4 +83,8 @@ The actual Rust 0.1.2 package passes readiness and scans the entire Codex reposi
 Linux release validation exposed six Python timeouts at 20 seconds while ten concurrent tests each built a package and started separate Pyodide interpreters. The packaged Linux ARM64 suite passes Python. The release branch bounds test concurrency within each file to four while preserving all assertions, 20-second timeouts, test isolation and concurrent execution. Bun official parallel-test documentation and installed Bun 1.4.1 help confirm --max-concurrency; the declared runner is also 1.4.1. No file-level parallel or isolation option changes.
 
 The exact isolated release branch also passes bun run check after bounding test concurrency: 16 Node tests, 600 Bun tests, 36 opt-in skips, zero failures. All ten Python tests pass; the slowest takes 3.66 seconds locally. Counts differ from the shared checkout because unrelated uncommitted test files are excluded. macOS arm64 and both Linux platform package suites passed in workflow 35470306741.
+
+Windows package builds succeeded, but all fresh-checkout tests failed before scanner execution: relocating git.exe via a symlink loses its DLL lookup location (exit 53). On Windows the isolated test PATH now names the actual Git executable directory; Unix still uses the isolated Git symlink. No language SDK or project dependency directories are restored to PATH. Final Linux repository validation passed with the concurrency cap in run 35470653541.
+
+The exact isolated release branch passes bun run check after the Windows Git harness fix: 16 Node tests, 600 Bun tests, 36 opt-in skips, zero failures. Windows execution is being requalified in the final release workflow.
 <!-- SECTION:NOTES:END -->
