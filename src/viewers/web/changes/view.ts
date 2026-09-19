@@ -140,4 +140,3 @@ export function leaveChangeFile(host: HTMLElement): void {
   host.querySelector('.tabs')!.classList.remove('file-toolbar', 'task-diff-toolbar')
   host.querySelector('.tabs')!.classList.add('controls')
 }
-
