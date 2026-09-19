@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@codex'
 created_date: '2026-09-19 21:17'
-updated_date: '2026-09-19 22:09'
+updated_date: '2026-09-19 22:25'
 labels: []
 dependencies: []
 references:
@@ -106,4 +106,12 @@ Alex explicitly approved the C# packaging fix and requested browser npm login. L
 JavaScript 0.1.0 is now published and verified in npm. C# uses exact platform optional dependencies; each host build stages the adapter and complete runtime, assembly emits separate runtime packages, and publication waits for runtimes before publishing the adapter. The npm-package installation test passed on macOS without project tools (13 assertions), all six packaged C# integration tests passed (29 assertions), and bun run check passed 16 Node and 601 Bun tests with 36 opt-in skips. The cold simplicity review passed; corrected the assembly comment it identified. Implementer specification and quality review traced source/staged build, platform assembly, publication ordering, normal module resolution and SDK-free scan/outline flows. No language analysis, OKF meaning or C4 ownership changed; native Windows/Linux package qualification and initial runtime publications remain.
 
 The full-context complexity review passed with no blockers or material simplification recommendations. Normal optional dependencies are the minimum sufficient delivery change for the observed npm size failure. GitHub trusted publishing for JavaScript was blocked by automatic approval review because persistent npm security settings were not explicitly authorized; requested separate approval for JavaScript and the five new runtime packages. This does not block manual publication with the completed npm login.
+
+npm pack measured the new macOS C# runtime at 41,167,899 bytes and its adapter at 13,443 bytes, compared with the rejected 214.6 MB combined package. The exact published JavaScript 0.1.0 package installs through Groma and scans Codex: 4 files and 65 operations. C# fix commit cfb1ee3c is in ready PR108; build-only release run 35472519649 is qualifying all five platforms before initial runtime publication.
+
+C# split release qualification completed successfully in run 35472519649: repository checks and all scanner package suites passed on macOS ARM64, Linux x64/ARM64 and Windows x64/ARM64. Each C# host test packed and installed the adapter and runtime before the SDK-free scan. Downloading the qualified artifacts for initial manual runtime publication; GitHub publishing permission remains a separate pending question.
+
+Initial runtime publication reached npm but each child returned EOTP because the shared release subprocess helper inherited stdout/stderr without stdin. Corrected the helper to inherit stdin as well, enabling the existing npm browser approval flow in a terminal. No runtime artifact or scanner behavior changed; repository checks are rerunning. No C# runtime version was accepted by these failed attempts.
+
+Repository checks pass after the npm terminal-input correction: 16 Node tests, 601 Bun tests, 36 opt-in skips, zero failures. The change only connects the existing publication subprocess to the caller terminal; all qualified scanner artifacts are unchanged.
 <!-- SECTION:NOTES:END -->
