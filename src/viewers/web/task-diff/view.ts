@@ -181,6 +181,7 @@ export function paintTaskSummary(
     const done = details.definitionOfDone.filter(criterion => criterion.checked).length
     section(body, 'done', `Definition of Done · ${done} of ${details.definitionOfDone.length}`, checklistRows(details.definitionOfDone))
   }
+  textSection(body, 'Implementation plan', details?.implementationPlan ?? '')
   section(body, 'references', 'References', item.references.map(reference => {
     const row = document.createElement('li')
     row.dataset.taskKey = reference
@@ -209,7 +210,6 @@ export function paintTaskSummary(
     status.textContent = error
     body.append(status)
   }
-  textSection(body, 'Implementation plan', details?.implementationPlan ?? '')
   textSection(body, 'Implementation notes', details?.implementationNotes ?? '')
   section(body, 'comments', 'Comments', (details?.comments ?? []).map(comment => {
     const row = document.createElement('li')
