@@ -2,7 +2,7 @@ import type { ScanHttpEndpoint } from '@groma/scanner'
 import { below, type Placed, type Placement } from './http-order.ts'
 import { blockedPath, endpointPath, readablePrefix } from './http-paths.ts'
 import {
-  atTopLevel, entryStart, mounting, ORDERED, routeMembers, routeMethod, routerRegistrations, unreadHonoMembers,
+  atTopLevel, entryStart, mounting, orderedFrameworks, routeMembers, routeMethod, routerRegistrations, unreadHonoMembers,
   type Call, type Registrar, type Registration, type Registrations, type RouterContext,
 } from './http-routers.ts'
 import type { Node } from './http-syntax.ts'
@@ -11,8 +11,7 @@ import { declarationOf, heldAt, importOrigin, literalText, objectEntries, runtim
 
 /*
  * The endpoints the registrations ./http-routers.ts finds serve, placed where their registrar is
- * mounted and numbered in the order they run, and Bun.serve routes, for every TypeScript-family
- * compiler.
+ * mounted and ranked in the order they run, and Bun.serve routes, for every TypeScript-family compiler.
  */
 
 interface Mount {
@@ -24,30 +23,34 @@ interface Mount {
   position: number
 }
 
+/** What one `use` or `route` call mounts, read once. */
+interface MountCall {
+  /** The recognized registrars among its arguments. */
+  children: Node[]
+  /** The path it states: empty when its first argument is a registrar or a handler, undefined when computed. */
+  prefix?: string
+  /** Whether its first argument is a registrar or a handler rather than a path. */
+  pathless: boolean
+  /** Whether it mounts, beside no recognized registrar, a router the scan cannot follow. */
+  foreign: boolean
+}
+
 interface Routing extends Registrations {
   mounts: Map<Node, Mount[]>
+  calls: Map<Registration, MountCall>
   context: RouterContext
 }
 
-/** Where an entry serves, and whether it certainly serves there or only may. */
-interface Place {
-  placement: Placement
-  certain: boolean
-}
+type Reading = Omit<Routing, 'mounts' | 'calls'>
 
 /** A mounted instance: the router itself, or the routes a Koa router exposes through `routes()`. */
-async function registrarArgument(argument: Node, routing: Omit<Routing, 'mounts'>): Promise<Node | undefined> {
-  const { ts } = routing.context
-  const exposed = ts.isCallExpression(argument) && ts.isPropertyAccessExpression(argument.expression)
-    && argument.expression.name.text === 'routes' ? argument.expression.expression : undefined
-  const named = exposed ?? argument
+async function registrarArgument(reading: Reading, argument: Node): Promise<Node | undefined> {
+  const { ts } = reading.context
+  const named = ts.isCallExpression(argument) && ts.isPropertyAccessExpression(argument.expression)
+    && argument.expression.name.text === 'routes' ? argument.expression.expression : argument
   if (!ts.isIdentifier(named)) return undefined
-  const declaration = await declarationOf(routing.context, named)
-  const registrar = declaration === undefined ? undefined : routing.registrars.get(declaration)
-  if (registrar === undefined) return undefined
-  // A Koa router is mounted through its `routes()`, any other registrar as itself.
-  const koa = registrar.framework === 'koa'
-  return koa === (exposed !== undefined) ? declaration : undefined
+  const declaration = await declarationOf(reading.context, named)
+  return declaration !== undefined && reading.registrars.has(declaration) ? declaration : undefined
 }
 
 /**
@@ -55,52 +58,70 @@ async function registrarArgument(argument: Node, routing: Omit<Routing, 'mounts'
  * a relative module, which is the application's own code rather than a package's middleware, unless
  * the scan sees it is a function, which is middleware.
  */
-async function foreignRouter(argument: Node, routing: Omit<Routing, 'mounts'>): Promise<boolean> {
-  const { ts } = routing.context
-  if (await registrarArgument(argument, routing) !== undefined) return false
+async function foreignRouter(reading: Reading, argument: Node): Promise<boolean> {
+  const { context } = reading
+  const { ts } = context
+  if (await registrarArgument(reading, argument) !== undefined) return false
   if (ts.isCallExpression(argument) && ts.isPropertyAccessExpression(argument.expression)) {
     return argument.expression.name.text === 'routes'
   }
-  const origin = await importOrigin(routing.context, argument)
+  const origin = await importOrigin(context, argument)
   if (origin?.module.startsWith('.') !== true) return false
-  const held = await heldAt(routing.context, argument)
+  const held = await heldAt(context, argument)
   return typeof held !== 'object' || !ts.isFunctionLike(held.node)
+}
+
+/** Middleware: a function the scan sees, or a handler a package provides, such as `express.json()` or `cors()`. */
+async function middleware(context: RouterContext, argument: Node): Promise<boolean> {
+  const { ts } = context
+  const held = await heldAt(context, argument)
+  if (typeof held === 'object' && ts.isFunctionLike(held.node)) return true
+  const callee = ts.isCallExpression(argument) ? argument.expression : argument
+  const holder = ts.isPropertyAccessExpression(callee) ? callee.expression : callee
+  const origin = await importOrigin(context, holder)
+  return origin !== undefined && !origin.module.startsWith('.')
 }
 
 /**
  * What a `use` or `route` call mounts: the recognized registrars among its arguments, under the path
- * its first argument states, or under no path when the first argument is itself a registrar.
+ * its first argument states, or under no path when the first argument is itself a registrar or a
+ * handler, such as `app.use(requireAuth, api)`.
  */
-async function mountOf(
-  registration: Registration, routing: Omit<Routing, 'mounts'>,
-): Promise<{ children: Node[]; prefix?: string }> {
+async function readMount(reading: Reading, registration: Registration): Promise<MountCall> {
   const [first, ...rest] = registration.call.arguments
-  if (first === undefined) return { children: [] }
-  const unprefixed = await registrarArgument(first, routing)
-  const children: Node[] = unprefixed === undefined ? [] : [unprefixed]
+  if (first === undefined) return { children: [], prefix: '', pathless: true, foreign: false }
+  const leading = await registrarArgument(reading, first)
+  const pathless = leading !== undefined || await foreignRouter(reading, first) || await middleware(reading.context, first)
+  const children = leading === undefined ? [] : [leading]
   for (const argument of rest) {
-    const child = await registrarArgument(argument, routing)
+    const child = await registrarArgument(reading, argument)
     if (child !== undefined) children.push(child)
   }
-  const prefix = unprefixed === undefined ? await literalText(routing.context, first) : ''
-  return { children, ...(prefix === undefined ? {} : { prefix }) }
+  const prefix = pathless ? '' : await literalText(reading.context, first)
+  // A handler next to a recognized registrar is middleware, wherever it comes from.
+  const foreign = children.length === 0
+    && (await Promise.all(registration.call.arguments.map(argument => foreignRouter(reading, argument)))).some(Boolean)
+  return { children, pathless, foreign, ...(prefix === undefined ? {} : { prefix }) }
 }
 
-async function collectMounts(routing: Omit<Routing, 'mounts'>): Promise<Map<Node, Mount[]>> {
+async function collectMounts(reading: Reading): Promise<Pick<Routing, 'mounts' | 'calls'>> {
   const mounts = new Map<Node, Mount[]>()
-  for (const registration of routing.registrations) {
+  const calls = new Map<Registration, MountCall>()
+  for (const registration of reading.registrations) {
     if (!mounting(registration)) continue
-    const { children, prefix } = await mountOf(registration, routing)
-    for (const [position, child] of children.entries()) {
-      mounts.set(child, [...mounts.get(child) ?? [], { registration, position, ...(prefix === undefined ? {} : { prefix }) }])
+    const mount = await readMount(reading, registration)
+    calls.set(registration, mount)
+    for (const [position, child] of mount.children.entries()) {
+      const entry = { registration, position, ...(mount.prefix === undefined ? {} : { prefix: mount.prefix }) }
+      mounts.set(child, [...mounts.get(child) ?? [], entry])
     }
   }
-  return mounts
+  return { mounts, calls }
 }
 
 /** The registrar's own path follows where it is placed. */
-function withOwn(placement: Placement, registrar: Registrar): Placement {
-  return registrar.own === '' ? placement : { ...placement, prefix: `${placement.prefix}/${registrar.own}` }
+function withPrefix(placement: Placement, registrar: Registrar): Placement {
+  return registrar.prefix === '' ? placement : { ...placement, prefix: `${placement.prefix}/${registrar.prefix}` }
 }
 
 /**
@@ -109,7 +130,7 @@ function withOwn(placement: Placement, registrar: Registrar): Placement {
  * the child's routes as they change. The copy's order is known only between top-level statements of
  * one file.
  */
-function underMount(mount: Registration, entry: Node, routing: Routing): 'yes' | 'no' | 'unknown' {
+function underMount(routing: Routing, mount: Registration, entry: Node): 'yes' | 'no' | 'unknown' {
   const { ts } = routing.context
   const parent = routing.registrars.get(mount.declaration)!
   const copies = (parent.framework === 'hono' && mount.member === 'route')
@@ -122,31 +143,31 @@ function underMount(mount: Registration, entry: Node, routing: Routing): 'yes' |
 
 /**
  * Every place an entry of this instance serves from; an unmounted router, or one whose own path is
- * unknown, serves nothing here.
+ * unknown, serves nothing here. An application is its file and the variable that holds it, so two
+ * applications of one file keep their own order.
  */
-function placements(declaration: Node, entry: Node, routing: Routing, seen: ReadonlySet<Node> = new Set()): Place[] {
+function placements(routing: Routing, declaration: Node, entry: Node, seen: ReadonlySet<Node> = new Set()): Placement[] {
   const registrar = routing.registrars.get(declaration)!
-  if (seen.has(declaration) || registrar.own === undefined) return []
+  if (seen.has(declaration) || registrar.prefix === undefined) return []
   const entries = routing.mounts.get(declaration) ?? []
   if (entries.length === 0) {
     if (registrar.kind === 'router') return []
-    const application = routing.context.file(declaration)
-    const root = { prefix: '', application, rank: [], known: true, ordered: ORDERED.has(registrar.framework) }
-    return [{ placement: withOwn(root, registrar), certain: true }]
+    const application = `${routing.context.file(declaration)}#${registrar.variable}`
+    const ordered = orderedFrameworks.has(registrar.framework)
+    return [withPrefix({ prefix: '', application, rank: [], known: true, ordered, certain: true }, registrar)]
   }
   // A mount whose prefix is unknown blocks its parent's paths instead of placing these routes.
   return entries.flatMap(({ registration, prefix, position }) => {
-    const under = prefix === undefined ? 'no' : underMount(registration, entry, routing)
+    const under = prefix === undefined ? 'no' : underMount(routing, registration, entry)
     if (under === 'no') return []
-    return placements(registration.declaration, registration.call, routing, new Set([...seen, declaration])).map(parent => {
-      const at = below(parent.placement, routing.indices.get(registration.call), prefix!)
-      const placement = withOwn(at.known ? { ...at, rank: [...at.rank, position] } : at, registrar)
-      return { placement, certain: parent.certain && under === 'yes' }
+    return placements(routing, registration.declaration, registration.call, new Set([...seen, declaration])).map(parent => {
+      const at = below(parent, prefix!, routing.indices.get(registration.call), position)
+      return { ...withPrefix(at, registrar), certain: parent.certain && under === 'yes' }
     })
   })
 }
 
-async function methodList(node: Node | undefined, context: RouterContext): Promise<string[]> {
+async function methodList(context: RouterContext, node: Node | undefined): Promise<string[]> {
   if (node === undefined) return []
   const values = context.ts.isArrayLiteralExpression(node) ? [...node.elements] : [node]
   const methods = await Promise.all(values.map(async value => methodText(await literalText(context, value))))
@@ -154,22 +175,23 @@ async function methodList(node: Node | undefined, context: RouterContext): Promi
 }
 
 /**
- * A route entry the scan sees but cannot read, a registration or an escape `entry`, still occupies its
+ * A route entry the scan sees but cannot read, a registration or a hand-off `entry`, still occupies its
  * place in an application that takes the first registered match: it is reported as its known prefix and
- * a remainder that may or may not match. `always` reports it in an application that prefers the most
- * specific route too.
+ * a remainder that may or may not match.
  */
-function blocked(place: Place, prefix: string, method: string, entry: Node, routing: Routing, always = false): Placed[] {
-  if (!place.placement.ordered && !always) return []
-  const at = below(place.placement, routing.indices.get(entry), prefix)
+function blocked(routing: Routing, placement: Placement, prefix: string, method: string, entry: Node): Placed[] {
+  if (!placement.ordered) return []
+  const at = below(placement, prefix, routing.indices.get(entry))
   const operation = routing.context.callerOperation(entry)
   return [{ endpoint: { operation, method, path: blockedPath(at.prefix) }, placement: at }]
 }
 
 /** Hono's trailing `*` also matches the path without it. A route that may not be there only blocks its path. */
-function served(place: Place, route: string, methods: readonly string[], operation: string, registration: Registration, routing: Routing): Placed[] {
-  if (!place.certain) return methods.flatMap(method => blocked(place, route, method, registration.call, routing))
-  const at = below(place.placement, routing.indices.get(registration.call), route)
+function served(
+  routing: Routing, placement: Placement, route: string, methods: readonly string[], operation: string, registration: Registration,
+): Placed[] {
+  if (!placement.certain) return methods.flatMap(method => blocked(routing, placement, route, method, registration.call))
+  const at = below(placement, route, routing.indices.get(registration.call))
   const path = endpointPath(at.prefix, routing.registrars.get(registration.declaration)!.framework === 'hono')
   return methods.map(method => ({ endpoint: { operation, method, path }, placement: at }))
 }
@@ -181,46 +203,47 @@ async function option(context: RouterContext, options: Node, name: string): Prom
 }
 
 /** Fastify's `route({ method, url, handler })`, or Express's `route(path)`, whose chained handlers are not read. */
-async function routeOptions(registration: Registration, place: Place, routing: Routing): Promise<Placed[]> {
+async function routeOptions(routing: Routing, registration: Registration, placement: Placement): Promise<Placed[]> {
   const { context } = routing
   const { call } = registration
   const argument = call.arguments[0]!
   const options = await heldAt(context, argument)
   if (typeof options !== 'object' || !context.ts.isObjectLiteralExpression(options.node)) {
-    return blocked(place, readablePrefix(await urlParts(context, argument)), '*', call, routing)
+    return blocked(routing, placement, readablePrefix(await urlParts(context, argument)), '*', call)
   }
   const url = await literalText(context, await option(context, argument, 'url'))
-  const methods = await methodList(await option(context, argument, 'method'), context)
-  if (url === undefined || methods.length === 0) return blocked(place, url ?? '', '*', call, routing)
+  const methods = await methodList(context, await option(context, argument, 'method'))
+  if (url === undefined || methods.length === 0) return blocked(routing, placement, url ?? '', '*', call)
   const operation = await context.handlerOperation(await option(context, argument, 'handler'), call)
-  return served(place, url, methods, operation, registration, routing)
+  return served(routing, placement, url, methods, operation, registration)
 }
 
 /** Hono's `on(method, path)`, `basePath(path)` and `mount(path)` block their path, read as far as it is literal. */
-async function unreadCall(registration: Registration, place: Place, routing: Routing): Promise<Placed[]> {
+async function unreadCall(routing: Routing, registration: Registration, placement: Placement): Promise<Placed[]> {
   const { call, member } = registration
   const { context } = routing
   const [first, second] = call.arguments
   const path = member === 'on' ? second : first
   const prefix = path === undefined ? '' : readablePrefix(await urlParts(context, path))
   const method = member === 'on' ? methodText(await literalText(context, first)) : undefined
-  return blocked(place, prefix, method ?? '*', call, routing)
+  return blocked(routing, placement, prefix, method ?? '*', call)
 }
 
 /**
  * Fastify's `register(plugin, { prefix })` registers the plugin's routes, which the scan does not read,
- * below its prefix; Fastify prefers the most specific route, so the block carries no order.
+ * below its prefix. Fastify prefers the most specific route, so the block carries no order.
  */
-async function registerCall(registration: Registration, place: Place, routing: Routing): Promise<Placed[]> {
+async function registerCall(routing: Routing, registration: Registration, placement: Placement): Promise<Placed[]> {
   const { call } = registration
   const options = call.arguments[1]
   const prefix = options === undefined ? 'absent' : await heldAt(routing.context, options, 'prefix')
   const readable = typeof prefix === 'object' ? readablePrefix(await urlParts(routing.context, prefix.node)) : ''
-  return blocked(place, readable, '*', call, routing, true)
+  const at = below(placement, readable)
+  return [{ endpoint: { operation: routing.context.callerOperation(call), method: '*', path: blockedPath(at.prefix) }, placement: at }]
 }
 
 /** The path argument: a Koa router also takes `get(name, path, handler)`, whose first argument names the route. */
-async function pathArgument(registration: Registration, routing: Routing): Promise<Node> {
+async function pathArgument(routing: Routing, registration: Registration): Promise<Node> {
   const [first, second] = registration.call.arguments
   const named = registration.member !== 'redirect' && registration.call.arguments.length > 2
     && routing.registrars.get(registration.declaration)!.framework === 'koa'
@@ -232,21 +255,21 @@ async function pathArgument(registration: Registration, routing: Routing): Promi
  * A registration needs its own handler: `app.get('name')` alone reads a setting. A Koa `redirect` answers
  * at its source path, which a route name in its place leaves unknown.
  */
-async function routeCall(registration: Registration, place: Place, routing: Routing): Promise<Placed[]> {
+async function routeCall(routing: Routing, registration: Registration, placement: Placement): Promise<Placed[]> {
   const { call, member } = registration
   const framework = routing.registrars.get(registration.declaration)!.framework
-  if (unreadHonoMembers.has(member)) return unreadCall(registration, place, routing)
-  if (member === 'register') return registerCall(registration, place, routing)
-  if (member === 'route' && call.arguments.length === 1) return routeOptions(registration, place, routing)
+  if (unreadHonoMembers.has(member)) return unreadCall(routing, registration, placement)
+  if (member === 'register') return registerCall(routing, registration, placement)
+  if (member === 'route' && call.arguments.length === 1) return routeOptions(routing, registration, placement)
   const method = routeMethod(member, framework)
   if (method === undefined || call.arguments.length < 2) return []
-  const parts = await urlParts(routing.context, await pathArgument(registration, routing))
+  const parts = await urlParts(routing.context, await pathArgument(routing, registration))
   const route = parts.length === 1 && parts[0]!.kind === 'text' ? parts[0]!.text : undefined
   if (route === undefined || (member === 'redirect' && !route.startsWith('/'))) {
-    return blocked(place, route === undefined ? readablePrefix(parts) : '', method, call, routing)
+    return blocked(routing, placement, route === undefined ? readablePrefix(parts) : '', method, call)
   }
   const handler = member === 'redirect' ? undefined : call.arguments[call.arguments.length - 1]
-  return served(place, route, [method], await routing.context.handlerOperation(handler, call), registration, routing)
+  return served(routing, placement, route, [method], await routing.context.handlerOperation(handler, call), registration)
 }
 
 /**
@@ -256,45 +279,43 @@ async function routeCall(registration: Registration, place: Place, routing: Rout
  * not a mount: a handler from a package or one the scan sees is a function, and any handler next to a
  * recognized registrar in one call.
  */
-async function mountCall(registration: Registration, place: Place, routing: Routing): Promise<Placed[]> {
+async function mountCall(routing: Routing, registration: Registration, placement: Placement): Promise<Placed[]> {
   const { call } = registration
-  const { children, prefix } = await mountOf(registration, routing)
-  const hidden = children.some(child => routing.registrars.get(child)!.own === undefined)
-  // A handler next to a recognized registrar is middleware, wherever it comes from.
-  const foreign = children.length === 0
-    && (await Promise.all(call.arguments.map(argument => foreignRouter(argument, routing)))).some(Boolean)
-  const blocks = hidden || foreign || (prefix === undefined ? children.length > 0 : children.length === 0 && call.arguments.length > 1)
-  if (!blocks) return []
+  const mount = routing.calls.get(registration)!
+  const hidden = mount.children.some(child => routing.registrars.get(child)!.prefix === undefined)
+  const unfollowed = mount.prefix === undefined
+    ? mount.children.length > 0
+    : !mount.pathless && mount.children.length === 0 && call.arguments.length > 1
+  if (!hidden && !mount.foreign && !unfollowed) return []
   const parts = await urlParts(routing.context, call.arguments[0]!)
-  return blocked(place, prefix ?? readablePrefix(parts), '*', call, routing)
+  return blocked(routing, placement, mount.prefix ?? readablePrefix(parts), '*', call)
 }
 
-async function registrationEndpoints(registration: Registration, routing: Routing): Promise<Placed[]> {
+async function registrationEndpoints(routing: Routing, registration: Registration): Promise<Placed[]> {
   const placed: Placed[] = []
-  for (const place of placements(registration.declaration, registration.call, routing)) {
-    placed.push(...await (mounting(registration) ? mountCall : routeCall)(registration, place, routing))
+  for (const placement of placements(routing, registration.declaration, registration.call)) {
+    placed.push(...await (mounting(registration) ? mountCall : routeCall)(routing, registration, placement))
   }
   return placed
 }
 
 /**
  * The endpoints the sources' routers serve, with the placement that orders them; an ordered entry the
- * scan cannot read blocks its paths, and a registrar handed to other code blocks from its own root.
+ * scan cannot read blocks its paths, and a registrar handed off to other code blocks from its own root.
  */
 export async function routerEndpoints(
   context: RouterContext, sources: readonly Node[], calls: readonly Call[],
 ): Promise<Placed[]> {
-  const found = await routerRegistrations(context, sources, calls)
-  const partial = { ...found, context }
-  const routing: Routing = { ...partial, mounts: await collectMounts(partial) }
-  const placed = found.escapes.flatMap(({ reference, declaration }) => placements(declaration, reference, routing)
-    .flatMap(place => blocked(place, '', '*', reference, routing)))
-  for (const registration of found.registrations) placed.push(...await registrationEndpoints(registration, routing))
+  const reading: Reading = { ...await routerRegistrations(context, sources, calls), context }
+  const routing: Routing = { ...reading, ...await collectMounts(reading) }
+  const placed = routing.handOffs.flatMap(({ reference, declaration }) => placements(routing, declaration, reference)
+    .flatMap(placement => blocked(routing, placement, '', '*', reference)))
+  for (const registration of routing.registrations) placed.push(...await registrationEndpoints(routing, registration))
   return placed
 }
 
 /** `Bun.serve` on the runtime's global, or the `serve` the `bun` module exports. */
-async function bunServe(call: Call, context: RouterContext): Promise<boolean> {
+async function bunServe(context: RouterContext, call: Call): Promise<boolean> {
   const { ts } = context
   const callee = call.expression
   if (ts.isPropertyAccessExpression(callee)) {
@@ -315,7 +336,7 @@ function serveMethod(key: string): string | undefined {
  * A route value is one handler for every method, or an object of handlers by method. Only a value the
  * scan proves to be a function serves every method; one it cannot read claims none.
  */
-async function serveRoute(route: string, value: Node, call: Call, context: RouterContext): Promise<ScanHttpEndpoint[]> {
+async function serveRoute(context: RouterContext, route: string, value: Node, call: Call): Promise<ScanHttpEndpoint[]> {
   const path = endpointPath(route)
   const byMethod = await objectEntries(context, value)
   if (byMethod === undefined) {
@@ -336,10 +357,10 @@ export async function serveEndpoints(context: RouterContext, calls: readonly Cal
   const endpoints: ScanHttpEndpoint[] = []
   for (const call of calls) {
     const [options] = call.arguments
-    if (options === undefined || !await bunServe(call, context)) continue
+    if (options === undefined || !await bunServe(context, call)) continue
     const routes = await heldAt(context, options, 'routes')
     const entries = typeof routes === 'object' ? await objectEntries(context, routes.node) : undefined
-    for (const [route, value] of entries ?? []) endpoints.push(...await serveRoute(route, value, call, context))
+    for (const [route, value] of entries ?? []) endpoints.push(...await serveRoute(context, route, value, call))
   }
   return endpoints
 }

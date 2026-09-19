@@ -71,7 +71,7 @@ async function controllerMethod(context: RouterContext, member: Node, controller
     const decorator = await decoratorCall(context, member, name)
     if (decorator === undefined) continue
     const { path, prefix } = await decoratorPath(context, decorator)
-    const placement = below(controller, undefined, path ?? prefix)
+    const placement = below(controller, path ?? prefix)
     const operation = await context.handlerOperation(member, member)
     placed.push({ endpoint: { operation, method, path: path === undefined ? blockedPath(placement.prefix) : endpointPath(placement.prefix) }, placement })
   }
@@ -85,7 +85,7 @@ async function controllerClass(context: RouterContext, statement: Node, nest: Ne
   if (decorator === undefined) return []
   const { path, prefix } = await decoratorPath(context, decorator)
   const application = nest.application ?? context.file(statement)
-  const controller: Placement = { prefix: path ?? prefix, application, rank: [], known: false, ordered: nest.ordered }
+  const controller: Placement = { prefix: path ?? prefix, application, rank: [], known: false, ordered: nest.ordered, certain: true }
   const placed: Placed[] = []
   for (const member of statement.members) placed.push(...await controllerMethod(context, member, controller))
   if (path !== undefined) return placed

@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@claude'
 created_date: '2026-09-16 20:32'
-updated_date: '2026-09-18 22:33'
+updated_date: '2026-09-19 00:25'
 labels: []
 dependencies:
   - TASK-418
@@ -67,6 +67,10 @@ modified_files:
   - test/fixtures/typescript-http/middleware.ts.fixture
   - test/fixtures/typescript-http/admin-router.ts.fixture
   - test/fixtures/javascript-http/server/exported.mjs
+  - plugins/scanners/typescript/src/http-controllers.ts
+  - test/fixtures/javascript-http/server/guarded.js
+  - test/fixtures/javascript-http/server/dual.js
+  - test/fixtures/javascript-http/server/setup.js
 parent_task_id: TASK-416
 type: feature
 ordinal: 484000
@@ -110,6 +114,8 @@ Certain HTTP relationships need endpoint and request facts from every ecosystem.
 10. Add fixtures for each new API and its abstentions, extend the supported-API table, drop jQuery and Koa from the unsupported list, and state that a name a loop binds is computed rather than configured.
 
 Review-fix round. Replace the per-file scope with the compiler's own resolution over the one parsed file: names resolve through the shared value reader (plugins/scanners/http-values.ts), whose importOrigin also reads CommonJS require forms and whose bindings see reassignment and destructuring, so a shadowing parameter or loop binding is never an import or an outer constant. Requests go through the shared plugins/scanners/http-clients.ts (fetch method rules, axios shorthands, config, instances, request baseURL and defaults); jQuery keeps its own reader with method over type. Routers go through one shared router reader for the TypeScript family (Express, Fastify, Hono and Koa), which the TypeScript scanner also uses: registrations, chains, hand-offs, mounts, blockers and order through plugins/scanners/http-order.ts, with route patterns from plugins/scanners/http-paths.ts (the JavaScript copy is deleted). Bun.serve claims every method only for a value proven to be a function. Docs answer decisions 7 and 8. Red fixtures for each review finding.
+
+Simplicity round, routing (owner request, junior-maintainer review): middleware before a router without a path no longer reads as a computed prefix; an application is keyed by its creating file and variable, so two applications in one file keep separate orders; one numbered routing model on the JavaScript page; below() alone appends indices while the order is known; split route patterns at every slash; remove special cases no test needs (a one-argument set, the Koa-only routes() mount, a tiebreak that cannot happen); hand-off naming, a registrar's prefix, the placement's certainty; register builds its own block; mounts read once per registration; tests for the rules that survived deletion and one endpoint table with positions.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
@@ -152,6 +158,8 @@ The page's supported-API table now lists both, neither appears in the unsupporte
 Verification after the extension: test/fixtures/javascript-http holds 11 files, the four tests assert 18 endpoints, 21 requests and 8 derived rows, Biome reports nothing for the plugin, and bun run check exits 0 in a detached worktree holding HEAD plus only this task's changes (16 Node tests, 492 Bun tests, 0 failures).
 
 Review-fix round. The external reviews found that uncertainty became certain facts: a parameter, local or loop binding that shadowed an import was taken for it, a reassigned or destructured CommonJS binding stayed a client or registrar, an unresolved Bun.serve route value claimed every method, jQuery's type beat method, a computed option key claimed GET, a request's own baseURL and an unreadable axios.create config were ignored, a reassigned property kept its literal, and axios defaults were never read. The per-file scope, reads and path copies are deleted: names resolve through the classic compiler over the one file and the shared value reader, whose importOrigin now reads require forms and whose index records required axios defaults; requests go through the shared plugins/scanners/http-clients.ts; routers go through a new shared reader for the TypeScript family, plugins/scanners/http-routers.ts and http-routes.ts, which the TypeScript scanner now uses too (its http-endpoints.ts is an adapter plus NestJS), with shared route patterns and order. Decided in cold review and applied: pathless mounts of routers the scan cannot follow block from their place (package middleware, a function the scan sees, and any handler beside a recognized router stay middleware); Hono route and a Koa router's use copy the child's routes when they run; in this one-file scan exports hand the registrar on, placed last (a circular require is the accepted exception); Fastify register blocks its prefix without order; Koa del and redirect are read; Bun.serve is one shared rule. Side effects accepted: TypeScript registrars include a never-reassigned let or var, React and Vue recognize a required axios, and a fetch input that is not URL text states no method. Verification: red fixtures in test/fixtures/javascript-http and typescript-http, each rule mutation-checked; isolated bun install --frozen-lockfile and bun run check exit 0 (584 pass, 35 skip, 0 fail).
+
+Simplicity round, routing (owner request, junior-maintainer review). Defects: middleware before a router without a path (app.use(requireAuth, api), app.use(express.json(), open)) read as a computed prefix, dropping the router and blocking the root; readMount now treats a registrar or handler first argument as no path (guarded.js). Two applications of one file shared one order key, so a blocker in one hid the other's rows; an application is now its file and variable, file#name (dual.js, with the core row it restores). Simplifications: below() alone appends a mount's index and position while the order is known (setup.js guards it); route patterns split at every slash; the one-argument set, Koa-only routes() mounts and an impossible rank tiebreak are gone; hand-off naming, Registrar.prefix, Placement.certain in place of a wrapper, register builds its own block, each mount call is read once, and the internals take their context or routing first. Docs: the JavaScript page states the routing model as six numbered rules. Tests: one endpoint table with application@position per line, sorted numerically. Verified: each new rule mutation-checked; isolated bun install --frozen-lockfile and bun run check exit 0 (595 pass, 35 skip, 0 fail). This commit also carries the two TypeScript adapter lines the shared change forces; the TypeScript tests move to the new application keys in the TASK-416.1 commit that follows.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
@@ -164,4 +172,6 @@ Because the scanner parses one file alone, a new file scope resolves names insid
 Verified with test-bun/javascript-http.test.ts over test/fixtures/javascript-http, whose four tests assert the 18 endpoints, 21 requests and 8 derived rows the 11 fixture files produce, including each unsupported construct that reports nothing and the operation each endpoint names. The packaged scanner also reported all three fetch calls in the authored JavaScript of a wifi-densepose checkout. bun run check exits 0 in a detached worktree holding HEAD plus only this task's changes: 16 Node tests and 492 Bun tests pass, and Biome reports nothing for the plugin.
 
 The review-fix round replaced the JavaScript scanner's own name resolution and value readers with the compiler over the one file and the shared readers, so shadowing names, reassigned or destructured bindings, computed or duplicated options, request-level bases, reassigned properties and axios defaults are read as the other TypeScript-family scanners read them. Routers now go through one shared reader for Express, Fastify, Hono and Koa, used by the TypeScript scanner too, which reports constrained route patterns, registration order and blockers for entries the scan cannot read, including routers from other files, exports, copying mounts and Fastify plugins. The JavaScript page answers producer decisions 7 and 8.
+
+The routing simplicity round fixed middleware before a pathless router and two applications of one file sharing an order, and reduced the shared router reader to one index rule, hand-off terms and a six-rule model on the JavaScript page.
 <!-- SECTION:FINAL_SUMMARY:END -->

@@ -24,20 +24,6 @@ function remainder(name = '*'): HttpEndpointSegment {
   return { kind: 'catch-all', name, optional: true, constrained: true }
 }
 
-/** Split at the slashes that separate segments, leaving those inside a pattern group. */
-function parts(pattern: string): string[] {
-  const found: string[] = []
-  let depth = 0
-  let current = ''
-  for (const character of pattern) {
-    if (character === '(' || character === '{') depth++
-    if ((character === ')' || character === '}') && depth > 0) depth--
-    if (character !== '/' || depth > 0) current += character
-    else if (current !== '') { found.push(current); current = '' }
-  }
-  return current === '' ? found : [...found, current]
-}
-
 function placeholder(match: RegExpExecArray, last: boolean): HttpEndpointSegment | undefined {
   const [, name, round, curly, optional] = match
   const pattern = round ?? curly
@@ -73,12 +59,11 @@ function segment(part: string, last: boolean, bareWildcard: boolean): HttpEndpoi
  */
 export function endpointPath(pattern: string, bareWildcard = false): HttpEndpointSegment[] {
   const group = OPTIONAL_GROUP.exec(pattern)
-  // Hono writes a pattern right after a parameter's name, `:id{[0-9]+}`, which is no group.
-  if (group !== null && !/:\w*$/.test(pattern.slice(0, group.index))) {
+  if (group !== null) {
     const path = endpointPath(pattern.slice(0, group.index), bareWildcard)
     return path.at(-1)?.kind === 'catch-all' ? path : [...path, { kind: 'parameter', name: group[1]!, optional: true }]
   }
-  const pieces = parts(pattern)
+  const pieces = pattern.split('/').filter(part => part !== '')
   const path: HttpEndpointSegment[] = []
   for (const [index, part] of pieces.entries()) {
     const stated = segment(part, index === pieces.length - 1, bareWildcard)
