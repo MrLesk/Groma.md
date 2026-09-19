@@ -1,11 +1,11 @@
 ---
 id: TASK-447
 title: Compare Git changes through the map and revision sources
-status: In Progress
+status: Done
 assignee:
   - '@codex'
 created_date: '2026-09-19 21:42'
-updated_date: '2026-09-19 22:37'
+updated_date: '2026-09-19 22:38'
 labels: []
 dependencies: []
 references:
@@ -131,12 +131,12 @@ Developers need to review local work, branches, commits, and optional GitHub PRs
 - [x] #2 Shared change projection and the existing map, hierarchy, and Details panes show added, edited, removed, renamed, and unmapped changes with correct ownership and immutable snapshot inputs.
 - [x] #3 Task Review changes uses the shared comparison and diff experience, preserves existing task endpoint policy, and active task focus changes file scope without changing endpoints.
 - [x] #4 One provider-neutral selector and Plugins settings support built-in local Git and the optional GitHub source with complete paging, search, readiness, exact commit acquisition, and discovery-only behavior.
-- [ ] #5 Documented automated and browser flows pass, packaged delivery works, required reviews are complete, and a PR is opened from the isolated worktree.
+- [x] #5 Documented automated and browser flows pass, packaged delivery works, required reviews are complete, and a PR is opened from the isolated worktree.
 <!-- AC:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 Acceptance criteria have objective verification evidence.
+- [x] #1 Acceptance criteria have objective verification evidence.
 - [x] #2 Relevant checks pass and changes remain task-scoped.
 - [x] #3 Public contracts or documentation are updated when behavior changes.
 - [x] #4 Implementation Plan reflects the final approach; correction history and verification are recorded in Implementation Notes.
@@ -164,4 +164,12 @@ Final review found that comparison payloads keep the live project profile even w
 Implementer specification and quality review completed against the five acceptance criteria and the approved plan. The selected range, Git facts, ownership projection, session payload, shared reader and map paint can be followed through their named domains. No authority-backed implementation blockers remain. Historical profile regression failed before its correction and now passes. Sixteen focused tests pass. Complete check passes: 617 Bun tests and 16 Node tests, with 35 toolchain-dependent skips; the pre-existing iso-map complexity warning remains. Browser verified current live-diff refresh and Shared on component change rows while task scope retained the base. Required final full-context complexity review and final packaging/PR publication remain.
 
 Final full-context complexity review found no blocking issues or further material layer, concept or test to remove. It confirmed clear domain ownership, the shared task/Git reader, and the temporary OKF/C4 comparison boundary. Final repeated bun run check passed: 617 Bun tests, 16 Node tests, 35 toolchain-dependent skips. All changed source and test files are at or below 500 lines; new/changed functions meet the complexity limit. git diff --check is clean. The standalone compiled CLI starts the comparison page, and its existing selector exposes local Git plus the enabled GitHub source. No Open PR implementation remains in the web/history paths. PR publication is the remaining acceptance item.
+
+PR opened: https://github.com/MrLesk/Groma.md/pull/109 from codex/git-changes in /private/tmp/groma-git-changes. Final compiled-browser check returned the real GitHub main branch and Escape cancelled selection without replacing the current comparison. Closing both test servers removed every owned revision ref; the disposable checkout remained on its original main commit. No material findings remain from either required independent review.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Implemented exact Git comparisons, separate map change colors, shared component/task file review and an optional GitHub discovery plugin within the existing revision control. Plain working-tree/time-machine browsing stays unchanged. Verified with bun run check (617 Bun and 16 Node passes; 35 toolchain skips), 16 focused tests, browser checks across three themes and task/history/live-update flows, live GitHub branch/PR and fork acquisition, and the standalone CLI build. Required reviews passed. Delivered in PR #109.
+<!-- SECTION:FINAL_SUMMARY:END -->
