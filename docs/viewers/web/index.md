@@ -169,6 +169,15 @@ Commits without the required OKF v0.2 Groma project profile remain visible but
 are marked Unsupported and cannot be selected. Returning to Current revision
 resumes live architecture and work updates.
 
+The floating icon bar beside the hierarchy toggles Actors, Systems, Containers,
+and Components on the map. Its icons follow the existing ● ■ ▱ ▪ marks with
+clean geometry and gently rounded corners. All four start visible. Hover or keyboard focus shows
+each icon's label; pressed buttons mark visible types. Hiding a type hides its
+map bodies, connections with hidden endpoints, and attached task pins. Children
+of a hidden boundary remain visible when their own type is enabled. Filtering
+keeps layout, camera, hierarchy, and stored architecture unchanged. Choices stay
+active across live updates and Iso, 2D, and Layers changes until the page reloads.
+
 The hierarchy pane's boxed double-chevron retracts it to a narrow rail and
 returns it without changing tree, selection, or camera state. Its quiet branch lines keep nested
 rows legible. Under Actors, each actor has an accordion that starts collapsed
