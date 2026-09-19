@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@codex'
 created_date: '2026-09-19 21:17'
-updated_date: '2026-09-19 21:25'
+updated_date: '2026-09-19 21:31'
 labels: []
 dependencies: []
 references:
@@ -30,6 +30,7 @@ modified_files:
   - bun.lock
   - .github/workflows/release.yml
   - docs/scanners/rust/validation.md
+  - package.json
 type: bug
 ordinal: 517000
 ---
@@ -77,4 +78,8 @@ Release commit 97353f42 is isolated on codex/rust-workspace-scanner-release; dra
 Release job 105969611090 failed before scanner builds: Temurin has no JDK 25 for Windows ARM64. The isolated release workflow now selects Microsoft JDK 25 for that one platform, whose official download page lists Windows ARM64 support. Other platforms retain Temurin. This is a reproduced publication blocker under acceptance criterion 5.
 
 The actual Rust 0.1.2 package passes readiness and scans the entire Codex repository: 2586 files, 25502 operations, 2 roots. Replacement release workflow 35470306741 uses Microsoft JDK 25 only on Windows ARM64. Publication remains pending.
+
+Linux release validation exposed six Python timeouts at 20 seconds while ten concurrent tests each built a package and started separate Pyodide interpreters. The packaged Linux ARM64 suite passes Python. The release branch bounds test concurrency within each file to four while preserving all assertions, 20-second timeouts, test isolation and concurrent execution. Bun official parallel-test documentation and installed Bun 1.4.1 help confirm --max-concurrency; the declared runner is also 1.4.1. No file-level parallel or isolation option changes.
+
+The exact isolated release branch also passes bun run check after bounding test concurrency: 16 Node tests, 600 Bun tests, 36 opt-in skips, zero failures. All ten Python tests pass; the slowest takes 3.66 seconds locally. Counts differ from the shared checkout because unrelated uncommitted test files are excluded. macOS arm64 and both Linux platform package suites passed in workflow 35470306741.
 <!-- SECTION:NOTES:END -->
