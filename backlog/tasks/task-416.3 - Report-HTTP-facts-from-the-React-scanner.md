@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@claude'
 created_date: '2026-09-16 20:15'
-updated_date: '2026-09-19 00:25'
+updated_date: '2026-09-19 00:44'
 labels: []
 dependencies: []
 references:
@@ -98,6 +98,7 @@ modified_files:
   - test/fixtures/vue-http/web/undici.ts.fixture
   - test/fixtures/react-http/required.tsx.fixture
   - test/fixtures/typescript-http/values.ts.fixture
+  - test/fixtures/javascript-http/client/fields.mjs
 parent_task_id: TASK-416
 type: feature
 ordinal: 474000
@@ -141,6 +142,8 @@ Review-fix round (external cold reviews at cf8e7975). Fix: (1) React treats ever
 Simplicity round (owner request, junior-maintainer review of the request and value readers): fix React's runtime fetch check, which read the value declaration without following an import, so a project's own imported fetch wrapper counted as the runtime's. Make the shared value, binding and client readers asynchronous over a small checker-question context that the classic compiler and the native SDK each answer in one adapter, and delete the TypeScript scanner's native copies; fold the repeated fetch request assembly into one shared reader, the narrowing-only context types into UrlContext, and the local node declarations into one structural Node; put the context first in every reader; point the Vue and Angular pages at the React page for the shared paragraphs; drop the test checks that could never fail.
 
 Simplicity round, routing: drop a comment in react/src/routes.ts that repeats the function's documentation.
+
+Re-verification defect: a value read through this was always configuration, which dropped a field's known text (callforpapers: resourceUrl = appConfig.serverApiUrl + '/api/speakers' read as configured /users and joined /api/users). Resolve this.<field> through the field's one plain assignment anywhere in the sources (initializer, constructor or other writes, subclass declarations), configured only when the sources never assign it, unknown when assigned more than once or unreadably; red fixture in the Angular package with a second file serving /api/users.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
@@ -176,6 +179,8 @@ Final review round applied: a dynamic import whose module object is not bound by
 Simplicity round (owner request, junior-maintainer review of the request and value readers). Defect: the runtime fetch check read the value declaration without following an import, so a fetch the project imports from its own module, or import fetch = require('undici'), counted as the runtime's; wrapped.tsx and required.tsx fixtures prove it (HEAD reported wrapped GET /api/wrapped). Refactor: the shared value, binding and client readers are asynchronous and ask a checker only the questions in plugins/scanners/http-checker.ts, answered by the classic adapter there and the native one in typescript/src/http-checker.ts; the TypeScript scanner's native copies (http-values, http-bindings, http-requests) and the JavaScript endpoint adapter are deleted, and RouterContext extends UrlContext. One fetchRequest serves React, JavaScript, Vue (ofetch for $fetch and useFetch) and TypeScript through runtimeFetch, which counts the runtime's fetch and node-fetch's default export; Vue's fetch goes through it too (undici.ts fixture). One boundExport reader states which export an import, import-equals or require binding names, for importOrigin, its per-file name filter and the axios defaults index. The narrowing context types and the local node declarations are gone, the context comes first, Vue and Angular link to React for the shared rules, and two checks that could never fail are folded into their expected lists. Coverage: the TypeScript test runs React's uncertain, shadow, wrapped, required and client-defaults cases (a two-assignment case was added), so the rule mutations that used to survive now fail. Verified: isolated bun install --frozen-lockfile and bun run check exit 0 (596 pass, 35 skip, 0 fail); the targeted check found every fact identical across the five scanners except the stated fixes.
 
 Simplicity round, routing: removed a comment in react/src/routes.ts that repeated the function's documentation.
+
+Re-verification defect (callforpapers): every value read through this was configuration, so resourceUrl = appConfig.serverApiUrl + '/api/speakers' read as configured /users and core derived a wrong row to /api/users. A this.<field> read now holds the value of the field's one plain assignment: its declaration's initializer, a write through any object that holds the instance (matched by the checker's property symbol), or a subclass's own declaration; a field the sources never assign, such as an injected one, stays configured; more than one assignment, one the scan cannot read, a path below the field, or any assignment in a file-alone scan leaves it unknown. Red fixture: the Angular SpeakerAccountService reports configured /api/speakers/users with no row to a second file serving /api/users (HEAD reported configured /users and that row); TypeScript fixtures cover a literal field, a subclass redeclaration and an external write, and a JavaScript fixture the file-alone rule; each rule mutation-checked. Verified: isolated bun install --frozen-lockfile and bun run check exit 0 (595 pass, 35 skip, 0 fail).
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
@@ -188,4 +193,6 @@ Review-fix round after external cold reviews: the React scanner accepts only the
 The simplicity round made the value, binding and client readers one asynchronous implementation that every TypeScript-family scanner uses through a small checker adapter, deleted the native copies, and fixed an imported project or package fetch being read as the runtime's.
 
 The routing simplicity round removed a repeated comment from the Next.js route reader.
+
+A field read through this now folds to its one assignment, which fixed a configured base dropping the field's known path in callforpapers.
 <!-- SECTION:FINAL_SUMMARY:END -->

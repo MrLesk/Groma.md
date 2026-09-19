@@ -188,6 +188,8 @@ test.concurrent('JavaScript client calls report the method and the path parts th
       ['GET', '/?/api/talks', 'client/options.mjs'],
       ['GET', '/?/rooms', 'client/fetch.mjs'],
       ['GET', '/?/talks', 'client/fetch.mjs'],
+      // Another file may assign a field this file assigns.
+      ['GET', '/?/talks', 'client/fields.mjs'],
       ['GET', '/?/talks', 'client/globals.js'],
       ['GET', '/?/talks', 'client/options.mjs'],
       ['GET', '/?/talks', 'client/shadowing.mjs'],
@@ -206,6 +208,8 @@ test.concurrent('JavaScript client calls report the method and the path parts th
       ['GET', 'configured /files', 'client/axios.mjs'],
       // The one assignment to a required client's defaults sets its base.
       ['GET', 'configured /required', 'client/commonjs.js'],
+      // A field the file never assigns is the client's own base setting.
+      ['GET', 'configured /talks', 'client/fields.mjs'],
       ['GET', 'configured /votes/{}', 'client/fetch.mjs'],
       // jQuery prefers `method` to its older `type`.
       ['PATCH', '/api/method', 'client/jquery.js'],

@@ -125,10 +125,12 @@ ecosystem:
 5. **Bases.** The [React
    scanner's](../react/index.md#http-endpoints-and-requests) decision 5 holds
    unchanged, so an environment object holding `/api` reports `/api/talks`, and
-   a field read through `this`, such as `this.base`, is the service's own base
-   setting and sets `configured`. A literal environment base is the value in the
-   source file, which an Angular build's `fileReplacements` can swap for another
-   environment, so the reported path is the development one.
+   a field read through `this` holds its one assignment, so `this.resourceUrl`
+   with `resourceUrl = API_ROOT + '/api/speakers'` reads as that configured base
+   and path, while an injected field is the service's own base setting. A
+   literal environment base is the value in the source file, which an Angular
+   build's `fileReplacements` can swap for another environment, so the reported
+   path is the development one.
 6. **File-location routes.** None: every request names the function that runs
    the call, and a call outside any function reports nothing.
 7. **Constrained segments.** None: the scanner reports no endpoint, so it reads

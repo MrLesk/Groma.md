@@ -5,7 +5,7 @@ import {
   type Held, type ImportOrigin, type Node, type SourceFile, type SyntaxCompiler, type TextNode,
 } from './http-syntax.ts'
 import { computedPart, configuredPart, methodText, type UrlPart } from './http-url.ts'
-import { boundExport, requiredModule, type IndexCompiler } from './http-uses.ts'
+import { boundExport, requiredModule, useAt, type IndexCompiler } from './http-uses.ts'
 
 /*
  * The values the TypeScript-family HTTP readers fold: what a name certainly holds, URL text, methods,
@@ -22,9 +22,11 @@ interface Binary extends Node { left: Node; right: Node; operatorToken: { kind: 
 interface ObjectLiteral extends Node { properties: readonly (Node & { name?: Node })[] }
 interface Variable extends Node { name: Node; initializer?: Node; parent: Node & { flags: number } }
 interface BindingElement extends Node { name?: Node; propertyName?: Node; parent: Node & { parent: Node } }
+interface Field extends Node { name: Node; initializer?: Node; parent: Node }
+interface ClassLike extends Node { heritageClauses?: ArrayLike<{ token: number; types: ArrayLike<{ expression: Node }> }> }
 
 export interface UrlCompiler extends IndexCompiler, SyntaxCompiler {
-  SyntaxKind: IndexCompiler['SyntaxKind'] & SyntaxCompiler['SyntaxKind'] & { ThisKeyword: number }
+  SyntaxKind: IndexCompiler['SyntaxKind'] & SyntaxCompiler['SyntaxKind'] & { ThisKeyword: number; ExtendsKeyword: number }
   NodeFlags: { Const: number }
   isStringLiteral(node: Node): node is TextNode
   isNumericLiteral(node: Node): node is TextNode
@@ -41,6 +43,8 @@ export interface UrlCompiler extends IndexCompiler, SyntaxCompiler {
   isBindingElement(node: Node): node is BindingElement
   isGetAccessorDeclaration(node: Node): boolean
   isSetAccessorDeclaration(node: Node): boolean
+  isPropertyDeclaration(node: Node): node is Field
+  isClassLike(node: Node): boolean
 }
 
 /** What every HTTP reader of a scan shares: the compiler's syntax, its checker, and how the sources use each variable. */
@@ -155,6 +159,75 @@ async function variableHeld(context: UrlContext, name: Node, path: readonly stri
   return held(context, declaration.initializer, path, depth + 1)
 }
 
+/** Whether a class extends `base`, directly or through the classes it extends. */
+async function extendsClass(context: UrlContext, klass: Node, base: Node, depth = 0): Promise<boolean> {
+  const { ts } = context
+  if (!ts.isClassLike(klass) || depth > MAX_DEPTH) return false
+  const clauses = (klass as ClassLike).heritageClauses ?? []
+  const clause = Array.from(clauses).find(entry => entry.token === ts.SyntaxKind.ExtendsKeyword)
+  const parent = clause?.types[0]
+  const declaration = parent === undefined ? undefined : await declarationOf(context, parent.expression)
+  return declaration !== undefined && (declaration === base || extendsClass(context, declaration, base, depth + 1))
+}
+
+/**
+ * What one other name spelled like a field assigns to it: a write through any object that holds the
+ * instance, as the value of a plain assignment or undefined for any other write, or a subclass's own
+ * declaration of the field; nothing for any other name.
+ */
+async function assignmentAt(
+  context: UrlContext, node: Node, same: boolean, declaration: Node | undefined,
+): Promise<{ value: Node | undefined } | undefined> {
+  const { ts } = context
+  const parent = node.parent
+  if (ts.isPropertyAccessExpression(parent) && parent.name === node) {
+    const use = same ? useAt(ts, node as TextNode) : undefined
+    return use?.kind === 'write' ? { value: use.path.length === 0 ? use.assigned : undefined } : undefined
+  }
+  if (!ts.isPropertyDeclaration(parent) || parent.name !== node || declaration === undefined || parent === declaration) return undefined
+  return await extendsClass(context, parent.parent, declaration.parent) ? { value: parent.initializer } : undefined
+}
+
+/**
+ * Every assignment the sources make to the field `this.<name>` reads: its declaration's initializer, a
+ * write through any object that holds the instance, and a subclass's own declaration of it. An
+ * assignment the scan cannot read, such as `+=` or a write below the field, is undefined.
+ */
+async function fieldAssignments(context: UrlContext, name: TextNode, declaration: Node | undefined): Promise<(Node | undefined)[]> {
+  const { ts, checker } = context
+  const [symbol] = await checker.symbolsAt([name])
+  const initialized = declaration !== undefined && (ts.isPropertyDeclaration(declaration) || ts.isPropertyAssignment(declaration))
+    ? declaration.initializer : undefined
+  const assignments: (Node | undefined)[] = initialized === undefined ? [] : [initialized]
+  const others = context.bindings.named(name.text).filter(node => node !== name)
+  const symbols = await checker.symbolsAt(others)
+  for (const [position, node] of others.entries()) {
+    const found = symbols[position]
+    const same = found !== undefined && symbol !== undefined && checker.same(found, symbol)
+    const assignment = await assignmentAt(context, node, same, declaration)
+    if (assignment !== undefined) assignments.push(assignment.value)
+  }
+  return assignments
+}
+
+/**
+ * What `this.<field>` holds: the value of the field's one plain assignment anywhere in the sources. A
+ * field the sources never assign, such as one a framework injects, holds the client's own setting,
+ * which is configuration; more than one assignment, or one the scan cannot read, leaves it unknown, and
+ * so does any assignment when the scan reads a file alone, since other files can assign the field too.
+ */
+async function fieldHeld(context: UrlContext, access: Node & { name: TextNode }, path: readonly string[], depth: number): Promise<Held> {
+  const { ts, checker } = context
+  const [symbol] = await checker.symbolsAt([access.name])
+  const declaration = symbol === undefined ? undefined : await checker.declaration(symbol)
+  const assignments = await fieldAssignments(context, access.name, declaration)
+  const injected = declaration !== undefined && ts.isParameter(declaration)
+  if (assignments.length === 0) return 'unseen'
+  const [only] = assignments
+  if (injected || assignments.length > 1 || only === undefined || path.length > 0 || context.bindings.fileAlone) return 'unknown'
+  return held(context, only, path, depth + 1)
+}
+
 async function held(context: UrlContext, node: Node, path: readonly string[], depth: number): Promise<Held> {
   const { ts } = context
   if (depth > MAX_DEPTH) return 'unknown'
@@ -166,13 +239,13 @@ async function held(context: UrlContext, node: Node, path: readonly string[], de
     return property === 'absent' && rest.length === 0 ? 'absent' : 'unknown'
   }
   if (ts.isPropertyAccessExpression(value) && ts.isIdentifier(value.name)) {
+    if (value.expression.kind === ts.SyntaxKind.ThisKeyword) return fieldHeld(context, value, path, depth)
     return held(context, value.expression, [value.name.text, ...path], depth + 1)
   }
   if (ts.isIdentifier(value)) return variableHeld(context, value, path, depth)
   if (name === undefined) return { node: value }
-  // `import.meta.env` is the runtime's configuration, and a field read through `this` holds the
-  // client's own setting, such as its base URL.
-  return ts.isMetaProperty(value) || value.kind === ts.SyntaxKind.ThisKeyword ? 'unseen' : 'unknown'
+  // `import.meta.env` is the runtime's configuration.
+  return ts.isMetaProperty(value) ? 'unseen' : 'unknown'
 }
 
 /**

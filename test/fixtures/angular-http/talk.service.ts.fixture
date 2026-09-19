@@ -1,6 +1,6 @@
-import { Injectable, inject } from '@angular/core'
+import { Inject, Injectable, inject } from '@angular/core'
 import { HttpClient, HttpRequest } from '@angular/common/http'
-import { API_ROOT } from 'app-config'
+import { API_ROOT, API_TOKEN } from 'app-config'
 import { environment } from './environment'
 
 const routes = { talks: '/api/talks' }
@@ -116,5 +116,31 @@ export class DraftService {
 
   read() {
     return this.drafts.get('/api/talks')
+  }
+}
+
+@Injectable({ providedIn: 'root' })
+export class SpeakerAccountService {
+  // A field holds its one assignment; one the sources never assign, such as an injected one, is the
+  // client's own setting, and one assigned twice is unknown.
+  private resourceUrl = API_ROOT + '/api/speakers'
+  private moving = '/api/first'
+
+  constructor(private http: HttpClient, @Inject(API_TOKEN) private baseUrl: string) {}
+
+  users() {
+    return this.http.get(this.resourceUrl + '/users')
+  }
+
+  injected() {
+    return this.http.get(this.baseUrl + '/talks')
+  }
+
+  relocate() {
+    this.moving = '/api/second'
+  }
+
+  moved() {
+    return this.http.get(this.moving + '/talks')
   }
 }

@@ -183,7 +183,9 @@ The [producer decisions](../evidence.md#producer-checklist) for this ecosystem:
 5. **The base.** `fetch('/api/talks')` has no base. A value this file cannot see
    is configuration, so an imported or required constant, `process.env.API_URL`,
    and an `axios.create({ baseURL })` built from one set `configured`, as does a
-   field read through `this`, which holds the client's own base setting. A
+   field read through `this` that the file never assigns, such as one a
+   framework injects, which is the client's own base setting; a field the file
+   assigns is unknown, because files the scan does not read may assign it too. A
    variable with a literal initializer that this file never assigns again
    resolves to its own literal text, unless a script, a file with no import,
    export, `require` or `exports`, declares it at the top level with `let` or

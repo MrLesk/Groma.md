@@ -131,15 +131,16 @@ The [producer decisions](../evidence.md#producer-checklist) for this ecosystem:
    a helper that forwards a parameter reports unknown text. Author those rows.
 5. **Bases.** A variable with a literal initializer that the program never
    assigns again, a property of an object literal it holds while nothing in the
-   program can change that property, and a template of those are literal text.
-   A value the scanner cannot see is configuration and sets `configured`:
+   program can change that property, and a template of those are literal text. A
+   value the scanner cannot see is configuration and sets `configured`:
    `process.env.X`, `import.meta.env.X`, a name only a declaration file or a
-   `declare` statement states, an imported package constant, and a field read
-   through `this`, which holds the client's own base. Text that continues a
-   configured value's last segment instead of starting with `/`, a literal
-   scheme and host, also when literal pieces only state it together, a
-   parameter, a value a call returns, and any other computed value report a
-   leading unknown segment.
+   `declare` statement states, and an imported package constant. A field read
+   through `this` holds its one plain assignment, as the [React
+   scanner](../react/index.md#http-endpoints-and-requests) states in its
+   decision 5. Text that continues a configured value's last segment instead of
+   starting with `/`, a literal scheme and host, also when literal pieces only
+   state it together, a parameter, a value a call returns, and any other
+   computed value report a leading unknown segment.
 6. **File-location routes.** None: TypeScript projects declare routes in code,
    so every endpoint names its resolved handler, or the registering operation
    when the handler is not certain.

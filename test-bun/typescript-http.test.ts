@@ -169,6 +169,9 @@ test.concurrent('fetch and axios requests keep every proven part and mark the re
       'DELETE <base>/speakers/{} axios-client.ts#removeSpeaker',
       // A request's own baseURL replaces the client's, and a host is never path text.
       'GET /?/api/talks values.ts#requestBase',
+      // A field a subclass declares again, or a write through any object assigns again, is unknown.
+      'GET /?/guests values.ts#guests',
+      'GET /?/rooms values.ts#rooms',
       'GET /?/talks client.ts#loadExternal',
       // Text that continues a configured value, and literal pieces that state a host, are unknown.
       'GET /?/talks values.ts#continued',
@@ -185,12 +188,12 @@ test.concurrent('fetch and axios requests keep every proven part and mark the re
       // A variable the program never assigns again holds its initializer.
       'GET /api/talks values.ts#fromRoot',
       'GET /api/talks/? client.ts#loadPartial',
+      // A field read through `this` holds its one assignment.
+      'GET /api/talks/latest values.ts#latest',
       'GET /api/talks/{} client.ts#loadTalk',
       'GET <base>/talks client.ts#loadConfigured',
       // A global the program only declares, `declare global`, is configuration.
       'GET <base>/talks values.ts#ambientRoot',
-      // A field read through `this` holds the client's own base, which is configuration.
-      'GET <base>/talks/latest values.ts#latest',
       'PATCH /api/speakers/{} axios-client.ts#patchSpeaker',
       'POST /api/talks client.ts#createTalk',
       // One assignment to an instance's defaults sets its method.

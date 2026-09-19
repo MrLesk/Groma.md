@@ -150,8 +150,13 @@ The [producer decisions](../evidence.md#producer-checklist) for this ecosystem:
    or a dynamic import's result, is used other than to read one export by name.
    A value the scanner cannot see, such as an ambient declaration,
    `process.env.API_URL`, `import.meta.env` or a constant imported from a
-   package, sets `configured`, and so does a field read through `this`, which
-   holds the client's own base setting. Text that continues a configured value's
+   package, sets `configured`. A field read through `this` holds the value of
+   its one plain assignment, whether its declaration, its constructor or any
+   code that writes it, so `resourceUrl = API_URL + '/api/speakers'` reads as
+   that configured base and path; a field the sources never assign, such as one
+   a framework injects, is the client's own base setting and sets `configured`,
+   and a field assigned more than once, by a subclass too, or with a value the
+   scanner cannot read, is unknown. Text that continues a configured value's
    last segment instead of starting with `/` is unknown. A literal host, also
    when literal pieces only state it together, a parameter, a value a call
    returns, and any other computed value report a leading unknown segment.

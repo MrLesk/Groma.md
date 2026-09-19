@@ -35,6 +35,10 @@ export interface Bindings {
   defaultImports(module: string): Node[]
   /** The names that stand for the variable, directly or through an import, outside types. */
   references(declaration: Node): Promise<Node[]>
+  /** Every name in the sources spelled `text`. */
+  named(text: string): readonly Node[]
+  /** Whether the scan reads each file by itself, so other files can change what any of it holds. */
+  fileAlone: boolean
 }
 
 /**
@@ -167,5 +171,7 @@ export function bindingUses(
     },
     defaultImports: module => indexed().defaults.get(module) ?? [],
     references: async declaration => (await usesOf(declaration)).map(use => use.reference),
+    named: text => indexed().names.get(text) ?? [],
+    fileAlone: options.fileAlone,
   }
 }
