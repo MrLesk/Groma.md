@@ -10,6 +10,7 @@ import { buildPackage } from '../plugins/scanners/angular/build.ts'
 import { inferRelationships } from '../src/relationship-inference.ts'
 
 const served = 'server/talks.ts'
+const users = 'server/users.ts'
 
 async function setup() {
   const temporary = await mkdtemp(path.join(os.tmpdir(), 'groma-angular-http-'))
@@ -38,9 +39,9 @@ function requests(observation: ScanObservation): string[] {
 }
 
 /** `:id` marks a parameter segment in the endpoint the fixture server serves. */
-function endpoint(method: string, route: string): ScanHttpEndpoint {
+function endpoint(method: string, route: string, operation = served): ScanHttpEndpoint {
   return {
-    operation: served,
+    operation,
     method,
     path: route.split('/').filter(Boolean).map((part): HttpEndpointSegment => (
       part.startsWith(':') ? { kind: 'parameter', name: part.slice(1) } : { kind: 'literal', value: part }
@@ -52,9 +53,12 @@ function server(): ScanObservation {
   return createScanObservation({
     scanner: { id: 'server', technology: 'fixture', engine: 'fixture', engineVersion: '1' },
     roots: [{ id: 'app', kind: 'project', name: 'App' }],
-    files: [{ file: served, roots: ['app'], symbols: [] }],
-    operations: [{ id: served, file: served, name: 'talks' }],
-    httpEndpoints: [endpoint('GET', '/api/talks'), endpoint('POST', '/api/talks'), endpoint('DELETE', '/api/talks/:id')],
+    files: [{ file: served, roots: ['app'], symbols: [] }, { file: users, roots: ['app'], symbols: [] }],
+    operations: [{ id: served, file: served, name: 'talks' }, { id: users, file: users, name: 'users' }],
+    httpEndpoints: [
+      endpoint('GET', '/api/talks'), endpoint('POST', '/api/talks'), endpoint('DELETE', '/api/talks/:id'),
+      endpoint('GET', '/api/users', users),
+    ],
     diagnostics: [],
   })
 }
@@ -79,9 +83,13 @@ test.concurrent('the built Angular package reports HttpClient requests and serve
       // A base stating a host, and a base that is a parameter, are unknown.
       'external GET /<unknown>/talks',
       'fromBase GET /<unknown>/talks',
-      // A field holding the client's base is its setting, which is configuration.
-      'latest GET configured:/talks/latest',
+      // A field the sources never assign, here an injected one, is the client's own setting.
+      'injected GET configured:/talks',
+      // A field holds its one assignment.
+      'latest GET /api/talks/latest',
       'list GET /api/talks',
+      // A field assigned twice is unknown.
+      'moved GET /<unknown>/talks',
       // One computed segment is dynamic; a partly computed segment is unknown.
       'one GET /api/speakers/<dynamic>',
       'partial GET /api/talks/<unknown>',
@@ -94,6 +102,8 @@ test.concurrent('the built Angular package reports HttpClient requests and serve
       'search GET /api/talks',
       // A helper reads its path from a parameter, and its caller reports nothing.
       'send GET /<unknown>',
+      // A field holds its one assignment, here a configured base and a literal path.
+      'users GET configured:/api/speakers/users',
     ])
     // `request(new HttpRequest(...))` states no separate URL, so `packaged` reports nothing.
     expect(requests(observation).some(request => request.startsWith('packaged'))).toBe(false)
@@ -106,8 +116,9 @@ test.concurrent('core derives one row from the Angular requests to the file that
   const { temporary, root, scanner } = await setup()
   try {
     const angular = (await scanner.scan(root))!
-    const owners = new Map([...angular.files.map(file => [file.file, file.file] as const), [served, served]])
+    const owners = new Map([...angular.files.map(file => [file.file, file.file] as const), [served, served], [users, users]])
 
+    // `/api/speakers/users` below a configured base is no request to `/api/users`.
     const rows = inferRelationships([angular, server()], owners)
     expect(rows.map(row => [row.source, row.target])).toEqual([['talk.service.ts', served]])
     const [row] = rows

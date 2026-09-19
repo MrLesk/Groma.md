@@ -73,3 +73,27 @@ const requiredClient = require('axios')
 export async function viaRequire(): Promise<unknown> {
   return requiredClient.get('/api/required')
 }
+
+export class RoomsClient {
+  base = '/api'
+
+  rooms(): Promise<unknown> {
+    return fetch(this.base + '/rooms')
+  }
+}
+
+export class LegacyRoomsClient extends RoomsClient {
+  base = '/legacy'
+}
+
+export class GuestsClient {
+  base = '/api'
+
+  guests(): Promise<unknown> {
+    return fetch(this.base + '/guests')
+  }
+}
+
+export function retarget(client: GuestsClient): void {
+  client.base = '/other'
+}
