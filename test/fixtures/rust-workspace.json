@@ -1,0 +1,10 @@
+{
+  "Cargo.toml": "[workspace]\nmembers = [\"app\"]\nresolver = \"3\"\n[workspace.package]\nedition = \"2024\"\n[workspace.dependencies]\nservice = { path = \"service\" }\nsupport = { path = \"support\" }\n",
+  "app/Cargo.toml": "[package]\nname = \"app\"\nversion = \"0.1.0\"\nedition.workspace = true\n[dependencies]\nservice.workspace = true\n[dev-dependencies]\nsupport.workspace = true\n",
+  "app/src/lib.rs": "#[path = \"../../shared.rs\"]\nmod shared;\npub async fn start() { service::run(); }\n",
+  "service/Cargo.toml": "[package]\nname = \"service\"\nversion = \"0.1.0\"\nedition.workspace = true\n",
+  "service/src/lib.rs": "#[path = \"../../shared.rs\"]\nmod shared;\npub fn run() {}\n",
+  "support/Cargo.toml": "[package]\nname = \"support\"\nversion = \"0.1.0\"\nedition.workspace = true\n[dependencies]\nservice.workspace = true\n",
+  "support/src/lib.rs": "pub async fn setup() { service::run(); }\n",
+  "shared.rs": "pub fn shared() {}\n"
+}

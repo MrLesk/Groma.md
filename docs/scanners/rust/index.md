@@ -23,11 +23,20 @@ API. The engine loads modules and resolves source names. Cargo metadata,
 rustc, build scripts and procedural macros are never executed.
 
 By default each workspace is scanned once. A package selects its library and
-binary targets; a workspace selects its members. `settings.manifest` on the
+binary targets; a workspace selects its explicit members and their local path
+dependencies inside the workspace, including dependencies declared for tests,
+build scripts and target platforms. Those implicit members inherit the workspace
+edition and dependency paths and are not scanned again as standalone packages.
+Only normal library dependencies supply edges in the source crate graph.
+`settings.manifest` on the
 existing Rust scanner entry selects one manifest relative to the repository.
 Test, example, benchmark and build-script targets are outside this extraction.
 External crates and standard-library types remain unresolved. This source
 loader does not evaluate custom target configurations or build-generated flags.
+
+Crates share the repository source root so `#[path]` modules can refer to source
+outside a crate's own directory. Module declarations still select the analyzed
+files; making a file reachable does not create a source owner by itself.
 
 ## Evidence and uncertainty
 
