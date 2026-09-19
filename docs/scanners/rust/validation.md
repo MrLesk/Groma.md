@@ -15,6 +15,14 @@ call targets in one observation, and a shared `#[path]` module outside both crat
 directories keeps one file identity with the existing multiple-context diagnostic.
 The packaged scanner reproduced the full-repository result independently.
 
+The published `@groma/scanner-rust@0.1.2` package reproduced the same Codex
+counts after installation from npm. Groma 0.3.3 also passed readiness and scanned
+the regression fixture after a fresh npm installation and a second-checkout
+restore. Release run [35470904452](https://github.com/MrLesk/Groma.md/actions/runs/35470904452)
+passed repository checks and the packaged fresh-checkout suite on macOS arm64,
+Linux x64/arm64 and Windows x64/arm64. The release's unrelated C# size and
+JavaScript first-publication failures did not prevent Rust publication.
+
 Focused validation passed 24 tests across the Rust, workspace and source-listing
 suites. `bun run check` passed 16 Node tests and 609 Bun tests, with 36 opt-in
 tests skipped. Native Rust checks were enabled in the separate focused run.

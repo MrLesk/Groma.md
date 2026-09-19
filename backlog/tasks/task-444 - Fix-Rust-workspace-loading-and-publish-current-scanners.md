@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@codex'
 created_date: '2026-09-19 21:17'
-updated_date: '2026-09-19 21:35'
+updated_date: '2026-09-19 21:49'
 labels: []
 dependencies: []
 references:
@@ -87,4 +87,8 @@ The exact isolated release branch also passes bun run check after bounding test 
 Windows package builds succeeded, but all fresh-checkout tests failed before scanner execution: relocating git.exe via a symlink loses its DLL lookup location (exit 53). On Windows the isolated test PATH now names the actual Git executable directory; Unix still uses the isolated Git symlink. No language SDK or project dependency directories are restored to PATH. Final Linux repository validation passed with the concurrency cap in run 35470653541.
 
 The exact isolated release branch passes bun run check after the Windows Git harness fix: 16 Node tests, 600 Bun tests, 36 opt-in skips, zero failures. Windows execution is being requalified in the final release workflow.
+
+Final release workflow 35470904452 uses commit b4ff1355. Repository checks and packaged scanner tests have passed on Linux x64/ARM64, macOS ARM64 and Windows ARM64; Windows x64 is still building. The Windows ARM64 pass confirms the Git executable location correction. The installed Groma 0.3.3 CLI also installed the local Rust 0.1.2 package, passed readiness and scanned the regression fixture, preserving one owner for its shared source file. JavaScript first publication still needs a renewed npm login; npm whoami returns E401.
+
+All five platform package suites and repository validation passed in release run 35470904452. npm accepted the contract and ten scanners, including Rust 0.1.2. The actual npm-installed Rust package scans Codex with 2586 files and 25502 operations; Groma 0.3.3 also passes a fresh install, readiness, fixture scan and second-checkout restore. Updated Rust validation documentation. JavaScript was rejected with E404 because it has no initial authenticated publication. C# was rejected with E413: the five-platform self-contained package is 214.6 MB compressed. No C# runtime content was removed: source analysis uses the bundled runtime assemblies as references. A platform-specific package split is a larger delivery change; awaiting Alex direction.
 <!-- SECTION:NOTES:END -->
