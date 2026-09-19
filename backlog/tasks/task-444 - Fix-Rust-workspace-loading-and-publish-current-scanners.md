@@ -5,11 +5,12 @@ status: In Progress
 assignee:
   - '@codex'
 created_date: '2026-09-19 21:17'
-updated_date: '2026-09-19 21:49'
+updated_date: '2026-09-19 22:09'
 labels: []
 dependencies: []
 references:
   - rust-src-index
+  - csharp-src-index
 modified_files:
   - test/fixtures/rust-workspace.json
   - test-bun/rust-workspace.test.ts
@@ -32,6 +33,12 @@ modified_files:
   - docs/scanners/rust/validation.md
   - package.json
   - test-bun/scanner-fresh-checkout.test.ts
+  - plugins/scanners/csharp/src/adapter.ts
+  - scripts/package-csharp-scanner.ts
+  - scripts/scanner-release.ts
+  - test-bun/csharp-packaging.test.ts
+  - docs/scanners/dotnet-csharp/index.md
+  - docs/scanners/publishing.md
 type: bug
 ordinal: 517000
 ---
@@ -63,6 +70,8 @@ Scanning Codex with the published Rust package fails on offline Cargo dependenci
 
 <!-- SECTION:PLAN:BEGIN -->
 1. Add minimal fixture regressions for shared module paths and implicit workspace members. 2. Correct Rust crate source roots and workspace membership/inheritance in the existing project loader. 3. Verify fixtures and the full Codex scan, then run repository checks. 4. Prepare changed package versions and use the existing multi-platform release workflow; verify published packages.
+
+5. Split the C# self-contained worker into platform npm packages and retain the existing scanner package as a small adapter with exact optional dependencies, following the existing Groma CLI delivery pattern. Qualify fresh installs and all platform package tests, then publish JavaScript and C# and verify npm versions.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
@@ -91,4 +100,10 @@ The exact isolated release branch passes bun run check after the Windows Git har
 Final release workflow 35470904452 uses commit b4ff1355. Repository checks and packaged scanner tests have passed on Linux x64/ARM64, macOS ARM64 and Windows ARM64; Windows x64 is still building. The Windows ARM64 pass confirms the Git executable location correction. The installed Groma 0.3.3 CLI also installed the local Rust 0.1.2 package, passed readiness and scanned the regression fixture, preserving one owner for its shared source file. JavaScript first publication still needs a renewed npm login; npm whoami returns E401.
 
 All five platform package suites and repository validation passed in release run 35470904452. npm accepted the contract and ten scanners, including Rust 0.1.2. The actual npm-installed Rust package scans Codex with 2586 files and 25502 operations; Groma 0.3.3 also passes a fresh install, readiness, fixture scan and second-checkout restore. Updated Rust validation documentation. JavaScript was rejected with E404 because it has no initial authenticated publication. C# was rejected with E413: the five-platform self-contained package is 214.6 MB compressed. No C# runtime content was removed: source analysis uses the bundled runtime assemblies as references. A platform-specific package split is a larger delivery change; awaiting Alex direction.
+
+Alex explicitly approved the C# packaging fix and requested browser npm login. Login now succeeded. The C# change is delivery plumbing owned by the existing scanner builder, adapter and release script: no new OKF concepts, metadata or C4 elements. Ordinary Markdown readers see unchanged architecture records. Only the current five supported targets are packaged; no generic runtime-package framework is added.
+
+JavaScript 0.1.0 is now published and verified in npm. C# uses exact platform optional dependencies; each host build stages the adapter and complete runtime, assembly emits separate runtime packages, and publication waits for runtimes before publishing the adapter. The npm-package installation test passed on macOS without project tools (13 assertions), all six packaged C# integration tests passed (29 assertions), and bun run check passed 16 Node and 601 Bun tests with 36 opt-in skips. The cold simplicity review passed; corrected the assembly comment it identified. Implementer specification and quality review traced source/staged build, platform assembly, publication ordering, normal module resolution and SDK-free scan/outline flows. No language analysis, OKF meaning or C4 ownership changed; native Windows/Linux package qualification and initial runtime publications remain.
+
+The full-context complexity review passed with no blockers or material simplification recommendations. Normal optional dependencies are the minimum sufficient delivery change for the observed npm size failure. GitHub trusted publishing for JavaScript was blocked by automatic approval review because persistent npm security settings were not explicitly authorized; requested separate approval for JavaScript and the five new runtime packages. This does not block manual publication with the completed npm login.
 <!-- SECTION:NOTES:END -->
