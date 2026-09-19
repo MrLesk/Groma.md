@@ -273,8 +273,8 @@ highlighted while the camera smoothly fits that step's exact relationship and
 endpoints. That relationship and its endpoint components pulse continuously.
 The focused action has a marked row; Clear focus removes the extra emphasis and
 smoothly fits all checked flows again. Reduced motion keeps static emphasis.
-Unrelated routes are hidden and
-task emphasis is quiet while reading a flow. Existing footprints and routes
+Unrelated routes are hidden while reading a flow. Components touched by active
+tasks keep their highlights alongside the flow. Existing footprints and routes
 stay fixed. Endpoints link to the normal component inspector. Opening source from
 that inspector uses Back to the component and does not also offer Back to flow.
 Leaving the file restores Back to flow, which returns the same scenario, step,
@@ -581,7 +581,10 @@ an element keeps the tasks active. Opening a task loads that task's full
 Backlog record on demand. The details pane shows the task's id,
 status and assignees over its title, then its description, acceptance criteria,
 Definition of Done, references, modified files, implementation plan,
-implementation notes, and comments. Empty sections are omitted. A reference
+implementation notes, and comments. Empty sections are omitted. Updates to the same
+task keep the current details visible while loading. Changed checks, fields, and
+rows animate in place; unchanged rows keep focus and the panel keeps its scroll
+position. Reduced motion applies changes immediately. A reference
 naming an element is a link that selects it. The selected task's pins carry a
 small arrowhead above their badge, its chips an accent border, and the strip
 scrolls the first into view.

@@ -21,7 +21,7 @@ function diffKey(item: WorkItem): string {
 }
 
 function detailsKey(item: WorkItem): string {
-  return [item.id, item.updatedAt].join('\0')
+  return JSON.stringify(item)
 }
 
 function errorMessage(reason: unknown, fallback: string): string {
@@ -68,6 +68,7 @@ export function createTaskDiffControl(options: TaskDiffControlOptions): TaskDiff
       payload = loaded
     } catch (reason) {
       if (activeRequest !== diffRequest) return
+      payload = undefined
       error = errorMessage(reason, 'Diff unavailable')
     }
     options.repaint()
@@ -86,9 +87,30 @@ export function createTaskDiffControl(options: TaskDiffControlOptions): TaskDiff
     }
   }
 
+  function refresh(nextItem: WorkItem): void {
+    const changedTask = item?.id !== nextItem.id
+    item = nextItem
+    if (changedTask) {
+      details = undefined
+      payload = undefined
+      file = undefined
+    }
+    const nextDetailsKey = detailsKey(nextItem)
+    if (nextDetailsKey !== activeDetailsKey) {
+      activeDetailsKey = nextDetailsKey
+      detailsError = undefined
+      void loadDetails(nextItem, ++detailsRequest)
+    }
+    const nextDiffKey = diffKey(nextItem)
+    if (nextDiffKey !== activeDiffKey) {
+      activeDiffKey = nextDiffKey
+      error = undefined
+      void loadDiff(nextItem, ++diffRequest)
+    }
+  }
+
   return {
     invalidate() {
-      payload = undefined
       error = undefined
       if (item !== undefined) void loadDiff(item, ++diffRequest)
     },
@@ -107,22 +129,7 @@ export function createTaskDiffControl(options: TaskDiffControlOptions): TaskDiff
         leaveTaskDiff(options.host)
         return false
       }
-      item = nextItem
-      const nextDetailsKey = detailsKey(nextItem)
-      if (nextDetailsKey !== activeDetailsKey) {
-        activeDetailsKey = nextDetailsKey
-        details = undefined
-        detailsError = undefined
-        void loadDetails(nextItem, ++detailsRequest)
-      }
-      const nextDiffKey = diffKey(nextItem)
-      if (nextDiffKey !== activeDiffKey) {
-        activeDiffKey = nextDiffKey
-        payload = undefined
-        error = undefined
-        file = undefined
-        void loadDiff(nextItem, ++diffRequest)
-      }
+      refresh(nextItem)
       const selected = payload?.files.find(candidate => candidate.file === file)
       if (payload !== undefined && selected !== undefined) {
         paintTaskFile(options.host, nextItem, payload, selected, back)

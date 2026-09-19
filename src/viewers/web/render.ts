@@ -180,7 +180,7 @@ function paintMapState(task: WorkItem | undefined, activeTaskItems: WorkItem[]):
   const selectedIds = selectedArchitecture(selection)
   const { routes: litIds, focusedRoute } = flowHighlight(activeFlows, world)
   map.select(selectedIds)
-  map.mark(new Set(activeFlows.length === 0 ? activeTaskItems.flatMap(item => touchedElements(item, world)) : []))
+  map.mark(new Set(activeTaskItems.flatMap(item => touchedElements(item, world))))
   pins.activate(activeTaskIds, task?.id)
   island.activate(activeTaskIds, task?.id)
   map.setLitRoutes(litIds, id => elementOnPath(id, litIds, world), focusedRoute)
