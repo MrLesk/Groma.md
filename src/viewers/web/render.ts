@@ -9,6 +9,7 @@ import { createAddControl } from './chrome/add.ts'
 import { createEmptyState } from './chrome/empty.ts'
 import { createMapDebugPanel } from './chrome/map-debug.ts'
 import { bindMapView } from './chrome/map-view.ts'
+import { bindC4Filter } from './chrome/c4-filter.ts'
 import { animateControl } from './chrome/motion.ts'
 import { bindChromeActions, createWebShell, mapFrame, type MapFrame } from './chrome/shell.ts'
 import { bindThemeControl, readSavedTheme } from './chrome/theme-control.ts'
@@ -48,9 +49,10 @@ let project: ProjectProfile | undefined = boot.project ?? undefined
 let currentPins = boot.pins
 let mapMeta = { generation: boot.generation, timings: boot.timings }
 const mapMotion = createMapMotion()
+const filterC4 = bindC4Filter(document.getElementById('c4-filter')!, () => repaintScene(false))
 const debug = createMapDebugPanel(document.body, () => ({ ...mapMeta, world, sheet }))
 function projectedScene() {
-  return debug.project(() => presentScene(sheet, project, mapMotion.pose))
+  return debug.project(() => filterC4(presentScene(sheet, project, mapMotion.pose)))
 }
 let scene = projectedScene()
 const host = document.getElementById('map')!
@@ -385,9 +387,7 @@ function toggleHud(): void {
   syncUrl()
 }
 
-function sceneCentre(bounds: typeof scene.bounds): { x: number; y: number } {
-  return { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 }
-}
+const sceneCentre = (bounds: typeof scene.bounds) => ({ x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 })
 
 /** Reprojects from one pose, then either fits a mode transition or keeps an orbited map centred. */
 function repaintScene(fit: boolean): void {
@@ -396,7 +396,7 @@ function repaintScene(fit: boolean): void {
   const after = sceneCentre(scene.bounds)
   paintMapView(mapMotion.view)
   debug.paint(() => map.paint(scene))
-  pins.paint(currentPins)
+  pins.paint(currentPins.filter(pin => map.anchorOf(pin.elementId) !== undefined))
   const frame = viewport()
   fitted = fitScene(frame)
   if (fit) {
@@ -477,7 +477,7 @@ function applyWork(payload: WebWorkPayload): void {
   detailsTab = detailsTabAfterWork(detailsTab, hasTasks)
   activeTaskIds = activeTaskIds.filter(id => workItem(id) !== undefined)
   selection = retainSelection(selection, id => known(id))
-  pins.paint(payload.pins)
+  pins.paint(currentPins.filter(pin => map.anchorOf(pin.elementId) !== undefined))
   island.paint(payload.pins, work)
   paintViewState()
   searchControl.updateTasks(work.items)
@@ -487,7 +487,7 @@ function paintWorld(): void {
   debug.paint(() => map.paint(scene))
   revisionControl.paintProjectEdit(map.svg)
   authoring.refresh()
-  pins.paint(currentPins)
+  pins.paint(currentPins.filter(pin => map.anchorOf(pin.elementId) !== undefined))
   island.paint(currentPins, work)
   emptyState.paint(world, project, revisionControl.selected !== undefined)
   applyCamera()
