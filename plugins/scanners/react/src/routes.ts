@@ -55,8 +55,6 @@ function routeSegment(part: string, last: boolean): HttpEndpointSegment | undefi
   if (rest) return last && pathText.test(rest[1]!) ? { kind: 'catch-all', name: rest[1]! } : undefined
   const parameter = PARAMETER.exec(part)
   if (parameter) return pathText.test(parameter[1]!) ? { kind: 'parameter', name: parameter[1]! } : undefined
-  // A route group `(marketing)`, an intercepted route `(.)talks`, a parallel route `@modal`, and a
-  // partly dynamic segment name no served segment.
   if (part.startsWith('(') || part.startsWith('@') || part.includes('[') || part.includes(']')) return undefined
   return pathText.test(part) ? { kind: 'literal', value: part } : undefined
 }
