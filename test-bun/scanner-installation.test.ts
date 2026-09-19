@@ -6,6 +6,8 @@ import path from 'node:path'
 import { createScannerSession } from '../src/scanner/session.ts'
 import { readScannerConfig, writeScannerConfig } from '../src/scanner/modules/config.ts'
 import { loadAnnotatedArchitecture } from '../src/core.ts'
+import { discoverScanners } from '../src/scanner/modules/discovery.ts'
+import { installableScanners, installSelectedScanners } from '../src/scanner/modules/setup.ts'
 
 async function fixture() {
   const root = await mkdtemp(path.join(os.tmpdir(), 'groma-published-install-'))
@@ -83,6 +85,35 @@ test.concurrent('bulk installation retains successful releases, retries unpublis
       expect((await loadAnnotatedArchitecture(f.root)).elements).toEqual(before.elements)
     } finally { await colleague.close() }
   } finally { await session.close(); await f.close() }
+})
+
+test.concurrent('setup retries a partial selection without reinstalling its successful scanners', async () => {
+  const f = await fixture()
+  try {
+    const proposal = await discoverScanners(f.root, f.options)
+    const selected = ['react', 'rust']
+    f.unavailable.add('@groma/scanner-rust')
+    await expect(installSelectedScanners(f.root, proposal, selected, f.options)).rejects.toThrow('rust')
+    const first = await readScannerConfig(f.root)
+    expect(first.scanners).toEqual([{ id: 'react', source: `@groma/scanner-react@${f.version}` }])
+    const refreshed = await discoverScanners(f.root, f.options)
+    expect(refreshed.inventory).toEqual([{ ...first.scanners[0]!, status: 'found' }])
+    expect(installableScanners(refreshed).map(item => item.id)).toContain('rust')
+    expect(installableScanners(refreshed).map(item => item.id)).not.toContain('react')
+
+    f.unavailable.delete('@groma/scanner-rust')
+    f.unavailable.add('@groma/scanner-react')
+    await installSelectedScanners(f.root, proposal, selected, f.options)
+    const complete = await readScannerConfig(f.root)
+    expect(complete.scanners).toEqual([
+      ...first.scanners, { id: 'rust', source: `@groma/scanner-rust@${f.version}` },
+    ])
+    await installSelectedScanners(f.root, proposal, selected, f.options)
+    await installSelectedScanners(f.root, refreshed, selected, f.options)
+    expect(await readScannerConfig(f.root)).toEqual(complete)
+    expect(f.downloads.filter(name => name === 'react.tgz')).toHaveLength(1)
+    expect(f.downloads.filter(name => name === 'rust.tgz')).toHaveLength(1)
+  } finally { await f.close() }
 })
 
 test.concurrent('one Install resolves and pins a release, reports scan failure and retries without replacing saved architecture', async () => {
