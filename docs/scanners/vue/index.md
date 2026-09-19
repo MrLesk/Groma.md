@@ -170,14 +170,15 @@ The [producer decisions](../evidence.md#producer-checklist) for this ecosystem:
    `.get`, `.post`, `.put`, `.patch`, `.delete`, `.head`, `.options`, `.connect`
    or `.trace` method suffix leave the path, a final `index` serves its
    directory, and placeholders read as decision 7 describes. A file without a
-   method suffix answers every method. `.js`, `.ts`, `.jsx` and `.tsx` route
-   files count. The endpoint names the function the default export designates: a
-   default-exported function, or a function the file declares, as a function or
-   a variable holding one, that the default export names or passes to a wrapper
-   such as `defineEventHandler`. When it designates no such function, the
-   endpoint names the file's module operation. A request in a file's own
-   top-level code, which is what `<script setup>` runs on setup, names that
-   file's module operation, so the row starts at the component.
+   method suffix answers every method. `.js`, `.mjs`, `.cjs`, `.ts`, `.mts`,
+   `.cts`, `.jsx` and `.tsx` route files count. The endpoint names the function
+   the default export designates: a default-exported function, or a function the
+   file declares, as a function or a variable holding one, that the default
+   export names or passes to a wrapper such as `defineEventHandler`. When it
+   designates no such function, the endpoint names the file's module operation.
+   A request in a file's own top-level code, which is what `<script setup>` runs
+   on setup, names that file's module operation, so the row starts at the
+   component.
 7. **Constrained segments.** Nitro constrains no segment, and segments follow
    the names it registers. A segment that starts with a placeholder, such as
    `[id]` or `[id]-latest`, is a parameter that accepts any text, named `*` when

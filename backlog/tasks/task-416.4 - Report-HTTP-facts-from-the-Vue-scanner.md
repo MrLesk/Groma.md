@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@claude'
 created_date: '2026-09-16 20:15'
-updated_date: '2026-09-18 20:20'
+updated_date: '2026-09-19 00:25'
 labels: []
 dependencies: []
 references:
@@ -90,6 +90,8 @@ Endpoints: Nuxt server routes by file location, server/api/** and server/routes/
 6. Isolated bun run check from a worktree at current HEAD, the Vue build, specification and quality self-review.
 
 Review-fix round (external cold reviews at cf8e7975) and the approved endpoint fact additions. Already fixed in the shared readers under TASK-416.3: axios request-level baseURL and unreadable create config, duplicate option keys, mutable options, axios defaults. Fix here: (1) Vue treats every axios import, such as isAxiosError or a named post, as a client: move the default-import recognition into http-clients.ts once, so React and Vue share it. (2) Nuxt baseURL was ignored: $fetch and useFetch read their options' baseURL as ofetch does (a URL that already starts with a literal base is kept, else the base joins it; an absolute URL replaces it), and unreadable options leave the base unknown. (3) Nuxt named handlers were dropped, which let a broader route take their requests: resolve a handler named by a const or function in the file, and a default-exported function declaration; a route file whose handler the scan cannot resolve still reports its endpoint, named by the file's module operation, as the producer checklist says. (4) A route segment that mixes text with a placeholder, such as hello-[name], is a constrained parameter instead of being omitted. (5) Vue page: decisions 7 (constraints) and 8 (Nuxt prefers the most specific route, so no order). Noted for TASK-416.11: the JavaScript scanner's own axios reader ignores defaults until it uses the shared one.
+
+Simplicity round, routing: decision 6 lists every route file extension the reader accepts (.mjs, .cjs, .mts, .cts too).
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
@@ -110,6 +112,8 @@ Review-fix round, implemented (awaiting cold review, not committed): http-client
 Cold review round 1 applied: a placeholder name the contract cannot spell, as in [[opt]] or [naïve], is * instead of failing the scan; the ofetch base rule moved to http-url.ts as withBase, decided on the joined text of base and URL, keeps a URL only when /, ? or its end follows the base, and starts the path unknown when that boundary falls on a computed part; Nuxt route names follow Nitro in vue/src/server-routes.ts: route group directories are dropped, then an environment suffix (.dev, .prod, .prerender), then a method suffix including connect and trace, then a final index; [...] is an unnamed catch-all; .jsx and .tsx route files count, and the Vue listing now includes .tsx and .jsx sources the scan reads; axiosRequest always resolves clients with the shared axiosClient, defaultClient and axiosClient are module-private, isDefaultFunction renamed. Fixtures: (admin)/users.get with a [resource].get sibling, speakers.get.prod, optional/[[opt]].get, wild/[...], routes/feed.tsx, and client requests for a templated base, a two-part base, a prefix that is not a segment, a computed boundary, users and speakers. Verified: the rows fail on the HEAD code (they went to [resource].get.ts); isolated worktree bun run check exit 0 (581 pass, 35 skip; lint warnings only outside this task); React and Vue builds succeed.
 
 Final review round applied: segments now follow the names Nitro registers ([...] to **, [...name] with a word-character name to **:name, [name] to :name); a segment that then starts with ** is a catch-all, one that starts with : a parameter, and any other text, hello-:name included, is literal, so hello-[name] serves only /hello-:name and [[opt]] is a parameter; [...file-path] is a parameter. The ofetch base branch where the base starts with the URL's text is covered. Fixtures: docs/[...file-path].get and client requests slashed and anyResource. Verified: isolated worktree bun install --frozen-lockfile and bun run check exit 0 (581 pass, 35 skip; lint warnings only outside this task); React and Vue builds succeed.
+
+Simplicity round, routing: decision 6 lists every route file extension the Nitro reader accepts, .mjs, .cjs, .mts and .cts included.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
@@ -118,4 +122,6 @@ Final review round applied: segments now follow the names Nitro registers ([...]
 The Vue scanner now reports its ecosystem's HTTP facts: requests through fetch, Nuxt's $fetch and useFetch, axios and an axios.create instance, in single-file component scripts as well as modules, and the endpoints a Nuxt project declares by file location under server/api and server/routes, with [id], [...slug], index files and method suffixes. plugins/scanners/vue/src/http.ts reads the Volar program the scan already builds, so names resolve through its checker while positions map back to the .vue or .ts source through the existing evidence operation map, and a file's own top-level code names its module operation. Endpoints need the project to declare nuxt, and $fetch and useFetch must resolve outside the project source, so a project's own composable is never read as Nuxt's. The client forms React and Vue read alike moved to the shared plugins/scanners/http-clients.ts, where the computed-property-name fix now serves both. Verified with test/fixtures/vue-http, a Nuxt app in a subdirectory, and test-bun/vue-http.test.ts: 17 requests covering every supported call and abstention, six endpoints with middleware and a non-function route silent, and five rows core derives from those facts alone. Isolated bun run check exit 0, and the Vue and React package builds pass. Documented in docs/scanners/vue/index.md, which answers the six producer decisions.
 
 Review-fix round after external cold reviews: React and Vue share one axios recognition in http-clients.ts, so named exports such as isAxiosError are never clients. $fetch and useFetch read their baseURL as ofetch does (withBase in http-url.ts). Nuxt server routes follow Nitro's naming (vue/src/server-routes.ts: route groups, environment and method suffixes including connect and trace, [...] catch-alls, literal text before a placeholder, .jsx and .tsx files), and every route file reports its endpoint, naming its resolved handler, a default-exported function or a same-file function the export names or wraps, else the file's module operation, so a broader route never takes its requests. Verified with vue-http fixtures whose rows went to the wrong file on the previous code, and an isolated bun run check.
+
+The routing simplicity round corrected the listed Nuxt route file extensions.
 <!-- SECTION:FINAL_SUMMARY:END -->
