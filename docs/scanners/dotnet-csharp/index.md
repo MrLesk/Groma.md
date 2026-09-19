@@ -1,7 +1,7 @@
 # C# scanner
 
-The C# scanner bundles Roslyn and a self-contained .NET runtime. Install the
-scanner and scan source without a project SDK, NuGet restore, generated output
+The C# scanner installs Roslyn and a self-contained .NET runtime for the host
+platform. Install the scanner and scan source without a project SDK, NuGet restore, generated output
 or application build. `global.json` does not select the scanner's runtime.
 
 ```sh
@@ -15,8 +15,19 @@ Maintainers build the package with the .NET 10 SDK and Bun:
 bun scripts/package-csharp-scanner.ts
 ```
 
-The package includes the executable worker, runtime, adapter and upstream
-notices. Its consumer does not need `dotnet` or an installation script.
+The public `@groma/scanner-csharp` package contains the adapter. Its exact
+optional dependencies select `@groma/scanner-csharp-<platform>-<architecture>`
+for the current host. Each runtime package contains the complete executable
+worker, .NET runtime and upstream notices. Consumers need optional dependencies
+enabled, but do not need `dotnet` or an installation script. Keeping host
+runtimes separate avoids npm's upload-size rejection of the combined package.
+
+The maintainer build installs its host runtime under the scanner's local
+`node_modules` and copies it into the staged package. Both source development
+and local package scans use normal module resolution. The release assembler
+emits one runtime package per built host and a small adapter referencing all
+of them; runtimes publish before the adapter. This changes package delivery
+only: scanner evidence, OKF records and C4 boundaries are unchanged.
 
 ## Source inputs
 

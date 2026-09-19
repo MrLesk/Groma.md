@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { cp, mkdir, mkdtemp, readFile, readdir, rename, rm, symlink, writeFile } from 'node:fs/promises'
+import { cp, mkdir, mkdtemp, readFile, readdir, rename, rm, stat, symlink, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import type { ScanObservation } from '@groma/scanner'
@@ -33,15 +33,42 @@ async function snapshot(root: string): Promise<Record<string, string>> {
   return result
 }
 
+/** Exercise the published split: install two tarballs, with the runtime outside the adapter. */
+async function installCSharpPackage(staged: string, temporary: string): Promise<string> {
+  const value = JSON.parse(await readFile(path.join(staged, 'package.json'), 'utf8'))
+  const dependencies: Record<string, string> = {}
+  const packages = [staged, ...Object.keys(value.optionalDependencies).map(name => path.join(staged, 'node_modules', name))]
+  for (const directory of packages) {
+    const manifest = JSON.parse(await readFile(path.join(directory, 'package.json'), 'utf8'))
+    const tarball = path.join(temporary, `${path.basename(directory)}.tgz`)
+    const pack = Bun.spawn([process.execPath, 'pm', 'pack', '--ignore-scripts', '--filename', tarball], {
+      cwd: directory, stdout: 'ignore', stderr: 'pipe',
+    })
+    expect(await pack.exited, await new Response(pack.stderr).text()).toBe(0)
+    // The rejected combined archive was 214.6 MB; each host package must fit comfortably below it.
+    expect((await stat(tarball)).size).toBeLessThan(100 * 1024 * 1024)
+    dependencies[manifest.name] = `file:${tarball}`
+  }
+  const installed = path.join(temporary, 'installed')
+  await mkdir(installed)
+  await writeFile(path.join(installed, 'package.json'), JSON.stringify({ private: true, dependencies }))
+  const install = Bun.spawn([process.execPath, 'install', '--ignore-scripts'], {
+    cwd: installed, stdout: 'ignore', stderr: 'pipe',
+  })
+  expect(await install.exited, await new Response(install.stderr).text()).toBe(0)
+  return path.join(installed, 'node_modules', value.name)
+}
+
 for (const [id, fixture] of Object.entries(examples)) {
   packageTest(`${id} package scans a fresh checkout with no project dependencies or language tools`, async () => {
     const temporary = await mkdtemp(path.join(os.tmpdir(), `groma-packaged-${id}-`))
     try {
       const root = path.join(temporary, 'project')
-      const artifact = path.join(temporary, 'scanner')
+      const staged = path.join(path.resolve(packages!), id)
+      const artifact = id === 'csharp' ? await installCSharpPackage(staged, temporary) : path.join(temporary, 'scanner')
       await cp(path.resolve(import.meta.dir, '../test/fixtures', fixture), root, { recursive: true })
       await prepareFiles(root)
-      await cp(path.join(path.resolve(packages!), id), artifact, { recursive: true })
+      if (id !== 'csharp') await cp(staged, artifact, { recursive: true })
       const git = Bun.which('git')!
       const init = Bun.spawn([git, 'init', '--quiet', root], { stderr: 'pipe' })
       expect(await init.exited, await new Response(init.stderr).text()).toBe(0)
