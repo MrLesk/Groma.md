@@ -24,7 +24,7 @@ test.concurrent('Groovy settings include projects whose literal source sets and 
   const root = await repository('java-gradle-groovy')
   try {
     const found = await gradleProjects(root)
-    expect(found.directories.map(directory => path.relative(root, directory)).sort()).toEqual(['', 'app', 'libs/core'])
+    expect(found.directories.map(directory => path.relative(root, directory)).sort()).toEqual(['', 'app', path.join('libs', 'core')])
     expect(found.diagnostics.map(diagnostic => diagnostic.file).sort()).toEqual(['app/build.gradle', 'build.gradle'])
     expect(await input(root)).toBeUndefined()
     expect(await input(path.join(root, 'app'))).toMatchObject({
