@@ -94,21 +94,28 @@ function appendSourceState(
   if (state.line !== undefined) pairs.push(['line', String(state.line)])
 }
 
+/** A publication can select a theme through its architecture/{theme}/ directory. */
+function pathTheme(pathname: string): WebThemeMode | undefined {
+  const theme = pathname.match(/\/architecture\/([^/]+)\/?$/)?.[1]
+  return isThemeMode(theme) ? theme : undefined
+}
+
 /**
  * Reads the ordered architecture selection (repeated `<kind>=<id>` and
  * `relationship=<source id>/<target id>` entries) or `task=<id>`,
  * checked flows (repeated `flow=<id>`) and the last flow's one-based `step=<number>`,
- * `tab=how|tasks`, `theme=light|dark|blueprint` and `hud=off`. Ids are the authored ids; anything the world
+ * `tab=how|tasks`, `theme=auto|light|dark|blueprint` and `hud=off`. A query theme overrides
+ * the publication path theme, then the saved default. Ids are the authored ids; anything the world
  * or the work does not know is ignored, a kind naming an element of another kind included.
  */
 export function readView(
-  search: string,
+  url: Pick<URL, 'search' | 'pathname'>,
   world: ArchitectureGraph,
   work: readonly WorkItem[],
   revisions: readonly GitRevision[] = [],
   defaultTheme: WebThemeMode = 'auto',
 ): ViewState {
-  const params = new URLSearchParams(search)
+  const params = new URLSearchParams(url.search)
   const revision = revisions.find(candidate => candidate.id === params.get('revision'))?.id
   const selectedTheme = params.get('theme')
   const byId = new Map(world.elements.map(element => [element.id, element]))
@@ -132,7 +139,7 @@ export function readView(
     tab: source.file !== undefined || params.get('tab') === 'how'
       ? 'how'
       : params.get('tab') === 'tasks' ? 'tasks' : 'what',
-    theme: isThemeMode(selectedTheme) ? selectedTheme : defaultTheme,
+    theme: isThemeMode(selectedTheme) ? selectedTheme : pathTheme(url.pathname) ?? defaultTheme,
     hudVisible: params.get('hud') !== 'off',
   }
 }
@@ -178,7 +185,7 @@ function appendFlow(pairs: [string, string][], flow: FlowRef | undefined, world:
 }
 
 /** The query string for a view, empty when everything is at its default. */
-export function writeView(state: ViewState, world: ArchitectureGraph, work: readonly WorkItem[]): string {
+export function writeView(state: ViewState, world: ArchitectureGraph, work: readonly WorkItem[], pathname: string): string {
   const elements = new Map(world.elements.map(element => [element.representationId, element]))
   const selected = state.selection.kind === 'architecture'
     ? elements.get(state.selection.ids.at(-1) ?? '')
@@ -191,7 +198,7 @@ export function writeView(state: ViewState, world: ArchitectureGraph, work: read
   for (const flow of state.flows) {
     appendFlow(pairs, flow === state.flows.at(-1) ? flow : { id: flow.id }, world)
   }
-  if (state.theme !== 'auto') pairs.push(['theme', state.theme])
+  if (state.theme !== (pathTheme(pathname) ?? 'auto')) pairs.push(['theme', state.theme])
   if (!state.hudVisible) pairs.push(['hud', 'off'])
   return pairs.length === 0 ? '' : `?${pairs.map(([key, value]) => `${key}=${value}`).join('&')}`
 }

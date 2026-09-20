@@ -643,9 +643,13 @@ Repeated `flow=<id>` parameters name checked scenarios in selection order;
 selection, the last flow owns details. An
 architecture selection alongside it opens endpoint inspection while retaining
 the checked flows and focused step. Opening a shared selection fits its content.
-`theme=light|dark|blueprint` names an
-explicit theme, and `hud=off` hides the page chrome. Auto stays out of the URL;
-reading accepts any parameter order and ignores unknown values.
+`theme=auto|light|dark|blueprint` names an explicit theme, and `hud=off` hides
+the page chrome. A publication path ending in `/architecture/{theme}/`, with
+any repository prefix, also selects one of those themes. An explicit query
+theme takes priority over the path, then the saved browser preference applies.
+The Theme menu writes an override only when its choice differs from the path
+theme. Without a path theme, Auto stays out of the URL. Reading accepts any
+parameter order and ignores unknown values.
 A watched TypeScript change folds and rebuilds the map without a
 browser refresh. An architecture Markdown change does the same
 without scanning. Selection stays if that box still exists, else the

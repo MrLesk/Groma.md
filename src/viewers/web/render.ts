@@ -81,7 +81,7 @@ const tip = createTip(host)
 const pins = createPins(host, id => map.anchorOf(id), id => toggleTask(id, false), tip)
 const island = createWorkIsland(host, id => toggleTask(id), pins.show, tip)
 let tree = initialTree()
-const opened = readView(location.search, world, work.items, boot.revisions, readSavedTheme(localStorage))
+const opened = readView(location, world, work.items, boot.revisions, readSavedTheme(localStorage))
 const themeControl = bindThemeControl(document.getElementById('theme') as HTMLDetailsElement, opened.theme, syncUrl)
 let hudVisible = opened.hudVisible
 shell.setHud(hudVisible)
@@ -174,7 +174,7 @@ function syncUrl(): void {
     tab: detailsTab,
     theme: themeControl.mode,
     hudVisible,
-  }, world, work.items)
+  }, world, work.items, location.pathname)
   history.replaceState(null, '', `${location.pathname}${query}`)
 }
 function paintMapState(task: WorkItem | undefined, activeTaskItems: WorkItem[]): void {
