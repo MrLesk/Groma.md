@@ -18,12 +18,13 @@ async function fixture(action: (root: string) => Promise<void>) {
   } finally { await rm(root, { recursive: true, force: true }) }
 }
 
-test.concurrent('implicit path members share workspace edition and local dependencies in one scan', async () => {
+test.concurrent('implicit path members inherit editions only when declared and retain local dependencies', async () => {
   await fixture(async root => {
     expect(await rustProjects(root, {})).toEqual([path.join(root, 'Cargo.toml')])
     const input = await readRustProject(root, {})
     expect(input.crates).toHaveLength(3)
-    expect(input.crates.every(crate => crate.edition === '2024')).toBe(true)
+    expect(Object.fromEntries(input.crates.map(crate => [crate.display_name, crate.edition])))
+      .toEqual({ app: '2024', service: '2024', support: '2015' })
     const dependencies = Object.fromEntries(input.crates.map(crate => [crate.display_name,
       crate.deps.map(dependency => input.crates[dependency.crate]!.display_name),
     ]))
@@ -32,11 +33,18 @@ test.concurrent('implicit path members share workspace edition and local depende
   })
 })
 
+test.concurrent('Rust source listing includes shared path modules outside target directories', async () => {
+  await fixture(async root => {
+    expect(await rust.listSourceFiles(root)).toContain('shared.rs')
+  })
+})
+
 const nativeTest = process.env.GROMA_TEST_RUST ? test.concurrent : test.skip
 nativeTest('Rust reads shared path modules and resolves calls across inherited workspace members', async () => {
   await fixture(async root => {
     const observation = (await rust.scan(root))!
     expect(observation.files).toHaveLength(4)
+    expect(await rust.listSourceFiles(root)).toEqual(observation.files.map(file => file.file).sort())
     expect(observation.files.filter(file => file.file === 'shared.rs')).toHaveLength(1)
     expect(observation.diagnostics.some(item => item.code === 'rust-unsupported-compilation-contexts'
       && item.file === 'shared.rs')).toBe(true)
@@ -45,7 +53,7 @@ nativeTest('Rust reads shared path modules and resolves calls across inherited w
       targets: call.targets.map(target => operations.get(target)?.file), unresolved: call.unresolved }))
     expect(calls).toEqual([
       { caller: 'start', targets: ['service/src/lib.rs'], unresolved: false },
-      { caller: 'setup', targets: ['service/src/lib.rs'], unresolved: false },
+      { caller: 'gen', targets: ['service/src/lib.rs'], unresolved: false },
     ])
   })
 }, 60000)

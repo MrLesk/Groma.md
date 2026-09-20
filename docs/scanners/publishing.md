@@ -11,7 +11,8 @@ contents changed before starting a release.
 Repository validation and the five platform scanner builds start together.
 Each platform builds its independent scanners concurrently. Scanner publication
 waits for validation and every platform build to succeed. The contract publishes
-first, then the scanner packages publish concurrently. Each concurrent group
+first, then the scanner packages publish concurrently. C# publishes its platform
+runtime packages before its adapter. Each concurrent group
 finishes all started work before reporting any failures or advancing.
 
 Groma builds then run in parallel across the five platforms, after scanner
@@ -43,7 +44,8 @@ The scanner build targets are macOS arm64, Linux x64 and arm64, and Windows x64
 and arm64. Building an artifact and manually exercising it are separate claims:
 record each explicitly.
 Go, Rust, TypeScript and Swift packages include native workers. Java includes a
-compiler runtime built with `jlink`; C# includes a self-contained .NET runtime.
+compiler runtime built with `jlink`; C# installs a host-specific self-contained
+.NET runtime through an exact optional dependency.
 Those assets are assembled per platform. Swift also carries its parser libraries
 and the Swift runtime needed on Linux and Windows. Python includes CPython and its
 standard library through Pyodide WebAssembly assets. Framework packages carry
@@ -82,7 +84,8 @@ request approval in the browser. Then configure trusted publishing once for each
 npm trust github @groma/scanner --repository MrLesk/Groma.md --file release.yml --allow-publish
 ```
 
-Repeat the command with each `@groma/scanner-<id>` name. The package must already
+Repeat the command with each `@groma/scanner-<id>` name and each
+`@groma/scanner-csharp-<platform>-<architecture>` runtime package. The package must already
 exist, and npm requests two-factor approval for the trust change. Later GitHub
 releases use the same workflow and publish automatically.
 Do not put credentials or two-factor codes in repository files.
@@ -121,7 +124,8 @@ Each release host runs the packaged fresh-checkout suite before uploading:
 GROMA_TEST_PACKAGES=/tmp/scanner-packages bun test --timeout 60000 test-bun/scanner-fresh-checkout.test.ts
 ```
 
-The suite relocates each package, scans an independent fixture with an empty
+The suite relocates each package. For C#, it packs and installs the adapter and
+host runtime as separate tarballs and checks their upload sizes. It scans an independent fixture with an empty
 home and only Git on PATH, checks useful local facts, repeats the scan and
 compares source bytes. The JavaScript harness rejects network fetches.
 This is evidence for the exercised host, not a claim of testing every target.

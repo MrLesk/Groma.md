@@ -25,8 +25,9 @@ rustc, build scripts and procedural macros are never executed.
 By default each workspace is scanned once. A package selects its library and
 binary targets; a workspace selects its explicit members and their local path
 dependencies inside the workspace, including dependencies declared for tests,
-build scripts and target platforms. Those implicit members inherit the workspace
-edition and dependency paths and are not scanned again as standalone packages.
+build scripts and target platforms. Those implicit members use workspace editions
+and dependency paths when their manifest opts in with `workspace = true`; an omitted package edition means Rust
+2015. They are not scanned again as standalone packages.
 Only normal library dependencies supply edges in the source crate graph.
 `settings.manifest` on the
 existing Rust scanner entry selects one manifest relative to the repository.
@@ -35,8 +36,10 @@ External crates and standard-library types remain unresolved. This source
 loader does not evaluate custom target configurations or build-generated flags.
 
 Crates share the repository source root so `#[path]` modules can refer to source
-outside a crate's own directory. Module declarations still select the analyzed
-files; making a file reachable does not create a source owner by itself.
+outside a crate's own directory. Source listing includes selected target directories
+and follows literal `#[path = "..."]` references to shared files outside them.
+Module declarations still select the analyzed files; making a file reachable
+does not create a source owner by itself.
 
 ## Evidence and uncertainty
 

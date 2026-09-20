@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@codex'
 created_date: '2026-09-19 21:10'
-updated_date: '2026-09-20 11:02'
+updated_date: '2026-09-20 12:49'
 labels: []
 dependencies: []
 references:
@@ -107,6 +107,10 @@ Public registry readback now confirms Swift 0.1.2 and its integrity exactly matc
 Swift 0.1.2 publication is fully verified. Registry latest is 0.1.2 and the public integrity matches the qualified 137637542-byte artifact. The npm-installed package passed 4 integration tests and 47 assertions. The published Groma 0.3.3 CLI installed the exact public version into a fresh fixture project, passed readiness and produced byte-identical Markdown across two scans with source bytes unchanged. A second project restored the copied scanner selection and passed readiness and stable repeated scans. Public-install verification used macOS arm64; all five native workers were previously qualified by CI. No Groma core release was needed. Windows repository follow-ups are owned by TASK-451.
 
 Alex reported that GitHub main still showed the old Swift macOS-only README row. The earlier correction existed only on the validation branch. Applied the exact one-line README correction directly to main in d75ee16e903b9c1e7fbd040bef3e3b27a78e37aa and read it back through the GitHub API: Swift now uses the same Available status as the other scanners. This standalone documentation correction does not change scanner code or require another test run.
+
+Shared main merge integration: retained all-host Swift assembly alongside the newer separate C# runtime packages from TASK-444. The existing Swift assembly test initially failed before reaching its assertions because its C# fixture used the old layout. Updated only that fixture to supply the staged runtime package and exact optional dependency; all Swift assertions remain unchanged. test-bun/scanner-release.test.ts is already recorded in this task’s modified-file list.
+
+Merge validation passed after the fixture correction: 2 focused packaging tests (27 assertions), then bun run check with 16 Node tests and 614 Bun tests passing, 36 optional artifact skips and zero failures. The combined release flow preserves both five-host Swift packaging and separate C# runtime packages.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary

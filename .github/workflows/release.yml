@@ -77,7 +77,7 @@ jobs:
           bun-version: ${{ env.BUN_VERSION }}
       - uses: actions/setup-java@v6
         with:
-          distribution: temurin
+          distribution: ${{ matrix.platform == 'win32-arm64' && 'microsoft' || 'temurin' }}
           java-version: '25'
       - uses: actions/setup-go@v6
         with:

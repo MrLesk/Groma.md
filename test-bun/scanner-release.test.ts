@@ -8,7 +8,7 @@ test.concurrent('scanner assembly keeps Swift workers and runtime libraries from
   const input = path.join(temporary, 'hosts'), output = path.join(temporary, 'packages')
   const hosts = ['darwin-arm64', 'linux-arm64', 'linux-x64', 'win32-arm64', 'win32-x64']
   const workers = { go: 'worker', rust: 'groma-rust-scanner', typescript: 'tsc',
-    java: 'runtime/bin/java', csharp: 'worker/Groma.CSharpScanner', swift: 'worker' }
+    java: 'runtime/bin/java', swift: 'worker' }
   try {
     for (const host of hosts) {
       for (const [id, name] of Object.entries(workers)) {
@@ -20,6 +20,15 @@ test.concurrent('scanner assembly keeps Swift workers and runtime libraries from
         await writeFile(path.join(directory, 'package.json'), JSON.stringify({ name: `@groma/scanner-${id}`,
           os: [host.split('-')[0]], cpu: [host.split('-')[1]] }))
       }
+      const name = `@groma/scanner-csharp-${host}`
+      const runtime = path.join(input, host, 'csharp/node_modules', name)
+      const [system, arch] = host.split('-')
+      await mkdir(path.join(runtime, 'worker'), { recursive: true })
+      await writeFile(path.join(runtime, 'package.json'), JSON.stringify({ name, version: '0.1.3', os: [system], cpu: [arch] }))
+      await writeFile(path.join(runtime, 'worker', `Groma.CSharpScanner${system === 'win32' ? '.exe' : ''}`), host)
+      await writeFile(path.join(input, host, 'csharp/package.json'), JSON.stringify({
+        name: '@groma/scanner-csharp', version: '0.1.3', optionalDependencies: { [name]: '0.1.3' },
+      }))
       await writeFile(path.join(input, host, 'swift/dist', host, 'runtime-library'), `runtime for ${host}`)
     }
     const child = Bun.spawn([process.execPath, path.resolve(import.meta.dir, '../scripts/scanner-release.ts'),
