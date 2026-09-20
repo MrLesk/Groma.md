@@ -4,7 +4,7 @@ import { test } from 'bun:test'
 
 import { loadAnnotatedArchitecture } from '../src/core.ts'
 import { ROOF_SHADOW, centredRect } from '../src/sheet/grid.ts'
-import { CONTAINER_FONT, GROUP_FONT, ISLAND_FONT, PLANE, SURFACE_PAD, buildingFont, curved, labelHeight, roofBlock, textPadding, textWidth } from '../src/sheet/measure.ts'
+import { CONTAINER_FONT, GROUP_FONT, ISLAND_FONT, PLANE, buildingFont, curved, roofBlock, textPadding, textWidth } from '../src/sheet/measure.ts'
 import { sheetScene } from '../src/sheet/scene.ts'
 import type { Building, RoutePoint, SheetScene } from '../src/sheet/types.ts'
 import type { Bounds, Point } from '../src/types.ts'
@@ -27,7 +27,7 @@ import {
 import type { ProjectedScene, ProjectionView } from '../src/viewers/web/iso/project.ts'
 import { presentScene } from '../src/viewers/web/iso/presentation.ts'
 import { NESTED_POSE, OVERHEAD_POSE } from '../src/viewers/web/layers/orbit.ts'
-import { SURFACE_SCREEN_PAD, surfaceLabelInsets } from '../src/viewers/web/iso/text.ts'
+import { surfaceLabelLayout } from '../src/viewers/web/iso/text.ts'
 import { box, openclawFixtureRoot, repositoryRoot, viewerFixtureRoot, worldOf } from './helpers.ts'
 
 const profile = (title: string, overview: string): ProjectProfile => ({
@@ -341,56 +341,64 @@ for (const mode of ['iso', '2d'] as const) {
       ...scene.zones.map(({ zone, polygon, text }) => ({ rect: zone.rect, polygon, text, size: GROUP_FONT })),
     ]
     assert.ok(scene.zones.length > 0 && scene.slabs.length > 0)
-    const labels = surfaces.map(({ rect, polygon, text, size }) => {
+    for (const { rect, polygon, text } of surfaces) {
       const origin = groundPoint(text.origin, scene.view)
       const body = screenBox(polygon.map(point => groundPoint(point, scene.view)))
-      const label = {
-        x: origin.x, y: origin.y + 3 * SURFACE_PAD / PLANE,
-        width: text.width / PLANE, height: size * 1.1 / PLANE,
-      }
       assert.ok(Math.abs(origin.y - (body.y + body.height)) < 1e-8, 'leader starts on the boundary')
-      assert.ok(label.y > body.y + body.height, 'text is outside its own surface')
-      assert.ok(Math.abs(label.x + label.width / 2 - (rect.gx + rect.w / 2)) < 1e-8, 'label is centered')
-      assert.ok(label.x >= rect.gx && label.x + label.width <= rect.gx + rect.w)
-      assert.ok(label.y + label.height <= rect.gy + rect.d + 1e-8, 'label fits the packed envelope')
-      return label
-    })
+      assert.ok(Math.abs(origin.x + text.width / (2 * PLANE) - (rect.gx + rect.w / 2)) < 1e-8, 'label anchor is centered')
+    }
     const roofs = scene.buildings.flatMap(item => item.floors.flatMap(floor => floor
       .filter(face => face.side === 'top')
       .map(face => screenBox(face.points.map(point => groundPoint(point, scene.view))))))
-    for (const [index, label] of labels.entries()) {
-      assert.ok(roofs.every(roof => !overlaps(label, roof)), 'labels clear building roofs')
-      assert.ok(labels.slice(index + 1).every(other => !overlaps(label, other)), 'nested labels do not overlap')
-    }
     for (const viewport of [{ width: 1200, height: 400 }, { width: 400, height: 1200 }]) {
       const camera = fitCamera(scene.bounds, viewport)
-      const padding = surfaceLabelInsets(camera.k, scene.view)
-      for (const { text, size } of surfaces) {
-        const bottom = labelHeight(size) + 2 * padding.y
-        for (const [x, y] of [[-padding.x, 0], [text.width + padding.x, 0], [-padding.x, bottom], [text.width + padding.x, bottom]]) {
-          const delta = project(x! / PLANE, y! / PLANE, 0, scene.view)
-          const px = (text.origin.x + delta.x) * camera.k + camera.x
-          const py = (text.origin.y + delta.y) * camera.k + camera.y
-          assert.ok(px >= 0 && px <= viewport.width && py >= 0 && py <= viewport.height, 'camera includes labels and leaders')
-        }
-      }
       for (const zoom of [camera.k / 2, camera.k, camera.k * 2, 4]) {
-        const inset = surfaceLabelInsets(zoom, scene.view)
-        for (const [x, y] of [[inset.x, 0], [0, inset.y]]) {
-          const delta = project(x! / PLANE, y! / PLANE, 0, scene.view)
-          assert.ok(Math.abs(Math.hypot(delta.x, delta.y) * zoom - SURFACE_SCREEN_PAD) < 0.03,
-            'additional text clearance stays in screen pixels at every zoom')
-        }
-        const spaced = labels.map(label => ({ ...label, y: label.y + inset.y / PLANE }))
-        for (const [index, label] of spaced.entries()) {
+        const fitted = surfaces.map(({ rect, text, size }) => {
+          const layout = surfaceLabelLayout(text, size, zoom, scene.view)
+          const origin = groundPoint(text.origin, scene.view)
+          const label = {
+            x: origin.x + layout.x / PLANE, y: origin.y,
+            width: layout.width / PLANE, height: layout.height / PLANE,
+          }
+          assert.ok(label.x >= rect.gx - 1e-8 && label.x + label.width <= rect.gx + rect.w + 1e-8,
+            'the complete selectable label stays within its owner width')
+          assert.ok(label.y + label.height <= rect.gy + rect.d + 1e-8, 'the label never leaves its reserved band')
+          assert.ok(layout.baseline - layout.fontSize * 0.9 >= layout.leader, 'text clears its leader')
+          for (const [x, y] of [[layout.x, 0], [layout.x + layout.width, 0], [layout.x, layout.height], [layout.x + layout.width, layout.height]]) {
+            const delta = project(x! / PLANE, y! / PLANE, 0, scene.view)
+            const px = (text.origin.x + delta.x) * camera.k + camera.x
+            const py = (text.origin.y + delta.y) * camera.k + camera.y
+            assert.ok(px >= 0 && px <= viewport.width && py >= 0 && py <= viewport.height, 'fitted camera includes bounded labels')
+          }
+          return label
+        })
+        for (const [index, label] of fitted.entries()) {
           assert.ok(roofs.every(roof => !overlaps(label, roof)), 'added clearance keeps text off roofs')
-          assert.ok(spaced.slice(index + 1).every(other => !overlaps(label, other)), 'spaced labels remain separate')
+          assert.ok(fitted.slice(index + 1).every(other => !overlaps(label, other)), 'bounded labels remain separate')
         }
       }
     }
     assert.deepEqual(sheet, before)
   })
 }
+
+test.concurrent('surface title geometry changes only between fixed zoom ranges', () => {
+  const ranges = [[0.03, 0.1, 0.2, 0.249], [0.25, 0.3, 0.4, 0.499], [0.5, 0.6, 0.8, 0.999], [1, 1.5, 2, 4]]
+  for (const view of [NESTED_POSE, OVERHEAD_POSE]) {
+    for (const band of [{ width: 20000, height: 10000 }, { width: 240, height: 120 }]) {
+      const text = { width: 200, band }
+      const layouts = ranges.map(range => {
+        const first = surfaceLabelLayout(text, CONTAINER_FONT, range[0]!, view)
+        for (const zoom of range.slice(1)) {
+          assert.deepEqual(surfaceLabelLayout(text, CONTAINER_FONT, zoom, view), first,
+            'font, position, gap and hit area stay fixed within the zoom range')
+        }
+        return JSON.stringify(first)
+      })
+      assert.ok(new Set(layouts).size > 1, 'crossing ranges still adjusts title readability')
+    }
+  }
+})
 
 
 test.concurrent('projecting a frozen world leaves it untouched', async () => {

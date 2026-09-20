@@ -16,7 +16,7 @@ import {
 } from './scale.ts'
 import { mapDefs } from './style.ts'
 import { pointsAttribute, svg, svgMarkup } from './svg.ts'
-import { padSurfaceLabels } from './text.ts'
+import { layoutSurfaceLabels, surfaceLabelStep } from './text.ts'
 
 /** Let zoom settle before committing its sharp SVG scale. Panning keeps the cached layer. */
 const CAMERA_SETTLE_MS = 250
@@ -175,6 +175,7 @@ export function createMap(host: HTMLElement): IsoMap {
   let latestCamera: { current: Camera; zoomRatio: number; showGrid: boolean } | undefined
   let gridView: ProjectionView = DEFAULT_PROJECTION
   let labels: SVGGElement[] = []
+  let labelStep = surfaceLabelStep(1)
   /** The slab or system island each building and slab stands on, by id. */
   let surfaces = new Map<string, string>()
 
@@ -185,7 +186,11 @@ export function createMap(host: HTMLElement): IsoMap {
 
   /** Refresh scale-dependent SVG together; per-frame writes invalidate Safari's cached layer. */
   const commitCamera = (current: Camera, zoomRatio: number, showGrid: boolean): void => {
-    padSurfaceLabels(labels, current.k, gridView)
+    const nextLabelStep = surfaceLabelStep(current.k)
+    if (nextLabelStep !== labelStep) {
+      layoutSurfaceLabels(labels, current.k, gridView)
+      labelStep = nextLabelStep
+    }
     glow.move(current)
     for (const { world } of paintSurfaces) {
       world.setAttribute('transform', `translate(${current.x} ${current.y}) scale(${current.k})`)
@@ -267,12 +272,14 @@ export function createMap(host: HTMLElement): IsoMap {
     paint(scene) {
       painted = scene
       gridView = scene.view
+      const zoom = composed?.k ?? 1
+      labelStep = surfaceLabelStep(zoom)
       definitions.innerHTML = mapDefs(scene.view) + facadeDefs(scene)
       for (const layer of Object.values(layers)) layer.replaceChildren()
       paintLayerPlanes(layers.sheet, scene)
       layers.sheet.insertAdjacentHTML('beforeend', sheetSvg(scene))
-      layers.islands.innerHTML = islandsSvg(scene)
-      layers.slabs.innerHTML = slabsSvg(scene)
+      layers.islands.innerHTML = islandsSvg(scene, zoom)
+      layers.slabs.innerHTML = slabsSvg(scene, zoom)
       layers.items.innerHTML = buildingsSvg(scene)
       items = new Map([layers.islands, layers.slabs, layers.items].flatMap(layer =>
         [...layer.querySelectorAll<SVGGElement>('[data-id]')].map(node => [node.dataset.id!, node] as const)))
@@ -291,7 +298,6 @@ export function createMap(host: HTMLElement): IsoMap {
         ...scene.slabs.map(({ slab }) => [slab.representationId, slab.island] as const),
       ])
       labels = [...ground.world.querySelectorAll<SVGGElement>('.surface-label')]
-      padSurfaceLabels(labels, composed?.k ?? 1, gridView)
     },
     select(ids) {
       const directItems = new Set<string>()

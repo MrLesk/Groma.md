@@ -468,18 +468,21 @@ slab, and zone names sit below their own front boundaries, centered on a short
 leader line. Names and leaders follow the sheet plane in both isometric and
 2D overhead views. System and container labels select their owning element;
 their text and leader share the boundary's selection and lit-state highlight.
-Text size follows the visible hierarchy: project title at 65 plane
-pixels, systems and the project overview at 48, containers at 36, groups at 28,
-and components at 16.
+Surface titles keep systems larger than containers, and containers larger than groups.
+They use four fixed size and spacing presets, from overview to close inspection.
+Each preset has fixed geometry in the sheet plane; zoom chooses a preset without
+adjusting it to the exact camera scale. Component names keep their measured roof size.
 Roofs, external label bands, and the project plate grow to fit their text.
+Surface bands reserve fixed room for the larger overview titles during layout.
 Camera fit includes the complete surface envelopes, including external labels.
-Hierarchy text has eight additional screen pixels of clearance after its
-leader, with eight screen pixels beside and below it in the selectable area.
-Labels and their hit areas move with the cached map during pan and zoom; their SVG
-geometry stays unchanged throughout movement. Exact screen padding returns
-with the sharp SVG scale when zoom settles. The existing plane-space label
-band scales with the architecture, and the packed world never changes.
-The fit margin contains the added clearance. No component name is hidden at any zoom.
+Each surface title, its leader, and its selectable area stay inside the reserved
+band below its own boundary. The desired text size is limited by the band's
+width and height, so it cannot cross the surrounding boundary at distant zoom.
+Labels and their hit areas move with the cached map during pan and zoom. Their SVG
+geometry stays unchanged throughout movement and across zoom stops within the same
+range. Only crossing a preset boundary updates the labels after movement settles;
+painting a new scene starts with its matching preset. Zoom never changes the packed
+world. No component name is hidden at any zoom.
 Groups remain visual groupings within their existing parent.
 
 Routes follow the lattice: one route per authored relationship,

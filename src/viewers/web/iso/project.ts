@@ -88,6 +88,8 @@ export interface SurfaceText {
 /** A surface name centered below its boundary, with room for a leader on the same plane. */
 export interface SurfaceLabel extends SurfaceText {
   width: number
+  /** Reserved plane-space envelope below the painted boundary; labels may not escape it. */
+  band: { width: number; height: number }
 }
 
 export interface ProjectedIsland {
@@ -355,6 +357,7 @@ function bandText(rect: CellRect, lines: string[], size: number, view: Projectio
     origin: project(rect.gx + (rect.w - width / PLANE) / 2, body.gy + body.d, 0, view),
     lines,
     width,
+    band: { width: rect.w * PLANE, height: labelBand(size) * PLANE },
   }
 }
 

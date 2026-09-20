@@ -65,9 +65,9 @@ export function labelHeight(size: number): number {
   return 3 * SURFACE_PAD + size * 1.1
 }
 
-/** Whole cells reserved outside the painted boundary for a surface title and its leader. */
+/** Fixed room for larger overview titles; zoom never changes the packed surface envelope. */
 export function labelBand(size: number): number {
-  return Math.ceil(labelHeight(size) / PLANE)
+  return Math.ceil(labelHeight(size * 3) / PLANE)
 }
 
 /** Cells a surface needs along +gx so its own name fits in its front band. */
