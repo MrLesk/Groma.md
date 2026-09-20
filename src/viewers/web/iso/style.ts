@@ -194,14 +194,16 @@ export const mapCss = `
   #map .route.lit .arrow { fill: var(--highlight); opacity: 1; }
   #map .route.focused { --emphasis: ${emphasis(3)}; animation: map-flow-focus 1600ms ease-in-out infinite; }
   #map :is(.building, .slab, .island).focused { --emphasis: ${emphasis(3)}; animation: map-flow-focus 1600ms ease-in-out infinite; }
+  #map .building.component-focus { animation: none; }
+  #map .building.component-focus > :not(.label) { animation: map-flow-focus 1600ms ease-in-out infinite; }
   @keyframes map-flow { from { stroke-dashoffset: 0; } to { stroke-dashoffset: -13; } }
   @keyframes map-flow-focus { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
   @media (prefers-reduced-motion: reduce) {
-    #map .route.lit .line, #map .route.focused, #map :is(.building, .slab, .island).focused { animation: none; }
+    #map .route.lit .line, #map .route.focused, #map :is(.building, .slab, .island).focused, #map .building.component-focus > :not(.label) { animation: none; }
   }
   #map .camera[data-tracing] .route-base,
   #map .camera[data-tracing] .route:not(.lit) { display: none; }
-  #map .camera[data-tracing] .building:not(.onpath):not(.selected):not(.touched),
+  #map .camera[data-tracing] .building:not(.onpath):not(.selected):not(.touched):not(.neighbor),
   #map .camera[data-tracing] .slab:not(.onpath):not(.selected):not(.touched) { opacity: 0.3; }
   #map:where(:not([data-camera-moving])) .building:not(.selected):hover, #map:where(:not([data-camera-moving])) .slab:not(.selected):not(.context):hover,
   #map:where(:not([data-camera-moving])) .island.system:not(.selected):not(.context):hover, #map .context { --emphasis: ${emphasis(0.5)}; }
@@ -218,5 +220,8 @@ export const mapCss = `
   }
   #map :is(.island, .slab):is(.selected, .touched, .lit, .context) > .surface-label .text { fill: var(--highlight); }
   #map :is(.island, .slab):is(.selected, .touched, .lit, .context) > .surface-label .label-leader { stroke: var(--highlight); }
+  #map .building.neighbor:not(.selected):not(.touched):not(.lit) { --emphasis: ${emphasis(0.5)}; }
+  #map .building.neighbor:not(.selected):not(.touched):not(.lit) .face { stroke: color-mix(in srgb, var(--highlight) 45%, var(--map-line)); }
+  #map .camera:has(.component-focus) .building.component:not(.component-focus):not(.neighbor) { opacity: 0.3; animation: none; }
   ${layerCss}
 `

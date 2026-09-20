@@ -3,7 +3,7 @@ import { createProjectReview } from './review/control.ts'
 import type { ProjectProfile } from '../../project-profile.ts'
 import type { AnnotatedElement, AnnotatedRelationship, WorkItem } from '../../types.ts'
 import { elementWorkGroups, touchedElements } from '../../work/pins.ts'
-import { elementOnPath, type FlowRef } from '../flows.ts'
+import type { FlowRef } from '../flows.ts'
 import { initialTree, semanticTreeRows, toggleExpansion, type TreeRow } from '../tui/tree.ts'
 import { createAddControl } from './chrome/add.ts'
 import { createEmptyState } from './chrome/empty.ts'
@@ -20,6 +20,7 @@ import { flowFocus, flowHighlight, flowSelection, retainFlows, toggleFlowActivat
 import { paintFlowReturn, paintFlowDetails } from './flow/reader.ts'
 import { fitArchitecture, fitHighlights, fitCamera, pan, wheelAction, zoomAbout, zoomLimits, zoomReadout, type Camera } from './iso/camera.ts'
 import { createMap } from './iso/map.ts'
+import { createMapHighlights } from './map-highlights.ts'
 import { createCameraAnimator } from './iso/motion.ts'
 import { bindMapPointer } from './iso/pointer.ts'
 import { presentScene, createMapAnimator, createMapMotion } from './iso/presentation.ts'
@@ -70,6 +71,7 @@ const zoomHost = document.getElementById('zoom')!
 const hierarchyContent = document.getElementById('hierarchy-content')!
 const hierarchyToggle = document.getElementById('hierarchy-toggle') as HTMLButtonElement
 const map = createMap(host)
+const highlights = createMapHighlights(map)
 const edit = data.edit
 const projectEditor = edit === undefined ? undefined : createProjectEditor(input => edit({ id: 'project', ...input }))
 const emptyState = createEmptyState(document.getElementById('empty')!)
@@ -175,15 +177,10 @@ function syncUrl(): void {
   }, world, work.items)
   history.replaceState(null, '', `${location.pathname}${query}`)
 }
-
 function paintMapState(task: WorkItem | undefined, activeTaskItems: WorkItem[]): void {
-  const selectedIds = selectedArchitecture(selection)
-  const { routes: litIds, focusedRoute } = flowHighlight(activeFlows, world)
-  map.select(selectedIds)
-  map.mark(new Set(activeTaskItems.flatMap(item => touchedElements(item, world))))
+  highlights.paint(selection, world, activeFlows, activeTaskItems)
   pins.activate(activeTaskIds, task?.id)
   island.activate(activeTaskIds, task?.id)
-  map.setLitRoutes(litIds, id => elementOnPath(id, litIds, world), focusedRoute)
 }
 
 function paintViewState(commitUrl = true): void {
