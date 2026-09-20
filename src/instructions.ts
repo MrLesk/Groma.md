@@ -17,7 +17,7 @@ source code ──scan──▶ groma|.groma/*.md ──view──▶ maps
 ## Workflow
 
 1. groma web — scan this repo and open the browser map.
-2. groma view — scan this repo and open the terminal map. groma view --plain prints the existing world as text without scanning. groma view <id> prints one existing record; groma view <path> prints the file's owner and the file's relationships.
+2. groma view --plain prints the existing world as text without scanning. groma view <id> prints one existing record; groma view <path> prints the file's owner and the file's relationships.
 3. groma scan — scan this repo. Prints ok and a short summary. Core creates one project-named system if none is declared and preserves existing architecture boundaries. Components with no identified container appear in an Unidentified container group inside their known system. Core also derives map connections from supported interactions and their current component owners.
 4. Change the architecture through Groma, not by editing its files.
    - groma add — declare a person, an external system, a draft, a relation, or a group; the scanner never sees those.

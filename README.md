@@ -57,7 +57,6 @@ groma init
 
 ```sh
 groma web     # browser map on http://localhost:4747
-groma view    # terminal map
 ```
 
 Backlog.md provides the tasks shown on the map; Groma works without it. macOS requires Apple Silicon.
@@ -83,21 +82,12 @@ Later scans keep what your agent wrote. [Agent guides](docs/agent-instructions/i
 ## What you get
 
 - **A browser map you can walk.** Zoom from systems to containers to components. Select anything to read what it does and open the source behind it. [Browser guide](docs/viewers/web/index.md)
-- **A terminal map** with the same architecture, scanning and watching from your shell. [Terminal guide](docs/viewers/tui/index.md)
 - **Live updates.** Saving code refreshes source evidence and detected relationships; new files become new components.
 - **Relationships and flows.** Describe how components interact, then chain relationships into named flows readers can step through. [Relationships and flows](docs/component-markdown.md)
 - **Drafts.** Sketch systems, containers, and components before they exist. They appear dashed beside the real ones until a scan matches their code and you accept them. [Draft lifecycle](docs/product-model.md#drafts)
 - **See work across the architecture.** Backlog.md tasks pin where people and agents are working; select one to highlight the components it touches and inspect its changes without leaving the map. [Task links](docs/agent-instructions/backlog.md)
 - **Explore past architecture with its code.** Open an earlier revision and inspect the source from that same commit, down to functions and methods.
 - **Publish a static site.** `groma export ./site` writes a standalone map from stored architecture with flows, tasks, diffs, and source, then exits. Run it again to publish an updated snapshot. Scanning and hosting run separately. [Static publication](docs/viewers/web/index.md#static-publication)
-
-<p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset=".github/assets/terminal-map-dark.svg">
-    <source media="(prefers-color-scheme: light)" srcset=".github/assets/terminal-map-light.svg">
-    <img src=".github/assets/terminal-map-light.svg" alt="Groma's terminal architecture map inside a container" width="100%">
-  </picture>
-</p>
 
 ## Plain Markdown, C4, OKF
 

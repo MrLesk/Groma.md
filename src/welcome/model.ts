@@ -19,11 +19,6 @@ export const welcomeActions = [
     description: 'scan and open the browser map',
   },
   {
-    id: 'view',
-    command: 'groma view',
-    description: 'scan and open the terminal map',
-  },
-  {
     id: 'scan',
     command: 'groma scan',
     description: 'refresh architecture from source',

@@ -176,7 +176,6 @@ function unhandledWelcomeAction(action: never): never {
 async function runWelcomeAction(action: WelcomeActionId): Promise<void> {
   switch (action) {
     case 'web': return openWeb()
-    case 'view': return openTerminalFromWelcome('view')
     case 'scan': return scanOnce()
     case 'scanners': return openTerminalFromWelcome('scanner', 'settings')
     default: return unhandledWelcomeAction(action)
