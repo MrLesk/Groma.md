@@ -474,11 +474,11 @@ Roofs, external label bands, and the project plate grow to fit their text.
 Camera fit includes the complete surface envelopes, including external labels.
 Hierarchy text has eight additional screen pixels of clearance after its
 leader, with eight screen pixels beside and below it in the selectable area.
-This additional padding is corrected for projection and camera scale on every
-zoom frame, including temporary camera transforms. The existing plane-space
-label band still scales with the architecture. Camera movement changes only
-the added text clearance and hit area, never the packed world. The fit margin
-also contains this added clearance. No component name is hidden at any zoom.
+Labels and their hit areas move with the cached map during pan and zoom; their SVG
+geometry stays unchanged throughout movement. Exact screen padding returns
+with the sharp SVG scale when zoom settles. The existing plane-space label
+band scales with the architecture, and the packed world never changes.
+The fit margin contains the added clearance. No component name is hidden at any zoom.
 Groups remain visual groupings within their existing parent.
 
 Routes follow the lattice: one route per authored relationship,

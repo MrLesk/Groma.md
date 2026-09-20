@@ -133,7 +133,9 @@ export function createMap(host: HTMLElement): IsoMap {
     cameraTimer = undefined
   }
 
+  /** Refresh scale-dependent SVG together; per-frame writes invalidate Safari's cached layer. */
   const commitCamera = (current: Camera, zoomRatio: number, showGrid: boolean): void => {
+    padSurfaceLabels(labels, current.k, gridView)
     for (const { world } of paintSurfaces) {
       world.setAttribute('transform', `translate(${current.x} ${current.y}) scale(${current.k})`)
     }
@@ -195,7 +197,6 @@ export function createMap(host: HTMLElement): IsoMap {
       const scaleChanged = current.k !== composed?.k || zoomRatio !== composedZoomRatio
       const cameraChanged = current.x !== composed?.x || current.y !== composed?.y || current.k !== composed?.k
       if (!cameraChanged && !scaleChanged) return false
-      if (current.k !== composed?.k) padSurfaceLabels(labels, current.k, gridView)
       composed = current
       composedZoomRatio = zoomRatio
       latestCamera = { current, zoomRatio, showGrid }
