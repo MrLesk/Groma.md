@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@codex'
 created_date: '2026-09-19 21:20'
-updated_date: '2026-09-19 21:29'
+updated_date: '2026-09-20 15:06'
 labels: []
 dependencies: []
 references:
@@ -14,7 +14,9 @@ references:
   - render
   - map-highlights
 documentation:
-  - docs/git-comparison-plan.md
+  - >-
+    backlog/tasks/task-463 -
+    Deliver-time-machine-comparison-and-static-export.md
 modified_files:
   - src/viewers/web/page.ts
   - src/viewers/web/payload.ts
@@ -37,14 +39,14 @@ ordinal: 518000
 ## Description
 
 <!-- SECTION:DESCRIPTION:BEGIN -->
-The current Open PR feature puts GitHub-specific discovery, URL state, and snapshot handling inside the Groma web app. Alex requests removing it while the replacement is planned around basic Git comparison and optional revision-source plugins.
+The Open PR feature put GitHub-specific discovery, URL state, and snapshot handling inside the Groma web app. This task removes that direct integration. Current time-machine and comparison requirements are defined in TASK-463 and its child tasks.
 <!-- SECTION:DESCRIPTION:END -->
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
 - [x] #1 The live web app has no Open PR button, dialog, PR panel, or GitHub-specific page handling.
 - [x] #2 PR-only readers, payload fields, URL state, map highlighting, tests, and product documentation are removed; ordinary revision, task, flow, and component selection behavior remains intact.
-- [x] #3 Stored architecture no longer describes the removed PR-only code, and the comparison plan records that the old implementation is removed rather than retained alongside the future plugin.
+- [x] #3 Stored architecture no longer describes the removed PR-only code, and the comparison plan records that the old implementation is removed.
 - [x] #4 Focused existing checks and bun run check pass, and the live working-tree and revision views are verified.
 <!-- AC:END -->
 
@@ -67,7 +69,7 @@ The current Open PR feature puts GitHub-specific discovery, URL state, and snaps
 <!-- SECTION:NOTES:BEGIN -->
 Removed the direct PR browser/server flow and its GitHub/model modules. Ordinary revisions use the existing revision session, and map highlights retain component neighbors, work, and flows. Removed obsolete product docs and tests. C4: the two removed implementation responsibilities no longer exist; their empty records were removed through groma remove after the live scanner cleared source evidence. OKF: no new record or metadata is introduced; ordinary architecture Markdown now describes the remaining implementation. TASK-441 owner confirmed the two record deletions are safe. TASK-446 may now add independent startup hooks to map-session.ts and opening web documentation.
 
-Verification: the five existing selection, highlight, flow, and work test files passed (24 tests, 62 assertions). bun run check passed with exit 0, including Biome, TypeScript, Node tests, and Bun tests (607 passed, 36 skipped, 0 failed). git diff --check passed. A targeted source, test, architecture, and documentation search found no remaining direct PR integration references outside the comparison plan. Browser verification confirmed the working-tree map has no Open PR control or panel. Time-machine navigation loaded commit 1c91ffd0ff5fdbab0d19de1a5259bd0b2e61bcb4 and historical source inspection loaded plugins/scanners/csharp/dotnet/Scanner.cs from that revision. The preview is restored to the working tree. Specification review matched each acceptance criterion to these checks. Quality review compared the task files with their pre-removal snapshots, traced the remaining ordinary revision and highlight paths, and confirmed the change only subtracts the direct PR behavior while preserving concurrent task changes. No new abstraction, compatibility behavior, or test was added. The remaining comparison UI and GitHub plugin are still planned work.
+Verification: the five existing selection, highlight, flow, and work test files passed (24 tests, 62 assertions). bun run check passed with exit 0, including Biome, TypeScript, Node tests, and Bun tests (607 passed, 36 skipped, 0 failed). git diff --check passed. A targeted source, test, architecture, and documentation search found no remaining direct PR integration references outside the comparison plan. Browser verification confirmed the working-tree map has no Open PR control or panel. Time-machine navigation loaded commit 1c91ffd0ff5fdbab0d19de1a5259bd0b2e61bcb4 and historical source inspection loaded plugins/scanners/csharp/dotnet/Scanner.cs from that revision. The preview is restored to the working tree. Specification review matched each acceptance criterion to these checks. Quality review compared the task files with their pre-removal snapshots, traced the remaining ordinary revision and highlight paths, and confirmed the change only subtracts the direct PR behavior while preserving concurrent task changes. No new abstraction, compatibility behavior, or test was added.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
