@@ -7,6 +7,7 @@ import { createScanObservation, type ScanObservation } from '@groma/scanner'
 import { loadAnnotatedArchitecture, reconcileScanObservations } from '../src/core.ts'
 import { editArchitecture } from '../src/edit.ts'
 import { addRelation } from '../src/relation.ts'
+import { buildPackage } from '../plugins/scanners/vue/build.ts'
 import { loadScannerRegistry } from '../src/scanner/registry.ts'
 import { readScannerConfig, writeScannerConfig } from '../src/scanner/modules/config.ts'
 import { addScanner } from '../src/scanner/modules/inventory.ts'
@@ -39,9 +40,11 @@ async function configure(root: string, exclude: unknown, directory = 'groma'): P
 
 test.concurrent('fully excluded Vue sources skip readiness and scanning until they are included again', async () => {
   const root = await repository()
+  const artifact = await mkdtemp(path.join(os.tmpdir(), 'groma-exclusions-vue-'))
   try {
     await cp(path.resolve(import.meta.dir, '../test/fixtures/vue-output'), path.join(root, 'fixtures/vue'), { recursive: true })
-    const scanners = [{ id: 'vue', source: path.resolve(import.meta.dir, '../plugins/scanners/vue') }]
+    await buildPackage(artifact)
+    const scanners = [{ id: 'vue', source: artifact }]
     await writeScannerConfig(root, { scanners, exclude: ['/fixtures/'] })
     const readiness = await checkScannerReadiness(root)
     expect(readiness.map(item => item.project)).toEqual(['ready'])
@@ -53,7 +56,7 @@ test.concurrent('fully excluded Vue sources skip readiness and scanning until th
     const included = await (await loadScannerRegistry(root)).collectObservations(root)
     expect(included.failures.map(failure => failure.scanner)).toEqual(['vue'])
     expect(included.failures[0]?.message).toContain('logic.ts')
-  } finally { await rm(root, { recursive: true, force: true }) }
+  } finally { await Promise.all([root, artifact].map(directory => rm(directory, { recursive: true, force: true }))) }
 })
 
 test.concurrent('shared exclusions prevent readiness and scan hooks from running against excluded inputs', async () => {
