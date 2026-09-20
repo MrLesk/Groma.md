@@ -60,6 +60,8 @@ export interface IsoMap {
   select(ids: readonly string[]): void
   /** Outlines the elements the active tasks touch and uniformly accents the routes leaving them; an empty set clears both. */
   mark(ids: ReadonlySet<string>): void
+  /** Pulses the inspected component and softly accents its direct component neighbors. */
+  markNeighbors(selectedId: string | undefined, neighbors: ReadonlySet<string>): void
   /** Lights route ids and direct endpoints; contextual ancestors stay neutral while everything off the path dims. */
   setLitRoutes(litRouteIds: ReadonlySet<string>, onPath: (id: string) => boolean, focusedRouteId?: string): void
   hitId(target: EventTarget | null): string | undefined
@@ -270,6 +272,12 @@ export function createMap(host: HTMLElement): IsoMap {
       for (const node of new Set(routes.values())) {
         node.group.classList.toggle('selected', node.ids.some(id => selectedRoutes.has(id)))
         node.group.classList.toggle('endpoint', directItems.has(node.source) || directItems.has(node.target))
+      }
+    },
+    markNeighbors(selectedId, neighbors) {
+      for (const [itemId, node] of items) {
+        node.classList.toggle('component-focus', itemId === selectedId)
+        node.classList.toggle('neighbor', itemId !== selectedId && neighbors.has(itemId))
       }
     },
     mark(ids) {

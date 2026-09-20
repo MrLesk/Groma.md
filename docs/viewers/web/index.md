@@ -263,6 +263,13 @@ line breaks and control positions steady throughout the motion. Source and diffs
 default until the reader explicitly chooses a width. That choice then stays with
 the panel across selection changes and file inspection. Acceptance criteria use
 strong read-only checkmarks, distinct from flow checkboxes.
+Selecting a component automatically accents its directly connected components
+in softer green, in either relationship direction, without following another
+hop. Other components are dimmed while a component is selected. The selected
+component's shape uses the same pulse as a focused flow step, while its text
+stays steady; reduced motion disables the pulse. This emphasis follows the
+selection without changing the camera or detail owner. Task and flow highlights
+remain active, with unrelated components dimmed until component selection clears.
 An element
 shows under two tabs. Selecting another architecture item returns the pane to What
 it does; a direct `tab=how` link still opens How it's built. What
