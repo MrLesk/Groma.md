@@ -114,7 +114,7 @@ The architecture lives in a `groma/` folder as an [Open Knowledge Format 0.2](ht
 | [Python](docs/scanners/python/index.md) | ✅ Available |
 | [Rust](docs/scanners/rust/index.md) | ✅ Available |
 | [PHP](docs/scanners/php/index.md) | ✅ Available |
-| [Swift](docs/scanners/swift/index.md) | [`@groma/scanner-swift`](https://www.npmjs.com/package/@groma/scanner-swift) · macOS arm64 |
+| [Swift](docs/scanners/swift/index.md) | ✅ Available |
 | Your favorite language or framework | [Submit an issue with your request](https://github.com/MrLesk/Groma.md/issues) |
 
 More languages arrive as [scanner plugins](docs/scanners/creating-a-plugin.md); add your own with `groma scanner add`. Each scanner's page describes what it reads. See [which relationships Groma detects](docs/relationship-inference.md#current-inference-rule).
