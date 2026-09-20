@@ -22,9 +22,10 @@ env:
 jobs:
   validate:
     name: validate-release
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup-swift
       - uses: actions/setup-java@v6
         with:
           distribution: temurin
@@ -57,7 +58,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - runner: ubuntu-latest
+          - runner: ubuntu-24.04
             platform: linux-x64
           - runner: ubuntu-24.04-arm
             platform: linux-arm64
@@ -70,6 +71,7 @@ jobs:
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup-swift
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: ${{ env.BUN_VERSION }}
@@ -96,6 +98,9 @@ jobs:
         shell: bash
       - name: Build runnable scanner packages
         run: bun scripts/scanner-release.ts stage scanner-packages
+        shell: bash
+      - name: Check Swift evidence and installed worker
+        run: GROMA_TEST_SWIFT_PACKAGE=scanner-packages/swift bun test test-bun/swift-scanner.test.ts
         shell: bash
       - name: Check fresh checkouts without project tools
         run: GROMA_TEST_PACKAGES=scanner-packages bun test --timeout 60000 test-bun/scanner-fresh-checkout.test.ts

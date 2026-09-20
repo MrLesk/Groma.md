@@ -1,0 +1,19 @@
+name: Set up the Swift scanner toolchain
+description: Install the compiler and native packaging tools used by scanner builds and tests
+runs:
+  using: composite
+  steps:
+    - uses: swift-actions/setup-swift@v3
+      if: runner.os != 'Windows'
+      with:
+        swift-version: '6.3.3'
+    - uses: compnerd/gha-setup-swift@bbae8ce86bac5a3449f3992b3d88bc4ca25f2057
+      if: runner.os == 'Windows'
+      with:
+        swift-version: swift-6.3.3-release
+        swift-build: 6.3.3-RELEASE
+        build_arch: ${{ runner.arch == 'ARM64' && 'arm64' || 'amd64' }}
+    - name: Install Linux library packaging tool
+      if: runner.os == 'Linux'
+      run: sudo apt-get update && sudo apt-get install -y patchelf
+      shell: bash

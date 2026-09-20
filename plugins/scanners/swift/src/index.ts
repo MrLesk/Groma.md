@@ -16,7 +16,7 @@ interface FileEvidence {
 }
 
 const assets = fileURLToPath(new URL('../dist/', import.meta.url))
-const worker = path.join(assets, `${process.platform}-${process.arch}`, 'worker')
+const worker = path.join(assets, `${process.platform}-${process.arch}`, process.platform === 'win32' ? 'worker.exe' : 'worker')
 const exclude = ['**/.build/**', '**/Pods/**', '**/Carthage/**']
 const exclusions = exclude.map(pattern => new Bun.Glob(pattern))
 

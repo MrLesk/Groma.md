@@ -1,6 +1,7 @@
 name: CI
 
 on:
+  workflow_dispatch:
   push:
     branches: [main]
   pull_request:
@@ -21,10 +22,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        os: [ubuntu-24.04, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup-swift
       - uses: actions/setup-java@v6
         with:
           distribution: temurin
@@ -35,7 +37,12 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
         shell: bash
+      - name: Build Swift test package
+        run: bun plugins/scanners/swift/build.ts scanner-packages/swift
+        shell: bash
       - name: Run repository checks
+        env:
+          GROMA_TEST_SWIFT_PACKAGE: scanner-packages/swift
         run: bun run check
         shell: bash
       - name: Build standalone binary

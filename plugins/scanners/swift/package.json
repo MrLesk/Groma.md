@@ -1,13 +1,10 @@
 {
   "name": "@groma/scanner-swift",
-  "version": "0.1.0",
+  "version": "0.1.2",
   "private": false,
   "type": "module",
   "license": "MIT",
   "description": "Swift source declarations, outlines and operation bodies without project dependencies.",
-  "os": [
-    "darwin"
-  ],
   "groma": {
     "scanner": {
       "id": "swift",

@@ -1,4 +1,75 @@
-# Firefox for iOS benchmark
+# Swift scanner validation
+
+## Cross-platform package work
+
+On 19 September 2026, the 0.1.2 build and release path was extended to Linux
+x64/arm64 and Windows x64/arm64, alongside macOS arm64. The 0.1.0 and 0.1.1
+packages are macOS-only.
+
+Local verification used Apple Swift 6.3.3 on macOS arm64 and the official
+`swift:6.3.3-noble` Linux arm64 and x64 images. Each Linux package was then run
+in an Ubuntu 24.04 container containing Bun 1.4.1, Git and system libraries, with
+no Swift toolchain installed and networking disabled. Both preserved the fixture's
+two source files, 22 operations, 16 unresolved calls, UTF-16 positions and method
+outlines across repeated scans. The x64 containers used Docker's CPU emulation
+on the Apple Silicon host.
+
+The four Swift integration tests passed on macOS (47 assertions), including
+installed-package isolation and watch updates. A separate assembly regression
+verified that all five hosts retain their worker and runtime assets in the
+combined package. The local repository check passed with 608 Bun tests and no
+failures; 36 tests requiring optional scanner artifacts were skipped. All 16 Node
+tests passed. A packaged macOS 0.1.2 build also passed the shared fresh-checkout
+test (7 assertions), and `npm pack` included its worker, metadata and notices.
+
+The [native CI run](https://github.com/MrLesk/Groma.md/actions/runs/35472816372)
+at commit `8cae781f` built and tested all five release hosts successfully, including
+Windows x64 and arm64. Each host passed all four Swift integration tests
+(47 assertions) and all twelve shared fresh-checkout scanner tests (92 assertions).
+The Swift tests check declaration and function evidence, UTF-16 positions, outlines,
+source watches and installed execution without Swift on PATH. The isolated branch
+passed all 16 Node tests and 601 Bun tests, with 36 optional artifact tests skipped.
+
+Windows packages build the pinned SwiftSyntax source into the worker. Installed
+scanning does not resolve packages or invoke the compiler. The actual five-host artifacts
+were assembled with the release script; every worker and runtime library was
+preserved byte-for-byte, and executable permissions were restored.
+
+The combined npm tarball installed offline and passed all four Swift integration
+tests (47 assertions) from that installation. It contains all five workers and
+their runtime libraries, licenses and notices; its compressed size is about 138 MB.
+
+The [ordinary CI run](https://github.com/MrLesk/Groma.md/actions/runs/35473844959)
+at commit `6aa4178a` passed repository checks on Linux and macOS. Windows built the
+Swift package and passed all four Swift tests and all 16 Node tests. Its full Bun
+suite had 594 passes, 41 optional skips and two failures in unchanged tests: a Java
+Gradle assertion expected Unix path separators, and a Python test exceeded its
+20-second limit. The Python timeout cause was not established by this work.
+Those failures did not affect the native Swift package qualification. TASK-451
+corrected the path assertion and measured the Python interpreter startup cost to
+set the test concurrency to two. The [final CI run](https://github.com/MrLesk/Groma.md/actions/runs/35505469431)
+at commit `8f7285f9` passed the complete repository checks and standalone builds
+on Windows, Linux and macOS, with all existing assertions and time limits retained.
+
+## Cross-platform npm release
+
+[`@groma/scanner-swift@0.1.2`](https://www.npmjs.com/package/@groma/scanner-swift/v/0.1.2)
+was published on 20 September 2026 with all five native workers. The public
+tarball is 137,637,542 bytes. Registry integrity matches the qualified artifact:
+
+```text
+sha512-Xeq3m2CLnJsHQn0ACT56MrUlnRat8HfzR5umx0w7l6yiZTf4ujzJ6Tbnw2i1Jmp7SvJzzKopCQb2HzArwRuUxw==
+```
+
+A fresh npm installation passed all four Swift integration tests (47 assertions).
+The published Groma 0.3.3 CLI also installed the scanner by its exact npm version
+in a disposable project containing the Swift fixture. Readiness passed and two
+scans produced byte-identical architecture Markdown without changing source bytes.
+A second project restored the copied scanner selection through `groma scanner install`
+and passed the same readiness and repeat-scan checks. This consumer check ran on
+macOS arm64; the five native CI jobs above qualify the other packaged workers.
+
+## Firefox for iOS benchmark
 
 The benchmark uses [Mozilla Firefox for iOS](https://github.com/mozilla-mobile/firefox-ios)
 at commit `35d384c766b5e3091b9df970e4365cf66d9795b9`. It is a Swift-first

@@ -3,8 +3,14 @@
 The Swift scanner reads source with SwiftParser and SwiftSyntax. Its package
 includes the native worker and parser libraries. Scanning requires Git and
 Groma, but no Xcode, Swift SDK, package resolution, or application build.
-The published package supports macOS 14 or later on Apple Silicon (arm64).
-Linux, Windows and Intel Mac packages are not provided.
+Release builds target macOS 14 or later on Apple Silicon (arm64), Linux x64
+and arm64, and Windows x64 and arm64. Linux packages are built on Ubuntu 24.04
+and use the host's glibc and C++ system libraries. Intel Mac packages are not
+part of Groma's release targets.
+
+Version 0.1.2 adds Linux and Windows packaging. The 0.1.0 and 0.1.1 packages
+support only macOS; see the [validation record](validation.md) for release
+and platform verification evidence.
 
 Install the scanner from npm, then scan:
 
@@ -64,18 +70,33 @@ level. Core owns file membership, component identity and relationship meaning.
 
 ## Maintainer build and validation
 
-Use a Swift toolchain that includes SwiftParser and SwiftSyntax host libraries,
-plus Apple's linker and signing tools:
+Use Swift 6.3.3. macOS and Linux builds use its SwiftParser and SwiftSyntax host
+libraries. macOS also uses Apple's linker and signing tools; Linux needs `ldd`
+and `patchelf`. Windows installers omit parser development modules, so the
+Windows build resolves the SwiftSyntax 603.0.2 commit pinned in `Package.swift`
+and links its source into the worker through SwiftPM. This needs Git and network
+access during packaging. Windows builds also use the toolchain's linker and
+`llvm-readobj`, with the Windows SDK and Visual C++ build tools available on CI.
 
 ```sh
 bun plugins/scanners/swift/build.ts /tmp/groma-scanner-swift
 GROMA_TEST_SWIFT_PACKAGE=/tmp/groma-scanner-swift bun test test-bun/swift-scanner.test.ts
 ```
 
-The build records the exact compiler version in the package and rewrites parser
-library references to the packaged copies. SwiftSyntax's license is included.
-The release workflow stages the Swift package on macOS and includes that
-artifact in the assembled scanners; it does not claim other host support.
+CI builds the package before running repository checks. For the same check
+locally, set `GROMA_TEST_SWIFT_PACKAGE` to the built package when invoking
+`bun run check`. Each test copies it into its own temporary fixture.
+
+The build records the exact compiler version in the package. macOS parser
+libraries load from beside the worker. Linux packages include the required
+Swift libraries and use relative library search paths. Windows packages contain
+`worker.exe` and its required non-system DLLs. Runtime licenses and notices
+are included beside the package license.
+
+The release workflow builds Swift on the same five hosts as the other native
+scanners. Each host runs the Swift evidence, outline, watch and installed-package
+checks. Assembly retains every host's worker and runtime libraries in one npm
+package; consumers select the executable for their operating system and CPU.
 
 The [Firefox for iOS benchmark](validation.md) records the pinned real-project
 evaluation. Automated tests use independent fixtures in `test/fixtures/`.

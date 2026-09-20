@@ -42,15 +42,17 @@ not as exact language-version requirements in discovery metadata.
 The scanner build targets are macOS arm64, Linux x64 and arm64, and Windows x64
 and arm64. Building an artifact and manually exercising it are separate claims:
 record each explicitly.
-Go, Rust and TypeScript packages include native workers. Java includes a
+Go, Rust, TypeScript and Swift packages include native workers. Java includes a
 compiler runtime built with `jlink`; C# includes a self-contained .NET runtime.
-Those assets are assembled per platform. Python includes CPython and its
+Those assets are assembled per platform. Swift also carries its parser libraries
+and the Swift runtime needed on Linux and Windows. Python includes CPython and its
 standard library through Pyodide WebAssembly assets. Framework packages carry
 their compiler libraries and TypeScript declarations. PHP bundles a JavaScript
 parser and does not need a PHP runtime. Official packages scan supported
 fresh checkouts without project dependencies or language tools on PATH.
 
-For a local host build with Java, Go, Rust and .NET available:
+For a local host build with Java, Go, Rust, .NET and the
+[Swift build tools](swift/index.md#maintainer-build-and-validation) available:
 
 ```sh
 bun install --frozen-lockfile --ignore-scripts

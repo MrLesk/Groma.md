@@ -10,7 +10,7 @@ const examples = {
   typescript: 'operation-wiring', python: 'python-project', java: 'java-maven', go: 'go-module',
   javascript: 'javascript-source',
   rust: 'rust-semantic', csharp: 'csharp-operations', angular: 'angular-output', react: 'react-callback', vue: 'vue-output', php: 'php-source',
-  ...(process.platform === 'darwin' ? { swift: 'swift-source' } : {}),
+  swift: 'swift-source',
 }
 
 async function prepareFiles(root: string): Promise<void> {
@@ -50,7 +50,8 @@ for (const [id, fixture] of Object.entries(examples)) {
       const bin = path.join(temporary, 'bin')
       await mkdir(home)
       await mkdir(bin)
-      await symlink(git, path.join(bin, process.platform === 'win32' ? 'git.exe' : 'git'))
+      if (process.platform !== 'win32') await symlink(git, path.join(bin, 'git'))
+      const scanPath = process.platform === 'win32' ? path.dirname(git) : bin
       const manifest = JSON.parse(await readFile(path.join(artifact, 'package.json'), 'utf8'))
       const runner = path.join(temporary, 'scan.mjs')
       await writeFile(runner, `
@@ -63,7 +64,7 @@ for (const [id, fixture] of Object.entries(examples)) {
         console.log(JSON.stringify(first));
       `)
       const child = Bun.spawn([process.execPath, runner], { cwd: temporary, stdout: 'pipe', stderr: 'pipe',
-        env: { PATH: bin, HOME: home, USERPROFILE: home, SystemRoot: process.env.SystemRoot ?? '',
+        env: { PATH: scanPath, HOME: home, USERPROFILE: home, SystemRoot: process.env.SystemRoot ?? '',
           TMPDIR: temporary, TEMP: temporary, TMP: temporary, DOTNET_SYSTEM_GLOBALIZATION_INVARIANT: '1' } })
       const [output, error, code] = await Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text(), child.exited])
       expect(code, error).toBe(0)

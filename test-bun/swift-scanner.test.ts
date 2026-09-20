@@ -13,8 +13,6 @@ import { createScannerSession } from '../src/scanner/session.ts'
 import { compileWatchPatterns } from '../src/scanner/watch-patterns.ts'
 import { detectDuplicatedLogic } from '../src/architecture-findings.ts'
 
-const swiftTest = process.platform === 'darwin' ? test.concurrent : test.skip
-
 async function setup() {
   const temporary = await mkdtemp(path.join(os.tmpdir(), 'groma-swift-test-'))
   const root = path.join(temporary, 'project'), artifact = path.join(temporary, 'scanner')
@@ -28,7 +26,7 @@ async function setup() {
   return { temporary, root, artifact, scanner }
 }
 
-swiftTest('Swift package preserves uncertainty, closure ownership and UTF-16 source positions', async () => {
+test.concurrent('Swift package preserves uncertainty, closure ownership and UTF-16 source positions', async () => {
   const { temporary, root, scanner } = await setup()
   try {
     expect((await discoverScanners(root)).recommendations.some(scanner => scanner.id === 'swift')).toBe(true)
@@ -66,7 +64,7 @@ swiftTest('Swift package preserves uncertainty, closure ownership and UTF-16 sou
   } finally { await rm(temporary, { recursive: true, force: true }) }
 }, 60000)
 
-swiftTest('Swift comparable bodies normalize bindings while retaining member and literal differences', async () => {
+test.concurrent('Swift comparable bodies normalize bindings while retaining member and literal differences', async () => {
   const { temporary, root, scanner } = await setup()
   try {
     const scan = (await scanner.scan(root))!
@@ -91,17 +89,20 @@ swiftTest('Swift comparable bodies normalize bindings while retaining member and
   } finally { await rm(temporary, { recursive: true, force: true }) }
 }, 60000)
 
-swiftTest('installed Swift package runs without SDKs and excludes source through the shared registry', async () => {
+test.concurrent('installed Swift package runs without SDKs and excludes source through the shared registry', async () => {
   const { temporary, root, artifact, scanner } = await setup()
   try {
     const home = path.join(temporary, 'home'), bin = path.join(temporary, 'bin')
     await mkdir(home)
     await mkdir(bin)
-    await symlink(Bun.which('git')!, path.join(bin, 'git'))
+    const git = Bun.which('git')!
+    if (process.platform !== 'win32') await symlink(git, path.join(bin, 'git'))
+    const scanPath = process.platform === 'win32' ? path.dirname(git) : bin
     const before = await readFile(path.join(root, 'Ledger.swift'), 'utf8')
     const runner = path.join(temporary, 'run.mjs')
     await writeFile(runner, `
       globalThis.fetch = () => { throw new Error('Unexpected scan network access') };
+      if (Bun.which('swift') || Bun.which('swiftc')) throw new Error('Swift SDK must not be on PATH');
       const scanner = (await import(${JSON.stringify(path.join(artifact, 'src/index.js'))})).default;
       await scanner.checkReadiness(${JSON.stringify(root)});
       const first = await scanner.scan(${JSON.stringify(root)});
@@ -110,7 +111,8 @@ swiftTest('installed Swift package runs without SDKs and excludes source through
       console.log(first.files.length);
     `)
     const child = Bun.spawn([process.execPath, runner], { stdout: 'pipe', stderr: 'pipe',
-      env: { PATH: bin, HOME: home, TMPDIR: temporary, DYLD_PRINT_LIBRARIES: '1' } })
+      env: { PATH: scanPath, HOME: home, USERPROFILE: home, SystemRoot: process.env.SystemRoot ?? '',
+        TMPDIR: temporary, TEMP: temporary, TMP: temporary, DYLD_PRINT_LIBRARIES: '1' } })
     const [output, errors, code] = await Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text(), child.exited])
     expect(code, errors).toBe(0)
     expect(output.trim()).toBe('2')
@@ -139,7 +141,7 @@ swiftTest('installed Swift package runs without SDKs and excludes source through
   } finally { await rm(temporary, { recursive: true, force: true }) }
 }, 60000)
 
-swiftTest('Swift edits and new files refresh the installed scanner session', async () => {
+test.concurrent('Swift edits and new files refresh the installed scanner session', async () => {
   const { temporary, root, artifact } = await setup()
   let completed: (() => void) | undefined
   const session = await createScannerSession(root, { onFold() { completed?.() } })
