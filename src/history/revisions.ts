@@ -8,7 +8,7 @@ import { annotateArchitecture } from '../core.ts'
 import { GromaFileSystem } from '../groma-filesystem.ts'
 import { loadProjectProfile } from '../project-profile.ts'
 
-/** One current-branch revision that changed the selected Groma tree. */
+/** Metadata for one current-branch commit. */
 export interface GitRevision {
   id: string
   shortId: string
@@ -88,16 +88,18 @@ function hasCommits(repositoryRoot: string): Promise<boolean> {
     .then(() => true, () => false)
 }
 
-/** Current-branch commits whose selected Groma tree changed, newest first. */
+/** Current-branch commits, newest first, without reading architecture or source files. */
 export async function listGitRevisions(repositoryRoot: string): Promise<GitRevision[]> {
-  const filesystem = GromaFileSystem.open(repositoryRoot)
+  return readRevisionLog(repositoryRoot, [])
+}
+
+async function readRevisionLog(repositoryRoot: string, paths: string[]): Promise<GitRevision[]> {
   if (!await hasCommits(repositoryRoot)) return []
   const output = await runGit([
     'log',
     '--decorate-refs=refs/tags/*',
     '--format=%H%x00%h%x00%cI%x00%s%x00%b%x00%(decorate:prefix=,suffix=,separator=%x1f,tag=)%x00',
-    '--',
-    filesystem.directory,
+    '--', ...paths,
   ], repositoryRoot)
   const fields = output.split('\0')
   const revisions: GitRevision[] = []
@@ -119,7 +121,7 @@ export async function listGitRevisions(repositoryRoot: string): Promise<GitRevis
 
 /** Current-branch Groma revisions, including commits the current reader cannot open. */
 export async function listGromaRevisions(repositoryRoot: string): Promise<GromaRevision[]> {
-  const revisions = await listGitRevisions(repositoryRoot)
+  const revisions = await readRevisionLog(repositoryRoot, [GromaFileSystem.open(repositoryRoot).directory])
   const result: GromaRevision[] = []
   // Bound simultaneous archive extraction and Markdown parsing during startup.
   for (let index = 0; index < revisions.length; index += 4) {

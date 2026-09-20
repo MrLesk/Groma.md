@@ -236,18 +236,21 @@ Enter or a result click opens the existing architecture or task details;
 opening an active task keeps it active. Escape or a click outside search
 restores the selection and camera from before the search.
 
-The revision menu starts at Current revision, the live selected Groma working
-tree. It lists the current branch's commits that changed the selected `groma/`
-or `.groma/` directory, newest first. Each
+The time machine starts at Current working tree. Opening it turns the header
+control into a search field for commit IDs or messages, including commit bodies.
+It lists current-branch commits newest first, including source-only changes.
+Listing history reads Git metadata; architecture is loaded only after selection. Each
 two-line row shows the subject, then an exact tag when present, short hash, and
 the commit date and time in the browser's locale. A row with a commit body
 shows that body on hover without repeating its subject. A selected commit
 opens the complete architecture and source measurements from that same Git
 snapshot. Historical views are read-only,
 carry no current Backlog work, and keep their full commit id in the URL.
-Commits without the required OKF v0.2 Groma project profile remain visible but
-are marked Unsupported and cannot be selected. Returning to Current revision
-resumes live architecture and work updates.
+The selected component stays open if it exists in the chosen revision; otherwise
+its details close. The header shows the clipped commit message with its full ID
+and message on hover. Closing search without selection preserves the current view.
+An unsupported architecture reports its error when selected and leaves the current
+view intact. Returning to Current working tree resumes live architecture and work updates.
 
 The floating icon bar beside the hierarchy toggles Actors, Systems, Containers,
 and Components on the map. Its icons follow the existing ● ■ ▱ ▪ marks with

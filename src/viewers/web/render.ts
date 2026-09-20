@@ -452,8 +452,8 @@ function applyWorld(payload: WebPayload, reset = false): void {
     tree = initialTree()
     activeTaskIds = []
     activeFlows = []
-    selection = noSelection
-    detailsTab = 'what'
+    selection = retainSelection(selection, id => worldElement(id) !== undefined)
+    if (detailsTab === 'tasks') detailsTab = 'what'
     camera.move(fitted)
     touched = false
   } else {

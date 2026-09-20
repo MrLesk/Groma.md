@@ -1,10 +1,11 @@
 ---
 id: TASK-463
 title: 'Deliver time machine, comparison, and static export'
-status: To Do
-assignee: []
+status: In Progress
+assignee:
+  - '@codex'
 created_date: '2026-09-20 15:04'
-updated_date: '2026-09-20 15:07'
+updated_date: '2026-09-20 22:14'
 labels: []
 dependencies: []
 references:

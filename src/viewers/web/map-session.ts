@@ -8,7 +8,7 @@ import type { StructuralResult } from '../../curate.ts'
 import { createScannerSession } from '../../scanner/session.ts'
 import { parseScannerSettingsAction, withScannerUpgrades } from '../../scanner/modules/settings.ts'
 import { pinsOf } from '../../work/pins.ts'
-import { listGromaRevisions, withGitRevision } from '../../history/revisions.ts'
+import { listGitRevisions, withGitRevision } from '../../history/revisions.ts'
 import { renderPage } from './page.ts'
 import type { WebMapPayload, WebPayload, WebRevision, WebWorkPayload } from './payload.ts'
 import { bundleRenderer, loadMapRoot } from './runtime.ts'
@@ -101,7 +101,7 @@ export async function createWebMapSession(
 
   /** History is read once when requested; opening the current map does not need snapshots. */
   function readRevisions(): Promise<WebRevision[]> {
-    revisionRead ??= listGromaRevisions(repositoryRoot).then(next => {
+    revisionRead ??= listGitRevisions(repositoryRoot).then(next => {
       revisions = next
       map = { ...map, revisions }
       return revisions
@@ -113,13 +113,18 @@ export async function createWebMapSession(
     if (revisionId === null) return payload()
     const revision = (await readRevisions()).find(candidate => candidate.id === revisionId)
     if (revision === undefined) return new Response('Unknown Groma revision', { status: 404 })
-    if (!revision.compatible) return new Response('Unsupported Groma revision', { status: 422 })
-    return {
-      generation: map.generation,
-      ...(await loadMap(repositoryRoot, revisions, revision)),
-      workGeneration: workState.workGeneration,
-      work: EMPTY_WORK_SNAPSHOT,
-      pins: [],
+    try {
+      const snapshot = await loadMap(repositoryRoot, revisions, revision)
+      if (snapshot.project === null) throw new Error('No Groma architecture in this commit')
+      return {
+        generation: map.generation,
+        ...snapshot,
+        workGeneration: workState.workGeneration,
+        work: EMPTY_WORK_SNAPSHOT,
+        pins: [],
+      }
+    } catch (error) {
+      return new Response(`Cannot open this revision: ${error instanceof Error ? error.message : String(error)}`, { status: 422 })
     }
   }
 

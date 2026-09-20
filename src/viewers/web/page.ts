@@ -152,7 +152,7 @@ const style = `
   .header-context > svg { height: 32px; width: auto; display: block; flex: none; transform: translateY(-1px); }
   #stats { min-width: 0; flex: 1; display: flex; align-items: center; gap: 10px; white-space: nowrap; }
   #stats .project-name { overflow: hidden; text-overflow: ellipsis; color: var(--ink); }
-  #stats .world-counts { flex: none; font-size: 10px; letter-spacing: 0.06em; }
+  #stats .world-counts { min-width: 0; overflow: hidden; text-overflow: ellipsis; font-size: 10px; letter-spacing: 0.06em; }
   .header-actions { display: flex; align-items: center; gap: 8px; }
   .header-actions details > summary { border-color: transparent; background: transparent; }
   .header-utilities { display: flex; align-items: center; gap: 4px; border-left: 1px solid var(--hairline); padding-left: 8px; }

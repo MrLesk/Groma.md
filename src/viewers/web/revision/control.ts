@@ -1,7 +1,7 @@
 import type { WebDataSource } from '../data.ts'
 import { bindPopover } from '../atoms/popover.ts'
 import type { WebBootPayload, WebPayload, WebWorkPayload } from '../payload.ts'
-import { revisionOptions } from './view.ts'
+import { revisionOptions, revisionTitle } from './view.ts'
 
 interface RevisionControlOptions {
   control: HTMLDetailsElement
@@ -65,9 +65,12 @@ function revisionTooltip(control: HTMLElement) {
 export function createRevisionControl(options: RevisionControlOptions) {
   const { control, body, boot, data, applyRevision, applyWorld, applyWork } = options
   const label = control.querySelector<HTMLElement>('.revision-current')!
-  const liveLabel = control.querySelector<HTMLElement>('[data-revision=""]')!.textContent!
+  const search = control.querySelector<HTMLInputElement>('.revision-search')!
+  const results = control.querySelector<HTMLElement>('.revision-results')!
+  const error = control.querySelector<HTMLElement>('.revision-error')!
   const { element: tooltip, hide: hideTooltip } = revisionTooltip(control)
   let selected: string | undefined
+  let revisions = boot.revisions
   let loading = false
   let historyLoaded = boot.delivery.kind === 'published' || boot.revisions.length > 0
   let appliedWorld = boot.generation
@@ -75,9 +78,37 @@ export function createRevisionControl(options: RevisionControlOptions) {
 
   bindPopover(control, { companion: tooltip })
 
+  function paintResults(): void {
+    results.innerHTML = revisionOptions(revisions, selected, search.value)
+    localizeDates(control)
+  }
+
+  function showError(reason: unknown): void {
+    error.textContent = reason instanceof Error ? reason.message : String(reason)
+    error.hidden = false
+    control.open = true
+  }
+
+  search.addEventListener('click', event => event.preventDefault())
+  search.addEventListener('input', paintResults)
+  control.addEventListener('keydown', event => {
+    if (event.key === 'Escape') {
+      event.preventDefault()
+      control.open = false
+      control.querySelector('summary')!.focus()
+    } else if (event.target === search && event.key === 'ArrowDown') {
+      event.preventDefault()
+      results.querySelector<HTMLButtonElement>('button')?.focus()
+    } else if (event.target === search && event.key === 'Enter') {
+      event.preventDefault()
+      results.querySelector<HTMLButtonElement>('button')?.click()
+    }
+  })
+
   const show = (payload: WebPayload): void => {
     selected = payload.revision?.id
-    label.textContent = payload.revision?.shortId ?? liveLabel
+    label.textContent = payload.revision?.subject ?? 'Current working tree'
+    label.title = revisionTitle(payload.revision)
     for (const option of control.querySelectorAll<HTMLElement>('.revision-option[data-revision]')) {
       option.setAttribute('aria-current', String(option.dataset.revision === (selected ?? '')))
     }
@@ -85,14 +116,20 @@ export function createRevisionControl(options: RevisionControlOptions) {
   }
 
   control.addEventListener('toggle', async () => {
+    if (control.open) {
+      search.value = ''
+      paintResults()
+      search.focus()
+    }
     if (!control.open || historyLoaded || loading) return
     loading = true
     control.setAttribute('aria-busy', 'true')
     try {
-      const revisions = await data.readRevisions()
-      control.querySelector('.revision-menu')!.insertAdjacentHTML('beforeend', revisionOptions(revisions, selected))
-      localizeDates(control)
+      revisions = await data.readRevisions()
+      paintResults()
       historyLoaded = true
+    } catch (reason) {
+      showError(reason)
     } finally {
       loading = false
       control.removeAttribute('aria-busy')
@@ -105,6 +142,7 @@ export function createRevisionControl(options: RevisionControlOptions) {
       : null
     if (option === null || !control.contains(option) || loading) return
     loading = true
+    error.hidden = true
     hideTooltip()
     control.removeAttribute('open')
     control.setAttribute('aria-busy', 'true')
@@ -116,6 +154,8 @@ export function createRevisionControl(options: RevisionControlOptions) {
       appliedWork = payload.workGeneration
       show(payload)
       applyRevision(payload)
+    } catch (reason) {
+      showError(reason)
     } finally {
       loading = false
       control.removeAttribute('aria-busy')
