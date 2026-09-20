@@ -1,11 +1,11 @@
 ---
 id: TASK-444
 title: Fix Rust workspace loading and publish current scanners
-status: In Progress
+status: Done
 assignee:
   - '@codex'
 created_date: '2026-09-19 21:17'
-updated_date: '2026-09-20 10:49'
+updated_date: '2026-09-20 11:07'
 labels: []
 dependencies: []
 references:
@@ -143,12 +143,14 @@ PR108 review correction verified: bun run check passes 16 Node and 602 Bun tests
 PR108 merge CI 35505835731 exposed the existing Windows Java separator failure and a newer main-branch Vue exclusions test referencing an unbuilt scanner. Merged origin/main into the isolated branch and coordinated the actual package.json overlap with TASK-451. These are reproduced release blockers; no scanner behavior or architecture model changes are needed.
 
 Merged-state local verification passes: the unchanged Vue exclusion assertions now run against a package built in the test-owned temporary directory; all 11 focused Java/Vue tests pass. TASK-451 owner confirmed its exact two final changes and no newer correction. Full bun run check passes after integration; proceeding to fresh PR CI before merge and scanner-only release.
+
+PR108 merge validation 35506158611 passed the full CI jobs on Linux, macOS and Windows. Merged PR108 as ae74717baec192b69a3548a3e3cd71369a904591 on 2026-09-20. Started scanner-only Release run 35506401167 from main with publish_scanners=true for Rust 0.1.3. Public fresh-install verification is prepared in an independent workspace fixture and awaits registry publication.
+
+Final release complete: main-branch Release35506401167 passed repository validation and all five platform package suites, then npm accepted @groma/scanner-rust0.1.3 with GitHub provenance. Registry readback confirms 0.1.3. The actual public package passed Groma fresh installation, readiness, the workspace regression scan, shared.rs source listing and second-checkout restoration. It also scanned the complete Codex repository successfully: 2 roots, 2586 files, 25502 operations and 44 diagnostics, with no project source changes or dependency installation. PR108 is merged at ae74717baec192b69a3548a3e3cd71369a904591; no release blocker remains.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
-Fixed Rust shared-module source visibility and implicit Cargo workspace inheritance. Published Rust 0.1.2 scans Codex: 2586 files and 25502 operations, without source edits or project dependency installation. Published all prepared scanner updates, including JavaScript 0.1.0 and C# 0.1.3. C# now installs one complete platform runtime through exact optional dependencies, resolving the rejected 214.6 MB archive. Verified public C# fresh installation and second-checkout restore; five platform CI suites and repository checks pass. Enabled CI publishing for JavaScript and the five new C# runtime packages. PR108 is ready for review.
-
-Addressed both PR108 review comments: selected Rust source listings include shared literal path modules, and implicit members only inherit workspace editions when explicitly declared. Regression failures were reproduced before the fix; native tests and the complete repository check pass. Prepared Rust 0.1.3 for the next release.
+Merged PR108 and published the prepared scanners through CI. Rust 0.1.3 fixes shared-module source visibility and listing, implicit Cargo workspace membership and opt-in edition inheritance. The public package scans Codex (2586 files, 25502 operations) and passes fresh installation and second-checkout restoration. JavaScript 0.1.0 and C# 0.1.3 are published; C# uses exact platform runtime dependencies to avoid the npm upload limit. New package CI publishing permissions are configured. Linux/macOS/Windows PR CI and all five native release suites pass. The final local check passed 16 Node and 603 Bun tests, with 36 opt-in skips.
 <!-- SECTION:FINAL_SUMMARY:END -->
