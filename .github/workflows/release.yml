@@ -79,10 +79,10 @@ jobs:
         with:
           distribution: ${{ matrix.platform == 'win32-arm64' && 'microsoft' || 'temurin' }}
           java-version: '25'
-      - uses: actions/setup-go@v6
+      - uses: actions/setup-go@v7
         with:
           go-version-file: plugins/scanners/go/worker/go.mod
-      - uses: actions/setup-dotnet@v5
+      - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: '10.0.x'
       - name: Install Rust build toolchain
