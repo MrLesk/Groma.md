@@ -47,13 +47,37 @@ async function startupPhases(url: string) {
   }
 }
 
+async function worldNamed(response: Response, name: string) {
+  const reader = response.body!.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+  try {
+    while (true) {
+      const { value, done } = await reader.read()
+      if (done) throw new Error('World events ended before the source update')
+      buffer += decoder.decode(value, { stream: true })
+      const events = buffer.split('\n\n')
+      buffer = events.pop()!
+      for (const event of events) {
+        if (!event.startsWith('event: world\n')) continue
+        const { world } = JSON.parse(event.slice(event.indexOf('data: ') + 'data: '.length))
+        if (world.elements.some((element: { title: string }) => element.title === name)) return
+      }
+    }
+  } finally {
+    await reader.cancel()
+  }
+}
+
 for (const findsComponents of [true, false]) {
   test.concurrent(`web startup waits for a scan with ${findsComponents ? 'components' : 'no components'} before opening the map`, async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'groma-startup-'))
     const scanning = Promise.withResolvers<void>()
     const release = Promise.withResolvers<void>()
     const listening = Promise.withResolvers<string>()
+    let scans = 0
     const gate = Bun.serve({ port: 0, async fetch() {
+      scans++
       scanning.resolve()
       await release.promise
       return new Response(null, { status: 204 })
@@ -65,16 +89,17 @@ for (const findsComponents of [true, false]) {
       const git = Bun.spawn(['git', 'init', '--quiet', root], { stdout: 'ignore', stderr: 'pipe' })
       expect(await git.exited).toBe(0)
       await mkdir(path.join(root, 'plugin'))
-      await writeFile(path.join(root, 'source.fixture'), 'function entry() {}')
+      await writeFile(path.join(root, 'source.fixture'), 'Fixture')
       await writeFile(path.join(root, 'plugin/package.json'), JSON.stringify({ name: 'fixture', version: '1.0.0',
         groma: { scanner: { id: 'fixture', entry: './index.ts' } } }))
       await writeFile(path.join(root, 'plugin/index.ts'), `export default {
-        id: 'fixture', watch: { include: ['**/*.fixture'], exclude: [] }, async scan() {
+        id: 'fixture', watch: { include: ['**/*.fixture'], exclude: [] }, async scan(root) {
           await fetch('http://localhost:${gate.port}')
           if (${!findsComponents}) return undefined
+          const files = await Array.fromAsync(new Bun.Glob('*.fixture').scan({ cwd: root }))
           return { scanner: { id: 'fixture', technology: 'fixture', engine: 'fixture', engineVersion: '1' }, diagnostics: [],
             roots: [{ id: 'root', name: 'Fixture', kind: 'package', file: 'package.json' }],
-            files: [{ file: 'source.fixture', roots: ['root'], symbols: [{ id: 'entry', kind: 'function', name: 'entry' }] }] }
+            files: files.map(file => ({ file, roots: ['root'], symbols: [{ id: 'entry', kind: 'function', name: 'entry' }] })) }
         }
       }`)
       await writeScannerConfig(root, { scanners: [{ id: 'fixture', source: './plugin' }] })
@@ -83,6 +108,7 @@ for (const findsComponents of [true, false]) {
       progress = await startupPhases(url)
       await scanning.promise
       await progress.waitFor('scanning')
+      expect(progress.phases).not.toContain('preparing-map')
       expect(progress.phases).not.toContain('opening-map')
       const loading = await (await fetch(url)).text()
       expect(loading).toContain('aria-busy="true"')
@@ -94,10 +120,25 @@ for (const findsComponents of [true, false]) {
       const afterScan = progress.phases.slice(progress.phases.indexOf('scanning'))
       expect(afterScan).toEqual(findsComponents
         ? ['scanning', 'updating-architecture', 'loading-architecture', 'preparing-map', 'opening-map']
-        : ['scanning', 'opening-map'])
+        : ['scanning', 'loading-architecture', 'preparing-map', 'opening-map'])
+      expect(progress.phases.filter(phase => phase === 'preparing-map')).toHaveLength(1)
       expect((await fetch(`${viewer.url}/ready`)).status).toBe(204)
       const { world } = await (await fetch(`${viewer.url}/world.json`)).json()
       expect(world.elements.some((element: { kind: string }) => element.kind === 'component')).toBe(findsComponents)
+      if (findsComponents) {
+        const updated = worldNamed(await fetch(`${viewer.url}/events`), 'Updated')
+        await writeFile(path.join(root, 'updated.fixture'), 'function updated() {}')
+        await updated
+        await progress.close()
+        progress = undefined
+        await viewer.close()
+        const previousScans = scans
+        opening = startWebViewer(root, { port: 0, scan: false, workSource: emptyWorkSource() })
+        const savedViewer = await opening
+        const saved = await (await fetch(`${savedViewer.url}/world.json`)).json()
+        expect(saved.world.elements.some((element: { title: string }) => element.title === 'Updated')).toBe(true)
+        expect(scans).toBe(previousScans)
+      }
     } finally {
       release.resolve()
       await progress?.close()

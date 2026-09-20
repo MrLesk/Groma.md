@@ -73,10 +73,7 @@ export async function createWebMapSession(
   const workSource = options.workSource ?? backlogPlugin.create(repositoryRoot)
   let revisions: WebRevision[] = []
   let revisionRead: Promise<WebRevision[]> | undefined
-  let map: WebMapPayload = {
-    generation: 1,
-    ...(await loadMap(repositoryRoot, revisions, null, options.onProgress)),
-  }
+  let map: WebMapPayload
   let workState: Omit<WebWorkPayload, 'pins'> = {
     workGeneration: 0,
     work: EMPTY_WORK_SNAPSHOT,
@@ -186,13 +183,26 @@ export async function createWebMapSession(
     })
   }
 
+  let initialScan = true
   const scannerSession = await createScannerSession(repositoryRoot, {
     scan: options.scan,
     onProgress: options.onProgress,
-    onFold: publishWorld,
+    onFold: () => initialScan ? undefined : publishWorld(),
     onSettings: settings => broadcast(encoder.encode(`event: scanners\ndata: ${JSON.stringify(settings)}\n\n`)),
   })
   await scannerSession.ready
+  // Initial folds are included in this map; later folds queue behind its load.
+  worldChain = loadMap(repositoryRoot, revisions, null, options.onProgress).then(next => {
+    map = { generation: 1, ...next }
+  })
+  initialScan = false
+  try {
+    await worldChain
+  } catch (error) {
+    closed = true
+    await scannerSession.close()
+    throw error
+  }
   options.onProgress?.('opening-map')
   const architectureWatch = await watchArchitecture(repositoryRoot, {
     onChange: async () => { await scannerSession.reconfigure(); await publishWorld() },

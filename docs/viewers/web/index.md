@@ -16,14 +16,17 @@ Opening an initialized project uses a compact card with the project name,
 version, and a left-aligned loading status, without setup navigation.
 
 Status changes follow actual work: creating the project, finding or installing
-scanners, preparing the viewer, loading architecture, preparing the map,
-preparing scanners, scanning code, updating architecture, and opening the map.
+scanners, preparing the viewer, preparing scanners, scanning code, updating
+architecture, loading architecture, preparing the map, and opening the map.
 Operations that do not run are not reported. There is no estimated percentage
 or timer-driven progress. The loading screen stays visible until the initial
 scanner session and its architecture update finish. An empty map is reported
-only after that scan. An initialized project runs one scan before opening. The live process then
-starts the same watch as `groma scan --watch`. Startup errors appear in the
-browser with the reported issue and the command to run after fixing it.
+only after that scan. An initialized project runs one scan, then builds its first
+map once from the reconciled architecture before opening. Later source changes
+queue a new map build, including changes received during the first build. The
+live process starts the same watch as `groma scan --watch` before scanning, so
+source edits during startup are retained. Startup errors appear in the browser
+with the reported issue and the command to run after fixing it.
 The startup header shows the running Groma version during setup, loading, and errors.
 
 [`server.ts`](../../../src/viewers/web/server.ts) owns this temporary startup
