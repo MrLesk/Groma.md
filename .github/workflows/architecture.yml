@@ -1,0 +1,80 @@
+name: Groma architecture
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: read
+
+env:
+  GROMA_THEME: blueprint
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: '1.4.1'
+
+      - uses: actions/configure-pages@v5
+        id: pages
+
+      - name: Install dependencies
+        run: |
+          bun install --frozen-lockfile
+          bun add --global backlog.md@1.52.0
+
+      - name: Restore released scanner runtimes
+        run: |
+          bun -e '
+            const file = Bun.file("groma/scanners.json");
+            const config = await file.json();
+            for (const scanner of config.scanners) {
+              const { name, version } = await Bun.file(`${scanner.source}/package.json`).json();
+              scanner.source = `${name}@${version}`;
+            }
+            await Bun.write(file, JSON.stringify(config, null, 2) + "\n");
+          '
+          bun run cli scanner install
+          bun run cli scanner check
+
+      - name: Export the committed architecture
+        env:
+          PAGE_URL: ${{ steps.pages.outputs.base_url }}
+        run: bun run cli export "./site/architecture/$GROMA_THEME" --url "${PAGE_URL%/}/architecture/$GROMA_THEME/"
+
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: ./site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.map-url.outputs.url }}
+    steps:
+      - name: Publish architecture website
+        id: deployment
+        uses: actions/deploy-pages@v4
+
+      - name: Link to the architecture map
+        id: map-url
+        env:
+          PAGE_URL: ${{ steps.deployment.outputs.page_url }}
+        run: echo "url=${PAGE_URL%/}/architecture/$GROMA_THEME/" >> "$GITHUB_OUTPUT"

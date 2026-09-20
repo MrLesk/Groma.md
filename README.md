@@ -18,6 +18,10 @@
 </p>
 
 <p align="center">
+  <a href="https://mrlesk.github.io/Groma.md/architecture/blueprint/"><strong>See it in action</strong></a>
+</p>
+
+<p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" type="image/avif" srcset=".github/assets/web-dark.avif">
     <source media="(prefers-color-scheme: dark)" type="image/webp" srcset=".github/assets/web-dark.webp">
