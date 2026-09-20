@@ -20,15 +20,15 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7.0.1
         with:
           fetch-depth: 0
 
-      - uses: oven-sh/setup-bun@v2
+      - uses: oven-sh/setup-bun@v2.2.0
         with:
           bun-version: '1.4.1'
 
-      - uses: actions/configure-pages@v5
+      - uses: actions/configure-pages@v6.0.0
         id: pages
 
       - name: Install dependencies
@@ -55,7 +55,7 @@ jobs:
           PAGE_URL: ${{ steps.pages.outputs.base_url }}
         run: bun run cli export "./site/architecture/$GROMA_THEME" --url "${PAGE_URL%/}/architecture/$GROMA_THEME/"
 
-      - uses: actions/upload-pages-artifact@v4
+      - uses: actions/upload-pages-artifact@v5.0.0
         with:
           path: ./site
 
@@ -71,7 +71,7 @@ jobs:
     steps:
       - name: Publish architecture website
         id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5.0.1
 
       - name: Link to the architecture map
         id: map-url
