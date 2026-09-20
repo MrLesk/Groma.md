@@ -287,10 +287,33 @@ Do not spawn agents for other reviews unless the user explicitly asks.
 
 ## Tests
 
-Test business logic, not UI or content. Cover navigation state, projection and layout invariants, camera rules, world
-immutability, and lifecycle. Do not assert decorative details: exact frame strings, hint text, border glyphs, colors, or
-prose from the architecture Markdown. Never write a test that only restates its input, such as checking that an element
-named A renders the word A; assert the behavior that produced it, such as "the details pane shows the selected element".
+Test domain rules and observable behavior: scanner inference, ownership, navigation state, projection and layout
+invariants, camera rules, world immutability, and lifecycle.
+
+Before adding a test or extending its assertions, inspect existing coverage and briefly record in the task plan:
+
+1. The supported rule and its authority: the user request, an accepted requirement, a documented contract, or a
+   reproduced failure in the supported flow.
+2. The concrete incorrect result the test would detect.
+3. The gap in existing coverage and the smallest test needed to close it.
+
+One short explanation per behavior is enough. If you cannot name the specific failure and the coverage gap, do not add
+the test. Prefer extending relevant coverage over duplicating the same check across files or layers. An agent-written
+acceptance criterion saying "tests cover this" does not by itself justify a test; it must trace to the supported rule.
+
+Zero new tests is a valid outcome. Copy, styling, documentation, and behavior-preserving cleanup do not automatically
+need new tests. Use existing checks and focused manual verification when they are sufficient.
+
+Do not add tests of documentation inventories, source-code text, decorative details (frame strings, hint text, border
+glyphs, colors), or exact prose. A minimal text anchor may observe behavior, and exact command arguments or protocol
+values may be checked when required by a contract; do not freeze the surrounding wording. Never merely restate a
+fixture or copy the implementation into the expected result. For example, an owner-selection test must identify the
+correct owner, not just find the heading "Owner".
+
+During the implementer's quality review, check that each new or changed test proves its claimed behavior: would the
+concrete wrong result fail, and would a harmless wording change or behavior-preserving refactor still pass? Remove or
+improve assertions that fail this review. For bug fixes, verify that the regression test fails before the fix and passes
+after it when practical.
 
 Automated tests load architecture only from `test/fixtures/`, never from the live `groma/` tree. A fixture is a
 minimum world that exhibits the rule under test: kinds, parentage, relationship direction, promotion, inset, camera.
