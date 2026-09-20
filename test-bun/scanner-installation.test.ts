@@ -3,6 +3,7 @@ import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { randomInt } from 'node:crypto'
 import os from 'node:os'
 import path from 'node:path'
+import packageJson from '../package.json'
 import { createScannerSession } from '../src/scanner/session.ts'
 import { readScannerConfig, writeScannerConfig } from '../src/scanner/modules/config.ts'
 import { loadAnnotatedArchitecture } from '../src/core.ts'
@@ -26,7 +27,7 @@ async function fixture() {
     const pkg = path.join(directory, 'package')
     await mkdir(pkg, { recursive: true })
     const manifest = { name: `@groma/scanner-${id}`, version, groma: { scanner: { id, entry: './index.js', discovery: {
-      technologies: [id], rules: [], compatibility: { groma: '^0.3.0' },
+      technologies: [id], rules: [], compatibility: { groma: packageJson.version },
     } } } }
     manifests[manifest.name] = manifest
     await writeFile(path.join(pkg, 'package.json'), JSON.stringify(manifest))

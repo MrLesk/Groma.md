@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test'
+import packageJson from '../package.json'
 import { withScannerUpgrades, type ScannerSettings } from '../src/scanner/modules/settings.ts'
 import { scannerUpgradeAction } from '../src/scanner/modules/settings-model.ts'
 import { scannerWarning } from '../src/viewers/web/settings/model.ts'
@@ -11,7 +12,7 @@ test.concurrent('upgrade checks preserve scan health and offer only a newer comp
     if (unavailable) return new Response('Unavailable', { status: 503 })
     const versions = Object.fromEntries(['1.0.0', '1.1.0', '2.0.0'].map(version => [version, {
       name: '@example/scanner', version,
-      groma: { scanner: { id: 'sample', entry: './index.js', discovery: { compatibility: { groma: version === '2.0.0' ? '^9.0.0' : '^0.3.0' } } } },
+      groma: { scanner: { id: 'sample', entry: './index.js', discovery: { compatibility: { groma: version === '2.0.0' ? '^9.0.0' : packageJson.version } } } },
     }]))
     return Response.json({ versions })
   } })

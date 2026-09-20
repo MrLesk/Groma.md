@@ -3,6 +3,7 @@ import { cp, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { randomUUID } from 'node:crypto'
 import os from 'node:os'
 import path from 'node:path'
+import packageJson from '../package.json'
 import { configuredScannerModules, updateScanner } from '../src/scanner/modules/inventory.ts'
 import { readScannerConfig, writeScannerConfig } from '../src/scanner/modules/config.ts'
 import { changeScannerSettings, parseScannerSettingsAction } from '../src/scanner/modules/settings.ts'
@@ -24,7 +25,7 @@ test.concurrent('npm updates resolve omitted and bare sources, pin compatible re
     await mkdir(pkg)
     for (const version of ['1.0.0', '1.1.0', '2.0.0']) {
       const manifest = { name, version, groma: { scanner: { id: 'sample', entry: './index.js', discovery: {
-        technologies: ['sample'], rules: [], compatibility: { groma: version === '2.0.0' ? '^9.0.0' : '^0.3.0' },
+        technologies: ['sample'], rules: [], compatibility: { groma: version === '2.0.0' ? '^9.0.0' : packageJson.version },
       } } } }
       await writeFile(path.join(pkg, 'package.json'), JSON.stringify(manifest))
       await writeFile(path.join(pkg, 'index.js'), 'export default {}')
