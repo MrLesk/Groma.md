@@ -1,11 +1,11 @@
 ---
 id: TASK-473
 title: Fix architecture export termination in CI
-status: In Progress
+status: Done
 assignee:
   - codex
 created_date: '2026-09-20 20:01'
-updated_date: '2026-09-20 20:10'
+updated_date: '2026-09-20 20:14'
 labels: []
 dependencies: []
 references:
@@ -26,14 +26,14 @@ The Groma architecture workflow fails inside the export command with SIGTERM and
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 The architecture publishing workflow completes the existing export and Pages deployment successfully.
+- [x] #1 The architecture publishing workflow completes the existing export and Pages deployment successfully.
 - [x] #2 The fix preserves the published architecture, task details and diffs, owned source inspection, and generated covers.
 - [x] #3 The reproduced export failure is covered by the smallest relevant regression check and repository checks pass.
 <!-- AC:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 Acceptance criteria have objective verification evidence.
+- [x] #1 Acceptance criteria have objective verification evidence.
 - [x] #2 Relevant checks pass and changes remain task-scoped.
 - [x] #3 Public contracts or documentation are updated when behavior changes.
 - [x] #4 Implementation Plan reflects the final approach; correction history and verification are recorded in Implementation Notes.
@@ -57,4 +57,12 @@ Focused checks pass: the export regression plus all three sharing checks (4 test
 bun run check passed: 16 Node tests and 624 Bun tests, with 36 skips and zero failures. The final full-context reviewer found no blockers and recommends keeping the sequential loop in the existing Web export domain. The published payload preserves every task detail and real diff in the focused test. The isolated Linux export has passed 99 of the original 172 tasks with one active detail read; measured peak container memory is 685277184 bytes. Hosted deployment remains unchecked until the pushed workflow finishes.
 
 The full fixed export completed the original 172-task committed snapshot in isolated Linux in 116.26 seconds, with one active detail read. The exported page contains all 172 task details and 172 diff entries in the original task order, plus source inspection and all three covers. The saved reproduction uses the pre-cleanup architecture and Backlog records and the repository Git history; success does not depend on the user cleanup. Final hosted workflow validation follows the implementation push.
+
+Hosted verification on implementation commit cff9ed3a passed. Architecture run 35534706780 completed build and Pages deployment in 2m52s (https://github.com/MrLesk/Groma.md/actions/runs/35534706780). CI run 35534706719 passed on all three hosts: Linux 1m50s, macOS 2m09s, Windows 2m51s (https://github.com/MrLesk/Groma.md/actions/runs/35534706719). All five updated Actions were exercised successfully. The implementation commit also contains the 66 unchanged-content Backlog moves explicitly approved by Alex.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Static export now finishes each task detail and diff before starting the next task, preventing an unbounded burst of CLI processes while keeping all published content. The regression failed before the fix and passes after it. Full checks passed (16 Node and 624 Bun tests; 36 skips). The original 172-task snapshot exported successfully in isolated Linux in 1m56s. The pushed implementation and user-approved Backlog cleanup passed all three CI jobs and deployed Pages successfully in 2m52s.
+<!-- SECTION:FINAL_SUMMARY:END -->
