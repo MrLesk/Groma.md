@@ -29,9 +29,9 @@ metadata, relationships, and history stay consistent.
 
 ## IMPORTANT: Point of view
 
-Whenever you are writing documentation or code, think from the pov of someone that is not aware of the current conversation
-and needs to understand what you wrote without extra context. Is the code clearly legible, are the docs explaining only
-what is relevant without mentioning transitions between approaches that happen during this conversation?
+Write for a junior developer who knows the language but is new to the project and has no access to this conversation.
+They should be able to find where a change belongs, follow the flow from entry point to result, and identify who owns
+each responsibility. Describe the final system and its reasons, not the approaches tried.
 
 ## OKF and C4 are design foundations
 
@@ -127,6 +127,8 @@ the files do not overlap with the current task, proceed independently without
 sending a coordination message. Coordinate only when the recorded files
 overlap or when the current work is about to create a real file-level conflict.
 
+Preserve unrelated changes made by the user or other agents. Do not revert or reformat them.
+
 ## Commit messages
 
 When the user confirms that a task is done, commit that task's files
@@ -153,6 +155,9 @@ cannot work without it.
 
 When multiple approaches produce the same result, choose the one that is shortest and easiest to explain. Do not import
 complexity from an earlier Groma implementation, a generic architecture, or a hypothetical future requirement.
+
+Do not reduce line count at the expense of readability. Before adding a file, layer, or dependency, find the domain that
+owns the behavior and reuse suitable existing concepts.
 
 ## File length
 
@@ -190,9 +195,14 @@ scope but do not expand it. Only the explicitly requested outcome, task acceptan
 a documented contract or named invariant, a reproduced failure in the supported product flow, and an explicitly approved
 example authorize implementation.
 
+Distinguish verified facts, assumptions, recommendations, and the user's confirmed decisions. Never present an inference
+as an approved requirement.
+
 A request to investigate, explain, review, propose, or design does not authorize implementation or file changes. If
 reasonable interpretations would materially change behavior, scope, cost, or complexity, report the difference to the
-user/orchestrator and wait for direction.
+user/orchestrator with the evidence, tradeoff, and recommendation. Pause only the affected work while waiting for
+direction. If you misread the user's direction, explain what you assumed and changed, and resolve the interpretation
+before continuing the affected work.
 
 For changes to product behavior, identify the actor, entry point, and expected result from the request, acceptance
 criteria, or an approved example. For fixes and internal refactors, restore or preserve the supported behavior; no new
@@ -246,6 +256,10 @@ The implementing agent performs the specification and quality reviews itself. Th
 result with the task acceptance criteria and Definition of Done. The quality review checks the changed code for
 reproducible defects, unnecessary complexity, unclear ownership, and missing tests in the supported flow. Do not spawn
 separate agents for these reviews.
+
+During the quality review, trace the changed flow from entry point to result as a junior developer new to the project.
+Check whether they can find where the behavior lives and where a similar change belongs, follow data and control flow,
+and understand ownership and correct use from names and contracts without knowing hidden conventions.
 
 The first specification and quality reviews may inspect the complete change. Any re-review is limited to the previously
 reported findings and regressions caused by their fixes. Newly noticed non-critical improvements are follow-ups.
