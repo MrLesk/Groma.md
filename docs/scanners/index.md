@@ -149,9 +149,12 @@ the same Git ignore rules. In JSON, write a backslash as `\\`.
 The list selects new evidence from every enabled scanner, including files
 tracked by Git. Omitting `exclude` or using `[]` adds no exclusions. Each
 scanner keeps its own language coverage and default exclusions; `!` does not
-restore files omitted by those defaults. Compiler analysis can still read
-excluded files as context. A failed scanner keeps its saved evidence while
-successful scanners publish their results.
+restore files omitted by those defaults. When a scanner lists source files and
+all of them are excluded, Groma skips its readiness check and scan. This keeps
+excluded test projects from blocking a scan on incomplete fixture inputs.
+When included sources remain, compiler analysis can still read excluded files
+as context. A failed scanner keeps its saved evidence while successful scanners
+publish their results.
 
 Run `groma scan` after editing the list. Restart an active viewer or
 `groma scan --watch` to load the new configuration; excluded source paths no

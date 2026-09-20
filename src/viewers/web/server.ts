@@ -11,6 +11,7 @@ import { discoverScanners, type ScannerDiscovery } from '../../scanner/modules/d
 import { installSelectedScanners } from '../../scanner/modules/setup.ts'
 import { createWebMapSession } from './map-session.ts'
 import { renderSetupPage } from './startup/page.ts'
+import { createStartupProgress } from './startup/progress.ts'
 
 type MapSession = Awaited<ReturnType<typeof createWebMapSession>>
 
@@ -26,27 +27,39 @@ export async function startWebViewer(
   } = {},
 ): Promise<{ url: string; close: () => Promise<void> }> {
   const initial = gromaInitialization(repositoryRoot)
+  const progress = createStartupProgress()
   let projectName = (await loadProjectProfile(repositoryRoot))?.title ?? path.basename(repositoryRoot)
   let proposal: ScannerDiscovery | undefined
   let map: MapSession | undefined
   let error: string | undefined
   let preparing = Promise.resolve()
 
+  function prepare(action: () => Promise<Response>): Promise<Response> {
+    const response = action()
+    preparing = response.then(() => {})
+    return response
+  }
+
   function openMap(scan: boolean): Promise<void> {
     error = undefined
     preparing = (async () => {
-      map = await createWebMapSession(repositoryRoot, { ...options, scan })
+      map = await createWebMapSession(repositoryRoot, {
+        ...options, scan, onProgress: phase => { if (map === undefined) progress.report(phase) },
+      })
     })().catch(failed)
     return preparing
   }
 
   function failed(cause: unknown): void {
     error = cause instanceof Error ? cause.message : String(cause)
+    progress.clear()
   }
 
   function setupResponse(status = error === undefined ? 200 : 500): Response {
     return new Response(renderSetupPage({
       projectName,
+      firstRun: !initial.initialized,
+      phase: progress.phase,
       ...gromaInitialization(repositoryRoot),
       error,
       proposal,
@@ -60,12 +73,15 @@ export async function startWebViewer(
     try {
       const input = await request.formData()
       projectName = String(input.get('projectName') ?? '')
+      progress.report('creating-project')
       await initializeRepository(repositoryRoot, {
         projectName,
         directory: String(input.get('directory') ?? ''),
       }, options.initDependencies)
+      progress.report('finding-scanners')
       proposal = await discoverScanners(repositoryRoot)
       error = undefined
+      progress.clear()
       return new Response(null, { status: 303, headers: { Location: '/' } })
     } catch (cause) {
       failed(cause)
@@ -77,9 +93,12 @@ export async function startWebViewer(
     if (proposal === undefined) return new Response('No scanner proposal to review.', { status: 400 })
     try {
       const input = await request.formData()
+      const selected = input.getAll('scanner').map(String)
+      progress.report(selected.length ? 'installing-scanners' : 'finding-scanners')
       try {
-        await installSelectedScanners(repositoryRoot, proposal, input.getAll('scanner').map(String))
+        await installSelectedScanners(repositoryRoot, proposal, selected)
       } finally {
+        progress.report('finding-scanners')
         proposal = await discoverScanners(repositoryRoot)
       }
       await openMap(true)
@@ -97,16 +116,18 @@ export async function startWebViewer(
     // The map's live event stream must stay open between changes.
     idleTimeout: 0,
     async fetch(request) {
-      if (request.method === 'GET' && new URL(request.url).pathname === '/ready') {
+      const route = `${request.method} ${new URL(request.url).pathname}`
+      if (route === 'GET /startup-events') return progress.response()
+      if (route === 'GET /ready') {
         await preparing
         return new Response(null, { status: error === undefined ? 204 : 500 })
       }
       if (map !== undefined) return map.fetch(request)
-      if (request.method === 'POST' && new URL(request.url).pathname === '/scanners') {
-        return selectScanners(request)
+      if (route === 'POST /scanners') {
+        return prepare(() => selectScanners(request))
       }
-      if (request.method === 'POST' && new URL(request.url).pathname === '/initialize') {
-        return initialize(request)
+      if (route === 'POST /initialize') {
+        return prepare(() => initialize(request))
       }
       return setupResponse()
     },
@@ -119,6 +140,7 @@ export async function startWebViewer(
   return {
     url,
     async close() {
+      progress.close()
       await server.stop(true)
       // A map still being prepared would otherwise finish after this close and leave its watchers running.
       await preparing

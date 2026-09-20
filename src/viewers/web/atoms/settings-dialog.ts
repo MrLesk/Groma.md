@@ -22,8 +22,8 @@ export function createSettingsDialog(id: string, title: string, content: string,
     options.onClose?.()
     dialog.close()
     if (opener?.tagName === 'BUTTON') opener.setAttribute('aria-expanded', 'false')
-    // A resolved warning disappears while Settings is open.
-    if (opener && !opener.hidden) opener.focus()
+    // A resolved warning or empty-map invitation can disappear while Settings is open.
+    if (opener && opener.getClientRects().length > 0) opener.focus()
     else document.getElementById('settings-toggle')?.focus()
   }
   dialog.addEventListener('cancel', event => { event.preventDefault(); close() })
