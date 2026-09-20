@@ -78,6 +78,12 @@ supported runner platforms, and commits the released version to `main` only afte
 `groma.md` manifest is public; the workflow stages its Node wrapper around the compiled binaries so
 the workspace-only development dependencies are not part of the published package.
 
+After every successful Groma release, update the `groma.md@<version>` pin in
+[`groma.md-action/action.yml`](https://github.com/MrLesk/groma.md-action/blob/main/action.yml) and follow the
+[Action release checklist](https://github.com/MrLesk/groma.md-action#releases). This final release step verifies the new
+Groma version in the Action, publishes an approved Action release, and updates its major-version pointer. It is manual;
+Groma's release workflow does not update the Action repository.
+
 ## Before starting a feature
 
 Describe every new supported product flow as a Gherkin scenario before implementation. The scenario is the semantic
