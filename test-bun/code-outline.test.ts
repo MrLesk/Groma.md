@@ -1,9 +1,11 @@
 import { expect, test } from 'bun:test'
 import path from 'node:path'
+import { mkdtemp, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
 
 import { readCodeStructure as readReferenceOutline } from '../plugins/scanners/typescript/src/structure.ts'
 import { loadAnnotatedArchitecture } from '../src/core.ts'
-import { readCodeStructure, type CodeFile } from '../src/viewers/source/structure.ts'
+import { readCodeStructure, readSnapshotCodeStructure, type CodeFile } from '../src/viewers/source/structure.ts'
 import { outlineStopKeys } from '../src/viewers/tui/navigation-details.ts'
 import { outlineRowKey } from '../src/viewers/tui/panes/details.ts'
 import { createSourceControl } from '../src/viewers/web/source/control.ts'
@@ -15,6 +17,15 @@ async function mixedComponent() {
   const world = await loadAnnotatedArchitecture(mixedFixture)
   return { world, component: world.elements.find(element => element.kind === 'component')! }
 }
+
+test.concurrent('snapshot outlines use installed repository scanners without loading them from the source snapshot', async () => {
+  const snapshot = await mkdtemp(path.join(tmpdir(), 'groma-outline-snapshot-'))
+  try {
+    const { world, component } = await mixedComponent()
+    const files = await readSnapshotCodeStructure(mixedFixture, snapshot, world, component.representationId)
+    expect(files?.map(file => file.declarations[0]?.name)).toEqual(['beta', 'alpha'])
+  } finally { await rm(snapshot, { recursive: true, force: true }) }
+})
 
 test.concurrent('a component whose Code spans two scanners outlines every file in Code order', async () => {
   const { world, component } = await mixedComponent()

@@ -2,11 +2,10 @@ import type { Comparison } from '../../history/comparison.ts'
 import type { GitRevision } from '../../history/revisions.ts'
 import type { SheetScene } from '../../sheet/types.ts'
 import type { ProjectProfile } from '../../project-profile.ts'
-import type { AnnotatedArchitectureModel, WorkItemDetails, WorkSnapshot } from '../../types.ts'
+import type { AnnotatedArchitectureModel, WorkSnapshot } from '../../types.ts'
 import type { WorkPin } from '../../work/pins.ts'
 import type { SourcePayload } from '../source/read.ts'
 import type { CodeFile } from '../source/structure.ts'
-import type { TaskDiffPayload } from '../source/diff.ts'
 
 export const PUBLISHED_EVENT = 'groma:published'
 export const PUBLISHED_VERSION_EVENT = 'groma:published-version'
@@ -46,14 +45,18 @@ export type WebPayload = WebMapPayload & WebWorkPayload
 /** Repository-backed reads materialized before a static Web view is published. */
 export interface PublishedReads {
   code: { element: string; files: readonly CodeFile[] }[]
-  sources: { element: string; file: string; source: SourcePayload }[]
-  tasks: { id: string; details: WorkItemDetails }[]
-  taskDiffs: ({ id: string; diff: TaskDiffPayload } | { id: string; error: string })[]
+  sources: { file: string; source: SourcePayload }[]
+}
+
+/** One ordinary or comparison view, already prepared by the same owners as live delivery. */
+export interface PublishedView {
+  payload: WebPayload
+  reads: PublishedReads
 }
 
 export type WebDelivery =
   | { kind: 'live' }
-  | { kind: 'published'; reads: PublishedReads }
+  | { kind: 'published'; views: PublishedView[] }
 
 /** Initial page data plus the one delivery boundary the browser must use. */
 export type WebBootPayload = WebPayload & { delivery: WebDelivery }

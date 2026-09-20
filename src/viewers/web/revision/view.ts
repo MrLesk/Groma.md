@@ -72,9 +72,9 @@ function revisionOption(revision: WebRevision, selected: boolean): string {
   return `<button class="anchored-option revision-option" type="button" data-revision="${revision.id}"${body} title="${escaped(revisionTitle(revision))}" aria-current="${selected}"><span class="revision-subject">${escaped(revision.subject)}</span><span class="revision-meta">${tag}<code>${revision.shortId}</code><time datetime="${revision.date}">${revision.date}</time></span></button>`
 }
 
-export function revisionOptions(revisions: WebPayload['revisions'], selected?: string, query = ''): string {
+export function revisionOptions(revisions: WebPayload['revisions'], selected?: string, query = '', workingTree = true): string {
   const filter = query.trim().toLocaleLowerCase()
-  const current = 'current working tree'.includes(filter)
+  const current = workingTree && 'current working tree'.includes(filter)
     ? `<button class="anchored-option revision-option current" type="button" data-revision="" aria-current="${selected === undefined}"><span class="revision-subject">Current working tree</span></button>` : ''
   const matches = revisions.filter(revision => `${revision.id} ${revision.subject} ${revision.body}`.toLocaleLowerCase().includes(filter))
   return current + matches.map(revision => revisionOption(revision, revision.id === selected)).join('')

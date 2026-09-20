@@ -8,7 +8,7 @@ import { annotateArchitecture } from '../core.ts'
 import { GromaFileSystem } from '../groma-filesystem.ts'
 import { loadProjectProfile } from '../project-profile.ts'
 
-/** Metadata for one current-branch commit. */
+/** Metadata for one exact Git commit. */
 export interface GitRevision {
   id: string
   shortId: string
@@ -93,14 +93,27 @@ export async function listGitRevisions(repositoryRoot: string): Promise<GitRevis
   return readRevisionLog(repositoryRoot, [])
 }
 
+const REVISION_FORMAT = '--format=%H%x00%h%x00%cI%x00%s%x00%b%x00%(decorate:prefix=,suffix=,separator=%x1f,tag=)%x00'
+
+/** Resolves an explicit export reference, including a commit outside the current branch. */
+export async function readGitRevision(repositoryRoot: string, reference: string): Promise<GitRevision> {
+  const id = (await runGit(['rev-parse', '--verify', '--end-of-options', `${reference}^{commit}`], repositoryRoot)).trim()
+  const output = await runGit(['log', '-1', '--decorate-refs=refs/tags/*', REVISION_FORMAT, id, '--'], repositoryRoot)
+  return parseRevisions(output)[0]!
+}
+
 async function readRevisionLog(repositoryRoot: string, paths: string[]): Promise<GitRevision[]> {
   if (!await hasCommits(repositoryRoot)) return []
   const output = await runGit([
     'log',
     '--decorate-refs=refs/tags/*',
-    '--format=%H%x00%h%x00%cI%x00%s%x00%b%x00%(decorate:prefix=,suffix=,separator=%x1f,tag=)%x00',
+    REVISION_FORMAT,
     '--', ...paths,
   ], repositoryRoot)
+  return parseRevisions(output)
+}
+
+function parseRevisions(output: string): GitRevision[] {
   const fields = output.split('\0')
   const revisions: GitRevision[] = []
   for (let index = 0; index + 5 < fields.length; index += 6) {

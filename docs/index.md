@@ -31,7 +31,8 @@ groma init "Shop" --directory groma
 shows the world. `groma view` opens the terminal map (text without a
 TTY). `groma web` serves the isometric web map in the browser and pins
 live Backlog work on the element each task touched last. `groma export
-<directory>` writes the current Web view as a read-only static site.
+<directory>` writes a read-only static working-tree snapshot without tasks.
+Use `--revision <commit>` for one commit, or add `--from <commit>` for comparison.
 On a TTY, `groma instructions` opens the local guide screen. A named guide or
 non-interactive use prints the human guide as plain text. Agent operating rules
 stay separate: `groma agent-instructions [guide]` always prints plain Markdown.

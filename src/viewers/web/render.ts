@@ -14,7 +14,7 @@ import { animateControl } from './chrome/motion.ts'
 import { bindChromeActions, createWebShell, mapFrame, type MapFrame } from './chrome/shell.ts'
 import { bindThemeControl, readSavedTheme } from './chrome/theme-control.ts'
 import { paintHeaderSummary } from './chrome/stats.ts'
-import { createWebDataSource } from './data.ts'
+import { createWebDataSource, openWebBoot } from './data.ts'
 import { createFlowList } from './flow/list.ts'
 import { flowFocus, flowHighlight, flowSelection, retainFlows, toggleFlowActivation, type WebFlowRef } from './flow/state.ts'
 import { paintFlowReturn, paintFlowDetails } from './flow/reader.ts'
@@ -41,7 +41,7 @@ import { createSourceControl } from './source/control.ts'
 import { createTaskDiffControl } from './task-diff/control.ts'
 import { readView, writeView } from './url.ts'
 const ZOOM_STEP = 1.25
-const boot = JSON.parse(document.getElementById('world')!.textContent!) as WebBootPayload
+const boot = openWebBoot(JSON.parse(document.getElementById('world')!.textContent!) as WebBootPayload, location)
 const data = createWebDataSource(boot)
 let world = boot.world
 let work = boot.work

@@ -100,36 +100,26 @@ function liveDataSource(): WebDataSource {
 function publishedDataSource(boot: WebBootPayload): WebDataSource {
   let snapshot = boot
 
-  function reads() {
-    if (snapshot.delivery.kind !== 'published') throw new Error('Published snapshot unavailable')
-    return snapshot.delivery.reads
-  }
-
   return {
     async readRevisions() {
       return snapshot.revisions
     },
-    async readWorld() {
-      return snapshot
+    async readWorld(revision, from) {
+      return publishedView(snapshot, revision, from).payload
     },
-    async readCode(element) {
-      return reads().code.find(item => item.element === element)?.files ?? []
+    async readCode(element, revision, from) {
+      return publishedView(snapshot, revision, from).reads.code.find(item => item.element === element)?.files ?? []
     },
-    async readSource(element, file) {
-      const found = reads().sources.find(item => item.element === element && item.file === file)
+    async readSource(_element, file, revision, from) {
+      const found = publishedView(snapshot, revision, from).reads.sources.find(item => item.file === file)
       if (found === undefined) throw new Error('Source file not found')
       return found.source
     },
-    async readTask(id) {
-      const found = reads().tasks.find(item => item.id === id)
-      if (found === undefined) throw new Error('Task not found')
-      return found.details
+    async readTask() {
+      throw new Error('Tasks are unavailable in static Groma')
     },
-    async readTaskDiff(id) {
-      const found = reads().taskDiffs.find(item => item.id === id)
-      if (found === undefined) throw new Error('Diff unavailable')
-      if ('error' in found) throw new Error(found.error)
-      return found.diff
+    async readTaskDiff() {
+      throw new Error('Tasks are unavailable in static Groma')
     },
     subscribe(handlers) {
       let checking = false
@@ -174,6 +164,22 @@ function publishedDataSource(boot: WebBootPayload): WebDataSource {
       }
     },
   }
+}
+
+function publishedView(boot: WebBootPayload, revision?: string, from?: string) {
+  if (boot.delivery.kind !== 'published') throw new Error('Published snapshot unavailable')
+  const view = boot.delivery.views.find(({ payload }) => payload.revision?.id === revision
+    && (payload.comparison === undefined ? undefined : payload.comparison.from?.id ?? '') === from)
+  if (view === undefined) throw new Error('This revision is not available in this static Groma')
+  return view
+}
+
+/** Restore a shared static link before any controller consumes the initial world. */
+export function openWebBoot(boot: WebBootPayload, url: Pick<Location, 'search'>): WebBootPayload {
+  const params = new URLSearchParams(url.search)
+  if (boot.delivery.kind === 'live' || (!params.has('revision') && !params.has('from'))) return boot
+  const view = publishedView(boot, params.get('revision') ?? undefined, params.get('from') ?? undefined)
+  return { ...view.payload, delivery: boot.delivery }
 }
 
 export function createWebDataSource(boot: WebBootPayload): WebDataSource {

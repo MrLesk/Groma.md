@@ -137,10 +137,10 @@ async function initializeProject(
   }
 }
 
-async function exportWeb(directory: string, url?: string): Promise<void> {
+async function exportWeb(directory: string, options: { url?: string; revision?: string; from?: string }): Promise<void> {
   const root = process.cwd()
   const { exportWebViewer } = await import('./viewers/web/export.ts')
-  const exported = await exportWebViewer(root, directory, { url })
+  const exported = await exportWebViewer(root, directory, options)
   console.log(`groma export at ${path.resolve(directory)}`)
   await exported.close()
 }
@@ -236,13 +236,15 @@ program
   .description('Export the browser map as a read-only static site')
   .argument('<directory>', 'output directory')
   .option('--url <url>', 'public URL of the exported directory, for social previews')
+  .option('--revision <commit>', 'export this commit instead of the working tree')
+  .option('--from <commit>', 'compare this starting commit with --revision')
   .addOption(new Option('--watch').hideHelp())
   .on('option:watch', () => {
     console.log('Coming soon.')
     process.exit(0)
   })
-  .action(async (directory: string, options: { url?: string }) => {
-    await exportWeb(directory, options.url)
+  .action(async (directory: string, options: { url?: string; revision?: string; from?: string }) => {
+    await exportWeb(directory, options)
   })
 
 withListWindowOptions(program

@@ -37,6 +37,17 @@ export async function readCodeStructure(
   revision: string | null,
   elementId: string,
 ): Promise<CodeFile[] | undefined> {
+  const load = (root: string) => readSnapshotCodeStructure(repositoryRoot, root, world, elementId)
+  return revision === null ? load(repositoryRoot) : withGitRevision(repositoryRoot, revision, load)
+}
+
+/** Installed scanners belong to the repository; their source input can be an already-open Git snapshot. */
+export async function readSnapshotCodeStructure(
+  repositoryRoot: string,
+  snapshotRoot: string,
+  world: ArchitectureGraph,
+  elementId: string,
+): Promise<CodeFile[] | undefined> {
   const element = world.elements.find(candidate => (
     candidate.kind === 'component' && candidate.representationId === elementId
   ))
@@ -51,11 +62,8 @@ export async function readCodeStructure(
       settings: module.settings,
     })))
   const order = requests.map(request => request.reference.file)
-  const load = async (root: string): Promise<CodeFile[]> => {
-    const files = await Promise.all(providers.map(({ scanner, references, settings }) => (
-      scanner.readCodeStructure?.(root, references, settings) ?? []
-    )))
-    return files.flat().sort((left, right) => order.indexOf(left.file) - order.indexOf(right.file))
-  }
-  return revision === null ? load(repositoryRoot) : withGitRevision(repositoryRoot, revision, load)
+  const files = await Promise.all(providers.map(({ scanner, references, settings }) => (
+    scanner.readCodeStructure?.(snapshotRoot, references, settings) ?? []
+  )))
+  return files.flat().sort((left, right) => order.indexOf(left.file) - order.indexOf(right.file))
 }

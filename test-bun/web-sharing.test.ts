@@ -38,7 +38,7 @@ test.concurrent('export writes the themed image referenced by its initial sharin
   const output = await mkdtemp(path.join(os.tmpdir(), 'groma-sharing-export-'))
   try {
     const exported = await exportWebViewer(mappedFixture, output, {
-      url: 'https://example.test/repository/architecture/blueprint', workSource: emptyWork(),
+      url: 'https://example.test/repository/architecture/blueprint',
     })
     await exported.close()
     const fields = await headMetadata(await readFile(path.join(output, 'index.html'), 'utf8'))

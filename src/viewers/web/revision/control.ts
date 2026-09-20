@@ -1,7 +1,7 @@
 import type { WebDataSource } from '../data.ts'
 import { bindPopover } from '../atoms/popover.ts'
 import type { WebBootPayload, WebPayload, WebWorkPayload } from '../payload.ts'
-import { comparisonMenu, revisionLabel, revisionOptions, revisionTitle } from './view.ts'
+import { comparisonMenu, revisionLabel, revisionMetadata, revisionOptions, revisionTitle } from './view.ts'
 
 interface RevisionControlOptions {
   control: HTMLDetailsElement
@@ -74,6 +74,8 @@ export function createRevisionControl(options: RevisionControlOptions) {
   const { element: tooltip, hide: hideTooltip } = revisionTooltip(control)
   let current: WebPayload = boot
   let revisions = boot.revisions
+  const singleSnapshot = boot.delivery.kind === 'published' && revisions.length < 2
+  const workingTree = boot.delivery.kind === 'live' || boot.revision === null
   let mode: 'browse' | 'pair' | 'from' | 'to' = current.comparison === undefined ? 'browse' : 'pair'
   let historyLoaded = boot.delivery.kind === 'published' || revisions.length > 0
   let request = 0
@@ -100,18 +102,19 @@ export function createRevisionControl(options: RevisionControlOptions) {
   }
 
   function paintMenu(): void {
-    control.toggleAttribute('data-searching', control.open && mode !== 'pair')
+    control.toggleAttribute('data-searching', control.open && mode !== 'pair' && !singleSnapshot)
     search.placeholder = { from: 'Choose starting revision…', to: 'Choose destination…', browse: 'Find commit or message…', pair: '' }[mode]
     context.replaceChildren()
     actions.replaceChildren()
-    if (mode === 'pair') results.innerHTML = comparisonMenu(current)
+    if (singleSnapshot) results.innerHTML = `<div class="revision-endpoint"><div>${revisionMetadata(current.revision)}</div></div><div class="revision-notice">No other revisions are available in this static Groma.</div>`
+    else if (mode === 'pair') results.innerHTML = comparisonMenu(current)
     else paintChoices()
     localizeDates(control)
   }
 
   function paintChoices(): void {
     const active = mode === 'from' ? from() : selected()
-    results.innerHTML = revisionOptions(revisions, active, search.value)
+    results.innerHTML = revisionOptions(revisions, active, search.value, workingTree)
     if (mode === 'browse') actions.innerHTML = '<button class="chrome-button" data-action="from">Compare from…</button>'
     else paintEndpointContext()
     localizeDates(control)
@@ -163,7 +166,7 @@ export function createRevisionControl(options: RevisionControlOptions) {
     mode = next
     search.value = ''
     paintMenu()
-    if (mode !== 'pair') search.focus()
+    if (mode !== 'pair' && !singleSnapshot) search.focus()
   }
 
   search.addEventListener('click', event => event.preventDefault())

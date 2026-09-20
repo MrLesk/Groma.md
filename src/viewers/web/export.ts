@@ -1,96 +1,103 @@
 import { mkdir, rename, writeFile } from 'node:fs/promises'
 import path from 'node:path'
-
 import { EMPTY_WORK_SNAPSHOT } from '@groma/work-source'
-import type { WorkSource } from '@groma/work-source'
-import { backlogPlugin } from '@groma/work-source-backlog'
-
 import { watchArchitecture } from '../../architecture-watch.ts'
-import { pinsOf } from '../../work/pins.ts'
+import { compareArchitecture, ownedFiles, type SourceTexts } from '../../history/comparison.ts'
+import { readGitRevision, type GitRevision } from '../../history/revisions.ts'
+import { atRevision, readSourceTexts } from '../../history/snapshots.ts'
+import { measuredSheetScene } from '../../sheet/scene.ts'
+import { readSnapshotCodeStructure } from '../source/structure.ts'
 import { renderPage } from './page.ts'
 import { PUBLISHED_EVENT, PUBLISHED_VERSION_EVENT } from './payload.ts'
-import type { PublishedReads, WebBootPayload, WebPayload } from './payload.ts'
+import type { PublishedView, WebBootPayload } from './payload.ts'
 import { bundleRenderer, loadMapRoot } from './runtime.ts'
 import { coverThemes, generateCovers } from './sharing/images.ts'
 import { coverFile } from './sharing/metadata.ts'
-import { readSource } from '../source/read.ts'
-import { readCodeStructure } from '../source/structure.ts'
-import { readTaskDiff } from '../source/diff.ts'
 
 export interface WebExportHandle {
   readonly closed: Promise<void>
   close(): Promise<void>
 }
 
-async function publishedTaskDiff(repositoryRoot: string, item: WebPayload['work']['items'][number], work: WebPayload['work']) {
-  try {
-    return { id: item.id, diff: await readTaskDiff(repositoryRoot, item, work) }
-  } catch (error) {
-    return { id: item.id, error: error instanceof Error ? error.message : String(error) }
-  }
+export interface WebExportOptions {
+  url?: string
+  revision?: string
+  from?: string
+  watch?: boolean
+  onError?: (error: unknown) => void
 }
 
-async function publishedReads(
-  repositoryRoot: string,
-  payload: WebPayload,
-  workSource: WorkSource,
-): Promise<PublishedReads> {
-  const code: PublishedReads['code'] = []
-  const sources: PublishedReads['sources'] = []
-  for (const element of payload.world.elements) {
+function emptyWork(generation: number) {
+  return { workGeneration: generation, work: EMPTY_WORK_SNAPSHOT, pins: [] }
+}
+
+async function snapshotView(repositoryRoot: string, root: string, revision: GitRevision | null, revisions: GitRevision[],
+  generation: number, map: Awaited<ReturnType<typeof loadMapRoot>>, files: string[]): Promise<PublishedView> {
+  if (map.project === null) throw new Error('No Groma architecture in this snapshot')
+  const code: PublishedView['reads']['code'] = []
+  for (const element of map.world.elements) {
     if (element.kind !== 'component') continue
-    const files = await readCodeStructure(
-      repositoryRoot,
-      payload.world,
-      null,
-      element.representationId,
-    )
-    code.push({ element: element.representationId, files: files ?? [] })
-    for (const file of new Set(element.code.map(reference => reference.file))) {
-      const source = await readSource(repositoryRoot, payload.world, null, element.representationId, file)
-      if (source === undefined) throw new Error(`Source file not found: ${file}`)
-      sources.push({
-        element: element.representationId,
-        file,
-        source,
-      })
-    }
+    code.push({ element: element.representationId,
+      files: await readSnapshotCodeStructure(repositoryRoot, root, map.world, element.representationId) ?? [] })
   }
-  const tasks: PublishedReads['tasks'] = []
-  const taskDiffs: PublishedReads['taskDiffs'] = []
-  // These reads start CLI processes; finish one task before starting the next.
-  for (const item of payload.work.items) {
-    tasks.push({ id: item.id, details: await workSource.readItem(item.id) })
-    taskDiffs.push(await publishedTaskDiff(repositoryRoot, item, payload.work))
+  const texts = await readSourceTexts(root, files)
+  return {
+    payload: { generation, ...map, revision, revisions, ...emptyWork(generation) },
+    reads: { code, sources: Object.entries(texts).flatMap(([file, source]) => source === undefined ? [] : [{ file, source: { source } }]) },
   }
-  return { code, sources, tasks, taskDiffs }
 }
 
-async function publishedSnapshot(
-  repositoryRoot: string,
-  workSource: WorkSource,
-  generation: number,
-): Promise<WebBootPayload> {
-  const [map, work] = await Promise.all([
-    loadMapRoot(repositoryRoot),
-    workSource.read().catch(() => EMPTY_WORK_SNAPSHOT),
-  ])
-  const payload: WebPayload = {
-    generation,
-    ...map,
-    revision: null,
-    revisions: [],
-    workGeneration: generation,
-    work,
-    pins: pinsOf(work.items, map.world, work.statuses.at(-1), work.defaultStatus),
-  }
+function sourceTexts(view: PublishedView): SourceTexts {
+  return Object.fromEntries(view.reads.sources.map(item => [item.file, item.source.source]))
+}
+
+function comparisonView(before: PublishedView, after: PublishedView): PublishedView {
+  const started = performance.now()
+  const compared = compareArchitecture(before.payload.world, after.payload.world, sourceTexts(before), sourceTexts(after))
+  const sheet = measuredSheetScene(compared.world)
+  // Changed files use comparison hunks; ordinary source reads use B, or A for removed files.
+  const sources = new Map([...before.reads.sources, ...after.reads.sources].map(item => [item.file, item]))
   return {
-    ...payload,
-    delivery: {
-      kind: 'published',
-      reads: await publishedReads(repositoryRoot, payload, workSource),
-    },
+    payload: { ...after.payload, world: compared.world, sheet: sheet.scene,
+      comparison: { from: before.payload.revision, components: compared.components, relationships: compared.relationships },
+      timings: { architectureLoadMilliseconds: 0, ...sheet.timings, totalMilliseconds: performance.now() - started } },
+    reads: { code: [], sources: [...sources.values()] },
   }
+}
+
+/** Materialize existing viewer reads while the requested roots are available; no Git reaches the browser. */
+async function publishedSnapshot(root: string, revisions: GitRevision[], generation: number): Promise<WebBootPayload> {
+  const to = revisions.at(-1) ?? null
+  const from = revisions.length === 2 ? revisions[0]! : undefined
+  return atRevision(root, to, async afterRoot => {
+    const afterMap = await loadMapRoot(afterRoot)
+    if (from === undefined) {
+      const view = await snapshotView(root, afterRoot, to, revisions, generation, afterMap, ownedFiles(afterMap.world))
+      return { ...view.payload, delivery: { kind: 'published', views: [view] } }
+    }
+    return atRevision(root, from, async beforeRoot => {
+      const beforeMap = await loadMapRoot(beforeRoot)
+      const files = [...new Set([...ownedFiles(beforeMap.world), ...ownedFiles(afterMap.world)])]
+      const [before, after] = await Promise.all([
+        snapshotView(root, beforeRoot, from, revisions, generation, beforeMap, files),
+        snapshotView(root, afterRoot, to, revisions, generation, afterMap, files),
+      ])
+      const comparison = comparisonView(before, after)
+      // Closing the comparison allows either commit to become the next destination.
+      const views = [before, after, comparison, comparisonView(after, before)]
+      return { ...comparison.payload, delivery: { kind: 'published', views } }
+    })
+  })
+}
+
+async function exportRevisions(root: string, options: WebExportOptions): Promise<GitRevision[]> {
+  if (options.from !== undefined && options.revision === undefined) throw new Error('--from requires --revision; comparison exports need two commits')
+  if (options.revision === undefined) return []
+  const to = await readGitRevision(root, options.revision)
+  if (options.from === undefined) return [to]
+  const from = await readGitRevision(root, options.from)
+  if (from.id === to.id) throw new Error('Choose two different commits')
+  return [from, to]
 }
 
 async function replaceFile(filename: string, contents: string | Uint8Array): Promise<void> {
@@ -107,16 +114,16 @@ function versionScript(generation: number): string {
   return `globalThis.dispatchEvent(new CustomEvent(${JSON.stringify(PUBLISHED_VERSION_EVENT)}, { detail: ${generation} }));\n`
 }
 
-/** Writes the read-only Web viewer and optionally keeps its static snapshot current. */
+/** Writes the normal viewer as one static snapshot or two commits with comparison views. */
 export async function exportWebViewer(
   repositoryRoot: string,
   outputDirectory: string,
-  options: { url?: string; watch?: boolean; workSource?: WorkSource; onError?: (error: unknown) => void } = {},
+  options: WebExportOptions = {},
 ): Promise<WebExportHandle> {
+  const revisions = await exportRevisions(repositoryRoot, options)
   const url = options.url === undefined ? undefined : new URL(options.url)
   if (url !== undefined && !url.pathname.endsWith('/')) url.pathname += '/'
   const output = path.resolve(outputDirectory)
-  const workSource = options.workSource ?? backlogPlugin.create(repositoryRoot)
   const renderer = await bundleRenderer()
   await mkdir(output, { recursive: true })
   await replaceFile(path.join(output, 'render.js'), renderer)
@@ -124,12 +131,10 @@ export async function exportWebViewer(
   let generation = Date.now()
   let closed = false
   let closePromise: () => void = () => {}
-  const finished = new Promise<void>(resolve => {
-    closePromise = resolve
-  })
+  const finished = new Promise<void>(resolve => { closePromise = resolve })
 
   async function publish(): Promise<void> {
-    const snapshot = await publishedSnapshot(repositoryRoot, workSource, ++generation)
+    const snapshot = await publishedSnapshot(repositoryRoot, revisions, ++generation)
     if (closed) return
     const covers = await generateCovers(snapshot)
     for (const theme of coverThemes) await replaceFile(path.join(output, coverFile(theme)), covers[theme])
@@ -141,24 +146,16 @@ export async function exportWebViewer(
   await publish()
   let chain = Promise.resolve()
   function schedule(): void {
-    chain = chain.then(publish).catch(error => {
-      options.onError?.(error)
-    })
+    chain = chain.then(publish).catch(error => { options.onError?.(error) })
   }
-
-  const architectureWatch = options.watch ? await watchArchitecture(repositoryRoot, { onChange: schedule }) : undefined
-  const workWatch = options.watch ? workSource.watch(schedule) : undefined
-
+  const watch = options.watch && revisions.length === 0
+    ? await watchArchitecture(repositoryRoot, { onChange: schedule }) : undefined
   return {
     closed: finished,
     async close() {
       if (closed) return
       closed = true
-      await Promise.all([
-        workWatch?.close(),
-        architectureWatch?.close(),
-        chain,
-      ])
+      await Promise.all([watch?.close(), chain])
       closePromise()
     },
   }

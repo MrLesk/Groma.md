@@ -65,12 +65,11 @@ This page is the browser surface. The shared viewer rules live in
 
 `groma export <directory>` reads stored architecture and writes the Web view as static HTML,
 JavaScript, snapshot, and generation files. The read-only page includes the
-project profile, architecture and flows, mapped Backlog tasks with their
-details and diffs, and source inspection for files owned by architecture
-components. It does not include revision history or the project editor, and
-it does not contact a Groma server or read the repository.
+project profile, architecture, flows, and source inspection. Every export
+excludes tasks, task pins, task search results, and editing controls. It does
+not contact Git, Backlog, or a Groma server.
 
-The export is a public disclosure boundary: every project description, task,
+The export is a public disclosure boundary: every project description,
 diff, and source file copied into the output can be read by anyone who can
 access the static host. Groma supplies no public server, authentication, or
 access control. Publish the directory only through a static host whose access
@@ -79,10 +78,38 @@ rules match the project.
 Export does not run a scanner. Run `groma scan` first when source changes need
 to be reflected in the stored architecture.
 
-Export writes one snapshot and exits. Run the command again to publish updated
-architecture, tasks, diffs, and owned source files. Serve or upload the output
-separately. Backlog tasks are read through the shared CLI work source; Groma
-does not inspect Backlog storage.
+Export writes the requested snapshots and exits. Serve or upload the output
+separately. The default captures the working tree, including uncommitted source
+changes. Its time machine identifies the working tree and explains that no
+other revisions are available. Run export again to update it.
+
+Use an explicit commit to capture its architecture, source, and commit metadata
+regardless of the current checkout:
+
+```sh
+groma export ./site --revision HEAD
+```
+
+Use two explicit commits for a comparison. For example, a CI job with the PR's
+base and head commits available locally can run:
+
+```sh
+groma export ./site --from "$BASE_SHA" --revision "$HEAD_SHA"
+```
+
+The site opens in the same A-to-B comparison as live Groma. The header's × opens
+B; the ordinary revision picker offers only A and B. Either can become the
+destination of another comparison. A one-commit export exposes its message,
+body, and ID, with the same no-other-revisions notice. Comparison export requires
+two commits; working-tree comparisons remain available in live Groma.
+
+`web/export.ts` packages the shared history comparison, map layout, source
+contents, and outlines while the snapshot roots are available. It prepares both
+individual views and both comparison directions. `web/data.ts` selects those
+bundled views, including shared URLs, through the same read boundary used by the
+live viewer. The export adds no comparison algorithm or separate presentation.
+The caller chooses the commits and static host; Groma does not resolve a PR,
+infer its merge base, or install a CI workflow.
 
 ### Social previews
 

@@ -107,7 +107,6 @@ const style = `
   }
   body.hierarchy-collapsed { --hierarchy-inset: 44px; }
   body.details-hidden { --details-inset: 0px; }
-  body[data-delivery="published"] #revision,
   body[data-delivery="published"] .project-edit { display: none; }
   body.hud-hidden { min-width: 0; display: block; padding: 0; }
   body.hud-hidden #header,
