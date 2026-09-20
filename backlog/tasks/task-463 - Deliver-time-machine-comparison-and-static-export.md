@@ -1,11 +1,11 @@
 ---
 id: TASK-463
 title: 'Deliver time machine, comparison, and static export'
-status: In Progress
+status: Done
 assignee:
   - '@codex'
 created_date: '2026-09-20 15:04'
-updated_date: '2026-09-20 22:14'
+updated_date: '2026-09-20 23:05'
 labels: []
 dependencies: []
 references:
@@ -102,15 +102,40 @@ This delivery includes no GitHub API integration, revision-source plugin framewo
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 A developer can browse revisions, start and end a comparison, inspect component and source changes, and export the same supported views through the four completed child tasks.
-- [ ] #2 The map, component details, file inspection, and static viewer consistently use this parent's shared revision, identity, change, color, task, and flow rules.
-- [ ] #3 The receipt-delivery example works across the full journey: choose A and B, inspect Added/Modified/Removed components and a source diff, end comparison, and open the equivalent static comparison and individual snapshots.
+- [x] #1 A developer can browse revisions, start and end a comparison, inspect component and source changes, and export the same supported views through the four completed child tasks.
+- [x] #2 The map, component details, file inspection, and static viewer consistently use this parent's shared revision, identity, change, color, task, and flow rules.
+- [x] #3 The receipt-delivery example works across the full journey: choose A and B, inspect Added/Modified/Removed components and a source diff, end comparison, and open the equivalent static comparison and individual snapshots.
 <!-- AC:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 Acceptance criteria have objective verification evidence.
-- [ ] #2 Relevant checks pass and changes remain task-scoped.
-- [ ] #3 Public contracts or documentation are updated when behavior changes.
-- [ ] #4 Implementation Plan reflects the final approach; correction history and verification are recorded in Implementation Notes.
+- [x] #1 Acceptance criteria have objective verification evidence.
+- [x] #2 Relevant checks pass and changes remain task-scoped.
+- [x] #3 Public contracts or documentation are updated when behavior changes.
+- [x] #4 Implementation Plan reflects the final approach; correction history and verification are recorded in Implementation Notes.
 <!-- DOD:END -->
+
+## Implementation Plan
+
+<!-- SECTION:PLAN:BEGIN -->
+Deliver four connected responsibilities on shared main:
+1. Metadata-only Git history and one searchable header selection owner.
+2. Pure ID-based comparison and a B-first combined map, including live working-tree updates.
+3. Existing details tabs and a shared source-diff renderer with task review; global panel stacking.
+4. Static packaging of one snapshot or two commits through the same history, map, source and presentation owners, with no task data.
+Validate the receipt-delivery example through live and static navigation, component states and source diffs. Keep OKF/C4 records unchanged in meaning; curate code ownership through Groma. Run focused/repository checks, required simplicity and full-context reviews per child, then the user's Grok 4.6 xhigh review. Commit and push task-scoped files only.
+<!-- SECTION:PLAN:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+TASK-463.1, .2 and .3 are implemented, reviewed, committed and pushed. TASK-463.4 is implemented and reviewed; final Grok feedback is pending. The end-to-end receipt-delivery fixture works in live and standalone static delivery. Full check passes 632 tests (36 platform skips). The earlier task-only diff renderer was replaced by shared source rendering; export no longer bundles tasks.
+
+All four child tasks are now Done and committed on main: 7638f239 (revision browsing), 685fa60d (map comparison), c1ac8c97 (details/source diffs), d7bca379 (static export). The receipt-delivery example passed live and standalone-static navigation, added/modified/removed component inspection, file diff/Back, end comparison and individual revision selection. Final full check: 632 pass, 36 skip, 0 fail. Shared-source scanner resolution was corrected after the cold review and verified with this repository's actual commit export. Requested Grok CLI review completed with --model grok-4.6 --reasoning-effort xhigh (resolved model grok-4.6-build). Verdict: no AC/DoD or reproducible blockers in the supported journey. It endorsed the shared change engine, precomputed static views, domain grouping, and deletion of the task-only renderer. Non-blocking observations: neutral Unchanged badges, revision sentinel naming, and shared-source folder layering. Identity-key concern was checked against src/core.ts: annotation always assigns representationId = element.id, so this is not a current divergent-ID failure. These observations do not require additional behavior or architecture changes for this delivery. Clean feedback saved at /tmp/groma-463-grok-feedback.md.
+<!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Delivered one searchable time machine for working-tree and commit views, ID-based component and independent relationship comparison, shared detail/source diffs, and static working-tree, commit and two-commit exports. Tasks remain in ordinary live working-tree views and are excluded from historical/comparison/static views. The normal viewer serves every mode; exports contain no separate comparison UI or runtime Git/Backlog dependency. All child acceptance criteria, the receipt-delivery journey, documentation, checks and requested reviews are complete.
+<!-- SECTION:FINAL_SUMMARY:END -->
