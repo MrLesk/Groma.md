@@ -81,13 +81,13 @@ Later scans keep what your agent wrote. [Agent guides](docs/agent-instructions/i
 
 ## What you get
 
-- **A browser map you can walk.** Zoom from systems to containers to components. Select anything to read what it does and open the source behind it. [Browser guide](docs/viewers/web/index.md)
-- **Live updates.** Saving code refreshes source evidence and detected relationships; new files become new components.
-- **Relationships and flows.** Describe how components interact, then chain relationships into named flows readers can step through. [Relationships and flows](docs/component-markdown.md)
-- **Drafts.** Sketch systems, containers, and components before they exist. They appear dashed beside the real ones until a scan matches their code and you accept them. [Draft lifecycle](docs/product-model.md#drafts)
-- **See work across the architecture.** Backlog.md tasks pin where people and agents are working; select one to highlight the components it touches and inspect its changes without leaving the map. [Task links](docs/agent-instructions/backlog.md)
-- **Explore past architecture with its code.** Open an earlier revision and inspect the source from that same commit, down to functions and methods.
-- **Publish a static site.** `groma export ./site` writes a standalone map from stored architecture with flows, tasks, diffs, and source, then exits. Run it again to publish an updated snapshot. Scanning and hosting run separately. [Static publication](docs/viewers/web/index.md#static-publication)
+- <img src=".github/assets/features/browser-map.svg" width="20" height="20" alt=""> **A browser map you can walk.** Zoom from systems to containers to components. Select anything to read what it does and open the source behind it. [Browser guide](docs/viewers/web/index.md)
+- <img src=".github/assets/features/live-updates.svg" width="20" height="20" alt=""> **Live updates.** Saving code refreshes source evidence and detected relationships; new files become new components.
+- <img src=".github/assets/features/relationships.svg" width="20" height="20" alt=""> **Relationships and flows.** Describe how components interact, then chain relationships into named flows readers can step through. [Relationships and flows](docs/component-markdown.md)
+- <img src=".github/assets/features/drafts.svg" width="20" height="20" alt=""> **Drafts.** Sketch systems, containers, and components before they exist. They appear dashed beside the real ones until a scan matches their code and you accept them. [Draft lifecycle](docs/product-model.md#drafts)
+- <img src=".github/assets/features/work.svg" width="20" height="20" alt=""> **See work across the architecture.** Backlog.md tasks pin where people and agents are working; select one to highlight the components it touches and inspect its changes without leaving the map. [Task links](docs/agent-instructions/backlog.md)
+- <img src=".github/assets/features/history.svg" width="20" height="20" alt=""> **Explore past architecture with its code.** Open an earlier revision and inspect the source from that same commit, down to functions and methods.
+- <img src=".github/assets/features/publish.svg" width="20" height="20" alt=""> **Publish a static site.** `groma export ./site` writes a standalone map from stored architecture with flows, tasks, diffs, and source, then exits. Run it again to publish an updated snapshot. Scanning and hosting run separately. [Static publication](docs/viewers/web/index.md#static-publication)
 
 ## Plain Markdown, C4, OKF
 
