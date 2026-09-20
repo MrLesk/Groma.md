@@ -1,11 +1,11 @@
 ---
 id: TASK-465
 title: Reduce CI time with cached Swift builds and isolated test workers
-status: In Progress
+status: Done
 assignee:
   - '@codex'
 created_date: '2026-09-20 16:49'
-updated_date: '2026-09-20 17:22'
+updated_date: '2026-09-20 17:43'
 labels: []
 dependencies: []
 modified_files:
@@ -26,17 +26,17 @@ Alex requested reducing ordinary CI from about 18 minutes toward 2–3 minutes. 
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 CI reuses a Swift test package only when the operating system, CPU, toolchain and package inputs match; changed inputs rebuild it.
-- [ ] #2 Linux, macOS and Windows retain the complete repository check and standalone binary build, with the existing test assertions, isolation and timeouts.
-- [ ] #3 An actual CI run proves the cache-miss build and a subsequent run proves cache-hit reuse; report measured durations and any remaining gap to the 2–3 minute target.
+- [x] #1 CI reuses a Swift test package only when the operating system, CPU, toolchain and package inputs match; changed inputs rebuild it.
+- [x] #2 Linux, macOS and Windows retain the complete repository check and standalone binary build, with the existing test assertions, isolation and timeouts.
+- [x] #3 An actual CI run proves the cache-miss build and a subsequent run proves cache-hit reuse; report measured durations and any remaining gap to the 2–3 minute target.
 <!-- AC:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 Acceptance criteria have objective verification evidence.
-- [ ] #2 Relevant checks pass and changes remain task-scoped.
-- [ ] #3 Public contracts or documentation are updated when behavior changes.
-- [ ] #4 Implementation Plan reflects the final approach; correction history and verification are recorded in Implementation Notes.
+- [x] #1 Acceptance criteria have objective verification evidence.
+- [x] #2 Relevant checks pass and changes remain task-scoped.
+- [x] #3 Public contracts or documentation are updated when behavior changes.
+- [x] #4 Implementation Plan reflects the final approach; correction history and verification are recorded in Implementation Notes.
 <!-- DOD:END -->
 
 ## Implementation Plan
@@ -71,4 +71,24 @@ Profiling isolated the timeout cost to large-world sheet routing during shared f
 The complete suite with two file workers and one active case per worker passed: 621 pass, 36 expected skips, zero failures and 2128 assertions in 47.44s, versus the original serial-file 79.68s. Adopt --parallel=2 --max-concurrency 1 while retaining the 20000ms timeout. This keeps at most two active test cases overall and changes no test source, fixture or assertion. Native Windows must confirm the reduced contention.
 
 Balanced final command passed bun run check: 16 Node tests, 621 Bun tests, 36 existing optional skips, zero failures and 2128 assertions; Bun suite 46.97s. Implementer specification/quality re-review is limited to the native timeout correction: two isolated file workers with one active case each retain the prior maximum of two active cases across the suite. All test sources, assertions, fixtures and 20-second limits remain unchanged; production routing matches HEAD exactly. Documentation states the final concurrency limit. Native verification remains pending, and a targeted full-context re-review is requested for this correction.
+
+Correction commit 4807c353 is pushed to shared main. Targeted full-context re-review confirmed the two-case overall limit is the simplest sound response to the observed contention; no blocking findings. Native CI run 35525683776 is validating the correction. Linux/macOS should reuse their existing exact caches; Windows still needs its first successfully cached build.
+
+Native correction run 35525683776: cached Linux passed in 1m09s (621 Bun pass, 36 skips, zero failures, 54.07s suite); cached macOS passed in 1m43s. Both restored their exact Swift package caches, skipped Swift setup/build, and passed all four Swift tests plus the standalone build. On Linux the formerly slow large-world reachability case fell from 21.8s with four active cases to 9.15s with two. Windows is still building its uncached Swift package.
+
+Windows cold validation passed on 4807c353: job 14m46s, Swift setup 105s, package build 595s, repository check 152s, standalone build 2s. All 616 applicable Windows Bun tests passed with 41 existing platform skips, 2082 assertions and no failures; all four Swift tests ran. Large-world reachability passed in 16.37s and viewport painting in 20ms. The exact Windows package cache was saved (29.8 MB). Attempt 2 of run 35525683776 is now measuring the same commit with cache hits; all three OSes skipped Swift setup and build.
+
+Final native verification: https://github.com/MrLesk/Groma.md/actions/runs/35525683776, attempt 2 at exact commit 4807c353, passed all three jobs with exact Swift cache hits. Windows: 3m00s; macOS: 2m23s; Linux: 2m01s. Swift setup and package compilation were skipped on every host, while every repository check, all four Swift package tests and the standalone binary build passed. Linux/macOS retained 621 pass, 36 expected skips and 2128 assertions; Windows retained 616 pass, 41 platform skips and 2082 assertions. Zero failures everywhere.
+AC1 evidence: native cache misses built packages and saved exact OS/CPU/Bun/input keys; subsequent restores used those exact keys with no restore prefixes. Input coverage was checked against the existing builder and official cache behavior. AC2 evidence: final native step outcomes and test logs preserve the full three-host checks, assertions, fixtures, isolation and 20-second limits. AC3 evidence: successful Windows cold run was 14m46s; the same commit with all caches warm completed its slowest job in 3m00s, versus the earlier 18m16s baseline. Linux/macOS warmed earlier at 1m09s/1m43s and at 2m01s/2m23s in the final attempt, showing normal runner variation.
+The measured cached run reaches the approximately 2–3 minute target. Cold Windows compilation still takes several minutes after relevant Swift/package inputs change or cache eviction; this change does not promise a three-minute cold build or a fixed runner duration. Both requested reviews and the targeted timeout-correction review are complete with no blocking findings. All 11 protected pending files still match their original hashes, and the production-routing experiment is fully reverted. No release, tag, version bump or package publication was made.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Reduced ordinary CI by caching the complete Swift test package with exact input keys and running the unchanged Bun suite in two isolated file workers, one case per worker. Updated contributor and Swift CI documentation.
+
+Verified bun run check locally and native cold/cache-hit behavior in run 35525683776. Final cached jobs: Windows 3:00, macOS 2:23, Linux 2:01; all checks, standalone builds and four Swift tests passed on every OS. The previous slowest job was 18:16. Fresh Windows Swift builds remain slow when the cache must be rebuilt. No test assertions or timeouts were weakened, and no production code changed.
+
+Committed only task-owned changes in shared main. Preserved the existing documentation and other agents' edits. Nothing released.
+<!-- SECTION:FINAL_SUMMARY:END -->
