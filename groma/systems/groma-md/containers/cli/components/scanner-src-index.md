@@ -15,6 +15,7 @@ groma:
     - scanner: typescript
       file: packages/scanner/src/values.ts
   group: Scanner support
+description: Defines the data contract every scanner plugin must satisfy
 ---
 
 Defines source, operation, and discovery data for scanner plugins. Checks these data at the plugin boundary.

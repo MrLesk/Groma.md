@@ -13,6 +13,7 @@ groma:
     - scanner: typescript
       file: src/viewers/web/task-diff/updates.ts
   group: Project work
+description: Shows a selected task and the source lines it changed
 ---
 
 Shows the selected task details and file differences. Opens the affected source lines for review.

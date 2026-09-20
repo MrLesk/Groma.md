@@ -44,6 +44,7 @@ groma:
       file: src/viewers/tui/molecules/work-marker.ts
       symbol: drawWorkCorner
   group: Terminal map
+description: Draws the terminal map with characters, styles and markers
 ---
 
 Draws the map buildings, routes, and markers with terminal characters. Applies the shared terminal styles.

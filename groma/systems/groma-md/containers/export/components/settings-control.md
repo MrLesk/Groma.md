@@ -18,6 +18,7 @@ groma:
     - scanner: typescript
       file: src/viewers/web/chrome/motion.ts
   group: Browser controls
+description: Theme, settings menu and plugin attention in the browser
 ---
 
 Shows the Settings menu and theme choices. Opens plugin settings and points to scanners that need attention. Supplies animations for shared controls.

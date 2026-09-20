@@ -14,6 +14,7 @@ groma:
     - scanner: typescript
       file: src/viewers/source/highlight.ts
   group: Shared viewer data
+description: Reads the source files and outlines owned by a selected component
 ---
 
 Reads the source files and declaration outlines owned by a component. Supplies code tokens for the viewers.

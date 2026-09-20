@@ -16,6 +16,7 @@ groma:
       file: src/scan-source-units.ts
       symbol: sourceUnitGroups
   group: Source scanning
+description: Folds successful scanner results into stored ownership and records
 ---
 
 Updates architecture records from successful scanner results. Preserves authored meaning and the assigned owner of each source file.

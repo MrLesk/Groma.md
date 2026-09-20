@@ -16,6 +16,7 @@ groma:
     - scanner: typescript
       file: plugins/scanners/angular/src/components.ts
   group: Language analysis
+description: Analyses Angular components, templates and HTTP bindings
 ---
 
 Checks Angular source and templates with the Angular compiler. Returns declarations, template callback evidence and supported HTTP requests and endpoints.

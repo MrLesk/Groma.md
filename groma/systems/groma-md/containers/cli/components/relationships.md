@@ -26,6 +26,7 @@ groma:
     - scanner: typescript
       file: src/sheet/route-spacing.ts
   group: Map layout
+description: Routes the connections between placed map elements
 ---
 
 Selects the relationships that the map must display. Allocates connection space and routes the lines around buildings.

@@ -13,6 +13,7 @@ groma:
     - scanner: typescript
       file: src/scanner/modules/setup.ts
   group: Scanner management
+description: Applies install, update and remove actions to project scanners
 ---
 
 Builds the shared scanner settings state. Applies install, update, and remove actions after user selection.

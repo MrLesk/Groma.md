@@ -11,6 +11,7 @@ groma:
     - scanner: typescript
       file: src/viewers/source/diff-lines.ts
   group: Shared viewer data
+description: Reads the file differences attached to a selected task
 ---
 
 Reads the file changes associated with a task. Prepares the source line differences for the viewers.

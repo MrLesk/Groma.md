@@ -16,6 +16,7 @@ groma:
     - scanner: typescript
       file: src/viewers/web/search/view.ts
   group: Architecture panels
+description: Searches elements and tasks from the browser map
 ---
 
 Searches architecture elements and tasks. Opens the selected result and restores the previous view when search closes.

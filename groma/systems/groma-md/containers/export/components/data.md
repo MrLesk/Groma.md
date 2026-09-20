@@ -11,6 +11,7 @@ groma:
     - scanner: typescript
       file: src/viewers/web/authoring.ts
   group: Browser session
+description: Loads live or exported architecture data into the browser
 ---
 
 Reads live updates from the local server or saved data from a static export. Sends permitted write and scanner actions to the server.

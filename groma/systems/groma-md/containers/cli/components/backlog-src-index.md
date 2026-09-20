@@ -9,6 +9,7 @@ groma:
     - scanner: typescript
       file: plugins/work-sources/backlog/src/index.ts
   group: Project work
+description: Reads and watches Backlog.md tasks through its CLI
 ---
 
 Reads tasks through the Backlog CLI. Watches the CLI output and reports task changes without reading Backlog storage files.

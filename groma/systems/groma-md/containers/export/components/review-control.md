@@ -16,6 +16,7 @@ groma:
     - scanner: typescript
       file: src/viewers/web/duplicates/view.ts
   group: Architecture panels
+description: Shows possible duplicate operations and their source comparison
 ---
 
 Shows possible copies of source operations. Lets the user compare their code before deciding whether a change is needed.

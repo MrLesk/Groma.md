@@ -12,6 +12,7 @@ groma:
     - scanner: typescript
       file: src/viewers/web/revision/view.ts
   group: Architecture panels
+description: Lists Git architecture revisions and opens a snapshot
 ---
 
 Lists available Git revisions and opens the selected architecture snapshot.

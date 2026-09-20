@@ -29,6 +29,7 @@ groma:
     - scanner: typescript
       file: src/sheet/types.ts
   group: Map layout
+description: Places systems, containers, groups and components on the shared map sheet
 ---
 
 Measures and places systems, containers, groups, and components. Reserves space for the connections before it places the map.

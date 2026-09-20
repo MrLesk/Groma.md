@@ -22,6 +22,7 @@ groma:
       file: src/viewers/web/organisms/sidebar-section.ts
       symbol: sectionHeading
   group: Architecture panels
+description: Shows the selected element, its source and its relationships
 ---
 
 Shows the selected element, its source files, and its relationships. Lets the user read or edit the element meaning.

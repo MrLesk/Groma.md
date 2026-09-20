@@ -17,6 +17,7 @@ groma:
     - scanner: typescript
       file: src/project-markdown.ts
   group: Project commands
+description: Creates project records and guides first-time scanner selection
 ---
 
 Creates the project records. Checks the project tools and guides the user through scanner selection.

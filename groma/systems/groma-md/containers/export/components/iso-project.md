@@ -13,6 +13,7 @@ groma:
     - scanner: typescript
       file: src/viewers/web/layers/separation.ts
   group: Map drawing
+description: Projects the layout into isometric, 2D and layer views
 ---
 
 Converts the flat layout into isometric, 2D, and layer views. Separates the architecture layers without changing the stored model.

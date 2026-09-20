@@ -24,6 +24,7 @@ groma:
       file: plugins/scanners/javascript/src/http-requests.ts
       symbol: httpRequest
   group: Language analysis
+description: Analyses JavaScript source with the TypeScript compiler
 ---
 
 Reads JavaScript source declarations and operation bodies with the TypeScript compiler. Returns source outlines, supported calls and HTTP request and endpoint evidence.

@@ -9,6 +9,7 @@ groma:
     - scanner: typescript
       file: src/search.ts
   group: Shared viewer data
+description: Indexes architecture elements for viewer search
 ---
 
 Builds a shared search index for architecture elements. Returns matching elements with their parent paths.

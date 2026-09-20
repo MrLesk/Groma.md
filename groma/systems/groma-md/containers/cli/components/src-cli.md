@@ -15,6 +15,7 @@ groma:
       file: src/write-commands.ts
       symbol: registerWriteCommands
   group: Project commands
+description: Reads CLI commands and starts the requested Groma action
 ---
 
 Reads commands and options. Starts the selected project action and reports its result.

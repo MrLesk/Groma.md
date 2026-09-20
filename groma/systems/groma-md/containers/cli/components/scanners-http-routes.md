@@ -29,6 +29,7 @@ groma:
     - scanner: typescript
       file: plugins/scanners/http-values.ts
   group: Scanner support
+description: Resolves HTTP clients, routers and endpoints for TypeScript-based scanners
 ---
 
 Resolves HTTP client values, router registrations and endpoint paths for TypeScript-based scanners. Returns source evidence for Groma to match requests with their providers.

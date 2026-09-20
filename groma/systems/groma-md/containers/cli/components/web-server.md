@@ -18,6 +18,7 @@ groma:
     - scanner: typescript
       file: src/viewers/web/startup/scanners.ts
   group: Browser delivery
+description: Serves the local browser map and live architecture operations
 ---
 
 Starts the local HTTP server. Serves project setup and connects the browser to architecture, scanner, task, and source operations.

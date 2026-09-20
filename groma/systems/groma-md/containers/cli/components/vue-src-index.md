@@ -28,6 +28,7 @@ groma:
     - scanner: typescript
       file: plugins/scanners/vue/src/sfc.ts
   group: Language analysis
+description: Analyses Vue source, templates and HTTP bindings
 ---
 
 Reads Vue source and templates. Returns declarations, event callback evidence, operation bodies, source outlines and supported HTTP requests and endpoints.

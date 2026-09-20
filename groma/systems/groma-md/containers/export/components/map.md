@@ -26,6 +26,7 @@ groma:
     - scanner: typescript
       file: src/viewers/web/layers/paint.ts
   group: Map drawing
+description: Paints the browser map as SVG buildings, routes and labels
 ---
 
 Draws the map surfaces, buildings, labels, and connections as SVG. Applies selection and task emphasis.

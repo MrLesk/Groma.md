@@ -11,6 +11,7 @@ groma:
     - scanner: typescript
       file: src/work/status-filter.ts
   group: Project work
+description: Pins tasks onto the components that own their source files
 ---
 
 Links tasks to architecture elements through file ownership and element references. Keeps the selected task status filters.

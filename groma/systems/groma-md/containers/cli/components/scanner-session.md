@@ -9,6 +9,7 @@ groma:
     - scanner: typescript
       file: src/scanner/session.ts
   group: Source scanning
+description: Owns live scanner state for an open terminal or browser viewer
 ---
 
 Owns the scanner state for an open viewer. Applies settings changes and connects source updates to architecture updates.

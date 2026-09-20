@@ -12,6 +12,7 @@ groma:
     - scanner: typescript
       file: src/viewers/web/organisms/sidebar-row.ts
   group: Architecture panels
+description: Shows the architecture tree and follows the current selection
 ---
 
 Shows systems, containers, groups, and components in a tree. Updates the open branches when the selection changes.

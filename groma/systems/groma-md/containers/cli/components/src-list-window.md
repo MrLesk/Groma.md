@@ -9,6 +9,7 @@ groma:
     - scanner: typescript
       file: src/list-window.ts
   group: Project commands
+description: Pages long command output and prints how to continue
 ---
 
 Selects a page from command results and provides the continuation position for the next request.

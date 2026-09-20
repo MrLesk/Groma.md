@@ -28,6 +28,7 @@ groma:
       file: plugins/scanners/typescript/src/source-usage.ts
       symbol: usedImportSpecifiers
   group: Language analysis
+description: Analyses TypeScript projects with the compiler
 ---
 
 Selects TypeScript projects and source files. Uses the compiler to collect declarations and imports, then returns source evidence.

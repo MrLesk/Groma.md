@@ -20,6 +20,7 @@ groma:
     - scanner: typescript
       file: src/naming.ts
   group: Architecture records
+description: Builds the in-memory C4 model from stored Markdown records
 ---
 
 Checks element identity, status, and C4 parent rules. Builds the shared architecture model from the stored records.

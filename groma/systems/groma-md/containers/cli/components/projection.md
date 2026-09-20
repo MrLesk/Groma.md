@@ -20,6 +20,7 @@ groma:
     - scanner: typescript
       file: src/viewers/tui/layout.ts
   group: Terminal map
+description: Projects the shared layout into terminal rows and cells
 ---
 
 Converts the shared architecture layout into terminal rows and cells. Selects the visible buildings and routes for the current view.

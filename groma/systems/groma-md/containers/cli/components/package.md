@@ -15,6 +15,7 @@ groma:
     - scanner: typescript
       file: src/scanner/modules/published.ts
   group: Scanner management
+description: Installs scanner packages from npm, Git or a local folder
 ---
 
 Resolves and installs scanner packages from npm, Git, or a local folder. Saves the selected sources and restores missing packages.

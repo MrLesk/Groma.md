@@ -10,6 +10,7 @@ groma:
       file: plugins/scanners/typescript/src/structure.ts
       symbol: readCodeStructure
   group: Language analysis
+description: Reads the declaration outline of a TypeScript file
 ---
 
 Reads the declarations in a TypeScript file. Supplies the source outline used in component details.

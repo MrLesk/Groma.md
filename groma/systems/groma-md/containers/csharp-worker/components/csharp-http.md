@@ -3,8 +3,8 @@ type: C4 Component
 title: C# HTTP analysis
 status: stable
 groma:
-  id: httpevidence
-  parent: groma-csharpscanner-groma-csharpscanner
+  id: csharp-http
+  parent: csharp-worker
   code:
     - scanner: csharp
       file: plugins/scanners/csharp/dotnet/HttpEvidence.cs
@@ -20,6 +20,7 @@ groma:
     - scanner: csharp
       file: plugins/scanners/csharp/dotnet/HttpSyntax.cs
       symbol: HttpSyntax
+description: Finds C# HTTP clients, routes and endpoints in the compilation
 ---
 
 Recognizes supported C# HTTP clients, route registrations and endpoints. Resolves their source values and returns request and provider evidence with the compiler scan.

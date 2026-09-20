@@ -22,6 +22,7 @@ groma:
     - scanner: typescript
       file: src/viewers/tui/panes/text.ts
   group: Terminal map
+description: Shows the terminal tree, details and source beside the map
 ---
 
 Shows the architecture tree, component details, and source text beside the map. Fits the panels to the terminal size.

@@ -13,6 +13,7 @@ groma:
     - scanner: typescript
       file: src/viewers/web/iso/pointer.ts
   group: Map drawing
+description: Fits, pans and zooms the browser map camera
 ---
 
 Fits, pans, and zooms the map. Handles pointer input and moves the camera with the view transition.

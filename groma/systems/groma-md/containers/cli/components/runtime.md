@@ -12,6 +12,7 @@ groma:
       file: plugins/scanners/python/worker/modules.ts
       symbol: workerModules
   group: Language analysis
+description: Runs Python analysis in a worker thread with the bundled interpreter
 ---
 
 Runs Python analysis in a worker thread using the bundled Pyodide interpreter. Loads the selected source files and analysis modules, then returns a scan result or source outline.

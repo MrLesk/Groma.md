@@ -14,6 +14,7 @@ groma:
       file: src/viewers/tui/work/rows.ts
       symbol: taskRows
   group: Terminal map
+description: Lists tasks by status and component in the terminal
 ---
 
 Shows tasks by status and component. Handles task selection and task list navigation.

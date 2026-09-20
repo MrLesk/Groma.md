@@ -3,6 +3,7 @@ type: Groma Project
 title: Groma.md
 groma:
   profile: architecture
+description: Stores software architecture as Markdown and shows it in terminal and browser maps
 ---
 
 Groma helps developers read and change software architecture. It stores architecture as Markdown and shows the same records in terminal and browser maps. Scanner plugins supply source evidence. The Backlog plugin supplies task data.

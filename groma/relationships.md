@@ -45,6 +45,10 @@ title: Architecture relationships
 | [src/viewers/web/map-session.ts](../src/viewers/web/map-session.ts) | [src/history/revisions.ts](../src/history/revisions.ts) | Lists architecture revisions and loads the requested Git snapshot | Function call |
 | [Coding agent](actors/coding-agent.md) | [Command interface](systems/groma-md/containers/cli/components/src-cli.md) | Reads architecture, runs scans, and submits explicit architecture changes | Groma CLI |
 | [src/cli.ts](../src/cli.ts) | [src/lint-command.ts](../src/lint-command.ts) | Registers the lint command on the shared CLI program | Function call |
+| [src/viewers/web/page.ts](../src/viewers/web/page.ts) | [src/viewers/web/sharing/metadata.ts](../src/viewers/web/sharing/metadata.ts) | Embeds Open Graph metadata so a shared page shows the architecture cover | Function call |
+| [src/viewers/web/export.ts](../src/viewers/web/export.ts) | [src/viewers/web/sharing/images.ts](../src/viewers/web/sharing/images.ts) | Writes theme-specific cover PNGs next to the static map | Function call |
+| [src/viewers/web/map-session.ts](../src/viewers/web/map-session.ts) | [src/viewers/web/sharing/images.ts](../src/viewers/web/sharing/images.ts) | Generates live cover images for the current architecture | Function call |
+| [src/viewers/web/server.ts](../src/viewers/web/server.ts) | [src/viewers/web/startup/progress.ts](../src/viewers/web/startup/progress.ts) | Reports named startup phases to the open browser page | Function call |
 
 ## Derived relationships
 

@@ -15,6 +15,7 @@ groma:
     - scanner: typescript
       file: src/empty-world.ts
   group: Project commands
+description: Shows project state and the commands that open a viewer or settings
 ---
 
 Shows the project state and the available commands. Opens the selected viewer or settings screen.

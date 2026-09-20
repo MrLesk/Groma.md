@@ -16,6 +16,7 @@ groma:
     - scanner: typescript
       file: plugins/scanners/typescript-project.ts
   group: Scanner support
+description: Finds language project roots and reports paths from the repository root
 ---
 
 Finds supported project inputs. Combines project results with paths that start at the repository root.

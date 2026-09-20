@@ -16,6 +16,7 @@ groma:
     - scanner: typescript
       file: src/viewers/web/flow/state.ts
   group: Architecture panels
+description: Lists authored flows and highlights the selected steps
 ---
 
 Lists the authored flows and their ordered steps. Highlights the selected flow and returns to the previous map selection.

@@ -3,8 +3,8 @@ type: C4 Component
 title: C# compiler analysis
 status: stable
 groma:
-  id: dotnet-scanner
-  parent: groma-csharpscanner-groma-csharpscanner
+  id: csharp-analysis
+  parent: csharp-worker
   code:
     - scanner: csharp
       file: plugins/scanners/csharp/dotnet/Scanner.cs
@@ -26,6 +26,7 @@ groma:
     - scanner: csharp
       file: plugins/scanners/csharp/dotnet/SourceProject.cs
       symbol: SourceProject
+description: Loads C# projects into Roslyn and collects declarations and operations
 ---
 
 Loads declared C# source projects into Roslyn. Collects source declarations, partial-type source units and operation evidence from the compilation.

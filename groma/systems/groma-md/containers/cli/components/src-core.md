@@ -17,6 +17,7 @@ groma:
       file: src/source-coverage.ts
       symbol: missingOwnerReason
   group: Architecture records
+description: Prepares element details and display order for the viewers
 ---
 
 Prepares element details, file sizes, and relationships for the viewers. Supplies the plain text view and shared display order.

@@ -15,6 +15,7 @@ groma:
     - scanner: typescript
       file: src/viewers/web/work/summary.ts
   group: Project work
+description: Shows task counts and work lists beside the browser map
 ---
 
 Shows task counts, lists, and component work. Updates the map when the selected task or status filters change.

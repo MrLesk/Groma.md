@@ -12,6 +12,7 @@ groma:
     - scanner: typescript
       file: src/flow-authoring.ts
   group: Architecture records
+description: Stores ordered flow steps over existing relationships
 ---
 
 Reads and writes ordered steps through existing relationships. Checks the endpoints and the direction of each step.

@@ -28,6 +28,7 @@ groma:
     - scanner: typescript
       file: src/viewers/web/atoms/text.ts
   group: Browser controls
+description: Shared buttons, dialogs, menus and text styles for browser panels
 ---
 
 Supplies the buttons, dialogs, menus, and text styles used by the browser panels.

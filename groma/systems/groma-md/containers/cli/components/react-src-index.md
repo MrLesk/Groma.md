@@ -18,6 +18,7 @@ groma:
     - scanner: typescript
       file: plugins/scanners/react/src/routes.ts
   group: Language analysis
+description: Analyses React source, JSX and HTTP bindings
 ---
 
 Reads React source and JSX with the TypeScript compiler. Returns declarations, callback evidence and supported HTTP requests and route providers.

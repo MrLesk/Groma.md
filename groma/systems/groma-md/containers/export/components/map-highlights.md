@@ -10,6 +10,7 @@ groma:
       file: src/viewers/web/map-highlights.ts
       symbol: createMapHighlights
   group: Map drawing
+description: Emphasises the current flow, task and neighbour components
 ---
 
 Combines the current flow, task and component-neighbor highlights. Updates map emphasis while keeping navigation and the selected details intact.

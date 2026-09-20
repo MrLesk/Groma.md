@@ -3,8 +3,8 @@ type: C4 Component
 title: Rust HTTP analysis
 status: stable
 groma:
-  id: endpoints
-  parent: groma-rust-scanner-groma-rust-scanner
+  id: rust-http
+  parent: rust-worker
   code:
     - scanner: rust
       file: plugins/scanners/rust/native/src/endpoints.rs
@@ -20,6 +20,7 @@ groma:
       file: plugins/scanners/rust/native/src/requests.rs
     - scanner: rust
       file: plugins/scanners/rust/native/src/url.rs
+description: Finds Rust HTTP clients and route handlers
 ---
 
 Recognizes supported Rust HTTP clients and route handlers. Resolves literal URLs and router placement into request and provider evidence.

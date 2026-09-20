@@ -10,6 +10,7 @@ groma:
       file: src/architecture-watch.ts
       symbol: watchArchitecture
   group: Architecture records
+description: Notifies open viewers when architecture files change
 ---
 
 Watches the architecture records. Tells open viewers when these records change.

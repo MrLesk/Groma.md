@@ -37,6 +37,7 @@ groma:
     - scanner: typescript
       file: plugins/scanners/php/src/http-routes.ts
   group: Language analysis
+description: Analyses PHP declarations, calls and HTTP evidence
 ---
 
 Parses PHP source declarations and operation bodies. Returns source outlines, supported calls and HTTP request and endpoint evidence.

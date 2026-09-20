@@ -22,6 +22,7 @@ groma:
       file: plugins/scanners/java/src/missing-types.ts
       symbol: summarizeMissingTypes
   group: Language analysis
+description: Starts the bundled Java worker and returns its scan results
 ---
 
 Reads supported Maven and Gradle source declarations and prepares the project input. Starts the bundled Java worker and returns its source analysis and outlines.

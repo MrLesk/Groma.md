@@ -19,6 +19,7 @@ groma:
     - scanner: typescript
       file: src/viewers/web/chrome/credits.ts
   group: Browser controls
+description: Browser toolbar, side panels and keyboard shortcuts
 ---
 
 Shows the map toolbar and side panels. Handles keyboard shortcuts, panel expansion, and empty map states.

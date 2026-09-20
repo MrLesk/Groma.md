@@ -15,6 +15,7 @@ groma:
     - scanner: typescript
       file: src/groma-filesystem.ts
   group: Architecture records
+description: Reads and writes architecture Markdown in the project Groma folder
 ---
 
 Reads and writes architecture records in the selected Groma folder. Keeps source links and authored sections in ordinary Markdown.
