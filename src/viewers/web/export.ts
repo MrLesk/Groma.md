@@ -56,13 +56,13 @@ async function publishedReads(
       })
     }
   }
-  const tasks = await Promise.all(payload.work.items.map(async item => ({
-    id: item.id,
-    details: await workSource.readItem(item.id),
-  })))
-  const taskDiffs = await Promise.all(payload.work.items.map(item => {
-    return publishedTaskDiff(repositoryRoot, item, payload.work)
-  }))
+  const tasks: PublishedReads['tasks'] = []
+  const taskDiffs: PublishedReads['taskDiffs'] = []
+  // These reads start CLI processes; finish one task before starting the next.
+  for (const item of payload.work.items) {
+    tasks.push({ id: item.id, details: await workSource.readItem(item.id) })
+    taskDiffs.push(await publishedTaskDiff(repositoryRoot, item, payload.work))
+  }
   return { code, sources, tasks, taskDiffs }
 }
 
