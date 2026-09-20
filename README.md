@@ -18,10 +18,6 @@
 </p>
 
 <p align="center">
-  <a href="https://mrlesk.github.io/Groma.md/architecture/blueprint/"><strong>See it in action</strong></a>
-</p>
-
-<p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" type="image/avif" srcset=".github/assets/web-dark.avif">
     <source media="(prefers-color-scheme: dark)" type="image/webp" srcset=".github/assets/web-dark.webp">
@@ -31,6 +27,10 @@
     <source media="(prefers-color-scheme: light)" type="image/gif" srcset=".github/assets/web-light.gif">
     <img src=".github/assets/web-light.gif" alt="Groma's browser map stepping through project setup, then opening the hierarchy and selecting Scan lifecycle" width="100%">
   </picture>
+</p>
+
+<p align="center">
+  <a href="https://mrlesk.github.io/Groma.md/architecture/blueprint/"><img src=".github/assets/explore-live-map.svg" alt="Explore the live map" width="232" height="48"></a>
 </p>
 
 Groma scans your code, draws it as a [C4](https://c4model.com) architecture map, and keeps that map open while you and your coding agents work. Save a file and the map updates. Work on a [Backlog.md](https://github.com/MrLesk/Backlog.md) task and it appears pinned to the components it touches. Everything is plain Markdown in your repository, so architecture changes are reviewed in the same pull request as the code.

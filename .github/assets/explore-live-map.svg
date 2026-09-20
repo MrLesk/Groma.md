@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="232" height="48" viewBox="0 0 232 48" role="img" aria-label="Explore the live map">
+  <rect x="1" y="1" width="230" height="46" rx="10" fill="#1D9E75"/>
+  <text x="24" y="29.5" fill="#0D1117" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="16" font-weight="600">Explore the live map</text>
+  <path d="M190 24h18m-6-6 6 6-6 6" fill="none" stroke="#0D1117" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
