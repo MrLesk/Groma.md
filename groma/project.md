@@ -1,6 +1,6 @@
 ---
 type: Groma Project
-title: Groma
+title: Groma.md
 groma:
   profile: architecture
 ---

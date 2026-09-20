@@ -54,7 +54,7 @@ title: Architecture relationships
 | [src/architecture-watch.ts](../src/architecture-watch.ts) | [src/viewers/tui/scanner-settings.ts](../src/viewers/tui/scanner-settings.ts) | Invokes supplied callback: onChange | typescript |
 | [src/architecture-watch.ts](../src/architecture-watch.ts) | [src/viewers/web/export.ts](../src/viewers/web/export.ts) | Invokes supplied callback: onChange | typescript |
 | [src/architecture-watch.ts](../src/architecture-watch.ts) | [src/viewers/web/map-session.ts](../src/viewers/web/map-session.ts) | Invokes supplied callback: onChange | typescript |
-| [src/init-command.ts](../src/init-command.ts) | [src/cli.ts](../src/cli.ts) | Invokes supplied callback: openViewer | typescript |
+| [src/init-command.ts](../src/init-command.ts) | [src/cli.ts](../src/cli.ts) | Invokes supplied callback: openWeb | typescript |
 | [src/scanner.ts](../src/scanner.ts) | [src/cli.ts](../src/cli.ts) | Invokes supplied callback: onFold | typescript |
 | [src/scanner/session.ts](../src/scanner/session.ts) | [src/view-host.ts](../src/view-host.ts) | Invokes supplied callbacks: onFold, onSettings | typescript |
 | [src/scanner/session.ts](../src/scanner/session.ts) | [src/viewers/web/map-session.ts](../src/viewers/web/map-session.ts) | Invokes supplied callbacks: onFold, onSettings | typescript |

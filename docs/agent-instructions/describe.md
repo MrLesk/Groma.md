@@ -2,6 +2,27 @@
 
 Read a record with `groma view <id>` before changing it.
 
+## Writing useful annotations
+
+Write for a developer who knows the language but is new to this project. Use
+the C4 meanings in `groma agent-instructions` to decide what the record should
+explain.
+
+- The title names the role or responsibility people should recognize on the
+  map. A source filename is useful only when it communicates that meaning.
+- The description answers what this element does for the project in one short
+  summary.
+- The overview adds the context needed to understand that responsibility:
+  where work enters, the important behavior, and which other parts it relies
+  on. Describe only what applies to this element; avoid a file or function
+  inventory.
+- Technology names the actual implementation or storage technology when it
+  helps a reader understand the element. Leave it unset when unknown.
+
+Use code, project documentation, and confirmed user context to support these
+claims. Keep useful existing annotations, and report missing knowledge instead
+of writing guesses. Optional fields need content only when they add meaning.
+
 ## Commands
 
 | Command | Target | Options |
@@ -31,4 +52,7 @@ groma edit entry --description 'Request coordinator' \
 
 ## Completion check
 
-Every visible element has a responsibility a new reader can understand.
+Every visible element has a responsibility a new reader can understand. Read
+the result with `groma view <id>` and check its name and explanation in the map.
+The short description and overview should complement each other, and the
+record should remain useful as ordinary Markdown outside Groma.
