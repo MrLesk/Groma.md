@@ -8,6 +8,30 @@ import type { Tip } from '../organisms/tip.ts'
 const FAN_PITCH = 46
 /** Screen pixels from the foot up to the label of a pin standing straight. */
 const STEM = 22
+const TRAVEL_MS = 850
+
+interface Pinned {
+  node: HTMLElement
+  elementId: string
+  anchor: Point
+  travel?: { offset: Point; started: number; lift: number }
+}
+
+/** Travel is relative to the destination, so scene reprojection still owns the anchor. */
+function positionOf(pin: Pinned, now: number, reducedMotion: boolean): Point {
+  const travel = pin.travel
+  if (travel === undefined) return pin.anchor
+  const progress = Math.min(1, (now - travel.started) / TRAVEL_MS)
+  if (progress === 1 || reducedMotion || pin.node.hidden) {
+    pin.travel = undefined
+    return pin.anchor
+  }
+  const eased = progress * progress * (3 - 2 * progress)
+  return {
+    x: pin.anchor.x + travel.offset.x * (1 - eased),
+    y: pin.anchor.y + travel.offset.y * (1 - eased) - Math.sin(Math.PI * eased) * travel.lift,
+  }
+}
 
 export const pinsCss = `
   #pins { position: absolute; inset: 0; transform-origin: 0 0; will-change: transform; pointer-events: none; }
@@ -37,6 +61,9 @@ export const pinsCss = `
     margin-top: 2px; padding: 1px 6px; border-radius: 3px; background: color-mix(in srgb, var(--pin) 85%, transparent); color: var(--on-colour);
     font-size: 9px; letter-spacing: 0.08em; white-space: nowrap;
   }
+  .pin.work-draft .badge .face.front { border-style: dashed; }
+  .pin.work-draft .task { border: 1px dashed color-mix(in srgb, var(--pin) 85%, transparent); background: transparent; color: var(--ink); }
+  .pin.work-draft .stem { background: repeating-linear-gradient(to bottom, color-mix(in srgb, var(--pin) 85%, transparent) 0 4px, transparent 4px 7px); }
   .pin.active .badge { border-radius: 50%; box-shadow: 0 0 0 3px var(--highlight); }
   /* a 10 by 6 px triangle whose tip ends 3 px above the 3 px ring */
   .pin.selected .head::before {
@@ -64,8 +91,10 @@ export function createPins(host: HTMLElement, anchorOf: (id: string) => Point | 
   const layer = document.createElement('div')
   layer.id = 'pins'
   host.append(layer)
-  /** Each pin's node and the surface point it stands on, in world pixels. */
-  const pinned = new Map<string, { node: HTMLElement; anchor: Point }>()
+  /** Anchors and travel offsets use world pixels; badges keep their screen size. */
+  const pinned = new Map<string, Pinned>()
+  const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)')
+  let travelFrame: number | undefined
   let pins: readonly WorkPin[] = []
   let enabledStatuses: readonly string[] = []
   const finishing = new Map<string, number>()
@@ -76,8 +105,16 @@ export function createPins(host: HTMLElement, anchorOf: (id: string) => Point | 
     if (camera === undefined) return
     layer.style.transform = `translate(${camera.x}px, ${camera.y}px)`
     if (!scaleChanged) return
-    for (const { node, anchor } of pinned.values()) {
-      node.style.translate = `${anchor.x * camera.k}px ${anchor.y * camera.k}px`
+    const now = performance.now()
+    for (const pin of pinned.values()) {
+      const point = positionOf(pin, now, reducedMotion.matches)
+      pin.node.style.translate = `${point.x * camera.k}px ${point.y * camera.k}px`
+    }
+    if (travelFrame === undefined && [...pinned.values()].some(pin => pin.travel !== undefined)) {
+      travelFrame = requestAnimationFrame(() => {
+        travelFrame = undefined
+        place()
+      })
     }
   }
   /** The pins the toggles allow fan out leftwards from their element's foot point, stems leaning back to it; the rest hide. */
@@ -98,7 +135,8 @@ export function createPins(host: HTMLElement, anchorOf: (id: string) => Point | 
     }
   }
   const updatePin = (pin: WorkPin, anchor: Point): void => {
-    let node = pinned.get(pin.key)?.node
+    const previous = pinned.get(pin.key)
+    let node = previous?.node
     if (node === undefined) {
       node = document.createElement('div')
       node.className = painted ? 'pin arriving' : 'pin'
@@ -107,7 +145,19 @@ export function createPins(host: HTMLElement, anchorOf: (id: string) => Point | 
       tip.attach(node.querySelector('.head')!)
       layer.append(node)
     }
-    pinned.set(pin.key, { node, anchor })
+    let travel = previous?.travel
+    if (previous !== undefined && previous.elementId !== pin.elementId) {
+      travel = undefined
+      if (camera !== undefined && !node.hidden && !reducedMotion.matches) {
+        const now = performance.now()
+        const from = positionOf(previous, now, false)
+        const offset = { x: from.x - anchor.x, y: from.y - anchor.y }
+        travel = { offset, started: now, lift: Math.min(40 / camera.k, Math.hypot(offset.x, offset.y) * 0.15) }
+        node.classList.remove('arriving')
+      }
+    }
+    pinned.set(pin.key, { node, anchor, elementId: pin.elementId, travel })
+    node.classList.toggle('work-draft', pin.draft)
     node.style.setProperty('--pin', pin.colour)
     node.querySelector<HTMLElement>('.head')!.dataset.tip = `${pin.assignee ?? 'Unassigned'} · ${pin.title}`
     if (finishing.has(pin.key)) node.classList.remove('arriving')
