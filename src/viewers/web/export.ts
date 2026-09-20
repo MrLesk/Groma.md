@@ -11,6 +11,8 @@ import { renderPage } from './page.ts'
 import { PUBLISHED_EVENT, PUBLISHED_VERSION_EVENT } from './payload.ts'
 import type { PublishedReads, WebBootPayload, WebPayload } from './payload.ts'
 import { bundleRenderer, loadMapRoot } from './runtime.ts'
+import { coverThemes, generateCovers } from './sharing/images.ts'
+import { coverFile } from './sharing/metadata.ts'
 import { readSource } from '../source/read.ts'
 import { readCodeStructure } from '../source/structure.ts'
 import { readTaskDiff } from '../source/diff.ts'
@@ -91,7 +93,7 @@ async function publishedSnapshot(
   }
 }
 
-async function replaceFile(filename: string, contents: string): Promise<void> {
+async function replaceFile(filename: string, contents: string | Uint8Array): Promise<void> {
   const temporary = `${filename}.${process.pid}.tmp`
   await writeFile(temporary, contents)
   await rename(temporary, filename)
@@ -109,8 +111,10 @@ function versionScript(generation: number): string {
 export async function exportWebViewer(
   repositoryRoot: string,
   outputDirectory: string,
-  options: { watch?: boolean; workSource?: WorkSource; onError?: (error: unknown) => void } = {},
+  options: { url?: string; watch?: boolean; workSource?: WorkSource; onError?: (error: unknown) => void } = {},
 ): Promise<WebExportHandle> {
+  const url = options.url === undefined ? undefined : new URL(options.url)
+  if (url !== undefined && !url.pathname.endsWith('/')) url.pathname += '/'
   const output = path.resolve(outputDirectory)
   const workSource = options.workSource ?? backlogPlugin.create(repositoryRoot)
   const renderer = await bundleRenderer()
@@ -127,8 +131,10 @@ export async function exportWebViewer(
   async function publish(): Promise<void> {
     const snapshot = await publishedSnapshot(repositoryRoot, workSource, ++generation)
     if (closed) return
+    const covers = await generateCovers(snapshot)
+    for (const theme of coverThemes) await replaceFile(path.join(output, coverFile(theme)), covers[theme])
     await replaceFile(path.join(output, 'snapshot.js'), snapshotScript(snapshot))
-    await replaceFile(path.join(output, 'index.html'), renderPage(snapshot))
+    await replaceFile(path.join(output, 'index.html'), renderPage(snapshot, url))
     await replaceFile(path.join(output, 'version.js'), versionScript(snapshot.generation))
   }
 

@@ -69,6 +69,45 @@ architecture, tasks, diffs, and owned source files. Serve or upload the output
 separately. Backlog tasks are read through the shared CLI work source; Groma
 does not inspect Backlog storage.
 
+### Social previews
+
+Export also writes `cover-light.png`, `cover-dark.png`, and `cover-blueprint.png`
+at 1200×630 pixels. Each cover uses the actual map, one continuous graph-paper
+grid, and a glass footer with the project title and Groma attribution.
+The map's geometry, drawing, themes, and font stack remain the source of truth.
+
+Set the public directory URL when publishing so the initial HTML contains
+absolute Open Graph page and image URLs:
+
+```sh
+groma export ./site/architecture/blueprint --url https://example.com/architecture/blueprint/
+```
+
+The publication URL selects the cover through the same theme rule as the Web
+view. Auto uses the light cover because a social crawler has no visitor theme
+preference. Static metadata is fixed at export time: changing `?theme=` in a
+published link does not rewrite its HTML. Without `--url`, the export remains
+portable with a relative light-cover link and no canonical Open Graph URL.
+The publishing workflow supplies the URL; Groma does not guess a public host.
+
+`groma web` emits metadata using the request URL and serves the same PNGs,
+generated on the first image request and refreshed after architecture changes.
+The project record's standard `title` and optional `description` supply the
+sharing text. An unauthored description stays absent; the overview is not
+converted into a second summary. Covers are derived presentation assets, not
+new OKF records or C4 elements.
+
+PNG generation requires installed Google Chrome. Set `GROMA_CHROME` to a
+Chrome or Chromium executable when it is not installed in Chrome's standard
+location. Groma launches a separate headless process, closes it after rendering,
+and does not download a browser. The published website only serves ordinary PNG
+files and needs no browser or Groma process on its host.
+
+The `web/sharing` domain owns this flow: `cover.ts` composes the page,
+`render.ts` paints it through the existing map, `images.ts` captures the PNGs,
+and `metadata.ts` builds the initial sharing fields. Export and live delivery
+use those same owners.
+
 ## Layout
 
 An empty world shows a welcome card with the project name and a normal next

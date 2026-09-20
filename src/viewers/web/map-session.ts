@@ -12,6 +12,8 @@ import { listGromaRevisions, withGitRevision } from '../../history/revisions.ts'
 import { renderPage } from './page.ts'
 import type { WebMapPayload, WebPayload, WebRevision, WebWorkPayload } from './payload.ts'
 import { bundleRenderer, loadMapRoot } from './runtime.ts'
+import { coverThemes, generateCovers, type CoverImages } from './sharing/images.ts'
+import { coverFile } from './sharing/metadata.ts'
 import { readSource } from '../source/read.ts'
 import { readCodeStructure } from '../source/structure.ts'
 import { readTaskDiff } from '../source/diff.ts'
@@ -80,7 +82,7 @@ export async function createWebMapSession(
     work: EMPTY_WORK_SNAPSHOT,
   }
   let closed = false
-  let currentPage: Blob | undefined
+  let covers: Promise<CoverImages> | undefined
   const clients = new Set<ReadableStreamDefaultController<Uint8Array>>()
   const encoder = new TextEncoder()
 
@@ -105,7 +107,6 @@ export async function createWebMapSession(
     revisionRead ??= listGromaRevisions(repositoryRoot).then(next => {
       revisions = next
       map = { ...map, revisions }
-      currentPage = undefined
       return revisions
     })
     return revisionRead
@@ -162,7 +163,7 @@ export async function createWebMapSession(
       generation: map.generation + 1,
       ...next,
     }
-    currentPage = undefined
+    covers = undefined
     broadcast(worldEvent())
   }
 
@@ -181,7 +182,6 @@ export async function createWebMapSession(
         workGeneration: workState.workGeneration + 1,
         work,
       }
-      currentPage = undefined
       broadcast(workEvent())
     })
   }
@@ -284,14 +284,9 @@ export async function createWebMapSession(
   }
 
   async function pageResponse(url: URL): Promise<Response> {
-    const revision = url.searchParams.get('revision')
-    if (revision === null) {
-      currentPage ??= new Blob([renderPage({ ...payload(), delivery: { kind: 'live' } })], { type: 'text/html; charset=utf-8' })
-      return new Response(currentPage, { headers: { 'Cache-Control': 'no-store' } })
-    }
-    const selected = await payloadAt(revision)
+    const selected = await payloadAt(url.searchParams.get('revision'))
     if (selected instanceof Response) return selected
-    return new Response(renderPage({ ...selected, delivery: { kind: 'live' } }), {
+    return new Response(renderPage({ ...selected, delivery: { kind: 'live' } }, url), {
       headers: {
         'Content-Type': 'text/html; charset=utf-8',
         'Cache-Control': 'no-store',
@@ -313,6 +308,11 @@ export async function createWebMapSession(
     ['/task-diff.json', taskDiffResponse],
     ['/events', eventsResponse],
   ])
+
+  for (const theme of coverThemes) routes.set(`/${coverFile(theme)}`, async () => {
+    covers ??= generateCovers(map)
+    return new Response((await covers)[theme], { headers: { 'Content-Type': 'image/png', 'Cache-Control': 'no-store' } })
+  })
 
   /** The shared writes at the path of their verb; each posts the input the CLI builds from its flags. */
   const writeRoutes = new Map<string, (request: Request) => Promise<Response>>([
@@ -356,6 +356,7 @@ export async function createWebMapSession(
         worldChain,
         workChain,
         revisionRead,
+        covers,
       ])
     },
   }

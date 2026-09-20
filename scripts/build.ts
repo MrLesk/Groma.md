@@ -3,6 +3,7 @@ import os from 'node:os'
 import path from 'node:path'
 
 import packageJson from '../package.json' with { type: 'json' }
+import { browserRenderers } from '../src/viewers/web/runtime.ts'
 
 const outfile = process.env.GROMA_BUILD_OUTFILE
   ?? process.argv[2]
@@ -37,12 +38,12 @@ async function prepareCreditAssets(root: string): Promise<string[]> {
   return assets
 }
 
-async function prepareRendererAsset(root: string): Promise<string> {
+async function prepareRendererAsset(root: string, renderer: typeof browserRenderers[keyof typeof browserRenderers]): Promise<string> {
   const build = await Bun.build({
-    entrypoints: [path.resolve('src/viewers/web/render.ts')],
+    entrypoints: [path.resolve(renderer.entry)],
     target: 'browser',
   })
-  const directory = path.join(root, 'groma-web-render')
+  const directory = path.join(root, renderer.asset)
   await mkdir(directory)
   await writeFile(path.join(directory, 'index.js'), await build.outputs[0]!.text())
   return directory
@@ -53,7 +54,7 @@ const compile: Bun.CompileBuildOptions = {
   outfile,
   assets: [
     ...await prepareCreditAssets(packedRoot),
-    await prepareRendererAsset(packedRoot),
+    ...await Promise.all(Object.values(browserRenderers).map(renderer => prepareRendererAsset(packedRoot, renderer))),
     'docs',
   ],
   autoloadDotenv: false,

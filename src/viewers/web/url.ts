@@ -100,6 +100,12 @@ function pathTheme(pathname: string): WebThemeMode | undefined {
   return isThemeMode(theme) ? theme : undefined
 }
 
+/** The browser and initial sharing metadata resolve the same explicit theme. */
+export function readTheme(url: Pick<URL, 'search' | 'pathname'>, defaultTheme: WebThemeMode = 'auto'): WebThemeMode {
+  const selected = new URLSearchParams(url.search).get('theme')
+  return isThemeMode(selected) ? selected : pathTheme(url.pathname) ?? defaultTheme
+}
+
 /**
  * Reads the ordered architecture selection (repeated `<kind>=<id>` and
  * `relationship=<source id>/<target id>` entries) or `task=<id>`,
@@ -117,7 +123,6 @@ export function readView(
 ): ViewState {
   const params = new URLSearchParams(url.search)
   const revision = revisions.find(candidate => candidate.id === params.get('revision'))?.id
-  const selectedTheme = params.get('theme')
   const byId = new Map(world.elements.map(element => [element.id, element]))
   const architecture = architectureSelection(params, byId, world)
   const task = work.find(item => item.id === params.get('task'))
@@ -139,7 +144,7 @@ export function readView(
     tab: source.file !== undefined || params.get('tab') === 'how'
       ? 'how'
       : params.get('tab') === 'tasks' ? 'tasks' : 'what',
-    theme: isThemeMode(selectedTheme) ? selectedTheme : pathTheme(url.pathname) ?? defaultTheme,
+    theme: readTheme(url, defaultTheme),
     hudVisible: params.get('hud') !== 'off',
   }
 }

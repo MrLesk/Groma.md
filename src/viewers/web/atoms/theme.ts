@@ -31,6 +31,9 @@ export interface Palette {
 export type WebTheme = 'light' | 'dark' | 'blueprint'
 export type WebThemeMode = 'auto' | WebTheme
 
+/** Shared typography for the interactive map and its published cover. */
+export const webFontFamily = "'SF Mono', ui-monospace, Menlo, monospace"
+
 export const themeModes: readonly WebThemeMode[] = ['auto', 'light', 'dark', 'blueprint']
 
 export const palettes: Record<WebTheme, Palette> = {

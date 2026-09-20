@@ -11,9 +11,10 @@ import backlogMarkFile from './work/backlog-mark.png' with { type: 'file' }
 
 import type { C4Kind } from '../../types.ts'
 import { chromeCss } from './atoms/chrome.ts'
+import { escaped } from './atoms/escape.ts'
 import { anchoredPopoverCss } from './atoms/popover.ts'
 import { kindGlyph, kindLabel } from '../atoms/kind.ts'
-import { cssBlock, palettes, themeLabel, themeModes, type WebThemeMode } from './atoms/theme.ts'
+import { cssBlock, palettes, themeLabel, themeModes, webFontFamily, type WebThemeMode } from './atoms/theme.ts'
 import { addDialogCss } from './chrome/add.ts'
 import { creditsControl, creditsCss } from './chrome/credits.ts'
 import { editorCss } from './editing/gestures.ts'
@@ -35,6 +36,7 @@ import { revisionControl, revisionCss } from './revision/view.ts'
 import { searchControl, searchCss } from './search/view.ts'
 import { highlightCss } from './source/highlight.ts'
 import { sourceCss } from './source/view.ts'
+import { sharingMetadata } from './sharing/metadata.ts'
 import { taskDiffCss } from './task-diff/view.ts'
 import { backlogMarkCss } from './work/backlog-mark.ts'
 import { workBadgeCss } from './work/badge.ts'
@@ -94,7 +96,7 @@ const style = `
     overflow: hidden;
     background: transparent;
     position: relative;
-    font-family: 'SF Mono', ui-monospace, Menlo, monospace;
+    font-family: ${webFontFamily};
     font-size: 12px;
     line-height: 1.5;
     color: var(--ink);
@@ -403,9 +405,10 @@ function helpControl(): string {
   return `<details id="help"><summary class="chrome-button">Help</summary><div class="anchored-popover help-panel" role="region" aria-label="Help">${guide}<div class="help-shortcuts">${body}</div></div></details>`
 }
 
-export function renderPage(payload: WebBootPayload): string {
+export function renderPage(payload: WebBootPayload, url?: URL): string {
   const json = JSON.stringify(payload).replace(/</g, '\\u003c')
-  return '<!doctype html><html><head><meta charset="utf-8"><title>groma.md</title>'
+  return `<!doctype html><html><head><meta charset="utf-8"><title>${escaped(payload.project?.title ?? 'Groma')}</title>`
+    + sharingMetadata(payload.project, url)
     + `<style>${style}</style></head><body data-delivery="${payload.delivery.kind}">`
     + `<header id="header"><div class="header-context">${lockup}<span id="stats"></span>${revisionControl(payload, { history: historyIcon, loader: revisionLoader })}</div>`
     + searchControl({ search: searchIcon, close: closeIcon })

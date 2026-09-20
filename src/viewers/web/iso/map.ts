@@ -98,7 +98,10 @@ function paintSurface(name: string, layers: SVGGElement[]) {
 }
 
 /** One fixed grid and one shared camera across ground, routes and foreground paint surfaces. */
-export function createMap(host: HTMLElement): IsoMap {
+export function createMap(host: HTMLElement, options: {
+  /** Covers keep graph paper legible independently of the fitted architecture's size. */
+  gridScale?: number
+} = {}): IsoMap {
   const root = document.createElement('div')
   root.className = 'map-surface'
   root.setAttribute('role', 'img')
@@ -161,8 +164,9 @@ export function createMap(host: HTMLElement): IsoMap {
     camera.style.setProperty('--camera-scale', String(current.k))
     camera.toggleAttribute('data-facades-hidden', !facadeDetailsVisible(current.k))
     field.style.display = showGrid ? '' : 'none'
-    root.toggleAttribute('data-minor-grid-hidden', !minorGridVisible(current.k))
-    for (const line of grid.lines) line.style.strokeWidth = String(1 / current.k)
+    const gridScale = options.gridScale ?? current.k
+    root.toggleAttribute('data-minor-grid-hidden', !minorGridVisible(gridScale))
+    for (const line of grid.lines) line.style.strokeWidth = String(1 / gridScale)
     camera.style.removeProperty('transform')
     camera.style.removeProperty('will-change')
     host.removeAttribute('data-camera-moving')
@@ -200,11 +204,12 @@ export function createMap(host: HTMLElement): IsoMap {
     svg: root,
     prepareCamera: startCameraMotion,
     move(current, zoomRatio) {
-      const showGrid = gridVisible(current.k)
+      const gridScale = options.gridScale ?? current.k
+      const showGrid = gridVisible(gridScale)
       if (showGrid) {
         grid.pattern.setAttribute(
           'patternTransform',
-          `translate(${current.x} ${current.y}) scale(${current.k}) ${planeMatrix('ground', undefined, gridView)}`,
+          `translate(${current.x} ${current.y}) scale(${gridScale}) ${planeMatrix('ground', undefined, gridView)}`,
         )
       }
       const scaleChanged = current.k !== composed?.k || zoomRatio !== composedZoomRatio

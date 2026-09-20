@@ -9,12 +9,19 @@ import type { WebMapPayload } from './payload.ts'
 
 export type MapLoadPhase = 'loading-architecture' | 'preparing-map'
 
+/** Browser entries included in both source runs and the standalone CLI. */
+export const browserRenderers = {
+  map: { asset: 'groma-web-render', entry: 'src/viewers/web/render.ts' },
+  cover: { asset: 'groma-web-cover', entry: 'src/viewers/web/sharing/render.ts' },
+} as const
+
 /** Builds the same browser runtime used by live and published delivery. */
-export async function bundleRenderer(): Promise<string> {
-  const compiledRenderer = compiledAsset('groma-web-render', 'index.js')
+export async function bundleRenderer(kind: keyof typeof browserRenderers = 'map'): Promise<string> {
+  const renderer = browserRenderers[kind]
+  const compiledRenderer = compiledAsset(renderer.asset, 'index.js')
   if (compiledRenderer !== undefined) return readFileSync(compiledRenderer, 'utf8')
   const build = await Bun.build({
-    entrypoints: [fileURLToPath(new URL('./render.ts', import.meta.url))],
+    entrypoints: [fileURLToPath(new URL(`../../../${renderer.entry}`, import.meta.url))],
     target: 'browser',
   })
   return build.outputs[0]!.text()
