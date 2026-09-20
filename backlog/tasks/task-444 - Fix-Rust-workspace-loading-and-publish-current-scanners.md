@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@codex'
 created_date: '2026-09-19 21:17'
-updated_date: '2026-09-20 10:25'
+updated_date: '2026-09-20 10:42'
 labels: []
 dependencies: []
 references:
@@ -39,6 +39,7 @@ modified_files:
   - test-bun/csharp-packaging.test.ts
   - docs/scanners/dotnet-csharp/index.md
   - docs/scanners/publishing.md
+  - plugins/scanners/rust/src/index.ts
 type: bug
 ordinal: 517000
 ---
@@ -72,6 +73,8 @@ Scanning Codex with the published Rust package fails on offline Cargo dependenci
 1. Add minimal fixture regressions for shared module paths and implicit workspace members. 2. Correct Rust crate source roots and workspace membership/inheritance in the existing project loader. 3. Verify fixtures and the full Codex scan, then run repository checks. 4. Prepare changed package versions and use the existing multi-platform release workflow; verify published packages.
 
 5. Split the C# self-contained worker into platform npm packages and retain the existing scanner package as a small adapter with exact optional dependencies, following the existing Groma CLI delivery pattern. Qualify fresh installs and all platform package tests, then publish JavaScript and C# and verify npm versions.
+
+6. Address PR108 review findings in the existing Rust adapter. Source listing must retain selected target-directory inputs and include shared path modules reached through literal path attributes (ScannerPlugin.listSourceFiles contract and reproduced fixture omission). Existing listing coverage only exercises src-local files; add one fixture assertion for shared.rs and compare native observation files with the listing. Cargo edition inheritance is opt-in; an omitted package edition must use 2015 (Cargo manifest contract). Existing workspace coverage uses only explicit inheritance; change its implicit support member to omit edition and use a valid 2015 gen identifier, then check both the crate edition and successful native scanning. Reproduce failures before the fixes, run focused tests and bun run check, and push the reviewed correction to PR108.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
@@ -124,10 +127,18 @@ Alex explicitly approved permanent npm publishing permission for release.yml in 
 npm accepted all five new C# runtime packages at 0.1.3. Created and verified GitHub trusted-publisher configurations for JavaScript and the runtime packages, scoped to MrLesk/Groma.md and release.yml. The existing C# adapter already had that trusted publisher. Release workflow 35504470207 is running on ada21479 with publish_scanners=true so CI publishes the adapter. Registry visibility is still propagating for the initial runtimes; public adapter installation remains pending.
 
 Release workflow 35504470207 completed successfully on ada21479: repository checks, five native platform package suites and npm publication all passed. CI published @groma/scanner-csharp 0.1.3 with GitHub provenance; all five exact runtime optional dependencies are publicly available at 0.1.3. The actual npm package passed Groma fresh installation, readiness and a two-project C# fixture scan on macOS ARM64. A second checkout restored the recorded scanner selection with groma scanner install and passed readiness and scanning. All six new package trusted-publisher grants are verified for MrLesk/Groma.md release.yml. No further npm approval or release blocker remains.
+
+Alex requested fixing actionable PR comments. Both review findings concern the supported Rust workspace flow. The existing Rust adapter owns the changes; OKF metadata and C4 boundaries remain unchanged. Source inputs do not themselves create architecture owners. This follows language and scanner contracts across repositories, rather than adding Codex-specific handling.
+
+Both PR review regressions failed before the fix: shared.rs was omitted and an implicit package without an edition used 2024, causing valid gen syntax to abort the native scan. Rust listing now follows literal path-module references from selected target-directory sources, preserving the existing manifest-selection regression. Edition inheritance requires workspace=true; otherwise an omitted edition is 2015. Twenty focused workspace/source-listing tests pass, including the native fixture. Rust 0.1.3 is prepared for the next CI release; 0.1.2 remains the published version. Initial full-check failures included a corrected source-listing scope regression and sandbox-denied watchers/local servers; rerunning with required permissions. Initial broader native test invocation used an incorrect worker argument and lacked the staged package; preparing the existing qualified worker with the changed adapter before rerunning.
+
+PR108 review correction verified: bun run check passes 16 Node and 602 Bun tests, with 36 opt-in skips and zero failures. All 12 native Rust tests pass with the qualified worker and rebuilt adapter, and 20 focused source-listing/workspace tests pass. Implementer specification and quality review traced listSourceFiles -> selected target directories -> shared literal path references and readRustProject -> opt-in edition selection -> native parsing. Existing manifest-selection coverage still passes. The regressions prove observable source coverage and parsing behavior, not prose or implementation text. No new domain or architecture design requires another delegated review. Rust 0.1.3 is prepared in this PR for a later release; the previously verified npm releases remain unchanged.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
 Fixed Rust shared-module source visibility and implicit Cargo workspace inheritance. Published Rust 0.1.2 scans Codex: 2586 files and 25502 operations, without source edits or project dependency installation. Published all prepared scanner updates, including JavaScript 0.1.0 and C# 0.1.3. C# now installs one complete platform runtime through exact optional dependencies, resolving the rejected 214.6 MB archive. Verified public C# fresh installation and second-checkout restore; five platform CI suites and repository checks pass. Enabled CI publishing for JavaScript and the five new C# runtime packages. PR108 is ready for review.
+
+Addressed both PR108 review comments: selected Rust source listings include shared literal path modules, and implicit members only inherit workspace editions when explicitly declared. Regression failures were reproduced before the fix; native tests and the complete repository check pass. Prepared Rust 0.1.3 for the next release.
 <!-- SECTION:FINAL_SUMMARY:END -->

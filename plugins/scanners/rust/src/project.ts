@@ -3,7 +3,7 @@ import { access, readFile, readdir } from 'node:fs/promises'
 import path from 'node:path'
 import type { ScannerSettings } from '@groma/scanner'
 import { promisify } from 'node:util'
-import { projectFiles } from '../../projects.ts'
+import { isUnder, projectFiles, repositoryFiles } from '../../projects.ts'
 
 export const execute = promisify(execFile)
 
@@ -134,10 +134,12 @@ async function sourceCrates(root: string, packages: Package[], model: Manifest) 
   const owners: Package[] = []
   for (const pkg of packages) {
     for (const target of await targets(pkg.file, pkg.model)) {
-      const edition = pkg.model.package?.edition
+      const declaredEdition = pkg.model.package?.edition
+      const edition = typeof declaredEdition === 'object' && declaredEdition.workspace
+        ? model.workspace?.package?.edition : declaredEdition
       if (target.library) libraries.set(pkg.file, crates.length)
       crates.push({ root_module: target.file, display_name: target.name,
-        edition: typeof edition === 'string' ? edition : model.workspace?.package?.edition ?? '2015', deps: [], cfg: features(pkg.model),
+        edition: typeof edition === 'string' ? edition : '2015', deps: [], cfg: features(pkg.model),
         // A #[path] module may be shared across crates. One source root keeps it visible in each context.
         source: { include_dirs: [root], exclude_dirs: [] } })
       owners.push(pkg)
@@ -173,11 +175,23 @@ export async function readRustProject(root: string, settings: ScannerSettings): 
   return { root, manifest, name: model.package?.name ?? path.basename(path.dirname(manifest)), targets: crates.map(crate => crate.root_module).sort(), crates }
 }
 
-/** The root module of every target a scan analyzes for these settings. */
-export async function targetRoots(root: string, settings: ScannerSettings): Promise<string[]> {
-  const roots: string[] = []
-  for (const manifest of await rustProjects(root, settings)) roots.push(...(await readRustProject(root, { ...settings, manifest })).targets)
-  return roots
+/** Target-directory sources plus literal path modules shared outside those directories. */
+export async function rustSourceFiles(root: string, settings: ScannerSettings): Promise<string[]> {
+  const directories: string[] = []
+  for (const manifest of await rustProjects(root, settings)) {
+    const input = await readRustProject(root, { ...settings, manifest })
+    directories.push(...input.targets.map(file => path.relative(root, path.dirname(file)).split(path.sep).join('/')))
+  }
+  const files = await repositoryFiles(root, file => file.endsWith('.rs'))
+  const selected = new Set(files.filter(file => directories.some(directory => isUnder(file, directory))))
+  for (const file of selected) {
+    const source = await readFile(path.join(root, file), 'utf8')
+    for (const match of source.matchAll(/#\s*\[\s*path\s*=\s*"([^"]+)"\s*\]/g)) {
+      const shared = path.posix.normalize(path.posix.join(path.posix.dirname(file), match[1]!))
+      if (files.includes(shared)) selected.add(shared)
+    }
+  }
+  return [...selected].sort()
 }
 
 export async function rustProjects(root: string, settings: ScannerSettings): Promise<string[]> {
