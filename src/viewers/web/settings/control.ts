@@ -64,6 +64,15 @@ export function createProjectSettings(data: WebDataSource) {
     warning.title = label
     warning.setAttribute('aria-label', label)
   })
-  plugins.addEventListener('click', () => { dismiss(); popup.open(toggle); settings.focus(); void settings.refresh() })
-  warning.addEventListener('click', () => { dismiss(); popup.open(warning); settings.focus(target?.scannerId); void settings.refresh() })
+  function openPlugins(opener: HTMLElement, scannerId?: string) {
+    dismiss()
+    popup.open(opener)
+    settings.focus(scannerId)
+    void settings.refresh()
+  }
+  plugins.addEventListener('click', () => openPlugins(toggle))
+  warning.addEventListener('click', () => openPlugins(warning, target?.scannerId))
+  const emptySetup = document.getElementById('empty-scanners')!
+  emptySetup.hidden = false
+  emptySetup.addEventListener('click', () => openPlugins(emptySetup))
 }

@@ -8,8 +8,9 @@ import { loadAnnotatedArchitecture, reconcileScanObservations } from '../src/cor
 import { editArchitecture } from '../src/edit.ts'
 import { addRelation } from '../src/relation.ts'
 import { loadScannerRegistry } from '../src/scanner/registry.ts'
-import { readScannerConfig } from '../src/scanner/modules/config.ts'
+import { readScannerConfig, writeScannerConfig } from '../src/scanner/modules/config.ts'
 import { addScanner } from '../src/scanner/modules/inventory.ts'
+import { checkScannerReadiness } from '../src/scanner/modules/readiness.ts'
 
 async function write(root: string, file: string, source: string): Promise<void> {
   const filename = path.join(root, file)
@@ -35,6 +36,50 @@ async function configure(root: string, exclude: unknown, directory = 'groma'): P
   const config = await readScannerConfig(root)
   await write(root, `${directory}/scanners.json`, JSON.stringify({ ...config, exclude }))
 }
+
+test.concurrent('fully excluded Vue sources skip readiness and scanning until they are included again', async () => {
+  const root = await repository()
+  try {
+    await cp(path.resolve(import.meta.dir, '../test/fixtures/vue-output'), path.join(root, 'fixtures/vue'), { recursive: true })
+    const scanners = [{ id: 'vue', source: path.resolve(import.meta.dir, '../plugins/scanners/vue') }]
+    await writeScannerConfig(root, { scanners, exclude: ['/fixtures/'] })
+    const readiness = await checkScannerReadiness(root)
+    expect(readiness.map(item => item.project)).toEqual(['ready'])
+    const excluded = await (await loadScannerRegistry(root)).collectObservations(root)
+    expect(excluded.failures).toEqual([])
+    expect(excluded.observations).toEqual([])
+
+    await writeScannerConfig(root, { scanners })
+    const included = await (await loadScannerRegistry(root)).collectObservations(root)
+    expect(included.failures.map(failure => failure.scanner)).toEqual(['vue'])
+    expect(included.failures[0]?.message).toContain('logic.ts')
+  } finally { await rm(root, { recursive: true, force: true }) }
+})
+
+test.concurrent('shared exclusions prevent readiness and scan hooks from running against excluded inputs', async () => {
+  const root = await repository()
+  try {
+    await write(root, 'hidden/source.fixture', 'source')
+    await write(root, 'plugin/package.json', JSON.stringify({ name: 'fixture-scanner', version: '1.0.0',
+      groma: { scanner: { id: 'fixture', entry: './index.ts' } },
+    }))
+    await write(root, 'plugin/index.ts', `export default {
+      id: 'fixture', watch: { include: ['**/*.fixture'], exclude: [] },
+      async listSourceFiles(root, settings) { return [settings.input] },
+      async checkReadiness() { throw new Error('fixture readiness failed') },
+      async scan() { throw new Error('fixture scan failed') },
+    }`)
+    const scanners = [{ id: 'fixture', source: './plugin', settings: { input: 'hidden/source.fixture' } }]
+    await writeScannerConfig(root, { scanners, exclude: ['/hidden/'] })
+    expect((await checkScannerReadiness(root)).map(item => item.project)).toEqual(['ready'])
+    expect((await (await loadScannerRegistry(root)).collectObservations(root)).failures).toEqual([])
+
+    await writeScannerConfig(root, { scanners })
+    expect((await checkScannerReadiness(root)).map(item => item.project)).toEqual(['blocked'])
+    expect((await (await loadScannerRegistry(root)).collectObservations(root)).failures.map(failure => failure.scanner))
+      .toEqual(['fixture'])
+  } finally { await rm(root, { recursive: true, force: true }) }
+})
 
 function observation(language: string): ScanObservation {
   const paths = ['src/kept.ts', 'scripts/hidden.ts', 'src/view.html', 'src/other.ts']

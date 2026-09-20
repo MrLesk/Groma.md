@@ -15,6 +15,7 @@ import { bundleRenderer, loadMapRoot } from './runtime.ts'
 import { readSource } from '../source/read.ts'
 import { readCodeStructure } from '../source/structure.ts'
 import { readTaskDiff } from '../source/diff.ts'
+import type { StartupPhase } from './startup/progress.ts'
 
 async function structureResponse(
   repositoryRoot: string,
@@ -52,9 +53,10 @@ async function loadMap(
   repositoryRoot: string,
   revisions: WebRevision[],
   revision: WebRevision | null,
+  onProgress?: (phase: StartupPhase) => void,
 ): Promise<Omit<WebMapPayload, 'generation'>> {
   const snapshot = revision === null
-    ? await loadMapRoot(repositoryRoot)
+    ? await loadMapRoot(repositoryRoot, onProgress)
     : await withGitRevision(repositoryRoot, revision.id, loadMapRoot)
   return { ...snapshot, revision, revisions }
 }
@@ -62,15 +64,16 @@ async function loadMap(
 /** Owns the ready map, its request handlers, and its live subscriptions. */
 export async function createWebMapSession(
   repositoryRoot: string,
-  options: { workSource?: WorkSource; scan?: boolean } = {},
+  options: { workSource?: WorkSource; scan?: boolean; onProgress?: (phase: StartupPhase) => void } = {},
 ): Promise<{ fetch: (request: Request) => Promise<Response>; close: () => Promise<void> }> {
+  options.onProgress?.('preparing-viewer')
   const renderer = await bundleRenderer()
   const workSource = options.workSource ?? backlogPlugin.create(repositoryRoot)
   let revisions: WebRevision[] = []
   let revisionRead: Promise<WebRevision[]> | undefined
   let map: WebMapPayload = {
     generation: 1,
-    ...(await loadMap(repositoryRoot, revisions, null)),
+    ...(await loadMap(repositoryRoot, revisions, null, options.onProgress)),
   }
   let workState: Omit<WebWorkPayload, 'pins'> = {
     workGeneration: 0,
@@ -148,7 +151,7 @@ export async function createWebMapSession(
   let worldChain = Promise.resolve()
   async function reloadWorld(): Promise<void> {
     if (closed) return
-    const next = await loadMap(repositoryRoot, revisions, null)
+    const next = await loadMap(repositoryRoot, revisions, null, options.onProgress)
     if (closed) return
     map = {
       generation: map.generation + 1,
@@ -180,10 +183,12 @@ export async function createWebMapSession(
 
   const scannerSession = await createScannerSession(repositoryRoot, {
     scan: options.scan,
+    onProgress: options.onProgress,
     onFold: publishWorld,
     onSettings: settings => broadcast(encoder.encode(`event: scanners\ndata: ${JSON.stringify(settings)}\n\n`)),
   })
   await scannerSession.ready
+  options.onProgress?.('opening-map')
   const architectureWatch = await watchArchitecture(repositoryRoot, {
     onChange: async () => { await scannerSession.reconfigure(); await publishWorld() },
   })

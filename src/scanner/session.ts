@@ -6,12 +6,16 @@ import type { ProjectReadiness } from './modules/readiness.ts'
 import { changeScannerSettings, readScannerSettings, type ScannerSettings, type ScannerSettingsAction } from './modules/settings.ts'
 import type { ScannerInstallOptions } from './modules/inventory.ts'
 
+export type ScannerPhase = 'preparing-scanners' | 'scanning' | 'updating-architecture'
+
 /** Owns scanner execution, settings state and the one source-adapter subscription for an open viewer. */
 export async function createScannerSession(root: string, options: {
   scan?: boolean
+  onProgress?: (phase: ScannerPhase) => void
   onSettings?: (settings: ScannerSettings) => void
   onFold?: () => void | Promise<void>
 } & ScannerInstallOptions = {}) {
+  options.onProgress?.('preparing-scanners')
   let state = await readScannerSettings(root, [], options)
   let checks: ProjectReadiness[] = []
   let watcher: Awaited<ReturnType<typeof watchObservations>> | undefined
@@ -32,6 +36,7 @@ export async function createScannerSession(root: string, options: {
     publish({ ...next, notice: { tone: 'error', message } })
   }
   async function fold({ observations, failures }: ScanBatch) {
+    if (observations.length) options.onProgress?.('updating-architecture')
     await reconcileScanObservations(root, observations)
     checks = [
       ...observations.map((observation): ProjectReadiness => ({ id: observation.scanner.id, package: 'found', project: 'ready', message: 'Scan completed.' })),
@@ -50,7 +55,9 @@ export async function createScannerSession(root: string, options: {
     const registry = await loadScannerRegistry(root, options)
     if (closed) return
     // With no selected scanner, only declaration matching runs; no scan evidence is written.
-    watcher = await watchObservations(root, registry, { scan, onObservations: fold, onError: report })
+    watcher = await watchObservations(root, registry, {
+      scan, onScan: () => options.onProgress?.('scanning'), onObservations: fold, onError: report,
+    })
   }
   function enqueue(action: () => Promise<void>, propagate = false): Promise<void> {
     const next = serial.then(async () => { if (!closed) await action() }).catch(async error => {

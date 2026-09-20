@@ -7,6 +7,8 @@ import { loadProjectProfile } from '../../project-profile.ts'
 import { measuredSheetScene } from '../../sheet/scene.ts'
 import type { WebMapPayload } from './payload.ts'
 
+export type MapLoadPhase = 'loading-architecture' | 'preparing-map'
+
 /** Builds the same browser runtime used by live and published delivery. */
 export async function bundleRenderer(): Promise<string> {
   const compiledRenderer = compiledAsset('groma-web-render', 'index.js')
@@ -21,7 +23,9 @@ export async function bundleRenderer(): Promise<string> {
 /** Loads and composes the current architecture map without optional work data. */
 export async function loadMapRoot(
   repositoryRoot: string,
+  onProgress?: (phase: MapLoadPhase) => void,
 ): Promise<Pick<WebMapPayload, 'project' | 'world' | 'sheet' | 'timings'>> {
+  onProgress?.('loading-architecture')
   const started = performance.now()
   const [architecture, project] = await Promise.all([
     (async () => {
@@ -32,6 +36,7 @@ export async function loadMapRoot(
     loadProjectProfile(repositoryRoot),
   ])
   const world = architecture.world
+  onProgress?.('preparing-map')
   const sheet = measuredSheetScene(world)
   return {
     project: project ?? null,

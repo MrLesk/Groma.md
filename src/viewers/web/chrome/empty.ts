@@ -9,43 +9,62 @@ export const emptyStateCss = `
   #empty[hidden] { display: none; }
   #empty .empty-card {
     pointer-events: auto;
-    display: grid; gap: 10px;
-    width: min(360px, calc(100vw - 32px));
-    padding: 28px 28px 24px;
+    display: grid; gap: 16px;
+    width: min(440px, calc(100vw - 32px));
+    padding: 32px;
     color: var(--ink);
     background: color-mix(in srgb, var(--paper) 78%, transparent);
-    border: 1px solid color-mix(in srgb, var(--ink) 16%, transparent);
-    border-radius: var(--chrome-radius);
-    box-shadow: 0 16px 48px color-mix(in srgb, var(--ink) 18%, transparent);
+    border: 1px solid var(--hairline);
+    border-radius: 16px;
+    box-shadow: 0 16px 64px color-mix(in srgb, var(--ink) 8%, transparent);
     backdrop-filter: blur(18px);
   }
-  #empty h1 { margin: 0; font-size: 22px; font-weight: 600; line-height: 1.25; }
+  #empty h1 { margin: 0; font-size: 24px; font-weight: 600; line-height: 1.3; letter-spacing: -0.04em; }
   #empty p { margin: 0; }
-  #empty .project { color: var(--muted); font-size: 11px; }
-  #empty .hint { font-size: 14px; line-height: 1.45; }
+  #empty .project { color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
+  #empty .hint { color: var(--muted); font-size: 14px; line-height: 1.6; }
   #empty .note { margin-top: 6px; color: var(--muted); font-size: 12px; font-style: italic; }
+  #empty:not(.has-architecture) .note { display: none; }
+  #empty .empty-action {
+    margin-top: 8px; padding: 12px 18px; border: 1px solid var(--accent); border-radius: 8px;
+    background: var(--accent); color: var(--on-colour); font-size: 14px; font-weight: 600;
+  }
+  #empty .empty-action:hover { background: color-mix(in srgb, var(--accent) 88%, var(--ink)); }
+  #empty .empty-action[hidden], #empty.has-architecture .empty-action { display: none; }
+  body:not(.hud-hidden) #empty:not(.has-architecture) { left: var(--hierarchy-inset); right: var(--details-inset); }
   #empty.has-architecture { inset: 78px 0 auto; }
-  #empty.has-architecture .empty-card { position: relative; padding: 14px 42px 14px 18px; gap: 4px; }
+  #empty.has-architecture .empty-card { position: relative; width: min(360px, calc(100vw - 32px)); padding: 14px 42px 14px 18px; gap: 4px; border-radius: var(--chrome-radius); }
   #empty.has-architecture h1 { font-size: 13px; }
   #empty.has-architecture .hint, #empty.has-architecture .note { font-size: 11px; font-style: normal; }
   #empty.has-architecture .project { display: none; }
   #empty .dismiss { display: none; }
   #empty.has-architecture .dismiss { display: block; position: absolute; right: 10px; top: 8px; border: 0; padding: 2px 5px; }
+  @media (max-width: 640px) { #empty .empty-card { padding: 24px; } }
 `
 
-/** An empty map offers scanner setup; existing architecture keeps its map beneath a compact notice. */
+function emptyMessage(empty: boolean) {
+  return empty
+    ? { title: 'Your map starts here', hint: "Add code when you're ready. Set up scanners to bring it into your map." }
+    : { title: noComponentsTitle, hint: noComponentsHint }
+}
+
+/** A new map welcomes an empty project; existing architecture keeps its compact notice. */
 export function emptyState(payload: WebBootPayload): string {
   const hidden = payload.revision === null && !hasComponents(payload.world) ? '' : ' hidden'
   const className = isEmptyWorld(payload.world) ? '' : ' class="has-architecture"'
+  const message = emptyMessage(isEmptyWorld(payload.world))
   return `<section id="empty" aria-label="Empty map"${className}${hidden}><div class="empty-card">`
-    + `<p class="project">${escaped(payload.project?.title ?? '')}</p><h1>${noComponentsTitle}</h1>`
-    + `<p class="hint">${noComponentsHint}</p><p class="note">${scannerSupportNote}</p>`
+    + `<p class="project">${escaped(payload.project?.title ?? '')}</p><h1>${message.title}</h1>`
+    + `<p class="hint">${message.hint}</p><p class="note">${scannerSupportNote}</p>`
+    + '<button id="empty-scanners" class="empty-action" type="button" aria-haspopup="dialog" aria-controls="project-settings" hidden>Set up scanners</button>'
     + '<button class="dismiss" type="button" aria-label="Dismiss no-components message">×</button></div></section>'
 }
 
 /** The invitation that stands in for the map while the world has nothing to draw. */
 export function createEmptyState(host: HTMLElement) {
   const title = host.querySelector('.project')!
+  const heading = host.querySelector('h1')!
+  const hint = host.querySelector('.hint')!
   let dismissed = false
   host.querySelector('.dismiss')!.addEventListener('click', () => {
     dismissed = true
@@ -55,9 +74,13 @@ export function createEmptyState(host: HTMLElement) {
   return {
     /** History is read-only, so a selected revision never shows the invitation. */
     paint(world: Pick<ArchitectureGraph, 'elements'>, project: ProjectProfile | undefined, historical: boolean): void {
-      host.hidden = historical || hasComponents(world) || (dismissed && !isEmptyWorld(world))
-      host.classList.toggle('has-architecture', !isEmptyWorld(world))
+      const empty = isEmptyWorld(world)
+      const message = emptyMessage(empty)
+      host.hidden = historical || hasComponents(world) || (dismissed && !empty)
+      host.classList.toggle('has-architecture', !empty)
       title.textContent = project?.title ?? ''
+      heading.textContent = message.title
+      hint.textContent = message.hint
     },
   }
 }
