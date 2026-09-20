@@ -309,8 +309,9 @@ strong read-only checkmarks, distinct from flow checkboxes.
 Selecting a component automatically accents its directly connected components
 in softer green, in either relationship direction, without following another
 hop. Other components are dimmed while a component is selected. The selected
-component's shape uses the same pulse as a focused flow step, while its text
-stays steady; reduced motion disables the pulse. This emphasis follows the
+component has a slow breathing green glow around its shape. Its green border
+lightens slightly at the glow's peak, while its fill and text stay steady;
+reduced motion keeps the glow and border steady. This emphasis follows the
 selection without changing the camera or detail owner. Task and flow highlights
 remain active, with unrelated components dimmed until component selection clears.
 An element
@@ -539,6 +540,11 @@ A new action starts from the displayed camera position. Dragging, scrolling,
 and pinching follow the gesture directly and stop an unfinished transition.
 Animated navigation and direct gestures prepare the same cached camera layer before movement.
 The map restores crisp SVG rendering after movement settles.
+The selected component's glow uses a small, separate layer containing its blurred
+silhouette. The blur stays fixed while the layer's opacity and the component's
+border color share a 2.6-second pulse. The border mixes in at most 20% white.
+A new selection starts both animations together; the fill and text do not animate.
+The glow follows the same camera and disappears when selection clears.
 Hover highlights pause during camera movement, including trackpad inertia, and return after it settles.
 Selection highlights and clicking remain available throughout.
 Reduced motion applies the destination without animation. `F1` toggles the HUD for a map-only

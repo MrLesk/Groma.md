@@ -6,8 +6,8 @@ import { buildingsSvg, facadeDefs } from './paint-buildings.ts'
 import { islandsSvg, sheetSvg, slabsSvg } from './paint-ground.ts'
 import { routesSvg } from './paint-routes.ts'
 import { gridPatternSvg, gridTransform } from './grid.ts'
-import { DEFAULT_PROJECTION } from './project.ts'
-import type { ProjectionView } from './project.ts'
+import { boundsOf, DEFAULT_PROJECTION } from './project.ts'
+import type { ProjectedBuilding, ProjectionView } from './project.ts'
 import {
   facadeDetailsVisible,
   gridVisible,
@@ -15,7 +15,7 @@ import {
   weightAt,
 } from './scale.ts'
 import { mapDefs } from './style.ts'
-import { svg } from './svg.ts'
+import { pointsAttribute, svg, svgMarkup } from './svg.ts'
 import { padSurfaceLabels } from './text.ts'
 
 /** Let zoom settle before committing its sharp SVG scale. Panning keeps the cached layer. */
@@ -40,7 +40,7 @@ export interface IsoMap {
   select(ids: readonly string[]): void
   /** Outlines the elements the active tasks touch and uniformly accents the routes leaving them; an empty set clears both. */
   mark(ids: ReadonlySet<string>): void
-  /** Pulses the inspected component and softly accents its direct component neighbors. */
+  /** Gives the inspected component a breathing glow and softly accents its direct component neighbors. */
   markNeighbors(selectedId: string | undefined, neighbors: ReadonlySet<string>): void
   /** Lights route ids and direct endpoints; contextual ancestors stay neutral while everything off the path dims. */
   setLitRoutes(litRouteIds: ReadonlySet<string>, onPath: (id: string) => boolean, focusedRouteId?: string): void
@@ -77,6 +77,54 @@ function paintSurface(name: string, layers: SVGGElement[]) {
   return { surface, scene, world }
 }
 
+/** A small, static silhouette lets the browser pulse its HTML layer without repainting the map SVG. */
+function componentGlow() {
+  const surface = document.createElement('div')
+  surface.className = 'component-glow'
+  surface.setAttribute('aria-hidden', 'true')
+  surface.hidden = true
+  let selected: ProjectedBuilding | undefined
+  let camera: Camera | undefined
+  let bounds = { x: 0, y: 0, width: 0, height: 0 }
+  const place = (): void => {
+    if (camera === undefined) return
+    surface.style.transform = `translate(${camera.x + bounds.x * camera.k}px, ${camera.y + bounds.y * camera.k}px)`
+    surface.style.width = `${bounds.width * camera.k}px`
+    surface.style.height = `${bounds.height * camera.k}px`
+  }
+  return {
+    surface,
+    show(building: ProjectedBuilding | undefined): void {
+      if (building === selected) return
+      selected = building
+      surface.hidden = building === undefined
+      surface.replaceChildren()
+      if (building === undefined) return
+      const faces = building.floors.flat()
+      const body = boundsOf(faces.flatMap(face => face.points))
+      const blur = 32
+      const margin = blur * 3
+      bounds = { x: body.x - margin, y: body.y - margin, width: body.width + margin * 2, height: body.height + margin * 2 }
+      const drawing = svg('svg', { width: '100%', height: '100%', viewBox: `${bounds.x} ${bounds.y} ${bounds.width} ${bounds.height}` })
+      drawing.innerHTML = svgMarkup('defs', {}, '',
+        svgMarkup('filter', { id: 'component-glow-blur', filterUnits: 'userSpaceOnUse', ...bounds }, '',
+          svgMarkup('feGaussianBlur', { stdDeviation: blur })))
+        + svgMarkup('g', { fill: 'var(--highlight)', filter: 'url(#component-glow-blur)' }, '',
+          faces.map(face => svgMarkup('polygon', { points: pointsAttribute(face.points) })).join(''))
+      // A fresh wrapper starts the halo in the same frame as the newly selected border.
+      const pulse = document.createElement('div')
+      pulse.className = 'component-glow-pulse'
+      pulse.append(drawing)
+      surface.append(pulse)
+      place()
+    },
+    move(current: Camera): void {
+      camera = current
+      place()
+    },
+  }
+}
+
 /** One fixed grid and one shared camera across ground, routes and foreground paint surfaces. */
 export function createMap(host: HTMLElement): IsoMap {
   const root = document.createElement('div')
@@ -106,11 +154,13 @@ export function createMap(host: HTMLElement): IsoMap {
   const ground = paintSurface('ground-surface', [layers.sheet, layers.islands, layers.slabs])
   const routeSurface = paintSurface('route-surface', [layers.routes])
   const foreground = paintSurface('foreground-surface', [layers.items, layers.layerLabels])
+  const glow = componentGlow()
   const definitions = svg('defs')
   definitions.innerHTML = mapDefs()
   foreground.scene.prepend(definitions)
   const paintSurfaces = [ground, routeSurface, foreground]
   camera.append(...paintSurfaces.map(({ surface }) => surface))
+  camera.insertBefore(glow.surface, foreground.surface)
   root.append(fieldSurface, camera)
   host.replaceChildren(root)
 
@@ -136,6 +186,7 @@ export function createMap(host: HTMLElement): IsoMap {
   /** Refresh scale-dependent SVG together; per-frame writes invalidate Safari's cached layer. */
   const commitCamera = (current: Camera, zoomRatio: number, showGrid: boolean): void => {
     padSurfaceLabels(labels, current.k, gridView)
+    glow.move(current)
     for (const { world } of paintSurfaces) {
       world.setAttribute('transform', `translate(${current.x} ${current.y}) scale(${current.k})`)
     }
@@ -269,6 +320,7 @@ export function createMap(host: HTMLElement): IsoMap {
       }
     },
     markNeighbors(selectedId, neighbors) {
+      glow.show(painted?.buildings.find(item => item.building.representationId === selectedId))
       for (const [itemId, node] of items) {
         node.classList.toggle('component-focus', itemId === selectedId)
         node.classList.toggle('neighbor', itemId !== selectedId && neighbors.has(itemId))

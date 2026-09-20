@@ -205,11 +205,28 @@ export const mapCss = `
   #map .route.focused { --emphasis: ${emphasis(3)}; animation: map-flow-focus 1600ms ease-in-out infinite; }
   #map :is(.building, .slab, .island).focused { --emphasis: ${emphasis(3)}; animation: map-flow-focus 1600ms ease-in-out infinite; }
   #map .building.component-focus { animation: none; }
-  #map .building.component-focus > :not(.label) { animation: map-flow-focus 1600ms ease-in-out infinite; }
+  #map .building.component-focus .face { animation: map-component-border 2600ms ease-in-out infinite; }
+  #map .component-glow {
+    position: absolute; left: 0; top: 0; pointer-events: none;
+  }
+  #map .component-glow-pulse {
+    width: 100%; height: 100%; opacity: 0.55;
+    will-change: opacity;
+    animation: map-component-glow 2600ms ease-in-out infinite;
+  }
   @keyframes map-flow { from { stroke-dashoffset: 0; } to { stroke-dashoffset: -13; } }
   @keyframes map-flow-focus { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+  @keyframes map-component-glow {
+    0%, 100% { opacity: 0.1; }
+    50% { opacity: 1; }
+  }
+  @keyframes map-component-border {
+    0%, 100% { stroke: var(--highlight); }
+    50% { stroke: color-mix(in srgb, var(--highlight) 80%, white); }
+  }
   @media (prefers-reduced-motion: reduce) {
-    #map .route.lit .line, #map .route.focused, #map :is(.building, .slab, .island).focused, #map .building.component-focus > :not(.label) { animation: none; }
+    #map .route.lit .line, #map .route.focused, #map :is(.building, .slab, .island).focused,
+    #map .component-glow-pulse, #map .building.component-focus .face { animation: none; }
   }
   #map .camera[data-tracing] .route-base,
   #map .camera[data-tracing] .route:not(.lit) { display: none; }
