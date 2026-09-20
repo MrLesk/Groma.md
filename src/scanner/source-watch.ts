@@ -40,6 +40,7 @@ export async function watchObservations(
   registry: ScannerRegistry,
   options: {
     scan?: boolean
+    onScan?: () => void
     onObservations: (batch: ScanBatch) => void | Promise<void>
     onError?: (error: unknown) => void | Promise<void>
   },
@@ -61,7 +62,7 @@ export async function watchObservations(
     const files = [...changed]
     changed.clear()
     try {
-      const observations = await registry.collectObservations(root, files)
+      const observations = await registry.collectObservations(root, files, options.onScan)
       if (!closed) await options.onObservations(observations)
     } catch (error) {
       if (!closed) await options.onError?.(error)
