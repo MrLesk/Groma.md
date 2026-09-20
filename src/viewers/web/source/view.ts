@@ -1,4 +1,5 @@
 import type { AnnotatedElement } from '../../../types.ts'
+import { leaveFileDiff } from './diff-view.ts'
 import { chromeButton } from '../atoms/button.ts'
 import { highlightedLine } from './highlight.ts'
 import type { SourcePayload } from '../../source/read.ts'
@@ -13,6 +14,7 @@ export function paintSource(
   error: string | undefined,
   onBack: () => void,
 ): void {
+  leaveFileDiff(host)
   host.classList.add('file-open')
   host.classList.add('source-open')
   host.querySelector('h1')!.textContent = file
@@ -67,6 +69,7 @@ export function paintSource(
 }
 
 export function leaveSource(host: HTMLElement): void {
+  leaveFileDiff(host)
   host.classList.remove('file-open')
   host.classList.remove('source-open')
   host.querySelector('.tabs')!.classList.remove('file-toolbar', 'source-toolbar')

@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test'
 import { readFile } from 'node:fs/promises'
 import { compareArchitecture, type SourceTexts } from '../src/history/comparison.ts'
 import type { AnnotatedArchitectureModel } from '../src/types.ts'
+import { readView, writeView } from '../src/viewers/web/url.ts'
 
 async function fixture(): Promise<{ before: AnnotatedArchitectureModel; after: AnnotatedArchitectureModel; oldSources: SourceTexts; newSources: SourceTexts }> {
   return JSON.parse(await readFile(new URL('../test/fixtures/revision-comparison.json', import.meta.url), 'utf8'))
@@ -14,12 +15,28 @@ test.concurrent('comparison retains removed context, matches stable IDs, and kee
   expect(Object.fromEntries(Object.entries(compared.components).map(([id, item]) => [id, item.status]))).toEqual({
     checkout: 'modified', payment: 'unchanged', 'receipt-sender': 'removed', 'receipt-worker': 'added',
   })
-  expect(compared.components['receipt-sender']!.files).toEqual([{ file: 'src/receipt.ts', status: 'unchanged' }])
+  expect(compared.components['receipt-sender']!.files).toMatchObject([{ file: 'src/receipt.ts', status: 'unchanged', additions: 0, deletions: 0 }])
+  expect(compared.components.checkout!.files).toMatchObject([{ additions: 1, deletions: 1 }])
+  expect(compared.components['receipt-worker']!.files).toMatchObject([{ status: 'added', additions: 1, deletions: 0 }])
   expect(compared.relationships).toEqual({ 'relationship:9': 'modified', 'relationship:0': 'added', 'removed:relationship:1': 'removed' })
   expect(compared.world.elements.find(item => item.id === 'mail')?.children).toEqual(['receipt-sender'])
   expect(compared.world.elements.find(item => item.id === 'shop')?.children).toEqual(['api', 'mail'])
   expect(compared.components.shop).toBeUndefined()
   expect(JSON.stringify([before, after])).toBe(inputs)
+})
+
+test.concurrent('comparison source links retain former ownership without exposing it in the individual destination', async () => {
+  const { before, after, oldSources, newSources } = await fixture()
+  after.elements.find(item => item.id === 'checkout')!.code = []
+  const compared = compareArchitecture(before, after, oldSources, newSources)
+  const comparison = { from: null, components: compared.components, relationships: compared.relationships }
+  const url = new URL('https://example.test/?component=checkout&file=src/checkout.ts')
+  const state = readView(url, compared.world, [], [], 'auto', comparison)
+  expect(state.file).toBe('src/checkout.ts')
+  expect(state.tab).toBe('how')
+  const shared = new URL(writeView(state, compared.world, [], '/', comparison), url)
+  expect(shared.searchParams.get('file')).toBe('src/checkout.ts')
+  expect(readView(shared, after, []).file).toBeUndefined()
 })
 
 test.concurrent('source-only and own-content changes modify only their owner; flows and layout measures do not', async () => {

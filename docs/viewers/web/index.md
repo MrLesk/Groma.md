@@ -270,6 +270,23 @@ theme roles; green remains the selection and active-flow color. Comparisons
 have no task data or editing controls. A working-tree endpoint follows owned
 source edits even when no scanner handles that file.
 
+Comparison details keep the same What it does and How it's built tabs. Added
+components show B's content; removed components keep A's readable description.
+Modified prose marks changed words in place, with changed fields alongside it.
+Relationships carry their own status. Files include both versions' ownership,
+with actual source status and line counts; removing a component does not imply
+deleting its files. Changed files open a unified diff, unchanged files the
+ordinary source view. Back restores the component, tab, and reading position.
+The shared details panel covers map controls within its area, while the header
+remains usable.
+
+History owns comparison facts and the shared source domain projects file hunks.
+`web/comparison/details.ts` presents those facts in the existing details tabs;
+`web/source/diff-view.ts` renders file rows and unified diffs for both comparison
+and task review. Task review still owns task endpoints and file selection.
+These are derived views of existing OKF records and C4 components, not new
+stored knowledge or architecture levels.
+
 The floating icon bar beside the hierarchy toggles Actors, Systems, Containers,
 and Components on the map. Its icons follow the existing ● ■ ▱ ▪ marks with
 clean geometry and gently rounded corners. All four start visible. Hover or keyboard focus shows

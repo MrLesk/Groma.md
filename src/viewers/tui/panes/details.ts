@@ -19,7 +19,7 @@ import type {
   WorkItem,
   WorkItemDetails,
 } from '../../../types.ts'
-import type { TaskFileDiff } from '../../source/diff-lines.ts'
+import type { TaskFileDiff } from '../../source/diff.ts'
 import type { CodeDeclaration, CodeFile, CodeSymbol } from '../../source/structure.ts'
 import { accent, bold, chunk, dim, kindMark, plain, styleRow, wrap, type Line, type PaneLines } from './text.ts'
 

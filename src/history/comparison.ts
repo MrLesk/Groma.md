@@ -1,25 +1,19 @@
 import type { AnnotatedArchitectureModel, AnnotatedElement, AnnotatedRelationship } from '../types.ts'
 import type { GitRevision } from './revisions.ts'
+import { projectFileDiff, type FileDiff } from '../viewers/source/diff-lines.ts'
 
-export type ChangeStatus = 'added' | 'modified' | 'removed' | 'unchanged'
+export type ChangeStatus = FileDiff['status']
 export type SourceTexts = Record<string, string | undefined>
-export interface FileChange { file: string; status: ChangeStatus }
 export interface ComponentChange {
   status: ChangeStatus
   before?: AnnotatedElement
   after?: AnnotatedElement
-  files: FileChange[]
+  files: FileDiff[]
 }
 export interface Comparison {
   from: GitRevision | null
   components: Record<string, ComponentChange>
   relationships: Record<string, ChangeStatus>
-}
-
-export function fileChange(before: string | undefined, after: string | undefined): ChangeStatus {
-  if (before === after) return 'unchanged'
-  if (before === undefined) return 'added'
-  return after === undefined ? 'removed' : 'modified'
 }
 
 export function ownedFiles(world: AnnotatedArchitectureModel): string[] {
@@ -35,7 +29,7 @@ function ownContent(element: AnnotatedElement): string {
 function componentChange(before: AnnotatedElement | undefined, after: AnnotatedElement | undefined,
   oldSources: SourceTexts, newSources: SourceTexts): ComponentChange {
   const paths = [...new Set([...(after?.code ?? []), ...(before?.code ?? [])].map(code => code.file))]
-  const files = paths.map(file => ({ file, status: fileChange(oldSources[file], newSources[file]) }))
+  const files = paths.map(file => projectFileDiff(file, oldSources[file], newSources[file]))
   const status = before === undefined ? 'added' : after === undefined ? 'removed'
     : ownContent(before) !== ownContent(after) || files.some(file => file.status !== 'unchanged') ? 'modified' : 'unchanged'
   return { status, before, after, files }

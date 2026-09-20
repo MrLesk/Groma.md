@@ -6,6 +6,8 @@ import type {
   CodeReference,
   Origin,
 } from '../../../types.ts'
+import type { Comparison, ComponentChange } from '../../../history/comparison.ts'
+import { changeBadge, comparisonOverview, comparisonTechnology, comparisonFiles } from '../comparison/details.ts'
 import type { ElementWorkGroup } from '../../../work/pins.ts'
 import type { Zone } from '../../../sheet/types.ts'
 import { findingsForOwner } from '../../../architecture-findings.ts'
@@ -26,7 +28,7 @@ import {
   paintSelectionControls,
 } from './writes.ts'
 import { paintRemoveControl } from './remove.ts'
-import { relationshipPairCard, type RelationshipPairData } from './relationship-card.ts'
+import { relationshipCard, relationshipPairCard, type RelationshipPairData } from './relationship-card.ts'
 import {
   parentOfElements,
   relationshipPairs,
@@ -98,10 +100,13 @@ export function tabSections(tab: Exclude<DetailsTab, 'tasks'>): Section[] {
 export function detailsTabs(
   inspected: Pick<Inspected, 'technology' | 'files'>,
   workGroups: readonly { items: readonly unknown[] }[],
+  comparison?: ComponentChange,
 ): DetailsTab[] {
+  const hasBuild = inspected.technology.length > 0 || inspected.files.length > 0
+    || (comparison?.files.length ?? 0) > 0 || Boolean(comparison?.before?.technology)
   return [
     'what',
-    ...(inspected.technology.length > 0 || inspected.files.length > 0 ? ['how' as const] : []),
+    ...(hasBuild ? ['how' as const] : []),
     ...(workGroups.some(group => group.items.length > 0) ? ['tasks' as const] : []),
   ]
 }
@@ -205,6 +210,7 @@ function marked(
 
 export interface DetailsOptions extends PaneWrites {
   world: ArchitectureGraph
+  comparison?: Comparison
   onSelect: (id: string, additive: boolean) => void,
   onToggleFlow: (flow: FlowRef) => void,
   activeFlows: readonly FlowRef[]
@@ -238,9 +244,13 @@ function paintTabs(tabsHost: HTMLElement, availableTabs: DetailsTab[], shownTab:
 /** Key of the only unfolded combined pair; module state so it survives details repaints (same pattern as `expandedCopiesKey`). */
 let openPair: string | undefined
 
-function paintRelationshipPairs(list: HTMLElement, inspected: Inspected, onSelect: DetailsOptions['onSelect']): void {
+function paintRelationshipPairs(list: HTMLElement, inspected: Inspected, onSelect: DetailsOptions['onSelect'], comparison?: Comparison): void {
   list.replaceChildren()
   for (const pair of inspected.relationships) {
+    if (comparison !== undefined) {
+      paintComparedRelationships(list, pair, inspected.id, onSelect, comparison)
+      continue
+    }
     const key = [inspected.id, pair.source.representationId, pair.target.representationId].join('\0')
     const item = document.createElement('li')
     item.append(relationshipPairCard(pair, onSelect, inspected.id, key === openPair, () => {
@@ -251,8 +261,19 @@ function paintRelationshipPairs(list: HTMLElement, inspected: Inspected, onSelec
   }
 }
 
+function paintComparedRelationships(list: HTMLElement, pair: RelationshipPairData, id: string, onSelect: DetailsOptions['onSelect'], comparison: Comparison): void {
+  for (const relationship of pair.relationships) {
+    const row = document.createElement('li')
+    const card = relationshipCard(relationship, onSelect, id)
+    const status = comparison.relationships[relationship.id]
+    if (status !== undefined && status !== 'unchanged') card.querySelector('.relationship-action')!.append(changeBadge(status))
+    row.append(card)
+    list.append(row)
+  }
+}
+
 export function paintDetails(host: HTMLElement, inspected: Inspected, options: DetailsOptions): void {
-  const { onSelect, onToggleFlow, activeFlows, tab, onTab, code, onSource, workGroups, onTask, onRemove, onAccept, onEdit, onRead, selection } = options
+  const { onSelect, onToggleFlow, activeFlows, tab, onTab, code, onSource, workGroups, onTask, onEdit, selection } = options
   if (onEdit !== undefined && isEditing(host, inspected.id)) return
   const title = host.querySelector('h1')!
   const meta = host.querySelector('.meta')!
@@ -262,13 +283,16 @@ export function paintDetails(host: HTMLElement, inspected: Inspected, options: D
   title.textContent = inspected.title
   meta.textContent = `${inspected.kindLabel} · ${inspected.origin}`
 
-  const availableTabs = detailsTabs(inspected, workGroups)
+  const change = options.comparison?.components[inspected.id]
+  if (change !== undefined) meta.append(changeBadge(change.status))
+  const availableTabs = detailsTabs(inspected, workGroups, change)
   const shownTab = availableTabs.includes(tab) ? tab : 'what'
   paintTabs(tabsHost, availableTabs, shownTab, onTab)
 
   body.replaceChildren()
   const sections: Record<Section, () => void> = {
     overview: () => {
+      if (change !== undefined) { comparisonOverview(body, change, options.world); return }
       if (inspected.description !== '') body.append(paragraph('description', inspected.description))
       if (inspected.overview !== '') body.append(paragraph('overview', inspected.overview))
     },
@@ -278,7 +302,7 @@ export function paintDetails(host: HTMLElement, inspected: Inspected, options: D
       const list = document.createElement('ul')
       list.className = 'relationships'
       body.append(heading('Relationships'), list)
-      paintRelationshipPairs(list, inspected, onSelect)
+      paintRelationshipPairs(list, inspected, onSelect, options.comparison)
     },
 
     flows: () => {
@@ -310,6 +334,7 @@ export function paintDetails(host: HTMLElement, inspected: Inspected, options: D
     },
 
     technology: () => {
+      if (change !== undefined) { comparisonTechnology(body, change); return }
       if (inspected.technology.length === 0) return
       body.append(heading('Technology'))
       const list = document.createElement('ul')
@@ -324,6 +349,7 @@ export function paintDetails(host: HTMLElement, inspected: Inspected, options: D
     },
 
     code: () => {
+      if (change !== undefined) { comparisonFiles(body, change, onSource); return }
       if (inspected.files.length === 0 && code.length === 0) return
       body.append(heading('Code'), codeList(inspected.files, code, inspected.findings, inspected.id, onSource))
     },
@@ -332,11 +358,14 @@ export function paintDetails(host: HTMLElement, inspected: Inspected, options: D
   if (shownTab === 'what' && selection !== undefined) paintSelectionControls(body, selection)
   if (shownTab === 'tasks') paintElementWork(body, workGroups, onTask)
   else for (const key of tabSections(shownTab)) sections[key]()
-  if (shownTab === 'what' && inspected.matchedGhost && onAccept !== undefined) paintAcceptControl(body, onAccept)
+  paintEditingControls(host, body, inspected, options, shownTab)
+}
+
+function paintEditingControls(host: HTMLElement, body: Element, inspected: Inspected, options: DetailsOptions, tab: DetailsTab): void {
+  const { onAccept, onEdit, onRead, onRemove } = options
+  if (tab === 'what' && inspected.matchedGhost && onAccept !== undefined) paintAcceptControl(body, onAccept)
   if (onEdit !== undefined && onRead !== undefined) body.prepend(editButton(host, inspected.id, elementFields(inspected, options), onEdit, onRead))
-  if (shownTab === 'what' && inspected.removable && onRemove !== undefined) {
-    paintRemoveControl(body, inspected.title, onRemove)
-  }
+  if (tab === 'what' && inspected.removable && onRemove !== undefined) paintRemoveControl(body, inspected.title, onRemove)
 }
 
 /** Empties the pane while nothing is selected. */

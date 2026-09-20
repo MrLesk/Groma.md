@@ -1,3 +1,5 @@
+import type { ComponentChange } from '../../../history/comparison.ts'
+import { paintFileDiff } from './diff-view.ts'
 import type { AnnotatedElement } from '../../../types.ts'
 import type { SourcePayload } from '../../source/read.ts'
 import type { CodeFile } from '../../source/structure.ts'
@@ -21,13 +23,14 @@ interface SourceControlOptions {
   element(): AnnotatedElement | undefined
   revision(): string | undefined
   from?(): string | undefined
+  comparison?(): ComponentChange | undefined
   readCode(element: string, revision?: string, from?: string): Promise<readonly CodeFile[]>
   readSource(element: string, file: string, revision?: string, from?: string): Promise<SourcePayload>
   repaint(): void
 }
 
-function ownsFile(element: AnnotatedElement | undefined, file: string): element is AnnotatedElement {
-  return element?.kind === 'component' && element.code.some(reference => reference.file === file)
+function ownsFile(element: AnnotatedElement, file: string, comparison?: ComponentChange): boolean {
+  return element.kind === 'component' && (comparison?.files ?? element.code).some(reference => reference.file === file)
 }
 
 function sameRequest(
@@ -93,6 +96,11 @@ export function createSourceControl(options: SourceControlOptions): SourceContro
     void Promise.all(options.host.getAnimations().map(animation => animation.finished)).then(restore, () => {})
   }
 
+  function changedFile(file: string) {
+    const diff = options.comparison?.()?.files.find(item => item.file === file)
+    return diff?.status === 'unchanged' ? undefined : diff
+  }
+
   async function load(nextFile: string, nextLine?: number): Promise<void> {
     const element = options.element()
     if (element?.kind !== 'component') return
@@ -106,6 +114,7 @@ export function createSourceControl(options: SourceControlOptions): SourceContro
     payload = undefined
     error = undefined
     options.repaint()
+    if (changedFile(nextFile) !== undefined) return
     try {
       const loaded = await options.readSource(elementId, nextFile, revision, from)
       if (!sameRequest(options, request, activeRequest, revision, elementId, from)) return
@@ -159,12 +168,14 @@ export function createSourceControl(options: SourceControlOptions): SourceContro
         leaveSource(options.host)
         return false
       }
-      if (element === undefined || (element.representationId !== openedBy && !ownsFile(element, file))) {
+      if (element === undefined || (element.representationId !== openedBy && !ownsFile(element, file, options.comparison?.()))) {
         clear()
         leaveSource(options.host)
         return false
       }
-      paintSource(options.host, element, file, line, payload, error, back)
+      const diff = changedFile(file)
+      if (diff === undefined) paintSource(options.host, element, file, line, payload, error, back)
+      else { leaveSource(options.host); paintFileDiff(options.host, diff, element.title, back) }
       return true
     },
     restore() {

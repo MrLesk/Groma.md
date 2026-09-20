@@ -1,3 +1,4 @@
+import type { Comparison } from '../../history/comparison.ts'
 import type { GitRevision } from '../../history/revisions.ts'
 import type { AnnotatedElement, AnnotatedRelationship, ArchitectureGraph, C4Kind, WorkItem } from '../../types.ts'
 import type { FlowRef } from '../flows.ts'
@@ -72,10 +73,11 @@ function activeFlows(params: URLSearchParams, world: ArchitectureGraph): FlowRef
 function sourceState(
   params: URLSearchParams,
   selected: AnnotatedElement | undefined,
+  comparison?: Comparison,
 ): Pick<ViewState, 'file' | 'line'> {
   if (selected?.kind !== 'component') return {}
   const requestedFile = params.get('file')
-  const file = selected.code.find(reference => reference.file === requestedFile)?.file
+  const file = (comparison?.components[selected.id]?.files ?? selected.code).find(reference => reference.file === requestedFile)?.file
   if (file === undefined) return {}
   const requestedLine = Number(params.get('line'))
   return Number.isInteger(requestedLine) && requestedLine > 0
@@ -87,9 +89,10 @@ function appendSourceState(
   pairs: [string, string][],
   state: ViewState,
   selected: AnnotatedElement | undefined,
+  comparison?: Comparison,
 ): void {
   if (state.file === undefined || selected?.kind !== 'component') return
-  const file = selected.code.find(reference => reference.file === state.file)?.file
+  const file = (comparison?.components[selected.id]?.files ?? selected.code).find(reference => reference.file === state.file)?.file
   if (file === undefined) return
   pairs.push(['file', file])
   if (state.line !== undefined) pairs.push(['line', String(state.line)])
@@ -121,6 +124,7 @@ export function readView(
   work: readonly WorkItem[],
   revisions: readonly GitRevision[] = [],
   defaultTheme: WebThemeMode = 'auto',
+  comparison?: Comparison,
 ): ViewState {
   const params = new URLSearchParams(url.search)
   const revision = revisions.find(candidate => candidate.id === params.get('revision'))?.id
@@ -136,7 +140,7 @@ export function readView(
   const selected = selection.kind === 'architecture'
     ? world.elements.find(element => element.representationId === selection.ids.at(-1))
     : undefined
-  const source = sourceState(params, selected)
+  const source = sourceState(params, selected, comparison)
   return {
     ...(revision === undefined ? {} : { revision }),
     ...source,
@@ -191,7 +195,7 @@ function appendFlow(pairs: [string, string][], flow: FlowRef | undefined, world:
 }
 
 /** The query string for a view, empty when everything is at its default. */
-export function writeView(state: ViewState, world: ArchitectureGraph, work: readonly WorkItem[], pathname: string): string {
+export function writeView(state: ViewState, world: ArchitectureGraph, work: readonly WorkItem[], pathname: string, comparison?: Comparison): string {
   const elements = new Map(world.elements.map(element => [element.representationId, element]))
   const selected = state.selection.kind === 'architecture'
     ? elements.get(state.selection.ids.at(-1) ?? '')
@@ -201,7 +205,7 @@ export function writeView(state: ViewState, world: ArchitectureGraph, work: read
   if (state.from !== undefined) pairs.push(['from', state.from])
   appendSelection(pairs, state, elements, world, work)
   if (state.selection.kind === 'architecture' && state.tab !== 'what') pairs.push(['tab', state.tab])
-  appendSourceState(pairs, state, selected)
+  appendSourceState(pairs, state, selected, comparison)
   for (const flow of state.flows) {
     appendFlow(pairs, flow === state.flows.at(-1) ? flow : { id: flow.id }, world)
   }

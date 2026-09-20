@@ -8,7 +8,9 @@ import {
   readGitText,
 } from '../../history/revisions.ts'
 import type { WorkItem, WorkSnapshot } from '../../types.ts'
-import { projectTaskFileDiff, type TaskFileDiff } from './diff-lines.ts'
+import { projectFileDiff, type FileDiff } from './diff-lines.ts'
+
+export interface TaskFileDiff extends FileDiff { shared: boolean }
 
 export interface TaskDiffPayload {
   taskId: string
@@ -55,7 +57,7 @@ export async function readTaskDiff(
     const after = completed
       ? await readGitText(repositoryRoot, revision, file)
       : await workingText(repositoryRoot, file)
-    return projectTaskFileDiff(file, before, after, shared.has(file))
+    return { ...projectFileDiff(file, before, after), shared: shared.has(file) }
   }))
   return {
     taskId: item.id,

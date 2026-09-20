@@ -33,6 +33,8 @@ import { relationshipCardCss } from './organisms/relationship-card.ts'
 import { tipCss } from './organisms/tip.ts'
 import type { WebBootPayload } from './payload.ts'
 import { projectEditorCss } from './project/editor.ts'
+import { fileDiffCss } from './source/diff-view.ts'
+import { comparisonDetailsCss } from './comparison/details.ts'
 import { revisionControl, revisionCss } from './revision/view.ts'
 import { searchControl, searchCss } from './search/view.ts'
 import { highlightCss } from './source/highlight.ts'
@@ -153,8 +155,8 @@ const style = `
   #stats { min-width: 0; flex: 1; display: flex; align-items: center; gap: 10px; white-space: nowrap; }
   #stats .project-name { overflow: hidden; text-overflow: ellipsis; color: var(--ink); }
   body[data-comparison] #stats .world-counts { display: none; }
-  .comparison-legend { display: none; gap: 12px; margin-top: 8px; }
-  body[data-comparison] .comparison-legend { display: flex; }
+  #legend .comparison-legend { display: none; gap: 12px; margin-top: 8px; }
+  body[data-comparison] #legend .comparison-legend { display: flex; }
   #legend .comparison-legend span:nth-child(1) { color: var(--diff-added); }
   #legend .comparison-legend span:nth-child(2) { color: var(--diff-modified); }
   #legend .comparison-legend span:nth-child(3) { color: var(--diff-removed); }
@@ -355,7 +357,7 @@ const style = `
   @media (prefers-reduced-motion: reduce) {
     #hierarchy, #hierarchy-toggle .hierarchy-chevron, #hierarchy-content, #hierarchy-title .pane-label, #details, body.details-hidden #details, body #work, body #map-view { transition: none; }
   }
-${floatingBarCss}${chromeCss}${anchoredPopoverCss}${creditsCss}${motionCss}${revisionCss}${searchCss}${highlightCss}${sourceCss}${taskDiffCss}${backlogMarkCss}${workBadgeCss}${workDetailsCss}${flowRowCss}${mapCss}${pinsCss}${workCss}${tipCss}${projectEditorCss}
+${floatingBarCss}${chromeCss}${anchoredPopoverCss}${creditsCss}${motionCss}${revisionCss}${searchCss}${highlightCss}${sourceCss}${fileDiffCss}${taskDiffCss}${comparisonDetailsCss}${backlogMarkCss}${workBadgeCss}${workDetailsCss}${flowRowCss}${mapCss}${pinsCss}${workCss}${tipCss}${projectEditorCss}
 ${emptyStateCss}
 ${addDialogCss}${editorCss}
 ${relationshipCardCss}${removeCss}${editableCss}${mapDebugCss}${detailsPanelCss}${mapViewCss}${c4FilterCss}`

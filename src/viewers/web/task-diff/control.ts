@@ -1,6 +1,7 @@
 import type { ArchitectureGraph, WorkItem, WorkItemDetails } from '../../../types.ts'
 import type { TaskDiffPayload } from '../../source/diff.ts'
-import { leaveTaskDiff, paintTaskFile, paintTaskSummary } from './view.ts'
+import { leaveFileDiff } from '../source/diff-view.ts'
+import { paintTaskFile, paintTaskSummary } from './view.ts'
 
 export interface TaskDiffControl {
   invalidate(): void
@@ -126,7 +127,7 @@ export function createTaskDiffControl(options: TaskDiffControlOptions): TaskDiff
         payload = undefined
         error = undefined
         file = undefined
-        leaveTaskDiff(options.host)
+        leaveFileDiff(options.host)
         return false
       }
       refresh(nextItem)

@@ -21,6 +21,8 @@ groma:
     - scanner: typescript
       file: src/viewers/web/organisms/sidebar-section.ts
       symbol: sectionHeading
+    - scanner: typescript
+      file: src/viewers/web/comparison/details.ts
   group: Architecture panels
 description: Shows the selected element, its source and its relationships
 ---

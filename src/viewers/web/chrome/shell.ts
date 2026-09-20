@@ -125,7 +125,7 @@ export function createWebShell(
 
 export const detailsPanelCss = `
   /* The dock reserves the normal map frame; its reader expands over that frame. */
-  #details-dock { position: absolute; top: 74px; bottom: 12px; right: 12px; width: var(--details-column); z-index: 6; pointer-events: none; }
+  #details-dock { position: absolute; top: 74px; bottom: 12px; right: 12px; width: var(--details-column); z-index: 10; pointer-events: none; }
   #details {
     --details-width: var(--details-column);
     --details-file-width: calc(100vw - var(--hierarchy-inset) - 36px);

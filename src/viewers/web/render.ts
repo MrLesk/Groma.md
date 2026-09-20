@@ -81,7 +81,7 @@ const tip = createTip(host)
 const pins = createPins(host, id => map.anchorOf(id), id => toggleTask(id, false), tip)
 const island = createWorkIsland(host, id => toggleTask(id), pins.show, tip)
 let tree = initialTree()
-const opened = readView(location, world, work.items, boot.revisions, readSavedTheme(localStorage))
+const opened = readView(location, world, work.items, boot.revisions, readSavedTheme(localStorage), boot.comparison)
 const themeControl = bindThemeControl(document.getElementById('theme') as HTMLDetailsElement, opened.theme, syncUrl)
 let hudVisible = opened.hudVisible
 shell.setHud(hudVisible)
@@ -106,7 +106,7 @@ const authoring = createAuthoring(host, map, data, {
 const source = createSourceControl({
   host: detailsHost, initialFile: opened.file, initialLine: opened.line,
   element: () => worldElement(primarySelection(selection)), readCode: data.readCode, readSource: data.readSource,
-  revision: () => revisionControl.selected, from: () => revisionControl.from, repaint: paintViewState,
+  revision: () => revisionControl.selected, from: () => revisionControl.from, comparison: () => revisionControl.comparison?.components[primarySelection(selection) ?? ''], repaint: paintViewState,
 })
 createProjectSettings(data)
 const review = createProjectReview({ world: () => world, revision: () => revisionControl.selected, readSource: data.readSource,
@@ -173,7 +173,7 @@ function syncUrl(): void {
     tab: detailsTab,
     theme: themeControl.mode,
     hudVisible,
-  }, world, work.items, location.pathname)
+  }, world, work.items, location.pathname, revisionControl.comparison)
   history.replaceState(null, '', `${location.pathname}${query}`)
 }
 function paintMapState(task: WorkItem | undefined, activeTaskItems: WorkItem[]): void {
@@ -218,7 +218,7 @@ function paintDetailsState(task: WorkItem | undefined): void {
     paintRelationship(detailsHost, relationship, world, select, authoring.relationWrites)
   } else if (inspected !== undefined) {
     paintDetails(detailsHost, inspected, {
-      world,
+      world, comparison: revisionControl.comparison,
       onSelect: select,
       onToggleFlow: flow => toggleFlow(flow, selected?.representationId),
       activeFlows,
@@ -227,7 +227,7 @@ function paintDetailsState(task: WorkItem | undefined): void {
         detailsTab = tab
         paintViewState()
       },
-      code: detailsTab === 'how' ? source.code() : [],
+      code: detailsTab === 'how' && revisionControl.comparison === undefined ? source.code() : [],
       onSource: source.open,
       workGroups: selected?.kind === 'component' ? elementWorkGroups(work, selected.representationId, world) : [],
       onTask: toggleTask,
@@ -462,7 +462,6 @@ function applyWorld(payload: WebPayload, reset = false): void {
     if (selection.kind === 'flow') selection = flowSelection(activeFlows)
     selection = retainSelection(selection, id => known(id))
   }
-  if (revisionControl.comparison !== undefined) source.clear()
   taskDiff.invalidate()
   paintWorld()
   searchControl.update(world.elements, work.items)
