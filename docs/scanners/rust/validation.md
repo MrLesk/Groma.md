@@ -1,5 +1,34 @@
 # Rust scanner validation
 
+## Codex workspace validation, 19 September 2026
+
+TASK-444 exercised the complete local Codex repository with the source adapter
+and the packaged Rust 0.1.2 candidate on macOS arm64. Both returned two project
+roots, 2,586 physical source files and 25,502 operations without changing Codex
+source or installing its dependencies. The source scan took 18.8 seconds.
+This validates extraction of the declared library/binary source scope, not
+complete runtime behavior or generated code.
+
+Two new fixture regressions failed before the loader fix and passed afterwards:
+workspace-local path dependencies retain their inherited Rust edition and local
+call targets in one observation, and a shared `#[path]` module outside both crate
+directories keeps one file identity with the existing multiple-context diagnostic.
+The packaged scanner reproduced the full-repository result independently.
+
+The published `@groma/scanner-rust@0.1.2` package reproduced the same Codex
+counts after installation from npm. Groma 0.3.3 also passed readiness and scanned
+the regression fixture after a fresh npm installation and a second-checkout
+restore. Release run [35470904452](https://github.com/MrLesk/Groma.md/actions/runs/35470904452)
+passed repository checks and the packaged fresh-checkout suite on macOS arm64,
+Linux x64/arm64 and Windows x64/arm64. The release's unrelated C# size and
+JavaScript first-publication failures did not prevent Rust publication.
+
+Focused validation passed 24 tests across the Rust, workspace and source-listing
+suites. `bun run check` passed 16 Node tests and 609 Bun tests, with 36 opt-in
+tests skipped. Native Rust checks were enabled in the separate focused run.
+
+## Earlier qualification
+
 Validation date: 9 September 2026. Platform: macOS arm64. Toolchain:
 Rust/Cargo 1.91.1 with rust-src, Bun 1.4.1, and rust-analyzer HIR 0.0.301
 locked in the scanner's Cargo.lock.

@@ -3,20 +3,29 @@ import { access, readFile, readdir } from 'node:fs/promises'
 import path from 'node:path'
 import type { ScannerSettings } from '@groma/scanner'
 import { promisify } from 'node:util'
-import { projectFiles } from '../../projects.ts'
+import { isUnder, projectFiles, repositoryFiles } from '../../projects.ts'
 
 export const execute = promisify(execFile)
 
-interface Manifest {
+interface DependencyTables {
+  dependencies?: Record<string, Dependency>
+  'dev-dependencies'?: Record<string, Dependency>
+  'build-dependencies'?: Record<string, Dependency>
+}
+interface Manifest extends DependencyTables {
   package?: { name: string; edition?: string | { workspace: boolean }; autobins?: boolean }
   workspace?: { members?: string[]; exclude?: string[]; package?: { edition?: string }; dependencies?: Record<string, Dependency> }
   lib?: { path?: string; name?: string }
   bin?: { path?: string; name: string }[]
-  dependencies?: Record<string, Dependency>
+  target?: Record<string, DependencyTables>
   features?: Record<string, string[]>
 }
 type Dependency = string | { path?: string; workspace?: boolean }
-interface Crate { root_module: string; display_name: string; edition: string; deps: { crate: number; name: string }[]; cfg: string[] }
+interface Crate {
+  root_module: string; display_name: string; edition: string
+  deps: { crate: number; name: string }[]; cfg: string[]
+  source: { include_dirs: string[]; exclude_dirs: string[] }
+}
 export interface RustInput { root: string; manifest: string; name: string; targets: string[]; crates: Crate[] }
 export interface RustOptions { worker?: string }
 
@@ -45,7 +54,37 @@ async function members(manifest: string, model: Manifest): Promise<string[]> {
       files.push(path.resolve(directory, file))
     }
   }
-  return [...new Set(files)].sort()
+  const selected = new Set(files)
+  if (model.workspace) await includePathMembers(manifest, model, selected)
+  return [...selected].sort()
+}
+
+/** Cargo also makes local path dependencies workspace members, including test and platform dependencies. */
+async function includePathMembers(manifest: string, model: Manifest, selected: Set<string>): Promise<void> {
+  const directory = path.dirname(manifest)
+  for (const file of selected) {
+    const pkg = { file, model: await read(file) }
+    for (const dependency of pathDependencies(pkg, manifest, model)) {
+      const relative = path.relative(directory, path.dirname(dependency)).split(path.sep).join('/')
+      if (relative === '..' || relative.startsWith('../') || path.isAbsolute(relative)) continue
+      if (model.workspace?.exclude?.some(exclude => new Bun.Glob(exclude).match(relative))) continue
+      selected.add(dependency)
+    }
+  }
+}
+
+function pathDependencies(pkg: Package, manifest: string, model: Manifest): string[] {
+  const tables = [pkg.model, ...Object.values(pkg.model.target ?? {})]
+  return tables.flatMap(table => [table.dependencies, table['dev-dependencies'], table['build-dependencies']])
+    .flatMap(declarations => Object.entries(declarations ?? {}))
+    .flatMap(([name, declaration]) => dependencyManifest(pkg, manifest, model, name, declaration) ?? [])
+}
+
+function dependencyManifest(pkg: Package, manifest: string, model: Manifest, name: string, declaration: Dependency): string | undefined {
+  const inherited = typeof declaration === 'object' && declaration.workspace
+  const dependency = inherited ? model.workspace?.dependencies?.[name] : declaration
+  if (typeof dependency !== 'object' || !dependency.path) return undefined
+  return path.resolve(path.dirname(inherited ? manifest : pkg.file), dependency.path, 'Cargo.toml')
 }
 
 function features(model: Manifest): string[] {
@@ -89,16 +128,20 @@ async function targets(manifest: string, model: Manifest): Promise<SourceTarget[
   return result
 }
 
-async function sourceCrates(packages: Package[], model: Manifest) {
+async function sourceCrates(root: string, packages: Package[], model: Manifest) {
   const crates: Crate[] = []
   const libraries = new Map<string, number>()
   const owners: Package[] = []
   for (const pkg of packages) {
     for (const target of await targets(pkg.file, pkg.model)) {
-      const edition = pkg.model.package?.edition
+      const declaredEdition = pkg.model.package?.edition
+      const edition = typeof declaredEdition === 'object' && declaredEdition.workspace
+        ? model.workspace?.package?.edition : declaredEdition
       if (target.library) libraries.set(pkg.file, crates.length)
       crates.push({ root_module: target.file, display_name: target.name,
-        edition: typeof edition === 'string' ? edition : model.workspace?.package?.edition ?? '2015', deps: [], cfg: features(pkg.model) })
+        edition: typeof edition === 'string' ? edition : '2015', deps: [], cfg: features(pkg.model),
+        // A #[path] module may be shared across crates. One source root keeps it visible in each context.
+        source: { include_dirs: [root], exclude_dirs: [] } })
       owners.push(pkg)
     }
   }
@@ -108,10 +151,8 @@ async function sourceCrates(packages: Package[], model: Manifest) {
 function dependencies(pkg: Package, manifest: string, model: Manifest, libraries: Map<string, number>): Crate['deps'] {
   const deps: Crate['deps'] = []
   for (const [name, declaration] of Object.entries(pkg.model.dependencies ?? {})) {
-    const inherited = typeof declaration === 'object' && declaration.workspace
-    const dependency = inherited ? model.workspace?.dependencies?.[name] : declaration
-    if (typeof dependency !== 'object' || !dependency.path) continue
-    const file = path.resolve(path.dirname(inherited ? manifest : pkg.file), dependency.path, 'Cargo.toml')
+    const file = dependencyManifest(pkg, manifest, model, name, declaration)
+    if (!file) continue
     const target = libraries.get(file)
     if (target !== undefined) deps.push({ crate: target, name: name.replaceAll('-', '_') })
   }
@@ -123,7 +164,7 @@ export async function readRustProject(root: string, settings: ScannerSettings): 
   const model = await read(manifest)
   const files = await members(manifest, model)
   const packages = await Promise.all(files.map(async file => ({ file, model: await read(file) })))
-  const { crates, libraries, owners } = await sourceCrates(packages, model)
+  const { crates, libraries, owners } = await sourceCrates(root, packages, model)
   for (const [index, crate] of crates.entries()) {
     const pkg = owners[index]!
     crate.deps = dependencies(pkg, manifest, model, libraries)
@@ -134,11 +175,23 @@ export async function readRustProject(root: string, settings: ScannerSettings): 
   return { root, manifest, name: model.package?.name ?? path.basename(path.dirname(manifest)), targets: crates.map(crate => crate.root_module).sort(), crates }
 }
 
-/** The root module of every target a scan analyzes for these settings. */
-export async function targetRoots(root: string, settings: ScannerSettings): Promise<string[]> {
-  const roots: string[] = []
-  for (const manifest of await rustProjects(root, settings)) roots.push(...(await readRustProject(root, { ...settings, manifest })).targets)
-  return roots
+/** Target-directory sources plus literal path modules shared outside those directories. */
+export async function rustSourceFiles(root: string, settings: ScannerSettings): Promise<string[]> {
+  const directories: string[] = []
+  for (const manifest of await rustProjects(root, settings)) {
+    const input = await readRustProject(root, { ...settings, manifest })
+    directories.push(...input.targets.map(file => path.relative(root, path.dirname(file)).split(path.sep).join('/')))
+  }
+  const files = await repositoryFiles(root, file => file.endsWith('.rs'))
+  const selected = new Set(files.filter(file => directories.some(directory => isUnder(file, directory))))
+  for (const file of selected) {
+    const source = await readFile(path.join(root, file), 'utf8')
+    for (const match of source.matchAll(/#\s*\[\s*path\s*=\s*"([^"]+)"\s*\]/g)) {
+      const shared = path.posix.normalize(path.posix.join(path.posix.dirname(file), match[1]!))
+      if (files.includes(shared)) selected.add(shared)
+    }
+  }
+  return [...selected].sort()
 }
 
 export async function rustProjects(root: string, settings: ScannerSettings): Promise<string[]> {
