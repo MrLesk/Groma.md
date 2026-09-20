@@ -5,18 +5,21 @@ status: Done
 assignee:
   - codex
 created_date: '2026-09-20 18:19'
-updated_date: '2026-09-20 18:23'
+updated_date: '2026-09-20 19:09'
 labels: []
 dependencies: []
 references:
   - src-welcome
   - src-cli
   - instructions
+  - src-initialize
 modified_files:
   - README.md
   - src/welcome/model.ts
   - src/cli.ts
   - src/instructions.ts
+  - src/init-command.ts
+  - src/init-command-ui.ts
 type: chore
 ordinal: 544000
 ---
@@ -24,7 +27,7 @@ ordinal: 544000
 ## Description
 
 <!-- SECTION:DESCRIPTION:BEGIN -->
-Remove promotion of the interactive terminal map from the README and welcome splash screen until it is ready. Keep the direct groma view command and plain or targeted architecture inspection available. Preserve unrelated pending documentation, icon, architecture, and web changes.
+Stop promoting the unfinished interactive terminal map in the README, welcome splash and initialization wizard. The user extended the original README and splash request to the init offer. Keep the direct groma view command and plain or targeted architecture inspection available. Preserve unrelated pending work.
 <!-- SECTION:DESCRIPTION:END -->
 
 ## Acceptance Criteria
@@ -32,6 +35,7 @@ Remove promotion of the interactive terminal map from the README and welcome spl
 - [x] #1 The README no longer recommends the interactive terminal map or displays its feature bullet and screenshot.
 - [x] #2 Interactive and plain welcome screens do not offer the terminal map, including the overview guide reachable from the welcome screen.
 - [x] #3 The direct groma view command and plain or targeted inspection remain available; remaining welcome actions still work.
+- [x] #4 Initialization offers only opening the browser map or finishing setup, and its later-use reminder recommends only groma web.
 <!-- AC:END -->
 
 ## Definition of Done
@@ -45,7 +49,7 @@ Remove promotion of the interactive terminal map from the README and welcome spl
 ## Implementation Plan
 
 <!-- SECTION:PLAN:BEGIN -->
-Remove the terminal-map action from the existing welcome action list and its unreachable dispatcher case. Remove the README promotion and the matching sentence in the shared human overview guide. Do not change the terminal map implementation or add another visibility setting. Coverage: this is a promotional removal, so use manual plain and interactive welcome checks and existing plain-view tests; do not add prose or source-text assertions. Run bun run check, perform specification and quality reviews, and request one final full-context complexity review. Stage only task-owned changes, including only the removal hunks in the already modified README, then commit and push.
+The README and welcome promotion removals are already committed. For the approved init extension, replace the obsolete multi-viewer choice with the existing yes/no prompt for opening the browser map, remove the terminal reminder, and give setup one direct browser-opening callback. Keep direct terminal-map use intact. Coverage: this is a small onboarding removal with no existing init-command test coverage. Use actual tui-test setup flows in temporary projects for opening the browser callback and declining it, plus the existing full repository checks; add no copy or source-text tests. Perform implementer specification and quality reviews and one final full-context complexity review. Commit and push only the setup changes and this task record.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
@@ -58,10 +62,20 @@ Verification: bun run check passed (16 Node tests; 622 Bun tests passed, 36 skip
 Implementer specification and quality reviews passed: the requested surfaces no longer advertise the terminal map; welcome row positions and the action type are derived from the same list, and the separate direct command remains intact. The flow stays in the existing welcome, command interface and command guides domains. The README working copy matches exactly the requested removals applied over its pre-existing icon edits; those icons will not be staged. This is a presentation-only change and does not change OKF records, C4 semantics or scanner behavior.
 
 Final full-context complexity review passed with no blockers or recommended refactor. The shared action list, derived action type and exhaustive dispatcher remain the smallest clear design. Non-blocking scope observation: initialization still offers Open in terminal and CLI help describes the map; those separate entry points were not included in the requested README and splash changes. Protected documentation and architecture edits were verified unchanged (11 of 11 snapshot hashes).
+
+User approved removing the terminal-map offer from initialization as well. Reopened this same task for that code change; previous README/splash verification still applies. No active task overlaps src/init-command.ts, src/init-command-ui.ts or src/cli.ts.
+
+The init extension uses the existing confirmation prompt and a browser-only callback. Removed the old viewer union, terminal choice, terminal reminder and CLI terminal dispatch. The terminal CLI helper no longer needs its scan argument because setup was the only caller that skipped its scan; direct use still scans through the existing viewer default.
+
+Interactive verification in temporary initialized projects used the real setup UI and first-scan flow. Selecting No in the actual CLI completed setup without launching a viewer; its final reminder contained only groma web. Selecting Yes through runInitCommand invoked the injected browser callback exactly once and returned completed. Direct groma view still rendered the terminal map and exited with Ctrl+C after the CLI helper cleanup. Captures: /tmp/groma-task468-init-782jhbz0/prompt.svg, finished.svg and direct-view.svg. No live repository architecture was scanned or changed.
+
+Final full repository check after all code changes passed: 16 Node tests; 622 Bun tests passed, 36 skipped, zero failures (54.09 seconds), plus lint and typecheck. Implementer specification review confirms the approved init extension: only browser opening is offered and recommended, declining it completes setup, and direct terminal access remains available. Quality review traced init through its existing UI, first-scan orchestration and CLI callback: one boolean answer and one browser action replace the unused multi-viewer contract. The implementation deletes more code than it adds, introduces no new module or dependency, and leaves OKF/C4 meaning unchanged. No blocking finding remains; final full-context review follows.
+
+The final full-context review of the init extension passed with no blockers or recommended refactor. It confirmed that a boolean browser offer and direct callback are simpler than retaining a one-viewer selector, responsibilities stay in the existing setup UI/orchestration/CLI domains, and the narrower types prevent setup from requesting the terminal map. The direct command retains its existing scanning behavior. The 11 protected documentation/architecture files still match their earlier hashes.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
-Removed interactive terminal-map promotion from the README, welcome actions and welcome overview while preserving the direct command and plain/targeted inspection. Verified with bun run check (16 Node and 622 Bun tests passed, 36 skipped), plain CLI output, and actual tui-test welcome/navigation checks. Specification, quality and full-context complexity reviews passed. Unrelated pending edits are preserved and excluded from the task commit.
+Removed interactive terminal-map promotion from the README, welcome screen and initialization wizard. Setup now offers only the browser map and recommends groma web for later use; the direct groma view command and plain/targeted inspection remain available. The init extension passed real interactive Yes/No checks, direct terminal-map launch/exit, implementer and full-context reviews, and bun run check (16 Node and 622 Bun tests passed, 36 skipped). Unrelated pending work is preserved and excluded from the task commits.
 <!-- SECTION:FINAL_SUMMARY:END -->

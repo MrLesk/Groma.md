@@ -15,7 +15,6 @@ import { NOT_INITIALIZED, type GromaDirectory } from './groma-filesystem.ts'
 import { c4Kind } from './okf-profile.ts'
 import { setupScanners, type ScannerSetupUi } from './scanner/modules/setup.ts'
 
-export type InitViewer = 'web' | 'view'
 export type PackageInstaller = 'brew' | 'bun' | 'npm'
 
 export interface InitCommandInput {
@@ -31,6 +30,7 @@ export interface InitCommandUi extends ScannerSetupUi {
   cancel(message: string): void
   confirmBacklogInstall(): Promise<boolean | undefined>
   confirmInit(): Promise<boolean | undefined>
+  confirmOpenWeb(): Promise<boolean | undefined>
   confirmScan(): Promise<boolean | undefined>
   directory(): Promise<GromaDirectory | undefined>
   error(message: string): void
@@ -40,7 +40,6 @@ export interface InitCommandUi extends ScannerSetupUi {
   note(message: string, title: string): void
   outro(message: string): void
   projectName(current?: string): Promise<string | undefined>
-  viewer(): Promise<InitViewer | 'finish' | undefined>
 }
 
 export interface RepositoryInitDependencies {
@@ -62,7 +61,7 @@ export interface InitCommandDependencies extends RepositoryInitDependencies {
 }
 
 export interface InitCommandActions {
-  openViewer(viewer: InitViewer): Promise<void>
+  openWeb(): Promise<void>
 }
 
 export interface RepositoryInitResult extends GromaInitResult {
@@ -245,10 +244,7 @@ function settingsSummary(projectName: string, directory: GromaDirectory): string
 }
 
 function commandReminder(ui: InitCommandUi): void {
-  ui.note(
-    'Run groma web for the browser map.\nRun groma view for the terminal map.',
-    'Open Groma later',
-  )
+  ui.note('Run groma web for the browser map.', 'Open Groma later')
 }
 
 async function offerBacklog(
@@ -297,7 +293,7 @@ function completionMessage(
   return `${verb} Groma project: ${projectName}`
 }
 
-/** The first scan and the choice of viewer; a caller that scans and opens a viewer itself skips both. */
+/** Offer a first scan and the browser map; a caller that opens its own viewer skips both. */
 async function offerFirstScan(
   input: InitCommandInput,
   dependencies: InitCommandDependencies,
@@ -318,11 +314,11 @@ async function offerFirstScan(
   }
   const summary = await dependencies.scan(input.repositoryRoot)
   ui.note(formatScanSummary(summary), 'First scan complete')
-  const viewer = await ui.viewer()
-  if (viewer === undefined) cancelled()
+  const openWeb = await ui.confirmOpenWeb()
+  if (openWeb === undefined) cancelled()
   commandReminder(ui)
   ui.outro(completed)
-  if (viewer !== 'finish') await actions.openViewer(viewer)
+  if (openWeb) await actions.openWeb()
 }
 
 async function hasObservedComponents(repositoryRoot: string): Promise<boolean> {
@@ -397,6 +393,6 @@ export async function ensureInitialized(
     dependencies.output('Run groma init when you are ready.')
     return 'declined'
   }
-  const outcome = await runInitCommand(input, { openViewer: async () => undefined }, overrides)
+  const outcome = await runInitCommand(input, { openWeb: async () => undefined }, overrides)
   return outcome === 'completed' ? 'ready' : 'cancelled'
 }

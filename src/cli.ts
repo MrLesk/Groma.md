@@ -71,10 +71,10 @@ async function openWeb(port?: number, scan = true): Promise<void> {
   }
 }
 
-async function openTerminalMap(scan = true): Promise<void> {
+async function openTerminalMap(): Promise<void> {
   const root = process.cwd()
   const { startTerminalViewer } = await import('./view-host.ts')
-  const viewer = await startTerminalViewer(root, { scan })
+  const viewer = await startTerminalViewer(root)
   await viewer.closed
 }
 
@@ -128,9 +128,7 @@ async function initializeProject(
       directory,
       interactive: interactiveTerminal(),
     }, {
-      openViewer: viewer => viewer === 'web'
-        ? openWeb(undefined, false)
-        : openTerminalMap(false),
+      openWeb: () => openWeb(undefined, false),
     })
     if (outcome === 'cancelled') process.exitCode = 1
   } catch (error) {

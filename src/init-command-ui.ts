@@ -31,7 +31,6 @@ import { styleText, stripVTControlCharacters } from 'node:util'
 import { GROMA_ACCENT, GROMA_ACCENT_ON_LIGHT } from './brand.ts'
 import type {
   InitCommandUi,
-  InitViewer,
   PackageInstaller,
 } from './init-command.ts'
 import type { GromaDirectory } from './groma-filesystem.ts'
@@ -202,6 +201,10 @@ export function createClackInitUi(): InitCommandUi {
       'Groma is not initialized here. Initialize now? (y/n)',
       accent,
     )),
+    confirmOpenWeb: async () => selected(await confirmPrompt(
+      'Open the browser map now?',
+      accent,
+    )),
     confirmScan: async () => selected(await confirmPrompt(
       'Run your first architecture scan now?',
       accent,
@@ -247,15 +250,6 @@ export function createClackInitUi(): InitCommandUi {
       initialValues: candidates.map(item => item.id),
       required: false,
     })),
-    viewer: async () => selected(await selectPrompt<InitViewer | 'finish'>(
-      'Do you want to see your architecture?',
-      [
-        { label: 'Open in browser', value: 'web', hint: 'Run groma web later' },
-        { label: 'Open in terminal', value: 'view', hint: 'Run groma view later' },
-        { label: 'Not now', value: 'finish' },
-      ],
-      accent,
-    )),
   }
 }
 
