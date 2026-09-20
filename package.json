@@ -49,7 +49,7 @@
     "test": "bun run test:node && bun run test:viewer",
     "test:csharp": "dotnet test plugins/scanners/csharp/dotnet/test/Groma.CSharpScanner.Tests.csproj",
     "test:node": "node --import=tsx --test test/*.test.ts",
-    "test:viewer": "bun test --timeout 20000 test-bun/",
+    "test:viewer": "bun test --max-concurrency 2 --timeout 20000 test-bun/",
     "check": "biome lint && bun scripts/lint-web-scrollbars.ts && bun run typecheck && bun run test"
   },
   "dependencies": {

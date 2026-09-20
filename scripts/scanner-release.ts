@@ -2,6 +2,7 @@ import { chmod, cp, mkdir, readFile, readdir, writeFile } from 'node:fs/promises
 import { existsSync } from 'node:fs'
 import path from 'node:path'
 import { readPublishedScanners } from '../src/scanner/modules/published.ts'
+import { assembleCSharpPackages } from './package-csharp-scanner.ts'
 
 const repository = { type: 'git', url: 'https://github.com/MrLesk/Groma.md.git' }
 const scannerIds = ['java', 'go', 'rust', 'csharp', 'angular', 'vue', 'react', 'typescript', 'python', 'php', 'swift', 'javascript']
@@ -15,7 +16,7 @@ async function writeManifest(directory: string, value: unknown) {
 }
 
 async function run(command: string[]) {
-  const child = Bun.spawn(command, { stdout: 'inherit', stderr: 'inherit' })
+  const child = Bun.spawn(command, { stdin: 'inherit', stdout: 'inherit', stderr: 'inherit' })
   if (await child.exited !== 0) throw new Error(`Failed: ${command.join(' ')}`)
 }
 
@@ -60,7 +61,7 @@ async function stage(output: string) {
   }
 }
 
-/** Combine the host artifacts into one package per scanner, with all built workers. */
+/** Combine host artifacts; C# keeps separate runtime packages to stay below npm upload limits. */
 async function assemble(input: string, output: string) {
   const hosts = (await readdir(input)).sort()
   if (hosts.length === 0) throw new Error('No scanner build artifacts')
@@ -68,12 +69,13 @@ async function assemble(input: string, output: string) {
   for (const host of hosts.slice(1)) {
     const swift = path.join(input, host, 'swift')
     if (existsSync(swift)) await cp(swift, path.join(output, 'swift'), { recursive: true })
-    for (const id of ['go', 'rust', 'typescript', 'java', 'csharp']) {
+    for (const id of ['go', 'rust', 'typescript', 'java']) {
       await cp(path.join(input, host, id, 'dist'), path.join(output, id, 'dist'), { recursive: true })
     }
   }
+  await assembleCSharpPackages(hosts.map(host => path.join(input, host)), output)
   if (!existsSync(path.join(output, 'swift'))) throw new Error('Swift scanner requires a macOS build artifact')
-  for (const [id, worker] of Object.entries({ go: 'worker', rust: 'groma-rust-scanner', typescript: 'tsc', java: 'runtime/bin/java', csharp: 'worker/Groma.CSharpScanner', swift: 'worker' })) {
+  for (const [id, worker] of Object.entries({ go: 'worker', rust: 'groma-rust-scanner', typescript: 'tsc', java: 'runtime/bin/java', swift: 'worker' })) {
     await prepareWorkers(path.join(output, id), id === 'rust' ? 'dist/bin' : 'dist', worker)
   }
 }
@@ -130,7 +132,14 @@ async function publish(input: string) {
     }
   }
   await publishPackage(path.join(input, 'contract'))
-  await completeTogether(scannerIds.map(id => publishPackage(path.join(input, id))))
+  await completeTogether(scannerIds.map(id => id === 'csharp'
+    ? publishCSharp(input) : publishPackage(path.join(input, id))))
+}
+
+async function publishCSharp(input: string) {
+  const runtimes = path.join(input, 'csharp-runtimes')
+  await completeTogether((await readdir(runtimes)).map(platform => publishPackage(path.join(runtimes, platform))))
+  await publishPackage(path.join(input, 'csharp'))
 }
 
 async function publishPackage(directory: string) {
