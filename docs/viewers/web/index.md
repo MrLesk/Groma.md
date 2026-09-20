@@ -9,12 +9,30 @@ state. Detection paths stay in collapsed, searchable details; declarations witho
 a version do not create a warning. Scanner problems appear before ordinary choices.
 Install & scan installs the selected additions; with no additions selected, the
 action is Scan project. Both open the map at the same address after preparation.
-The loading screen stays visible until the initial scanner session has finished
-and its architecture update is ready. An empty map is reported only after that scan.
-An initialized project runs one scan before opening. The live process then
+Setup, first scan, and regular loading use the same card frame. Setup shows
+Project, Scanners, and Map navigation. The first scan replaces the form with
+completed setup milestones, the current operation, and the pending map step.
+Opening an initialized project uses a compact card with the project name,
+version, and a left-aligned loading status, without setup navigation.
+
+Status changes follow actual work: creating the project, finding or installing
+scanners, preparing the viewer, loading architecture, preparing the map,
+preparing scanners, scanning code, updating architecture, and opening the map.
+Operations that do not run are not reported. There is no estimated percentage
+or timer-driven progress. The loading screen stays visible until the initial
+scanner session and its architecture update finish. An empty map is reported
+only after that scan. An initialized project runs one scan before opening. The live process then
 starts the same watch as `groma scan --watch`. Startup errors appear in the
 browser with the reported issue and the command to run after fixing it.
 The startup header shows the running Groma version during setup, loading, and errors.
+
+[`server.ts`](../../../src/viewers/web/server.ts) owns this temporary startup
+state and streams updates through `/startup-events`.
+[`startup/page.ts`](../../../src/viewers/web/startup/page.ts) presents the forms
+and progress; it waits for the form operation or `/ready` before opening the
+next screen. The map session, map loader, and scanner session report the work
+they own. These updates describe runtime activity; they do not create stored
+OKF knowledge or C4 architecture elements.
 
 If startup reports an occupied concrete port, an interactive terminal shows
 the runtime error and asks whether to use

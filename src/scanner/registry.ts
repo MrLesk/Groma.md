@@ -25,7 +25,7 @@ export class ScannerFailure extends Error {
 
 export interface ScannerRegistry {
   readonly scannerIds: readonly string[]
-  collectObservations(repositoryRoot: string, changedFiles?: readonly string[]): Promise<ScanBatch>
+  collectObservations(repositoryRoot: string, changedFiles?: readonly string[], onScan?: () => void): Promise<ScanBatch>
   watchesFile(relativePath: string): boolean
   /** In scanner id order, the scanners that would analyze this file now and those whose listing failed; the caller excludes configured patterns first. */
   readersOfFile(repositoryRoot: string, file: string): Promise<FileReaders>
@@ -173,7 +173,7 @@ export function createScannerRegistry(
     watchesFile(relativePath) {
       return !excluded(relativePath) && subscriptions.some(subscription => subscription.matches(relativePath))
     },
-    async collectObservations(root, changedFiles) {
+    async collectObservations(root, changedFiles, onScan) {
       const files = changedFiles?.filter(file => !excluded(file))
       for (const { scanner, matches } of subscriptions) {
         if (!files || files.some(matches)) pending.add(scanner)
@@ -181,7 +181,11 @@ export function createScannerRegistry(
       const selected = [...pending]
       // Every scanner finishes before a failure surfaces, so none keeps a child process in the repository.
       const results = await Promise.allSettled(selected.map(async scanner => {
-        const result = await scannerSourcesExcluded(scanner, root, excluded) ? undefined : await scanner.scan(root)
+        let result: ScanObservation | undefined
+        if (!await scannerSourcesExcluded(scanner, root, excluded)) {
+          onScan?.()
+          result = await scanner.scan(root)
+        }
         const observation = result && excludeEvidence(result, excluded)
         if (observation) observations.set(scanner, observation)
         else observations.delete(scanner)

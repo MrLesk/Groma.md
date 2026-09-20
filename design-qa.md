@@ -189,3 +189,127 @@ The user requested extra space beside the middle label, two-line wrapping for th
 The action has 12px horizontal padding and its label is capped at 24ch. Both Git examples measure 30px high at a 15px line height: exactly two lines. The arrow begins 2px below the label. Its action center remains equal to the endpoint-gap center. All seven component rows fit the 900px viewport without overflow, and action/endpoint navigation still works. The combined comparison has no actionable P0/P1/P2 findings. The focused change preserves the previously reviewed ownership and behavior. Final isolated repository checks pass 104 Node and 301 Bun tests.
 
 final result: passed
+
+
+---
+
+# TASK-446 startup design QA
+
+## Findings and approved decisions
+
+No actionable P0, P1, or P2 differences remain.
+
+The three roles are complementary: project setup, first-scan progress, and regular
+loading. Alex's final decision is to keep a card around all three. The regular
+loader has a compact card and left-aligned status.
+
+## Source visual truth
+
+All source boards are 2048 × 768 pixels:
+
+- Setup: first panel of `/Users/alex/.codex/generated_images/01a0bb7b-4651-7980-b6a4-f5769319e8fd/exec-4cc2ad43-67bc-4c92-9e64-117877b7b182.png`.
+- First-scan steps: middle panel of `/Users/alex/.codex/generated_images/01a0bb7b-4651-7980-b6a4-f5769319e8fd/exec-4886d9ce-09f8-4a7c-8a1f-9a9f83ec6ca4.png`, enclosed in the shared card after Alex's correction.
+- Regular loading: last panel of `/Users/alex/.codex/generated_images/01a0bb7b-4651-7980-b6a4-f5769319e8fd/exec-db8e8d87-cb45-4934-a99a-822ef9dc3c1d.png`, with the status aligned left.
+- Card correction: `/var/folders/fd/cgvn5zh52tb_sbt7hp_vtbmm0000gn/T/codex-clipboard-a5cc9376-0373-4d13-8bad-308de6e9b170.png` and Alex's confirmation that the card is nicer.
+
+## Browser evidence
+
+Capture directory:
+`/Users/alex/.codex/visualizations/2026/09/19/01a0bb7b-4651-7980-b6a4-f5769319e8fd/startup/`
+
+| Screenshot | CSS viewport and image pixels | State |
+| --- | --- | --- |
+| 01-setup-desktop.png | 800 × 640 | Dark setup, project name focused |
+| 02-setup-narrow.png | 375 × 812 | Dark setup, alternate folder selected |
+| 06-first-scan-card-desktop.png | 800 × 640 | Dark first scan, two completed milestones, scan active |
+| 07-first-scan-card-narrow.png | 375 × 812 | Same first-scan state |
+| 08-regular-loading-desktop.png | 1280 × 720 | Dark regular loading, scan active |
+| 09-regular-loading-narrow.png | 375 × 812 | Same regular-loading state |
+| 10-regular-loading-light.png | 375 × 812 | Light regular loading, reduced motion |
+
+Screenshots were captured from the real web server with isolated temporary
+projects. The browser reported devicePixelRatio 1, and image dimensions match
+CSS dimensions. There is no density downsampling.
+
+The source images are presentation boards, not literal browser viewports.
+Comparison used the relevant panel's content region, excluded board titles and
+captions, and judged proportional composition rather than treating the full
+2048-pixel board as one screen. The setup and first-scan source/current images
+were opened together in one comparison input; the regular source/current images
+were opened together in another. The final card correction was compared again
+with the card reference and final first-scan capture together. These are grouped
+comparison inputs, not an exported side-by-side contact sheet.
+
+The form labels, step indicators, logo, divider, and status strip are readable
+at the captured resolution, so separate enlarged crops were not needed.
+
+## Required fidelity surfaces
+
+- **Fonts and typography:** native Groma monospace stack, 24px main headings,
+  14px form/progress text, and 18px regular status. At narrow width the first-scan
+  heading wraps naturally and the regular status uses 16px. Existing font and
+  antialiasing differences from generated lettering are expected.
+- **Spacing and layout:** setup and first scan share a 520px maximum card width;
+  regular loading uses 560px with much less height. The header, navigation,
+  field spacing, and connected milestones preserve the approved hierarchy.
+  Both 375px loading views and setup fit without horizontal overflow.
+- **Colors and tokens:** existing paper, ink, muted, hairline, and green accent
+  tokens support dark and light themes. Completed connector lines now use
+  green; pending lines remain neutral. Button/checkmark contrast uses the
+  existing on-colour token instead of reproducing generated-image lighting.
+- **Image quality and assets:** the existing Groma SVG lockup stays sharp.
+  Native form controls, the existing CSS grid/spinner treatment, and the
+  established checkmark convention are retained. No new raster asset or icon
+  dependency is needed for these functional screens.
+- **Copy and content:** the project name and running version are real data.
+  “Scanner setup complete” avoids claiming installation when no package was
+  added. The active label comes from the running operation; no fake percentage,
+  elapsed-time sequence, or decorative subtitle is shown.
+
+## Comparison history
+
+1. Initial captures exposed a P2 completed-connector mismatch: selector
+   specificity kept completed lines grey. The selector now applies the green
+   completion token.
+2. Alex identified the missing first-scan card as an unwanted interpretation of
+   the open-canvas mockup and confirmed cards for all three screens. The
+   first-scan override that removed the card was deleted.
+3. Final captures 06 and 07 show the restored card and green completed
+   connectors at desktop and narrow widths. The paired final comparison found
+   no actionable P0/P1/P2 mismatch.
+4. The regular-loader captures confirm the requested left alignment. Its shorter
+   card is intentional, since it has neither form fields nor a setup checklist.
+
+## Interaction and accessibility evidence
+
+- Project name entry and both folder radio options work; Continue reaches
+  scanner selection, and Scan project reaches first-scan progress.
+- A controlled real scanner remains active until released. Releasing it opens
+  the populated map for both the first-run and initialized-project paths.
+- Status updates are announced through a polite live region outside the busy
+  card. Pending and completed states have text as well as visual marks.
+- Reduced-motion emulation reports animation-name none. Light-theme capture
+  remains readable. Temporary viewport and media overrides were reset.
+- Browser error logs were empty after the verified first-run and regular flows.
+- The preview harness initially timed out its artificial scan gate and had an
+  incomplete temporary project profile. Those harness issues were corrected;
+  the successful flows were checked again. They required no product fallback.
+- Nine focused lifecycle/source-watch/exclusion tests pass. The excluded-source
+  regression failed before moving the scan callback to actual scanner
+  invocation and passes after the fix.
+- Final `bun run check` passes: 16 Node tests, 611 Bun tests, 36 configured skips.
+  The remaining complexity warning is in unchanged `test-bun/iso-map.test.ts`.
+
+## Implementation checklist
+
+- Three card screens and left-aligned regular status: verified.
+- Operation-driven phases and skipped-operation behavior: verified.
+- Setup and both loading-to-map paths: verified.
+- Dark/light, narrow width, reduced motion, and browser errors: verified.
+- Documentation and repository checks: complete.
+
+No follow-up visual polish is required. Installing a downloaded scanner package
+was not repeated during visual QA; its existing selection/install operation is
+unchanged.
+
+final result: passed
