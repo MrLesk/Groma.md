@@ -71,10 +71,14 @@ does not inspect Backlog storage.
 
 ## Layout
 
-When no components exist, the page points to `groma scanner setup` for a
-coverage review. An empty world shows the project name and explains that
-Source scanning uses the plugins selected for this project. A world with existing architecture
-keeps its map and navigation beneath a compact, dismissible notice. The first
+An empty world shows a welcome card with the project name and a normal next
+step for a project that has no code yet. **Set up scanners** opens the existing
+Plugins settings dialog in live web delivery; published views omit this action.
+The card sits in the map's clear area beside the visible panels and uses the
+same frame as startup. The web empty-state controller owns its copy and
+visibility; the settings controller owns opening and closing the dialog.
+A world with existing architecture but no components keeps its map and navigation
+beneath a compact, dismissible notice pointing to `groma scanner setup`. The first
 component removes the notice without a reload. Historical views hide it.
 
 The hierarchy Add button is hidden while creation controls are unfinished.

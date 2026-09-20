@@ -313,3 +313,97 @@ was not repeated during visual QA; its existing selection/install operation is
 unchanged.
 
 final result: passed
+
+
+---
+
+# TASK-449 empty-project welcome design QA
+
+## Findings
+
+No actionable P0/P1/P2 difference remains in the requested empty-project screen.
+The old failure-style message is replaced by “Your map starts here”, one concise
+next step, and a live “Set up scanners” action inside the approved card frame.
+
+## Evidence and comparison
+
+- Source screenshot: `/var/folders/fd/cgvn5zh52tb_sbt7hp_vtbmm0000gn/T/codex-clipboard-e44da597-147f-4963-92b1-218ed9fe2798.png`.
+- Final implementation: `/Users/alex/.codex/visualizations/2026/09/19/01a0bb7b-4651-7980-b6a4-f5769319e8fd/empty-map/07-empty-final.png`.
+- Both source and final screenshot: 621 × 387 pixels. Browser viewport:
+  621 × 387 CSS pixels; devicePixelRatio 1. No density resampling.
+- State: empty initialized project, dark theme, map chrome hidden to match the
+  supplied content crop. Map camera position differs from the source; the card,
+  typography, and grid treatment are the comparison scope.
+- Source and final implementation were opened together in the same comparison
+  input. This is a grouped comparison, not an exported contact sheet.
+- The card and controls are readable at native capture size, so no separate
+  enlarged region was necessary.
+- Supporting captures in the same `empty-map` directory:
+  `02-empty-narrow.png` and `03-empty-light.png` at 375 × 667;
+  `04-empty-panels.png` at 900 × 700; and
+  `06-published-empty.png` at 900 × 700.
+
+## Required fidelity surfaces
+
+- **Typography:** existing Groma monospace family, 24px heading, 14px next-step
+  text, and 12px project label. The short heading fits at 375px and the next step
+  wraps cleanly without italic technical copy.
+- **Spacing and layout:** 440px maximum width, 32px desktop padding, 16px radius,
+  and a full-width action match the approved startup cards. At 375px the card is
+  343px wide with no horizontal overflow. At the supported 900px map width, the
+  welcome begins at x=370 while the hierarchy ends at x=292; neither overlaps.
+- **Colors and tokens:** existing paper, ink, muted, hairline, green accent, and
+  on-colour tokens provide the same dark/light behavior as startup.
+- **Assets:** the existing map grid and architecture drawing remain unchanged.
+  This copy/control improvement needs no new image or icon asset.
+- **Copy:** the welcome treats an empty project as a normal starting point.
+  It does not claim a scanner failed or promise that scanning has already run.
+
+## Interaction and correction history
+
+1. Initial paired comparison showed the intended calmer card with no blocking
+   visual mismatch. A later selector adjustment limited the new positioning to
+   the welcome, retaining the compact notice's existing placement. The final
+   paired capture confirms the welcome is unchanged.
+2. The live button opens the existing Plugins dialog. With no code present,
+   scanner settings correctly report that no source project was detected.
+   Closing settings returns focus to the welcome button.
+3. The new entry point exposed a P2 keyboard-focus defect: after a component
+   arrived while settings was open, the welcome disappeared and closing the
+   dialog left focus on BODY.
+4. The existing dialog's opener-visibility check now includes hidden ancestors.
+   Repeating the same flow returns focus to `settings-toggle`; with the welcome
+   still present, focus returns to `empty-scanners`. This corrects focus handling
+   without adding a new navigation path.
+5. Adding a system switches to the existing compact notice; dismissal still
+   works. Adding the first component hides the notice on the live update.
+   Selecting an empty historical revision hides it as before.
+6. Static export keeps the welcome but does not enable or display a scanner
+   configuration button. Browser error logs were empty.
+
+The compact no-components notice can be covered by existing map panels at narrow
+desktop widths when both side panels are open. Its original positioning and
+layer order already have this limitation; the welcome change does not extend to
+redesigning that existing notice.
+
+## Verification and review
+
+`bun run check` passed after the final code change: 16 Node tests and 611 Bun
+tests, with 36 configured skips. No new decorative UI/content tests were added.
+The browser checks cover the new action and the reproduced focus failure.
+Task-scoped whitespace checks pass.
+
+The implementer's specification and quality reviews confirm that the empty-state
+controller owns its presentation and visibility, the settings controller owns
+opening Plugins, and the shared dialog owns focus restoration. There are no new
+modules, dependencies, architecture concepts, or stored fields.
+
+## Implementation checklist
+
+- Welcoming empty-project card: verified.
+- Live settings action and focus restoration: verified.
+- Published, historical, compact, and populated states: verified.
+- Light/dark and supported layout sizes: verified.
+- Documentation and repository check: complete.
+
+final result: passed
