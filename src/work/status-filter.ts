@@ -14,19 +14,20 @@ export function preservedWorkStatuses(
 
 /**
  * Reconciles the island's filters with a work snapshot. Only statuses with a
- * mapped pin are rendered. The first snapshot enables every configured status
- * except the default and final ones; later snapshots preserve that choice.
+ * mapped pin are rendered. The first snapshot enables the default and every
+ * intermediate status; the final status stays hidden. Later snapshots
+ * preserve that choice.
  */
 export function workStatusFilters(
   configured: readonly string[],
-  defaultStatus: string,
+  _defaultStatus: string,
   pinStatuses: readonly string[],
   enabled?: readonly string[],
 ): WorkStatusFilterState {
   const present = new Set(pinStatuses)
   return {
     available: configured.filter(status => present.has(status)),
-    enabled: [...(enabled ?? configured.filter(status => status !== defaultStatus && status !== configured.at(-1)))],
+    enabled: [...(enabled ?? configured.filter(status => status !== configured.at(-1)))],
   }
 }
 

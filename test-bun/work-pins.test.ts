@@ -87,6 +87,20 @@ test.concurrent('every assignee and task pair gets one ordered pin with task pro
   ])
 })
 
+test.concurrent('the configured default-status pin is marked as future draft work', () => {
+  const world = pinWorld()
+  const pins = pinsOf([
+    item('TASK-12', { status: 'To Do' }),
+    item('TASK-13', { status: 'In Progress' }),
+    item('TASK-14', { status: 'Done' }),
+  ], world, 'Done', 'To Do')
+  assert.deepEqual(pins.map(pin => [pin.taskId, pin.draft]), [
+    ['TASK-12', true],
+    ['TASK-13', false],
+    ['TASK-14', false],
+  ])
+})
+
 test.concurrent('an unassigned mapped task gets one generic task pin', () => {
   const world = pinWorld()
   const pins = pinsOf([item('TASK-11', { assignees: [] })], world, 'Done')

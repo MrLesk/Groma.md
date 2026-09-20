@@ -145,12 +145,13 @@ with `w` or Escape restores the saved architecture view and focuses the map.
 
 Every touched slab or building carries its task in a corner: the selected task
 when it touches the element, else the first shown task in work order, with +N for
-the other shown tasks; in progress in the brand green, to do plain, done dim, the
-selected task bold. In the root map a task on a component stands on its container
+the other shown tasks; future work has a quiet diamond marker and dim text, in
+progress uses the brand green, done is dim, and the selected task is bold. In the root map a task on a component stands on its container
 row and a system carries only tasks that touch the system. The Work focus list has
 one toggle per status with a mapped task: Space on its header shows or hides those
 tasks on the map without changing the selection, scope or camera; the default and
-final statuses start hidden. List folding and map visibility are independent.
+intermediate statuses start shown, while the final status starts hidden. List
+folding and map visibility are independent.
 The component Tasks tab shares browsing, folding and record opening, but has no
 visibility controls. `t` focuses the hierarchy to change visibility. Escape
 returns from a diff to its record; Escape from the record closes Work and returns

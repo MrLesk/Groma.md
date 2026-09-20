@@ -60,6 +60,11 @@ export interface WorkView {
 
 const itemsOf = (work: WorkSnapshot | undefined): WorkItem[] => work?.items ?? []
 
+function initialExpandedStatuses(work: WorkSnapshot): string[] {
+  const terminal = work.statuses.at(-1)
+  return work.statuses.filter(status => status !== work.defaultStatus && status !== terminal)
+}
+
 export function workGroups(work: WorkSnapshot | undefined): WorkGroup[] {
   const items = itemsOf(work)
   if (items.length === 0) return []
@@ -109,7 +114,7 @@ export function initialWorkFocus(
   settings?: WorkListSettings,
 ): WorkFocus {
   const defaults = work === undefined ? [] : workStatusFilters(work.statuses, work.defaultStatus, []).enabled
-  const expanded = settings?.expanded ?? defaults
+  const expanded = settings?.expanded ?? (work === undefined ? [] : initialExpandedStatuses(work))
   const groups = workGroups(work)
   const taskId = groups.filter(group => expanded.includes(group.status)).flatMap(group => group.items)[0]?.id
   return {

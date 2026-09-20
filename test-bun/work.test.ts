@@ -58,6 +58,27 @@ test.concurrent('Work orders default, active and terminal groups while selecting
   assert.deepEqual(moveWorkFocus(model, header, 1).selection, header.selection)
 })
 
+test.concurrent('default-status work is mapped by default while its task group stays folded', () => {
+  const work = snapshot([
+    item('TASK-TODO', { status: 'To Do', references: ['cleft'] }),
+    item('TASK-ACTIVE', { references: ['cright'] }),
+  ])
+  const model = { ...navigationWorld(), work }
+  const focus = initialWorkFocus(work, beforeWork())
+  const projection = projectWorld(model, {
+    viewport: mapViewportOf({ width: 120, height: 36 }),
+    currentId: 'observed:alpha',
+  })
+  const map = projectWork(model, projection, focus)
+
+  assert.deepEqual(focus.expanded, ['In Progress'])
+  assert.deepEqual(focus.shown, ['To Do', 'In Progress'])
+  assert.deepEqual(map.corners.map(corner => [corner.taskId, corner.stage]).sort(), [
+    ['TASK-ACTIVE', 'progress'],
+    ['TASK-TODO', 'todo'],
+  ])
+})
+
 test.concurrent('Work projection shares modified-file and reference touch meaning with the web', () => {
   const base = navigationWorld()
   const model = {
@@ -145,25 +166,25 @@ test.concurrent('at root a component task stands on its container row and never 
   assert.deepEqual(corners.map(corner => corner.elementId), ['observed:cleft'])
 })
 
-test.concurrent('status toggles start without the default and final statuses and flip one status without moving the map', () => {
+test.concurrent('status toggles start with the default and without the final status and flip one status without moving the map', () => {
   const work = snapshot([
     item('TASK-ACTIVE', { title: 'Active', references: ['cleft'] }),
     item('TASK-DONE', { title: 'Done', status: 'Done', references: ['cright'] }),
   ])
   const model = { ...navigationWorld(), work }
   const first = initialWorkFocus(work, beforeWork())
-  assert.deepEqual(first.shown, ['In Progress'])
-  assert.deepEqual(toggleShownStatus(first, 'Done').shown, ['In Progress', 'Done'])
-  assert.deepEqual(toggleShownStatus(toggleShownStatus(first, 'Done'), 'Done').shown, ['In Progress'])
+  assert.deepEqual(first.shown, ['To Do', 'In Progress'])
+  assert.deepEqual(toggleShownStatus(first, 'Done').shown, ['To Do', 'In Progress', 'Done'])
+  assert.deepEqual(toggleShownStatus(toggleShownStatus(first, 'Done'), 'Done').shown, ['To Do', 'In Progress'])
 
   let state = reduceViewer(model, initialState(model), 'toggle-work')
   state = reduceViewer(model, state, 'down')
   assert.deepEqual(state.work?.selection, { state: 'status', status: 'Done' })
   const folded = reduceViewer(model, state, 'enter')
-  assert.deepEqual(folded.work?.shown, ['In Progress'])
+  assert.deepEqual(folded.work?.shown, ['To Do', 'In Progress'])
   assert.ok(folded.work?.expanded?.includes('Done'))
   const toggled = reduceViewer(model, folded, 'toggle-selection')
-  assert.deepEqual(toggled.work?.shown, ['In Progress', 'Done'])
+  assert.deepEqual(toggled.work?.shown, ['To Do', 'In Progress', 'Done'])
   assert.deepEqual([toggled.level, toggled.currentId, toggled.work?.selection], [state.level, state.currentId, state.work?.selection])
 })
 

@@ -51,9 +51,9 @@ Use the real project at 120x36 and 200x60, then shrink an open view to 80x30:
    pie progress beside exact checklist counts, open the same record, and highlight the task's architecture. Open a
    modified-file diff and an architecture reference. Closing Work restores the
    saved architecture view.
-   Confirm To Do comes first and starts folded and map-hidden; In Progress is
-   expanded and Done folded. Enter folds or opens a header without changing map
-   visibility; Space changes visibility only in the hierarchy. A folded task cannot
+   Confirm To Do comes first and starts folded while its mapped marker is visible;
+   In Progress is expanded and Done folded. Enter folds or opens a header without
+   changing map visibility; Space changes visibility only in the hierarchy. A folded task cannot
    keep the cursor. Records show definition before execution, and their reading
    cursor reaches notes and comments after the last link. A diff returns to the
    exact record row.

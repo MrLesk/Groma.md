@@ -80,7 +80,7 @@ async function publishedSnapshot(
     revisions: [],
     workGeneration: generation,
     work,
-    pins: pinsOf(work.items, map.world, work.statuses.at(-1)),
+    pins: pinsOf(work.items, map.world, work.statuses.at(-1), work.defaultStatus),
   }
   return {
     ...payload,

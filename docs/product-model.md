@@ -356,11 +356,14 @@ provides complete replacement lists, and the plugin notifies its host after
 each complete JSON response. Closing the subscription stops the CLI process.
 A task touches
 every element whose `groma.code` maps one of its modified files, then every element
-it references by exact `id`. The terminal map marks the assignees of each task
-In Progress on those elements. The web map stands one pin per assignee and task
+it references by exact `id`. The terminal map marks tasks in its currently shown
+statuses on those elements; default and intermediate statuses start shown. The web map stands one pin per assignee and task
 on the element the task touched last; an unassigned mapped task gets one generic
 Backlog pin. The Live work island filters pins and chips by the configured
 statuses, showing a filter only while that status has a mapped pin. A filter
-appears when the first matching pin arrives. The default and terminal statuses
-start hidden and every other configured status starts shown. Without the CLI,
-the plugin supplies empty work and every architecture flow remains available.
+appears when the first matching pin arrives. The configured terminal status starts
+hidden. The configured default status represents future work, starts shown, and uses
+draft treatment on the map; every other configured status starts shown. Draft treatment
+belongs to the work projection and does not change Groma architecture records or
+Markdown. Without the CLI, the plugin supplies empty work and every architecture flow
+remains available.

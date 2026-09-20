@@ -11,6 +11,8 @@ export interface WorkPin {
   taskId: string
   title: string
   status: string
+  /** True for the configured default status: future work shown with draft treatment. */
+  draft: boolean
   terminal: boolean
   done: number
   total: number
@@ -81,6 +83,7 @@ export function pinsOf(
   items: readonly WorkItem[],
   world: Pick<ArchitectureGraph, 'elements'>,
   terminalStatus: string | undefined,
+  defaultStatus?: string,
 ): WorkPin[] {
   const pins: WorkPin[] = []
   for (const item of [...items].sort((a, b) => taskNumber(a.id) - taskNumber(b.id))) {
@@ -94,6 +97,7 @@ export function pinsOf(
         taskId: item.id,
         title: item.title,
         status: item.status,
+        draft: item.status === defaultStatus,
         terminal: item.status === terminalStatus,
         done: item.acceptanceCriteriaCompleted,
         total: item.acceptanceCriteriaCount,

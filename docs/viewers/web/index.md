@@ -547,8 +547,9 @@ Saving posts the same input as `groma edit project` and updates the standard
 title and optional concise description plus the Markdown body overview in the
 selected Groma directory's `project.md`; the
 published world event repaints every open map without a browser reload.
-Backlog work is loaded from one task-list summary and shows as pins. Every
-configured task, including terminal history, puts one pin per assignee on the
+Backlog work is loaded from one task-list summary and shows mapped tasks as pins.
+Every configured task with a mapped architecture element, including terminal
+history, puts one pin per assignee on the
 element the task touched last: the element whose code holds the task's newest
 modified file, else the first element it references. An unassigned task puts
 one generic pin there. A pin
@@ -561,7 +562,11 @@ with the task's title; when the task is Done the badge shows a checkmark
 and flips back while hovered. A visible pin that becomes Done flips into
 that checkmark once. Every assignee and
 task pair has its own colour, the pairs in task order over a fixed
-palette. A pin that appears after the map is open bounces once in
+palette. When a task touches another component, its existing pin travels to
+the new component in an 850 ms arc with a soft start and landing. A further
+component change redirects it from its current position. Pan and zoom keep
+the moving pin aligned with the map; reduced motion places it immediately.
+A pin that appears after the map is open bounces once in
 that colour, then returns to the inactive greyscale. The
 Backlog.md Tasks panel, 35%-paper frosted glass with a 28px outer radius
 at the bottom centre of the map, stays visible while Backlog has a configured workflow,
@@ -580,8 +585,9 @@ filter for each configured status in configuration order when that status
 has at least one pin. The filters match the task chips' height, and a vertical
 rule separates them from the scrollable strip of chips, one per shown pin
 with its badge and task id. A filter appears on the same live update that
-brings the first pin in its status. The configured default and terminal
-statuses start hidden; every other configured status starts shown. A filter
+brings the first pin in its status. The configured default and intermediate
+statuses start shown; the terminal status starts hidden. Default-status pins
+and their task labels use the map's dashed draft treatment. A filter
 hides or shows both the matching pins and chips. A visible chip also flips
 once when its task becomes Done. Each completing badge stays visible through
 the flip and a 2.5-second checkmark hold. If the Done filter is off, the pin or chip

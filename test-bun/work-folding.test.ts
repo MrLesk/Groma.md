@@ -17,11 +17,11 @@ function model() {
   return { ...navigationWorld(), work: { statuses: ['To Do', 'In Progress', 'Done'], defaultStatus: 'To Do', items } }
 }
 
-test.concurrent('status folding preserves map filters and moves hidden task selection to its header', () => {
+test.concurrent('status folding preserves map filters and keeps future work visible while its list stays folded', () => {
   const world = model()
   const focus = initialWorkFocus(world.work, initialState(world))
   assert.deepEqual(focus.expanded, ['In Progress'])
-  assert.deepEqual(focus.shown, ['In Progress'])
+  assert.deepEqual(focus.shown, ['To Do', 'In Progress'])
   assert.deepEqual(workRows(world, focus).map(row => row.kind), ['status', 'status', 'task', 'status'])
   const folded = foldWorkStatus(world, focus, 'In Progress', false)
   assert.deepEqual(folded.selection, { state: 'status', status: 'In Progress' })
@@ -29,7 +29,7 @@ test.concurrent('status folding preserves map filters and moves hidden task sele
   assert.equal(workRows(world, folded).some(row => row.kind === 'task'), false)
   assert.equal(workRows(world, foldWorkStatus(world, folded, 'To Do', true)).filter(row => row.kind === 'task').length, 1)
   const delayed = reconcileWorkFocus(world.work, initialWorkFocus(undefined, initialState(world)))!
-  assert.deepEqual(delayed.shown, ['In Progress'])
+  assert.deepEqual(delayed.shown, ['To Do', 'In Progress'])
 })
 
 test.concurrent('component task groups and global Work share folding without coupling it to map visibility', () => {
@@ -39,14 +39,14 @@ test.concurrent('component task groups and global Work share folding without cou
   assert.equal(state.actionCursor, 'status:To Do')
   state = reduceViewer(world, state, 'enter')
   assert.ok(state.workList?.expanded?.includes('To Do'))
-  assert.deepEqual(state.workList?.shown, ['In Progress'])
+  assert.deepEqual(state.workList?.shown, ['To Do', 'In Progress'])
   state = reduceViewer(world, state, 'toggle-selection')
-  assert.deepEqual(state.workList?.shown, ['In Progress'])
+  assert.deepEqual(state.workList?.shown, ['To Do', 'In Progress'])
   state = reduceViewer(world, state, 'down')
   assert.equal(state.actionCursor, 'TASK-0')
   state = reduceViewer(world, state, 'left')
   assert.equal(state.actionCursor, 'status:To Do')
-  assert.deepEqual(state.workList?.shown, ['In Progress'])
+  assert.deepEqual(state.workList?.shown, ['To Do', 'In Progress'])
   state = reduceViewer(world, state, 'toggle-work')
   assert.deepEqual(state.work?.expanded, ['In Progress'])
   assert.deepEqual(state.work?.selection, { state: 'selected', taskId: 'TASK-1' })

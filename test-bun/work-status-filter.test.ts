@@ -10,14 +10,14 @@ import {
 
 const statuses = ['To Do', 'In Progress', 'Done']
 
-test.concurrent('only statuses with pins become filters while the default selection follows the workflow', () => {
+test.concurrent('only statuses with pins become filters while future and intermediate work starts visible', () => {
   const empty = workStatusFilters(statuses, 'To Do', [])
-  assert.deepEqual(empty, { available: [], enabled: ['In Progress'] })
+  assert.deepEqual(empty, { available: [], enabled: ['To Do', 'In Progress'] })
 
   const arrived = workStatusFilters(statuses, 'To Do', ['Done', 'In Progress', 'To Do'], empty.enabled)
   assert.deepEqual(arrived, {
     available: ['To Do', 'In Progress', 'Done'],
-    enabled: ['In Progress'],
+    enabled: ['To Do', 'In Progress'],
   })
 })
 
@@ -30,7 +30,7 @@ test.concurrent('an unconfigured cold start cannot become an empty user filter c
     preservedWorkStatuses([], boot.enabled),
   )
 
-  assert.deepEqual(arrived, { available: ['In Progress'], enabled: ['In Progress'] })
+  assert.deepEqual(arrived, { available: ['In Progress'], enabled: ['To Do', 'In Progress'] })
 })
 
 test.concurrent('custom intermediate statuses start enabled when their first pin arrives', () => {
@@ -40,7 +40,7 @@ test.concurrent('custom intermediate statuses start enabled when their first pin
 
   assert.deepEqual(arrived, {
     available: ['Review'],
-    enabled: ['In Progress', 'Review'],
+    enabled: ['To Do', 'In Progress', 'Review'],
   })
 })
 
@@ -50,5 +50,5 @@ test.concurrent('a filter choice survives an empty snapshot and a later pin', ()
   const empty = workStatusFilters(statuses, 'To Do', [], disabled.enabled)
   const returned = workStatusFilters(statuses, 'To Do', ['In Progress'], empty.enabled)
 
-  assert.deepEqual(returned, { available: ['In Progress'], enabled: [] })
+  assert.deepEqual(returned, { available: ['In Progress'], enabled: ['To Do'] })
 })

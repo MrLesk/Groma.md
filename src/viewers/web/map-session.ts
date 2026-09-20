@@ -87,7 +87,12 @@ export async function createWebMapSession(
   function workPayload(): WebWorkPayload {
     return {
       ...workState,
-      pins: pinsOf(workState.work.items, map.world, workState.work.statuses.at(-1)),
+      pins: pinsOf(
+        workState.work.items,
+        map.world,
+        workState.work.statuses.at(-1),
+        workState.work.defaultStatus,
+      ),
     }
   }
 
