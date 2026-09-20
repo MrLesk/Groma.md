@@ -83,9 +83,11 @@ bun plugins/scanners/swift/build.ts /tmp/groma-scanner-swift
 GROMA_TEST_SWIFT_PACKAGE=/tmp/groma-scanner-swift bun test test-bun/swift-scanner.test.ts
 ```
 
-CI builds the package before running repository checks. For the same check
-locally, set `GROMA_TEST_SWIFT_PACKAGE` to the built package when invoking
-`bun run check`. Each test copies it into its own temporary fixture.
+CI caches the test package by OS, CPU, toolchain and package inputs. An exact
+match skips Swift setup and compilation; every repository check still runs.
+Changed inputs rebuild the package. Release builds always compile it afresh.
+For the same check locally, set `GROMA_TEST_SWIFT_PACKAGE` to the built package
+when invoking `bun run check`. Each test copies it into its own temporary fixture.
 
 The build records the exact compiler version in the package. macOS parser
 libraries load from beside the worker. Linux packages include the required

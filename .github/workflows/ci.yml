@@ -26,7 +26,21 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
+      - name: Cache Swift test package
+        id: swift-package
+        uses: actions/cache@v6
+        with:
+          path: scanner-packages/swift
+          key: >-
+            swift-test-package-${{ matrix.os }}-${{ runner.arch }}-${{ env.BUN_VERSION }}-${{ hashFiles(
+              '.github/actions/setup-swift/action.yml',
+              'plugins/scanners/swift/**',
+              'plugins/scanners/projects.ts',
+              'packages/scanner/**',
+              'docs/scanners/swift/**',
+              'bun.lock', 'LICENSE') }}
       - uses: ./.github/actions/setup-swift
+        if: steps.swift-package.outputs.cache-hit != 'true'
       - uses: actions/setup-java@v6
         with:
           distribution: temurin
@@ -38,6 +52,7 @@ jobs:
         run: bun install --frozen-lockfile
         shell: bash
       - name: Build Swift test package
+        if: steps.swift-package.outputs.cache-hit != 'true'
         run: bun plugins/scanners/swift/build.ts scanner-packages/swift
         shell: bash
       - name: Run repository checks
