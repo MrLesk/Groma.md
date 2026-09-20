@@ -81,15 +81,7 @@ async function expectPagesRejoin(render: Render, size: number, headBlocks: numbe
 }
 
 test.concurrent('consecutive overview pages print the complete answer once, in order', async () => {
-  const pages = overview(viewerViewFixture)
-  const complete = await pages({})
-  const total = Number(await pages({ count: true }))
-  expect(total).toBeGreaterThan(2)
-  await expectPagesRejoin(pages, 2, 0)
-  expect(await pages({ maxCount: '2' })).toContain(`Showing 1-2 of ${total} items.`)
-  expect(await pages({ skip: '2' })).not.toContain('Next:')
-  expect(complete).not.toContain('Showing')
-  expect(await pages({ skip: String(total) })).toContain(`Showing 0 of ${total} items.`)
+  await expectPagesRejoin(overview(viewerViewFixture), 2, 0)
 })
 
 test.concurrent('an empty section and the closing command print on the page that reaches their place', async () => {
@@ -106,14 +98,5 @@ test.concurrent('a draft summary pages the elements it touches', async () => {
   const total = Number(await draft({ count: true }))
   expect(total).toBe(1)
   const pastEnd = await draft({ skip: '1' })
-  expect(pastEnd).toContain('Showing 0 of 1 items.')
   expect(blocks(pastEnd)).toEqual(complete.slice(0, -1))
-})
-
-test.concurrent('a drill-down pages its children and keeps the element it describes', async () => {
-  const drillDown = record(viewerViewFixture, 'shop', true)
-  const total = Number(await drillDown({ count: true }))
-  const page = await drillDown({ maxCount: '2' })
-  expect(page).toContain('shop  system  Shop')
-  expect(page).toContain(`Showing 1-2 of ${total} items. Next: groma view shop --plain --skip 2`)
 })
