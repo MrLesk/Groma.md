@@ -146,11 +146,13 @@ const style = `
     gap: 16px;
     padding: 0 16px;
   }
+  #header #stats, #header #zoom, #header .controls button { font-size: 12px; }
   .header-context { min-width: 0; display: flex; align-items: center; gap: 16px; }
-  .header-context > svg { height: 26px; width: auto; display: block; flex: none; }
+  /* The lockup's text sits below its artwork's center, so align it optically with the header text. */
+  .header-context > svg { height: 32px; width: auto; display: block; flex: none; transform: translateY(-1px); }
   #stats { min-width: 0; flex: 1; display: flex; align-items: center; gap: 10px; white-space: nowrap; }
   #stats .project-name { overflow: hidden; text-overflow: ellipsis; color: var(--ink); }
-  #stats .world-counts { flex: none; font-size: 9px; letter-spacing: 0.06em; }
+  #stats .world-counts { flex: none; font-size: 10px; letter-spacing: 0.06em; }
   .header-actions { display: flex; align-items: center; gap: 8px; }
   .header-actions details > summary { border-color: transparent; background: transparent; }
   .header-utilities { display: flex; align-items: center; gap: 4px; border-left: 1px solid var(--hairline); padding-left: 8px; }

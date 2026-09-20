@@ -60,11 +60,11 @@ export const c4FilterCss = `
   #c4-filter button {
     position: relative; display: grid; place-items: center; width: 32px; height: 32px; padding: 0;
     border: 1px solid transparent; border-radius: 50%; color: var(--muted);
-    transition: color 160ms ease, background 160ms ease, border-color 160ms ease;
+    transition: color 160ms ease, background 160ms ease;
   }
-  #c4-filter svg { width: 17px; height: 17px; }
-  #c4-filter [aria-pressed="true"] { color: var(--accent-text); background: color-mix(in srgb, var(--accent-text) 12%, transparent); border-color: color-mix(in srgb, var(--accent-text) 20%, transparent); }
+  #c4-filter svg { display: block; width: 16px; height: 16px; }
   #c4-filter button:hover { color: var(--ink); background: var(--hover); }
+  #c4-filter [aria-pressed="true"], #c4-filter [aria-pressed="true"]:hover { color: var(--paper); background: var(--ink); }
   #c4-filter .c4-tooltip {
     position: absolute; left: calc(100% + 13px); top: 50%; transform: translate(-4px, -50%);
     padding: 5px 9px; border: 1px solid var(--hairline); border-radius: 6px; background: var(--paper); color: var(--ink);
