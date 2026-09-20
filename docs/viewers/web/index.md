@@ -160,9 +160,9 @@ third-party runtime library and development tool, including its version, license
 and project link. The dropdown lists Auto,
 Light, Dark and Blueprint. Auto is the default for a browser profile with no
 saved choice and follows that browser's light or dark colour preference. A
-choice is saved for later visits. Blueprint uses a deep navy field, pale cyan drafting lines, and
-restrained calibration marks while keeping the same architecture, compass,
-and accent green. The full footer is absent, and Live work keeps the bottom
+choice is saved for later visits. Blueprint uses a deep navy field, quieter blue drafting lines,
+and Groma green for selection and active flows, with restrained calibration marks
+and the same architecture and compass. The full footer is absent, and Live work keeps the bottom
 centre. The camera fits architecture into the clear area between
 the floating hierarchy and any open details pane, so the grid continues
 beneath the chrome without hiding the fitted world.
