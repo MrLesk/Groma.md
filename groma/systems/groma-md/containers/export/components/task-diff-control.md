@@ -10,6 +10,8 @@ groma:
       file: src/viewers/web/task-diff/control.ts
     - scanner: typescript
       file: src/viewers/web/task-diff/view.ts
+    - scanner: typescript
+      file: src/viewers/web/task-diff/updates.ts
   group: Project work
 ---
 

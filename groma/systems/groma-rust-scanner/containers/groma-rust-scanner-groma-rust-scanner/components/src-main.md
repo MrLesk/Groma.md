@@ -10,6 +10,10 @@ groma:
       file: plugins/scanners/rust/native/src/main.rs
     - scanner: rust
       file: plugins/scanners/rust/native/src/scan.rs
+    - scanner: rust
+      file: plugins/scanners/rust/native/src/tokens.rs
+    - scanner: rust
+      file: plugins/scanners/rust/native/src/text.rs
 ---
 
-Loads the selected Cargo project with rust-analyzer. Writes source declarations and supported call evidence as a scanner result.
+Loads the declared source crate graph with rust-analyzer. Returns source declarations, operation bodies and supported call evidence for the scanner result.

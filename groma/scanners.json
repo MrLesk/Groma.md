@@ -43,6 +43,10 @@
     "/scripts/",
     "/test/",
     "/test-bun/",
-    "/plugins/scanners/csharp/dotnet/test/"
+    "/plugins/scanners/csharp/dotnet/test/",
+    "/examples/",
+    "/plugins/scanners/*/build.ts",
+    "/plugins/scanners/framework-package.ts",
+    "/plugins/scanners/rust/notices.ts"
   ]
 }

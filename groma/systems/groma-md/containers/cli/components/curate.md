@@ -1,6 +1,6 @@
 ---
 type: C4 Component
-title: Component structure
+title: Architecture structure
 status: stable
 groma:
   id: curate
@@ -9,11 +9,15 @@ groma:
     - scanner: typescript
       file: src/curate.ts
     - scanner: typescript
-      file: src/move.ts
-      symbol: moveBlocker
-    - scanner: typescript
       file: src/group.ts
+    - scanner: typescript
+      file: src/curate-rename.ts
+    - scanner: typescript
+      file: src/curate-rewrites.ts
+    - scanner: typescript
+      file: src/movable.ts
+      symbol: moveBlocker
   group: Architecture records
 ---
 
-Combines source evidence into one component. Moves empty components and assigns named groups without changing source file ownership.
+Moves, combines and renames architecture elements while preserving source ownership and links. Assigns named groups within containers and checks that structural changes preserve authored meaning.

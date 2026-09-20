@@ -12,6 +12,9 @@ groma:
       file: src/scan-reconciler.ts
     - scanner: typescript
       file: src/scan-component-naming.ts
+    - scanner: typescript
+      file: src/scan-source-units.ts
+      symbol: sourceUnitGroups
   group: Source scanning
 ---
 

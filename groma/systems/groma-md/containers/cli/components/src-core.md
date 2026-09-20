@@ -13,6 +13,9 @@ groma:
     - scanner: typescript
       file: src/element-order.ts
       symbol: compareSemanticElements
+    - scanner: typescript
+      file: src/source-coverage.ts
+      symbol: missingOwnerReason
   group: Architecture records
 ---
 

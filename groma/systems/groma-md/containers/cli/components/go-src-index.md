@@ -13,4 +13,4 @@ groma:
   group: Language analysis
 ---
 
-Selects Go modules and checks the Go tools. Starts the Go worker and reads its scan result.
+Selects Go modules and starts the bundled Go worker. Returns its source analysis and outlines through the shared scanner contract.

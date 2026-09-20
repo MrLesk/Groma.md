@@ -10,7 +10,10 @@ groma:
       file: src/scan-evidence.ts
     - scanner: typescript
       file: src/relationship-inference.ts
+    - scanner: typescript
+      file: src/http-relationships.ts
+      symbol: httpRelationships
   group: Source scanning
 ---
 
-Combines operation evidence from scanners. Derives a relationship only when the supplied callback has one known provider.
+Combines operation and HTTP evidence from scanners. Derives architecture relationships only when callback or request evidence identifies a supported provider.

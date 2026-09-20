@@ -30,28 +30,42 @@ title: Architecture relationships
 | [plugins/scanners/csharp/dotnet/Command.cs](../plugins/scanners/csharp/dotnet/Command.cs) | [plugins/scanners/csharp/dotnet/Scanner.cs](../plugins/scanners/csharp/dotnet/Scanner.cs) | Runs the requested compiler analysis | Function call |
 | [plugins/scanners/go/src/adapter.ts](../plugins/scanners/go/src/adapter.ts) | [plugins/scanners/go/worker/main.go](../plugins/scanners/go/worker/main.go) | Starts Go analysis and reads its result | Child process and JSON |
 | [plugins/scanners/rust/src/index.ts](../plugins/scanners/rust/src/index.ts) | [plugins/scanners/rust/native/src/main.rs](../plugins/scanners/rust/native/src/main.rs) | Starts Rust analysis and reads its result | Child process and JSON |
+| [Developer](actors/developer.md) | [Command interface](systems/groma-md/containers/cli/components/src-cli.md) | Runs project scans, architecture commands, and scanner setup | Groma CLI |
+| [Developer](actors/developer.md) | [Task changes panel](systems/groma-md/containers/export/components/task-diff-control.md) | Reviews a selected task and its source changes in the browser map | Browser UI |
+| [Developer](actors/developer.md) | [Revision selector](systems/groma-md/containers/export/components/revision-control.md) | Selects a stored architecture revision in the browser map | Browser UI |
+| [plugins/work-sources/backlog/src/index.ts](../plugins/work-sources/backlog/src/index.ts) | [Backlog.md](externals/backlog-md.md) | Reads task summaries, selected details, workflow settings, and live updates | Backlog CLI and JSON |
+| [src/history/revisions.ts](../src/history/revisions.ts) | [Git](externals/git.md) | Lists architecture commits and reads files or snapshots at selected revisions | Git CLI |
+| [src/scanner/modules/published.ts](../src/scanner/modules/published.ts) | [Scanner package registry](externals/scanner-package-registry.md) | Reads published scanner releases and compatibility metadata | HTTP registry API |
+| [src/scanner/modules/package.ts](../src/scanner/modules/package.ts) | [Scanner package registry](externals/scanner-package-registry.md) | Downloads the selected scanner package and its dependencies | Bun install and npm registry protocol |
+| [src/cli.ts](../src/cli.ts) | [src/authoring.ts](../src/authoring.ts) | Dispatches explicit architecture creation, editing, drafting, acceptance, and removal | Function call |
+| [src/edit.ts](../src/edit.ts) | [src/markdown-emitter.ts](../src/markdown-emitter.ts) | Writes the validated change to an architecture record | Function call |
+| [src/scanner/cli.ts](../src/scanner/cli.ts) | [src/scanner/modules/inventory.ts](../src/scanner/modules/inventory.ts) | Installs or updates the requested scanner and records its selected source | Function call |
+| [src/viewers/web/task-diff/control.ts](../src/viewers/web/task-diff/control.ts) | [src/viewers/web/data.ts](../src/viewers/web/data.ts) | Requests selected task details and file differences through the supplied data operations | Bound function calls |
+| [src/viewers/web/revision/control.ts](../src/viewers/web/revision/control.ts) | [src/viewers/web/data.ts](../src/viewers/web/data.ts) | Requests available revisions and the selected architecture snapshot | Function call |
+| [src/viewers/web/map-session.ts](../src/viewers/web/map-session.ts) | [src/history/revisions.ts](../src/history/revisions.ts) | Lists architecture revisions and loads the requested Git snapshot | Function call |
+| [Coding agent](actors/coding-agent.md) | [Command interface](systems/groma-md/containers/cli/components/src-cli.md) | Reads architecture, runs scans, and submits explicit architecture changes | Groma CLI |
 | [src/cli.ts](../src/cli.ts) | [src/lint-command.ts](../src/lint-command.ts) | Registers the lint command on the shared CLI program | Function call |
 
 ## Derived relationships
 
 | Source | Target | Description | Technology |
 | --- | --- | --- | --- |
-| [src/architecture-watch.ts](../src/architecture-watch.ts) | [src/view-host.ts](../src/view-host.ts) | Invokes supplied onChange callback | typescript |
-| [src/architecture-watch.ts](../src/architecture-watch.ts) | [src/viewers/tui/scanner-settings.ts](../src/viewers/tui/scanner-settings.ts) | Invokes supplied onChange callback | typescript |
-| [src/architecture-watch.ts](../src/architecture-watch.ts) | [src/viewers/web/export.ts](../src/viewers/web/export.ts) | Invokes supplied onChange callback | typescript |
-| [src/architecture-watch.ts](../src/architecture-watch.ts) | [src/viewers/web/map-session.ts](../src/viewers/web/map-session.ts) | Invokes supplied onChange callback | typescript |
-| [src/init-command.ts](../src/init-command.ts) | [src/cli.ts](../src/cli.ts) | Invokes supplied openViewer callback | typescript |
-| [src/scanner.ts](../src/scanner.ts) | [src/cli.ts](../src/cli.ts) | Invokes supplied onFold callback | typescript |
-| [src/scanner/session.ts](../src/scanner/session.ts) | [src/view-host.ts](../src/view-host.ts) | Invokes supplied onFold callback; Invokes supplied onSettings callback | typescript |
-| [src/scanner/session.ts](../src/scanner/session.ts) | [src/viewers/web/map-session.ts](../src/viewers/web/map-session.ts) | Invokes supplied onFold callback; Invokes supplied onSettings callback | typescript |
-| [src/scanner/source-watch.ts](../src/scanner/source-watch.ts) | [src/cli.ts](../src/cli.ts) | Invokes supplied onError callback | typescript |
-| [src/scanner/source-watch.ts](../src/scanner/source-watch.ts) | [src/scanner.ts](../src/scanner.ts) | Invokes supplied onObservations callback | typescript |
-| [src/scanner/source-watch.ts](../src/scanner/source-watch.ts) | [src/scanner/session.ts](../src/scanner/session.ts) | Invokes supplied onError callback; Invokes supplied onObservations callback | typescript |
-| [src/viewers/tui/panes/screen.ts](../src/viewers/tui/panes/screen.ts) | [src/viewers/tui/terminal-viewer.ts](../src/viewers/tui/terminal-viewer.ts) | Invokes supplied onHierarchyRow callback; Invokes supplied onMapCell callback | typescript |
-| [src/viewers/web/atoms/settings-dialog.ts](../src/viewers/web/atoms/settings-dialog.ts) | [src/viewers/web/review/control.ts](../src/viewers/web/review/control.ts) | Invokes supplied onClose callback | typescript |
-| [src/viewers/web/authoring.ts](../src/viewers/web/authoring.ts) | [src/viewers/web/render.ts](../src/viewers/web/render.ts) | Invokes supplied live callback; Invokes supplied world callback | typescript |
-| [src/viewers/web/iso/pointer.ts](../src/viewers/web/iso/pointer.ts) | [src/viewers/web/render.ts](../src/viewers/web/render.ts) | Invokes supplied editProject callback; Invokes supplied orbiting callback; Invokes supplied select callback | typescript |
-| [src/viewers/web/review/control.ts](../src/viewers/web/review/control.ts) | [src/viewers/web/render.ts](../src/viewers/web/render.ts) | Invokes supplied world callback | typescript |
-| [src/viewers/web/search/session.ts](../src/viewers/web/search/session.ts) | [src/viewers/web/render.ts](../src/viewers/web/render.ts) | Invokes supplied anchorOf callback; Invokes supplied apply callback; Invokes supplied openTask callback; Invokes supplied previewMap callback; Invokes supplied snapshot callback; Invokes supplied taskElements callback | typescript |
-| [src/viewers/web/source/control.ts](../src/viewers/web/source/control.ts) | [src/viewers/web/render.ts](../src/viewers/web/render.ts) | Invokes supplied element callback; Invokes supplied repaint callback; Invokes supplied revision callback | typescript |
-| [src/viewers/web/task-diff/control.ts](../src/viewers/web/task-diff/control.ts) | [src/viewers/web/render.ts](../src/viewers/web/render.ts) | Invokes supplied repaint callback; Invokes supplied world callback | typescript |
+| [src/architecture-watch.ts](../src/architecture-watch.ts) | [src/view-host.ts](../src/view-host.ts) | Invokes supplied callback: onChange | typescript |
+| [src/architecture-watch.ts](../src/architecture-watch.ts) | [src/viewers/tui/scanner-settings.ts](../src/viewers/tui/scanner-settings.ts) | Invokes supplied callback: onChange | typescript |
+| [src/architecture-watch.ts](../src/architecture-watch.ts) | [src/viewers/web/export.ts](../src/viewers/web/export.ts) | Invokes supplied callback: onChange | typescript |
+| [src/architecture-watch.ts](../src/architecture-watch.ts) | [src/viewers/web/map-session.ts](../src/viewers/web/map-session.ts) | Invokes supplied callback: onChange | typescript |
+| [src/init-command.ts](../src/init-command.ts) | [src/cli.ts](../src/cli.ts) | Invokes supplied callback: openViewer | typescript |
+| [src/scanner.ts](../src/scanner.ts) | [src/cli.ts](../src/cli.ts) | Invokes supplied callback: onFold | typescript |
+| [src/scanner/session.ts](../src/scanner/session.ts) | [src/view-host.ts](../src/view-host.ts) | Invokes supplied callbacks: onFold, onSettings | typescript |
+| [src/scanner/session.ts](../src/scanner/session.ts) | [src/viewers/web/map-session.ts](../src/viewers/web/map-session.ts) | Invokes supplied callbacks: onFold, onSettings | typescript |
+| [src/scanner/source-watch.ts](../src/scanner/source-watch.ts) | [src/cli.ts](../src/cli.ts) | Invokes supplied callback: onError | typescript |
+| [src/scanner/source-watch.ts](../src/scanner/source-watch.ts) | [src/scanner.ts](../src/scanner.ts) | Invokes supplied callback: onObservations | typescript |
+| [src/scanner/source-watch.ts](../src/scanner/source-watch.ts) | [src/scanner/session.ts](../src/scanner/session.ts) | Invokes supplied callbacks: onError, onObservations | typescript |
+| [src/viewers/tui/panes/screen.ts](../src/viewers/tui/panes/screen.ts) | [src/viewers/tui/terminal-viewer.ts](../src/viewers/tui/terminal-viewer.ts) | Invokes supplied callbacks: onHierarchyRow, onMapCell | typescript |
+| [src/viewers/web/atoms/settings-dialog.ts](../src/viewers/web/atoms/settings-dialog.ts) | [src/viewers/web/review/control.ts](../src/viewers/web/review/control.ts) | Invokes supplied callback: onClose | typescript |
+| [src/viewers/web/authoring.ts](../src/viewers/web/authoring.ts) | [src/viewers/web/render.ts](../src/viewers/web/render.ts) | Invokes supplied callbacks: live, world | typescript |
+| [src/viewers/web/iso/pointer.ts](../src/viewers/web/iso/pointer.ts) | [src/viewers/web/render.ts](../src/viewers/web/render.ts) | Invokes supplied callbacks: editProject, orbiting, select | typescript |
+| [src/viewers/web/review/control.ts](../src/viewers/web/review/control.ts) | [src/viewers/web/render.ts](../src/viewers/web/render.ts) | Invokes supplied callback: world | typescript |
+| [src/viewers/web/search/session.ts](../src/viewers/web/search/session.ts) | [src/viewers/web/render.ts](../src/viewers/web/render.ts) | Invokes supplied callbacks: anchorOf, apply, openTask, previewMap, snapshot, taskElements | typescript |
+| [src/viewers/web/source/control.ts](../src/viewers/web/source/control.ts) | [src/viewers/web/render.ts](../src/viewers/web/render.ts) | Invokes supplied callbacks: element, repaint, revision | typescript |
+| [src/viewers/web/task-diff/control.ts](../src/viewers/web/task-diff/control.ts) | [src/viewers/web/render.ts](../src/viewers/web/render.ts) | Invokes supplied callbacks: repaint, world | typescript |

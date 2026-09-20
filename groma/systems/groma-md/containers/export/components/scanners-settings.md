@@ -8,6 +8,9 @@ groma:
   code:
     - scanner: typescript
       file: src/viewers/web/scanners/settings.ts
+    - scanner: typescript
+      file: src/viewers/web/scanners/name.ts
+      symbol: scannerName
   group: Browser controls
 ---
 

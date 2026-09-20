@@ -14,7 +14,20 @@ groma:
     - scanner: typescript
       file: plugins/scanners/vue/src/evidence.ts
       symbol: VueEvidence
+    - scanner: typescript
+      file: plugins/scanners/vue/src/http.ts
+    - scanner: typescript
+      file: plugins/scanners/vue/src/server-routes.ts
+      symbol: serverRoute
+    - scanner: typescript
+      file: plugins/scanners/vue/src/outline.ts
+      symbol: readVueOutline
+    - scanner: typescript
+      file: plugins/scanners/vue/src/operations.ts
+      symbol: addComparedOperations
+    - scanner: typescript
+      file: plugins/scanners/vue/src/sfc.ts
   group: Language analysis
 ---
 
-Reads Vue source and template data. Returns declarations and event callback evidence.
+Reads Vue source and templates. Returns declarations, event callback evidence, operation bodies, source outlines and supported HTTP requests and endpoints.

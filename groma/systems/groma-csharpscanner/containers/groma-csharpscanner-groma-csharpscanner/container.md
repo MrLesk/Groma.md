@@ -7,4 +7,4 @@ groma:
   parent: groma-csharpscanner
 ---
 
-Loads C# projects with MSBuild and Roslyn. Returns source and operation evidence to the Groma scanner adapter.
+Runs C# source analysis in a separate .NET process using Roslyn. Returns declarations, operations, HTTP evidence and source outlines to the Groma scanner adapter.

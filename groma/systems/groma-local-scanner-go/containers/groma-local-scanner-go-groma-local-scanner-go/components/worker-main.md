@@ -12,6 +12,10 @@ groma:
       file: plugins/scanners/go/worker/contract.go
     - scanner: go
       file: plugins/scanners/go/worker/evidence.go
+    - scanner: go
+      file: plugins/scanners/go/worker/project.go
+    - scanner: go
+      file: plugins/scanners/go/worker/tokens.go
 ---
 
-Loads the active Go module with the Go compiler tools. Writes source declarations and operation evidence as a scanner result.
+Loads active Go module source with the bundled parser and type checker. Returns declarations and operation evidence for the scanner result.

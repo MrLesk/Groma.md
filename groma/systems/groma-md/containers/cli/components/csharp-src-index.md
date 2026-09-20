@@ -17,4 +17,4 @@ groma:
   group: Language analysis
 ---
 
-Selects C# projects and checks the .NET tools. Starts the C# worker and reads its scan result.
+Selects declared C# projects and starts the bundled .NET worker. Converts its source analysis and outlines into the shared scanner contract.

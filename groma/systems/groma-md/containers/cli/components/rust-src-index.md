@@ -13,4 +13,4 @@ groma:
   group: Language analysis
 ---
 
-Selects Cargo projects and checks the Rust tools. Starts the Rust worker and reads its scan result.
+Reads Cargo source declarations and prepares the source crate graph. Starts the bundled Rust worker and returns its source analysis and outlines.

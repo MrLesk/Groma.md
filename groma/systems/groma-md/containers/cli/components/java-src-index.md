@@ -11,10 +11,17 @@ groma:
     - scanner: typescript
       file: plugins/scanners/java/src/adapter.ts
     - scanner: typescript
+      file: plugins/scanners/java/src/process.ts
+    - scanner: typescript
+      file: plugins/scanners/java/src/java-input.ts
+    - scanner: typescript
       file: plugins/scanners/java/src/maven.ts
     - scanner: typescript
-      file: plugins/scanners/java/src/process.ts
+      file: plugins/scanners/java/src/gradle.ts
+    - scanner: typescript
+      file: plugins/scanners/java/src/missing-types.ts
+      symbol: summarizeMissingTypes
   group: Language analysis
 ---
 
-Selects Maven projects and checks the Java tools. Starts the Java worker with the prepared project model.
+Reads supported Maven and Gradle source declarations and prepares the project input. Starts the bundled Java worker and returns its source analysis and outlines.

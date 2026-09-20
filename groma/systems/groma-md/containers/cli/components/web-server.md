@@ -15,6 +15,8 @@ groma:
     - scanner: typescript
       file: src/viewers/web/startup/page.ts
       symbol: renderSetupPage
+    - scanner: typescript
+      file: src/viewers/web/startup/scanners.ts
   group: Browser delivery
 ---
 

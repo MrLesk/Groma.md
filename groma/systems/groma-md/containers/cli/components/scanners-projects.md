@@ -13,6 +13,8 @@ groma:
       symbol: projectScanner
     - scanner: typescript
       file: plugins/scanners/observations.ts
+    - scanner: typescript
+      file: plugins/scanners/typescript-project.ts
   group: Scanner support
 ---
 

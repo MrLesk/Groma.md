@@ -10,6 +10,10 @@ groma:
       file: packages/scanner/src/index.ts
     - scanner: typescript
       file: packages/scanner/src/discovery.ts
+    - scanner: typescript
+      file: packages/scanner/src/http.ts
+    - scanner: typescript
+      file: packages/scanner/src/values.ts
   group: Scanner support
 ---
 

@@ -11,4 +11,4 @@ groma:
   group: Language analysis
 ---
 
-Selects Python source files and checks the Python interpreter. Starts the Python worker and reads its scan result.
+Selects Python source and project declarations. Starts the bundled analysis runtime in a worker thread and returns scan results or source outlines.

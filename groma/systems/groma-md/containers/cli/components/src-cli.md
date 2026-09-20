@@ -11,6 +11,9 @@ groma:
     - scanner: typescript
       file: src/scanner/cli.ts
       symbol: registerScannerCommands
+    - scanner: typescript
+      file: src/write-commands.ts
+      symbol: registerWriteCommands
   group: Project commands
 ---
 
