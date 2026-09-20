@@ -1,11 +1,11 @@
 ---
 id: TASK-444
 title: Fix Rust workspace loading and publish current scanners
-status: In Progress
+status: Done
 assignee:
   - '@codex'
 created_date: '2026-09-19 21:17'
-updated_date: '2026-09-19 22:25'
+updated_date: '2026-09-20 10:25'
 labels: []
 dependencies: []
 references:
@@ -55,15 +55,15 @@ Scanning Codex with the published Rust package fails on offline Cargo dependenci
 - [x] #2 Implicit path-dependency workspace members retain inherited edition and local dependencies without duplicate standalone scans.
 - [x] #3 The complete Codex repository scans with the corrected Rust package without source edits or application dependency installation.
 - [x] #4 Focused regression tests and bun run check pass; documentation records the supported behavior and verification.
-- [ ] #5 Updated scanner packages, including JavaScript, are published through the existing release process and verified from npm.
+- [x] #5 Updated scanner packages, including JavaScript, are published through the existing release process and verified from npm.
 <!-- AC:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 Acceptance criteria have objective verification evidence.
-- [ ] #2 Relevant checks pass and changes remain task-scoped.
-- [ ] #3 Public contracts or documentation are updated when behavior changes.
-- [ ] #4 Implementation Plan reflects the final approach; correction history and verification are recorded in Implementation Notes.
+- [x] #1 Acceptance criteria have objective verification evidence.
+- [x] #2 Relevant checks pass and changes remain task-scoped.
+- [x] #3 Public contracts or documentation are updated when behavior changes.
+- [x] #4 Implementation Plan reflects the final approach; correction history and verification are recorded in Implementation Notes.
 <!-- DOD:END -->
 
 ## Implementation Plan
@@ -114,4 +114,20 @@ C# split release qualification completed successfully in run 35472519649: reposi
 Initial runtime publication reached npm but each child returned EOTP because the shared release subprocess helper inherited stdout/stderr without stdin. Corrected the helper to inherit stdin as well, enabling the existing npm browser approval flow in a terminal. No runtime artifact or scanner behavior changed; repository checks are rerunning. No C# runtime version was accepted by these failed attempts.
 
 Repository checks pass after the npm terminal-input correction: 16 Node tests, 601 Bun tests, 36 opt-in skips, zero failures. The change only connects the existing publication subprocess to the caller terminal; all qualified scanner artifacts are unchanged.
+
+All five platform artifacts were assembled successfully. The corrected release command now presents npm browser approval for each of the five initial C# runtime publications; opened all five approval pages in the default browser. Publication is waiting for the account holder to complete those approvals. The adapter will publish after the runtime group succeeds. Public C# installation verification and AC5 remain pending; no credential or approval URL was stored in the repository.
+
+The five npm browser approval sessions ended with E404 from the approval completion endpoint before any runtime upload succeeded. They are no longer active; no background publishing command remains. Requested Alex availability before opening fresh publication approvals. C# source, package assembly and five-platform qualification are complete; publication and public-install verification remain pending.
+
+Alex explicitly approved permanent npm publishing permission for release.yml in MrLesk/Groma.md for JavaScript and the five new C# runtime packages. The renewed npm web login succeeded on 2026-09-20. Initial runtime uploads use the qualified five-platform CI artifacts; the existing C# adapter already has the release workflow publishing path. npm documentation requires each new package to exist before trusted publishing can be configured.
+
+npm accepted all five new C# runtime packages at 0.1.3. Created and verified GitHub trusted-publisher configurations for JavaScript and the runtime packages, scoped to MrLesk/Groma.md and release.yml. The existing C# adapter already had that trusted publisher. Release workflow 35504470207 is running on ada21479 with publish_scanners=true so CI publishes the adapter. Registry visibility is still propagating for the initial runtimes; public adapter installation remains pending.
+
+Release workflow 35504470207 completed successfully on ada21479: repository checks, five native platform package suites and npm publication all passed. CI published @groma/scanner-csharp 0.1.3 with GitHub provenance; all five exact runtime optional dependencies are publicly available at 0.1.3. The actual npm package passed Groma fresh installation, readiness and a two-project C# fixture scan on macOS ARM64. A second checkout restored the recorded scanner selection with groma scanner install and passed readiness and scanning. All six new package trusted-publisher grants are verified for MrLesk/Groma.md release.yml. No further npm approval or release blocker remains.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Fixed Rust shared-module source visibility and implicit Cargo workspace inheritance. Published Rust 0.1.2 scans Codex: 2586 files and 25502 operations, without source edits or project dependency installation. Published all prepared scanner updates, including JavaScript 0.1.0 and C# 0.1.3. C# now installs one complete platform runtime through exact optional dependencies, resolving the rejected 214.6 MB archive. Verified public C# fresh installation and second-checkout restore; five platform CI suites and repository checks pass. Enabled CI publishing for JavaScript and the five new C# runtime packages. PR108 is ready for review.
+<!-- SECTION:FINAL_SUMMARY:END -->
