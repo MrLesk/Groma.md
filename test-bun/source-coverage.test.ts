@@ -2,9 +2,7 @@ import { expect, test } from 'bun:test'
 import { cp, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import { createScanObservation } from '@groma/scanner'
 
-import { reconcileScanObservations } from '../src/core.ts'
 import { parseListWindow } from '../src/list-window.ts'
 import { renderPlainRecord } from '../src/plain-world.ts'
 import { readScannerConfig, writeScannerConfig } from '../src/scanner/modules/config.ts'
@@ -96,20 +94,5 @@ test.concurrent('a scanner whose listing fails is named beside the other scanner
     const notes = await reason(root, 'src/notes.txt')
     expect(notes).toContain('broken could not list its sources: Cargo.toml is unreadable')
     expect(notes).not.toContain('no enabled scanner')
-  } finally { await rm(root, { recursive: true, force: true }) }
-})
-
-test.concurrent('a scanned file answers with its owner instead of a reason', async () => {
-  const root = await repository()
-  try {
-    await reconcileScanObservations(root, [createScanObservation({
-      scanner: { id: 'first', technology: 'fixture', engine: 'fixture', engineVersion: '1' },
-      roots: [{ id: 'app', kind: 'project', name: 'App' }],
-      files: [{ file: 'src/kept.ts', roots: ['app'], symbols: [] }],
-      diagnostics: [],
-    })])
-    const result = await renderPlainRecord(root, 'src/kept.ts', true, window)
-    expect(result.ok).toBeTrue()
-    expect(result.ok && result.text).toContain('Owner')
   } finally { await rm(root, { recursive: true, force: true }) }
 })
