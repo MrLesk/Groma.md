@@ -61,12 +61,12 @@
     "@groma/work-source-backlog": "workspace:*",
     "@opentui/core": "0.5.10",
     "@parcel/watcher": "2.6.0",
+    "@resvg/resvg-wasm": "2.6.2",
     "comark": "0.6.2",
     "commander": "15.0.0",
     "diff": "9.0.0",
     "fuse.js": "7.5.0",
     "ignore": "7.0.9",
-    "puppeteer-core": "25.11.0",
     "web-worker": "1.5.0",
     "webcola": "3.4.0"
   },

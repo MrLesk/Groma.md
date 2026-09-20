@@ -74,7 +74,7 @@ does not inspect Backlog storage.
 Export also writes `cover-light.png`, `cover-dark.png`, and `cover-blueprint.png`
 at 1200×630 pixels. Each cover uses the actual map, one continuous graph-paper
 grid, and a glass footer with the project title and Groma attribution.
-The map's geometry, drawing, themes, and font stack remain the source of truth.
+The map's geometry, drawing, themes, and bundled fonts remain the source of truth.
 
 Set the public directory URL when publishing so the initial HTML contains
 absolute Open Graph page and image URLs:
@@ -97,16 +97,20 @@ sharing text. An unauthored description stays absent; the overview is not
 converted into a second summary. Covers are derived presentation assets, not
 new OKF records or C4 elements.
 
-PNG generation requires installed Google Chrome. Set `GROMA_CHROME` to a
-Chrome or Chromium executable when it is not installed in Chrome's standard
-location. Groma launches a separate headless process, closes it after rendering,
-and does not download a browser. The published website only serves ordinary PNG
-files and needs no browser or Groma process on its host.
+Generation runs inside Groma using resvg WebAssembly and bundled DejaVu fonts.
+It needs no browser, installed fonts, or network access. The renderer and fonts
+also travel inside the standalone CLI. The published website serves ordinary
+PNG files and needs no Groma process on its host.
 
-The `web/sharing` domain owns this flow: `cover.ts` composes the page,
-`render.ts` paints it through the existing map, `images.ts` captures the PNGs,
-and `metadata.ts` builds the initial sharing fields. Export and live delivery
-use those same owners.
+The `iso` drawing functions produce SVG for both the interactive map and covers.
+The browser mounts it and owns selection and camera movement; shared style rules
+resolve explicit colours and fixed-camera stroke widths for PNG generation.
+The viewport grid stays outside the moving architecture group.
+
+The `web/sharing` domain owns publication: `cover.ts` composes the shared SVG
+and footer, `images.ts` converts it to PNG, and `metadata.ts` builds the initial
+sharing fields. Export and live delivery use those same owners. Bundled fonts
+and their redistribution notice live together under `web/atoms/fonts`.
 
 ## Layout
 

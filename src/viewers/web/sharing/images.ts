@@ -1,30 +1,39 @@
-import { launch } from 'puppeteer-core'
+import { readFileSync } from 'node:fs'
+import { initWasm, Resvg } from '@resvg/resvg-wasm'
+import wasm from '@resvg/resvg-wasm/index_bg.wasm' with { type: 'file' }
+import { fontBuffers } from '../atoms/fonts/index.ts'
 import { themeModes, type WebTheme } from '../atoms/theme.ts'
-import { bundleRenderer } from '../runtime.ts'
-import { COVER_SIZE, renderCover, type CoverPayload } from './cover.ts'
+import { renderCover, type CoverPayload } from './cover.ts'
 
 export const coverThemes = themeModes.filter(theme => theme !== 'auto')
 export type CoverImages = Record<WebTheme, Uint8Array<ArrayBuffer>>
 
-/** One browser renders the real web map for both export and live image requests. */
-export async function generateCovers(payload: CoverPayload): Promise<CoverImages> {
-  const renderer = await bundleRenderer('cover')
-  const browser = await launch({
-    ...(process.env.GROMA_CHROME === undefined ? { channel: 'chrome' } : { executablePath: process.env.GROMA_CHROME }),
-    headless: true,
-    defaultViewport: COVER_SIZE,
-  })
+let ready: Promise<void> | undefined
+
+function renderPng(svg: string): Uint8Array<ArrayBuffer> {
+  const renderer = new Resvg(svg, { font: {
+    fontBuffers,
+    defaultFontFamily: 'DejaVu Sans Mono',
+    monospaceFamily: 'DejaVu Sans Mono',
+    sansSerifFamily: 'DejaVu Sans',
+  } })
   try {
-    const images = {} as CoverImages
-    for (const theme of coverThemes) {
-      const page = await browser.newPage()
-      await page.setContent(renderCover(payload, theme, renderer))
-      await page.waitForSelector('html[data-cover-ready="true"]')
-      images[theme] = new Uint8Array(await page.screenshot({ type: 'png' }))
-      await page.close()
+    const image = renderer.render()
+    try {
+      return new Uint8Array(image.asPng())
+    } finally {
+      image.free()
     }
-    return images
   } finally {
-    await browser.close()
+    renderer.free()
   }
+}
+
+/** The embedded renderer and fonts generate both live and exported covers entirely in process. */
+export async function generateCovers(payload: CoverPayload): Promise<CoverImages> {
+  ready ??= initWasm(readFileSync(wasm))
+  await ready
+  const images = {} as CoverImages
+  for (const theme of coverThemes) images[theme] = renderPng(renderCover(payload, theme))
+  return images
 }

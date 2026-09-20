@@ -1,15 +1,14 @@
 import type { Point } from '../../../types.ts'
-import { PLANE } from '../../../sheet/measure.ts'
 import { paintLayerLabels, paintLayerPlanes } from '../layers/paint.ts'
 import type { LayeredScene } from '../layers/separation.ts'
 import type { Camera } from './camera.ts'
-import { paintBuildings } from './paint-buildings.ts'
-import { paintIslands, paintSheet, paintSlabs } from './paint-ground.ts'
-import { paintRoutes, type RouteNode } from './paint-routes.ts'
-import { DEFAULT_PROJECTION, planeMatrix } from './project.ts'
+import { buildingsSvg, facadeDefs } from './paint-buildings.ts'
+import { islandsSvg, sheetSvg, slabsSvg } from './paint-ground.ts'
+import { routesSvg } from './paint-routes.ts'
+import { gridPatternSvg, gridTransform } from './grid.ts'
+import { DEFAULT_PROJECTION } from './project.ts'
 import type { ProjectionView } from './project.ts'
 import {
-  GRID_TILE_CELLS,
   facadeDetailsVisible,
   gridVisible,
   minorGridVisible,
@@ -19,33 +18,14 @@ import { mapDefs } from './style.ts'
 import { svg } from './svg.ts'
 import { padSurfaceLabels } from './text.ts'
 
-/** A graph-paper tile: minor lines every cell, one major line each way. */
-const TILE_SIZE = GRID_TILE_CELLS * PLANE
 /** Let zoom settle before committing its sharp SVG scale. Panning keeps the cached layer. */
 const CAMERA_SETTLE_MS = 250
 
-/**
- * The endless grid: one tile repeated over the whole pane, moved and scaled
- * with the camera so it stays aligned with the sheet's cells. Lines in both
- * isometric directions are drawn past the tile and clipped, so they join up
- * across tiles; their width is set per camera move to stay screen-constant.
- */
-function gridPattern(): { pattern: SVGPatternElement; lines: SVGPathElement[] } {
-  const pattern = svg('pattern', {
-    id: 'grid', patternUnits: 'userSpaceOnUse', width: TILE_SIZE, height: TILE_SIZE,
-  })
-  const minor: string[] = []
-  const major: string[] = []
-  for (let index = 0; index < GRID_TILE_CELLS; index += 1) {
-    const offset = index * PLANE
-    const lines = index % GRID_TILE_CELLS === 0 ? major : minor
-    lines.push(`M${offset} 0V${TILE_SIZE}`, `M0 ${offset}H${TILE_SIZE}`)
-  }
-  const paths = [svg('path', { d: minor.join('') }, 'grid'), svg('path', { d: major.join('') }, 'grid major')]
-  /** Inside a pattern the stroke must scale with the tile; the width is corrected in `move` instead. */
-  for (const path of paths) path.removeAttribute('vector-effect')
-  pattern.append(...paths)
-  return { pattern, lines: paths }
+interface RouteNode {
+  group: SVGGElement
+  ids: string[]
+  source: string
+  target: string
 }
 
 export interface IsoMap {
@@ -98,19 +78,19 @@ function paintSurface(name: string, layers: SVGGElement[]) {
 }
 
 /** One fixed grid and one shared camera across ground, routes and foreground paint surfaces. */
-export function createMap(host: HTMLElement, options: {
-  /** Covers keep graph paper legible independently of the fitted architecture's size. */
-  gridScale?: number
-} = {}): IsoMap {
+export function createMap(host: HTMLElement): IsoMap {
   const root = document.createElement('div')
   root.className = 'map-surface'
   root.setAttribute('role', 'img')
   root.setAttribute('aria-label', 'Architecture map')
   root.tabIndex = 0
-  const grid = gridPattern()
   const fieldSurface = svg('svg', { width: '100%', height: '100%', 'aria-hidden': 'true' }, 'field-surface')
   const fieldDefinitions = svg('defs')
-  fieldDefinitions.append(grid.pattern)
+  fieldDefinitions.innerHTML = gridPatternSvg({ x: 0, y: 0, k: 1 })
+  const grid = {
+    pattern: fieldDefinitions.querySelector('pattern')!,
+    lines: [...fieldDefinitions.querySelectorAll('path')],
+  }
   const field = svg('rect', { width: '100%', height: '100%', fill: 'url(#grid)' }, 'field')
   fieldSurface.append(fieldDefinitions, field)
   const camera = document.createElement('div')
@@ -164,7 +144,7 @@ export function createMap(host: HTMLElement, options: {
     camera.style.setProperty('--camera-scale', String(current.k))
     camera.toggleAttribute('data-facades-hidden', !facadeDetailsVisible(current.k))
     field.style.display = showGrid ? '' : 'none'
-    const gridScale = options.gridScale ?? current.k
+    const gridScale = current.k
     root.toggleAttribute('data-minor-grid-hidden', !minorGridVisible(gridScale))
     for (const line of grid.lines) line.style.strokeWidth = String(1 / gridScale)
     camera.style.removeProperty('transform')
@@ -204,12 +184,12 @@ export function createMap(host: HTMLElement, options: {
     svg: root,
     prepareCamera: startCameraMotion,
     move(current, zoomRatio) {
-      const gridScale = options.gridScale ?? current.k
+      const gridScale = current.k
       const showGrid = gridVisible(gridScale)
       if (showGrid) {
         grid.pattern.setAttribute(
           'patternTransform',
-          `translate(${current.x} ${current.y}) scale(${gridScale}) ${planeMatrix('ground', undefined, gridView)}`,
+          gridTransform(current, gridView),
         )
       }
       const scaleChanged = current.k !== composed?.k || zoomRatio !== composedZoomRatio
@@ -235,16 +215,24 @@ export function createMap(host: HTMLElement, options: {
     paint(scene) {
       painted = scene
       gridView = scene.view
-      definitions.innerHTML = mapDefs(scene.view)
+      definitions.innerHTML = mapDefs(scene.view) + facadeDefs(scene)
       for (const layer of Object.values(layers)) layer.replaceChildren()
       paintLayerPlanes(layers.sheet, scene)
-      paintSheet(layers.sheet, scene)
-      items = new Map([
-        ...paintIslands(layers.islands, scene),
-        ...paintSlabs(layers.slabs, scene),
-        ...paintBuildings(layers.items, scene),
-      ])
-      routes = paintRoutes(layers.routes, scene)
+      layers.sheet.insertAdjacentHTML('beforeend', sheetSvg(scene))
+      layers.islands.innerHTML = islandsSvg(scene)
+      layers.slabs.innerHTML = slabsSvg(scene)
+      layers.items.innerHTML = buildingsSvg(scene)
+      items = new Map([layers.islands, layers.slabs, layers.items].flatMap(layer =>
+        [...layer.querySelectorAll<SVGGElement>('[data-id]')].map(node => [node.dataset.id!, node] as const)))
+      layers.routes.innerHTML = routesSvg(scene)
+      const groups = new Map([...layers.routes.querySelectorAll<SVGGElement>('g.route')]
+        .map(group => [group.dataset.id!, group]))
+      routes = new Map()
+      for (const { route } of scene.routes) {
+        const ids = route.relationshipIds ?? [route.id]
+        const node = { group: groups.get(route.id)!, ids, source: route.source, target: route.target }
+        for (const id of ids) routes.set(id, node)
+      }
       paintLayerLabels(layers.layerLabels, scene)
       surfaces = new Map([
         ...scene.buildings.map(({ building }) => [building.representationId, building.surface] as const),

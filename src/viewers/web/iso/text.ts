@@ -1,7 +1,8 @@
 import { PLANE, SURFACE_PAD, labelHeight, textLineHeight, textPadding } from '../../../sheet/measure.ts'
 import type { ProjectionView, SurfaceLabel, SurfaceText } from './project.ts'
 import { planeMatrix, project } from './project.ts'
-import { round, svg } from './svg.ts'
+import { round, svgMarkup as svg } from './svg.ts'
+import { escaped } from '../atoms/escape.ts'
 
 /** Additional space around hierarchy text, measured along each projected axis in screen pixels. */
 export const SURFACE_SCREEN_PAD = 8
@@ -36,19 +37,14 @@ export function surfaceText(
   size: number,
   className: string,
   view: ProjectionView,
-): SVGGElement {
-  const group = svg('g', { transform: planeMatrix('ground', text.origin, view) }, className)
+): string {
   const padding = textPadding(size)
-  text.lines.forEach((line, index) => {
-    const node = svg('text', {
+  return svg('g', { transform: planeMatrix('ground', text.origin, view) }, className,
+    text.lines.map((line, index) => svg('text', {
       x: padding,
       y: padding + size * 0.9 + index * textLineHeight(size),
       'font-size': size,
-    }, 'text')
-    node.textContent = line
-    group.append(node)
-  })
-  return group
+    }, 'text', escaped(line))).join(''))
 }
 
 /** The label and its short leader share the surface's identity and ground plane. */
@@ -57,20 +53,18 @@ export function surfaceLabel(
   size: number,
   view: ProjectionView,
   spacing = 0,
-): SVGGElement {
-  const group = svg('g', { transform: planeMatrix('ground', text.origin, view) }, 'label surface-label')
-  group.append(
-    svg('rect', { width: text.width, height: labelHeight(size) }, 'label-hit'),
-    svg('line', { x1: text.width / 2, x2: text.width / 2, y1: 0, y2: 2 * SURFACE_PAD }, 'label-leader'),
-  )
-  const node = svg('text', {
+  zoom = 1,
+): string {
+  const padding = surfaceLabelInsets(zoom, view)
+  return svg('g', { transform: planeMatrix('ground', text.origin, view) }, 'label surface-label',
+    svg('rect', { x: -padding.x, width: text.width + 2 * padding.x, height: labelHeight(size) + 2 * padding.y }, 'label-hit')
+    + svg('line', { x1: text.width / 2, x2: text.width / 2, y1: 0, y2: 2 * SURFACE_PAD }, 'label-leader')
+    + svg('text', {
     x: text.width / 2,
     y: 3 * SURFACE_PAD + size * 0.9,
     'text-anchor': 'middle',
     'font-size': size,
     'letter-spacing': `${spacing}em`,
-  }, 'text')
-  node.textContent = text.lines[0]!
-  group.append(node)
-  return group
+    dy: padding.y,
+  }, 'text', escaped(text.lines[0]!)))
 }

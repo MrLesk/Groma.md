@@ -1,42 +1,69 @@
 import lockup from '../atoms/lockup.svg' with { type: 'text' }
 import { escaped } from '../atoms/escape.ts'
-import { cssBlock, palettes, webFontFamily, type WebTheme } from '../atoms/theme.ts'
-import { mapCss } from '../iso/style.ts'
+import { palettes, webFontFamily, type WebTheme } from '../atoms/theme.ts'
+import { textWidth } from '../../../sheet/measure.ts'
+import { fitCamera, pan } from '../iso/camera.ts'
+import { gridPatternSvg } from '../iso/grid.ts'
+import { buildingsSvg, facadeDefs } from '../iso/paint-buildings.ts'
+import { islandsSvg, sheetSvg, slabsSvg } from '../iso/paint-ground.ts'
+import { routesSvg } from '../iso/paint-routes.ts'
+import { presentScene } from '../iso/presentation.ts'
+import { facadeDetailsVisible } from '../iso/scale.ts'
+import { mapDefs, mapDrawingCss } from '../iso/style.ts'
+import { svgMarkup as svg } from '../iso/svg.ts'
+import { NESTED_POSE } from '../layers/orbit.ts'
 import type { WebMapPayload } from '../payload.ts'
 
 export const COVER_SIZE = { width: 1200, height: 630 } as const
 export type CoverPayload = Pick<WebMapPayload, 'sheet' | 'project'>
 
-/** A full-size map field with a camera fitted above one glass footer. */
-export function renderCover(payload: CoverPayload, theme: WebTheme, renderer: string): string {
-  const json = JSON.stringify({ sheet: payload.sheet, project: payload.project }).replaceAll('<', '\\u003c')
-  return `<!doctype html><html><head><meta charset="utf-8"><style>
-    :root { ${cssBlock(palettes[theme])} }
-    * { box-sizing: border-box; }
-    html, body { margin: 0; width: ${COVER_SIZE.width}px; height: ${COVER_SIZE.height}px; overflow: hidden; }
-    body { position: relative; background: var(--paper); color: var(--ink); font-family: ${webFontFamily}; }
-    .cover { position: absolute; inset: 10px; overflow: hidden; border-radius: 26px;
-      border: 1px solid color-mix(in srgb, var(--map-line) 50%, transparent); }
-    #map { position: absolute; inset: 0; }
-    .architecture-frame { position: absolute; inset: 16px 18px auto; height: 432px; pointer-events: none; }
-    .cover-footer { position: absolute; left: 18px; right: 18px; bottom: 16px; height: 126px;
-      padding: 17px 26px; display: flex; align-items: center; justify-content: space-between; gap: 24px;
-      border: 1px solid color-mix(in srgb, var(--map-line) 40%, transparent); border-radius: 20px;
-      background: color-mix(in srgb, var(--paper) 56%, transparent); backdrop-filter: blur(14px); }
-    .cover-identity { display: grid; gap: 9px; min-width: 0; }
-    h1 { margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-      font-size: 36px; font-weight: 700; line-height: 1.05; letter-spacing: -0.7px; }
-    .cover-byline { display: flex; gap: 10px; align-items: center; font-size: 20px; color: var(--muted); }
-    .cover-byline svg { width: 140px; height: 35px; color: var(--ink); }
-    .cover-invitation { flex: none; font-size: 27px; letter-spacing: -0.65px; white-space: nowrap; }
-    ${mapCss}
-    #map .project-edit { display: none; }
-  </style></head><body><main class="cover">
-    <div id="map"></div><div class="architecture-frame"></div>
-    <footer class="cover-footer"><div class="cover-identity">
-      <h1>${escaped(payload.project?.title ?? 'Groma')}</h1>
-      <div class="cover-byline"><span>By</span>${lockup}</div>
-    </div><div class="cover-invitation">Explore the architecture →</div></footer>
-  </main><script id="cover-data" type="application/json">${json}</script>
-  <script>${renderer.replaceAll('</script', '<\\/script')}</script></body></html>`
+function titleWithin(title: string, width: number): string {
+  if (textWidth(title, 36) <= width) return title
+  const letters = [...title]
+  while (textWidth(`${letters.join('')}…`, 36) > width) letters.pop()
+  return `${letters.join('')}…`
+}
+
+/** The real map sits on one continuous field; a glass footer carries the project's sharing identity. */
+export function renderCover(payload: CoverPayload, theme: WebTheme): string {
+  const palette = palettes[theme]
+  const scene = presentScene(payload.sheet, payload.project ?? undefined, NESTED_POSE)
+  const camera = pan(fitCamera(scene.bounds, { width: 1144, height: 432 }), 28, 26)
+  const drawing = svg('g', {}, 'sheet', sheetSvg(scene))
+    + svg('g', {}, 'islands', islandsSvg(scene, camera.k))
+    + svg('g', {}, 'slabs', slabsSvg(scene, camera.k))
+    + svg('g', {}, 'routes', routesSvg(scene))
+    + svg('g', {}, 'items', buildingsSvg(scene))
+  const definitions = (mapDefs(scene.view) + facadeDefs(scene)).replaceAll('var(--map-hatch)', palette.hatch)
+  const title = titleWithin(payload.project?.title ?? 'Groma', 600)
+  const brand = lockup.replace('<svg ', '<svg x="86" y="548" width="140" height="35" ')
+  return `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"
+    id="map" width="${COVER_SIZE.width}" height="${COVER_SIZE.height}" viewBox="0 0 1200 630"
+    font-family="${escaped(webFontFamily)}" color="${palette.ink}">
+    <style>${mapDrawingCss(palette, camera.k)} #map .project-edit { display: none; }</style>
+    <defs>
+      ${definitions}
+      ${gridPatternSvg({ ...camera, k: 0.5 }, scene.view)}
+      <clipPath id="cover-frame"><rect x="10" y="10" width="1180" height="610" rx="26"/></clipPath>
+      <clipPath id="cover-footer"><rect x="28" y="478" width="1144" height="126" rx="20"/></clipPath>
+      <filter id="frost" filterUnits="userSpaceOnUse" x="0" y="454" width="1200" height="176">
+        <feGaussianBlur stdDeviation="14"/>
+      </filter>
+      <g id="field"><rect width="1200" height="630" fill="${palette.paper}"/>
+        <rect width="1200" height="630" fill="url(#grid)"/></g>
+    </defs>
+    <rect width="1200" height="630" fill="${palette.paper}"/>
+    <g clip-path="url(#cover-frame)">
+      <use xlink:href="#field"/>
+      <g class="camera"${facadeDetailsVisible(camera.k) ? '' : ' data-facades-hidden=""'}
+        transform="translate(${camera.x} ${camera.y}) scale(${camera.k})">${drawing}</g>
+      <g clip-path="url(#cover-footer)"><use xlink:href="#field" filter="url(#frost)"/></g>
+      <rect x="28" y="478" width="1144" height="126" rx="20" fill="${palette.paper}" fill-opacity="0.56"
+        stroke="${palette.line}" stroke-opacity="0.4"/>
+      <text x="54" y="526" fill="${palette.ink}" font-size="36" font-weight="700" letter-spacing="-0.7">${escaped(title)}</text>
+      <text x="54" y="572" fill="${palette.muted}" font-size="20">By</text>${brand}
+      <text x="1144" y="551" fill="${palette.ink}" font-size="27" letter-spacing="-0.65" text-anchor="end">Explore the architecture →</text>
+    </g>
+    <rect x="10" y="10" width="1180" height="610" rx="26" fill="none" stroke="${palette.line}" stroke-opacity="0.5"/>
+  </svg>`
 }

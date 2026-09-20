@@ -1,3 +1,4 @@
+import { mixColour, webFontFamily, type Palette } from '../atoms/theme.ts'
 import { layerCss } from '../layers/paint.ts'
 import { DEFAULT_PROJECTION, planeMatrix } from './project.ts'
 import type { Plane, ProjectionView } from './project.ts'
@@ -62,98 +63,88 @@ export function mapDefs(view: ProjectionView = DEFAULT_PROJECTION): string {
     + tile('hatch-ground', 'ground', 8, `<path d="M0 8L8 0" ${ink}/>`, view)
 }
 
-/** Paper with a depth's share of ink mixed in, in whichever theme. */
-function tint(depth: number): string {
-  return `color-mix(in srgb, var(--ink) ${(tintAt(depth) * 100).toFixed(1)}%, var(--paper))`
+/** The same colour and level rules serve browser CSS and explicit static SVG values. */
+function paintTint(share: number, palette?: Palette): string {
+  return palette === undefined
+    ? `color-mix(in srgb, var(--ink) ${(share * 100).toFixed(1)}%, var(--paper))`
+    : mixColour(palette.paper, palette.ink, share)
 }
 
-function stroke(level: Level): string {
-  return `--stroke: ${strokeAt(depthOf(level)).toFixed(2)}px;`
+function stroke(level: Level, palette: Palette | undefined, zoom: number): string {
+  const width = strokeAt(depthOf(level)).toFixed(2)
+  return palette === undefined ? `--stroke: ${width}px;` : `stroke-width: ${Number(width) / zoom};`
 }
 
-/** A level's tokens: its stroke, the tint of its top and, deeper, of its sides. */
-function tokens(level: Level): string {
-  const depth = depthOf(level)
-  return `${stroke(level)} --top-fill: ${tint(depth)}; --right-fill: ${tint(depth + SIDE.right)}; --left-fill: ${tint(depth + SIDE.left)};`
+function surfaceColours(kind: string, depth: number, palette?: Palette): string {
+  return `#map .${kind} .ground, #map .${kind} .top { fill: ${paintTint(tintAt(depth), palette)}; }
+    #map .${kind} .right { fill: ${paintTint(tintAt(depth + SIDE.right), palette)}; }
+    #map .${kind} .left { fill: ${paintTint(tintAt(depth + SIDE.left), palette)}; }`
 }
 
-/**
- * The map's own stylesheet. Every level group sets its tokens from the
- * scale, with the system island half a tint step lighter on that scale. One
- * rule turns them into strokes (times the state's emphasis and the camera's
- * zoom weight) and fills; no literal width or tint lives here. Neutral routes show
- * origin; task highlights are solid and selected flows use moving dashes. Patterns
- * mean kind, and component facade windows mean file type. Selection
- * and context change strokes, never fills.
- */
-export const mapCss = `
-  #map > .map-surface {
-    position: absolute; inset: 0; cursor: grab;
-    user-select: none; -webkit-user-select: none; touch-action: none; outline: none;
-  }
-  #map .field-surface, #map .camera { position: absolute; inset: 0; width: 100%; height: 100%; }
-  #map .field-surface { pointer-events: none; }
-  #map .paint-surface { position: absolute; inset: 0; pointer-events: none; }
-  #map .scene { display: block; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
-  #map .world { pointer-events: auto; }
-  #map .camera[data-tracing] .route-surface { will-change: transform; }
-  #map > .map-surface [data-id] { cursor: pointer; }
-  #map > .map-surface:active, #map > .map-surface:active [data-id] { cursor: grabbing; }
-  #map .camera { transform-origin: 0 0; }
-  #map .sheet { pointer-events: none; ${stroke('island')} }
-  #map .calibration-tick, #map .compass, #map .project-plate { ${stroke('building')} }
+/** Supplying a palette resolves theme values and compensates strokes for a fixed SVG camera. */
+export function mapDrawingCss(palette?: Palette, zoom = 1): string {
+  const paper = palette?.paper ?? 'var(--paper)'
+  const ink = palette?.ink ?? 'var(--ink)'
+  const muted = palette?.muted ?? 'var(--muted)'
+  const line = palette?.line ?? 'var(--map-line)'
+  const grid = palette === undefined ? 'var(--map-grid)' : mixColour(palette.paper, palette.line, 0.12)
+  const gridMajor = palette === undefined ? 'var(--map-grid-major)' : mixColour(palette.paper, palette.line, 0.2)
+  const width = palette === undefined ? 'stroke-width: calc(var(--stroke) * var(--emphasis, 1) * var(--weight, 1));' : ''
+  return `
+  #map .sheet { pointer-events: none; ${stroke('island', palette, zoom)} }
+  #map .calibration-tick, #map .compass, #map .project-plate { ${stroke('building', palette, zoom)} }
   /* zones lie inside slab groups and keep their own weight while the slab is hovered or selected */
-  #map .zone { ${stroke('building')} --emphasis: 1; }
-  #map .island { ${tokens('island')} }
-  #map .island.system { --top-fill: ${tint(depthOf('island') - 0.5)}; }
-  #map .slab { ${tokens('slab')} }
-  #map .building { ${tokens('building')} }
-  #map .route { ${stroke('route')} }
+  #map .zone { ${stroke('building', palette, zoom)} --emphasis: 1; }
+  #map .island { ${stroke('island', palette, zoom)} }
+  #map .slab { ${stroke('slab', palette, zoom)} }
+  #map .building { ${stroke('building', palette, zoom)} }
+  #map .route { ${stroke('route', palette, zoom)} }
   #map .frame, #map .calibration-tick,
   #map .compass .ring, #map .compass .star, #map .compass .north,
   #map .project-plate .plate, #map .project-plate .edit-frame,
   #map .project-plate .pencil path, #map .project-plate .pencil polygon,
   #map .ground, #map .face, #map .route-base, #map .route .line {
-    stroke: var(--map-line); stroke-linejoin: round;
-    stroke-width: calc(var(--stroke) * var(--emphasis, 1) * var(--weight, 1));
+    stroke: ${line}; stroke-linejoin: round;
+    ${width}
   }
   #map .frame, #map .calibration-tick,
   #map .compass .ring, #map .compass .star,
   #map .project-plate .edit-frame, #map .project-plate .pencil path { fill: none; }
-  #map .frame { --emphasis: 1.6; }
+  #map .frame { ${palette === undefined ? '--emphasis: 1.6;' : `stroke-width: ${strokeAt(0) * 1.6 / zoom};`} }
   #map .calibration-tick { stroke-linecap: square; }
-  #map .compass { --emphasis: 1.25; }
-  #map .compass .north { fill: var(--map-line); }
-  #map .compass .text { fill: var(--ink); font-weight: 600; }
-  #map .project-plate .plate { fill: var(--paper); fill-opacity: 0.72; }
+  #map .compass { ${palette === undefined ? '--emphasis: 1.25;' : `stroke-width: ${strokeAt(2) * 1.25 / zoom};`} }
+  #map .compass .north { fill: ${line}; }
+  #map .compass .text { fill: ${ink}; font-weight: 600; }
+  #map .project-plate .plate { fill: ${paper}; fill-opacity: 0.72; }
   #map .project-plate .project-title .text { font-weight: 650; letter-spacing: 0.06em; }
-  #map .project-plate .project-overview .text { fill: var(--muted); }
-  #map .project-plate .project-overview .md-strong { font-weight: 700; fill: var(--ink); }
+  #map .project-plate .project-overview .text { fill: ${muted}; }
+  #map .project-plate .project-overview .md-strong { font-weight: 700; fill: ${ink}; }
   #map .project-plate .project-overview .md-emphasis { font-style: italic; }
-  #map .project-plate .project-overview .md-code { font-family: 'SF Mono', ui-monospace, Menlo, monospace; fill: var(--ink); }
+  #map .project-plate .project-overview .md-code { font-family: ${webFontFamily}; fill: ${ink}; }
   #map .project-plate .project-overview .md-link { text-decoration: underline; text-underline-offset: 2px; }
-  #map .project-plate .project-meta .text { fill: var(--muted); letter-spacing: 0.14em; }
+  #map .project-plate .project-meta .text { fill: ${muted}; letter-spacing: 0.14em; }
   #map .project-edit { pointer-events: all; cursor: pointer; outline: none; }
   #map .project-edit .edit-frame { fill: transparent; pointer-events: all; }
   #map .project-edit .pencil path { stroke-linecap: square; }
-  #map .project-edit .pencil .body { fill: color-mix(in srgb, var(--ink) 10%, var(--paper)); }
-  #map .project-edit .pencil .facet { fill: color-mix(in srgb, var(--ink) 18%, var(--paper)); }
-  #map .project-edit .pencil .eraser { fill: color-mix(in srgb, var(--ink) 28%, var(--paper)); }
-  #map .project-edit .pencil .ferrule { fill: color-mix(in srgb, var(--ink) 18%, var(--paper)); }
-  #map .project-edit .pencil .tip { fill: color-mix(in srgb, var(--ink) 12%, var(--paper)); }
-  #map .project-edit .pencil .lead { fill: var(--ink); }
+  #map .project-edit .pencil .body { fill: ${paintTint(0.1, palette)}; }
+  #map .project-edit .pencil .facet { fill: ${paintTint(0.18, palette)}; }
+  #map .project-edit .pencil .eraser { fill: ${paintTint(0.28, palette)}; }
+  #map .project-edit .pencil .ferrule { fill: ${paintTint(0.18, palette)}; }
+  #map .project-edit .pencil .tip { fill: ${paintTint(0.12, palette)}; }
+  #map .project-edit .pencil .lead { fill: ${ink}; }
   #map .project-edit .pencil .facet, #map .project-edit .pencil .eraser, #map .project-edit .pencil .ferrule,
   #map .project-edit .pencil .tip, #map .project-edit .pencil .lead { stroke: none; }
-  #map:where(:not([data-camera-moving])) .project-edit:hover .edit-frame, #map .project-edit:focus .edit-frame { fill: var(--ink); fill-opacity: 0.05; }
+  #map:where(:not([data-camera-moving])) .project-edit:hover .edit-frame, #map .project-edit:focus .edit-frame { fill: ${ink}; fill-opacity: 0.05; }
   #map:where(:not([data-camera-moving])) .project-edit:hover .pencil path, #map .project-edit:focus .pencil path,
-  #map:where(:not([data-camera-moving])) .project-edit:hover .pencil .body, #map .project-edit:focus .pencil .body { stroke: var(--ink); }
-  #map .grid { fill: none; stroke: var(--map-grid); }
-  #map .grid.major { stroke: var(--map-grid-major); }
+  #map:where(:not([data-camera-moving])) .project-edit:hover .pencil .body, #map .project-edit:focus .pencil .body { stroke: ${ink}; }
+  #map .grid { fill: none; stroke: ${grid}; }
+  #map .grid.major { stroke: ${gridMajor}; }
   #map > .map-surface[data-minor-grid-hidden] .grid:not(.major) { display: none; }
-  #map .ground, #map .face.top { fill: var(--top-fill); }
-  #map .face.right { fill: var(--right-fill); }
-  #map .face.left { fill: var(--left-fill); }
-  #map .actor .face { fill: var(--paper); }
+  ${surfaceColours('island', depthOf('island'), palette)}
+  ${surfaceColours('system', depthOf('island') - 0.5, palette)}
+  ${surfaceColours('slab', depthOf('slab'), palette)}
+  ${surfaceColours('building', depthOf('building'), palette)}
+  #map .actor .face { fill: ${paper}; }
   #map .zone .ground { fill: url(#hatch-ground); }
   #map .pattern { stroke: none; pointer-events: none; }
   #map .island.actors .pattern { fill: url(#dots); }
@@ -168,21 +159,40 @@ export const mapCss = `
   #map .camera[data-facades-hidden] .building .pattern { display: none; }
   #map .label-hit { fill: transparent; stroke: none; pointer-events: all; }
   #map .label-leader {
-    stroke: var(--map-line); stroke-width: calc(var(--stroke) * var(--emphasis, 1) * var(--weight, 1));
+    stroke: ${line}; ${width}
     vector-effect: non-scaling-stroke; pointer-events: none;
   }
   #map .ghost { opacity: 0.8; }
   #map .ghost .face, #map .ghost .ground { fill: none; pointer-events: all; }
   #map .ghost .pattern { display: none; }
   #map .ghost.draft .face, #map .ghost.draft .ground,
-  #map .route-base.ghost.draft, #map .route.ghost.draft:not(.touched):not(.lit) .line { stroke-dasharray: 4 3; }
-  #map .text { fill: var(--ink); pointer-events: none; }
-  #map :is(.island, .slab, .zone) > .label .text { font-weight: 600; }
+  #map .route-base.ghost.draft, #map .route.ghost.draft:not(.touched):not(.lit) .line { stroke-dasharray: ${4 / zoom} ${3 / zoom}; }
+  #map .text { fill: ${ink}; pointer-events: none; }
+  #map .island > .label .text, #map .slab > .label .text, #map .zone > .label .text { font-weight: 600; }
   #map .route-base, #map .route .line { fill: none; stroke-linecap: round; opacity: 0.9; }
   #map .route-base { pointer-events: none; }
   #map .route .line { opacity: 0; }
-  #map .route .arrow { fill: var(--map-line); opacity: 0.9; }
+  #map .route .arrow { fill: ${line}; opacity: 0.9; }
   #map .route .hit { fill: none; stroke: transparent; stroke-width: 12; }
+`
+}
+
+/** Browser layout, interaction states and motion surround the shared drawing rules. */
+export const mapCss = `
+  #map > .map-surface {
+    position: absolute; inset: 0; cursor: grab;
+    user-select: none; -webkit-user-select: none; touch-action: none; outline: none;
+  }
+  #map .field-surface, #map .camera { position: absolute; inset: 0; width: 100%; height: 100%; }
+  #map .field-surface { pointer-events: none; }
+  #map .paint-surface { position: absolute; inset: 0; pointer-events: none; }
+  #map .scene { display: block; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
+  #map .world { pointer-events: auto; }
+  #map .camera[data-tracing] .route-surface { will-change: transform; }
+  #map > .map-surface [data-id] { cursor: pointer; }
+  #map > .map-surface:active, #map > .map-surface:active [data-id] { cursor: grabbing; }
+  #map .camera { transform-origin: 0 0; }
+  ${mapDrawingCss()}
   #map:where(:not([data-camera-moving])) .route:hover, #map .route.endpoint, #map .route.touched { --emphasis: ${emphasis(1)}; }
   #map:where(:not([data-camera-moving])) .route:hover .line { stroke: var(--map-line); opacity: 1; }
   #map:where(:not([data-camera-moving])) .route:hover .arrow { fill: var(--map-line); opacity: 1; }

@@ -1,82 +1,53 @@
 import { CONTAINER_FONT, GROUP_FONT, ISLAND_FONT, ISLAND_SPACING, textWidth } from '../../../sheet/measure.ts'
+import { escaped } from '../atoms/escape.ts'
 import type { Compass, PlateText, ProjectPlate, RichPlateText, Segment } from './blueprint.ts'
 import type { ProjectedScene, ProjectedZone, ProjectionView } from './project.ts'
 import { planeMatrix } from './project.ts'
-import { pointsAttribute, round, svg } from './svg.ts'
+import { pointsAttribute, round, svgMarkup as svg } from './svg.ts'
 import { surfaceLabel } from './text.ts'
 
 function pathOf(segments: readonly Segment[]): string {
-  return segments
-    .map(segment => `M${round(segment.from.x)} ${round(segment.from.y)}L${round(segment.to.x)} ${round(segment.to.y)}`)
-    .join('')
+  return segments.map(segment =>
+    `M${round(segment.from.x)} ${round(segment.from.y)}L${round(segment.to.x)} ${round(segment.to.y)}`).join('')
 }
 
-function compassGroup(compass: Compass, view: ProjectionView): SVGGElement {
-  const group = svg('g', {}, 'compass')
-  group.append(
-    svg('polygon', { points: pointsAttribute(compass.ring) }, 'ring'),
-    svg('polygon', { points: pointsAttribute(compass.star) }, 'star'),
-    svg('polygon', { points: pointsAttribute(compass.north) }, 'north'),
-  )
-  for (const letter of compass.letters) {
-    const plane = svg('g', { transform: planeMatrix('ground', letter.at, view) })
-    const text = svg('text', {
-      'font-size': compass.fontSize, 'text-anchor': 'middle', 'dominant-baseline': 'middle',
-    }, 'text')
-    text.textContent = letter.text
-    plane.append(text)
-    group.append(plane)
+function compassGroup(compass: Compass, view: ProjectionView): string {
+  return svg('g', {}, 'compass',
+    svg('polygon', { points: pointsAttribute(compass.ring) }, 'ring')
+    + svg('polygon', { points: pointsAttribute(compass.star) }, 'star')
+    + svg('polygon', { points: pointsAttribute(compass.north) }, 'north')
+    + compass.letters.map(letter => svg('g', { transform: planeMatrix('ground', letter.at, view) }, '',
+      svg('text', { 'font-size': compass.fontSize, 'text-anchor': 'middle', 'dominant-baseline': 'middle' },
+        'text', escaped(letter.text)))).join(''))
+}
+
+function lineAttributes(text: PlateText | RichPlateText, plain: string, index: number) {
+  return {
+    y: text.fontSize * 0.9 + index * text.lineHeight,
+    'font-size': text.fontSize,
+    ...(textWidth(plain, text.fontSize) > text.maxWidth
+      ? { textLength: text.maxWidth, lengthAdjust: 'spacingAndGlyphs' } : {}),
   }
-  return group
 }
 
-function plateText(text: PlateText, className: string, view: ProjectionView): SVGGElement {
-  const group = svg('g', { transform: planeMatrix('ground', text.origin, view) }, className)
-  text.lines.forEach((line, index) => {
-    const node = svg('text', {
-      y: text.fontSize * 0.9 + index * text.lineHeight,
-      'font-size': text.fontSize,
-    }, 'text')
-    if (textWidth(line, text.fontSize) > text.maxWidth) {
-      node.setAttribute('textLength', String(text.maxWidth))
-      node.setAttribute('lengthAdjust', 'spacingAndGlyphs')
-    }
-    node.textContent = line
-    group.append(node)
-  })
-  return group
+function plateText(text: PlateText, className: string, view: ProjectionView): string {
+  return svg('g', { transform: planeMatrix('ground', text.origin, view) }, className,
+    text.lines.map((line, index) => svg('text', lineAttributes(text, line, index), 'text', escaped(line))).join(''))
 }
 
-function richPlateText(text: RichPlateText, className: string, view: ProjectionView): SVGGElement {
-  const group = svg('g', { transform: planeMatrix('ground', text.origin, view) }, className)
-  text.lines.forEach((line, index) => {
-    const node = svg('text', {
-      y: text.fontSize * 0.9 + index * text.lineHeight,
-      'font-size': text.fontSize,
-    }, 'text')
-    const plain = line.map(run => run.text).join('')
-    if (textWidth(plain, text.fontSize) > text.maxWidth) {
-      node.setAttribute('textLength', String(text.maxWidth))
-      node.setAttribute('lengthAdjust', 'spacingAndGlyphs')
-    }
-    for (const run of line) {
-      const span = svg('tspan', {}, run.styles.map(style => `md-${style}`).join(' '))
-      span.textContent = run.text
-      node.append(span)
-    }
-    group.append(node)
-  })
-  return group
+function richPlateText(text: RichPlateText, view: ProjectionView): string {
+  return svg('g', { transform: planeMatrix('ground', text.origin, view) }, 'project-overview',
+    text.lines.map((line, index) => svg('text', lineAttributes(text, line.map(run => run.text).join(''), index), 'text',
+      line.map(run => svg('tspan', {}, run.styles.map(style => `md-${style}`).join(' '), escaped(run.text))).join(''))).join(''))
 }
 
-function pencilGroup(plate: ProjectPlate, view: ProjectionView): SVGGElement {
+function pencilGroup(plate: ProjectPlate, view: ProjectionView): string {
   const { origin, length, thickness } = plate.edit.pencil
   const eraser = thickness * 0.45
   const ferrule = eraser + thickness * 0.25
   const tip = length - thickness * 0.8
   const lead = length - thickness * 0.2
-  const group = svg('g', { transform: planeMatrix('ground', origin, view) }, 'pencil')
-  group.append(
+  return svg('g', { transform: planeMatrix('ground', origin, view) }, 'pencil', [
     svg('polygon', { points: `0,0 ${thickness},0 ${thickness},${tip} ${thickness / 2},${length} 0,${tip}` }, 'body'),
     svg('polygon', {
       points: `${thickness * 0.28},${ferrule} ${thickness * 0.72},${ferrule} ${thickness * 0.72},${tip} ${thickness * 0.28},${tip}`,
@@ -86,82 +57,56 @@ function pencilGroup(plate: ProjectPlate, view: ProjectionView): SVGGElement {
     svg('polygon', { points: `0,${tip} ${thickness},${tip} ${thickness / 2},${length}` }, 'tip'),
     svg('polygon', { points: `${thickness * 0.4},${lead} ${thickness * 0.6},${lead} ${thickness / 2},${length}` }, 'lead'),
     svg('path', { d: `M0 ${eraser}H${thickness}M0 ${ferrule}H${thickness}M0 ${tip}H${thickness}` }, 'seams'),
-  )
-  return group
+  ].join(''))
 }
 
-function projectPlateGroup(plate: ProjectPlate, view: ProjectionView): SVGGElement {
-  const group = svg('g', {}, 'project-plate')
-  group.append(
-    svg('polygon', { points: pointsAttribute(plate.polygon) }, 'plate'),
-    plateText(plate.title, 'project-title', view),
-    richPlateText(plate.overview, 'project-overview', view),
-    plateText(plate.meta, 'project-meta', view),
-  )
-  const edit = svg('g', {
-    'data-project-edit': '', role: 'button', tabindex: 0, 'aria-label': 'Edit project profile',
-  }, 'project-edit')
-  edit.append(svg('polygon', { points: pointsAttribute(plate.edit.polygon) }, 'edit-frame'))
-  edit.append(pencilGroup(plate, view))
-  group.append(edit)
-  return group
+function projectPlateGroup(plate: ProjectPlate, view: ProjectionView): string {
+  return svg('g', {}, 'project-plate',
+    svg('polygon', { points: pointsAttribute(plate.polygon) }, 'plate')
+    + plateText(plate.title, 'project-title', view)
+    + richPlateText(plate.overview, view)
+    + plateText(plate.meta, 'project-meta', view)
+    + svg('g', { 'data-project-edit': '', role: 'button', tabindex: 0, 'aria-label': 'Edit project profile' }, 'project-edit',
+      svg('polygon', { points: pointsAttribute(plate.edit.polygon) }, 'edit-frame') + pencilGroup(plate, view)))
 }
 
-/** The sheet's frame, front-edge calibration and compass; the map paints its grid behind them. */
-export function paintSheet(layer: SVGGElement, scene: ProjectedScene): void {
-  layer.append(
-    svg('polygon', { points: pointsAttribute(scene.frame) }, 'frame'),
-    svg('path', { d: pathOf(scene.calibrationTicks) }, 'calibration-tick'),
-    compassGroup(scene.compass, scene.view),
-  )
-  if (scene.projectPlate !== undefined) layer.append(projectPlateGroup(scene.projectPlate, scene.view))
+/** The sheet's frame, calibration and compass; the viewer places its grid behind them. */
+export function sheetSvg(scene: ProjectedScene): string {
+  return svg('polygon', { points: pointsAttribute(scene.frame) }, 'frame')
+    + svg('path', { d: pathOf(scene.calibrationTicks) }, 'calibration-tick')
+    + compassGroup(scene.compass, scene.view)
+    + (scene.projectPlate === undefined ? '' : projectPlateGroup(scene.projectPlate, scene.view))
 }
 
-function zoneGroup(zone: ProjectedZone, view: ProjectionView): SVGGElement {
-  const group = svg('g', {}, 'zone')
-  group.append(
-    svg('polygon', { points: pointsAttribute(zone.polygon) }, 'ground'),
-    surfaceLabel(zone.text, GROUP_FONT, view),
-  )
-  return group
+function zoneGroup(zone: ProjectedZone, view: ProjectionView, zoom: number): string {
+  return svg('g', {}, 'zone',
+    svg('polygon', { points: pointsAttribute(zone.polygon) }, 'ground')
+    + surfaceLabel(zone.text, GROUP_FONT, view, 0, zoom))
 }
 
-/** Flat islands; system islands are selectable, actors and external islands are not. */
-export function paintIslands(layer: SVGGElement, scene: ProjectedScene): Map<string, Element> {
-  const nodes = new Map<string, Element>()
-  for (const { island, polygon, text } of scene.islands) {
-    const group = svg('g', {}, `island ${island.kind}`)
-    group.append(svg('polygon', { points: pointsAttribute(polygon) }, 'ground'))
-    if (island.kind !== 'system') group.append(svg('polygon', { points: pointsAttribute(polygon) }, 'pattern'))
-    group.append(surfaceLabel(text, ISLAND_FONT, scene.view, ISLAND_SPACING))
-    if (island.element) {
-      group.dataset.id = island.element.representationId
-      group.setAttribute('aria-label', island.name)
-      nodes.set(island.element.representationId, group)
-    }
-    layer.append(group)
-  }
-  for (const zone of scene.zones) {
-    if (scene.islands.some(item => item.island.key === zone.zone.parent)) layer.append(zoneGroup(zone, scene.view))
-  }
-  return nodes
+/** System islands carry their architecture identity; actor and external grounds do not. */
+export function islandsSvg(scene: ProjectedScene, zoom = 1): string {
+  return scene.islands.map(({ island, polygon, text }) => {
+    const attributes: Record<string, string> = island.element === null
+      ? {} : { 'data-id': island.element.representationId, 'aria-label': island.name }
+    return svg('g', attributes, `island ${island.kind}`,
+      svg('polygon', { points: pointsAttribute(polygon) }, 'ground')
+      + (island.kind === 'system' ? '' : svg('polygon', { points: pointsAttribute(polygon) }, 'pattern'))
+      + surfaceLabel(text, ISLAND_FONT, scene.view, ISLAND_SPACING, zoom))
+  }).join('') + scene.zones.filter(zone => scene.islands.some(item => item.island.key === zone.zone.parent))
+    .map(zone => zoneGroup(zone, scene.view, zoom)).join('')
 }
 
-/** Container slabs have ground-level tops, hanging sides, external names and zones on top. */
-export function paintSlabs(layer: SVGGElement, scene: ProjectedScene): Map<string, Element> {
-  const nodes = new Map<string, Element>()
-  for (const { slab, faces, text } of scene.slabs) {
-    const group = svg('g', { 'aria-label': slab.title }, `slab${slab.origin === 'observed' ? '' : ` ghost ${slab.origin}`}`)
-    group.dataset.id = slab.representationId
-    for (const face of faces) group.append(svg('polygon', { points: pointsAttribute(face.points) }, `face ${face.side}`))
+/** Container slabs have hanging sides, external names and zones on top. */
+export function slabsSvg(scene: ProjectedScene, zoom = 1): string {
+  return scene.slabs.map(({ slab, faces, text }) => {
+    const ghost = slab.origin === 'observed' ? '' : ` ghost ${slab.origin}`
     const top = faces.find(face => face.side === 'top')!
-    group.append(svg('polygon', { points: pointsAttribute(top.points) }, 'pattern'))
-    group.append(surfaceLabel(text, CONTAINER_FONT, scene.view))
-    for (const zone of scene.zones) {
-      if (zone.zone.parent === slab.representationId) group.append(zoneGroup(zone, scene.view))
-    }
-    nodes.set(slab.representationId, group)
-    layer.append(group)
-  }
-  return nodes
+    return svg('g', { 'aria-label': slab.title, 'data-id': slab.representationId }, `slab${ghost}`,
+      faces.map(face => svg('polygon', { points: pointsAttribute(face.points) }, `face ${face.side}`)).join('')
+      + svg('polygon', { points: pointsAttribute(top.points) }, 'pattern')
+      + surfaceLabel(text, CONTAINER_FONT, scene.view, 0, zoom)
+      + scene.zones.filter(zone => zone.zone.parent === slab.representationId)
+        .map(zone => zoneGroup(zone, scene.view, zoom)).join(''))
+  }).join('')
 }

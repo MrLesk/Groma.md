@@ -32,7 +32,15 @@ export type WebTheme = 'light' | 'dark' | 'blueprint'
 export type WebThemeMode = 'auto' | WebTheme
 
 /** Shared typography for the interactive map and its published cover. */
-export const webFontFamily = "'SF Mono', ui-monospace, Menlo, monospace"
+export const webFontFamily = "'DejaVu Sans Mono', monospace"
+
+/** Shared sRGB mixing for explicit SVG colours and the web theme's graph paper. */
+export function mixColour(paper: string, ink: string, share: number): string {
+  const channel = (colour: string, index: number) => Number.parseInt(colour.slice(index, index + 2), 16)
+  const channels = [1, 3, 5].map(index => Math.round(channel(paper, index) * (1 - share) + channel(ink, index) * share)
+    .toString(16).padStart(2, '0')).join('')
+  return `#${channels}`
+}
 
 export const themeModes: readonly WebThemeMode[] = ['auto', 'light', 'dark', 'blueprint']
 
@@ -141,7 +149,7 @@ export function cssBlock(palette: Palette): string {
   --syntax-type: ${palette.syntaxType};
   --diff-added: ${palette.diffAdded};
   --diff-removed: ${palette.diffRemoved};
-  --map-grid: color-mix(in srgb, var(--paper) 88%, var(--map-line));
-  --map-grid-major: color-mix(in srgb, var(--paper) 80%, var(--map-line));
+  --map-grid: ${mixColour(palette.paper, palette.line, 0.12)};
+  --map-grid-major: ${mixColour(palette.paper, palette.line, 0.2)};
 `
 }

@@ -10,6 +10,7 @@ import { startWebViewer } from '../src/viewers/web/server.ts'
 import { sharingMetadata } from '../src/viewers/web/sharing/metadata.ts'
 
 const fixture = path.resolve(import.meta.dir, '../test/fixtures/empty-project')
+const mappedFixture = path.resolve(import.meta.dir, '../test/fixtures/source-view')
 
 function emptyWork(): WorkSource {
   return {
@@ -36,7 +37,7 @@ function assertCover(bytes: Buffer): void {
 test.concurrent('export writes the themed image referenced by its initial sharing metadata', async () => {
   const output = await mkdtemp(path.join(os.tmpdir(), 'groma-sharing-export-'))
   try {
-    const exported = await exportWebViewer(fixture, output, {
+    const exported = await exportWebViewer(mappedFixture, output, {
       url: 'https://example.test/repository/architecture/blueprint', workSource: emptyWork(),
     })
     await exported.close()

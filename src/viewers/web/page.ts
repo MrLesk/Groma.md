@@ -1,3 +1,4 @@
+import { fontCss } from './atoms/fonts/index.ts'
 import { floatingBarCss } from './atoms/floating-bar.ts'
 import { settingsControl, settingsCss } from './settings/control.ts'
 import { settingsDialogCss } from './atoms/settings-dialog.ts'
@@ -67,6 +68,7 @@ const legendKinds: C4Kind[][] = [
 ]
 
 const style = `
+  ${fontCss}
   ${scannerSettingsCss}${duplicatesCss}${projectReviewCss}${settingsCss}${settingsDialogCss}
   :root {
     ${cssBlock(palettes.light)}
