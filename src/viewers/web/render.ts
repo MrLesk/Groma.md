@@ -25,7 +25,7 @@ import { createCameraAnimator } from './iso/motion.ts'
 import { bindMapPointer } from './iso/pointer.ts'
 import { presentScene, createMapAnimator, createMapMotion } from './iso/presentation.ts'
 import { paintRelationship } from './organisms/relationship-details.ts'
-import { detailsTabAfterSelection, detailsTabAfterWork, type DetailsTab, inspectDetails, paintDetails } from './organisms/details.ts'
+import { detailsTabAfterSelection, detailsTabAfterWork, type DetailsTab, inspectSelection, paintDetails } from './organisms/details.ts'
 import { paintHierarchy } from './organisms/hierarchy.ts'
 import { createPins } from './work/pins.ts'
 import { createTip } from './organisms/tip.ts'
@@ -135,11 +135,12 @@ const camera = createCameraAnimator(fitted, applyCamera, map.prepareCamera)
 let touched = false
 function worldElement(id: string | undefined): AnnotatedElement | undefined { return id === undefined ? undefined : world.elements.find(element => element.representationId === id) }
 function worldRelationship(id: string | undefined): AnnotatedRelationship | undefined { return id === undefined ? undefined : world.relationships.find(item => item.id === id) }
+function unidentifiedGroup(id: string | undefined) { return sheet.zones.find(zone => zone.unidentifiedContainer && zone.key === id) }
 function workItem(id: string | undefined): WorkItem | undefined { return id === undefined ? undefined : work.items.find(item => item.id === id) }
 
 /** True for an element, relationship or task id the current payload has. */
 function known(id: string | undefined): boolean {
-  return worldElement(id) !== undefined || worldRelationship(id) !== undefined || workItem(id) !== undefined
+  return worldElement(id) !== undefined || worldRelationship(id) !== undefined || unidentifiedGroup(id) !== undefined || workItem(id) !== undefined
     || world.flows.some(flow => flow.id === id)
 }
 
@@ -201,6 +202,7 @@ function paintDetailsState(task: WorkItem | undefined): void {
   const activeFlow = activeFlows.at(-1)
   const selectedId = primarySelection(selection)
   const selected = worldElement(selectedId)
+  const inspected = inspectSelection(selectedId, world, sheet.zones)
   const relationship = worldRelationship(selectedId)
   const paintedReader = source.paint(selected) || taskDiff.paint(task)
   paintFlowReturn(
@@ -215,11 +217,11 @@ function paintDetailsState(task: WorkItem | undefined): void {
   }
   if (relationship !== undefined) {
     paintRelationship(detailsHost, relationship, world, select, authoring.relationWrites)
-  } else if (selected !== undefined) {
-    paintDetails(detailsHost, inspectDetails(selected, world), {
+  } else if (inspected !== undefined) {
+    paintDetails(detailsHost, inspected, {
       world,
       onSelect: select,
-      onToggleFlow: flow => toggleFlow(flow, selected.representationId),
+      onToggleFlow: flow => toggleFlow(flow, selected?.representationId),
       activeFlows,
       tab: detailsTab,
       onTab: tab => {
@@ -228,9 +230,9 @@ function paintDetailsState(task: WorkItem | undefined): void {
       },
       code: detailsTab === 'how' ? source.code() : [],
       onSource: source.open,
-      workGroups: selected.kind === 'component' ? elementWorkGroups(work, selected.representationId, world) : [],
+      workGroups: selected?.kind === 'component' ? elementWorkGroups(work, selected.representationId, world) : [],
       onTask: toggleTask,
-      ...authoring.paneWrites(selected.id, selectedArchitecture(selection)),
+      ...(selected === undefined ? {} : authoring.paneWrites(selected.id, selectedArchitecture(selection))),
     })
   }
 }
@@ -251,7 +253,7 @@ function toggleRow(row: TreeRow): void {
 }
 
 function select(id: string, additive = false, focus = true): void {
-  if (worldElement(id) === undefined && worldRelationship(id) === undefined) return
+  if (worldElement(id) === undefined && worldRelationship(id) === undefined && unidentifiedGroup(id) === undefined) return
   source.clear()
   const next = selectArchitecture(selection, id, additive)
   detailsTab = detailsTabAfterSelection(detailsTab, primarySelection(selection), primarySelection(next))

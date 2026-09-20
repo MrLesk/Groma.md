@@ -1,0 +1,6 @@
+import { Component } from '@angular/core'
+
+@Component({ selector: 'label-preview', standalone: true, template: '{{ text }}' })
+export class Label {
+  text = ' label '
+}

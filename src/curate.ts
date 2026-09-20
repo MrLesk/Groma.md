@@ -62,45 +62,6 @@ function requiresEmptyMeaning(source: string, id: string): void {
   }
 }
 
-/** Every element stored under this one, at any depth. */
-function descendants(model: ArchitectureModel, id: string): ArchitectureElement[] {
-  const children = model.elements.filter(element => element.parentId === id)
-  return [...children, ...children.flatMap(child => descendants(model, child.id))]
-}
-
-/** A scanned container that owns no files, which scans find through existingChild, not inferredContainer (scan-reconciler.ts). */
-function foundOnlyByName(model: ArchitectureModel, element: ArchitectureElement): boolean {
-  return element.kind === 'container' && element.status === 'stable'
-    && [element, ...descendants(model, element.id)].every(item => item.code.length === 0)
-}
-
-/**
- * The next scan would create a scanned container that owns no files again if this write renamed, moved
- * or removed it, or moved another container out of the system it stays in, so the write is refused first.
- */
-function requireScanFindable(
-  context: CurationContext,
-  target: ArchitectureElement,
-  parentId: string | undefined,
-  rewrites: readonly Rewrite[],
-  removals: readonly ArchitectureElement[],
-): void {
-  const bySource = new Map(context.model.elements.map(element => [element.sourceFilename, element]))
-  const changed = [
-    ...rewrites
-      .filter(rewrite => rewrite.destinationFilename !== rewrite.sourceFilename)
-      .map(rewrite => bySource.get(rewrite.sourceFilename)!),
-    ...removals,
-  ]
-  const leavesSystem = target.kind === 'container' && parentId !== undefined && parentId !== target.parentId
-  const staying = leavesSystem ? context.model.elements.filter(element => element.parentId === target.parentId) : []
-  const named = [...changed, ...staying].find(element => foundOnlyByName(context.model, element))
-  if (named !== undefined) {
-    throw new Error(`cannot change "${target.id}": container "${named.id}" owns no files, so scans find it only by `
-      + `its name in "${named.parentId}", and it must keep its ID and system`)
-  }
-}
-
 function codeKey(reference: CodeReference): string {
   return `${reference.scanner}\0${reference.file}`
 }
@@ -411,7 +372,6 @@ export async function curateElement(
     ...combined.rewrites,
     ...await movedDescendants(context, target, renamed.destination, renamed.id),
   ]
-  requireScanFindable(context, target, input.parent, rewrites, combined.removals)
   // Only a rename repoints links; requireLoadableResult refuses a move or combine that would break one.
   const links = input.newId === undefined ? [] : await linkWrites(context, rewrites)
   const writes: DocumentWrite[] = [...rewrites, ...links]

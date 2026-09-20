@@ -1,11 +1,14 @@
 # Curating structure
 
 Structure decides which elements exist, where each belongs, and which source
-files each component owns. Settle it before writing meaning: combines and moves
-refuse records that already carry authored meaning.
+files each component owns. Combines and component moves require empty meaning;
+moving a container preserves its meaning and its components.
 
-Scans create the stable systems, containers, and components of existing
-software. Hand-proposed software stays a ghost draft until a scan matches it
+The first scan with source files creates one project-named system when none is
+declared. Scans preserve existing systems and containers; source groups cannot
+create additional systems or application boundaries. A component with a known
+system but no identifiable container appears in an Unidentified container group.
+Hand-proposed software stays a ghost draft until a scan matches it
 and it is accepted. Actors and external systems are stable declarations of what
 the scanner cannot see.
 
@@ -38,7 +41,7 @@ the scanner cannot see.
 | `groma add external <name> --overview <markdown>` | the name of a new outside system; `--technology` is optional |
 | `groma draft <system\|container\|component> <name> --overview <markdown>` | a new name; containers and components also require `--parent <id>`, which a system refuses |
 | `groma accept <id>` | a ghost element ID; scans first when no scan has matched it yet |
-| `groma remove <id>` | an actor, external system, ghost, or unused draft ID, or a scanned component without Code references |
+| `groma remove <id>` | an actor, external system, ghost, unused draft, component without Code references, or empty system/container |
 
 A group address is `<container-id>/<group-kebab>`; it is not an element ID. A
 ghost is written at the path it will keep. To remove a scanned component,
@@ -92,20 +95,16 @@ Combined records must have the same kind and parent. Absorbed records cannot
 have body content, concept-addressed relationships, a group, or technology.
 The children a combine absorbs directly cannot have body content either, so a
 system combine refuses a described container while a described component two
-levels down relocates with it. A move requires an empty body on the record that
-moves, not on its children. No record anywhere under a moved or absorbed record
+levels down relocates with it. A component move requires an empty body; a
+container move preserves its body and children. No record anywhere under a moved or absorbed record
 may hold a concept-addressed relationship, because its document changes path and
 these operations do not repoint links; a rename does.
 File connections follow their current owners and do not block these operations.
 The survivor may already have authored meaning.
 
-A scan finds a container through the files of its own project that the
-container or its components own, and otherwise only by its scanned name and
-system. A rename, move or combine that would move or remove a scanned container
-owning no files, alone or with its system, is refused, and so is moving another
-container out of the system it stays in, because the next scan would create
-that container again. Combine the other systems into its system instead, and
-change its title instead of its ID.
+A scan reuses established ownership or a matching declared boundary. Renames,
+moves and combines remain authoritative; scans cannot recreate removed
+containers from source group names.
 
 ## Renaming an ID
 
@@ -136,7 +135,8 @@ new ID survives every later scan.
 
 Detach takes files out of a component that should not own them. The component
 keeps its ID and meaning, and its other files. The next scan gives each
-detached file its own new component in the container the scanner infers, and
+detached file its own new component under the established container or its known
+system's Unidentified container group, and
 combine or move then places it:
 
 ```sh
@@ -163,11 +163,11 @@ its unit. Detach every file of the unit to give the unit one new component.
 Do not clear authored meaning or edit architecture files to bypass a refused
 combine or move.
 
-## One product, several scanned systems
+## Correcting system ownership
 
-A scan creates one system per project it finds, so a repository with several
-languages or applications can start with several systems. Keep them when they
-describe separate products. When they describe one product, merge them:
+Several languages or source projects do not establish several software
+systems. Keep declared systems when they describe separate products. When
+empty records describe one product, merge them:
 
 ```sh
 groma edit shop --combine depot
@@ -181,11 +181,11 @@ single container instead when only part of a system belongs elsewhere:
 groma edit depot-warehouse --parent shop
 ```
 
-A container carries its components to the new system. A system emptied this way
-stays until you combine it into the surviving system. Both operations refuse a
-container or system with authored meaning under the same rules as component
-moves and combines, refuse an external system as a destination, and refuse a
-change that would leave a flow step unresolvable.
+A container carries its meaning and components to the new system. A system
+emptied this way stays until explicitly removed with `groma remove <system-id>`.
+Combines still refuse authored meaning on absorbed records. Both operations
+refuse an external system as a destination and refuse a change that would leave
+a flow step unresolvable.
 
 ## Skyscrapers
 

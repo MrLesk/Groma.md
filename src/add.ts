@@ -29,18 +29,18 @@ export interface AddInput {
 
 type DeclaredThing = 'actor' | 'external' | 'draft'
 
-/** Kinds only a scan or an accepted draft creates, each with the parent flag its teaching sentence shows. */
-const scannedKinds: Record<string, string> = {
+/** Proposed architecture uses the draft command and its required parent. */
+const draftKinds: Record<string, string> = {
   system: '',
   container: ' --parent <system-id>',
   component: ' --parent <container-id>',
 }
 
 function requireThing(thing: string, name: string): DeclaredThing {
-  const parentHint = scannedKinds[thing]
+  const parentHint = draftKinds[thing]
   if (parentHint !== undefined) {
     throw new Error(
-      `${thing}s are found by the scanner. To draft one, run: groma draft ${thing} "${name}"${parentHint}`,
+      `To draft a ${thing}, run: groma draft ${thing} "${name}"${parentHint}`,
     )
   }
   if (thing === 'actor' || thing === 'external' || thing === 'draft') return thing

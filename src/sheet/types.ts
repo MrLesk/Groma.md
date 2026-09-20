@@ -33,6 +33,8 @@ export interface Island {
 export interface Zone {
   key: string
   name: string
+  /** Derived display group for components whose system is known but container is not. */
+  unidentifiedContainer?: true
   /** Island key or slab representation id the zone lies on. */
   parent: string
   members: string[]

@@ -221,15 +221,15 @@ export const mapCss = `
   #map:where(:not([data-camera-moving])) .island.system:not(.selected):not(.context):hover > .ground { stroke: var(--map-line); }
   #map .selected, #map .touched,
   #map .building.lit, #map .slab.lit, #map .island.lit { --emphasis: ${emphasis(1)}; }
-  #map .context .face, #map .island.context > .ground, #map .selected .face, #map .island.selected > .ground,
+  #map .context .face, #map .island.context > .ground, #map .selected .face, #map :is(.island, .zone).selected > .ground,
   #map .touched .face, #map .island.touched > .ground,
   #map .building.lit .face, #map .slab.lit > .face, #map .island.lit > .ground { stroke: var(--highlight); }
   #map .selected > .label .text, #map .touched > .label .text,
   #map .building.lit > .label .text, #map .slab.lit > .label .text, #map .island.lit > .label .text {
     fill: var(--ink); font-weight: 600;
   }
-  #map :is(.island, .slab):is(.selected, .touched, .lit, .context) > .surface-label .text { fill: var(--highlight); }
-  #map :is(.island, .slab):is(.selected, .touched, .lit, .context) > .surface-label .label-leader { stroke: var(--highlight); }
+  #map :is(.island, .slab, .zone):is(.selected, .touched, .lit, .context) > .surface-label .text { fill: var(--highlight); }
+  #map :is(.island, .slab, .zone):is(.selected, .touched, .lit, .context) > .surface-label .label-leader { stroke: var(--highlight); }
   #map .building.neighbor:not(.selected):not(.touched):not(.lit) { --emphasis: ${emphasis(0.5)}; }
   #map .building.neighbor:not(.selected):not(.touched):not(.lit) .face { stroke: color-mix(in srgb, var(--highlight) 45%, var(--map-line)); }
   #map .camera:has(.component-focus) .building.component:not(.component-focus):not(.neighbor) { opacity: 0.3; animation: none; }

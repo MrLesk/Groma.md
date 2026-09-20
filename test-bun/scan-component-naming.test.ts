@@ -5,7 +5,6 @@ import os from 'node:os'
 import path from 'node:path'
 import { createScanObservation } from '@groma/scanner'
 
-import { addThing } from '../src/add.ts'
 import { loadArchitecture } from '../src/architecture-reader.ts'
 import { editArchitecture } from '../src/edit.ts'
 import { draftElement } from '../src/draft.ts'
@@ -125,7 +124,8 @@ test.concurrent('file and scanner order share one owner and preserve IDs on late
 test.concurrent('matching a draft keeps its identity and draft status', async () => {
   const root = await repository()
   try {
-    await reconcileScanObservations(root, [observation([])])
+    await cp(path.resolve(import.meta.dir, '../test/fixtures/curation/groma/systems/shop'), path.join(root, 'groma/systems/shop'), { recursive: true })
+    await draftElement(root, { kind: 'container', name: 'Scanner', parent: 'shop', overview: '' })
     await draftElement(root, { kind: 'component', name: 'Worker', parent: 'scanner', overview: '' })
     const summary = await reconcileScanObservations(root, [observation(['src/worker.ts'])])
     expect(summary).toEqual({ created: 0, refreshed: 0, matched: 1 })
@@ -149,7 +149,7 @@ test.concurrent('extension-only source filenames produce readable records that s
   } finally { await rm(root, { recursive: true, force: true }) }
 })
 
-test.concurrent('overlapping fresh roots reuse their pending container and an existing ID wins over new collisions', async () => {
+test.concurrent('overlapping fresh roots share unknown placement and an existing ID wins over new collisions', async () => {
   const root = await repository()
   try {
     const first = observation(['first/build.ts'])
@@ -157,7 +157,7 @@ test.concurrent('overlapping fresh roots reuse their pending container and an ex
     overlap.roots.find(root => root.parent === 'root')!.name = 'Other scanner'
     await reconcileScanObservations(root, [first, overlap])
     const records = await loadArchitecture(root)
-    expect(records.documents.filter(document => document.frontmatter.type === 'C4 Container')).toHaveLength(1)
+    expect(records.documents.filter(document => document.frontmatter.type === 'C4 Container')).toHaveLength(0)
     const existing = (await components(root))[0]!
     expect(existing.id).toBe('build')
     expect(existing.code).toHaveLength(2)
@@ -187,40 +187,12 @@ test.concurrent('scanned IDs never take a word the CLI reads as an address, and 
   expect([...names(['src/group.ts', 'src/relation.ts']).values()].map(value => value.id)).toEqual(['src-group', 'src-relation'])
 
   const root = await repository()
-  // A project without files is found again only through the ID the first scan gave it.
-  const scan = createScanObservation({
-    scanner: { id: 'fixture', technology: 'fixture', engine: 'fixture', engineVersion: '1' },
-    roots: [{ id: 'root', kind: 'project', name: 'Group' }],
-    files: [],
-    diagnostics: [],
-  })
+  const scan = observation(['src/group.ts'])
   try {
     expect((await reconcileScanObservations(root, [scan])).created).toBe(2)
     const ids = (await loadArchitecture(root)).documents
       .map(document => (document.frontmatter.groma as { id?: string } | undefined)?.id)
     expect(ids).not.toContain('group')
     expect((await reconcileScanObservations(root, [scan])).created).toBe(0)
-  } finally { await rm(root, { recursive: true, force: true }) }
-})
-
-test.concurrent('a numbered ID of a project without files is found again by later scans', async () => {
-  const root = await repository()
-  // The plain and the qualified ID of the empty project are taken, so the scan numbers its container.
-  await addThing(root, { thing: 'actor', name: 'Jobs', overview: 'Runs jobs.' })
-  await addThing(root, { thing: 'actor', name: 'Depot Jobs', overview: 'Runs depot jobs.' })
-  const scan = createScanObservation({
-    scanner: { id: 'fixture', technology: 'fixture', engine: 'fixture', engineVersion: '1' },
-    roots: [
-      { id: 'depot', kind: 'solution', name: 'Depot' },
-      { id: 'api', kind: 'project', parent: 'depot', name: 'Api' },
-      { id: 'jobs', kind: 'project', parent: 'depot', name: 'Jobs' },
-    ],
-    files: [{ file: 'api/a.cs', roots: ['api'], symbols: [] }],
-    diagnostics: [],
-  })
-  try {
-    const created = []
-    for (let scans = 0; scans < 3; scans += 1) created.push((await reconcileScanObservations(root, [scan])).created)
-    expect(created).toEqual([4, 0, 0])
   } finally { await rm(root, { recursive: true, force: true }) }
 })

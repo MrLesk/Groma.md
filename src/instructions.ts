@@ -18,13 +18,13 @@ source code ──scan──▶ groma|.groma/*.md ──view──▶ maps
 
 1. groma web — scan this repo and open the browser map.
 2. groma view — scan this repo and open the terminal map. groma view --plain prints the existing world as text without scanning. groma view <id> prints one existing record; groma view <path> prints the file's owner and the file's relationships.
-3. groma scan — scan this repo. Prints ok and a short summary. It does not print the architecture. The scanner alone creates systems, containers and components; nothing hand-writes them. Core also derives map connections from used source references and their current component owners. These remain source-dependency claims at every level.
+3. groma scan — scan this repo. Prints ok and a short summary. Core creates one project-named system if none is declared and preserves existing architecture boundaries. Components with no identified container appear in an Unidentified container group inside their known system. Core also derives map connections from supported interactions and their current component owners.
 4. Change the architecture through Groma, not by editing its files.
    - groma add — declare a person, an external system, a draft, a relation, or a group; the scanner never sees those.
    - groma draft — a new system, container or component becomes a ghost at the path it will keep.
-   - groma edit — retitle, rename an id, update meaning or technology, tag a part with a draft, group scan evidence, move an empty scanned component or container, combine empty scan records including systems, detach files from a component, or change the project record.
+   - groma edit — retitle, rename an id, update meaning or technology, tag a part with a draft, group scan evidence, move an empty scanned component or a container with its meaning, combine empty scan records including systems, detach files from a component, or change the project record.
    - groma add relation, groma edit relation, groma remove relation — author or reword a file interaction, or remove a draft interaction. Current relationships cannot be removed.
-   - groma remove — take away a person, an external, a ghost, a draft nothing belongs to, a draft relation, or a group.
+   - groma remove — take away a person, an external, a ghost, a code-free component or empty boundary, a draft nothing belongs to, a draft relation, or a group.
 5. groma accept <id> — accept a ghost only if a scan has matched it. The file stays where it is; only its status changes.
 6. groma lint — report architecture issues from current scanner evidence. The first rule checks for possible duplicate logic. Saved architecture stays unchanged. Exit code 1 means findings or a scanner failure; 0 means no findings in the available evidence.
 
@@ -62,9 +62,9 @@ Say what must be true, not how to build it. Do not specify frameworks, file layo
 - Remove a planned collaboration: groma remove relation <source-file> <target-file>. Only draft relationships without flow references can be removed; current relationships are protected.
 - Draft outcome prose: groma edit <draft-id> --overview <markdown>
 - Project record: groma edit project [--title <text>] [--description <text>] [--overview <markdown>]
-- Remove a person, an external, a ghost, a component without Code references, or a draft no ghost belongs to: groma remove <id>. For scanned components, delete the source files and run their scanner first to clear the Code references. Removal still refuses while flows use the element, other parts relate to it, it contains parts, or ghosts carry the draft's tag.
+- Remove a person, an external, a ghost, a component without Code references, an empty system/container, or a draft no ghost belongs to: groma remove <id>. For scanned components, delete the source files and run their scanner first to clear the Code references. Removal still refuses while flows use the element, other parts relate to it, it contains parts, or ghosts carry the draft's tag.
 
-Containers need a system parent. Components need a container parent. An external system has no containers. Structural edits preserve authored file interactions through current ownership and refuse to remove authored prose or concept-addressed relationships. A scanned container that owns no files keeps its id and system, because scans find it only by its name. Scans refresh the Derived relationships section from supported operation evidence and preserve authored sections. Raw dependency graphs are not persisted. Current authored text takes precedence for the same file pair; editing a derived row takes authorship. Scans never verify authored text or accept drafts.
+Containers need a system parent. A component's parent can be its known system when its container is unidentified. An external system has no containers. Container moves preserve authored meaning and children; component moves and combines retain their restrictions on authored prose. Structural edits preserve file interactions and refuse changes that break concept-addressed relationships or flows. Scans refresh the Derived relationships section from supported operation evidence and preserve authored sections. Raw dependency graphs are not persisted. Current authored text takes precedence for the same file pair; editing a derived row takes authorship. Scans never verify authored text or accept drafts.
 
 ${instructionDirectory}`
 

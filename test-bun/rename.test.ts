@@ -29,6 +29,7 @@ function observation() {
 async function repository(): Promise<string> {
   const root = await mkdtemp(path.join(os.tmpdir(), 'groma-rename-'))
   await cp(path.resolve(import.meta.dir, '../test/fixtures/empty-project'), root, { recursive: true })
+  await cp(path.resolve(import.meta.dir, '../test/fixtures/curation/groma/systems/shop'), path.join(root, 'groma/systems/shop'), { recursive: true })
   await reconcileScanObservations(root, [observation()])
   return root
 }

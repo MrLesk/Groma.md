@@ -39,15 +39,15 @@ function sized(building: Building): Sized {
   }
 }
 
-function containerBuildings(model: TerminalViewModel, container: AnnotatedElement): Building[] {
+function surfaceBuildings(model: TerminalViewModel, surface: AnnotatedElement): Building[] {
   return byPlacement(model.sheet.buildings.filter(building => {
-    return building.surface === container.representationId && building.kind === 'component'
+    return building.surface === surface.representationId && building.kind === 'component'
   }))
 }
 
-function bands(model: TerminalViewModel, container: AnnotatedElement): Band[] {
-  const buildings = containerBuildings(model, container)
-  const zones = byPlacement(model.sheet.zones.filter(zone => zone.parent === container.representationId))
+function bands(model: TerminalViewModel, surface: AnnotatedElement): Band[] {
+  const buildings = surfaceBuildings(model, surface)
+  const zones = byPlacement(model.sheet.zones.filter(zone => zone.parent === surface.representationId))
   const grouped = new Set(zones.flatMap(zone => zone.members))
   const loose = buildings.filter(building => !grouped.has(building.representationId))
   return [
@@ -91,16 +91,16 @@ function card({ building, rows }: Sized, element: AnnotatedElement, bounds: Boun
   }
 }
 
-function slab(element: AnnotatedElement, bounds: Bounds): WorldItem {
+function surfaceFrame(element: AnnotatedElement, bounds: Bounds): WorldItem {
   return {
     key: element.representationId,
     representationId: element.representationId,
     id: element.id,
     title: element.title,
-    kind: 'container',
+    kind: element.kind,
     origin: element.origin,
     external: false,
-    shape: 'slab',
+    shape: element.kind === 'system' ? 'island' : 'slab',
     lines: [],
     worldBounds: bounds,
   }
@@ -155,33 +155,33 @@ function siblingRows(model: TerminalViewModel, container: AnnotatedElement): Ann
   return rows.map(row => row.element)
 }
 
-/** The active container owns the map; neighbouring slabs are three-column named strips. */
-export function containerLayout(
+/** The active container or system owns the map; neighbouring slabs are three-column named strips. */
+export function surfaceLayout(
   model: TerminalViewModel,
-  container: AnnotatedElement,
+  surface: AnnotatedElement,
   mapWidth: number,
 ): WorldItem[] {
   const byId = new Map(model.elements.map(element => [element.representationId, element]))
-  const width = Math.max(container.title.length + 6, fittedWidth(mapWidth))
+  const width = Math.max(surface.title.length + 6, fittedWidth(mapWidth))
   const items: WorldItem[] = []
   let y = 2
-  for (const band of bands(model, container)) {
+  for (const band of bands(model, surface)) {
     const laid = bandItems(band, byId, width, y)
     items.push(...laid.items)
     y += laid.height + 1
   }
   const height = Math.max(4, y + 1)
   const neighbours = (['left', 'right'] as const).flatMap(side => {
-    const element = neighbourContainer(model, container, side)
+    const element = neighbourContainer(model, surface, side)
     if (element === undefined) return []
-    return [{ ...slab(element, {
+    return [{ ...surfaceFrame(element, {
       x: side === 'left' ? -5 : width + 2,
       y: 0,
       width: 3,
       height,
     }), preview: 'vertical' as const }]
   })
-  return [slab(container, { x: 0, y: 0, width, height }), ...items, ...neighbours]
+  return [surfaceFrame(surface, { x: 0, y: 0, width, height }), ...items, ...neighbours]
 }
 
 /** The container before or after this one on its island. */
@@ -195,7 +195,7 @@ export function neighbourContainer(
   return siblings[at + (direction === 'right' ? 1 : -1)]
 }
 
-/** The first building of a container in placement order. */
-export function firstBuilding(model: TerminalViewModel, container: AnnotatedElement): string | undefined {
-  return containerBuildings(model, container)[0]?.representationId
+/** The first component on a surface in placement order. */
+export function firstBuilding(model: TerminalViewModel, surface: AnnotatedElement): string | undefined {
+  return surfaceBuildings(model, surface)[0]?.representationId
 }

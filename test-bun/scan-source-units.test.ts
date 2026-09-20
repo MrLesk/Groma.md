@@ -124,8 +124,8 @@ test.concurrent('relationships inside a source unit do not become architecture s
 test.concurrent('manual combines and moves remain authoritative without warnings when source units are scanned again', async () => {
   const root = await repository()
   try {
+    await cp(path.resolve(import.meta.dir, '../test/fixtures/curation/groma/systems/shop'), path.join(root, 'groma/systems/shop'), { recursive: true })
     const scan = observation()
-    scan.roots.push({ id: 'other', kind: 'project', name: 'Other' })
     await reconcileScanObservations(root, [scan])
     const initial = await loadAnnotatedArchitecture(root)
     const component = owner(initial, 'emitter.ts')

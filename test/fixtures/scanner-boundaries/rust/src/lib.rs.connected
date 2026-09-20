@@ -1,0 +1,5 @@
+mod format;
+
+pub fn render(value: &str) -> String {
+    format::label(value)
+}

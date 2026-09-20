@@ -79,7 +79,9 @@ export function sheetSvg(scene: ProjectedScene): string {
 }
 
 function zoneGroup(zone: ProjectedZone, view: ProjectionView, zoom: number): string {
-  return svg('g', {}, 'zone',
+  const attributes: Record<string, string> = zone.zone.unidentifiedContainer
+    ? { 'data-id': zone.zone.key, 'aria-label': zone.zone.name } : {}
+  return svg('g', attributes, 'zone',
     svg('polygon', { points: pointsAttribute(zone.polygon) }, 'ground')
     + surfaceLabel(zone.text, GROUP_FONT, view, 0, zoom))
 }

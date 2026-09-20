@@ -6,7 +6,7 @@ import { detectDuplicatedLogic, rememberArchitectureFindings } from './architect
 import { buildArchitectureModel } from './architecture-model.ts'
 import { storedConnections } from './relationship-markdown.ts'
 import { loadArchitecture } from './architecture-reader.ts'
-import { architectureElementPath } from './architecture-path.ts'
+import { architectureElementPath, isExternalPath } from './architecture-path.ts'
 import { GromaFileSystem } from './groma-filesystem.ts'
 import {
   renderArchitectureDocument,
@@ -16,6 +16,7 @@ import {
 import { isReservedId, kebabCase } from './naming.ts'
 import { componentNames, sourceStem } from './scan-component-naming.ts'
 import { sourceUnitGroups } from './scan-source-units.ts'
+import { loadProjectProfile } from './project-profile.ts'
 import { c4Kind, requireGromaMapping } from './okf-profile.ts'
 import { refreshDerivedRelationships } from './relationship-inference.ts'
 import type { ScanFile, ScanObservation, ScanRoot } from '@groma/scanner'
@@ -210,41 +211,41 @@ async function refreshCuratedCode(
   }
 }
 
-function mostFrequent(records: WorldRecord[]): WorldRecord | undefined {
-  const counts = new Map<WorldRecord, number>()
-  for (const record of records) counts.set(record, (counts.get(record) ?? 0) + 1)
-  return [...counts].sort((left, right) => {
-    return right[1] - left[1] || left[0].id.localeCompare(right[0].id)
-  })[0]?.[0]
+function onlyRecord(records: WorldRecord[]): WorldRecord | undefined {
+  return records.every(record => record === records[0]) ? records[0] : undefined
 }
 
-function inferredContainer(
+function sourceParents(
   world: World,
   observation: ScanObservation,
   root: ScanRoot,
-  candidates: Map<string, FileCandidate>,
-): WorldRecord | undefined {
-  const containers = observation.files.flatMap(file => {
+): WorldRecord[] {
+  return observation.files.flatMap(file => {
     if (!file.roots.includes(root.id)) return []
     const owner = world.byCodeFile.get(file.file)
-      ?? candidates.get(file.file)?.parent
-    if (owner?.kind === 'container') return [owner]
+    if (owner?.kind === 'container' || owner?.kind === 'system') return [owner]
     const parent = owner?.parent === undefined ? undefined : world.byId.get(owner.parent ?? '')
-    return parent?.kind === 'container' ? [parent] : []
+    return parent === undefined ? [] : [parent]
   })
-  return mostFrequent(containers)
 }
 
 function systemFor(world: World, container?: WorldRecord): WorldRecord | undefined {
+  if (container?.kind === 'system') return container
   if (container?.parent === undefined || container.parent === null) return undefined
   const system = world.byId.get(container.parent)
   return system?.kind === 'system' ? system : undefined
 }
 
-/**
- * The record availableId named for this name and parent: its candidates up to the first free one.
- * requireScanFindable in curate.ts refuses curation that would hide a container from this lookup.
- */
+/** Conflicting containers can establish their common system, never a winning container. */
+function commonParent(world: World, parents: WorldRecord[]): WorldRecord | undefined {
+  return onlyRecord(parents) ?? onlyRecord(parents.flatMap(parent => systemFor(world, parent) ?? []))
+}
+
+function internalSystems(world: World): WorldRecord[] {
+  return [...world.byId.values()].filter(record => record.kind === 'system' && !isExternalPath(record.sourceFilename))
+}
+
+/** The record availableId named for this name and parent: its candidates up to the first free one. */
 function existingChild(
   world: World,
   kind: C4Kind,
@@ -272,51 +273,17 @@ async function attachReference(
   await upsertCode(repositoryRoot, record.sourceFilename, record.code)
 }
 
-async function observationSystem(
+async function createInitialSystem(
   repositoryRoot: string,
   world: World,
-  root: ScanRoot,
-  inferred: Map<string, WorldRecord | undefined>,
+  observations: ScanObservation[],
   summary: ScanSummary,
-): Promise<WorldRecord> {
-  let system = mostFrequent([...inferred.values()].flatMap(record => {
-    const candidate = systemFor(world, record)
-    return candidate === undefined ? [] : [candidate]
-  }))
-  system ??= existingChild(world, 'system', root.name)
-  if (system === undefined) {
-    system = await createRecord(repositoryRoot, world, {
-      kind: 'system',
-      name: root.name,
-    })
-    summary.created += 1
-  }
-  return system
-}
-
-async function observationContainers(
-  repositoryRoot: string,
-  world: World,
-  roots: ScanRoot[],
-  system: WorldRecord,
-  inferred: Map<string, WorldRecord | undefined>,
-  summary: ScanSummary,
-): Promise<Map<string, WorldRecord>> {
-  const containers = new Map<string, WorldRecord>()
-  for (const root of roots) {
-    let container = inferred.get(root.id)
-      ?? existingChild(world, 'container', root.name, system)
-    if (container === undefined) {
-      container = await createRecord(repositoryRoot, world, {
-        kind: 'container',
-        name: root.name,
-        parent: system,
-      })
-      summary.created += 1
-    }
-    containers.set(root.id, container)
-  }
-  return containers
+): Promise<void> {
+  if (internalSystems(world).length > 0 || !observations.some(observation => observation.files.length > 0)) return
+  // loadArchitecture has already validated the required project profile.
+  const project = (await loadProjectProfile(repositoryRoot))!
+  await createRecord(repositoryRoot, world, { kind: 'system', name: project.title })
+  summary.created += 1
 }
 
 function scanReference(
@@ -333,7 +300,7 @@ function scanReference(
 
 interface FileCandidate {
   file: string
-  parent: WorldRecord
+  parents: WorldRecord[]
   references: CodeReference[]
   owner?: WorldRecord
 }
@@ -350,7 +317,7 @@ function associateCandidates(
     if (!primary || members.some(member => member === undefined)) continue
     const references = members.flatMap(member => member!.references)
     for (const file of unit.files) candidates.delete(file)
-    candidates.set(unit.primary, { ...primary, references, owner })
+    candidates.set(unit.primary, { ...primary, parents: members.flatMap(member => member!.parents), references, owner })
   }
   return diagnostics
 }
@@ -358,17 +325,20 @@ function associateCandidates(
 function collectFiles(
   candidates: Map<string, FileCandidate>,
   observation: ScanObservation,
-  containers: Map<string, WorldRecord>,
+  placements: Map<string, WorldRecord[]>,
 ): void {
   for (const file of observation.files) {
-    const parent = file.roots.flatMap(id => containers.get(id) ?? []).sort((a, b) => a.id.localeCompare(b.id))[0]
-    if (parent === undefined) continue
-    const candidate = candidates.get(file.file) ?? { file: file.file, parent, references: [] }
-    if (parent.id < candidate.parent.id) candidate.parent = parent
+    const candidate = candidates.get(file.file) ?? { file: file.file, parents: [], references: [] }
+    candidate.parents.push(...file.roots.flatMap(id => placements.get(id) ?? []))
     const reference = scanReference(observation, file)
     if (!candidate.references.some(item => item.scanner === reference.scanner)) candidate.references.push(reference)
     candidates.set(file.file, candidate)
   }
+}
+
+function requirePlacement(file: string, parent: WorldRecord | undefined): WorldRecord {
+  if (parent === undefined) throw new Error(`Cannot determine a system for ${file}; existing systems do not establish its ownership`)
+  return parent
 }
 
 async function reconcileFiles(
@@ -377,13 +347,14 @@ async function reconcileFiles(
   candidates: Map<string, FileCandidate>,
   summary: ScanSummary,
 ): Promise<void> {
-  const unowned: FileCandidate[] = []
+  const unowned: Array<FileCandidate & { parent: WorldRecord }> = []
   for (const candidate of [...candidates.values()].sort((a, b) => a.file.localeCompare(b.file))) {
-    const named = existingChild(world, 'component', sourceStem(candidate.file), candidate.parent)
+    const parent = commonParent(world, candidate.parents)
+    const named = existingChild(world, 'component', sourceStem(candidate.file), parent)
     const draft = named?.status === 'draft' && named.code.length === 0 ? named : undefined
     const owner = candidate.owner ?? world.byCodeFile.get(candidate.file) ?? draft
     if (owner === undefined) {
-      unowned.push(candidate)
+      unowned.push({ ...candidate, parent: requirePlacement(candidate.file, parent) })
       continue
     }
     if (owner === draft) summary.matched += 1
@@ -407,32 +378,39 @@ async function reconcileFiles(
   }
 }
 
-async function prepareObservation(
-  repositoryRoot: string,
-  world: World,
-  observation: ScanObservation,
-  summary: ScanSummary,
-  candidates: Map<string, FileCandidate>,
-): Promise<Map<string, WorldRecord>> {
+function sourceRootGroups(observation: ScanObservation): Map<ScanRoot, ScanRoot[]> {
   const byId = new Map(observation.roots.map(root => [root.id, root]))
   const memberships = new Set(observation.files.flatMap(file => file.roots))
   const groups = new Map<ScanRoot, ScanRoot[]>()
-  const parents = new Set(observation.roots.map(root => root.parent))
-  for (const root of observation.roots.filter(root => memberships.has(root.id) || !parents.has(root.id))) {
+  for (const root of observation.roots.filter(root => memberships.has(root.id))) {
     let top = root
     while (top.parent !== undefined) top = byId.get(top.parent)!
     const members = groups.get(top) ?? []
     members.push(root)
     groups.set(top, members)
   }
-  const containers = new Map<string, WorldRecord>()
-  for (const [top, roots] of groups) {
-    const inferred = new Map(roots.map(root => [root.id, inferredContainer(world, observation, root, candidates)]))
-    const system = await observationSystem(repositoryRoot, world, top, inferred, summary)
-    const found = await observationContainers(repositoryRoot, world, roots, system, inferred, summary)
-    for (const [id, container] of found) containers.set(id, container)
+  return groups
+}
+
+function namedPlacement(world: World, root: ScanRoot, system: WorldRecord | undefined): WorldRecord[] {
+  if (system === undefined) return []
+  return [existingChild(world, 'container', root.name, system) ?? system]
+}
+
+function observationPlacements(world: World, observation: ScanObservation): Map<string, WorldRecord[]> {
+  const placements = new Map<string, WorldRecord[]>()
+  for (const [top, roots] of sourceRootGroups(observation)) {
+    const parents = new Map(roots.map(root => [root.id, sourceParents(world, observation, root)]))
+    const systems = [...parents.values()].flat().flatMap(parent => systemFor(world, parent) ?? [])
+    const system = systems.length > 0 ? onlyRecord(systems)
+      : existingChild(world, 'system', top.name) ?? onlyRecord(internalSystems(world))
+    for (const root of roots) {
+      // Source groups can reuse an established boundary, but cannot establish a new one.
+      const known = parents.get(root.id)!
+      placements.set(root.id, known.length > 0 ? known : namedPlacement(world, root, system))
+    }
   }
-  return containers
+  return placements
 }
 
 export async function reconcileScanObservations(
@@ -457,16 +435,11 @@ export async function reconcileScanObservations(
   })))
   if (diagnostics.length > 0) summary.scannerDiagnostics = diagnostics
   await refreshCuratedCode(repositoryRoot, world, observations, summary, protectedFiles)
+  await createInitialSystem(repositoryRoot, world, observations, summary)
   const candidates = new Map<string, FileCandidate>()
-  const ordered = [...observations].sort((a, b) => {
-    const key = (observation: ScanObservation) => JSON.stringify([
-      observation.roots.map(root => [root.file, root.name, root.id, root.parent]).sort(),
-    ])
-    return key(a).localeCompare(key(b))
-  })
-  for (const observation of ordered) {
-    const containers = await prepareObservation(repositoryRoot, world, observation, summary, candidates)
-    collectFiles(candidates, observation, containers)
+  for (const observation of observations) {
+    const placements = observationPlacements(world, observation)
+    collectFiles(candidates, observation, placements)
   }
   const unitConflicts = associateCandidates(candidates, observations, world)
   await reconcileFiles(repositoryRoot, world, candidates, summary)

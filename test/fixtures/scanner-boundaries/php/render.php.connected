@@ -1,0 +1,8 @@
+<?php
+namespace Labels;
+
+require_once __DIR__ . '/format.php';
+
+function render(string $value): string {
+    return format_label($value);
+}

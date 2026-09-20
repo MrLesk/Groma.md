@@ -14,6 +14,9 @@ geometric zoom or fit-all view.
   rows and miniature component blocks. It does not show groups or component cards.
 - Enter opens only a container, showing that container, its groups and
   components. Backspace returns to root. Arrows never change scope.
+- Components with an unidentified container have a summary row within their
+  system. Selecting one through the hierarchy opens its system surface and the
+  Unidentified container group; Backspace returns to that system at root.
 - Arrowing selects the nearest eligible card by its rectangle, including slight
   overlap. Map arrows never move pane focus. The camera follows toward the
   selection, bounded by the displayed map, with no empty space beyond its edges.
@@ -66,4 +69,3 @@ trap - EXIT
 ```
 
 Look at the root view, details, a container, and a large size such as 200x60.
-

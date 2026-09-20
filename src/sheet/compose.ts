@@ -115,6 +115,8 @@ export function containerFlow(
   systemIsland: string,
   relationships: readonly Pick<AnnotatedRelationship, 'source' | 'target'>[],
 ): ContainerFlow | null {
+  // Unknown boundaries retain the measured packing; container-only composition would omit them.
+  if (placement.zones.some(zone => zone.parent === systemIsland && zone.unidentifiedContainer)) return null
   const units = placement.slabs.filter(slab => slab.island === systemIsland)
   if (units.length < 2) return null
   const ownerByElement = owners(placement)

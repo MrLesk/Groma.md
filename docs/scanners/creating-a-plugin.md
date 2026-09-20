@@ -405,12 +405,16 @@ root and no fixed number of hierarchy levels:
 }
 ```
 
-Root kinds describe source structure, not C4 roles. A solution can be a useful
-clue to a system boundary and a project to a container boundary, but neither
-proves that boundary. Core owns the interpretation. For initial placement it
-uses each top-level root as a system clue and roots with file membership, or
-leaf roots, as container clues. Intermediate groups add no extra C4 level.
-Existing curated file ownership takes precedence.
+Root kinds describe source structure, not C4 roles. A solution, package or
+project does not prove an application boundary. Core owns the interpretation
+and preserves existing curated file ownership. A source group can help reuse
+an established container, but it cannot create one. Source roots also cannot
+create additional systems; the [initial system default](index.md) belongs to
+core. Placement evidence must agree on a container or its common system across
+all scanners. Components whose container
+is unknown stay within their known system, shown in an **Unidentified container**
+group. Empty source groups create no architecture. Intermediate source groups
+add no C4 level.
 
 For a shared source, one file record can list `roots: ["api", "worker"]`.
 This records membership, not several architecture owners. A scanner must not

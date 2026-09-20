@@ -7,6 +7,7 @@ import type {
   Origin,
 } from '../../../types.ts'
 import type { ElementWorkGroup } from '../../../work/pins.ts'
+import type { Zone } from '../../../sheet/types.ts'
 import { findingsForOwner } from '../../../architecture-findings.ts'
 import { removalBlocker } from '../../../removable.ts'
 import { flowsThrough } from '../../flows.ts'
@@ -160,6 +161,28 @@ export function inspectDetails(
     matchedGhost: isMatchedGhost(element),
     movable: element.movable === true,
     parent: element.parent,
+  }
+}
+
+/** Inspect either a stored architecture element or the derived placement group. */
+export function inspectSelection(id: string | undefined, world: ArchitectureGraph, zones: readonly Zone[]): Inspected | undefined {
+  const element = world.elements.find(item => item.representationId === id)
+  if (element !== undefined) return inspectDetails(element, world)
+  const group = zones.find(zone => zone.unidentifiedContainer && zone.key === id)
+  return group === undefined ? undefined : inspectUnidentifiedContainer(group, world)
+}
+
+/** A display group explains missing placement without exposing architecture writes. */
+export function inspectUnidentifiedContainer(zone: Zone, world: ArchitectureGraph): Inspected {
+  const members = new Set(zone.members)
+  return {
+    id: zone.key, title: zone.name, description: '', kindLabel: 'Placement group', origin: 'observed',
+    overview: 'Groma.md could not determine which container these components belong to. This group keeps them visible within their system; it does not represent an application or data store.',
+    children: world.elements.filter(element => members.has(element.representationId)).map(element => ({
+      id: element.representationId, title: element.title, kind: element.kind, external: element.external,
+    })),
+    relationships: [], flows: [], technology: [], files: [], findings: [],
+    removable: false, matchedGhost: false, movable: false, parent: zone.parent,
   }
 }
 

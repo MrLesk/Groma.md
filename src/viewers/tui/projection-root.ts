@@ -1,4 +1,4 @@
-import type { Island } from '../../sheet/types.ts'
+import type { Island, Zone } from '../../sheet/types.ts'
 import type { AnnotatedElement } from '../../types.ts'
 import { kindGlyph } from '../atoms/kind.ts'
 import type { TerminalViewModel } from './model.ts'
@@ -24,6 +24,7 @@ interface RootRow {
 interface RootIsland {
   island: Island
   rows: RootRow[]
+  unidentified: Zone | undefined
 }
 
 /** The sheet's placement order: by row, then column. */
@@ -31,8 +32,8 @@ export function byPlacement<T extends { rect: { gx: number; gy: number } }>(item
   return [...items].sort((left, right) => left.rect.gy - right.rect.gy || left.rect.gx - right.rect.gx)
 }
 
-function blocksOf(element: AnnotatedElement, byId: ReadonlyMap<string, AnnotatedElement>): string {
-  return element.children
+function blocksOf(children: readonly string[], byId: ReadonlyMap<string, AnnotatedElement>): string {
+  return children
     .flatMap(id => {
       const child = byId.get(id)
       return child?.kind === 'component' ? [child.origin === 'observed' ? '▪' : '▫'] : []
@@ -51,9 +52,10 @@ export function rootIslands(model: TerminalViewModel): RootIsland[] {
       : byPlacement(model.sheet.buildings.filter(building => building.surface === island.key))
     const rows = children.flatMap(child => {
       const element = byId.get(child.representationId)
-      return element === undefined ? [] : [{ element, blocks: island.kind === 'system' ? blocksOf(element, byId) : '' }]
+      return element === undefined ? [] : [{ element, blocks: island.kind === 'system' ? blocksOf(element.children, byId) : '' }]
     })
-    return { island, rows }
+    const unidentified = model.sheet.zones.find(zone => zone.parent === island.key && zone.unidentifiedContainer)
+    return { island, rows, unidentified }
   })
 }
 
@@ -89,19 +91,21 @@ function chunks(value: string, width: number): string[] {
 export function rootLayout(model: TerminalViewModel, mapWidth: number): WorldItem[] {
   const maxWidth = fittedWidth(mapWidth)
   let x = 0
-  return rootIslands(model).flatMap(({ island, rows }) => {
+  return rootIslands(model).flatMap(({ island, rows, unidentified }) => {
     const names = rows.map(row => `${kindGlyph(row.element.kind)} ${row.element.title}`)
+    if (unidentified) names.push(`? ${unidentified.name}`)
     const nameColumn = Math.max(0, ...names.map(name => name.length)) + 2
     const natural = Math.max(
       island.name.length + 6,
-      2 * ROW_INSET + nameColumn + Math.max(0, ...rows.map(row => row.blocks.length)),
+      2 * ROW_INSET + nameColumn + Math.max(unidentified?.members.length ?? 0, ...rows.map(row => row.blocks.length)),
     )
     const width = Math.min(natural, maxWidth)
     const bar = Math.max(1, width - 2 * ROW_INSET - nameColumn)
+    const linesFor = (name: string, blocks: string) => chunks(blocks, bar)
+      .map((part, line) => `${(line === 0 ? name : '').padEnd(nameColumn)}${part}`)
     let y = 1
     const rowItems = rows.map((row, index) => {
-      const lines = chunks(row.blocks, bar)
-        .map((part, line) => `${(line === 0 ? names[index]! : '').padEnd(nameColumn)}${part}`)
+      const lines = linesFor(names[index]!, row.blocks)
       const item: WorldItem = {
         key: row.element.representationId,
         representationId: row.element.representationId,
@@ -117,6 +121,15 @@ export function rootLayout(model: TerminalViewModel, mapWidth: number): WorldIte
       y += lines.length
       return item
     })
+    if (unidentified) {
+      const byId = new Map(model.elements.map(element => [element.representationId, element]))
+      const lines = linesFor(names.at(-1)!, blocksOf(unidentified.members, byId))
+      rowItems.push({
+        key: unidentified.key, title: unidentified.name, kind: 'group', origin: 'observed', external: false,
+        shape: 'row', lines, worldBounds: { x, y, width, height: lines.length },
+      })
+      y += lines.length
+    }
     const islandItem: WorldItem = {
       key: island.key,
       ...(island.element === null ? {} : {

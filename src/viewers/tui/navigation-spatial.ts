@@ -44,10 +44,11 @@ export function leaveView(
   if (state.level === 'context') {
     return { level: state.level, currentId: selected?.representationId }
   }
-  const container = ancestorOfKind(selected, 'container', elementsById(model))
+  const byId = elementsById(model)
+  const surface = ancestorOfKind(selected, 'container', byId) ?? ancestorOfKind(selected, 'system', byId)
   return {
     level: 'context',
-    currentId: container?.representationId ?? selected?.representationId,
+    currentId: surface?.representationId ?? selected?.representationId,
   }
 }
 

@@ -8,7 +8,7 @@ import type {
 } from '../../types.ts'
 import type { TerminalViewModel } from './model.ts'
 import { encloses, projectBounds, projectPoint, type TerminalCamera } from './projection-camera.ts'
-import { containerLayout } from './projection-container.ts'
+import { surfaceLayout } from './projection-container.ts'
 import { firstRootRow, rootLayout } from './projection-root.ts'
 import { routeBetween } from './projection-routes.ts'
 
@@ -47,7 +47,7 @@ export interface ProjectedMapRoute {
 export interface TerminalProjection {
   level: TerminalLevel
   currentId: string | null
-  /** The container whose map this is; null at root. */
+  /** The container or system surface whose components are shown; null at root. */
   scope: string | null
   camera: TerminalCamera
   viewport: Bounds
@@ -65,16 +65,16 @@ export interface TerminalProjectionOptions {
   camera?: TerminalCamera
 }
 
-function focusContainer(
+function focusSurface(
   model: TerminalViewModel,
   currentId: string | undefined,
 ): AnnotatedElement | undefined {
   const byId = new Map(model.elements.map(element => [element.representationId, element]))
   let current = currentId === undefined ? undefined : byId.get(currentId)
-  while (current && current.kind !== 'container') {
+  while (current?.kind === 'component') {
     current = current.parent === null ? undefined : byId.get(current.parent)
   }
-  return current
+  return current?.external ? undefined : current
 }
 
 function unionBounds(items: readonly { worldBounds: Bounds }[], margin = 2): Bounds {
@@ -219,17 +219,17 @@ function projectRelationships(
   return [...pairs.values()]
 }
 
-/** What a level shows: the root sheet or one container's stable part of that sheet. */
+/** What a level shows: the root sheet or the components on one container or system surface. */
 function levelItems(
   model: TerminalViewModel,
   level: TerminalLevel,
   currentId: string | undefined,
   mapWidth: number,
 ): { items: WorldItem[]; focus: AnnotatedElement | undefined } {
-  const focus = level === 'components' ? focusContainer(model, currentId) : undefined
+  const focus = level === 'components' ? focusSurface(model, currentId) : undefined
   const items = level === 'context'
     ? rootLayout(model, mapWidth)
-    : focus === undefined ? [] : containerLayout(model, focus, mapWidth)
+    : focus === undefined ? [] : surfaceLayout(model, focus, mapWidth)
   return { items, focus }
 }
 

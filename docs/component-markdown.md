@@ -82,6 +82,7 @@ externals/<system-id>.md
 systems/<system-id>/system.md
 systems/<system-id>/containers/<container-id>/container.md
 systems/<system-id>/containers/<container-id>/components/<component-id>.md
+systems/<system-id>/components/<component-id>.md
 ```
 
 The path makes the architecture easy to browse and says which systems are
@@ -95,7 +96,14 @@ containers.
 | `C4 Actor` | none |
 | `C4 System` | none |
 | `C4 Container` | a `C4 System` under `systems/` |
-| `C4 Component` | a `C4 Container` |
+| `C4 Component` | a `C4 Container`, or its internal `C4 System` when the container is unidentified |
+
+A component stored directly under its system has incomplete placement. This is
+a Groma application-profile rule, not another C4 containment level. Its Markdown
+still carries its responsibility and source links. Groma draws these components
+in one **Unidentified container** group within that system. The group is derived
+for display and is never stored as a container or treated as an application
+boundary. Its detail panel explains the missing container.
 
 ## Concept frontmatter
 

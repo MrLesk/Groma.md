@@ -161,6 +161,12 @@ function documentToElement(document: ArchitectureDocument): ArchitectureElement 
   }
 }
 
+function acceptsParent(element: ArchitectureElement, parent: ArchitectureElement): boolean {
+  // A system parent records known system ownership while the component's container is unidentified.
+  return parent.kind === expectedParentKinds.get(element.kind)
+    || (element.kind === 'component' && parent.kind === 'system')
+}
+
 function validateContainment(
   elements: ArchitectureElement[],
   elementsById: Map<string, ArchitectureElement>,
@@ -194,7 +200,7 @@ function validateContainment(
         `unknown parent id "${element.parentId}"`,
       )
     }
-    if (parent.kind !== expectedParentKind) {
+    if (!acceptsParent(element, parent)) {
       throw new ArchitectureModelError(
         'INVALID_PARENT',
         element.sourceFilename,
@@ -223,7 +229,7 @@ function validateElementLocation(element: ArchitectureElement): void {
     actor: /^actors\/[^/]+\.md$/,
     system: element.external ? /^externals\/[^/]+\.md$/ : /^systems\/[^/]+\/system\.md$/,
     container: /^systems\/[^/]+\/containers\/[^/]+\/container\.md$/,
-    component: /^systems\/[^/]+\/containers\/[^/]+\/components\/[^/]+\.md$/,
+    component: /^systems\/[^/]+\/(?:containers\/[^/]+\/)?components\/[^/]+\.md$/,
   }
   if (!patterns[element.kind].test(relative)) {
     throw new ArchitectureModelError(

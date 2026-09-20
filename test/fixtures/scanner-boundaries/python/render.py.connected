@@ -1,0 +1,5 @@
+from .format import format_label
+
+
+def render(value):
+    return format_label(value)

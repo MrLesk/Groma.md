@@ -1,0 +1,7 @@
+import { Component } from '@angular/core'
+import { formatLabel } from './format'
+
+@Component({ selector: 'label-preview', standalone: true, template: '{{ text }}' })
+export class Label {
+  text = formatLabel(' label ')
+}

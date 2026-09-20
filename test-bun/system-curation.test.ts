@@ -11,9 +11,10 @@ import { editArchitecture } from '../src/edit.ts'
 import { addFlow } from '../src/flow-authoring.ts'
 import { RELATIONSHIPS_TYPE, requireGromaMapping } from '../src/okf-profile.ts'
 import { addRelation } from '../src/relation.ts'
+import { removeThing } from '../src/remove.ts'
 import type { AnnotatedArchitectureModel } from '../src/types.ts'
 
-/** Two projects in one repository, so the scan creates two systems with one container each. */
+/** Source evidence for two explicitly declared systems and application containers. */
 function observation() {
   return createScanObservation({
     scanner: { id: 'fixture', technology: 'fixture', engine: 'fixture', engineVersion: '1' },
@@ -27,27 +28,10 @@ function observation() {
   })
 }
 
-/** A project with a file beside a solution whose second project has none, so one scanned container owns nothing. */
-function emptyProjectObservation() {
-  return createScanObservation({
-    scanner: { id: 'fixture', technology: 'fixture', engine: 'fixture', engineVersion: '1' },
-    roots: [
-      { id: 'shop', kind: 'project', name: 'Shop' },
-      { id: 'depot', kind: 'solution', name: 'Depot' },
-      { id: 'api', kind: 'project', parent: 'depot', name: 'Api' },
-      { id: 'jobs', kind: 'project', parent: 'depot', name: 'Jobs' },
-    ],
-    files: [
-      { file: 'shop/a.ts', roots: ['shop'], symbols: [] },
-      { file: 'depot/api/b.cs', roots: ['api'], symbols: [] },
-    ],
-    diagnostics: [],
-  })
-}
-
 async function repository(scanned = observation()): Promise<string> {
   const root = await mkdtemp(path.join(os.tmpdir(), 'groma-systems-'))
   await cp(path.resolve(import.meta.dir, '../test/fixtures/empty-project'), root, { recursive: true })
+  await cp(path.resolve(import.meta.dir, '../test/fixtures/curation'), root, { recursive: true })
   await reconcileScanObservations(root, [scanned])
   return root
 }
@@ -99,12 +83,14 @@ test.concurrent('combining two systems moves their containers and components, an
   } finally { await rm(root, { recursive: true, force: true }) }
 })
 
-test.concurrent('a container moves to another system with everything stored under it', async () => {
+test.concurrent('a described container keeps its meaning and children when moved, and its empty system can leave', async () => {
   const root = await repository()
   try {
+    const initial = await loadAnnotatedArchitecture(root)
+    const [destination, origin] = ids(initial, 'system')
+    const container = ids(initial, 'container').find(id => parentOf(initial, id) === origin)!
+    await editArchitecture(root, { id: container, description: 'Processes requests.', overview: 'Runs the request handlers in one process.' })
     const before = await loadAnnotatedArchitecture(root)
-    const [destination, origin] = ids(before, 'system')
-    const container = ids(before, 'container').find(id => parentOf(before, id) === origin)!
     const components = before.elements.filter(element => element.parent === container).map(element => element.id)
     expect(components.length).toBeGreaterThan(1)
 
@@ -116,12 +102,18 @@ test.concurrent('a container moves to another system with everything stored unde
     expect(parentOf(after, container)).toBe(destination!)
     expect(after.elements.filter(element => element.parent === container).map(element => element.id)).toEqual(components)
     expect(owners(after)).toEqual(owners(before))
-    // The emptied system stays until a curator combines it away.
+    expect(after.elements.find(element => element.id === container)).toMatchObject({
+      ...before.elements.find(element => element.id === container)!, parent: destination,
+    })
+    // Moving retains the old system until the curator explicitly removes it.
     expect(ids(after, 'system')).toEqual(ids(before, 'system'))
+    await removeThing(root, { id: origin! })
+    const removed = await loadAnnotatedArchitecture(root)
+    expect(ids(removed, 'system')).toEqual([destination!])
 
     const scans = [await reconcileScanObservations(root, [observation()]), await reconcileScanObservations(root, [observation()])]
     expect(scans.map(summary => summary.created)).toEqual([0, 0])
-    expect((await loadAnnotatedArchitecture(root)).elements).toEqual(after.elements)
+    expect((await loadAnnotatedArchitecture(root)).elements).toEqual(removed.elements)
   } finally { await rm(root, { recursive: true, force: true }) }
 })
 
@@ -137,44 +129,6 @@ test.concurrent('an external system is no destination, and a container needs a s
     await expect(editArchitecture(root, { id: system, combine: [external] })).rejects.toThrow('cannot combine')
     await expect(editArchitecture(root, { id: container!, parent: sibling! })).rejects.toThrow('requires a system parent')
     expect((await loadAnnotatedArchitecture(root)).elements).toEqual(world.elements)
-  } finally { await rm(root, { recursive: true, force: true }) }
-})
-
-test.concurrent('a scanned container that owns no files keeps its name and system, and so does the system it stays in', async () => {
-  const root = await repository(emptyProjectObservation())
-  try {
-    const before = await loadAnnotatedArchitecture(root)
-    expect(parentOf(before, 'jobs')).toBe('depot')
-    expect(before.elements.filter(element => element.parent === 'jobs')).toEqual([])
-
-    const edits = [
-      { id: 'jobs', newId: 'workers' },
-      { id: 'jobs', parent: 'shop' },
-      { id: 'api', combine: ['jobs'] },
-      // The conservative rule also refuses these two, although a scan could still find "jobs" by its unqualified ID.
-      { id: 'depot', newId: 'warehouse' },
-      { id: 'shop', combine: ['depot'] },
-      // The next scan would place the solution through the moved container and look for the empty one there.
-      { id: 'api', parent: 'shop' },
-    ]
-    for (const edit of edits) await expect(editArchitecture(root, edit)).rejects.toThrow('owns no files')
-    expect((await loadAnnotatedArchitecture(root)).elements).toEqual(before.elements)
-  } finally { await rm(root, { recursive: true, force: true }) }
-})
-
-test.concurrent('a scanned container that owns no files keeps its ID and system while it absorbs a sibling', async () => {
-  const root = await repository(emptyProjectObservation())
-  try {
-    await editArchitecture(root, { id: 'jobs', combine: ['api'] })
-    const after = await loadAnnotatedArchitecture(root)
-    expect(ids(after, 'container')).toEqual(['jobs', 'shop-shop'])
-
-    const scans = [
-      await reconcileScanObservations(root, [emptyProjectObservation()]),
-      await reconcileScanObservations(root, [emptyProjectObservation()]),
-    ]
-    expect(scans.map(summary => summary.created)).toEqual([0, 0])
-    expect((await loadAnnotatedArchitecture(root)).elements).toEqual(after.elements)
   } finally { await rm(root, { recursive: true, force: true }) }
 })
 

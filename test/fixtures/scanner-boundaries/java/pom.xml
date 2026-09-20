@@ -1,0 +1,7 @@
+<project>
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>example</groupId>
+  <artifactId>label-library</artifactId>
+  <version>0.0.0</version>
+  <properties><maven.compiler.release>25</maven.compiler.release></properties>
+</project>

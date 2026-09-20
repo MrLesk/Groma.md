@@ -47,7 +47,7 @@ interface Node {
   paint:
     | { kind: 'building'; element: AnnotatedElement; heightUnits: number; shape: Shape; floors: BuildingFloor[]; lines: string[] }
     | { kind: 'slab'; element: AnnotatedElement }
-    | { kind: 'zone'; name: string; members: string[] }
+    | { kind: 'zone'; name: string; members: string[]; unidentifiedContainer?: true }
     | { kind: 'island'; islandKind: IslandKind; name: string; element: AnnotatedElement | null }
 }
 
@@ -258,10 +258,19 @@ export function placeWorld(world: ArchitectureGraph): Placement {
     )
   }
   const systemIsland = (system: AnnotatedElement): Node => {
-    const containers = childrenOf(system.representationId).filter(child => child.kind === 'container')
+    const children = childrenOf(system.representationId)
+    const containers = children.filter(child => child.kind === 'container')
+    const components = children.filter(child => child.kind === 'component')
+    const surfaces = withZones(system.representationId, containers.map(slab), containers, relationships)
+    if (components.length > 0) {
+      surfaces.push(packed(`unidentified:${system.representationId}`, components.map(building), {
+        kind: 'zone', name: 'Unidentified container', unidentifiedContainer: true,
+        members: components.map(component => component.representationId),
+      }, relationships))
+    }
     return packed(
       system.representationId,
-      withZones(system.representationId, containers.map(slab), containers, relationships),
+      surfaces,
       { kind: 'island', islandKind: 'system', name: system.title, element: system },
       relationships,
     )
@@ -353,7 +362,9 @@ function collect(islands: readonly Node[], origins: readonly CellRect[]): Placem
     } else if (paint.kind === 'slab') {
       placement.slabs.push({ ...item(paint.element), island: islandKey, rect })
     } else if (paint.kind === 'zone') {
-      placement.zones.push({ key: node.key, name: paint.name, parent: surface, members: paint.members, rect })
+      placement.zones.push({ key: node.key, name: paint.name, parent: surface, members: paint.members, rect,
+        unidentifiedContainer: paint.unidentifiedContainer,
+      })
     } else {
       placement.buildings.push({
         ...item(paint.element),

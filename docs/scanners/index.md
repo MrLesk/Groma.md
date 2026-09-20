@@ -27,7 +27,11 @@ prints every failure in full, including each syntax error that failed a scan.
 Failed scanners contribute no fresh observation; healthy scanners still update the
 architecture.
 
-Core keeps curated file membership authoritative. Files already assigned to one component stay together. An explicit scanner source unit can associate unowned companion files with one component; other unknown files become singleton components under their inferred source roots. Conflicting ownership is reported for review. A drafted name match receives Code but stays a draft until `groma accept`.
+Core keeps curated file membership authoritative. Files already assigned to one component stay together. An explicit scanner source unit can associate unowned companion files with one component; other unknown files become singleton components. A drafted name match receives Code but stays a draft until `groma accept`.
+
+The first scan with source files creates one system named from the project profile when no internal system is declared. This is Groma's starting model; curation defines the actual system boundaries. Later scans reuse declared systems and never create additional systems from source roots. If several systems exist and a new file has no identifiable system, the scan reports the file as an error.
+
+Source roots do not establish application boundaries. Core collects placement evidence across scanners before choosing a parent. Existing ownership or a matching declared boundary can identify a container. When the evidence names different containers within one system, or identifies only the system, the component belongs directly to that system and appears in an **Unidentified container** group. File counts and scanner order do not settle conflicting placement.
 
 New component titles use the source filename without its final extension.
 Identifier casing such as `ProposalService` is preserved; filename separators

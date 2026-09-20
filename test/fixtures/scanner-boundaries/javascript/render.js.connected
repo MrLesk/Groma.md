@@ -1,0 +1,5 @@
+import { formatLabel } from './format.js'
+
+export function render(value) {
+  return formatLabel(value)
+}

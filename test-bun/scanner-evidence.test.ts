@@ -263,7 +263,7 @@ test.concurrent('reconciliation qualifies reserved document names', async () => 
   }
 })
 
-test.concurrent('a qualified empty project container is reused on repeat scans', async () => {
+test.concurrent('an empty source project does not create architecture on repeat scans', async () => {
   const root = await temporaryTree({
     ...packageFiles,
   })
@@ -278,7 +278,7 @@ test.concurrent('a qualified empty project container is reused on repeat scans',
   })
   try {
     expect(await reconcileScanObservations(root, [emptyProject]))
-      .toEqual({ created: 2, refreshed: 0, matched: 0 })
+      .toEqual({ created: 0, refreshed: 0, matched: 0 })
     expect(await reconcileScanObservations(root, [emptyProject]))
       .toEqual({ created: 0, refreshed: 0, matched: 0 })
   } finally {

@@ -114,7 +114,7 @@ export function registerWriteCommands(program: Command): void {
 
   program
     .command('remove')
-    .description('Remove a person, external, ghost, component without Code, unused draft, relation, or group')
+    .description('Remove a person, external, ghost, component without Code, empty system/container, unused draft, relation, or group')
     .argument('<id>', 'element id, draft id, flow id, relation, or group')
     .argument('[ids...]', 'with relation: the source and target endpoints; with group: the address and the members leaving')
     .action(async (id: string, ids: string[]) => {
