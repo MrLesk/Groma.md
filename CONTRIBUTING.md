@@ -29,9 +29,9 @@ Groma is written in TypeScript. Bun runs the CLI and both viewers. Tests under `
 repository check: it runs Biome, typechecks the code, and runs both test suites. Every test loads architecture from
 fixtures under `test/fixtures/`, never from the live `groma/` tree.
 
-The Bun suite uses two worker processes, with each file isolated from other files. Inside each file, at most two
-`test.concurrent` cases overlap. Tests keep their own fixtures and cleanup; the worker count does not change their
-assertions or time limits.
+The Bun suite uses two worker processes, with each file isolated from other files. Each worker runs one test at a time,
+so at most two cases run at once across the suite. Tests keep their own fixtures and cleanup; the worker count does not
+change their assertions or time limits.
 
 Biome applies its recommended lint rules and reports cognitive complexity above 15. Existing complexity warnings identify
 cleanup work; do not add new ones. Biome formatting and import assist are disabled, so keep the surrounding file style
