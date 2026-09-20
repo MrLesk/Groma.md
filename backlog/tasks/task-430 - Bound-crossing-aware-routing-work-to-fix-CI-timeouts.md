@@ -1,11 +1,11 @@
 ---
 id: TASK-430
 title: Bound crossing-aware routing work to fix CI timeouts
-status: In Progress
+status: Done
 assignee:
   - '@codex'
 created_date: '2026-09-16 21:10'
-updated_date: '2026-09-16 21:14'
+updated_date: '2026-09-17 06:13'
 labels: []
 dependencies: []
 references:
@@ -26,15 +26,15 @@ The macOS CI large-world tests exceed their 20-second limit after crossing-aware
 <!-- AC:BEGIN -->
 - [x] #1 Crossing-aware routing retains relationship direction, obstacle clearance, spacing, determinism and the existing crossing-reduction regression.
 - [x] #2 Large-world routing work is reduced without increasing test timeouts or weakening existing tests.
-- [ ] #3 The repository checks and CI pass after the fix is pushed.
+- [x] #3 The repository checks and CI pass after the fix is pushed.
 <!-- AC:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 Acceptance criteria have objective verification evidence.
-- [ ] #2 Relevant checks pass and changes remain task-scoped.
-- [ ] #3 Public contracts or documentation are updated when behavior changes.
-- [ ] #4 Implementation Plan reflects the final approach; correction history and verification are recorded in Implementation Notes.
+- [x] #1 Acceptance criteria have objective verification evidence.
+- [x] #2 Relevant checks pass and changes remain task-scoped.
+- [x] #3 Public contracts or documentation are updated when behavior changes.
+- [x] #4 Implementation Plan reflects the final approach; correction history and verification are recorded in Implementation Notes.
 <!-- DOD:END -->
 
 ## Implementation Plan
@@ -49,4 +49,12 @@ The macOS CI large-world tests exceed their 20-second limit after crossing-aware
 Profiled the 572-route large-world fixture: 6.41 s before; 327,756 path-occupancy updates took 2.05 s. Incremental per-axis occupancy counts reduce this to 1,716 updates and 36 ms; complete route generation is 4.39 s. Complete serialized route output is identical before/after. Search now discards branches whose distance lower bound cannot beat the original route cost. A turn-aware search-priority experiment showed no useful gain and was removed. Latest upstream macOS run also reproduces the same three 20-second test timeouts (21.1 s). No CI settings or tests changed.
 
 Focused existing tests passed: 21 tests covering the large fixture, crossing reduction and dense routing safety. Full bun run check passed: 16 Node tests, 360 Bun passed, 17 skipped, zero failures; standalone bun run build passed. No new lint warnings or whitespace errors. Implementer specification/quality review: incremental counts preserve shared stroke nodes and overlapping lane margins; a Manhattan distance bound prunes only paths unable to improve the incumbent route cost. Existing routing geometry is identical for every route in the large-world fixture. No changes to tests, runner timeouts, workflow configuration, rendering semantics or stored architecture. CI verification remains pending after push.
+
+Pushed only commit 37a8a7c1189f0c16f804043d8166998f201442da after explicit approval, excluding two later unrelated local commits. GitHub Actions run 35188737587 passed repository checks and standalone builds on macOS, Ubuntu and Windows. The three previously failing macOS large-world tests now pass at about 17.75 s, within the unchanged 20 s timeout. Verified through gh run watch --exit-status (exit 0) and the completed macOS job log. CI evidence: https://github.com/MrLesk/Groma.md/actions/runs/35188737587
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Reduced repeated occupancy work and pruned rerouting branches that cannot improve the original path. All 572 large-fixture routes remain identical; local routing improved from 6.41 s to 4.39 s. No timeouts or assertions changed. Local checks/build and GitHub Actions checks/builds pass on macOS, Ubuntu and Windows for 37a8a7c1 (run 35188737587).
+<!-- SECTION:FINAL_SUMMARY:END -->
