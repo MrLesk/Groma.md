@@ -41,7 +41,8 @@ export async function watchObservations(
   options: {
     scan?: boolean
     onScan?: (event: ScanEvent) => void
-    onObservations: (batch: ScanBatch) => void | Promise<void>
+    watchesFile?: (file: string) => boolean
+    onObservations: (batch: ScanBatch, files: string[]) => void | Promise<void>
     onError?: (error: unknown) => void | Promise<void>
   },
 ): Promise<{ close(): Promise<void> }> {
@@ -63,7 +64,7 @@ export async function watchObservations(
     changed.clear()
     try {
       const observations = await registry.collectObservations(root, files, options.onScan)
-      if (!closed) await options.onObservations(observations)
+      if (!closed) await options.onObservations(observations, files)
     } catch (error) {
       if (!closed) await options.onError?.(error)
     } finally {
@@ -86,7 +87,7 @@ export async function watchObservations(
       options.onError?.(error)
       return
     }
-    const relevant = files.filter(file => file !== '' && registry.watchesFile(file))
+    const relevant = files.filter(file => file !== '' && (registry.watchesFile(file) || options.watchesFile?.(file)))
     if (!relevant.length) return
     for (const file of relevant) changed.add(file)
     schedule()

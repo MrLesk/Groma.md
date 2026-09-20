@@ -20,8 +20,9 @@ interface SourceControlOptions {
   initialLine?: number
   element(): AnnotatedElement | undefined
   revision(): string | undefined
-  readCode(element: string, revision?: string): Promise<readonly CodeFile[]>
-  readSource(element: string, file: string, revision?: string): Promise<SourcePayload>
+  from?(): string | undefined
+  readCode(element: string, revision?: string, from?: string): Promise<readonly CodeFile[]>
+  readSource(element: string, file: string, revision?: string, from?: string): Promise<SourcePayload>
   repaint(): void
 }
 
@@ -35,9 +36,11 @@ function sameRequest(
   activeRequest: number,
   revision: string | undefined,
   elementId: string,
+  from: string | undefined,
 ): boolean {
   return request === activeRequest
     && options.revision() === revision
+    && options.from?.() === from
     && options.element()?.representationId === elementId
 }
 
@@ -95,6 +98,7 @@ export function createSourceControl(options: SourceControlOptions): SourceContro
     if (element?.kind !== 'component') return
     const elementId = element.representationId
     const revision = options.revision()
+    const from = options.from?.()
     const activeRequest = ++request
     openedBy = elementId
     file = nextFile
@@ -103,8 +107,8 @@ export function createSourceControl(options: SourceControlOptions): SourceContro
     error = undefined
     options.repaint()
     try {
-      const loaded = await options.readSource(elementId, nextFile, revision)
-      if (!sameRequest(options, request, activeRequest, revision, elementId)) return
+      const loaded = await options.readSource(elementId, nextFile, revision, from)
+      if (!sameRequest(options, request, activeRequest, revision, elementId, from)) return
       payload = loaded
     } catch (reason) {
       if (activeRequest !== request) return
@@ -116,7 +120,7 @@ export function createSourceControl(options: SourceControlOptions): SourceContro
   async function loadStructure(element: AnnotatedElement, revision: string | undefined): Promise<void> {
     const activeRequest = ++structureRequest
     try {
-      const loaded = await options.readCode(element.representationId, revision)
+      const loaded = await options.readCode(element.representationId, revision, options.from?.())
       if (activeRequest !== structureRequest || structureElement !== element || structureRevision !== revision) return
       codeFiles = loaded
     } catch {

@@ -9,6 +9,7 @@ import type { Selection } from './selection.ts'
 /** What the page's query string carries, so a view opens again from its link. */
 export interface ViewState {
   revision?: string
+  from?: string
   file?: string
   line?: number
   selection: Selection
@@ -197,6 +198,7 @@ export function writeView(state: ViewState, world: ArchitectureGraph, work: read
     : undefined
   const pairs: [string, string][] = []
   if (state.revision !== undefined) pairs.push(['revision', state.revision])
+  if (state.from !== undefined) pairs.push(['from', state.from])
   appendSelection(pairs, state, elements, world, work)
   if (state.selection.kind === 'architecture' && state.tab !== 'what') pairs.push(['tab', state.tab])
   appendSourceState(pairs, state, selected)

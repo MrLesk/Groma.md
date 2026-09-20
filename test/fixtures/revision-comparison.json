@@ -1,0 +1,240 @@
+{
+  "before": {
+    "drafts": [],
+    "flows": [],
+    "elements": [
+      {
+        "id": "shop",
+        "representationId": "shop",
+        "kind": "system",
+        "title": "Shop",
+        "overview": "",
+        "parent": null,
+        "children": [
+          "api",
+          "mail"
+        ],
+        "external": false,
+        "origin": "observed",
+        "code": []
+      },
+      {
+        "id": "api",
+        "representationId": "api",
+        "kind": "container",
+        "title": "Order API",
+        "overview": "",
+        "parent": "shop",
+        "children": [
+          "checkout",
+          "payment"
+        ],
+        "external": false,
+        "origin": "observed",
+        "code": []
+      },
+      {
+        "id": "mail",
+        "representationId": "mail",
+        "kind": "container",
+        "title": "Mail application",
+        "overview": "",
+        "parent": "shop",
+        "children": [
+          "receipt-sender"
+        ],
+        "external": false,
+        "origin": "observed",
+        "code": []
+      },
+      {
+        "id": "checkout",
+        "representationId": "checkout",
+        "kind": "component",
+        "title": "Checkout",
+        "overview": "Accepts orders and sends receipts.",
+        "parent": "api",
+        "children": [],
+        "external": false,
+        "origin": "observed",
+        "code": [
+          {
+            "scanner": "typescript",
+            "file": "src/checkout.ts"
+          }
+        ],
+        "technology": "TypeScript"
+      },
+      {
+        "id": "payment",
+        "representationId": "payment",
+        "kind": "component",
+        "title": "Payment adapter",
+        "overview": "Collects payment.",
+        "parent": "api",
+        "children": [],
+        "external": false,
+        "origin": "observed",
+        "code": [
+          {
+            "scanner": "typescript",
+            "file": "src/payment.ts"
+          }
+        ]
+      },
+      {
+        "id": "receipt-sender",
+        "representationId": "receipt-sender",
+        "kind": "component",
+        "title": "Receipt sender",
+        "overview": "Sends a receipt synchronously.",
+        "parent": "mail",
+        "children": [],
+        "external": false,
+        "origin": "observed",
+        "code": [
+          {
+            "scanner": "typescript",
+            "file": "src/receipt.ts"
+          }
+        ]
+      }
+    ],
+    "relationships": [
+      {
+        "id": "relationship:0",
+        "source": "checkout",
+        "target": "payment",
+        "description": "Collects payment",
+        "technology": "Function",
+        "origin": "observed"
+      },
+      {
+        "id": "relationship:1",
+        "source": "checkout",
+        "target": "receipt-sender",
+        "description": "Sends receipt",
+        "technology": "HTTPS",
+        "origin": "observed"
+      }
+    ]
+  },
+  "after": {
+    "drafts": [],
+    "flows": [],
+    "elements": [
+      {
+        "id": "shop",
+        "representationId": "shop",
+        "kind": "system",
+        "title": "Shop",
+        "overview": "",
+        "parent": null,
+        "children": [
+          "api"
+        ],
+        "external": false,
+        "origin": "observed",
+        "code": []
+      },
+      {
+        "id": "api",
+        "representationId": "api",
+        "kind": "container",
+        "title": "Order API",
+        "overview": "",
+        "parent": "shop",
+        "children": [
+          "checkout",
+          "payment",
+          "receipt-worker"
+        ],
+        "external": false,
+        "origin": "observed",
+        "code": []
+      },
+      {
+        "id": "checkout",
+        "representationId": "checkout",
+        "kind": "component",
+        "title": "Checkout",
+        "overview": "Accepts orders and queues receipt delivery.",
+        "parent": "api",
+        "children": [],
+        "external": false,
+        "origin": "observed",
+        "code": [
+          {
+            "scanner": "typescript",
+            "file": "src/checkout.ts"
+          }
+        ],
+        "technology": "TypeScript"
+      },
+      {
+        "id": "payment",
+        "representationId": "payment",
+        "kind": "component",
+        "title": "Payment adapter",
+        "overview": "Collects payment.",
+        "parent": "api",
+        "children": [],
+        "external": false,
+        "origin": "observed",
+        "code": [
+          {
+            "scanner": "typescript",
+            "file": "src/payment.ts"
+          }
+        ]
+      },
+      {
+        "id": "receipt-worker",
+        "representationId": "receipt-worker",
+        "kind": "component",
+        "title": "Receipt worker",
+        "overview": "Delivers queued receipts after checkout completes.",
+        "parent": "api",
+        "children": [],
+        "external": false,
+        "origin": "observed",
+        "code": [
+          {
+            "scanner": "typescript",
+            "file": "src/worker.ts"
+          }
+        ],
+        "technology": "TypeScript"
+      }
+    ],
+    "relationships": [
+      {
+        "id": "relationship:9",
+        "source": "checkout",
+        "target": "payment",
+        "description": "Collects payment with a receipt reference",
+        "technology": "Function",
+        "origin": "observed"
+      },
+      {
+        "id": "relationship:0",
+        "source": "checkout",
+        "target": "receipt-worker",
+        "description": "Queues receipt",
+        "technology": "Queue",
+        "origin": "observed"
+      }
+    ]
+  },
+  "oldSources": {
+    "src/checkout.ts": "export const receipt = sendReceipt(order)\n",
+    "src/payment.ts": "export const pay = chargeCard\n",
+    "src/receipt.ts": "export const sendReceipt = deliver\n"
+  },
+  "newSources": {
+    "src/checkout.ts": "export const receipt = queueReceipt(order)\n",
+    "src/payment.ts": "export const pay = chargeCard\n",
+    "src/receipt.ts": "export const sendReceipt = deliver\n",
+    "src/worker.ts": "export const work = deliverQueuedReceipt\n"
+  }
+}

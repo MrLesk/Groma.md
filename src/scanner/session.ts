@@ -16,6 +16,7 @@ export async function createScannerSession(root: string, options: {
   onProgress?: (progress: ScannerProgress) => void
   onSettings?: (settings: ScannerSettings) => void
   onFold?: () => void | Promise<void>
+  watchesFile?: (file: string) => boolean
 } & ScannerInstallOptions = {}) {
   options.onProgress?.({ phase: 'preparing-scanners' })
   let state = await readScannerSettings(root, [], options)
@@ -44,7 +45,7 @@ export async function createScannerSession(root: string, options: {
     const next = await readScannerSettings(root, checks, options)
     publish({ ...next, notice: { tone: 'error', message } })
   }
-  async function fold({ observations, failures }: ScanBatch) {
+  async function fold({ observations, failures }: ScanBatch, files: string[]) {
     if (observations.length) options.onProgress?.({ phase: 'updating-architecture' })
     await reconcileScanObservations(root, observations)
     checks = [
@@ -52,7 +53,7 @@ export async function createScannerSession(root: string, options: {
       ...failures.map((failure): ProjectReadiness => ({ id: failure.scanner, package: 'found', project: 'blocked', message: failure.message })),
     ]
     publish(await readScannerSettings(root, checks, options))
-    if (observations.length) await options.onFold?.()
+    if (observations.length || files.some(file => options.watchesFile?.(file))) await options.onFold?.()
   }
   async function start(scan: boolean) {
     await watcher?.close()
@@ -65,7 +66,7 @@ export async function createScannerSession(root: string, options: {
     if (closed) return
     // With no selected scanner, only declaration matching runs; no scan evidence is written.
     watcher = await watchObservations(root, registry, {
-      scan, onScan: scanProgress, onObservations: fold, onError: report,
+      scan, onScan: scanProgress, onObservations: fold, onError: report, watchesFile: options.watchesFile,
     })
   }
   function enqueue(action: () => Promise<void>, propagate = false): Promise<void> {

@@ -10,8 +10,6 @@ export const revisionCss = `
   #revision summary:focus-visible { outline: 2px solid var(--highlight); outline-offset: -1px; }
   #revision .revision-current { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   #revision .revision-search { display: none; width: 100%; min-width: 0; flex: 1; padding: 0; border: 0; outline: 0; background: transparent; color: var(--ink); font: inherit; }
-  #revision[open] .revision-current { display: none; }
-  #revision[open] .revision-search { display: block; }
   #revision[open] summary { border-color: var(--highlight); }
   #revision .revision-loader { display: none; animation: revision-spin 700ms linear infinite; }
   #revision[aria-busy="true"] .revision-history { display: none; }
@@ -19,6 +17,26 @@ export const revisionCss = `
   #revision .chevron { width: 8px; height: 8px; flex: none; margin-left: 3px; border-right: 1px solid currentColor; border-bottom: 1px solid currentColor; transform: translateY(-2px) rotate(45deg); transition: transform 160ms ease; }
   #revision[open] .chevron { transform: translateY(2px) rotate(225deg); }
   body[data-revision] #revision summary { color: var(--ink); }
+  .time-machine { display: flex; align-items: center; min-width: 0; flex: none; }
+  #revision .revision-current { display: flex; align-items: center; gap: 10px; }
+  .revision-current > span:not(.revision-vs) { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  .revision-vs { flex: none; color: var(--muted); font-size: 10px; }
+  #revision[data-comparison] summary { max-width: min(360px, 32vw); }
+  #revision[data-searching] .revision-current { display: none; }
+  #revision[data-searching] .revision-search { display: block; }
+  #revision .revision-context { display: flex; align-items: center; gap: 12px; }
+  #revision .revision-context:not(:empty) { padding: 10px 12px; border-bottom: 1px solid var(--hairline); }
+  .revision-context span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-size: 11px; }
+  .revision-actions:not(:empty) { padding: 8px; border-top: 1px solid var(--hairline); }
+  .revision-actions button { width: 100%; justify-content: flex-start; }
+  .revision-endpoint { display: flex; align-items: start; gap: 14px; padding: 12px; }
+  .revision-endpoint > div { flex: 1; min-width: 0; }
+  .revision-endpoint strong { display: block; font-weight: 500; font-size: 12px; margin-bottom: 6px; overflow-wrap: anywhere; }
+  .revision-endpoint p { font-size: 11px; color: var(--muted); white-space: pre-wrap; margin: 8px 0 0; }
+  .revision-endpoint button { flex: none; font-size: 10px; }
+  .revision-pair-direction { color: var(--muted); padding-left: 12px; }
+  #end-comparison[hidden] { display: none; }
+  #end-comparison { margin-left: 4px; font-size: 18px; padding: 6px 9px; }
   @keyframes revision-spin { to { transform: rotate(360deg); } }
   .revision-option { display: grid; grid-template-columns: minmax(0, 1fr); gap: 3px; }
   .revision-subject { overflow: hidden; color: var(--ink); text-overflow: ellipsis; white-space: nowrap; }
@@ -63,7 +81,24 @@ export function revisionOptions(revisions: WebPayload['revisions'], selected?: s
     || '<div class="revision-notice">No matching revisions</div>'
 }
 
+
+export function revisionLabel(payload: WebPayload): string {
+  const label = (revision: WebRevision | null) => `<span title="${escaped(revisionTitle(revision))}">${escaped(revision?.subject ?? 'Current working tree')}</span>`
+  return payload.comparison === undefined ? label(payload.revision)
+    : `${label(payload.comparison.from)}<span class="revision-vs">vs.</span>${label(payload.revision)}`
+}
+
+export function revisionMetadata(revision: WebRevision | null): string {
+  if (revision === null) return '<strong>Current working tree</strong>'
+  return `<strong>${escaped(revision.subject)}</strong><span class="revision-meta"><code>${revision.shortId}</code><time datetime="${revision.date}">${revision.date}</time></span>${revision.body === '' ? '' : `<p>${escaped(revision.body)}</p>`}`
+}
+
+export function comparisonMenu(payload: WebPayload): string {
+  return `<div class="revision-endpoint"><div>${revisionMetadata(payload.comparison!.from)}</div><button class="chrome-button" data-action="from">Change start</button></div>
+    <div class="revision-pair-direction">↓</div>
+    <div class="revision-endpoint"><div>${revisionMetadata(payload.revision)}</div><button class="chrome-button" data-action="to">Change destination</button></div>`
+}
+
 export function revisionControl(payload: WebPayload, icons: { history: string, loader: string }): string {
-  const current = payload.revision?.subject ?? 'Current working tree'
-  return `<details id="revision"><summary class="chrome-button" aria-label="Choose revision">${icons.history}${icons.loader}<span class="revision-current" title="${escaped(revisionTitle(payload.revision))}">${escaped(current)}</span><input class="revision-search" type="search" aria-label="Find revision by commit ID or message" placeholder="Find commit or message…" autocomplete="off"><span class="chevron"></span></summary><div class="anchored-popover revision-menu"><div class="revision-error revision-notice" role="alert" hidden></div><div class="revision-results">${revisionOptions(payload.revisions, payload.revision?.id)}</div></div></details>`
+  return `<div class="time-machine"><details id="revision"><summary class="chrome-button" aria-label="Choose revision">${icons.history}${icons.loader}<span class="revision-current">${revisionLabel(payload)}</span><input class="revision-search" type="search" aria-label="Find revision by commit ID or message" placeholder="Find commit or message…" autocomplete="off"><span class="chevron"></span></summary><div class="anchored-popover revision-menu"><div class="revision-error revision-notice" role="alert" hidden></div><div class="revision-context"></div><div class="revision-results"></div><div class="revision-actions"></div></div></details><button id="end-comparison" class="chrome-button" aria-label="End comparison" title="End comparison" hidden>×</button></div>`
 }

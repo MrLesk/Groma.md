@@ -1,3 +1,4 @@
+import type { Comparison } from '../../history/comparison.ts'
 import type { GitRevision } from '../../history/revisions.ts'
 import type { SheetScene } from '../../sheet/types.ts'
 import type { ProjectProfile } from '../../project-profile.ts'
@@ -24,6 +25,7 @@ export interface WebMapPayload {
   generation: number
   project: ProjectProfile | null
   revision: WebRevision | null
+  comparison?: Comparison
   revisions: WebRevision[]
   world: AnnotatedArchitectureModel
   sheet: SheetScene

@@ -1,7 +1,7 @@
 import type { WebDataSource } from '../data.ts'
 import { bindPopover } from '../atoms/popover.ts'
 import type { WebBootPayload, WebPayload, WebWorkPayload } from '../payload.ts'
-import { revisionOptions, revisionTitle } from './view.ts'
+import { comparisonMenu, revisionLabel, revisionOptions, revisionTitle } from './view.ts'
 
 interface RevisionControlOptions {
   control: HTMLDetailsElement
@@ -61,26 +61,69 @@ function revisionTooltip(control: HTMLElement) {
   return { element: tooltip, hide }
 }
 
-/** Owns the compact revision selector and applies live or published snapshots. */
+/** Owns one authoritative revision or pair; menu drafts never change the displayed view. */
 export function createRevisionControl(options: RevisionControlOptions) {
   const { control, body, boot, data, applyRevision, applyWorld, applyWork } = options
   const label = control.querySelector<HTMLElement>('.revision-current')!
   const search = control.querySelector<HTMLInputElement>('.revision-search')!
   const results = control.querySelector<HTMLElement>('.revision-results')!
+  const context = control.querySelector<HTMLElement>('.revision-context')!
+  const actions = control.querySelector<HTMLElement>('.revision-actions')!
   const error = control.querySelector<HTMLElement>('.revision-error')!
+  const end = document.getElementById('end-comparison')!
   const { element: tooltip, hide: hideTooltip } = revisionTooltip(control)
-  let selected: string | undefined
+  let current: WebPayload = boot
   let revisions = boot.revisions
-  let loading = false
-  let historyLoaded = boot.delivery.kind === 'published' || boot.revisions.length > 0
-  let appliedWorld = boot.generation
+  let mode: 'browse' | 'pair' | 'from' | 'to' = current.comparison === undefined ? 'browse' : 'pair'
+  let historyLoaded = boot.delivery.kind === 'published' || revisions.length > 0
+  let request = 0
+  let navigating = false
+  let pendingWorld: WebPayload | undefined
   let appliedWork = boot.workGeneration
 
+  const selected = () => current.revision?.id
+  const from = () => current.comparison === undefined ? undefined : current.comparison.from?.id ?? ''
+  const live = () => current.comparison === undefined && current.revision === null && boot.delivery.kind === 'live'
   bindPopover(control, { companion: tooltip })
 
-  function paintResults(): void {
-    results.innerHTML = revisionOptions(revisions, selected, search.value)
+  function paintEndpointContext(): void {
+    const fixed = mode === 'from' ? current.revision : current.comparison!.from
+    const text = document.createElement('span')
+    const direction = mode === 'from' ? 'To' : 'From'
+    text.textContent = `${direction}: ${fixed?.subject ?? 'Current working tree'}`
+    text.title = revisionTitle(fixed)
+    context.append(text)
+    context.insertAdjacentHTML('beforeend', '<button class="chrome-button" data-action="cancel">Cancel</button>')
+    for (const option of results.querySelectorAll<HTMLButtonElement>('[data-revision]')) {
+      option.disabled = option.dataset.revision === (fixed?.id ?? '')
+    }
+  }
+
+  function paintMenu(): void {
+    control.toggleAttribute('data-searching', control.open && mode !== 'pair')
+    search.placeholder = { from: 'Choose starting revision…', to: 'Choose destination…', browse: 'Find commit or message…', pair: '' }[mode]
+    context.replaceChildren()
+    actions.replaceChildren()
+    if (mode === 'pair') results.innerHTML = comparisonMenu(current)
+    else paintChoices()
     localizeDates(control)
+  }
+
+  function paintChoices(): void {
+    const active = mode === 'from' ? from() : selected()
+    results.innerHTML = revisionOptions(revisions, active, search.value)
+    if (mode === 'browse') actions.innerHTML = '<button class="chrome-button" data-action="from">Compare from…</button>'
+    else paintEndpointContext()
+    localizeDates(control)
+  }
+
+  function setRevision(payload: WebPayload): void {
+    current = payload
+    label.innerHTML = revisionLabel(payload)
+    control.toggleAttribute('data-comparison', payload.comparison !== undefined)
+    end.hidden = payload.comparison === undefined
+    body.toggleAttribute('data-revision', !live())
+    body.toggleAttribute('data-comparison', payload.comparison !== undefined)
   }
 
   function showError(reason: unknown): void {
@@ -89,8 +132,42 @@ export function createRevisionControl(options: RevisionControlOptions) {
     control.open = true
   }
 
+  async function load(revision?: string, starting?: string, reset = true): Promise<void> {
+    const loading = ++request
+    navigating = true
+    error.hidden = true
+    hideTooltip()
+    if (reset) control.open = false
+    control.setAttribute('aria-busy', 'true')
+    try {
+      const payload = await data.readWorld(revision, starting)
+      if (loading !== request) return
+      appliedWork = payload.workGeneration
+      setRevision(payload)
+      if (reset) applyRevision(payload)
+      else applyWorld(payload)
+    } catch (reason) {
+      if (loading === request) showError(reason)
+    } finally {
+      if (loading === request) {
+        navigating = false
+        control.removeAttribute('aria-busy')
+        const pending = pendingWorld
+        pendingWorld = undefined
+        if (pending !== undefined) refreshWorld(pending)
+      }
+    }
+  }
+
+  function chooseMode(next: typeof mode): void {
+    mode = next
+    search.value = ''
+    paintMenu()
+    if (mode !== 'pair') search.focus()
+  }
+
   search.addEventListener('click', event => event.preventDefault())
-  search.addEventListener('input', paintResults)
+  search.addEventListener('input', paintMenu)
   control.addEventListener('keydown', event => {
     if (event.key === 'Escape') {
       event.preventDefault()
@@ -98,95 +175,72 @@ export function createRevisionControl(options: RevisionControlOptions) {
       control.querySelector('summary')!.focus()
     } else if (event.target === search && event.key === 'ArrowDown') {
       event.preventDefault()
-      results.querySelector<HTMLButtonElement>('button')?.focus()
+      results.querySelector<HTMLButtonElement>('button:not(:disabled)')?.focus()
     } else if (event.target === search && event.key === 'Enter') {
       event.preventDefault()
-      results.querySelector<HTMLButtonElement>('button')?.click()
+      results.querySelector<HTMLButtonElement>('button:not(:disabled)')?.click()
     }
   })
-
-  const show = (payload: WebPayload): void => {
-    selected = payload.revision?.id
-    label.textContent = payload.revision?.subject ?? 'Current working tree'
-    label.title = revisionTitle(payload.revision)
-    for (const option of control.querySelectorAll<HTMLElement>('.revision-option[data-revision]')) {
-      option.setAttribute('aria-current', String(option.dataset.revision === (selected ?? '')))
-    }
-    body.toggleAttribute('data-revision', selected !== undefined)
-  }
-
   control.addEventListener('toggle', async () => {
-    if (control.open) {
-      search.value = ''
-      paintResults()
-      search.focus()
-    }
-    if (!control.open || historyLoaded || loading) return
-    loading = true
+    if (!control.open) { control.removeAttribute('data-searching'); return }
+    chooseMode(current.comparison === undefined ? 'browse' : 'pair')
+    if (historyLoaded) return
     control.setAttribute('aria-busy', 'true')
     try {
       revisions = await data.readRevisions()
-      paintResults()
       historyLoaded = true
-    } catch (reason) {
-      showError(reason)
-    } finally {
-      loading = false
-      control.removeAttribute('aria-busy')
-    }
+      paintMenu()
+    } catch (reason) { showError(reason) }
+    finally { if (!navigating) control.removeAttribute('aria-busy') }
   })
-
-  control.addEventListener('click', async event => {
-    const option = event.target instanceof Element
-      ? event.target.closest<HTMLButtonElement>('.revision-option[data-revision]')
-      : null
-    if (option === null || !control.contains(option) || loading) return
-    loading = true
-    error.hidden = true
-    hideTooltip()
-    control.removeAttribute('open')
-    control.setAttribute('aria-busy', 'true')
-    option.blur()
-    const revisionId = option.dataset.revision
-    try {
-      const payload = await data.readWorld(revisionId === '' ? undefined : revisionId)
-      appliedWorld = payload.generation
-      appliedWork = payload.workGeneration
-      show(payload)
-      applyRevision(payload)
-    } catch (reason) {
-      showError(reason)
-    } finally {
-      loading = false
-      control.removeAttribute('aria-busy')
-    }
+  function chooseRevision(revision: string): void {
+    if (mode === 'from') void load(selected(), revision)
+    else if (mode === 'to') void load(revision || undefined, from())
+    else void load(revision || undefined)
+  }
+  function activate(button: HTMLButtonElement): void {
+    const action = button.dataset.action
+    if (action === 'cancel') { chooseMode(current.comparison === undefined ? 'browse' : 'pair'); return }
+    if (action === 'from' || action === 'to') { chooseMode(action); return }
+    const revision = button.dataset.revision
+    if (revision === undefined) return
+    chooseRevision(revision)
+  }
+  control.addEventListener('click', event => {
+    if (navigating || !(event.target instanceof Element)) return
+    const button = event.target.closest<HTMLButtonElement>('button')
+    if (button !== null && control.contains(button)) activate(button)
   })
+  end.addEventListener('click', () => { void load(selected()) })
 
-  data.subscribe({
-    world(payload) {
-      if (selected !== undefined || payload.generation <= appliedWorld) return
-      appliedWorld = payload.generation
+  function refreshWorld(payload: WebPayload): void {
+    if (navigating) { pendingWorld = payload; return }
+    if (payload.generation <= current.generation) return
+    if (current.comparison !== undefined) {
+      if (current.revision === null || current.comparison.from === null) void load(selected(), from(), false)
+    } else if (current.revision === null) {
+      setRevision(payload)
       appliedWork = Math.max(appliedWork, payload.workGeneration)
       applyWorld(payload)
-    },
+    }
+  }
+
+  data.subscribe({
+    world: refreshWorld,
     work(payload) {
-      if (selected !== undefined || payload.workGeneration <= appliedWork) return
+      if (!live() || payload.workGeneration <= appliedWork) return
       appliedWork = payload.workGeneration
       applyWork(payload)
     },
   })
-
-  localizeDates(control)
-  show(boot)
+  setRevision(boot)
   return {
-    get selected() {
-      return selected
-    },
+    get selected() { return selected() },
+    get from() { return from() },
+    get comparison() { return current.comparison },
+    get live() { return live() },
     paintProjectEdit(root: ParentNode) {
-      root.querySelector('[data-project-edit]')?.toggleAttribute(
-        'hidden',
-        selected !== undefined || data.edit === undefined,
-      )
+      root.querySelector('[data-project-edit]')?.toggleAttribute('hidden', !live() || data.edit === undefined)
     },
   }
 }

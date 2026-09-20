@@ -11,10 +11,10 @@ export interface WebDataSource {
   readScanners?(checkUpdates?: boolean): Promise<ScannerSettings>
   changeScanners?(action: ScannerSettingsAction): Promise<ScannerSettings>
   onScanners?: (state: ScannerSettings) => void
-  readWorld(revision?: string): Promise<WebPayload>
+  readWorld(revision?: string, from?: string): Promise<WebPayload>
   readRevisions(): Promise<WebRevision[]>
-  readCode(element: string, revision?: string): Promise<readonly CodeFile[]>
-  readSource(element: string, file: string, revision?: string): Promise<SourcePayload>
+  readCode(element: string, revision?: string, from?: string): Promise<readonly CodeFile[]>
+  readSource(element: string, file: string, revision?: string, from?: string): Promise<SourcePayload>
   readTask(id: string): Promise<WorkItemDetails>
   readTaskDiff(id: string): Promise<TaskDiffPayload>
   /** The writers, absent in the published delivery, which has none. */
@@ -63,14 +63,14 @@ function liveDataSource(): WebDataSource {
     readRevisions() {
       return responseJson('/revisions.json')
     },
-    readWorld(revision) {
-      return responseJson(revision === undefined ? '/world.json' : `/world.json?revision=${revision}`)
+    readWorld(revision, from) {
+      return responseJson(selected('/world.json', { revision, from }))
     },
-    readCode(element, revision) {
-      return responseJson(selected('/code.json', { element, revision }))
+    readCode(element, revision, from) {
+      return responseJson(selected('/code.json', { element, revision, from }))
     },
-    readSource(element, file, revision) {
-      return responseJson(selected('/source.json', { element, file, revision }))
+    readSource(element, file, revision, from) {
+      return responseJson(selected('/source.json', { element, file, revision, from }))
     },
     readTask(id) {
       return responseJson(selected('/task.json', { task: id }))

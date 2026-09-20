@@ -8,6 +8,9 @@ import type { StructuralResult } from '../../curate.ts'
 import { createScannerSession } from '../../scanner/session.ts'
 import { parseScannerSettingsAction, withScannerUpgrades } from '../../scanner/modules/settings.ts'
 import { pinsOf } from '../../work/pins.ts'
+import { ownedFiles } from '../../history/comparison.ts'
+import { readComparison } from '../../history/snapshots.ts'
+import { measuredSheetScene } from '../../sheet/scene.ts'
 import { listGitRevisions, withGitRevision } from '../../history/revisions.ts'
 import { renderPage } from './page.ts'
 import type { WebMapPayload, WebPayload, WebRevision, WebWorkPayload } from './payload.ts'
@@ -74,6 +77,7 @@ export async function createWebMapSession(
   let revisions: WebRevision[] = []
   let revisionRead: Promise<WebRevision[]> | undefined
   let map: WebMapPayload
+  const sourceFiles = new Set<string>()
   let workState: Omit<WebWorkPayload, 'pins'> = {
     workGeneration: 0,
     work: EMPTY_WORK_SNAPSHOT,
@@ -128,14 +132,52 @@ export async function createWebMapSession(
     }
   }
 
+  async function payloadFor(url: URL): Promise<WebPayload | Response> {
+    const fromId = url.searchParams.get('from')
+    const toId = url.searchParams.get('revision')
+    if (fromId === null) return payloadAt(toId)
+    const history = await readRevisions()
+    const from = fromId === '' ? null : history.find(item => item.id === fromId)
+    const to = toId === null ? null : history.find(item => item.id === toId)
+    if (from === undefined || to === undefined) return new Response('Unknown revision', { status: 404 })
+    if (from?.id === to?.id) return new Response('Choose two different revisions', { status: 400 })
+    return comparisonAt(from, to)
+  }
+
+  async function comparisonAt(from: WebRevision | null, to: WebRevision | null): Promise<WebPayload | Response> {
+    try {
+      const started = performance.now()
+      const compared = await readComparison(repositoryRoot, from, to)
+      for (const component of Object.values(compared.comparison.components)) {
+        for (const { file } of component.files) sourceFiles.add(file)
+      }
+      const loaded = performance.now()
+      const sheet = measuredSheetScene(compared.world)
+      return { ...compared, revision: to, revisions, generation: map.generation, sheet: sheet.scene,
+        workGeneration: workState.workGeneration, work: EMPTY_WORK_SNAPSHOT, pins: [],
+        timings: { architectureLoadMilliseconds: loaded - started, ...sheet.timings, totalMilliseconds: performance.now() - started } }
+    } catch (error) {
+      return new Response(`Cannot compare these revisions: ${error instanceof Error ? error.message : String(error)}`, { status: 422 })
+    }
+  }
+
   async function sourceSelection(url: URL): Promise<Response> {
-    const selected = await payloadAt(url.searchParams.get('revision'))
+    const selected = await payloadFor(url)
     if (selected instanceof Response) return selected
     const element = url.searchParams.get('element')
     if (element === null) return new Response('Component selection required', { status: 400 })
+    const file = url.searchParams.get('file')
+    const change = selected.comparison?.components[element]
+    if (change !== undefined) {
+      const useBefore = url.pathname === '/code.json' ? change.after === undefined
+        : change.files.find(item => item.file === file)?.status === 'removed'
+      if (useBefore) selected.revision = selected.comparison!.from
+      selected.world = { ...selected.world, elements: selected.world.elements.map(item => item.id !== element ? item
+        : { ...item, code: [...(change.after?.code ?? []), ...(change.before?.code ?? [])] }) }
+    }
     return url.pathname === '/code.json'
       ? structureResponse(repositoryRoot, selected, element)
-      : sourceResponse(repositoryRoot, selected, element, url.searchParams.get('file'))
+      : sourceResponse(repositoryRoot, selected, element, file)
   }
 
   function worldEvent(): Uint8Array {
@@ -165,6 +207,7 @@ export async function createWebMapSession(
       generation: map.generation + 1,
       ...next,
     }
+    for (const file of ownedFiles(map.world)) sourceFiles.add(file)
     covers = undefined
     broadcast(worldEvent())
   }
@@ -191,6 +234,7 @@ export async function createWebMapSession(
   let initialScan = true
   const scannerSession = await createScannerSession(repositoryRoot, {
     scan: options.scan,
+    watchesFile: file => sourceFiles.has(file),
     onProgress: options.onProgress,
     onFold: () => initialScan ? undefined : publishWorld(),
     onSettings: settings => broadcast(encoder.encode(`event: scanners\ndata: ${JSON.stringify(settings)}\n\n`)),
@@ -199,6 +243,7 @@ export async function createWebMapSession(
   // Initial folds are included in this map; later folds queue behind its load.
   worldChain = loadMap(repositoryRoot, revisions, null, options.onProgress).then(next => {
     map = { generation: 1, ...next }
+    for (const file of ownedFiles(map.world)) sourceFiles.add(file)
   })
   initialScan = false
   try {
@@ -228,7 +273,7 @@ export async function createWebMapSession(
   }
 
   async function worldResponse(_request: Request, url: URL): Promise<Response> {
-    const selected = await payloadAt(url.searchParams.get('revision'))
+    const selected = await payloadFor(url)
     return selected instanceof Response ? selected : Response.json(selected)
   }
 
@@ -299,7 +344,7 @@ export async function createWebMapSession(
   }
 
   async function pageResponse(url: URL): Promise<Response> {
-    const selected = await payloadAt(url.searchParams.get('revision'))
+    const selected = await payloadFor(url)
     if (selected instanceof Response) return selected
     return new Response(renderPage({ ...selected, delivery: { kind: 'live' } }, url), {
       headers: {

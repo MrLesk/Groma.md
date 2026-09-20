@@ -250,5 +250,16 @@ export const mapCss = `
   #map .building.neighbor:not(.selected):not(.touched):not(.lit) { --emphasis: ${emphasis(0.5)}; }
   #map .building.neighbor:not(.selected):not(.touched):not(.lit) .face { stroke: color-mix(in srgb, var(--highlight) 45%, var(--map-line)); }
   #map .camera:has(.component-focus) .building.component:not(.component-focus):not(.neighbor) { opacity: 0.3; animation: none; }
+  #map [data-change="added"] { --change: var(--diff-added); }
+  #map [data-change="modified"] { --change: var(--diff-modified); }
+  #map [data-change="removed"] { --change: var(--diff-removed); }
+  #map .building.component[data-change] .face.top { fill: color-mix(in srgb, var(--change) 25%, var(--paper)); }
+  #map .building.component[data-change] .face.left { fill: color-mix(in srgb, var(--change) 18%, var(--paper)); }
+  #map .building.component[data-change] .face.right { fill: color-mix(in srgb, var(--change) 11%, var(--paper)); }
+  #map .building.component[data-change]:not(.selected):not(.lit):not(.component-focus) .face { stroke: var(--change); }
+  #map .building.component[data-change] > .label .text { fill: var(--change); }
+  #map .building.component:is(.selected, .lit) > .label .text { fill: var(--highlight-text); }
+  #map .route[data-change]:not(.lit):not(.selected):not(.endpoint) .line { stroke: var(--change); opacity: 1; }
+  #map .route[data-change]:not(.lit):not(.selected):not(.endpoint) .arrow { fill: var(--change); opacity: 1; }
   ${layerCss}
 `

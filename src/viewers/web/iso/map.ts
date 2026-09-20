@@ -1,3 +1,4 @@
+import type { Comparison } from '../../../history/comparison.ts'
 import type { Point } from '../../../types.ts'
 import { paintLayerLabels, paintLayerPlanes } from '../layers/paint.ts'
 import type { LayeredScene } from '../layers/separation.ts'
@@ -38,6 +39,7 @@ export interface IsoMap {
   paint(scene: LayeredScene): void
   /** Unions the existing selected-element and selected-route treatments across an ordered selection. */
   select(ids: readonly string[]): void
+  changes(comparison: Comparison | undefined): void
   /** Outlines the elements the active tasks touch and uniformly accents the routes leaving them; an empty set clears both. */
   mark(ids: ReadonlySet<string>): void
   /** Gives the inspected component a breathing glow and softly accents its direct component neighbors. */
@@ -298,6 +300,17 @@ export function createMap(host: HTMLElement): IsoMap {
         ...scene.slabs.map(({ slab }) => [slab.representationId, slab.island] as const),
       ])
       labels = [...ground.world.querySelectorAll<SVGGElement>('.surface-label')]
+    },
+    changes(comparison) {
+      const apply = (node: Element, status: string | undefined) => {
+        if (status === undefined || status === 'unchanged') node.removeAttribute('data-change')
+        else node.setAttribute('data-change', status)
+      }
+      for (const [id, node] of items) apply(node, comparison?.components[id]?.status)
+      for (const route of new Set(routes.values())) {
+        const statuses = new Set(route.ids.map(id => comparison?.relationships[id]).filter(status => status !== undefined && status !== 'unchanged'))
+        apply(route.group, statuses.size > 1 ? 'modified' : [...statuses][0])
+      }
     },
     select(ids) {
       const directItems = new Set<string>()

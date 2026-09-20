@@ -99,14 +99,14 @@ const revisionControl = createRevisionControl({
   applyRevision: payload => applyWorld(payload, true), applyWorld, applyWork,
 })
 const authoring = createAuthoring(host, map, data, {
-  live: () => revisionControl.selected === undefined,
+  live: () => revisionControl.live,
   world: () => world,
   repaint: () => paintViewState(),
 })
 const source = createSourceControl({
   host: detailsHost, initialFile: opened.file, initialLine: opened.line,
   element: () => worldElement(primarySelection(selection)), readCode: data.readCode, readSource: data.readSource,
-  revision: () => revisionControl.selected, repaint: paintViewState,
+  revision: () => revisionControl.selected, from: () => revisionControl.from, repaint: paintViewState,
 })
 createProjectSettings(data)
 const review = createProjectReview({ world: () => world, revision: () => revisionControl.selected, readSource: data.readSource,
@@ -116,7 +116,6 @@ const taskDiff = createTaskDiffControl({
   host: detailsHost, world: () => world, readDetails: data.readTask, readDiff: data.readTaskDiff,
   repaint: paintViewState, select,
 })
-/** The full-screen grid surrounds a safe camera frame between the floating chrome. */
 function viewport(): MapFrame {
   return mapFrame(
     host.getBoundingClientRect(),
@@ -138,7 +137,6 @@ function worldRelationship(id: string | undefined): AnnotatedRelationship | unde
 function unidentifiedGroup(id: string | undefined) { return sheet.zones.find(zone => zone.unidentifiedContainer && zone.key === id) }
 function workItem(id: string | undefined): WorkItem | undefined { return id === undefined ? undefined : work.items.find(item => item.id === id) }
 
-/** True for an element, relationship or task id the current payload has. */
 function known(id: string | undefined): boolean {
   return worldElement(id) !== undefined || worldRelationship(id) !== undefined || unidentifiedGroup(id) !== undefined || workItem(id) !== undefined
     || world.flows.some(flow => flow.id === id)
@@ -165,10 +163,10 @@ function zoomStep(factor: number, control: HTMLElement): void {
   touched = true
 }
 
-/** The URL follows the view, without adding history entries. */
 function syncUrl(): void {
   const query = writeView({
     ...(revisionControl.selected === undefined ? {} : { revision: revisionControl.selected }),
+    ...(revisionControl.from === undefined ? {} : { from: revisionControl.from }),
     ...(source.file === undefined ? {} : { file: source.file }),
     ...(source.line === undefined ? {} : { line: source.line }),
     selection, flows: activeFlows,
@@ -179,6 +177,7 @@ function syncUrl(): void {
   history.replaceState(null, '', `${location.pathname}${query}`)
 }
 function paintMapState(task: WorkItem | undefined, activeTaskItems: WorkItem[]): void {
+  map.changes(revisionControl.comparison)
   highlights.paint(selection, world, activeFlows, activeTaskItems)
   pins.activate(activeTaskIds, task?.id)
   island.activate(activeTaskIds, task?.id)
@@ -371,13 +370,13 @@ bindMapPointer(map, {
   select: (id, additive) => select(id, additive, 'map'),
   deselect,
   editProject() {
-    if (revisionControl.selected === undefined && project !== undefined) projectEditor?.open(project)
+    if (revisionControl.live && project !== undefined) projectEditor?.open(project)
   },
 })
 map.svg.addEventListener('keydown', event => {
   if (!map.isProjectEdit(event.target) || (event.key !== 'Enter' && event.key !== ' ')) return
   event.preventDefault()
-  if (revisionControl.selected === undefined && project !== undefined) projectEditor?.open(project)
+  if (revisionControl.live && project !== undefined) projectEditor?.open(project)
 })
 
 function toggleHud(): void {
@@ -463,6 +462,7 @@ function applyWorld(payload: WebPayload, reset = false): void {
     if (selection.kind === 'flow') selection = flowSelection(activeFlows)
     selection = retainSelection(selection, id => known(id))
   }
+  if (revisionControl.comparison !== undefined) source.clear()
   taskDiff.invalidate()
   paintWorld()
   searchControl.update(world.elements, work.items)
@@ -489,7 +489,7 @@ function paintWorld(): void {
   authoring.refresh()
   pins.paint(currentPins.filter(pin => map.anchorOf(pin.elementId) !== undefined))
   island.paint(currentPins, work)
-  emptyState.paint(world, project, revisionControl.selected !== undefined)
+  emptyState.paint(world, project, !revisionControl.live)
   applyCamera()
   paintViewState()
   source.restore()

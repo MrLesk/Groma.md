@@ -50,8 +50,28 @@ test.concurrent('web history includes source-only commits and reads the selected
     expect(oldSource.source).toBe(original)
     expect(newSource.source).toBe(source)
     expect((await request(`/world.json?revision=${unsupported}`)).status).toBe(422)
+    const comparison = await (await request(`/world.json?from=${before}&revision=${after}`)).json() as WebPayload
+    expect(comparison.comparison?.from?.id).toBe(before)
+    expect(comparison.comparison?.components[component.id]?.status).toBe('modified')
+    expect(comparison.work.items).toEqual([])
+    const pairedSource = await (await request(`/source.json?${query}&from=${before}&revision=${after}`)).json()
+    expect(pairedSource.source).toBe(source)
+    expect((await request(`/world.json?from=${after}&revision=${after}`)).status).toBe(400)
     expect(git('rev-parse', 'HEAD')).toBe(after)
     expect(git('status', '--porcelain')).toBe('')
+    const reader = (await request('/events')).body!.getReader()
+    try {
+      await reader.read()
+      await writeFile(path.join(root, 'src/orders.ts'), 'export const receipt = "live change"\n')
+      let event = ''
+      while (!event.startsWith('event: world')) {
+        event = new TextDecoder().decode((await reader.read()).value)
+      }
+      const live = await (await request(`/world.json?from=${after}`)).json() as WebPayload
+      expect(live.revision).toBeNull()
+      expect(live.comparison?.components[component.id]?.status).toBe('modified')
+      expect(live.generation).toBeGreaterThan(selected.generation)
+    } finally { await reader.cancel() }
   } finally {
     await session?.close()
     await rm(root, { recursive: true, force: true })

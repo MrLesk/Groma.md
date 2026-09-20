@@ -252,6 +252,24 @@ and message on hover. Closing search without selection preserves the current vie
 An unsupported architecture reports its error when selected and leaves the current
 view intact. Returning to Current working tree resumes live architecture and work updates.
 
+
+Choose **Compare from…** to keep the viewed revision as destination B and pick a
+starting revision A. The header shows A **vs.** B; its menu shows the full pair
+and lets either endpoint change using the same search. Cancel preserves the
+pair. The × button ends comparison and opens B. Ordinary revision browsing
+then opens either individual snapshot. The URL stores A in `from` (empty for
+the working tree) and B in `revision` (omitted for the working tree).
+
+Comparison matches components by their stable IDs. Their own architecture or
+owned-source changes mark them Modified; relationships have independent change
+statuses. Tasks, flows, neighbors, and ancestor changes do not propagate that
+status. The destination map and flows remain, with removed components,
+relationships, and needed former parent context added from A. Systems,
+containers, and groups stay neutral. Added, Modified, and Removed use shared
+theme roles; green remains the selection and active-flow color. Comparisons
+have no task data or editing controls. A working-tree endpoint follows owned
+source edits even when no scanner handles that file.
+
 The floating icon bar beside the hierarchy toggles Actors, Systems, Containers,
 and Components on the map. Its icons follow the existing ● ■ ▱ ▪ marks with
 clean geometry and gently rounded corners. All four start visible. Hover or keyboard focus shows

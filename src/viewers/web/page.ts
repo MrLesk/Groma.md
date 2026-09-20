@@ -152,6 +152,12 @@ const style = `
   .header-context > svg { height: 32px; width: auto; display: block; flex: none; transform: translateY(-1px); }
   #stats { min-width: 0; flex: 1; display: flex; align-items: center; gap: 10px; white-space: nowrap; }
   #stats .project-name { overflow: hidden; text-overflow: ellipsis; color: var(--ink); }
+  body[data-comparison] #stats .world-counts { display: none; }
+  .comparison-legend { display: none; gap: 12px; margin-top: 8px; }
+  body[data-comparison] .comparison-legend { display: flex; }
+  #legend .comparison-legend span:nth-child(1) { color: var(--diff-added); }
+  #legend .comparison-legend span:nth-child(2) { color: var(--diff-modified); }
+  #legend .comparison-legend span:nth-child(3) { color: var(--diff-removed); }
   #stats .world-counts { min-width: 0; overflow: hidden; text-overflow: ellipsis; font-size: 10px; letter-spacing: 0.06em; }
   .header-actions { display: flex; align-items: center; gap: 8px; }
   .header-actions details > summary { border-color: transparent; background: transparent; }
@@ -418,7 +424,7 @@ export function renderPage(payload: WebBootPayload, url?: URL): string {
     + searchControl({ search: searchIcon, close: closeIcon })
     + `<div class="header-actions">${projectReviewControl}<div id="map-controls" class="controls" aria-label="Map controls"><button id="fit" aria-label="Fit map">${fitIcon}<span>Fit</span></button><button id="zoom-out" aria-label="Zoom out"><span class="control-glyph">−</span></button><span id="zoom" aria-live="polite"></span><button id="zoom-in" aria-label="Zoom in"><span class="control-glyph">+</span></button></div><div class="header-utilities">${settingsControl(themeControl())}${helpControl()}${creditsControl(infoIcon, lockup)}</div></div>`
     + '</header>'
-    + `<nav id="hierarchy" aria-label="Hierarchy"><div id="hierarchy-title"><span class="pane-label">Hierarchy</span>${payload.delivery.kind === 'live' ? '<button id="add" type="button" aria-label="Add">+</button>' : ''}<button id="hierarchy-toggle" type="button" aria-controls="hierarchy-content">${hierarchyIcon}</button></div><div id="hierarchy-content"><div id="flows"></div><div id="tree"></div><div id="legend">${legend()}</div></div></nav>`
+    + `<nav id="hierarchy" aria-label="Hierarchy"><div id="hierarchy-title"><span class="pane-label">Hierarchy</span>${payload.delivery.kind === 'live' ? '<button id="add" type="button" aria-label="Add">+</button>' : ''}<button id="hierarchy-toggle" type="button" aria-controls="hierarchy-content">${hierarchyIcon}</button></div><div id="hierarchy-content"><div id="flows"></div><div id="tree"></div><div id="legend">${legend()}<div class="comparison-legend"><span>+ Added</span><span>~ Modified</span><span>− Removed</span></div></div></div></nav>`
     + `<div id="map" role="tabpanel" aria-label="Architecture map"></div>${mapViewControl()}${c4FilterControl()}`
     + emptyState(payload)
     + `<div id="details-dock"><aside id="details" aria-label="Details"><div class="details-controls"><button id="details-expand" aria-label="Expand details" title="Expand details" aria-expanded="false">${expandIcon}${collapseIcon}</button><button id="details-close" aria-label="Close details">${closeIcon}</button></div><p class="meta"></p><h1></h1><nav class="controls tabs"></nav><div class="body"></div></aside></div>`

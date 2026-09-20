@@ -25,6 +25,7 @@ export interface Palette {
   syntaxString: string
   syntaxType: string
   diffAdded: string
+  diffModified: string
   diffRemoved: string
 }
 
@@ -62,7 +63,8 @@ export const palettes: Record<WebTheme, Palette> = {
     syntaxNumber: '#C2410C',
     syntaxString: '#0E7C55',
     syntaxType: '#2563EB',
-    diffAdded: '#147A59',
+    diffAdded: '#2563EB',
+    diffModified: '#9A6700',
     diffRemoved: '#B42318',
   },
   dark: {
@@ -82,7 +84,8 @@ export const palettes: Record<WebTheme, Palette> = {
     syntaxNumber: '#FFA657',
     syntaxString: '#7EE787',
     syntaxType: '#79C0FF',
-    diffAdded: '#3FB950',
+    diffAdded: '#79C0FF',
+    diffModified: '#E3B341',
     diffRemoved: '#FF7B72',
   },
   blueprint: {
@@ -103,6 +106,7 @@ export const palettes: Record<WebTheme, Palette> = {
     syntaxString: '#70E1F5',
     syntaxType: '#D9B8FF',
     diffAdded: '#70E1F5',
+    diffModified: '#FFE066',
     diffRemoved: '#FF8FAB',
   },
 }
@@ -148,6 +152,7 @@ export function cssBlock(palette: Palette): string {
   --syntax-string: ${palette.syntaxString};
   --syntax-type: ${palette.syntaxType};
   --diff-added: ${palette.diffAdded};
+  --diff-modified: ${palette.diffModified};
   --diff-removed: ${palette.diffRemoved};
   --map-grid: ${mixColour(palette.paper, palette.line, 0.12)};
   --map-grid-major: ${mixColour(palette.paper, palette.line, 0.2)};
