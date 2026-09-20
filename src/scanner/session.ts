@@ -1,21 +1,23 @@
 import { reconcileScanObservations } from '../core.ts'
-import { loadScannerRegistry, type ScanBatch } from './registry.ts'
+import { loadScannerRegistry, type ScanBatch, type ScanEvent } from './registry.ts'
 import { watchObservations } from './source-watch.ts'
 import { readScannerConfig } from './modules/config.ts'
 import type { ProjectReadiness } from './modules/readiness.ts'
 import { changeScannerSettings, readScannerSettings, type ScannerSettings, type ScannerSettingsAction } from './modules/settings.ts'
 import type { ScannerInstallOptions } from './modules/inventory.ts'
 
-export type ScannerPhase = 'preparing-scanners' | 'scanning' | 'updating-architecture'
+export type ScannerProgress =
+  | { phase: 'preparing-scanners' | 'updating-architecture' }
+  | { phase: 'scanning'; scanners: readonly string[] }
 
 /** Owns scanner execution, settings state and the one source-adapter subscription for an open viewer. */
 export async function createScannerSession(root: string, options: {
   scan?: boolean
-  onProgress?: (phase: ScannerPhase) => void
+  onProgress?: (progress: ScannerProgress) => void
   onSettings?: (settings: ScannerSettings) => void
   onFold?: () => void | Promise<void>
 } & ScannerInstallOptions = {}) {
-  options.onProgress?.('preparing-scanners')
+  options.onProgress?.({ phase: 'preparing-scanners' })
   let state = await readScannerSettings(root, [], options)
   let checks: ProjectReadiness[] = []
   let watcher: Awaited<ReturnType<typeof watchObservations>> | undefined
@@ -23,7 +25,14 @@ export async function createScannerSession(root: string, options: {
   let closed = false
   let serial = Promise.resolve()
   const listeners = new Set<(state: ScannerSettings) => void>()
+  const activeScanners = new Set<string>()
 
+  function scanProgress(event: ScanEvent) {
+    if (event.type === 'start') activeScanners.add(event.scanner)
+    else activeScanners.delete(event.scanner)
+    options.onProgress?.(activeScanners.size
+      ? { phase: 'scanning', scanners: [...activeScanners] } : { phase: 'preparing-scanners' })
+  }
   function publish(next: ScannerSettings) {
     if (closed) return
     state = next
@@ -36,7 +45,7 @@ export async function createScannerSession(root: string, options: {
     publish({ ...next, notice: { tone: 'error', message } })
   }
   async function fold({ observations, failures }: ScanBatch) {
-    if (observations.length) options.onProgress?.('updating-architecture')
+    if (observations.length) options.onProgress?.({ phase: 'updating-architecture' })
     await reconcileScanObservations(root, observations)
     checks = [
       ...observations.map((observation): ProjectReadiness => ({ id: observation.scanner.id, package: 'found', project: 'ready', message: 'Scan completed.' })),
@@ -56,7 +65,7 @@ export async function createScannerSession(root: string, options: {
     if (closed) return
     // With no selected scanner, only declaration matching runs; no scan evidence is written.
     watcher = await watchObservations(root, registry, {
-      scan, onScan: () => options.onProgress?.('scanning'), onObservations: fold, onError: report,
+      scan, onScan: scanProgress, onObservations: fold, onError: report,
     })
   }
   function enqueue(action: () => Promise<void>, propagate = false): Promise<void> {

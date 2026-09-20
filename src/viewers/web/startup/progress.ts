@@ -1,3 +1,6 @@
+import type { ScannerProgress } from '../../../scanner/session.ts'
+import { scannerName } from '../scanners/name.ts'
+
 /** Startup belongs to the web host; scanner and map operations only report their work. */
 export const startupPhases = {
   'creating-project': { label: 'Creating project', milestone: 0 },
@@ -7,29 +10,34 @@ export const startupPhases = {
   'loading-architecture': { label: 'Loading architecture', milestone: 2 },
   'preparing-map': { label: 'Preparing map', milestone: 2 },
   'preparing-scanners': { label: 'Preparing scanners', milestone: 2 },
-  scanning: { label: 'Scanning code', milestone: 2 },
+  scanning: { label: 'Scanning', milestone: 2 },
   'updating-architecture': { label: 'Updating architecture', milestone: 2 },
   'opening-map': { label: 'Opening map', milestone: 3 },
 } as const
 
 export type StartupPhase = keyof typeof startupPhases
+export type StartupProgress = ScannerProgress | { phase: Exclude<StartupPhase, ScannerProgress['phase']> }
 
-export function startupUpdate(phase: StartupPhase) {
-  return { phase, ...startupPhases[phase] }
+export function startupUpdate(progress: StartupProgress) {
+  return {
+    ...progress,
+    ...startupPhases[progress.phase],
+    scannerNames: progress.phase === 'scanning' ? progress.scanners.map(scannerName) : [],
+  }
 }
 
-/** Sends the current phase immediately, then actual phase changes until the page leaves. */
+/** Sends the current work immediately, then actual changes until the page leaves. */
 export function createStartupProgress() {
-  let phase: StartupPhase | undefined
+  let current: StartupProgress | undefined
   const clients = new Set<ReadableStreamDefaultController<Uint8Array>>()
   const encoder = new TextEncoder()
-  const event = (next: StartupPhase) => encoder.encode(`data: ${JSON.stringify(startupUpdate(next))}\n\n`)
+  const event = (next: StartupProgress) => encoder.encode(`data: ${JSON.stringify(startupUpdate(next))}\n\n`)
 
   return {
-    get phase() { return phase },
-    clear() { phase = undefined },
-    report(next: StartupPhase) {
-      phase = next
+    get current() { return current },
+    clear() { current = undefined },
+    report(next: StartupProgress) {
+      current = next
       for (const client of clients) client.enqueue(event(next))
     },
     response(): Response {
@@ -38,7 +46,7 @@ export function createStartupProgress() {
         start(controller) {
           client = controller
           clients.add(client)
-          if (phase !== undefined) client.enqueue(event(phase))
+          if (current !== undefined) client.enqueue(event(current))
         },
         cancel() { clients.delete(client) },
       })

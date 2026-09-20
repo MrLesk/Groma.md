@@ -17,7 +17,7 @@ import { coverFile } from './sharing/metadata.ts'
 import { readSource } from '../source/read.ts'
 import { readCodeStructure } from '../source/structure.ts'
 import { readTaskDiff } from '../source/diff.ts'
-import type { StartupPhase } from './startup/progress.ts'
+import type { StartupProgress } from './startup/progress.ts'
 
 async function structureResponse(
   repositoryRoot: string,
@@ -55,10 +55,10 @@ async function loadMap(
   repositoryRoot: string,
   revisions: WebRevision[],
   revision: WebRevision | null,
-  onProgress?: (phase: StartupPhase) => void,
+  onProgress?: (progress: StartupProgress) => void | Promise<void>,
 ): Promise<Omit<WebMapPayload, 'generation'>> {
   const snapshot = revision === null
-    ? await loadMapRoot(repositoryRoot, onProgress)
+    ? await loadMapRoot(repositoryRoot, phase => onProgress?.({ phase }))
     : await withGitRevision(repositoryRoot, revision.id, loadMapRoot)
   return { ...snapshot, revision, revisions }
 }
@@ -66,9 +66,9 @@ async function loadMap(
 /** Owns the ready map, its request handlers, and its live subscriptions. */
 export async function createWebMapSession(
   repositoryRoot: string,
-  options: { workSource?: WorkSource; scan?: boolean; onProgress?: (phase: StartupPhase) => void } = {},
+  options: { workSource?: WorkSource; scan?: boolean; onProgress?: (progress: StartupProgress) => void | Promise<void> } = {},
 ): Promise<{ fetch: (request: Request) => Promise<Response>; close: () => Promise<void> }> {
-  options.onProgress?.('preparing-viewer')
+  options.onProgress?.({ phase: 'preparing-viewer' })
   const renderer = await bundleRenderer()
   const workSource = options.workSource ?? backlogPlugin.create(repositoryRoot)
   let revisions: WebRevision[] = []
@@ -203,7 +203,7 @@ export async function createWebMapSession(
     await scannerSession.close()
     throw error
   }
-  options.onProgress?.('opening-map')
+  options.onProgress?.({ phase: 'opening-map' })
   const architectureWatch = await watchArchitecture(repositoryRoot, {
     onChange: async () => { await scannerSession.reconfigure(); await publishWorld() },
   })

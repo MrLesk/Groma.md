@@ -27,7 +27,7 @@ export async function bundleRenderer(): Promise<string> {
 /** Loads and composes the current architecture map without optional work data. */
 export async function loadMapRoot(
   repositoryRoot: string,
-  onProgress?: (phase: MapLoadPhase) => void,
+  onProgress?: (phase: MapLoadPhase) => void | Promise<void>,
 ): Promise<Pick<WebMapPayload, 'project' | 'world' | 'sheet' | 'timings'>> {
   onProgress?.('loading-architecture')
   const started = performance.now()
@@ -40,7 +40,8 @@ export async function loadMapRoot(
     loadProjectProfile(repositoryRoot),
   ])
   const world = architecture.world
-  onProgress?.('preparing-map')
+  // The live host can deliver its status before layout occupies the event loop.
+  await onProgress?.('preparing-map')
   const sheet = measuredSheetScene(world)
   return {
     project: project ?? null,

@@ -25,10 +25,16 @@ export class ScannerFailure extends Error {
 
 export interface ScannerRegistry {
   readonly scannerIds: readonly string[]
-  collectObservations(repositoryRoot: string, changedFiles?: readonly string[], onScan?: () => void): Promise<ScanBatch>
+  collectObservations(repositoryRoot: string, changedFiles?: readonly string[], onScan?: (event: ScanEvent) => void): Promise<ScanBatch>
   watchesFile(relativePath: string): boolean
   /** In scanner id order, the scanners that would analyze this file now and those whose listing failed; the caller excludes configured patterns first. */
   readersOfFile(repositoryRoot: string, file: string): Promise<FileReaders>
+}
+
+/** One scanner invocation starts once and ends on success or failure; skipped scanners emit neither. */
+export interface ScanEvent {
+  scanner: string
+  type: 'start' | 'end'
 }
 
 export interface FileReaders {
@@ -183,8 +189,12 @@ export function createScannerRegistry(
       const results = await Promise.allSettled(selected.map(async scanner => {
         let result: ScanObservation | undefined
         if (!await scannerSourcesExcluded(scanner, root, excluded)) {
-          onScan?.()
-          result = await scanner.scan(root)
+          try {
+            onScan?.({ scanner: scanner.id, type: 'start' })
+            result = await scanner.scan(root)
+          } finally {
+            onScan?.({ scanner: scanner.id, type: 'end' })
+          }
         }
         const observation = result && excludeEvidence(result, excluded)
         if (observation) observations.set(scanner, observation)

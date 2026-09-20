@@ -44,7 +44,13 @@ export async function startWebViewer(
     error = undefined
     preparing = (async () => {
       map = await createWebMapSession(repositoryRoot, {
-        ...options, scan, onProgress: phase => { if (map === undefined) progress.report(phase) },
+        ...options, scan,
+        onProgress: update => {
+          if (map !== undefined) return
+          progress.report(update)
+          // Flush startup events before synchronous map layout blocks this server.
+          if (update.phase === 'preparing-map') return new Promise<void>(resolve => setTimeout(resolve, 0))
+        },
       })
     })().catch(failed)
     return preparing
@@ -59,7 +65,7 @@ export async function startWebViewer(
     return new Response(renderSetupPage({
       projectName,
       firstRun: !initial.initialized,
-      phase: progress.phase,
+      progress: progress.current,
       ...gromaInitialization(repositoryRoot),
       error,
       proposal,
@@ -73,12 +79,12 @@ export async function startWebViewer(
     try {
       const input = await request.formData()
       projectName = String(input.get('projectName') ?? '')
-      progress.report('creating-project')
+      progress.report({ phase: 'creating-project' })
       await initializeRepository(repositoryRoot, {
         projectName,
         directory: String(input.get('directory') ?? ''),
       }, options.initDependencies)
-      progress.report('finding-scanners')
+      progress.report({ phase: 'finding-scanners' })
       proposal = await discoverScanners(repositoryRoot)
       error = undefined
       progress.clear()
@@ -94,11 +100,11 @@ export async function startWebViewer(
     try {
       const input = await request.formData()
       const selected = input.getAll('scanner').map(String)
-      progress.report(selected.length ? 'installing-scanners' : 'finding-scanners')
+      progress.report({ phase: selected.length ? 'installing-scanners' : 'finding-scanners' })
       try {
         await installSelectedScanners(repositoryRoot, proposal, selected)
       } finally {
-        progress.report('finding-scanners')
+        progress.report({ phase: 'finding-scanners' })
         proposal = await discoverScanners(repositoryRoot)
       }
       await openMap(true)

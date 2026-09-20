@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test'
 import { createScanObservation, type ScannerPlugin, type ScanObservation } from '@groma/scanner'
-import { createScannerRegistry } from '../src/scanner/registry.ts'
+import { createScannerRegistry, type ScanEvent } from '../src/scanner/registry.ts'
 
 function scanner(id: string) {
   let calls = 0
@@ -74,22 +74,32 @@ test.concurrent('a scanner that stops supporting a project removes its previous 
   expect(result.observations.map(observation => observation.scanner.id)).toEqual(['second'])
 })
 
-test.concurrent('a mixed batch waits for every scanner and returns its failures', async () => {
+test.concurrent('a mixed batch waits for every invocation and emits its start and end events', async () => {
   const failed = scanner('failed')
   failed.fail(true)
+  const skipped = scanner('skipped')
+  skipped.plugin.listSourceFiles = async () => ['excluded/source.skipped']
   const started = Promise.withResolvers<void>()
   const finish = Promise.withResolvers<void>()
+  const events: ScanEvent[] = []
   let completed = false
   const slow: ScannerPlugin = {
     id: 'slow', watch: { include: ['**'], exclude: [] },
     async scan() { started.resolve(); await finish.promise; completed = true; return undefined },
   }
-  const registry = createScannerRegistry([failed.plugin, slow], () => false)
-  const result = registry.collectObservations('.').then(batch => {
+  const registry = createScannerRegistry([failed.plugin, slow, skipped.plugin], file => file.startsWith('excluded/'))
+  const result = registry.collectObservations('.', undefined, event => events.push(event)).then(batch => {
     expect(completed).toBe(true)
     return batch
   })
   await started.promise
+  const beforeFinish = events.filter(event => event.scanner === 'slow')
   finish.resolve()
   expect((await result).failures.map(error => error.scanner)).toEqual(['failed'])
+  expect(beforeFinish).toEqual([{ scanner: 'slow', type: 'start' }])
+  for (const id of ['failed', 'slow']) {
+    expect(events.filter(event => event.scanner === id).map(event => event.type)).toEqual(['start', 'end'])
+  }
+  expect(events.filter(event => event.scanner === 'skipped')).toEqual([])
+  expect(skipped.calls()).toBe(0)
 })

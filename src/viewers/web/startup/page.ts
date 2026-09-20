@@ -8,7 +8,7 @@ import type { GromaInitResult } from '../../../initialize.ts'
 import { escaped } from '../atoms/escape.ts'
 import { cssBlock, palettes } from '../atoms/theme.ts'
 import { chromeCss } from '../atoms/chrome.ts'
-import { startupUpdate, type StartupPhase } from './progress.ts'
+import { startupUpdate, type StartupProgress } from './progress.ts'
 
 type GromaDirectory = GromaInitResult['directory']
 
@@ -17,7 +17,7 @@ interface SetupPage {
   directory?: GromaDirectory
   initialized: boolean
   firstRun: boolean
-  phase?: StartupPhase
+  progress?: StartupProgress
   error?: string
   proposal?: ScannerDiscovery
 }
@@ -37,7 +37,7 @@ const style = `
     font: 14px/1.5 'SF Mono', ui-monospace, Menlo, monospace;
   }
   main {
-    width: min(520px, 100%); padding: 32px; border: 1px solid var(--hairline); border-radius: 16px;
+    width: min(520px, 100%); min-width: 0; padding: 32px; border: 1px solid var(--hairline); border-radius: 16px;
     background: color-mix(in srgb, var(--paper) 78%, transparent); backdrop-filter: blur(16px);
     box-shadow: 0 16px 64px color-mix(in srgb, var(--ink) 8%, transparent);
   }
@@ -116,17 +116,21 @@ const style = `
   .status-strip { display: flex; align-items: center; gap: 20px; margin: 36px 0 12px; }
   .status-strip h1 { font-size: 18px; font-weight: 500; letter-spacing: -0.02em; margin: 0; text-align: left; overflow-wrap: anywhere; }
   main[data-view="loading"] header { padding-bottom: 24px; margin: 0; border-bottom: 1px solid var(--hairline); }
-  main[data-view="loading"] .first-progress, main[data-view="first-scan"] .status-strip { display: none; }
+  main[data-view="loading"] .first-progress, main[data-view="first-scan"] .loading-progress { display: none; }
   .milestones { list-style: none; padding: 0; margin: 30px 0 0; }
-  .milestones li { position: relative; display: flex; align-items: center; gap: 22px; min-height: 60px; color: var(--muted); }
-  .milestones li:not(:last-child)::after { content: ''; position: absolute; left: 11px; top: 45px; bottom: -15px; width: 1px; background: var(--hairline); }
-  .milestone-mark { width: 24px; height: 24px; flex-shrink: 0; display: grid; place-items: center; border: 2px solid var(--muted); border-radius: 50%; }
+  .milestones > li { position: relative; display: flex; align-items: flex-start; gap: 22px; min-height: 60px; color: var(--muted); }
+  .milestones > li:not(:last-child)::after { content: ''; position: absolute; left: 11px; top: 45px; bottom: -15px; width: 1px; background: var(--hairline); }
+  .milestone-mark { width: 24px; height: 24px; margin-top: 18px; flex-shrink: 0; display: grid; place-items: center; border: 2px solid var(--muted); border-radius: 50%; }
+  .milestone-work { min-width: 0; padding: 18px 0; }
   .milestone-mark .check { display: none; }
   .milestones [data-state="complete"] .milestone-mark { color: var(--on-colour); border-color: var(--accent); background: var(--accent); }
   .milestones [data-state="complete"] .check { display: block; font-weight: 700; }
-  .milestones li[data-state="complete"]::after { background: var(--accent); }
+  .milestones > li[data-state="complete"]::after { background: var(--accent); }
   .milestones [data-state="active"] { color: var(--ink); }
   .milestones [data-state="active"] .milestone-mark { border-color: var(--hairline); border-top-color: var(--accent); animation: spin 700ms linear infinite; }
+  .scanner-progress { list-style: none; padding: 0; margin: 8px 0 0; }
+  .scanner-progress > li { display: flex; align-items: center; gap: 12px; min-height: 32px; overflow-wrap: anywhere; }
+  .scanner-progress .spinner { width: 16px; height: 16px; }
   .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
   @keyframes spin { to { transform: rotate(360deg); } }
   @media (prefers-reduced-motion: reduce) { .spinner, .milestones [data-state="active"] .milestone-mark { animation: none; } }
@@ -157,13 +161,28 @@ const script = `
   const content = document.querySelector('#startup-content');
   const progress = document.querySelector('#startup-progress');
   let events;
+  function showScanners(names) {
+    document.querySelector('.status-strip > .spinner').hidden = names.length > 0;
+    document.querySelectorAll('[data-scanners]').forEach(list => {
+      list.hidden = names.length === 0;
+      list.replaceChildren(...names.map(name => {
+        const row = document.createElement('li');
+        const spinner = document.createElement('span');
+        spinner.className = 'spinner';
+        spinner.setAttribute('aria-hidden', 'true');
+        row.append(spinner, document.createTextNode(name));
+        return row;
+      }));
+    });
+  }
   function showPhase(update) {
     main.dataset.view = main.dataset.firstRun === 'true' ? 'first-scan' : 'loading';
     main.setAttribute('aria-busy', 'true');
     content.hidden = true;
     progress.hidden = false;
+    showScanners(update.scannerNames);
     document.querySelector('[data-phase]').textContent = update.label + '…';
-    document.querySelector('[data-announcement]').textContent = update.label;
+    document.querySelector('[data-announcement]').textContent = [update.label, ...update.scannerNames].join(' ');
     document.querySelectorAll('[data-milestone]').forEach(row => {
       const index = Number(row.dataset.milestone);
       const state = index < update.milestone ? 'complete' : index === update.milestone ? 'active' : 'pending';
@@ -230,8 +249,14 @@ function setupContent(input: SetupPage): string {
   return `<h1>Could not open architecture</h1>${error}<p class="next">Fix the reported issue, then run groma web again.</p>`
 }
 
-function progressContent(phase: StartupPhase): string {
-  const update = startupUpdate(phase)
+function scannerRows(names: readonly string[]): string {
+  return `<ul class="scanner-progress" data-scanners${names.length ? '' : ' hidden'}>`
+    + names.map(name => `<li><span class="spinner" aria-hidden="true"></span>${escaped(name)}</li>`).join('') + '</ul>'
+}
+
+function progressContent(progress: StartupProgress): string {
+  const update = startupUpdate(progress)
+  const scanners = scannerRows(update.scannerNames)
   const milestones = [
     ['Create project', 'Project created'],
     ['Set up scanners', 'Scanner setup complete'],
@@ -242,14 +267,16 @@ function progressContent(phase: StartupPhase): string {
     const state = index < update.milestone ? 'complete' : index === update.milestone ? 'active' : 'pending'
     const label = state === 'active' ? update.label : state === 'complete' ? completed : pending
     return `<li data-milestone="${index}" data-state="${state}" data-pending="${pending}" data-completed="${completed}"${state === 'active' ? ' aria-current="step"' : ''}>`
-      + `<span class="milestone-mark" aria-hidden="true"><span class="check">✓</span></span><span data-label>${label}</span></li>`
+      + `<span class="milestone-mark" aria-hidden="true"><span class="check">✓</span></span>`
+      + `<div class="milestone-work"><span data-label>${escaped(label)}</span>${index === 2 ? scanners : ''}</div></li>`
   }).join('')
   return `<div class="first-progress"><h1>Creating your first map</h1><ol class="milestones" aria-label="Startup progress">${rows}</ol></div>`
-    + `<div class="status-strip"><span class="spinner" aria-hidden="true"></span><h1 data-phase>${update.label}…</h1></div>`
+    + `<div class="loading-progress"><div class="status-strip"><span class="spinner" aria-hidden="true"${update.scannerNames.length ? ' hidden' : ''}></span>`
+    + `<h1 data-phase>${escaped(update.label)}…</h1></div>${scanners}</div>`
 }
 
 function pageView(input: SetupPage): string {
-  if (input.error === undefined && input.phase !== undefined) return input.firstRun ? 'first-scan' : 'loading'
+  if (input.error === undefined && input.progress !== undefined) return input.firstRun ? 'first-scan' : 'loading'
   if (input.proposal !== undefined) return 'scanners'
   if (!input.initialized) return 'setup'
   if (input.error !== undefined) return 'error'
@@ -269,6 +296,6 @@ export function renderSetupPage(input: SetupPage): string {
     + `<div class="brand">${lockup}<span class="header-project" title="${escaped(input.projectName)}">${escaped(input.projectName)}</span></div>`
     + `<span class="version">v${escaped(packageJson.version)}</span></header><p id="request-error" class="error" role="alert" hidden></p>`
     + `<section id="startup-content"${loading ? ' hidden' : ''}>${view === 'setup' || view === 'scanners' ? steps : ''}${setupContent(input)}</section>`
-    + `<section id="startup-progress"${loading ? '' : ' hidden'}>${progressContent(input.phase ?? 'preparing-viewer')}</section></main>`
+    + `<section id="startup-progress"${loading ? '' : ' hidden'}>${progressContent(input.progress ?? { phase: 'preparing-viewer' })}</section></main>`
     + `<span class="sr-only" role="status" aria-live="polite" data-announcement></span><script>${script}</script></body></html>`
 }

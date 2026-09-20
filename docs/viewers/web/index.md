@@ -16,11 +16,17 @@ Opening an initialized project uses a compact card with the project name,
 version, and a left-aligned loading status, without setup navigation.
 
 Status changes follow actual work: creating the project, finding or installing
-scanners, preparing the viewer, preparing scanners, scanning code, updating
+scanners, preparing the viewer, preparing scanners, scanning, updating
 architecture, loading architecture, preparing the map, and opening the map.
+While scanning, each active scanner has its own row and activity indicator,
+so parallel work stays visible. Its row leaves when that scanner finishes or
+fails. Skipped scanners never appear as active. Both startup cards use these
+rows, and pages opened during a scan receive the current active list.
 Operations that do not run are not reported. There is no estimated percentage
-or timer-driven progress. The loading screen stays visible until the initial
-scanner session and its architecture update finish. An empty map is reported
+or timer-driven progress. Before map calculation starts, the server yields
+once to send its queued progress updates to the browser. The loading screen
+stays visible until the initial scanner session and its architecture update
+finish. An empty map is reported
 only after that scan. An initialized project runs one scan, then builds its first
 map once from the reconciled architecture before opening. Later source changes
 queue a new map build, including changes received during the first build. The
@@ -34,8 +40,14 @@ state and streams updates through `/startup-events`.
 [`startup/page.ts`](../../../src/viewers/web/startup/page.ts) presents the forms
 and progress; it waits for the form operation or `/ready` before opening the
 next screen. The map session, map loader, and scanner session report the work
-they own. These updates describe runtime activity; they do not create stored
-OKF knowledge or C4 architecture elements.
+they own. The scanner registry emits a start event immediately before each
+scanner invocation and an end event when it succeeds or fails. Skipped
+scanners emit neither. The scanner session derives the active list from these
+events.
+[`startup/progress.ts`](../../../src/viewers/web/startup/progress.ts) formats
+scanner names and retains the complete current update for new pages and
+event-stream subscribers. These updates describe runtime activity; they do
+not create stored OKF knowledge or C4 architecture elements.
 
 If startup reports an occupied concrete port, an interactive terminal shows
 the runtime error and asks whether to use

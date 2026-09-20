@@ -5,7 +5,7 @@ import { realpath } from 'node:fs/promises'
 import path from 'node:path'
 
 import { gromaDirectories } from '../groma-filesystem.ts'
-import type { ScannerRegistry, ScanBatch } from './registry.ts'
+import type { ScannerRegistry, ScanBatch, ScanEvent } from './registry.ts'
 
 const SETTLE_MS = 150
 const skippedRoots = new Set(['.git', ...gromaDirectories, 'node_modules'])
@@ -40,7 +40,7 @@ export async function watchObservations(
   registry: ScannerRegistry,
   options: {
     scan?: boolean
-    onScan?: () => void
+    onScan?: (event: ScanEvent) => void
     onObservations: (batch: ScanBatch) => void | Promise<void>
     onError?: (error: unknown) => void | Promise<void>
   },

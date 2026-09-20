@@ -16,13 +16,20 @@ function emptyWorkSource(): WorkSource {
   }
 }
 
-async function startupPhases(url: string) {
+interface StartupEvent {
+  phase: string
+  scanners?: string[]
+  scannerNames?: string[]
+}
+
+async function startupEvents(url: string) {
   const response = await fetch(`${url}/startup-events`)
   expect(response.headers.get('content-type')).toContain('text/event-stream')
   const reader = response.body!.getReader()
   const decoder = new TextDecoder()
   const phases: string[] = []
-  const listeners = new Map<string, () => void>()
+  const updates: StartupEvent[] = []
+  const listeners = new Set<(update: StartupEvent) => void>()
   const reading = (async () => {
     let buffer = ''
     while (true) {
@@ -32,16 +39,28 @@ async function startupPhases(url: string) {
       const events = buffer.split('\n\n')
       buffer = events.pop()!
       for (const event of events) {
-        const phase: string = JSON.parse(event.slice('data: '.length)).phase
-        phases.push(phase)
-        listeners.get(phase)?.()
+        const update: StartupEvent = JSON.parse(event.slice('data: '.length))
+        phases.push(update.phase)
+        updates.push(update)
+        for (const listener of listeners) listener(update)
       }
     }
   })()
   return {
     phases,
-    async waitFor(phase: string) {
-      if (!phases.includes(phase)) await new Promise<void>(resolve => listeners.set(phase, resolve))
+    updates,
+    async waitFor(matching: string | ((update: StartupEvent) => boolean)) {
+      const matches = typeof matching === 'string' ? (update: StartupEvent) => update.phase === matching : matching
+      const observed = updates.find(matches)
+      if (observed) return observed
+      return await new Promise<StartupEvent>(resolve => {
+        const listener = (update: StartupEvent) => {
+          if (!matches(update)) return
+          listeners.delete(listener)
+          resolve(update)
+        }
+        listeners.add(listener)
+      })
     },
     async close() { await reader.cancel(); await reading },
   }
@@ -70,20 +89,28 @@ async function worldNamed(response: Response, name: string) {
 }
 
 for (const findsComponents of [true, false]) {
-  test.concurrent(`web startup waits for a scan with ${findsComponents ? 'components' : 'no components'} before opening the map`, async () => {
+  test.concurrent(`web startup tracks active scanners before opening a map with ${findsComponents ? 'components' : 'no components'}`, async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'groma-startup-'))
     const scanning = Promise.withResolvers<void>()
+    const companionScanning = Promise.withResolvers<void>()
     const release = Promise.withResolvers<void>()
+    const releaseCompanion = Promise.withResolvers<void>()
     const listening = Promise.withResolvers<string>()
     let scans = 0
-    const gate = Bun.serve({ port: 0, async fetch() {
-      scans++
-      scanning.resolve()
-      await release.promise
+    const gate = Bun.serve({ port: 0, async fetch(request) {
+      if (new URL(request.url).pathname === '/companion') {
+        companionScanning.resolve()
+        await releaseCompanion.promise
+      } else {
+        scans++
+        scanning.resolve()
+        await release.promise
+      }
       return new Response(null, { status: 204 })
     } })
     let opening: ReturnType<typeof startWebViewer> | undefined
-    let progress: Awaited<ReturnType<typeof startupPhases>> | undefined
+    let progress: Awaited<ReturnType<typeof startupEvents>> | undefined
+    let lateProgress: Awaited<ReturnType<typeof startupEvents>> | undefined
     try {
       await cp(path.resolve(import.meta.dir, '../test/fixtures/empty-project'), root, { recursive: true })
       const git = Bun.spawn(['git', 'init', '--quiet', root], { stdout: 'ignore', stderr: 'pipe' })
@@ -102,25 +129,56 @@ for (const findsComponents of [true, false]) {
             files: files.map(file => ({ file, roots: ['root'], symbols: [{ id: 'entry', kind: 'function', name: 'entry' }] })) }
         }
       }`)
-      await writeScannerConfig(root, { scanners: [{ id: 'fixture', source: './plugin' }] })
+      await mkdir(path.join(root, 'companion'))
+      await writeFile(path.join(root, 'companion/package.json'), JSON.stringify({ name: 'companion', version: '1.0.0',
+        groma: { scanner: { id: 'companion', entry: './index.ts' } } }))
+      await writeFile(path.join(root, 'companion/index.ts'), `export default {
+        id: 'companion', watch: { include: ['**/*.companion'], exclude: [] }, async scan() {
+          await fetch('http://localhost:${gate.port}/companion')
+          if (${findsComponents}) throw new Error('Fixture scanner failure')
+          return undefined
+        }
+      }`)
+      await writeScannerConfig(root, { scanners: [
+        { id: 'fixture', source: './plugin' }, { id: 'companion', source: './companion' },
+      ] })
       opening = startWebViewer(root, { port: 0, scan: true, workSource: emptyWorkSource(), onListening: listening.resolve })
       const url = await listening.promise
-      progress = await startupPhases(url)
-      await scanning.promise
-      await progress.waitFor('scanning')
+      await Promise.all([scanning.promise, companionScanning.promise])
+      progress = await startupEvents(url)
+      const active = await progress.waitFor('scanning')
+      expect(active.scanners?.toSorted()).toEqual(['companion', 'fixture'])
+      expect(active.scannerNames?.toSorted()).toEqual(['Companion', 'Fixture'])
+      releaseCompanion.resolve()
+      const remaining = await progress.waitFor(update => update.phase === 'scanning' && update.scanners?.length === 1)
+      expect(remaining.scanners).toEqual(['fixture'])
+      expect(remaining.scannerNames).toEqual(['Fixture'])
+      lateProgress = await startupEvents(url)
+      const replayed = await lateProgress.waitFor('scanning')
+      expect(replayed.scanners).toEqual(['fixture'])
+      expect(replayed.scannerNames).toEqual(['Fixture'])
+      await lateProgress.close()
+      lateProgress = undefined
       expect(progress.phases).not.toContain('preparing-map')
       expect(progress.phases).not.toContain('opening-map')
       const loading = await (await fetch(url)).text()
+      let loadingScanners = ''
+      await new HTMLRewriter().on('[data-scanners]', {
+        text(chunk) { loadingScanners += chunk.text },
+      }).transform(new Response(loading)).text()
+      expect(loadingScanners).toContain('Fixture')
+      expect(loadingScanners).not.toContain('Companion')
       expect(loading).toContain('aria-busy="true"')
       expect(loading).not.toContain('id="empty"')
       expect(loading).not.toContain('id="world"')
       release.resolve()
       const viewer = await opening
       await progress.waitFor('opening-map')
-      const afterScan = progress.phases.slice(progress.phases.indexOf('scanning'))
+      const afterScan = progress.phases.slice(progress.phases.lastIndexOf('scanning') + 1)
       expect(afterScan).toEqual(findsComponents
-        ? ['scanning', 'updating-architecture', 'loading-architecture', 'preparing-map', 'opening-map']
-        : ['scanning', 'loading-architecture', 'preparing-map', 'opening-map'])
+        ? ['preparing-scanners', 'updating-architecture', 'loading-architecture', 'preparing-map', 'opening-map']
+        : ['preparing-scanners', 'loading-architecture', 'preparing-map', 'opening-map'])
+      expect(progress.updates.filter(update => update.phase !== 'scanning').every(update => !update.scanners?.length)).toBe(true)
       expect(progress.phases.filter(phase => phase === 'preparing-map')).toHaveLength(1)
       expect((await fetch(`${viewer.url}/ready`)).status).toBe(204)
       const { world } = await (await fetch(`${viewer.url}/world.json`)).json()
@@ -141,6 +199,8 @@ for (const findsComponents of [true, false]) {
       }
     } finally {
       release.resolve()
+      releaseCompanion.resolve()
+      await lateProgress?.close()
       await progress?.close()
       await (await opening)?.close()
       await gate.stop(true)
@@ -154,7 +214,7 @@ test.concurrent('setup reports its real work and readiness waits for initializat
   const creating = Promise.withResolvers<void>()
   const release = Promise.withResolvers<void>()
   let viewer: Awaited<ReturnType<typeof startWebViewer>> | undefined
-  let progress: Awaited<ReturnType<typeof startupPhases>> | undefined
+  let progress: Awaited<ReturnType<typeof startupEvents>> | undefined
   let initialize: Promise<Response> | undefined
   try {
     await cp(path.resolve(import.meta.dir, '../test/fixtures/empty-project'), root, { recursive: true })
@@ -167,7 +227,7 @@ test.concurrent('setup reports its real work and readiness waits for initializat
         backlogAvailable: () => false,
       },
     })
-    const watching = startupPhases(viewer.url)
+    const watching = startupEvents(viewer.url)
     initialize = fetch(`${viewer.url}/initialize`, {
       method: 'POST', redirect: 'manual', body: new URLSearchParams({ projectName: 'Example', directory: 'groma' }),
     })
@@ -216,7 +276,7 @@ test.concurrent('startup does not report scanning when every selected source is 
     }`)
     await writeScannerConfig(root, { scanners: [{ id: 'fixture', source: './plugin' }], exclude: ['*.fixture'] })
     const phases: string[] = []
-    session = await createScannerSession(root, { scan: true, onProgress: phase => phases.push(phase) })
+    session = await createScannerSession(root, { scan: true, onProgress: update => phases.push(update.phase) })
     await session.ready
     expect(phases).toEqual(['preparing-scanners'])
   } finally {
