@@ -28,10 +28,11 @@ To release changed scanners without a new Groma version, run the same workflow
 manually with `publish_scanners` enabled. Leave it disabled for a build-only run.
 
 The author contract is `@groma/scanner`. Official packages use
-`@groma/scanner-<id>`; the main CLI remains `groma.md`. Initial scanner versions
-are `0.1.0` and require Groma `^0.3.0`. The manifests own
-`groma.scanner.discovery.compatibility`; verify it against the supported examples
-before each release. Keep package versions coordinated with `@groma/scanner`
+`@groma/scanner-<id>`; the main CLI remains `groma.md`. Scanner manifests declare
+their minimum Groma API version in `groma.scanner.discovery.compatibility.groma`,
+currently `>=0.3.0`. Newer stable Groma versions remain eligible. Raise the minimum
+only when a scanner uses an API introduced in a newer Groma version, and verify
+it against the supported examples before each release. Keep package versions coordinated with `@groma/scanner`
 where it is a runtime dependency.
 
 Language-version declarations do not restrict installation. Plugins validate
@@ -62,7 +63,7 @@ dotnet restore plugins/scanners/csharp/dotnet/Groma.CSharpScanner.csproj --locke
 bun scripts/scanner-release.ts stage /tmp/scanner-packages
 ```
 
-This stages the contract and nine scanner packages without publishing them.
+This stages the contract and all official scanner packages without publishing them.
 Maintainer builds may download scanner build dependencies and runtime packs.
 Use these folders with `groma scanner add` for focused local validation. For a
 multi-platform release, collect the staged host directories, then assemble them:

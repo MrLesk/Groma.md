@@ -257,7 +257,7 @@ For a framework detected through a dependency:
           "package": "@example/ui"
         }],
         "compatibility": {
-          "groma": "^0.2.0"
+          "groma": ">=0.3.0"
         }
       }
     }
@@ -279,8 +279,10 @@ report an additional technology outside `technologies` to expose a coverage gap.
 | `toml` | `tables`: at least one named top-level table must exist. `versionPath`: keys leading to the version string. `declaration` explains the clue. |
 | `text` | `versionPattern`: regular expression evaluated with the multiline flag; the first capture is the version. `declaration` explains the clue. |
 
-Declare the supported Groma API range in `compatibility.groma`. Groma uses
-that requirement and standard npm `os`/`cpu` fields to choose a published release
+Declare the minimum Groma API version the scanner needs in `compatibility.groma`,
+such as `>=0.3.0`. Later stable Groma versions remain eligible. Raise the minimum
+only when the scanner uses an API introduced in a newer Groma version.
+Groma uses that requirement and standard npm `os`/`cpu` fields to choose a published release
 when the user installs a package by name. Language versions are discovery evidence,
 not installation restrictions. Validate supported source configuration and
 scanner-owned tools inside `scan`, with concrete instructions when something is
