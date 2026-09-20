@@ -36,7 +36,7 @@ import { createSearchSession } from './search/session.ts'
 import { createWorkIsland } from './work/island.ts'
 import { openWorkSelection, toggleWorkSelection } from './work/selection.ts'
 import type { WebBootPayload, WebPayload, WebWorkPayload } from './payload.ts'
-import { noSelection, primarySelection, primarySystem, retainSelection, selectArchitecture, selectedArchitecture, selectTask } from './selection.ts'
+import { noSelection, primarySelection, primarySystem, retainSelection, selectArchitecture, selectMapArchitecture, selectedArchitecture, selectTask } from './selection.ts'
 import { createSourceControl } from './source/control.ts'
 import { createTaskDiffControl } from './task-diff/control.ts'
 import { readView, writeView } from './url.ts'
@@ -252,16 +252,17 @@ function toggleRow(row: TreeRow): void {
   paintTree()
 }
 
-function select(id: string, additive = false, focus = true): void {
+function select(id: string, additive = false, origin: 'panel' | 'map' = 'panel'): void {
   if (worldElement(id) === undefined && worldRelationship(id) === undefined && unidentifiedGroup(id) === undefined) return
   source.clear()
-  const next = selectArchitecture(selection, id, additive)
+  const next = origin === 'map' ? selectMapArchitecture(selection, id, additive, world)
+    : selectArchitecture(selection, id, additive)
   detailsTab = detailsTabAfterSelection(detailsTab, primarySelection(selection), primarySelection(next))
   selection = next
   touched = true
-  if (!focus) camera.move(camera.current, false)
+  if (origin === 'map') camera.move(camera.current, false)
   paintViewState()
-  if (focus) focusArchitecture(selectedArchitecture(selection))
+  if (origin === 'panel') focusArchitecture(selectedArchitecture(selection))
 }
 
 function applyFocus(next: Camera | undefined, frame: MapFrame): void {
@@ -367,7 +368,7 @@ bindMapPointer(map, {
     touched = true
     mapAnimator.orbit(dx, dy)
   },
-  select: (id, additive) => select(id, additive, false),
+  select: (id, additive) => select(id, additive, 'map'),
   deselect,
   editProject() {
     if (revisionControl.selected === undefined && project !== undefined) projectEditor?.open(project)

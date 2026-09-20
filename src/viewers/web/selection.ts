@@ -42,6 +42,17 @@ export function selectTask(id: string): Selection {
   return { kind: 'task', id }
 }
 
+/** System surfaces first release a component selection so large islands offer room to deselect. */
+export function selectMapArchitecture(selection: Selection, id: string, additive: boolean, world: ArchitectureGraph): Selection {
+  const target = world.elements.find(element => element.representationId === id)
+  const selected = selectedArchitecture(selection)
+  if (!additive && target?.kind === 'system' && !target.external
+    && world.elements.some(element => element.kind === 'component' && selected.includes(element.representationId))) {
+    return noSelection
+  }
+  return selectArchitecture(selection, id, additive)
+}
+
 /** Drops targets that disappeared from a live payload without changing the order of those that remain. */
 export function retainSelection(selection: Selection, known: (id: string) => boolean): Selection {
   if (selection.kind === 'none') return selection

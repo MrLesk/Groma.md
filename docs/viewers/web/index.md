@@ -565,6 +565,10 @@ panel only reveals the collected snapshot and never rebuilds the map. Resizing t
 map until you move the camera; after that it keeps the same point in
 the centre. Clicking a building, slab, system island, relationship, or task pin
 on the map selects it without moving the camera and stops any unfinished transition.
+When a component is selected, a plain click on an internal system first clears
+the architecture selection without moving the camera. A second click selects
+the system. Shift-click still toggles selection immediately, and hierarchy,
+details, and search selections remain immediate. Active tasks and flows stay highlighted.
 Selecting an item in the hierarchy, Details, search, or another control outside
 the map centers the camera on its complete body. Automatic focus
 stops at normal readable label size; larger selections zoom out until they fit.

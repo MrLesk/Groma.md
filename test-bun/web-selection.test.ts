@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict'
+import path from 'node:path'
+import { loadAnnotatedArchitecture } from '../src/core.ts'
 
 import { test } from 'bun:test'
 
@@ -8,9 +10,27 @@ import {
   primarySelection,
   retainSelection,
   selectArchitecture,
+  selectMapArchitecture,
   selectedArchitecture,
   selectTask,
 } from '../src/viewers/web/selection.ts'
+
+test.concurrent('a system map click clears a selected component before a second click selects the system', async () => {
+  const world = await loadAnnotatedArchitecture(path.resolve(import.meta.dir, '../test/fixtures/relationship-pairs'))
+  const component = world.elements.find(element => element.kind === 'component')!
+  const system = world.elements.find(element => element.kind === 'system' && !element.external)!
+  const selected = selectArchitecture(noSelection, component.representationId, false)
+
+  const cleared = selectMapArchitecture(selected, system.representationId, false, world)
+  assert.deepEqual(cleared, noSelection)
+  assert.equal(ownsDetails(cleared), false)
+  assert.deepEqual(selectMapArchitecture(cleared, system.representationId, false, world),
+    { kind: 'architecture', ids: [system.representationId] })
+  assert.deepEqual(selectMapArchitecture(selected, system.representationId, true, world),
+    { kind: 'architecture', ids: [component.representationId, system.representationId] })
+  assert.deepEqual(selectArchitecture(selected, system.representationId, false),
+    { kind: 'architecture', ids: [system.representationId] })
+})
 
 test.concurrent('every concrete selection owns details and the empty selection does not', () => {
   assert.equal(ownsDetails(noSelection), false)
