@@ -113,7 +113,7 @@ const style = `
     border: 2px solid var(--hairline); border-top-color: var(--accent); border-radius: 50%;
     animation: spin 700ms linear infinite;
   }
-  .status-strip { display: flex; align-items: center; gap: 20px; padding: 20px; border: 1px solid var(--hairline); border-radius: 8px; margin: 36px 0 12px; }
+  .status-strip { display: flex; align-items: center; gap: 20px; margin: 36px 0 12px; }
   .status-strip h1 { font-size: 18px; font-weight: 500; letter-spacing: -0.02em; margin: 0; text-align: left; overflow-wrap: anywhere; }
   main[data-view="loading"] header { padding-bottom: 24px; margin: 0; border-bottom: 1px solid var(--hairline); }
   main[data-view="loading"] .first-progress, main[data-view="first-scan"] .status-strip { display: none; }
@@ -138,7 +138,7 @@ const style = `
     .brand { gap: 10px; }
     .header-project { padding-left: 10px; font-size: 12px; }
     .steps { gap: 10px; font-size: 12px; }
-    .status-strip { gap: 14px; padding: 16px; }
+    .status-strip { gap: 14px; }
     .status-strip h1 { font-size: 16px; }
     .scanner-choice { padding: 16px 14px; gap: 10px; flex-wrap: wrap; }
     .scanner-state { margin-left: auto; }
