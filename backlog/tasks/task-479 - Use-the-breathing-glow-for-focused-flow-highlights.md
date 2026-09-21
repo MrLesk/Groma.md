@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@codex'
 created_date: '2026-09-21 21:12'
-updated_date: '2026-09-21 21:21'
+updated_date: '2026-09-21 21:27'
 labels: []
 dependencies: []
 references:
@@ -23,14 +23,14 @@ ordinal: 555000
 ## Description
 
 <!-- SECTION:DESCRIPTION:BEGIN -->
-Flow steps still fade their highlighted map elements with the old opacity pulse, while clicking a component uses the newer breathing glow. Alex requests one consistent glow treatment everywhere the old map opacity pulse is used, keeping the architecture and its labels solid.
+Focused flow components used the old opacity pulse while clicking a component used the breathing glow. Components should share the glow. Relationship lines should show only directional motion, without a glow or opacity pulse.
 <!-- SECTION:DESCRIPTION:END -->
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [x] #1 Focusing a flow step gives its highlighted endpoints and relationship the existing breathing glow treatment instead of fading their bodies or labels.
-- [x] #2 Component selection and flow focus share the glow treatment; changing or clearing highlights, filtering, and switching Iso, 2D, or Layers keeps glows attached only to the displayed highlighted geometry.
-- [x] #3 Reduced motion keeps steady emphasis, and the existing direction animation, selection, neighbor, task, and comparison behavior is preserved.
+- [x] #1 Focused flow components use the same breathing glow as component selection, while their bodies and labels remain solid.
+- [x] #2 Relationship lines show only their directional motion: no glow, opacity pulse, or border-color animation.
+- [x] #3 Highlight cleanup, overlapping component selection, view changes, filtering, and reduced motion continue to work.
 <!-- AC:END -->
 
 ## Definition of Done
@@ -44,7 +44,7 @@ Flow steps still fade their highlighted map elements with the old opacity pulse,
 ## Implementation Plan
 
 <!-- SECTION:PLAN:BEGIN -->
-1. Reuse the existing map-owned cached glow for inspected components and focused flow endpoints/routes; keep each blurred shape on its own bounded HTML layer and derive it from the displayed projection. Remove the old map-flow-focus opacity animation and share the restrained border animation. 2. Preserve flow direction, neighbor/task/selection semantics, camera placement, and reduced motion. This is presentation in the existing map owner: no new OKF records, C4 concepts, or architecture geometry. It depends on projected shapes, not project language. 3. Existing web-map-highlights, web-flow-activation, and projection tests cover selection and flow membership. Add no decorative tests; directly verify solid bodies/labels, glow lifecycle, view changes, overlapping selection, and reduced motion in the browser using the flows fixture. 4. Update only the glow paragraphs in the web guide, preserving the embedding tasks. Run focused tests and bun run check, perform specification/quality review, then the requested full-context complexity review before finalization.
+1. Keep the shared cached glow only for highlighted component shapes. Relationship lines retain directional motion only; remove their added glow and border animation and the old opacity pulse. 2. Correct the two glow paragraphs in the web guide and preserve other agents work. No OKF or C4 changes: this remains map presentation. 3. Use existing behavioral coverage and browser checks of component glows, direction-only relationship lines, and reduced motion; no decorative tests. Run bun run check, then self-review and the requested full-context complexity review.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
@@ -55,10 +55,22 @@ Implementation and self-review: one map-owned glow cache now takes the union of 
 Additional verification: all 16 Node tests passed in bun run check. Browser console reported no warnings or errors. The temporary browser viewport and reduced-motion override were restored, and the fixture server was stopped. Only the two glow-related documentation hunks are staged; the embedding/inset work remains outside this task.
 
 Final full-context complexity review: no blocking findings or material simplifications. The reviewer confirmed that existing highlight classes lead through projected geometry to one cached halo per displayed shape, with shared cleanup and existing camera ownership. Keeping the small helpers in iso/map.ts and the shared animation in iso/style.ts is clearer than adding a separate module. No further architecture changes are needed.
+
+Scope correction from Alex: the request was about components, not relationship lines. I incorrectly expanded the scope and wrote acceptance criteria that included routes. Reopening this task to remove the added route glow and border animation and restore relationship rendering to its pre-task behavior.
+
+Alex clarified the final relationship treatment: lines need only directional motion, with no opacity pulse. This supersedes the previous correction plan to restore the original line opacity animation.
+
+Corrected implementation and self-review: removed route lookup, polyline/lift drawing, and the line/shape switch from the glow renderer. The glow candidate selector now names only architecture bodies. Relationship lines use only map-flow (dash movement); their groups and strokes remain at opacity 1 and have no border-color animation. Browser verification on the flow fixture found exactly two halos (worker and entry), solid component bodies, route group animation none, line animation map-flow, and changing dash offsets while opacity stayed 1. Reduced-motion emulation disabled the halos and line movement with stable opacity; clearing focus removed both halos while the checked-flow lines continued directional motion. The targeted specification/quality re-review matched these results to the corrected request and found no remaining defect or added responsibility.
+
+Final correction verification: bun run check passed again after the direction-only line change (16 Node tests and 650 Bun tests passed, 38 skipped, no failures). Browser console had no warnings or errors. No tests or public APIs were added.
+
+Final full-context complexity review found no blocking issue. Accepted its narrow simplification: remove the extra stacking-order change so component glow layers stay behind relationship lines. The renderer now accepts only body polygons and no line/shape mode. Ownership remains in the existing map renderer/styles with no new abstraction.
+
+The final bun run check passed after preserving the original halo layer order: 16 Node tests and 650 Bun tests passed, 38 skipped, zero failures. Final scope: component glow, direction-only relationship lines. The rejected route-glow behavior from the first delivery is removed.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
-Replaced the old focused-flow opacity pulse with the existing breathing glow for endpoints and routes. Selection and flow focus share one cached halo per displayed shape; bodies and labels stay solid, direction motion continues, and reduced motion stays steady. Updated the web guide. Verified with 37 focused tests, bun run check (16 Node tests and 650 Bun tests passed; 38 skipped), browser lifecycle/view/filter/overlap/reduced-motion checks, and the final complexity review.
+Focused flow components share the component-selection breathing glow, with solid bodies and labels. Relationship lines only move along their direction; they have no glow, opacity pulse, or border-color animation. Removed route-specific glow geometry and drawing, kept halos behind the lines, and corrected the web guide. Browser checks verified two component halos, direction-only opaque lines, reduced motion, and cleanup. bun run check passed (16 Node tests and 650 Bun tests; 38 skipped). The targeted full-context complexity review found no blocking issues.
 <!-- SECTION:FINAL_SUMMARY:END -->

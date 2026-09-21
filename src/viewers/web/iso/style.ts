@@ -205,7 +205,6 @@ export const mapCss = `
   #map :is(.route, .building, .slab, .island).focused { --emphasis: ${emphasis(3)}; }
   #map .building:is(.component-focus, .focused) .face,
   #map .slab.focused > .face, #map .island.focused > .ground { animation: map-highlight-border 2600ms ease-in-out infinite; }
-  #map .route.focused .line { animation: map-flow 900ms linear infinite, map-highlight-border 2600ms ease-in-out infinite; }
   #map .highlight-glow {
     position: absolute; left: 0; top: 0; pointer-events: none;
   }

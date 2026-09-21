@@ -80,7 +80,7 @@ function paintSurface(name: string, layers: SVGGElement[]) {
 }
 
 /** A bounded, static silhouette lets the browser pulse its HTML layer without fading or repainting the map SVG. */
-function highlightGlow(id: string, shapes: readonly Point[][], line: boolean) {
+function highlightGlow(id: string, shapes: readonly Point[][]) {
   const surface = document.createElement('div')
   surface.className = 'highlight-glow'
   surface.setAttribute('aria-hidden', 'true')
@@ -93,12 +93,8 @@ function highlightGlow(id: string, shapes: readonly Point[][], line: boolean) {
   drawing.innerHTML = svgMarkup('defs', {}, '',
     svgMarkup('filter', { id: filter, filterUnits: 'userSpaceOnUse', ...bounds }, '',
       svgMarkup('feGaussianBlur', { stdDeviation: blur })))
-    + svgMarkup('g', {
-      fill: line ? 'none' : 'var(--highlight)',
-      stroke: line ? 'var(--highlight)' : 'none',
-      'stroke-width': blur,
-      filter: `url(#${filter})`,
-    }, '', shapes.map(points => svgMarkup(line ? 'polyline' : 'polygon', { points: pointsAttribute(points) })).join(''))
+    + svgMarkup('g', { fill: 'var(--highlight)', filter: `url(#${filter})` }, '',
+      shapes.map(points => svgMarkup('polygon', { points: pointsAttribute(points) })).join(''))
   // A fresh wrapper starts the halo in the same frame as the newly focused border.
   const pulse = document.createElement('div')
   pulse.className = 'highlight-glow-pulse'
@@ -114,17 +110,15 @@ function highlightGlow(id: string, shapes: readonly Point[][], line: boolean) {
   }
 }
 
-/** The glow follows the same projected geometry as the highlighted body or route. */
+/** The glow follows the same projected geometry as the highlighted architecture body. */
 function glowGeometry(scene: LayeredScene, id: string) {
   const source = scene.buildings.find(item => item.building.representationId === id)
     ?? scene.slabs.find(item => item.slab.representationId === id)
     ?? scene.islands.find(item => item.island.element?.representationId === id)
-    ?? scene.routes.find(item => item.route.id === id)
   if (source === undefined) return undefined
-  if ('floors' in source) return { source, shapes: source.floors.flat().map(face => face.points), line: false }
-  if ('faces' in source) return { source, shapes: source.faces.map(face => face.points), line: false }
-  if ('polygon' in source) return { source, shapes: [source.polygon], line: false }
-  return { source, shapes: [source.points, ...source.lifts.map(lift => [lift.from, lift.to])], line: true }
+  if ('floors' in source) return { source, shapes: source.floors.flat().map(face => face.points) }
+  if ('faces' in source) return { source, shapes: source.faces.map(face => face.points) }
+  return { source, shapes: [source.polygon] }
 }
 
 /** One fixed grid and one shared camera across ground, routes and foreground paint surfaces. */
@@ -184,7 +178,7 @@ export function createMap(host: HTMLElement): IsoMap {
     const previous = glows.get(id)
     if (previous?.geometry === geometry.source) return
     previous?.surface.remove()
-    const glow = highlightGlow(id, geometry.shapes, geometry.line)
+    const glow = highlightGlow(id, geometry.shapes)
     camera.insertBefore(glow.surface, routeSurface.surface)
     if (committed !== undefined) glow.move(committed)
     glows.set(id, { ...glow, geometry: geometry.source })
@@ -194,7 +188,7 @@ export function createMap(host: HTMLElement): IsoMap {
   const updateGlows = (): void => {
     if (painted === undefined) return
     const visible = new Set<string>()
-    for (const node of root.querySelectorAll<SVGGElement>('.component-focus, .focused')) {
+    for (const node of root.querySelectorAll<SVGGElement>('.component-focus, :is(.building, .slab, .island).focused')) {
       const id = node.dataset.id!
       const geometry = glowGeometry(painted, id)
       if (geometry === undefined) continue
