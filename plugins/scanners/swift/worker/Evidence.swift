@@ -10,6 +10,7 @@ final class Evidence {
     let converter: SourceLocationConverter
     private let offsets: [Int]
     private var symbols: [Symbol] = []
+    private var entryPoint: String?
     private var operations: [Operation] = []
     private var invocations: [Invocation] = []
 
@@ -81,6 +82,9 @@ final class Evidence {
         let name = node.as(ExtensionDeclSyntax.self)?.extendedType.trimmedDescription
             ?? typeName(node).map { named($0.text, context: context) }
         if let name, !node.is(ExtensionDeclSyntax.self) { symbol(node, name: name, kind: declaration.introducer.text) }
+        if context.type == nil && declaration.attributes.contains(where: {
+            $0.as(AttributeSyntax.self)?.attributeName.trimmedDescription == "main"
+        }) { entryPoint = name }
         walk(Syntax(declaration.memberBlock), context: Context(type: name, operation: "\(file)#module"))
     }
 
@@ -131,7 +135,7 @@ final class Evidence {
         let module = "\(file)#module"
         operations.append(Operation(id: module, file: file, name: "(module)", position: 0))
         walk(Syntax(tree), context: Context(operation: module))
-        return FileEvidence(file: file, symbols: symbols, operations: operations,
+        return FileEvidence(file: file, entryPoint: entryPoint, symbols: symbols, operations: operations,
                             invocations: invocations, declarations: Outline(tree: tree, converter: converter).declarations)
     }
 }

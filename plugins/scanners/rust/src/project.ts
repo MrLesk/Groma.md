@@ -26,7 +26,10 @@ interface Crate {
   deps: { crate: number; name: string }[]; cfg: string[]
   source: { include_dirs: string[]; exclude_dirs: string[] }
 }
-export interface RustInput { root: string; manifest: string; name: string; targets: string[]; crates: Crate[] }
+export interface RustInput {
+  root: string; manifest: string; name: string; targets: string[]; crates: Crate[]
+  executables: { file: string; declaration: string; name: string }[]
+}
 export interface RustOptions { worker?: string }
 
 export async function exists(file: string): Promise<boolean> {
@@ -132,12 +135,14 @@ async function sourceCrates(root: string, packages: Package[], model: Manifest) 
   const crates: Crate[] = []
   const libraries = new Map<string, number>()
   const owners: Package[] = []
+  const executables: RustInput['executables'] = []
   for (const pkg of packages) {
     for (const target of await targets(pkg.file, pkg.model)) {
       const declaredEdition = pkg.model.package?.edition
       const edition = typeof declaredEdition === 'object' && declaredEdition.workspace
         ? model.workspace?.package?.edition : declaredEdition
       if (target.library) libraries.set(pkg.file, crates.length)
+      else executables.push({ file: target.file, declaration: pkg.file, name: target.name })
       crates.push({ root_module: target.file, display_name: target.name,
         edition: typeof edition === 'string' ? edition : '2015', deps: [], cfg: features(pkg.model),
         // A #[path] module may be shared across crates. One source root keeps it visible in each context.
@@ -145,7 +150,7 @@ async function sourceCrates(root: string, packages: Package[], model: Manifest) 
       owners.push(pkg)
     }
   }
-  return { crates, libraries, owners }
+  return { crates, libraries, owners, executables }
 }
 
 function dependencies(pkg: Package, manifest: string, model: Manifest, libraries: Map<string, number>): Crate['deps'] {
@@ -164,7 +169,7 @@ export async function readRustProject(root: string, settings: ScannerSettings): 
   const model = await read(manifest)
   const files = await members(manifest, model)
   const packages = await Promise.all(files.map(async file => ({ file, model: await read(file) })))
-  const { crates, libraries, owners } = await sourceCrates(root, packages, model)
+  const { crates, libraries, owners, executables } = await sourceCrates(root, packages, model)
   for (const [index, crate] of crates.entries()) {
     const pkg = owners[index]!
     crate.deps = dependencies(pkg, manifest, model, libraries)
@@ -172,7 +177,7 @@ export async function readRustProject(root: string, settings: ScannerSettings): 
     if (library !== undefined && library !== index) crate.deps.push({ crate: library, name: crates[library]!.display_name })
   }
   if (!crates.length) throw new Error('RUST_TARGET_MISSING: The selected Cargo project needs a library or binary target.')
-  return { root, manifest, name: model.package?.name ?? path.basename(path.dirname(manifest)), targets: crates.map(crate => crate.root_module).sort(), crates }
+  return { root, manifest, name: model.package?.name ?? path.basename(path.dirname(manifest)), targets: crates.map(crate => crate.root_module).sort(), crates, executables }
 }
 
 /** Target-directory sources plus literal path modules shared outside those directories. */

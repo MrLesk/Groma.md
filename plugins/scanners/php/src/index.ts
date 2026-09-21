@@ -6,6 +6,7 @@ import { phpEvidence } from './evidence.ts'
 import { moduleOperation, phpHttpFacts, resolveEndpoints } from './http.ts'
 import { readCodeStructure } from './outline.ts'
 import { parsePhp } from './syntax.ts'
+import { phpEntries } from './entries.ts'
 
 async function inventory(root: string) {
   return projectFiles(root, file => file.endsWith('.php'))
@@ -15,7 +16,7 @@ export default {
   id: 'php',
   readCodeStructure,
   listSourceFiles: inventory,
-  watch: { include: ['**/*.php'], exclude: [] },
+  watch: { include: ['**/*.php', '**/composer.json'], exclude: [] },
   async checkReadiness(root) {
     if (!(await inventory(root)).length) throw new Error('php: No PHP source files were found in the Git repository.')
   },
@@ -28,7 +29,8 @@ export default {
       evidence.push({ file, ...phpEvidence(file, tree), ...phpHttpFacts(file, tree) })
     }
     const declared = evidence.flatMap(file => file.operations)
-    const httpEndpoints = resolveEndpoints(evidence, declared, await projectFiles(root, file => path.basename(file) === 'composer.json'))
+    const manifests = await projectFiles(root, file => path.basename(file) === 'composer.json')
+    const httpEndpoints = resolveEndpoints(evidence, declared, manifests)
     const httpRequests = evidence.flatMap(file => file.requests)
     // A file's top-level code is an operation only when an HTTP fact names it.
     const named = new Set([...httpEndpoints, ...httpRequests].map(fact => fact.operation))
@@ -37,6 +39,7 @@ export default {
       scanner: { id: 'php', technology: 'php', engine: 'php-parser', engineVersion: '3.7.0' },
       roots: [{ id: 'php-source', kind: 'source-group', name: path.basename(root) }],
       files: evidence.map(({ file, symbols }) => ({ file, roots: ['php-source'], symbols })),
+      entryPoints: await phpEntries(root, evidence, manifests),
       operations,
       invocations: evidence.flatMap(file => file.invocations),
       httpEndpoints,

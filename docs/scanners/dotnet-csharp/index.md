@@ -43,6 +43,13 @@ local project references supply context. The scanner's runtime supplies base
 build settings, restore packages, or execute source generators. Standard .NET,
 Web and Worker SDK headers are accepted; this is not general framework analysis.
 
+For executable projects, Roslyn's resolved entry point supplies an execution fact
+with its source file, project declaration, assembly name and the project's own
+compiled source files. Referenced projects remain separate source units. Explicit
+`OutputType` takes precedence; the supported Web and Worker SDKs default to `Exe`.
+Core applies the [shared container-placement rule](../evidence.md#execution-entries-and-container-placement).
+Solutions and library projects alone do not imply containers.
+
 Generated `bin` and `obj` files are excluded. A physical source file cannot
 belong to several selected project contexts. Project references must stay
 inside the repository. Mixed-language graphs and legacy projects are unsupported.

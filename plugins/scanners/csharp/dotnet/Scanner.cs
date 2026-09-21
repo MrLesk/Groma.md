@@ -19,6 +19,7 @@ public sealed class RoslynScanner
             project => $"project:{SourcePath.Relative(request.RepositoryRoot, project.FilePath!)}");
         List<ScanFile> files = [];
         List<ScanSourceUnit> sourceUnits = [];
+        List<ScanEntryPoint> entryPoints = [];
         List<ScanDiagnostic> diagnostics = [];
         OperationEvidence evidence = new(request.RepositoryRoot);
         HttpEvidence http = new(request.RepositoryRoot,
@@ -31,6 +32,12 @@ public sealed class RoslynScanner
                 ?? throw new InvalidDataException($"Roslyn could not compile '{project.Name}'.");
             CheckCompilation(compilation, project, request.RepositoryRoot, diagnostics, cancellationToken);
             sourceUnits.AddRange(PartialSourceUnits.Extract(compilation, request.RepositoryRoot, cancellationToken));
+            string? entryFile = compilation.GetEntryPoint(cancellationToken)?.Locations.FirstOrDefault(location => location.IsInSource)?.SourceTree?.FilePath;
+            if (SourcePath.IsPhysicalSource(request.RepositoryRoot, entryFile))
+                entryPoints.Add(new ScanEntryPoint(SourcePath.Relative(request.RepositoryRoot, entryFile!),
+                    SourcePath.Relative(request.RepositoryRoot, project.FilePath!), project.Name,
+                    project.Documents.Where(document => SourcePath.IsPhysicalSource(request.RepositoryRoot, document.FilePath))
+                        .Select(document => SourcePath.Relative(request.RepositoryRoot, document.FilePath!)).Order(StringComparer.Ordinal).ToArray()));
             foreach (Document document in project.Documents.OrderBy(document => document.FilePath, StringComparer.Ordinal))
             {
                 if (!SourcePath.IsPhysicalSource(request.RepositoryRoot, document.FilePath)) continue;
@@ -60,7 +67,7 @@ public sealed class RoslynScanner
         var (served, sent) = http.Facts(operations.Select(operation => operation.Id).ToHashSet(StringComparer.Ordinal));
         return ScanObservation.Create(
             new ScannerIdentity("csharp", "c#/.NET", "roslyn", typeof(CSharpCompilation).Assembly.GetName().Version!.ToString()),
-            roots, files, diagnostics, operations, evidence.Invocations, sourceUnits, served, sent);
+            roots, files, diagnostics, operations, evidence.Invocations, sourceUnits, served, sent, entryPoints);
     }
 
     private static void CheckCompilation(Compilation compilation, Project project, string root, List<ScanDiagnostic> diagnostics, CancellationToken token)

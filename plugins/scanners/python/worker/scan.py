@@ -290,10 +290,11 @@ def scan(files):
                    "httpEndpoints": [], "httpRequests": [],
                    "diagnostics": [{"severity": "info", "code": "PYTHON_SYNTAX_ONLY",
                                     "message": "Python syntax evidence only: call targets are unresolved, and imports are read only for HTTP facts."}]}
-    modules = {}
+    modules, trees = {}, {}
     for file, owner in memberships.items():
         source = read_source(file)
         tree = ast.parse(source, filename=file)
+        trees[file] = tree
         # Validate scope rules too, but never execute the resulting code object.
         compile(tree, file, "exec")
         evidence = Evidence(file, source)
@@ -303,6 +304,7 @@ def scan(files):
         observation["invocations"].extend(evidence.invocations)
         modules[file] = read_module(file, tree, evidence.identities, local_references(tree))
     sources = Sources(modules)
+    observation["entryPoints"] = execution_entries(files, trees, sources, memberships)
     observation["httpEndpoints"] = served_endpoints(sources)
     # A route entry the scanner cannot report is registered by its module's own code.
     registering = {fact["operation"] for fact in observation["httpEndpoints"]}

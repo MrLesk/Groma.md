@@ -97,7 +97,7 @@ public final class Main {
                 "schemaVersion", 1,
                 "scanner", Json.object("id", "java", "technology", "java", "engine", "javac-tree", "engineVersion", Runtime.version().toString()),
                 "roots", List.of(Json.object("id", "java:source-set", "kind", "java-project", "name", root.getFileName().toString())),
-                "files", index.files(), "operations", index.operations,
+                "files", index.files(), "entryPoints", index.entryPoints(), "operations", index.operations,
                 "invocations", uses.invocations, "httpEndpoints", http.endpoints,
                 "httpRequests", http.requests, "diagnostics", messages);
         }

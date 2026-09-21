@@ -15,6 +15,9 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import javax.lang.model.element.Element;
+import javax.lang.model.element.ExecutableElement;
+import javax.lang.model.element.Modifier;
+import javax.lang.model.type.TypeKind;
 
 /** Source-owned declarations only; javac-inserted constructors and accessors are excluded. */
 final class Declarations extends TreePathScanner<Void, Void> {
@@ -24,6 +27,7 @@ final class Declarations extends TreePathScanner<Void, Void> {
     final Map<Tree, String> operationAt = new IdentityHashMap<>();
     final Map<Element, String> operationFor = new HashMap<>();
     final List<Object> operations = new ArrayList<>();
+    private final Map<String, String> entries = new LinkedHashMap<>();
     private final Map<String, List<Object>> symbols = new LinkedHashMap<>();
     private final Set<String> declared = new HashSet<>();
 
@@ -60,6 +64,9 @@ final class Declarations extends TreePathScanner<Void, Void> {
             // A method of an anonymous class, including an enum constant body, is an anonymous callback.
             operation(tree, element.getEnclosingElement() + "#" + element, anonymous() ? null : Tokens.of(getCurrentPath(), trees, authored));
             operationFor.put(element, operationAt.get(tree));
+            if (element instanceof ExecutableElement method && entryPoint(method)) {
+                entries.put(file(getCurrentPath().getCompilationUnit()), method.getEnclosingElement().getSimpleName().toString());
+            }
         }
         return super.visitMethod(tree, unused);
     }
@@ -125,6 +132,21 @@ final class Declarations extends TreePathScanner<Void, Void> {
 
     String file(CompilationUnitTree unit) {
         return Main.file(root, unit.getSourceFile());
+    }
+
+    private static boolean entryPoint(ExecutableElement method) {
+        return method.getSimpleName().contentEquals("main")
+            && method.getModifiers().containsAll(Set.of(Modifier.PUBLIC, Modifier.STATIC))
+            && method.getReturnType().getKind() == TypeKind.VOID
+            && method.getParameters().size() == 1
+            && method.getParameters().getFirst().asType().toString().equals("java.lang.String[]");
+    }
+
+    /** A compiler source set, excluding separately scanned dependency projects. */
+    List<Object> entryPoints() {
+        return entries.entrySet().stream().map(entry -> (Object) Json.object(
+            "file", entry.getKey(), "declaration", entry.getKey(), "name", entry.getValue(),
+            "files", List.copyOf(symbols.keySet()))).toList();
     }
 
     List<Object> files() {

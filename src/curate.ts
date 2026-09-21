@@ -1,6 +1,7 @@
 import { parseFrontmatter, parseMarkdown } from 'comark'
 
 import { architectureElementPath } from './architecture-path.ts'
+import { loadArchitecture } from './architecture-reader.ts'
 import { buildArchitectureModel, expectedParentKinds } from './architecture-model.ts'
 import { relocated, requireElement } from './curate-rewrites.ts'
 import type { CurationContext, DocumentWrite, Rewrite } from './curate-rewrites.ts'
@@ -373,8 +374,7 @@ export async function curateElement(
     ...await movedDescendants(context, target, renamed.destination, renamed.id),
   ]
   // Only a rename repoints links; requireLoadableResult refuses a move or combine that would break one.
-  const links = input.newId === undefined ? [] : await linkWrites(context, rewrites)
-  const writes: DocumentWrite[] = [...rewrites, ...links]
+  const writes: DocumentWrite[] = input.newId === undefined ? rewrites : await linkWrites(context, rewrites)
   validateDestinations(filesystem, writes)
   const removals = combined.removals.map(element => element.sourceFilename)
   await requireLoadableResult(context, target, writes, removals)
@@ -388,4 +388,29 @@ export async function curateElement(
       ...combined.removals.map(element => ({ oldId: element.id, newId: target.id })),
     ],
   }
+}
+
+/** A scan may complete missing placement, never replace an established container assignment. */
+export async function completeContainerPlacement(
+  repositoryRoot: string,
+  parents: ReadonlyMap<string, string>,
+): Promise<void> {
+  if (parents.size === 0) return
+  const records = await loadArchitecture(repositoryRoot)
+  const model = buildArchitectureModel(records.documents)
+  const byId = new Map(model.elements.map(element => [element.id, element]))
+  const filesystem = GromaFileSystem.open(repositoryRoot)
+  const context = { repositoryRoot, records, model, byId, filesystem }
+  const rewrites: Rewrite[] = []
+  for (const [id, parentId] of parents) {
+    const element = requireElement(byId, id), parent = requireElement(byId, parentId)
+    if (element.kind !== 'component' || parent.kind !== 'container' || element.parentId !== parent.parentId) {
+      throw new Error(`cannot complete container placement for "${id}"`)
+    }
+    rewrites.push(...await relocated(context, element, parent.sourceFilename, parent.id))
+  }
+  const writes = await linkWrites(context, rewrites)
+  validateDestinations(filesystem, writes)
+  await requireLoadableResult(context, requireElement(byId, parents.keys().next().value!), writes, [])
+  await applyRewrites(repositoryRoot, writes, [])
 }

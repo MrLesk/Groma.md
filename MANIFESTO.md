@@ -69,9 +69,11 @@ Preserve explanations of responsibilities and collaborations that a reader
 can understand; do not reduce architecture to machine-oriented structure.
 
 The first overview of an element may come from an accepted plan. A first scan
-may leave that overview empty. Once the document exists, core may update only
-its nested `groma.code` evidence from later scan results; it never rewrites
-the Markdown body.
+may leave that overview empty. Later scans refresh nested `groma.code` evidence.
+Positive execution evidence may also complete a component's unidentified container
+placement. Existing container assignments, source ownership, IDs and authored
+meaning remain authoritative. Moving a record rebases its Markdown links; scans
+do not replace its prose.
 
 ## Code is evidence, not architecture
 

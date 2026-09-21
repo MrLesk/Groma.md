@@ -1,5 +1,8 @@
 import { existsSync, readFileSync } from 'node:fs'
 import path from 'node:path'
+import { withJavaScriptEntries } from '../../entry-points/javascript.ts'
+import { entrySourceInputs } from '../../entry-points/source.ts'
+import { classicChecker } from '../../http-checker.ts'
 import { createScanObservation, type ScanDiagnostic, type ScanInvocation, type ScanOperation } from '@groma/scanner'
 import ts from 'typescript'
 import { frameworkProjects, hasDependency } from '../../projects.ts'
@@ -195,9 +198,10 @@ async function scanReactProject(projectRoot: string, root: string) {
   const httpEndpoints = nextRouteEndpoints(routes, projectRoot, routers, handler => evidence.operationId(handler))
   const files = [...new Set([...sources, ...routes].map(source => relative(root, source.fileName)))]
     .map(file => ({ file, symbols: [] }))
-  return createScanObservation({ scanner: { id: 'react', technology: 'typescript/react', engine: 'typescript-sdk', engineVersion: ts.version },
+  return withJavaScriptEntries(root, createScanObservation({ scanner: { id: 'react', technology: 'typescript/react', engine: 'typescript-sdk', engineVersion: ts.version },
     roots: [{ id: 'react-project', kind: 'package', name: manifest.name, file: relative(root, path.join(projectRoot, 'package.json')) }],
     files: files.map(file => ({ ...file, roots: ['react-project'] })),
     operations: [...evidence.operations.values()], invocations: evidence.invocations, diagnostics: evidence.diagnostics,
-    ...(httpEndpoints.length ? { httpEndpoints } : {}), ...(httpRequests.length ? { httpRequests } : {}) })
+    ...(httpEndpoints.length ? { httpEndpoints } : {}), ...(httpRequests.length ? { httpRequests } : {}) }),
+    await entrySourceInputs(root, ts, classicChecker(ts, program.getTypeChecker()), owned))
 }

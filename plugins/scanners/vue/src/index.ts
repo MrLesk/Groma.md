@@ -8,6 +8,10 @@ import { vueHttpFacts } from './http.ts'
 import { addComparedOperations } from './operations.ts'
 import { readVueOutline } from './outline.ts'
 import { relative, vueProject } from './project.ts'
+import { withJavaScriptEntries } from '../../entry-points/javascript.ts'
+import { entrySourceInputs } from '../../entry-points/source.ts'
+import { classicChecker } from '../../http-checker.ts'
+import ts from 'typescript'
 
 export async function scanVue(root: string): Promise<ScanObservation | undefined> {
   const parts = []
@@ -44,19 +48,19 @@ async function scanVueProject(projectRoot: string, root: string): Promise<ScanOb
   for (const file of new Set(sourceUnits.flatMap(unit => unit.files))) {
     if (!files.some(source => source.file === file)) files.push({ file, symbols: [] })
   }
-  return createScanObservation({
+  return withJavaScriptEntries(root, createScanObservation({
     scanner: { id: 'vue', technology: 'typescript/vue', engine: '@vue/language-core', engineVersion: '3.3.11' },
     roots: [{ id: 'vue-project', kind: 'package', name: manifest.name, file: relative(root, path.join(projectRoot, 'package.json')) }],
     files: files.map(file => ({ ...file, roots: ['vue-project'] })),
     sourceUnits,
     operations: [...evidence.operations.values()], invocations: evidence.invocations, diagnostics: evidence.diagnostics,
     ...(httpEndpoints.length ? { httpEndpoints } : {}), ...(httpRequests.length ? { httpRequests } : {}),
-  })
+  }), await entrySourceInputs(root, ts, classicChecker(ts, project.checker), project.files))
 }
 
 export default {
   id: 'vue',
-  watch: { include: ['**/*.vue', '**/*.ts', '**/*.js', '**/*.html', '**/*.css', '**/*.scss', '**/*.sass', '**/*.less', '**/*.styl', '**/tsconfig*.json', '**/package.json'], exclude: [] },
+  watch: { include: ['**/*.vue', '**/*.ts', '**/*.js', '**/*.html', '**/*.css', '**/*.scss', '**/*.sass', '**/*.less', '**/*.styl', '**/tsconfig*.json', '**/package.json', '**/angular.json'], exclude: [] },
   readCodeStructure: readVueOutline,
   /** Each Vue project's sources, including its `.vue` files and a Nuxt project's server routes. */
   listSourceFiles: root => frameworkSourceFiles({ root, dependency: 'vue', projects: ['.vue'],

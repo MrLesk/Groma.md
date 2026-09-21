@@ -39,7 +39,7 @@ internal static class SourceProject
             if (request.Configuration == "Debug") constants = [.. constants, "DEBUG", "TRACE"];
             solution = solution.AddProject(ProjectInfo.Create(project.Id, VersionStamp.Create(), name, name, LanguageNames.CSharp,
                 filePath: file, parseOptions: new CSharpParseOptions(version, preprocessorSymbols: constants),
-                compilationOptions: new CSharpCompilationOptions(Property(project.Xml, "OutputType") is "Exe" or "WinExe"
+                compilationOptions: new CSharpCompilationOptions(OutputType(project.Xml) is "Exe" or "WinExe"
                     ? OutputKind.ConsoleApplication : OutputKind.DynamicallyLinkedLibrary), metadataReferences: references));
         }
         foreach (var (file, project) in projects)
@@ -60,6 +60,10 @@ internal static class SourceProject
 
     private static string? Property(XElement xml, string name) => xml.Descendants(name)
         .LastOrDefault(item => item.Attribute("Condition") is null && item.Parent?.Attribute("Condition") is null)?.Value.Trim();
+
+    // Web and Worker SDK props default to Exe; an explicit project property takes precedence.
+    private static string OutputType(XElement xml) => Property(xml, "OutputType")
+        ?? (((string?)xml.Attribute("Sdk"))?.Split('/')[0] is "Microsoft.NET.Sdk.Web" or "Microsoft.NET.Sdk.Worker" ? "Exe" : "Library");
 
     private static IEnumerable<string> Items(XElement xml, string name, string attribute) => xml.Descendants(name)
         .Where(item => item.Attribute("Condition") is null && item.Parent?.Attribute("Condition") is null)

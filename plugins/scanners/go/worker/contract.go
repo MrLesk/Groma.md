@@ -23,6 +23,12 @@ type sourceFile struct {
 	File    string   `json:"file"`
 	Symbols []symbol `json:"symbols"`
 }
+type entryPoint struct {
+	File        string   `json:"file"`
+	Declaration string   `json:"declaration"`
+	Name        string   `json:"name"`
+	Files       []string `json:"files"`
+}
 type operation struct {
 	ID       string `json:"id"`
 	File     string `json:"file"`
@@ -53,6 +59,7 @@ type observation struct {
 	Roots         []root         `json:"roots"`
 	Scanner       identity       `json:"scanner"`
 	Files         []sourceFile   `json:"files"`
+	EntryPoints   []entryPoint   `json:"entryPoints"`
 	Operations    []operation    `json:"operations"`
 	Invocations   []invocation   `json:"invocations"`
 	HTTPEndpoints []httpEndpoint `json:"httpEndpoints"`

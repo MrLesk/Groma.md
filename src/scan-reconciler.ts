@@ -15,6 +15,8 @@ import {
 } from './markdown-emitter.ts'
 import { isReservedId, kebabCase } from './naming.ts'
 import { componentNames, sourceStem } from './scan-component-naming.ts'
+import { entryPointPlacements } from './scan-entrypoints.ts'
+import { completeContainerPlacement } from './curate.ts'
 import { sourceUnitGroups } from './scan-source-units.ts'
 import { loadProjectProfile } from './project-profile.ts'
 import { c4Kind, requireGromaMapping } from './okf-profile.ts'
@@ -45,7 +47,7 @@ function codeFileKey(scanner: string, file: string): string {
   return `${scanner}\0${file}`
 }
 
-interface WorldRecord {
+export interface WorldRecord {
   id: string
   title: string
   kind: C4Kind
@@ -55,7 +57,7 @@ interface WorldRecord {
   code: CodeReference[]
 }
 
-interface World {
+export interface World {
   byId: Map<string, WorldRecord>
   byCodeFile: Map<string, WorldRecord>
 }
@@ -345,6 +347,7 @@ async function reconcileFiles(
   repositoryRoot: string,
   world: World,
   candidates: Map<string, FileCandidate>,
+  entryMemberFiles: ReadonlySet<string>,
   summary: ScanSummary,
 ): Promise<void> {
   const unowned: Array<FileCandidate & { parent: WorldRecord }> = []
@@ -354,7 +357,10 @@ async function reconcileFiles(
     const draft = named?.status === 'draft' && named.code.length === 0 ? named : undefined
     const owner = candidate.owner ?? world.byCodeFile.get(candidate.file) ?? draft
     if (owner === undefined) {
-      unowned.push({ ...candidate, parent: requirePlacement(candidate.file, parent) })
+      // New execution members need entry inference, not a helper's inherited container.
+      const initialParent = candidate.references.some(reference => entryMemberFiles.has(reference.file))
+        ? systemFor(world, parent) : parent
+      unowned.push({ ...candidate, parent: requirePlacement(candidate.file, initialParent) })
       continue
     }
     if (owner === draft) summary.matched += 1
@@ -413,6 +419,18 @@ function observationPlacements(world: World, observation: ScanObservation): Map<
   return placements
 }
 
+async function placeEntries(repositoryRoot: string, world: World, observations: ScanObservation[], summary: ScanSummary): Promise<void> {
+  const parents = new Map<string, string>()
+  for (const placement of entryPointPlacements(world, observations)) {
+    const container = placement.container ?? await createRecord(repositoryRoot, world, {
+      kind: 'container', name: placement.name, parent: placement.system,
+    })
+    if (!placement.container) summary.created += 1
+    for (const component of placement.components) parents.set(component.id, container.id)
+  }
+  await completeContainerPlacement(repositoryRoot, parents)
+}
+
 export async function reconcileScanObservations(
   repositoryRoot: string,
   observations: ScanObservation[],
@@ -442,7 +460,9 @@ export async function reconcileScanObservations(
     collectFiles(candidates, observation, placements)
   }
   const unitConflicts = associateCandidates(candidates, observations, world)
-  await reconcileFiles(repositoryRoot, world, candidates, summary)
+  const entryMemberFiles = new Set(observations.flatMap(observation => observation.entryPoints?.flatMap(entry => entry.files) ?? []))
+  await reconcileFiles(repositoryRoot, world, candidates, entryMemberFiles, summary)
+  await placeEntries(repositoryRoot, world, observations, summary)
   const owners = new Map([...world.byId.values()].flatMap(record => record.code.map(reference => [reference.file, record.id] as const)))
   const conflicts = [...unitConflicts, ...await refreshDerivedRelationships(repositoryRoot, observations, owners, retained)]
   if (conflicts.length > 0) summary.evidenceConflicts = conflicts

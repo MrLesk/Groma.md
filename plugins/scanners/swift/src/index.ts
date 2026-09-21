@@ -8,6 +8,7 @@ import { projectFiles } from '../../projects.ts'
 
 interface FileEvidence {
   file: string
+  entryPoint?: string
   symbols: ScanSymbol[]
   operations: ScanOperation[]
   invocations: ScanInvocation[]
@@ -64,6 +65,9 @@ export default {
       scanner: { id: 'swift', technology: 'swift', engine: 'SwiftParser/SwiftSyntax', engineVersion: engine.version },
       roots: [{ id: 'swift-source', kind: 'source-group', name: path.basename(root) }],
       files: evidence.map(file => ({ file: file.file, symbols: file.symbols, roots: ['swift-source'] })),
+      entryPoints: evidence.flatMap(file => file.entryPoint === undefined ? [] : [
+        { file: file.file, declaration: file.file, name: file.entryPoint, files: [file.file] },
+      ]),
       operations: evidence.flatMap(file => file.operations),
       invocations: evidence.flatMap(file => file.invocations),
       diagnostics: [{ severity: 'info', code: 'SWIFT_SOURCE_SCOPE',

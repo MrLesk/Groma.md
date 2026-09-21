@@ -87,7 +87,7 @@ function excludeEvidence(
   excluded: (file: string) => boolean,
 ): ScanObservation | undefined {
   const files = observation.files.filter(file => !excluded(file.file))
-  if (files.length === observation.files.length) return observation
+  if (files.length === observation.files.length && !observation.entryPoints?.some(entry => excluded(entry.file) || excluded(entry.declaration))) return observation
   if (files.length === 0) return undefined
   const paths = new Set(files.map(file => file.file))
   const rootIds = new Set(files.flatMap(file => file.roots))
@@ -111,6 +111,11 @@ function excludeEvidence(
     ...(observation.sourceUnits === undefined ? {} : {
       sourceUnits: observation.sourceUnits.filter(unit => paths.has(unit.primary))
         .map(unit => ({ ...unit, files: unit.files.filter(file => paths.has(file)) })),
+    }),
+    ...(observation.entryPoints === undefined ? {} : {
+      entryPoints: observation.entryPoints.filter(entry => !excluded(entry.file) && !excluded(entry.declaration))
+        .map(entry => ({ ...entry, files: entry.files.filter(file => paths.has(file)) }))
+        .filter(entry => entry.files.length > 0),
     }),
     ...(operations === undefined ? {} : { operations, invocations }),
     // An excluded file is outside the architecture, so its endpoints stop competing for a request.

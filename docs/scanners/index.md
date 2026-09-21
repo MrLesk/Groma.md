@@ -9,7 +9,7 @@ source → complete scanner observations → core reconciliation → Markdown
 ```
 
 An observation contains atomic files and symbols, source roots with parent links,
-file membership, optional operation evidence, and diagnostics. It identifies the
+file membership, optional execution-entry and operation evidence, and diagnostics. It identifies the
 scanner separately from its technology and analysis engine. It contains no C4
 components or architecture IDs. TypeScript uses imports and directories to infer
 source groups. C# preserves solutions and Roslyn projects. Dependency graphs stay
@@ -31,7 +31,9 @@ Core keeps curated file membership authoritative. Files already assigned to one 
 
 The first scan with source files creates one system named from the project profile when no internal system is declared. This is Groma's starting model; curation defines the actual system boundaries. Later scans reuse declared systems and never create additional systems from source roots. If several systems exist and a new file has no identifiable system, the scan reports the file as an error.
 
-Source roots do not establish application boundaries. Core collects placement evidence across scanners before choosing a parent. Existing ownership or a matching declared boundary can identify a container. When the evidence names different containers within one system, or identifies only the system, the component belongs directly to that system and appears in an **Unidentified container** group. File counts and scanner order do not settle conflicting placement.
+Source roots do not establish application boundaries. Core collects placement evidence across scanners before choosing a parent. Existing ownership or a matching declared boundary can identify a container. [Execution-entry evidence](evidence.md#execution-entries-and-container-placement) can establish an application container automatically. Core merges facts about the same physical entry, places its own unambiguous components, and leaves shared or uncertain sources directly under their known system. These components appear in an **Unidentified container** group. File counts and scanner order do not settle conflicting placement.
+
+A rescan can complete a system-parented component's missing container placement. It preserves its ID, Code ownership, authored content, relationships and flows, rebasing Markdown links as its file moves. It never changes an existing container assignment or accepts a draft. No viewer-specific grouping or new stored metadata is needed.
 
 New component titles use the source filename without its final extension.
 Identifier casing such as `ProposalService` is preserved; filename separators

@@ -36,6 +36,9 @@ groma:
       file: plugins/scanners/php/src/receivers.ts
     - scanner: typescript
       file: plugins/scanners/php/src/http-routes.ts
+    - scanner: typescript
+      file: plugins/scanners/php/src/entries.ts
+      symbol: phpEntries
   group: Language analysis
 description: Analyses PHP declarations, calls and HTTP evidence
 ---

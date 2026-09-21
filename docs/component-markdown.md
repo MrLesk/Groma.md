@@ -141,7 +141,10 @@ parent and owns no relationships. Scanners never derive groups. `groma edit
 --group` and `--ungroup` are the supported writers. `groma edit --combine`
 folds unique Code references from empty scan records into one component, and
 `groma edit --parent` moves an empty scanned component without changing its
-identity.
+identity. Scanning can also complete a component's unidentified placement: positive
+execution evidence can move it from its system into an application container.
+This preserves its ID, source ownership and authored meaning, and rebases incoming
+and outgoing Markdown links. An existing container assignment is never replaced.
 
 The architecture model owns IDs. Groma assigns an ID when it drafts a concept
 or when a scan finds a previously unknown source. A drafted concept keeps its

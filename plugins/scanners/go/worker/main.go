@@ -6,6 +6,7 @@ import (
 	"go/ast"
 	"go/token"
 	"os"
+	"path"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -43,7 +44,9 @@ func scan(directory string) (*observation, error) {
 		return nil, err
 	}
 	loaded, messages, err := loadSources(directory)
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	if len(loaded) == 0 {
 		return nil, fmt.Errorf("the root module has no active Go packages")
 	}
@@ -52,6 +55,7 @@ func scan(directory string) (*observation, error) {
 		Scanner:       identity{"go", "go", "go/parser + go/types", runtime.Version() + " / x/tools v0.49.0"},
 		Roots:         []root{}, Files: []sourceFile{},
 		Operations: []operation{}, Invocations: []invocation{},
+		EntryPoints:   []entryPoint{},
 		HTTPEndpoints: []httpEndpoint{}, HTTPRequests: []httpRequest{},
 		Diagnostics: []diagnostic{{Severity: "info", Code: "GO_ANALYSIS_SCOPE",
 			Message: "Root module active host build context; tests and nested modules are excluded. Dynamic dispatch and providers outside this module remain unresolved. No callback binding propagation."}},
@@ -66,12 +70,38 @@ func scan(directory string) (*observation, error) {
 		if err := analyzer.addPackage(directory, pkg); err != nil {
 			return nil, err
 		}
+		if entry := packageEntry(directory, pkg); entry != nil {
+			result.EntryPoints = append(result.EntryPoints, *entry)
+		}
 	}
 	module := loaded[0].Module
 	result.Roots = append(result.Roots, root{ID: "module:" + module.Path, Kind: "module", Name: module.Path, File: "go.mod"})
 	analyzer.calls()
 	analyzer.httpFacts()
 	return result, nil
+}
+
+// The Go language starts main in package main; imported packages are separate compilation units.
+func packageEntry(directory string, pkg *packages.Package) *entryPoint {
+	if pkg.Name != "main" {
+		return nil
+	}
+	entry := entryPoint{Name: path.Base(pkg.PkgPath), Declaration: "go.mod", Files: []string{}}
+	for _, syntax := range pkg.Syntax {
+		file, _ := filepath.Rel(directory, pkg.Fset.Position(syntax.Pos()).Filename)
+		file = filepath.ToSlash(file)
+		entry.Files = append(entry.Files, file)
+		for _, decl := range syntax.Decls {
+			function, ok := decl.(*ast.FuncDecl)
+			if ok && function.Recv == nil && function.Name.Name == "main" && function.Body != nil {
+				entry.File = file
+			}
+		}
+	}
+	if entry.File == "" {
+		return nil
+	}
+	return &entry
 }
 
 func (e *evidence) addPackage(directory string, pkg *packages.Package) error {

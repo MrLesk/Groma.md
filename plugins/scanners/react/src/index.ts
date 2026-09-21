@@ -9,11 +9,11 @@ export { scanReact } from './scan.ts'
 
 export default {
   id: 'react',
-  watch: { include: ['**/*.tsx', '**/*.ts', '**/tsconfig*.json', '**/package.json'], exclude: [] },
+  watch: { include: ['**/*.tsx', '**/*.ts', '**/tsconfig*.json', '**/package.json', '**/*.html', '**/angular.json'], exclude: [] },
   checkReadiness: checkReactReadiness,
-  /** The TSX components of each React project, and the files whose location may declare a Next.js route. */
+  /** Compiler inputs include the source launchers, TSX components and possible Next.js routes. */
   listSourceFiles: root => frameworkSourceFiles({ root, dependency: 'react', projects: ['.tsx'],
-    sources: ['.tsx'], also: routeCandidate }),
+    sources: ['.tsx', '.ts'], also: routeCandidate }),
   // Every reference the outline receives is a TypeScript or TSX source this scanner reads.
   readCodeStructure: (root, references) => readTypeScriptOutline(ts, root, references),
   scan: scanReact,

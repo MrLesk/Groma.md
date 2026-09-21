@@ -1,4 +1,4 @@
-# Scanner evidence for relationship inference
+# Scanner evidence
 
 This page defines the semantics of the first operation evidence contract and
 separates it from later proposed evidence. Implementations use the [scanner authoring guide](creating-a-plugin.md) and
@@ -6,7 +6,7 @@ separates it from later proposed evidence. Implementations use the [scanner auth
 their need.
 
 The accepted direction is that scanners produce temporary source facts and
-core derives architecture relationships. The selection policy belongs in
+core derives architecture boundaries and relationships. Relationship selection belongs in
 [Deriving architecture relationships](../relationship-inference.md), shared
 by every language plugin.
 
@@ -36,6 +36,65 @@ Extraction can be sophisticated while remaining architecture-unaware. A
 language-level method target is not automatically the concrete runtime
 implementation. An interface declaration alone does not identify the object
 supplied to a parameter.
+
+## Execution entries and container placement
+
+`entryPoints` is optional, temporary source evidence. Each fact contains:
+
+| Field | Meaning |
+| --- | --- |
+| `file` | Exact repository-relative physical source entry. It identifies the same entry across scanners and declarations. |
+| `declaration` | Source or configuration file that declares execution. Excluding it removes the fact. |
+| `name` | Name from the source declaration, target or command; a starting title, never an architecture ID. |
+| `files` | Analyzed files in this entry's own compilation or local module unit, excluding separately declared dependency units. |
+
+A framework observer may report only some members. Every fact must include its
+physical entry in both its member list and that observer's file inventory. Every
+other member must also be in the inventory. Core merges
+facts with the same `file`; another declaration or scanner does not create another
+application. Missing facts mean unsupported or unknown, not proof of absence.
+Source units here describe compilation or module input, not runtime ownership.
+
+Core owns the application profile rule: a positive execution entry can establish a
+C4 container within one known system. It reuses the entry's existing container or
+creates one when there are unassigned components to place. It never creates an
+empty container. Each entry identifies its own source; other sources reported by
+multiple entries remain ambiguous. A whole component moves only when all its Code
+files identify the same entry. Core does not split curated components or replace
+existing container assignments. Shared libraries and unresolved placement stay
+under their known system. Roots, directory names, imports and dependency closure
+alone cannot establish a container.
+
+The same rule runs after file reconciliation on first scans and rescans. A
+component directly under a system can gain its container while keeping its ID,
+source ownership and authored meaning. The existing curation writer moves its
+Markdown and rebases links. Existing container identities survive title or ID
+curation through their source owners. Scanning never accepts a draft.
+
+The official producers currently recognize these source forms:
+
+| Producer | Execution evidence | Source membership |
+| --- | --- | --- |
+| C# | Roslyn entry in an executable project, including supported Web/Worker defaults | That project's compiled sources; no referenced projects |
+| Go | `main` in package `main` | That package's compiled sources; no imported packages |
+| Rust | Cargo binary targets | That binary crate's modules; no library or dependency crates |
+| Java | `public static void main(String[])`, including varargs | That project's compiler source set |
+| Python | Module execution guard, `__main__.py`, or `project.scripts` | Resolved local imports within the declared project |
+| JavaScript, TypeScript, React, Vue, Angular | Source-backed package commands/bins, HTML script entries, Angular build entry declarations, and readable Bun browser/compiled build entries | Resolved local modules within the declared package; framework companion files join their source unit |
+| PHP | Source-backed Composer bins and literal PHP script commands | Explicitly included local sources within that Composer package |
+| Swift | Source `@main` declaration | Its source file; project target membership is not analyzed |
+
+These are declared extraction limits, not separate C4 policies. Dynamic build
+configuration, unresolved launch commands and unobserved members remain unknown.
+All twelve official scanners emit the same evidence contract, with no C4 kinds,
+container IDs, architecture parents or ownership choices.
+
+In OKF, the result remains ordinary typed Markdown concepts and links; the facts
+are not stored as new knowledge concepts or metadata. An ordinary reader can read
+the existing container and component documents and follow their links. In C4,
+the result uses the existing container level. Groma interprets the temporary facts
+and its application profile decides placement; neither OKF nor C4 mandates this
+automatic inference rule.
 
 ## Vocabulary and introduction order
 

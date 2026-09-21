@@ -23,6 +23,9 @@ groma:
     - scanner: typescript
       file: plugins/scanners/javascript/src/http-requests.ts
       symbol: httpRequest
+    - scanner: typescript
+      file: plugins/scanners/javascript/src/entries.ts
+      symbol: javaScriptEntries
   group: Language analysis
 description: Analyses JavaScript source with the TypeScript compiler
 ---

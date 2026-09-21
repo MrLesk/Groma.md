@@ -8,7 +8,7 @@ export { scanAngular } from './scan.ts'
 
 export default {
   id: 'angular',
-  watch: { include: ['**/*.ts', '**/*.html', '**/*.css', '**/*.scss', '**/*.sass', '**/*.less', '**/*.styl', '**/tsconfig*.json', '**/package.json'], exclude: [] },
+  watch: { include: ['**/*.ts', '**/*.html', '**/*.css', '**/*.scss', '**/*.sass', '**/*.less', '**/*.styl', '**/tsconfig*.json', '**/package.json', '**/angular.json'], exclude: [] },
   checkReadiness: checkAngularReadiness,
   /** Each Angular project's TypeScript sources, plus the templates and stylesheets it can declare. */
   listSourceFiles: root => frameworkSourceFiles({ root, dependency: '@angular/core', projects: ['.ts'],

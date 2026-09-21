@@ -45,6 +45,7 @@ struct Declaration: Encodable {
 
 struct FileEvidence: Encodable {
     let file: String
+    var entryPoint: String?
     let symbols: [Symbol]
     let operations: [Operation]
     let invocations: [Invocation]

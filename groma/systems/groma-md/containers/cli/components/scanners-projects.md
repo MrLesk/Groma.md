@@ -15,8 +15,13 @@ groma:
       file: plugins/scanners/observations.ts
     - scanner: typescript
       file: plugins/scanners/typescript-project.ts
+    - scanner: typescript
+      file: plugins/scanners/entry-points/javascript.ts
+      symbol: withJavaScriptEntries
+    - scanner: typescript
+      file: plugins/scanners/entry-points/source.ts
   group: Scanner support
 description: Finds language project roots and reports paths from the repository root
 ---
 
-Finds supported project inputs. Combines project results with paths that start at the repository root.
+Finds supported source projects and composes observations with repository-relative paths. Reads declared JavaScript-family execution entries and their local source inputs through the scanners’ existing compilers. These shared helpers report evidence; core owns application placement.

@@ -364,6 +364,9 @@ same JSON, which their module reads with `parseScanObservation`.
   `parent` links to another root in the same observation.
 - `files`: one entry per physical source path, with nonempty `roots` membership
   and declarations in `symbols`. A file may belong to more than one root.
+- `entryPoints`: optional [execution-entry facts](evidence.md#execution-entries-and-container-placement):
+  physical entry `file`, its source/configuration `declaration`, declared `name`,
+  and analyzed `files` in that entry's own source unit. They carry no C4 decision.
 - `operations` and `invocations`: optional executable work and call evidence.
   Operations may include source ranges and binding-normalized body tokens.
 - `httpEndpoints` and `httpRequests`: optional HTTP facts linked to operations.

@@ -1,10 +1,10 @@
 import path from 'node:path'
+import { parseFrontmatter } from 'comark'
 
 import { relationshipTargetFilename } from './architecture-markdown.ts'
 import { freeId } from './architecture-model.ts'
 import { architectureElementPath } from './architecture-path.ts'
 import { readDocument, withGromaField } from './markdown-emitter.ts'
-import { RELATIONSHIPS_TYPE } from './okf-profile.ts'
 import { requireElement } from './curate-rewrites.ts'
 import type { CurationContext, DocumentWrite } from './curate-rewrites.ts'
 import type { ArchitectureElement } from './types.ts'
@@ -17,6 +17,20 @@ import type { ArchitectureElement } from './types.ts'
  */
 const inlineLink = /\]\(\s*<?([^()\s<>]+)>?((?:\s+(?:"[^"]*"|'[^']*'|\([^()]*\)))?)\s*\)/g
 const linkDefinition = /^( {0,3}\[(?:\\.|[^\\\]])+\]:[ \t]*(?:\r?\n[ \t]*)?)<?([^\s<>]+)>?/gm
+const codeLiteral = /^ {0,3}(`{3,}|~{3,})[^\n]*\n[\s\S]*?^ {0,3}\1[ \t]*(?:\n|$)|(?<!`)(`+)(?!`)[\s\S]*?(?<!`)\2(?!`)/gm
+
+/** Link-shaped text in metadata or code examples is authored content, not a link destination. */
+function rewriteProse(source: string, rewrite: (prose: string) => string): string {
+  const { content } = parseFrontmatter(source)
+  const parts = [source.slice(0, source.length - content.length)]
+  let start = 0
+  for (const literal of content.matchAll(codeLiteral)) {
+    parts.push(rewrite(content.slice(start, literal.index)), literal[0])
+    start = literal.index + literal[0].length
+  }
+  parts.push(rewrite(content.slice(start)))
+  return parts.join('')
+}
 
 export interface RenamedTarget {
   id: string
@@ -32,14 +46,20 @@ function withMovedLinks(
   source: string,
   sourceFilename: string,
   moves: ReadonlyMap<string, string>,
+  destinationFilename = sourceFilename,
 ): string {
-  const from = path.posix.dirname(sourceFilename)
+  const from = path.posix.dirname(destinationFilename)
   const moved = (href: string): string | undefined => {
     const resolved = relationshipTargetFilename(sourceFilename, href)
-    const destination = resolved === null ? undefined : moves.get(resolved)
-    return destination === undefined ? undefined : path.posix.relative(from, destination)
+    if (resolved === null) return undefined
+    const destination = moves.get(resolved) ?? (sourceFilename !== destinationFilename ? resolved : undefined)
+    const fragment = href.includes('#') ? href.slice(href.indexOf('#')) : ''
+    if (destination === undefined) return undefined
+    const relative = path.posix.relative(from, destination).split('/').map(encodeURIComponent).join('/')
+      .replaceAll('(', '%28').replaceAll(')', '%29')
+    return `${relative}${fragment}`
   }
-  return source
+  return rewriteProse(source, prose => prose
     .replace(inlineLink, (match, href: string, title: string) => {
       const next = moved(href)
       return next === undefined ? match : `](${next}${title})`
@@ -47,10 +67,10 @@ function withMovedLinks(
     .replace(linkDefinition, (match, label: string, href: string) => {
       const next = moved(href)
       return next === undefined ? match : `${label}${next}`
-    })
+    }))
 }
 
-/** The relationship record and the flows name element documents by link, so their links follow a rename. */
+/** Rebase outgoing links and repoint incoming links, preserving the same Markdown destinations. */
 export async function linkWrites(
   context: CurationContext,
   rewrites: readonly DocumentWrite[],
@@ -58,16 +78,18 @@ export async function linkWrites(
   const moves = new Map(rewrites
     .filter(rewrite => rewrite.destinationFilename !== rewrite.sourceFilename)
     .map(rewrite => [rewrite.sourceFilename, rewrite.destinationFilename]))
-  const linked = [
-    ...context.records.documents.filter(document => document.frontmatter.type === RELATIONSHIPS_TYPE),
-    ...context.records.flows,
-  ]
-  const writes: DocumentWrite[] = []
-  for (const document of linked) {
-    const stored = await readDocument(context.repositoryRoot, document.sourceFilename)
-    const source = withMovedLinks(stored, document.sourceFilename, moves)
+  const linked = [...context.records.documents, ...context.records.flows, ...context.records.drafts]
+    .map(document => document.sourceFilename)
+  linked.push(context.filesystem.sourceFilename('project.md'))
+  const written = new Set(rewrites.map(rewrite => rewrite.sourceFilename))
+  const writes: DocumentWrite[] = rewrites.map(rewrite => ({ ...rewrite,
+    source: withMovedLinks(rewrite.source, rewrite.sourceFilename, moves, rewrite.destinationFilename) }))
+  for (const sourceFilename of linked) {
+    if (written.has(sourceFilename)) continue
+    const stored = await readDocument(context.repositoryRoot, sourceFilename)
+    const source = withMovedLinks(stored, sourceFilename, moves)
     if (source === stored) continue
-    writes.push({ sourceFilename: document.sourceFilename, destinationFilename: document.sourceFilename, source })
+    writes.push({ sourceFilename, destinationFilename: sourceFilename, source })
   }
   return writes
 }

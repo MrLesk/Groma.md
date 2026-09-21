@@ -21,6 +21,7 @@ import {
   type ImportGraphNode,
 } from './graph.ts'
 import { displayName, kebabCase } from './naming.ts'
+import { withJavaScriptEntries } from '../../entry-points/javascript.ts'
 
 async function packageBins(repositoryRoot: string): Promise<string[]> {
   try {
@@ -126,7 +127,7 @@ export async function scanTypeScriptSource(
   const names = scopeNames(scopeFiles)
   const scopeId = (file: string) => `scope:${file}`
   const name = await packageName(repositoryRoot)
-  return createScanObservation({
+  return withJavaScriptEntries(repositoryRoot, createScanObservation({
     scanner: {
       id: 'typescript',
       technology: 'typescript',
@@ -145,5 +146,5 @@ export async function scanTypeScriptSource(
     httpEndpoints: graph.httpEndpoints,
     httpRequests: graph.httpRequests,
     diagnostics: [],
-  })
+  }), { imports: new Map(graph.files.map(node => [node.file, node.imports])), entries: graph.entries })
 }

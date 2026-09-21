@@ -1,5 +1,8 @@
 import { existsSync, readFileSync } from 'node:fs'
 import path from 'node:path'
+import { withJavaScriptEntries } from '../../entry-points/javascript.ts'
+import { entrySourceInputs } from '../../entry-points/source.ts'
+import { classicChecker } from '../../http-checker.ts'
 import { Call, ImplicitReceiver, PropertyRead, CssSelector, SelectorMatcher, TmplAstRecursiveVisitor, tmplAstVisitAll, parseTemplate, type TmplAstElement, type TmplAstBoundEvent } from '@angular/compiler'
 import { readConfiguration, VERSION } from '@angular/compiler-cli'
 import { createScanObservation, type ScanDiagnostic, type ScanInvocation, type ScanObservation, type ScanOperation } from '@groma/scanner'
@@ -179,12 +182,13 @@ async function scanAngularProject(projectRoot: string, root: string): Promise<Sc
   for (const file of new Set(sourceUnits.flatMap(unit => unit.files))) {
     if (!files.some(source => source.file === file)) files.push({ file, symbols: [] })
   }
-  return createScanObservation({ scanner: { id: 'angular', technology: 'typescript/angular', engine: '@angular/compiler-cli', engineVersion: VERSION.full },
+  return withJavaScriptEntries(root, createScanObservation({ scanner: { id: 'angular', technology: 'typescript/angular', engine: '@angular/compiler-cli', engineVersion: VERSION.full },
     roots: [{ id: 'angular-project', kind: 'package', name: manifest.name, file: relative(root, path.join(projectRoot, 'package.json')) }],
     files: files.map(file => ({ ...file, roots: ['angular-project'] })),
     sourceUnits,
     operations: [...evidence.operations.values()], invocations: evidence.invocations, diagnostics: evidence.diagnostics,
-    ...(httpRequests.length ? { httpRequests } : {}) })
+    ...(httpRequests.length ? { httpRequests } : {}) }),
+    await entrySourceInputs(root, ts, classicChecker(ts, checker), sources))
 }
 
 function componentResource(root: string, component: SourceComponent, resource: string): string | undefined {

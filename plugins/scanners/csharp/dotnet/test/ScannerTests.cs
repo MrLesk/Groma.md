@@ -4,6 +4,26 @@ namespace Groma.CSharpScanner.Tests;
 
 public sealed class ScannerTests
 {
+    [Theory]
+    [InlineData("Microsoft.NET.Sdk.Web", "")]
+    [InlineData("Microsoft.NET.Sdk.Worker", "")]
+    [InlineData("Microsoft.NET.Sdk", "<OutputType>Exe</OutputType>")]
+    public async Task CompilerEntryIncludesOwnSourcesButNotReferencedLibraries(string sdk, string output)
+    {
+        using ScannerFixture fixture = new();
+        fixture.Write("Service/Service.csproj", $"<Project Sdk=\"{sdk}\"><PropertyGroup><TargetFramework>net10.0</TargetFramework>{output}</PropertyGroup><ItemGroup><ProjectReference Include=\"../Library/Library.csproj\" /></ItemGroup></Project>");
+        fixture.Write("Service/Program.cs", "System.Console.WriteLine(new Library.Value());");
+        fixture.Write("Service/Handler.cs", "class Handler {}");
+        fixture.Write("Library/Library.csproj", "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup></Project>");
+        fixture.Write("Library/Value.cs", "namespace Library; public class Value {}");
+        ScanObservation scan = await fixture.ScanAsync(Path.Combine(fixture.Root, "Service/Service.csproj"));
+        ScanEntryPoint entry = Assert.Single(scan.EntryPoints!);
+        Assert.Equal("Service/Program.cs", entry.File);
+        Assert.Equal("Service/Service.csproj", entry.Declaration);
+        Assert.Contains("Service/Handler.cs", entry.Files);
+        Assert.DoesNotContain("Library/Value.cs", entry.Files);
+    }
+
     [Fact]
     public async Task SolutionScanKeepsPartialFilesAtomicAndPreservesProjectHierarchy()
     {

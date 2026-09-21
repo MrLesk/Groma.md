@@ -8,6 +8,7 @@ public sealed record ScanRoot(string Id, string Kind, string Name, string? File 
 public sealed record ScanSymbol(string Id, string Name, string Kind);
 public sealed record ScanFile(string File, IReadOnlyList<string> Roots, IReadOnlyList<ScanSymbol> Symbols);
 public sealed record ScanSourceUnit(string Primary, IReadOnlyList<string> Files);
+public sealed record ScanEntryPoint(string File, string Declaration, string Name, IReadOnlyList<string> Files);
 /// <summary>Named operations add their inclusive 1-based line range and binding-normalized body tokens.</summary>
 public sealed record ScanOperation(string Id, string File, string Name, int? StartLine = null, int? EndLine = null, IReadOnlyList<string>? Tokens = null);
 public sealed record ScanInvocation(string Source, IReadOnlyList<string> Targets, bool Unresolved, int Line, string? Member = null);
@@ -29,7 +30,8 @@ public sealed record ScanObservation(
     IReadOnlyList<ScanInvocation>? Invocations = null,
     IReadOnlyList<ScanSourceUnit>? SourceUnits = null,
     IReadOnlyList<ScanHttpEndpoint>? HttpEndpoints = null,
-    IReadOnlyList<ScanHttpRequest>? HttpRequests = null)
+    IReadOnlyList<ScanHttpRequest>? HttpRequests = null,
+    IReadOnlyList<ScanEntryPoint>? EntryPoints = null)
 {
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -47,7 +49,8 @@ public sealed record ScanObservation(
         IEnumerable<ScanInvocation>? invocations = null,
         IEnumerable<ScanSourceUnit>? sourceUnits = null,
         IEnumerable<ScanHttpEndpoint>? httpEndpoints = null,
-        IEnumerable<ScanHttpRequest>? httpRequests = null)
+        IEnumerable<ScanHttpRequest>? httpRequests = null,
+        IEnumerable<ScanEntryPoint>? entryPoints = null)
     {
         ScanRoot[] orderedRoots = ValidateRoots(roots);
         ScanFile[] orderedFiles = UniqueBy(
@@ -117,6 +120,7 @@ public sealed record ScanObservation(
             Operations: orderedOperations,
             Invocations: orderedInvocations,
             SourceUnits: ValidateUnits(sourceUnits, filePaths),
+            EntryPoints: entryPoints?.OrderBy(entry => entry.File, StringComparer.Ordinal).ToArray(),
             HttpEndpoints: servedEndpoints,
             HttpRequests: sentRequests,
             Diagnostics: messages

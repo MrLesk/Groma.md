@@ -10,6 +10,7 @@ import {
 } from './files.ts'
 import { displayName, kebabCase } from './naming.ts'
 import { analyzeSourceFiles } from './source-analysis.ts'
+import type { SourceEntry } from '../../entry-points/javascript.ts'
 
 export interface ImportGraphNode {
   file: string
@@ -19,6 +20,7 @@ export interface ImportGraphNode {
 }
 
 export interface ImportGraph {
+  entries: SourceEntry[]
   files: ImportGraphNode[]
   operations: ScanOperation[]
   invocations: ScanInvocation[]
@@ -58,7 +60,7 @@ export async function buildImportGraph(
 ): Promise<ImportGraph> {
   const paths = await listTypeScriptFiles(repositoryRoot, config)
   const files = new Set(paths)
-  const { files: analyses, operations, invocations, httpEndpoints, httpRequests } = await analyzeSourceFiles(repositoryRoot, paths)
+  const { files: analyses, operations, invocations, httpEndpoints, httpRequests, entries } = await analyzeSourceFiles(repositoryRoot, paths)
   const nodes = new Map<string, ImportGraphNode>()
   for (const analysis of analyses) {
     const node = nodes.get(analysis.file) ?? { file: analysis.file, imports: [], importedBy: [], symbols: [] }
@@ -71,5 +73,5 @@ export async function buildImportGraph(
     for (const imported of node.imports) nodes.get(imported)?.importedBy.push(node.file)
   }
   for (const node of nodes.values()) node.importedBy.sort()
-  return { files: [...nodes.values()], operations, invocations, httpEndpoints, httpRequests }
+  return { files: [...nodes.values()], operations, invocations, httpEndpoints, httpRequests, entries }
 }

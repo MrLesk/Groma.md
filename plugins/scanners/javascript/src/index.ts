@@ -5,6 +5,8 @@ import { javaScriptEvidence } from './evidence.ts'
 import { javaScriptHttpFacts } from './http.ts'
 import { readJavaScriptOutline } from './outline.ts'
 import { javaScriptSources, type JavaScriptSource } from './sources.ts'
+import { withJavaScriptEntries } from '../../entry-points/javascript.ts'
+import { javaScriptEntries } from './entries.ts'
 
 /** Each file is parsed alone, so no project configuration, dependency or build tool is needed. */
 function parse(source: JavaScriptSource): ts.SourceFile {
@@ -35,7 +37,7 @@ function parseWarning(source: ts.SourceFile): ScanDiagnostic | undefined {
 export default {
   id: 'javascript',
   watch: {
-    include: ['**/*.js', '**/*.mjs', '**/*.cjs', '**/*.jsx'],
+    include: ['**/*.js', '**/*.mjs', '**/*.cjs', '**/*.jsx', '**/*.html', '**/package.json', '**/angular.json'],
     exclude: ['**/*.min.js', '**/*.min.mjs', '**/*.min.cjs', '**/*.min.jsx'],
   },
   /** The same authored selection `scan` makes, so a minified bundle is never listed. */
@@ -58,7 +60,7 @@ export default {
       return { file: source.fileName, evidence, facts: await javaScriptHttpFacts(source, evidence) }
     }))
     const symbols = new Map(scanned.map(({ file, evidence }) => [file, evidence.symbols]))
-    return createScanObservation({
+    return withJavaScriptEntries(root, createScanObservation({
       scanner: { id: 'javascript', technology: 'javascript', engine: 'typescript-sdk', engineVersion: ts.version },
       roots: [{ id: 'javascript-source', kind: 'source-group', name: path.basename(root) }],
       files: parsed.map(({ fileName: file }) => ({ file, symbols: symbols.get(file) ?? [], roots: ['javascript-source'] })),
@@ -69,7 +71,7 @@ export default {
       diagnostics: [{ severity: 'info', code: 'JAVASCRIPT_SOURCE_SCOPE',
         message: 'Source syntax only. Module loading, dynamic dispatch, framework wiring and external symbols remain unresolved.' },
       ...warnings.filter(warning => warning !== undefined)],
-    })
+    }), await javaScriptEntries(root, readable))
   },
   // Every file this scanner owns is a JavaScript source, so no reference is filtered out here.
   readCodeStructure: readJavaScriptOutline,

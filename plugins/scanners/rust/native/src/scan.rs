@@ -21,6 +21,14 @@ pub struct Input {
     pub name: String,
     pub targets: Vec<String>,
     pub crates: Vec<Value>,
+    pub executables: Vec<Executable>,
+}
+
+#[derive(Deserialize)]
+pub struct Executable {
+    pub file: String,
+    pub declaration: String,
+    pub name: String,
 }
 
 pub(crate) struct Source {
@@ -59,6 +67,20 @@ pub fn scan(input: Input) -> anyhow::Result<Value> {
         bail!("rust-analyzer loaded no selected library or binary targets");
     }
     let file_ids = selected_files(&crates, &sema, &db)?;
+    let mut entry_points = Vec::new();
+    let relative = |file: &str| -> anyhow::Result<String> {
+        Ok(Path::new(file).strip_prefix(&input.root)?.to_string_lossy().replace('\\', "/"))
+    };
+    for executable in &input.executables {
+        let krate = crates.iter().find(|krate| vfs.file_path(krate.root_file(&db)).to_string() == executable.file);
+        if let Some(krate) = krate {
+            let members = selected_files(&[*krate], &sema, &db)?;
+            let own_files: Vec<_> = members.into_iter()
+                .map(|file| relative(&vfs.file_path(file).to_string())).collect::<anyhow::Result<_>>()?;
+            entry_points.push(json!({"file": relative(&executable.file)?,
+                "declaration": relative(&executable.declaration)?, "name": executable.name, "files": own_files}));
+        }
+    }
     let mut files = Vec::new();
     let mut sources = Vec::new();
     let mut diagnostics = vec![json!({
@@ -124,6 +146,7 @@ pub fn scan(input: Input) -> anyhow::Result<Value> {
         "scanner": {"id": "rust", "technology": "rust", "engine": "rust-analyzer-hir", "engineVersion": "0.0.301"},
         "roots": [{"id": scope, "kind": "cargo", "name": input.name, "file": scope}],
         "files": files,
+        "entryPoints": entry_points,
         "operations": operations, "invocations": invocations,
         "httpEndpoints": http_endpoints, "httpRequests": http_requests,
         "diagnostics": diagnostics,

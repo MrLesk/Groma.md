@@ -233,28 +233,30 @@ TypeScript and C# source and project files. It does not open a viewer. `groma
 view` and `groma web` run one scan before opening, then start that watch
 in-process.
 
-Each language scanner returns one validated, complete observation of atomic
-files and symbols, inferred scopes and relationships, and diagnostics. Groma
-collects every supported observation before core writes Markdown. A scanner
-failure therefore cannot publish a partial batch.
+Each language scanner returns a validated observation of source files, symbols,
+source roots, supported execution and interaction facts, and diagnostics. Core
+collects the batch before writing Markdown; successful scanners contribute even
+when another scanner fails. Scanners do not return C4 elements or architecture
+relationships.
 
 Core applies the batch like this:
 
 1. An existing `groma.code` file match keeps its element and authored body. Symbols
    refresh from current evidence, but every curated file remains on that
    element, including files grouped together by a person.
-2. Placement inferred from imports, directories, or projects chooses a scope
-   for unknown files. It never changes existing ownership.
-3. An unknown file becomes a singleton component. A matching ghost receives
-   Code and remains a draft.
-4. Source-dependency targets are saved on each Code reference. Core resolves
-   them through current file ownership to produce directed component
-   connections. Several file dependencies between the same components produce
-   one connection; dependencies within a component stay internal. A raw scan
-   needs no authored relationships and supplies no business descriptions.
-   TypeScript uses AST binding resolution; unused and shadowed imports do not
-   create dependencies. Used types and explicit module initialization remain.
-   Singleton placement is source inventory, not proof of a C4 responsibility.
+2. Existing boundaries and source ownership guide placement. Source roots,
+   directories and imports alone do not create containers.
+3. An unknown file becomes a singleton component, unless explicit source-unit
+   evidence groups companion files. A matching ghost receives Code and stays a draft.
+4. Positive execution-entry evidence lets core create an application container
+   and place its unambiguous components. Later scans can complete unidentified
+   placement while preserving IDs, source ownership, authored meaning and links.
+   Existing container assignments win; shared or uncertain sources remain under
+   their known system.
+5. Core derives supported interactions from temporary operation and communication
+   evidence through current file owners. Raw dependency graphs are not stored.
+   A scan supplies no business descriptions. Singleton placement is source
+   inventory, not proof of a C4 responsibility.
 
 A scan never turns a ghost into stable architecture.
 

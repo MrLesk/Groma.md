@@ -11,6 +11,9 @@ import { usedImportSpecifiers } from './source-usage.ts'
 import { typescriptProjects, type TypeScriptProject } from './projects.ts'
 import { resolvedImports } from './source-imports.ts'
 import { sourceOperations } from './source-operations.ts'
+import { nativeChecker, syntax } from './http-checker.ts'
+import { sourceBuildEntries } from '../../entry-points/source.ts'
+import type { SourceEntry } from '../../entry-points/javascript.ts'
 
 export interface SourceAnalysis {
   file: string
@@ -19,6 +22,7 @@ export interface SourceAnalysis {
 }
 
 type SourceEvidence = {
+  entries: SourceEntry[]
   files: SourceAnalysis[]
   operations: ScanOperation[]
   invocations: ScanInvocation[]
@@ -60,10 +64,10 @@ function unique<Fact>(facts: Fact[]): Fact[] {
 
 /** Each compiler project resolves its own aliases; only selected repository source becomes evidence. */
 export async function analyzeSourceFiles(repositoryRoot: string, paths: string[]): Promise<SourceEvidence> {
-  if (paths.length === 0) return { files: [], operations: [], invocations: [], httpEndpoints: [], httpRequests: [] }
+  if (paths.length === 0) return { files: [], operations: [], invocations: [], httpEndpoints: [], httpRequests: [], entries: [] }
   const api = new API({ cwd: repositoryRoot })
   try {
-    const result: SourceEvidence = { files: [], operations: [], invocations: [], httpEndpoints: [], httpRequests: [] }
+    const result: SourceEvidence = { files: [], operations: [], invocations: [], httpEndpoints: [], httpRequests: [], entries: [] }
     for (const project of await typescriptProjects(api, repositoryRoot, paths)) {
       if (!project.config) {
         const analyzed = new Set(result.files.map(file => path.resolve(repositoryRoot, file.file)))
@@ -71,6 +75,7 @@ export async function analyzeSourceFiles(repositoryRoot: string, paths: string[]
         if (!project.files.length) continue
       }
       const evidence = await analyzeProject(api, repositoryRoot, paths, project)
+      result.entries.push(...evidence.entries)
       result.files.push(...evidence.files)
       result.operations.push(...evidence.operations)
       result.invocations.push(...evidence.invocations)
@@ -103,5 +108,6 @@ async function analyzeProject(api: API, repositoryRoot: string, paths: string[],
       return { file, imports: await resolvedImports(repositoryRoot, source, await usedImportSpecifiers(source, checker), checker),
         symbols: exportSymbols(file, source) }
     }))
-    return { files, ...evidence }
+    const entries = await sourceBuildEntries(repositoryRoot, { ...syntax, SyntaxKind }, nativeChecker(checker), selectedProgramSources)
+    return { files, ...evidence, entries }
 }

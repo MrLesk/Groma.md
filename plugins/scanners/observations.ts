@@ -10,6 +10,10 @@ export function relocateObservation(observation: ScanObservation, directory: str
     ...(observation.sourceUnits === undefined ? {} : {
       sourceUnits: observation.sourceUnits.map(unit => ({ primary: file(unit.primary), files: unit.files.map(file) })),
     }),
+    ...(observation.entryPoints === undefined ? {} : {
+      entryPoints: observation.entryPoints.map(entry => ({ ...entry, file: file(entry.file),
+        declaration: file(entry.declaration), files: entry.files.map(file) })),
+    }),
     operations: observation.operations?.map(operation => ({ ...operation, file: file(operation.file) })),
     invocations: observation.invocations?.map(call => ({ ...call,
       ...(call.binding ? { binding: { ...call.binding, file: file(call.binding.file) } } : {}) })),
@@ -26,6 +30,7 @@ export function combineObservations(parts: { key: string; observation: ScanObser
   const invocations: NonNullable<ScanObservation['invocations']> = []
   const diagnostics: ScanObservation['diagnostics'] = []
   const sourceUnits: NonNullable<ScanObservation['sourceUnits']> = []
+  const entryPoints: NonNullable<ScanObservation['entryPoints']> = []
   const httpEndpoints: NonNullable<ScanObservation['httpEndpoints']> = []
   const httpRequests: NonNullable<ScanObservation['httpRequests']> = []
   for (const { key, observation } of parts) {
@@ -43,10 +48,12 @@ export function combineObservations(parts: { key: string; observation: ScanObser
     httpRequests.push(...(observation.httpRequests ?? []).map(request => ({ ...request, operation: id(request.operation) })))
     diagnostics.push(...observation.diagnostics)
     sourceUnits.push(...observation.sourceUnits ?? [])
+    entryPoints.push(...observation.entryPoints ?? [])
   }
   return createScanObservation({ scanner: parts[0]!.observation.scanner, roots, files: [...files.values()],
     operations, invocations, diagnostics,
     ...(parts.some(part => part.observation.sourceUnits !== undefined) ? { sourceUnits } : {}),
+    ...(parts.some(part => part.observation.entryPoints !== undefined) ? { entryPoints } : {}),
     ...(parts.some(part => part.observation.httpEndpoints !== undefined) ? { httpEndpoints } : {}),
     ...(parts.some(part => part.observation.httpRequests !== undefined) ? { httpRequests } : {}),
   })

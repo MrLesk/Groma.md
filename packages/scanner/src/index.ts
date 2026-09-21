@@ -40,6 +40,17 @@ export interface ScanSourceUnit {
   files: string[]
 }
 
+/** A compiler, build or launch declaration designates this source as an execution entry. */
+export interface ScanEntryPoint {
+  /** Inventoried physical source entry; different declarations of it describe one execution unit. */
+  file: string
+  /** Source or configuration file that declares the entry. */
+  declaration: string
+  name: string
+  /** Includes the entry itself and this scanner's files in its source unit, excluding referenced units. */
+  files: string[]
+}
+
 export interface ScanDiagnostic {
   severity: string
   code: string
@@ -83,6 +94,7 @@ export interface ScanObservation {
   roots: ScanRoot[]
   files: ScanFile[]
   sourceUnits?: ScanSourceUnit[]
+  entryPoints?: ScanEntryPoint[]
   /** Omitted when a scanner does not extract operation evidence. Never persisted as a graph. */
   operations?: ScanOperation[]
   invocations?: ScanInvocation[]
@@ -199,6 +211,7 @@ export function createScanObservation(input: ObservationInput): ScanObservation 
     roots,
     files,
     ...sourceUnits(input.sourceUnits, filePaths),
+    ...entryPoints(input.entryPoints, filePaths),
     ...operationEvidence(input, filePaths),
     ...httpEvidence(input.httpEndpoints, input.httpRequests, input.operations && new Set(input.operations.map(operation => operation.id))),
     diagnostics: [...new Map(input.diagnostics.map(diagnostic => [
@@ -208,6 +221,24 @@ export function createScanObservation(input: ObservationInput): ScanObservation 
       return diagnosticKey(left).localeCompare(diagnosticKey(right))
     }),
   }
+}
+
+function entryPoints(input: unknown, paths: Set<string>): Pick<ScanObservation, 'entryPoints'> {
+  if (input === undefined) return {}
+  const entries = array(input, 'entryPoints').map(value => {
+    const entry = object(value, 'entry point')
+    const files = [...new Set(array(entry.files, 'entry point.files').map(file => string(file, 'entry point.file')))].sort()
+    for (const file of files) {
+      if (!paths.has(file)) throw new Error(`entry point references unknown file: ${file}`)
+    }
+    const file = string(entry.file, 'entry point.file')
+    if (!files.includes(file)) throw new Error(`entry point must include its own source file: ${file}`)
+    return { file, declaration: string(entry.declaration, 'entry point.declaration'),
+      name: string(entry.name, 'entry point.name'), files }
+  })
+  const key = (entry: ScanEntryPoint) => compare(entry.file, entry.declaration, entry.name, ...entry.files)
+  return { entryPoints: [...new Map(entries.map(entry => [key(entry), entry])).values()]
+    .sort((a, b) => key(a).localeCompare(key(b))) }
 }
 
 function sourceUnits(input: unknown, paths: Set<string>): Pick<ScanObservation, 'sourceUnits'> {
@@ -274,6 +305,7 @@ export function parseScanObservation(source: string): ScanObservation {
     // createScanObservation validates both fact lists.
     httpEndpoints: value.httpEndpoints as ScanHttpEndpoint[] | undefined,
     httpRequests: value.httpRequests as ScanHttpRequest[] | undefined,
+    entryPoints: value.entryPoints as ScanEntryPoint[] | undefined,
     ...sourceUnits(value.sourceUnits, new Set(array(value.files, 'files').map(entry => string(object(entry, 'file').file, 'file.file')))),
     roots: array(value.roots, 'roots').map(entry => {
       const root = object(entry, 'root')
