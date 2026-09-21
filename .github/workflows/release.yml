@@ -82,6 +82,7 @@ jobs:
       - uses: actions/setup-go@v7
         with:
           go-version-file: plugins/scanners/go/worker/go.mod
+          cache-dependency-path: plugins/scanners/go/worker/go.sum
       - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: '10.0.x'
@@ -416,7 +417,6 @@ jobs:
       - name: Commit released version to main
         uses: stefanzweifel/git-auto-commit-action@v7
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          commit-message: 'chore: sync groma.md version to ${{ github.ref_name }}'
+          commit_message: 'chore: sync groma.md version to ${{ github.ref_name }}'
           branch: main
           file_pattern: package.json
