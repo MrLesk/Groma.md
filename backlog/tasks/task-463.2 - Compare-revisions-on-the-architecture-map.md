@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@codex'
 created_date: '2026-09-20 15:05'
-updated_date: '2026-09-20 22:36'
+updated_date: '2026-09-21 05:56'
 labels: []
 dependencies:
   - TASK-463.1
@@ -122,6 +122,8 @@ Feature: Compare revisions
 4. Apply shared theme roles to component faces and relationships, preserving green interaction emphasis. Observe owned source edits even without a scanner.
 Tests: parent identity/change rules require a fixture comparison covering stable-ID rename/move, added/removed components, relationship-only and flow-only changes, source-only changes, neutral context, and unchanged files after ownership removal. Existing tests have no revision comparison. Add focused pure comparison tests and extend the revision-session integration for pair reads and working-tree source events; use browser checks for header transitions and colors.
 5. Run focused checks and browser flow, then the repository check and required simplicity/specification/quality/full-context reviews before finalizing.
+
+Follow-up: make the fixed endpoint visibly disabled in the revision picker using its existing native disabled state. Dim the row and remove hover emphasis, then verify both endpoint pickers and all three themes in the browser. No decorative CSS tests are needed.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
@@ -138,10 +140,14 @@ Latest bun run check passed: 627 Bun tests, 36 skipped, no failures; lint, types
 Full-context complexity review passes. Removed duplicate legend CSS it noticed. The live scanner created empty file-shaped Comparison and Snapshots records; the Groma CLI combined them into the existing Revision history component, which owns exact revision loading and derived comparisons. No new C4 boundary is needed.
 
 Final browser check changed destination B to working tree and starting A to a different commit, preserving one pair and excluding authoring/tasks. Confirmed semantic legend colors after CSS cleanup. All required reviews pass; no blocking findings remain.
+
+Follow-up verified: the fixed endpoint now uses one revision-domain CSS rule for reduced opacity, a not-allowed cursor, and no hover background. Browser checks passed in light, dark, and blueprint for both endpoint pickers; searching the disabled commit and pressing Enter leaves the pair unchanged. No behavior or public contract changed. Own specification and quality review found no issue. bun run check passed: 632 tests passed, 36 skipped, no failures.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
 Added one derived comparison model, exact pair loading, a searchable A/B header with direct exit, and component/relationship change colors. Removed context remains selectable; owned working-tree files refresh through the existing watcher. Source reads receive the same pair. Verified by fixture and live-source tests, all three themes and header transitions in-browser, full repository check (627 passed), cold and full-context reviews.
+
+The matching commit now looks clearly disabled in comparison pickers in every theme. The updated static preview is open; repository checks pass (632 passed, 36 skipped).
 <!-- SECTION:FINAL_SUMMARY:END -->

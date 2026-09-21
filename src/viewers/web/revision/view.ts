@@ -39,6 +39,7 @@ export const revisionCss = `
   #end-comparison { margin-left: 4px; font-size: 18px; padding: 6px 9px; }
   @keyframes revision-spin { to { transform: rotate(360deg); } }
   .revision-option { display: grid; grid-template-columns: minmax(0, 1fr); gap: 3px; }
+  #revision .revision-option:disabled { opacity: .4; cursor: not-allowed; background: transparent; }
   .revision-subject { overflow: hidden; color: var(--ink); text-overflow: ellipsis; white-space: nowrap; }
   .revision-meta { min-width: 0; display: flex; align-items: center; font-size: 10px; white-space: nowrap; }
   .revision-meta > * { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
