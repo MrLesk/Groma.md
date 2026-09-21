@@ -50,14 +50,10 @@ Free, MIT-licensed, and local. No account, backend, or AI service required.
 ```sh
 npm i -g groma.md backlog.md
 cd your-repo
-groma init
-```
-
-`groma init` sets up the repository and offers a first scan. Then open the map:
-
-```sh
 groma web     # browser map on http://localhost:4747
 ```
+
+For a new project, `groma web` guides you through project setup, scanner selection, and the first scan in your browser.
 
 Backlog.md provides the tasks shown on the map; Groma works without it. macOS requires Apple Silicon.
 
@@ -65,7 +61,7 @@ Backlog.md provides the tasks shown on the map; Groma works without it. macOS re
 
 The first scan gives you components and detected relationships. Your coding agent turns them into architecture: it reads the code, names responsibilities, merges records that belong together, and adds the relationships the scanner cannot see. Always do this after the first scan.
 
-Agents use the same CLI as people. `groma init` registers Groma in your `AGENTS.md` or `CLAUDE.md`, `groma agent-instructions` prints an index of task-focused agent guides, and every command explains itself through `--help`. Ask your agent:
+Agents use the same CLI as people. Browser setup registers Groma in your `AGENTS.md` or `CLAUDE.md`, `groma agent-instructions` prints an index of task-focused agent guides, and every command explains itself through `--help`. Ask your agent:
 
 ```text
 Read the current Groma architecture with `groma agent-instructions` and `groma view --plain`. Compare it with the source code, then annotate the architecture so it reflects the code: combine records that share a responsibility, add missing overviews and relationships, and keep Backlog.md task links current. Use Groma's CLI for architecture changes, then summarize what you changed.
