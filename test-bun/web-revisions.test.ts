@@ -14,6 +14,7 @@ test.concurrent('web history includes source-only commits and reads the selected
   let session: Awaited<ReturnType<typeof createWebMapSession>> | undefined
   try {
     git('init', '--quiet')
+    git('config', 'core.autocrlf', 'false')
     await writeFile(path.join(root, 'README.md'), 'No architecture yet')
     git('add', '.')
     git('commit', '--quiet', '-m', 'Before architecture')

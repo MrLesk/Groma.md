@@ -58,6 +58,7 @@ test.concurrent('commit export and both comparison directions use only bundled c
   try {
     await cp(fixture, root, { recursive: true })
     await git('init', '--quiet')
+    await git('config', 'core.autocrlf', 'false')
     await git('add', '.')
     await git('-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.test', 'commit', '--quiet', '-m', 'Record orders')
     const before = await git('rev-parse', 'HEAD')
