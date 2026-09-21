@@ -202,31 +202,31 @@ export const mapCss = `
   #map .route.lit { --emphasis: ${emphasis(2)}; }
   #map .route.lit .line { stroke: var(--highlight); opacity: 1; stroke-dasharray: 8 5; animation: map-flow 900ms linear infinite; }
   #map .route.lit .arrow { fill: var(--highlight); opacity: 1; }
-  #map .route.focused { --emphasis: ${emphasis(3)}; animation: map-flow-focus 1600ms ease-in-out infinite; }
-  #map :is(.building, .slab, .island).focused { --emphasis: ${emphasis(3)}; animation: map-flow-focus 1600ms ease-in-out infinite; }
-  #map .building.component-focus { animation: none; }
-  #map .building.component-focus .face { animation: map-component-border 2600ms ease-in-out infinite; }
-  #map .component-glow {
+  #map :is(.route, .building, .slab, .island).focused { --emphasis: ${emphasis(3)}; }
+  #map .building:is(.component-focus, .focused) .face,
+  #map .slab.focused > .face, #map .island.focused > .ground { animation: map-highlight-border 2600ms ease-in-out infinite; }
+  #map .route.focused .line { animation: map-flow 900ms linear infinite, map-highlight-border 2600ms ease-in-out infinite; }
+  #map .highlight-glow {
     position: absolute; left: 0; top: 0; pointer-events: none;
   }
-  #map .component-glow-pulse {
+  #map .highlight-glow-pulse {
     width: 100%; height: 100%; opacity: 0.55;
     will-change: opacity;
-    animation: map-component-glow 2600ms ease-in-out infinite;
+    animation: map-highlight-glow 2600ms ease-in-out infinite;
   }
   @keyframes map-flow { from { stroke-dashoffset: 0; } to { stroke-dashoffset: -13; } }
-  @keyframes map-flow-focus { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
-  @keyframes map-component-glow {
+  @keyframes map-highlight-glow {
     0%, 100% { opacity: 0.1; }
     50% { opacity: 1; }
   }
-  @keyframes map-component-border {
+  @keyframes map-highlight-border {
     0%, 100% { stroke: var(--highlight); }
     50% { stroke: color-mix(in srgb, var(--highlight) 80%, white); }
   }
   @media (prefers-reduced-motion: reduce) {
-    #map .route.lit .line, #map .route.focused, #map :is(.building, .slab, .island).focused,
-    #map .component-glow-pulse, #map .building.component-focus .face { animation: none; }
+    #map .route.lit .line, #map .highlight-glow-pulse,
+    #map .building:is(.component-focus, .focused) .face,
+    #map .slab.focused > .face, #map .island.focused > .ground { animation: none; }
   }
   #map .camera[data-tracing] .route-base,
   #map .camera[data-tracing] .route:not(.lit) { display: none; }
@@ -249,7 +249,7 @@ export const mapCss = `
   #map :is(.island, .slab, .zone):is(.selected, .touched, .lit, .context) > .surface-label .label-leader { stroke: var(--highlight); }
   #map .building.neighbor:not(.selected):not(.touched):not(.lit) { --emphasis: ${emphasis(0.5)}; }
   #map .building.neighbor:not(.selected):not(.touched):not(.lit) .face { stroke: color-mix(in srgb, var(--highlight) 45%, var(--map-line)); }
-  #map .camera:has(.component-focus) .building.component:not(.component-focus):not(.neighbor) { opacity: 0.3; animation: none; }
+  #map .camera:has(.component-focus) .building.component:not(.component-focus):not(.neighbor) { opacity: 0.3; }
   #map [data-change="added"] { --change: var(--diff-added); }
   #map [data-change="modified"] { --change: var(--diff-modified); }
   #map [data-change="removed"] { --change: var(--diff-removed); }

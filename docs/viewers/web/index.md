@@ -423,7 +423,9 @@ The flow reader shows its overview and every ordered action. Opening a flow from
 element details adds Back to that element above the reader. Select an action,
 Previous, or Next to focus a step: the whole authored path and its endpoints stay
 highlighted while the camera smoothly fits that step's exact relationship and
-endpoints. That relationship and its endpoint components pulse continuously.
+endpoints. That relationship and its endpoints use the same breathing green glow
+as component selection. Their outlines lighten slightly while bodies and labels
+stay solid; route arrows keep their directional motion.
 The focused action has a marked row; Clear focus removes the extra emphasis and
 smoothly fits all checked flows again. Reduced motion keeps static emphasis.
 Unrelated routes are hidden while reading a flow. Components touched by active
@@ -623,11 +625,12 @@ A new action starts from the displayed camera position. Dragging, scrolling,
 and pinching follow the gesture directly and stop an unfinished transition.
 Animated navigation and direct gestures prepare the same cached camera layer before movement.
 The map restores crisp SVG rendering after movement settles.
-The selected component's glow uses a small, separate layer containing its blurred
-silhouette. The blur stays fixed while the layer's opacity and the component's
-border color share a 2.6-second pulse. The border mixes in at most 20% white.
-A new selection starts both animations together; the fill and text do not animate.
-The glow follows the same camera and disappears when selection clears.
+Component selection and focused flow endpoints and routes share one glow per
+highlighted shape. Each uses a small, separate layer containing its blurred
+silhouette. The blur stays fixed while the layer's opacity and the shape's border
+color share a 2.6-second pulse. The border mixes in at most 20% white; the fill and
+text do not animate. The glows follow the displayed projection and camera, and
+disappear when their highlights clear or their shapes are filtered out.
 Hover highlights pause during camera movement, including trackpad inertia, and return after it settles.
 Selection highlights and clicking remain available throughout.
 Reduced motion applies the destination without animation. `F1` toggles the HUD for a map-only
