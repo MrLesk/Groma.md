@@ -114,6 +114,8 @@ let fitted: Camera = fitScene(viewport())
 const camera = createCameraAnimator(fitted, applyCamera, map.prepareCamera)
 /** Once an interaction positions the camera, live refits stop until the viewer presses 0. */
 let touched = false
+/** A world update's blend: the camera tracks its fit on every frame, through the last, instead of refitting a selection. */
+let following = false
 function worldElement(id: string | undefined): AnnotatedElement | undefined { return id === undefined ? undefined : world.elements.find(element => element.representationId === id) }
 function worldRelationship(id: string | undefined): AnnotatedRelationship | undefined { return id === undefined ? undefined : world.relationships.find(item => item.id === id) }
 function unidentifiedGroup(id: string | undefined) { return sheet.zones.find(zone => zone.unidentifiedContainer && zone.key === id) }
@@ -392,13 +394,14 @@ function repaintScene(fit: boolean): void {
   pins.paint(currentPins.filter(pin => map.anchorOf(pin.elementId) !== undefined))
   const frame = viewport()
   fitted = fitScene(frame)
-  if (fit && mapMotion.morphing) {
-    if (!touched) camera.frame(fitted, mapMotion.framing)
+  if (fit && (mapMotion.morphing || following)) {
+    if (!touched) camera.frame(fitted, 1)
   } else if (fit) {
     const focus = mapMotion.view === 'layers' ? undefined : fitArchitecture(scene, world, selectedArchitecture(selection), frame)
     camera.frame(focus === undefined ? fitted : pan(focus, frame.x, frame.y), mapMotion.framing)
     touched = focus !== undefined
   } else camera.move(pan(camera.current, (before.x - after.x) * camera.current.k, (before.y - after.y) * camera.current.k), false)
+  following = mapMotion.morphing
   applyCamera()
   const task = selection.kind === 'task' ? workItem(selection.id) : undefined
   paintMapState(task, activeTaskIds.map(id => workItem(id)).filter((item): item is WorkItem => item !== undefined))
