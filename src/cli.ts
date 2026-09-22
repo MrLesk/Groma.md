@@ -7,7 +7,10 @@ import { Command, Option } from 'commander'
 import { confirm } from '@clack/prompts'
 import packageJson from '../package.json' with { type: 'json' }
 
-import { agentGuideNames, readAgentGuide } from './agent-instructions.ts'
+import { agentGuideNames, firstScanAgentNote, readAgentGuide } from './agent-instructions.ts'
+import { loadArchitecture } from './architecture-reader.ts'
+import { annotateArchitecture } from './core.ts'
+import { awaitsCuration, firstScanHint, firstScanTitle } from './empty-world.ts'
 import { ensureInitialized, runInitCommand } from './init-command.ts'
 import { humanInstructionGuide } from './instructions.ts'
 import { listWindowRequested, parseListWindow, withListWindowOptions, type ListWindow } from './list-window.ts'
@@ -145,11 +148,21 @@ async function exportWeb(directory: string, options: { url?: string; revision?: 
   await exported.close()
 }
 
+/** A stored architecture nobody has curated yet; false where Groma is not set up or cannot read it. */
+async function awaitingCuration(root: string): Promise<boolean> {
+  try {
+    return awaitsCuration(annotateArchitecture(await loadArchitecture(root)))
+  } catch {
+    return false
+  }
+}
+
 async function scanOnce(): Promise<void> {
   const root = process.cwd()
   const summary = await scanRepository(root)
   console.log('ok')
   console.log(formatScanReport(root, summary))
+  if (await awaitingCuration(root)) console.log(`${firstScanTitle}. ${firstScanHint}`)
 }
 
 async function runScan(watchEnabled: boolean): Promise<void> {
@@ -314,6 +327,7 @@ program
       process.exitCode = 1
       return
     }
+    if (guide === undefined && await awaitingCuration(process.cwd())) console.log(`${firstScanAgentNote}\n`)
     console.log(selected)
   })
 

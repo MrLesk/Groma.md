@@ -1,4 +1,4 @@
-import { hasComponents, isEmptyWorld, noComponentsHint, noComponentsTitle, scannerSupportNote } from '../../../empty-world.ts'
+import { awaitsCuration, firstScanHint, firstScanTitle, hasComponents, isEmptyWorld, noComponentsHint, noComponentsTitle, scannerSupportNote } from '../../../empty-world.ts'
 import type { ProjectProfile } from '../../../project-profile.ts'
 import type { ArchitectureGraph } from '../../../types.ts'
 import { escaped } from '../atoms/escape.ts'
@@ -24,7 +24,7 @@ export const emptyStateCss = `
   #empty .project { color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
   #empty .hint { color: var(--muted); font-size: 14px; line-height: 1.6; }
   #empty .note { margin-top: 6px; color: var(--muted); font-size: 12px; font-style: italic; }
-  #empty:not(.has-architecture) .note { display: none; }
+  #empty:not(.has-architecture) .note, #empty.first-scan .note { display: none; }
   #empty .empty-action {
     margin-top: 8px; padding: 12px 18px; border: 1px solid var(--accent); border-radius: 8px;
     background: var(--accent); color: var(--on-colour); font-size: 14px; font-weight: 600;
@@ -32,7 +32,9 @@ export const emptyStateCss = `
   #empty .empty-action:hover { background: color-mix(in srgb, var(--accent) 88%, var(--ink)); }
   #empty .empty-action[hidden], #empty.has-architecture .empty-action { display: none; }
   body:not(.hud-hidden) #empty:not(.has-architecture) { left: var(--hierarchy-inset); right: var(--details-inset); }
-  #empty.has-architecture { inset: 78px 0 auto; }
+  /* Below the Iso, 2D and Layers bar (top 74px, 44px tall); map-only view hides the notice with the rest of the chrome. */
+  #empty.has-architecture { inset: 130px 0 auto; }
+  body.hud-hidden #empty.has-architecture { display: none; }
   #empty.has-architecture .empty-card { position: relative; width: min(360px, calc(100vw - 32px)); padding: 14px 42px 14px 18px; gap: 4px; border-radius: var(--chrome-radius); }
   #empty.has-architecture h1 { font-size: 13px; }
   #empty.has-architecture .hint, #empty.has-architecture .note { font-size: 11px; font-style: normal; }
@@ -42,22 +44,29 @@ export const emptyStateCss = `
   @media (max-width: 640px) { #empty .empty-card { padding: 24px; } }
 `
 
-function emptyMessage(empty: boolean) {
-  return empty
-    ? { title: 'Your map starts here', hint: "Add code when you're ready. Set up scanners to bring it into your map." }
-    : { title: noComponentsTitle, hint: noComponentsHint }
+type World = Pick<ArchitectureGraph, 'elements'>
+
+function emptyMessage(world: World) {
+  if (isEmptyWorld(world)) return { title: 'Your map starts here', hint: "Add code when you're ready. Set up scanners to bring it into your map." }
+  return hasComponents(world) ? { title: firstScanTitle, hint: firstScanHint } : { title: noComponentsTitle, hint: noComponentsHint }
+}
+
+/** An empty map, a map without components, and a first scan nobody has curated each get a notice. */
+function needsNotice(world: World): boolean {
+  return !hasComponents(world) || awaitsCuration(world)
 }
 
 /** A new map welcomes an empty project; existing architecture keeps its compact notice. */
 export function emptyState(payload: WebBootPayload): string {
-  const hidden = payload.revision === null && !hasComponents(payload.world) ? '' : ' hidden'
-  const className = isEmptyWorld(payload.world) ? '' : ' class="has-architecture"'
-  const message = emptyMessage(isEmptyWorld(payload.world))
-  return `<section id="empty" aria-label="Empty map"${className}${hidden}><div class="empty-card">`
+  const hidden = payload.revision === null && needsNotice(payload.world) ? '' : ' hidden'
+  const classes = [isEmptyWorld(payload.world) ? '' : 'has-architecture', awaitsCuration(payload.world) ? 'first-scan' : ''].filter(Boolean)
+  const className = classes.length === 0 ? '' : ` class="${classes.join(' ')}"`
+  const message = emptyMessage(payload.world)
+  return `<section id="empty" aria-label="Map notice"${className}${hidden}><div class="empty-card">`
     + `<p class="project">${escaped(payload.project?.title ?? '')}</p><h1>${message.title}</h1>`
     + `<p class="hint">${message.hint}</p><p class="note">${scannerSupportNote}</p>`
     + '<button id="empty-scanners" class="empty-action" type="button" aria-haspopup="dialog" aria-controls="project-settings" hidden>Set up scanners</button>'
-    + '<button class="dismiss" type="button" aria-label="Dismiss no-components message">×</button></div></section>'
+    + '<button class="dismiss" type="button" aria-label="Dismiss message">×</button></div></section>'
 }
 
 /** The invitation that stands in for the map while the world has nothing to draw. */
@@ -73,11 +82,12 @@ export function createEmptyState(host: HTMLElement) {
 
   return {
     /** History is read-only, so a selected revision never shows the invitation. */
-    paint(world: Pick<ArchitectureGraph, 'elements'>, project: ProjectProfile | undefined, historical: boolean): void {
+    paint(world: World, project: ProjectProfile | undefined, historical: boolean): void {
       const empty = isEmptyWorld(world)
-      const message = emptyMessage(empty)
-      host.hidden = historical || hasComponents(world) || (dismissed && !empty)
+      const message = emptyMessage(world)
+      host.hidden = historical || !needsNotice(world) || (dismissed && !empty)
       host.classList.toggle('has-architecture', !empty)
+      host.classList.toggle('first-scan', awaitsCuration(world))
       title.textContent = project?.title ?? ''
       heading.textContent = message.title
       hint.textContent = message.hint

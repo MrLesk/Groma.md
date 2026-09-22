@@ -9,8 +9,12 @@ const managedBlockPattern = /<!-- groma:start -->[\s\S]*?<!-- groma:end -->/g
 const managedAgentInstructions = `<!-- groma:start -->
 ## Groma
 
-This project uses Groma. Before you scan, inspect, or curate architecture, or change files for a Backlog task, run \`groma agent-instructions\` and read the guide it names for that job. Do not edit Groma-owned architecture files directly.
+This project uses Groma. Before you scan, inspect, or curate architecture, or change files for a Backlog task, run \`groma agent-instructions\` and read the guide it names for that job. When it reports a first scan, ask the user whether they want you to curate the architecture. Do not edit Groma-owned architecture files directly.
 <!-- groma:end -->`
+
+/** Printed above the guide index while the stored architecture is still an uncurated first scan. */
+export const firstScanAgentNote = 'This architecture is still its first scan: no element has a description or an overview yet. '
+  + 'Ask the user whether they want you to curate it.'
 
 /** Guides printed by name; running the command without a name prints the index that routes to them. */
 export const agentGuideNames = ['inspect', 'structure', 'describe', 'relationships', 'backlog'] as const

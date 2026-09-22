@@ -54,6 +54,12 @@ presentation. Use the CLI to maintain that metadata and source references.
 
 ## Curation workflow and expected result
 
+A scan writes no descriptions or overviews. While no element has either, the
+architecture is still its first scan, and this index opens with a note that
+says so. Tell the user and ask once whether they want you to curate it. Curate
+only after they agree; if they decline, do not ask again in the same
+conversation.
+
 When asked to curate, work through inspect, structure, describe, and
 relationships in that order. An inspection request only calls for an
 explanation of the current architecture.

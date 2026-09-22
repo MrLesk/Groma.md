@@ -87,6 +87,11 @@ operation before opening a map.
    `groma`, and `groma --plain` instead fail with one sentence naming
    `groma init`, without a stack trace.
    A successful scan with no components invites TypeScript work in both viewers.
+   Until an element has a description or an overview, the architecture is
+   still its first scan: the browser map shows a dismissible First scan notice,
+   a single `groma scan` ends with the same next step, and
+   `groma agent-instructions` opens with a note that tells agents to ask the
+   user whether to curate it.
    Existing drafted architecture remains available. Adding supported source
    updates the live map, including when its source directory is new.
    A startup failure reports the actual issue; it is not treated as an empty

@@ -13,7 +13,7 @@ add descriptions, actors, flows, groups, or relationship rows.
 
 | Command | Target | Result |
 | --- | --- | --- |
-| `groma scan` | none | Scans the repository and updates the stored architecture. Prints `ok` and a summary, not the architecture. |
+| `groma scan` | none | Scans the repository and updates the stored architecture. Prints `ok` and a summary, not the architecture. While no element has a description or an overview, a single scan ends with `First scan. Ask your coding agent to curate this architecture.` |
 | `groma view --plain` | none | Prints the actors, systems, and external systems, the relationships between them, and the flow and draft indexes. Does not scan. |
 | `groma view <id> --plain` | an element ID | Prints that element, its direct children, and the relationships that cross its boundary, split into incoming and outgoing. Run it on a child ID to go one C4 level deeper. Does not scan. |
 | `groma view <target>` | an element ID: actor, external system, system, container, or component | Without `--plain`, prints that complete Markdown record, including its Code references. Does not scan. |
