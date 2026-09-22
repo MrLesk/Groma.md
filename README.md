@@ -30,7 +30,7 @@
 </p>
 
 <p align="center">
-  <a href="https://mrlesk.github.io/Groma.md/architecture/blueprint/"><img src=".github/assets/explore-live-map.svg" alt="Explore the live map" width="232" height="48"></a>
+  <a href="https://mrlesk.github.io/Groma.md/architecture/blueprint/?theme=auto"><img src=".github/assets/explore-live-map.svg" alt="Explore the live map" width="232" height="48"></a>
 </p>
 
 Groma scans your code, draws it as a [C4](https://c4model.com) architecture map, and keeps that map open while you and your coding agents work. Save a file and the map updates. Work on a [Backlog.md](https://github.com/MrLesk/Backlog.md) task and it appears pinned to the components it touches. Everything is plain Markdown in your repository, so architecture changes are reviewed in the same pull request as the code.
