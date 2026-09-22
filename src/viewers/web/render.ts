@@ -11,14 +11,15 @@ import { createMapDebugPanel } from './chrome/map-debug.ts'
 import { bindMapView } from './chrome/map-view.ts'
 import { bindC4Filter } from './chrome/c4-filter.ts'
 import { animateControl } from './chrome/motion.ts'
-import { bindChromeActions, createWebShell, mapFrame, type MapFrame } from './chrome/shell.ts'
+import { bindChromeActions, createWebShell, mapFrame, pageHosts, type MapFrame } from './chrome/shell.ts'
 import { bindThemeControl, readSavedTheme } from './chrome/theme-control.ts'
 import { paintHeaderSummary } from './chrome/stats.ts'
 import { createWebDataSource, openWebBoot } from './data.ts'
+import { listenForEmbeddedViews } from './embedding.ts'
 import { createFlowList } from './flow/list.ts'
 import { flowFocus, flowHighlight, flowSelection, retainFlows, toggleFlowActivation, type WebFlowRef } from './flow/state.ts'
 import { paintFlowReturn, paintFlowDetails } from './flow/reader.ts'
-import { fitArchitecture, fitHighlights, fitCamera, pan, wheelAction, zoomAbout, zoomLimits, zoomReadout, type Camera } from './iso/camera.ts'
+import { fitArchitecture, fitHighlights, fitCamera, pan, zoomAbout, zoomLimits, zoomReadout, type Camera } from './iso/camera.ts'
 import { createMap } from './iso/map.ts'
 import { createMapHighlights } from './map-highlights.ts'
 import { createCameraAnimator } from './iso/motion.ts'
@@ -36,7 +37,7 @@ import { createSearchSession } from './search/session.ts'
 import { createWorkIsland } from './work/island.ts'
 import { openWorkSelection, toggleWorkSelection } from './work/selection.ts'
 import type { WebBootPayload, WebPayload, WebWorkPayload } from './payload.ts'
-import { noSelection, primarySelection, primarySystem, retainSelection, selectArchitecture, selectMapArchitecture, selectedArchitecture, selectTask } from './selection.ts'
+import { noSelection, primarySelection, primarySystem, retainSelection, selectArchitecture, selectMapArchitecture, selectedArchitecture, selectTask, type Selection } from './selection.ts'
 import { createSourceControl } from './source/control.ts'
 import { createTaskDiffControl } from './task-diff/control.ts'
 import { readView, writeView } from './url.ts'
@@ -56,20 +57,8 @@ function projectedScene() {
   return debug.project(() => filterC4(presentScene(sheet, project, mapMotion.pose)))
 }
 let scene = projectedScene()
-const host = document.getElementById('map')!
-const headerHost = document.getElementById('header')!
-const hierarchyHost = document.getElementById('hierarchy')!
-const treeHost = document.getElementById('tree')!
-const flowsHost = document.getElementById('flows')!
+const { host, headerHost, hierarchyHost, treeHost, flowsHost, statsHost, revisionSelect, searchRoot, detailsHost, detailsDock, zoomHost, hierarchyContent, hierarchyToggle } = pageHosts()
 const paintFlows = createFlowList()
-const statsHost = document.getElementById('stats')!
-const revisionSelect = document.getElementById('revision') as HTMLDetailsElement
-const searchRoot = document.getElementById('web-search')!
-const detailsHost = document.getElementById('details')!
-const detailsDock = document.getElementById('details-dock')!
-const zoomHost = document.getElementById('zoom')!
-const hierarchyContent = document.getElementById('hierarchy-content')!
-const hierarchyToggle = document.getElementById('hierarchy-toggle') as HTMLButtonElement
 const map = createMap(host)
 const highlights = createMapHighlights(map)
 const edit = data.edit
@@ -344,21 +333,12 @@ function toggleFlow(flow: FlowRef, returnTo?: string): void {
   showFlows()
 }
 
-/** The pane takes the wheel wherever the cursor is, pins included; the Live work island keeps it for its chip strip. */
-host.addEventListener('wheel', event => {
-  if (event.target instanceof Element && event.target.closest('#work')) return
-  event.preventDefault()
-  const action = wheelAction(event)
-  if (action.kind === 'pan') camera.move(pan(camera.current, action.dx, action.dy), false)
-  else {
-    const rect = host.getBoundingClientRect()
-    camera.move(zoomAbout(camera.current, action.factor, { x: event.clientX - rect.left, y: event.clientY - rect.top }, fitted), false)
-  }
-  touched = true
-}, { passive: false })
-
-bindMapPointer(map, {
+bindMapPointer(host, map, {
   orbiting: () => mapMotion.view === 'layers',
+  wheel(action, point) {
+    camera.move(action.kind === 'pan' ? pan(camera.current, action.dx, action.dy) : zoomAbout(camera.current, action.factor, point, fitted), false)
+    touched = true
+  },
   pan(dx, dy) {
     camera.move(pan(camera.current, dx, dy), false)
     touched = true
@@ -384,6 +364,27 @@ function toggleHud(): void {
   shell.setHud(hudVisible)
   refit()
   syncUrl()
+}
+
+/** Frames what a view opened: its task, flow step or selection, or the whole sheet when it names none. */
+function focusOpened(kind: Selection['kind']): void {
+  if (kind === 'task') focusActiveTasks()
+  else if (kind === 'architecture') focusArchitecture(selectedArchitecture(selection))
+  else if (kind === 'flow') focusArchitecture(flowFocus(activeFlows, world))
+  else refit()
+}
+/** An embedding page opens another view in place, from the same query string the URL carries. */
+function openView(search: string): void {
+  const next = readView({ search, pathname: location.pathname }, world, work.items, boot.revisions, themeControl.mode, revisionControl.comparison)
+  if (next.hudVisible !== hudVisible) toggleHud()
+  source.clear()
+  selection = next.selection
+  activeFlows = next.flows
+  activeTaskIds = selection.kind === 'task' ? [selection.id] : []
+  detailsTab = next.tab
+  paintViewState()
+  if (next.file !== undefined) source.open(next.file, next.line)
+  focusOpened(selection.kind)
 }
 
 const sceneCentre = (bounds: typeof scene.bounds) => ({ x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 })
@@ -494,6 +495,5 @@ function paintWorld(): void {
   source.restore()
 }
 paintWorld()
-if (selection.kind === 'task') focusActiveTasks()
-else if (opened.selection.kind === 'architecture') focusArchitecture(selectedArchitecture(selection))
-else if (selection.kind === 'flow') focusArchitecture(flowFocus(activeFlows, world))
+focusOpened(opened.selection.kind)
+listenForEmbeddedViews(window, openView)

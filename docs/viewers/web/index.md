@@ -795,6 +795,15 @@ theme takes priority over the path, then the saved browser preference applies.
 The Theme menu writes an override only when its choice differs from the path
 theme. Without a path theme, Auto stays out of the URL. Reading accepts any
 parameter order and ignores unknown values.
+A page that shows the map in an iframe, such as a slide deck or a
+documentation site, opens another view without reloading it. It posts
+`{ gromaView: '?component=<id>&tab=how' }` to the iframe, using the same
+query string, and the camera moves there as it does for the same selection
+made in the map. A view that names no selection clears it and fits the whole
+sheet. The posted view sets the selection, flows and step, task, details tab,
+source `file` and `line`, and `hud`; the theme and revision stay as they are. The map posts
+`{ gromaReady: true }` to the embedding page once it can take views. Only the
+parent window is heard, so a map opened directly ignores every message.
 A watched TypeScript change folds and rebuilds the map without a
 browser refresh. An architecture Markdown change does the same
 without scanning. Selection stays if that box still exists, else the

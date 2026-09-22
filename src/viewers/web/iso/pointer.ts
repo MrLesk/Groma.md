@@ -1,9 +1,12 @@
+import { wheelAction } from './camera.ts'
 import type { IsoMap } from './map.ts'
 
 export interface MapPointerActions {
   orbiting(): boolean
   pan(dx: number, dy: number): void
   orbit(dx: number, dy: number): void
+  /** A wheel or pinch step; `point` is the cursor inside the map pane, where a zoom stays anchored. */
+  wheel(action: ReturnType<typeof wheelAction>, point: { x: number; y: number }): void
   select(id: string, additive: boolean): void
   deselect(): void
   editProject(): void
@@ -11,8 +14,16 @@ export interface MapPointerActions {
 
 const DRAG_THRESHOLD = 4
 
-/** One pointer gesture map: click selects, drag orbits in F2, and Shift-drag always pans. */
-export function bindMapPointer(map: IsoMap, actions: MapPointerActions): void {
+/** One pointer gesture map: click selects, drag orbits in F2, Shift-drag always pans, and the wheel pans or zooms. */
+export function bindMapPointer(host: HTMLElement, map: IsoMap, actions: MapPointerActions): void {
+  /** The pane takes the wheel wherever the cursor is, pins included; the Live work island keeps it for its chip strip. */
+  host.addEventListener('wheel', event => {
+    if (event.target instanceof Element && event.target.closest('#work')) return
+    event.preventDefault()
+    const rect = host.getBoundingClientRect()
+    actions.wheel(wheelAction(event), { x: event.clientX - rect.left, y: event.clientY - rect.top })
+  }, { passive: false })
+
   let pointer: {
     id: number
     x: number

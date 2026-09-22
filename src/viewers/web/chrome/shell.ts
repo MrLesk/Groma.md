@@ -14,6 +14,26 @@ export function bindChromeActions(actions: ShortcutActions): void {
   bindPopover(document.getElementById('credits')!)
 }
 
+/** The page elements map orchestration paints into, looked up once. */
+export function pageHosts() {
+  const byId = (id: string) => document.getElementById(id)!
+  return {
+    host: byId('map'),
+    headerHost: byId('header'),
+    hierarchyHost: byId('hierarchy'),
+    treeHost: byId('tree'),
+    flowsHost: byId('flows'),
+    statsHost: byId('stats'),
+    revisionSelect: byId('revision') as HTMLDetailsElement,
+    searchRoot: byId('web-search'),
+    detailsHost: byId('details'),
+    detailsDock: byId('details-dock'),
+    zoomHost: byId('zoom'),
+    hierarchyContent: byId('hierarchy-content'),
+    hierarchyToggle: byId('hierarchy-toggle') as HTMLButtonElement,
+  }
+}
+
 export interface WebShell {
   paint(selection: Selection): void
   setHud(visible: boolean): void
