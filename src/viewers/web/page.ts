@@ -397,7 +397,8 @@ function helpControl(): string {
   const sections: [string, [string, string][]][] = [
     ['Map', [
       ['Pan', 'Drag or scroll'],
-      ['Zoom', `Pinch or ${key('+')} ${key('−')}`],
+      ['Zoom', `Pinch or ${key('Cmd/Ctrl')} + scroll`],
+      ['Zoom in or out', `${key('+')} ${key('−')}`],
       ['Fit map', `${key('0')}`],
       ['Clear selection', key('Esc')],
     ]],

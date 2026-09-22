@@ -619,7 +619,10 @@ cmd or ctrl with the wheel zooms about the cursor; the `-` and `+`
 buttons and keys zoom about the center, and `0` refits, between half
 the fitted view and a cell 192 screen pixels wide. Dragging pans too;
 scrolling or pinching over a pin moves the map, and over the Live
-work island it scrolls the chip strip. Panel selection, flow steps, search navigation,
+work island it scrolls the chip strip. On a touch screen, one finger drags
+and two fingers pinch: the map zooms about the point between them and pans
+as that point moves. A two-finger touch never selects, and the finger left
+after a pinch keeps dragging. Panel selection, flow steps, search navigation,
 Fit, and zoom buttons move and zoom together in a quick 220 ms transition.
 A new action starts from the displayed camera position. Dragging, scrolling,
 and pinching follow the gesture directly and stop an unfinished transition.

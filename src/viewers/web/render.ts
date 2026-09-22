@@ -328,8 +328,8 @@ function toggleFlow(flow: FlowRef, returnTo?: string): void {
 
 bindMapPointer(host, map, {
   orbiting: () => mapMotion.view === 'layers',
-  wheel(action, point) {
-    camera.move(action.kind === 'pan' ? pan(camera.current, action.dx, action.dy) : zoomAbout(camera.current, action.factor, point, fitted), false)
+  zoom(factor, point) {
+    camera.move(zoomAbout(camera.current, factor, point, fitted), false)
     touched = true
   },
   pan(dx, dy) {
