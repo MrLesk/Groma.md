@@ -820,6 +820,12 @@ sheet. The posted view sets the selection, flows and step, task, details tab,
 source `file` and `line`, and `hud`; the theme and revision stay as they are. The map posts
 `{ gromaReady: true }` to the embedding page once it can take views. Only the
 parent window is heard, so a map opened directly ignores every message.
+An embedding page that draws its own frame opens the map with `inset=<pixels>`.
+Everything drawn over the map, from the header and both panes to the view
+switch, filters, work island and first-scan notice, then stays that far inside
+every window edge, while the map still fills the window and the camera fits
+selections into the space the chrome leaves. The value is a positive whole
+number of pixels; anything else keeps the usual layout.
 A watched TypeScript change folds and rebuilds the map without a
 browser refresh. An architecture Markdown change does the same
 without scanning. Selection stays if that box still exists, else the

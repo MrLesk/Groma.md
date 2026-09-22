@@ -159,7 +159,7 @@ export const detailsPanelCss = `
   #details-dock { position: absolute; top: 74px; bottom: 12px; right: 12px; width: var(--details-column); z-index: 10; pointer-events: none; }
   #details {
     --details-width: var(--details-column);
-    --details-file-width: calc(100vw - var(--hierarchy-inset) - 36px);
+    --details-file-width: calc(var(--chrome-width) - var(--hierarchy-inset) - 36px);
     position: absolute; inset: 0 0 0 auto; width: var(--details-width); min-height: 0;
     overflow: hidden auto; scrollbar-gutter: stable; padding: 22px 24px; pointer-events: auto;
     opacity: 1; transform: translateX(0); visibility: visible;
@@ -169,7 +169,7 @@ export const detailsPanelCss = `
     opacity: 0; transform: translateX(calc(100% + 12px)); visibility: hidden; pointer-events: none;
     transition: opacity var(--chrome-motion) var(--chrome-ease), transform var(--chrome-motion) var(--chrome-ease), visibility 0s linear var(--chrome-motion);
   }
-  body.details-expanded #details { --details-width: min(calc(640px + 48px + 2px), calc(100vw - 24px)); }
+  body.details-expanded #details { --details-width: min(calc(640px + 48px + 2px), calc(var(--chrome-width) - 24px)); }
   body.details-expanded #details.file-open { --details-width: var(--details-file-width); }
   /* Layout uses the final width while the frame animates, so text never rewraps mid-motion. */
   #details > :is(.meta, h1, .tabs, .body) { width: calc(var(--details-width) - 50px); }
@@ -195,8 +195,12 @@ export const detailsPanelCss = `
     #details { --details-file-width: 960px; }
   }
   @media (max-width: 1024px) {
-    #details-dock { position: fixed; width: min(var(--details-column), calc(100vw - 24px)); }
-    #details { --details-width: min(var(--details-column), calc(100vw - 24px)); --details-file-width: calc(100vw - 24px); }
+    /* Fixed to the window here, so the dock adds an embedding page's chrome inset itself. */
+    #details-dock {
+      position: fixed; width: min(var(--details-column), calc(var(--chrome-width) - 24px));
+      top: calc(74px + var(--chrome-inset, 0px)); right: calc(12px + var(--chrome-inset, 0px)); bottom: calc(12px + var(--chrome-inset, 0px));
+    }
+    #details { --details-width: min(var(--details-column), calc(var(--chrome-width) - 24px)); --details-file-width: calc(var(--chrome-width) - 24px); }
     body.details-expanded { min-width: 0; }
   }
   @media (max-width: 600px) {

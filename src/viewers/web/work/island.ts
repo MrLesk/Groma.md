@@ -15,9 +15,13 @@ const CHEVRON = icon('<path d="M6 15l6-6 6 6"/>')
 
 export const workCss = `
   ${workSummaryCss}
-  /* Centred by margins, not by a translate: a fractional transform would resample the blurred layer and soften the text. */
+  /*
+   * Centred by margins, not by a translate: a fractional transform would resample the blurred layer and soften the text.
+   * Placed from the map, which fills the window, so the island adds an embedding page's chrome inset itself.
+   */
   #work {
-    position: absolute; left: 0; right: 0; bottom: 12px; margin: 0 auto; width: fit-content; box-sizing: border-box; max-width: calc(100% - 24px);
+    --window-inset: var(--chrome-inset, 0px);
+    position: absolute; left: 0; right: 0; bottom: calc(12px + var(--window-inset)); margin: 0 auto; width: fit-content; box-sizing: border-box; max-width: calc(100% - 24px);
     gap: 10px; padding: 6px 12px; overflow: hidden;
   }
   #work[hidden] { display: none; }

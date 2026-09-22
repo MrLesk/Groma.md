@@ -32,8 +32,11 @@ export const emptyStateCss = `
   #empty .empty-action:hover { background: color-mix(in srgb, var(--accent) 88%, var(--ink)); }
   #empty .empty-action[hidden], #empty.has-architecture .empty-action { display: none; }
   body:not(.hud-hidden) #empty:not(.has-architecture) { left: var(--hierarchy-inset); right: var(--details-inset); }
-  /* Below the Iso, 2D and Layers bar (top 74px, 44px tall); map-only view hides the notice with the rest of the chrome. */
-  #empty.has-architecture { inset: 130px 0 auto; }
+  /*
+   * Below the Iso, 2D and Layers bar (top 74px, 44px tall); map-only view hides the notice with the rest of the chrome.
+   * The notice is fixed to the window, so it adds an embedding page's chrome inset itself.
+   */
+  #empty.has-architecture { inset: calc(130px + var(--chrome-inset, 0px)) 0 auto; }
   body.hud-hidden #empty.has-architecture { display: none; }
   #empty.has-architecture .empty-card { position: relative; width: min(360px, calc(100vw - 32px)); padding: 14px 42px 14px 18px; gap: 4px; border-radius: var(--chrome-radius); }
   #empty.has-architecture h1 { font-size: 13px; }

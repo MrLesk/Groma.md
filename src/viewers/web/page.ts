@@ -93,9 +93,15 @@ const style = `
   }
   html { margin: 0; height: 100%; overflow-x: auto; overflow-y: hidden; background: var(--paper); }
   *, *::before, *::after { box-sizing: border-box; }
+  /*
+   * The chrome is placed from the body's edges and the map from the window's, so an inset moves only the chrome.
+   * Chrome placed from the window instead, like the work island in the map, adds the inset itself, and chrome sized
+   * from the window uses --chrome-width, the window width less the inset on both sides.
+   */
   body {
-    margin: 0;
-    height: 100%;
+    --chrome-width: calc(100vw - 2 * var(--chrome-inset, 0px));
+    margin: var(--chrome-inset, 0px);
+    height: calc(100% - 2 * var(--chrome-inset, 0px));
     min-width: 900px;
     overflow: hidden;
     background: transparent;
@@ -307,10 +313,11 @@ const style = `
   #hierarchy-toggle, #details-close, #zoom-in, #zoom-out { width: 32px; height: 32px; padding: 0; }
   #zoom-in, #zoom-out { justify-content: center; font-size: 12px; line-height: 1.2; }
   .control-glyph { display: block; transform-origin: center; }
+  /* A bar placed from the window sets --window-inset to the chrome inset it has to add. */
   body #work, body #map-view {
-    left: calc(var(--hierarchy-inset) + 24px);
-    right: calc(var(--details-inset) + 24px);
-    max-width: calc(100% - var(--hierarchy-inset) - var(--details-inset) - 48px);
+    left: calc(var(--hierarchy-inset) + var(--window-inset, 0px) + 24px);
+    right: calc(var(--details-inset) + var(--window-inset, 0px) + 24px);
+    max-width: calc(100% - var(--hierarchy-inset) - var(--details-inset) - 2 * var(--window-inset, 0px) - 48px);
     transition: left var(--chrome-motion) var(--chrome-ease), right var(--chrome-motion) var(--chrome-ease);
   }
   .row {
@@ -417,11 +424,20 @@ function helpControl(): string {
   return `<details id="help"><summary class="chrome-button">Help</summary><div class="anchored-popover help-panel" role="region" aria-label="Help">${guide}<div class="help-shortcuts">${body}</div></div></details>`
 }
 
+/**
+ * A page that embeds the map and draws its own frame opens it with `inset=<pixels>`: the chrome
+ * stays that far inside every window edge while the map still fills the window.
+ */
+function chromeInset(url: URL | undefined): string {
+  const inset = Number(url?.searchParams.get('inset'))
+  return Number.isInteger(inset) && inset > 0 ? ` style="--chrome-inset:${inset}px"` : ''
+}
+
 export function renderPage(payload: WebBootPayload, url?: URL): string {
   const json = JSON.stringify(payload).replace(/</g, '\\u003c')
   return `<!doctype html><html><head><meta charset="utf-8"><title>${escaped(payload.project?.title ?? 'Groma')}</title>`
     + sharingMetadata(payload.project, url)
-    + `<style>${style}</style></head><body data-delivery="${payload.delivery.kind}">`
+    + `<style>${style}</style></head><body data-delivery="${payload.delivery.kind}"${chromeInset(url)}>`
     + `<header id="header"><div class="header-context">${lockup}<span id="stats"></span>${revisionControl(payload, { history: historyIcon, loader: revisionLoader })}</div>`
     + searchControl({ search: searchIcon, close: closeIcon })
     + `<div class="header-actions">${projectReviewControl}<div id="map-controls" class="controls" aria-label="Map controls"><button id="fit" aria-label="Fit map">${fitIcon}<span>Fit</span></button><button id="zoom-out" aria-label="Zoom out"><span class="control-glyph">−</span></button><span id="zoom" aria-live="polite"></span><button id="zoom-in" aria-label="Zoom in"><span class="control-glyph">+</span></button></div><div class="header-utilities">${settingsControl(themeControl())}${helpControl()}${creditsControl(infoIcon, lockup)}</div></div>`
