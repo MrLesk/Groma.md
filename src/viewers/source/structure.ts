@@ -55,15 +55,17 @@ export async function readSnapshotCodeStructure(
   const modules = (await configuredScannerModules(repositoryRoot))
     .filter((module): module is FoundScannerModule => module.status === 'found')
   const requests = outlineRequests(element.code, new Set(modules.map(module => module.id)))
-  const providers = await Promise.all(modules.filter(module => requests.some(request => request.scanner === module.id))
-    .map(async module => ({
-      scanner: await importScanner(module.entry, module.id),
-      references: requests.filter(request => request.scanner === module.id).map(request => request.reference),
-      settings: module.settings,
-    })))
   const order = requests.map(request => request.reference.file)
-  const files = await Promise.all(providers.map(({ scanner, references, settings }) => (
-    scanner.readCodeStructure?.(snapshotRoot, references, settings) ?? []
-  )))
+  const files = await Promise.all(modules.map(async module => {
+    const references = requests.filter(request => request.scanner === module.id).map(request => request.reference)
+    if (references.length === 0) return []
+    // A scanner that cannot load or outline here, such as one missing its worker, contributes no outline, like one without the hook.
+    try {
+      const scanner = await importScanner(module.entry, module.id)
+      return await scanner.readCodeStructure?.(snapshotRoot, references, module.settings) ?? []
+    } catch {
+      return []
+    }
+  }))
   return files.flat().sort((left, right) => order.indexOf(left.file) - order.indexOf(right.file))
 }

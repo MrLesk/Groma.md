@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test'
 import path from 'node:path'
-import { mkdtemp, rm } from 'node:fs/promises'
+import { cp, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 
 import { readCodeStructure as readReferenceOutline } from '../plugins/scanners/typescript/src/structure.ts'
@@ -25,6 +25,23 @@ test.concurrent('snapshot outlines use installed repository scanners without loa
     const files = await readSnapshotCodeStructure(mixedFixture, snapshot, world, component.representationId)
     expect(files?.map(file => file.declarations[0]?.name)).toEqual(['beta', 'alpha'])
   } finally { await rm(snapshot, { recursive: true, force: true }) }
+})
+
+test.concurrent('a scanner that cannot outline, such as one missing its worker, leaves the other scanners outlining', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'groma-outline-failing-'))
+  try {
+    await cp(mixedFixture, root, { recursive: true })
+    await writeFile(path.join(root, 'plugins/beta/index.js'), `export default {
+  id: 'beta',
+  watch: { include: [], exclude: [] },
+  async scan() { return undefined },
+  async readCodeStructure() { throw new Error('BETA_WORKER_MISSING') },
+}
+`)
+    const { world, component } = await mixedComponent()
+    const files = await readSnapshotCodeStructure(root, root, world, component.representationId)
+    expect(files?.map(file => [file.file, file.declarations[0]?.name])).toEqual([['src/orders.alpha', 'alpha']])
+  } finally { await rm(root, { recursive: true, force: true }) }
 })
 
 test.concurrent('a component whose Code spans two scanners outlines every file in Code order', async () => {

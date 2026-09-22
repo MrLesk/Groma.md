@@ -103,7 +103,9 @@ Every official scanner implements
 `readCodeStructure(repositoryRoot, references, settings)`. It supplies the
 declarations listed under a component's Code in the web and terminal maps and
 the static export. The hook is optional for other plugins; a plugin without it
-contributes no outline. The outline is read-only source detail, never an
+contributes no outline. So does a scanner that cannot load or outline on this
+computer, such as one missing its native worker; the maps and the static export
+keep every other scanner's outline. The outline is read-only source detail, never an
 architecture record. Build it by parsing source only: no project dependencies,
 builds, or project tools.
 
