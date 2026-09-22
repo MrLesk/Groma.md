@@ -6,22 +6,34 @@ import { phpEvidence } from './evidence.ts'
 import { moduleOperation, phpHttpFacts, resolveEndpoints } from './http.ts'
 import { readCodeStructure } from './outline.ts'
 import { parsePhp } from './syntax.ts'
-import { phpEntries } from './entries.ts'
+import { commandTargets, phpEntries } from './entries.ts'
 
-async function inventory(root: string) {
-  return projectFiles(root, file => file.endsWith('.php'))
+async function inventory(root: string, excluded?: (file: string) => boolean) {
+  const available = await projectFiles(root, file => !excluded?.(file))
+  const files = available.filter(file => file.endsWith('.php'))
+  const manifests = available.filter(file => path.basename(file) === 'composer.json')
+  const commands = new Set<string>()
+  for (const declaration of manifests) {
+    const manifest = JSON.parse(await readFile(path.join(root, declaration), 'utf8'))
+    for (const target of commandTargets(manifest)) commands.add(path.posix.join(path.posix.dirname(declaration), target))
+  }
+  for (const file of available.filter(file => commands.has(file))) {
+    if (!file.endsWith('.php') && (await readFile(path.join(root, file), 'utf8')).includes('<?php')) files.push(file)
+  }
+  return { files: [...new Set(files)].sort(), manifests }
 }
 
 export default {
   id: 'php',
   readCodeStructure,
-  listSourceFiles: inventory,
-  watch: { include: ['**/*.php', '**/composer.json'], exclude: [] },
+  listSourceFiles: async root => (await inventory(root)).files,
+  // Composer can name an extensionless PHP command at any path.
+  watch: { include: ['**/*'], exclude: [] },
   async checkReadiness(root) {
-    if (!(await inventory(root)).length) throw new Error('php: No PHP source files were found in the Git repository.')
+    if (!(await inventory(root)).files.length) throw new Error('php: No PHP source files were found in the Git repository.')
   },
-  async scan(root) {
-    const files = await inventory(root)
+  async scan(root, _settings, excluded) {
+    const { files, manifests } = await inventory(root, excluded)
     if (!files.length) return undefined
     const evidence = []
     for (const file of files) {
@@ -29,7 +41,6 @@ export default {
       evidence.push({ file, ...phpEvidence(file, tree), ...phpHttpFacts(file, tree) })
     }
     const declared = evidence.flatMap(file => file.operations)
-    const manifests = await projectFiles(root, file => path.basename(file) === 'composer.json')
     const httpEndpoints = resolveEndpoints(evidence, declared, manifests)
     const httpRequests = evidence.flatMap(file => file.requests)
     // A file's top-level code is an operation only when an HTTP fact names it.

@@ -21,6 +21,8 @@ import {
 export interface PhpHttpFacts {
   endpoints: PendingEndpoint[]
   requests: ScanHttpRequest[]
+  /** A declared class and the parent whose inherited methods it can serve. */
+  parents: Map<string, string>
   /** Routes files this file loads, such as through Laravel's `withRouting` or a route group given a file. */
   loads: Load[]
   /** Laravel's global parameter patterns this file sets. */
@@ -38,6 +40,7 @@ const noConstants: Constants = () => undefined
 function collectImports(tree: Syntax): Map<string, string> {
   const imports = new Map<string, string>()
   function visit(node: Syntax): void {
+    if (node !== tree && node.kind === 'namespace') return
     if (node.kind === 'useitem') {
       const name = String((node as Fields).name)
       imports.set(nameOf(field(node, 'alias')) ?? name.split('\\').at(-1)!, name)
@@ -109,6 +112,7 @@ function constantsIn(table: ConstantTable, scope: NameScope): Constants {
 export function phpHttpFacts(file: string, tree: Syntax): PhpHttpFacts {
   const endpoints: PendingEndpoint[] = []
   const requests: ScanHttpRequest[] = []
+  const parents = new Map<string, string>()
   const loads: Load[] = []
   const patterns = new Map<string, string>()
   const basePaths: RouteText[] = []
@@ -135,17 +139,26 @@ export function phpHttpFacts(file: string, tree: Syntax): PhpHttpFacts {
     return { ...next, constants: constantsIn(table, next) }
   }
 
+  function recordParent(node: Fields, scope: FileScope): void {
+    const parent = node.kind === 'class' ? typeName(field(node, 'extends'), scope) : undefined
+    if (scope.type !== undefined && parent !== undefined) parents.set(scope.type, parent)
+  }
+
   /**
    * The scope a declaration opens: a namespace, a type with its attribute prefix, patterns and
    * receiver properties, or an operation with its own receiver parameters. Code inside a type reaches
    * the type's properties through `$this`; variables of enclosing code are not visible.
    */
   function declared(node: Fields, scope: FileScope, group?: Receiver): FileScope | undefined {
-    if (node.kind === 'namespace') return renamed(scope, { namespace: nameOf(node.name) ?? '' })
+    if (node.kind === 'namespace') {
+      const named = renamed(scope, { namespace: nameOf(node.name) ?? '', imports: collectImports(node) })
+      return { ...named, receivers: boundReceivers(node, named) }
+    }
     if (typeKinds.has(node.kind)) {
       const name = nameOf(node.name)
       const typed = renamed(scope, { type: name === undefined ? undefined : symbolName(scope.namespace, name) })
-      const { prefix, requirements } = attributeScope(node, typed.constants)
+      recordParent(node, typed)
+      const { prefix, requirements } = attributeScope(node, typed)
       return { ...typed, receivers: typeReceivers(node, typed), prefix: joinRoutes(scope.prefix, prefix), requirements }
     }
     if (!callables.has(node.kind)) return undefined
@@ -215,8 +228,10 @@ export function phpHttpFacts(file: string, tree: Syntax): PhpHttpFacts {
     file, namespace: '', imports: collectImports(tree), constants: noConstants, prefix: noRoute, requirements: new Map(), receivers: new Map(),
   }
   const named = renamed(top, {})
-  visit(tree as Fields, { ...named, receivers: boundReceivers(tree as Fields, named) })
-  return { endpoints, requests: [...requests, ...curl.requests()], loads, patterns, basePaths }
+  const globalReceivers = list(tree, 'children').some(child => child.kind === 'namespace')
+    ? new Map<string, Receiver>() : boundReceivers(tree as Fields, named)
+  visit(tree as Fields, { ...named, receivers: globalReceivers })
+  return { endpoints, requests: [...requests, ...curl.requests()], parents, loads, patterns, basePaths }
 }
 
 /**
@@ -228,7 +243,7 @@ export function moduleOperation(file: string): ScanOperation {
 }
 
 /** One file's facts as the scan collects them, before handler symbols name operations. */
-export interface FileFacts extends Pick<PhpHttpFacts, 'endpoints' | 'loads' | 'patterns' | 'basePaths'> {
+export interface FileFacts extends Pick<PhpHttpFacts, 'endpoints' | 'parents' | 'loads' | 'patterns' | 'basePaths'> {
   file: string
   symbols: ScanSymbol[]
 }
@@ -262,8 +277,8 @@ function slimBase(files: readonly FileFacts[]): RouteText {
 function served(entry: PendingEndpoint, operation: string | undefined, base: Base, context: { patterns: Requirements; application: string }): ScanHttpEndpoint {
   const path = joinRoutes(base.prefix, entry.route)
   // A Laravel route's own patterns, then those of the group that loads its file, override the global ones.
-  const requirements = entry.project === 'laravel' ? new Map([...context.patterns, ...base.requirements, ...entry.requirements]) : entry.requirements
-  const segments = routeSegments(path.text, requirements)
+  const requirements = entry.routing === 'laravel' ? new Map([...context.patterns, ...base.requirements, ...entry.requirements]) : entry.requirements
+  const segments = routeSegments(path.text, requirements, entry.routing !== 'symfony')
   const known = operation !== undefined && path.resolved
   const order = { application: context.application, position: 0 }
   return { operation: known ? operation : entry.registrar, method: entry.method, path: known ? segments : blockerPath(segments), order }
@@ -280,18 +295,36 @@ export function resolveEndpoints(
 ): ScanHttpEndpoint[] {
   const declared = new Set(operations.map(operation => operation.id))
   const byName = operationsByName(files, declared)
+  const parents = new Map<string, string | undefined>()
+  for (const file of files) for (const [child, parent] of file.parents) {
+    parents.set(child, parents.has(child) ? undefined : parent)
+  }
   const paths = files.map(file => file.file)
   const application = (file: string) => laravelApplication(file, paths, manifests)
   const laravel = laravelRouting(files, application)
   const slim: Base = { prefix: slimBase(files), requirements: new Map() }
+  const inheritedOperation = (symbol: string): string | undefined => {
+    const separator = symbol.lastIndexOf('::')
+    if (separator < 0) return byName.get(symbol)
+    const method = symbol.slice(separator + 2)
+    let type: string | undefined = symbol.slice(0, separator)
+    const seen = new Set<string>()
+    while (type !== undefined && !seen.has(type)) {
+      seen.add(type)
+      const name = `${type}::${method}`
+      if (byName.has(name)) return byName.get(name)
+      type = parents.get(type)
+    }
+    return undefined
+  }
   const operationOf = (handler: Handler | undefined) => {
-    const found = handler === undefined ? undefined : 'operation' in handler ? handler.operation : byName.get(handler.symbol)
+    const found = handler === undefined ? undefined : 'operation' in handler ? handler.operation : inheritedOperation(handler.symbol)
     return found !== undefined && declared.has(found) ? found : undefined
   }
   const endpoints = files.flatMap(({ file, endpoints }) => endpoints.flatMap(entry => {
-    const laravelRoute = entry.project === 'laravel'
+    const laravelRoute = entry.routing === 'laravel'
     const context = { patterns: laravel.patterns, application: laravelRoute ? application(file) : file }
-    const bases = laravelRoute ? laravel.basesOf(file) : [entry.project === 'slim' ? slim : rootBase]
+    const bases = laravelRoute ? laravel.basesOf(file) : [entry.routing === 'slim' ? slim : rootBase]
     return bases.map(base => served(entry, operationOf(entry.handler), base, context))
   }))
   return [...endpoints, ...laravel.blockers]

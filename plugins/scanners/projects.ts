@@ -5,7 +5,7 @@ import path from 'node:path'
 import { promisify } from 'node:util'
 
 const execute = promisify(execFile)
-const excluded = new Set(['.git', 'node_modules', 'vendor', 'target', 'dist', 'build', 'bin', 'obj',
+const excluded = new Set(['.git', 'node_modules', 'vendor', 'target', 'dist', 'build', 'obj',
   '.gradle', '.angular', 'coverage', 'generated', 'groma', '.groma'])
 
 /** The tracked and unignored files that match and exist, in any directory. */

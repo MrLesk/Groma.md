@@ -10,10 +10,9 @@ import {
 export type Handler = { operation: string } | { symbol: string }
 
 /**
- * What the whole scan adds to a route its own file states: a Laravel project's loads and global
- * patterns, or the base path a Slim project gives the application a typed `App` holds.
+ * Which router's route syntax and project-wide rules an entry uses.
  */
-export type Project = 'laravel' | 'slim'
+export type Routing = 'laravel' | 'slim' | 'symfony'
 
 /** A route entry of one file, before handler symbols name operations and before the project adds to it. */
 export interface PendingEndpoint {
@@ -23,7 +22,7 @@ export interface PendingEndpoint {
   /** The route under the prefixes of its own file, as far as the source states it. */
   route: RouteText
   requirements: Requirements
-  project?: Project
+  routing?: Routing
   /** The operation that registers the route, which the endpoint names as a blocker. */
   registrar: string
 }
@@ -100,8 +99,8 @@ export function handlerOf(argument: Fields | undefined, scope: FileScope): Handl
   return written === undefined || !/^\\?[\w\\]+(?:::\w+)?$/.test(written) ? undefined : { symbol: qualifiedName(written) }
 }
 
-/** Where a route entry is registered: its prefix and patterns, its project, and the operation that registers it. */
-type Registration = Pick<FileScope, 'prefix' | 'requirements'> & { registrar: string; project?: Project }
+/** Where a route entry is registered: its prefix, patterns, router and registering operation. */
+type Registration = Pick<FileScope, 'prefix' | 'requirements'> & { registrar: string; routing?: Routing }
 
 export function registration(scope: FileScope): Registration {
   return { prefix: scope.prefix, requirements: scope.requirements, registrar: scope.operation ?? moduleOperationId(scope.file) }
@@ -115,7 +114,7 @@ export function registration(scope: FileScope): Registration {
 function endpointsFor(methods: string[] | undefined, route: RouteText, handler: Handler | undefined, at: Registration): PendingEndpoint[] {
   const entry = {
     handler: methods === undefined ? undefined : handler, route: joinRoutes(at.prefix, route), requirements: at.requirements,
-    project: at.project, registrar: at.registrar,
+    routing: at.routing, registrar: at.registrar,
   }
   return (methods ?? ['*']).map(method => ({ ...entry, method }))
 }
@@ -171,7 +170,7 @@ interface Chain {
   prefix: RouteText
   requirements: Map<string, string>
   router: Router
-  project?: Project
+  routing?: Routing
   controller?: string
 }
 
@@ -201,9 +200,9 @@ function routerChain(call: Fields, scope: FileScope): Chain | undefined {
   }
   const receiver = proved(current, scope)
   if (receiver === undefined || receiver.role === 'client') return undefined
-  if (receiver.role === 'laravel') return { ...chain, prefix: joinRoutes(scope.prefix, ...prefixes), router: 'laravel', project: 'laravel' }
-  const project = receiver.projectBase ? 'slim' : undefined
-  return { ...chain, prefix: joinRoutes(receiver.prefix, ...prefixes), router: 'slim', project }
+  if (receiver.role === 'laravel') return { ...chain, prefix: joinRoutes(scope.prefix, ...prefixes), router: 'laravel', routing: 'laravel' }
+  const routing = receiver.projectBase ? 'slim' : undefined
+  return { ...chain, prefix: joinRoutes(receiver.prefix, ...prefixes), router: 'slim', routing }
 }
 
 /** The patterns Laravel's `Route::pattern('id', ...)` or `Route::patterns([...])` sets for every route. */
@@ -283,7 +282,7 @@ export function groupCall(call: Fields, scope: FileScope): Group | undefined {
   const requirements = where === undefined ? chain.requirements : new Map([...chain.requirements, ...patternMap(where, scope.constants)])
   const host = entryValue(options, 'domain', scope.constants) === undefined ? noRoute : unresolvedRoute
   const prefix = joinRoutes(chain.prefix, groupPrefix(options, scope.constants), host)
-  const member: Receiver = chain.router === 'laravel' ? { role: 'laravel' } : { role: 'slim', prefix, projectBase: chain.project === 'slim' }
+  const member: Receiver = chain.router === 'laravel' ? { role: 'laravel' } : { role: 'slim', prefix, projectBase: chain.routing === 'slim' }
   return { ...chain, prefix, requirements, routes, member, loaded: routes === undefined ? last : undefined }
 }
 
@@ -309,10 +308,12 @@ function attributeRoute(attribute: Fields, constants: Constants): AttributeRoute
   }
 }
 
-/** Attributes named `Route`, as Symfony writes them on a controller class and its methods. */
-export function routeAttributes(node: Fields): Fields[] {
+/** Only proved routing attributes register Symfony-style endpoints. Drupal's Route extends Symfony's. */
+export function routeAttributes(node: Fields, scope: NameScope): Fields[] {
   return list(node, 'attrGroups').flatMap(group => list(group, 'attrs')
-    .filter(attribute => String(attribute.name).split('\\').at(-1) === 'Route'))
+    .filter(attribute => ['Symfony\\Component\\Routing\\Attribute\\Route', 'Symfony\\Component\\Routing\\Annotation\\Route',
+      'Drupal\\Core\\Routing\\Attribute\\Route']
+      .includes(typeName(String(attribute.name), scope) ?? '')))
 }
 
 /**
@@ -320,8 +321,8 @@ export function routeAttributes(node: Fields): Fields[] {
  * class. A class with no such attribute states neither; a path that is not literal leaves the prefix
  * unresolved.
  */
-export function attributeScope(node: Fields, constants: Constants): Pick<FileScope, 'prefix' | 'requirements'> {
-  const routes = routeAttributes(node).map(attribute => attributeRoute(attribute, constants))
+export function attributeScope(node: Fields, scope: FileScope): Pick<FileScope, 'prefix' | 'requirements'> {
+  const routes = routeAttributes(node, scope).map(attribute => attributeRoute(attribute, scope.constants))
   return { prefix: joinRoutes(...routes.map(route => route.route)), requirements: new Map(routes.flatMap(route => [...route.requirements])) }
 }
 
@@ -335,14 +336,15 @@ function routedMethod(attributes: Fields[], method: Fields, scope: FileScope): P
   const handler = { operation: operationId(scope.file, method) }
   return attributes.flatMap(attribute => {
     const { route, methods, requirements } = attributeRoute(attribute, scope.constants)
-    const at = { ...scope, requirements: new Map([...scope.requirements, ...requirements]), registrar: handler.operation }
+    const at = { ...scope, requirements: new Map([...scope.requirements, ...requirements]), registrar: handler.operation,
+      routing: 'symfony' as const }
     return endpointsFor(methods, route, handler, at)
   })
 }
 
 /** Endpoints a controller method's own `#[Route]` attributes declare, under the class prefix and patterns. */
 export function attributeEndpoints(method: Fields, scope: FileScope): PendingEndpoint[] {
-  return field(method, 'body') === undefined ? [] : routedMethod(routeAttributes(method), method, scope)
+  return field(method, 'body') === undefined ? [] : routedMethod(routeAttributes(method, scope), method, scope)
 }
 
 /**
@@ -352,8 +354,8 @@ export function attributeEndpoints(method: Fields, scope: FileScope): PendingEnd
 export function invokableEndpoints(type: Fields, scope: FileScope): PendingEndpoint[] {
   const methods = list(type, 'body').filter(member => member.kind === 'method')
   const invoke = methods.find(method => nameOf(method.name)?.toLowerCase() === '__invoke' && field(method, 'body') !== undefined)
-  if (invoke === undefined || methods.some(method => routeAttributes(method).length > 0)) return []
-  return routedMethod(routeAttributes(type), invoke, scope)
+  if (invoke === undefined || methods.some(method => routeAttributes(method, scope).length > 0)) return []
+  return routedMethod(routeAttributes(type, scope), invoke, scope)
 }
 
 /**
@@ -364,13 +366,16 @@ export function restRouteEndpoints(call: Fields, scope: FileScope): PendingEndpo
   if (calledFunction(call) !== 'register_rest_route') return []
   const [namespace, route, args] = list(call, 'arguments')
   const path = joinRoutes(routeText(namespace, scope.constants), routeText(route, scope.constants))
-  const configurations = entryValue(args, 'methods', scope.constants) === undefined
-    ? list(args, 'items').map(item => field(item, 'value')).filter(value => value?.kind === 'array')
-    : [args]
+  const configurations = entryValue(args, 'callback', scope.constants) !== undefined ? [args]
+    : list(args, 'items').filter(item => {
+      const key = field(item, 'key')
+      return key === undefined || (['number', 'string'].includes(key.kind) && /^\d+$/.test(String(key.value)))
+    }).map(item => field(item, 'value')).filter(value => value?.kind === 'array')
   // Arguments that state no readable configuration still register the route.
   if (configurations.length === 0) return endpointsFor(undefined, path, undefined, registration(scope))
   return configurations.flatMap(configuration => {
-    const methods = restMethods(entryValue(configuration, 'methods', scope.constants), scope.constants)
+    const declared = entryValue(configuration, 'methods', scope.constants)
+    const methods = declared === undefined ? ['GET'] : restMethods(declared, scope.constants)
     const handler = handlerOf(entryValue(configuration, 'callback', scope.constants), scope)
     return endpointsFor(methods, path, handler, registration(scope))
   })

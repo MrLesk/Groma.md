@@ -1,9 +1,10 @@
 # PHP scanner
 
 The PHP scanner reads tracked and unignored `.php` files, including PHP embedded
-in HTML. It does not require Composer, PHP, WordPress, project dependencies, or
-application execution. Discovery matches PHP source directly, even without a
-package manifest.
+in HTML. It also reads extensionless PHP commands named by a Composer `bin` or
+direct `php` script when the file contains a PHP opening tag. It does not require
+Composer, PHP, WordPress, project dependencies, or application execution.
+Discovery matches PHP source directly, even without a package manifest.
 
 ```sh
 bun plugins/scanners/php/build.ts
@@ -47,6 +48,8 @@ one physical owner and authored architecture. Shared Git boundaries omit ignored
 files and dependency/build output directories. Core applies configured source
 exclusions. Test source is otherwise treated like other PHP source; projects can
 exclude it explicitly.
+The live scanner also rescans after other unexcluded repository changes so it
+can catch extensionless Composer commands at any declared path.
 
 ## Source outline
 
@@ -165,13 +168,15 @@ prefix, so they are blockers.
 **Endpoints.** Only the handler a route names is an endpoint, and only a route
 registered on a proved router counts. The scanner reads `get`, `post`, `put`,
 `patch`, `delete`, `options`, `head`, `any`, `match` and `map` on such a
-router, Symfony `#[Route]` attributes on controller methods,
+router, Symfony `#[Route]` attributes on controller methods (including Drupal's
+attribute that extends Symfony's),
 the class-level `#[Route]` of an invokable controller whose methods declare
 none, which routes `__invoke`, and `register_rest_route` with the
 `WP_REST_Server` method constants. A handler is a closure written in place,
 `[Type::class, 'method']`, `[$this, 'method']`, `Type::class` for an invokable
 class, or a string naming a function or `Type::method`, and must be a function
-or method with a body in the scanned files. Laravel reads a plain string
+or method with a body in the scanned files, including an inherited method on a
+scanned parent class. Laravel reads a plain string
 handler as a method of the controller its `Route::controller(...)` group names,
 and otherwise as a controller class, so outside such a group it is unknown.
 A Laravel route under `domain(...)`, or in a group whose options state a
@@ -179,7 +184,8 @@ A Laravel route under `domain(...)`, or in a group whose options state a
 `permanentRedirect` and the resource and singleton members register routes
 whose handlers or paths are framework conventions, so they are blockers.
 Middleware reports nothing, and neither does `Route::fallback`, which the router
-tries only after every other route.
+tries only after every other route. WordPress skips associative route options
+beside numeric endpoint groups and defaults a group without `methods` to `GET`.
 
 **Dynamic or unknown.** `"/talks/$id"` fills one whole segment, so it is
 dynamic; PHP proves nothing about whether the value holds a slash.
@@ -215,6 +221,8 @@ catch-all that replaces the rest of the route. Laravel's global
 `Route::pattern` and `Route::patterns`, in any scanned file, constrain every
 Laravel route parameter of that name that states no pattern of its own; one
 whose parameter name the scanner cannot read constrains every such parameter.
+Symfony's `{slug:post}` maps the route parameter to a controller argument; it
+does not constrain the path segment.
 
 **Registration order.** Laravel, Symfony, Slim and WordPress take the first
 registered route that matches, so every endpoint reports `order`. The scanner

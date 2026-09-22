@@ -52,7 +52,7 @@ file such as `*.csproj` or `package.json`. The `--json` result always lists
 every finding.
 
 Dependency and generated directories are excluded by path segment:
-`node_modules`, `vendor`, `target`, `dist`, `build`, `bin`, `obj`, `.gradle`,
+`node_modules`, `vendor`, `target`, `dist`, `build`, `obj`, `.gradle`,
 `.angular`, `coverage`, and `generated`. Git metadata and Groma architecture
 directories are also excluded. A project deliberately placed under one of
 these names is outside this discovery scope. In an initialized project, discovery

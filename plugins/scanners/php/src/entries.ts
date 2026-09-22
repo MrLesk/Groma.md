@@ -5,6 +5,18 @@ import type { PhpHttpFacts } from './http.ts'
 
 type Source = { file: string } & PhpHttpFacts
 
+/** Composer binaries and direct PHP script commands that can name executable source. */
+export function commandTargets(manifest: Record<string, unknown>): string[] {
+  const bins = typeof manifest.bin === 'string' ? [manifest.bin]
+    : Array.isArray(manifest.bin) ? manifest.bin.filter((value): value is string => typeof value === 'string') : []
+  const scripts = manifest.scripts && typeof manifest.scripts === 'object' ? Object.values(manifest.scripts) : []
+  const commands = scripts.flatMap(script => Array.isArray(script) ? script : [script]).flatMap(script => {
+    const match = typeof script === 'string' && /^@?php\s+([\w./-]+)(?:\s|$)/.exec(script)
+    return match ? [match[1]!] : []
+  })
+  return [...bins, ...commands]
+}
+
 function includedFiles(entry: string, sources: ReadonlyMap<string, Source>, owner: (file: string) => string | undefined): string[] {
   const pending = [entry], found = new Set<string>()
   while (pending.length) {
@@ -26,12 +38,7 @@ export async function phpEntries(root: string, evidence: Source[], manifests: st
   const entries: ScanEntryPoint[] = []
   for (const declaration of manifests) {
     const manifest = JSON.parse(await readFile(path.join(root, declaration), 'utf8'))
-    const bins: string[] = typeof manifest.bin === 'string' ? [manifest.bin] : manifest.bin ?? []
-    const scripts = Object.values(manifest.scripts ?? {}).flat().flatMap(script => {
-      const match = typeof script === 'string' && /^@?php\s+([\w./-]+\.php)(?:\s|$)/.exec(script)
-      return match ? [match[1]!] : []
-    })
-    for (const target of [...bins, ...scripts]) {
+    for (const target of commandTargets(manifest)) {
       const file = path.posix.join(path.posix.dirname(declaration), target)
       const files = owner(file) === declaration ? includedFiles(file, byFile, owner) : []
       if (files.length) entries.push({ file, declaration, name: path.posix.basename(target, '.php'), files })

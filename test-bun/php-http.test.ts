@@ -1,22 +1,98 @@
 import { expect, test } from 'bun:test'
-import { cp, mkdtemp, rm } from 'node:fs/promises'
+import { cp, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import type { HttpEndpointSegment, HttpRequestSegment, ScanObservation, ScannerPlugin } from '@groma/scanner'
 import { buildPackage } from '../plugins/scanners/php/build.ts'
 import { inferRelationships } from '../src/relationship-inference.ts'
 
-async function scanFixture(fixture = 'php-http'): Promise<{ temporary: string; scan: ScanObservation }> {
+async function scanFixture(fixture = 'php-http', source?: string, base?: string): Promise<{ temporary: string; scan: ScanObservation }> {
   const temporary = await mkdtemp(path.join(os.tmpdir(), 'groma-php-http-'))
   const root = path.join(temporary, 'project')
   const artifact = path.join(temporary, 'scanner')
   await cp(path.resolve(import.meta.dir, '../test/fixtures', fixture), root, { recursive: true })
+  if (source !== undefined) await writeFile(path.join(root, 'routes.php'), source)
+  if (base !== undefined) await writeFile(path.join(root, 'base.php'), base)
   const git = Bun.spawn(['git', 'init', '--quiet', root], { stdout: 'ignore', stderr: 'pipe' })
   expect(await git.exited).toBe(0)
   await buildPackage(artifact)
   const scanner: ScannerPlugin = (await import(path.join(artifact, 'dist/index.js'))).default
   return { temporary, scan: (await scanner.scan(root))! }
 }
+
+test.concurrent('Slim routes to an inherited invokable handler in another file', async () => {
+  const { temporary, scan } = await scanFixture('empty-project', String.raw`<?php
+namespace Demo;
+use Slim\Factory\AppFactory;
+class ItemAction extends BaseAction {}
+$app = AppFactory::create();
+$app->get('/items', ItemAction::class);
+`, `<?php namespace Demo;
+abstract class BaseAction { public function __invoke() {} }
+`)
+  try {
+    expect(scan.httpEndpoints!.map(endpoint => [endpoint.method, endpointPath(endpoint.path), fileOf(scan, endpoint.operation)]))
+      .toEqual([['GET', '/items', 'base.php']])
+  } finally { await rm(temporary, { recursive: true, force: true }) }
+})
+
+test.concurrent('PHP accepts recognized Route attributes and keeps mapped parameters unconstrained', async () => {
+  const { temporary, scan } = await scanFixture('empty-project', String.raw`<?php
+namespace App;
+use Symfony\Component\Routing\Attribute\Route as HttpRoute;
+use Drupal\Core\Routing\Attribute\Route as DrupalRoute;
+#[\Attribute] class Route { public function __construct(public string $path) {} }
+#[Route('/unregistered')] class LocalHandler { public function __invoke() {} }
+#[HttpRoute('/posts/{slug:post}', methods: ['GET'])]
+class MappedHandler { public function __invoke() {} }
+#[DrupalRoute('/admin', methods: ['POST'])]
+class DrupalHandler { public function __invoke() {} }
+`)
+  try {
+    expect(scan.httpEndpoints!.map(endpoint => [endpoint.method, endpointPath(endpoint.path)])).toEqual([
+      ['GET', '/posts/:slug'],
+      ['POST', '/admin'],
+    ])
+  } finally { await rm(temporary, { recursive: true, force: true }) }
+})
+
+test.concurrent('PHP resolves Route imports inside each namespace block', async () => {
+  const { temporary, scan } = await scanFixture('empty-project', String.raw`<?php
+namespace First {
+  use Symfony\Component\Routing\Attribute\Route as WebRoute;
+  use Demo\Other\Route as OtherRoute;
+  #[WebRoute('/first', methods: ['GET'])] class FirstHandler { public function __invoke() {} }
+  #[OtherRoute('/not-first')] class UnrelatedFirst { public function __invoke() {} }
+}
+namespace Second {
+  use Demo\Other\Route as WebRoute;
+  use Symfony\Component\Routing\Attribute\Route as OtherRoute;
+  #[WebRoute('/not-second')] class UnrelatedSecond { public function __invoke() {} }
+  #[OtherRoute('/second', methods: ['POST'])] class SecondHandler { public function __invoke() {} }
+}
+`)
+  try {
+    expect(scan.httpEndpoints!.map(endpoint => [endpoint.method, endpointPath(endpoint.path)]))
+      .toEqual([['GET', '/first'], ['POST', '/second']])
+  } finally { await rm(temporary, { recursive: true, force: true }) }
+})
+
+test.concurrent('WordPress REST options do not become routes and missing methods default to GET', async () => {
+  const { temporary, scan } = await scanFixture('empty-project', `<?php
+function list_items() {}
+register_rest_route('shop/v1', '/items', [
+    ['methods' => 'GET', 'callback' => 'list_items'],
+    'args' => ['id' => ['type' => 'integer']],
+    'schema' => ['type' => 'object'],
+]);
+register_rest_route('shop/v1', '/default', ['callback' => 'list_items']);
+`)
+  try {
+    expect(scan.httpEndpoints!.map(endpoint => [endpoint.method, endpointPath(endpoint.path)])).toEqual([
+      ['GET', '/shop/v1/items'], ['GET', '/shop/v1/default'],
+    ])
+  } finally { await rm(temporary, { recursive: true, force: true }) }
+})
 
 /** `:id` is a parameter and `:path*` an optional catch-all, as the derived statement writes them; `~` marks a constrained one. */
 function endpointPath(segments: readonly HttpEndpointSegment[]): string {

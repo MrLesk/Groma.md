@@ -27,7 +27,7 @@ interface Placeholder { name: string; pattern: string | undefined; optional: boo
 type Piece = string | Placeholder | { tail: true }
 
 /** The route's segments, each a list of pieces; a Slim optional group ends the route. */
-function routePieces(route: string): Piece[][] {
+function routePieces(route: string, colonPattern: boolean): Piece[][] {
   const segments: Piece[][] = [[]]
   function text(value: string): boolean {
     const [before, tail] = value.split(/\[(.*)/s)
@@ -41,7 +41,8 @@ function routePieces(route: string): Piece[][] {
   let at = 0
   for (const match of route.matchAll(placeholder)) {
     if (text(route.slice(at, match.index))) return segments.filter(pieces => pieces.length > 0)
-    segments.at(-1)!.push({ name: (match[1] ?? match[5])!, pattern: match[2] ?? match[4] ?? match[6], optional: match[3] !== undefined })
+    segments.at(-1)!.push({ name: (match[1] ?? match[5])!,
+      pattern: match[2] ?? (colonPattern ? match[4] : undefined) ?? match[6], optional: match[3] !== undefined })
     at = match.index + match[0].length
   }
   text(route.slice(at))
@@ -99,8 +100,8 @@ function segmentOf(pieces: Piece[], requirements: Requirements, last: boolean): 
  * segments or that the format cannot state, a constrained optional catch-all named after its first
  * placeholder replaces the rest of the route, so the endpoint is never widened or omitted.
  */
-export function routeSegments(route: string, requirements: Requirements): HttpEndpointSegment[] {
-  const pieces = routePieces(route)
+export function routeSegments(route: string, requirements: Requirements, colonPattern = true): HttpEndpointSegment[] {
+  const pieces = routePieces(route, colonPattern)
   const segments: HttpEndpointSegment[] = []
   for (const [index, segment] of pieces.entries()) {
     const stated = segmentOf(segment, requirements, index === pieces.length - 1)

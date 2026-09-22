@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { cp, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import type { CodeSymbol, ScannerPlugin } from '@groma/scanner'
@@ -10,6 +10,7 @@ import { loadAnnotatedArchitecture, reconcileScanObservations } from '../src/cor
 import { loadArchitecture } from '../src/architecture-reader.ts'
 import { editArchitecture } from '../src/edit.ts'
 import { createScannerSession } from '../src/scanner/session.ts'
+import { compileWatchPatterns } from '../src/scanner/watch-patterns.ts'
 import { readCodeStructure } from '../src/viewers/source/structure.ts'
 
 const fixtures = path.resolve(import.meta.dir, '../test/fixtures')
@@ -54,6 +55,32 @@ test.concurrent('packaged PHP discovers source without Composer and reports exac
     const curated = await loadAnnotatedArchitecture(root)
     expect((await reconcileScanObservations(root, [scan])).created).toBe(0)
     expect(await loadAnnotatedArchitecture(root)).toEqual(curated)
+  } finally { await rm(temporary, { recursive: true, force: true }) }
+})
+
+test.concurrent('PHP reads tracked Composer binaries with and without a PHP extension', async () => {
+  const { temporary, root, scanner } = await setup()
+  try {
+    await mkdir(path.join(root, 'bin'))
+    await writeFile(path.join(root, 'bin/command.php'), '<?php function runCommand(): void {}\n')
+    await writeFile(path.join(root, 'bin/console'), '#!/usr/bin/env php\n<?php function runConsole(): void {}\n')
+    await mkdir(path.join(root, 'tools'))
+    await writeFile(path.join(root, 'tools/console'), '<?php function runTool(): void {}\n')
+    await writeFile(path.join(root, 'composer.json'), JSON.stringify({ name: 'sample/tool',
+      bin: ['bin/command.php', 'bin/console'], scripts: { inspect: '@php tools/console' } }))
+    const scan = (await scanner.scan(root))!
+    expect(scan.files.some(file => file.file === 'bin/command.php')).toBe(true)
+    expect(scan.entryPoints).toContainEqual({
+      file: 'bin/command.php', declaration: 'composer.json', name: 'command', files: ['bin/command.php'],
+    })
+    expect(scan.files.some(file => file.file === 'bin/console')).toBe(true)
+    expect(scan.entryPoints).toContainEqual({
+      file: 'bin/console', declaration: 'composer.json', name: 'console', files: ['bin/console'],
+    })
+    expect(scan.entryPoints).toContainEqual({
+      file: 'tools/console', declaration: 'composer.json', name: 'console', files: ['tools/console'],
+    })
+    expect(compileWatchPatterns(scanner.watch)('tools/console')).toBe(true)
   } finally { await rm(temporary, { recursive: true, force: true }) }
 })
 
@@ -136,6 +163,27 @@ test.concurrent('PHP syntax failures cannot publish a partial observation and ig
     await writeFile(path.join(root, 'view.php'), '<?php function broken(')
     await expect(scanner.scan(root)).rejects.toThrow()
     expect(await loadArchitecture(root)).toEqual(saved)
+  } finally { await rm(temporary, { recursive: true, force: true }) }
+})
+
+test.concurrent('PHP accepts named arguments after unpacking but rejects positional ones', async () => {
+  const { temporary, root, scanner } = await setup()
+  try {
+    const file = path.join(root, 'unpacked.php')
+    await writeFile(file, '<?php function send($call, $args) { return $call(...$args, named: true); }')
+    expect((await scanner.scan(root))!.files.some(source => source.file === 'unpacked.php')).toBe(true)
+    await writeFile(file, '<?php function send($call, $args) { return $call(...$args, true); }')
+    await expect(scanner.scan(root)).rejects.toThrow()
+  } finally { await rm(temporary, { recursive: true, force: true }) }
+})
+
+test.concurrent('PHP scan omits source excluded by Groma before parsing it', async () => {
+  const { temporary, root, scanner } = await setup()
+  try {
+    await writeFile(path.join(root, 'excluded.php'), '<?php function broken(')
+    const scan = (await scanner.scan(root, undefined, file => file === 'excluded.php'))!
+    expect(scan.files.some(file => file.file === 'excluded.php')).toBe(false)
+    await expect(scanner.scan(root)).rejects.toThrow()
   } finally { await rm(temporary, { recursive: true, force: true }) }
 })
 

@@ -54,11 +54,32 @@ export function moduleOperationId(file: string): string {
   return `${file}#module`
 }
 
-/** PHP syntax through 8.4; parser errors throw instead of producing a partial tree. */
+/** php-parser flags PHP 8.1's valid named argument after unpacking; its parsed argument remains intact. */
+function validNamedAfterUnpack(tree: Program, error: { message: string; loc?: { start: { offset: number } } | null }): boolean {
+  if (!error.message.startsWith('Unexpected non-variadic argument after a variadic argument')) return false
+  const offset = error.loc?.start.offset
+  if (offset === undefined) return false
+  let valid = false
+  function visit(node: Syntax): void {
+    let unpacked = false
+    for (const argument of list(node, 'arguments')) {
+      if (argument.kind === 'variadic') unpacked = true
+      else if (unpacked && argument.kind === 'namedargument' && argument.loc?.end.offset === offset) valid = true
+    }
+    for (const child of children(node)) visit(child)
+  }
+  visit(tree)
+  return valid
+}
+
+/** PHP syntax through 8.4; real parser errors throw instead of producing a partial tree. */
 export function parsePhp(file: string, source: string): Program {
-  const parser = new Engine({ parser: { version: '8.4', suppressErrors: false },
+  const parser = new Engine({ parser: { version: '8.4', suppressErrors: true },
     ast: { withPositions: true }, lexer: { short_tags: true } })
-  return parser.parseCode(source, file)
+  const tree = parser.parseCode(source, file)
+  const invalid = tree.errors.find(error => !validNamedAfterUnpack(tree, error))
+  if (invalid !== undefined) throw invalid
+  return tree
 }
 
 export function isSyntax(value: unknown): value is Syntax {
@@ -90,11 +111,11 @@ export interface NameScope {
   type?: string
 }
 
-/** The fully qualified name a class reference states, through the file's `use` aliases. */
-export function typeName(node: Fields | undefined, scope: NameScope): string | undefined {
-  if (node?.kind === 'selfreference' || node?.kind === 'staticreference') return scope.type
-  if (node?.kind !== 'name') return undefined
-  const written = String(node.name)
+/** The fully qualified name a class reference or attribute states, through the file's `use` aliases. */
+export function typeName(node: Fields | string | undefined, scope: NameScope): string | undefined {
+  if (typeof node !== 'string' && (node?.kind === 'selfreference' || node?.kind === 'staticreference')) return scope.type
+  if (typeof node !== 'string' && node?.kind !== 'name') return undefined
+  const written = typeof node === 'string' ? node : String(node.name)
   if (written.startsWith('\\')) return qualifiedName(written)
   const [head, ...rest] = written.split('\\')
   const imported = scope.imports.get(head!)
