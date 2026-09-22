@@ -4,6 +4,7 @@ import type { Building, RoutePoint, SheetScene } from '../../../sheet/types.ts'
 import type { LayerPose } from '../layers/orbit.ts'
 import { EXPLODED_POSE, NESTED_POSE, OVERHEAD_POSE, ORBIT_DURATION_MS, PLAN_DURATION_MS, interpolatePose, orbitPose } from '../layers/orbit.ts'
 import { sceneAtSeparation, type LayeredScene } from '../layers/separation.ts'
+import { MORPH_DURATION_MS, MORPH_FASTEST_MS, MORPH_LIMIT, sameSheet, tweenSheet } from './morph.ts'
 import { projectScene } from './project.ts'
 
 export type MapView = 'iso' | '2d' | 'layers'
@@ -11,12 +12,18 @@ export type MapView = 'iso' | '2d' | 'layers'
 export interface MapMotion {
   readonly view: MapView
   readonly pose: LayerPose
-  /** Progress for framing the plan transition, or one for ordinary layer motion. */
+  /** The sheet as displayed: the latest placement, or the blend on its way there. */
+  readonly sheet: SheetScene
+  /** True while a world update is still settling on the map. */
+  readonly morphing: boolean
+  /** Progress for framing the plan transition or a settling sheet, or one for ordinary layer motion. */
   readonly framing: number
   /** Every view moves through the displayed pose unless reduced motion is requested. */
   choose(view: MapView, now: number, animate: boolean): boolean
   toggleLayers(now: number, animate: boolean): boolean
-  /** Advances the current transition and reports whether another frame is needed. */
+  /** Moves the map towards a new placement from wherever it is; reports whether frames are needed. */
+  retarget(sheet: SheetScene, now: number, animate: boolean): boolean
+  /** Advances the current transitions and reports whether another frame is needed. */
   step(now: number): boolean
   /** Cancels entrance motion and orbits the fully separated stack. */
   orbit(dx: number, dy: number): void
@@ -25,7 +32,15 @@ export interface MapMotion {
 export interface MapAnimator {
   choose(view: MapView): void
   toggleLayers(): void
+  /** Follows a world update; the caller paints the first frame and later frames repaint here. */
+  retarget(sheet: SheetScene): void
   orbit(dx: number, dy: number): void
+}
+
+const EMPTY_SHEET: SheetScene = { sheet: { gx: 0, gy: 0, w: 0, d: 0 }, islands: [], zones: [], slabs: [], buildings: [], routes: [] }
+
+function ease(progress: number): number {
+  return 1 - (1 - Math.min(1, Math.max(0, progress))) ** 3
 }
 
 
@@ -100,13 +115,36 @@ export function presentScene(sheet: SheetScene, profile: ProjectProfile | undefi
   return sceneAtSeparation(projected, pose.separation)
 }
 
-/** Presentation owns its view, the nested view F2 returns to, and the orbit pose. */
-export function createMapMotion(): MapMotion {
+/** Presentation owns its view, the nested view F2 returns to, the orbit pose, and the sheet on its way to the latest placement. */
+export function createMapMotion(initial: SheetScene = EMPTY_SHEET): MapMotion {
   let view: MapView = 'iso'
   let nested: Exclude<MapView, 'layers'> = 'iso'
   let pose = NESTED_POSE
   let framing = 1
   let transition: { from: LayerPose; to: LayerPose; started: number; duration: number } | undefined
+  let displayed = initial
+  let morph: { from: SheetScene; to: SheetScene; started: number; duration: number } | undefined
+
+  function stepPose(now: number): boolean {
+    if (transition === undefined) return false
+    const progress = (now - transition.started) / transition.duration
+    pose = interpolatePose(transition.from, transition.to, progress)
+    const flattening = transition.to.flatten - transition.from.flatten
+    framing = flattening === 0 ? 1 : (pose.flatten - transition.from.flatten) / flattening
+    if (progress < 1) return true
+    transition = undefined
+    return false
+  }
+  function stepSheet(now: number): boolean {
+    if (morph === undefined) return false
+    const progress = (now - morph.started) / morph.duration
+    displayed = tweenSheet(morph.from, morph.to, ease(progress))
+    framing = ease(progress)
+    if (progress < 1) return true
+    displayed = morph.to
+    morph = undefined
+    return false
+  }
 
   function choose(next: MapView, now: number, animate: boolean): boolean {
     if (next === view) return transition !== undefined
@@ -132,19 +170,28 @@ export function createMapMotion(): MapMotion {
       return pose
     },
     get framing() { return framing },
+    get sheet() { return displayed },
+    get morphing() { return morph !== undefined },
     choose,
     toggleLayers(now, animate) {
       return choose(view === 'layers' ? nested : 'layers', now, animate)
     },
+    retarget(sheet, now, animate) {
+      const large = sheet.buildings.length + sheet.slabs.length > MORPH_LIMIT
+      if (!animate || large || sameSheet(displayed, sheet)) {
+        displayed = sheet
+        morph = undefined
+        return transition !== undefined
+      }
+      // Updates arriving faster than a transition are followed at their own pace, from the blend shown now.
+      const duration = morph === undefined ? MORPH_DURATION_MS : Math.max(MORPH_FASTEST_MS, Math.min(MORPH_DURATION_MS, now - morph.started))
+      morph = { from: displayed, to: sheet, started: now, duration }
+      framing = 0
+      return true
+    },
     step(now) {
-      if (transition === undefined) return false
-      const progress = (now - transition.started) / transition.duration
-      pose = interpolatePose(transition.from, transition.to, progress)
-      const flattening = transition.to.flatten - transition.from.flatten
-      framing = flattening === 0 ? 1 : (pose.flatten - transition.from.flatten) / flattening
-      if (progress < 1) return true
-      transition = undefined
-      return false
+      const posing = stepPose(now)
+      return stepSheet(now) || posing
     },
     orbit(dx, dy) {
       if (view !== 'layers') return
@@ -172,17 +219,18 @@ export function createMapAnimator(motion: MapMotion, repaint: (fit: boolean) => 
     repaint(true)
     if (animating) frame = requestAnimationFrame(animate)
   }
-  const change = (apply: (now: number, animate: boolean) => boolean): void => {
+  const change = (apply: (now: number, animate: boolean) => boolean, paintNow = true): void => {
     if (frame !== undefined) cancelAnimationFrame(frame)
     frame = undefined
     animating = apply(performance.now(), !matchMedia('(prefers-reduced-motion: reduce)').matches)
-    repaint(true)
+    if (paintNow) repaint(true)
     if (animating) frame = requestAnimationFrame(animate)
   }
 
   return {
     choose: view => { if (view !== motion.view) change((now, animate) => motion.choose(view, now, animate)) },
     toggleLayers: () => change(motion.toggleLayers),
+    retarget: sheet => change((now, animate) => motion.retarget(sheet, now, animate), false),
     orbit(dx, dy) {
       stopAnimation()
       motion.orbit(dx, dy)

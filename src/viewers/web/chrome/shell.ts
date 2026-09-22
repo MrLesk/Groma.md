@@ -64,6 +64,17 @@ export interface MapFrame {
   height: number
 }
 
+/** The camera frame measured from the page now: the whole map, or the safe area between visible chrome. */
+export function measureFrame(hosts: ReturnType<typeof pageHosts>, hudVisible: boolean): MapFrame {
+  return mapFrame(
+    hosts.host.getBoundingClientRect(),
+    hosts.headerHost.getBoundingClientRect(),
+    hosts.hierarchyHost.getBoundingClientRect(),
+    { left: hosts.detailsDock.offsetLeft, hidden: hosts.detailsHost.inert },
+    hudVisible,
+  )
+}
+
 /** The camera frame is either the whole map or the safe area between visible chrome. */
 export function mapFrame(
   map: Rect,

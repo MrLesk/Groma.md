@@ -10,6 +10,8 @@ groma:
       file: src/viewers/web/iso/presentation.ts
     - scanner: typescript
       file: src/viewers/web/layers/orbit.ts
+    - scanner: typescript
+      file: src/viewers/web/iso/morph.ts
   group: Map drawing
 description: Animates transitions between browser map views
 ---

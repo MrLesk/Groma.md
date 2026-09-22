@@ -11,7 +11,7 @@ import { createMapDebugPanel } from './chrome/map-debug.ts'
 import { bindMapView } from './chrome/map-view.ts'
 import { bindC4Filter } from './chrome/c4-filter.ts'
 import { animateControl } from './chrome/motion.ts'
-import { bindChromeActions, createWebShell, mapFrame, pageHosts, type MapFrame } from './chrome/shell.ts'
+import { bindChromeActions, createWebShell, measureFrame, pageHosts, type MapFrame } from './chrome/shell.ts'
 import { bindThemeControl, readSavedTheme } from './chrome/theme-control.ts'
 import { paintHeaderSummary } from './chrome/stats.ts'
 import { createWebDataSource, openWebBoot } from './data.ts'
@@ -50,14 +50,15 @@ let sheet = boot.sheet
 let project: ProjectProfile | undefined = boot.project ?? undefined
 let currentPins = boot.pins
 let mapMeta = { generation: boot.generation, timings: boot.timings }
-const mapMotion = createMapMotion()
+const mapMotion = createMapMotion(sheet)
 const filterC4 = bindC4Filter(document.getElementById('c4-filter')!, () => repaintScene(false))
 const debug = createMapDebugPanel(document.body, () => ({ ...mapMeta, world, sheet }))
 function projectedScene() {
-  return debug.project(() => filterC4(presentScene(sheet, project, mapMotion.pose)))
+  return debug.project(() => filterC4(presentScene(mapMotion.sheet, project, mapMotion.pose)))
 }
 let scene = projectedScene()
-const { host, headerHost, hierarchyHost, treeHost, flowsHost, statsHost, revisionSelect, searchRoot, detailsHost, detailsDock, zoomHost, hierarchyContent, hierarchyToggle } = pageHosts()
+const hosts = pageHosts()
+const { host, treeHost, flowsHost, statsHost, revisionSelect, searchRoot, detailsHost, zoomHost, hierarchyContent, hierarchyToggle } = hosts
 const paintFlows = createFlowList()
 const map = createMap(host)
 const highlights = createMapHighlights(map)
@@ -105,15 +106,7 @@ const taskDiff = createTaskDiffControl({
   host: detailsHost, world: () => world, readDetails: data.readTask, readDiff: data.readTaskDiff,
   repaint: paintViewState, select,
 })
-function viewport(): MapFrame {
-  return mapFrame(
-    host.getBoundingClientRect(),
-    headerHost.getBoundingClientRect(),
-    hierarchyHost.getBoundingClientRect(),
-    { left: detailsDock.offsetLeft, hidden: detailsHost.inert },
-    hudVisible,
-  )
-}
+const viewport = (): MapFrame => measureFrame(hosts, hudVisible)
 function fitScene(frame: MapFrame): Camera {
   return pan(fitCamera(scene.bounds, frame), frame.x, frame.y)
 }
@@ -399,7 +392,9 @@ function repaintScene(fit: boolean): void {
   pins.paint(currentPins.filter(pin => map.anchorOf(pin.elementId) !== undefined))
   const frame = viewport()
   fitted = fitScene(frame)
-  if (fit) {
+  if (fit && mapMotion.morphing) {
+    if (!touched) camera.frame(fitted, mapMotion.framing)
+  } else if (fit) {
     const focus = mapMotion.view === 'layers' ? undefined : fitArchitecture(scene, world, selectedArchitecture(selection), frame)
     camera.frame(focus === undefined ? fitted : pan(focus, frame.x, frame.y), mapMotion.framing)
     touched = focus !== undefined
@@ -444,8 +439,11 @@ function applyWorld(payload: WebPayload, reset = false): void {
   sheet = payload.sheet
   project = payload.project ?? undefined
   currentPins = payload.pins
+  mapAnimator.retarget(sheet)
   scene = projectedScene()
   fitted = fitScene(viewport())
+  // A settling sheet is followed from where the camera is; an instant change flies to the new fit.
+  const settle = () => mapMotion.morphing ? camera.frame(fitted, 0) : camera.move(fitted)
   if (reset) {
     authoring.cancel()
     source.clear()
@@ -454,10 +452,10 @@ function applyWorld(payload: WebPayload, reset = false): void {
     activeFlows = []
     selection = retainSelection(selection, id => worldElement(id) !== undefined)
     if (detailsTab === 'tasks') detailsTab = 'what'
-    camera.move(fitted)
+    settle()
     touched = false
   } else {
-    if (!touched) camera.move(fitted)
+    if (!touched) settle()
     activeTaskIds = activeTaskIds.filter(id => workItem(id) !== undefined)
     activeFlows = retainFlows(activeFlows, world)
     if (selection.kind === 'flow') selection = flowSelection(activeFlows)

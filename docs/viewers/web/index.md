@@ -644,6 +644,19 @@ Reduced motion applies the final geometry immediately.
 Iso and 2D fit the selected architecture so it remains readable; with no
 architecture selection they fit the whole map. Layers fits the whole stack.
 
+A world update moves the map the same way instead of repainting it in place.
+Over 700 ms the displayed sheet blends into the new placement: islands, slabs,
+buildings and routes that exist in both glide to their new cells, a new
+building grows out of the ground while its routes draw on from their source,
+and a departed building shrinks away while its routes retract. Surfaces keep
+their label band while they grow, and a building shows its name once it is
+half grown. Updates that arrive faster than a transition, such as a replayed
+history or a revision change, continue from the blend on screen and settle in
+the time between updates, never faster than 160 ms. A camera nobody has moved
+follows the changing sheet on the same clock; a hand-positioned camera stays
+where it is. Reduced motion, a placement identical to the one shown, and maps
+above 500 surfaces apply the update at once.
+
 `F2` lifts the blueprint into aligned System, Container, and Component
 layers and briefly turns the view to show that it can orbit. In layer mode,
 drag to orbit horizontally with limited vertical tilt, or Shift-drag to pan;
