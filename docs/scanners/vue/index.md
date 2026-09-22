@@ -121,13 +121,14 @@ there.
 | --- | --- |
 | `fetch(url, options)`, `$fetch(url, options)`, `useFetch(url, options)` | Request; a literal `method` gives the method, no options means `GET`, and options the scanner cannot read leave it out |
 | `$fetch` and `useFetch` with a `baseURL` option | Request whose path follows that base |
-| `axios.get`, `.post`, `.put`, `.patch`, `.delete`, `.head`, `.options` | Request with that method |
+| `axios.get`, `.post`, `.put`, `.patch`, `.delete`, `.head`, `.options`, `.postForm`, `.putForm`, `.patchForm` | Request with that method; form helpers use their matching HTTP method |
 | `axios(config)`, `axios.request(config)` | Request from the config's `url`; its `method`, else the client's, else `GET` |
 | `axios.create(config)` instances | Request whose path follows the config's `baseURL`, and whose method defaults to the config's |
 | `server/api/**` | Endpoint at `/api/...`, with the method its file name states |
 | `server/routes/**` | Endpoint at the path after `server/routes`, with the method its file name states |
 
-`fetch` counts when it is the runtime's or the default export of `node-fetch`,
+`fetch` counts when it is the runtime's, the default export of `node-fetch`, or
+a named `undici` import,
 as on the React page. `$fetch` and `useFetch` must resolve to a declaration
 outside the project source, such as an installed package's types, so a project's
 own `useFetch` composable, whose body decides the URL, is never read as Nuxt's;

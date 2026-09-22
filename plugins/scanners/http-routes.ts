@@ -141,18 +141,22 @@ function underMount(routing: Routing, mount: Registration, entry: Node): 'yes' |
   return entryStart(ts, entry) < entryStart(ts, mount.call) ? 'yes' : 'no'
 }
 
-/**
- * Every place an entry of this instance serves from; an unmounted router, or one whose own path is
- * unknown, serves nothing here. An application is its file and the variable that holds it, so two
- * applications of one file keep their own order.
- */
+/** Give same-named local applications distinct order identities while keeping unique names readable. */
+function applicationId(routing: Routing, declaration: Node, variable: string): string {
+  const file = routing.context.file(declaration)
+  const namesakes = [...routing.registrars].filter(([node, registrar]) => registrar.kind === 'app'
+    && registrar.variable === variable && routing.context.file(node) === file)
+  return `${file}#${variable}${namesakes.length > 1 ? `@${declaration.getStart()}` : ''}`
+}
+
+/** Every place an entry serves from; an unmounted router or one with an unknown path serves nothing. */
 function placements(routing: Routing, declaration: Node, entry: Node, seen: ReadonlySet<Node> = new Set()): Placement[] {
   const registrar = routing.registrars.get(declaration)!
   if (seen.has(declaration) || registrar.prefix === undefined) return []
   const entries = routing.mounts.get(declaration) ?? []
   if (entries.length === 0) {
     if (registrar.kind === 'router') return []
-    const application = `${routing.context.file(declaration)}#${registrar.variable}`
+    const application = applicationId(routing, declaration, registrar.variable)
     const ordered = orderedFrameworks.has(registrar.framework)
     return [withPrefix({ prefix: '', application, rank: [], known: true, ordered, certain: true }, registrar)]
   }

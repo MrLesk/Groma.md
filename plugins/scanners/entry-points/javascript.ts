@@ -22,8 +22,12 @@ function declaredBins(declaration: string, manifest: Record<string, unknown>): S
 function declaredScripts(declaration: string, scripts: Record<string, unknown> | undefined): SourceEntry[] {
   return Object.entries(scripts ?? {}).flatMap(([name, script]) => {
     if (typeof script !== 'string') return []
-    const match = /^(?:node|bun|tsx|ts-node)\s+(?:run\s+)?([\w./-]+\.(?:[cm]?[jt]sx?))(?:\s|$)/.exec(script)
-    return match ? [{ declaration, name, file: path.posix.join(path.posix.dirname(declaration), match[1]!) }] : []
+    // Only split literal chains: a quoted shell fragment can contain && without running another command.
+    const commands = /["'`]/.test(script) ? [script] : script.split(/\s+&&\s+/)
+    return commands.flatMap(command => {
+      const match = /^(?:node|bun|tsx|ts-node)\s+(?:run\s+)?([\w./-]+\.(?:[cm]?[jt]sx?))(?:\s|$)/.exec(command)
+      return match ? [{ declaration, name, file: path.posix.join(path.posix.dirname(declaration), match[1]!) }] : []
+    })
   })
 }
 

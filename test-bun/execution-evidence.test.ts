@@ -62,6 +62,19 @@ for (const example of examples) test.concurrent(`${example.scanner.id} reports d
   } finally { await rm(directory, { recursive: true, force: true }) }
 })
 
+test.concurrent('each literal command in a package script reports its own JavaScript entry', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'groma-js-chained-entries-'))
+  try {
+    await writeFile(path.join(root, 'package.json'), JSON.stringify({ scripts: {
+      test: 'node ./index.js && node ./cjs.js && node ./formatting.js',
+    } }))
+    for (const file of ['index.js', 'cjs.js', 'formatting.js']) await writeFile(path.join(root, file), 'console.log(1)\n')
+    expect(await Bun.spawn(['git', 'init', '--quiet', root]).exited).toBe(0)
+    const scan = (await javascript.scan(root))!
+    expect(scan.entryPoints?.map(entry => entry.file).sort()).toEqual(['cjs.js', 'formatting.js', 'index.js'])
+  } finally { await rm(root, { recursive: true, force: true }) }
+})
+
 test.concurrent('declared commands and browser builds share source identity across declarations and scanner subsets', async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'groma-js-entries-'))
   try {

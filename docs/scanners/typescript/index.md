@@ -85,8 +85,8 @@ program never assigns again holds it. The routers are read by the reader the
 
 | Construct | Reported |
 | --- | --- |
-| `fetch(url, init)`, including a `node-fetch` default import | Request; a literal `method` gives the method, no options means `GET`, and options the scanner cannot read leave it out |
-| `axios.get`, `.post`, `.put`, `.patch`, `.delete`, `.head`, `.options` | Request with that method |
+| `fetch(url, init)`, including a `node-fetch` default import or a named `undici` import | Request; a literal `method` gives the method, no options means `GET`, and options the scanner cannot read leave it out |
+| `axios.get`, `.post`, `.put`, `.patch`, `.delete`, `.head`, `.options`, `.postForm`, `.putForm`, `.patchForm` | Request with that method; form helpers use their matching HTTP method |
 | `axios(config)`, `axios.request(config)` | Request from the config's `url`; its `method`, else the client's, else `GET` |
 | `axios.create(config)` instances | Request whose path follows the config's `baseURL`, and whose method defaults to the config's |
 | `express()` and `express.Router()` | Endpoint per `get`, `post`, `put`, `patch`, `delete`, `head`, `options`, `all` call with a handler |

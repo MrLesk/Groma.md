@@ -50,7 +50,9 @@ export function javaScriptEvidence(file: string, source: ts.SourceFile): FileEvi
   }
 
   function visit(node: ts.Node, owner: ScanOperation | undefined): void {
-    const inside = executable(node) ? operation(node) : owner
+    // Accessors run as their own body even though they are not compared as duplicate operations.
+    const inside = executable(node) || ts.isGetAccessorDeclaration(node) || ts.isSetAccessorDeclaration(node)
+      ? operation(node) : owner
     if (ts.isCallExpression(node)) {
       calls.push(node)
       invocation(node, inside ?? moduleOperation())

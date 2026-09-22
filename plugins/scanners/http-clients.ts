@@ -42,13 +42,14 @@ async function optionsBase(context: UrlContext, config: Node | undefined, fallba
 }
 
 /**
- * The runtime's `fetch`, or the default export of `node-fetch`. A `fetch` the project declares, or
- * imports from anywhere else, is its own function.
+ * The runtime's `fetch`, the default export of `node-fetch`, or Undici's named `fetch`.
+ * A function the project declares, or imports from anywhere else, is its own function.
  */
 export async function runtimeFetch(context: UrlContext, callee: Node): Promise<FetchClient | undefined> {
-  if (!context.ts.isIdentifier(callee) || callee.text !== 'fetch') return undefined
+  if (!context.ts.isIdentifier(callee)) return undefined
   const origin = await importOrigin(context, callee)
-  const fetch = origin === undefined ? await runtimeGlobal(context, callee) : origin.module === 'node-fetch' && origin.name === 'default'
+  const fetch = origin === undefined ? callee.text === 'fetch' && await runtimeGlobal(context, callee)
+    : (origin.module === 'node-fetch' && origin.name === 'default') || (origin.module === 'undici' && origin.name === 'fetch')
   return fetch ? 'fetch' : undefined
 }
 
@@ -118,10 +119,11 @@ async function holdsObject(context: UrlContext, node: Node): Promise<boolean> {
 const SHORTHAND = new Map([
   ['get', 'GET'], ['post', 'POST'], ['put', 'PUT'], ['patch', 'PATCH'],
   ['delete', 'DELETE'], ['head', 'HEAD'], ['options', 'OPTIONS'],
+  ['postForm', 'POST'], ['putForm', 'PUT'], ['patchForm', 'PATCH'],
 ])
 
 /** The shorthands whose second argument is the request body, which moves the configuration to the third. */
-const WITH_BODY = new Set(['post', 'put', 'patch'])
+const WITH_BODY = new Set(['post', 'put', 'patch', 'postForm', 'putForm', 'patchForm'])
 
 /** The axios default export; a named export such as `isAxiosError` or `post` is not a client. */
 async function isAxios(context: UrlContext, node: Node): Promise<boolean> {

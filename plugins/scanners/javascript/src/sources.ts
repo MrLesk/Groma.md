@@ -6,6 +6,7 @@ const SOURCE = /\.(?:js|mjs|cjs|jsx)$/
 const MINIFIED_NAME = /\.min\.(?:js|mjs|cjs|jsx)$/
 /** Minified output packs statements into very long lines; authored JavaScript stays far below this. */
 const MINIFIED_LINE_LENGTH = 500
+const BANNERED_SINGLE_LINE_LENGTH = 400
 
 export interface JavaScriptSource {
   file: string
@@ -23,8 +24,12 @@ export function hasMinifiedName(file: string): boolean {
 
 /** Minified text with any other name, such as a vendored bundle, is recognized by its line length. */
 export function isMinifiedText(text: string): boolean {
-  const code = text.trimEnd()
-  return code.length / code.split('\n').length >= MINIFIED_LINE_LENGTH
+  // License and generator headers are not part of the compact code whose line length we measure.
+  const banner = /^(?:\s*\/\*[\s\S]*?\*\/)+\s*/.exec(text)?.[0]
+  const code = text.slice(banner?.length ?? 0).trimEnd()
+  const lines = code.split('\n')
+  const threshold = banner !== undefined && lines.length === 1 ? BANNERED_SINGLE_LINE_LENGTH : MINIFIED_LINE_LENGTH
+  return code.length / lines.length >= threshold
 }
 
 /** Tracked, unignored authored sources. Minified files are not authored source and are left out. */

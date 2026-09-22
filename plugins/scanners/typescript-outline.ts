@@ -13,7 +13,7 @@ import type { CodeDeclaration, CodeFile, CodeFunction, CodeSymbol, CodeType, Cod
 type KindName =
   | 'Identifier' | 'PrivateIdentifier' | 'StringLiteral' | 'NumericLiteral'
   | 'FunctionDeclaration' | 'ArrowFunction' | 'FunctionExpression' | 'VariableStatement'
-  | 'ClassDeclaration' | 'InterfaceDeclaration' | 'EnumDeclaration' | 'Constructor' | 'MethodDeclaration' | 'MethodSignature'
+  | 'ClassDeclaration' | 'ClassExpression' | 'InterfaceDeclaration' | 'EnumDeclaration' | 'Constructor' | 'MethodDeclaration' | 'MethodSignature'
   | 'ModuleDeclaration' | 'ModuleBlock' | 'ExportAssignment' | 'ExportDeclaration' | 'NamedExports'
   | 'ExportKeyword' | 'PrivateKeyword' | 'ProtectedKeyword'
 
@@ -144,7 +144,8 @@ function typeMember(scope: OutlineScope, member: Node): CodeSymbol[] {
 
 /** The members of a class or interface, none for an enum, and undefined for a statement that is not a type. */
 function typeMembers(k: Kinds, statement: Node): readonly Node[] | undefined {
-  if (is<ClassLike>(statement, k.ClassDeclaration) || is<ClassLike>(statement, k.InterfaceDeclaration)) return statement.members
+  if (is<ClassLike>(statement, k.ClassDeclaration) || is<ClassLike>(statement, k.ClassExpression)
+    || is<ClassLike>(statement, k.InterfaceDeclaration)) return statement.members
   return statement.kind === k.EnumDeclaration ? [] : undefined
 }
 
@@ -182,6 +183,14 @@ export function outlineSource(ts: OutlineSyntax, source: SourceFile, context: Ou
   const exported = new Set([...source.statements.flatMap(statement => listedExports(k, statement)), ...context.exported ?? []])
   const scope = { k, source, symbols: context.symbols, exported, topLevelPrivate: context.topLevelPrivate ?? false }
   return declarationsIn(scope, source.statements)
+}
+
+/** A JavaScript module may publish a named class expression directly through CommonJS. */
+export function outlineClassExpression(ts: OutlineSyntax, source: SourceFile, value: Node, context: OutlineContext): CodeType[] {
+  if (value.kind !== ts.SyntaxKind.ClassExpression) return []
+  const scope = { k: ts.SyntaxKind, source, symbols: context.symbols,
+    exported: new Set(context.exported ?? []), topLevelPrivate: context.topLevelPrivate ?? false }
+  return typeDeclaration(scope, value)
 }
 
 /** Outline one block of source text by parsing it alone. */

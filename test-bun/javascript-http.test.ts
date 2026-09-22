@@ -1,10 +1,11 @@
 import { expect, test } from 'bun:test'
-import { cp, mkdtemp, rm } from 'node:fs/promises'
+import { cp, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import type { HttpEndpointSegment, HttpRequestSegment, ScanObservation, ScannerPlugin } from '@groma/scanner'
 import { buildPackage } from '../plugins/scanners/javascript/build.ts'
 import { inferRelationships } from '../src/relationship-inference.ts'
+import javascript from '../plugins/scanners/javascript/src/index.ts'
 
 async function scanFixture(): Promise<{ temporary: string; scan: ScanObservation }> {
   const temporary = await mkdtemp(path.join(os.tmpdir(), 'groma-javascript-http-'))
@@ -138,6 +139,47 @@ test.concurrent('JavaScript routers report the endpoints their handlers serve, i
       'server/spa.js#app@1 GET /:*+ server/spa.js#spa',
     ])
   } finally { await rm(temporary, { recursive: true, force: true }) }
+})
+
+test.concurrent('separate local applications with the same variable name keep separate route order', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'groma-javascript-apps-'))
+  try {
+    await writeFile(path.join(root, 'apps.js'), `import express from 'express'
+function first() { const app = express(); app.get('/first', () => {}) }
+function second() { const app = express(); app.get('/second', () => {}) }
+`)
+    expect(await Bun.spawn(['git', 'init', '--quiet', root]).exited).toBe(0)
+    const endpoints = (await javascript.scan(root))!.httpEndpoints!.filter(endpoint => endpoint.method === 'GET')
+    expect(endpoints).toHaveLength(2)
+    expect(new Set(endpoints.map(endpoint => endpoint.order?.application)).size).toBe(2)
+    expect(endpoints.map(endpoint => endpoint.order?.position)).toEqual([0, 0])
+  } finally { await rm(root, { recursive: true, force: true }) }
+})
+
+test.concurrent('a named undici fetch import reports the request it sends', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'groma-javascript-undici-'))
+  try {
+    await writeFile(path.join(root, 'client.mjs'), "import { fetch as send } from 'undici'\nexport function load() { return send('/items', { method: 'POST' }) }\n")
+    expect(await Bun.spawn(['git', 'init', '--quiet', root]).exited).toBe(0)
+    const requests = (await javascript.scan(root))!.httpRequests!
+    expect(requests).toHaveLength(1)
+    expect(requests[0]).toMatchObject({ method: 'POST', path: [{ kind: 'literal', value: 'items' }] })
+  } finally { await rm(root, { recursive: true, force: true }) }
+})
+
+test.concurrent('axios form helpers report their HTTP methods and paths', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'groma-javascript-axios-form-'))
+  try {
+    await writeFile(path.join(root, 'client.mjs'), `import client from 'axios'
+client.postForm('/first', {})
+client.putForm('/second', {})
+client.patchForm('/third', {})
+`)
+    expect(await Bun.spawn(['git', 'init', '--quiet', root]).exited).toBe(0)
+    const requests = (await javascript.scan(root))!.httpRequests!
+    expect(requests.map(request => [request.method, request.path.map(segment => segment.kind === 'literal' ? segment.value : '?')]))
+      .toEqual([['POST', ['first']], ['PUT', ['second']], ['PATCH', ['third']]])
+  } finally { await rm(root, { recursive: true, force: true }) }
 })
 
 test.concurrent('an endpoint names the handler the route states, and its registrar when the handler is elsewhere', async () => {

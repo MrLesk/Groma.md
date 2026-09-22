@@ -37,8 +37,9 @@ Minified output is not authored source, so it is left out of the scan and the
 source outline:
 
 - a name that states minified output, such as `jquery-ui.min.js`;
-- text whose lines average 500 characters or more, the shape of a bundle a build
-  produced under an ordinary name such as `vendor.js`.
+- text whose code lines average 500 characters or more after leading block
+  comments, or one 400-character code line after such a banner, the shape of a
+  bundle a build produced under an ordinary name such as `vendor.js`.
 
 The shared Git boundary omits ignored files and dependency or build directories
 such as `node_modules`, `vendor`, `dist` and `build`. Core applies the source
@@ -66,6 +67,8 @@ and methods and constructors with a body produce operation evidence with UTF-16
 source offsets.
 Code outside every function is the module's own work, so a browser script's
 top-level calls keep an operation to belong to, without inventing a function.
+Calls inside accessors belong to an anonymous accessor operation; accessors are
+not compared for duplicate logic.
 
 Calls remain unresolved. One parsed file proves no call target: an imported name,
 a `require` result and a method on a value are all decided elsewhere, so core
@@ -77,6 +80,8 @@ JavaScript file belongs to one C4 runtime boundary. Core owns architecture
 identity and curation, and repeated scans preserve one physical owner and the
 authored architecture. JavaScript edits and new files refresh through the shared
 scanner watcher.
+Each literal local `node`, `bun`, `tsx` or `ts-node` command in an unquoted
+`&&`-chained package script can supply an execution entry.
 
 ## Source outline
 
@@ -86,7 +91,8 @@ parses the file alone and lists what it declares at the top level:
 
 - functions, and arrow functions or function expressions assigned directly to a
   `const`, `let` or `var` name;
-- classes, with every method and the constructor as members.
+- classes, including a named class expression assigned to `module.exports`,
+  with every method and the constructor as members.
 
 Fields, accessors, and declarations inside a function, method or block are not
 listed. A declaration is marked as an entry when the component's Code names it,
@@ -96,12 +102,12 @@ Visibility follows how the file publishes a name:
 
 | Value | JavaScript |
 | --- | --- |
-| `public` | An `export`, a name in the file's own `export { name }` list or `export default name`, a name a CommonJS `module.exports` or `exports.name` assignment publishes, and every top-level declaration of a file that states no module boundary, because those names are globals |
+| `public` | An `export`, a name in the file's own `export { name }` list or `export default name`, a name a CommonJS `module.exports` or `exports.name` assignment publishes, including through a chained assignment, and every top-level declaration of a file that states no module boundary, because those names are globals |
 | `private` | Every other top-level declaration, and a `#name` member |
 
 A `.mjs` or `.cjs` file is a module whatever it contains, so its unpublished
 declarations stay private. A `.js` file is a module when it states an `import`,
-an `export` or a CommonJS export; otherwise it is a browser script whose
+an `export`, a CommonJS export or a `require` call; otherwise it is a browser script whose
 declarations any other script on the page may use. Members are `public` unless
 their name is private.
 
@@ -125,8 +131,8 @@ that file states it and a value from another file is one the scanner cannot see.
 
 | Construct | Reported |
 | --- | --- |
-| `fetch(url, init)`, including a `node-fetch` default import | Request; a literal `method` gives the method, no options means `GET`, and options the scanner cannot read, or an input that is not a URL, such as a `Request`, leave it out |
-| `axios.get`, `.post`, `.put`, `.patch`, `.delete`, `.head`, `.options` | Request with that method |
+| `fetch(url, init)`, including a `node-fetch` default import or a named `undici` import | Request; a literal `method` gives the method, no options means `GET`, and options the scanner cannot read, or an input that is not a URL, such as a `Request`, leave it out |
+| `axios.get`, `.post`, `.put`, `.patch`, `.delete`, `.head`, `.options`, `.postForm`, `.putForm`, `.patchForm` | Request with that method; form helpers use their matching HTTP method |
 | `axios(config)`, `axios.request(config)` | Request from the config's `url`; its `method`, else the client's, else `GET` |
 | `axios.create(config)` instances | Request whose path follows the config's `baseURL`, and whose method defaults to the config's |
 | `$.get`, `$.post`, `$.getJSON`, `$.getScript` | Request with that helper's method |
@@ -219,7 +225,9 @@ The [producer decisions](../evidence.md#producer-checklist) for this ecosystem:
 8. **Registration order.** Express, Hono and Koa routers take the first
    registered match, so their endpoints carry `order`: the application, named by
    the file that creates it and the variable that holds it, such as
-   `server/app.js#app`, and a position. The routing model has six rules:
+   `server/app.js#app`, and a position. Same-named local applications in one
+   file also carry their declaration position to keep their order separate.
+   The routing model has six rules:
    1. A registrar's entries are its registrations and the references that hand
       it off to other code, such as `registerRoutes(app)`. Serving it with
       `listen`, Node's `createServer(app)` or an imported `serve(app)` registers

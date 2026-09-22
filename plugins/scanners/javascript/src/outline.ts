@@ -2,20 +2,15 @@ import { readFile } from 'node:fs/promises'
 import path from 'node:path'
 import type { CodeFile, SourceReference } from '@groma/scanner'
 import ts from 'typescript'
-import { outlineSource } from '../../typescript-outline.ts'
-import { topLevelDeclarations } from './declarations.ts'
+import { outlineClassExpression, outlineSource } from '../../typescript-outline.ts'
+import { assignedValue, commonJsExport, topLevelDeclarations } from './declarations.ts'
 
 /** A `.mjs` or `.cjs` file is a module whatever it contains. */
 const MODULE_EXTENSION = /\.(?:mjs|cjs)$/
 
-function isExportsReference(node: ts.Expression): boolean {
-  if (ts.isIdentifier(node)) return node.text === 'exports'
-  return ts.isPropertyAccessExpression(node) && ts.isIdentifier(node.expression)
-    && node.expression.text === 'module' && node.name.text === 'exports'
-}
-
 function assignedNames(value: ts.Expression): string[] {
   if (ts.isIdentifier(value)) return [value.text]
+  if (ts.isClassExpression(value) && value.name) return [value.name.text]
   if (!ts.isObjectLiteralExpression(value)) return []
   return value.properties.flatMap(property => {
     if (ts.isShorthandPropertyAssignment(property)) return [property.name.text]
@@ -23,28 +18,30 @@ function assignedNames(value: ts.Expression): string[] {
   })
 }
 
-/** The CommonJS export a statement makes, such as `module.exports = { subtotal }` or `exports.run = ...`. */
-function commonJsExport(statement: ts.Statement): ts.BinaryExpression | undefined {
-  if (!ts.isExpressionStatement(statement)) return undefined
-  const assignment = statement.expression
-  if (!ts.isBinaryExpression(assignment) || assignment.operatorToken.kind !== ts.SyntaxKind.EqualsToken) return undefined
-  const { left } = assignment
-  const target = ts.isPropertyAccessExpression(left) && isExportsReference(left.expression) ? left.expression : left
-  return isExportsReference(target) ? assignment : undefined
-}
-
 /** The local names one CommonJS export publishes. An exported literal value publishes no local name. */
 function publishedBy(assignment: ts.BinaryExpression): string[] {
-  const { left, right } = assignment
+  const { left } = assignment
+  const right = assignedValue(assignment.right)
   // `exports.label = label` and `module.exports.label = label` publish the assigned local name.
-  if (ts.isPropertyAccessExpression(left) && isExportsReference(left.expression)) {
+  if (ts.isPropertyAccessExpression(left) && !(ts.isIdentifier(left.expression)
+    && left.expression.text === 'module' && left.name.text === 'exports')) {
     return ts.isIdentifier(right) ? [right.text] : []
   }
   return assignedNames(right)
 }
 
-function statesEcmaScriptModule(source: ts.SourceFile): boolean {
-  return source.statements.some(statement => ts.isImportDeclaration(statement) || ts.isExportDeclaration(statement)
+function usesRequire(source: ts.SourceFile): boolean {
+  let found = false
+  const visit = (node: ts.Node): void => {
+    if (ts.isCallExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === 'require') found = true
+    else if (!found) ts.forEachChild(node, visit)
+  }
+  ts.forEachChild(source, visit)
+  return found
+}
+
+function statesModuleBoundary(source: ts.SourceFile): boolean {
+  return usesRequire(source) || source.statements.some(statement => ts.isImportDeclaration(statement) || ts.isExportDeclaration(statement)
     || ts.isExportAssignment(statement)
     || (ts.canHaveModifiers(statement)
       && (ts.getModifiers(statement) ?? []).some(modifier => modifier.kind === ts.SyntaxKind.ExportKeyword)))
@@ -57,7 +54,7 @@ function statesEcmaScriptModule(source: ts.SourceFile): boolean {
  */
 function publishedNames(file: string, source: ts.SourceFile): string[] {
   const exports = source.statements.flatMap(statement => commonJsExport(statement) ?? [])
-  if (exports.length > 0 || MODULE_EXTENSION.test(file) || statesEcmaScriptModule(source)) {
+  if (exports.length > 0 || MODULE_EXTENSION.test(file) || statesModuleBoundary(source)) {
     return exports.flatMap(publishedBy)
   }
   return topLevelDeclarations(source).map(declaration => declaration.name)
@@ -73,7 +70,15 @@ export async function readJavaScriptOutline(
     const fileName = path.join(repositoryRoot, reference.file)
     const text = await readFile(fileName, 'utf8')
     const source = ts.createSourceFile(fileName, text, ts.ScriptTarget.Latest, true)
-    const declarations = outlineSource(ts, source, { symbols: reference.symbols, exported: publishedNames(reference.file, source) })
+    const exported = publishedNames(reference.file, source)
+    const classes = source.statements.flatMap(statement => {
+      const assignment = commonJsExport(statement)
+      const value = assignment && assignedValue(assignment.right)
+      return value && ts.isClassExpression(value)
+        ? outlineClassExpression(ts, source, value, { symbols: reference.symbols, exported }) : []
+    })
+    const declarations = [...outlineSource(ts, source, { symbols: reference.symbols, exported }), ...classes]
+      .sort((left, right) => left.line - right.line)
     if (declarations.length > 0) files.push({ file: reference.file, declarations })
   }
   return files

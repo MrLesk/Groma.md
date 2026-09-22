@@ -88,15 +88,15 @@ serves nothing.
 
 | Construct | Reported |
 | --- | --- |
-| `fetch(url, init)`, including a `node-fetch` default import | Request; a literal `method` gives the method, no options means `GET`, and options the scanner cannot read leave it out |
-| `axios.get`, `.post`, `.put`, `.patch`, `.delete`, `.head`, `.options` | Request with that method |
+| `fetch(url, init)`, including a `node-fetch` default import or a named `undici` import | Request; a literal `method` gives the method, no options means `GET`, and options the scanner cannot read leave it out |
+| `axios.get`, `.post`, `.put`, `.patch`, `.delete`, `.head`, `.options`, `.postForm`, `.putForm`, `.patchForm` | Request with that method; form helpers use their matching HTTP method |
 | `axios(config)`, `axios.request(config)` | Request from the config's `url`; its `method`, else the client's, else `GET` |
 | `axios.create(config)` instances | Request whose path follows the config's `baseURL`, and whose method defaults to the config's |
 | `app/**/route.ts` | Endpoint per exported `GET`, `POST`, `PUT`, `PATCH`, `DELETE`, `HEAD` or `OPTIONS` handler, at the route's directory path |
 | `pages/api/**` | Endpoint for the default export, which answers every method, so `*` |
 
 `fetch` counts when it is the runtime's, which the project neither declares nor
-imports, or the default export of `node-fetch`, so a `fetch` the project exports
+imports, the default export of `node-fetch`, or a named `undici` import, so a `fetch` the project exports
 from its own module is that function. An `axios` client counts only when its
 name is the `axios` default import, or a variable the project never assigns
 again holding `require('axios')` or `axios.create(...)` called on it, so

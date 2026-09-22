@@ -55,9 +55,8 @@ test.concurrent('the built Vue package reports Nuxt and axios requests, includin
     const observation = (await scanner.scan(root))!
 
     // A `get` on another object, a reassigned axios instance, a helper's caller, a project's own
-    // `useFetch` composable, a `fetch` imported from a package, and the named axios exports
-    // `isAxiosError` and `post` report nothing, so `stored`, `reassigned`, `viaHelper`, `wrapped`,
-    // `viaUndici`, `checked` and `named` send nothing.
+    // `useFetch` composable, and the named axios exports `isAxiosError` and `post` report nothing,
+    // so `stored`, `reassigned`, `viaHelper`, `wrapped`, `checked` and `named` send nothing.
     expect(requests(observation)).toEqual([
       // A single-file component's script block reports its own file and lines.
       // A component's own setup code runs the request its module operation names.
@@ -101,6 +100,7 @@ test.concurrent('the built Vue package reports Nuxt and axios requests, includin
       'web/client.ts#templated GET /api/talks',
       // Options the scanner cannot read leave the method out instead of claiming GET, and may hold a base.
       'web/client.ts#unresolved no-method /<unknown>/api/talks',
+      'web/undici.ts#viaUndici GET /api/undici',
     ])
   } finally { await rm(temporary, { recursive: true, force: true }) }
 }, 120000)
@@ -173,6 +173,7 @@ test.concurrent('core derives rows from the Vue requests to the server routes th
       'web/client.ts -> web/server/api/talks/[id].delete.ts',
       // A literal route beats the parameter route beside it, so a named handler keeps its requests.
       'web/client.ts -> web/server/api/talks/named.get.ts',
+      'web/undici.ts -> web/server/api/[resource].get.ts',
     ])
     expect(rows.find(row => row.target.endsWith('health.ts'))?.description).toContain('GET /health')
   } finally { await rm(temporary, { recursive: true, force: true }) }

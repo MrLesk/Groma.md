@@ -12,6 +12,8 @@ import { loadScannerRegistry } from '../src/scanner/registry.ts'
 import { compileWatchPatterns } from '../src/scanner/watch-patterns.ts'
 import { editArchitecture } from '../src/edit.ts'
 import { readCodeStructure } from '../src/viewers/source/structure.ts'
+import javascript from '../plugins/scanners/javascript/src/index.ts'
+import { readJavaScriptOutline } from '../plugins/scanners/javascript/src/outline.ts'
 
 const fixtures = path.resolve(import.meta.dir, '../test/fixtures')
 
@@ -186,4 +188,46 @@ test.concurrent('a component outlines its JavaScript files with module, CommonJS
       ],
     ])
   } finally { await rm(temporary, { recursive: true, force: true }) }
+})
+
+test.concurrent('CommonJS publication and module use give declarations their real visibility', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'groma-javascript-visibility-'))
+  try {
+    await writeFile(path.join(root, 'chain.cjs'), 'function create() {}\nexports = module.exports = create\n')
+    await writeFile(path.join(root, 'require.js'), "const fs = require('node:fs')\nfunction helper() {}\n")
+    await writeFile(path.join(root, 'class.cjs'), 'module.exports = class Application { constructor() {} use() {} }\n')
+    expect(await Bun.spawn(['git', 'init', '--quiet', root]).exited).toBe(0)
+    const scan = (await javascript.scan(root))!
+    expect(scan.files.find(file => file.file === 'class.cjs')?.symbols.map(symbol => symbol.name)).toContain('Application')
+    const files = await readJavaScriptOutline(root, ['chain.cjs', 'require.js', 'class.cjs'].map(file => ({ file, symbols: [] })))
+    const declaration = (file: string) => files.find(item => item.file === file)!.declarations
+    expect(declaration('chain.cjs')).toEqual([expect.objectContaining({ name: 'create', visibility: 'public' })])
+    expect(declaration('require.js')).toEqual([expect.objectContaining({ name: 'helper', visibility: 'private' })])
+    expect(declaration('class.cjs')).toEqual([expect.objectContaining({ kind: 'type', name: 'Application', visibility: 'public',
+      members: [expect.objectContaining({ name: 'constructor' }), expect.objectContaining({ name: 'use' })] })])
+  } finally { await rm(root, { recursive: true, force: true }) }
+})
+
+test.concurrent('calls inside accessors belong to the accessor without entering duplicate comparison', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'groma-javascript-accessor-'))
+  try {
+    const source = 'class Request { get url() { return formatUrl() } }\nfunction formatUrl() { return "/" }\n'
+    await writeFile(path.join(root, 'request.js'), source)
+    expect(await Bun.spawn(['git', 'init', '--quiet', root]).exited).toBe(0)
+    const scan = (await javascript.scan(root))!
+    const call = scan.invocations!.find(invocation => invocation.member === undefined)!
+    const owner = scan.operations!.find(operation => operation.id === call.source)!
+    expect(owner.position).toBe(source.indexOf('get url'))
+    expect(owner.tokens).toBeUndefined()
+  } finally { await rm(root, { recursive: true, force: true }) }
+})
+
+test.concurrent('a leading comment does not hide a compact generated JavaScript body', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'groma-javascript-compact-'))
+  try {
+    await writeFile(path.join(root, 'authored.js'), 'export function run() { return 1 }\n')
+    await writeFile(path.join(root, 'compressed.js'), `/* generated source\n * kept as a tracked file\n */\n${'var a=1;'.repeat(60)}\n`)
+    expect(await Bun.spawn(['git', 'init', '--quiet', root]).exited).toBe(0)
+    expect((await javascript.scan(root))!.files.map(file => file.file)).toEqual(['authored.js'])
+  } finally { await rm(root, { recursive: true, force: true }) }
 })
