@@ -16,7 +16,7 @@ interface Manifest extends DependencyTables {
   package?: { name: string; edition?: string | { workspace: boolean }; autobins?: boolean }
   workspace?: { members?: string[]; exclude?: string[]; package?: { edition?: string }; dependencies?: Record<string, Dependency> }
   lib?: { path?: string; name?: string }
-  bin?: { path?: string; name: string }[]
+  bin?: { path?: string; name: string; 'required-features'?: string[] }[]
   target?: Record<string, DependencyTables>
   features?: Record<string, string[]>
 }
@@ -90,22 +90,49 @@ function dependencyManifest(pkg: Package, manifest: string, model: Manifest, nam
   return path.resolve(path.dirname(inherited ? manifest : pkg.file), dependency.path, 'Cargo.toml')
 }
 
-function features(model: Manifest): string[] {
+function expandedFeatures(model: Manifest, initial: Set<string>): Set<string> {
   const enabled = new Set<string>()
   function add(name: string): void {
-    if (enabled.has(name) || name.includes('/') || name.startsWith('dep:')) return
+    if (enabled.has(name)) return
     enabled.add(name)
     for (const nested of model.features?.[name] ?? []) add(nested)
   }
-  if (model.features?.default) add('default')
-  return [...enabled].sort().map(name => `feature="${name}"`)
+  for (const name of initial) add(name)
+  return enabled
+}
+
+function packageFeatures(packages: Package[], manifest: string, model: Manifest): Map<string, Set<string>> {
+  const active = new Map(packages.map(pkg => [pkg.file, new Set(pkg.model.features?.default ? ['default'] : [])]))
+  let changed = true
+  while (changed) {
+    changed = false
+    for (const pkg of packages) {
+      for (const value of expandedFeatures(pkg.model, active.get(pkg.file)!)) {
+        if (activateDependencyFeature(pkg, value, active, manifest, model)) changed = true
+      }
+    }
+  }
+  return new Map(packages.map(pkg => [pkg.file, expandedFeatures(pkg.model, active.get(pkg.file)!)]))
+}
+
+function activateDependencyFeature(
+  pkg: Package, value: string, active: Map<string, Set<string>>, manifest: string, model: Manifest,
+): boolean {
+  const [dependency, feature, extra] = value.split('/')
+  if (!feature || extra || dependency!.endsWith('?')) return false
+  const declaration = pkg.model.dependencies?.[dependency!]
+  if (!declaration) return false
+  const target = dependencyManifest(pkg, manifest, model, dependency!, declaration)
+  const enabled = target && active.get(target)
+  if (!enabled || enabled.has(feature)) return false
+  enabled.add(feature)
+  return true
 }
 
 type SourceTarget = { file: string; name: string; library: boolean }
 type Package = { file: string; model: Manifest }
 
-async function automaticBins(directory: string, model: Manifest): Promise<NonNullable<Manifest['bin']>> {
-  if (model.package?.autobins === false) return []
+async function conventionalBins(directory: string, model: Manifest): Promise<NonNullable<Manifest['bin']>> {
   const bins = []
   if (await exists(path.join(directory, 'src/main.rs'))) bins.push({ name: model.package!.name, path: 'src/main.rs' })
   const binRoot = path.join(directory, 'src/bin')
@@ -117,34 +144,45 @@ async function automaticBins(directory: string, model: Manifest): Promise<NonNul
   return bins
 }
 
-async function targets(manifest: string, model: Manifest): Promise<SourceTarget[]> {
+function binaryDeclarations(model: Manifest, conventional: NonNullable<Manifest['bin']>): NonNullable<Manifest['bin']> {
+  const bins = [...model.bin ?? []]
+  if (model.package?.autobins !== false) {
+    for (const bin of conventional) if (!bins.some(item => item.name === bin.name)) bins.push(bin)
+  }
+  return bins
+}
+
+async function targets(manifest: string, model: Manifest, enabled: Set<string>): Promise<SourceTarget[]> {
   const directory = path.dirname(manifest)
   const result: SourceTarget[] = []
   const library = path.resolve(directory, model.lib?.path ?? 'src/lib.rs')
   if (await exists(library)) result.push({ file: library, name: model.lib?.name ?? model.package!.name.replaceAll('-', '_'), library: true })
-  const bins = [...model.bin ?? []]
-  for (const bin of await automaticBins(directory, model)) if (!bins.some(item => item.name === bin.name)) bins.push(bin)
-  for (const bin of bins) {
-    const file = path.resolve(directory, bin.path ?? `src/bin/${bin.name}.rs`)
+  const conventional = await conventionalBins(directory, model)
+  for (const bin of binaryDeclarations(model, conventional)) {
+    if (bin['required-features']?.some(feature => !enabled.has(feature))) continue
+    const inferred = conventional.find(item => item.name === bin.name)?.path ?? `src/bin/${bin.name}.rs`
+    const file = path.resolve(directory, bin.path ?? inferred)
     if (await exists(file)) result.push({ file, name: bin.name.replaceAll('-', '_'), library: false })
   }
   return result
 }
 
-async function sourceCrates(root: string, packages: Package[], model: Manifest) {
+async function sourceCrates(root: string, packages: Package[], model: Manifest, active: Map<string, Set<string>>) {
   const crates: Crate[] = []
   const libraries = new Map<string, number>()
   const owners: Package[] = []
   const executables: RustInput['executables'] = []
   for (const pkg of packages) {
-    for (const target of await targets(pkg.file, pkg.model)) {
+    const enabled = active.get(pkg.file)!
+    for (const target of await targets(pkg.file, pkg.model, enabled)) {
       const declaredEdition = pkg.model.package?.edition
       const edition = typeof declaredEdition === 'object' && declaredEdition.workspace
         ? model.workspace?.package?.edition : declaredEdition
       if (target.library) libraries.set(pkg.file, crates.length)
       else executables.push({ file: target.file, declaration: pkg.file, name: target.name })
       crates.push({ root_module: target.file, display_name: target.name,
-        edition: typeof edition === 'string' ? edition : '2015', deps: [], cfg: features(pkg.model),
+        edition: typeof edition === 'string' ? edition : '2015', deps: [],
+        cfg: [...enabled].filter(name => !name.includes('/') && !name.startsWith('dep:')).sort().map(name => `feature="${name}"`),
         // A #[path] module may be shared across crates. One source root keeps it visible in each context.
         source: { include_dirs: [root], exclude_dirs: [] } })
       owners.push(pkg)
@@ -164,15 +202,32 @@ function dependencies(pkg: Package, manifest: string, model: Manifest, libraries
   return deps
 }
 
+async function workspaceContext(root: string, manifest: string, model: Manifest): Promise<Package> {
+  if (model.workspace) return { file: manifest, model }
+  for (let directory = path.dirname(path.dirname(manifest)); directory === root || directory.startsWith(`${root}${path.sep}`); directory = path.dirname(directory)) {
+    const candidate = path.join(directory, 'Cargo.toml')
+    if (!await exists(candidate)) continue
+    const ancestor = await read(candidate)
+    if (ancestor.workspace && (await members(candidate, ancestor)).includes(manifest)) {
+      return { file: candidate, model: ancestor }
+    }
+  }
+  return { file: manifest, model }
+}
+
 export async function readRustProject(root: string, settings: ScannerSettings): Promise<RustInput> {
   const manifest = manifestAt(root, settings)
   const model = await read(manifest)
-  const files = await members(manifest, model)
+  const { file: contextManifest, model: contextModel } = await workspaceContext(root, manifest, model)
+  const selected = new Set(model.workspace ? await members(manifest, model) : [manifest])
+  if (contextManifest !== manifest) await includePathMembers(contextManifest, contextModel, selected)
+  const files = [...selected].sort()
   const packages = await Promise.all(files.map(async file => ({ file, model: await read(file) })))
-  const { crates, libraries, owners, executables } = await sourceCrates(root, packages, model)
+  const active = packageFeatures(packages, contextManifest, contextModel)
+  const { crates, libraries, owners, executables } = await sourceCrates(root, packages, contextModel, active)
   for (const [index, crate] of crates.entries()) {
     const pkg = owners[index]!
-    crate.deps = dependencies(pkg, manifest, model, libraries)
+    crate.deps = dependencies(pkg, contextManifest, contextModel, libraries)
     const library = libraries.get(pkg.file)
     if (library !== undefined && library !== index) crate.deps.push({ crate: library, name: crates[library]!.display_name })
   }

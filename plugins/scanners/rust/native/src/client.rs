@@ -1,6 +1,6 @@
 use ra_ap_hir::{FieldSource, HasSource, ModuleDef, PathResolution, Semantics};
 use ra_ap_ide_db::RootDatabase;
-use ra_ap_syntax::ast::{self, HasModuleItem, HasName};
+use ra_ap_syntax::ast::{self, HasGenericArgs, HasModuleItem, HasName};
 use ra_ap_syntax::{AstNode, SyntaxNode};
 
 use crate::text::{callee, receiver_start};
@@ -62,6 +62,13 @@ fn declared(sema: &Semantics<'_, RootDatabase>, path: &ast::Path) -> bool {
             if let Some(parameter) = ast::Param::cast(parent.clone()) {
                 return typed(parameter.ty());
             }
+            if let Some(pattern) = ast::TupleStructPat::cast(parent.clone()) {
+                let state = pattern.path().and_then(|path| path.segment()?.name_ref())
+                    .is_some_and(|name| name.text() == "State");
+                let parameter = pattern.syntax().parent().and_then(ast::Param::cast);
+                return state && pattern.fields().count() == 1
+                    && parameter.is_some_and(|parameter| state_client(parameter.ty()));
+            }
             let Some(binding) = ast::LetStmt::cast(parent) else { return false };
             match binding.ty() {
                 Some(declared) => typed(Some(declared)),
@@ -73,6 +80,17 @@ fn declared(sema: &Semantics<'_, RootDatabase>, path: &ast::Path) -> bool {
         }
         _ => false,
     }
+}
+
+/// `State(client): State<Client>` binds the extracted reqwest client to `client`.
+fn state_client(declared: Option<ast::Type>) -> bool {
+    let Some(ast::Type::PathType(outer)) = declared else { return false };
+    let Some(segment) = outer.path().and_then(|path| path.segment()) else { return false };
+    if segment.name_ref().is_none_or(|name| name.text() != "State") { return false }
+    let Some(arguments) = segment.generic_arg_list() else { return false };
+    let mut arguments = arguments.generic_args();
+    let Some(ast::GenericArg::TypeArg(inner)) = arguments.next() else { return false };
+    arguments.next().is_none() && typed(inner.ty())
 }
 
 /// A type written as the client, also behind a reference.

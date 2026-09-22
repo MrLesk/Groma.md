@@ -22,6 +22,11 @@ crate graph. It passes that graph directly to rust-analyzer's `ProjectJson`
 API. The engine loads modules and resolves source names. Cargo metadata,
 rustc, build scripts and procedural macros are never executed.
 
+A selected member manifest keeps its enclosing workspace edition and local
+dependency context. Default features can enable features in local dependencies.
+Binary targets with `required-features` enter the graph only when those features
+are active; a named binary without a path uses Cargo's inferred source path.
+
 By default each workspace is scanned once. A package selects its library and
 binary targets; a workspace selects its explicit members and their local path
 dependencies inside the workspace, including dependencies declared for tests,
@@ -51,6 +56,7 @@ bodies, macro-expanded call bodies and generated sources are not extracted.
 
 A physical file shared by multiple module contexts appears once, with no guessed
 declarations or targets and a `rust-unsupported-compilation-contexts` diagnostic.
+This includes a file reached through a symlink.
 Invalid syntax or an engine module-loading error fails the observation.
 Unresolved external semantics do not fail the source scan. A completed scan
 does not claim that the application compiles.
@@ -208,7 +214,8 @@ read from its declaration: a parameter, `let`, static or struct field typed
 `reqwest::Client`, `reqwest::blocking::Client` or a `Client` its module imports
 from reqwest, `Client::new()` or `Client::default()`, the `build()` of a
 `Client::builder()` chain with `?`, `unwrap()` or `expect(..)`, or a `clone()` of
-a client. A URL inside such a
+a client. A handler can also extract the same typed client with
+`State(client): State<Client>`. A URL inside such a
 chain that is only an argument, such as a header value read from a map, is not a
 request. A hyper or http `Request::builder().uri(url)` chain reports the method
 its `method` call states. A request the source splits across statements, a warp
@@ -228,8 +235,10 @@ Closures and async blocks are anonymous callbacks; their tokens belong to the
 function that contains them. These functions are not compared:
 
 - functions produced by macros;
-- functions under inactive `cfg` conditions, such as `#[cfg(test)]`;
+- functions under inactive `cfg` conditions and direct `#[test]` functions;
 - functions in a file with several compilation contexts.
+
+Calls and comparison tokens inside inactive `cfg` branches are omitted as well.
 
 Braces, brackets and separators are dropped. Parentheses stay where they group
 an operator expression, so `(a + b) * c` differs from `a + b * c` while `(a) + b`

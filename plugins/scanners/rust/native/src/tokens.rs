@@ -2,7 +2,9 @@ use std::collections::HashMap;
 
 use ra_ap_hir::{Local, PathResolution, Semantics};
 use ra_ap_ide_db::RootDatabase;
-use ra_ap_syntax::{AstNode, SyntaxKind, SyntaxNode, SyntaxToken, T, TextRange, ast, ast::HasName};
+use ra_ap_syntax::{AstNode, NodeOrToken, SyntaxKind, SyntaxNode, SyntaxToken, T, TextRange, WalkEvent, ast, ast::HasName};
+
+use crate::scan::disabled;
 
 /// Braces, brackets and separator punctuation are dropped, so layout does not change the tokens.
 /// Parentheses are handled apart: they stay only where they group (see `keeps_parentheses`).
@@ -38,9 +40,13 @@ pub fn operation_tokens(
             body_tokens.bind(&binding);
         }
     }
-    let elements = body.syntax().descendants_with_tokens();
-    for token in elements.filter_map(|element| element.into_token()) {
-        body_tokens.push(&token);
+    let mut walk = body.syntax().preorder_with_tokens();
+    while let Some(event) = walk.next() {
+        match event {
+            WalkEvent::Enter(NodeOrToken::Node(node)) if disabled(sema, &node) => walk.skip_subtree(),
+            WalkEvent::Enter(NodeOrToken::Token(token)) => body_tokens.push(&token),
+            _ => {}
+        }
     }
     body_tokens.tokens
 }

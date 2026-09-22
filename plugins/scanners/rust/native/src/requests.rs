@@ -26,7 +26,7 @@ pub fn requests(
         for syntax in source.syntax.syntax().descendants().filter_map(ast::Fn::cast) {
             let (Some(function), Some(body)) = (sema.to_def(&syntax), syntax.body()) else { continue };
             let Some(operation) = functions.get(&function) else { continue };
-            for node in owned_nodes(body.syntax()) {
+            for node in owned_nodes(body.syntax(), sema) {
                 if let Some((method, url)) = client_call(sema, &node) {
                     let mut fact = request_path(&url_parts(sema, names, &url));
                     fact["operation"] = json!(operation);

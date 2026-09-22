@@ -1,10 +1,10 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::Path;
 
 use anyhow::{Context, bail};
 use ra_ap_hir::{AnyDiagnostic, AsAssocItem, CallableKind, Crate, Function, Semantics};
 use ra_ap_ide_db::RootDatabase;
-use ra_ap_syntax::{AstNode, SyntaxNode, TextSize, WalkEvent, ast, ast::HasName};
+use ra_ap_syntax::{AstNode, SyntaxNode, TextSize, WalkEvent, ast, ast::{HasAttrs, HasName}};
 use ra_ap_vfs::FileId;
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -39,6 +39,7 @@ pub(crate) struct Source {
 
 pub fn scan(input: Input) -> anyhow::Result<Value> {
     // Supply a source crate graph directly; Cargo, rustc and build scripts are never invoked.
+    let repository_root = std::fs::canonicalize(&input.root)?;
     let base = ra_ap_vfs::AbsPathBuf::assert_utf8(std::path::PathBuf::from(&input.root));
     let project = ra_ap_project_model::ProjectJson::new(None, &base,
         serde_json::from_value(json!({ "crates": input.crates }))?);
@@ -66,10 +67,14 @@ pub fn scan(input: Input) -> anyhow::Result<Value> {
     if crates.is_empty() {
         bail!("rust-analyzer loaded no selected library or binary targets");
     }
-    let file_ids = selected_files(&crates, &sema, &db)?;
+    let mut physical = BTreeMap::<_, Vec<FileId>>::new();
+    for file_id in selected_files(&crates, &sema, &db)? {
+        let path = std::fs::canonicalize(vfs.file_path(file_id).to_string())?;
+        physical.entry(path).or_default().push(file_id);
+    }
     let mut entry_points = Vec::new();
     let relative = |file: &str| -> anyhow::Result<String> {
-        Ok(Path::new(file).strip_prefix(&input.root)?.to_string_lossy().replace('\\', "/"))
+        Ok(std::fs::canonicalize(file)?.strip_prefix(&repository_root)?.to_string_lossy().replace('\\', "/"))
     };
     for executable in &input.executables {
         let krate = crates.iter().find(|krate| vfs.file_path(krate.root_file(&db)).to_string() == executable.file);
@@ -87,14 +92,13 @@ pub fn scan(input: Input) -> anyhow::Result<Value> {
         "severity": "information", "code": "rust-analysis-scope",
         "message": "Declared default features and library/binary source only; external crates and standard library types remain unresolved. Build-script output, procedural macros, expanded calls, trait dispatch and callback value flow are not extracted."
     })];
-    for file_id in file_ids {
-        let absolute = vfs.file_path(file_id).to_string();
-        let file = Path::new(&absolute)
-            .strip_prefix(&input.root)
+    for (absolute, variants) in physical {
+        let file = absolute
+            .strip_prefix(&repository_root)
             .context("selected source is outside the repository")?
             .to_string_lossy()
             .replace('\\', "/");
-        let contexts = sema.file_to_module_defs(file_id).count();
+        let contexts: usize = variants.iter().map(|id| sema.file_to_module_defs(*id).count()).sum();
         files.push(json!({"file": file, "symbols": []}));
         if contexts != 1 {
             diagnostics.push(json!({
@@ -104,6 +108,7 @@ pub fn scan(input: Input) -> anyhow::Result<Value> {
             }));
             continue;
         }
+        let file_id = variants[0];
         let text = std::fs::read_to_string(&absolute)?;
         let edition = sema
             .file_to_module_defs(file_id)
@@ -194,6 +199,7 @@ fn declarations(
             .descendants()
             .filter_map(ast::Fn::cast)
         {
+            if disabled(sema, syntax.syntax()) { continue }
             let (Some(function), Some(name), Some(body)) =
                 (sema.to_def(&syntax), syntax.name(), syntax.body())
             else {
@@ -236,7 +242,7 @@ fn calls(
                 continue;
             };
             let Some(body) = syntax.body() else { continue };
-            for node in call_nodes(body.syntax()) {
+            for node in call_nodes(body.syntax(), sema) {
                 let target = call_target(&node, sema)
                     .filter(|function| {
                         function
@@ -265,11 +271,15 @@ fn calls(
 
 /// Nodes of one function body, including its closures and async blocks: their code is part of
 /// this function. Nested `fn` items are their own operations and are left out.
-pub(crate) fn owned_nodes(body: &SyntaxNode) -> Vec<SyntaxNode> {
+pub(crate) fn owned_nodes(body: &SyntaxNode, sema: &Semantics<'_, RootDatabase>) -> Vec<SyntaxNode> {
     let mut nodes = Vec::new();
     let mut walk = body.preorder();
     while let Some(event) = walk.next() {
         let WalkEvent::Enter(node) = event else { continue };
+        if disabled(sema, &node) {
+            walk.skip_subtree();
+            continue;
+        }
         if &node != body && ast::Fn::can_cast(node.kind()) {
             walk.skip_subtree();
             continue;
@@ -281,13 +291,17 @@ pub(crate) fn owned_nodes(body: &SyntaxNode) -> Vec<SyntaxNode> {
 
 /// Call nodes of one function body. Unlike the nodes the body owns, a closure or async block
 /// is skipped here: this scan does not extract the calls those deferred bodies make.
-fn call_nodes(body: &SyntaxNode) -> Vec<SyntaxNode> {
+fn call_nodes(body: &SyntaxNode, sema: &Semantics<'_, RootDatabase>) -> Vec<SyntaxNode> {
     let mut nodes = Vec::new();
     let mut walk = body.preorder();
     while let Some(event) = walk.next() {
         let WalkEvent::Enter(node) = event else {
             continue;
         };
+        if disabled(sema, &node) {
+            walk.skip_subtree();
+            continue;
+        }
         if &node != body
             && (ast::Fn::can_cast(node.kind())
                 || ast::ClosureExpr::can_cast(node.kind())
@@ -301,6 +315,17 @@ fn call_nodes(body: &SyntaxNode) -> Vec<SyntaxNode> {
         }
     }
     nodes
+}
+
+/// Only source active in the selected Cargo feature context contributes evidence.
+pub(crate) fn disabled(sema: &Semantics<'_, RootDatabase>, node: &SyntaxNode) -> bool {
+    let Some(item) = ast::AnyHasAttrs::cast(node.clone()) else { return false };
+    item.attrs().any(|attr| {
+        let Some(path) = attr.path() else { return false };
+        let name = path.syntax().text().to_string();
+        name == "test" || (name == "cfg" && attr.token_tree()
+            .and_then(|tree| sema.check_cfg_attr(&tree)) == Some(false))
+    })
 }
 
 fn call_target(node: &SyntaxNode, sema: &Semantics<'_, RootDatabase>) -> Option<Function> {

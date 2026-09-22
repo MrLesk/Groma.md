@@ -9,7 +9,7 @@ use serde_json::{Value, json};
 use crate::handlers::{attribute_routes, method_handlers, ranked, typed_parameters};
 use crate::patterns::segments;
 use crate::placement::{Framework, Placement, RouterCall, Start, placement, router_call, start};
-use crate::scan::{Source, owned_nodes};
+use crate::scan::{Source, disabled, owned_nodes};
 use crate::text::{callee, let_value, macro_identifiers};
 use crate::url::{Constants, literal_path};
 
@@ -232,7 +232,7 @@ fn routing(sema: &Semantics<'_, RootDatabase>, names: &Constants, sources: &[Sou
     let reader = Reader { sema, names, handlers };
     for (_, syntax, owner) in declared(sema, sources) {
         let Some(body) = syntax.body() else { continue };
-        for node in owned_nodes(body.syntax()) {
+        for node in owned_nodes(body.syntax(), sema) {
             if let Some(call) = ast::MethodCallExpr::cast(node.clone()) {
                 reader.visit(owner, &call, &mut routing);
             } else if let Some(call) = ast::CallExpr::cast(node) {
@@ -251,7 +251,10 @@ fn declared<'a>(
     sources.iter().flat_map(move |source| {
         let functions = source.syntax.syntax().descendants().filter_map(ast::Fn::cast);
         let file = source.file.as_str();
-        functions.filter_map(move |syntax| sema.to_def(&syntax).map(|function| (file, syntax, function)))
+        functions.filter_map(move |syntax| {
+            if disabled(sema, syntax.syntax()) { return None }
+            sema.to_def(&syntax).map(|function| (file, syntax, function))
+        })
     })
 }
 
@@ -344,8 +347,8 @@ impl Reader<'_, '_> {
         if let ast::Expr::MacroExpr(call) = target {
             let Some(call) = call.macro_call() else { return };
             for name in macro_identifiers(&call) {
-                if let Some([function]) = self.handlers.get(&name).map(Vec::as_slice) {
-                    registered(*function);
+                if let Some(function) = self.handler(owner, &name) {
+                    registered(function);
                 }
             }
             return;
@@ -353,6 +356,19 @@ impl Reader<'_, '_> {
         if let Some(function) = target_function(self.sema, target) {
             registered(function);
         }
+    }
+
+    /// A `routes!` identifier is local to its Rust module, then to its crate.
+    fn handler(&self, owner: Function, name: &str) -> Option<Function> {
+        let candidates = self.handlers.get(name)?;
+        let module = owner.module(self.sema.db);
+        let local: Vec<_> = candidates.iter().copied()
+            .filter(|candidate| candidate.module(self.sema.db) == module).collect();
+        if let [function] = local.as_slice() { return Some(*function) }
+        if !local.is_empty() { return None }
+        let crate_members: Vec<_> = candidates.iter().copied()
+            .filter(|candidate| candidate.module(self.sema.db).krate() == module.krate()).collect();
+        match crate_members.as_slice() { [function] => Some(*function), _ => None }
     }
 
     /// Whether a call is made on a `web::scope` or `web::resource` chain.

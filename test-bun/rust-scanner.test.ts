@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { cp, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { appendFile, cp, mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import rustScanner, { scanRustSource } from '../plugins/scanners/rust/src/index.ts'
@@ -55,6 +55,34 @@ rustTest('rust-analyzer owns alias and inherent method targets while unsupported
     }
     expect(calls.some(call => call.caller.name === 'later')).toBeFalse()
     expect(first.operations!.every(operation => Number.isInteger(operation.position))).toBeTrue()
+  })
+}, 60000)
+
+rustTest('inactive cfg branches and test functions produce no ordinary source facts', async () => {
+  await fixture('rust-semantic', async root => {
+    await appendFile(path.join(root, 'Cargo.toml'), '\n[features]\noptional = []\n')
+    await appendFile(path.join(root, 'src/lib.rs'), '\npub fn conditional() {\n    #[cfg(feature = "optional")] provider::Worker::create().work();\n    #[cfg(not(feature = "optional"))] provider::run();\n}\n#[test]\nfn test_only() { provider::run(); }\n')
+    const observation = await scanRustSource(root, {}, { worker })
+    const conditional = observation.operations!.find(operation => operation.name === 'conditional')!
+    expect(observation.invocations!.filter(call => call.source === conditional.id)).toHaveLength(1)
+    expect(conditional.tokens).not.toContain('create')
+    expect(observation.operations!.some(operation => operation.name === 'test_only')).toBeFalse()
+  })
+}, 60000)
+
+const symlinkTest = worker && process.platform !== 'win32' ? test.concurrent : test.skip
+symlinkTest('one physical Rust file reached through a symlink has one uncertain source identity', async () => {
+  await fixture('rust-semantic', async root => {
+    await appendFile(path.join(root, 'Cargo.toml'), '\n[workspace]\nmembers = ["mirror"]\n')
+    await mkdir(path.join(root, 'mirror/src'), { recursive: true })
+    await writeFile(path.join(root, 'mirror/Cargo.toml'), '[package]\nname = "mirror"\nversion = "0.1.0"\nedition = "2021"\n')
+    await writeFile(path.join(root, 'mirror/src/lib.rs'), 'mod provider;\n')
+    await symlink('../../src/provider.rs', path.join(root, 'mirror/src/provider.rs'))
+    const observation = await scanRustSource(root, {}, { worker })
+    expect(observation.files.filter(file => file.file.endsWith('provider.rs'))).toHaveLength(1)
+    expect(observation.operations!.some(operation => operation.file === 'src/provider.rs')).toBeFalse()
+    expect(observation.diagnostics.some(item => item.code === 'rust-unsupported-compilation-contexts'
+      && item.file === 'src/provider.rs')).toBeTrue()
   })
 }, 60000)
 
@@ -261,6 +289,26 @@ rustTest('Rust HTTP facts cover axum, actix-web and Rocket endpoints, reqwest re
       'client.rs speakers GET /speakers configured',
       'client.rs through_helper GET /unknown',
     ])
+  })
+}, 60000)
+
+rustTest('Rocket route registration uses the handler in its module when another module reuses the name', async () => {
+  await fixture('rust-http', async root => {
+    await appendFile(path.join(root, 'src/rocket_routes.rs'), '\nmod unrelated {\n    #[get("/unused")]\n    fn index() -> &\'static str { "" }\n}\n')
+    const observation = await scanRustSource(root, {}, { worker })
+    const routes = observation.httpEndpoints!.map(fact => `${fact.method} /${segments(fact.path)}`)
+    expect(routes).toContain('GET /v1/speakers')
+  })
+}, 60000)
+
+rustTest('a reqwest client taken from a typed extractor sends an HTTP request', async () => {
+  await fixture('rust-http', async root => {
+    await appendFile(path.join(root, 'src/client.rs'), '\npub async fn extracted(axum::extract::State(client): axum::extract::State<Client>) {\n    client.get("/stream").send().await;\n}\n')
+    const observation = await scanRustSource(root, {}, { worker })
+    const operation = observation.operations!.find(item => item.name === 'extracted')!
+    const request = observation.httpRequests!.find(item => item.operation === operation.id)
+    expect(request?.method).toBe('GET')
+    expect(request && `/${segments(request.path)}`).toBe('/stream')
   })
 }, 60000)
 
