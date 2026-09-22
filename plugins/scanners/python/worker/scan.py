@@ -296,7 +296,7 @@ def scan(files):
         tree = ast.parse(source, filename=file)
         trees[file] = tree
         # Validate scope rules too, but never execute the resulting code object.
-        compile(tree, file, "exec")
+        compile(tree, file, "exec", flags=ast.PyCF_ALLOW_TOP_LEVEL_AWAIT)
         evidence = Evidence(file, source)
         evidence.visit(tree)
         observation["files"].append({"file": file, "roots": [owner], "symbols": evidence.symbols})

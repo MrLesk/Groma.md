@@ -101,6 +101,19 @@ def base_url_facts(tree, assigned):
     return {"classes": classes, "stores": stores, "reads": reads}
 
 
+def local_imports(tree):
+    """Imports that can run in the module scope, including branches and repeated star imports."""
+    imports = []
+    for node in scope_nodes(tree):
+        if isinstance(node, ast.Import):
+            imports.extend((alias.name if alias.asname else alias.name.split(".")[0], None)
+                           for alias in node.names)
+        elif isinstance(node, ast.ImportFrom):
+            spec = "." * node.level + (node.module or "")
+            imports.extend((spec, alias.name) for alias in node.names)
+    return imports
+
+
 def read_module(file, tree, identities, shadowed):
     """Everything HTTP facts need from one module: its declarations, constants, imports and calls.
 
@@ -111,6 +124,7 @@ def read_module(file, tree, identities, shadowed):
     module = {"file": file, "path": module_path(file), "package": file.endswith("__init__.py"),
               "identities": identities, "shadowed": shadowed, "assigned": assigned,
               "base_url": base_url_facts(tree, assigned), "definitions": {}, "values": {}, "imports": {},
+              "local_imports": local_imports(tree),
               "bindings": Counter(name for node in ast.walk(tree) for name in binding_names(node)),
               "calls": [node for node in ast.walk(tree) if isinstance(node, ast.Call)]}
     for node in tree.body:

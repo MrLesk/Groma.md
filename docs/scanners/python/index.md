@@ -57,15 +57,21 @@ is unresolved: Python runtime binding is outside this parser's evidence.
 Decorators, defaults, annotations, module/class initialization, lambdas and
 lazy generator expressions do not provide invocation evidence. Concrete
 callbacks are not analyzed and call evidence produces no derived call
-relationships; imports are followed only for the [HTTP facts](#http-facts)
-below. Every observation includes a `PYTHON_SYNTAX_ONLY` diagnostic.
+relationships; imports are followed for execution-entry source closure and
+the [HTTP facts](#http-facts) below. Every observation includes a
+`PYTHON_SYNTAX_ONLY` diagnostic.
 
-Source is parsed and compiled for syntax and scope validation, but the code
-object is never executed. Invalid source or project TOML fails the whole Python
+Source is parsed and compiled for syntax and scope validation, including valid
+module-level `await`, but the code object is never executed. Invalid source or project TOML fails the whole Python
 observation. Other healthy scanners follow Groma's existing failure isolation.
 Correct reported syntax errors or use a scanner release supporting the source
 language version. Readiness checks source availability and the packaged worker;
 full syntax validation happens during the scan.
+
+Module guards, `__main__.py`, and `[project.scripts]` identify execution entries.
+A declared script resolves its target within its own project. Its local source
+closure follows imports that can run at module level, including repeated star
+imports and imports inside a branch; imports inside functions do not add files.
 
 ## Source outline
 
@@ -133,6 +139,7 @@ it recognizes in Python source. Supported declarations:
 | --- | --- |
 | `@app.route`, `@app.api_route`, `@app.get` and the other method decorators on a `Flask`, `FastAPI` or `Starlette` application | One endpoint per method; a `route` or `api_route` without `methods` serves `GET` |
 | `add_api_route(path, endpoint, methods=...)` and `add_route(...)` on a `FastAPI` or `Starlette` application or router | Read like `route` |
+| `add_url_rule(rule, view_func=handler, methods=...)` on a `Flask` application | One endpoint per method; `GET` when no method is listed |
 | `mount(path, app)` on a `FastAPI` or `Starlette` application or router | The mounted application's routes under the mount path; a blocker for everything under that path when the scanner cannot resolve the mounted application |
 | `host(...)` on a `FastAPI` or `Starlette` application or router | A blocker for the whole application |
 | `Blueprint(url_prefix=...)` and `APIRouter(prefix=...)` | The router's own prefix |
@@ -148,8 +155,9 @@ it recognizes in Python source. Supported declarations:
 segment, with `(?P<rest>.*)` or `.+` last as a catch-all; a dot in its text is
 literal only when escaped.
 
-The scanner reports no endpoint for an application or router created inside a
-function or a Starlette or FastAPI route table, and no request for a client call
+The scanner recognizes an application assigned once in a function body, such
+as Flask's `create_app`, and routes declared on that local name. It reports no
+endpoint for a router created inside a function or a Starlette or FastAPI route table, and no request for a client call
 outside a function. A Flask route whose path or methods are computed, or whose
 blueprint the scanner cannot resolve or finds registered on an application it
 cannot resolve, such as one passed to a function, reports nothing; Django,

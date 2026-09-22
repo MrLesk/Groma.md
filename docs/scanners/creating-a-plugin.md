@@ -64,8 +64,10 @@ The shared source runtime compiles these patterns once, applies shared project
 exclusions, watches the filesystem, and schedules matching scanners. Plugins
 supply subscription data and do not create watchers or match changed paths.
 Watch patterns select scan triggers; compiler project rules still determine
-the files analyzed by `scan`. Each `scan` receives the repository root and its optional settings object and returns one
-complete observation, replacing this scanner's previous observation in the
+the files analyzed by `scan`. Each `scan` receives the repository root, its optional settings object,
+and a shared exclusion predicate as the optional third argument. A scanner that
+can filter its source inventory should apply the predicate before parsing;
+Groma also filters returned evidence. The scan returns one complete observation, replacing this scanner's previous observation in the
 session. Unaffected scanners retain their evidence for core's combined view.
 
 ## Explicit source units
@@ -315,6 +317,8 @@ existing scanner entry beside `id` and `source`:
 Groma validates that `settings` is an object, preserves it during scanner
 management, and passes only that entry's settings as the second argument to
 both `checkReadiness` and `scan`. Omitted settings arrive as `undefined`.
+The optional third `scan` argument tests repository-relative paths against
+Groma's shared exclusions. It is separate from scanner-owned settings.
 Use a default parameter when the scanner has defaults:
 
 ```ts

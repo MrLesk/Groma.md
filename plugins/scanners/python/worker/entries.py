@@ -22,7 +22,7 @@ def entry_modules(sources, entry, memberships):
         if file in found or memberships[file] != memberships[entry["file"]]:
             continue
         found.add(file)
-        for spec, name in module["imports"].values():
+        for spec, name in module["local_imports"]:
             target = sources.module(spec, module)
             if target is None:
                 continue
@@ -45,8 +45,13 @@ def execution_entries(files, trees, sources, memberships):
         with open(declaration, "rb") as stream:
             project = tomllib.load(stream).get("project", {})
         for name, target in project.get("scripts", {}).items():
-            module = sources.lookup(target.split(":")[0])
-            if module is not None and memberships[module["file"]] == str(PurePosixPath(declaration).parent):
+            path = target.split(":")[0]
+            local = [module for module in sources.modules.values()
+                     if memberships[module["file"]] == str(PurePosixPath(declaration).parent)]
+            matches = [module for module in local if module["path"] == path]
+            matches = matches or [module for module in local if module["path"].endswith(f".{path}")]
+            if len(matches) == 1:
+                module = matches[0]
                 entries.append({"file": module["file"], "declaration": declaration, "name": name})
     for entry in entries:
         entry["files"] = entry_modules(sources, sources.modules[entry["file"]], memberships)

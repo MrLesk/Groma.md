@@ -10,9 +10,9 @@ const excluded = ['**/.venv/**', '**/venv/**', '**/__pycache__/**', '**/test/**'
   '**/test_*.py', '**/*_test.py', '**/conftest.py']
 const globs = excluded.map(pattern => new Bun.Glob(pattern))
 
-async function inventory(root: string) {
+async function inventory(root: string, excluded?: (file: string) => boolean) {
   return projectFiles(root, file => (file.endsWith('.py') || declarations.has(path.posix.basename(file)))
-    && !globs.some(glob => glob.match(file)))
+    && !globs.some(glob => glob.match(file)) && !excluded?.(file))
 }
 
 /** The analyzed sources; the declaration files in the inventory describe projects, not source. */
@@ -45,8 +45,8 @@ export default {
     if (references.length === 0) return []
     return JSON.parse(await run({ root, references }))
   },
-  async scan(root) {
-    const files = await inventory(root)
+  async scan(root, _settings, excluded) {
+    const files = await inventory(root, excluded)
     if (!files.some(file => file.endsWith('.py'))) return undefined
     return parseScanObservation(await run({ root, files }))
   },

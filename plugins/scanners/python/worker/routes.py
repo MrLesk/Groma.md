@@ -13,7 +13,7 @@ REGISTRATIONS = {"register_blueprint": "url_prefix", "include_router": "prefix"}
 ORDERED = ("FastAPI", "Starlette", "APIRouter")
 # Decorators that name their methods, and calls that add one route.
 ROUTE_VERBS = ("route", "api_route")
-ADDED_ROUTES = ("add_api_route", "add_route")
+ADDED_ROUTES = ("add_api_route", "add_route", "add_url_rule")
 # Flask and Django write <converter:name>; FastAPI and Starlette write {name} or {name:converter}.
 PLACEHOLDER = re.compile(r"<(?:([^<>:]+):)?([^<>:]+)>|\{([^{}:]+)(?::([^{}]+))?\}")
 # Converters that accept any one segment; `path` takes the rest of the path, and every other converter restricts.
@@ -159,10 +159,54 @@ def prefix_segments(sources, module, node):
     return None if route is None else route_segments(route)
 
 
+def app_names(scope, name):
+    """Name nodes that read one function's binding, including decorators evaluated in that function."""
+    found = []
+    for node in scope_nodes(scope):
+        if isinstance(node, ast.Name) and node.id == name:
+            found.append(node)
+        elif isinstance(node, FUNCTIONS):
+            found.extend(part for decorator in node.decorator_list for part in ast.walk(decorator)
+                         if isinstance(part, ast.Name) and part.id == name)
+            if name not in parameters(node) and not any(name in binding_names(part) for part in scope_nodes(node)):
+                found.extend(app_names(node, name))
+    return found
+
+
+def local_app_values(module):
+    """Applications assigned once in a function body, and the Name nodes that read that binding."""
+    values, references = {}, {}
+    for scope in module["definitions"].values():
+        if not isinstance(scope, FUNCTIONS):
+            continue
+        bindings = Counter(name for node in scope_nodes(scope) for name in binding_names(node))
+        for statement in scope.body:
+            if not isinstance(statement, ast.Assign) or len(statement.targets) != 1:
+                continue
+            target = statement.targets[0]
+            kind = constructor(statement.value)
+            if not isinstance(target, ast.Name) or kind not in APPS or bindings[target.id] != 1:
+                continue
+            key = (module["file"], scope.lineno, target.id)
+            values[key] = kind
+            references.update((node, key) for node in app_names(scope, target.id))
+    return values, references
+
+
+def router_key(sources, module, node):
+    if isinstance(node, ast.Name) and node in module["local_router_keys"]:
+        return module["local_router_keys"][node]
+    return value_key(sources, module, node)
+
+
 def collect_routers(sources):
     """Every application and router object, with the prefixes registrations add to it."""
     routers = {}
     for module in sources.modules.values():
+        local, module["local_router_keys"] = local_app_values(module)
+        for key, kind in local.items():
+            routers[key] = {"prefix": [], "registrations": [], "unknown": [],
+                            "ordered": kind in ORDERED, "application": module["file"]}
         for name, value in module["values"].items():
             kind = constructor(value)
             if kind in APPS:
@@ -181,7 +225,7 @@ def collect_routers(sources):
                 continue
             registered, prefix, replaces = found
             key = value_key(sources, module, registered)
-            parent = value_key(sources, module, call.func.value)
+            parent = router_key(sources, module, call.func.value)
             if key in routers:
                 routers[key]["registrations"].append({
                     "parent": parent, "prefix": prefix_segments(sources, module, prefix), "replaces": replaces,
@@ -293,7 +337,7 @@ def decorator_endpoints(sources, module, routers, decorator, operation):
     verb = method_name(decorator)
     if (verb not in ROUTE_VERBS and verb not in METHODS) or not decorator.args:
         return []
-    key = value_key(sources, module, decorator.func.value)
+    key = router_key(sources, module, decorator.func.value)
     if key not in routers:
         return []
     return route_facts(routers, key, module["file"], operation, path_segments_of(sources, module, decorator.args[0]),
@@ -309,14 +353,15 @@ def call_endpoints(sources, routers):
             verb = method_name(call)
             if verb not in ADDED_ROUTES and verb != "host":
                 continue
-            key = value_key(sources, module, call.func.value)
+            key = router_key(sources, module, call.func.value)
             if key not in routers:
                 continue
             if verb == "host":
                 facts.extend(route_facts(routers, key, module["file"], None, None, None))
                 continue
-            segments = path_segments_of(sources, module, argument(call, 0, "path"))
-            found = resolve(sources, module, argument(call, 1, "endpoint"))
+            flask = verb == "add_url_rule"
+            segments = path_segments_of(sources, module, argument(call, 0, "rule" if flask else "path"))
+            found = resolve(sources, module, argument(call, 2, "view_func") if flask else argument(call, 1, "endpoint"))
             handler = found[2] if found is not None and found[0] == "operation" else None
             facts.extend(route_facts(routers, key, module["file"], handler, segments,
                                      route_methods(sources, module, call, verb)))

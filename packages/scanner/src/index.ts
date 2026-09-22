@@ -164,7 +164,8 @@ export interface ScannerPlugin {
    * so Groma can explain why a file has no architecture owner.
    */
   listSourceFiles?(repositoryRoot: string, settings?: ScannerSettings): Promise<string[]>
-  scan(repositoryRoot: string, settings?: ScannerSettings): Promise<ScanObservation | undefined>
+  /** The host may remove source from analysis before parsing; it also filters returned evidence. */
+  scan(repositoryRoot: string, settings?: ScannerSettings, excluded?: (file: string) => boolean): Promise<ScanObservation | undefined>
 }
 
 type ObservationInput = Omit<ScanObservation, 'schemaVersion'>

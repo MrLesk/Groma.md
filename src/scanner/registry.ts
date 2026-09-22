@@ -141,7 +141,7 @@ export async function loadScannerRegistry(
     try {
       const scanner = await importScanner(module.entry, module.id)
       const { listSourceFiles } = scanner
-      return { ...scanner, scan: (root: string) => scanner.scan(root, module.settings),
+      return { ...scanner, scan: (root: string, _settings?: ScannerSettings, excluded?: (file: string) => boolean) => scanner.scan(root, module.settings, excluded),
         ...(listSourceFiles === undefined ? {} : { listSourceFiles: (root: string) => listSourceFiles.call(scanner, root, module.settings) }) }
     } catch (error) {
       // Failed imports have no source subscription. Retry/settings reload the registry.
@@ -196,7 +196,7 @@ export function createScannerRegistry(
         if (!await scannerSourcesExcluded(scanner, root, excluded)) {
           try {
             onScan?.({ scanner: scanner.id, type: 'start' })
-            result = await scanner.scan(root)
+            result = await scanner.scan(root, undefined, excluded)
           } finally {
             onScan?.({ scanner: scanner.id, type: 'end' })
           }

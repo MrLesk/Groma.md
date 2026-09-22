@@ -7,6 +7,8 @@ import type { CodeSymbol, HttpEndpointSegment, HttpRequestSegment, ScanHttpEndpo
 import { loadAnnotatedArchitecture } from '../src/core.ts'
 import { httpRelationships } from '../src/http-relationships.ts'
 import { addScanner } from '../src/scanner/modules/inventory.ts'
+import { readScannerConfig, writeScannerConfig } from '../src/scanner/modules/config.ts'
+import { loadScannerRegistry } from '../src/scanner/registry.ts'
 import { compileWatchPatterns } from '../src/scanner/watch-patterns.ts'
 import { readCodeStructure } from '../src/viewers/source/structure.ts'
 
@@ -281,6 +283,76 @@ test.concurrent('Python rejects syntax and scope errors without returning partia
       await writeFile(path.join(root, 'nested/worker.py'), source)
       await expect(scanner.scan(root)).rejects.toThrow('PYTHON_SCAN_FAILED')
     }
+  } finally { await rm(temporary, { recursive: true, force: true }) }
+})
+
+test.concurrent('Python scans valid module-level await without executing it', async () => {
+  const { root, temporary, scanner } = await fixture()
+  try {
+    await writeFile(path.join(root, 'await.py'), 'async def main(): pass\nawait main()\n')
+    expect((await scanner.scan(root))!.files.some(file => file.file === 'await.py')).toBe(true)
+  } finally { await rm(temporary, { recursive: true, force: true }) }
+})
+
+test.concurrent('a declared Python script selects its own project module despite a matching module in another project', async () => {
+  const { root, temporary, scanner } = await fixture()
+  try {
+    await writeFile(path.join(root, 'nested/pyproject.toml'), '[project]\nname = "nested"\n[project.scripts]\ntermui = "termui:cli"\n')
+    await writeFile(path.join(root, 'nested/termui.py'), 'def cli(): pass\n')
+    await writeFile(path.join(root, 'termui.py'), 'def other(): pass\n')
+    expect((await scanner.scan(root))!.entryPoints).toContainEqual({
+      file: 'nested/termui.py', declaration: 'nested/pyproject.toml', name: 'termui', files: ['nested/termui.py'],
+    })
+  } finally { await rm(temporary, { recursive: true, force: true }) }
+})
+
+test.concurrent('a Python entry includes repeated star imports and imports in a module-level branch', async () => {
+  const { root, temporary, scanner } = await fixture()
+  try {
+    await mkdir(path.join(root, 'pkg'))
+    await writeFile(path.join(root, 'pkg/__main__.py'), 'from .first import *\nfrom .second import *\ntry:\n    from .third import run\nexcept ImportError:\n    pass\n')
+    for (const name of ['first', 'second', 'third']) await writeFile(path.join(root, `pkg/${name}.py`), 'def run(): pass\n')
+    expect((await scanner.scan(root))!.entryPoints?.find(entry => entry.file === 'pkg/__main__.py')?.files).toEqual([
+      'pkg/__main__.py', 'pkg/first.py', 'pkg/second.py', 'pkg/third.py',
+    ])
+  } finally { await rm(temporary, { recursive: true, force: true }) }
+})
+
+test.concurrent('a shared exclusion keeps invalid Python outside parsing when valid source remains', async () => {
+  const { root, temporary, artifact } = await fixture()
+  try {
+    await cp(path.join(fixtures, 'empty-project'), root, { recursive: true })
+    await writeFile(path.join(root, 'bad.py'), 'def broken(:\n')
+    await addScanner(root, artifact)
+    await writeScannerConfig(root, { ...await readScannerConfig(root), exclude: ['/bad.py'] })
+    const batch = await (await loadScannerRegistry(root)).collectObservations(root)
+    expect(batch.failures).toEqual([])
+    expect(batch.observations[0]?.files.some(file => file.file === 'bad.py')).toBe(false)
+  } finally { await rm(temporary, { recursive: true, force: true }) }
+})
+
+test.concurrent('Python recognizes a Flask route registered with a view function', async () => {
+  const { root, temporary, scanner } = await fixture()
+  try {
+    await writeFile(path.join(root, 'flask_case.py'), 'from flask import Flask\napp = Flask(__name__)\ndef hello(): pass\napp.add_url_rule("/hello", view_func=hello)\n')
+    const scan = (await scanner.scan(root))!
+    const handler = scan.operations!.find(operation => operation.file === 'flask_case.py' && operation.name === 'hello')!
+    expect(scan.httpEndpoints).toContainEqual({
+      operation: handler.id, method: 'GET', path: [{ kind: 'literal', value: 'hello' }],
+    })
+  } finally { await rm(temporary, { recursive: true, force: true }) }
+})
+
+test.concurrent('Python recognizes a Flask route on an app created inside a factory', async () => {
+  const { root, temporary, scanner } = await fixture()
+  try {
+    await writeFile(path.join(root, 'factory.py'), 'from flask import Flask\ndef create_app():\n    app = Flask(__name__)\n    @app.route("/inside")\n    def inside(): pass\n    def unrelated(app):\n        @app.route("/wrong")\n        def wrong(): pass\n    return app\n')
+    const scan = (await scanner.scan(root))!
+    const handler = scan.operations!.find(operation => operation.file === 'factory.py' && operation.name.endsWith('inside'))!
+    expect(scan.httpEndpoints).toContainEqual({
+      operation: handler.id, method: 'GET', path: [{ kind: 'literal', value: 'inside' }],
+    })
+    expect(scan.httpEndpoints?.some(fact => route(fact.path) === '/wrong')).toBe(false)
   } finally { await rm(temporary, { recursive: true, force: true }) }
 })
 
