@@ -33,47 +33,58 @@
   <a href="https://mrlesk.github.io/Groma.md/architecture/blueprint/?theme=auto"><img src=".github/assets/explore-live-map.svg" alt="Explore the live map" width="232" height="48"></a>
 </p>
 
-Groma scans your code, draws it as a [C4](https://c4model.com) architecture map, and keeps that map open while you and your coding agents work. Save a file and the map updates. Work on a [Backlog.md](https://github.com/MrLesk/Backlog.md) task and it appears pinned to the components it touches. Everything is plain Markdown in your repository, so architecture changes are reviewed in the same pull request as the code.
+Groma scans your code into a first [C4](https://c4model.com) architecture map. Your coding agent curates it into the architecture you would explain to a new teammate, and the map stays open while you and your agents work. Save a file and the map updates. Work on a [Backlog.md](https://github.com/MrLesk/Backlog.md) task and it appears pinned to the components it touches. Everything is plain Markdown in your repository, so architecture changes are reviewed in the same pull request as the code.
 
-Free, MIT-licensed, and local. No account, backend, or AI service required.
+Free, MIT-licensed, and local. No account or backend, and Groma itself calls no AI service: curation uses the coding agent you already work with.
 
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset=".github/assets/workflow-dark.png">
     <source media="(prefers-color-scheme: light)" srcset=".github/assets/workflow-light.png">
-    <img src=".github/assets/workflow-light.png" alt="Groma scans your repository into C4 architecture documents stored as OKF Markdown. Add relationships and groups to build a live architecture map that updates as your code changes." width="100%">
+    <img src=".github/assets/workflow-light.png" alt="Groma scans your repository with a deterministic scan into a first map, a starting point. Your coding agent curates it: it names, merges and connects components into your architecture, stored as C4 Markdown in Git. The map stays live as your code changes, and later scans keep your agent's work." width="100%">
   </picture>
 </p>
 
-## Install
+## Get started
+
+Three steps. The scan gives you a first map; your agent turns it into your architecture.
+
+### 1. Install
 
 ```sh
 npm i -g groma.md backlog.md
+```
+
+Backlog.md provides the tasks shown on the map; Groma works without it. macOS requires Apple Silicon.
+
+### 2. Scan
+
+```sh
 cd your-repo
 groma web     # browser map on http://localhost:4747
 ```
 
-For a new project, `groma web` guides you through project setup, scanner selection, and the first scan in your browser.
+On a new project, `groma web` walks you through project setup and scanner selection, then runs the first scan. The scan is deterministic: it turns your source into components and the relationships a scanner can detect. That first map is a starting point you can recognize and navigate, not your architecture yet.
 
-Backlog.md provides the tasks shown on the map; Groma works without it. macOS requires Apple Silicon.
+### 3. Curate with your agent
 
-## Use it with your agent
-
-The first scan gives you components and detected relationships. Your coding agent turns them into architecture: it reads the code, names responsibilities, merges records that belong together, and adds the relationships the scanner cannot see. Always do this after the first scan.
-
-Agents use the same CLI as people. Browser setup registers Groma in your `AGENTS.md` or `CLAUDE.md`, `groma agent-instructions` prints an index of task-focused agent guides, and every command explains itself through `--help`. Ask your agent:
+Your coding agent turns the first scan into architecture. It reads the code, names responsibilities, merges records that belong together, and adds the relationships the scanner cannot see. Keep the map open while it works: every change it makes appears on the map. Ask your agent:
 
 ```text
 Read the current Groma architecture with `groma agent-instructions` and `groma view --plain`. Compare it with the source code, then annotate the architecture so it reflects the code: combine records that share a responsibility, add missing overviews and relationships, and keep Backlog.md task links current. Use Groma's CLI for architecture changes, then summarize what you changed.
 ```
 
-Any file resolves to the architecture that owns it, so an agent can start from the code it just changed:
+Setup registers Groma in your `AGENTS.md` or `CLAUDE.md`, so your agent knows where to start. Later scans keep what your agent wrote.
+
+## Work with your agent
+
+Agents use the same CLI as people. `groma agent-instructions` prints an index of task-focused agent guides, and every command explains itself through `--help`. Any file resolves to the architecture that owns it, so an agent can start from the code it just changed:
 
 ```sh
 groma view src/orders.ts    # the owner of this file and its relationships
 ```
 
-Later scans keep what your agent wrote. [Agent guides](docs/agent-instructions/index.md)
+[Agent guides](docs/agent-instructions/index.md)
 
 ## What you get
 
