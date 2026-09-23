@@ -15,14 +15,12 @@ import {
   minorGridVisible,
   weightAt,
 } from './scale.ts'
-import { mapDefs } from './style.ts'
+import { HOVERABLE, mapDefs } from './style.ts'
 import { patch, svg } from './svg.ts'
 import { surfaceLabelStep } from './text.ts'
 
 /** The map settles this long after its camera last moved or it was last repainted: a zoom commits its sharp SVG scale, and hover and glows return. Panning keeps the cached layer. */
 const SETTLE_MS = 250
-/** What shows a hover look: buildings, slabs, system islands, routes and the project pencil. */
-const HOVERABLE = '.building, .slab, .island.system, .route, .project-edit'
 
 interface RouteNode {
   group: SVGGElement
@@ -157,7 +155,10 @@ export function createMap(host: HTMLElement): IsoMap {
   let surfaces = new Map<string, string>()
   /** The scene inputs the current highlights were applied with, as JSON. */
   let highlighted = ''
-  /** True from a camera change or a repaint until the map settles; hover highlights and glows wait for it. */
+  /**
+   * True from a camera change or a repaint until the map settles; hover highlights and glows wait for it. It lives
+   * here rather than as an attribute on the map host, because flipping such an attribute restyles every map element.
+   */
   let moving = false
   /** The element carrying the hover look, and where the mouse last was over the map. */
   let hovered: Element | undefined
@@ -246,7 +247,8 @@ export function createMap(host: HTMLElement): IsoMap {
     moving = false
     repainted = false
     if (latest !== undefined && (latest.camera.k !== committed?.camera.k || latest.zoomRatio !== committed?.zoomRatio)) commitCamera(latest)
-    hover(pointer === undefined ? undefined : document.elementFromPoint(pointer.x, pointer.y))
+    // A drag held still keeps its hover: the point under the pointer is the drag cover, not the map.
+    if (dragCover.hidden) hover(pointer === undefined ? undefined : document.elementFromPoint(pointer.x, pointer.y))
     updateGlows()
     glows.hide(false)
   }
@@ -256,7 +258,6 @@ export function createMap(host: HTMLElement): IsoMap {
     if (settleTimer === undefined) settleTimer = setTimeout(settle, SETTLE_MS)
   }
 
-  /** A camera change or a repaint moves the map until it settles; hover highlights and glows wait for that. */
   const markMoving = (): void => {
     if (!moving) {
       moving = true
@@ -269,7 +270,7 @@ export function createMap(host: HTMLElement): IsoMap {
     pointer = { x: event.clientX, y: event.clientY }
     // A pressed button starts a drag; hover waits for it like it waits for any camera motion.
     if (event.buttons === 0) hover(event.target)
-  }, { passive: true })
+  })
   root.addEventListener('pointerleave', () => {
     pointer = undefined
     hover(undefined)

@@ -143,9 +143,6 @@ export function mapDrawingCss(palette?: Palette, zoom = 1): string {
   #map .project-edit .pencil .lead { fill: ${ink}; }
   #map .project-edit .pencil .facet, #map .project-edit .pencil .eraser, #map .project-edit .pencil .ferrule,
   #map .project-edit .pencil .tip, #map .project-edit .pencil .lead { stroke: none; }
-  #map .project-edit.hovered .edit-frame, #map .project-edit:focus .edit-frame { fill: ${ink}; fill-opacity: 0.05; }
-  #map .project-edit.hovered .pencil path, #map .project-edit:focus .pencil path,
-  #map .project-edit.hovered .pencil .body, #map .project-edit:focus .pencil .body { stroke: ${ink}; }
   #map .grid { fill: none; stroke: ${grid}; }
   #map .grid.major { stroke: ${gridMajor}; }
   #map > .map-surface[data-minor-grid-hidden] .grid:not(.major) { display: none; }
@@ -186,6 +183,13 @@ export function mapDrawingCss(palette?: Palette, zoom = 1): string {
 `
 }
 
+/**
+ * What shows a hover look. Map hover looks key off the .hovered class that iso/map.ts puts on the closest of these
+ * under a resting mouse, never :hover, and the camera layer keeps will-change: either change would make Safari
+ * redraw the whole map when a pan starts.
+ */
+export const HOVERABLE = '.building, .slab, .island.system, .route, .project-edit'
+
 /** Browser layout, interaction states and motion surround the shared drawing rules. */
 export const mapCss = `
   #map > .map-surface {
@@ -222,6 +226,9 @@ export const mapCss = `
   #map .camera[data-tracing] .route:not(.lit) { display: none; }
   #map .camera[data-tracing] .building:not(.onpath):not(.selected):not(.touched):not(.neighbor),
   #map .camera[data-tracing] .slab:not(.onpath):not(.selected):not(.touched) { opacity: 0.3; }
+  #map .project-edit.hovered .edit-frame, #map .project-edit:focus .edit-frame { fill: var(--ink); fill-opacity: 0.05; }
+  #map .project-edit.hovered .pencil path, #map .project-edit:focus .pencil path,
+  #map .project-edit.hovered .pencil .body, #map .project-edit:focus .pencil .body { stroke: var(--ink); }
   #map .building.hovered:not(.selected), #map .slab.hovered:not(.selected):not(.context),
   #map .island.system.hovered:not(.selected):not(.context), #map .context { --emphasis: ${emphasis(0.5)}; }
   #map .building.hovered:not(.selected) .face, #map .slab.hovered:not(.selected):not(.context) .face,

@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@claude'
 created_date: '2026-09-23 18:32'
-updated_date: '2026-09-23 20:07'
+updated_date: '2026-09-23 20:52'
 labels: []
 dependencies: []
 references:
@@ -58,6 +58,8 @@ Alex sees a short stutter when a pan starts after the map has come to rest. It s
 4. The camera layer stays cached for good (will-change in iso/style.ts) and a zoom commit resets its transform to identity instead of removing it; the per-gesture prepareCamera promotion in iso/map.ts, iso/motion.ts and render.ts is deleted. Removing and re-adding the transform made Safari redraw the whole map on the first pan after every zoom.
 5. Mouse drags: a hidden drag cover over the map (iso/map.ts dragging, shown by iso/pointer.ts once a drag moves the map) carries the grabbing cursor, replacing the :active [data-id] cursor rule that restyled every map element at each press and release.
 6. Verify with Chrome traces (restyle counts at pan start and settle), native Safari 27 through safaridriver (worst frame in the first 150 ms of a wheel pan with the mouse resting on island ground, after a pan and after a pinch zoom, with and without a selected component), a Safari sharpness screenshot after a zoom, and the real-mouse behaviour script; update the web guide; bun run check.
+
+7. Follow-up from the end-of-task review (Alex approved all four, 2026-09-23): (a) the settle updates hover only while the drag cover is hidden, so a drag held still keeps its hover; (b) HOVERABLE moves from iso/map.ts into iso/style.ts beside the .hovered rules, with one note that map hover looks use .hovered, never :hover, and that the camera layer keeps will-change; (c) the project pencil's hover and focus rules move from mapDrawingCss, which social covers also use, into mapCss; (d) the repeated motion comment in iso/map.ts is trimmed to say why motion is a value in map.ts rather than an attribute on the map host, and the no-op passive option on the pointermove listener is dropped.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
@@ -73,6 +75,8 @@ Alex, 2026-09-23 after restarting groma web with the change: the pan-start stutt
 Safari 27 measurements (automated Safari launched by safaridriver after Alex quit Safari; Safari rejects automation sessions for an instance it did not launch: 'Safari was not launched for automation'). Protocol: 1512x869 window at DPR 2, Groma's map at fit, the mouse resting on open system-island ground (the hover look on the island), then a 24-step wheel pan; the worst frame in the first 150 ms, 4 rounds each. Findings: (a) with a component selected, every pan start stalled 124-224 ms because the glow was removed at the start and rebuilt at settle; glow switched off: 34-36 ms. (b) The first pan after a zoom stalled 124-146 ms because the commit removed the camera transform and will-change; keeping both: 32-36 ms. (c) A hover change on a large island or slab at the moment a pan starts stalled 105-156 ms (seen when the pointer moved and pressed in the same instant); hover switched off: 13-18 ms. Grid hidden and pins hidden: no change. Final code, same protocol: selected 30/18/18/20 ms after a pan and 18/18/23/17 ms after a zoom; nothing selected 17-23 ms; before: 124-142 ms after a pan with a selection and 124-146 ms after a zoom. A Safari screenshot at 1200% after a zoom settles is as sharp as the old code (identical edge energy 0.82). Chrome real-mouse script re-run with the new semantics: 12 checks pass (hover keeps its element during drags and wheel pans and moves on settle; selected emphasis; glow opacity 0 while moving and back after settle; clicks during and after motion). bun run check passes: 16 Node, 706 Bun, 0 failed. AC2 reworded from 'stay off while the camera moves' to 'do not change while the camera moves', which the Safari findings require; the web guide says the same.
 
 Alex confirmed on 2026-09-23 after restarting groma web in his Safari: 'ok it's fixed'.
+
+Follow-up from the end-of-task review, approved by Alex on 2026-09-23: the settle updates hover only while the drag cover is hidden, so a mouse drag held still keeps its hover (Chrome real-mouse check: the hovered building keeps its look through a 700 ms hold with the cover shown and after release); HOVERABLE moved from iso/map.ts into iso/style.ts beside the hover rules with the note that hover looks use .hovered, never :hover, and that the camera keeps will-change; the project pencil's hover and focus rules moved from mapDrawingCss into mapCss with var(--ink), which is what mapDrawingCss produced for the live map (pencil check: rest 1, hovered 0.05, focus 0.05, as before); the repeated motion comment now says why motion is a value in map.ts, and the no-op passive option on pointermove is gone. The real-mouse script now waits past the TASK-498 glide before checking hover and glow after a release; all 12 checks pass. Clean checkout of HEAD plus these two files: biome, the scrollbar lint, typecheck, 16 Node tests and all 113 web and iso Bun tests pass.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
