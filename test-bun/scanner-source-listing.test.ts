@@ -38,14 +38,15 @@ const listings: [ScannerPlugin, string, string[]][] = [
   [angular, 'angular-output', [
     'emitter.css', 'emitter.html', 'emitter.ts', 'host.html', 'host.scss', 'host.ts', 'shared.css',
   ]],
-  // React's compiler also reads TypeScript launchers and supporting modules, but not declaration files.
+  // React's programs may read any source the TypeScript scanner reads, but not declaration files.
   [react, 'react-http', [
-    'app/api/(admin)/audit/route.ts', 'app/api/docs/[[...slug]]/route.ts', 'app/api/files/[...path]/route.ts',
-    'app/api/index/route.ts', 'app/api/talks/[id]/route.ts', 'app/api/talks/route.ts',
-    'barrel.ts', 'cfg.ts', 'drafts.tsx', 'exposed.ts', 'handed.ts', 'lazy.ts', 'middleware.ts',
+    'app/.well-known/security.txt/route.ts', 'app/_lib/api/ping/route.ts', 'app/api/(admin)/audit/route.ts',
+    'app/api/auth/[...nextauth]/route.ts', 'app/api/docs/[[...slug]]/route.ts', 'app/api/files/[...path]/route.ts',
+    'app/api/index/route.ts', 'app/api/listed/route.ts', 'app/api/talks/[id]/route.ts', 'app/api/talks/route.ts',
+    'barrel.ts', 'cfg.ts', 'drafts.tsx', 'exposed.ts', 'handed.ts', 'lazy.ts', 'methods.tsx', 'middleware.ts',
     'options.tsx', 'pages/api.tsx', 'pages/api/drafts/index.ts', 'pages/api/health.ts', 'pages/api/index/list.ts',
-    'pages/api/speakers/[id].ts', 'required.tsx', 'shadow.tsx', 'shared.ts', 'src/app/api/status/route.ts', 'talks.tsx',
-    'uncertain.tsx', 'wrapped.tsx', 'wrapper.ts', 'writer.ts',
+    'pages/api/session.ts', 'pages/api/speakers/[id].ts', 'required.tsx', 'shadow.tsx', 'shared.ts',
+    'src/app/api/status/route.ts', 'talks.tsx', 'uncertain.tsx', 'warm.tsx', 'wrapped.tsx', 'wrapper.ts', 'writer.ts',
   ]],
   // A package manifest is not analyzed source.
   [swift, 'swift-source', ['Ledger.swift', 'Other.swift']],

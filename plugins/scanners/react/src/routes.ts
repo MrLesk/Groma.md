@@ -22,8 +22,8 @@ export interface Routers {
 }
 
 /** Next.js reads `app` and `pages` from the project root, each from `src` only when the root has none. */
-export function nextRouters(projectRoot: string): Routers {
-  const active = (name: string): string => existsSync(path.join(projectRoot, name)) ? name : `src/${name}`
+export function nextRouters(directory: string): Routers {
+  const active = (name: string): string => existsSync(path.join(directory, name)) ? name : `src/${name}`
   return { app: active('app'), pages: active('pages') }
 }
 
@@ -31,14 +31,11 @@ export function nextRouters(projectRoot: string): Routers {
 export function routeLocation(file: string, routers: Routers): { router: 'app' | 'pages'; directory?: string } | undefined {
   const within = (directory: string): string | undefined => file.startsWith(`${directory}/`) ? file.slice(directory.length + 1) : undefined
   const app = APP_ROUTE.exec(within(routers.app) ?? '')
-  if (app) return { router: 'app', ...(app[1] === undefined ? {} : { directory: app[1] }) }
+  // A private folder such as `_lib` opts itself and its subfolders out of routing.
+  if (app) return app[1]?.split('/').some(part => part.startsWith('_'))
+    ? undefined : { router: 'app', ...(app[1] === undefined ? {} : { directory: app[1] }) }
   const pages = PAGES_API.exec(within(routers.pages) ?? '')
   return pages ? { router: 'pages', directory: pages[1]! } : undefined
-}
-
-/** Whether a file sits where a Next.js project may declare a route, under its root or `src`. */
-export function routeCandidate(file: string): boolean {
-  return ['', 'src/'].some(prefix => routeLocation(file, { app: `${prefix}app`, pages: `${prefix}pages` }) !== undefined)
 }
 
 /** A fully parenthesized name organizes files without serving a segment, unless it marks an intercept. */
@@ -76,64 +73,72 @@ function routePath(directory: string | undefined, stripIndex: boolean): HttpEndp
   return segments
 }
 
-function functionValue(node: ts.Node | undefined): Operation | undefined {
-  return node !== undefined && executable(node) ? node : undefined
-}
-
 function hasModifier(statement: ts.Statement, kind: ts.SyntaxKind): boolean {
   return ts.canHaveModifiers(statement)
     && (ts.getModifiers(statement) ?? []).some(modifier => modifier.kind === kind)
 }
 
-/** `export async function GET()`, whose name is the method it answers. */
-function declaredHandler(statement: ts.Statement): [string, Operation] | undefined {
-  if (!ts.isFunctionDeclaration(statement) || statement.name === undefined) return undefined
-  const handler = functionValue(statement)
-  return handler !== undefined && METHODS.has(statement.name.text) ? [statement.name.text, handler] : undefined
+/** What a route export serves: the function the file defines, the file's module code, or nothing. */
+type Served = Operation | ts.SourceFile | undefined
+
+/** A literal value is data, never a handler. */
+function literal(node: ts.Node): boolean {
+  return ts.isObjectLiteralExpression(node) || ts.isArrayLiteralExpression(node) || ts.isLiteralExpression(node)
+    || node.kind === ts.SyntaxKind.TrueKeyword || node.kind === ts.SyntaxKind.FalseKeyword || node.kind === ts.SyntaxKind.NullKeyword
 }
 
-/** `export const GET = async () => {}`, one entry per declared method name. */
-function boundHandlers(statement: ts.Statement): [string, Operation][] {
-  if (!ts.isVariableStatement(statement)) return []
-  return statement.declarationList.declarations.flatMap((declaration): [string, Operation][] => {
-    const handler = functionValue(declaration.initializer)
-    if (handler === undefined || !ts.isIdentifier(declaration.name) || !METHODS.has(declaration.name.text)) return []
-    return [[declaration.name.text, handler]]
-  })
+/**
+ * A function the route file defines serves itself; a literal serves nothing. Any other value, such as a
+ * wrapper's result or an import, runs through the file's module code, which then names the endpoint.
+ */
+function served(source: ts.SourceFile, value: ts.Node | undefined, depth = 0): Served {
+  if (value === undefined || literal(value)) return undefined
+  if (executable(value)) return value
+  return ts.isIdentifier(value) && depth < 8 ? servedName(source, value.text, depth + 1) : source
 }
 
-/** The method handlers an App Router route file exports. */
-function appHandlers(source: ts.SourceFile): Map<string, Operation> {
-  const exported = source.statements.filter(statement => hasModifier(statement, ts.SyntaxKind.ExportKeyword))
-  return new Map(exported.flatMap(statement => {
-    const declared = declaredHandler(statement)
-    return declared === undefined ? boundHandlers(statement) : [declared]
-  }))
-}
-
-/** A local name the file's default export names, resolved without the checker. */
-function localFunction(source: ts.SourceFile, name: string): Operation | undefined {
+/** What a name the file exports serves, through its local declaration; an imported name is the module's. */
+function servedName(source: ts.SourceFile, name: string, depth = 0): Served {
   for (const statement of source.statements) {
-    if (ts.isFunctionDeclaration(statement) && statement.name?.text === name) return functionValue(statement)
+    if (ts.isFunctionDeclaration(statement) && statement.name?.text === name) return served(source, statement, depth)
     if (!ts.isVariableStatement(statement)) continue
     for (const declaration of statement.declarationList.declarations) {
-      if (ts.isIdentifier(declaration.name) && declaration.name.text === name) return functionValue(declaration.initializer)
+      if (ts.isIdentifier(declaration.name) && declaration.name.text === name) return served(source, declaration.initializer, depth)
     }
   }
-  return undefined
+  return source
 }
 
-/** A Pages Router API route answers every method with its default export. */
-function pagesHandler(source: ts.SourceFile): Operation | undefined {
-  for (const statement of source.statements) {
-    if (ts.isFunctionDeclaration(statement)
-      && hasModifier(statement, ts.SyntaxKind.DefaultKeyword)) return functionValue(statement)
-    if (!ts.isExportAssignment(statement) || statement.isExportEquals === true) continue
-    const value = functionValue(statement.expression)
-    if (value !== undefined) return value
-    if (ts.isIdentifier(statement.expression)) return localFunction(source, statement.expression.text)
+/** Each name a statement exports, with what it serves: declarations, and export lists such as `export { handler as GET }`. */
+function statementExports(source: ts.SourceFile, statement: ts.Statement): [string, Served][] {
+  if (ts.isExportDeclaration(statement)) {
+    if (statement.isTypeOnly || statement.exportClause === undefined || !ts.isNamedExports(statement.exportClause)) return []
+    // A name another module defines runs through this file's module code.
+    return statement.exportClause.elements.filter(element => !element.isTypeOnly).map(element => [element.name.text,
+      statement.moduleSpecifier === undefined ? servedName(source, (element.propertyName ?? element.name).text) : source])
   }
-  return undefined
+  if (!hasModifier(statement, ts.SyntaxKind.ExportKeyword)) return []
+  const name = hasModifier(statement, ts.SyntaxKind.DefaultKeyword) ? 'default' : undefined
+  if (ts.isFunctionDeclaration(statement)) return [[name ?? statement.name!.text, served(source, statement)]]
+  if (!ts.isVariableStatement(statement)) return []
+  // `export const { GET, POST } = handlers` exports values another object holds, run through the module code.
+  return statement.declarationList.declarations.flatMap((declaration): [string, Served][] => ts.isIdentifier(declaration.name)
+    ? [[declaration.name.text, served(source, declaration.initializer)]]
+    : ts.isObjectBindingPattern(declaration.name) ? declaration.name.elements.flatMap((element): [string, Served][] =>
+      ts.isIdentifier(element.name) ? [[element.name.text, source]] : []) : [])
+}
+
+/** What each name a route file exports serves; `export default value` is the name `default`. */
+function routeExports(source: ts.SourceFile): Map<string, Served> {
+  return new Map(source.statements.flatMap((statement): [string, Served][] => ts.isExportAssignment(statement)
+    ? statement.isExportEquals === true ? [] : [['default', served(source, statement.expression)]]
+    : statementExports(source, statement)))
+}
+
+/** An App Router file answers each method it exports; a Pages Router API route answers every method with its default export. */
+function answeredMethod(router: 'app' | 'pages', name: string): string | undefined {
+  if (router === 'app') return METHODS.has(name) ? name : undefined
+  return name === 'default' ? '*' : undefined
 }
 
 /**
@@ -142,23 +147,19 @@ function pagesHandler(source: ts.SourceFile): Operation | undefined {
  */
 export function nextRouteEndpoints(
   sources: readonly ts.SourceFile[],
-  projectRoot: string,
+  directory: string,
   routers: Routers,
-  operationId: (node: Operation) => string,
+  operationId: (node: Operation | ts.SourceFile) => string,
 ): ScanHttpEndpoint[] {
   const endpoints: ScanHttpEndpoint[] = []
   for (const source of sources) {
-    const location = routeLocation(path.relative(projectRoot, source.fileName).split(path.sep).join('/'), routers)
+    const location = routeLocation(path.relative(directory, source.fileName).split(path.sep).join('/'), routers)
     const segments = location === undefined ? undefined : routePath(location.directory, location.router === 'pages')
     if (location === undefined || segments === undefined) continue
-    if (location.router === 'app') {
-      for (const [method, handler] of appHandlers(source)) {
-        endpoints.push({ operation: operationId(handler), method, path: segments })
-      }
-      continue
+    for (const [name, handler] of routeExports(source)) {
+      const method = answeredMethod(location.router, name)
+      if (method !== undefined && handler !== undefined) endpoints.push({ operation: operationId(handler), method, path: segments })
     }
-    const handler = pagesHandler(source)
-    if (handler !== undefined) endpoints.push({ operation: operationId(handler), method: '*', path: segments })
   }
   return endpoints
 }

@@ -17,6 +17,11 @@ groma:
       symbol: reactHttpRequests
     - scanner: typescript
       file: plugins/scanners/react/src/routes.ts
+    - scanner: typescript
+      file: plugins/scanners/react/src/evidence.ts
+      symbol: Evidence
+    - scanner: typescript
+      file: plugins/scanners/react/src/project.ts
   group: Language analysis
 description: Analyses React source, JSX and HTTP bindings
 ---

@@ -54,6 +54,8 @@ test.concurrent('the built React package reports fetch and axios requests', asyn
     // `isAxiosError` and `post` are not clients, so `shadowed`, `wrapped`, `required`, `stored`,
     // `reassigned`, `checked` and `named` send nothing.
     expect(requests(observation)).toEqual([
+      // A call outside every function belongs to the module code.
+      '(anonymous) GET /api/listed',
       // A URL that replaces a base stating a host is its own URL, and a host is never path text.
       'absoluteOverBase GET /<unknown>/talks',
       'added POST /api/talks',
@@ -84,8 +86,8 @@ test.concurrent('the built React package reports fetch and axios requests', asyn
       'external GET /<unknown>/talks',
       // A base the caller supplies is computed.
       'fromBase GET /<unknown>/talks',
-      // A helper reads its path from a parameter, which could also be a Request with a method of its own,
-      // and its caller reports nothing.
+      // A helper reads its path from a string parameter, which is a URL rather than a Request, and its
+      // caller reports nothing.
       'helper no-method /<unknown>',
       // An instance joins its base and a path with one slash, and uses the method its configuration states.
       'joined POST /api/talks',
@@ -93,6 +95,8 @@ test.concurrent('the built React package reports fetch and axios requests', asyn
       'joinedHost GET /<unknown>/talks',
       'list GET /api/talks',
       'listed GET /api/talks',
+      // An object-literal or class method runs its own request.
+      'load GET /api/talks',
       'one GET /api/talks/<dynamic>',
       // A partly computed segment is unknown.
       'partial GET /api/talks/<unknown>',
@@ -116,6 +120,7 @@ test.concurrent('the built React package reports fetch and axios requests', asyn
       'typedParameter no-method /<unknown>',
       // An axios config the scanner cannot read may hold a method and a base, so it leaves both unknown.
       'unresolved no-method /<unknown>/api/talks',
+      'upload POST /api/talks',
       // An object is not the literal it was written as once an alias, a function it is handed to, one of
       // its methods or accessors, another file, or a module object holding it can change it: a namespace
       // import, a re-exported namespace, or a dynamic import's result.
@@ -139,23 +144,33 @@ test.concurrent('the built React package reports Next.js route handlers and API 
 
     expect(endpoints(observation)).toEqual([
       // A route group organizes files without serving a segment.
+      // A route file the config's globs skip, such as one in a dot directory, still serves its path.
+      'app/.well-known/security.txt/route.ts GET /.well-known/security.txt',
       'app/api/(admin)/audit/route.ts GET /api/audit',
+      // Handlers destructured from another object are served by the module code.
+      'app/api/auth/[...nextauth]/route.ts GET /api/auth/:nextauth+',
+      'app/api/auth/[...nextauth]/route.ts POST /api/auth/:nextauth+',
       // A catch-all takes the rest of the path, and an optional one may take none.
       'app/api/docs/[[...slug]]/route.ts GET /api/docs/:slug*',
       'app/api/files/[...path]/route.ts GET /api/files/:path+',
       // An App Router directory named index is an ordinary segment.
       'app/api/index/route.ts GET /api/index',
+      // An export list names a handler the file defines; a wrapper's result is served by the module code.
+      'app/api/listed/route.ts GET /api/listed',
+      'app/api/listed/route.ts POST /api/listed',
+      'app/api/listed/route.ts PUT /api/listed',
       'app/api/talks/[id]/route.ts DELETE /api/talks/:id',
       'app/api/talks/route.ts GET /api/talks',
       'app/api/talks/route.ts POST /api/talks',
       // A Pages Router index file serves its directory, while an index directory is a segment.
       'pages/api/drafts/index.ts * /api/drafts',
       'pages/api/index/list.ts * /api/index/list',
+      'pages/api/session.ts * /api/session',
       'pages/api/speakers/[id].ts * /api/speakers/:id',
     ])
-    // `pages/api.tsx` is a page, `pages/api/health.ts` exports no function, middleware answers nothing,
-    // and `src/app` is not read while the project root has an `app` directory.
-    expect(endpoints(observation).some(fact => /api\.tsx|health\.ts|middleware|^src\//.test(fact))).toBe(false)
+    // `pages/api.tsx` is a page, `pages/api/health.ts` exports data, middleware answers nothing, a private
+    // `_lib` folder is not routed, and `src/app` is not read while the project root has an `app` directory.
+    expect(endpoints(observation).some(fact => /api\.tsx|health\.ts|middleware|_lib|^src\//.test(fact))).toBe(false)
     expect(observation.files.map(file => file.file)).toContain('app/api/talks/route.ts')
   } finally { await rm(temporary, { recursive: true, force: true }) }
 }, 120000)
@@ -169,10 +184,12 @@ test.concurrent('core derives rows from the React requests to the route files th
     // The fixture's requests and its Next.js route files are both React facts.
     const rows = inferRelationships([react], owners)
     expect(rows.map(row => `${row.source} -> ${row.target}`).sort()).toEqual([
+      'methods.tsx -> app/api/talks/route.ts',
       'options.tsx -> app/api/talks/route.ts',
       'talks.tsx -> app/api/talks/[id]/route.ts',
       'talks.tsx -> app/api/talks/route.ts',
       'uncertain.tsx -> app/api/talks/route.ts',
+      'warm.tsx -> app/api/listed/route.ts',
     ])
     const listing = rows.find(row => row.source === 'talks.tsx' && row.target === 'app/api/talks/route.ts')?.description
     expect(listing).toContain('GET /api/talks')

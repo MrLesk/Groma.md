@@ -1,7 +1,7 @@
 # React scanner
 
-The React scanner connects a directly supplied JSX callback prop to calls on
-the component's destructured parameter. Enable it alongside the TypeScript scanner.
+The React scanner connects a callback that a JSX element supplies as a prop to
+the component's calls of that prop. Enable it alongside the TypeScript scanner.
 Core selects relationships from the combined evidence and keeps one owner per
 physical source file.
 
@@ -25,10 +25,18 @@ declarations. the TypeScript scanner's 7.1 SDK is unchanged. No consumer build
 or installation script is required. Public naming and publication are separate
 release decisions.
 
-The scanner reads each selected project's `tsconfig.json` and owned TSX files
-using its bundled TypeScript compiler. Project dependencies and React types do
-not need to be installed. Invalid configuration and source syntax fail with a
-diagnostic; missing external types do not prevent local callback extraction.
+The scanner reads each selected package's nearest `tsconfig.json` and owned TSX
+files using its bundled TypeScript compiler. It reads only files the TypeScript
+scanner reads, so the files that scanner leaves out by default, such as `.test`
+and `.spec` files, stay out, and a syntax error only fails the scan in a file it
+reads. Project dependencies and React types do
+not need to be installed. A solution `tsconfig.json` that names no source of its
+own compiles through the first config it references that compiles one of its
+components. An extended config a fresh
+checkout lacks, such as an uninstalled package or a generated file, leaves the
+config's own settings and reports a `react-missing-config-base` warning.
+Invalid configuration and source syntax fail with a diagnostic; missing external
+types do not prevent local callback extraction.
 The scanner does not run application code or require successful type checking.
 
 ## Evidence and tooling
@@ -41,12 +49,24 @@ The adapter uses the maintained JavaScript compiler API pinned to 6.0.3;
 retains the established compiler API. The plugin does not recreate language
 name or type resolution.
 
-A component must resolve to a source function or a `const` arrow/function value
-in the inventoried TSX files. Its first parameter must directly destructure the
-callback prop. The JSX attribute must supply an identifier resolving directly
-to a source function or `const` arrow/function value. Calls are matched to the
-exact compiler symbol of that destructured parameter. Each concrete JSX
-attribute has a separate binding; nested calls belong to their nearest function.
+A component, and a handler the JSX attribute names, must resolve to a source
+function in the files the scanner reads, or to a `const` holding one. React's
+`useCallback`, `memo` and `forwardRef` hand back the function they are given, so
+a `const` holding such a call holds that function; they count only when imported
+from `react`, by name or through its module object. A handler may also be a
+function written in place, and a TypeScript module may hold it; that module then
+joins the scanner's files. The component reads the callback prop from its first
+parameter, by destructuring it, with or without a default, or as a property of
+that parameter, such as `props.onSave()`. Calls are matched to the exact
+compiler symbol of the destructured prop or the props parameter. Each concrete
+JSX attribute has a separate binding; nested calls belong to their nearest
+function, method or accessor.
+
+In a project whose tsconfig sets `moduleSuffixes`, as React Native projects do,
+the compiler resolves each import for one platform. A file named for a platform,
+by one of those suffixes or `.web`, such as `Menu.web.tsx`, binds only to
+components of its own platform, or to a shared file beside which its platform
+has no file of its own.
 
 Operation, call, and attribute positions are original zero-based UTF-16 offsets;
 lines are one-based. The named prop supplies the existing `member` field.
@@ -81,7 +101,8 @@ here React, with the symbols of all those links.
 The scanner reports [HTTP facts](../evidence.md#http-endpoints-and-requests) for
 the clients it recognizes in the TSX files it reads, and for the endpoints a
 Next.js project declares by file location. In a project that declares `next`, it
-also reads `app/**/route.ts` and `.tsx` and `pages/api/**`, which another scanner
+also reads `app/**/route.ts` and `.tsx` and `pages/api/**`, including route files
+the tsconfig leaves out, such as a `.well-known` directory, which another scanner
 may read as well. Next.js reads each of `app` and `pages` from the project root,
 or from `src` only when the root has none, so a `src/app` beside a root `app`
 serves nothing.
@@ -92,7 +113,7 @@ serves nothing.
 | `axios.get`, `.post`, `.put`, `.patch`, `.delete`, `.head`, `.options`, `.postForm`, `.putForm`, `.patchForm` | Request with that method; form helpers use their matching HTTP method |
 | `axios(config)`, `axios.request(config)` | Request from the config's `url`; its `method`, else the client's, else `GET` |
 | `axios.create(config)` instances | Request whose path follows the config's `baseURL`, and whose method defaults to the config's |
-| `app/**/route.ts` | Endpoint per exported `GET`, `POST`, `PUT`, `PATCH`, `DELETE`, `HEAD` or `OPTIONS` handler, at the route's directory path |
+| `app/**/route.ts` | Endpoint per exported `GET`, `POST`, `PUT`, `PATCH`, `DELETE`, `HEAD` or `OPTIONS` handler, including names in an export list, at the route's directory path |
 | `pages/api/**` | Endpoint for the default export, which answers every method, so `*` |
 
 `fetch` counts when it is the runtime's, which the project neither declares nor
@@ -130,9 +151,9 @@ The [producer decisions](../evidence.md#producer-checklist) for this ecosystem:
    declares `next`. A page, a layout, `middleware.ts`, and a component answer no
    request of their own, and `pages/api.tsx` is a page, not a route. A route file
    whose path holds a parallel route `@modal` or an intercepted route `(.)talks`
-   reports nothing, because the served path is not the file path there. A Pages
-   Router route whose default export is not a function in that file also reports
-   nothing.
+   reports nothing, because the served path is not the file path there, and a
+   private folder such as `_lib` is not routed. An export whose value is a
+   literal, such as a configuration object, serves nothing.
 3. **Dynamic or unknown.** `` `/talks/${id}` `` fills one whole segment, so it is
    dynamic. `` `/talks/${id}-latest` ``, a path built from a parameter, and an
    unresolvable value are unknown. The query and fragment are dropped, computed
@@ -166,8 +187,11 @@ The [producer decisions](../evidence.md#producer-checklist) for this ecosystem:
    segment, so `app/api/(admin)/audit/route.ts` serves `/api/audit`. A Pages
    Router `index` file serves its directory, while a directory named `index` is an
    ordinary segment. An App Router endpoint names the exported handler for its
-   method; a Pages Router endpoint names the function its default export
-   designates. Every request names the function that runs the call.
+   method, and a Pages Router endpoint the function its default export
+   designates. A handler the file does not define as a function, such as a
+   wrapper's result or an imported handler, is served by the file's module code,
+   which the endpoint then names. Every request names the function that runs the
+   call, or the module code outside every function.
 7. **Constrained segments.** None: `[id]`, `[...rest]` and `[[...rest]]` accept
    any text.
 8. **Registration order.** None: Next.js prefers the most specific route,
@@ -175,12 +199,15 @@ The [producer decisions](../evidence.md#producer-checklist) for this ecosystem:
 
 ## Limits
 
-This revision qualifies the Backlog.md CleanupModal success callback. It does
-not analyze hooks, state stores, routing, server components, class components,
-component wrappers, callback forwarding, returned functions, mutable values,
-DOM dispatch, or arbitrary callback expressions. JSX spreads and unsupported
-direct bindings produce `unsupported-react-binding` diagnostics and no certain
-claim. Components that cannot resolve to a supported source function do not
+The scanner does not analyze state stores, routing, server components, class
+components, hooks other than `useCallback`, wrappers other than `memo` and
+`forwardRef`, callback forwarding, returned functions, mutable values, DOM
+dispatch, or callback expressions other than a function written in place. A prop the component calls
+that receives anything other than a supported direct binding, and a JSX spread on
+a component that calls a prop from its first parameter, produce `unsupported-react-binding`
+diagnostics and no certain claim. A prop the component never calls is no
+interaction of that component, and declared types, installed or not, decide
+neither result. Components that cannot resolve to a supported source function do not
 establish a callback interaction.
 
 TSX and TypeScript edits use the existing watch lifecycle. Healthy scanners update the architecture while failed scanners keep their saved evidence. See [fresh-checkout validation](../fresh-checkout-validation.md) for
@@ -191,11 +218,16 @@ the executed artifact checks and remaining release gates.
 Run Groma from the repository root. The scanner finds package declarations in
 tracked and unignored files, including nested apps and libraries. Dependencies,
 dev dependencies, peer dependencies and optional dependencies identify candidates.
-A candidate also needs a tracked or unignored `tsconfig.json` and TSX source
-files belonging to that package, outside nested packages. Declaration files and
-inactive fixtures with a `.fixture` suffix do not qualify. Packages with only
-framework tooling dependencies are skipped. No matching project produces no evidence. Each compiler uses that project's configuration and local source;
-imported source in sibling repository libraries keeps its original source path.
+A candidate also needs a tracked or unignored `tsconfig.json` in its directory or
+a repository ancestor, and TSX source files belonging to that package, outside
+nested packages. Declaration files and inactive fixtures with a `.fixture` suffix
+do not qualify. Packages with only framework tooling dependencies are skipped. No
+matching project produces no evidence, and neither does a package whose config
+compiles none of its components, such as one holding only tests. Each compiler uses the nearest config of
+its package; imported source in sibling repository libraries keeps its original
+source path. A file belongs to the nearest React package that contains it, so a
+package whose config also compiles a nested package leaves that package's files
+to it, while components and handlers still resolve across both.
 Readiness checks all selected projects. An invalid selected project fails this scanner's observation; other scanners
 can still update the architecture.
 Source and nested package/configuration changes use the shared scanner watch flow.

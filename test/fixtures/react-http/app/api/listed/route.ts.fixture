@@ -1,0 +1,13 @@
+async function GET(): Promise<Response> {
+  return new Response('listed')
+}
+
+const handler = wrap(async () => new Response('posted'))
+
+export { GET, handler as POST }
+
+export const PUT = wrap(async () => new Response('put'))
+
+function wrap<T>(value: T): T {
+  return value
+}

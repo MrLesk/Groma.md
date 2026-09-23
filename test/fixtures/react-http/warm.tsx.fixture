@@ -1,0 +1,1 @@
+export const warmed = fetch('/api/listed')

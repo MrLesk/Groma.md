@@ -12,7 +12,7 @@ export async function reactHttpRequests(
   sources: readonly ts.SourceFile[],
   analyzed: readonly ts.SourceFile[],
   checker: ts.TypeChecker,
-  callerOperation: (call: ts.Node) => string | undefined,
+  callerOperation: (call: ts.Node) => string,
 ): Promise<ScanHttpRequest[]> {
   const context = urlContext(ts, classicChecker(ts, checker), analyzed)
   const calls: ts.CallExpression[] = []
@@ -24,8 +24,7 @@ export async function reactHttpRequests(
   const requests: ScanHttpRequest[] = []
   for (const call of calls) {
     const request = await fetchRequest(context, call, callee => runtimeFetch(context, callee)) ?? await axiosRequest(context, call)
-    const operation = request === undefined ? undefined : callerOperation(call)
-    if (request !== undefined && operation !== undefined) requests.push({ operation, ...request })
+    if (request !== undefined) requests.push({ operation: callerOperation(call), ...request })
   }
   return requests
 }

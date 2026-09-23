@@ -1,0 +1,11 @@
+export const store = {
+  async upload(file: Blob) {
+    await fetch('/api/talks', { method: 'POST', body: file })
+  },
+}
+
+export class Loader {
+  load() {
+    return fetch('/api/talks')
+  }
+}
