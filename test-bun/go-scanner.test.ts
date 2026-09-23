@@ -1,9 +1,10 @@
 import { expect, test } from 'bun:test'
-import { cp, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { buildWorker } from '../plugins/scanners/go/build.ts'
-import { readGoCodeStructure, scanGoSource } from '../plugins/scanners/go/src/adapter.ts'
+import { readGoCodeStructure, run, scanGoSource } from '../plugins/scanners/go/src/adapter.ts'
+import plugin from '../plugins/scanners/go/src/index.ts'
 import { loadAnnotatedArchitecture } from '../src/core.ts'
 import { readScannerConfig, writeScannerConfig } from '../src/scanner/modules/config.ts'
 import { addScanner } from '../src/scanner/modules/inventory.ts'
@@ -15,9 +16,11 @@ const go = process.env.GROMA_TEST_GO
 const goTest = go ? test.concurrent : test.skip
 const fixtures = path.resolve(import.meta.dir, '../test/fixtures')
 
+/** A Git working tree, because the scanner reads the tracked and unignored files, as the go command would. */
 async function fixture(name = 'go-module') {
   const root = await mkdtemp(path.join(os.tmpdir(), 'groma-go-test-'))
   await cp(path.join(fixtures, name), root, { recursive: true })
+  expect(await Bun.spawn(['git', 'init', '--quiet', root]).exited).toBe(0)
   return { root, worker: path.join(root, process.platform === 'win32' ? 'worker.exe' : 'worker') }
 }
 
@@ -64,15 +67,67 @@ goTest('Go resolves imported functions and concrete methods while preserving wra
   } finally { await rm(root, { recursive: true, force: true }) }
 }, 60000)
 
-goTest('Go preserves unresolved calls without dependencies and rejects malformed syntax', async () => {
+goTest('Go scans source without its dependencies and fails only on invalid syntax', async () => {
   const { root, worker } = await fixture()
   try {
     await buildWorker(worker, go)
-    await writeFile(path.join(root, 'caller.go'), 'package dispatch\nfunc Broken() { absent() }\n')
+    await writeFile(path.join(root, 'caller.go'), 'package dispatch\nimport "example.org/absent"\nfunc Broken() { absent.Call() }\n')
     const observation = await scanGoSource(root, { worker })
     expect(observation.invocations).toEqual([expect.objectContaining({ targets: [], unresolved: true })])
+    // Type errors follow from what the scan does not load, so they are one summary located by file and line.
+    expect(observation.diagnostics.filter(item => item.code !== 'GO_ANALYSIS_SCOPE'))
+      .toEqual([expect.objectContaining({ code: 'GO_MISSING_EXTERNAL_PACKAGES', file: 'caller.go', line: 2 })])
+    expect(JSON.stringify(observation.diagnostics)).not.toContain(root)
+    // Source that does not type-check, such as a redeclared function, still scans; invalid syntax does not.
+    await writeFile(path.join(root, 'caller.go'), 'package dispatch\nfunc Broken() {}\nfunc Broken() {}\n')
+    expect((await scanGoSource(root, { worker })).files.map(file => file.file)).toContain('caller.go')
     await writeFile(path.join(root, 'caller.go'), 'package dispatch\nfunc Broken( {\n')
     await expect(scanGoSource(root, { worker })).rejects.toThrow()
+    // A module whose files all sit behind build constraints, such as a tools module, adds no evidence.
+    await rm(path.join(root, 'provider'), { recursive: true })
+    await writeFile(path.join(root, 'caller.go'), '//go:build tools\n\npackage dispatch\n')
+    expect((await scanGoSource(root, { worker })).files).toEqual([])
+  } finally { await rm(root, { recursive: true, force: true }) }
+}, 60000)
+
+goTest('Go scans every machine alike, in one linux/amd64 build context with cgo', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'groma-go-test-'))
+  const worker = path.join(root, process.platform === 'win32' ? 'worker.exe' : 'worker')
+  try {
+    await buildWorker(worker, go)
+    await writeFile(path.join(root, 'go.mod'), 'module example.test/mode\n\ngo 1.22\n')
+    await writeFile(path.join(root, 'cgo.go'), 'package mode\n\nimport "C"\n\nfunc Mode() string { return "cgo" }\n')
+    await writeFile(path.join(root, 'plain.go'), '//go:build !cgo\n\npackage mode\n\nfunc Mode() string { return "plain" }\n')
+    await writeFile(path.join(root, 'mode_linux.go'), 'package mode\n\nfunc System() string { return "linux" }\n')
+    await writeFile(path.join(root, 'mode_windows.go'), 'package mode\n\nfunc System() string { return "windows" }\n')
+    // The build environment, like the host platform, does not change what a scan reads.
+    const output = await run(worker, [root], root, {
+      env: { ...process.env, GOOS: 'windows', GOARCH: 'arm64', CGO_ENABLED: '0' },
+      input: JSON.stringify(['cgo.go', 'mode_linux.go', 'mode_windows.go', 'plain.go']),
+    })
+    expect((JSON.parse(output) as ScanObservation).files.map(file => file.file)).toEqual(['cgo.go', 'mode_linux.go'])
+  } finally { await rm(root, { recursive: true, force: true }) }
+}, 60000)
+
+goTest('Go reads and lists the tracked, unignored files the go command reads', async () => {
+  const { root, worker } = await fixture()
+  try {
+    await buildWorker(worker, go)
+    const files: Record<string, string> = {
+      'build/output.go': 'package build\n', 'generated/api.go': 'package generated\n',
+      '_examples/demo.go': 'package main\nfunc main() {}\n', '.hidden/hidden.go': 'package hidden\n',
+      'testdata/case.go': 'package fixture\n', 'ignored/local.go': 'package ignored\n', '.gitignore': 'ignored/\n',
+      'tools/go.mod': 'module example.test/tools\n\ngo 1.22\n', 'tools/tools.go': 'package tools\n',
+    }
+    for (const [file, text] of Object.entries(files)) {
+      await mkdir(path.join(root, path.dirname(file)), { recursive: true })
+      await writeFile(path.join(root, file), text)
+    }
+    const listed = await plugin.listSourceFiles!(root, {})
+    // Build and generated folders hold source; ignored, underscore, dot and testdata paths do not.
+    expect(listed).toEqual(['build/output.go', 'caller.go', 'generated/api.go', 'provider/provider.go', 'tools/tools.go'])
+    // Each module scans on its own, and together they read exactly what the listing names.
+    expect((await plugin.scan(root, { worker }))!.files.map(file => file.file).sort()).toEqual(listed)
   } finally { await rm(root, { recursive: true, force: true }) }
 }, 60000)
 
@@ -83,9 +138,10 @@ goTest('Go attaches source ranges and binding-normalized tokens only to named op
     const operations = (await scanGoSource(root, { worker })).operations!
     const named = (name: string) => operations.find(operation => operation.name.endsWith(name))!
     // Anonymous literals, including fields of a literal passed as a call argument in or out of parentheses,
-    // and initializer code.
+    // blank functions, generated code and initializer code.
     expect(operations.filter(operation => !operation.tokens).map(operation => operation.name).sort())
-      .toEqual(['closure', 'closure', 'closure', 'closure', 'closure', 'example.test/duplicates.init', 'initializer'])
+      .toEqual(['closure', 'closure', 'closure', 'closure', 'closure', 'example.test/duplicates.Generated',
+        'example.test/duplicates._', 'example.test/duplicates.init', 'initializer'])
     // Literals assigned to a variable or keyed in a literal that is not an argument take that name.
     expect(operations.filter(operation => operation.tokens).map(operation => operation.name))
       .toEqual(expect.arrayContaining(['validate', 'normalize', 'Start', 'stop']))
@@ -164,6 +220,11 @@ goTest('Go outlines defined types with their receiver methods and top-level func
     const store = file!.declarations.find((declaration): declaration is CodeType => declaration.name === 'Store')!
     expect(store.members[0]!.line).toBe(lineOf(source, 'func (s *Store) Close'))
     expect(file!.declarations.filter(declaration => declaration.entry).map(declaration => declaration.name)).toEqual(['NewStore'])
+    // A link names a method, never an interface signature that shares its name.
+    const [linked] = await readGoCodeStructure(root, [{ file: 'store.go', symbols: ['Close'] }], { worker })
+    expect(linked!.declarations.flatMap(declaration => declaration.kind === 'type'
+      ? declaration.members.filter(member => member.entry).map(member => `${declaration.name}.${member.name}`) : []))
+      .toEqual(['Store.Close'])
   } finally { await rm(root, { recursive: true, force: true }) }
 }, 60000)
 
@@ -218,13 +279,17 @@ goTest('Go reports HTTP endpoints from net/http, chi, gin and echo with their gr
     // Each endpoint names the operation that answers it, so a handler in another file owns the fact.
     // Only a catch-all at the root serves an empty remainder. A chi regular expression and text beside
     // a parameter in one segment constrain it; a chi regular expression that may match a slash stands
-    // for the rest of the route. A chi Mount carries every prefix of its receiver, and names read the
-    // same whichever file assigns, builds or mounts them. Nothing is reported for a reassigned router or
+    // for the rest of the route only when other text follows it in its segment. A chi pattern and a
+    // net/http method constant state the method. A chi Mount carries every prefix of its receiver, and names read the
+    // same whichever file assigns, builds or mounts them. A root gin or echo router serves from the root
+    // even as a parameter. Nothing is reported for a group parameter, a reassigned router or
     // group closure parameter, a ServeMux field assigned from a call, a router built for a mount
     // elsewhere, mounted on a router this scan cannot read, mounted twice or inside itself, a mounted
     // router that is not chi, or one behind http.StripPrefix.
     expect(endpoints).toEqual([
+      'echo.go DELETE /v2/talks/:id',
       'echo.go GET /files/:path+',
+      'echo.go GET /paramtalks',
       'echo.go PATCH /api/talks/:id',
       'echo.go POST /api/talks',
       'gin.go * /api/health',
@@ -232,6 +297,7 @@ goTest('Go reports HTTP endpoints from net/http, chi, gin and echo with their gr
       'gin.go GET /api/talks/:id',
       'gin.go GET /api/versions/:version!',
       'gin.go GET /files/:filepath+',
+      'gin.go POST /paramtalks',
       'handlers.go * /:path*',
       'handlers.go * /files/:path+',
       'handlers.go * /health',
@@ -239,7 +305,7 @@ goTest('Go reports HTTP endpoints from net/http, chi, gin and echo with their gr
       'handlers.go GET /api/codes/:code!',
       'handlers.go GET /api/exports/:id!',
       'handlers.go GET /api/files/:path+',
-      'handlers.go GET /api/raws/:path*!',
+      'handlers.go GET /api/raws/:path!/raw',
       'handlers.go GET /api/reports/:path*!',
       'handlers.go GET /api/talks',
       'handlers.go GET /api/talks/:id!',
@@ -251,6 +317,7 @@ goTest('Go reports HTTP endpoints from net/http, chi, gin and echo with their gr
       'handlers.go GET /talks',
       'handlers.go GET /talks/:id',
       'handlers.go GET /version',
+      'handlers.go POST /api/items/:id',
       'handlers.go POST /talks',
       'handlers.go PUT /api/talks',
     ].sort())
@@ -286,12 +353,13 @@ goTest('Go reports what each net/http request proves and leaves the rest unknown
       'GET /?/talks',
       'GET /?/tupletalks',
       'GET /?/v2/growntalks',
-      'GET /?/{}/hosttalks',
+      'GET /?/hosttalks',
       'GET /api/talks/{}',
       'GET /api/v1/pathtalks',
       'GET /health',
       'GET /rate/100%',
       'GET /talks/?',
+      'HEAD /health',
       'GET <base>/defaulttalks',
       'GET <base>/flagtalks',
       'GET <base>/settingtalks',

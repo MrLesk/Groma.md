@@ -76,7 +76,7 @@ The official producers currently recognize these source forms:
 | Producer | Execution evidence | Source membership |
 | --- | --- | --- |
 | C# | Roslyn entry in an executable project, including supported Web/Worker defaults | That project's compiled sources; no referenced projects |
-| Go | `main` in package `main` | That package's compiled sources; no imported packages |
+| Go | `main` in package `main` | That package and the module packages it imports, directly or indirectly |
 | Rust | Cargo binary targets | That binary crate's modules; no library or dependency crates |
 | Java | `public static void main(String[])`, including varargs | That project's compiler source set |
 | Python | Module execution guard, `__main__.py`, or `project.scripts` | Resolved local imports within the declared project |

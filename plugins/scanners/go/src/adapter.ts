@@ -3,6 +3,7 @@ import { access, realpath } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { parseScanObservation, type CodeFile, type ScanObservation, type SourceReference } from '@groma/scanner'
+import { moduleSources } from './sources.ts'
 
 const packagedWorker = fileURLToPath(new URL(`../dist/${process.platform}-${process.arch}/worker${process.platform === 'win32' ? '.exe' : ''}`, import.meta.url))
 
@@ -43,8 +44,10 @@ export async function readGoCodeStructure(repositoryRoot: string, references: re
   return JSON.parse(await run(worker, ['outline', repositoryRoot], repositoryRoot, { input: JSON.stringify(references) }))
 }
 
+/** Scans one module: the worker reads the files sources.ts selects, then applies the build context. */
 export async function scanGoSource(repositoryRoot: string, options: GoScanOptions = {}): Promise<ScanObservation> {
   const { root, worker } = await checkGoReadiness(repositoryRoot, options)
-  try { return parseScanObservation(await run(worker, [root], root)) }
+  const files = await moduleSources(root)
+  try { return parseScanObservation(await run(worker, [root], root, { input: JSON.stringify(files) })) }
   catch (error) { throw new Error(`GO_SOURCE_INVALID: No observation was produced. Check Go source syntax and module declarations. ${error}`) }
 }

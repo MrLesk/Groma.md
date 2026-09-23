@@ -43,14 +43,18 @@ var routerConstructors = map[string]map[string]bool{
 	echo:    {"New": true},
 }
 
+// rootRouters names each framework's router type that serves from the root: it holds no group prefix.
+var rootRouters = map[string]string{netHTTP: "ServeMux", gin: "Engine", echo: "Echo"}
+
 // A router value, with the prefix its groups and mount declare.
 type router struct {
 	framework string
 	prefix    []endpointSegment
 }
 
-// importPaths maps each local package alias in a file to its import path.
-func importPaths(syntax *ast.File) map[string]string {
+// importAliases maps each local package alias in a file to its import path. Blank and dot imports
+// share their alias, so this map names frameworks, not every imported package.
+func importAliases(syntax *ast.File) map[string]string {
 	result := map[string]string{}
 	for _, entry := range syntax.Imports {
 		path := strings.Trim(entry.Path.Value, `"`)
@@ -99,9 +103,10 @@ func (s *source) packageFramework(expression ast.Expr) (string, string, bool) {
 	return library, name, library != ""
 }
 
-// declared registers parameters, struct fields and variables written as a net/http type, and the
-// router a chi group closure receives. A group-capable router reaches this scan with a prefix it
-// cannot see, so only the constructors, mounts and groups in this source establish one.
+// declared registers parameters, struct fields and variables written as a root router or a net/http
+// client, and the router a chi group closure receives. A chi router, gin group or echo group reaches
+// this scan with a prefix it cannot see, so only the constructors, mounts and groups in this source
+// establish one.
 func (e *evidence) declared(s *source) {
 	ast.Inspect(s.syntax, func(node ast.Node) bool {
 		switch node := node.(type) {
@@ -124,7 +129,11 @@ func (e *evidence) declaredNames(s *source, names []*ast.Ident, written ast.Expr
 		written = pointer.X
 	}
 	library, name, ok := s.packageFramework(written)
-	if !ok || library != netHTTP || (name != "ServeMux" && name != "Client") {
+	if !ok {
+		return
+	}
+	client := library == netHTTP && name == "Client"
+	if !client && rootRouters[library] != name {
 		return
 	}
 	for _, declared := range names {
@@ -132,10 +141,10 @@ func (e *evidence) declaredNames(s *source, names []*ast.Ident, written ast.Expr
 		if object == nil {
 			continue
 		}
-		if name == "ServeMux" {
-			e.routers[object] = router{framework: netHTTP}
-		} else {
+		if client {
 			e.clients[object] = true
+		} else {
+			e.routers[object] = router{framework: library}
 		}
 	}
 }
@@ -306,7 +315,8 @@ func (e *evidence) httpCall(s *source, call *ast.CallExpr, current scope) {
 		e.endpoint(s, known, selector.Sel.Name, call, current)
 		return
 	}
-	if object := s.object(selector.X); object != nil && e.clients[object] {
+	// A tracked client name, or a client value written in place such as http.DefaultClient.
+	if e.clients[s.object(selector.X)] || isClient(s, selector.X) {
 		e.request(s, selector.Sel.Name, call, current.owner, false)
 	}
 }
@@ -334,11 +344,9 @@ func (e *evidence) endpointFact(s *source, known router, route registration, cal
 	}
 	method := route.method
 	if route.methodArg >= 0 {
-		text, ok := constantString(s, call.Args[route.methodArg])
-		if !ok {
+		if method = methodName(s, call.Args[route.methodArg]); method == "" {
 			return httpEndpoint{}, false
 		}
-		method = strings.ToUpper(text)
 	}
 	stated, path, ok := routePattern(s, known.framework, call.Args[route.path])
 	if !ok {

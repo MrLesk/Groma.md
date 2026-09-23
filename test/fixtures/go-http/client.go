@@ -57,6 +57,11 @@ func unproven() {
 
 func address() string { return "/computed" }
 
+// The default client sends the same requests as the package functions.
+func defaultClient() {
+	http.DefaultClient.Head("/health")
+}
+
 func packageBase() {
 	http.Get(apiBase + "/settingtalks")
 }

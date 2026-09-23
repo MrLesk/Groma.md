@@ -14,7 +14,8 @@ func chiRoutes() http.Handler {
 	router.Get("/health", Health)
 	router.Route("/api", func(r chi.Router) {
 		r.Get("/talks/{id:[0-9]+}", ShowTalk)
-		r.Method("PUT", "/talks", http.HandlerFunc(CreateTalk))
+		r.Method(http.MethodPut, "/talks", http.HandlerFunc(CreateTalk))
+		r.HandleFunc("POST /items/{id}", CreateTalk)
 		r.Get("/files/*", ServeFiles)
 		r.Get("/exports/{id}.json", ShowTalk)
 		r.Get("/reports/{path:.+}.json", ShowTalk)

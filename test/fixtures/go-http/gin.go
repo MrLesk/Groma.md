@@ -37,3 +37,9 @@ func ginReassigned(prefix string, admin bool) {
 	}
 	scoped.GET("/scoped", ginShowTalk)
 }
+
+// A root engine serves from the root wherever it comes from; a group may already carry a prefix.
+func registerGinTalks(engine *gin.Engine, group *gin.RouterGroup) {
+	engine.POST("/paramtalks", ginShowTalk)
+	group.GET("/unseen", ginShowTalk)
+}

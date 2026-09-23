@@ -108,12 +108,16 @@ func (o *outliner) specs(decl *ast.GenDecl) {
 	}
 }
 
+// interfaceMethods lists method signatures. Scan symbols never name one, so a Code link that shares
+// its name names another declaration and does not make the signature an entry.
 func (o *outliner) interfaceMethods(definition ast.Expr) []codeSymbol {
 	members := []codeSymbol{}
 	if methods, ok := definition.(*ast.InterfaceType); ok {
 		for _, field := range methods.Methods.List {
 			for _, name := range field.Names {
-				members = append(members, o.symbol(name))
+				member := o.symbol(name)
+				member.Entry = false
+				members = append(members, member)
 			}
 		}
 	}

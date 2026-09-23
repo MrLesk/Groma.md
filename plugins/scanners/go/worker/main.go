@@ -5,13 +5,10 @@ import (
 	"fmt"
 	"go/ast"
 	"go/token"
+	"io"
 	"os"
-	"path"
 	"path/filepath"
 	"runtime"
-	"strings"
-
-	"golang.org/x/tools/go/packages"
 )
 
 func main() {
@@ -21,9 +18,9 @@ func main() {
 	case len(os.Args) == 3 && os.Args[1] == "outline":
 		result, err = outline(os.Args[2], os.Stdin)
 	case len(os.Args) == 2:
-		result, err = scan(os.Args[1])
+		result, err = scan(os.Args[1], os.Stdin)
 	default:
-		err = fmt.Errorf("expected a repository root, or outline and a repository root")
+		err = fmt.Errorf("expected a module root, or outline and a repository root")
 	}
 	if err != nil {
 		fail(err)
@@ -38,17 +35,20 @@ func fail(err error) {
 	os.Exit(1)
 }
 
-func scan(directory string) (*observation, error) {
+// scan analyzes one module. Its files arrive on stdin as module-relative paths: the adapter's
+// sources.ts selects them the way the go command selects packages.
+func scan(directory string, input io.Reader) (*observation, error) {
 	directory, err := filepath.Abs(directory)
 	if err != nil {
 		return nil, err
 	}
-	loaded, messages, err := loadSources(directory)
-	if err != nil {
+	var files []string
+	if err := json.NewDecoder(input).Decode(&files); err != nil {
 		return nil, err
 	}
-	if len(loaded) == 0 {
-		return nil, fmt.Errorf("the root module has no active Go packages")
+	loaded, err := loadSources(directory, files)
+	if err != nil {
+		return nil, err
 	}
 	result := &observation{
 		SchemaVersion: 1,
@@ -58,72 +58,34 @@ func scan(directory string) (*observation, error) {
 		EntryPoints:   []entryPoint{},
 		HTTPEndpoints: []httpEndpoint{}, HTTPRequests: []httpRequest{},
 		Diagnostics: []diagnostic{{Severity: "info", Code: "GO_ANALYSIS_SCOPE",
-			Message: "Root module active host build context; tests and nested modules are excluded. Dynamic dispatch and providers outside this module remain unresolved. No callback binding propagation."}},
+			Message: "Each module is analyzed on its own in one linux/amd64 build context with cgo, without test files. Dynamic dispatch and providers outside the module remain unresolved. No callback binding propagation."}},
 	}
-	result.Diagnostics = append(result.Diagnostics, messages...)
+	// A module whose files all sit behind build constraints, such as a tools module, adds no evidence.
+	if len(loaded.packages) == 0 {
+		return result, nil
+	}
+	result.Diagnostics = append(result.Diagnostics, loaded.diagnostics...)
 	analyzer := newEvidence(result)
-	for _, pkg := range loaded {
-		if pkg.Module == nil || filepath.Clean(pkg.Module.Dir) != directory {
-			return nil, fmt.Errorf("only the module rooted at the selected repository is supported")
-		}
+	for _, pkg := range loaded.packages {
 		result.Roots = append(result.Roots, root{ID: pkg.PkgPath, Parent: "module:" + pkg.Module.Path, Kind: "package", Name: pkg.PkgPath})
-		if err := analyzer.addPackage(directory, pkg); err != nil {
-			return nil, err
-		}
-		if entry := packageEntry(directory, pkg); entry != nil {
+		analyzer.addFiles(loaded.files[pkg.PkgPath])
+		if entry := packageEntry(pkg, loaded); entry != nil {
 			result.EntryPoints = append(result.EntryPoints, *entry)
 		}
 	}
-	module := loaded[0].Module
+	module := loaded.packages[0].Module
 	result.Roots = append(result.Roots, root{ID: "module:" + module.Path, Kind: "module", Name: module.Path, File: "go.mod"})
 	analyzer.calls()
 	analyzer.httpFacts()
 	return result, nil
 }
 
-// The Go language starts main in package main; imported packages are separate compilation units.
-func packageEntry(directory string, pkg *packages.Package) *entryPoint {
-	if pkg.Name != "main" {
-		return nil
-	}
-	entry := entryPoint{Name: path.Base(pkg.PkgPath), Declaration: "go.mod", Files: []string{}}
-	for _, syntax := range pkg.Syntax {
-		file, _ := filepath.Rel(directory, pkg.Fset.Position(syntax.Pos()).Filename)
-		file = filepath.ToSlash(file)
-		entry.Files = append(entry.Files, file)
-		for _, decl := range syntax.Decls {
-			function, ok := decl.(*ast.FuncDecl)
-			if ok && function.Recv == nil && function.Name.Name == "main" && function.Body != nil {
-				entry.File = file
-			}
-		}
-	}
-	if entry.File == "" {
-		return nil
-	}
-	return &entry
-}
-
-func (e *evidence) addPackage(directory string, pkg *packages.Package) error {
-	for _, syntax := range pkg.Syntax {
-		absolute := pkg.Fset.Position(syntax.Pos()).Filename
-		relative, err := filepath.Rel(directory, absolute)
-		if err != nil {
-			return err
-		}
-		if relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
-			return fmt.Errorf("compiler source outside the root module: %s", absolute)
-		}
-		data, err := os.ReadFile(absolute)
-		if err != nil {
-			return err
-		}
-		file := &source{pkg: pkg, syntax: syntax, file: filepath.ToSlash(relative), text: data, imports: importPaths(syntax)}
+func (e *evidence) addFiles(files []*source) {
+	for _, file := range files {
 		e.sources = append(e.sources, file)
-		e.result.Files = append(e.result.Files, sourceFile{Roots: []string{pkg.PkgPath}, File: file.file, Symbols: file.symbols()})
+		e.result.Files = append(e.result.Files, sourceFile{Roots: []string{file.pkg.PkgPath}, File: file.file, Symbols: file.symbols()})
 		e.declarations(file)
 	}
-	return nil
 }
 
 func (s *source) symbols() []symbol {

@@ -6,6 +6,7 @@ import (
 	"go/token"
 	"go/types"
 	"sort"
+	"unicode/utf8"
 
 	"golang.org/x/tools/go/packages"
 	"golang.org/x/tools/go/types/typeutil"
@@ -15,10 +16,37 @@ type source struct {
 	pkg    *packages.Package
 	syntax *ast.File
 	file   string
-	text   []byte
+	// Where each character that UTF-8 stores in more bytes than UTF-16 units ends, so a byte
+	// offset converts to a UTF-16 position without rereading the text before it.
+	wide []wideEnd
+	// A file marked "Code generated ... DO NOT EDIT." is repeated by design and nobody reviews it
+	// by hand, so its operations are not compared.
+	generated bool
 	// Local package aliases, which name the frameworks this file uses.
 	imports map[string]string
 }
+
+// wideEnd is a byte offset and how many more bytes than UTF-16 units the text holds up to it.
+type wideEnd struct{ offset, surplus int }
+
+func wideEnds(text []byte) []wideEnd {
+	ends := []wideEnd{}
+	surplus := 0
+	for offset := 0; offset < len(text); {
+		character, size := utf8.DecodeRune(text[offset:])
+		offset += size
+		units := 1
+		if character > 0xffff {
+			units = 2
+		}
+		if size > units {
+			surplus += size - units
+			ends = append(ends, wideEnd{offset, surplus})
+		}
+	}
+	return ends
+}
+
 type body struct {
 	source *source
 	node   ast.Node
@@ -32,8 +60,8 @@ type evidence struct {
 	literals                    map[*ast.FuncLit]string
 	// Operation IDs this observation declares; a fact may only reference one of them.
 	recorded map[string]bool
-	// Names whose declared type makes them a ServeMux, names that hold a net/http client, and the
-	// mount each router serves under. Any other router name is read from its assigned value.
+	// Names whose declared type makes them a root router, names that hold a net/http client, and
+	// the mount each router serves under. Any other router name is read from its assigned value.
 	routers map[types.Object]router
 	clients map[types.Object]bool
 	mounted map[types.Object]mount
@@ -55,14 +83,11 @@ func newEvidence(result *observation) *evidence {
 
 func (s *source) offset(pos token.Pos) int {
 	bytes := s.pkg.Fset.Position(pos).Offset
-	units := 0
-	for _, r := range string(s.text[:bytes]) {
-		units++
-		if r > 0xffff {
-			units++
-		}
+	after := sort.Search(len(s.wide), func(index int) bool { return s.wide[index].offset > bytes })
+	if after == 0 {
+		return bytes
 	}
-	return units
+	return bytes - s.wide[after-1].surplus
 }
 
 func (s *source) id(pos token.Pos) string {
@@ -89,18 +114,24 @@ func (e *evidence) addBody(s *source, declaration ast.Node, executable ast.Node,
 	return id
 }
 
+// declarations records the file's operations; a generated file's operations carry no tokens.
 func (e *evidence) declarations(s *source) {
 	info := s.pkg.TypesInfo
+	compared := !s.generated
 	for _, decl := range s.syntax.Decls {
 		switch node := decl.(type) {
 		case *ast.FuncDecl:
 			if node.Body == nil {
 				continue
 			}
-			function := info.Defs[node.Name].(*types.Func)
+			// Source that does not type-check, such as a redeclared function, still scans.
+			function, ok := info.Defs[node.Name].(*types.Func)
+			if !ok {
+				continue
+			}
 			var tokens []string
-			// Package init functions are initializer code.
-			if node.Recv != nil || node.Name.Name != "init" {
+			// Package init functions are initializer code, and a blank function names nothing to compare.
+			if compared && node.Name.Name != "_" && (node.Recv != nil || node.Name.Name != "init") {
 				tokens = operationTokens(info, node)
 			}
 			id := e.addBody(s, node, node.Body, function.FullName(), tokens)
@@ -119,7 +150,11 @@ func (e *evidence) declarations(s *source) {
 		}
 		name, named := names[literal]
 		if named {
-			e.literals[literal] = e.addBody(s, literal, literal.Body, name, operationTokens(info, literal))
+			var tokens []string
+			if compared {
+				tokens = operationTokens(info, literal)
+			}
+			e.literals[literal] = e.addBody(s, literal, literal.Body, name, tokens)
 		} else {
 			e.literals[literal] = e.addBody(s, literal, literal.Body, "closure", nil)
 		}

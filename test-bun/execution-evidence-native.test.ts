@@ -66,19 +66,26 @@ test.concurrent('Java reports executable main signatures and their compilation i
 }, 60000)
 
 const goTest = process.env.GROMA_TEST_GO ? test.concurrent : test.skip
-goTest('Go main packages include their own compilation files and exclude imported packages', async () => {
+goTest('Go main packages include the module packages they import, directly or indirectly', async () => {
   await example({
     'go.mod': 'module example.test/entries\n\ngo 1.24\n',
-    'cmd/api/main.go': 'package main\nimport "example.test/entries/lib"\nfunc main() { lib.Run(); help() }\n',
+    'cmd/api/main.go': 'package main\nimport (\n"example.test/entries/lib"\n_ "example.test/entries/plugins/one"\n_ "example.test/entries/plugins/two"\n)\nfunc main() { lib.Run(); help() }\n',
     'cmd/api/helper.go': 'package main\nfunc help() {}\n',
     'cmd/worker/main.go': 'package main\nfunc main() {}\n',
-    'lib/library.go': 'package lib\nfunc Run() {}\n',
+    'lib/library.go': 'package lib\nimport "example.test/entries/lib/store"\nfunc Run() { store.Save() }\n',
+    'lib/store/store.go': 'package store\nfunc Save() {}\n',
+    'plugins/one/one.go': 'package one\n',
+    'plugins/two/two.go': 'package two\n',
   }, async (root, artifact) => {
     const worker = path.join(artifact, process.platform === 'win32' ? 'worker.exe' : 'worker')
     await buildGo(worker, process.env.GROMA_TEST_GO)
     const scan = await scanGoSource(root, { worker })
-    expect(scan.entryPoints!.map(entry => entry.file).sort()).toEqual(['cmd/api/main.go', 'cmd/worker/main.go'])
-    expect(scan.entryPoints!.find(entry => entry.file === 'cmd/api/main.go')!.files).toEqual(['cmd/api/helper.go', 'cmd/api/main.go'])
+    const files = (file: string) => scan.entryPoints!.find(entry => entry.file === file)!.files
+    // Blank imports are compiled into the binary too.
+    expect(files('cmd/api/main.go')).toEqual([
+      'cmd/api/helper.go', 'cmd/api/main.go', 'lib/library.go', 'lib/store/store.go', 'plugins/one/one.go', 'plugins/two/two.go',
+    ])
+    expect(files('cmd/worker/main.go')).toEqual(['cmd/worker/main.go'])
   })
 }, 60000)
 

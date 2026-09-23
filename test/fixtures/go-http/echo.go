@@ -14,3 +14,10 @@ func echoRoutes() *echo.Echo {
 func echoCreateTalk(c echo.Context) error { return nil }
 func echoUpdateTalk(c echo.Context) error { return nil }
 func echoFiles(c echo.Context) error      { return nil }
+
+// A root router serves from the root wherever it comes from; a group may already carry a prefix.
+func registerEchoTalks(server *echo.Echo, admin *echo.Group) {
+	server.GET("/paramtalks", echoFiles)
+	server.Group("/v2").DELETE("/talks/:id", echoUpdateTalk)
+	admin.GET("/unseen", echoFiles)
+}

@@ -10,6 +10,9 @@ var initial = Register("forms")
 
 func init() { registered["init"] = true }
 
+// A blank function, such as a generated stringer check, names nothing to compare.
+func _() { _ = registered["check"] }
+
 var validate = func(name string) bool { return name != "" }
 
 func Register(name string) bool {

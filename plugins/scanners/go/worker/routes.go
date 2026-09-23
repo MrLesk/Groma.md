@@ -17,6 +17,19 @@ var httpMethods = map[string]bool{
 	"HEAD": true, "OPTIONS": true, "CONNECT": true, "TRACE": true,
 }
 
+// methodName reads a literal method or a net/http method constant such as http.MethodGet, or "".
+func methodName(s *source, expression ast.Expr) string {
+	if text, ok := constantString(s, expression); ok && methodToken.MatchString(strings.ToUpper(text)) {
+		return strings.ToUpper(text)
+	}
+	if library, name, ok := s.packageFramework(expression); ok && library == netHTTP {
+		if method := strings.ToUpper(strings.TrimPrefix(name, "Method")); httpMethods[method] {
+			return method
+		}
+	}
+	return ""
+}
+
 // registration describes one route call: where the method, path and handler are.
 type registration struct {
 	// method is the HTTP method, or `*` for every method; methodArg names the argument that states it.
@@ -71,24 +84,26 @@ func registrationOf(library string, name string) (registration, bool) {
 	return registration{}, false
 }
 
-// routePattern reads a literal route. A net/http pattern can state the method, which comes back first.
+// routePattern reads a literal route. A net/http or chi pattern can state the method before a space
+// or tab, which comes back first; chi reads that method in any case.
 func routePattern(s *source, library string, expression ast.Expr) (string, []endpointSegment, bool) {
 	text, ok := constantString(s, expression)
 	if !ok {
 		return "", nil, false
 	}
 	method := ""
-	if library == netHTTP {
-		if before, after, found := strings.Cut(text, " "); found {
-			method, text = before, strings.TrimSpace(after)
-			if !methodToken.MatchString(method) {
-				return "", nil, false
-			}
+	if index := strings.IndexAny(text, " \t"); index >= 0 && (library == netHTTP || library == chi) {
+		method, text = text[:index], strings.TrimLeft(text[index+1:], " \t")
+		if library == chi {
+			method = strings.ToUpper(method)
 		}
-		// A pattern with a host does not describe this application's root path.
-		if !strings.HasPrefix(text, "/") {
+		if !methodToken.MatchString(method) {
 			return "", nil, false
 		}
+	}
+	// A net/http pattern with a host does not describe this application's root path.
+	if library == netHTTP && !strings.HasPrefix(text, "/") {
+		return "", nil, false
 	}
 	path, ok := routeSegments(library, text)
 	if !ok {
@@ -174,8 +189,9 @@ func goSegment(part string) (endpointSegment, bool) {
 
 // chiSegment reads `{name}`, `{name:regex}` and `*`. A regular expression, or literal text beside
 // a placeholder as in `{id}.json`, restricts what chi accepts. chi hands a regular expression the
-// text up to the character after its placeholder, which can cross a `/`, so a pattern that may match
-// `/` is read as spanning segments: a constrained optional catch-all that stands for the rest.
+// text up to the character that follows its placeholder. At the end of a segment that is the next
+// `/`, so the placeholder stays in its segment. Before other text, as in `{path:.+}.json`, an
+// expression that may match `/` spans segments: a constrained optional catch-all that stands for the rest.
 func chiSegment(part string) (endpointSegment, bool) {
 	if part == "*" {
 		return catchAll("")
@@ -189,7 +205,7 @@ func chiSegment(part string) (endpointSegment, bool) {
 	}
 	first := placeholders[0]
 	for _, placeholder := range placeholders {
-		if placeholder.pattern != "" && matchesSlash(placeholder.pattern) {
+		if placeholder.pattern != "" && !placeholder.last && matchesSlash(placeholder.pattern) {
 			segment, ok := catchAll(first.name)
 			segment.Optional, segment.Constrained = true, true
 			return segment, ok
@@ -201,6 +217,8 @@ func chiSegment(part string) (endpointSegment, bool) {
 type chiPlaceholder struct {
 	name    string
 	pattern string
+	// last reports that the placeholder ends its segment.
+	last bool
 }
 
 // chiPlaceholders reads each `{name}` or `{name:regex}` in a segment, whose regular expression may
@@ -221,8 +239,9 @@ func chiPlaceholders(part string) (placeholders []chiPlaceholder, whole bool, cl
 			}
 			if depth == 0 {
 				name, pattern, _ := strings.Cut(part[start+1:index], ":")
-				placeholders = append(placeholders, chiPlaceholder{name: name, pattern: pattern})
-				whole = start == 0 && index == len(part)-1
+				last := index == len(part)-1
+				placeholders = append(placeholders, chiPlaceholder{name: name, pattern: pattern, last: last})
+				whole = start == 0 && last
 			}
 		}
 	}

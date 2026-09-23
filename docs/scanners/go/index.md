@@ -15,19 +15,29 @@ the adapter, native worker and upstream licenses, with no installation scripts.
 
 ## Source and evidence
 
-Each tracked or unignored `go.mod` identifies a module. The worker reads its
-module declaration and parses active host-platform Go files with `go/parser`.
-`go/build.MatchFile` selects files; test files, vendor, testdata and nested
-modules are excluded. Nested modules are scanned independently. cgo and custom
-build contexts are outside this source loader.
+Each tracked or unignored `go.mod` identifies a module, and each module is
+scanned on its own. The scanner reads a module's tracked or unignored `.go`
+files the way the `go` command selects packages: test files, `testdata`,
+`vendor`, nested modules, and every directory or file whose name starts with `.`
+or `_` are left out. The listing and the scan use this one selection.
+
+One build context then decides which files build: linux/amd64 with cgo, as in a
+native Linux build, so every machine scans the same files whatever its platform
+or its `GOOS`, `GOARCH`, `CGO_ENABLED` and `GOEXPERIMENT` settings. No other
+build tag is set. A module whose files all sit behind build constraints, such
+as a tools module, adds nothing.
 
 The source importer gives `go/types` local packages from that module.
 External packages, including standard-library declarations, are unresolved
 context. The scanner does not invoke `go`, use its cache, or evaluate `go.work`.
-Missing dependencies produce diagnostics without blocking source inventory.
-Invalid syntax still fails the scan.
+The type errors that follow from what it does not load become one
+`GO_MISSING_EXTERNAL_PACKAGES` summary per module, located at the first error and
+naming the module dependencies most packages import. They never block source
+inventory. Invalid syntax still fails the scan.
 
-Files retain package and module membership. Functions, methods, closures and
+Files retain package and module membership. A `main` package with a `main`
+function is an execution entry whose files are that package and every module
+package it imports, directly or indirectly. Functions, methods, closures and
 package initializers supply operations and exact UTF-16 source positions.
 Local imported aliases and concrete method calls retain their canonical target.
 Interfaces, function values and providers outside the module remain unresolved.
@@ -56,7 +66,8 @@ referenced file with `go/parser` only. It does not type-check or read other
 files.
 
 - Types are defined types such as `type Store struct{}` or `type Count int`,
-  never aliases. Interface method signatures are their members.
+  never aliases. Interface method signatures are their members, and never an
+  entry: a Code link names a declaration, not a signature.
 - A method with receiver `T`, `*T`, or generic `T[P]` is a member of the file's
   entry for `T`. When another file declares `T`, the entry sits at the first
   such method.
@@ -74,7 +85,8 @@ written type: `net/http`, `github.com/go-chi/chi`, `github.com/gin-gonic/gin` an
 `github.com/labstack/echo`. A router is a value built by `http.NewServeMux`,
 `chi.NewRouter`, `chi.NewMux`, `gin.New`, `gin.Default` or `echo.New`, the default
 `ServeMux` behind `http.Handle` and `http.HandleFunc`, or a parameter, struct field
-or variable written as `*http.ServeMux`. A chi, gin or echo router that arrives as a
+or variable written as a root router: `*http.ServeMux`, `*gin.Engine` or
+`*echo.Echo`. A chi router, gin `RouterGroup` or echo `Group` that arrives as a
 parameter or field may already carry a group prefix this scan cannot see, so its
 routes are not reported.
 
@@ -123,27 +135,31 @@ Answers to the [producer checklist](../evidence.md#producer-checklist):
    leading unknown segment, and `os.Getenv` is a setting. A package-level
    variable assigned more than once, or whose address the source takes for
    anything but a flag, since a pointer can write it, is a leading unknown
-   segment. So are a literal scheme and host, a local variable, a parameter,
-   text that continues the value's own last segment, and every other computed
-   value.
+   segment. So are a literal scheme and host, including a host written in
+   pieces as in `fmt.Sprintf("http://%s/talks", host)`, a local variable, a
+   parameter, text that continues the value's own last segment, and every other
+   computed value.
 6. **File-location routes.** Go has none, so every endpoint names its handler: a
    function, a method value, an `http.HandlerFunc` conversion, or a function
    literal.
 7. **Constrained segments.** A chi `{name:regex}` parameter, and a chi, gin or
    echo segment that mixes literal text with a parameter, such as `{id}.json` or
    `v:version`, is a constrained parameter named after that parameter. chi hands
-   a regular expression the text up to the character after its placeholder,
-   which can cross a `/`, so a regular expression that may match `/`, such as
-   `{path:.+}`, is a constrained optional catch-all that replaces the rest of the
-   route. net/http rejects a wildcard that shares its segment with text, so no
-   such route is served.
+   a regular expression the text up to the character after its placeholder. At
+   the end of a segment that is the next `/`, so `{path:.+}` stays one segment.
+   Before other text, as in `{path:.+}.json`, a regular expression that may match
+   `/` crosses segments, so that segment is a constrained optional catch-all that
+   replaces the rest of the route. net/http rejects a wildcard that shares its
+   segment with text, so no such route is served.
 8. **Registration order.** net/http, chi, gin and echo prefer the most specific
    route over the first one registered, so no endpoint reports `order`.
 
 Route syntax follows each framework: net/http method patterns such as
 `"GET /talks/{id}"`, `{name}`, `{name...}`, the `{$}` anchor and a
-trailing-slash subtree; chi `{name}`, `{name:regex}` and `*`; gin `:name` and
-`*name`; echo `:name` and `*`. A catch-all serves an empty remainder only after
+trailing-slash subtree; chi `{name}`, `{name:regex}` and `*`, with the same
+method patterns in `Handle` and `HandleFunc`; gin `:name` and `*name`; echo
+`:name` and `*`. A method argument is a literal or a net/http constant such as
+`http.MethodPut`. A catch-all serves an empty remainder only after
 a trailing slash, which request paths do not keep, so it requires at least one
 segment. A catch-all at the root, such as the bare `/` subtree, is optional.
 
@@ -162,7 +178,7 @@ catch-all report nothing. Routes another module registers are outside this scan.
 [shared rule](../../architecture-findings.md#compared-operations). The scanner
 attaches a source range and body tokens to:
 
-- functions and methods with a body, except `init` functions;
+- functions and methods with a body, except `init` and blank `_` functions;
 - function literals assigned to a named variable with `var`, `:=`, or `=`;
 - function literals written as any keyed element of a composite literal, such
   as a struct field or map value.
@@ -171,7 +187,9 @@ These function literals take the variable name, or the key's source text, as
 their operation name. Keyed function literals in a composite literal passed
 directly to a call, alone or behind `&`, are anonymous callbacks, as are all
 other function literals. Package variable initializers and `init` functions
-are initializer code. Go has no constructors.
+are initializer code. Go has no constructors. A file marked
+`// Code generated ... DO NOT EDIT.` has no compared operations: generated code
+is repeated by design and is not reviewed by hand.
 
 Receivers and named results are bound with the parameters in declaration
 order. Every other name declared inside the operation becomes a slot in order

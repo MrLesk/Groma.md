@@ -39,25 +39,12 @@ func (e *evidence) request(s *source, name string, call *ast.CallExpr, owner str
 	}
 	method := recognized.method
 	if recognized.methodArg >= 0 {
-		method = requestMethod(s, call.Args[recognized.methodArg])
+		method = methodName(s, call.Args[recognized.methodArg])
 	}
 	configured, path := requestPath(e.urlParts(s, call.Args[recognized.url]))
 	e.result.HTTPRequests = append(e.result.HTTPRequests, httpRequest{
 		Operation: owner, Method: method, Configured: configured, Path: path,
 	})
-}
-
-// requestMethod reads a literal method or a net/http method constant such as http.MethodGet.
-func requestMethod(s *source, expression ast.Expr) string {
-	if text, ok := constantString(s, expression); ok && methodToken.MatchString(strings.ToUpper(text)) {
-		return strings.ToUpper(text)
-	}
-	if library, name, ok := s.packageFramework(expression); ok && library == netHTTP {
-		if method := strings.ToUpper(strings.TrimPrefix(name, "Method")); httpMethods[method] {
-			return method
-		}
-	}
-	return ""
 }
 
 // urlPart is one piece of a URL expression: text the source proves, or a value it computes.
@@ -190,24 +177,28 @@ func requestPath(parts []urlPart) (bool, []requestSegment) {
 		// A base the scanner cannot resolve at all stays in the path as unknown text.
 		return false, append([]requestSegment{{Kind: "unknown"}}, requestSegments(parts[1:])...)
 	}
-	if rest, host := afterAuthority(parts[0].text); host {
-		remainder := append([]urlPart{{text: rest}}, parts[1:]...)
-		return false, append([]requestSegment{{Kind: "unknown"}}, requestSegments(remainder)...)
+	if path, host := afterAuthority(parts); host {
+		return false, append([]requestSegment{{Kind: "unknown"}}, requestSegments(path)...)
 	}
 	return false, requestSegments(parts)
 }
 
-// afterAuthority drops a scheme and host, which address a server this path cannot be compared with.
-func afterAuthority(text string) (string, bool) {
+// afterAuthority drops a literal scheme and the host after it, which address a server this path
+// cannot be compared with. The host ends at the first slash, which a later piece can hold, as in
+// fmt.Sprintf("http://%s/talks", host).
+func afterAuthority(parts []urlPart) ([]urlPart, bool) {
+	text := parts[0].text
 	start := strings.Index(text, "//")
 	if start < 0 || (start > 0 && !strings.HasSuffix(text[:start], ":")) {
-		return text, false
+		return parts, false
 	}
-	rest := text[start+2:]
-	if slash := strings.Index(rest, "/"); slash >= 0 {
-		return rest[slash:], true
+	rest := append([]urlPart{{text: text[start+2:]}}, parts[1:]...)
+	for index, part := range rest {
+		if slash := strings.Index(part.text, "/"); !part.computed && slash >= 0 {
+			return append([]urlPart{{text: part.text[slash:]}}, rest[index+1:]...), true
+		}
 	}
-	return "", true
+	return nil, true
 }
 
 // withText joins adjacent text and drops empty text, so a URL written in pieces, such as
