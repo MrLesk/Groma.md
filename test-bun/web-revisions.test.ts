@@ -54,6 +54,9 @@ test.concurrent('web history includes source-only commits and reads the selected
     const comparison = await (await request(`/world.json?from=${before}&revision=${after}`)).json() as WebPayload
     expect(comparison.comparison?.from?.id).toBe(before)
     expect(comparison.comparison?.components[component.id]?.status).toBe('modified')
+    // A request naming the newer commit as the start opens the same comparison, from the older commit.
+    const reversed = await (await request(`/world.json?from=${after}&revision=${before}`)).json() as WebPayload
+    expect([reversed.comparison?.from?.id, reversed.revision?.id]).toEqual([before, after])
     expect(comparison.work.items).toEqual([])
     const pairedSource = await (await request(`/source.json?${query}&from=${before}&revision=${after}`)).json()
     expect(pairedSource.source).toBe(source)

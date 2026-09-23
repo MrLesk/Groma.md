@@ -1,8 +1,10 @@
 import { expect, test } from 'bun:test'
 import { readFile } from 'node:fs/promises'
 import { compareArchitecture, type SourceTexts } from '../src/history/comparison.ts'
+import { sheetScene } from '../src/sheet/scene.ts'
 import type { AnnotatedArchitectureModel } from '../src/types.ts'
 import { readView, writeView } from '../src/viewers/web/url.ts'
+import { box, uses, worldOf } from './helpers.ts'
 
 async function fixture(): Promise<{ before: AnnotatedArchitectureModel; after: AnnotatedArchitectureModel; oldSources: SourceTexts; newSources: SourceTexts }> {
   return JSON.parse(await readFile(new URL('../test/fixtures/revision-comparison.json', import.meta.url), 'utf8'))
@@ -54,4 +56,22 @@ test.concurrent('source-only and own-content changes modify only their owner; fl
   expect(comparison.components['receipt-sender']!.status).toBe('modified')
   expect(comparison.world.flows).toBe(next.flows)
   expect(Object.values(comparison.components).some(item => item.status === 'added' || item.status === 'removed')).toBe(false)
+})
+
+test.concurrent('an id that changes kind keeps both elements, so both comparison directions place everything', () => {
+  // `export` is a component in the older world and a container holding revision-control in the newer one.
+  const unit = { x: 0, y: 0, width: 1, height: 1 }
+  const older = worldOf([
+    box('shop', 'system', unit), box('web', 'container', unit, { parent: 'observed:shop' }),
+    box('export', 'component', unit, { parent: 'observed:web' }), box('developer', 'actor', unit),
+  ], [uses('uses-export', 'developer', 'export')])
+  const newer = worldOf([
+    box('shop', 'system', unit), box('export', 'container', unit, { parent: 'observed:shop' }),
+    box('revision-control', 'component', unit, { parent: 'observed:export' }), box('developer', 'actor', unit),
+  ], [uses('uses-revision-control', 'developer', 'revision-control')])
+  for (const [before, after] of [[older, newer], [newer, older]] as const) {
+    const scene = sheetScene(compareArchitecture(before, after, {}, {}).world)
+    const placed = [...scene.buildings, ...scene.slabs].map(item => item.representationId)
+    expect(placed).toEqual(expect.arrayContaining(['observed:revision-control', 'observed:export', 'removed:observed:export']))
+  }
 })

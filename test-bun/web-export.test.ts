@@ -47,7 +47,7 @@ test.concurrent('working-tree export retains uncommitted source and contains one
   } finally { await rm(root, { recursive: true, force: true }) }
 })
 
-test.concurrent('commit export and both comparison directions use only bundled commits independently of checkout', async () => {
+test.concurrent('commit export and its one older-to-newer comparison use only bundled commits independently of checkout', async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'groma-export-commits-'))
   const git = async (...args: string[]) => {
     const process = Bun.spawn(['git', ...args], { cwd: root, stdout: 'pipe', stderr: 'pipe' })
@@ -76,22 +76,20 @@ test.concurrent('commit export and both comparison directions use only bundled c
     expect(single.revisions.map(item => item.id)).toEqual([after])
     expect((await createWebDataSource(single).readSource('orders', 'src/orders.ts', after)).source).toBe(newSource)
 
-    const boot = await publish(root, { from: before, revision: after })
+    // Naming the newer commit as the start still exports one comparison, from the older commit to the newer.
+    const boot = await publish(root, { from: after, revision: before })
     expectNoWork(boot)
     expect(boot.comparison?.from?.id).toBe(before)
     expect(boot.revision?.id).toBe(after)
-    expect(boot.revisions.map(item => item.id)).toEqual([before, after])
+    expect(boot.revisions.map(item => item.id)).toEqual([after, before])
+    expect(boot.delivery.kind === 'published' && boot.delivery.views.length).toBe(3)
     expect(boot.comparison?.components.orders).toMatchObject({ status: 'modified', files: [{ status: 'modified', additions: 1, deletions: 1 }] })
     const data = createWebDataSource(boot)
     expect((await data.readWorld(after)).comparison).toBeUndefined()
     expect((await data.readSource('orders', 'src/orders.ts', before)).source).toBe(oldSource)
-    const reverse = await data.readWorld(before, after)
-    expect(reverse.comparison?.components.orders?.files[0]?.hunks.flatMap(hunk => hunk.lines))
-      .toContainEqual(expect.objectContaining({ kind: 'removed', text: '  return lines + 1' }))
     const opened = openWebBoot(boot, { search: `?revision=${before}` })
     expect(opened.comparison).toBeUndefined()
     expect(opened.revision?.id).toBe(before)
-    expect(openWebBoot(boot, { search: `?revision=${before}&from=${after}` }).comparison?.from?.id).toBe(after)
     await expect(data.readWorld()).rejects.toThrow()
     await expect(data.readWorld('unbundled')).rejects.toThrow()
     expect(await git('rev-parse', 'HEAD')).toBe(before)

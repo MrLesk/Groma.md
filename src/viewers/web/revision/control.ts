@@ -122,8 +122,13 @@ export function createRevisionControl(options: RevisionControlOptions) {
     const held = editing === 'from' ? from() : viewed
     const otherEndpoint = { revision: undefined, from: viewed, to: from() }[editing ?? 'revision']
     results.innerHTML = revisionOptions(revisions, held, search.value, workingTree)
+    // A comparison runs from an older revision to a newer one. The list runs newest first under the working tree, so a
+    // start must sit below its destination and a destination above its start.
+    const position = new Map(['', ...revisions.map(revision => revision.id)].map((id, index) => [id, index]))
+    const other = position.get(otherEndpoint ?? '') ?? 0
     for (const option of results.querySelectorAll<HTMLButtonElement>('[data-revision]')) {
-      option.disabled = option.dataset.revision === otherEndpoint
+      const here = position.get(option.dataset.revision!) ?? 0
+      option.disabled = editing === 'from' ? here <= other : editing === 'to' && here >= other
     }
     localizeDates(results)
   }
@@ -169,9 +174,9 @@ export function createRevisionControl(options: RevisionControlOptions) {
 
   /** A start is usually a parent of the destination, so its list opens at the destination row. */
   function revealDestination(): void {
-    const fixed = starting() ? results.querySelector<HTMLElement>(':disabled') : null
+    const destination = starting() ? results.querySelector<HTMLElement>(`[data-revision="${selected() ?? ''}"]`) : null
     // 6px is the list's own padding, so the row sits flush with its top.
-    if (fixed !== null) menu.scrollTop = Math.max(0, fixed.offsetTop - 6)
+    if (destination !== null) menu.scrollTop = Math.max(0, destination.offsetTop - 6)
   }
 
   async function loadHistory(): Promise<void> {

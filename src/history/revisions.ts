@@ -95,6 +95,15 @@ export async function listGitRevisions(repositoryRoot: string): Promise<GitRevis
 
 const REVISION_FORMAT = '--format=%H%x00%h%x00%cI%x00%s%x00%b%x00%(decorate:prefix=,suffix=,separator=%x1f,tag=)%x00'
 
+/**
+ * Two commits from older to newer, the order every comparison runs in, for an export, which has no history list to
+ * read it from: an ancestor before its descendant. Commits on diverging branches keep their order.
+ */
+export async function olderFirst(repositoryRoot: string, a: GitRevision, b: GitRevision): Promise<[GitRevision, GitRevision]> {
+  const base = (await runGit(['merge-base', a.id, b.id], repositoryRoot)).trim()
+  return base === b.id ? [b, a] : [a, b]
+}
+
 /** Resolves an explicit export reference, including a commit outside the current branch. */
 export async function readGitRevision(repositoryRoot: string, reference: string): Promise<GitRevision> {
   const id = (await runGit(['rev-parse', '--verify', '--end-of-options', `${reference}^{commit}`], repositoryRoot)).trim()

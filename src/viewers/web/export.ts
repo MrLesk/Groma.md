@@ -3,7 +3,7 @@ import path from 'node:path'
 import { EMPTY_WORK_SNAPSHOT } from '@groma/work-source'
 import { watchArchitecture } from '../../architecture-watch.ts'
 import { compareArchitecture, ownedFiles, type SourceTexts } from '../../history/comparison.ts'
-import { readGitRevision, type GitRevision } from '../../history/revisions.ts'
+import { olderFirst, readGitRevision, type GitRevision } from '../../history/revisions.ts'
 import { atRevision, readSourceTexts } from '../../history/snapshots.ts'
 import { measuredSheetScene } from '../../sheet/scene.ts'
 import { readSnapshotCodeStructure } from '../source/structure.ts'
@@ -78,14 +78,15 @@ async function publishedSnapshot(root: string, revisions: GitRevision[], generat
     return atRevision(root, from, async beforeRoot => {
       const beforeMap = await loadMapRoot(beforeRoot)
       const files = [...new Set([...ownedFiles(beforeMap.world), ...ownedFiles(afterMap.world)])]
+      // The time machine lists the commits newest first, as it does live.
+      const history = [...revisions].reverse()
       const [before, after] = await Promise.all([
-        snapshotView(root, beforeRoot, from, revisions, generation, beforeMap, files),
-        snapshotView(root, afterRoot, to, revisions, generation, afterMap, files),
+        snapshotView(root, beforeRoot, from, history, generation, beforeMap, files),
+        snapshotView(root, afterRoot, to, history, generation, afterMap, files),
       ])
+      // One comparison, from the older commit to the newer; closing it opens either commit on its own.
       const comparison = comparisonView(before, after)
-      // Closing the comparison allows either commit to become the next destination.
-      const views = [before, after, comparison, comparisonView(after, before)]
-      return { ...comparison.payload, delivery: { kind: 'published', views } }
+      return { ...comparison.payload, delivery: { kind: 'published', views: [before, after, comparison] } }
     })
   })
 }
@@ -97,7 +98,8 @@ async function exportRevisions(root: string, options: WebExportOptions): Promise
   if (options.from === undefined) return [to]
   const from = await readGitRevision(root, options.from)
   if (from.id === to.id) throw new Error('Choose two different commits')
-  return [from, to]
+  // A comparison always runs from the older commit to the newer one, whichever order the options name.
+  return olderFirst(root, from, to)
 }
 
 async function replaceFile(filename: string, contents: string | Uint8Array): Promise<void> {

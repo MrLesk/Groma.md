@@ -97,15 +97,16 @@ base and head commits available locally can run:
 groma export ./site --from "$BASE_SHA" --revision "$HEAD_SHA"
 ```
 
-The site opens in the same A-to-B comparison as live Groma. The header's × opens
-B; the ordinary revision picker offers only A and B. Either can become the
-destination of another comparison. A one-commit export exposes its message,
+The site opens the comparison from the older commit to the newer one, whichever
+order `--from` and `--revision` name, as live Groma does. The header's × opens
+the newer commit; the ordinary revision picker offers only the two commits. A
+one-commit export exposes its message,
 body, and ID, with the same no-other-revisions notice. Comparison export requires
 two commits; working-tree comparisons remain available in live Groma.
 
 `web/export.ts` packages the shared history comparison, map layout, source
 contents, and outlines while the snapshot roots are available. It prepares both
-individual views and both comparison directions. `web/data.ts` selects those
+individual views and their one comparison. `web/data.ts` selects those
 bundled views, including shared URLs, through the same read boundary used by the
 live viewer. The export adds no comparison algorithm or separate presentation.
 The caller chooses the commits and static host; Groma does not resolve a PR,
@@ -302,17 +303,22 @@ Nothing about comparing shows by default. While the open search is empty,
 **or compare 2 revisions** follows the placeholder, just outside a field too short
 to hold both; typing removes those words. Activating them moves the search to the start field, and "vs." and
 the viewed revision slide in beside it as destination B. The list opens at the
-destination row, which is disabled, so its parents are the next rows. The ×
+destination row; it and every newer row are disabled, so its parents are the next
+rows. The ×
 appears and cancels, as do Escape and a click outside. Choosing a commit opens
 A to B.
 
 While comparing, start and destination are two fields in one box with a rule on
 each side of "vs.". Each field is as wide as its commit message. Clicking a
 field turns it into the commit search at the same position and width while the
-other field stays in place, and the list sits under that field with the other
-endpoint disabled. The × ends the comparison and opens B. Ordinary browsing then
-opens either individual snapshot. The URL stores A in `from` (empty for the
-working tree) and B in `revision` (omitted for the working tree).
+other field stays in place, and the list sits under that field. A comparison
+always runs from the older revision to the newer one: a start must lie further
+down the list than its destination, the working tree is only ever a destination,
+and the list disables every commit on the wrong side of the other endpoint. A link
+that names the newer commit as the start opens the same comparison, older first.
+The × ends the comparison and opens B. Ordinary browsing then opens either
+individual snapshot. The URL stores A in `from` and B in `revision` (omitted for
+the working tree).
 `web/revision/view.ts` owns the fields, the list rows, and their motion;
 `web/revision/control.ts` owns the displayed revision or pair and which field is
 the search. Motion uses the chrome motion variables and is off under reduced
@@ -322,7 +328,10 @@ Comparison matches components by their stable IDs. Their own architecture or
 owned-source changes mark them Modified; relationships have independent change
 statuses. Tasks, flows, neighbors, and ancestor changes do not propagate that
 status. The destination map and flows remain, with removed components,
-relationships, and needed former parent context added from A. Systems,
+relationships, and needed former parent context added from A. An ID that names a
+different kind of element in each revision, such as a component that became a
+container, shows as two elements: B's keeps the ID and A's is added as removed,
+with A's children beneath it. Systems,
 containers, and groups stay neutral. Added, Modified, and Removed use shared
 theme roles; green remains the selection and active-flow color. Comparisons
 have no task data or editing controls. A working-tree endpoint follows owned

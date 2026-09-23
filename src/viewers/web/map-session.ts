@@ -132,7 +132,7 @@ export async function createWebMapSession(
     }
   }
 
-  /** The two revisions a request compares; undefined for a request about one revision. */
+  /** The two revisions a request compares, older first whichever order it names; undefined for a request about one revision. */
   async function comparedPair(url: URL): Promise<[WebRevision | null, WebRevision | null] | Response | undefined> {
     const fromId = url.searchParams.get('from')
     if (fromId === null) return undefined
@@ -142,7 +142,9 @@ export async function createWebMapSession(
     const to = toId === null ? null : history.find(item => item.id === toId)
     if (from === undefined || to === undefined) return new Response('Unknown revision', { status: 404 })
     if (from?.id === to?.id) return new Response('Choose two different revisions', { status: 400 })
-    return [from, to]
+    // Older means lower in the newest-first history list, as the time machine shows it; the working tree is newest.
+    const position = (revision: WebRevision | null): number => revision === null ? -1 : history.indexOf(revision)
+    return position(from) < position(to) ? [to, from] : [from, to]
   }
 
   async function payloadFor(url: URL): Promise<WebPayload | Response> {

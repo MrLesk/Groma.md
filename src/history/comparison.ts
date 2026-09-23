@@ -90,9 +90,33 @@ function combinedElements(before: AnnotatedArchitectureModel, after: AnnotatedAr
   return [...elements.values()].map(item => ({ ...item, children: children.get(item.representationId) ?? [] }))
 }
 
+/**
+ * An id that names a different kind of element in each revision stands for two elements: the destination's keeps the
+ * id, and the start's becomes `removed:<id>`, as a removed relationship does, together with every reference to it in
+ * the start revision. Otherwise the start's children would hang under the destination's element of the wrong kind.
+ */
+function withChangedKindsApart(before: AnnotatedArchitectureModel, after: AnnotatedArchitectureModel): AnnotatedArchitectureModel {
+  const kinds = new Map(after.elements.map(item => [item.representationId, item.kind]))
+  const changed = new Set(before.elements
+    .filter(item => kinds.has(item.representationId) && kinds.get(item.representationId) !== item.kind)
+    .map(item => item.representationId))
+  if (changed.size === 0) return before
+  const apart = (id: string): string => changed.has(id) ? `removed:${id}` : id
+  return {
+    ...before,
+    elements: before.elements.map(item => ({
+      ...item,
+      ...(changed.has(item.representationId) ? { id: `removed:${item.id}`, representationId: apart(item.representationId) } : {}),
+      parent: item.parent === null ? null : apart(item.parent),
+    })),
+    relationships: before.relationships.map(item => ({ ...item, source: apart(item.source), target: apart(item.target) })),
+  }
+}
+
 /** Pure comparison: never changes either snapshot or propagates a change to neighbors or ancestors. */
-export function compareArchitecture(before: AnnotatedArchitectureModel, after: AnnotatedArchitectureModel,
+export function compareArchitecture(start: AnnotatedArchitectureModel, after: AnnotatedArchitectureModel,
   oldSources: SourceTexts, newSources: SourceTexts) {
+  const before = withChangedKindsApart(start, after)
   const old = new Map(before.elements.filter(item => item.kind === 'component').map(item => [item.id, item]))
   const next = new Map(after.elements.filter(item => item.kind === 'component').map(item => [item.id, item]))
   const components: Record<string, ComponentChange> = {}
