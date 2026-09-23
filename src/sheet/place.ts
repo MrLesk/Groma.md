@@ -18,6 +18,7 @@ import {
   roofLines,
 } from './measure.ts'
 import { grow, shelf } from './pack.ts'
+import { balance } from './pack-forces.ts'
 import type { Partnered } from './pack.ts'
 import { flowRanks } from './rank.ts'
 import { mapRelationships } from './route/relationships.ts'
@@ -145,9 +146,9 @@ function lifted(siblings: readonly Node[], relationships: readonly Pick<Annotate
 }
 
 /**
- * A surface holding its children by growth placement (the actors and
- * external islands stack theirs in one column), at least as wide as its own
- * name.
+ * A surface holding its children by growth placement settled by the force
+ * balance (the actors and external islands stack theirs in one column), at
+ * least as wide as its own name.
  */
 function packed(
   key: string,
@@ -170,7 +171,7 @@ function packed(
     entry: entries.has(child.key),
     partners: partners.get(child.key)!,
   }))
-  const placed = stack ? shelf(items, 1) : grow(items)
+  const placed = stack ? shelf(items, 1) : balance(items, grow(items))
   /** Systems, slabs and zones share the roomier nested-surface inset; the centred actors and external islands stay compact. */
   const connections = subtreeConnections(key, children, relationships)
   const ownPorts = connectionCounts(relationships).get(key) ?? 0

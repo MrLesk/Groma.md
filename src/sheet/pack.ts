@@ -155,6 +155,11 @@ export function grow(items: readonly Partnered[]): Shelf {
   const state = { rects, paths: new PackingPaths(items, rects), westEdge: entries.length > 0 ? PAD : -Infinity }
   placeConnected(connected, state)
   placeLoose(loose, rects)
+  return shelfAround(rects)
+}
+
+/** The shelf holding `rects`, moved so their union starts PAD cells inside the parent's edge. */
+export function shelfAround(rects: ReadonlyMap<string, CellRect>): Shelf {
   const all = unionRects([...rects.values()])!
   const at = new Map([...rects].map(([key, rect]) => [key, { gx: rect.gx - all.gx + PAD, gy: rect.gy - all.gy + PAD }]))
   return { w: all.w + 2 * PAD, d: all.d + 2 * PAD, at }

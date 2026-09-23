@@ -31,3 +31,18 @@ export const SPOT_BEND = 2
 export const SPOT_DETOUR = 100
 /** An entry column deeper than this many times its width folds into a square-ish block. Lower folds sooner, giving squarer surfaces and longer entry arrows. */
 export const FOLD_ASPECT = 3
+
+/* How siblings settle: the force balance on a surface ------------------- */
+
+/** Cells of ground two siblings push apart to, partners too, so the routes between them have room. More spreads surfaces and their routes; the sheet grows. */
+export const SIBLING_SPREAD = GAP + 2
+/** Push per cell two siblings stand closer than SIBLING_SPREAD. More holds the spread against the partners' pull and the surface's gravity. */
+export const SIBLING_PUSH = 0.5
+/** Pull per relationship and per cell two partners stand farther than the sibling gap. More draws partners closer and gives their routes less room. */
+export const PARTNER_PULL = 0.05
+/** Pull per relationship and per cell of offset that lines partners up face to face. More lines them up sooner, so more of their routes run straight. */
+export const PARTNER_ALIGN = 0.05
+/** Pull of every child toward the middle of its siblings, per cell of distance. More gives tighter, rounder surfaces. */
+export const SURFACE_GRAVITY = 0.01
+/** Cells per round an entry drifts west, where the outside feeds it. Without it entries wander and routes cross and bend more. */
+export const ENTRY_DRIFT = 0.1

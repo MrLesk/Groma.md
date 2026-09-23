@@ -484,16 +484,23 @@ any length), by the arrows it would stand in the way of, and by the
 cells it adds to the surface's longer side, so a heavy target comes
 next to what feeds it, light intermediates settle at the edges,
 partners line up into straight runs and chains wrap instead of
-stretching. Placement and routing share one connection-space calculation.
-Each building reserves its full roof shadow, port clearance, and turning room.
-Ports keep room for a stroke lane on either side; additional connections grow
-the minimum footprint and its surrounding space. Groups, containers and islands
-include the connection space of their contents, and container composition keeps
-those allowances when moving whole subtrees. These are drawing rules;
-they do not change the stored elements, relationships or source evidence.
-Nothing stands west of the entries, and children no
-relationship touches are packed as one block after them. The
-actors and external islands shift across the row, north or south, so
+stretching. Children no relationship touches are packed as one block after
+them. That growth placement is only where a surface starts. Its children
+then settle like electrons around a nucleus: every two siblings push apart until
+four cells of ground stand between them, partners
+pull back toward the two-cell sibling gap and toward facing each other so their
+routes can run straight, all of them drift toward the middle of the surface, and
+entries drift west while nothing stands west of them. Pairs left closer than the
+sibling gap are pushed apart and every corner lands on a whole cell. A surface
+whose children share no relationship keeps its growth placement.
+Placement and routing share one connection-space calculation. Each building
+reserves its full roof shadow, port clearance, and turning room. Ports keep room
+for a stroke lane on either side; additional connections grow the minimum
+footprint and its surrounding space. Groups, containers and islands include the
+connection space of their contents, and container composition keeps those
+allowances when moving whole subtrees. These are drawing rules; they do not
+change the stored elements, relationships or source evidence.
+The actors and external islands shift across the row, north or south, so
 their buildings face what they talk to.
 Containers are slabs whose top is level with the ground and whose
 thickness hangs below the grid line, drawn over the island in front of
