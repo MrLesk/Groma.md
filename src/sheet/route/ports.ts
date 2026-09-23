@@ -52,16 +52,11 @@ function portAt(endpoint: Endpoint, side: PortSide, share: number): RoutePort {
   return { side, wall, guard }
 }
 
-/**
- * The stretch of a wall a port may slide along, across the port's exit axis: the middle half, where ports are
- * distributed. A round building's stretch is its middle point, so its ports may slide toward the middle but not away.
- */
+/** The stretch of a wall a port may slide along, across the port's exit axis: the middle half, where ports are distributed. */
 export function portSpan(endpoint: Endpoint, side: PortSide): [number, number] {
   const [from, to] = PORT_SPAN.map(share => portAt(endpoint, side, share))
     .map(port => side === 'north' || side === 'south' ? port.wall.x : port.wall.y)
-  if (!endpoint.round) return [from!, to!]
-  const middle = (from! + to!) / 2
-  return [middle, middle]
+  return [from!, to!]
 }
 
 interface PortObstacle {
@@ -136,9 +131,9 @@ function portShare(index: number, count: number): number {
   return PORT_SPAN[0] + (PORT_SPAN[1] - PORT_SPAN[0]) * index / (count - 1)
 }
 
-/** Round buildings and external systems take one arriving route per wall where they have walls to spare. */
+/** External systems take one arriving route per wall where they have walls to spare. */
 function oneArrivalPerWall(endpoint: Endpoint, role: 'source' | 'target'): boolean {
-  return role === 'target' && (endpoint.round === true || endpoint.owner === 'island:external')
+  return role === 'target' && endpoint.owner === 'island:external'
 }
 
 function portCapacity(candidate: EndpointCandidate): number {

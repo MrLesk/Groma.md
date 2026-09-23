@@ -44,7 +44,6 @@ export function measuredSheetScene(world: ArchitectureGraph): MeasuredSheetScene
       rect: building.rect,
       owner: building.surface,
       roof: building.heightUnits,
-      round: building.shape.kind === 'round',
     })
   }
   const routes = routeAll(endpoints, mapRelationships(world))

@@ -28,8 +28,6 @@ export interface Endpoint {
   rect: CellRect
   owner?: string
   roof?: number
-  /** A round building: its ports stay toward the middle of each wall, and it takes one arriving route per wall. */
-  round?: boolean
 }
 
 export type RouteRequest = Pick<AnnotatedRelationship, 'id' | 'source' | 'target' | 'description' | 'origin'> & { relationshipIds?: string[] }

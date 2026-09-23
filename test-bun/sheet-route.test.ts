@@ -40,7 +40,6 @@ function endpointsOf(scene: SheetScene): Map<string, Endpoint> {
       rect: building.rect,
       owner: building.surface,
       roof: building.heightUnits,
-      round: building.shape.kind === 'round',
     })
   }
   return endpoints
