@@ -1,11 +1,11 @@
 ---
 id: TASK-491
 title: Qualify and improve the Vue scanner on public repositories
-status: In Progress
+status: Done
 assignee:
   - '@codex'
 created_date: '2026-09-22 21:47'
-updated_date: '2026-09-23 05:41'
+updated_date: '2026-09-23 19:20'
 labels: []
 dependencies: []
 references:
@@ -39,14 +39,14 @@ Alex requested a repository-by-repository Vue scanner exercise after Rust. Scan 
 <!-- AC:BEGIN -->
 - [x] #1 Ten distinct public Vue repositories are scanned at recorded commits, with concrete evidence and each result classified.
 - [x] #2 Verified defects in the supported Vue scan flow are fixed with focused regression coverage where existing tests leave a gap.
-- [ ] #3 The complete repository check passes after the Vue scanner changes.
+- [x] #3 The complete repository check passes after the Vue scanner changes.
 - [x] #4 Temporary repository clones are removed after Vue qualification and the results are reported to Alex before work starts on another scanner.
 <!-- AC:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 Acceptance criteria have objective verification evidence.
-- [ ] #2 Relevant checks pass and changes remain task-scoped.
+- [x] #1 Acceptance criteria have objective verification evidence.
+- [x] #2 Relevant checks pass and changes remain task-scoped.
 - [x] #3 Public contracts or documentation are updated when behavior changes.
 - [x] #4 Implementation Plan reflects the final approach; correction history and verification are recorded in Implementation Notes.
 <!-- DOD:END -->
@@ -105,4 +105,12 @@ Final bun run check after all Vue code changes: Biome and TypeScript stages pass
 Targeted full-context re-review confirmed the original nested ownership defect is resolved: Child.vue has one child package root and one wave operation in both the new parent-import regression and the reviewer’s original no-import reproduction. No remaining defect in that finding.
 
 Alex requested commit and push on 2026-09-23. Rechecked the task-scoped Vue, nested-project, React, Angular, TypeScript and JavaScript HTTP tests: 45 pass, 214 assertions. The independent route-crossings test still fails in another agent’s route-layout files; complete repository check AC3 remains open. Vue task files will be committed and pushed without unrelated workspace changes.
+
+Full repository check at 9a0e9bb1 in a clean detached worktree (bun install --frozen-lockfile, bun run check): Biome and typecheck pass; Node 16 pass; Bun 705 pass, 43 skip, 0 fail. The earlier route-crossings failure is resolved by the committed routing work, so AC3 and DoD 1-2 now have objective evidence.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Qualified the Vue scanner on ten pinned public repositories and fixed function-typed and runtime-array emits, direct template emits, native-listener diagnostic noise, project discovery under export-only manifests and ancestor tsconfigs, solution-style configs, missing generated base configs, nested package ownership, spread axios baseURL values, and fetch with a URL object. Verified with focused Vue, nested-project and TypeScript-family HTTP tests and the full repository check at 9a0e9bb1 (Node 16 pass; Bun 705 pass, 43 skip, 0 fail). Temporary clones were removed.
+<!-- SECTION:FINAL_SUMMARY:END -->
