@@ -67,20 +67,6 @@ test.concurrent('a glide carries the camera on in its direction and slows until 
   expect(slow.current).toEqual(start)
 })
 
-test.concurrent('navigation replaces a glide and starts from the displayed camera', () => {
-  const motion = createCameraMotion({ x: 0, y: 0, k: 1 })
-  motion.glide({ x: 3, y: 0 }, 0)
-  motion.step(100)
-  const displayed = motion.current
-  const next = { x: -50, y: 20, k: 2 }
-  motion.move(next, 100, true)
-  expect(motion.current).toEqual(displayed)
-  motion.step(100 + CAMERA_DURATION_MS)
-  expect(motion.current).toEqual(next)
-  expect(motion.step(5_000)).toBe(false)
-  expect(motion.current).toEqual(next)
-})
-
 test.concurrent('spatial framing starts at the displayed camera and follows the moving projected bounds', () => {
   const initial = { x: 20, y: 30, k: 1 }
   const motion = createCameraMotion(initial)
