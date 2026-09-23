@@ -34,6 +34,11 @@ export function node(
   return { tag, attributes: attributesOf(tag, attributes, className), children }
 }
 
+/** One mark of a pattern tile: tile marks draw in pattern space, so they keep ordinary strokes instead of non-scaling ones. */
+export function mark(tag: string, attributes: Record<string, string | number>): SvgNode {
+  return { tag, attributes: Object.fromEntries(Object.entries(attributes).map(([name, value]) => [name, String(value)])), children: [] }
+}
+
 /** SVG text for covers and static pages. */
 export function markup(nodes: readonly SvgNode[]): string {
   return nodes.map(item => {

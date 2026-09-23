@@ -7,14 +7,9 @@ import { createGlows } from './glow.ts'
 import { buildingsSvg, facadeDefs } from './paint-buildings.ts'
 import { islandsSvg, sheetSvg, slabsSvg } from './paint-ground.ts'
 import { routesSvg } from './paint-routes.ts'
-import { gridPatternSvg, gridTransform } from './grid.ts'
+import { createGrid } from './grid.ts'
 import { DEFAULT_PROJECTION } from './project.ts'
-import {
-  facadeDetailsVisible,
-  gridVisible,
-  minorGridVisible,
-  weightAt,
-} from './scale.ts'
+import { facadeDetailsVisible, weightAt } from './scale.ts'
 import { HOVERABLE, mapDefs } from './style.ts'
 import { patch, svg } from './svg.ts'
 import { surfaceLabelStep } from './text.ts'
@@ -107,15 +102,7 @@ export function createMap(host: HTMLElement): IsoMap {
   root.setAttribute('role', 'img')
   root.setAttribute('aria-label', 'Architecture map')
   root.tabIndex = 0
-  const fieldSurface = svg('svg', { width: '100%', height: '100%', 'aria-hidden': 'true' }, 'field-surface')
-  const fieldDefinitions = svg('defs')
-  fieldDefinitions.innerHTML = gridPatternSvg({ x: 0, y: 0, k: 1 })
-  const grid = {
-    pattern: fieldDefinitions.querySelector('pattern')!,
-    lines: [...fieldDefinitions.querySelectorAll('path')],
-  }
-  const field = svg('rect', { width: '100%', height: '100%', fill: 'url(#grid)' }, 'field')
-  fieldSurface.append(fieldDefinitions, field)
+  const grid = createGrid()
   const camera = document.createElement('div')
   camera.className = 'camera'
   const layers = {
@@ -137,7 +124,7 @@ export function createMap(host: HTMLElement): IsoMap {
   const dragCover = document.createElement('div')
   dragCover.className = 'drag-cover'
   dragCover.hidden = true
-  root.append(fieldSurface, camera, dragCover)
+  root.append(grid.surface, camera, dragCover)
   host.replaceChildren(root)
 
   let items = new Map<string, Element>()
@@ -228,9 +215,6 @@ export function createMap(host: HTMLElement): IsoMap {
     camera.style.setProperty('--weight', String(weightAt(view.zoomRatio)))
     camera.style.setProperty('--camera-scale', String(current.k))
     camera.toggleAttribute('data-facades-hidden', !facadeDetailsVisible(current.k))
-    field.style.display = gridVisible(current.k) ? '' : 'none'
-    root.toggleAttribute('data-minor-grid-hidden', !minorGridVisible(current.k))
-    for (const line of grid.lines) line.style.strokeWidth = String(1 / current.k)
     repainted = false
     // The cached layer keeps a transform at rest: removing it and setting it again on the next pan makes Safari redraw the whole map.
     camera.style.transform = 'translate(0px, 0px) scale(1)'
@@ -282,7 +266,8 @@ export function createMap(host: HTMLElement): IsoMap {
       dragCover.hidden = !active
     },
     move(current, zoomRatio) {
-      if (gridVisible(current.k)) grid.pattern.setAttribute('patternTransform', gridTransform(current, painted?.view ?? DEFAULT_PROJECTION))
+      // Before the unchanged-camera return: a repaint can change the projection without moving the camera.
+      grid.follow(current, painted?.view ?? DEFAULT_PROJECTION)
       const scaleChanged = current.k !== latest?.camera.k || zoomRatio !== latest?.zoomRatio
       const cameraChanged = current.x !== latest?.camera.x || current.y !== latest?.camera.y || current.k !== latest?.camera.k
       if (!cameraChanged && !scaleChanged) return false
@@ -383,7 +368,7 @@ export function createMap(host: HTMLElement): IsoMap {
       return target.closest<HTMLElement>('[data-id]')?.dataset.id
     },
     isSheet(target) {
-      return target === root || target === camera || target === field
+      return target === root || target === camera
     },
     isProjectEdit(target) {
       return target instanceof Element && target.closest('[data-project-edit]') !== null

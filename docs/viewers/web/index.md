@@ -148,7 +148,9 @@ PNG files and needs no Groma process on its host.
 The `iso` drawing functions produce SVG for both the interactive map and covers.
 The browser mounts it and owns selection and camera movement; shared style rules
 resolve explicit colours and fixed-camera stroke widths for PNG generation.
-The viewport grid stays outside the moving architecture group.
+The viewport grid stays outside the moving architecture group and follows every
+camera frame, line widths included, so the map shows the same grid in motion and
+at rest.
 
 The `web/sharing` domain owns publication: `cover.ts` composes the shared SVG
 and footer, `images.ts` converts it to PNG, and `metadata.ts` builds the initial
@@ -567,8 +569,9 @@ source evidence keep plain storey lines,
 actor sides and the actors island dots, external sides and the
 external island crosses, container slabs a faint grain, and system
 islands have none; every pattern is laid in the plane it lies on. Facade
-patterns stop below readable size while every floor face remains, and the
-minor grid yields to its major lines only at the most distant scale.
+patterns stop below readable size while every floor face remains. Grid lines
+thin as their rows close up, so the grid keeps one weight at every zoom, and
+rows closer than six pixels leave: minor rows first, then the whole grid.
 Sibling groups are flat hatched zones around their members. Their names use
 the same external label treatment as islands and slabs. Line
 style means origin: observed items are solid, draft ghosts dashed,

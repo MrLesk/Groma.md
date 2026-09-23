@@ -5,12 +5,7 @@ import { DEFAULT_PROJECTION, planeMatrix } from './project.ts'
 import type { Plane, ProjectionView } from './project.ts'
 import { FACADE_MARK, SIDE, depthOf, emphasis, strokeAt, tintAt } from './scale.ts'
 import type { Level } from './scale.ts'
-import { node, type SvgNode } from './svg.ts'
-
-/** Tile marks draw in pattern space, so they keep ordinary strokes instead of the map's non-scaling ones. */
-function mark(tag: string, attributes: Record<string, string | number>): SvgNode {
-  return { tag, attributes: Object.fromEntries(Object.entries(attributes).map(([name, value]) => [name, String(value)])), children: [] }
-}
+import { mark, node, type SvgNode } from './svg.ts'
 
 const ink = { stroke: 'var(--map-hatch)', 'stroke-width': 0.75 }
 const dot = mark('circle', { cx: 4, cy: 4, r: 0.75, fill: 'var(--map-hatch)' })
@@ -145,7 +140,6 @@ export function mapDrawingCss(palette?: Palette, zoom = 1): string {
   #map .project-edit .pencil .tip, #map .project-edit .pencil .lead { stroke: none; }
   #map .grid { fill: none; stroke: ${grid}; }
   #map .grid.major { stroke: ${gridMajor}; }
-  #map > .map-surface[data-minor-grid-hidden] .grid:not(.major) { display: none; }
   ${surfaceColours('island', depthOf('island'), palette)}
   ${surfaceColours('system', depthOf('island') - 0.5, palette)}
   ${surfaceColours('slab', depthOf('slab'), palette)}

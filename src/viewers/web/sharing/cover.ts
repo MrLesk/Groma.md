@@ -3,7 +3,7 @@ import { escaped } from '../atoms/escape.ts'
 import { palettes, webFontFamily, type WebTheme } from '../atoms/theme.ts'
 import { textWidth } from '../../../sheet/measure.ts'
 import { fitCamera, pan } from '../iso/camera.ts'
-import { gridPatternSvg } from '../iso/grid.ts'
+import { gridPattern } from '../iso/grid.ts'
 import { buildingsSvg, facadeDefs } from '../iso/paint-buildings.ts'
 import { islandsSvg, sheetSvg, slabsSvg } from '../iso/paint-ground.ts'
 import { routesSvg } from '../iso/paint-routes.ts'
@@ -45,7 +45,7 @@ export function renderCover(payload: CoverPayload, theme: WebTheme): string {
     <style>${mapDrawingCss(palette, camera.k)} #map .project-edit { display: none; }</style>
     <defs>
       ${definitions}
-      ${gridPatternSvg({ ...camera, k: 0.5 }, scene.view)}
+      ${markup([gridPattern({ ...camera, k: 0.5 }, scene.view)])}
       <clipPath id="cover-frame"><rect x="10" y="10" width="1180" height="610" rx="26"/></clipPath>
       <clipPath id="cover-footer"><rect x="28" y="478" width="1144" height="126" rx="20"/></clipPath>
       <filter id="frost" filterUnits="userSpaceOnUse" x="0" y="454" width="1200" height="176">
