@@ -38,3 +38,10 @@ func platform() { linuxCall() }
 #else
 func platform() { appleCall() }
 #endif
+
+func wrapped(
+    _ count: Int
+) -> Int {
+    let answer = count * 2 + 7
+    return answer - 1
+}

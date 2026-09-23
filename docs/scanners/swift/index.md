@@ -26,38 +26,61 @@ On another checkout, `groma scanner install` restores that selection before
 
 ## Source inputs
 
-Tracked and unignored `.swift` files are read at every repository depth.
-`Package.swift` is a build declaration and is not scanned as application code.
-The common scanner directory exclusions apply, together with `.build`, `Pods`
-and `Carthage`. Shared `scanners.json` exclusions select published evidence.
-Source changes and new Swift files trigger the existing shared watch session.
+Tracked and unignored `.swift` files are read at every repository depth,
+including tests and generated sources such as `*.pb.swift`. `Package.swift` and
+its `Package@swift-<version>.swift` variants are build declarations and are not
+scanned as application code. The common scanner directory exclusions apply,
+together with `.build`, `Pods`, `Carthage` and DocC catalogs (`*.docc`), whose
+snippets no build compiles. Files excluded in `scanners.json` are never read, so
+an excluded file cannot fail the scan. Source changes and new Swift files
+trigger the existing shared watch session.
 
 Xcode projects and Swift package manifests are not executed or evaluated.
 Source files form one source group; directories, imports and extension names
 do not define architecture boundaries or multi-file components.
 Conditional compilation branches are parsed as source without selecting a
-build configuration. Macros are not expanded. Invalid syntax fails the whole
-Swift observation with file and line diagnostics.
+build configuration; only `#if false`, which no configuration compiles, is
+left out. Macros are not expanded. Invalid syntax fails the whole Swift
+observation with file and line diagnostics, and so does a file that is not
+UTF-8. Syntax errors inside a block whose condition checks the compiler or
+language version, as in `#if compiler(>=6.4)`, do not fail the scan: the
+compiler skips such a block when it needs another version, so it may hold
+syntax this parser does not know.
+
+An `@main`, `@UIApplicationMain` or `@NSApplicationMain` type, and a
+`main.swift` file, whose top-level code runs as its module's program, are
+execution entries. SwiftPM names a target after its directory under `Sources`,
+so an entry there takes that name; elsewhere the entry type names it, or the
+directory holding `main.swift`. Each entry's source is its own file; target
+membership is not analyzed.
 
 ## Evidence and outlines
 
 The scanner reports types, functions, constructors, executable bodies and call
 locations. Locations use the shared UTF-16 offset contract. Calls inside closures
-belong to their closure operation, not to the enclosing function. Syntax alone
+belong to their closure operation, not to the enclosing function. A local
+function, closure or type is named after the operation that declares it, as in
+`Store.load.helper`, and names drop escaping backticks. Syntax alone
 does not establish overload resolution, dynamic dispatch, dependency injection,
 macro expansion or cross-language targets. Calls therefore have no certain
 targets and do not produce derived architecture arrows.
 
-Outlines list top-level types and functions, plus methods and constructors.
-Extensions contribute methods to the named type without combining source files.
-Access maps as follows: `open/public` to public, `package/internal` and the
+Outlines list top-level types, functions and macro declarations, plus methods,
+constructors and `deinit`. Extensions contribute methods to the named type
+without combining source files; `extension Box<Int>` and `extension [Int]`
+extend `Box` and `Array`. A type declared in an extension, as in
+`extension Editor { struct Store {} }`, is listed as `Editor.Store` with its
+methods, and so is a nested type that the same file extends; other nested types
+stay part of their declaration. Declarations inside statements and closures are
+not listed. Access maps as follows: `open/public` to public, `package/internal` and the
 default to internal, `fileprivate/private` to private. Swift has no protected
 access. Protocol requirements use the protocol's access; an extension's explicit
 access supplies its members' default. Outlines do not resolve an extended type
 declared in another file or module; its visibility uses the extension's source
 modifier or the internal default.
 
-Named operation bodies carry source ranges and tokens for `groma lint`.
+Named operation bodies, `deinit` included, carry source ranges from their
+declaration line and tokens for `groma lint`.
 Lexically bound parameter and local variable names become numbered slots.
 Operators, member names, argument labels, literals and unresolved names remain
 distinct. Every parenthesis the source writes stays a token, so `(a + b) * c`

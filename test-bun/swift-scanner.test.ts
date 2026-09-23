@@ -11,13 +11,13 @@ import { loadAnnotatedArchitecture, reconcileScanObservations } from '../src/cor
 import { editArchitecture } from '../src/edit.ts'
 import { createScannerSession } from '../src/scanner/session.ts'
 import { compileWatchPatterns } from '../src/scanner/watch-patterns.ts'
-import { detectDuplicatedLogic } from '../src/architecture-findings.ts'
+import { copiesOf, detectDuplicatedLogic } from '../src/architecture-findings.ts'
 
-async function setup() {
+async function setup(fixture = 'swift-source') {
   const temporary = await mkdtemp(path.join(os.tmpdir(), 'groma-swift-test-'))
   const root = path.join(temporary, 'project'), artifact = path.join(temporary, 'scanner')
   await cp(path.resolve(import.meta.dir, '../test/fixtures/empty-project'), root, { recursive: true })
-  await cp(path.resolve(import.meta.dir, '../test/fixtures/swift-source'), root, { recursive: true })
+  await cp(path.resolve(import.meta.dir, `../test/fixtures/${fixture}`), root, { recursive: true })
   const init = Bun.spawn(['git', 'init', '--quiet', root], { stderr: 'pipe' })
   expect(await init.exited, await new Response(init.stderr).text()).toBe(0)
   if (process.env.GROMA_TEST_SWIFT_PACKAGE) await cp(process.env.GROMA_TEST_SWIFT_PACKAGE, artifact, { recursive: true })
@@ -75,6 +75,9 @@ test.concurrent('Swift comparable bodies normalize bindings while retaining memb
     const findings = detectDuplicatedLogic([scan], new Map(scan.files.map(file => [file.file, file.file])))
     expect(findings.some(finding => finding.match === 'exact'
       && new Set(finding.instances.map(instance => instance.file)).size === 2)).toBe(true)
+    // The outline row of a signature spread over several lines still shows the copies of its body.
+    const other = (await readFile(path.join(root, 'Other.swift'), 'utf8')).split('\n')
+    expect(copiesOf(findings, 'Other.swift', other.indexOf('func wrapped(') + 1, 'wrapped')).toBeDefined()
     expect(tokens('access')).not.toEqual(tokens('otherAccess'))
     expect(tokens('access')).toContain('local:0')
     expect(tokens('access')).toContain('first')
@@ -86,6 +89,27 @@ test.concurrent('Swift comparable bodies normalize bindings while retaining memb
     expect(scan.operations!.filter(operation => operation.name === 'platform')).toHaveLength(2)
     const comparable = scan.operations!.filter(operation => operation.tokens)
     expect(comparable.every(operation => operation.startLine! > 0 && operation.endLine! >= operation.startLine!)).toBe(true)
+  } finally { await rm(temporary, { recursive: true, force: true }) }
+}, 60000)
+
+test.concurrent('Swift outlines follow namespaces and nested extensions, and entries follow their executables', async () => {
+  const { temporary, root, scanner } = await setup('swift-shapes')
+  try {
+    const scan = (await scanner.scan(root))!
+    expect(scan.files.map(file => file.file)).toEqual(['Future.swift', 'Legacy/AppDelegate.swift', 'Namespaces.swift',
+      'Sources/Echo/main.swift', 'Sources/TCPClient/Client.swift'])
+    expect(scan.entryPoints!.map(entry => `${entry.file}=${entry.name}`)).toEqual(['Legacy/AppDelegate.swift=AppDelegate',
+      'Sources/Echo/main.swift=Echo', 'Sources/TCPClient/Client.swift=TCPClient'])
+    expect(scan.files.flatMap(file => file.symbols.map(symbol => symbol.name))).toContain('Editor.Store.load.helper')
+    expect(scan.operations!.find(operation => operation.name === 'Handle.deinit')?.tokens).toBeDefined()
+
+    const outline = await scanner.readCodeStructure!(root, [{ file: 'Namespaces.swift', symbols: [] }])
+    expect(outline[0]!.declarations.map(declaration => `${declaration.name}[${declaration.visibility}]`
+      + (declaration.kind === 'type' ? `{${declaration.members.map(member => member.name).join(',')}}` : ''))).toEqual([
+      'Editor[public]{}', 'Editor.Store[public]{save,load}', 'Outer[public]{}', 'Outer.Inner[public]{own,added}',
+      'Box[public]{sum}', 'Array[internal]{total}', 'Logged[public]', 'Handle[internal]{deinit}', 'default[internal]',
+    ])
+    expect(await scanner.readCodeStructure!(root, [{ file: 'Sources/Echo/main.swift', symbols: [] }])).toEqual([])
   } finally { await rm(temporary, { recursive: true, force: true }) }
 }, 60000)
 
@@ -122,7 +146,8 @@ test.concurrent('installed Swift package runs without SDKs and excludes source t
     await addScanner(root, artifact)
     const configPath = path.join(root, 'groma/scanners.json')
     const config = JSON.parse(await readFile(configPath, 'utf8'))
-    await writeFile(configPath, JSON.stringify({ ...config, exclude: ['Other.swift'] }))
+    await writeFile(configPath, JSON.stringify({ ...config, exclude: ['Other.swift', 'Excluded.swift'] }))
+    await writeFile(path.join(root, 'Excluded.swift'), 'func bad(')
     await mkdir(path.join(root, 'Pods'))
     await writeFile(path.join(root, 'Pods/Bad.swift'), 'func bad(')
     await writeFile(path.join(root, '.gitignore'), 'Ignored.swift\n')
@@ -135,6 +160,8 @@ test.concurrent('installed Swift package runs without SDKs and excludes source t
     expect(compileWatchPatterns(scanner.watch)('Pods/Bad.swift')).toBe(false)
     await writeFile(path.join(root, 'Ledger.swift'), 'func broken(')
     await expect(scanner.scan(root)).rejects.toThrow('SWIFT_SOURCE_INVALID')
+    await writeFile(path.join(root, 'Ledger.swift'), new Uint8Array([0x2f, 0x2f, 0xe9, 0x0a]))
+    await expect(scanner.scan(root)).rejects.toThrow(/SWIFT_SOURCE_INVALID[\s\S]*Ledger\.swift/)
     const failed = await registry.collectObservations(root)
     expect(failed.observations).toHaveLength(0)
     expect(failed.failures).toHaveLength(1)

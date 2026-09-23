@@ -229,8 +229,18 @@ function laterSharing(itemIndex: number, gramSets: readonly Set<string>[], index
   return [...later]
 }
 
+/**
+ * A body that contains the other, such as a function and a helper it declares, is one implementation.
+ * Bodies spanning the same lines may be siblings, as on one minified line.
+ */
+function nested(left: Candidate, right: Candidate): boolean {
+  if (left.file !== right.file || (left.startLine === right.startLine && left.endLine === right.endLine)) return false
+  return (left.startLine <= right.startLine && right.endLine <= left.endLine)
+    || (right.startLine <= left.startLine && left.endLine <= right.endLine)
+}
+
 function nearPair(left: Candidate, right: Candidate): boolean {
-  if (Math.min(left.tokens.length, right.tokens.length) < MIN_NEAR_TOKENS) return false
+  if (Math.min(left.tokens.length, right.tokens.length) < MIN_NEAR_TOKENS || nested(left, right)) return false
   const total = left.tokens.length + right.tokens.length
   if (2 * Math.min(left.tokens.length, right.tokens.length) / total < NEAR_LCS) return false
   // A common subsequence cannot contain more copies of a token than either body.

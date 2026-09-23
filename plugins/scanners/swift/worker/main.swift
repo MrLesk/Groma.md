@@ -10,16 +10,21 @@ do {
     var errors: [String] = []
     for file in request.files {
         let url = URL(fileURLWithPath: request.root).appendingPathComponent(file)
-        let source = try String(contentsOf: url, encoding: .utf8)
+        // Swift source is UTF-8; name the file so it can be corrected or excluded.
+        guard let source = String(data: try Data(contentsOf: url), encoding: .utf8) else {
+            errors.append("\(file): source is not valid UTF-8")
+            continue
+        }
         let tree = Parser.parse(source: source)
-        if tree.hasError {
+        let invalid = tree.hasError ? ParseDiagnosticsGenerator.diagnostics(for: tree).filter { !versionGated($0.node) } : []
+        if invalid.isEmpty {
+            result.append(Evidence(file: file, source: source, tree: tree).read(tree))
+        } else {
             let converter = SourceLocationConverter(fileName: file, tree: tree)
-            for diagnostic in ParseDiagnosticsGenerator.diagnostics(for: tree) {
+            for diagnostic in invalid {
                 let location = converter.location(for: diagnostic.position)
                 errors.append("\(file):\(location.line):\(location.column): \(diagnostic.message)")
             }
-        } else {
-            result.append(Evidence(file: file, source: source, tree: tree).read(tree))
         }
     }
     if !errors.isEmpty {

@@ -119,11 +119,12 @@ orders the files by the component's Code. List `declarations` in source order.
 
 Top-level means directly in the file or inside a namespace, package, or module
 block, such as a C# `namespace`, a braced PHP namespace, a TypeScript
-`namespace` or `module`, or a Rust inline `mod`. A declaration inside another
-type or function is nested and is not listed. PHP also counts a function
-declared directly inside `if (!function_exists('name'))` as top-level when the
-guard names that function. C# top-level statements, with the local functions
-and lambdas they declare, form the program's entry point and are not listed.
+`namespace` or `module`, a Rust inline `mod`, or a Swift `extension` body. A
+declaration inside another type or function is nested and is not listed. PHP
+also counts a function declared directly inside `if (!function_exists('name'))`
+as top-level when the guard names that function. C# top-level statements, with
+the local functions and lambdas they declare, form the program's entry point
+and are not listed.
 
 - `kind: 'function'` is a top-level function, or a function literal (arrow
   function, function expression, or lambda) assigned directly to a top-level

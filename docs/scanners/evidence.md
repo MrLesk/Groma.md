@@ -82,7 +82,7 @@ The official producers currently recognize these source forms:
 | Python | Module execution guard, `__main__.py`, or `project.scripts` | Resolved local imports within the declared project |
 | JavaScript, TypeScript, React, Vue, Angular | Source-backed package commands/bins, HTML script entries, Angular build entry declarations, and readable Bun browser/compiled build entries | Resolved local modules within the declared package; framework companion files join their source unit |
 | PHP | Source-backed Composer bins and literal PHP script commands | Explicitly included local sources within that Composer package |
-| Swift | Source `@main` declaration | Its source file; project target membership is not analyzed |
+| Swift | `@main`, `@UIApplicationMain` or `@NSApplicationMain` type, or `main.swift` top-level code | Its source file; project target membership is not analyzed |
 
 These are declared extraction limits, not separate C4 policies. Dynamic build
 configuration, unresolved launch commands and unobserved members remain unknown.

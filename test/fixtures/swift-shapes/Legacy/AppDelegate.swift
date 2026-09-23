@@ -1,0 +1,2 @@
+@UIApplicationMain
+final class AppDelegate {}

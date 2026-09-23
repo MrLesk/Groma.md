@@ -59,7 +59,9 @@ operator keeps its grouping, so `(a + b) * c` and `a + b * c` differ; each
 scanner page states which parentheses its tokens keep. Two bodies that match after that normalization
 are **structurally duplicated logic**. Near-matches add the tokens that are
 not shared. Neither claim proves that the operations implement one business
-rule or that they should share an implementation.
+rule or that they should share an implementation. A body that contains
+another, such as a function and a helper declared inside it, is one
+implementation, so the two are not compared with each other.
 
 ## Compared operations
 

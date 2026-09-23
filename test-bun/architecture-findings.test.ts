@@ -133,6 +133,16 @@ test.concurrent('a missing predicate is a similar finding with a concrete differ
   expect(findings[0]!.differences.join(' ')).toContain('"todo"')
 })
 
+test.concurrent('a body is not a copy of a helper it declares, while bodies on one line are still compared', () => {
+  const at = (name: string, startLine: number, endLine: number, tokens: string[]): ScanOperation =>
+    ({ id: `src/a.ts#${name}`, file: 'src/a.ts', name, startLine, endLine, tokens })
+  const describe = [...ruleTokens, 'return', 'help', 'call']
+  expect(detectDuplicatedLogic([observation([at('describe', 1, 12, describe), at('help', 2, 6, ruleTokens)])],
+    new Map<string, string>())).toEqual([])
+  expect(detectDuplicatedLogic([observation([at('describe', 1, 1, describe), at('help', 1, 1, ruleTokens)])],
+    new Map<string, string>())[0]?.match).toBe('similar')
+})
+
 test.concurrent('unrelated computation is not clustered with readiness', () => {
   const findings = detectDuplicatedLogic([observation([
     operation('src/a.ts', 'canStart', ruleTokens),

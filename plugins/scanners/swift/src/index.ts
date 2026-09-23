@@ -8,7 +8,7 @@ import { projectFiles } from '../../projects.ts'
 
 interface FileEvidence {
   file: string
-  entryPoint?: string
+  entryType?: string
   symbols: ScanSymbol[]
   operations: ScanOperation[]
   invocations: ScanInvocation[]
@@ -18,18 +18,22 @@ interface FileEvidence {
 
 const assets = fileURLToPath(new URL('../dist/', import.meta.url))
 const worker = path.join(assets, `${process.platform}-${process.arch}`, process.platform === 'win32' ? 'worker.exe' : 'worker')
-const exclude = ['**/.build/**', '**/Pods/**', '**/Carthage/**']
+// DocC catalogs hold documentation snippets that no build compiles; some are deliberately incomplete.
+const exclude = ['**/.build/**', '**/Pods/**', '**/Carthage/**', '**/*.docc/**']
 const exclusions = exclude.map(pattern => new Bun.Glob(pattern))
+// SwiftPM reads Package.swift and its version-specific Package@swift-<version>.swift variants.
+const manifest = /^Package(@swift-[\d.]+)?\.swift$/
 
-async function files(root: string) {
-  return projectFiles(root, file => file.endsWith('.swift') && path.posix.basename(file) !== 'Package.swift'
-    && !exclusions.some(pattern => pattern.match(file)))
+async function files(root: string, excluded?: (file: string) => boolean) {
+  return projectFiles(root, file => file.endsWith('.swift') && !manifest.test(path.posix.basename(file))
+    && !exclusions.some(pattern => pattern.match(file)) && !excluded?.(file))
 }
 
 function readEvidence(root: string, files: string[]): Promise<FileEvidence[]> {
   return new Promise((resolve, reject) => {
-    const child = execFile(worker, [], { cwd: root, maxBuffer: 128 * 1024 * 1024 }, (error, stdout, stderr) => {
-      if (error) reject(new Error(stderr.trim() || error.message))
+    // Evidence grows with the source, so its output has no fixed limit.
+    const child = execFile(worker, [], { cwd: root, maxBuffer: Infinity }, (error, stdout, stderr) => {
+      if (error) reject(new Error(stderr.trim() || (error.signal ? `Swift worker stopped by ${error.signal}` : error.message)))
       else {
         try { resolve(JSON.parse(stdout)) } catch (error) { reject(error) }
       }
@@ -37,6 +41,19 @@ function readEvidence(root: string, files: string[]): Promise<FileEvidence[]> {
     child.stdin!.on('error', () => { /* execFile reports worker exit. */ })
     child.stdin!.end(JSON.stringify({ root, files }))
   })
+}
+
+/**
+ * Swift runs `main.swift` as its module's top-level code, and `@main` marks an entry type. SwiftPM names a
+ * target after its directory under `Sources`, which tells executables apart better than a type name such as
+ * `Client`; elsewhere the entry type, or the directory holding `main.swift`, names the entry.
+ */
+function entryName(root: string, file: FileEvidence): string | undefined {
+  const parts = file.file.split('/')
+  if (file.entryType === undefined && parts.at(-1) !== 'main.swift') return undefined
+  const target = parts.lastIndexOf('Sources')
+  if (target >= 0 && target < parts.length - 2) return parts[target + 1]
+  return file.entryType ?? parts.at(-2) ?? path.basename(root)
 }
 
 function outline(file: FileEvidence, symbols: string[]): CodeFile {
@@ -51,13 +68,13 @@ function outline(file: FileEvidence, symbols: string[]): CodeFile {
 export default {
   id: 'swift',
   watch: { include: ['**/*.swift'], exclude },
-  listSourceFiles: files,
+  listSourceFiles: root => files(root),
   async checkReadiness(root) {
     if (!(await files(root)).length) throw new Error('swift: No Swift source files were found in the Git repository.')
     await access(worker)
   },
-  async scan(root) {
-    const inventory = await files(root)
+  async scan(root, _settings, excluded) {
+    const inventory = await files(root, excluded)
     if (!inventory.length) return undefined
     const evidence = await readEvidence(root, inventory)
     const engine = JSON.parse(await readFile(path.join(assets, `${process.platform}-${process.arch}`, 'engine.json'), 'utf8'))
@@ -65,9 +82,10 @@ export default {
       scanner: { id: 'swift', technology: 'swift', engine: 'SwiftParser/SwiftSyntax', engineVersion: engine.version },
       roots: [{ id: 'swift-source', kind: 'source-group', name: path.basename(root) }],
       files: evidence.map(file => ({ file: file.file, symbols: file.symbols, roots: ['swift-source'] })),
-      entryPoints: evidence.flatMap(file => file.entryPoint === undefined ? [] : [
-        { file: file.file, declaration: file.file, name: file.entryPoint, files: [file.file] },
-      ]),
+      entryPoints: evidence.flatMap(file => {
+        const name = entryName(root, file)
+        return name === undefined ? [] : [{ file: file.file, declaration: file.file, name, files: [file.file] }]
+      }),
       operations: evidence.flatMap(file => file.operations),
       invocations: evidence.flatMap(file => file.invocations),
       diagnostics: [{ severity: 'info', code: 'SWIFT_SOURCE_SCOPE',
@@ -78,6 +96,6 @@ export default {
     const selected = references.filter(reference => reference.file.endsWith('.swift'))
     if (!selected.length) return []
     const evidence = await readEvidence(root, selected.map(reference => reference.file))
-    return evidence.map((file, index) => outline(file, selected[index]!.symbols))
+    return evidence.map((file, index) => outline(file, selected[index]!.symbols)).filter(file => file.declarations.length)
   },
 } satisfies ScannerPlugin
