@@ -70,6 +70,7 @@ test.concurrent('the built Vue package reports Nuxt and axios requests, includin
       'web/Talks.vue#partial GET /api/talks/<unknown>',
       'web/Talks.vue#plain GET /health',
       'web/Talks.vue#search GET /api/talks',
+      'web/Talks.vue#urlObject GET /<unknown>',
       // A module's own top-level request names that file's module operation.
       'web/client.ts#(module) GET /api/talks',
       // A dynamic segment could reach many routes, so it derives no row.
@@ -97,6 +98,7 @@ test.concurrent('the built Vue package reports Nuxt and axios requests, includin
       'web/client.ts#removed DELETE /api/talks/<dynamic>',
       // Computed text that may or may not repeat the base starts the path unknown.
       'web/client.ts#slashed GET /<unknown>/<dynamic>',
+      'web/client.ts#spreadBase GET /api/talks',
       'web/client.ts#templated GET /api/talks',
       // Options the scanner cannot read leave the method out instead of claiming GET, and may hold a base.
       'web/client.ts#unresolved no-method /<unknown>/api/talks',

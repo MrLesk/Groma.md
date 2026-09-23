@@ -6,6 +6,7 @@ import { createRequire } from 'node:module'
 import type { ScannerPlugin } from '@groma/scanner'
 import { buildPackage as react } from '../plugins/scanners/react/build.ts'
 import { buildPackage as vue } from '../plugins/scanners/vue/build.ts'
+import vueScanner, { scanVue } from '../plugins/scanners/vue/src/index.ts'
 import { buildPackage as angular } from '../plugins/scanners/angular/build.ts'
 import { inferRelationships } from '../src/relationship-inference.ts'
 import { buildImportGraph } from '../plugins/scanners/typescript/src/graph.ts'
@@ -92,6 +93,52 @@ test.concurrent('project discovery includes peer dependencies but excludes ignor
     await writeFile(path.join(root, 'package.json'), JSON.stringify({ dependencies: { react: '*' } }))
     await writeFile(path.join(root, 'tsconfig.json'), '{}')
     expect(await frameworkProjects(root, 'react', ['.tsx'])).toEqual([path.join(root, 'packages/ui')])
+  } finally { await rm(root, { recursive: true, force: true }) }
+})
+
+test.concurrent('an export-only package manifest does not hide its parent framework source', async () => {
+  const root = await repository()
+  try {
+    await writeFile(path.join(root, 'package.json'), JSON.stringify({ dependencies: { vue: '*' } }))
+    await writeFile(path.join(root, 'tsconfig.json'), '{}')
+    await mkdir(path.join(root, 'src/widget'), { recursive: true })
+    await writeFile(path.join(root, 'src/widget/package.json'), JSON.stringify({ exports: './Widget.vue' }))
+    await writeFile(path.join(root, 'src/widget/Widget.vue'), '<template><p>Widget</p></template>')
+    expect(await frameworkProjects(root, 'vue', ['.vue'])).toEqual([root])
+  } finally { await rm(root, { recursive: true, force: true }) }
+})
+
+test.concurrent('a Vue package uses an ancestor TypeScript config that includes its components', async () => {
+  const root = await repository()
+  try {
+    await writeFile(path.join(root, 'package.json'), JSON.stringify({ private: true }))
+    await writeFile(path.join(root, 'tsconfig.json'), JSON.stringify({ include: ['packages/**/*.vue'] }))
+    await mkdir(path.join(root, 'packages/client'), { recursive: true })
+    await writeFile(path.join(root, 'packages/client/package.json'), JSON.stringify({ name: 'client', dependencies: { vue: '*' } }))
+    await writeFile(path.join(root, 'packages/client/App.vue'), '<script setup lang="ts">const title = "App"</script><template>{{ title }}</template>')
+    expect(await frameworkProjects(root, 'vue', ['.vue'])).toEqual([])
+    expect(await frameworkProjects(root, 'vue', ['.vue'], { inheritConfig: true })).toEqual([path.join(root, 'packages/client')])
+    expect((await scanVue(root))?.files.map(file => file.file)).toContain('packages/client/App.vue')
+    expect(await vueScanner.listSourceFiles(root)).toContain('packages/client/App.vue')
+  } finally { await rm(root, { recursive: true, force: true }) }
+})
+
+test.concurrent('a nested Vue package owns its components once when the parent config includes them', async () => {
+  const root = await repository()
+  try {
+    await writeFile(path.join(root, 'package.json'), JSON.stringify({ name: 'parent', dependencies: { vue: '*' } }))
+    await writeFile(path.join(root, 'tsconfig.json'), JSON.stringify({ include: ['**/*.vue', 'helper.ts'] }))
+    await writeFile(path.join(root, 'Root.vue'), '<script setup lang="ts">import Child from "./packages/child/Child.vue"</script><template><Child /></template>')
+    await writeFile(path.join(root, 'helper.ts'), 'export function help() { return 1 }')
+    const child = path.join(root, 'packages/child')
+    await mkdir(child, { recursive: true })
+    await writeFile(path.join(child, 'package.json'), JSON.stringify({ name: 'child', dependencies: { vue: '*' } }))
+    await writeFile(path.join(child, 'tsconfig.json'), JSON.stringify({ include: ['*.vue'] }))
+    await writeFile(path.join(child, 'Child.vue'), '<script setup lang="ts">function wave() { return 42 }</script><template>Child</template>')
+    const observation = (await scanVue(root))!
+    expect(observation.files.find(file => file.file === 'packages/child/Child.vue')?.roots).toHaveLength(1)
+    expect(observation.operations?.filter(operation => operation.file === 'packages/child/Child.vue' && operation.name === 'wave')).toHaveLength(1)
+    expect(observation.files.find(file => file.file === 'helper.ts')?.roots).toHaveLength(1)
   } finally { await rm(root, { recursive: true, force: true }) }
 })
 

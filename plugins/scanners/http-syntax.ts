@@ -84,7 +84,10 @@ export function ownProperty(ts: SyntaxCompiler, object: ObjectLiteral, name: str
   let found: Held = 'absent'
   for (const property of object.properties) {
     const key = propertyKey(ts, property)
-    if (key === undefined || ts.isGetAccessorDeclaration(property) || ts.isSetAccessorDeclaration(property)) return 'unknown'
+    if (key === undefined || ts.isGetAccessorDeclaration(property) || ts.isSetAccessorDeclaration(property)) {
+      found = 'unknown'
+      continue
+    }
     if (key === name) found = ts.isPropertyAssignment(property) ? { node: property.initializer } : 'unknown'
   }
   return found

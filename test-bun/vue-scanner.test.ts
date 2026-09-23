@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { cp, mkdtemp, readFile, rename, rm, writeFile } from 'node:fs/promises'
+import { cp, mkdir, mkdtemp, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import type { ScannerPlugin, SourceReference } from '@groma/scanner'
@@ -56,6 +56,7 @@ test.concurrent('Vue resolves SFC events and original UTF-16 positions beyond Ty
   try {
     const vue = (await scanner.scan(root))!
     expect(await scanner.scan(root)).toEqual(vue)
+    expect(vue.diagnostics.some(item => item.file === 'Emitter.vue' && item.code === 'unsupported-vue-binding')).toBe(false)
     const typescript = (await scanTypeScriptSource(root))!
     const owners = new Map(vue.files.map(file => [file.file, file.file]))
     expect(inferRelationships([typescript], owners)).toEqual([])
@@ -73,6 +74,14 @@ test.concurrent('Vue resolves SFC events and original UTF-16 positions beyond Ty
     expect(invocation.binding).toEqual({ file: 'Host.vue', line: 7, position: host.indexOf('@saved') })
     const receiver = vue.operations!.find(item => item.file === 'receiver.ts')!
     expect(typescript.operations!.some(item => item.file === receiver.file && item.position === receiver.position)).toBe(true)
+    await writeFile(path.join(root, 'Emitter.vue'), source.replace(
+      'defineEmits<{ saved: [value: string] }>()', "defineEmits<(event: 'saved', value: string) => void>()",
+    ))
+    expect((await scanner.scan(root))!.invocations).toHaveLength(2)
+    await writeFile(path.join(root, 'Emitter.vue'), source.replace(
+      'defineEmits<{ saved: [value: string] }>()', "defineEmits(['saved'])",
+    ))
+    expect((await scanner.scan(root))!.invocations).toHaveLength(2)
     await writeFile(path.join(root, 'Host.vue'), host.replaceAll('@saved="onSaved"', '@saved="onSaved($event)"').replaceAll('@saved="receive"', '@saved="receive($event)"'))
     const unsupported = (await scanner.scan(root))!
     expect(unsupported.invocations).toEqual([])
@@ -121,6 +130,20 @@ test.concurrent('Vue external blocks share one component while imports and trans
   } finally { await rm(temporary, { recursive: true, force: true }) }
 })
 
+test.concurrent('Vue binds a declared emit called directly from a child template', async () => {
+  const { temporary, root, scanner } = await setup()
+  try {
+    const child = '<script setup lang="ts">const emit = defineEmits<{ saved: [] }>()</script>\n<template><button @click="emit(\'saved\')">Save</button></template>'
+    await writeFile(path.join(root, 'Emitter.vue'), child)
+    const observation = (await scanner.scan(root))!
+    expect(observation.invocations).toHaveLength(2)
+    expect(observation.invocations?.every(call => call.position === child.indexOf("emit('saved')"))).toBe(true)
+    expect(observation.operations?.find(operation => operation.id === observation.invocations?.[0]?.source)?.name).toBe('(template)')
+    await writeFile(path.join(root, 'Emitter.vue'), child.replace('defineEmits<{ saved: [] }>()', "defineEmits(['saved'])"))
+    expect((await scanner.scan(root))?.invocations).toHaveLength(2)
+  } finally { await rm(temporary, { recursive: true, force: true }) }
+})
+
 test.concurrent('Vue rejects external scripts combined with script setup', async () => {
   const { temporary, root, scanner } = await setup()
   try {
@@ -128,6 +151,40 @@ test.concurrent('Vue rejects external scripts combined with script setup', async
     await expect(scanner.scan(root)).rejects.toThrow('script setup')
     await writeFile(path.join(root, 'External.vue'), '<script lang="ts" src="./logic.ts"></script><script setup lang="ts">const value = 1</script>')
     await expect(scanner.scan(root)).rejects.toThrow('script setup')
+  } finally { await rm(temporary, { recursive: true, force: true }) }
+})
+
+test.concurrent('Vue reads tracked components and Nuxt routes without generated TypeScript config roots', async () => {
+  const { temporary, root, scanner } = await setup()
+  try {
+    await writeFile(path.join(root, 'package.json'), JSON.stringify({ name: 'app', dependencies: { vue: '*', nuxt: '*' } }))
+    await writeFile(path.join(root, 'tsconfig.json'), JSON.stringify({ files: [], references: [{ path: './.nuxt/tsconfig.app.json' }] }))
+    await mkdir(path.join(root, 'server/api'), { recursive: true })
+    await writeFile(path.join(root, 'server/api/hello.ts'), 'export default function hello() {}')
+    const observation = (await scanner.scan(root))!
+    expect(observation.files.map(file => file.file)).toContain('Emitter.vue')
+    expect(observation.files.map(file => file.file)).toContain('server/api/hello.ts')
+    expect(observation.httpEndpoints?.some(endpoint => endpoint.path.some(segment => segment.kind === 'literal' && segment.value === 'hello'))).toBe(true)
+  } finally { await rm(temporary, { recursive: true, force: true }) }
+})
+
+test.concurrent('Vue scans local components when an extended generated config is absent', async () => {
+  const { temporary, root, scanner } = await setup()
+  try {
+    await writeFile(path.join(root, 'tsconfig.json'), JSON.stringify({ extends: './.generated/tsconfig.json' }))
+    const observation = (await scanner.scan(root))!
+    expect(observation.files.map(file => file.file)).toContain('Emitter.vue')
+    expect(observation.diagnostics.some(item => item.code === 'vue-missing-config-base')).toBe(true)
+  } finally { await rm(temporary, { recursive: true, force: true }) }
+})
+
+test.concurrent('Vue reports a missing declared TypeScript root while scanning local components', async () => {
+  const { temporary, root, scanner } = await setup()
+  try {
+    await writeFile(path.join(root, 'tsconfig.json'), JSON.stringify({ files: ['src/**/*.ts'] }))
+    const observation = (await scanner.scan(root))!
+    expect(observation.files.map(file => file.file)).toContain('Emitter.vue')
+    expect(observation.diagnostics.some(item => item.code === 'vue-missing-config-source')).toBe(true)
   } finally { await rm(temporary, { recursive: true, force: true }) }
 })
 

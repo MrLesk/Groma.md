@@ -1,5 +1,5 @@
 import type { ScanHttpRequest } from '@groma/scanner'
-import { holderOf, urlText, type Node } from './http-syntax.ts'
+import { holderOf, unwrapped, urlText, type Held, type Node } from './http-syntax.ts'
 import { computedPart, joinBase, methodText, requestUrl, withBase, type UrlPart } from './http-url.ts'
 import {
   declarationOf, heldAt, heldParts, importOrigin, literalText, methodName, runtimeGlobal, urlParts, type UrlContext,
@@ -53,6 +53,16 @@ export async function runtimeFetch(context: UrlContext, callee: Node): Promise<F
   return fetch ? 'fetch' : undefined
 }
 
+/** String syntax and a runtime URL object carry no request method; a Request object may carry one. */
+async function urlWithoutMethod(context: UrlContext, input: Held): Promise<boolean> {
+  if (input === 'unseen') return true
+  if (typeof input !== 'object') return false
+  const value = unwrapped(context.ts, input.node)
+  if (urlText(context.ts, value)) return true
+  return context.ts.isNewExpression(value) && context.ts.isIdentifier(value.expression)
+    && value.expression.text === 'URL' && await runtimeGlobal(context, value.expression)
+}
+
 /**
  * A request through a fetch-style client, which `client` recognizes from the callee. The options state
  * the method of a URL, while any other input, such as a `Request`, carries a method of its own; ofetch
@@ -65,8 +75,7 @@ export async function fetchRequest(
   const kind = url === undefined ? undefined : await client(call.expression)
   if (url === undefined || kind === undefined) return undefined
   const input = await heldAt(context, url)
-  const method = input === 'unseen' || (typeof input === 'object' && urlText(context.ts, input.node))
-    ? await declaredMethod(context, options, 'GET') : undefined
+  const method = await urlWithoutMethod(context, input) ? await declaredMethod(context, options, 'GET') : undefined
   const parts = await urlParts(context, url)
   const target = kind === 'ofetch' ? withBase(await optionsBase(context, options, []), parts) : parts
   return { ...(method === undefined ? {} : { method }), ...requestUrl(target) }

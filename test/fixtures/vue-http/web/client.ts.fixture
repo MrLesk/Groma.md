@@ -4,6 +4,7 @@ import { API_ROOT } from 'app-config'
 const API = '/api'
 const ROOT = '/v1'
 const api = axios.create({ baseURL: '/api' })
+const spreadApi = axios.create({ ...{ baseURL: '/wrong' }, baseURL: '/api' })
 let mutable = axios.create({ baseURL: '/api' })
 mutable = axios.create({ baseURL: '/other' })
 const store = { get: (key: string) => key }
@@ -22,6 +23,10 @@ export function configuredCall() {
 
 export function based() {
   return api.get('/talks')
+}
+
+export function spreadBase() {
+  return spreadApi.get('/talks')
 }
 
 export function configured() {

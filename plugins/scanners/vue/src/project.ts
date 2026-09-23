@@ -3,7 +3,7 @@ import path from 'node:path'
 import { proxyCreateProgram } from '@volar/typescript'
 import { createParsedCommandLine, createVueLanguagePlugin, SourceMap, VueVirtualCode, type Language } from '@vue/language-core'
 import ts from 'typescript'
-import type { ScanSourceUnit } from '@groma/scanner'
+import type { ScanDiagnostic, ScanSourceUnit } from '@groma/scanner'
 import { hasDependency } from '../../projects.ts'
 
 // Hoisted tooling declarations see the host SDK; the bundled runtime uses pinned TS 5.9.3.
@@ -27,34 +27,56 @@ export function failDiagnostics(diagnostics: readonly ts.Diagnostic[]): void {
     `${item.file?.fileName ?? 'Vue'}: ${ts.flattenDiagnosticMessageText(item.messageText, '\n')}`).join('\n'))
 }
 
+function projectConfig(root: string, repositoryRoot: string): string {
+  for (let directory = root; ; directory = path.dirname(directory)) {
+    const file = path.join(directory, 'tsconfig.json')
+    if (existsSync(file)) return file
+    if (directory === repositoryRoot) throw new Error(`${root}: no TypeScript config in the package or its repository ancestors`)
+  }
+}
+
 export class VueProject {
   readonly program: ts.Program
   readonly checker: ts.TypeChecker
   readonly files: ts.SourceFile[]
   readonly root: string
   readonly options
+  readonly diagnostics: ScanDiagnostic[]
   private language!: Language<string>
   private readonly plugin
 
-  constructor(root: string, repositoryRoot = root) {
+  constructor(root: string, repositoryRoot: string, sources: readonly string[], owners: ReadonlyMap<string, string>) {
     this.root = repositoryRoot
-    const configFile = path.join(root, 'tsconfig.json')
+    const assigned = new Set(sources.map(file => path.resolve(repositoryRoot, file)))
+    const configFile = projectConfig(root, repositoryRoot)
+    const configRoot = path.dirname(configFile)
     const config = ts.readJsonConfigFile(configFile, ts.sys.readFile)
     const vue = createParsedCommandLine(vueTypeScript, ts.sys, configFile)
     this.options = vue.vueOptions
     this.plugin = createVueLanguagePlugin<string>(vueTypeScript, vue.options, vue.vueOptions, id => id)
-    const parsed = ts.parseJsonSourceFileConfigFileContent(config, ts.sys, root, {}, configFile,
+    const parsed = ts.parseJsonSourceFileConfigFileContent(config, ts.sys, configRoot, {}, configFile,
       undefined, this.plugin.typescript!.extraFileExtensions)
-    failDiagnostics(parsed.errors)
+    failDiagnostics(parsed.errors.filter(item => item.code !== 5083))
+    this.diagnostics = parsed.errors.filter(item => item.code === 5083).map(item => ({
+      severity: 'warning', code: 'vue-missing-config-base', file: relative(repositoryRoot, configFile),
+      message: `The extended TypeScript config is absent; source uses the available settings. ${ts.flattenDiagnosticMessageText(item.messageText, ' ')}`,
+    }))
     parsed.options.allowNonTsExtensions = true
     const host = ts.createCompilerHost(parsed.options)
     host.getCurrentDirectory = () => root
     this.program = proxyCreateProgram(vueTypeScript, ts.createProgram, () => ({
       languagePlugins: [this.plugin], setup: language => { this.language = language },
-    }))({ rootNames: parsed.fileNames, options: parsed.options, host })
+    }))({ rootNames: [...new Set([...assigned, ...parsed.fileNames.filter(file =>
+      (owners.get(relative(repositoryRoot, file)) ?? root) === root)])],
+      options: parsed.options, host })
     failDiagnostics(this.program.getSyntacticDiagnostics())
+    this.diagnostics.push(...this.program.getOptionsDiagnostics().filter(item => item.code === 6053).map(item => ({
+      severity: 'warning', code: 'vue-missing-config-source', file: relative(repositoryRoot, configFile),
+      message: `A declared TypeScript source is absent; available source was still scanned. ${ts.flattenDiagnosticMessageText(item.messageText, ' ')}`,
+    })))
     this.checker = this.program.getTypeChecker()
-    this.files = this.program.getSourceFiles().filter(source => this.owned(source))
+    this.files = this.program.getSourceFiles().filter(source => this.owned(source)
+      && (owners.get(relative(repositoryRoot, source.fileName)) ?? root) === root)
     for (const source of this.files) this.validateSfc(source.fileName)
   }
 
@@ -126,13 +148,13 @@ export class VueProject {
   }
 }
 
-export function vueProject(root: string, repositoryRoot = root) {
+export function vueProject(root: string, repositoryRoot = root, sources: readonly string[] = [], owners: ReadonlyMap<string, string> = new Map()) {
   const manifestFile = path.join(root, 'package.json')
   if (!existsSync(manifestFile)) return undefined
   const manifest = JSON.parse(readFileSync(manifestFile, 'utf8'))
   if (!hasDependency(manifest, 'vue')) return undefined
   try {
-    return { manifest, project: new VueProject(root, repositoryRoot) }
+    return { manifest, project: new VueProject(root, repositoryRoot, sources, owners) }
   } catch (error) {
     throw new Error(`VUE_SOURCE_INVALID: Check the project tsconfig.json and Vue syntax. ${error}`)
   }

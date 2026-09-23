@@ -32,6 +32,15 @@ function includesEvent(type: ts.TypeNode | undefined, event: string): boolean {
   return ts.isUnionTypeNode(type) && type.types.some(item => includesEvent(item, event))
 }
 
+function directEmitOffset(expression: string, event: string): number | undefined {
+  const source = ts.createSourceFile('event.ts', expression, ts.ScriptTarget.Latest, true)
+  const statement = source.statements[0]
+  const call = statement && ts.isExpressionStatement(statement) ? statement.expression : undefined
+  if (source.statements.length !== 1 || !call || !ts.isCallExpression(call) || !ts.isIdentifier(call.expression)) return undefined
+  const name = call.arguments[0]
+  return name && ts.isStringLiteral(name) && name.text === event ? call.expression.getStart(source) : undefined
+}
+
 export class VueEvidence {
   readonly operations = new Map<string, ScanOperation>()
   readonly invocations: ScanInvocation[] = []
@@ -44,6 +53,7 @@ export class VueEvidence {
     const template = sfc.ir.template
     if (!template?.ast) return
     for (const element of forEachElementNode(template.ast)) {
+      if (element.tagType !== ElementTypes.COMPONENT) continue
       for (const prop of element.props) {
         if (prop.type !== NodeTypes.DIRECTIVE || prop.name !== 'on') continue
         const binding = template.startTagEnd + prop.loc.start.offset
@@ -89,7 +99,7 @@ export class VueEvidence {
     const setup = sfc.ir.scriptSetup
     if (!setup) return undefined
     const emits = parseScriptSetupRanges(vueTypeScript, setup.ast, this.project.options).defineEmits
-    if (!emits?.typeArg) return undefined
+    if (!emits?.typeArg && !emits?.arg) return undefined
     const symbols = new Set<ts.Symbol>()
     for (const node of this.project.nodes(sfc.fileName, setup.startTagEnd + emits.exp.start)) {
       const call = node.parent
@@ -119,18 +129,50 @@ export class VueEvidence {
     return calls
   }
 
+  private templateEmissions(sfc: VueVirtualCode, event: string): number[] {
+    const template = sfc.ir.template
+    const symbol = this.emitSymbol(sfc)
+    if (!template?.ast || !symbol || !this.declaresEvent(sfc, event)) return []
+    const positions: number[] = []
+    for (const element of forEachElementNode(template.ast)) {
+      for (const prop of element.props) {
+        if (prop.type !== NodeTypes.DIRECTIVE || prop.name !== 'on' || prop.exp?.type !== NodeTypes.SIMPLE_EXPRESSION) continue
+        const offset = directEmitOffset(prop.exp.content, event)
+        if (offset === undefined) continue
+        const position = template.startTagEnd + prop.exp.loc.start.offset + offset
+        if (this.project.nodes(sfc.fileName, position).some(node =>
+          ts.isIdentifier(node) && this.project.checker.getSymbolAtLocation(node) === symbol)) positions.push(position)
+      }
+    }
+    return positions
+  }
+
+  private templateOperation(sfc: VueVirtualCode): string {
+    const file = relative(this.project.root, sfc.fileName)
+    const id = `${file}#template`
+    if (!this.operations.has(id)) this.operations.set(id, { id, file, name: '(template)' })
+    return id
+  }
+
   private declaresEvent(sfc: VueVirtualCode, event: string): boolean {
     const setup = sfc.ir.scriptSetup
     if (!setup) return false
-    const range = parseScriptSetupRanges(vueTypeScript, setup.ast, this.project.options).defineEmits?.typeArg
+    const emits = parseScriptSetupRanges(vueTypeScript, setup.ast, this.project.options).defineEmits
+    const range = emits?.typeArg ?? emits?.arg
     if (!range) return false
     let declared = false
     function visit(node: ts.Node): void {
-      if (node.getStart(setup!.ast) === range!.start && ts.isTypeLiteralNode(node)) {
-        declared = node.members.some(member =>
-          ts.isPropertySignature(member) && (ts.isIdentifier(member.name) || ts.isStringLiteral(member.name))
-            ? member.name.text === event
-            : ts.isCallSignatureDeclaration(member) && includesEvent(member.parameters[0]?.type, event))
+      if (node.getStart(setup!.ast) === range!.start) {
+        if (ts.isArrayLiteralExpression(node)) {
+          declared = node.elements.some(item => ts.isStringLiteral(item) && item.text === event)
+        }
+        if (ts.isFunctionTypeNode(node)) declared = includesEvent(node.parameters[0]?.type, event)
+        if (ts.isTypeLiteralNode(node)) {
+          declared = node.members.some(member =>
+            ts.isPropertySignature(member) && (ts.isIdentifier(member.name) || ts.isStringLiteral(member.name))
+              ? member.name.text === event
+              : ts.isCallSignatureDeclaration(member) && includesEvent(member.parameters[0]?.type, event))
+        }
       }
       ts.forEachChild(node, visit)
     }
@@ -156,7 +198,7 @@ export class VueEvidence {
   }
 
   private bind(file: string, element: ElementNode, event: DirectiveNode, binding: number, templateOffset: number): boolean {
-    if (element.tagType !== ElementTypes.COMPONENT || event.modifiers.length
+    if (event.modifiers.length
       || event.arg?.type !== NodeTypes.SIMPLE_EXPRESSION || !event.arg.isStatic
       || event.exp?.type !== NodeTypes.SIMPLE_EXPRESSION) return false
     // The compiler's expression AST distinguishes a direct identifier from calls and dynamic expressions.
@@ -167,20 +209,21 @@ export class VueEvidence {
     const child = this.component(file, templateOffset + element.loc.start.offset + 1)
     const target = this.handler(file, templateOffset + event.exp.loc.start.offset)
     if (!child || !target) return false
-    const calls = this.emissions(child, event.arg.content)
-    let bound = false
-    for (const call of calls) {
+    const targetId = this.operationId(target)
+    if (!targetId) return false
+    const script = this.emissions(child, event.arg.content).flatMap(call => {
       const caller = enclosingOperation(call)
       const position = this.project.position(call)
-      if (!caller || position === undefined) continue
-      const source = this.operationId(caller)
-      const targetId = this.operationId(target)
-      if (!source || !targetId) continue
-      this.invocations.push({ source, targets: [targetId], unresolved: false, member: event.arg.content,
-        position, line: this.project.line(child.fileName, position),
+      const source = caller && this.operationId(caller)
+      return source && position !== undefined ? [{ source, position }] : []
+    })
+    const template = this.templateEmissions(child, event.arg.content)
+      .map(position => ({ source: this.templateOperation(child), position }))
+    for (const { source, position } of [...script, ...template]) {
+      this.invocations.push({ source, targets: [targetId], unresolved: false, member: event.arg.content, position,
+        line: this.project.line(child.fileName, position),
         binding: { file: relative(this.project.root, file), position: binding, line: this.project.line(file, binding) } })
-      bound = true
     }
-    return bound
+    return script.length + template.length > 0
   }
 }

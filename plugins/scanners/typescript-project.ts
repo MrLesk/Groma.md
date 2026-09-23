@@ -8,6 +8,8 @@ export interface FrameworkSources {
   dependency: string
   /** Extensions whose presence marks a project directory, as the scan's own project search uses. */
   projects: readonly string[]
+  /** Include packages whose nearest TypeScript config is in a repository ancestor. */
+  inheritConfig?: boolean
   /** Extensions the scan reads inside a project, including any companion resource it reads. */
   sources: readonly string[]
   /** A further project-relative file the scan reads, such as a route that a file location declares. */
@@ -20,8 +22,8 @@ export interface FrameworkSources {
  * for the analysis to decide.
  */
 export async function frameworkSourceFiles(options: FrameworkSources): Promise<string[]> {
-  const { root, dependency, projects, sources, also } = options
-  const directories = (await frameworkProjects(root, dependency, projects))
+  const { root, dependency, projects, sources, also, inheritConfig } = options
+  const directories = (await frameworkProjects(root, dependency, projects, { inheritConfig }))
     .map(directory => path.relative(root, directory).split(path.sep).join('/') || '.')
   if (directories.length === 0) return []
   const listed: string[] = []

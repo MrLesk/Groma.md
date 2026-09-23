@@ -39,6 +39,11 @@ function fromBase(base: string) {
 function plain() {
   return fetch('/health')
 }
+
+const resourceUrl = new URL('/api/talks', location.origin)
+function urlObject() {
+  return fetch(resourceUrl)
+}
 </script>
 
 <template><button type="button" @click="list()">{{ data }}</button></template>

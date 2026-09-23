@@ -2,8 +2,9 @@
 
 The Vue scanner adds single-file component (SFC) event bindings to Groma's
 TypeScript scanner evidence. Its bundled compiler tools read local source
-without project dependencies. The scanner reads each selected project's
-`tsconfig.json`; it does not execute application code.
+without project dependencies. The scanner uses each selected project's
+`tsconfig.json`, or the nearest one above that package; it does not execute
+application code.
 
 ```sh
 bun install --frozen-lockfile --ignore-scripts
@@ -53,28 +54,31 @@ trigger the existing shared scanner refresh.
 ### Inline event bindings
 
 The qualified example is Vue REPL's CodeMirror `change` event bound to the
-parent's `onChange` function. A static imported SFC must use a typed
-`defineEmits` declaration assigned to a constant. A call to that same symbol
-must supply a declared literal event name inside a source function. The parent
-template must bind the event directly to one source function declaration or
-constant function expression. Imported TypeScript functions use the same rule.
+parent's `onChange` function. A static imported SFC must assign `defineEmits`
+to a constant and declare the event in a type literal, function type, or
+literal runtime array. A call to that same symbol must supply a declared
+literal event name inside a source function or directly in an inline template
+event expression. The parent template must bind the event directly to one
+source function declaration or constant function expression. Imported
+TypeScript functions use the same rule.
 See [Vue component events](https://vuejs.org/guide/components/events).
 
-The observation records the emitting function, literal emit call, concrete
-template attribute and supplied handler. All positions refer to the original
-physical source, as zero-based UTF-16 offsets; lines are one-based. The nearest
+The observation records the emitting function or child template, literal emit
+call, concrete parent template attribute and supplied handler. All positions
+refer to the original physical source, as zero-based UTF-16 offsets; lines are one-based. The nearest
 function owns a nested emit call. Repeated scans are deterministic.
 
 Unresolved, dynamic or unsupported bindings produce `unsupported-vue-binding`
 diagnostics and no certain relationship. This revision does not support
-Options API events, runtime `defineEmits` arrays, dynamic components, dynamic
-event names, handler expressions or modifiers, state stores, routing, server
-frameworks or arbitrary event mutation. Compiler syntax/template errors fail
-the scan and preserve the previous complete map. Readiness errors explain
-invalid configuration or source syntax. Typed event names are read from the
-local `defineEmits` type literal; missing Vue types do not erase that evidence.
+Options API events, dynamic components, dynamic event names, handler
+expressions or modifiers, state stores, or arbitrary event mutation. Nuxt
+server routes and shared HTTP client calls are observed separately. Compiler
+syntax/template errors fail the scan and preserve the previous complete map.
+Missing generated TypeScript config bases and missing declared source roots
+produce warnings while available source is scanned. Other invalid configuration
+fails readiness. Missing Vue types do not erase local `defineEmits` evidence.
 
-Vue contributes `vue` Code provenance for configured source files. Shared core
+Vue contributes `vue` Code provenance for selected source files. Shared core
 keeps one physical-file owner, interprets complementary and conflicting
 observations, and writes readable relationship rows. `.vue` and TypeScript
 edits participate in the existing scan watcher.
@@ -206,7 +210,9 @@ In a component, the source range is in the `.vue` file's own lines. The
 functions a `<script setup>` block exposes to its template are compared.
 `setup()` on the argument of `defineComponent({ ... })` is an anonymous callback,
 while the methods under its `methods` property are compared. Top-level statements
-of a block are initializer code, and template expressions are not operations.
+of a block are initializer code, and template expressions are not compared
+operations. A direct template emit has a source operation named `(template)`
+only for the event relationship.
 Scripts the component keeps in a separate file are TypeScript modules, which the
 TypeScript scanner compares.
 
@@ -215,10 +221,11 @@ TypeScript scanner compares.
 Run Groma from the repository root. The scanner finds package declarations in
 tracked and unignored files, including nested apps and libraries. Dependencies,
 dev dependencies, peer dependencies and optional dependencies identify candidates.
-A candidate also needs a tracked or unignored `tsconfig.json` and Vue source
-files belonging to that package, outside nested packages. Declaration files and
-inactive fixtures with a `.fixture` suffix do not qualify. Packages with only
-framework tooling dependencies are skipped. No matching project produces no evidence. Each compiler uses that project's configuration and local source;
+A candidate also needs a tracked or unignored `tsconfig.json` in the package
+or an ancestor, and Vue source files belonging to that package, outside nested
+Vue projects. Declaration files and inactive fixtures with a `.fixture` suffix
+do not qualify. Packages with only framework tooling dependencies are skipped.
+No matching project produces no evidence. Each compiler uses the nearest configuration and local source;
 imported source in sibling repository libraries keeps its original source path.
 Readiness checks all selected projects. An invalid selected project fails this scanner's observation; other scanners
 can still update the architecture.
