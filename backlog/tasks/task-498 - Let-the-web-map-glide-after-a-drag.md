@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@claude'
 created_date: '2026-09-23 18:32'
-updated_date: '2026-09-23 21:10'
+updated_date: '2026-09-23 21:34'
 labels: []
 dependencies: []
 references:
@@ -49,9 +49,9 @@ Two-finger trackpad pans keep moving after the fingers lift because macOS sends 
 ## Implementation Plan
 
 <!-- SECTION:PLAN:BEGIN -->
-1. iso/motion.ts: createCameraMotion gains glide(velocity, now), a third motion beside move and frame. The camera keeps going at the release velocity (screen px per ms) and slows exponentially with a 500 ms time constant, close to macOS trackpad momentum, until its speed falls under 0.02 px/ms; the offset is integrated exactly, so frame rate does not change the distance. move and frame replace a glide, so every other navigation continues from the displayed camera. The animator gains glide(velocity), which does nothing under reduced motion.
+1. iso/motion.ts: createCameraMotion gains glide(velocity, now), a third motion beside move and frame. The camera keeps going at the release velocity (screen px per ms) and slows exponentially with a 500 ms time constant, close to macOS trackpad momentum, until its speed falls under 0.02 px/ms; the offset is integrated exactly and applied with camera.ts's pan(), so frame rate does not change the distance. move and frame replace a glide, so every other navigation continues from the displayed camera. The animator gains glide(velocity), which does nothing under reduced motion, and hold(), which stops a transition or glide where the camera is shown now.
 2. iso/pointer.ts: the gesture records the positions of a one-pointer pan drag; on release it asks for a glide at the speed over the last 100 ms (a pause longer than that gives no glide). Orbit drags, taps and any gesture that had two pointers never glide. The first press of a gesture calls a new hold action.
-3. render.ts: glide maps to camera.glide; hold maps to camera.move(camera.current, false), so a press catches a glide or an animated move. The map-origin line in select() that stopped the camera becomes redundant and is deleted.
+3. render.ts: glide maps to camera.glide and hold to camera.hold, so a press catches a glide or an animated move; a task selection that keeps the camera also calls camera.hold. The map-origin line in select() that stopped the camera becomes redundant and is deleted.
 4. Tests (authority: TASK-498 AC1; Alex asked for tests of core business logic only). web-camera-motion.test.ts: a glide moves in the release direction, covers less ground each interval, stops, and never moves for a release slower than the stop speed (wrong results caught: a glide that never stops, reverses or creeps; existing tests cover only transitions and framing). The pointer test stub gains no-op hold and glide actions.
 5. docs/viewers/web/index.md: one sentence on the glide and what stops it.
 6. Verify in headless Chrome with real mouse drags (glide distance, stop, catch by press, no glide after a pause), bun run check, then Alex tries it in Safari.
@@ -65,6 +65,10 @@ Implemented as planned: createCameraMotion.glide with a 500 ms time constant and
 Alex tried the glide and replied 'looks good' (2026-09-23). Clean checkout of HEAD plus only this task's files: biome lint, the scrollbar lint, typecheck and 16 Node tests pass; all 23 web and iso Bun test files pass (113 tests; export, sharing and revision tests need the repository's 20 s timeout under load). The full Bun suite had Swift, Vue and Java scanner tests time out at 20-60 s in both the clean checkout and the shared tree while the machine's load average was 52-76; none of those files import the changed web modules.
 
 Alex asked for tests of core business logic only (2026-09-23): the pointer gesture glide test and the 'navigation replaces a glide' test were removed, and the pointer test returns to its earlier pinch and tap expectations with no-op hold and glide stubs. The glide physics test remains; the web and iso Bun tests pass.
+
+Alex approved three tidy-ups from the end-of-task review (2026-09-23): the camera animator owns hold(), used by the gesture's first press and by a task selection that keeps the camera, instead of two copies of camera.move(camera.current, false) in render.ts; glideStep applies its offset with camera.ts's pan(); and the glide's integral is named fullSpeedMs, since it is milliseconds at the release speed rather than a distance.
+
+After the tidy-ups, the headless Chrome glide checks on a fresh static export pass again: a flick glides on and stops, no glide after a 250 ms pause, a press catches the glide, the wheel takes over, and reduced motion gives no glide. Lint, typecheck and the camera motion and pointer tests pass.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary

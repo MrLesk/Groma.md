@@ -273,7 +273,7 @@ function applyTaskSelection(next: ReturnType<typeof toggleWorkSelection>, focus 
   source.clear()
   selection = next.selected === undefined ? noSelection : selectTask(next.selected)
   touched = true
-  if (!focus) camera.move(camera.current, false)
+  if (!focus) camera.hold()
   paintViewState()
   if (focus) focusActiveTasks()
 }
@@ -330,7 +330,7 @@ function toggleFlow(flow: FlowRef, returnTo?: string): void {
 
 bindMapPointer(host, map, {
   orbiting: () => mapMotion.view === 'layers',
-  hold: () => camera.move(camera.current, false),
+  hold: camera.hold,
   zoom(factor, point) {
     camera.move(zoomAbout(camera.current, factor, point, fitted), false)
     touched = true

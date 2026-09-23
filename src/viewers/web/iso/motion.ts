@@ -1,5 +1,5 @@
 import type { Point } from '../../../types.ts'
-import type { Camera } from './camera.ts'
+import { type Camera, pan } from './camera.ts'
 
 export const CAMERA_DURATION_MS = 220
 /** A released drag's glide loses 63% of its speed every half second, close to macOS trackpad momentum. */
@@ -26,8 +26,8 @@ export function createCameraMotion(initial: Camera) {
   const glideStep = (now: number, { from, velocity, started }: Glide): boolean => {
     const duration = GLIDE_TIME_CONSTANT_MS * Math.log(Math.hypot(velocity.x, velocity.y) / GLIDE_STOP_SPEED)
     const elapsed = Math.max(0, Math.min(now - started, duration))
-    const travelled = GLIDE_TIME_CONSTANT_MS * (1 - Math.exp(-elapsed / GLIDE_TIME_CONSTANT_MS))
-    current = { ...from, x: from.x + velocity.x * travelled, y: from.y + velocity.y * travelled }
+    const fullSpeedMs = GLIDE_TIME_CONSTANT_MS * (1 - Math.exp(-elapsed / GLIDE_TIME_CONSTANT_MS))
+    current = pan(from, velocity.x * fullSpeedMs, velocity.y * fullSpeedMs)
     target = current
     if (elapsed < duration) return true
     glide = undefined
@@ -93,6 +93,11 @@ export function createCameraAnimator(initial: Camera, paint: () => void) {
     paint()
     if (moving) frame = requestAnimationFrame(tick)
   }
+  const move = (to: Camera, animate = true): void => {
+    stopFrame()
+    motion.move(to, performance.now(), animate && !matchMedia('(prefers-reduced-motion: reduce)').matches)
+    frame = requestAnimationFrame(tick)
+  }
   return {
     get current() { return motion.current },
     get target() { return motion.target },
@@ -101,11 +106,9 @@ export function createCameraAnimator(initial: Camera, paint: () => void) {
       motion.frame(to, amount)
       frame = requestAnimationFrame(tick)
     },
-    move(to: Camera, animate = true) {
-      stopFrame()
-      motion.move(to, performance.now(), animate && !matchMedia('(prefers-reduced-motion: reduce)').matches)
-      frame = requestAnimationFrame(tick)
-    },
+    move,
+    /** Stops a transition or glide where the camera is shown now. */
+    hold: () => move(motion.current, false),
     /** Reduced motion leaves the camera where the drag left it. */
     glide(velocity: Point) {
       if (matchMedia('(prefers-reduced-motion: reduce)').matches) return
