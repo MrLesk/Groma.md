@@ -1,11 +1,11 @@
 ---
 id: TASK-492
 title: Qualify and improve the Java scanner on public repositories
-status: In Progress
+status: Done
 assignee:
   - '@codex'
 created_date: '2026-09-22 21:47'
-updated_date: '2026-09-23 05:41'
+updated_date: '2026-09-23 19:20'
 labels: []
 dependencies: []
 references:
@@ -33,14 +33,14 @@ Alex requested a repository-by-repository Java scanner exercise after the Rust p
 <!-- AC:BEGIN -->
 - [x] #1 Ten distinct public Java repositories are scanned at recorded commits, with concrete evidence and each result classified.
 - [x] #2 Verified defects in the supported Java scan flow are fixed with focused regression coverage where existing tests leave a gap.
-- [ ] #3 The complete repository check passes after the Java scanner changes.
+- [x] #3 The complete repository check passes after the Java scanner changes.
 - [x] #4 Temporary repository clones are removed after Java qualification and the results are reported to Alex before work starts on another scanner.
 <!-- AC:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 Acceptance criteria have objective verification evidence.
-- [ ] #2 Relevant checks pass and changes remain task-scoped.
+- [x] #1 Acceptance criteria have objective verification evidence.
+- [x] #2 Relevant checks pass and changes remain task-scoped.
 - [x] #3 Public contracts or documentation are updated when behavior changes.
 - [x] #4 Implementation Plan reflects the final approach; correction history and verification are recorded in Implementation Notes.
 <!-- DOD:END -->
@@ -89,4 +89,12 @@ Cold simplicity review accepted two ownership cleanups: Main now aggregates requ
 Own specification and quality review traced Main.analyze through Declarations and Uses to the three Java HTTP readers and request output. Each new test targets a reproduced wrong result; tests do not freeze prose. The readers own Java client syntax, HttpPaths owns shared path/value rules, and no C4 or language-specific rule entered core. The full-context complexity reviewer found no material simplification or defect, and the cold review targeted re-review passed. The second bun run check produced 698 pass, 43 skip, 1 fail: route-crossings in concurrently modified map routing; it also fails alone. All Java suites pass. Removed all 23 task-owned /private/tmp/groma-java-492* entries and verified none remain. AC3 and DoD 1-2 remain open until the repository-wide check passes; task remains In Progress and uncommitted pending Alex review.
 
 Alex requested commit and push on 2026-09-23. The isolated route-crossings viewer test still fails in concurrently modified map routing; Java-focused tests pass and this Java task has no overlapping route files. Commit and push the Java-only work now while leaving AC3 and DoD 1-2 open until the repository-wide check is green.
+
+Full repository check at 9a0e9bb1 in a clean detached worktree (bun install --frozen-lockfile, bun run check): Biome and typecheck pass; Node 16 pass; Bun 705 pass, 43 skip, 0 fail. The earlier route-crossings failure is resolved by the committed routing work, so AC3 and DoD 1-2 now have objective evidence.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Qualified the Java scanner on ten pinned public repositories and fixed private calls with missing dependency types and named-module source paths, and added MicroProfile REST client, WebClient.Builder, Retrofit and OkHttp request facts. Verified with the focused Java suites (20 tests) and the full repository check at 9a0e9bb1 (Node 16 pass; Bun 705 pass, 43 skip, 0 fail). Temporary clones were removed.
+<!-- SECTION:FINAL_SUMMARY:END -->
