@@ -130,6 +130,7 @@ Groma is an early prototype. Review the first scan before treating it as your ar
 - [Product model](docs/product-model.md)
 - [Contributing guide](CONTRIBUTING.md)
 - [Groma manifesto](MANIFESTO.md)
+- [What is a groma?](docs/what-is-a-groma.md)
 
 ## License
 
