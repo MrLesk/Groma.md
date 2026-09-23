@@ -84,8 +84,6 @@ final class Uses extends TreePathScanner<Void, String> {
     }
 
     private boolean hasError(Tree tree) {
-        var type = index.trees.getTypeMirror(getCurrentPath());
-        if (type != null && type.getKind() == javax.lang.model.type.TypeKind.ERROR) return true;
         var unit = getCurrentPath().getCompilationUnit();
         long start = index.trees.getSourcePositions().getStartPosition(unit, tree);
         long end = index.trees.getSourcePositions().getEndPosition(unit, tree);

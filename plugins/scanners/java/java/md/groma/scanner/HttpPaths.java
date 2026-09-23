@@ -1,14 +1,19 @@
 package md.groma.scanner;
 
+import com.sun.source.tree.AssignmentTree;
 import com.sun.source.tree.BinaryTree;
+import com.sun.source.tree.CompilationUnitTree;
+import com.sun.source.tree.CompoundAssignmentTree;
 import com.sun.source.tree.LiteralTree;
 import com.sun.source.tree.MemberSelectTree;
 import com.sun.source.tree.MethodInvocationTree;
 import com.sun.source.tree.Tree;
 import com.sun.source.tree.VariableTree;
 import com.sun.source.util.TreePath;
+import com.sun.source.util.TreePathScanner;
 import com.sun.source.util.Trees;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -36,6 +41,29 @@ final class HttpPaths {
     }
 
     private HttpPaths() {}
+
+    /** Variables assigned after declaration cannot supply a source-proven initializer to a request. */
+    static Set<Element> assignedVariables(Set<Tree> authored, Trees trees) {
+        var assigned = new HashSet<Element>();
+        var recorder = new TreePathScanner<Void, Void>() {
+            @Override public Void visitAssignment(AssignmentTree tree, Void unused) {
+                add(tree.getVariable());
+                return super.visitAssignment(tree, unused);
+            }
+
+            @Override public Void visitCompoundAssignment(CompoundAssignmentTree tree, Void unused) {
+                add(tree.getVariable());
+                return super.visitCompoundAssignment(tree, unused);
+            }
+
+            private void add(com.sun.source.tree.ExpressionTree target) {
+                var element = trees.getElement(new TreePath(getCurrentPath(), target));
+                if (element != null) assigned.add(element);
+            }
+        };
+        for (var tree : authored) if (tree instanceof CompilationUnitTree unit) recorder.scan(unit, null);
+        return assigned;
+    }
 
     /**
      * Segments of a Spring path pattern, or of a JAX-RS template when `jaxrs` is set. A segment that may span segments

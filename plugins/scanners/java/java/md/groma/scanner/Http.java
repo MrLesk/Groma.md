@@ -4,7 +4,6 @@ import com.sun.source.tree.AnnotationTree;
 import com.sun.source.tree.AssignmentTree;
 import com.sun.source.tree.ClassTree;
 import com.sun.source.tree.CompilationUnitTree;
-import com.sun.source.tree.CompoundAssignmentTree;
 import com.sun.source.tree.ExpressionTree;
 import com.sun.source.tree.IdentifierTree;
 import com.sun.source.tree.MemberSelectTree;
@@ -67,32 +66,10 @@ final class Http extends TreePathScanner<Void, Void> {
     /** Every variable some statement assigns after its declaration, in any file. */
     private final Set<Element> assigned;
 
-    Http(Declarations index, Trees trees) {
+    Http(Declarations index, Trees trees, Set<Element> assigned) {
         this.index = index;
         this.trees = trees;
-        this.assigned = assignedVariables(index.authored, trees);
-    }
-
-    private static Set<Element> assignedVariables(Set<Tree> authored, Trees trees) {
-        var assigned = new HashSet<Element>();
-        var recorder = new TreePathScanner<Void, Void>() {
-            @Override public Void visitAssignment(AssignmentTree tree, Void unused) {
-                add(tree.getVariable());
-                return super.visitAssignment(tree, unused);
-            }
-
-            @Override public Void visitCompoundAssignment(CompoundAssignmentTree tree, Void unused) {
-                add(tree.getVariable());
-                return super.visitCompoundAssignment(tree, unused);
-            }
-
-            private void add(ExpressionTree target) {
-                var element = trees.getElement(new TreePath(getCurrentPath(), target));
-                if (element != null) assigned.add(element);
-            }
-        };
-        for (var tree : authored) if (tree instanceof CompilationUnitTree unit) recorder.scan(unit, null);
-        return assigned;
+        this.assigned = assigned;
     }
 
     @Override public Void visitCompilationUnit(CompilationUnitTree tree, Void unused) {
@@ -233,6 +210,10 @@ final class Http extends TreePathScanner<Void, Void> {
 
     /** Feign and Spring HTTP interfaces declare requests with the same annotations a controller uses. */
     private void clientRequestsOf(TreePath path, ClassTree tree) {
+        if (annotation(tree.getModifiers(), "RegisterRestClient") != null) {
+            microprofileRequestsOf(path, tree);
+            return;
+        }
         var feign = annotation(tree.getModifiers(), "FeignClient");
         var exchange = annotation(tree.getModifiers(), "HttpExchange");
         if (feign == null && exchange == null) return;
@@ -250,6 +231,26 @@ final class Http extends TreePathScanner<Void, Void> {
                 parts.addAll(HttpPaths.templateParts(route));
                 request(index.declareOperation(methodPath), verb, parts);
             });
+        }
+    }
+
+    /** A MicroProfile REST client declares JAX-RS methods under its interface path. */
+    private void microprofileRequestsOf(TreePath path, ClassTree tree) {
+        var root = annotation(tree.getModifiers(), "Path");
+        var prefix = root == null ? "" : routes(path, root).get(0);
+        for (var member : tree.getMembers()) {
+            if (!(member instanceof MethodTree method)) continue;
+            var methodPath = new TreePath(path, method);
+            var own = annotation(method.getModifiers(), "Path");
+            var route = prefix + "/" + (own == null ? "" : routes(methodPath, own).get(0));
+            if (route.contains(HttpPaths.UNREADABLE)) continue;
+            for (var verb : JAXRS_METHODS) {
+                if (annotation(method.getModifiers(), verb) == null) continue;
+                var parts = new ArrayList<HttpPaths.Part>();
+                parts.add(HttpPaths.Part.hole(true));
+                parts.addAll(HttpPaths.templateParts(route));
+                request(index.declareOperation(methodPath), verb, parts);
+            }
         }
     }
 
@@ -325,7 +326,11 @@ final class Http extends TreePathScanner<Void, Void> {
     private void fluent(MethodInvocationTree tree, ExpressionTree receiver) {
         if (!(receiver instanceof MethodInvocationTree call) || tree.getArguments().isEmpty()) return;
         if (!(call.getMethodSelect() instanceof MemberSelectTree select)) return;
-        var type = receiverType(select.getExpression());
+        var source = select.getExpression();
+        var type = source instanceof MethodInvocationTree build && build.getArguments().isEmpty()
+            && build.getMethodSelect() instanceof MemberSelectTree method && method.getIdentifier().contentEquals("build")
+            && "WebClient.Builder".equals(receiverType(method.getExpression()))
+            ? "WebClient" : receiverType(source);
         if (type == null || !FLUENT_CLIENTS.contains(type)) return;
         var name = select.getIdentifier().toString();
         var verb = name.equals("method") && !call.getArguments().isEmpty()
@@ -456,6 +461,8 @@ final class Http extends TreePathScanner<Void, Void> {
 
     /** The simple name a type or receiver expression spells. */
     private static String typeName(Tree tree) {
+        if (tree instanceof MemberSelectTree select && select.getIdentifier().contentEquals("Builder")
+            && "WebClient".equals(typeName(select.getExpression()))) return "WebClient.Builder";
         if (tree instanceof MemberSelectTree select) return select.getIdentifier().toString();
         if (tree instanceof ParameterizedTypeTree parameterized) return typeName(parameterized.getType());
         if (tree instanceof IdentifierTree identifier) return identifier.getName().toString();

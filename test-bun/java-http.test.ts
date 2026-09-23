@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { cp, mkdtemp, readdir, rm } from 'node:fs/promises'
+import { cp, mkdir, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { parseScanObservation, type HttpEndpointSegment, type HttpRequestSegment } from '@groma/scanner'
@@ -104,6 +104,118 @@ test.concurrent('Java reports the endpoints its controllers serve and the reques
       'Clients.java | StreamController.java | Calls HTTP endpoint: GET /api/stream/talks',
       'ReviewsClient.java | ReviewsResource.java | Calls HTTP endpoint: GET /reviews/:id',
       'TalksClient.java | TalksController.java | Calls HTTP endpoint: GET /api/talks/:id',
+    ])
+  } finally { await rm(root, { recursive: true, force: true }) }
+}, 60000)
+
+test.concurrent('MicroProfile REST interfaces declare configured HTTP requests', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'groma-java-microprofile-'))
+  try {
+    await mkdir(path.join(root, 'src/main/java'), { recursive: true })
+    await writeFile(path.join(root, 'src/main/java/ExtensionsService.java'), `
+@Path("/extensions")
+@RegisterRestClient
+interface ExtensionsService {
+  @GET String list();
+  @POST @Path("/{id}") String update();
+}`)
+    const worker = path.join(root, 'worker.jar')
+    await buildWorker(worker)
+    const scan = parseScanObservation(await run(javaCommand(), ['-jar', worker, root, '21', 'UTF-8'], root,
+      'src/main/java/ExtensionsService.java\n'))
+    expect(scan.httpEndpoints).toEqual([])
+    expect(scan.httpRequests!.map(request => [request.method, route(request.path), request.configured])).toEqual([
+      ['GET', 'extensions', true], ['POST', 'extensions/dynamic', true],
+    ])
+  } finally { await rm(root, { recursive: true, force: true }) }
+}, 60000)
+
+test.concurrent('a typed WebClient builder supplies the client for a fluent request', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'groma-java-webclient-builder-'))
+  try {
+    await mkdir(path.join(root, 'src/main/java'), { recursive: true })
+    await writeFile(path.join(root, 'src/main/java/Gateway.java'), `
+class Gateway {
+  WebClient.Builder webClientBuilder;
+  Other.Builder other;
+  void owner() { webClientBuilder.build().get().uri("http://service/owners/{id}", 7); }
+  void unrelated() { other.build().get().uri("http://service/ignore"); }
+}`)
+    const worker = path.join(root, 'worker.jar')
+    await buildWorker(worker)
+    const scan = parseScanObservation(await run(javaCommand(), ['-jar', worker, root, '21', 'UTF-8'], root,
+      'src/main/java/Gateway.java\n'))
+    expect(scan.httpRequests!.map(request => [request.method, route(request.path)])).toEqual([
+      ['GET', 'unknown/owners/dynamic'],
+    ])
+  } finally { await rm(root, { recursive: true, force: true }) }
+}, 60000)
+
+test.concurrent('an imported Retrofit route declares a request without treating JAX-RS as Retrofit', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'groma-java-retrofit-'))
+  try {
+    await mkdir(path.join(root, 'src/main/java'), { recursive: true })
+    await writeFile(path.join(root, 'src/main/java/Services.java'), `
+import retrofit2.http.GET;
+class Services {
+  interface GitHub {
+    @GET("/repos/{owner}/{repo}/contributors") String contributors(String owner, String repo);
+  }
+  interface Resource {
+    @jakarta.ws.rs.GET String local();
+  }
+}`)
+    const worker = path.join(root, 'worker.jar')
+    await buildWorker(worker)
+    const scan = parseScanObservation(await run(javaCommand(), ['-jar', worker, root, '21', 'UTF-8'], root,
+      'src/main/java/Services.java\n'))
+    expect(scan.httpRequests!.map(request => [request.method, route(request.path), request.configured])).toEqual([
+      ['GET', 'repos/dynamic/dynamic/contributors', true],
+    ])
+  } finally { await rm(root, { recursive: true, force: true }) }
+}, 60000)
+
+test.concurrent('OkHttp reports only sent requests from source-proven builders', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'groma-java-okhttp-'))
+  try {
+    await mkdir(path.join(root, 'src/main/java'), { recursive: true })
+    await writeFile(path.join(root, 'src/main/java/Client.java'), `
+import okhttp3.OkHttpClient;
+import okhttp3.Request;
+class Client {
+  OkHttpClient client = new OkHttpClient();
+  void get() {
+    Request request = new Request.Builder().url("https://example.com/owners/7").build();
+    client.newCall(request).execute();
+  }
+  void post() {
+    Request request = new Request.Builder().url("https://example.com/owners").post(null).build();
+    client.newCall(request).execute();
+  }
+  void patch() {
+    Request request = new Request.Builder().url("https://example.com/owners/7").method("PATCH", null).build();
+    client.newCall(request).execute();
+  }
+  void unreadable(String verb) {
+    Request request = new Request.Builder().url("https://example.com/ignored").method(verb, null).build();
+    client.newCall(request).execute();
+  }
+  void unsent() {
+    Request request = new Request.Builder().url("https://example.com/ignored").build();
+    client.newCall(request);
+  }
+  void changed() {
+    Request request = new Request.Builder().url("https://example.com/old").build();
+    request = new Request.Builder().url("https://example.com/new").build();
+    client.newCall(request).execute();
+  }
+}`)
+    const worker = path.join(root, 'worker.jar')
+    await buildWorker(worker)
+    const scan = parseScanObservation(await run(javaCommand(), ['-jar', worker, root, '21', 'UTF-8'], root,
+      'src/main/java/Client.java\n'))
+    expect(scan.httpRequests!.map(request => [request.method, route(request.path)])).toEqual([
+      ['GET', 'unknown/owners/7'], ['POST', 'unknown/owners'], ['PATCH', 'unknown/owners/7'],
     ])
   } finally { await rm(root, { recursive: true, force: true }) }
 }, 60000)

@@ -60,7 +60,7 @@ public final class Main {
         var diagnostics = new DiagnosticCollector<JavaFileObject>();
         try (var manager = compiler.getStandardFileManager(diagnostics, Locale.ROOT, java.nio.charset.Charset.forName(encoding))) {
             manager.setLocationFromPaths(StandardLocation.CLASS_PATH, List.of());
-            manager.setLocationFromPaths(StandardLocation.SOURCE_PATH, List.of());
+            manager.setLocationFromPaths(StandardLocation.SOURCE_PATH, List.of(root));
             manager.setLocationFromPaths(StandardLocation.MODULE_PATH, List.of());
             var compilerOutput = new StringWriter();
             var task = (JavacTask) compiler.getTask(compilerOutput, manager, diagnostics,
@@ -85,8 +85,17 @@ public final class Main {
             units.forEach(unit -> index.scan(unit, null));
             var uses = new Uses(index, diagnostics.getDiagnostics());
             units.forEach(unit -> uses.scan(unit, null));
-            var http = new Http(index, Trees.instance(task));
+            var trees = Trees.instance(task);
+            var assigned = HttpPaths.assignedVariables(index.authored, trees);
+            var http = new Http(index, trees, assigned);
             units.forEach(unit -> http.scan(unit, null));
+            var retrofit = new RetrofitRequests(index, trees);
+            units.forEach(unit -> retrofit.scan(unit, null));
+            var okHttp = new OkHttpRequests(index, trees, assigned);
+            units.forEach(unit -> okHttp.scan(unit, null));
+            var requests = new ArrayList<Object>(http.requests);
+            requests.addAll(retrofit.requests);
+            requests.addAll(okHttp.requests);
             var messages = new ArrayList<Object>();
             // The plugin folds the unresolved-name errors among these into one summary.
             for (var item : diagnostics.getDiagnostics()) {
@@ -99,7 +108,7 @@ public final class Main {
                 "roots", List.of(Json.object("id", "java:source-set", "kind", "java-project", "name", root.getFileName().toString())),
                 "files", index.files(), "entryPoints", index.entryPoints(), "operations", index.operations,
                 "invocations", uses.invocations, "httpEndpoints", http.endpoints,
-                "httpRequests", http.requests, "diagnostics", messages);
+                "httpRequests", requests, "diagnostics", messages);
         }
     }
 

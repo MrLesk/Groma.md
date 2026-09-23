@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { cp, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { cp, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 
 import os from 'node:os'
 import path from 'node:path'
@@ -70,6 +70,41 @@ public class Caller {
     expect(missing).toHaveLength(1)
     expect(missing[0]!.message).toStartWith('3 ')
     expect(summarized.some(item => item.code.startsWith('compiler.err.'))).toBeFalse()
+  } finally { await rm(root, { recursive: true, force: true }) }
+})
+
+test.concurrent('private Java calls keep their source target when an external type is missing', async () => {
+  const { root, worker } = await fixture()
+  try {
+    await writeFile(path.join(root, 'src/main/java/Caller.java'), `package entry;
+public class Caller {
+  private MissingType value() { return null; }
+  private String consume(MissingType item) { return "ok"; }
+  void run() { MissingType item = value(); consume(item); }
+}`)
+    const observation = await compilerScan(root, worker)
+    const evidence = calls(observation)
+    expect(evidence.find(call => call.member === 'value')).toMatchObject({
+      providers: ['entry.Caller#value()'], unresolved: false,
+    })
+    expect(evidence.find(call => call.member === 'consume')).toMatchObject({
+      providers: ['entry.Caller#consume(MissingType)'], unresolved: false,
+    })
+  } finally { await rm(root, { recursive: true, force: true }) }
+})
+
+test.concurrent('a modular Java project keeps authored local calls', async () => {
+  const { root, worker } = await fixture()
+  try {
+    await writeFile(path.join(root, 'src/main/java/module-info.java'), 'module example {}\n')
+    await mkdir(path.join(root, 'src/main/java/demo'), { recursive: true })
+    await writeFile(path.join(root, 'src/main/java/demo/A.java'),
+      'package demo; public class A { private static void step() {} public static void start() { step(); } }\n')
+    const files = 'src/main/java/module-info.java\nsrc/main/java/demo/A.java\n'
+    const observation = parseScanObservation(await run(javaCommand(), ['-jar', worker, root, '25', 'UTF-8'], root, files))
+    const evidence = calls(observation)
+    expect(evidence.find(call => call.member === 'step')).toMatchObject({ providers: ['demo.A#step()'], unresolved: false })
+    expect(observation.diagnostics.some(item => item.code === 'compiler.err.file.sb.on.source.or.patch.path.for.module')).toBeFalse()
   } finally { await rm(root, { recursive: true, force: true }) }
 })
 

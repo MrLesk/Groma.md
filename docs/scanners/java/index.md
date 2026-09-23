@@ -43,6 +43,10 @@ from any other unresolved name, so the count includes every unresolved name,
 such as a typo. Other compiler errors are reported as warnings with their javac
 code.
 
+The worker places the selected project root on javac's source path. This lets
+named modules with `module-info.java` keep local source bindings without
+loading a project build or dependency JARs.
+
 ## Gradle projects
 
 Tracked and unignored `build.gradle`, `build.gradle.kts`, `settings.gradle` and
@@ -150,20 +154,31 @@ Requests:
   attributes, and a Spring HTTP interface with `@HttpExchange`, `@GetExchange`,
   `@PostExchange`, `@PutExchange`, `@DeleteExchange` or `@PatchExchange`. Such
   a method has no body, so its request declares the operation itself.
+- MicroProfile `@RegisterRestClient` interfaces with JAX-RS `@Path` and HTTP
+  method annotations. The remote base remains configured.
+- Retrofit interface methods with an imported `retrofit2.http` `@GET`, `@POST`,
+  `@PUT`, `@PATCH`, `@DELETE`, `@HEAD` or `@OPTIONS` annotation and a literal
+  route. The remote base remains configured.
 - `RestTemplate`: `getForObject`, `getForEntity`, `postForObject`,
   `postForEntity`, `postForLocation`, `put`, `delete`, `patchForObject`,
   `headForHeaders`, `optionsForAllow`, and `exchange` or `execute` with an
   `HttpMethod` argument.
 - `RestClient` and `WebClient`: the fluent `get()`, `post()`, `put()`,
   `delete()`, `patch()`, `head()`, `options()` or `method(HttpMethod.X)`,
-  followed by `uri(...)`.
+  followed by `uri(...)`. A typed `WebClient.Builder` may supply the client
+  through `build()` in that chain.
 - `java.net.http.HttpClient`: an `HttpRequest.newBuilder` chain with `uri(...)`
   and `GET()`, `POST(...)`, `PUT(...)`, `DELETE()`, `HEAD()` or
   `method("...")`. A chain that names no method sends GET, as the builder does.
+- `OkHttpClient`: a `newCall(request).execute()` or `.enqueue(...)` chain where
+  the request is a visible `Request.Builder` URL and method, either inline or
+  in a variable that is not reassigned. Constructing a call without sending it
+  supplies no request fact. A builder with no stated method sends GET.
 
 An imperative client is recognized by the declared type name of its receiver in
 the same file, so a field, a local variable and `new RestTemplate()` all count,
-while a client another call returns does not. A name the file declares with two
+while a client another call returns does not, apart from the typed
+`WebClient.Builder.build()` chain. A name the file declares with two
 types is dropped, because the receiver is then unknown. Literal routes and URLs,
 constants the sources declare and concatenations of them become facts, as does
 a field or local that nothing assigns after its declaration, carries no
@@ -201,11 +216,12 @@ A blocker never takes a request certainly, and competes with the routes a
 request reaches as the
 [HTTP request rule](../../relationship-inference.md#http-requests) describes.
 
-Nothing is reported for a functional WebFlux `RouterFunction`, a JAX-RS `@Path`
+Nothing is reported for functional WebFlux, Javalin or Helidon routes, a JAX-RS `@Path`
 interface whose implementing class carries no annotation of its own, a mapping
 a controller method inherits from an interface method in the sources, an
 un-annotated method without `@Override` that implements a method of a type that
-does not resolve, a builder chain whose `method(...)` value is not literal, and
+does not resolve, an OkHttp call stored and sent in another statement, a builder
+chain whose `method(...)` value is not literal, and
 filters, interceptors and security matchers such as `/api/**`. A mapping's
 `params`, `headers`, `consumes` and `produces` conditions are not part of the
 fact: its endpoint serves the path and method whatever they require, as a
