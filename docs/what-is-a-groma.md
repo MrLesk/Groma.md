@@ -11,7 +11,7 @@ A groma is the instrument Roman surveyors used to mark straight lines and right 
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="../.github/assets/what-is-a-groma/instrument-dark.webp">
-  <img src="../.github/assets/what-is-a-groma/instrument-light.webp" alt="A surveyor sights past the plumb lines of a groma. Two green sight lines leave it at a right angle, and a square plot is staked out in green." width="100%">
+  <img src="../.github/assets/what-is-a-groma/instrument-light.webp" alt="A surveyor stands at a groma. Two green sight lines cross at a right angle beneath it and run to ranging poles, and a square plot is staked out in green." width="100%">
 </picture>
 
 A groma is a tall staff with a flat cross on top that can turn. A plumb line with a weight hangs from the end of each of the four arms.
@@ -26,7 +26,7 @@ Roman land surveyors were called gromatici, after the instrument. They laid out 
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="../.github/assets/what-is-a-groma/map-dark.webp">
-  <img src="../.github/assets/what-is-a-groma/map-light.webp" alt="A surveyor with a groma stands at the edge of an isometric architecture map. A green line runs along the grid to one building." width="100%">
+  <img src="../.github/assets/what-is-a-groma/map-light.webp" alt="A surveyor with a groma stands at the edge of an isometric architecture map. A straight green line runs from the foot of the groma to one building." width="100%">
 </picture>
 
 A groma turned a plan into lines on the ground that builders could follow. Groma does the same for software: it keeps a project's architecture as a map that people and coding agents read and follow while they change the code. Drafts stay dashed until a scan finds their code and you accept them, like a camp staked out before its tents go up.
