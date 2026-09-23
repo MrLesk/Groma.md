@@ -6,6 +6,7 @@ import { contains, overlaps } from '../src/sheet/grid.ts'
 import { sheetScene } from '../src/sheet/scene.ts'
 import { islandsSvg } from '../src/viewers/web/iso/paint-ground.ts'
 import { projectScene } from '../src/viewers/web/iso/project.ts'
+import { markup } from '../src/viewers/web/iso/svg.ts'
 import { inspectSelection } from '../src/viewers/web/organisms/details.ts'
 import { initialState } from '../src/viewers/tui/navigation.ts'
 import { leaveView } from '../src/viewers/tui/navigation-spatial.ts'
@@ -38,7 +39,7 @@ test.concurrent('the group is selectable and explains missing placement with lin
   const world = await loadAnnotatedArchitecture(fixture)
   const scene = sheetScene(world)
   const group = scene.zones.find(zone => zone.unidentifiedContainer)!
-  expect(islandsSvg(projectScene(scene))).toContain(`data-id="${group.key}"`)
+  expect(markup(islandsSvg(projectScene(scene)))).toContain(`data-id="${group.key}"`)
   const inspected = inspectSelection(group.key, world, scene.zones)!
   expect(inspected.overview).toContain('could not determine')
   expect(new Set(inspected.children.map(child => child.id))).toEqual(new Set(group.members))

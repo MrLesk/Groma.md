@@ -1,38 +1,30 @@
-import { pointsAttribute, svg } from '../iso/svg.ts'
+import { node, pointsAttribute, type SvgNode } from '../iso/svg.ts'
 import type { LayeredScene } from './separation.ts'
 
-/** Paints the three aligned blueprint planes and the risers that show their separation. */
-export function paintLayerPlanes(layer: SVGGElement, scene: LayeredScene): void {
-  if (scene.layerPlanes.length === 0) return
-
+/** The three aligned blueprint planes and the risers that show their separation. */
+export function layerPlanesSvg(scene: LayeredScene): SvgNode[] {
+  if (scene.layerPlanes.length === 0) return []
   const risers = scene.layerPlanes.slice(1).flatMap((plane, index) => {
     const below = scene.layerPlanes[index]!
-    return plane.polygon.map((point, corner) => svg('line', {
+    return plane.polygon.map((point, corner) => node('line', {
       x1: below.polygon[corner]!.x,
       y1: below.polygon[corner]!.y,
       x2: point.x,
       y2: point.y,
     }))
   })
-  layer.append(svg('g', {}, 'layer-risers'))
-  layer.lastElementChild!.append(...risers)
-
-  for (const plane of scene.layerPlanes) {
-    const group = svg('g', { opacity: plane.opacity }, `layer-plane ${plane.layer}`)
-    group.append(svg('polygon', { points: pointsAttribute(plane.polygon) }))
-    layer.append(group)
-  }
+  return [
+    node('g', {}, 'layer-risers', risers),
+    ...scene.layerPlanes.map(plane => node('g', { opacity: plane.opacity }, `layer-plane ${plane.layer}`, [
+      node('polygon', { points: pointsAttribute(plane.polygon) }),
+    ])),
+  ]
 }
 
-/** Keeps plane names above architecture bodies while their sheets remain behind them. */
-export function paintLayerLabels(layer: SVGGElement, scene: LayeredScene): void {
-  for (const plane of scene.layerPlanes) {
-    const label = svg('text', {
-      x: plane.label.at.x, y: plane.label.at.y, opacity: plane.opacity,
-    }, 'layer-label')
-    label.textContent = plane.label.text
-    layer.append(label)
-  }
+/** Plane names stay above architecture bodies while their sheets remain behind them. */
+export function layerLabelsSvg(scene: LayeredScene): SvgNode[] {
+  return scene.layerPlanes.map(plane =>
+    node('text', { x: plane.label.at.x, y: plane.label.at.y, opacity: plane.opacity }, 'layer-label', plane.label.text))
 }
 
 /** Theme-neutral layer treatment; every color comes from the active shared palette. */
@@ -59,6 +51,6 @@ export const layerCss = `
     vector-effect: non-scaling-stroke;
   }
   #map .route .lift { stroke-dasharray: 2 5; opacity: 0.52; }
-  #map:where(:not([data-camera-moving])) .route:hover .lift, #map .route.endpoint .lift, #map .route.selected .lift,
+  #map:where(:not([data-map-moving])) .route:hover .lift, #map .route.endpoint .lift, #map .route.selected .lift,
   #map .route.touched .lift, #map .route.lit .lift { opacity: 1; }
 `

@@ -389,9 +389,8 @@ strong read-only checkmarks, distinct from flow checkboxes.
 Selecting a component automatically accents its directly connected components
 in softer green, in either relationship direction, without following another
 hop. Other components are dimmed while a component is selected. The selected
-component has a slow breathing green glow around its shape. Its green border
-lightens slightly at the glow's peak, while its fill and text stay steady;
-reduced motion keeps the glow and border steady. This emphasis follows the
+component has a slow breathing green glow around its shape, while its border,
+fill and text stay steady; reduced motion keeps the glow steady. This emphasis follows the
 selection without changing the camera or detail owner. Task and flow highlights
 remain active, with unrelated components dimmed until component selection clears.
 An element
@@ -424,7 +423,7 @@ element details adds Back to that element above the reader. Select an action,
 Previous, or Next to focus a step: the whole authored path and its endpoints stay
 highlighted while the camera smoothly fits that step's exact relationship and
 endpoints. Its endpoint components use the same breathing green glow as component
-selection. Their outlines lighten slightly while bodies and labels stay solid.
+selection, while their outlines, bodies and labels stay steady.
 Relationship lines keep only their directional motion.
 The focused action has a marked row; Clear focus removes the extra emphasis and
 smoothly fits all checked flows again. Reduced motion keeps static emphasis.
@@ -630,10 +629,12 @@ Animated navigation and direct gestures prepare the same cached camera layer bef
 The map restores crisp SVG rendering after movement settles.
 Component selection and focused flow endpoints share one glow per
 highlighted shape. Each uses a small, separate layer containing its blurred
-silhouette. The blur stays fixed while the layer's opacity and the shape's border
-color share a 2.6-second pulse. The border mixes in at most 20% white; the fill and
-text do not animate. The glows follow the displayed projection and camera, and
-disappear when their highlights clear or their shapes are filtered out.
+silhouette. The blur stays fixed while the layer's opacity pulses every 2.6
+seconds; the shape's border, fill and text do not animate, so the glow never
+repaints the map. The glow hides while the map moves (panning, zooming, a view
+change, orbiting or a settling world update) and returns once the map has been
+still for 250 ms. It follows the displayed projection and camera, and disappears
+when its highlight clears or its shape is filtered out.
 Hover highlights pause during camera movement, including trackpad inertia, and return after it settles.
 Selection highlights and clicking remain available throughout.
 Reduced motion applies the destination without animation. `F1` toggles the HUD for a map-only

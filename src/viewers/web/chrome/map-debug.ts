@@ -159,11 +159,13 @@ export function createMapDebugPanel(
       client.projectionMilliseconds = performance.now() - started
       return result
     },
-    paint(work: () => void): void {
+    paint<T>(work: () => T): T {
       const started = performance.now()
-      work()
+      const result = work()
       client.paintMilliseconds = performance.now() - started
-      update(mapDebugSnapshot(currentMap(), client))
+      // A hidden panel shows the latest values when it opens, so animated repaints skip writing them.
+      if (!panel.hidden) update(mapDebugSnapshot(currentMap(), client))
+      return result
     },
     toggle() {
       panel.hidden = !panel.hidden
@@ -172,6 +174,7 @@ export function createMapDebugPanel(
         animation = undefined
         return
       }
+      update(mapDebugSnapshot(currentMap(), client))
       fps.textContent = '-- FPS'
       sampleStart = undefined
       frames = 0

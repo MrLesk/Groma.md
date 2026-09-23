@@ -160,9 +160,11 @@ function syncUrl(): void {
   }, world, work.items, location.pathname, revisionControl.comparison)
   history.replaceState(null, '', `${location.pathname}${query}`)
 }
-function paintMapState(task: WorkItem | undefined, activeTaskItems: WorkItem[]): void {
+/** Applies comparison marks, highlights and task activation from the current selection, flows and active tasks. */
+function paintMapState(): void {
+  const task = selection.kind === 'task' ? workItem(selection.id) : undefined
   map.changes(revisionControl.comparison)
-  highlights.paint(selection, world, activeFlows, activeTaskItems)
+  highlights.paint(selection, world, activeFlows, activeTaskIds.map(id => workItem(id)).filter((item): item is WorkItem => item !== undefined))
   pins.activate(activeTaskIds, task?.id)
   island.activate(activeTaskIds, task?.id)
 }
@@ -170,8 +172,7 @@ function paintMapState(task: WorkItem | undefined, activeTaskItems: WorkItem[]):
 function paintViewState(commitUrl = true): void {
   if (commitUrl) syncUrl()
   const task = selection.kind === 'task' ? workItem(selection.id) : undefined
-  const activeTaskItems = activeTaskIds.map(id => workItem(id)).filter((item): item is WorkItem => item !== undefined)
-  paintMapState(task, activeTaskItems)
+  paintMapState()
   paintTree()
   paintFlows(flowsHost, world, activeFlows, toggleFlow, {
     title: 'Actors', selectedIds: selectedArchitecture(selection), onSelectActor: select,
@@ -384,15 +385,15 @@ function openView(search: string): void {
 
 const sceneCentre = (bounds: typeof scene.bounds) => ({ x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 })
 
-/** Reprojects from one pose, then either fits a mode transition or keeps an orbited map centred. */
+/** Reads the pane frame before painting (so it forces no layout), reprojects from one pose, then fits a mode transition or keeps an orbited map centred; highlights are applied again only when the paint asks. */
 function repaintScene(fit: boolean): void {
+  const frame = viewport()
   const before = sceneCentre(scene.bounds)
   scene = projectedScene()
   const after = sceneCentre(scene.bounds)
   paintMapView(mapMotion.view)
-  debug.paint(() => map.paint(scene))
+  const rehighlight = debug.paint(() => map.paint(scene))
   pins.paint(currentPins.filter(pin => map.anchorOf(pin.elementId) !== undefined))
-  const frame = viewport()
   fitted = fitScene(frame)
   if (fit && (mapMotion.morphing || following)) {
     if (!touched) camera.frame(fitted, 1)
@@ -403,8 +404,7 @@ function repaintScene(fit: boolean): void {
   } else camera.move(pan(camera.current, (before.x - after.x) * camera.current.k, (before.y - after.y) * camera.current.k), false)
   following = mapMotion.morphing
   applyCamera()
-  const task = selection.kind === 'task' ? workItem(selection.id) : undefined
-  paintMapState(task, activeTaskIds.map(id => workItem(id)).filter((item): item is WorkItem => item !== undefined))
+  if (rehighlight) paintMapState()
 }
 
 const mapAnimator = createMapAnimator(mapMotion, repaintScene)

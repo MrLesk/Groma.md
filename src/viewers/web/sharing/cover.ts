@@ -10,7 +10,7 @@ import { routesSvg } from '../iso/paint-routes.ts'
 import { presentScene } from '../iso/presentation.ts'
 import { facadeDetailsVisible } from '../iso/scale.ts'
 import { mapDefs, mapDrawingCss } from '../iso/style.ts'
-import { svgMarkup as svg } from '../iso/svg.ts'
+import { markup, node } from '../iso/svg.ts'
 import { NESTED_POSE } from '../layers/orbit.ts'
 import type { WebMapPayload } from '../payload.ts'
 
@@ -29,12 +29,14 @@ export function renderCover(payload: CoverPayload, theme: WebTheme): string {
   const palette = palettes[theme]
   const scene = presentScene(payload.sheet, payload.project ?? undefined, NESTED_POSE)
   const camera = pan(fitCamera(scene.bounds, { width: 1144, height: 432 }), 28, 26)
-  const drawing = svg('g', {}, 'sheet', sheetSvg(scene))
-    + svg('g', {}, 'islands', islandsSvg(scene, camera.k))
-    + svg('g', {}, 'slabs', slabsSvg(scene, camera.k))
-    + svg('g', {}, 'routes', routesSvg(scene))
-    + svg('g', {}, 'items', buildingsSvg(scene))
-  const definitions = (mapDefs(scene.view) + facadeDefs(scene)).replaceAll('var(--map-hatch)', palette.hatch)
+  const drawing = markup([
+    node('g', {}, 'sheet', sheetSvg(scene)),
+    node('g', {}, 'islands', islandsSvg(scene, camera.k)),
+    node('g', {}, 'slabs', slabsSvg(scene, camera.k)),
+    node('g', {}, 'routes', routesSvg(scene)),
+    node('g', {}, 'items', buildingsSvg(scene)),
+  ])
+  const definitions = markup([...mapDefs(scene.view), ...facadeDefs(scene)]).replaceAll('var(--map-hatch)', palette.hatch)
   const title = titleWithin(payload.project?.title ?? 'Groma', 600)
   const brand = lockup.replace('<svg ', '<svg x="86" y="548" width="140" height="35" ')
   return `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"

@@ -1,10 +1,9 @@
-import { escaped } from '../atoms/escape.ts'
 import type { LayeredScene } from '../layers/separation.ts'
 import { planeMatrix } from './project.ts'
-import { pointsAttribute, svgMarkup as svg } from './svg.ts'
+import { node, pointsAttribute, type SvgNode } from './svg.ts'
 
 /** Neutral strokes are batched by origin; each route keeps its own interaction overlay and identity. */
-export function routesSvg(scene: LayeredScene): string {
+export function routesSvg(scene: LayeredScene): SvgNode[] {
   const basePathsByOrigin = new Map<string, string[]>()
   const interactiveRoutes = scene.routes.map(({ route, points, arrow, lifts }) => {
     const originPaths = basePathsByOrigin.get(route.origin) ?? []
@@ -13,17 +12,19 @@ export function routesSvg(scene: LayeredScene): string {
     originPaths.push(`M${pointsAttribute(points)}`, liftPath)
     basePathsByOrigin.set(route.origin, originPaths)
     const ghost = route.origin === 'observed' ? '' : ` ghost ${route.origin}`
-    return svg('g', { 'data-id': route.id }, `route${ghost}`,
-      svg('polyline', { points: pointsAttribute(points) }, 'line')
-      + svg('path', { d: liftPath }, 'line lift')
-      + svg('g', { transform: `${planeMatrix('ground', arrow.at, scene.view)} rotate(${arrow.turn})` }, 'arrow',
-        svg('path', { d: 'M0 0L-8 5.25L-8 -5.25Z' }))
-      + svg('polyline', { points: pointsAttribute(points) }, 'hit')
-      + svg('title', {}, '', escaped(route.description)))
-  }).join('')
+    return node('g', { 'data-id': route.id }, `route${ghost}`, [
+      node('polyline', { points: pointsAttribute(points) }, 'line'),
+      node('path', { d: liftPath }, 'line lift'),
+      node('g', { transform: `${planeMatrix('ground', arrow.at, scene.view)} rotate(${arrow.turn})` }, 'arrow', [
+        node('path', { d: 'M0 0L-8 5.25L-8 -5.25Z' }),
+      ]),
+      node('polyline', { points: pointsAttribute(points) }, 'hit'),
+      node('title', {}, '', route.description),
+    ])
+  })
   const base = [...basePathsByOrigin].map(([origin, lines]) => {
     const ghost = origin === 'observed' ? '' : ` ghost ${origin}`
-    return svg('path', { d: lines.join('') }, `route route-base${ghost}`)
-  }).join('')
-  return base + interactiveRoutes
+    return node('path', { d: lines.join('') }, `route route-base${ghost}`)
+  })
+  return [...base, ...interactiveRoutes]
 }

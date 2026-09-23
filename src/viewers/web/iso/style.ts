@@ -1,18 +1,27 @@
 import { mixColour, webFontFamily, type Palette } from '../atoms/theme.ts'
 import { layerCss } from '../layers/paint.ts'
+import { glowCss } from './glow.ts'
 import { DEFAULT_PROJECTION, planeMatrix } from './project.ts'
 import type { Plane, ProjectionView } from './project.ts'
 import { FACADE_MARK, SIDE, depthOf, emphasis, strokeAt, tintAt } from './scale.ts'
 import type { Level } from './scale.ts'
+import { node, type SvgNode } from './svg.ts'
 
-const ink = 'stroke="var(--map-hatch)" stroke-width="0.75"'
-const dot = '<circle cx="4" cy="4" r="0.75" fill="var(--map-hatch)"/>'
-const cross = `<path d="M4 2V6M2 4H6" ${ink}/>`
-const line = `<path d="M0 3H6" ${ink}/>`
+/** Tile marks draw in pattern space, so they keep ordinary strokes instead of the map's non-scaling ones. */
+function mark(tag: string, attributes: Record<string, string | number>): SvgNode {
+  return { tag, attributes: Object.fromEntries(Object.entries(attributes).map(([name, value]) => [name, String(value)])), children: [] }
+}
 
-function tile(id: string, plane: Plane, size: number, body: string, view: ProjectionView): string {
-  if (view.pitch === 90 && plane !== 'ground') return ''
-  return `<pattern id="${id}" width="${size}" height="${size}" patternUnits="userSpaceOnUse" patternTransform="${planeMatrix(plane, undefined, view)}">${body}</pattern>`
+const ink = { stroke: 'var(--map-hatch)', 'stroke-width': 0.75 }
+const dot = mark('circle', { cx: 4, cy: 4, r: 0.75, fill: 'var(--map-hatch)' })
+const cross = mark('path', { d: 'M4 2V6M2 4H6', ...ink })
+const line = mark('path', { d: 'M0 3H6', ...ink })
+
+function tile(id: string, plane: Plane, size: number, body: SvgNode[], view: ProjectionView): SvgNode[] {
+  if (view.pitch === 90 && plane !== 'ground') return []
+  return [node('pattern', {
+    id, width: size, height: size, patternUnits: 'userSpaceOnUse', patternTransform: planeMatrix(plane, undefined, view),
+  }, '', body)]
 }
 
 function hash(value: string): number {
@@ -33,15 +42,13 @@ export function facadePattern(
   fileType: string,
   plane: Extract<Plane, 'left' | 'right'>,
   view: ProjectionView = DEFAULT_PROJECTION,
-): string {
+): SvgNode[] {
   const value = hash(fileType)
   const bits = (value ^ (value >>> 9) ^ (value >>> 18)) & 0x1ff || 1
-  const windows = Array.from({ length: 9 }, (_, index) => {
-    if ((bits & (1 << index)) === 0) return ''
-    const x = 1 + (index % 3) * 2.5
-    const y = 1 + Math.floor(index / 3) * 2.5
-    return `<rect x="${x}" y="${y}" width="${FACADE_MARK}" height="${FACADE_MARK}" fill="var(--map-hatch)"/>`
-  }).join('')
+  const windows = Array.from({ length: 9 }, (_, index) => index).filter(index => (bits & (1 << index)) !== 0)
+    .map(index => mark('rect', {
+      x: 1 + (index % 3) * 2.5, y: 1 + Math.floor(index / 3) * 2.5, width: FACADE_MARK, height: FACADE_MARK, fill: 'var(--map-hatch)',
+    }))
   return tile(facadePatternId(fileType, plane), plane, 8, windows, view)
 }
 
@@ -53,14 +60,16 @@ export function facadePattern(
  * diagonal hatch for group zones. Systems have no pattern, and neither does
  * any roof.
  */
-export function mapDefs(view: ProjectionView = DEFAULT_PROJECTION): string {
-  return tile('dots', 'ground', 8, dot, view)
-    + tile('dots-left', 'left', 8, dot, view) + tile('dots-right', 'right', 8, dot, view)
-    + tile('cross', 'ground', 8, cross, view)
-    + tile('cross-left', 'left', 8, cross, view) + tile('cross-right', 'right', 8, cross, view)
-    + tile('lines-left', 'left', 6, line, view) + tile('lines-right', 'right', 6, line, view)
-    + tile('grain', 'ground', 12, '<circle cx="6" cy="6" r="0.6" fill="var(--map-hatch)"/>', view)
-    + tile('hatch-ground', 'ground', 8, `<path d="M0 8L8 0" ${ink}/>`, view)
+export function mapDefs(view: ProjectionView = DEFAULT_PROJECTION): SvgNode[] {
+  return [
+    ...tile('dots', 'ground', 8, [dot], view),
+    ...tile('dots-left', 'left', 8, [dot], view), ...tile('dots-right', 'right', 8, [dot], view),
+    ...tile('cross', 'ground', 8, [cross], view),
+    ...tile('cross-left', 'left', 8, [cross], view), ...tile('cross-right', 'right', 8, [cross], view),
+    ...tile('lines-left', 'left', 6, [line], view), ...tile('lines-right', 'right', 6, [line], view),
+    ...tile('grain', 'ground', 12, [mark('circle', { cx: 6, cy: 6, r: 0.6, fill: 'var(--map-hatch)' })], view),
+    ...tile('hatch-ground', 'ground', 8, [mark('path', { d: 'M0 8L8 0', ...ink })], view),
+  ]
 }
 
 /** The same colour and level rules serve browser CSS and explicit static SVG values. */
@@ -134,9 +143,9 @@ export function mapDrawingCss(palette?: Palette, zoom = 1): string {
   #map .project-edit .pencil .lead { fill: ${ink}; }
   #map .project-edit .pencil .facet, #map .project-edit .pencil .eraser, #map .project-edit .pencil .ferrule,
   #map .project-edit .pencil .tip, #map .project-edit .pencil .lead { stroke: none; }
-  #map:where(:not([data-camera-moving])) .project-edit:hover .edit-frame, #map .project-edit:focus .edit-frame { fill: ${ink}; fill-opacity: 0.05; }
-  #map:where(:not([data-camera-moving])) .project-edit:hover .pencil path, #map .project-edit:focus .pencil path,
-  #map:where(:not([data-camera-moving])) .project-edit:hover .pencil .body, #map .project-edit:focus .pencil .body { stroke: ${ink}; }
+  #map:where(:not([data-map-moving])) .project-edit:hover .edit-frame, #map .project-edit:focus .edit-frame { fill: ${ink}; fill-opacity: 0.05; }
+  #map:where(:not([data-map-moving])) .project-edit:hover .pencil path, #map .project-edit:focus .pencil path,
+  #map:where(:not([data-map-moving])) .project-edit:hover .pencil .body, #map .project-edit:focus .pencil .body { stroke: ${ink}; }
   #map .grid { fill: none; stroke: ${grid}; }
   #map .grid.major { stroke: ${gridMajor}; }
   #map > .map-surface[data-minor-grid-hidden] .grid:not(.major) { display: none; }
@@ -193,9 +202,9 @@ export const mapCss = `
   #map > .map-surface:active, #map > .map-surface:active [data-id] { cursor: grabbing; }
   #map .camera { transform-origin: 0 0; }
   ${mapDrawingCss()}
-  #map:where(:not([data-camera-moving])) .route:hover, #map .route.endpoint, #map .route.touched { --emphasis: ${emphasis(1)}; }
-  #map:where(:not([data-camera-moving])) .route:hover .line { stroke: var(--map-line); opacity: 1; }
-  #map:where(:not([data-camera-moving])) .route:hover .arrow { fill: var(--map-line); opacity: 1; }
+  #map:where(:not([data-map-moving])) .route:hover, #map .route.endpoint, #map .route.touched { --emphasis: ${emphasis(1)}; }
+  #map:where(:not([data-map-moving])) .route:hover .line { stroke: var(--map-line); opacity: 1; }
+  #map:where(:not([data-map-moving])) .route:hover .arrow { fill: var(--map-line); opacity: 1; }
   #map .route.endpoint .line, #map .route.selected .line, #map .route.touched .line { stroke: var(--highlight); opacity: 1; }
   #map .route.endpoint .arrow, #map .route.selected .arrow, #map .route.touched .arrow { fill: var(--highlight); opacity: 1; }
   #map .route.touched .line { stroke-dasharray: none; }
@@ -203,38 +212,19 @@ export const mapCss = `
   #map .route.lit .line { stroke: var(--highlight); opacity: 1; stroke-dasharray: 8 5; animation: map-flow 900ms linear infinite; }
   #map .route.lit .arrow { fill: var(--highlight); opacity: 1; }
   #map :is(.route, .building, .slab, .island).focused { --emphasis: ${emphasis(3)}; }
-  #map .building:is(.component-focus, .focused) .face,
-  #map .slab.focused > .face, #map .island.focused > .ground { animation: map-highlight-border 2600ms ease-in-out infinite; }
-  #map .highlight-glow {
-    position: absolute; left: 0; top: 0; pointer-events: none;
-  }
-  #map .highlight-glow-pulse {
-    width: 100%; height: 100%; opacity: 0.55;
-    will-change: opacity;
-    animation: map-highlight-glow 2600ms ease-in-out infinite;
-  }
   @keyframes map-flow { from { stroke-dashoffset: 0; } to { stroke-dashoffset: -13; } }
-  @keyframes map-highlight-glow {
-    0%, 100% { opacity: 0.1; }
-    50% { opacity: 1; }
-  }
-  @keyframes map-highlight-border {
-    0%, 100% { stroke: var(--highlight); }
-    50% { stroke: color-mix(in srgb, var(--highlight) 80%, white); }
-  }
   @media (prefers-reduced-motion: reduce) {
-    #map .route.lit .line, #map .highlight-glow-pulse,
-    #map .building:is(.component-focus, .focused) .face,
-    #map .slab.focused > .face, #map .island.focused > .ground { animation: none; }
+    #map .route.lit .line { animation: none; }
   }
+  ${glowCss}
   #map .camera[data-tracing] .route-base,
   #map .camera[data-tracing] .route:not(.lit) { display: none; }
   #map .camera[data-tracing] .building:not(.onpath):not(.selected):not(.touched):not(.neighbor),
   #map .camera[data-tracing] .slab:not(.onpath):not(.selected):not(.touched) { opacity: 0.3; }
-  #map:where(:not([data-camera-moving])) .building:not(.selected):hover, #map:where(:not([data-camera-moving])) .slab:not(.selected):not(.context):hover,
-  #map:where(:not([data-camera-moving])) .island.system:not(.selected):not(.context):hover, #map .context { --emphasis: ${emphasis(0.5)}; }
-  #map:where(:not([data-camera-moving])) .building:not(.selected):hover .face, #map:where(:not([data-camera-moving])) .slab:not(.selected):not(.context):hover .face,
-  #map:where(:not([data-camera-moving])) .island.system:not(.selected):not(.context):hover > .ground { stroke: var(--map-line); }
+  #map:where(:not([data-map-moving])) .building:not(.selected):hover, #map:where(:not([data-map-moving])) .slab:not(.selected):not(.context):hover,
+  #map:where(:not([data-map-moving])) .island.system:not(.selected):not(.context):hover, #map .context { --emphasis: ${emphasis(0.5)}; }
+  #map:where(:not([data-map-moving])) .building:not(.selected):hover .face, #map:where(:not([data-map-moving])) .slab:not(.selected):not(.context):hover .face,
+  #map:where(:not([data-map-moving])) .island.system:not(.selected):not(.context):hover > .ground { stroke: var(--map-line); }
   #map .selected, #map .touched,
   #map .building.lit, #map .slab.lit, #map .island.lit { --emphasis: ${emphasis(1)}; }
   #map .context .face, #map .island.context > .ground, #map .selected .face, #map :is(.island, .zone).selected > .ground,

@@ -1,8 +1,7 @@
 import { CONTAINER_FONT, PLANE, textLineHeight, textPadding } from '../../../sheet/measure.ts'
 import type { ProjectionView, SurfaceLabel, SurfaceText } from './project.ts'
 import { planeMatrix, project } from './project.ts'
-import { round, svgMarkup as svg } from './svg.ts'
-import { escaped } from '../atoms/escape.ts'
+import { node, round, type SvgNode } from './svg.ts'
 
 /** Fixed plane-space sizes keep titles readable without relaying out at every camera scale. */
 const TITLE_STEPS = [
@@ -50,39 +49,20 @@ export function surfaceLabelLayout(
   }
 }
 
-/** Apply a changed preset after the camera settles; movement and same-range zoom skip this work. */
-export function layoutSurfaceLabels(labels: readonly SVGGElement[], zoom: number, view: ProjectionView): void {
-  for (const label of labels) {
-    const text = label.querySelector('text')!
-    const hit = label.querySelector('rect')!
-    // Keep original measurements separate from the current preset.
-    const layout = surfaceLabelLayout({
-      width: Number(text.getAttribute('x')) * 2,
-      band: { width: Number(label.dataset.bandWidth), height: Number(label.dataset.bandHeight) },
-    }, Number(label.dataset.fontSize), zoom, view)
-    text.setAttribute('font-size', String(layout.fontSize))
-    text.setAttribute('y', String(layout.baseline))
-    label.querySelector('line')!.setAttribute('y2', String(layout.leader))
-    hit.setAttribute('x', String(layout.x))
-    hit.setAttribute('width', String(layout.width))
-    hit.setAttribute('height', String(layout.height))
-  }
-}
-
 /** Building names stay inset on their own roofs, laid out in plane pixels. */
 export function surfaceText(
   text: SurfaceText,
   size: number,
   className: string,
   view: ProjectionView,
-): string {
+): SvgNode {
   const padding = textPadding(size)
-  return svg('g', { transform: planeMatrix('ground', text.origin, view) }, className,
-    text.lines.map((line, index) => svg('text', {
+  return node('g', { transform: planeMatrix('ground', text.origin, view) }, className,
+    text.lines.map((line, index) => node('text', {
       x: padding,
       y: padding + size * 0.9 + index * textLineHeight(size),
       'font-size': size,
-    }, 'text', escaped(line))).join(''))
+    }, 'text', line)))
 }
 
 /** The label and its short leader share the surface's identity and ground plane. */
@@ -92,19 +72,17 @@ export function surfaceLabel(
   view: ProjectionView,
   spacing = 0,
   zoom = 1,
-): string {
+): SvgNode {
   const layout = surfaceLabelLayout(text, size, zoom, view)
-  return svg('g', {
-    transform: planeMatrix('ground', text.origin, view),
-    'data-font-size': size, 'data-band-width': text.band.width, 'data-band-height': text.band.height,
-  }, 'label surface-label',
-    svg('rect', { x: layout.x, width: layout.width, height: layout.height }, 'label-hit')
-    + svg('line', { x1: text.width / 2, x2: text.width / 2, y1: 0, y2: layout.leader }, 'label-leader')
-    + svg('text', {
-    x: text.width / 2,
-    y: layout.baseline,
-    'text-anchor': 'middle',
-    'font-size': layout.fontSize,
-    'letter-spacing': `${spacing}em`,
-  }, 'text', escaped(text.lines[0]!)))
+  return node('g', { transform: planeMatrix('ground', text.origin, view) }, 'label surface-label', [
+    node('rect', { x: layout.x, width: layout.width, height: layout.height }, 'label-hit'),
+    node('line', { x1: text.width / 2, x2: text.width / 2, y1: 0, y2: layout.leader }, 'label-leader'),
+    node('text', {
+      x: text.width / 2,
+      y: layout.baseline,
+      'text-anchor': 'middle',
+      'font-size': layout.fontSize,
+      'letter-spacing': `${spacing}em`,
+    }, 'text', text.lines[0]!),
+  ])
 }

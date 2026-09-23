@@ -1,14 +1,14 @@
 import type { Comparison } from '../../../history/comparison.ts'
 import type { Point } from '../../../types.ts'
-import { paintLayerLabels, paintLayerPlanes } from '../layers/paint.ts'
+import { layerLabelsSvg, layerPlanesSvg } from '../layers/paint.ts'
 import type { LayeredScene } from '../layers/separation.ts'
 import type { Camera } from './camera.ts'
+import { createGlows } from './glow.ts'
 import { buildingsSvg, facadeDefs } from './paint-buildings.ts'
 import { islandsSvg, sheetSvg, slabsSvg } from './paint-ground.ts'
 import { routesSvg } from './paint-routes.ts'
 import { gridPatternSvg, gridTransform } from './grid.ts'
-import { boundsOf, DEFAULT_PROJECTION } from './project.ts'
-import type { ProjectionView } from './project.ts'
+import { DEFAULT_PROJECTION } from './project.ts'
 import {
   facadeDetailsVisible,
   gridVisible,
@@ -16,11 +16,11 @@ import {
   weightAt,
 } from './scale.ts'
 import { mapDefs } from './style.ts'
-import { pointsAttribute, svg, svgMarkup } from './svg.ts'
-import { layoutSurfaceLabels, surfaceLabelStep } from './text.ts'
+import { patch, svg } from './svg.ts'
+import { surfaceLabelStep } from './text.ts'
 
-/** Let zoom settle before committing its sharp SVG scale. Panning keeps the cached layer. */
-const CAMERA_SETTLE_MS = 250
+/** The map settles this long after its camera last moved or it was last repainted: a zoom commits its sharp SVG scale, and glows return. Panning keeps the cached layer. */
+const SETTLE_MS = 250
 
 interface RouteNode {
   group: SVGGElement
@@ -35,8 +35,12 @@ export interface IsoMap {
   prepareCamera(): void
   /** Applies the camera and reports whether its compositor scale changed. */
   move(camera: Camera, zoomRatio: number): boolean
-  /** Rebuilds every layer after an architecture or project-profile change. */
-  paint(scene: LayeredScene): void
+  /**
+   * Draws the scene into the existing layers, reusing their elements; a repaint counts as map motion. Returns true
+   * when the highlights must be applied again: elements were created or removed, or the routes and surfaces they
+   * read changed.
+   */
+  paint(scene: LayeredScene): boolean
   /** Unions the existing selected-element and selected-route treatments across an ordered selection. */
   select(ids: readonly string[]): void
   changes(comparison: Comparison | undefined): void
@@ -79,46 +83,21 @@ function paintSurface(name: string, layers: SVGGElement[]) {
   return { surface, scene, world }
 }
 
-/** A bounded, static silhouette lets the browser pulse its HTML layer without fading or repainting the map SVG. */
-function highlightGlow(id: string, shapes: readonly Point[][]) {
-  const surface = document.createElement('div')
-  surface.className = 'highlight-glow'
-  surface.setAttribute('aria-hidden', 'true')
-  const body = boundsOf(shapes.flat())
-  const blur = 32
-  const margin = blur * 3
-  const bounds = { x: body.x - margin, y: body.y - margin, width: body.width + margin * 2, height: body.height + margin * 2 }
-  const filter = `highlight-glow-${id}`
-  const drawing = svg('svg', { width: '100%', height: '100%', viewBox: `${bounds.x} ${bounds.y} ${bounds.width} ${bounds.height}` })
-  drawing.innerHTML = svgMarkup('defs', {}, '',
-    svgMarkup('filter', { id: filter, filterUnits: 'userSpaceOnUse', ...bounds }, '',
-      svgMarkup('feGaussianBlur', { stdDeviation: blur })))
-    + svgMarkup('g', { fill: 'var(--highlight)', filter: `url(#${filter})` }, '',
-      shapes.map(points => svgMarkup('polygon', { points: pointsAttribute(points) })).join(''))
-  // A fresh wrapper starts the halo in the same frame as the newly focused border.
-  const pulse = document.createElement('div')
-  pulse.className = 'highlight-glow-pulse'
-  pulse.append(drawing)
-  surface.append(pulse)
-  return {
-    surface,
-    move(camera: Camera): void {
-      surface.style.transform = `translate(${camera.x + bounds.x * camera.k}px, ${camera.y + bounds.y * camera.k}px)`
-      surface.style.width = `${bounds.width * camera.k}px`
-      surface.style.height = `${bounds.height * camera.k}px`
-    },
-  }
+/** A camera with the zoom ratio its stroke weight follows. */
+interface CameraView {
+  camera: Camera
+  zoomRatio: number
 }
 
-/** The glow follows the same projected geometry as the highlighted architecture body. */
-function glowGeometry(scene: LayeredScene, id: string) {
-  const source = scene.buildings.find(item => item.building.representationId === id)
-    ?? scene.slabs.find(item => item.slab.representationId === id)
-    ?? scene.islands.find(item => item.island.element?.representationId === id)
-  if (source === undefined) return undefined
-  if ('floors' in source) return { source, shapes: source.floors.flat().map(face => face.points) }
-  if ('faces' in source) return { source, shapes: source.faces.map(face => face.points) }
-  return { source, shapes: [source.polygon] }
+/** What the highlight setters read from the scene besides the drawn elements: each route's ids and ends, and the surface under each body. */
+function highlightInputs(scene: LayeredScene) {
+  return {
+    routes: scene.routes.map(({ route }) => ({ id: route.id, ids: route.relationshipIds ?? [route.id], source: route.source, target: route.target })),
+    surfaces: [
+      ...scene.buildings.map(({ building }) => [building.representationId, building.surface] as const),
+      ...scene.slabs.map(({ slab }) => [slab.representationId, slab.island] as const),
+    ],
+  }
 }
 
 /** One fixed grid and one shared camera across ground, routes and foreground paint surfaces. */
@@ -150,107 +129,119 @@ export function createMap(host: HTMLElement): IsoMap {
   const ground = paintSurface('ground-surface', [layers.sheet, layers.islands, layers.slabs])
   const routeSurface = paintSurface('route-surface', [layers.routes])
   const foreground = paintSurface('foreground-surface', [layers.items, layers.layerLabels])
-  const glows = new Map<string, ReturnType<typeof highlightGlow> & { geometry: object }>()
   const definitions = svg('defs')
-  definitions.innerHTML = mapDefs()
   foreground.scene.prepend(definitions)
   const paintSurfaces = [ground, routeSurface, foreground]
   camera.append(...paintSurfaces.map(({ surface }) => surface))
+  const glows = createGlows(camera, routeSurface.surface)
   root.append(fieldSurface, camera)
   host.replaceChildren(root)
 
   let items = new Map<string, Element>()
   let painted: LayeredScene | undefined
   let routes = new Map<string, RouteNode>()
-  let composed: Camera | undefined
-  let composedZoomRatio: number | undefined
-  let committed: Camera | undefined
-  let committedZoomRatio: number | undefined
-  let cameraTimer: ReturnType<typeof setTimeout> | undefined
-  let latestCamera: { current: Camera; zoomRatio: number; showGrid: boolean } | undefined
-  let gridView: ProjectionView = DEFAULT_PROJECTION
-  let labels: SVGGElement[] = []
+  /** The camera the map shows now, and the one last written into the SVG; between them the cached layer moves. */
+  let latest: CameraView | undefined
+  let committed: CameraView | undefined
+  let settleTimer: ReturnType<typeof setTimeout> | undefined
+  let movedAt = 0
   let labelStep = surfaceLabelStep(1)
+  /** True from a repaint until the camera is next committed or the map settles: the cached layer no longer shows the picture. */
+  let repainted = false
   /** The slab or system island each building and slab stands on, by id. */
   let surfaces = new Map<string, string>()
+  /** The scene inputs the current highlights were applied with, as JSON. */
+  let highlighted = ''
 
-  const showGlow = (id: string, geometry: NonNullable<ReturnType<typeof glowGeometry>>): void => {
-    const previous = glows.get(id)
-    if (previous?.geometry === geometry.source) return
-    previous?.surface.remove()
-    const glow = highlightGlow(id, geometry.shapes)
-    camera.insertBefore(glow.surface, routeSurface.surface)
-    if (committed !== undefined) glow.move(committed)
-    glows.set(id, { ...glow, geometry: geometry.source })
-  }
-
-  /** Selection and flow focus share one glow per visible shape, including their overlapping endpoints. */
+  /** Selection and flow focus share one glow per visible body, including their overlapping endpoints. Glows wait while the map moves. */
   const updateGlows = (): void => {
-    if (painted === undefined) return
-    const visible = new Set<string>()
-    for (const node of root.querySelectorAll<SVGGElement>('.component-focus, :is(.building, .slab, .island).focused')) {
-      const id = node.dataset.id!
-      const geometry = glowGeometry(painted, id)
-      if (geometry === undefined) continue
-      visible.add(id)
-      showGlow(id, geometry)
-    }
-    for (const [id, glow] of glows) {
-      if (visible.has(id)) continue
-      glow.surface.remove()
-      glows.delete(id)
-    }
+    if (painted === undefined || host.hasAttribute('data-map-moving')) return
+    const focused = [...items].filter(([, item]) => item.matches('.component-focus, :is(.building, .slab, .island).focused'))
+    glows.show(painted, focused.map(([id]) => id), committed?.camera)
   }
 
-  const clearCameraTimer = (): void => {
-    if (cameraTimer !== undefined) clearTimeout(cameraTimer)
-    cameraTimer = undefined
+  /** Islands and slabs carry the surface titles, the only drawing that depends on the zoom's title step. */
+  const drawSurfaces = (scene: LayeredScene, zoom: number): boolean => {
+    labelStep = surfaceLabelStep(zoom)
+    return [patch(layers.islands, islandsSvg(scene, zoom)), patch(layers.slabs, slabsSvg(scene, zoom))].some(Boolean)
+  }
+
+  /** Draws the scene at one zoom's title step; only values that changed are written. Reports whether elements were created or removed. */
+  const draw = (scene: LayeredScene, zoom: number): boolean => [
+    patch(definitions, [...mapDefs(scene.view), ...facadeDefs(scene)]),
+    patch(layers.sheet, [...layerPlanesSvg(scene), ...sheetSvg(scene)]),
+    drawSurfaces(scene, zoom),
+    patch(layers.items, buildingsSvg(scene)),
+    patch(layers.routes, routesSvg(scene)),
+    patch(layers.layerLabels, layerLabelsSvg(scene)),
+  ].some(Boolean)
+
+  /** The drawn items and routes by id, and the surface under each body, as the highlight setters read them. */
+  const index = (inputs: ReturnType<typeof highlightInputs>): void => {
+    items = new Map([layers.islands, layers.slabs, layers.items].flatMap(layer =>
+      [...layer.querySelectorAll<SVGGElement>('[data-id]')].map(item => [item.dataset.id!, item] as const)))
+    const groups = new Map([...layers.routes.querySelectorAll<SVGGElement>('g.route')]
+      .map(group => [group.dataset.id!, group]))
+    routes = new Map()
+    for (const route of inputs.routes) {
+      const entry = { group: groups.get(route.id)!, ids: route.ids, source: route.source, target: route.target }
+      for (const id of route.ids) routes.set(id, entry)
+    }
+    surfaces = new Map(inputs.surfaces)
   }
 
   /** Refresh scale-dependent SVG together; per-frame writes invalidate Safari's cached layer. */
-  const commitCamera = (current: Camera, zoomRatio: number, showGrid: boolean): void => {
-    const nextLabelStep = surfaceLabelStep(current.k)
-    if (nextLabelStep !== labelStep) {
-      layoutSurfaceLabels(labels, current.k, gridView)
-      labelStep = nextLabelStep
-    }
-    for (const glow of glows.values()) glow.move(current)
+  const commitCamera = (view: CameraView): void => {
+    const current = view.camera
+    // Surface titles move to the settled zoom's step through the same painters; only their attributes change.
+    if (painted !== undefined && surfaceLabelStep(current.k) !== labelStep) drawSurfaces(painted, current.k)
+    glows.move(current)
     for (const { world } of paintSurfaces) {
       world.setAttribute('transform', `translate(${current.x} ${current.y}) scale(${current.k})`)
     }
-    committed = current
-    committedZoomRatio = zoomRatio
-    const weight = weightAt(zoomRatio)
-    camera.style.setProperty('--weight', String(weight))
+    committed = view
+    camera.style.setProperty('--weight', String(weightAt(view.zoomRatio)))
     camera.style.setProperty('--camera-scale', String(current.k))
     camera.toggleAttribute('data-facades-hidden', !facadeDetailsVisible(current.k))
-    field.style.display = showGrid ? '' : 'none'
-    const gridScale = current.k
-    root.toggleAttribute('data-minor-grid-hidden', !minorGridVisible(gridScale))
-    for (const line of grid.lines) line.style.strokeWidth = String(1 / gridScale)
+    field.style.display = gridVisible(current.k) ? '' : 'none'
+    root.toggleAttribute('data-minor-grid-hidden', !minorGridVisible(current.k))
+    for (const line of grid.lines) line.style.strokeWidth = String(1 / current.k)
+    repainted = false
     camera.style.removeProperty('transform')
     camera.style.removeProperty('will-change')
-    host.removeAttribute('data-camera-moving')
   }
 
-  const scheduleCameraCommit = (): void => {
-    clearCameraTimer()
-    cameraTimer = setTimeout(() => {
-      cameraTimer = undefined
-      host.removeAttribute('data-camera-moving')
-      const latest = latestCamera
-      if (latest === undefined) camera.style.removeProperty('will-change')
-      else if (latest.current.k !== committed?.k || latest.zoomRatio !== committedZoomRatio) {
-        commitCamera(latest.current, latest.zoomRatio, latest.showGrid)
-      }
-    }, CAMERA_SETTLE_MS)
+  /** The map settles once nothing has moved it for SETTLE_MS; one timer waits for that instead of restarting on every frame. */
+  const settle = (): void => {
+    const wait = movedAt + SETTLE_MS - performance.now()
+    if (wait > 0) {
+      settleTimer = setTimeout(settle, wait)
+      return
+    }
+    settleTimer = undefined
+    host.removeAttribute('data-map-moving')
+    repainted = false
+    if (latest === undefined) camera.style.removeProperty('will-change')
+    else if (latest.camera.k !== committed?.camera.k || latest.zoomRatio !== committed?.zoomRatio) commitCamera(latest)
+    updateGlows()
   }
 
-  const startCameraMotion = (): void => {
+  const scheduleSettle = (): void => {
+    movedAt = performance.now()
+    if (settleTimer === undefined) settleTimer = setTimeout(settle, SETTLE_MS)
+  }
+
+  /** A camera change or a repaint moves the map until it settles; hover highlights and glows wait for that. */
+  const markMoving = (): void => {
     // Hover changes beneath a stationary pointer repaint Safari's cached SVG during inertia.
-    host.toggleAttribute('data-camera-moving', true)
+    host.toggleAttribute('data-map-moving', true)
+    scheduleSettle()
+  }
+
+  /** Promotes the cached camera layer before a gesture or animation moves it; a committed zoom releases it, while a pan keeps it cached. */
+  const startCameraMotion = (): void => {
     camera.style.willChange = 'transform'
-    scheduleCameraCommit()
+    scheduleSettle()
   }
 
   /** Capture wheel motion before the normal host handler schedules its camera frame, including over sibling overlays. */
@@ -265,62 +256,34 @@ export function createMap(host: HTMLElement): IsoMap {
     svg: root,
     prepareCamera: startCameraMotion,
     move(current, zoomRatio) {
-      const gridScale = current.k
-      const showGrid = gridVisible(gridScale)
-      if (showGrid) {
-        grid.pattern.setAttribute(
-          'patternTransform',
-          gridTransform(current, gridView),
-        )
-      }
-      const scaleChanged = current.k !== composed?.k || zoomRatio !== composedZoomRatio
-      const cameraChanged = current.x !== composed?.x || current.y !== composed?.y || current.k !== composed?.k
+      if (gridVisible(current.k)) grid.pattern.setAttribute('patternTransform', gridTransform(current, painted?.view ?? DEFAULT_PROJECTION))
+      const scaleChanged = current.k !== latest?.camera.k || zoomRatio !== latest?.zoomRatio
+      const cameraChanged = current.x !== latest?.camera.x || current.y !== latest?.camera.y || current.k !== latest?.camera.k
       if (!cameraChanged && !scaleChanged) return false
-      composed = current
-      composedZoomRatio = zoomRatio
-      latestCamera = { current, zoomRatio, showGrid }
-      if (committed !== undefined) camera.style.willChange = 'transform'
-      if (committed === undefined) {
-        clearCameraTimer()
-        commitCamera(current, zoomRatio, showGrid)
-      } else {
-        const ratio = current.k / committed.k
-        const x = current.x - committed.x * ratio
-        const y = current.y - committed.y * ratio
+      latest = { camera: current, zoomRatio }
+      markMoving()
+      // A repainted picture has no cached layer worth moving, so the camera goes straight into the SVG.
+      if (committed === undefined || repainted) commitCamera(latest)
+      else {
+        camera.style.willChange = 'transform'
+        const ratio = current.k / committed.camera.k
+        const x = current.x - committed.camera.x * ratio
+        const y = current.y - committed.camera.y * ratio
         camera.style.transform = `translate(${x}px, ${y}px) scale(${ratio})`
-        scheduleCameraCommit()
       }
       return scaleChanged
     },
     paint(scene) {
       painted = scene
-      gridView = scene.view
-      const zoom = composed?.k ?? 1
-      labelStep = surfaceLabelStep(zoom)
-      definitions.innerHTML = mapDefs(scene.view) + facadeDefs(scene)
-      for (const layer of Object.values(layers)) layer.replaceChildren()
-      paintLayerPlanes(layers.sheet, scene)
-      layers.sheet.insertAdjacentHTML('beforeend', sheetSvg(scene))
-      layers.islands.innerHTML = islandsSvg(scene, zoom)
-      layers.slabs.innerHTML = slabsSvg(scene, zoom)
-      layers.items.innerHTML = buildingsSvg(scene)
-      items = new Map([layers.islands, layers.slabs, layers.items].flatMap(layer =>
-        [...layer.querySelectorAll<SVGGElement>('[data-id]')].map(node => [node.dataset.id!, node] as const)))
-      layers.routes.innerHTML = routesSvg(scene)
-      const groups = new Map([...layers.routes.querySelectorAll<SVGGElement>('g.route')]
-        .map(group => [group.dataset.id!, group]))
-      routes = new Map()
-      for (const { route } of scene.routes) {
-        const ids = route.relationshipIds ?? [route.id]
-        const node = { group: groups.get(route.id)!, ids, source: route.source, target: route.target }
-        for (const id of ids) routes.set(id, node)
-      }
-      paintLayerLabels(layers.layerLabels, scene)
-      surfaces = new Map([
-        ...scene.buildings.map(({ building }) => [building.representationId, building.surface] as const),
-        ...scene.slabs.map(({ slab }) => [slab.representationId, slab.island] as const),
-      ])
-      labels = [...ground.world.querySelectorAll<SVGGElement>('.surface-label')]
+      const reshaped = draw(scene, latest?.camera.k ?? 1)
+      repainted = true
+      markMoving()
+      const inputs = highlightInputs(scene)
+      const key = JSON.stringify(inputs)
+      if (!reshaped && key === highlighted) return false
+      highlighted = key
+      index(inputs)
+      return true
     },
     changes(comparison) {
       const apply = (node: Element, status: string | undefined) => {
