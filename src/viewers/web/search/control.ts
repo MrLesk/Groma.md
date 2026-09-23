@@ -124,6 +124,8 @@ export function createSearchControl(options: SearchControlOptions) {
 
   input.addEventListener('focus', open)
   input.addEventListener('input', query)
+  // A narrow header folds the field to its icon; a click anywhere on the field still starts a search.
+  input.parentElement!.addEventListener('click', () => input.focus())
   clear.addEventListener('click', () => {
     input.value = ''
     query()

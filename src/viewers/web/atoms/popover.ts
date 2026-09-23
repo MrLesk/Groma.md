@@ -3,7 +3,7 @@ interface PopoverOptions {
   companion?: Node
 }
 
-/** Shares outside-click dismissal; search supplies cancellation and revision owns a tooltip. */
+/** Shares outside-click dismissal; search and revision supply their own cancellation, and revision owns a tooltip. */
 export function bindPopover(root: HTMLElement, options: PopoverOptions = {}): void {
   const dismiss = options.dismiss ?? (() => root.removeAttribute('open'))
   document.addEventListener('pointerdown', event => {
@@ -29,6 +29,17 @@ export const anchoredPopoverCss = `
     background: color-mix(in srgb, var(--paper) 78%, transparent);
     backdrop-filter: blur(18px);
     box-shadow: 0 12px 36px color-mix(in srgb, var(--ink) 14%, transparent);
+  }
+  /* Menus that open under a field enter the same way; [hidden] restarts the entrance. */
+  .anchored-popover.animated:not([hidden]) {
+    transform-origin: top center;
+    animation: anchored-popover-in calc(var(--chrome-motion) * 0.7) var(--chrome-ease) both;
+  }
+  @keyframes anchored-popover-in {
+    from { opacity: 0; transform: translateY(-6px) scale(0.98); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .anchored-popover.animated:not([hidden]) { animation: none; }
   }
   .anchored-option {
     width: 100%;

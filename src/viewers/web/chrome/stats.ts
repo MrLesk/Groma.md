@@ -27,8 +27,11 @@ export function paintHeaderSummary(
   name.textContent = project.title
   const counts = document.createElement('span')
   counts.className = 'world-counts'
-  counts.textContent = Object.entries(c4Counts(world))
+  // The inner span lets the header drop the counts whole when only a fragment of them would fit.
+  const text = document.createElement('span')
+  text.textContent = Object.entries(c4Counts(world))
     .map(([kind, count]) => `${count} ${kind}${count === 1 ? '' : 's'}`)
     .join(' · ')
+  counts.append(text)
   host.append(name, counts)
 }

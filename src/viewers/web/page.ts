@@ -147,25 +147,33 @@ const style = `
     left: 12px;
     height: 52px;
     z-index: 20;
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) clamp(200px, 22vw, 280px) auto;
+    display: flex;
     align-items: center;
     gap: 16px;
     padding: 0 16px;
   }
+  /* A short header gives way in this order: world counts, Search down to 200px, then the commit messages.
+     Search's large shrink factor makes it absorb a shortage before the revision fields start to clip. */
+  #header > .header-context { flex: 1 1 auto; }
+  #header > #web-search { flex: 0 1000 280px; min-width: 200px; }
+  #header > .header-actions { flex: none; }
   #header #stats, #header #zoom, #header .controls button { font-size: 12px; }
   .header-context { min-width: 0; display: flex; align-items: center; gap: 16px; }
   /* The lockup's text sits below its artwork's center, so align it optically with the header text. */
   .header-context > svg { height: 32px; width: auto; display: block; flex: none; transform: translateY(-1px); }
-  #stats { min-width: 0; flex: 1; display: flex; align-items: center; gap: 10px; white-space: nowrap; }
-  #stats .project-name { overflow: hidden; text-overflow: ellipsis; color: var(--ink); }
+  #stats { display: contents; white-space: nowrap; }
+  #stats .project-name { flex: none; color: var(--ink); }
+  .header-context > .time-machine { margin-left: auto; }
   body[data-comparison] #stats .world-counts { display: none; }
   #legend .comparison-legend { display: none; gap: 12px; margin-top: 8px; }
   body[data-comparison] #legend .comparison-legend { display: flex; }
   #legend .comparison-legend span:nth-child(1) { color: var(--diff-added); }
   #legend .comparison-legend span:nth-child(2) { color: var(--diff-modified); }
   #legend .comparison-legend span:nth-child(3) { color: var(--diff-removed); }
-  #stats .world-counts { min-width: 0; overflow: hidden; text-overflow: ellipsis; font-size: 10px; letter-spacing: 0.06em; }
+  /* Zero width keeps the counts out of the header's demand: they fill only width nothing else wants, and leave
+     whole rather than show a clipped fragment beside a long commit message. */
+  #stats .world-counts { container-type: inline-size; flex: 1 1 0px; width: 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; font-size: 10px; letter-spacing: 0.06em; }
+  @container (max-width: 150px) { .world-counts > span { display: none; } }
   .header-actions { display: flex; align-items: center; gap: 8px; }
   .header-actions details > summary { border-color: transparent; background: transparent; }
   .header-utilities { display: flex; align-items: center; gap: 4px; border-left: 1px solid var(--hairline); padding-left: 8px; }
@@ -213,12 +221,23 @@ const style = `
   @media (max-width: 1400px) {
     #stats .world-counts { display: none; }
   }
+  /* Up to this width the header has no spare room for a comparison being started or for compare words standing
+     outside a short revision field, so Search folds to its 34px icon until the list closes. Opening Search itself
+     unfolds it. */
+  @media (max-width: 1320px) {
+    #header > #web-search { transition: flex-basis var(--chrome-motion) var(--chrome-ease), min-width var(--chrome-motion) var(--chrome-ease); }
+    #header:has(#revision[data-starting], .time-machine > .revision-compare:not([hidden])) > #web-search:not([data-open]) { flex-basis: 34px; min-width: 34px; overflow: hidden; }
+  }
   @media (max-width: 1080px) {
     #header { gap: 12px; padding: 0 12px; }
     .header-context { gap: 10px; }
     #fit > span { display: none; }
-    #header #revision summary { min-width: 0; }
-    #header #revision .revision-current, #header #revision .revision-loading { display: none; }
+    /* Both short IDs must fit at 1000px, so Search may narrow to 120px here. */
+    #header > #web-search { min-width: 120px; }
+  }
+  /* Below this width a pair's two short IDs fit only once Search folds to its icon as well. */
+  @media (max-width: 1000px) {
+    body[data-comparison] #header > #web-search:not([data-open]) { flex-basis: 34px; min-width: 34px; overflow: hidden; }
   }
   #hierarchy { position: absolute; top: 74px; bottom: 12px; min-width: 0; min-height: 0; z-index: 5; }
   #hierarchy {
@@ -361,7 +380,7 @@ const style = `
   .mark { flex: none; }
   .ghost { opacity: 0.5; }
   @media (prefers-reduced-motion: reduce) {
-    #hierarchy, #hierarchy-toggle .hierarchy-chevron, #hierarchy-content, #hierarchy-title .pane-label, #details, body.details-hidden #details, body #work, body #map-view { transition: none; }
+    #hierarchy, #hierarchy-toggle .hierarchy-chevron, #hierarchy-content, #hierarchy-title .pane-label, #details, body.details-hidden #details, body #work, body #map-view, #header > #web-search { transition: none; }
   }
 ${floatingBarCss}${chromeCss}${anchoredPopoverCss}${creditsCss}${motionCss}${revisionCss}${searchCss}${highlightCss}${sourceCss}${fileDiffCss}${taskDiffCss}${comparisonDetailsCss}${backlogMarkCss}${workBadgeCss}${workDetailsCss}${flowRowCss}${mapCss}${pinsCss}${workCss}${tipCss}${projectEditorCss}
 ${emptyStateCss}

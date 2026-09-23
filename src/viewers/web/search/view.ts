@@ -6,35 +6,7 @@ export const searchCss = `
     position: relative;
     --popover-width: 480px;
     --search-result-height: 50px;
-    --search-motion: calc(var(--chrome-motion) * 0.7);
   }
-  #web-search .search-field {
-    height: 32px;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    border: 1px solid var(--hairline);
-    border-radius: var(--control-radius);
-    padding: 0 7px 0 10px;
-    background: color-mix(in srgb, var(--paper) 60%, transparent);
-    color: var(--muted);
-  }
-  #web-search[data-open] .search-field {
-    border-color: var(--highlight);
-    box-shadow: 0 0 0 1px color-mix(in srgb, var(--highlight) 12%, transparent);
-  }
-  #web-search input {
-    min-width: 0;
-    flex: 1;
-    border: 0;
-    outline: 0;
-    padding: 0;
-    background: transparent;
-    color: var(--ink);
-    font: inherit;
-  }
-  #web-search input::placeholder { color: var(--muted); }
-  #web-search input::-webkit-search-cancel-button { display: none; }
   #web-search .search-clear {
     width: 22px;
     height: 22px;
@@ -55,18 +27,6 @@ export const searchCss = `
     max-height: calc(100vh - 64px);
     overflow: hidden;
     padding-bottom: 4px;
-    opacity: 1;
-    transform: translateY(0) scale(1);
-    transform-origin: top center;
-  }
-  #web-search .search-menu[hidden] {
-    display: none;
-    opacity: 0;
-    transform: translateY(-6px) scale(0.98);
-  }
-  #web-search .search-menu:not([hidden]) { animation: search-menu-in var(--search-motion) var(--chrome-ease) both; }
-  @keyframes search-menu-in {
-    from { opacity: 0; transform: translateY(-6px) scale(0.98); }
   }
   #web-search .search-results {
     max-height: calc(5 * var(--search-result-height));
@@ -113,13 +73,10 @@ export const searchCss = `
   #web-search .search-meta { font-size: 9px; letter-spacing: 0.08em; text-transform: uppercase; white-space: nowrap; }
   #web-search .search-path { grid-column: 3 / 5; overflow: hidden; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
   #web-search .search-empty { margin: 0; padding: 14px 10px; color: var(--muted); }
-  @media (prefers-reduced-motion: reduce) {
-    #web-search .search-menu:not([hidden]) { animation: none; }
-  }
 `
 
 export function searchControl(icons: { search: string, close: string }): string {
-  return `<div id="web-search"><div class="search-field">${icons.search}<input type="search" placeholder="Search" autocomplete="off" spellcheck="false" role="combobox" aria-label="Search" aria-autocomplete="list" aria-expanded="false" aria-controls="web-search-results"><button class="search-clear" type="button" aria-label="Clear search">${icons.close}</button><span class="keycap search-shortcut" aria-hidden="true"></span></div><div class="anchored-popover search-menu" hidden><div id="web-search-results" class="search-results" role="listbox" aria-label="Search results"></div><div class="anchored-popover-footer"><span class="result-count"></span><span>↑↓ Navigate</span><span><span class="keycap">↵</span> Open</span><span><span class="keycap">Esc</span> Close</span></div></div></div>`
+  return `<div id="web-search"><div class="chrome-field">${icons.search}<input type="search" placeholder="Search" autocomplete="off" spellcheck="false" role="combobox" aria-label="Search" aria-autocomplete="list" aria-expanded="false" aria-controls="web-search-results"><button class="search-clear" type="button" aria-label="Clear search">${icons.close}</button><span class="keycap search-shortcut" aria-hidden="true"></span></div><div class="anchored-popover animated search-menu" hidden><div id="web-search-results" class="search-results" role="listbox" aria-label="Search results"></div><div class="anchored-popover-footer"><span class="result-count"></span><span>↑↓ Navigate</span><span><span class="keycap">↵</span> Open</span><span><span class="keycap">Esc</span> Close</span></div></div></div>`
 }
 
 export function paintSearchResults(

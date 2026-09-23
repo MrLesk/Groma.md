@@ -221,12 +221,26 @@ Draft element outlines remain dashed.
 The map grid fills the screen. Inset 35%-paper frosted chrome floats
 above it as one technical instrument. The header groups the groma.md lockup,
 project title from `project.md`, quiet system, container, and component counts,
-and revision menu on the left.
+and the revision fields on the left.
 A permanent Search field sits between that context and the view controls:
 Fit, `-`, zoom readout, `+`, Settings, Help, and Info. Controls share one
 height, and opening search leaves them in place. Header popups float with
-a clear gap below the bar. At narrower widths the
-counts and the Revision and Fit text give way to the controls.
+a clear gap below the bar. Search and the revision fields share one text field
+look, `.chrome-field` in `web/atoms/chrome.ts`, and one menu entrance in
+`web/atoms/popover.ts`. `web/page.ts` owns the order in which a short header
+gives way: the counts, which show only above 1400 px, take just the width
+nothing else wants and leave whole when less than 150 px is left for them;
+Search narrows to 200 px; then the commit messages clip together. The project
+title never gives way. Up to 1320 px the header has no spare room for a
+comparison being started or for compare words outside a short revision field, so
+Search folds to its icon until the list closes; opening Search, by key or by
+clicking its icon, unfolds it. At 1080 px and below the Fit
+text leaves, a revision field shows its exact tag or short ID instead of its
+message, Search may narrow to 120 px, and an open revision search takes the whole
+box. At 1000 px and below Search also stays folded while a comparison is open, so
+both short IDs read whole down to the page's 900 px minimum. `page.ts` reads the
+revision box's `data-starting` attribute, where the compare words stand, and the
+body's `data-comparison` attribute for those folds.
 Iso, 2D and Layers are icon-and-label tabs in a floating bar at the top of the
 map, centered between the side panels. It shares the bottom tasks bar rounded
 surface. One selection pill slides and resizes between tabs; reduced motion
@@ -263,29 +277,46 @@ Enter or a result click opens the existing architecture or task details;
 opening an active task keeps it active. Escape or a click outside search
 restores the selection and camera from before the search.
 
-The time machine starts at Current working tree. Opening it turns the header
-control into a search field for commit IDs or messages, including commit bodies.
-It lists current-branch commits newest first, including source-only changes.
-Listing history reads Git metadata; architecture is loaded only after selection. Each
-two-line row shows the subject, then an exact tag when present, short hash, and
-the commit date and time in the browser's locale. A row with a commit body
-shows that body on hover without repeating its subject. A selected commit
-opens the complete architecture and source measurements from that same Git
-snapshot. Historical views are read-only,
-carry no current Backlog work, and keep their full commit id in the URL.
-The selected component stays open if it exists in the chosen revision; otherwise
-its details close. The header shows the clipped commit message with its full ID
-and message on hover. Closing search without selection preserves the current view.
-An unsupported architecture reports its error when selected and leaves the current
-view intact. Returning to Current working tree resumes live architecture and work updates.
+The time machine starts at Current working tree. While browsing it is one
+revision field in the header, as wide as its commit message. Clicking the field
+turns it into the commit search in the same place and at the same width; only a
+newly selected commit's message changes the field's width. The search matches commit IDs, messages,
+and commit bodies. Its list sits directly under the field and follows it when the
+header reflows. It shows current-branch commits newest first, including
+source-only changes. Listing history reads Git metadata; architecture is loaded
+only after selection. Each two-line row shows the subject, then an exact tag when
+present, short hash, and the commit date and time in the browser's locale. A row
+with a commit body shows that body on hover without repeating its subject. A
+selected commit opens the complete architecture and source measurements from
+that same Git snapshot. Historical views are read-only, carry no current Backlog
+work, and keep their full commit id in the URL. The selected component stays open
+if it exists in the chosen revision; otherwise its details close. A field's hover
+title is its full ID and message. Escape or a click outside closes the search and
+preserves the current view. An unsupported architecture reports its error at the
+top of the list, which scrolls back to it, and leaves the current view intact. Returning to
+Current working tree resumes live architecture and work updates. A single-snapshot
+export has nothing to search: its field opens the snapshot's metadata and a
+notice.
 
+Nothing about comparing shows by default. While the open search is empty,
+**or compare 2 revisions** follows the placeholder, just outside a field too short
+to hold both; typing removes those words. Activating them moves the search to the start field, and "vs." and
+the viewed revision slide in beside it as destination B. The list opens at the
+destination row, which is disabled, so its parents are the next rows. The ×
+appears and cancels, as do Escape and a click outside. Choosing a commit opens
+A to B.
 
-Choose **Compare from…** to keep the viewed revision as destination B and pick a
-starting revision A. The header shows A **vs.** B; its menu shows the full pair
-and lets either endpoint change using the same search. Cancel preserves the
-pair. The × button ends comparison and opens B. Ordinary revision browsing
-then opens either individual snapshot. The URL stores A in `from` (empty for
-the working tree) and B in `revision` (omitted for the working tree).
+While comparing, start and destination are two fields in one box with a rule on
+each side of "vs.". Each field is as wide as its commit message. Clicking a
+field turns it into the commit search at the same position and width while the
+other field stays in place, and the list sits under that field with the other
+endpoint disabled. The × ends the comparison and opens B. Ordinary browsing then
+opens either individual snapshot. The URL stores A in `from` (empty for the
+working tree) and B in `revision` (omitted for the working tree).
+`web/revision/view.ts` owns the fields, the list rows, and their motion;
+`web/revision/control.ts` owns the displayed revision or pair and which field is
+the search. Motion uses the chrome motion variables and is off under reduced
+motion.
 
 Comparison matches components by their stable IDs. Their own architecture or
 owned-source changes mark them Modified; relationships have independent change
