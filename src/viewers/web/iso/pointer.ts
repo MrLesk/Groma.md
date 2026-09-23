@@ -4,7 +4,11 @@ import type { IsoMap } from './map.ts'
 
 export interface MapPointerActions {
   orbiting(): boolean
+  /** A press stops the camera where it is, catching a glide or an animated move. */
+  hold(): void
   pan(dx: number, dy: number): void
+  /** Carries a released drag on at its velocity, in screen pixels per millisecond. */
+  glide(velocity: Point): void
   orbit(dx: number, dy: number): void
   /** Zooms by `factor` about `point` in the map pane: the cursor for the wheel, the point between the fingers for a pinch. */
   zoom(factor: number, point: Point): void
@@ -14,6 +18,13 @@ export interface MapPointerActions {
 }
 
 const DRAG_THRESHOLD = 4
+/** A released drag glides at its speed over this last stretch; a longer pause before release leaves nothing to glide. */
+const RELEASE_WINDOW_MS = 100
+
+/** A pan drag position with its event time. */
+interface Sample extends Point {
+  time: number
+}
 
 /** One gesture map for the map pane: a click selects, a drag pans (orbits in Layers unless Shift is held), two fingers pinch to zoom, and the wheel pans or zooms. */
 export function bindMapPointer(host: HTMLElement, map: IsoMap, actions: MapPointerActions): void {
@@ -43,11 +54,20 @@ export function bindMapPointer(host: HTMLElement, map: IsoMap, actions: MapPoint
     projectEdit: boolean
     additive: boolean
   } | null = null
+  /** Where the current one-pointer drag panned; a gesture that ever had two pointers never glides. */
+  let trail: Sample[] = []
+  let pinched = false
 
   map.svg.addEventListener('pointerdown', event => {
     if (event.button !== 0) return
+    if (pointers.size === 0) {
+      actions.hold()
+      trail = []
+      pinched = false
+    }
     const start = { x: event.clientX, y: event.clientY }
     pointers.set(event.pointerId, start)
+    if (pointers.size > 1) pinched = true
     press = pointers.size > 1 ? null : {
       id: event.pointerId,
       start,
@@ -70,7 +90,10 @@ export function bindMapPointer(host: HTMLElement, map: IsoMap, actions: MapPoint
     const still = [...pointers].find(([id]) => id !== event.pointerId)?.[1]
     if (still !== undefined) pinch(last, next, still)
     else if (actions.orbiting() && !event.shiftKey) actions.orbit(next.x - last.x, next.y - last.y)
-    else actions.pan(next.x - last.x, next.y - last.y)
+    else {
+      actions.pan(next.x - last.x, next.y - last.y)
+      trail.push({ ...next, time: event.timeStamp })
+    }
   })
 
   /** One finger moved from `from` to `to` while the other stayed at `still`: follow their midpoint and zoom by their change in spread about it. */
@@ -89,9 +112,17 @@ export function bindMapPointer(host: HTMLElement, map: IsoMap, actions: MapPoint
     else if (pressed.onSheet) actions.deselect()
   }
 
+  /** Glides at the drag's speed since the oldest position in the release window. */
+  function release(end: Sample): void {
+    const first = trail.find(sample => end.time - sample.time <= RELEASE_WINDOW_MS)
+    if (first === undefined || end.time <= first.time) return
+    actions.glide({ x: (end.x - first.x) / (end.time - first.time), y: (end.y - first.y) / (end.time - first.time) })
+  }
+
   map.svg.addEventListener('pointerup', event => {
     if (!pointers.delete(event.pointerId)) return
     if (press?.id === event.pointerId) tap(press)
+    else if (pointers.size === 0 && !pinched) release({ x: event.clientX, y: event.clientY, time: event.timeStamp })
     press = null
     if (pointers.size === 0) map.dragging(false)
   })

@@ -679,6 +679,11 @@ after a pinch keeps dragging. Panel selection, flow steps, search navigation,
 Fit, and zoom buttons move and zoom together in a quick 220 ms transition.
 A new action starts from the displayed camera position. Dragging, scrolling,
 and pinching follow the gesture directly and stop an unfinished transition.
+A drag released while still moving glides on in the same direction and slows to
+a stop, like trackpad momentum; a pause before release, a pinch, and a Layers
+orbit do not glide, and reduced motion turns the glide off. Pressing the map
+holds the camera where it is, stopping a glide or an unfinished transition, and
+any other navigation takes over from the displayed position.
 The map keeps one cached camera layer, which animated navigation and direct gestures move without redrawing the map.
 The map restores crisp SVG rendering after movement settles.
 Component selection and focused flow endpoints share one glow per

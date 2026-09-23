@@ -45,6 +45,42 @@ test.concurrent('direct gestures or reduced motion replace and cancel an animate
   expect(motion.current).toEqual(direct)
 })
 
+test.concurrent('a glide carries the camera on in its direction and slows until it stops; a release too slow to glide leaves it still', () => {
+  const start = { x: 0, y: 0, k: 1 }
+  const motion = createCameraMotion(start)
+  motion.glide({ x: 2, y: -1 }, 0)
+  expect(motion.step(100)).toBe(true)
+  const first = motion.current
+  expect(first.x).toBeGreaterThan(0)
+  expect(first.y).toBeCloseTo(-first.x / 2)
+  expect(first.k).toBe(1)
+  motion.step(200)
+  expect(motion.current.x - first.x).toBeLessThan(first.x)
+  expect(motion.step(60_000)).toBe(false)
+  const stopped = motion.current
+  expect(motion.step(120_000)).toBe(false)
+  expect(motion.current).toEqual(stopped)
+
+  const slow = createCameraMotion(start)
+  slow.glide({ x: 0.001, y: 0 }, 0)
+  expect(slow.step(50)).toBe(false)
+  expect(slow.current).toEqual(start)
+})
+
+test.concurrent('navigation replaces a glide and starts from the displayed camera', () => {
+  const motion = createCameraMotion({ x: 0, y: 0, k: 1 })
+  motion.glide({ x: 3, y: 0 }, 0)
+  motion.step(100)
+  const displayed = motion.current
+  const next = { x: -50, y: 20, k: 2 }
+  motion.move(next, 100, true)
+  expect(motion.current).toEqual(displayed)
+  motion.step(100 + CAMERA_DURATION_MS)
+  expect(motion.current).toEqual(next)
+  expect(motion.step(5_000)).toBe(false)
+  expect(motion.current).toEqual(next)
+})
+
 test.concurrent('spatial framing starts at the displayed camera and follows the moving projected bounds', () => {
   const initial = { x: 20, y: 30, k: 1 }
   const motion = createCameraMotion(initial)

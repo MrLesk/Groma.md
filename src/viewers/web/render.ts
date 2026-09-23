@@ -244,7 +244,6 @@ function select(id: string, additive = false, origin: 'panel' | 'map' = 'panel')
   detailsTab = detailsTabAfterSelection(detailsTab, primarySelection(selection), primarySelection(next))
   selection = next
   touched = true
-  if (origin === 'map') camera.move(camera.current, false)
   paintViewState()
   if (origin === 'panel') focusArchitecture(selectedArchitecture(selection))
 }
@@ -331,6 +330,7 @@ function toggleFlow(flow: FlowRef, returnTo?: string): void {
 
 bindMapPointer(host, map, {
   orbiting: () => mapMotion.view === 'layers',
+  hold: () => camera.move(camera.current, false),
   zoom(factor, point) {
     camera.move(zoomAbout(camera.current, factor, point, fitted), false)
     touched = true
@@ -339,15 +339,14 @@ bindMapPointer(host, map, {
     camera.move(pan(camera.current, dx, dy), false)
     touched = true
   },
+  glide: camera.glide,
   orbit(dx, dy) {
     touched = true
     mapAnimator.orbit(dx, dy)
   },
   select: (id, additive) => select(id, additive, 'map'),
   deselect,
-  editProject() {
-    if (revisionControl.live && project !== undefined) projectEditor?.open(project)
-  },
+  editProject: () => { if (revisionControl.live && project !== undefined) projectEditor?.open(project) },
 })
 map.svg.addEventListener('keydown', event => {
   if (!map.isProjectEdit(event.target) || (event.key !== 'Enter' && event.key !== ' ')) return
