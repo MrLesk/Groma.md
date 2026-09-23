@@ -679,7 +679,7 @@ after a pinch keeps dragging. Panel selection, flow steps, search navigation,
 Fit, and zoom buttons move and zoom together in a quick 220 ms transition.
 A new action starts from the displayed camera position. Dragging, scrolling,
 and pinching follow the gesture directly and stop an unfinished transition.
-Animated navigation and direct gestures prepare the same cached camera layer before movement.
+The map keeps one cached camera layer, which animated navigation and direct gestures move without redrawing the map.
 The map restores crisp SVG rendering after movement settles.
 Component selection and focused flow endpoints share one glow per
 highlighted shape. Each uses a small, separate layer containing its blurred
@@ -689,7 +689,7 @@ repaints the map. The glow hides while the map moves (panning, zooming, a view
 change, orbiting or a settling world update) and returns once the map has been
 still for 250 ms. It follows the displayed projection and camera, and disappears
 when its highlight clears or its shape is filtered out.
-Hover highlights pause during camera movement, including trackpad inertia, and return after it settles.
+A hover highlight stays on its element while the map moves, including trackpad inertia, and moves to whatever is under the pointer once the map settles.
 Selection highlights and clicking remain available throughout.
 Reduced motion applies the destination without animation. `F1` toggles the HUD for a map-only
 view. The floating camera bar selects Iso, 2D, or Layers. 2D looks straight down on the same

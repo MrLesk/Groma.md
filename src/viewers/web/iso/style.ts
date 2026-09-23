@@ -143,9 +143,9 @@ export function mapDrawingCss(palette?: Palette, zoom = 1): string {
   #map .project-edit .pencil .lead { fill: ${ink}; }
   #map .project-edit .pencil .facet, #map .project-edit .pencil .eraser, #map .project-edit .pencil .ferrule,
   #map .project-edit .pencil .tip, #map .project-edit .pencil .lead { stroke: none; }
-  #map:where(:not([data-map-moving])) .project-edit:hover .edit-frame, #map .project-edit:focus .edit-frame { fill: ${ink}; fill-opacity: 0.05; }
-  #map:where(:not([data-map-moving])) .project-edit:hover .pencil path, #map .project-edit:focus .pencil path,
-  #map:where(:not([data-map-moving])) .project-edit:hover .pencil .body, #map .project-edit:focus .pencil .body { stroke: ${ink}; }
+  #map .project-edit.hovered .edit-frame, #map .project-edit:focus .edit-frame { fill: ${ink}; fill-opacity: 0.05; }
+  #map .project-edit.hovered .pencil path, #map .project-edit:focus .pencil path,
+  #map .project-edit.hovered .pencil .body, #map .project-edit:focus .pencil .body { stroke: ${ink}; }
   #map .grid { fill: none; stroke: ${grid}; }
   #map .grid.major { stroke: ${gridMajor}; }
   #map > .map-surface[data-minor-grid-hidden] .grid:not(.major) { display: none; }
@@ -199,12 +199,13 @@ export const mapCss = `
   #map .world { pointer-events: auto; }
   #map .camera[data-tracing] .route-surface { will-change: transform; }
   #map > .map-surface [data-id] { cursor: pointer; }
-  #map > .map-surface:active, #map > .map-surface:active [data-id] { cursor: grabbing; }
-  #map .camera { transform-origin: 0 0; }
+  #map > .map-surface:active, #map .drag-cover { cursor: grabbing; }
+  #map .drag-cover { position: absolute; inset: 0; }
+  #map .camera { transform-origin: 0 0; will-change: transform; }
   ${mapDrawingCss()}
-  #map:where(:not([data-map-moving])) .route:hover, #map .route.endpoint, #map .route.touched { --emphasis: ${emphasis(1)}; }
-  #map:where(:not([data-map-moving])) .route:hover .line { stroke: var(--map-line); opacity: 1; }
-  #map:where(:not([data-map-moving])) .route:hover .arrow { fill: var(--map-line); opacity: 1; }
+  #map .route.hovered, #map .route.endpoint, #map .route.touched { --emphasis: ${emphasis(1)}; }
+  #map .route.hovered .line { stroke: var(--map-line); opacity: 1; }
+  #map .route.hovered .arrow { fill: var(--map-line); opacity: 1; }
   #map .route.endpoint .line, #map .route.selected .line, #map .route.touched .line { stroke: var(--highlight); opacity: 1; }
   #map .route.endpoint .arrow, #map .route.selected .arrow, #map .route.touched .arrow { fill: var(--highlight); opacity: 1; }
   #map .route.touched .line { stroke-dasharray: none; }
@@ -221,10 +222,10 @@ export const mapCss = `
   #map .camera[data-tracing] .route:not(.lit) { display: none; }
   #map .camera[data-tracing] .building:not(.onpath):not(.selected):not(.touched):not(.neighbor),
   #map .camera[data-tracing] .slab:not(.onpath):not(.selected):not(.touched) { opacity: 0.3; }
-  #map:where(:not([data-map-moving])) .building:not(.selected):hover, #map:where(:not([data-map-moving])) .slab:not(.selected):not(.context):hover,
-  #map:where(:not([data-map-moving])) .island.system:not(.selected):not(.context):hover, #map .context { --emphasis: ${emphasis(0.5)}; }
-  #map:where(:not([data-map-moving])) .building:not(.selected):hover .face, #map:where(:not([data-map-moving])) .slab:not(.selected):not(.context):hover .face,
-  #map:where(:not([data-map-moving])) .island.system:not(.selected):not(.context):hover > .ground { stroke: var(--map-line); }
+  #map .building.hovered:not(.selected), #map .slab.hovered:not(.selected):not(.context),
+  #map .island.system.hovered:not(.selected):not(.context), #map .context { --emphasis: ${emphasis(0.5)}; }
+  #map .building.hovered:not(.selected) .face, #map .slab.hovered:not(.selected):not(.context) .face,
+  #map .island.system.hovered:not(.selected):not(.context) > .ground { stroke: var(--map-line); }
   #map .selected, #map .touched,
   #map .building.lit, #map .slab.lit, #map .island.lit { --emphasis: ${emphasis(1)}; }
   #map .context .face, #map .island.context > .ground, #map .selected .face, #map :is(.island, .zone).selected > .ground,

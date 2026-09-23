@@ -51,6 +51,6 @@ export const layerCss = `
     vector-effect: non-scaling-stroke;
   }
   #map .route .lift { stroke-dasharray: 2 5; opacity: 0.52; }
-  #map:where(:not([data-map-moving])) .route:hover .lift, #map .route.endpoint .lift, #map .route.selected .lift,
+  #map .route.hovered .lift, #map .route.endpoint .lift, #map .route.selected .lift,
   #map .route.touched .lift, #map .route.lit .lift { opacity: 1; }
 `

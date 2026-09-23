@@ -65,6 +65,7 @@ export function bindMapPointer(host: HTMLElement, map: IsoMap, actions: MapPoint
     const next = { x: event.clientX, y: event.clientY }
     if (press !== null && Math.hypot(next.x - press.start.x, next.y - press.start.y) <= DRAG_THRESHOLD) return
     press = null
+    map.dragging(true)
     pointers.set(event.pointerId, next)
     const still = [...pointers].find(([id]) => id !== event.pointerId)?.[1]
     if (still !== undefined) pinch(last, next, still)
@@ -92,9 +93,11 @@ export function bindMapPointer(host: HTMLElement, map: IsoMap, actions: MapPoint
     if (!pointers.delete(event.pointerId)) return
     if (press?.id === event.pointerId) tap(press)
     press = null
+    if (pointers.size === 0) map.dragging(false)
   })
   map.svg.addEventListener('pointercancel', event => {
     pointers.delete(event.pointerId)
     press = null
+    if (pointers.size === 0) map.dragging(false)
   })
 }

@@ -4,12 +4,16 @@ import type { Camera } from './camera.ts'
 import { boundsOf } from './project.ts'
 import { node, patch, pointsAttribute, svg } from './svg.ts'
 
-/** The glow's own layer breathes by opacity alone, so it never repaints the map; it hides while the map moves. */
+/**
+ * The glow's own layer breathes by opacity alone, so it never repaints the map. It hides by opacity too: removing
+ * it, or hiding it with display, changes the layers over the map and makes Safari redraw the whole map.
+ */
 export const glowCss = `
   #map .highlight-glow {
     position: absolute; left: 0; top: 0; pointer-events: none;
+    will-change: opacity;
   }
-  #map[data-map-moving] .highlight-glow { display: none; }
+  #map [data-glows-hidden] > .highlight-glow { opacity: 0; }
   #map .highlight-glow-pulse {
     width: 100%; height: 100%; opacity: 0.55;
     will-change: opacity;
@@ -102,6 +106,10 @@ export function createGlows(layer: HTMLElement, before: Element) {
     },
     move(camera: Camera): void {
       for (const glow of glows.values()) glow.move(camera)
+    },
+    /** Hides every glow, including ones shown later, until called with false. */
+    hide(hidden: boolean): void {
+      layer.toggleAttribute('data-glows-hidden', hidden)
     },
   }
 }

@@ -46,7 +46,7 @@ export function createCameraMotion(initial: Camera) {
 }
 
 /** Camera frames share the same paint callback as direct gestures and respect reduced motion. */
-export function createCameraAnimator(initial: Camera, paint: () => void, prepare: () => void) {
+export function createCameraAnimator(initial: Camera, paint: () => void) {
   const motion = createCameraMotion(initial)
   let frame: number | undefined
   const stopFrame = (): void => {
@@ -64,13 +64,11 @@ export function createCameraAnimator(initial: Camera, paint: () => void, prepare
     get target() { return motion.target },
     frame(to: Camera, amount: number) {
       stopFrame()
-      prepare()
       motion.frame(to, amount)
       frame = requestAnimationFrame(tick)
     },
     move(to: Camera, animate = true) {
       stopFrame()
-      prepare()
       motion.move(to, performance.now(), animate && !matchMedia('(prefers-reduced-motion: reduce)').matches)
       frame = requestAnimationFrame(tick)
     },

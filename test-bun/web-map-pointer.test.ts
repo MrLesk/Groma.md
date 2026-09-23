@@ -9,7 +9,7 @@ import { bindMapPointer } from '../src/viewers/web/iso/pointer.ts'
 function mapPane() {
   const listeners = new Map<string, (event: object) => void>()
   const svg = { addEventListener: (type: string, listener: (event: object) => void) => { listeners.set(type, listener) }, setPointerCapture() {} }
-  const map = { svg, hitId: () => undefined, isSheet: () => true, isProjectEdit: () => false } as unknown as IsoMap
+  const map = { svg, hitId: () => undefined, isSheet: () => true, isProjectEdit: () => false, dragging() {} } as unknown as IsoMap
   const host = { addEventListener() {}, getBoundingClientRect: () => ({ left: 0, top: 0 }) } as unknown as HTMLElement
   const calls: unknown[] = []
   bindMapPointer(host, map, {
