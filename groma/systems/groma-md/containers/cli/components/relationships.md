@@ -5,27 +5,38 @@ status: stable
 groma:
   id: relationships
   parent: cli
+  group: Map layout
   code:
     - scanner: typescript
-      file: src/sheet/relationships.ts
-      symbol: mapRelationships
-    - scanner: typescript
-      file: src/sheet/route-space.ts
-    - scanner: typescript
-      file: src/sheet/route.ts
+      file: src/sheet/route/route.ts
       symbol: routeAll
     - scanner: typescript
-      file: src/sheet/route-grid.ts
+      file: src/sheet/route/checks.ts
     - scanner: typescript
-      file: src/sheet/route-search.ts
-      symbol: RouteSearch
+      file: src/sheet/route/costs.ts
     - scanner: typescript
-      file: src/sheet/route-geometry.ts
+      file: src/sheet/route/finish.ts
     - scanner: typescript
-      file: src/sheet/route-finish.ts
+      file: src/sheet/route/geometry.ts
     - scanner: typescript
-      file: src/sheet/route-spacing.ts
-  group: Map layout
+      file: src/sheet/route/graph.ts
+    - scanner: typescript
+      file: src/sheet/route/nudge.ts
+    - scanner: typescript
+      file: src/sheet/route/order.ts
+    - scanner: typescript
+      file: src/sheet/route/paths.ts
+      symbol: RoutePaths
+    - scanner: typescript
+      file: src/sheet/route/ports.ts
+    - scanner: typescript
+      file: src/sheet/route/queue.ts
+      symbol: SearchQueue
+    - scanner: typescript
+      file: src/sheet/route/relationships.ts
+      symbol: mapRelationships
+    - scanner: typescript
+      file: src/sheet/route/space.ts
 description: Routes the connections between placed map elements
 ---
 

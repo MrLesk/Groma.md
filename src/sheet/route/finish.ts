@@ -1,6 +1,7 @@
-import { ROUTE_CLEARANCE, visibleObstacle, routesCross, crossingRouteIdsFor, type FlatRoute, type Endpoint, type Point } from './route-geometry.ts'
-import { sharedPathMeasure } from './route-spacing.ts'
-const PORT_EPSILON = 0.01
+import { crossingRouteIdsFor, routesCross, sharedPathMeasure } from './checks.ts'
+import { BEND } from './costs.ts'
+import { EPSILON, visibleObstacle, type Endpoint, type FlatRoute, type Point } from './geometry.ts'
+import { BUNDLE_SPACING, ROUTE_CLEARANCE, portStretch } from './space.ts'
 interface RouteEndRun {
   route: FlatRoute
   indices: number[]
@@ -16,9 +17,9 @@ function routeEndRun(route: FlatRoute, fromStart: boolean): RouteEndRun | undefi
     fromStart ? index : route.points.length - 1 - index)
   const end = route.points[indices[0]!]!
   const next = route.points[indices[1]!]!
-  const slotAxis = Math.abs(next.y - end.y) > PORT_EPSILON ? 'x' : 'y'
+  const slotAxis = Math.abs(next.y - end.y) > EPSILON ? 'x' : 'y'
   const runAxis = slotAxis === 'x' ? 'y' : 'x'
-  const bend = indices.findIndex(index => Math.abs(route.points[index]![slotAxis] - end[slotAxis]) > PORT_EPSILON) - 1
+  const bend = indices.findIndex(index => Math.abs(route.points[index]![slotAxis] - end[slotAxis]) > EPSILON) - 1
   if (bend < 1 || bend + 1 >= indices.length) return undefined
   const bendPoint = route.points[indices[bend]!]!
   const turnedPoint = route.points[indices[bend + 1]!]!
@@ -47,13 +48,7 @@ function wallSpan(endpoint: Endpoint, end: RouteEndRun): [number, number] {
     ? direction < 0 ? [polygon[0]!, polygon[1]!] : [polygon[3]!, polygon[4]!]
     : direction < 0 ? [polygon[5]!, polygon[0]!] : [polygon[2]!, polygon[3]!]
   const values = edge.map(point => point[end.slotAxis])
-  return usableSpan(Math.min(...values), Math.max(...values))
-}
-
-/** Keep shortcuts in the same middle wall span as the original port assignment. */
-function usableSpan(lower: number, upper: number): [number, number] {
-  const inset = (upper - lower) / 4
-  return [lower + inset, upper - inset]
+  return portStretch(Math.min(...values), Math.max(...values))
 }
 
 function facingRoutePoints(
@@ -75,7 +70,7 @@ function facingRoutePoints(
   const targetSpan = wallSpan(targetEndpoint, target)
   const lower = Math.max(sourceSpan[0], targetSpan[0])
   const upper = Math.min(sourceSpan[1], targetSpan[1])
-  if (lower > upper + PORT_EPSILON) return undefined
+  if (lower > upper + EPSILON) return undefined
   const coordinate = Math.min(upper, Math.max(lower, source.slot))
   return [
     { ...start, [source.slotAxis]: coordinate },
@@ -112,7 +107,7 @@ function orderFan(group: RouteEndRun[]): void {
   group.sort((a, b) => {
     if (a.turn !== b.turn) return a.turn - b.turn
     const distance = a.turn < 0 ? a.run - b.run : b.run - a.run
-    return Math.abs(distance) > PORT_EPSILON ? distance : a.slot - b.slot
+    return Math.abs(distance) > EPSILON ? distance : a.slot - b.slot
   })
   for (const [position, end] of group.entries()) {
     for (let offset = 0; offset <= end.bend; offset += 1) {
@@ -134,7 +129,16 @@ function fanCrossings(group: readonly RouteEndRun[]): number {
 function safeRoutes(endpoints: ReadonlyMap<string, Endpoint>, routes: readonly FlatRoute[], changed: readonly FlatRoute[]): boolean {
   if (crossingRouteIdsFor(endpoints)(changed).length > 0) return false
   const routeIds = new Set(changed.map(route => route.id))
-  return sharedPathMeasure(routes, routeIds)(changed) <= PORT_EPSILON
+  return sharedPathMeasure(routes, routeIds)(changed) <= EPSILON
+}
+
+/**
+ * Whether routes changed from `before` to `after` run closer than the bundle spacing to other routes along no more length
+ * than before, so a finishing pass never undoes the spacing nudging gave the bundles.
+ */
+function keepsSpacing(routes: readonly FlatRoute[], before: readonly FlatRoute[], after: readonly FlatRoute[]): boolean {
+  const near = sharedPathMeasure(routes, new Set(after.map(route => route.id)), BUNDLE_SPACING)
+  return near(after) <= near(before) + EPSILON
 }
 
 function routeCrossings(route: FlatRoute, routes: readonly FlatRoute[]): number {
@@ -150,7 +154,8 @@ export function alignFacingRoutes(
     if (!points) continue
     const candidate = { ...route, points }
     const changed = routes.map(other => other.id === route.id ? candidate : other)
-    if (routeCrossings(candidate, changed) <= routeCrossings(route, routes) && safeRoutes(endpoints, changed, [candidate])) {
+    if (routeCrossings(candidate, changed) <= routeCrossings(route, routes) && safeRoutes(endpoints, changed, [candidate])
+      && keepsSpacing(routes, [route], [candidate])) {
       route.points = points
     }
   }
@@ -165,7 +170,9 @@ function improveFan(
   if (before === 0) return
   const originals = new Map(group.map(end => [end.route, end.route.points.map(point => ({ ...point }))]))
   orderFan(group)
-  if (fanCrossings(group) < before && safeRoutes(endpoints, routes, [...originals.keys()])) return
+  const changed = [...originals.keys()]
+  const unchanged = [...originals].map(([route, points]) => ({ ...route, points }))
+  if (fanCrossings(group) < before && safeRoutes(endpoints, routes, changed) && keepsSpacing(routes, unchanged, changed)) return
   for (const [route, points] of originals) route.points = points
 }
 
@@ -179,12 +186,12 @@ export function orderBuildingFans(
 
 
 function same(a: Point, b: Point): boolean {
-  return Math.abs(a.x - b.x) < 0.001 && Math.abs(a.y - b.y) < 0.001
+  return Math.abs(a.x - b.x) < EPSILON && Math.abs(a.y - b.y) < EPSILON
 }
 
 function collinear(a: Point, b: Point, c: Point): boolean {
-  return Math.abs(a.x - b.x) < 0.001 && Math.abs(b.x - c.x) < 0.001
-    || Math.abs(a.y - b.y) < 0.001 && Math.abs(b.y - c.y) < 0.001
+  return Math.abs(a.x - b.x) < EPSILON && Math.abs(b.x - c.x) < EPSILON
+    || Math.abs(a.y - b.y) < EPSILON && Math.abs(b.y - c.y) < EPSILON
 }
 
 export function compactPath(points: readonly Point[]): Point[] {
@@ -197,8 +204,9 @@ export function compactPath(points: readonly Point[]): Point[] {
   return result
 }
 
+/** Length plus the bend price the path search uses, so a shortcut wins only where the search would prefer it too. */
 function routeCost(points: readonly Point[]): number {
-  let cost = points.length * 18
+  let cost = (points.length - 2) * BEND
   for (let index = 1; index < points.length; index += 1) {
     cost += Math.abs(points[index]!.x - points[index - 1]!.x)
       + Math.abs(points[index]!.y - points[index - 1]!.y)
@@ -224,7 +232,7 @@ function walls(endpoint: Endpoint | undefined): Wall[] {
     [polygon[3]!, polygon[4]!, 'x', 'y', 1],
     [polygon[5]!, polygon[0]!, 'y', 'x', -1],
   ] as const).map(([from, to, along, run, sign]) => {
-    const [lower, upper] = usableSpan(Math.min(from[along], to[along]), Math.max(from[along], to[along]))
+    const [lower, upper] = portStretch(Math.min(from[along], to[along]), Math.max(from[along], to[along]))
     return {
       along, run, sign,
       position: from[run],
@@ -255,7 +263,7 @@ function acceptShortest(
   for (const points of candidates) {
     const candidate = { ...route, points }
     if (crosses([candidate]).length > 0 || routeCrossings(candidate, routes) > crossings) continue
-    if (spacing([candidate]) > 0.001) continue
+    if (spacing([candidate]) > EPSILON || !keepsSpacing(routes, [route], [candidate])) continue
     route.points = points
     return
   }
@@ -272,7 +280,7 @@ function endShortcuts(points: Point[], endpoint: Endpoint | undefined): Point[][
       const start = wallPoint(wall, points[0]![wall.along])
       const bend = { ...start, [wall.run]: point[wall.run] }
       const shortcut = compactPath([start, bend, ...points.slice(join)])
-      if (routeCost(shortcut) < cost - 0.001) candidates.push(shortcut)
+      if (routeCost(shortcut) < cost - EPSILON) candidates.push(shortcut)
     }
   }
   return candidates
@@ -308,7 +316,7 @@ export function shortenDirect(endpoints: ReadonlyMap<string, Endpoint>, routes: 
     for (const source of walls(endpoints.get(route.source))) {
       for (const target of walls(endpoints.get(route.target))) {
         const points = directShortcut(source, target)
-        if (points && routeCost(points) < cost - 0.001) candidates.push(points)
+        if (points && routeCost(points) < cost - EPSILON) candidates.push(points)
       }
     }
     acceptShortest(endpoints, routes, route, candidates)

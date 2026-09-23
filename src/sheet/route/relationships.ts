@@ -1,5 +1,5 @@
-import type { AnnotatedRelationship, ArchitectureGraph } from '../types.ts'
-import type { RouteRequest } from './route-geometry.ts'
+import type { AnnotatedRelationship, ArchitectureGraph } from '../../types.ts'
+import type { RouteRequest } from './geometry.ts'
 
 function dependencyCount(relationship: AnnotatedRelationship): number {
   const connections = relationship.connections ?? []

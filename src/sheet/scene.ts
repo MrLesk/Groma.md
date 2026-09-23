@@ -1,7 +1,7 @@
 import type { ArchitectureGraph } from '../types.ts'
-import { mapRelationships } from './relationships.ts'
+import { mapRelationships } from './route/relationships.ts'
 import { placeWorld } from './place.ts'
-import { routeAll, type Endpoint } from './route.ts'
+import { routeAll, type Endpoint } from './route/route.ts'
 import type { SheetScene } from './types.ts'
 
 export interface SheetSceneTimings {
@@ -44,7 +44,7 @@ export function measuredSheetScene(world: ArchitectureGraph): MeasuredSheetScene
       rect: building.rect,
       owner: building.surface,
       roof: building.heightUnits,
-      centrePorts: building.shape.kind === 'round',
+      round: building.shape.kind === 'round',
     })
   }
   const routes = routeAll(endpoints, mapRelationships(world))

@@ -3,7 +3,7 @@ import type { Placement } from './place.ts'
 import { MARGIN, translate, unionRects } from './grid.ts'
 import { ISLAND_FONT, ISLAND_SPACING, labelBand, nameCells } from './measure.ts'
 import type { CellRect } from './types.ts'
-import { connectionCounts, portSideCells, routeReach } from './route-space.ts'
+import { connectionCounts, portSideCells, routeReach } from './route/space.ts'
 
 const SURFACE_INSET = 2
 const UNIT_GAP = 3

@@ -29,7 +29,7 @@ project profile; the viewer still cannot write architecture records.
 
 Core returns the one architecture with its origin annotations, observed or
 draft, then composes one `SheetScene`: islands, slabs, buildings, zones,
-and lattice routes on whole cells. Both hosts give that fixed scene to their
+and routes. Both hosts give that fixed scene to their
 viewer. Keys, pointers, projection, camera, paint, and widgets are plugin
 concerns.
 

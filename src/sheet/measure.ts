@@ -1,6 +1,6 @@
 import type { AnnotatedElement, CodeReference, Origin } from '../types.ts'
 import type { BuildingFloor, Shape } from './types.ts'
-import { ROUTE_UNIT, portSideCells } from './route-space.ts'
+import { ROUTE_UNIT, portSideCells } from './route/space.ts'
 
 /** Plane pixels per cell: the roof text is laid out in these units and projected with the roof. */
 export const PLANE = ROUTE_UNIT

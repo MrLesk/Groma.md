@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict'
 import { test } from 'bun:test'
-import { routeAll } from '../src/sheet/route.ts'
-import { ROUTE_UNIT, crossingRouteIdsFor, routesCross, type Endpoint, type FlatRoute } from '../src/sheet/route-geometry.ts'
-import { orthogonal, sharedPathMeasure } from '../src/sheet/route-spacing.ts'
+import { routeAll } from '../src/sheet/route/route.ts'
+import type { Endpoint, FlatRoute } from '../src/sheet/route/geometry.ts'
+import { ROUTE_UNIT } from '../src/sheet/route/space.ts'
+import { orthogonal, sharedPathMeasure, crossingRouteIdsFor, routesCross } from '../src/sheet/route/checks.ts'
 
 // Diagonally paired corners admit separate paths around the outside, but the
 // distance-only router sends both through the middle and crosses them.

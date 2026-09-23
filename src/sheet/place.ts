@@ -20,8 +20,8 @@ import {
 import { grow, shelf } from './pack.ts'
 import type { Partnered } from './pack.ts'
 import { flowRanks } from './rank.ts'
-import { mapRelationships } from './relationships.ts'
-import { connectionCounts, portSideCells, routeReach } from './route-space.ts'
+import { mapRelationships } from './route/relationships.ts'
+import { connectionCounts, portSideCells, routeReach } from './route/space.ts'
 import type {
   Building,
   BuildingFloor,

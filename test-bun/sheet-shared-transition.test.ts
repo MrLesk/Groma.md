@@ -3,14 +3,13 @@ import assert from 'node:assert/strict'
 import { test } from 'bun:test'
 
 import {
-  ROUTE_UNIT,
-  crossingRouteIdsFor,
   visibleObstacle,
   type Endpoint,
   type Point,
-} from '../src/sheet/route-geometry.ts'
-import { sharedPathMeasure } from '../src/sheet/route-spacing.ts'
-import { routeAll } from '../src/sheet/route.ts'
+} from '../src/sheet/route/geometry.ts'
+import { ROUTE_UNIT } from '../src/sheet/route/space.ts'
+import { sharedPathMeasure, crossingRouteIdsFor } from '../src/sheet/route/checks.ts'
+import { routeAll } from '../src/sheet/route/route.ts'
 
 function onBoundary(point: Point, endpoint: Endpoint): boolean {
   const polygon = visibleObstacle(endpoint)

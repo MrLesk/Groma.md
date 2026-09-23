@@ -7,7 +7,7 @@ import { MARGIN, contains, unionRects } from '../src/sheet/grid.ts'
 import { ISLAND_FONT, labelBand } from '../src/sheet/measure.ts'
 import { placeWorld } from '../src/sheet/place.ts'
 import { sheetScene } from '../src/sheet/scene.ts'
-import { ROUTE_SPACING, ROUTE_UNIT, routeReach } from '../src/sheet/route-space.ts'
+import { ROUTE_SPACING, ROUTE_UNIT, routeReach } from '../src/sheet/route/space.ts'
 import type { ArchitectureWorld } from '../src/types.ts'
 import { box, uses } from './helpers.ts'
 

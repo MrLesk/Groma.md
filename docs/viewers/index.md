@@ -26,7 +26,7 @@ The web map paints the whole world at once as one isometric blueprint
 sheet: flat islands for actors, external systems and each internal system,
 low container slabs, buildings (components whose height and shape follow
 the observed code, round buildings for actors, pills for external
-systems), and one lattice route per authored relationship.
+systems), and one route per authored relationship.
 
 A viewer never reads architecture Markdown or walks `groma/` directories.
 Core composes the blueprint sheet before either viewer receives it. The web uses
@@ -55,7 +55,7 @@ on the web the whole description is the route's tooltip.
 
 The Web renderer boundary is deliberately narrow. Projection, camera,
 paint, hit testing, selection and the lit flow belong to the Web surface.
-Footprints, floors, shapes, islands, zones, slabs and lattice routes belong
+Footprints, floors, shapes, islands, zones, slabs and routes belong
 to Core's sheet; the web server ships the world, its sheet, the active
 Backlog tasks and their pins together as one payload. The
 Web renderer may not move a footprint or reroute a relationship.

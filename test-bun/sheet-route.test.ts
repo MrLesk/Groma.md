@@ -4,17 +4,15 @@ import { test } from 'bun:test'
 
 import { loadAnnotatedArchitecture } from '../src/core.ts'
 import {
-  ROUTE_CLEARANCE,
-  ROUTE_UNIT,
-  crossingRouteIdsFor,
   visibleObstacle,
   type Endpoint,
   type FlatRoute,
   type Point,
-} from '../src/sheet/route-geometry.ts'
-import { artifactRouteIds, orthogonal, sharedPathMeasure } from '../src/sheet/route-spacing.ts'
-import { routeAll } from '../src/sheet/route.ts'
-import { orderBuildingFans } from '../src/sheet/route-finish.ts'
+} from '../src/sheet/route/geometry.ts'
+import { ROUTE_CLEARANCE, ROUTE_UNIT } from '../src/sheet/route/space.ts'
+import { artifactRouteIds, orthogonal, sharedPathMeasure, crossingRouteIdsFor } from '../src/sheet/route/checks.ts'
+import { routeAll } from '../src/sheet/route/route.ts'
+import { orderBuildingFans } from '../src/sheet/route/finish.ts'
 import { sheetScene } from '../src/sheet/scene.ts'
 import type { SheetScene } from '../src/sheet/types.ts'
 import type { ArchitectureGraph } from '../src/types.ts'
@@ -42,7 +40,7 @@ function endpointsOf(scene: SheetScene): Map<string, Endpoint> {
       rect: building.rect,
       owner: building.surface,
       roof: building.heightUnits,
-      centrePorts: building.shape.kind === 'round',
+      round: building.shape.kind === 'round',
     })
   }
   return endpoints

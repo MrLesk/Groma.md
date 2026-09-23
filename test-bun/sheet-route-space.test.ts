@@ -2,9 +2,9 @@ import assert from 'node:assert/strict'
 import { test } from 'bun:test'
 
 import { overlaps } from '../src/sheet/grid.ts'
-import { routeReach, connectionCounts, ROUTE_SPACING, ROUTE_UNIT } from '../src/sheet/route-space.ts'
-import { crossingRouteIdsFor, visibleObstacle, type Endpoint, type FlatRoute } from '../src/sheet/route-geometry.ts'
-import { orthogonal, sharedPathMeasure } from '../src/sheet/route-spacing.ts'
+import { routeReach, connectionCounts, ROUTE_SPACING, ROUTE_UNIT } from '../src/sheet/route/space.ts'
+import { visibleObstacle, type Endpoint, type FlatRoute } from '../src/sheet/route/geometry.ts'
+import { orthogonal, sharedPathMeasure, crossingRouteIdsFor } from '../src/sheet/route/checks.ts'
 import { sheetScene } from '../src/sheet/scene.ts'
 import type { SheetScene } from '../src/sheet/types.ts'
 import type { ArchitectureGraph } from '../src/types.ts'
@@ -73,7 +73,7 @@ test.concurrent('connection demand grows port capacity and clear routing envelop
   assert.deepEqual(world, before)
 })
 
-test.concurrent('dense sibling connections receive bypass lanes without losing or overlapping relationships', () => {
+test.concurrent('dense sibling connections route every relationship without losing or overlapping any', () => {
   const count = 12
   const world: ArchitectureGraph = {
     flows: [],

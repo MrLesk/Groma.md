@@ -485,14 +485,11 @@ cells it adds to the surface's longer side, so a heavy target comes
 next to what feeds it, light intermediates settle at the edges,
 partners line up into straight runs and chains wrap instead of
 stretching. Placement and routing share one connection-space calculation.
-Each building reserves its full roof shadow, port clearance, and turning lanes.
+Each building reserves its full roof shadow, port clearance, and turning room.
 Ports keep room for a stroke lane on either side; additional connections grow
 the minimum footprint and its surrounding space. Groups, containers and islands
 include the connection space of their contents, and container composition keeps
-those allowances when moving whole subtrees. The router allocates physical lane
-width before drawing a line, including turning room for ports that will be
-routed later. It provides bypass tracks around buildings and keeps perpendicular
-crossings possible without sharing parallel strokes. These are drawing rules;
+those allowances when moving whole subtrees. These are drawing rules;
 they do not change the stored elements, relationships or source evidence.
 Nothing stands west of the entries, and children no
 relationship touches are packed as one block after them. The
@@ -566,15 +563,27 @@ painting a new scene starts with its matching preset. Zoom never changes the pac
 world. No component name is hidden at any zoom.
 Groups remain visual groupings within their existing parent.
 
-Routes follow the lattice: one route per authored relationship,
-between the authored endpoints, preferring to leave from the middle of
-the side of the source that faces the target and to arrive, pointing
-inward, at the middle of the side of the target that faces the source,
-keeping one lane clear of every foreign building and slab, and
-running on the one ground plane from end to end, slabs included. A
-route holds the middle of the free ground: it keeps a full cell clear
-of every building it passes, of a slab or island border, and of a
-route already drawn, unless its ends leave it nowhere else to go. A
+Routes follow the channels between buildings: one route per authored
+relationship, between the authored endpoints, preferring to leave from the
+middle of the side of the source that faces the target and to arrive, pointing
+inward, at the middle of the side of the target that faces the source, and
+running on the one ground plane from end to end, slabs included. At a building
+a route may leave or arrive by another side, only where that avoids a crossing
+or saves real length, from the middle of that side; at a system island or
+container slab it keeps its assigned side. A route runs
+down the centre line of each channel it takes, half a cell clear of the
+buildings on either side. Routes that share a channel form a bundle a third of a
+cell apart, centred on the channel, closing up toward an eighth of a cell only
+where the channel is too narrow for the whole bundle; the shortcuts that later
+straighten route ends keep that spacing. Along a shared stretch,
+and round a corner they take together, routes keep one order, so they cross
+only where they meet or part, and only when they meet and part on opposite sides
+of each other. A route pays for its length, its bends, a side other than the
+one it prefers, every route it crosses, and every channel it crowds past that
+comfortable spacing, so a full channel sends routes around other
+buildings. Ports slide along the middle half of their wall to make room
+for a bundle, and when two walls face each other their ports line up so the
+route between them runs straight. A
 building's back sides are hidden under its roof, so there a route
 starts or ends on the
 ground just behind the building where the roof's shadow ends: on screen
@@ -583,12 +592,10 @@ roof, with no visible step. The displayed endpoint meets the visible building
 outline in the current view; in 2D it reaches the flattened footprint instead
 of stopping at the isometric roof offset. Endpoint bends move with those ports
 without adding small staircases beside the building. Endpoints stay in the middle half of each usable
-wall, including after shortcuts. Parallel runs keep enough distance for their
-visible strokes to remain distinct. When two middles do not line up, the line stays
+wall, including after shortcuts. When two middles do not line up, the line stays
 straight and the longer side gives way. Each route ends in an
 arrowhead lying on the sheet that keeps its screen size at every
-zoom. Routes prefer a detour around existing arrows to an unnecessary crossing,
-with a bend cost that keeps those detours simple. Every relationship remains
+zoom. Every relationship remains
 visible at normal contrast. A route's description is its tooltip. Every selected box draws
 every edge and its name in the accent green, the name in bold, the
 slab or island it stands on is

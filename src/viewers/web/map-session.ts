@@ -24,7 +24,7 @@ import type { StartupProgress } from './startup/progress.ts'
 
 async function structureResponse(
   repositoryRoot: string,
-  selected: WebPayload,
+  selected: Pick<WebPayload, 'world' | 'revision'>,
   element: string,
 ): Promise<Response> {
   try {
@@ -39,7 +39,7 @@ async function structureResponse(
 
 async function sourceResponse(
   repositoryRoot: string,
-  selected: WebPayload,
+  selected: Pick<WebPayload, 'world' | 'revision'>,
   element: string,
   file: string | null,
 ): Promise<Response> {
@@ -132,37 +132,67 @@ export async function createWebMapSession(
     }
   }
 
-  async function payloadFor(url: URL): Promise<WebPayload | Response> {
+  /** The two revisions a request compares; undefined for a request about one revision. */
+  async function comparedPair(url: URL): Promise<[WebRevision | null, WebRevision | null] | Response | undefined> {
     const fromId = url.searchParams.get('from')
+    if (fromId === null) return undefined
     const toId = url.searchParams.get('revision')
-    if (fromId === null) return payloadAt(toId)
     const history = await readRevisions()
     const from = fromId === '' ? null : history.find(item => item.id === fromId)
     const to = toId === null ? null : history.find(item => item.id === toId)
     if (from === undefined || to === undefined) return new Response('Unknown revision', { status: 404 })
     if (from?.id === to?.id) return new Response('Choose two different revisions', { status: 400 })
-    return comparisonAt(from, to)
+    return [from, to]
+  }
+
+  async function payloadFor(url: URL): Promise<WebPayload | Response> {
+    const pair = await comparedPair(url)
+    if (pair === undefined) return payloadAt(url.searchParams.get('revision'))
+    return pair instanceof Response ? pair : comparisonAt(...pair)
+  }
+
+  /** Both revisions' architecture and the changes between them, without laying out the map. */
+  async function compare(from: WebRevision | null, to: WebRevision | null) {
+    const compared = await readComparison(repositoryRoot, from, to)
+    for (const component of Object.values(compared.comparison.components)) {
+      for (const { file } of component.files) sourceFiles.add(file)
+    }
+    return compared
+  }
+
+  function comparisonError(error: unknown): Response {
+    return new Response(`Cannot compare these revisions: ${error instanceof Error ? error.message : String(error)}`, { status: 422 })
   }
 
   async function comparisonAt(from: WebRevision | null, to: WebRevision | null): Promise<WebPayload | Response> {
     try {
       const started = performance.now()
-      const compared = await readComparison(repositoryRoot, from, to)
-      for (const component of Object.values(compared.comparison.components)) {
-        for (const { file } of component.files) sourceFiles.add(file)
-      }
+      const compared = await compare(from, to)
       const loaded = performance.now()
       const sheet = measuredSheetScene(compared.world)
       return { ...compared, revision: to, revisions, generation: map.generation, sheet: sheet.scene,
         workGeneration: workState.workGeneration, work: EMPTY_WORK_SNAPSHOT, pins: [],
         timings: { architectureLoadMilliseconds: loaded - started, ...sheet.timings, totalMilliseconds: performance.now() - started } }
     } catch (error) {
-      return new Response(`Cannot compare these revisions: ${error instanceof Error ? error.message : String(error)}`, { status: 422 })
+      return comparisonError(error)
+    }
+  }
+
+  /** What a code or source request reads; inside a comparison that is both revisions, never a new map layout. */
+  async function selectionFor(url: URL): Promise<Pick<WebPayload, 'world' | 'revision' | 'comparison'> | Response> {
+    const pair = await comparedPair(url)
+    if (pair === undefined) return payloadAt(url.searchParams.get('revision'))
+    if (pair instanceof Response) return pair
+    try {
+      const { world, comparison } = await compare(...pair)
+      return { world, revision: pair[1], comparison }
+    } catch (error) {
+      return comparisonError(error)
     }
   }
 
   async function sourceSelection(url: URL): Promise<Response> {
-    const selected = await payloadFor(url)
+    const selected = await selectionFor(url)
     if (selected instanceof Response) return selected
     const element = url.searchParams.get('element')
     if (element === null) return new Response('Component selection required', { status: 400 })

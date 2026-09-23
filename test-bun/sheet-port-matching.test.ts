@@ -3,13 +3,13 @@ import assert from 'node:assert/strict'
 import { test } from 'bun:test'
 
 import {
-  ROUTE_UNIT,
   visibleObstacle,
   type Endpoint,
   type Point,
   type RouteRequest,
-} from '../src/sheet/route-geometry.ts'
-import { routeAll } from '../src/sheet/route.ts'
+} from '../src/sheet/route/geometry.ts'
+import { ROUTE_UNIT } from '../src/sheet/route/space.ts'
+import { routeAll } from '../src/sheet/route/route.ts'
 
 type BuildingSpec = readonly [key: string, gx: number, gy: number, w: number, d: number, roof: number]
 

@@ -2,8 +2,10 @@ import assert from 'node:assert/strict'
 
 import { test } from 'bun:test'
 
-import { assignFixedPorts, ROUTE_UNIT, type Endpoint } from '../src/sheet/route-geometry.ts'
-import { routeAll } from '../src/sheet/route.ts'
+import type { Endpoint } from '../src/sheet/route/geometry.ts'
+import { ROUTE_UNIT } from '../src/sheet/route/space.ts'
+import { assignFixedPorts } from '../src/sheet/route/ports.ts'
+import { routeAll } from '../src/sheet/route/route.ts'
 import type { Building, SheetScene } from '../src/sheet/types.ts'
 import { projectScene } from '../src/viewers/web/iso/project.ts'
 import type { Point } from '../src/types.ts'

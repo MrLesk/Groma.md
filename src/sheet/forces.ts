@@ -6,7 +6,8 @@
  * in grid.ts.
  *
  * These values set minimum visual gaps. Connection space is measured by
- * route-space.ts and can require larger envelopes.
+ * route/space.ts and can require larger envelopes. Routes are shaped by their
+ * own costs, in route/costs.ts.
  */
 
 /* How buildings stand, in cells ------------------------------------------ */
