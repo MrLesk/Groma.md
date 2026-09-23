@@ -1,11 +1,11 @@
 ---
 id: TASK-487
 title: Qualify and improve the JavaScript scanner on public repositories
-status: In Progress
+status: Done
 assignee:
   - '@codex'
 created_date: '2026-09-22 21:29'
-updated_date: '2026-09-22 21:59'
+updated_date: '2026-09-23 19:20'
 labels: []
 dependencies: []
 references:
@@ -43,14 +43,14 @@ Alex requested a repository-by-repository JavaScript scanner exercise after the 
 <!-- AC:BEGIN -->
 - [x] #1 Ten distinct public JavaScript repositories are scanned at recorded commits, with concrete evidence and each result classified.
 - [x] #2 Verified defects in the supported JavaScript scan flow are fixed with focused regression coverage where existing tests leave a gap.
-- [ ] #3 The complete repository check passes after the JavaScript scanner changes.
+- [x] #3 The complete repository check passes after the JavaScript scanner changes.
 - [x] #4 Temporary repository clones are removed after JavaScript qualification and the results are reported to Alex before work starts on another scanner.
 <!-- AC:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 Acceptance criteria have objective verification evidence.
-- [ ] #2 Relevant checks pass and changes remain task-scoped.
+- [x] #1 Acceptance criteria have objective verification evidence.
+- [x] #2 Relevant checks pass and changes remain task-scoped.
 - [x] #3 Public contracts or documentation are updated when behavior changes.
 - [x] #4 Implementation Plan reflects the final approach; correction history and verification are recorded in Implementation Notes.
 <!-- DOD:END -->
@@ -83,4 +83,12 @@ All 24 focused JavaScript tests and all three Vue HTTP tests pass; full check af
 Scanner report delivered to Alex after ten pinned repository scans, source-backed fixes, focused verification, and clone cleanup. TASK-487 remains In Progress: the repository check gate has one reproducible failure in unrelated active route-crossing work. No commit or push was made before Done confirmation.
 
 Alex asked to commit and push TASK-487 while the shared route-crossing test still fails. Rechecked task scope against TASK-491, TASK-492 and TASK-482 modified-file lists: no overlap. Final focused tests pass (27 tests, 106 assertions); git diff --check passes. Keeping the task In Progress and AC3 unchecked until bun run check succeeds; commit and push contain only TASK-487 files.
+
+Full repository check at 9a0e9bb1 in a clean detached worktree (bun install --frozen-lockfile, bun run check): Biome and typecheck pass; Node 16 pass; Bun 705 pass, 43 skip, 0 fail. The earlier route-crossings failure is resolved by the committed routing work, so AC3 and DoD 1-2 now have objective evidence.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Qualified the JavaScript scanner on ten pinned public repositories and fixed chained CommonJS publication, accessor call ownership, CommonJS helper visibility, named exported class outlines, same-named app route identity, chained package commands, compact generated schema detection, and Undici fetch and Axios form-helper requests. Verified with focused JavaScript and Vue HTTP tests and the full repository check at 9a0e9bb1 (Node 16 pass; Bun 705 pass, 43 skip, 0 fail). Temporary clones were removed.
+<!-- SECTION:FINAL_SUMMARY:END -->
