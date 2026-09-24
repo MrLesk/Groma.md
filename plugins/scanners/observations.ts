@@ -17,6 +17,8 @@ export function relocateObservation(observation: ScanObservation, directory: str
     operations: observation.operations?.map(operation => ({ ...operation, file: file(operation.file) })),
     invocations: observation.invocations?.map(call => ({ ...call,
       ...(call.binding ? { binding: { ...call.binding, file: file(call.binding.file) } } : {}) })),
+    httpEndpoints: observation.httpEndpoints?.map(endpoint => endpoint.order === undefined ? endpoint
+      : { ...endpoint, order: { ...endpoint.order, application: file(endpoint.order.application) } }),
     diagnostics: observation.diagnostics.map(item => ({ ...item, ...(item.file ? { file: file(item.file) } : {}) })),
   }
 }

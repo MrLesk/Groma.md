@@ -78,6 +78,6 @@ func (e *evidence) mountedRouter(object types.Object, known router) (router, boo
 	if !ok {
 		return router{}, false
 	}
-	prefix := joinSegments(joinSegments(receiver.prefix, under.prefix), known.prefix)
-	return router{library: known.library, prefix: prefix}, true
+	known.prefix = joinSegments(joinSegments(receiver.prefix, under.prefix), known.prefix)
+	return known, true
 }

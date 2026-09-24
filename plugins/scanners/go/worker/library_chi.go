@@ -1,10 +1,6 @@
 package main
 
-import (
-	"regexp/syntax"
-	"slices"
-	"strings"
-)
+import "strings"
 
 // chi routes below a mount and reads the method of a pattern such as "get /talks" in any case.
 var chi = &routerLibrary{
@@ -39,78 +35,8 @@ func chiSegment(part string) (endpointSegment, bool) {
 	if part == "*" {
 		return catchAll("")
 	}
-	placeholders, whole, closed := chiPlaceholders(part)
-	if !closed || (len(placeholders) == 0 && strings.ContainsAny(part, "{}*")) {
+	if strings.Contains(part, "*") && !strings.Contains(part, "{") {
 		return endpointSegment{}, false
 	}
-	if len(placeholders) == 0 {
-		return literalSegment(part)
-	}
-	first := placeholders[0]
-	for _, placeholder := range placeholders {
-		if placeholder.pattern != "" && !placeholder.last && matchesSlash(placeholder.pattern) {
-			segment, ok := catchAll(first.name)
-			segment.Optional, segment.Constrained = true, true
-			return segment, ok
-		}
-	}
-	return parameter(first.name, !whole || first.pattern != "")
-}
-
-type chiPlaceholder struct {
-	name    string
-	pattern string
-	// last reports that the placeholder ends its segment.
-	last bool
-}
-
-// chiPlaceholders reads each `{name}` or `{name:regex}` in a segment, whose regular expression may
-// hold braces, and whether one placeholder is the whole segment. It reports whether every brace closes.
-func chiPlaceholders(part string) (placeholders []chiPlaceholder, whole bool, closed bool) {
-	depth, start := 0, 0
-	for index := 0; index < len(part); index++ {
-		switch part[index] {
-		case '{':
-			if depth == 0 {
-				start = index
-			}
-			depth++
-		case '}':
-			depth--
-			if depth < 0 {
-				return nil, false, false
-			}
-			if depth == 0 {
-				name, pattern, _ := strings.Cut(part[start+1:index], ":")
-				last := index == len(part)-1
-				placeholders = append(placeholders, chiPlaceholder{name: name, pattern: pattern, last: last})
-				whole = start == 0 && last
-			}
-		}
-	}
-	return placeholders, whole, depth == 0
-}
-
-// matchesSlash reports whether a regular expression may match text holding `/`. One that does not
-// parse may.
-func matchesSlash(pattern string) bool {
-	expression, err := syntax.Parse(pattern, syntax.Perl)
-	return err != nil || slashIn(expression)
-}
-
-func slashIn(expression *syntax.Regexp) bool {
-	switch expression.Op {
-	case syntax.OpAnyChar, syntax.OpAnyCharNotNL:
-		return true
-	case syntax.OpLiteral:
-		return slices.Contains(expression.Rune, '/')
-	case syntax.OpCharClass:
-		for index := 0; index+1 < len(expression.Rune); index += 2 {
-			if expression.Rune[index] <= '/' && '/' <= expression.Rune[index+1] {
-				return true
-			}
-		}
-		return false
-	}
-	return slices.ContainsFunc(expression.Sub, slashIn)
+	return braceSegment(part, func(p placeholder) bool { return !p.last && p.matchesSlash() })
 }

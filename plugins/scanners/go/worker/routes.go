@@ -4,6 +4,8 @@ import (
 	"go/ast"
 	"net/url"
 	"regexp"
+	"regexp/syntax"
+	"slices"
 	"strings"
 )
 
@@ -138,4 +140,86 @@ func literalSegment(part string) (endpointSegment, bool) {
 		part = url.PathEscape(part)
 	}
 	return endpointSegment{Kind: "literal", Value: part}, pathText.MatchString(part)
+}
+
+// placeholder is one `{name}` or `{name:regex}` in a route segment.
+type placeholder struct {
+	name    string
+	pattern string
+	// last reports that the placeholder ends its segment.
+	last bool
+}
+
+// bracePlaceholders reads each `{name}` or `{name:regex}` in a segment, whose regular expression may
+// hold braces, and whether one placeholder is the whole segment. It reports whether every brace closes.
+func bracePlaceholders(part string) (placeholders []placeholder, whole bool, closed bool) {
+	depth, start := 0, 0
+	for index := 0; index < len(part); index++ {
+		switch part[index] {
+		case '{':
+			if depth == 0 {
+				start = index
+			}
+			depth++
+		case '}':
+			depth--
+			if depth < 0 {
+				return nil, false, false
+			}
+			if depth == 0 {
+				name, pattern, _ := strings.Cut(part[start+1:index], ":")
+				last := index == len(part)-1
+				placeholders = append(placeholders, placeholder{name: name, pattern: pattern, last: last})
+				whole = start == 0 && last
+			}
+		}
+	}
+	return placeholders, whole, depth == 0
+}
+
+// braceSegment reads a segment of `{name}` and `{name:regex}` placeholders. A placeholder the
+// library's spans rule lets cross a `/` makes the segment a constrained optional catch-all that
+// stands for the rest.
+func braceSegment(part string, spans func(placeholder) bool) (endpointSegment, bool) {
+	placeholders, whole, closed := bracePlaceholders(part)
+	if !closed {
+		return endpointSegment{}, false
+	}
+	if len(placeholders) == 0 {
+		return literalSegment(part)
+	}
+	first := placeholders[0]
+	if slices.ContainsFunc(placeholders, spans) {
+		segment, ok := catchAll(first.name)
+		segment.Optional, segment.Constrained = true, true
+		return segment, ok
+	}
+	return parameter(first.name, !whole || first.pattern != "")
+}
+
+// matchesSlash reports whether the placeholder's regular expression may match text holding `/`.
+// One that does not parse may.
+func (p placeholder) matchesSlash() bool {
+	if p.pattern == "" {
+		return false
+	}
+	expression, err := syntax.Parse(p.pattern, syntax.Perl)
+	return err != nil || slashIn(expression)
+}
+
+func slashIn(expression *syntax.Regexp) bool {
+	switch expression.Op {
+	case syntax.OpAnyChar, syntax.OpAnyCharNotNL:
+		return true
+	case syntax.OpLiteral:
+		return slices.Contains(expression.Rune, '/')
+	case syntax.OpCharClass:
+		for index := 0; index+1 < len(expression.Rune); index += 2 {
+			if expression.Rune[index] <= '/' && '/' <= expression.Rune[index+1] {
+				return true
+			}
+		}
+		return false
+	}
+	return slices.ContainsFunc(expression.Sub, slashIn)
 }

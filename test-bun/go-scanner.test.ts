@@ -268,7 +268,8 @@ function httpFacts(observation: ScanObservation) {
   const files = new Map(observation.operations!.map(operation => [operation.id, operation.file]))
   return {
     endpoints: observation.httpEndpoints!
-      .map(fact => `${files.get(fact.operation)} ${fact.method} ${httpPath(fact.path)}`).sort(),
+      .map(fact => `${files.get(fact.operation)} ${fact.method} ${httpPath(fact.path)}${fact.order ? ` @${fact.order.application}:${fact.order.position}` : ''}`)
+      .sort(),
     requests: observation.httpRequests!
       .map(fact => `${fact.method ?? '-'} ${fact.configured ? '<base>' : ''}${httpPath(fact.path)}`).sort(),
   }
@@ -288,8 +289,8 @@ goTest('Go reports HTTP endpoints from every supported router with their group p
     // even as a parameter. Nothing is reported for a group parameter, a reassigned router or
     // group closure parameter, a ServeMux field assigned from a call, a router built for a mount
     // elsewhere, mounted on a router this scan cannot read, mounted twice or inside itself, a mounted
-    // router that is not chi, or one behind http.StripPrefix. Each fixture file explains its
-    // library's own rules.
+    // router that is not chi, or one behind http.StripPrefix. A first-match router's facts carry its
+    // order. Each fixture file explains its library's own rules.
     expect(endpoints).toEqual([
       'echo.go DELETE /v2/talks/:id',
       'echo.go GET /files/:path+',
@@ -336,6 +337,18 @@ goTest('Go reports HTTP endpoints from every supported router with their group p
       'prometheus.go GET /-/healthy',
       'prometheus.go GET /api/v1/query',
       'prometheus.go POST /api/v1/admin/tsdb/snapshot',
+      'gorilla.go * /:path*! @gorilla.go:0',
+      'gorilla.go * /:path*! @gorilla.go:0',
+      'gorilla.go * /archive/:rest*! @gorilla.go:0',
+      'gorilla.go * /kept/:path*! @gorilla.go:0',
+      'gorilla.go * /reviews/:id! @gorilla.go:0',
+      'gorilla.go * /search/:path*! @gorilla.go:0',
+      'gorilla.go * /speakers/:path*! @gorilla.go:0',
+      'gorilla.go GET /api/scores/:id @gorilla.go:0',
+      'gorilla.go GET /reviews @gorilla.go:0',
+      'gorilla.go GET /reviews/:id! @gorilla.go:0',
+      'gorilla.go POST /reviews @gorilla.go:0',
+      'gorilla.go PUT /reviews @gorilla.go:0',
     ].sort())
   } finally { await rm(root, { recursive: true, force: true }) }
 }, 60000)

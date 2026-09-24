@@ -36,6 +36,10 @@ groma:
     - scanner: go
       file: plugins/scanners/go/worker/library_prometheus.go
       symbol: prometheusRoute
+    - scanner: go
+      file: plugins/scanners/go/worker/library_gorilla.go
+    - scanner: go
+      file: plugins/scanners/go/worker/endpoints.go
 description: Finds Go HTTP clients, routers and endpoints
 ---
 

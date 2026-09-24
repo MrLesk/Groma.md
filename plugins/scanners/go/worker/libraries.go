@@ -17,6 +17,14 @@ type routerLibrary struct {
 	rootOnlyType string
 	// routes are the route registration methods.
 	routes map[string]registration
+	// methodsCall follows a registration to state its methods, as gorilla's .Methods("GET") does, and
+	// nameCall only names the route. When a library has them, any other call that follows a
+	// registration narrows the route in a way a fact cannot state.
+	methodsCall, nameCall string
+	// firstMatch: the library tries routes in registration order and takes the first match. Its facts
+	// report their order, and a route this scan sees but cannot read becomes a blocker for the
+	// requests under what it can read.
+	firstMatch bool
 	// groups return a router at or below their receiver's path.
 	groups map[string]group
 	// mount is the method that serves another router of this library below a prefix, as chi's Mount
@@ -42,7 +50,6 @@ type routerLibrary struct {
 }
 
 // registration describes one route method: the method it registers, and where its handler is.
-// Its path is the first argument, or the second when the first states the method.
 type registration struct {
 	// method is the HTTP method, `*` for every method, or empty when the first argument states it.
 	method string
@@ -51,6 +58,14 @@ type registration struct {
 }
 
 const lastArgument = -1
+
+// pathArgument is where the path is: first, or second when the first argument states the method.
+func (r registration) pathArgument() int {
+	if r.method == "" {
+		return 1
+	}
+	return 0
+}
 
 // group describes a method that returns a router at or below its receiver's path.
 type group struct {
@@ -63,7 +78,7 @@ type group struct {
 
 const noPrefix = -1
 
-var libraries = []*routerLibrary{netHTTP, chi, gin, echo, httprouter, prometheusRoute}
+var libraries = []*routerLibrary{netHTTP, chi, gin, echo, httprouter, prometheusRoute, gorilla}
 
 // libraryOf names the routing library an import path belongs to, or nil.
 func libraryOf(path string) *routerLibrary {

@@ -10,6 +10,11 @@ import (
 type router struct {
 	library *routerLibrary
 	prefix  []endpointSegment
+	// application is the file that builds the router tree, where its registration order counts.
+	application string
+	// blocked: a group of a first-match library whose prefix this scan cannot read keeps its parent's
+	// prefix, and every route on it blocks the requests below that prefix.
+	blocked bool
 }
 
 // declared registers parameters, struct fields and variables written with a library's root-only
@@ -93,7 +98,7 @@ func (e *evidence) routerOf(s *source, expression ast.Expr) (router, bool) {
 		return router{}, false
 	}
 	if library, name, ok := s.packageLibrary(call.Fun); ok && slices.Contains(library.constructors, name) {
-		return router{library: library}, true
+		return router{library: library, application: s.file}, true
 	}
 	selector, ok := ast.Unparen(call.Fun).(*ast.SelectorExpr)
 	if !ok {
@@ -125,7 +130,9 @@ func (e *evidence) namedRouter(object types.Object) (router, bool) {
 }
 
 // groupRouter reads a group call: the router at its receiver's path, or below the prefix it states.
-// A group whose prefix is not constant serves a path this scan cannot state.
+// A group whose prefix is not constant, or that stands below one, serves a path this scan cannot
+// state: a first-match library's group keeps the readable prefix and blocks, and any other reports
+// nothing.
 func groupRouter(s *source, parent router, name string, call *ast.CallExpr) (router, bool) {
 	group, ok := parent.library.groups[name]
 	if !ok {
@@ -138,8 +145,10 @@ func groupRouter(s *source, parent router, name string, call *ast.CallExpr) (rou
 		return router{}, false
 	}
 	prefix, ok := routePath(s, parent.library, call.Args[group.prefix])
-	if !ok {
-		return router{}, false
+	if !ok || parent.blocked {
+		parent.blocked = true
+		return parent, parent.library.firstMatch
 	}
-	return router{library: parent.library, prefix: joinSegments(parent.prefix, prefix)}, true
+	parent.prefix = joinSegments(parent.prefix, prefix)
+	return parent, true
 }

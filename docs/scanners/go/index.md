@@ -82,26 +82,29 @@ The worker reports the endpoints this module serves and the requests it sends as
 [HTTP facts](../evidence.md#http-endpoints-and-requests). External packages stay
 unresolved in a source-only scan, so frameworks are recognized by import path and
 written type: `net/http`, `github.com/go-chi/chi`, `github.com/gin-gonic/gin`,
-`github.com/labstack/echo`, `github.com/julienschmidt/httprouter` and
-`github.com/prometheus/common/route`. A router is a value built by
-`http.NewServeMux`, `chi.NewRouter`, `chi.NewMux`, `gin.New`, `gin.Default`,
-`echo.New`, `httprouter.New` or `route.New`, the default `ServeMux` behind
-`http.Handle` and `http.HandleFunc`, or a parameter, struct field or variable
-written as a root router: `*http.ServeMux`, `*gin.Engine`, `*echo.Echo` or
-`*httprouter.Router`. A chi router, gin `RouterGroup`, echo `Group` or prometheus
-`*route.Router` that arrives as a parameter or field may already carry a group
-prefix this scan cannot see, so its routes are not reported.
+`github.com/labstack/echo`, `github.com/julienschmidt/httprouter`,
+`github.com/prometheus/common/route` and `github.com/gorilla/mux`. A router is a
+value built by `http.NewServeMux`, `chi.NewRouter`, `chi.NewMux`, `gin.New`,
+`gin.Default`, `echo.New`, `httprouter.New`, `route.New` or `mux.NewRouter`, the
+default `ServeMux` behind `http.Handle` and `http.HandleFunc`, or a parameter,
+struct field or variable written as a root router: `*http.ServeMux`,
+`*gin.Engine`, `*echo.Echo` or `*httprouter.Router`. A chi router, gin
+`RouterGroup`, echo `Group`, prometheus `*route.Router` or gorilla `*mux.Router`
+that arrives as a parameter or field may already carry a group prefix this scan
+cannot see, so its routes are not reported.
 
 Answers to the [producer checklist](../evidence.md#producer-checklist):
 
 1. **Prefixes.** Every constant prefix the source declares: a chi `Route` or
    `Mount` prefix, a gin or echo `Group` prefix, a prometheus route `WithPrefix`
-   prefix, nested groups, and the route's own path. A chi router mounted with
-   `Mount` serves below every prefix of the router it is mounted on. A router
-   whose served path is longer than this source can state reports nothing for
-   its routes:
+   prefix, a gorilla `PathPrefix(...).Subrouter()` prefix, nested groups, and
+   the route's own path. A chi router mounted with `Mount` serves below every
+   prefix of the router it is mounted on. A router whose served path is longer
+   than this source can state reports nothing for its routes:
 
-   - a router under a group or mount whose prefix is not constant;
+   - a router under a group or mount whose prefix is not constant, except under
+     gorilla, where each of its routes blocks below the readable prefix, as
+     Registration order describes;
    - a router mounted on a router this scan cannot read;
    - a router mounted twice, or inside itself;
    - a ServeMux, gin or echo router mounted with chi `Mount`, because it still
@@ -120,11 +123,14 @@ Answers to the [producer checklist](../evidence.md#producer-checklist):
    chi `Get` through `Trace` with `Handle`, `HandleFunc`, `Method` and
    `MethodFunc`, gin `GET` through `OPTIONS` with `Any` and `Handle`, echo
    `GET` through `CONNECT` with `Any` and `Add`, httprouter `GET` through
-   `DELETE` with `Handle`, `Handler` and `HandlerFunc`, and prometheus route
-   `Get`, `Post`, `Put`, `Del` (DELETE), `Options`, `Head` and `Query`. `Use`
-   middleware, echo `Static` and `File`, httprouter `ServeFiles`, and a handler
-   this scan cannot resolve to an operation, such as one a local wrapper
-   returns, report nothing.
+   `DELETE` with `Handle`, `Handler` and `HandlerFunc`, prometheus route
+   `Get`, `Post`, `Put`, `Del` (DELETE), `Options`, `Head` and `Query`, and
+   gorilla `HandleFunc` and `Handle`, one endpoint for each method a following
+   `.Methods(...)` states or for every method, where a following `.Name(...)`
+   changes nothing. `Use` middleware, echo `Static` and `File`, httprouter
+   `ServeFiles`, and a handler this scan cannot resolve to an operation, such as
+   one a local wrapper returns, report nothing, except a gorilla route, which
+   blocks instead.
 3. **Dynamic or unknown.** A `fmt.Sprintf` verb that fills a whole segment, as in
    `/talks/%d`, is dynamic. A verb that shares a segment with text, as in
    `/talks/%s-%s`, and every other computed value are unknown.
@@ -153,23 +159,38 @@ Answers to the [producer checklist](../evidence.md#producer-checklist):
    `{id}.json`, `v:version` or `room-:number`, is a constrained parameter named
    after that parameter. chi hands a regular expression the text up to the
    character after its placeholder. At the end of a segment that is the next
-   `/`, so `{path:.+}` stays one segment.
-   Before other text, as in `{path:.+}.json`, a regular expression that may match
-   `/` crosses segments, so that segment is a constrained optional catch-all that
-   replaces the rest of the route. net/http rejects a wildcard that shares its
-   segment with text, so no such route is served.
+   `/`, so `{path:.+}` stays one segment. Before other text, as in
+   `{path:.+}.json`, a regular expression that may match `/` crosses segments,
+   so that segment is a constrained optional catch-all that replaces the rest of
+   the route. A gorilla `{name:regex}` variable, or one beside literal text, is a
+   constrained parameter too, but gorilla matches the whole path with one
+   regular expression: a variable whose expression may match `/`, such as
+   `{rest:.*}`, spans the rest of the path wherever it stands. net/http rejects a
+   wildcard that shares its segment with text, so no such route is served.
 8. **Registration order.** net/http, chi, gin and echo prefer the most specific
    route over the first one registered, and httprouter, also behind prometheus
-   route, matches one route per request, so no endpoint reports `order`.
+   route, matches one route per request, so their endpoints report no `order`.
+   gorilla/mux tries routes in registration order and takes the first match. Its
+   endpoints report `order`: the application is the file whose `mux.NewRouter()`
+   builds their router, and every endpoint of one router shares one position,
+   because this scan does not read the order among them. A gorilla route this
+   scan sees but cannot read is reported at that position as a blocker: the
+   literal segments its router's and its own path start with, a constrained
+   optional catch-all, method `*`, named after the registering function. That
+   covers an unresolved handler, a path or `.Methods` argument that is not
+   constant, a following call other than `.Methods` and `.Name`, such as
+   `.Queries` or `.Host`, a route kept in a variable, which a later call may
+   narrow, and a route below a group whose prefix is not constant.
 
 Route syntax follows each framework: net/http method patterns such as
 `"GET /talks/{id}"`, `{name}`, `{name...}`, the `{$}` anchor and a
 trailing-slash subtree; chi `{name}`, `{name:regex}` and `*`, with the same
 method patterns in `Handle` and `HandleFunc`; gin, httprouter and prometheus
-route `:name` and `*name`; echo `:name` and `*`. A method argument is a literal
-or a net/http constant such as `http.MethodPut`. A catch-all serves an empty
-remainder only after a trailing slash, which request paths do not keep, so it
-requires at least one segment. A catch-all at the root, such as the bare `/` subtree, is optional.
+route `:name` and `*name`; echo `:name` and `*`; gorilla `{name}` and
+`{name:regex}`. A method argument is a literal or a net/http constant such as
+`http.MethodPut`. A catch-all serves an empty remainder only after a trailing
+slash, which request paths do not keep, so it requires at least one segment. A
+catch-all at the root, such as the bare `/` subtree, is optional.
 
 Requests come from `http.Get`, `Head`, `Post` and `PostForm`, the same
 methods on a tracked `*http.Client` or `http.DefaultClient`, and
@@ -178,7 +199,10 @@ own.
 
 A route or method that is not constant, a net/http pattern with a host, a
 catch-all that shares its segment with text, and a route that continues after a
-catch-all report nothing. Routes another module registers are outside this scan.
+catch-all report nothing, except a gorilla route, which blocks. Routes another
+module registers are outside this scan, and so are gorilla routers embedded in a
+struct and route chains such as `r.Path(...).HandlerFunc(...)`,
+`r.Methods(...).Subrouter()` and `r.PathPrefix(...).Handler(...)`.
 
 ## Compared operations
 

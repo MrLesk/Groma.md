@@ -118,8 +118,10 @@ func loadSources(directory string, files []string) (*loadedModule, error) {
 		}
 		if syntax.Name.Name != pkg.Name { return nil, fmt.Errorf("multiple packages in %s", path.Dir(relative)) }
 		pkg.Syntax = append(pkg.Syntax, syntax)
+		next, discarded := chainCalls(syntax)
 		loaded.files[name] = append(loaded.files[name], &source{pkg: pkg, syntax: syntax, file: relative,
-			wide: wideEnds(text), generated: ast.IsGenerated(syntax), imports: importAliases(syntax)})
+			wide: wideEnds(text), generated: ast.IsGenerated(syntax), imports: importAliases(syntax),
+			next: next, discarded: discarded})
 	}
 	names := make([]string, 0, len(loader.packages))
 	for name := range loader.packages { names = append(names, name) }

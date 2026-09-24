@@ -24,6 +24,10 @@ type source struct {
 	generated bool
 	// Local package aliases, which name the routing libraries this file uses.
 	imports map[string]string
+	// For each call, the call made on its result, and whether an expression statement drops that
+	// result: see chainCalls in endpoints.go.
+	next      map[*ast.CallExpr]*ast.CallExpr
+	discarded map[*ast.CallExpr]bool
 }
 
 // wideEnd is a byte offset and how many more bytes than UTF-16 units the text holds up to it.

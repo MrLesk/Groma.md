@@ -101,6 +101,13 @@ type httpEndpoint struct {
 	Operation string            `json:"operation"`
 	Method    string            `json:"method"`
 	Path      []endpointSegment `json:"path"`
+	// Set only by a router that takes the first registered match.
+	Order *endpointOrder `json:"order,omitempty"`
+}
+type endpointOrder struct {
+	// The file that creates the application; positions compare only within one application.
+	Application string `json:"application"`
+	Position    int    `json:"position"`
 }
 
 type requestSegment struct {

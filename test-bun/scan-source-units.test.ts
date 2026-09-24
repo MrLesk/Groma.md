@@ -46,6 +46,10 @@ test.concurrent('source units survive parsing, project relocation, and overlappi
   const shifted = relocateObservation(scan, 'packages/view')
   expect(shifted.sourceUnits).toEqual([{ primary: 'packages/view/emitter.ts',
     files: ['packages/view/emitter.ts', 'packages/view/host.html'] }])
+  // A first-match router's order names the file that builds it, which moves with the project.
+  const ordered = relocateObservation({ ...scan,
+    httpEndpoints: [{ ...scan.httpEndpoints![0]!, order: { application: 'handler.ts', position: 0 } }] }, 'packages/view')
+  expect(ordered.httpEndpoints![0]!.order).toEqual({ application: 'packages/view/handler.ts', position: 0 })
   const combined = combineObservations([{ key: 'one', observation: shifted }, { key: 'two', observation: shifted }])!
   expect(combined.sourceUnits).toEqual(shifted.sourceUnits)
   expect(combined.files).toHaveLength(scan.files.length)
