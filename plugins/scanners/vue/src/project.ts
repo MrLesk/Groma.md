@@ -77,7 +77,9 @@ export class VueProject {
     host.getCurrentDirectory = () => root
     this.program = proxyCreateProgram(vueTypeScript, ts.createProgram, () => ({
       languagePlugins: [this.plugin], setup: language => { this.language = language },
-    }))({ rootNames: [...new Set([...assigned, ...parsed.fileNames.filter(selected)])], options: parsed.options, host })
+    // A root the config declares but the disk lacks stays, so the compiler reports it as absent.
+    }))({ rootNames: [...new Set([...assigned, ...parsed.fileNames.filter(file => selected(file) || !ts.sys.fileExists(file))])],
+      options: parsed.options, host })
     failDiagnostics(this.program.getSyntacticDiagnostics())
     this.diagnostics.push(...this.program.getOptionsDiagnostics().filter(item => item.code === 6053).map(item => ({
       severity: 'warning', code: 'vue-missing-config-source', file: relative(repositoryRoot, configFile),

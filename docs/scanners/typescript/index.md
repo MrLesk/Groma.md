@@ -2,9 +2,9 @@
 
 The TypeScript scanner reports supported `.ts` and `.tsx` files without requiring groma.md comments, IDs, or types in application code.
 
-It selects tracked and unignored `.ts` and `.tsx` files through `git ls-files`. Declaration files (`.d.ts`) only describe types, so they are never sources. The package declares default [exclusions](../index.md#excluding-source-evidence): `.test` and `.spec` files, the root `test` folder, and `node_modules`, `dist`, `build` and `coverage` folders. The exclusions apply to the `tsconfig.json` files the scanner finds and the package manifests it maps as they do to sources. The compiler resolves used imports, including aliases and package exports, to selected repository source. External dependencies do not become source entries.
+The package declares the default [include and exclude lists](../index.md#selecting-source-files). It includes `**/*.ts` and `**/*.tsx` sources, `**/tsconfig*.json` configs, and the `package.json`, HTML, `angular.json`, `project.json` and `nx.json` files the entry reader reads. It excludes `.test` and `.spec` files, the root `test` folder, and `node_modules`, `dist`, `build` and `coverage` folders. The scanner reads only the files groma.md hands it: sources, configs and manifests alike. Declaration files (`.d.ts`) only describe types, so they are never sources. The compiler resolves used imports, including aliases and package exports, to selected repository source. External dependencies do not become source entries.
 
-Every named `package.json` outside the exclusions is a workspace package. A bare import of one resolves to its source without `node_modules`: the compiler tries the targets its `exports` name, else its `types`, `typings` and `main`, in TypeScript's order, and a target under the `outDir` of a config that states both `outDir` and `rootDir` counts as the same path under `rootDir`. An import whose targets name no file, or whose name two packages share, stays unresolved; an identical key in a config's own `paths` wins, and a manifest that is not JSON names no package. Each file's imports come from the program of the config that owns it, so a package's own path aliases resolve as its config states. An entry declared on build output, such as a package `bin` or a `node dist/main.js` script, attaches to the source file the same mapping finds.
+Every named `package.json` among the scanner's files is a workspace package. A bare import of one resolves to its source without `node_modules`: the compiler tries the targets its `exports` name, else its `types`, `typings` and `main`, in TypeScript's order, and a target under the `outDir` of a config that states both `outDir` and `rootDir` counts as the same path under `rootDir`. An import whose targets name no file, or whose name two packages share, stays unresolved; an identical key in a config's own `paths` wins, and a manifest that is not JSON names no package. Each file's imports come from the program of the config that owns it, so a package's own path aliases resolve as its config states. An entry declared on build output, such as a package `bin` or a `node dist/main.js` script, attaches to the source file the same mapping finds.
 
 Each file remains one atomic evidence entry with every recognized exported function, class, interface, type, enum, or variable declared in that file, whether its own `export` keyword, the file's export lists, `export default name` or a destructured export publishes it. A file never imports itself: augmenting a module with `declare module` adds no edge. Scanned package `bin` entries and files with no incoming source imports are candidate module roots below the package root. Imported helpers do not become additional roots because they have dependencies or multiple callers. A package can have several candidates, with or without `bin` metadata. If no candidate exists, the first scanned file supplies one root. Import distance assigns other files to the nearest root, with common directories as the deterministic fallback. The import graph remains internal analysis data.
 
@@ -13,8 +13,8 @@ These source roots and file memberships are evidence, not confirmed application 
 
 ## Operations and callback wiring
 
-Each nested `tsconfig.json` outside the exclusions, and each configuration it
-references, supplies compiler options for its included files. Configurations with no matching inputs contribute
+Each nested `tsconfig.json` among the scanner's files, and each configuration it
+references as build context, supplies compiler options for its included files. Configurations with no matching inputs contribute
 no files. A configuration that extends a config the checkout lacks, such as an
 uninstalled package base or a generated file, keeps its own settings and the scan
 reports a warning; other configuration errors still stop the scan. The nearest containing configuration owns a file,
@@ -33,8 +33,8 @@ relationships. Core owns the [supplied-operation rule](../../relationship-infere
 and writes selected interactions. Direct call evidence is not automatically
 selected. Jelly was compared offline and is not required to run this scanner.
 
-Changes to nested TypeScript configurations or package manifests refresh the
-scanner through the same watch runtime as source edits.
+A change to any file the include list names, such as a nested configuration or
+a package manifest, refreshes the scanner as a source edit does.
 
 ## Compared operations
 

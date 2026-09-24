@@ -55,8 +55,8 @@ test.concurrent('fully excluded Vue sources skip readiness and scanning until th
 
     await writeScannerConfig(root, { scanners })
     const included = await (await loadScannerRegistry(root)).collectObservations(root)
-    expect(included.failures.map(failure => failure.scanner)).toEqual(['vue'])
-    expect(included.failures[0]?.message).toContain('logic.ts')
+    expect(included.failures).toEqual([])
+    expect(included.observations.map(observation => observation.scanner.id)).toEqual(['vue'])
   } finally { await Promise.all([root, artifact].map(directory => rm(directory, { recursive: true, force: true }))) }
 })
 

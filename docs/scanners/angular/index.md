@@ -78,9 +78,9 @@ supplied-callback rule. Ordinary TypeScript evidence can remain unresolved
 while Angular establishes the concrete binding.
 
 Angular reports `angular` Code provenance for its source contribution.
-The exact source path keeps one curated owner across both scanners. HTML edits
-participate in the existing watch lifecycle, as do CSS, SCSS, Sass, Less, and Stylus
-source edits. Repeat scans retain authored
+The exact source path keeps one curated owner across both scanners. A change to
+a file the include list names, such as a template or a CSS, SCSS, Sass, Less or
+Stylus stylesheet, triggers a rescan. Repeat scans retain authored
 architecture, and compiler errors leave the previous complete map in place.
 
 In OKF, the result remains ordinary Code links and readable relationship rows.
@@ -179,24 +179,26 @@ real-project result and remaining release gates.
 
 ## Projects
 
-Run groma.md from the repository root. The scanner finds package declarations in
-tracked and unignored files, including nested apps and libraries. Dependencies,
-dev dependencies, peer dependencies and optional dependencies identify candidates;
+Run groma.md from the repository root. The scanner finds package declarations
+among its files, including nested apps and libraries. Dependencies, dev
+dependencies, peer dependencies and optional dependencies identify candidates;
 a `package.json` that is not JSON declares none. A candidate also needs a
-tracked or unignored `tsconfig.json` in its directory or below it, as an Nx
+`tsconfig.json` among its files in its directory or below it, as an Nx
 workspace keeps one in each project while declaring Angular once at its root,
 and TypeScript source files belonging to that package, outside nested
 candidates. Declaration files and inactive fixtures with a `.fixture`
 suffix do not qualify. Packages with only framework tooling dependencies are
 skipped. No matching project produces no evidence.
 
-A project compiles its own TypeScript sources outside the scanner's
-[exclusions](../index.md#excluding-source-evidence). The package declares
-`*.spec.ts` and `*.test.ts` specs and the `.angular`, `node_modules`, `dist`,
-`build` and `coverage` folders as defaults. The scan and
-readiness check read no package declaration, config, source or entry
-declaration the exclusions name, and the source listing names files before
-them. As in the
+A project compiles its own TypeScript sources among the files groma.md hands
+it. The package declares the default
+[include and exclude lists](../index.md#selecting-source-files): it includes
+`.ts` sources, HTML templates and stylesheets, `tsconfig*.json` configs, and the
+`package.json`, `angular.json`, `project.json` and `nx.json` files the entry
+reader reads, and excludes `*.spec.ts` and `*.test.ts` specs and the `.angular`,
+`node_modules`, `dist`, `build` and `coverage` folders. A template or stylesheet
+outside the files gets the `angular-missing-resource` warning, and the source
+listing names files before exclusions. As in the
 [TypeScript scanner](../typescript/index.md), each source compiles with the
 deepest config that includes it, following the references of a solution config
 that lists no files of its own; a source no config includes compiles with default
@@ -204,5 +206,4 @@ options. Imported source in sibling repository libraries keeps its original sour
 path and supplies child directives and values, but only its own project reports it.
 Readiness reads every selected project's configs; invalid configuration or source
 syntax fails this scanner's observation, and other scanners can still update the
-architecture. Source and nested package/configuration changes use the shared
-scanner watch flow.
+architecture.

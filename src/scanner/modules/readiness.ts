@@ -32,8 +32,8 @@ export async function checkScannerReadiness(
 ): Promise<ProjectReadiness[]> {
   const results: ProjectReadiness[] = []
   const config = await readScannerConfig(root)
-  const listing = await repositoryListing(root, config.useGitignore ?? true)
   const modules = await configuredScannerModules(root, options)
+  const listing = modules.length ? await repositoryListing(root, config.useGitignore ?? true) : []
   const proposal = modules.some(module => module.status === 'found' && module.discovery?.compatibility)
     ? await discoverScanners(root, options) : undefined
   for (const module of modules) {

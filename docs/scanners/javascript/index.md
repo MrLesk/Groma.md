@@ -1,7 +1,7 @@
 # JavaScript scanner
 
-The JavaScript scanner reads tracked and unignored `.js`, `.mjs`, `.cjs` and
-`.jsx` files, covering ECMAScript modules, CommonJS modules and browser scripts.
+The JavaScript scanner reads the `.js`, `.mjs`, `.cjs` and `.jsx` files
+groma.md hands it, covering ECMAScript modules, CommonJS modules and browser scripts.
 It does not require Node.js, installed packages, a bundler, a project build or a
 `tsconfig.json`. Discovery matches JavaScript source directly, even without a
 package manifest.
@@ -31,13 +31,15 @@ TypeScript-style type annotations, as in many Flow-typed files, still parse, and
 octal literals and escapes that only strict mode rejects, such as `0755`, are not
 parse errors.
 
-## Excluded files
+## Included and excluded files
 
-The package declares default
-[exclusions](../index.md#excluding-source-evidence): names that state minified
+The package declares the default
+[include and exclude lists](../index.md#selecting-source-files). It includes
+the four source extensions and the `package.json`, HTML, `project.json` and
+`nx.json` files the entry reader reads. It excludes names that state minified
 output, such as `jquery-ui.min.js`, and `node_modules`, `dist`, `build` and
-`coverage` folders. The scan and the readiness check
-read no source the exclusions name.
+`coverage` folders. The scan and the readiness check read only the files the
+lists select.
 
 A bundle under an ordinary name, such as `vendor.js`, is read like any other
 source; a project that keeps it out adds a pattern to `scanners.json`.

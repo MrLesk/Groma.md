@@ -21,6 +21,8 @@ import { scannerFiles } from '../src/scanner/modules/selection.ts'
 const reactFiles = (root: string) => scannerFiles(root, reactManifest.groma.scanner)
 const vueFiles = (root: string) => scannerFiles(root, vueManifest.groma.scanner)
 const typescriptFiles = (root: string) => scannerFiles(root, typescriptManifest.groma.scanner)
+/** The TypeScript scanner's include list alone, so a config under the default-excluded test folder is read. */
+const includedFiles = (root: string) => scannerFiles(root, { include: typescriptManifest.groma.scanner.include })
 
 async function repository() {
   const root = await mkdtemp(path.join(os.tmpdir(), 'groma-nested-'))
@@ -223,13 +225,13 @@ test.concurrent('TypeScript configs with no inputs or an absent base keep valid 
     const emptyConfig = path.join(root, 'test/fixture/tsconfig.json')
     await writeFile(emptyConfig, JSON.stringify({ include: ['*.tsx'] }))
     await writeFile(path.join(root, 'test/fixture/view.tsx.fixture'), 'export const view = <div />')
-    const graph = await buildImportGraph(root, await typescriptFiles(root))
+    const graph = await buildImportGraph(root, await includedFiles(root))
     expect(graph.files.map(file => file.file).sort()).toEqual(['app/entry.ts', 'app/target.ts'])
     expect(graph.files.find(file => file.file === 'app/entry.ts')!.imports).toEqual(['app/target.ts'])
     expect(graph.operations.some(operation => operation.file === 'app/entry.ts' && operation.name === 'run')).toBe(true)
     expect(graph.diagnostics.map(item => [item.severity, item.file])).toEqual([['warning', 'app/tsconfig.json'], ['warning', 'app/tsconfig.json']])
     await writeFile(emptyConfig, JSON.stringify({ compilerOptions: { target: 'invalid' }, include: ['*.tsx'] }))
-    await expect(buildImportGraph(root, await typescriptFiles(root))).rejects.toThrow('target')
+    await expect(buildImportGraph(root, await includedFiles(root))).rejects.toThrow('target')
   } finally { await rm(root, { recursive: true, force: true }) }
 })
 

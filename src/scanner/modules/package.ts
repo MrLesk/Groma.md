@@ -123,6 +123,17 @@ async function scannerEntry(packageRoot: string, value: unknown): Promise<string
   return entry
 }
 
+/** A scanner manifest's include globs, which it must declare, and its optional default exclusions. */
+function scannerLists(scanner: Record<string, unknown>): { include: string[]; exclude?: string[] } {
+  if (!stringArray(scanner.include) || scanner.include.length === 0) {
+    throw new Error('scanner package.json groma.scanner.include must list the files the scanner reads')
+  }
+  if (scanner.exclude !== undefined && !stringArray(scanner.exclude)) {
+    throw new Error('scanner package.json groma.scanner.exclude must be an array of strings')
+  }
+  return { include: scanner.include, ...(scanner.exclude === undefined ? {} : { exclude: scanner.exclude }) }
+}
+
 async function scannerPackage(packageRoot: string): Promise<ResolvedScannerPackage | undefined> {
   let source: string
   try {
@@ -137,12 +148,7 @@ async function scannerPackage(packageRoot: string): Promise<ResolvedScannerPacka
   if (Object.keys(scanner).some(field => !['id', 'entry', 'discovery', 'include', 'exclude'].includes(field))) {
     throw new Error('scanner package.json groma.scanner may contain only id, entry, discovery, include and exclude')
   }
-  if (!stringArray(scanner.include) || scanner.include.length === 0) {
-    throw new Error('scanner package.json groma.scanner.include must list the files the scanner reads')
-  }
-  if (scanner.exclude !== undefined && !stringArray(scanner.exclude)) {
-    throw new Error('scanner package.json groma.scanner.exclude must be an array of strings')
-  }
+  const lists = scannerLists(scanner)
   if (typeof scanner.id !== 'string' || !scannerId.test(scanner.id)) {
     throw new Error('scanner package.json groma.scanner.id must be lowercase kebab-case')
   }
@@ -160,8 +166,7 @@ async function scannerPackage(packageRoot: string): Promise<ResolvedScannerPacka
     name: manifest.name,
     version: manifest.version,
     ...(scanner.discovery === undefined ? {} : { discovery: parseScannerDiscovery(scanner.discovery) }),
-    include: scanner.include,
-    ...(scanner.exclude === undefined ? {} : { exclude: scanner.exclude }),
+    ...lists,
   }
 }
 

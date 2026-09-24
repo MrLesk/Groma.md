@@ -197,7 +197,8 @@ export function createScannerRegistry(scanners: readonly ConfiguredPlugin[], use
         if (!changedFiles || changedFiles.some(reads(scanner))) pending.add(scanner)
       }
       const selected = [...pending]
-      const listing = await repositoryListing(root, useGitignore)
+      // A collection with no scanner to run reads no repository listing, so it needs no Git repository.
+      const listing = selected.length ? await repositoryListing(root, useGitignore) : []
       // Every scanner finishes before a failure surfaces, so none keeps a child process in the repository.
       const results = await Promise.allSettled(selected.map(async scanner => {
         const { plugin, settings = {}, excluded } = scanner

@@ -26,12 +26,14 @@ or installation script is required. Public naming and publication are separate
 release decisions.
 
 The scanner reads each selected package's nearest `tsconfig.json` and owned TSX
-files using its bundled TypeScript compiler. It reads the repository's `.ts` and
-`.tsx` sources, never declaration files, less its exclusions, and a syntax error
-only fails the scan in a file it reads. The package declares the TypeScript
-scanner's default [exclusions](../index.md#excluding-source-evidence): `.test`
-and `.spec` files, the root `test` folder, and `node_modules`, `dist`,
-`build` and `coverage` folders. Project dependencies and
+files using its bundled TypeScript compiler. It reads only the files groma.md
+hands it, never declaration files as sources, and a syntax error only fails the
+scan in a file it reads. The package declares the default
+[include and exclude lists](../index.md#selecting-source-files): it includes
+`.ts` and `.tsx` sources, `tsconfig*.json` configs, and the `package.json`, HTML,
+`project.json` and `nx.json` files the entry reader reads, and excludes `.test`
+and `.spec` files, the root `test` folder, and `node_modules`, `dist`, `build`
+and `coverage` folders. Project dependencies and
 React types do not need to be installed. A solution `tsconfig.json` that names no source of its
 own compiles through the first config it references that compiles one of its
 components. An extended config a fresh
@@ -212,16 +214,16 @@ interaction of that component, and declared types, installed or not, decide
 neither result. Components that cannot resolve to a supported source function do not
 establish a callback interaction.
 
-TSX and TypeScript edits use the existing watch lifecycle. Healthy scanners update the architecture while failed scanners keep their saved evidence. See [fresh-checkout validation](../fresh-checkout-validation.md) for
+A change to a file the include list names triggers a rescan. Healthy scanners update the architecture while failed scanners keep their saved evidence. See [fresh-checkout validation](../fresh-checkout-validation.md) for
 the executed artifact checks and remaining release gates.
 
 ## Nested projects
 
-Run groma.md from the repository root. The scanner finds package declarations in
-tracked and unignored files, including nested apps and libraries. Dependencies,
-dev dependencies, peer dependencies and optional dependencies identify candidates.
-A candidate also needs a tracked or unignored `tsconfig.json` in its directory or
-a repository ancestor, and TSX source files belonging to that package, outside
+Run groma.md from the repository root. The scanner finds package declarations
+among its files, including nested apps and libraries. Dependencies, dev
+dependencies, peer dependencies and optional dependencies identify candidates.
+A candidate also needs a `tsconfig.json` among its files in its directory or a
+repository ancestor, and TSX source files belonging to that package, outside
 nested packages. Declaration files and inactive fixtures with a `.fixture` suffix
 do not qualify. Packages with only framework tooling dependencies are skipped. No
 matching project produces no evidence, and neither does a package whose config
@@ -232,4 +234,3 @@ package whose config also compiles a nested package leaves that package's files
 to it, while components and handlers still resolve across both.
 Readiness checks all selected projects. An invalid selected project fails this scanner's observation; other scanners
 can still update the architecture.
-Source and nested package/configuration changes use the shared scanner watch flow.

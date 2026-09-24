@@ -11,7 +11,7 @@ import { repositoryListing } from '../../repository-listing.ts'
 import { officialScannerCatalog, recommendScanners } from './catalog.ts'
 import type { TechnologyFinding, ScannerRecommendation, OfficialScanner } from './catalog.ts'
 import { scannerInventory, configuredScannerModules } from './inventory.ts'
-import { exclusion, readScannerConfig } from './config.ts'
+import { exclusion, readScannerConfig, type ScannerConfig } from './config.ts'
 import type { ScannerInventoryItem, ScannerResolutionOptions } from './inventory.ts'
 
 export interface ScannerDiscovery {
@@ -88,6 +88,27 @@ async function declarationFindings(repositoryRoot: string, file: string, rules: 
   return findings
 }
 
+/**
+ * The technologies the project's declarations report, and the declarations that could not be parsed. Discovery rules
+ * belong to every scanner, installed or not, so the global exclusion list alone applies.
+ */
+async function declaredFindings(repositoryRoot: string, rules: CompiledRule[], config: ScannerConfig | undefined) {
+  const findings: TechnologyFinding[] = []
+  const limits: string[] = []
+  const excluded = exclusion(config?.exclude ?? [])
+  for (const file of await projectDeclarations(repositoryRoot, rules, config?.useGitignore ?? true)) {
+    if (excluded(file)) continue
+    try {
+      findings.push(...await declarationFindings(repositoryRoot, file, rules))
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') continue
+      if (!(error instanceof SyntaxError)) throw error
+      limits.push(`${file}: declaration could not be parsed; technology support remains uncertain.`)
+    }
+  }
+  return { findings, limits }
+}
+
 export async function discoverScanners(
   repositoryRoot: string,
   options: ScannerResolutionOptions = {},
@@ -100,24 +121,11 @@ export async function discoverScanners(
     compatibility: module.discovery.compatibility,
   }] : [])
   catalog = [...catalog.filter(item => !installed.some(module => module.id === item.id)), ...installed]
-  const findings: TechnologyFinding[] = []
-  const limits: string[] = []
   const rules = catalog.flatMap(scanner => scanner.rules.map(rule => ({
     rule, matches: compileWatchPatterns(rule.files),
   })))
-  // Discovery rules belong to every scanner, installed or not, so the global list alone applies.
   const config = initialized ? await readScannerConfig(repositoryRoot) : undefined
-  const excluded = exclusion(config?.exclude ?? [])
-  for (const file of await projectDeclarations(repositoryRoot, rules, config?.useGitignore ?? true)) {
-    if (excluded(file)) continue
-    try {
-      findings.push(...await declarationFindings(repositoryRoot, file, rules))
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === 'ENOENT') continue
-      if (!(error instanceof SyntaxError)) throw error
-      limits.push(`${file}: declaration could not be parsed; technology support remains uncertain.`)
-    }
-  }
+  const { findings, limits } = await declaredFindings(repositoryRoot, rules, config)
   const inventory = initialized ? await scannerInventory(repositoryRoot, options) : []
   const recommendations = recommendScanners(findings, inventory, catalog).map(candidate => {
     const scanner = installed.find(scanner => scanner.id === candidate.id)

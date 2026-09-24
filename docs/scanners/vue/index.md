@@ -32,12 +32,15 @@ code with the TypeScript checker, which resolves component imports and handler
 function identities. The scanner translates these facts into the existing
 supplied-callback evidence contract; it has no separate name or type resolver.
 
-The package declares default
-[exclusions](../index.md#excluding-source-evidence): `node_modules`, `dist`,
-`build` and `coverage` folders. The scan and the readiness
-check leave out every source the exclusions name, including one the project's
-`tsconfig.json` includes; a source they read can still import it as compiler
-context.
+The package declares the default
+[include and exclude lists](../index.md#selecting-source-files). It includes
+`.vue` components, their JavaScript and TypeScript sources and stylesheets,
+HTML pages, `tsconfig*.json` configs, and the `package.json`, `project.json` and
+`nx.json` files the entry reader reads. It excludes `node_modules`, `dist`,
+`build` and `coverage` folders. The scan and the readiness check read only the
+files groma.md hands them, even when the project's `tsconfig.json` includes
+more; a source they read can still import another file as compiler context, and
+an external `src` block outside the files is left out of its component.
 
 ## Supported interaction
 
@@ -88,8 +91,8 @@ fails readiness. Missing Vue types do not erase local `defineEmits` evidence.
 
 Vue contributes `vue` Code provenance for selected source files. Shared core
 keeps one physical-file owner, interprets complementary and conflicting
-observations, and writes readable relationship rows. `.vue` and TypeScript
-edits participate in the existing scan watcher.
+observations, and writes readable relationship rows. A change to a file the
+include list names triggers a rescan.
 
 In OKF, the result is ordinary source links and relationship Markdown. An SFC
 is source evidence; it does not automatically define a C4 responsibility or
@@ -226,15 +229,14 @@ TypeScript scanner compares.
 
 ## Nested projects
 
-Run groma.md from the repository root. The scanner finds package declarations in
-tracked and unignored files, including nested apps and libraries. Dependencies,
-dev dependencies, peer dependencies and optional dependencies identify candidates.
-A candidate also needs a tracked or unignored `tsconfig.json` in the package
-or an ancestor, and Vue source files belonging to that package, outside nested
+Run groma.md from the repository root. The scanner finds package declarations
+among its files, including nested apps and libraries. Dependencies, dev
+dependencies, peer dependencies and optional dependencies identify candidates.
+A candidate also needs a `tsconfig.json` among its files in the package or an
+ancestor, and Vue source files belonging to that package, outside nested
 Vue projects. Declaration files and inactive fixtures with a `.fixture` suffix
 do not qualify. Packages with only framework tooling dependencies are skipped.
 No matching project produces no evidence. Each compiler uses the nearest configuration and local source;
 imported source in sibling repository libraries keeps its original source path.
 Readiness checks all selected projects. An invalid selected project fails this scanner's observation; other scanners
 can still update the architecture.
-Source and nested package/configuration changes use the shared scanner watch flow.

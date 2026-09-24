@@ -105,7 +105,7 @@ test.skipIf(process.platform === 'win32').concurrent('the repository listing nam
     await writeFile(path.join(outside, 'Shared.swift'), 'struct Shared {}\n')
     await symlink(path.join(outside, 'Shared.swift'), path.join(root, 'Shared.swift'))
     const listed = await repositoryListing(root)
-    expect(listed.filter(file => file.endsWith('.swift'))).toEqual(['Ledger.swift', 'Other.swift', 'Shared.swift'])
+    expect(listed.filter(file => file.endsWith('.swift'))).toEqual(['Ledger.swift', 'Other.swift', 'Package.swift', 'Shared.swift'])
   } finally { await Promise.all([root, outside].map(directory => rm(directory, { recursive: true, force: true }))) }
 })
 
