@@ -50,7 +50,7 @@ Declare the module entry in the package manifest:
 The manifest ID must match the default export. The entry must be a file inside
 the package. Scanner packages are TypeScript or JavaScript modules and must not
 depend on installation scripts. Bundle executable package imports into the entry
-before distribution, as the authoring example does. Groma loads the bundled
+before distribution, as the authoring example does. groma.md loads the bundled
 entry and packaged assets; consumers do not build the plugin.
 
 Optional `exclude` lists the scanner's default exclusions as Git ignore
@@ -60,7 +60,7 @@ scanner to a project writes them into its entry in `scanners.json`, where people
 extend or override them; an update never rewrites that list. Keep only language
 coverage in code, meaning the files the language's own build compiles.
 
-`id` identifies the scanner inside Groma. `watch.include` and `watch.exclude`
+`id` identifies the scanner inside groma.md. `watch.include` and `watch.exclude`
 are required arrays of repository-relative patterns. They subscribe this
 scanner to relevant source and configuration changes, including new files.
 Patterns are anchored at the repository root and use `/` separators, `*`, `**`,
@@ -77,7 +77,7 @@ and its exclusion predicate, the project's global list followed by the scanner's
 own, as the optional third argument. The predicate tests repository-relative
 paths with `/` separators. A scanner that
 can filter its source inventory should apply the predicate before parsing;
-Groma also filters returned evidence. The scan returns one complete observation, replacing this scanner's previous observation in the
+groma.md also filters returned evidence. The scan returns one complete observation, replacing this scanner's previous observation in the
 session. Unaffected scanners retain their evidence for core's combined view.
 
 ## Explicit source units
@@ -125,7 +125,7 @@ When a file has Code links from several configured scanners, the one with the
 lowest id outlines it, with the symbols of all those links. The lowest id wins
 among every configured scanner, so a file whose lowest one has no
 `readCodeStructure` gets no outline. Return one `CodeFile`
-(`{ file, declarations }`) per reference; omit files without declarations. Groma
+(`{ file, declarations }`) per reference; omit files without declarations. groma.md
 orders the files by the component's Code. List `declarations` in source order.
 
 Top-level means directly in the file or inside a namespace, package, or module
@@ -216,13 +216,13 @@ project tool such as Maven, Gradle, `dotnet`, `go` or `cargo`. Watch patterns ar
 not that selection: they subscribe to changes, so they include configuration and
 test sources a scan never reads.
 
-Report the files the language's own build compiles, before exclusions. Groma
+Report the files the language's own build compiles, before exclusions. groma.md
 applies the scanner's exclusion list to the listing, so it can skip a scanner
 whose sources are all excluded and name the pattern that hides a file. Tests,
 generated output, vendored code and build directories belong in the scanner's
 default `exclude` list rather than in its listing code.
 
-Groma runs the listing before every readiness check and scan, so a listing that
+groma.md runs the listing before every readiness check and scan, so a listing that
 throws fails its scanner. Because it reads before exclusions, a listing meets
 broken inputs in excluded folders, so a manifest the build cannot read names
 nothing.
@@ -246,7 +246,7 @@ scanner makes:
 A listing must never leave out a file the scan does read: that would report the
 file as read by no enabled scanner.
 
-Groma uses the listing to explain a file with no architecture owner. `groma view`
+groma.md uses the listing to explain a file with no architecture owner. `groma view`
 on such a file exits non-zero with one reason: it is not a repository file, a
 named `scanners.json` pattern excludes it, no enabled scanner reads it, or it
 waits for a scan by the scanners that read it, because it is new or was
@@ -307,10 +307,10 @@ report an additional technology outside `technologies` to expose a coverage gap.
 | `toml` | `tables`: at least one named top-level table must exist. `versionPath`: keys leading to the version string. `declaration` explains the clue. |
 | `text` | `versionPattern`: regular expression evaluated with the multiline flag; the first capture is the version. `declaration` explains the clue. |
 
-Declare the minimum Groma API version the scanner needs in `compatibility.groma`,
-such as `>=0.3.0`. Later stable Groma versions remain eligible. Raise the minimum
-only when the scanner uses an API introduced in a newer Groma version.
-Groma uses that requirement and standard npm `os`/`cpu` fields to choose a published release
+Declare the minimum groma.md API version the scanner needs in `compatibility.groma`,
+such as `>=0.3.0`. Later stable groma.md versions remain eligible. Raise the minimum
+only when the scanner uses an API introduced in a newer groma.md version.
+groma.md uses that requirement and standard npm `os`/`cpu` fields to choose a published release
 when the user installs a package by name. Language versions are discovery evidence,
 not installation restrictions. Validate supported source configuration and
 scanner-owned tools inside `scan`, with concrete instructions when something is
@@ -318,13 +318,13 @@ missing or unsupported. A tested example version is not a supported-version rang
 
 The official catalog imports selected plugin manifests and is embedded by
 `bun run build`. Updating metadata for an existing selected plugin needs no
-technology-specific Groma code change. A new form of detection outside these
+technology-specific groma.md code change. A new form of detection outside these
 rule types requires a change to the shared reader. Unlisted third-party packages
-remain installable by name, but Groma has no third-party discovery index.
+remain installable by name, but groma.md has no third-party discovery index.
 
 ## Scanner settings
 
-All Groma scanner settings belong in the single `scanners.json` inside the
+All groma.md scanner settings belong in the single `scanners.json` inside the
 selected `groma/` or `.groma/` directory. Put optional `settings` on the
 existing scanner entry beside `id` and `source`:
 
@@ -340,7 +340,7 @@ existing scanner entry beside `id` and `source`:
 }
 ```
 
-Groma validates that `settings` is an object, preserves it during scanner
+groma.md validates that `settings` is an object, preserves it during scanner
 management, and passes only that entry's settings as the second argument to
 both `checkReadiness` and `scan`. Omitted settings arrive as `undefined`.
 Use a default parameter when the scanner has defaults:
@@ -360,15 +360,15 @@ and make errors identify the scanner and setting to correct. Resolve project
 selection paths relative to the supplied repository root.
 
 Scanners must not read `scanners.json` themselves or introduce separate
-Groma configuration files. Keep native compiler settings in native project
+groma.md configuration files. Keep native compiler settings in native project
 files such as `tsconfig.json`, `Cargo.toml` and `.csproj`. Pass parsed
 settings to a native worker through its existing invocation interface.
 
-Settings load when Groma creates the scanner session. After editing them, run
+Settings load when groma.md creates the scanner session. After editing them, run
 a new scan or restart the active viewer or watch session. Plugin watch patterns
-cover native source and project files; they do not reload Groma settings.
+cover native source and project files; they do not reload groma.md settings.
 
-These settings are Groma runtime configuration, not OKF knowledge records or
+These settings are groma.md runtime configuration, not OKF knowledge records or
 C4 elements. The scanner module loader owns their delivery; the plugin owns
 their meaning. Architecture Markdown stays readable without interpreting them.
 
@@ -457,14 +457,14 @@ contexts; the shared contract does not extend that scanner's supported analysis.
 
 Roots remain temporary evidence, not stored OKF concepts or new C4 boxes.
 An ordinary Markdown or OKF reader sees the existing architecture records,
-Code links, and relationship statements. Groma core owns source placement and
+Code links, and relationship statements. groma.md core owns source placement and
 identity under its existing architecture profile. This distinction applies to
 solutions, monorepos, and source groupings in other languages as well.
 
 ### Symbols, operations, and invocations
 
 A symbol describes a declaration in a file. Its `id` is chosen by the scanner
-and is local to its observation; it is not a Groma architecture ID. `name` is
+and is local to its observation; it is not a groma.md architecture ID. `name` is
 the readable declaration name and `kind` its source category. Core uses symbols
 for named Code references. A class, interface, type alias, or constant can be a
 symbol without being executable work.
@@ -586,7 +586,7 @@ groma scanner add git+https://github.com/example/python-scanner.git#v1.0.0
 
 `add` validates the installed package before writing `scanners.json` in the
 selected `groma/` or `.groma/` directory.
-Npm and Git packages live in Groma's shared `~/.groma/cache/scanners` cache. Local
+Npm and Git packages live in groma.md's shared `~/.groma/cache/scanners` cache. Local
 packages run directly from the configured path.
 
 ```sh
@@ -599,7 +599,7 @@ groma scanner remove python
 deleting shared cache data.
 
 For a runnable example, use the [inventory teaching scanner](https://github.com/MrLesk/groma-scanner-example/tree/v0.1.0)
-with its supplied project fixture and Groma 0.3.0 or later:
+with its supplied project fixture and groma.md 0.3.0 or later:
 
 ```sh
 groma scanner add 'git+https://github.com/MrLesk/groma-scanner-example.git#v0.1.0'
@@ -607,9 +607,9 @@ groma scanner add 'git+https://github.com/MrLesk/groma-scanner-example.git#v0.1.
 
 A Git source must use public HTTPS and contain one runnable scanner package at
 its repository root. Include bundled entry code and required worker assets in
-the selected tag or commit. Groma installs declared dependencies with installation
+the selected tag or commit. groma.md installs declared dependencies with installation
 scripts disabled; it does not compile the scanner. Git must be available locally.
-Groma resolves a tag to its full commit and records that commit in `scanners.json`.
+groma.md resolves a tag to its full commit and records that commit in `scanners.json`.
 Commit this project configuration so teammates restore the same scanner even
 when a tag moves. Local paths stay local; package downloads are shared, but each
 project chooses its own scanners and settings. Scan and watch never install packages, search global
@@ -628,13 +628,13 @@ groma scanner update python @example/groma-scanner-python@1.1.0
 groma scanner update python git+https://github.com/example/python-scanner.git#v1.1.0
 ```
 
-Groma installs and validates the replacement before recording its exact source.
+groma.md installs and validates the replacement before recording its exact source.
 The scanner ID must remain the same. A failed or rejected replacement leaves
 project configuration unchanged. Scanner settings, project exclusions and
 other scanner selections are preserved. Other projects keep their own versions.
 Use `groma scanner list` and `groma scanner check` to inspect the result;
 `groma scanner install` restores the recorded version or commit.
 
-Updates are explicit. Scanning, starting a viewer or upgrading Groma does not
+Updates are explicit. Scanning, starting a viewer or upgrading groma.md does not
 select a newer scanner. Local plugins continue to run from their configured
-folder; rebuild their entry and restart Groma after changing their code.
+folder; rebuild their entry and restart groma.md after changing their code.

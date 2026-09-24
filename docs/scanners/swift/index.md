@@ -2,11 +2,11 @@
 
 The Swift scanner reads source with SwiftParser and SwiftSyntax. Its package
 includes the native worker and parser libraries. Scanning requires Git and
-Groma, but no Xcode, Swift SDK, package resolution, or application build.
+groma.md, but no Xcode, Swift SDK, package resolution, or application build.
 Release builds target macOS 14 or later on Apple Silicon (arm64), Linux x64
 and arm64, and Windows x64 and arm64. Linux packages are built on Ubuntu 24.04
 and use the host's glibc and C++ system libraries. Intel Mac packages are not
-part of Groma's release targets.
+part of groma.md's release targets.
 
 Version 0.1.2 adds Linux and Windows packaging. The 0.1.0 and 0.1.1 packages
 support only macOS; see the [validation record](validation.md) for release
@@ -20,7 +20,7 @@ groma scanner check
 groma scan
 ```
 
-Groma records the selected exact version in the project's scanner settings.
+groma.md records the selected exact version in the project's scanner settings.
 On another checkout, `groma scanner install` restores that selection before
 `groma scan`. Local package paths remain available for maintainer validation.
 

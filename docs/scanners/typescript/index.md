@@ -1,6 +1,6 @@
 # TypeScript scanner
 
-The TypeScript scanner reports supported `.ts` and `.tsx` files without requiring Groma comments, IDs, or types in application code.
+The TypeScript scanner reports supported `.ts` and `.tsx` files without requiring groma.md comments, IDs, or types in application code.
 
 It selects tracked and unignored `.ts` and `.tsx` files through `git ls-files`. Declaration files (`.d.ts`) only describe types, so they are never sources. The package declares default [exclusions](../index.md#excluding-source-evidence): `.test` and `.spec` files, the root `test` folder, and `node_modules`, `dist`, `build` and `coverage` folders. The exclusions apply to the `tsconfig.json` files the scanner finds and the package manifests it maps as they do to sources. The compiler resolves used imports, including aliases and package exports, to selected repository source. External dependencies do not become source entries.
 

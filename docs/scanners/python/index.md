@@ -17,7 +17,7 @@ groma scanner check
 groma scan
 ```
 
-For local development, build a runnable package from the Groma repository,
+For local development, build a runnable package from the groma.md repository,
 copy that package into the consumer repository, and add its relative path:
 
 ```sh
@@ -65,7 +65,7 @@ the [HTTP facts](#http-facts) below. Every observation includes a
 
 Source is parsed and compiled for syntax and scope validation, including valid
 module-level `await`, but the code object is never executed. Invalid source or project TOML fails the whole Python
-observation. Other healthy scanners follow Groma's existing failure isolation.
+observation. Other healthy scanners follow groma.md's existing failure isolation.
 Correct reported syntax errors or use a scanner release supporting the source
 language version. Readiness checks source availability and the packaged worker;
 full syntax validation happens during the scan.
@@ -268,7 +268,7 @@ The eight [producer decisions](../evidence.md#producer-checklist) for Python:
 ## Architecture meaning
 
 Python roots, symbols and operations are temporary scanner evidence. They add
-no OKF record type or C4 containment level. Groma core owns initial placement
+no OKF record type or C4 containment level. groma.md core owns initial placement
 and preserves curated file ownership. Ordinary Markdown and OKF readers see
 the existing architecture records and Code links with scanner ID `python`.
 Framework dependencies and imports alone do not establish C4 collaborations.

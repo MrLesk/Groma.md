@@ -217,7 +217,7 @@ the executed artifact checks and remaining release gates.
 
 ## Nested projects
 
-Run Groma from the repository root. The scanner finds package declarations in
+Run groma.md from the repository root. The scanner finds package declarations in
 tracked and unignored files, including nested apps and libraries. Dependencies,
 dev dependencies, peer dependencies and optional dependencies identify candidates.
 A candidate also needs a tracked or unignored `tsconfig.json` in its directory or

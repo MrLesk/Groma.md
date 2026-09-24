@@ -14,7 +14,7 @@ groma scan
 
 For local development, a maintainer with JDK 25 builds the package with
 `bun plugins/scanners/java/build.ts`, then adds the resulting
-`plugins/scanners/java/dist/package` directory to Groma. The package contains
+`plugins/scanners/java/dist/package` directory to groma.md. The package contains
 bundled JavaScript, a precompiled worker JAR and a platform-specific compiler
 runtime. The runtime includes its upstream license notices;
 `THIRD-PARTY-NOTICES.txt` carries the license texts of the bundled npm

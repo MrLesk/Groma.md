@@ -29,7 +29,7 @@ architecture.
 
 Core keeps curated file membership authoritative. Files already assigned to one component stay together. An explicit scanner source unit can associate unowned companion files with one component; other unknown files become singleton components. A drafted name match receives Code but stays a draft until `groma accept`.
 
-The first scan with source files creates one system named from the project profile when no internal system is declared. This is Groma's starting model; curation defines the actual system boundaries. Later scans reuse declared systems and never create additional systems from source roots. If several systems exist and a new file has no identifiable system, the scan reports the file as an error.
+The first scan with source files creates one system named from the project profile when no internal system is declared. This is groma.md's starting model; curation defines the actual system boundaries. Later scans reuse declared systems and never create additional systems from source roots. If several systems exist and a new file has no identifiable system, the scan reports the file as an error.
 
 Source roots do not establish application boundaries. Core collects placement evidence across scanners before choosing a parent. Existing ownership or a matching declared boundary can identify a container. [Execution-entry evidence](evidence.md#execution-entries-and-container-placement) can establish an application container automatically. Core merges facts about the same physical entry, places its own unambiguous components, and leaves shared or uncertain sources directly under their known system. These components appear in an **Unidentified container** group. File counts and scanner order do not settle conflicting placement.
 
@@ -60,7 +60,7 @@ previous observation. Closing a session releases its watcher and waits for
 active analysis and publication.
 
 The source runtime emits observations without accessing architecture records.
-The Groma adapter sends them to core for reconciliation. In OKF, Code links and
+The groma.md adapter sends them to core for reconciliation. In OKF, Code links and
 relationship rows remain ordinary readable Markdown; this runtime adds no
 stored metadata. In C4, it is part of the existing scan lifecycle responsibility,
 not another architecture level. Core still owns architectural interpretation.
@@ -100,7 +100,7 @@ cannot parse out of its evidence and warns.
 This changes scanner execution, not the architecture model. In OKF, readers
 still see ordinary Markdown, Code links and relationship rows. In C4, parsers
 and runtimes belong to the existing scanner responsibility; dependencies do
-not become new map elements. Groma core continues to own architectural meaning.
+not become new map elements. groma.md core continues to own architectural meaning.
 
 ## Scanner settings
 
@@ -126,8 +126,8 @@ optional `settings` object to the relevant entry, preserving its installed
 ```
 
 Each scanner documents its settings and defaults. Project paths are relative
-to the repository root. Groma passes these settings to readiness checks and
-scans; plugins do not read separate Groma configuration files. Compiler options
+to the repository root. groma.md passes these settings to readiness checks and
+scans; plugins do not read separate groma.md configuration files. Compiler options
 remain in native project files. Run a new scan or restart an active viewer or
 watch session after changing settings. Scanner add and remove preserve settings
 on retained entries. See the [plugin contract](creating-a-plugin.md#scanner-settings).
@@ -167,7 +167,7 @@ are edited like any other pattern; updating a scanner keeps the entry's list.
 Omitting `exclude` or using `[]` adds no exclusions. Only language coverage,
 the files the language's own build compiles, stays built into a scanner; `!`
 does not restore a file outside it. When a scanner lists source files and all of them are excluded for
-it, Groma skips its readiness check and scan. This keeps
+it, groma.md skips its readiness check and scan. This keeps
 excluded test projects from blocking a scan on incomplete fixture inputs.
 When included sources remain, compiler analysis can still read excluded files
 as context. A failed scanner keeps its saved evidence while successful scanners

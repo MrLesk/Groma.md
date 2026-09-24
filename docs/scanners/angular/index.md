@@ -6,7 +6,7 @@ supported Maven and Angular application. Healthy scanners update the map; failed
 
 ## Build and install
 
-From the Groma checkout:
+From the groma.md checkout:
 
 ```sh
 bun install --frozen-lockfile --ignore-scripts
@@ -41,7 +41,7 @@ or an extended config the checkout lacks, produces an `angular-unreadable-config
 warning; the rest of the config applies.
 The TypeScript scanner uses the native TypeScript 7 SDK. The package build resolves every
 compiler TypeScript import to the scanner's own installation before bundling,
-so workspace dependency hoisting cannot substitute Groma's compiler.
+so workspace dependency hoisting cannot substitute groma.md's compiler.
 
 Angular's template parser and selector matcher read template syntax. TypeScript
 resolves local class, property and handler identities. The adapter recognizes
@@ -179,7 +179,7 @@ real-project result and remaining release gates.
 
 ## Projects
 
-Run Groma from the repository root. The scanner finds package declarations in
+Run groma.md from the repository root. The scanner finds package declarations in
 tracked and unignored files, including nested apps and libraries. Dependencies,
 dev dependencies, peer dependencies and optional dependencies identify candidates;
 a `package.json` that is not JSON declares none. A candidate also needs a

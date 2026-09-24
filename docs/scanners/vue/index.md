@@ -1,6 +1,6 @@
 # Vue scanner
 
-The Vue scanner adds single-file component (SFC) event bindings to Groma's
+The Vue scanner adds single-file component (SFC) event bindings to groma.md's
 TypeScript scanner evidence. Its bundled compiler tools read local source
 without project dependencies. The scanner uses each selected project's
 `tsconfig.json`, or the nearest one above that package; it does not execute
@@ -93,7 +93,7 @@ edits participate in the existing scan watcher.
 
 In OKF, the result is ordinary source links and relationship Markdown. An SFC
 is source evidence; it does not automatically define a C4 responsibility or
-add a containment level. Groma's existing ownership and relationship model
+add a containment level. groma.md's existing ownership and relationship model
 owns that interpretation. No new architecture metadata is added.
 
 See [fresh-checkout validation](../fresh-checkout-validation.md) for the pinned project and executed release
@@ -226,7 +226,7 @@ TypeScript scanner compares.
 
 ## Nested projects
 
-Run Groma from the repository root. The scanner finds package declarations in
+Run groma.md from the repository root. The scanner finds package declarations in
 tracked and unignored files, including nested apps and libraries. Dependencies,
 dev dependencies, peer dependencies and optional dependencies identify candidates.
 A candidate also needs a tracked or unignored `tsconfig.json` in the package
