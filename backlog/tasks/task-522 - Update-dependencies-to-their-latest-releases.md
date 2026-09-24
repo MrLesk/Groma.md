@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@claude'
 created_date: '2026-09-24 16:23'
-updated_date: '2026-09-24 16:59'
+updated_date: '2026-09-24 17:23'
 labels: []
 dependencies: []
 references:
@@ -51,6 +51,7 @@ On 2026-09-24 a check of the Info panel found that 10 of its 18 libraries were b
 - [x] #4 `bun run check` and `bun run build` pass, and the built binary starts
 - [x] #5 The browser map, terminal map, init prompts and the scanners whose libraries changed still work in a manual check
 - [x] #6 Documentation that names bundled dependency versions matches the new versions
+- [x] #7 Transitive dependencies are at the newest versions their dependents declared ranges allow, so bun update reports no changes; packages held a major behind are listed with the dependent that holds them
 <!-- AC:END -->
 
 ## Definition of Done
@@ -105,10 +106,12 @@ End-of-task review: a general-purpose agent reviewed from a written brief (the f
 Follow-ups noticed and not done here: the Angular scanner treats TS5025 (unknown option with a suggestion, such as checkers) as fatal instead of angular-unreadable-config; the Info panel shows an SSH repository URL for @resvg/resvg-wasm and "MIT License" for @comark/html; the init wizard shows an empty Project readiness box when no scanner is selected; the Vue and PHP scanners hard-code engineVersion (still correct); the repository pins Bun 1.4.1 in packageManager and CI.
 
 Final check on the exact commit tree (HEAD 16ff0735 plus these 18 files, bun install --frozen-lockfile): bun run check exit 0; same 3 Biome warnings and 2 infos; tsc clean; Node 16/16; Bun 734 pass, 45 skip, 0 fail.
+
+Follow-up on 2026-09-24 (Alex asked about nanoid 3 vs 6 and asked to run bun update): bun update reports no changes. The shared bun.lock already held 7 in-range refreshes written at 19:14 by another run: js-yaml 5.2.2 -> 5.4.2, entities 8.0.0 -> 8.1.0, nanoid 3.3.18 -> 3.3.19, ansi-regex 6.2.2 -> 6.3.0, strip-ansi -> 7.2.0 for string-width, get-east-asian-width 1.6.0 -> 1.7.0, @babel/parser 7.29.8 -> 7.29.9. Alex approved committing them under this task. Packages a major behind stay because their dependents declare older ranges: in the Groma binary, @opentui/core pins marked 17.0.1, string-width 7.2.0 and strip-ansi 7.1.2 (emoji-regex 10 through string-width); markdown-exit, comark parser, wants entities ^7, linkify-it ^5 and uc.micro ^2; clack wants sisteransi ^1; @parcel/watcher wants node-addon-api ^7; js-yaml wants argparse ^2. Scanner and development tooling only: postcss 8 (through @vue/compiler-sfc) wants nanoid ^3; the Vue compiler wants Babel 7, estree-walker ^2, magic-string ^0.30 and entities ^7; good-enough-parser 1.1.23 pins old @thi.ng packages, moo and @types/moo; @types/node pins undici-types ~8.9. Forcing them with overrides would run these packages against majors they do not declare (nanoid 4+ is ESM-only while postcss 8 requires it), so none is overridden. Verification: HEAD 48ea5bcf plus the refreshed bun.lock, bun install --frozen-lockfile, bun run check exit 0 (Node 16/16, Bun 736 pass, 45 skip, 0 fail); the comark round trip of 643 records already ran on js-yaml 5.4.2 and entities 8.1.0.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
-Updated every root and scanner dependency to its newest release after reviewing each changelog: clack, comark and @comark/html, OpenTUI, ignore, Biome, @types/node, @types/bun, tsx, the TypeScript 7.1 nightly for the repository and TypeScript scanner, Angular 22.2 and Vue 3.5.43 with their own TypeScript 6.0.3, and React 19.3 for the React scanner tests. Removed the unused web-worker and webcola, so the Info panel lists only libraries Groma uses. The classic-API scanners stay on TypeScript 6.0 because TypeScript 7 has no classic compiler API. Adapted the TypeScript scanner to the nightly createProgram and createSnapshot API and the init wizard to the typed clack cancel value; the Angular unreadable-config fixture now uses a TypeScript 7 option. Scanner docs state the TypeScript rule instead of copying versions, and biome.json uses the installed schema. Verified in clean worktrees with only these changes: bun run check green, binary build and start, framework scanner package builds, an identical self-scan and groma lint against HEAD, identical terminal map and init screens against HEAD under tui-test, the browser map and project preview, and byte-identical comark round trips of 643 architecture records.
+Updated every root and scanner dependency to its newest release after reviewing each changelog: clack, comark and @comark/html, OpenTUI, ignore, Biome, @types/node, @types/bun, tsx, the TypeScript 7.1 nightly for the repository and TypeScript scanner, Angular 22.2 and Vue 3.5.43 with their own TypeScript 6.0.3, and React 19.3 for the React scanner tests. Removed the unused web-worker and webcola, so the Info panel lists only libraries Groma uses. The classic-API scanners stay on TypeScript 6.0 because TypeScript 7 has no classic compiler API. Adapted the TypeScript scanner to the nightly createProgram and createSnapshot API and the init wizard to the typed clack cancel value; the Angular unreadable-config fixture now uses a TypeScript 7 option. Scanner docs state the TypeScript rule instead of copying versions, and biome.json uses the installed schema. A follow-up refreshed transitive dependencies to the newest versions their dependents allow (bun update reports no changes); the packages still a major behind are held by their dependents ranges and are listed in the notes. Verified in clean worktrees with only these changes: bun run check green, binary build and start, framework scanner package builds, an identical self-scan and groma lint against HEAD, identical terminal map and init screens against HEAD under tui-test, the browser map and project preview, byte-identical comark round trips of 643 architecture records, and green CI on Ubuntu, macOS and Windows for the first run containing the dependency commit.
 <!-- SECTION:FINAL_SUMMARY:END -->
