@@ -2,11 +2,11 @@ package main
 
 import "strings"
 
-// echo shares gin's path syntax, but its handler follows the path.
+// echo takes its handler right after the path, before any middleware.
 var echo = &routerLibrary{
 	imports:      func(path string) bool { return strings.HasPrefix(path, "github.com/labstack/echo") },
 	constructors: []string{"New"},
-	root:         "Echo",
+	rootOnlyType: "Echo",
 	routes: map[string]registration{
 		"CONNECT": {method: "CONNECT", handler: 1}, "DELETE": {method: "DELETE", handler: 1}, "GET": {method: "GET", handler: 1},
 		"HEAD": {method: "HEAD", handler: 1}, "OPTIONS": {method: "OPTIONS", handler: 1}, "PATCH": {method: "PATCH", handler: 1},

@@ -12,10 +12,10 @@ type router struct {
 	prefix  []endpointSegment
 }
 
-// declared registers parameters, struct fields and variables written as a root router or a net/http
-// client, and the router a group hands to its closure. A chi router, gin group or echo group reaches
-// this scan with a prefix it cannot see, so only the constructors, mounts and groups in this source
-// establish one.
+// declared registers parameters, struct fields and variables written with a library's root-only
+// router type or as a net/http client, and the router a group hands to its closure. Any other
+// router value may reach this scan with a prefix it cannot see, so only the constructors, mounts
+// and groups in this source establish one.
 func (e *evidence) declared(s *source) {
 	ast.Inspect(s.syntax, func(node ast.Node) bool {
 		switch node := node.(type) {
@@ -42,7 +42,7 @@ func (e *evidence) declaredNames(s *source, names []*ast.Ident, written ast.Expr
 		return
 	}
 	client := library == netHTTP && name == "Client"
-	if !client && library.root != name {
+	if !client && library.rootOnlyType != name {
 		return
 	}
 	for _, declared := range names {

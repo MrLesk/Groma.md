@@ -274,7 +274,7 @@ function httpFacts(observation: ScanObservation) {
   }
 }
 
-goTest('Go reports HTTP endpoints from net/http, chi, gin and echo with their group prefixes', async () => {
+goTest('Go reports HTTP endpoints from every supported router with their group prefixes', async () => {
   const { root, worker } = await fixture('go-http')
   try {
     await buildWorker(worker, go)
@@ -284,11 +284,12 @@ goTest('Go reports HTTP endpoints from net/http, chi, gin and echo with their gr
     // a parameter in one segment constrain it; a chi regular expression that may match a slash stands
     // for the rest of the route only when other text follows it in its segment. A chi pattern and a
     // net/http method constant state the method. A chi Mount carries every prefix of its receiver, and names read the
-    // same whichever file assigns, builds or mounts them. A root gin or echo router serves from the root
+    // same whichever file assigns, builds or mounts them. A router of a root-only type serves from the root
     // even as a parameter. Nothing is reported for a group parameter, a reassigned router or
     // group closure parameter, a ServeMux field assigned from a call, a router built for a mount
     // elsewhere, mounted on a router this scan cannot read, mounted twice or inside itself, a mounted
-    // router that is not chi, or one behind http.StripPrefix.
+    // router that is not chi, or one behind http.StripPrefix. Each fixture file explains its
+    // library's own rules.
     expect(endpoints).toEqual([
       'echo.go DELETE /v2/talks/:id',
       'echo.go GET /files/:path+',
@@ -323,6 +324,18 @@ goTest('Go reports HTTP endpoints from net/http, chi, gin and echo with their gr
       'handlers.go POST /api/items/:id',
       'handlers.go POST /talks',
       'handlers.go PUT /api/talks',
+      'httprouter.go DELETE /speakers/:id',
+      'httprouter.go GET /assets/:filepath+',
+      'httprouter.go GET /parameterspeakers',
+      'httprouter.go GET /rooms/:number!',
+      'httprouter.go GET /speakers/:id',
+      'httprouter.go GET /speakers/:id/photo',
+      'httprouter.go POST /speakers',
+      'httprouter.go PUT /speakers/:id',
+      'prometheus.go DELETE /api/v1/series',
+      'prometheus.go GET /-/healthy',
+      'prometheus.go GET /api/v1/query',
+      'prometheus.go POST /api/v1/admin/tsdb/snapshot',
     ].sort())
   } finally { await rm(root, { recursive: true, force: true }) }
 }, 60000)

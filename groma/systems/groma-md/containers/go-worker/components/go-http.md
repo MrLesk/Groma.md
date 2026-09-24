@@ -19,17 +19,23 @@ groma:
     - scanner: go
       file: plugins/scanners/go/worker/libraries.go
     - scanner: go
-      file: plugins/scanners/go/worker/nethttp.go
+      file: plugins/scanners/go/worker/routers.go
     - scanner: go
-      file: plugins/scanners/go/worker/chi.go
+      file: plugins/scanners/go/worker/library_nethttp.go
     - scanner: go
-      file: plugins/scanners/go/worker/gin.go
+      file: plugins/scanners/go/worker/library_chi.go
+    - scanner: go
+      file: plugins/scanners/go/worker/library_gin.go
       symbol: gin
     - scanner: go
-      file: plugins/scanners/go/worker/echo.go
+      file: plugins/scanners/go/worker/library_echo.go
       symbol: echo
     - scanner: go
-      file: plugins/scanners/go/worker/routers.go
+      file: plugins/scanners/go/worker/library_httprouter.go
+      symbol: httprouter
+    - scanner: go
+      file: plugins/scanners/go/worker/library_prometheus.go
+      symbol: prometheusRoute
 description: Finds Go HTTP clients, routers and endpoints
 ---
 

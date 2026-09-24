@@ -100,24 +100,6 @@ func routeSegments(library *routerLibrary, text string) ([]endpointSegment, bool
 	return path, true
 }
 
-// colonSegment reads the gin and echo syntax: `:name` for one segment, `*` or `*name` for the rest.
-// Literal text before `:name`, as in `v:version`, restricts what the router accepts in the segment.
-func colonSegment(part string) (endpointSegment, bool) {
-	if strings.HasPrefix(part, ":") {
-		return parameter(strings.TrimPrefix(part, ":"), false)
-	}
-	if strings.HasPrefix(part, "*") {
-		return catchAll(strings.TrimPrefix(part, "*"))
-	}
-	if before, name, found := strings.Cut(part, ":"); found && !strings.Contains(before, "*") {
-		return parameter(name, true)
-	}
-	if strings.Contains(part, "*") {
-		return endpointSegment{}, false
-	}
-	return literalSegment(part)
-}
-
 func parameter(name string, constrained bool) (endpointSegment, bool) {
 	name, ok := segmentName(name)
 	return endpointSegment{Kind: "parameter", Name: name, Constrained: constrained}, ok

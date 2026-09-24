@@ -6,7 +6,7 @@ import "strings"
 var netHTTP = &routerLibrary{
 	imports:         func(path string) bool { return path == "net/http" },
 	constructors:    []string{"NewServeMux"},
-	root:            "ServeMux",
+	rootOnlyType:    "ServeMux",
 	routes:          map[string]registration{"Handle": {method: "*", handler: 1}, "HandleFunc": {method: "*", handler: 1}},
 	stripPrefix:     "StripPrefix",
 	defaultRouter:   true,

@@ -6,7 +6,7 @@ import "strings"
 var gin = &routerLibrary{
 	imports:      func(path string) bool { return strings.HasPrefix(path, "github.com/gin-gonic/gin") },
 	constructors: []string{"New", "Default"},
-	root:         "Engine",
+	rootOnlyType: "Engine",
 	routes: map[string]registration{
 		"DELETE": {method: "DELETE", handler: lastArgument}, "GET": {method: "GET", handler: lastArgument},
 		"HEAD": {method: "HEAD", handler: lastArgument}, "OPTIONS": {method: "OPTIONS", handler: lastArgument},

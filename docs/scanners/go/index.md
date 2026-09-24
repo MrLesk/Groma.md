@@ -81,22 +81,25 @@ files.
 The worker reports the endpoints this module serves and the requests it sends as
 [HTTP facts](../evidence.md#http-endpoints-and-requests). External packages stay
 unresolved in a source-only scan, so frameworks are recognized by import path and
-written type: `net/http`, `github.com/go-chi/chi`, `github.com/gin-gonic/gin` and
-`github.com/labstack/echo`. A router is a value built by `http.NewServeMux`,
-`chi.NewRouter`, `chi.NewMux`, `gin.New`, `gin.Default` or `echo.New`, the default
-`ServeMux` behind `http.Handle` and `http.HandleFunc`, or a parameter, struct field
-or variable written as a root router: `*http.ServeMux`, `*gin.Engine` or
-`*echo.Echo`. A chi router, gin `RouterGroup` or echo `Group` that arrives as a
-parameter or field may already carry a group prefix this scan cannot see, so its
-routes are not reported.
+written type: `net/http`, `github.com/go-chi/chi`, `github.com/gin-gonic/gin`,
+`github.com/labstack/echo`, `github.com/julienschmidt/httprouter` and
+`github.com/prometheus/common/route`. A router is a value built by
+`http.NewServeMux`, `chi.NewRouter`, `chi.NewMux`, `gin.New`, `gin.Default`,
+`echo.New`, `httprouter.New` or `route.New`, the default `ServeMux` behind
+`http.Handle` and `http.HandleFunc`, or a parameter, struct field or variable
+written as a root router: `*http.ServeMux`, `*gin.Engine`, `*echo.Echo` or
+`*httprouter.Router`. A chi router, gin `RouterGroup`, echo `Group` or prometheus
+`*route.Router` that arrives as a parameter or field may already carry a group
+prefix this scan cannot see, so its routes are not reported.
 
 Answers to the [producer checklist](../evidence.md#producer-checklist):
 
 1. **Prefixes.** Every constant prefix the source declares: a chi `Route` or
-   `Mount` prefix, a gin or echo `Group` prefix, nested groups, and the route's
-   own path. A chi router mounted with `Mount` serves below every prefix of the
-   router it is mounted on. A router whose served path is longer than this
-   source can state reports nothing for its routes:
+   `Mount` prefix, a gin or echo `Group` prefix, a prometheus route `WithPrefix`
+   prefix, nested groups, and the route's own path. A chi router mounted with
+   `Mount` serves below every prefix of the router it is mounted on. A router
+   whose served path is longer than this source can state reports nothing for
+   its routes:
 
    - a router under a group or mount whose prefix is not constant;
    - a router mounted on a router this scan cannot read;
@@ -115,10 +118,13 @@ Answers to the [producer checklist](../evidence.md#producer-checklist):
    may already serve below a prefix this scan cannot see.
 2. **Endpoints.** Only route registrations: net/http `Handle` and `HandleFunc`,
    chi `Get` through `Trace` with `Handle`, `HandleFunc`, `Method` and
-   `MethodFunc`, gin `GET` through `OPTIONS` with `Any` and `Handle`, and echo
-   `GET` through `CONNECT` with `Any` and `Add`. `Use` middleware, echo `Static`
-   and `File`, and a handler this scan cannot resolve to an operation report
-   nothing.
+   `MethodFunc`, gin `GET` through `OPTIONS` with `Any` and `Handle`, echo
+   `GET` through `CONNECT` with `Any` and `Add`, httprouter `GET` through
+   `DELETE` with `Handle`, `Handler` and `HandlerFunc`, and prometheus route
+   `Get`, `Post`, `Put`, `Del` (DELETE), `Options`, `Head` and `Query`. `Use`
+   middleware, echo `Static` and `File`, httprouter `ServeFiles`, and a handler
+   this scan cannot resolve to an operation, such as one a local wrapper
+   returns, report nothing.
 3. **Dynamic or unknown.** A `fmt.Sprintf` verb that fills a whole segment, as in
    `/talks/%d`, is dynamic. A verb that shares a segment with text, as in
    `/talks/%s-%s`, and every other computed value are unknown.
@@ -142,26 +148,28 @@ Answers to the [producer checklist](../evidence.md#producer-checklist):
 6. **File-location routes.** Go has none, so every endpoint names its handler: a
    function, a method value, an `http.HandlerFunc` conversion, or a function
    literal.
-7. **Constrained segments.** A chi `{name:regex}` parameter, and a chi, gin or
-   echo segment that mixes literal text with a parameter, such as `{id}.json` or
-   `v:version`, is a constrained parameter named after that parameter. chi hands
-   a regular expression the text up to the character after its placeholder. At
-   the end of a segment that is the next `/`, so `{path:.+}` stays one segment.
+7. **Constrained segments.** A chi `{name:regex}` parameter, and a chi, gin,
+   echo or httprouter segment that mixes literal text with a parameter, such as
+   `{id}.json`, `v:version` or `room-:number`, is a constrained parameter named
+   after that parameter. chi hands a regular expression the text up to the
+   character after its placeholder. At the end of a segment that is the next
+   `/`, so `{path:.+}` stays one segment.
    Before other text, as in `{path:.+}.json`, a regular expression that may match
    `/` crosses segments, so that segment is a constrained optional catch-all that
    replaces the rest of the route. net/http rejects a wildcard that shares its
    segment with text, so no such route is served.
 8. **Registration order.** net/http, chi, gin and echo prefer the most specific
-   route over the first one registered, so no endpoint reports `order`.
+   route over the first one registered, and httprouter, also behind prometheus
+   route, matches one route per request, so no endpoint reports `order`.
 
 Route syntax follows each framework: net/http method patterns such as
 `"GET /talks/{id}"`, `{name}`, `{name...}`, the `{$}` anchor and a
 trailing-slash subtree; chi `{name}`, `{name:regex}` and `*`, with the same
-method patterns in `Handle` and `HandleFunc`; gin `:name` and `*name`; echo
-`:name` and `*`. A method argument is a literal or a net/http constant such as
-`http.MethodPut`. A catch-all serves an empty remainder only after
-a trailing slash, which request paths do not keep, so it requires at least one
-segment. A catch-all at the root, such as the bare `/` subtree, is optional.
+method patterns in `Handle` and `HandleFunc`; gin, httprouter and prometheus
+route `:name` and `*name`; echo `:name` and `*`. A method argument is a literal
+or a net/http constant such as `http.MethodPut`. A catch-all serves an empty
+remainder only after a trailing slash, which request paths do not keep, so it
+requires at least one segment. A catch-all at the root, such as the bare `/` subtree, is optional.
 
 Requests come from `http.Get`, `Head`, `Post` and `PostForm`, the same
 methods on a tracked `*http.Client` or `http.DefaultClient`, and

@@ -11,9 +11,10 @@ type routerLibrary struct {
 	imports func(path string) bool
 	// constructors build a router that serves from the root.
 	constructors []string
-	// root is the router type that serves from the root, so a parameter, field or variable written
-	// with it is a router; empty when a group returns that type too, since it may carry a prefix.
-	root string
+	// rootOnlyType is the router type that only a root router has, so a parameter, field or variable
+	// written with it serves from the root. Leave it empty when a group returns that type too, as
+	// prometheus's WithPrefix does, because such a router may already carry a prefix.
+	rootOnlyType string
 	// routes are the route registration methods.
 	routes map[string]registration
 	// groups return a router at or below their receiver's path.
@@ -62,7 +63,7 @@ type group struct {
 
 const noPrefix = -1
 
-var libraries = []*routerLibrary{netHTTP, chi, gin, echo}
+var libraries = []*routerLibrary{netHTTP, chi, gin, echo, httprouter, prometheusRoute}
 
 // libraryOf names the routing library an import path belongs to, or nil.
 func libraryOf(path string) *routerLibrary {
