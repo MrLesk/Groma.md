@@ -1,4 +1,5 @@
-import type { TreeRow } from '../../tui/tree.ts'
+import type { ArchitectureGraph } from '../../../types.ts'
+import { initialTree, semanticTreeRows, toggleExpansion, type TreeRow } from '../../tui/tree.ts'
 import { replaceTreeChildren, sidebarBranches, sidebarRow } from './sidebar-row.ts'
 import { sectionHeading } from './sidebar-section.ts'
 
@@ -32,7 +33,7 @@ function hierarchyRow(
   return button
 }
 
-export function paintHierarchy(
+function paintHierarchy(
   host: HTMLElement,
   rows: TreeRow[],
   selectedIds: ReadonlySet<string>,
@@ -59,4 +60,21 @@ export function paintHierarchy(
   })
   list.hidden = !unfolded
   replaceTreeChildren(host, heading, list)
+}
+
+/** The architecture tree beside the map; it keeps the branches a person opened or closed across repaints. */
+export function createHierarchy(host: HTMLElement, onSelect: (id: string, additive: boolean) => void) {
+  let tree = initialTree()
+  const paint = (world: ArchitectureGraph, selectedIds: readonly string[]): void => {
+    const rows = semanticTreeRows(world, selectedIds, tree).filter(row => row.kind !== 'actor')
+    paintHierarchy(host, rows, new Set(selectedIds), onSelect, row => {
+      tree = toggleExpansion(tree, row)
+      paint(world, selectedIds)
+    })
+  }
+  return {
+    paint,
+    /** Another revision starts with the default branches open. */
+    reset(): void { tree = initialTree() },
+  }
 }

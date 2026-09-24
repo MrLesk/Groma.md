@@ -8,7 +8,7 @@ groma:
   code:
     - scanner: typescript
       file: src/viewers/web/organisms/hierarchy.ts
-      symbol: paintHierarchy
+      symbol: createHierarchy
     - scanner: typescript
       file: src/viewers/web/organisms/sidebar-row.ts
   group: Architecture panels

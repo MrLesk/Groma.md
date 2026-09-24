@@ -4,14 +4,14 @@ import type { ProjectProfile } from '../../project-profile.ts'
 import type { AnnotatedElement, AnnotatedRelationship, WorkItem } from '../../types.ts'
 import { elementWorkGroups, touchedElements } from '../../work/pins.ts'
 import type { FlowRef } from '../flows.ts'
-import { initialTree, semanticTreeRows, toggleExpansion, type TreeRow } from '../tui/tree.ts'
 import { createAddControl } from './chrome/add.ts'
 import { createEmptyState } from './chrome/empty.ts'
 import { createMapDebugPanel } from './chrome/map-debug.ts'
 import { bindMapView } from './chrome/map-view.ts'
 import { bindC4Filter } from './chrome/c4-filter.ts'
 import { animateControl } from './chrome/motion.ts'
-import { bindChromeActions, createWebShell, measureFrame, pageHosts, type MapFrame } from './chrome/shell.ts'
+import { measureFrame, type MapFrame } from './chrome/frame.ts'
+import { bindChromeActions, createWebShell, pageHosts } from './chrome/shell.ts'
 import { bindThemeControl, readSavedTheme } from './chrome/theme-control.ts'
 import { paintHeaderSummary } from './chrome/stats.ts'
 import { createWebDataSource, openWebBoot } from './data.ts'
@@ -19,15 +19,15 @@ import { listenForEmbeddedViews } from './embedding.ts'
 import { createFlowList } from './flow/list.ts'
 import { flowFocus, flowHighlight, flowSelection, retainFlows, toggleFlowActivation, type WebFlowRef } from './flow/state.ts'
 import { paintFlowReturn, paintFlowDetails } from './flow/reader.ts'
-import { fitArchitecture, fitHighlights, fitCamera, pan, zoomAbout, zoomLimits, zoomReadout, type Camera } from './iso/camera/camera.ts'
+import { fitArchitecture, fitHighlights, pan, zoomLimits } from './iso/camera/camera.ts'
 import { createMap } from './iso/painting/map.ts'
 import { createMapHighlights } from './iso/highlights.ts'
-import { createCameraAnimator } from './iso/camera/motion.ts'
 import { bindMapPointer } from './iso/camera/pointer.ts'
+import { createCameraSession } from './iso/camera/session.ts'
 import { presentScene, createMapAnimator, createMapMotion } from './iso/view-motion/presentation.ts'
 import { paintRelationship } from './organisms/relationship-details.ts'
 import { detailsTabAfterSelection, detailsTabAfterWork, type DetailsTab, inspectSelection, paintDetails } from './organisms/details.ts'
-import { paintHierarchy } from './organisms/hierarchy.ts'
+import { createHierarchy } from './organisms/hierarchy.ts'
 import { createPins } from './work/pins.ts'
 import { createTip } from './organisms/tip.ts'
 import { createProjectEditor } from './project/editor.ts'
@@ -70,7 +70,7 @@ const shell = createWebShell(document.body, hierarchyContent, hierarchyToggle, d
 const tip = createTip(host)
 const pins = createPins(host, id => map.anchorOf(id), id => toggleTask(id, false), tip)
 const island = createWorkIsland(host, id => toggleTask(id), pins.show, tip)
-let tree = initialTree()
+const hierarchy = createHierarchy(treeHost, select)
 const opened = readView(location, world, work.items, boot.revisions, readSavedTheme(localStorage), boot.comparison)
 const themeControl = bindThemeControl(document.getElementById('theme') as HTMLDetailsElement, opened.theme, syncUrl)
 let hudVisible = opened.hudVisible
@@ -107,13 +107,15 @@ const taskDiff = createTaskDiffControl({
   repaint: paintViewState, select,
 })
 const viewport = (): MapFrame => measureFrame(hosts, hudVisible)
-const fitScene = (frame: MapFrame): Camera => pan(fitCamera(scene.bounds, frame), frame.x, frame.y)
 emptyState.paint(world, project, !revisionControl.live) // Before the first fit; a published view hides the page's notice.
-let fitted: Camera = fitScene(viewport())
-function zoomRatio(view: Camera): number { return view.k / fitted.k }
-const camera = createCameraAnimator(fitted, applyCamera, to => map.approach(to, zoomRatio(to)))
-/** Once an interaction positions the camera, live refits stop until the viewer presses 0. */
-let touched = false
+const camera = createCameraSession({
+  frame: viewport, bounds: () => scene.bounds, approach: map.approach, readout: zoomHost, host,
+  move(view, zoom) {
+    const scaleChanged = map.move(view, zoom)
+    pins.place(view)
+    return scaleChanged
+  },
+})
 /** A world update's blend: the camera tracks its fit on every frame, through the last, instead of refitting a selection. */
 let following = false
 function worldElement(id: string | undefined): AnnotatedElement | undefined { return id === undefined ? undefined : world.elements.find(element => element.representationId === id) }
@@ -126,25 +128,10 @@ function known(id: string | undefined): boolean {
     || world.flows.some(flow => flow.id === id)
 }
 
-function applyCamera(): void {
-  const current = camera.current
-  const scaleChanged = map.move(current, zoomRatio(current))
-  pins.place(current)
-  if (scaleChanged) zoomHost.textContent = zoomReadout(current, fitted) || '100%'
-}
-
-function refit(): void {
-  fitted = fitScene(viewport())
-  camera.navigate(fitted)
-  touched = false
-}
-
-function fitControl(): void { animateControl(document.getElementById('fit')!, 'fit'); refit() }
+function fitControl(): void { animateControl(document.getElementById('fit')!, 'fit'); camera.refit() }
 function zoomStep(factor: number, control: HTMLElement): void {
   animateControl(control, 'zoom')
-  const frame = viewport()
-  camera.navigate(zoomAbout(camera.target, factor, { x: frame.x + frame.width / 2, y: frame.y + frame.height / 2 }, fitted))
-  touched = true
+  camera.zoomBy(factor)
 }
 
 function syncUrl(): void {
@@ -173,7 +160,7 @@ function paintViewState(commitUrl = true): void {
   if (commitUrl) syncUrl()
   const task = selection.kind === 'task' ? workItem(selection.id) : undefined
   paintMapState()
-  paintTree()
+  hierarchy.paint(world, selectedArchitecture(selection))
   paintFlows(flowsHost, world, activeFlows, toggleFlow, {
     title: 'Actors', selectedIds: selectedArchitecture(selection), onSelectActor: select,
   })
@@ -221,21 +208,6 @@ function paintDetailsState(task: WorkItem | undefined): void {
   }
 }
 
-function paintTree(): void {
-  paintHierarchy(
-    treeHost,
-    semanticTreeRows(world, selectedArchitecture(selection), tree).filter(row => row.kind !== 'actor'),
-    new Set(selectedArchitecture(selection)),
-    select,
-    toggleRow,
-  )
-}
-
-function toggleRow(row: TreeRow): void {
-  tree = toggleExpansion(tree, row)
-  paintTree()
-}
-
 function select(id: string, additive = false, origin: 'panel' | 'map' = 'panel'): void {
   if (worldElement(id) === undefined && worldRelationship(id) === undefined && unidentifiedGroup(id) === undefined) return
   source.clear()
@@ -243,27 +215,22 @@ function select(id: string, additive = false, origin: 'panel' | 'map' = 'panel')
     : selectArchitecture(selection, id, additive)
   detailsTab = detailsTabAfterSelection(detailsTab, primarySelection(selection), primarySelection(next))
   selection = next
-  touched = true
+  camera.touched = true
   paintViewState()
   if (origin === 'panel') focusArchitecture(selectedArchitecture(selection))
 }
 
-function applyFocus(next: Camera | undefined, frame: MapFrame): void {
-  if (next === undefined) return
-  camera.navigate(pan(next, frame.x, frame.y))
-  touched = true
-}
 function focusActiveTasks(): void {
   const elementIds = activeTaskIds.flatMap(id => {
     const task = workItem(id)
     return task === undefined ? [] : touchedElements(task, world)
   })
   const frame = viewport()
-  applyFocus(fitHighlights(scene, elementIds, frame, zoomLimits(fitted).max), frame)
+  camera.focus(fitHighlights(scene, elementIds, frame, zoomLimits(camera.fitted).max), frame)
 }
 function focusArchitecture(ids: readonly string[]): void {
   const frame = viewport()
-  applyFocus(fitArchitecture(scene, world, ids, frame), frame)
+  camera.focus(fitArchitecture(scene, world, ids, frame), frame)
 }
 
 /** Task pins preserve the camera; panel and search selections bring active work into view. */
@@ -272,7 +239,7 @@ function applyTaskSelection(next: ReturnType<typeof toggleWorkSelection>, focus 
   activeTaskIds = next.active
   source.clear()
   selection = next.selected === undefined ? noSelection : selectTask(next.selected)
-  touched = true
+  camera.touched = true
   if (!focus) camera.hold()
   paintViewState()
   if (focus) focusActiveTasks()
@@ -296,13 +263,14 @@ const searchControl = createSearchSession({
   clearSource: source.clear, anchorOf: id => map.anchorOf(id),
   taskElements: task => touchedElements(task, world),
   openTask: id => applyTaskSelection(openWorkSelection(activeTaskIds, id)),
-  snapshot: () => ({ selection, camera: { ...camera.current }, touched, detailsTab }),
+  snapshot: () => ({ selection, camera: { ...camera.current }, touched: camera.touched, detailsTab }),
   previewMap(ids, nextCamera) {
-    if (nextCamera !== undefined) { camera.navigate(nextCamera); touched = true }
+    if (nextCamera !== undefined) { camera.navigate(nextCamera); camera.touched = true }
     map.select(ids ?? selectedArchitecture(selection))
   },
   apply(next, commitUrl) {
-    ({ selection, touched, detailsTab } = next)
+    ({ selection, detailsTab } = next)
+    camera.touched = next.touched
     if (!commitUrl) camera.navigate(next.camera)
     paintViewState(commitUrl)
     if (commitUrl) focusArchitecture(selectedArchitecture(selection))
@@ -331,17 +299,11 @@ function toggleFlow(flow: FlowRef, returnTo?: string): void {
 bindMapPointer(host, map, {
   orbiting: () => mapMotion.view === 'layers',
   hold: camera.hold,
-  zoom(factor, point) {
-    camera.track(zoomAbout(camera.current, factor, point, fitted))
-    touched = true
-  },
-  pan(dx, dy) {
-    camera.track(pan(camera.current, dx, dy))
-    touched = true
-  },
+  zoom: camera.zoomAt,
+  pan: camera.panBy,
   glide: camera.glide,
   orbit(dx, dy) {
-    touched = true
+    camera.touched = true
     mapAnimator.orbit(dx, dy)
   },
   select: (id, additive) => select(id, additive, 'map'),
@@ -357,7 +319,7 @@ map.svg.addEventListener('keydown', event => {
 function toggleHud(): void {
   hudVisible = !hudVisible
   shell.setHud(hudVisible)
-  refit()
+  camera.refit()
   syncUrl()
 }
 
@@ -366,7 +328,7 @@ function focusOpened(kind: Selection['kind']): void {
   if (kind === 'task') focusActiveTasks()
   else if (kind === 'architecture') focusArchitecture(selectedArchitecture(selection))
   else if (kind === 'flow') focusArchitecture(flowFocus(activeFlows, world))
-  else refit()
+  else camera.refit()
 }
 /** An embedding page opens another view in place, from the same query string the URL carries. */
 function openView(search: string): void {
@@ -393,16 +355,16 @@ function repaintScene(fit: boolean): void {
   paintMapView(mapMotion.view)
   const rehighlight = debug.paint(() => map.paint(scene))
   pins.paint(currentPins.filter(pin => map.anchorOf(pin.elementId) !== undefined))
-  fitted = fitScene(frame)
+  const fitted = camera.refitTo(frame)
   if (fit && (mapMotion.morphing || following)) {
-    if (!touched) camera.frame(fitted, 1)
+    if (!camera.touched) camera.frame(fitted, 1)
   } else if (fit) {
     const focus = mapMotion.view === 'layers' ? undefined : fitArchitecture(scene, world, selectedArchitecture(selection), frame)
     camera.frame(focus === undefined ? fitted : pan(focus, frame.x, frame.y), mapMotion.framing)
-    touched = focus !== undefined
+    camera.touched = focus !== undefined
   } else camera.track(pan(camera.current, (before.x - after.x) * camera.current.k, (before.y - after.y) * camera.current.k))
   following = mapMotion.morphing
-  applyCamera()
+  camera.paint()
   if (rehighlight) paintMapState()
 }
 
@@ -419,21 +381,6 @@ bindChromeActions({
   deselect,
 })
 
-let lastViewport = viewport()
-const resizeObserver = new ResizeObserver(() => {
-  const next = viewport()
-  if (touched) {
-    camera.navigate(pan(
-      camera.target,
-      next.x + next.width / 2 - lastViewport.x - lastViewport.width / 2,
-      next.y + next.height / 2 - lastViewport.y - lastViewport.height / 2,
-    ))
-    fitted = fitScene(next)
-  } else refit()
-  lastViewport = next
-})
-resizeObserver.observe(host)
-
 function applyWorld(payload: WebPayload, reset = false): void {
   mapMeta = { generation: payload.generation, timings: payload.timings }
   world = payload.world
@@ -444,21 +391,21 @@ function applyWorld(payload: WebPayload, reset = false): void {
   emptyState.paint(world, project, !revisionControl.live) // Before measuring, so the fit leaves the card's new space.
   mapAnimator.retarget(sheet)
   scene = projectedScene()
-  fitted = fitScene(viewport())
+  const fitted = camera.refitTo(viewport())
   // A settling sheet is followed from where the camera is; an instant change flies to the new fit.
   const settle = () => mapMotion.morphing ? camera.frame(fitted, 0) : camera.navigate(fitted)
   if (reset) {
     authoring.cancel()
     source.clear()
-    tree = initialTree()
+    hierarchy.reset()
     activeTaskIds = []
     activeFlows = []
     selection = retainSelection(selection, id => worldElement(id) !== undefined)
     if (detailsTab === 'tasks') detailsTab = 'what'
     settle()
-    touched = false
+    camera.touched = false
   } else {
-    if (!touched) settle()
+    if (!camera.touched) settle()
     activeTaskIds = activeTaskIds.filter(id => workItem(id) !== undefined)
     activeFlows = retainFlows(activeFlows, world)
     if (selection.kind === 'flow') selection = flowSelection(activeFlows)
@@ -490,7 +437,7 @@ function paintWorld(): void {
   authoring.refresh()
   pins.paint(currentPins.filter(pin => map.anchorOf(pin.elementId) !== undefined))
   island.paint(currentPins, work)
-  applyCamera()
+  camera.paint()
   paintViewState()
   source.restore()
 }

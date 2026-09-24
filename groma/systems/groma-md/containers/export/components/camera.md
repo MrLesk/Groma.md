@@ -15,6 +15,8 @@ groma:
       file: src/viewers/web/iso/camera/pointer.ts
     - scanner: typescript
       file: src/viewers/web/iso/camera/layer.ts
+    - scanner: typescript
+      file: src/viewers/web/iso/camera/session.ts
 description: Fits, pans and zooms the browser map camera
 ---
 

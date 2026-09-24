@@ -18,8 +18,10 @@ groma:
       file: src/viewers/web/chrome/map-view.ts
     - scanner: typescript
       file: src/viewers/web/chrome/credits.ts
+    - scanner: typescript
+      file: src/viewers/web/chrome/frame.ts
   group: Browser controls
 description: Browser toolbar, side panels and keyboard shortcuts
 ---
 
-Shows the map toolbar and side panels. Handles keyboard shortcuts, panel expansion, and empty map states.
+Shows the map toolbar and side panels. Handles keyboard shortcuts, panel expansion and empty map states, and measures the frame the visible chrome leaves for the camera.

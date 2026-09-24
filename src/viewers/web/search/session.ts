@@ -1,7 +1,7 @@
 import type { WorkItem } from '@groma/work-source'
 
 import type { AnnotatedElement, Point } from '../../../types.ts'
-import type { MapFrame } from '../chrome/shell.ts'
+import type { MapFrame } from '../chrome/frame.ts'
 import { pan, type Camera } from '../iso/camera/camera.ts'
 import { detailsTabAfterSelection, type DetailsTab } from '../organisms/details.ts'
 import { noSelection, primarySelection, selectArchitecture, type Selection } from '../selection.ts'
