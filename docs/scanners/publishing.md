@@ -74,7 +74,7 @@ bun scripts/scanner-release.ts assemble /tmp/scanner-host-artifacts /tmp/scanner
 
 Publication is a separate, explicit operation using the maintainer's npm login
 or the existing GitHub trusted publisher. Configure package publishing access
-for `MrLesk/Groma.md`, workflow `release.yml`, before using CI publication.
+for `MrLesk/groma.md`, workflow `release.yml`, before using CI publication.
 For the first publication, run the Release workflow manually from the prepared
 source branch. A manual run validates the repository and builds scanner artifacts
 for all five targets; it does not publish. Download its `scanner-packages-*`
@@ -82,7 +82,7 @@ artifacts, assemble them, and publish with the maintainer's npm login. npm may
 request approval in the browser. Then configure trusted publishing once for each package with npm 11.15.0 or later:
 
 ```sh
-npm trust github @groma/scanner --repository MrLesk/Groma.md --file release.yml --allow-publish
+npm trust github @groma/scanner --repository MrLesk/groma.md --file release.yml --allow-publish
 ```
 
 Repeat the command with each `@groma/scanner-<id>` name and each

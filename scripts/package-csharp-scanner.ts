@@ -6,7 +6,7 @@ import { run } from '../plugins/scanners/csharp/src/process.ts'
 const root = fileURLToPath(new URL('..', import.meta.url))
 const source = path.join(root, 'plugins/scanners/csharp')
 const dist = path.join(source, 'dist')
-const repository = { type: 'git', url: 'git+https://github.com/MrLesk/Groma.md.git' }
+const repository = { type: 'git', url: 'git+https://github.com/MrLesk/groma.md.git' }
 
 async function manifest(directory: string) {
   return JSON.parse(await readFile(path.join(directory, 'package.json'), 'utf8'))

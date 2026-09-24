@@ -3,7 +3,7 @@ import path from 'node:path'
 import { readPublishedScanners } from '../src/scanner/modules/published.ts'
 import { assembleCSharpPackages } from './package-csharp-scanner.ts'
 
-const repository = { type: 'git', url: 'https://github.com/MrLesk/Groma.md.git' }
+const repository = { type: 'git', url: 'https://github.com/MrLesk/groma.md.git' }
 const scannerIds = ['java', 'go', 'rust', 'csharp', 'angular', 'vue', 'react', 'typescript', 'python', 'php', 'swift', 'javascript']
 
 async function manifest(directory: string) {

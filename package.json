@@ -7,10 +7,10 @@
   "homepage": "https://groma.md",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/MrLesk/Groma.md.git"
+    "url": "git+https://github.com/MrLesk/groma.md.git"
   },
   "bugs": {
-    "url": "https://github.com/MrLesk/Groma.md/issues"
+    "url": "https://github.com/MrLesk/groma.md/issues"
   },
   "keywords": [
     "architecture",

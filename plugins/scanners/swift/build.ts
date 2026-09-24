@@ -36,7 +36,7 @@ export async function buildPackage(destination: string): Promise<void> {
     const { dependencies: _, ...manifest } = JSON.parse(await readFile(path.join(root, 'package.json'), 'utf8'))
     await writeFile(path.join(destination, 'package.json'), `${JSON.stringify({ ...manifest, os: [process.platform], cpu: [process.arch],
       groma: { scanner: { ...manifest.groma.scanner, entry: './src/index.js' } },
-      repository: { type: 'git', url: 'https://github.com/MrLesk/Groma.md.git', directory: 'plugins/scanners/swift' },
+      repository: { type: 'git', url: 'https://github.com/MrLesk/groma.md.git', directory: 'plugins/scanners/swift' },
       files: ['src', 'dist', 'LICENSE', 'SwiftSyntax.LICENSE', 'THIRD-PARTY-NOTICES.txt', 'README.md', 'validation.md'],
     }, null, 2)}\n`)
     await cp(path.join(root, '../../../LICENSE'), path.join(destination, 'LICENSE'))
