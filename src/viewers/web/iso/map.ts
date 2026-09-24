@@ -105,6 +105,8 @@ export function createMap(host: HTMLElement): IsoMap {
   const grid = createGrid()
   const camera = document.createElement('div')
   camera.className = 'camera'
+  // The cached layer stays promoted at rest: promoting it again when a pan starts makes Safari redraw the whole map.
+  camera.style.willChange = 'transform'
   const layers = {
     sheet: svg('g', {}, 'sheet'),
     islands: svg('g', {}, 'islands'),
@@ -220,26 +222,49 @@ export function createMap(host: HTMLElement): IsoMap {
     camera.style.transform = 'translate(0px, 0px) scale(1)'
   }
 
-  /** The map settles once nothing has moved it for SETTLE_MS; one timer waits for that instead of restarting on every frame. */
+  /**
+   * Once the compositor has scaled the cached layer, Safari keeps drawing it below full resolution, even with the zoom
+   * committed into the SVG. Changing its will-change around a forced layout makes Safari rebuild it sharp without
+   * drawing a frame uncached, which would hold Safari for hundreds of milliseconds on a zoomed-out map. It runs in the
+   * frame after the commit: in the commit's own frame it leaves a zoomed-in map soft.
+   */
+  const rebuildCachedLayer = (): void => {
+    camera.style.willChange = 'auto'
+    void camera.offsetWidth
+    camera.style.willChange = 'transform'
+  }
+
+  /**
+   * The map settles once nothing has moved it for SETTLE_MS; one timer waits for that instead of restarting on every
+   * frame. The timer hands over to an animation frame, which runs after the camera's own: a long frame can hold a
+   * camera transition past SETTLE_MS, and settling in between would commit a camera that the next frame replaces.
+   */
   const settle = (): void => {
     const wait = movedAt + SETTLE_MS - performance.now()
     if (wait > 0) {
-      settleTimer = setTimeout(settle, wait)
+      waitToSettle(wait)
       return
     }
     settleTimer = undefined
     moving = false
     repainted = false
-    if (latest !== undefined && (latest.camera.k !== committed?.camera.k || latest.zoomRatio !== committed?.zoomRatio)) commitCamera(latest)
+    if (latest !== undefined && (latest.camera.k !== committed?.camera.k || latest.zoomRatio !== committed?.zoomRatio)) {
+      commitCamera(latest)
+      requestAnimationFrame(rebuildCachedLayer)
+    }
     // A drag held still keeps its hover: the point under the pointer is the drag cover, not the map.
     if (dragCover.hidden) hover(pointer === undefined ? undefined : document.elementFromPoint(pointer.x, pointer.y))
     updateGlows()
     glows.hide(false)
   }
 
+  const waitToSettle = (ms: number): void => {
+    settleTimer = setTimeout(() => requestAnimationFrame(settle), ms)
+  }
+
   const scheduleSettle = (): void => {
     movedAt = performance.now()
-    if (settleTimer === undefined) settleTimer = setTimeout(settle, SETTLE_MS)
+    if (settleTimer === undefined) waitToSettle(SETTLE_MS)
   }
 
   const markMoving = (): void => {

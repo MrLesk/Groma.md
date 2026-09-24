@@ -179,8 +179,7 @@ export function mapDrawingCss(palette?: Palette, zoom = 1): string {
 
 /**
  * What shows a hover look. Map hover looks key off the .hovered class that iso/map.ts puts on the closest of these
- * under a resting mouse, never :hover, and the camera layer keeps will-change: either change would make Safari
- * redraw the whole map when a pan starts.
+ * under a resting mouse, never :hover: a :hover rule would make Safari redraw the whole map when a pan starts.
  */
 export const HOVERABLE = '.building, .slab, .island.system, .route, .project-edit'
 
@@ -199,7 +198,7 @@ export const mapCss = `
   #map > .map-surface [data-id] { cursor: pointer; }
   #map > .map-surface:active, #map .drag-cover { cursor: grabbing; }
   #map .drag-cover { position: absolute; inset: 0; }
-  #map .camera { transform-origin: 0 0; will-change: transform; }
+  #map .camera { transform-origin: 0 0; }
   ${mapDrawingCss()}
   #map .route.hovered, #map .route.endpoint, #map .route.touched { --emphasis: ${emphasis(1)}; }
   #map .route.hovered .line { stroke: var(--map-line); opacity: 1; }
