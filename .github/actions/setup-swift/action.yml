@@ -4,10 +4,11 @@ runs:
   using: composite
   steps:
     # On a runner image without this Swift, setup-swift downloads Swiftly and checks its signature against a keyring it
-    # never fills, so the step fails; swift.org's published keys include the signing key.
+    # never fills, so the step fails. swift-keys.asc is https://www.swift.org/keys/all-keys.asc, kept here because that
+    # URL sometimes answers runners without the keys.
     - name: Import the Swift signing keys
       if: runner.os == 'Linux'
-      run: curl -fsSL https://www.swift.org/keys/all-keys.asc | gpg --import
+      run: gpg --import "$GITHUB_ACTION_PATH/swift-keys.asc"
       shell: bash
     - uses: swift-actions/setup-swift@v3
       if: runner.os != 'Windows'
