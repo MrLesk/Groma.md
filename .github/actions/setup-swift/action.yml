@@ -8,6 +8,11 @@ runs:
       if: runner.os != 'Windows'
       with:
         swift-version: '6.3.3'
+    # The swift.org compiler this installs does not find the macOS SDK the way Xcode's compiler does.
+    - name: Point the Swift toolchain at the macOS SDK
+      if: runner.os == 'macOS'
+      run: echo "SDKROOT=$(xcrun --sdk macosx --show-sdk-path)" >> "$GITHUB_ENV"
+      shell: bash
     - uses: compnerd/gha-setup-swift@bbae8ce86bac5a3449f3992b3d88bc4ca25f2057
       if: runner.os == 'Windows'
       with:
