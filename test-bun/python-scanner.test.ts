@@ -289,7 +289,10 @@ test.concurrent('Python rejects syntax and scope errors without returning partia
   try {
     for (const source of ['def broken(:\n', 'return 1\n']) {
       await writeFile(path.join(root, 'nested/worker.py'), source)
-      await expect(scanner.scan(root, {}, await pythonFiles(root))).rejects.toThrow('PYTHON_SCAN_FAILED')
+      // Not `.rejects`: Bun's async matchers re-enter the event loop and can lose other tests' child-process exits
+      // (oven-sh/bun#33261).
+      const failure = await scanner.scan(root, {}, await pythonFiles(root)).then(() => undefined, (error: Error) => error.message)
+      expect(failure).toContain('PYTHON_SCAN_FAILED')
     }
   } finally { await rm(temporary, { recursive: true, force: true }) }
 })
